@@ -1,0 +1,548 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Sigil Online</title>
+
+    <link rel="stylesheet" href="/static/sigil.css">
+    <link rel="icon" href="data:,">
+  </head>
+
+  <script src="/static/sigil.js"></script>
+
+  <body onload="main();">
+    
+    <div id="fullBoard" >
+
+      <div>
+        <img id="board" src="/static/images/board.png"/>
+      </div>
+
+
+
+      <!-- Locks -->
+
+    <div id="redlocka1" class = "redlocka1start">
+      <img id = "redlockcirclea1" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbara1" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbara1" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbara1" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombara1" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+
+    <div id="redlocka2" class = "redlocka2start">
+      <img id = "redlockcirclea2" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbara2" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbara2" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbara2" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombara2" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+
+    <div id="redlockb1" class = "redlockb1start">
+      <img id = "redlockcircleb1" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarb1" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarb1" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarb1" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarb1" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlockb2" class = "redlockb2start">
+      <img id = "redlockcircleb2" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarb2" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarb2" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarb2" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarb2" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlockc1" class = "redlockc1start">
+      <img id = "redlockcirclec1" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarc1" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarc1" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarc1" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarc1" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlockc2" class = "redlockc2start">
+      <img id = "redlockcirclec2" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarc2" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarc2" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarc2" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarc2" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+
+
+
+
+
+    <div id="redlocka1alt" class = "redlocka1altstart">
+      <img id = "redlockcirclea1alt" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbara1alt" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbara1alt" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbara1alt" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombara1alt" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlocka2alt" class = "redlocka2altstart">
+      <img id = "redlockcirclea2alt" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbara2alt" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbara2alt" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbara2alt" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombara2alt" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+
+    <div id="redlockb1alt" class = "redlockb1altstart">
+      <img id = "redlockcircleb1alt" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarb1alt" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarb1alt" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarb1alt" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarb1alt" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlockb2alt" class = "redlockb2altstart">
+      <img id = "redlockcircleb2alt" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarb2alt" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarb2alt" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarb2alt" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarb2alt" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlockc1alt" class = "redlockc1altstart">
+      <img id = "redlockcirclec1alt" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarc1alt" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarc1alt" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarc1alt" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarc1alt" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+    <div id="redlockc2alt" class = "redlockc2altstart">
+      <img id = "redlockcirclec2alt" class = "redlockcirclestart" src="/static/images/redlockcircle.png">
+      <img id = "redleftbarc2alt" class="redleftbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redrightbarc2alt" class="redrightbarstart" src = "/static/images/redlockhorizbar.png">
+      <img id = "redtopbarc2alt" class="redtopbarstart" src = "/static/images/redlockvertbar.png">
+      <img id = "redbottombarc2alt" class="redbottombarstart" src = "/static/images/redlockvertbar.png">
+    </div>
+
+
+
+  <div id="bluelocka1" class = "bluelocka1start">
+      <img id = "bluelockcirclea1" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbara1" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbara1" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbara1" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombara1" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelocka2" class = "bluelocka2start">
+      <img id = "bluelockcirclea2" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbara2" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbara2" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbara2" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombara2" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+
+    <div id="bluelockb1" class = "bluelockb1start">
+      <img id = "bluelockcircleb1" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarb1" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarb1" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarb1" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarb1" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelockb2" class = "bluelockb2start">
+      <img id = "bluelockcircleb2" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarb2" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarb2" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarb2" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarb2" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelockc1" class = "bluelockc1start">
+      <img id = "bluelockcirclec1" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarc1" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarc1" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarc1" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarc1" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelockc2" class = "bluelockc2start">
+      <img id = "bluelockcirclec2" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarc2" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarc2" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarc2" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarc2" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+
+
+
+    <div id="bluelocka1alt" class = "bluelocka1altstart">
+      <img id = "bluelockcirclea1alt" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbara1alt" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbara1alt" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbara1alt" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombara1alt" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelocka2alt" class = "bluelocka2altstart">
+      <img id = "bluelockcirclea2alt" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbara2alt" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbara2alt" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbara2alt" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombara2alt" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+
+    <div id="bluelockb1alt" class = "bluelockb1altstart">
+      <img id = "bluelockcircleb1alt" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarb1alt" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarb1alt" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarb1alt" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarb1alt" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelockb2alt" class = "bluelockb2altstart">
+      <img id = "bluelockcircleb2alt" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarb2alt" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarb2alt" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarb2alt" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarb2alt" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelockc1alt" class = "bluelockc1altstart">
+      <img id = "bluelockcirclec1alt" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarc1alt" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarc1alt" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarc1alt" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarc1alt" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+    <div id="bluelockc2alt" class = "bluelockc2altstart">
+      <img id = "bluelockcirclec2alt" class = "bluelockcirclestart" src="/static/images/bluelockcircle.png">
+      <img id = "blueleftbarc2alt" class="blueleftbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluerightbarc2alt" class="bluerightbarstart" src = "/static/images/bluelockhorizbar.png">
+      <img id = "bluetopbarc2alt" class="bluetopbarstart" src = "/static/images/bluelockvertbar.png">
+      <img id = "bluebottombarc2alt" class="bluebottombarstart" src = "/static/images/bluelockvertbar.png">
+    </div>
+
+
+  <!-- End Of Locks -->
+
+
+  <!-- Red Void Stones & Mana Stones -->
+      <div>
+        <img id ="a1" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+      <div>
+        <img id ="a11" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a12" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a13" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+
+
+      <div>
+        <img id ="b1" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+      <div>
+        <img id ="b11" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b12" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b13" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+
+      <div>
+        <img id ="c1" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+
+
+      <div>
+        <img id ="c11" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c12" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c13" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+
+
+    <!-- End of Red Void Stones -->
+
+
+
+
+    <!-- Blue Void Stones & Mana Stones -->
+      <div>
+        <img id ="scorekeeper" class="scoreb1" src = "/static/images/bluestone.png">
+      </div>
+    <!-- End of Blue Void Stones -->
+
+
+
+
+
+  <!-- Spells & Their Stones & Text Boxes -->
+
+
+  <p id="majortext2" class="spelltext"></p>
+
+
+  <div id="majordiv2">
+        <img id="major2" src="/static/images/Flourish.png">
+        <img id="majornodes2" src="/static/images/majornodes.png">
+
+         <div>
+        <img id ="b2" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b3" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b4" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b5" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b6" class="stone" src = "/static/images/emptystone.png">
+      </div>
+
+      </div>
+
+
+  <p id="minortext1" class="spelltext"></p>
+
+
+  <div id="minordiv1">
+        <img id="minor1" src="/static/images/Grow.png">
+        <img id="minornodes1" src="/static/images/minornodes.png">
+
+        <div>
+        <img id ="a8" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a9" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a10" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+
+      <p id="charmtext1" class="spelltext"></p>
+
+      <div id="charmdiv1">
+        <img id="charm1" src="/static/images/Sprout.png">
+        <img id="charmnodes1" src="/static/images/charmnodes.png">
+
+      <div>
+        <img id ="a7" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+
+  <p id="majortext1" class="spelltext"></p>
+
+
+  <div id="majordiv1">
+        <img id="major1" src="/static/images/Flourish.png">
+        <img id="majornodes1" src="/static/images/majornodes.png">
+
+        <div>
+        <img id ="a2" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a3" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a4" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a5" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="a6" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+  <p id="minortext2" class="spelltext"></p>
+
+
+  <div id="minordiv2">
+        <img id="minor2" src="/static/images/Grow.png">
+        <img id="minornodes2" src="/static/images/minornodes.png">
+
+        <div>
+        <img id ="b8" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b9" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="b10" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+
+      <p id="charmtext2" class="spelltext"></p>
+
+  <div id="charmdiv2">
+        <img id="charm2" src="/static/images/Sprout.png">
+        <img id="charmnodes2" src="/static/images/charmnodes.png">
+
+        <div>
+        <img id ="b7" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+  <p id="charmtext3" class="spelltext"></p>
+
+
+  <div id="charmdiv3">
+        <img id="charm3" src="/static/images/Sprout.png">
+        <img id="charmnodes3" src="/static/images/charmnodes.png">
+
+        <div>
+        <img id ="c7" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+
+  <p id="majortext3" class="spelltext"></p>
+
+  <div id="majordiv3">
+        <img id="major3" src="/static/images/Flourish.png">
+        <img id="majornodes3" src="/static/images/majornodes.png">
+
+        <div>
+        <img id ="c2" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c3" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c4" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c5" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c6" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+
+  <p id="minortext3" class="spelltext"></p>
+
+
+      <div id="minordiv3">
+        <img id="minor3" src="/static/images/Grow.png">
+        <img id="minornodes3" src="/static/images/minornodes.png">
+
+        <div>
+        <img id ="c8" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c9" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      <div>
+        <img id ="c10" class="stone" src = "/static/images/emptystone.png">
+      </div>
+      </div>
+
+
+    </div>
+
+
+    <div id="actionBox">
+      <b>Welcome to Sigil Online!</b>
+    </div>
+    <input type="text" id="actionInput" onkeypress="actionInputKeypress();" />
+
+
+    <div>
+      <b id="whoseturndisplay"></b>
+    </div>
+
+
+    <div>
+      <b id="redcountdown"></b>
+    </div>
+
+    <div>
+      <b id="bluecountdown"></b>
+    </div>
+
+
+    <div>
+      <button type="button" id="dashbutton" class="dashbutton">
+        <b>Dash</b>
+      </button>
+    </div>
+
+    <div>
+      <button type="button" id="passbutton" class="passbutton">
+        <b>Pass</b>
+      </button>
+    </div>
+
+    <div>
+      <button type="button" id="resetbutton" class="resetbutton">
+        <b>Reset</b>
+      </button>
+    </div>
+
+    <div>
+      <button type="button" id="doneselectingbutton" class="doneselectingbutton">
+        <b>Done</b>
+      </button>
+    </div>
+
+
+
+    <div>
+      <button type="button" id="startbutton" class="startbutton">
+        <b>Join Game</b>
+      </button>
+    </div>
+
+
+
+    <div id="chatBox">
+      <b>Chat</b>
+    </div>
+
+    <input type="text" id="chatInput" onkeypress="chatInputKeypress();" />
+
+
+  </body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
