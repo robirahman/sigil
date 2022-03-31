@@ -1,8 +1,6 @@
 ### Sigil Online
 
 
-
-
 import json
 import time
 
@@ -2168,6 +2166,7 @@ class Player():
 			self.jmessage("Enemy stone pushed to " + push)
 			break
 			
+
 
 
 
