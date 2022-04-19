@@ -374,7 +374,7 @@ function incomingEvent(event) {
     setupSpells(payload);
 
   } else if (payload.type == "message") {
-    box.innerHTML += "<br/>" + payload.message;
+    box.innerHTML = payload.message;
 
     box.scrollTop = box.scrollHeight;
 

@@ -1,6 +1,6 @@
 
 ### Sigil Online spell generator file
-### To play "All-Green", un-comment the last line at the bottom of file
+### To play Core, un-comment the last line at the bottom of file
 
 
 import random
@@ -66,28 +66,28 @@ spell_list = [major1, major2, major3, minor1, minor2, minor3, charm1, charm2, ch
 ### should be written as 'self.positions[i]' for the i-th spell.
 ### Then 'name' can be a string.
 
-all_green1 = "spellfile.Flourish(self, self.positions[1], 'Flourish1')"
+core1 = "spellfile.Flourish(self, self.positions[1], 'Flourish1')"
 
-all_green2 = "spellfile.Flourish(self, self.positions[2], 'Flourish2')"
+core2 = "spellfile.Erupt(self, self.positions[2], 'Erupt2')"
 
-all_green3 = "spellfile.Flourish(self, self.positions[3], 'Flourish3')"
+core3 = "spellfile.Bewitch(self, self.positions[3], 'Bewitch3')"
 
-all_green4 = "spellfile.Grow(self, self.positions[4], 'Grow1')"
+core4 = "spellfile.Grow(self, self.positions[4], 'Grow1')"
 
-all_green5 = "spellfile.Grow(self, self.positions[5], 'Grow2')"
+core5 = "spellfile.Fire(self, self.positions[5], 'Fire2')"
 
-all_green6 = "spellfile.Grow(self, self.positions[6], 'Grow3')"
+core6 = "spellfile.Ice(self, self.positions[6], 'Ice3')"
 
-all_green7 = "spellfile.Sprout(self, self.positions[7], 'Sprout1')"
+core7 = "spellfile.Sprout(self, self.positions[7], 'Sprout1')"
 
-all_green8 = "spellfile.Sprout(self, self.positions[8], 'Sprout2')"
+core8 = "spellfile.Spark(self, self.positions[8], 'Spark2')"
 
-all_green9 = "spellfile.Sprout(self, self.positions[9], 'Sprout3')"
+core9 = "spellfile.Frost(self, self.positions[9], 'Frost3')"
 
 
-### UNCOMMENT THE LINE BELOW TO PLAY ALL-GREEN
+### UNCOMMENT THE LINE BELOW TO PLAY CORE
 
-# spell_list = [all_green1, all_green2, all_green3, all_green4, all_green5, all_green6, all_green7, all_green8, all_green9]
+spell_list = [core1, core2, core3, core4, core5, core6, core7, core8, core9]
 
 
 
