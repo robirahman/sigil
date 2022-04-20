@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Sigil Online</title>
+
+    <link rel="stylesheet" href="/static/home.css">
+    <link rel="icon" href="data:,">
+  </head>
+
+  <script src="/static/home.js"></script>
+
+  <body onload="main();">
+
+    <div id="WelcomeBox">
+      <b>Welcome to Sigil Online!</b>
+    </div>
+
+    <ul>
+      <li><a href="{{ url_for('tutorial') }}">Tutorial</a></li>
+      <li><a href="{{ url_for('gameboard') }}">Ladder Match</a></li>
+      <li><a href="{{ url_for('privatematch') }}">Private Match</a></li>
+    </ul>
+
+  </body>
+</html>
+
+
+

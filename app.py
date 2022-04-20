@@ -39,8 +39,20 @@ redjoined = False
 bluejoined = False
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def home():
+    return render_template('home.html')
+
+@app.route('/gameboard')
+def gameboard():
+    return render_template('gameboard.html')
+
+@app.route('/tutorial')
+def tutorial():
+    return render_template('tutorial.html')
+
+@app.route('/privatematch')
+def privatematch():
+    return render_template('privatematch.html')
 
 @sock.route('/api/game')
 def playgame(ws):
