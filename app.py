@@ -50,6 +50,10 @@ def gameboard():
 def tutorial():
     return render_template('tutorial.html')
 
+@app.route('/laddermatch')
+def laddermatch():
+    return render_template('laddermatch.html')
+
 @app.route('/privatematch')
 def privatematch():
     return render_template('privatematch.html')
