@@ -495,25 +495,20 @@ class Player():
 		return actualmessage
 
 
-	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True, canshimmer=True):
+	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
 		self.board.update(True)
 
 		actions = []
 		spelllist = []
-		if canshimmer:
-			for nirvanaspell in self.charged_spells:
-				if nirvanaspell.name[:-1] == 'Nirvana':
-					actions.append(nirvanaspell.name)
-					spelllist.append(nirvanaspell.name)
 
 		if canmove:
 			actions.append('move')
 		else:
 			if (candash & canspell & (self.totalstones > 2)):
-				if 'Autumn' not in [s.name[:-1] for s in self.opp.charged_spells]:
+				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
-			if ('Summer' in [s.name[:-1] for s in self.charged_spells]) and cansummer:
+			if ('Summer' in [s.name for s in self.charged_spells]) and cansummer:
 				summer_active = True
 
 			if (canspell) or (not canspell and summer_active):
@@ -521,11 +516,16 @@ class Player():
 				for spell in self.charged_spells:
 					if not spell.static:
 						if spell.ischarm:
-							if 'Winter' not in [s.name[:-1] for s in self.opp.charged_spells]:
-								actions.append(spell.name)
-								spelllist.append(spell.name)
+							if 'Winter' not in [s.name for s in self.opp.charged_spells]:
+								if spell.name == 'Frost':
+									if candash:
+										actions.append(spell.name)
+										spelllist.append(spell.name)
+								else:
+									actions.append(spell.name)
+									spelllist.append(spell.name)
 						else:
-							if self.lock == spell and ('Spring' in [s.name[:-1] for s in self.charged_spells]) and self.springlock != spell:
+							if self.lock == spell and ('Spring' in [s.name for s in self.charged_spells]) and self.springlock != spell:
 								actions.append(spell.name)
 								spelllist.append(spell.name)
 							if self.lock != spell:
@@ -553,57 +553,38 @@ class Player():
 
 		if action not in actions and action not in shortcuts:
 			self.jmessage("Invalid action!")
-			self.taketurn(canmove, candash, canspell, cansummer, canshimmer)
+			self.taketurn(canmove, candash, canspell, cansummer)
 			return None
 
 		elif action in shortcuts:
 			self.move(action, standardmove=True)
 			self.board.currentplayerhasmoved = True
-			self.taketurn(False, candash, canspell, cansummer, canshimmer)
+			self.taketurn(False, candash, canspell, cansummer)
 			return None
 
 		elif action == 'move':
 			self.move(standardmove=True)
 			self.board.currentplayerhasmoved = True
-			self.taketurn(False, candash, canspell, cansummer, canshimmer)
+			self.taketurn(False, candash, canspell, cansummer)
 			return None
 
 		elif action == 'dash':
-			self.dash()
-			self.taketurn(canmove, False, canspell, cansummer, canshimmer)
-			return None
-
-		elif action[:-1] == 'Nirvana':
-			while True:
-				self.jmessage("Select a stone to sacrifice.", "node")
-				message = self.receivemessage()
-
-				if message in self.board.nodes:
-					node = self.board.nodes[message]
-					if node.stone != self.color:
-						continue
-
-					else:
-						node.stone = None
-						if (self.board.last_play == node.name):
-							self.board.last_play = None
-							self.board.last_player = None
-						break
-
-				else:
-					continue
-			self.board.update()
-			self.move()
-			self.taketurn(canmove, candash, canspell, cansummer, False)
-			return None
+			if ('Heat_Shimmer' in [s.name for s in self.charged_spells]):
+				self.dash(True)
+				self.taketurn(canmove, False, canspell, cansummer)
+				return None
+			else:
+				self.dash()
+				self.taketurn(canmove, False, canspell, cansummer)
+				return None
 
 		elif action in spelllist:
 			self.board.spelldict[action].cast(self)
 			if canspell:
-				self.taketurn(False, False, False, cansummer, canshimmer)
+				self.taketurn(False, False, False, cansummer)
 				return None
 			else:
-				self.taketurn(False, False, False, False, canshimmer)
+				self.taketurn(False, False, False, False)
 				return None
 
 
@@ -615,7 +596,7 @@ class Player():
 		### like Inferno, which should set the global
 		### variables gameover = True and winner = self.enemy
 
-		if 'Inferno' in [spell.name[:-1] for spell in self.charged_spells]:
+		if 'Inferno' in [spell.name for spell in self.charged_spells]:
 			self.jmessage("DEATH BY INFERNO!")
 			self.opp.jmessage("DEATH BY INFERNO!")
 			self.board.gameover = True
@@ -635,7 +616,7 @@ class Player():
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
 	
 
-		if 'Inferno' in [spell.name[:-1] for spell in self.charged_spells]:
+		if 'Inferno' in [spell.name for spell in self.charged_spells]:
 			self.jmessage("INFERNO TRIGGER!")
 			self.opp.jmessage("INFERNO TRIGGER!")
 			for name in board.nodes:
@@ -708,7 +689,7 @@ class Player():
 			return None
 
 		elif not adjacent:
-			if not (standardmove and ("Levity" in [spell.name[:-1] for spell in self.charged_spells])):
+			if not (standardmove and ("Field_of_Flowers" in [spell.name for spell in self.charged_spells])):
 				self.jmessage("Invalid move-- that's not adjacent to you!")
 				self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
 				return None
@@ -719,7 +700,7 @@ class Player():
 					self.board.last_player = self.color
 					self.board.update()
 				else:
-					if (standardmove and ("Gravity" in [spell.name[:-1] for spell in self.opp.charged_spells])):
+					if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
 						self.jmessage("You can only make soft moves under Gravity.")
 						self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
 						return None
@@ -762,7 +743,7 @@ class Player():
 					self.jmessage("You must move in a Ritual.")
 					self.move(ritual_only=True)
 					return None
-			if (standardmove and ("Gravity" in [spell.name[:-1] for spell in self.opp.charged_spells])):
+			if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
 				self.jmessage("You can only make soft moves under Gravity.")
 				self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
 				return None
@@ -830,43 +811,60 @@ class Player():
 		else:
 			self.pushenemy(node)
 
-	def dash(self):
-		self.jmessage("Select your first stone to sacrifice. ", "node")
-		
-		sac1 = self.receivemessage()
-
-		if (self.board.nodes[sac1].stone != self.color):
-			self.jmessage("Invalid sacrifice")
-			self.dash()
-			return None
-
-		self.board.nodes[sac1].stone = None
-		if (self.board.last_play == sac1):
-			self.board.last_play = None
-			self.board.last_player = None
-		self.board.update()
-
-		while True:
-			self.jmessage("Select your second stone to sacrifice. ", "node")
+	def dash(self, shimmer=False):
+		if shimmer:
+			while True:
+				self.jmessage("Select a stone to sacrifice. ", "node")
 			
-			sac2 = self.receivemessage()
+				actualmessage = self.receivemessage()
+				if actualmessage in self.board.nodes:
+					node = self.board.nodes[actualmessage]
+					if (node.stone != self.color):
+						continue
+					else:
+						node.stone = None
+						if (self.board.last_play == node):
+							self.board.last_play = None
+							self.board.last_player = None
+						self.board.update()
+						break
+			self.move()
+			self.board.update(True)
 
-			if (self.board.nodes[sac2].stone != self.color):
-				self.jmessage("Invalid sacrifice")
-				continue
-			else:
-				break
-	
-		self.board.nodes[sac2].stone = None
-		if (self.board.last_play == sac2):
-			self.board.last_play = None
-			self.board.last_player = None
-		self.board.update()
-			
-		self.move()
+		else:
+			while True:
+				self.jmessage("Select your first stone to sacrifice. ", "node")
+				
+				actualmessage = self.receivemessage()
+				if actualmessage in self.board.nodes:
+					node = self.board.nodes[actualmessage]
+					if (node.stone != self.color):
+						continue
+					else:
+						node.stone = None
+						if (self.board.last_play == node):
+							self.board.last_play = None
+							self.board.last_player = None
+						self.board.update()
+						break
 
-		### Update the new score
-		self.board.update(True)
+			while True:
+				self.jmessage("Select your second stone to sacrifice. ", "node")
+				
+				actualmessage = self.receivemessage()
+				if actualmessage in self.board.nodes:
+					node = self.board.nodes[actualmessage]
+					if (node.stone != self.color):
+						continue
+					else:
+						node.stone = None
+						if (self.board.last_play == node):
+							self.board.last_play = None
+							self.board.last_player = None
+						self.board.update()
+						break
+			self.move()
+			self.board.update(True)
 
 	def pushenemy(self, node):
 		node.stone = self.color

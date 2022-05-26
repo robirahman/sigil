@@ -70,7 +70,7 @@ def playgame(ws):
 
 
 		### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
-		### and values "Flourish2", "Sprout3", etc.
+		### and values "Searing_Wind", "Creeping_Vines", etc.
 		egress = { "type": "spellsetup" }
 
 		egress["major1"] = board.spells[0].name
@@ -122,7 +122,7 @@ def playgame(ws):
 
 
 		### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
-		### and values "Flourish2", "Sprout3", etc.
+		### and values "Searing_Wind", "Creeping_Vines", etc.
 		egress = { "type": "spellsetup" }
 
 		egress["major1"] = board.spells[0].name

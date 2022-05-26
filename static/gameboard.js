@@ -154,16 +154,16 @@ function addSpellLabels() {
 
 function setupSpells(spellnamedict) {
   // spellnamedict is a JSON dictionary with keys "major2", "charm3", etc.,
-  // and values "Flourish2", "Sprout3", etc.
-  document.getElementById("major1").src = "/static/images/" + spellnamedict.major1.slice(0, -1) + ".png";
-  document.getElementById("major2").src = "/static/images/" + spellnamedict.major2.slice(0, -1) + ".png";
-  document.getElementById("major3").src = "/static/images/" + spellnamedict.major3.slice(0, -1) + ".png";
-  document.getElementById("minor1").src = "/static/images/" + spellnamedict.minor1.slice(0, -1) + ".png";
-  document.getElementById("minor2").src = "/static/images/" + spellnamedict.minor2.slice(0, -1) + ".png";
-  document.getElementById("minor3").src = "/static/images/" + spellnamedict.minor3.slice(0, -1) + ".png";
-  document.getElementById("charm1").src = "/static/images/" + spellnamedict.charm1.slice(0, -1) + ".png";
-  document.getElementById("charm2").src = "/static/images/" + spellnamedict.charm2.slice(0, -1) + ".png";
-  document.getElementById("charm3").src = "/static/images/" + spellnamedict.charm3.slice(0, -1) + ".png";
+  // and values "Searing_Wind", "Creeping_Vines", etc.
+  document.getElementById("major1").src = "/static/images/" + spellnamedict.major1 + ".png";
+  document.getElementById("major2").src = "/static/images/" + spellnamedict.major2 + ".png";
+  document.getElementById("major3").src = "/static/images/" + spellnamedict.major3 + ".png";
+  document.getElementById("minor1").src = "/static/images/" + spellnamedict.minor1 + ".png";
+  document.getElementById("minor2").src = "/static/images/" + spellnamedict.minor2 + ".png";
+  document.getElementById("minor3").src = "/static/images/" + spellnamedict.minor3 + ".png";
+  document.getElementById("charm1").src = "/static/images/" + spellnamedict.charm1 + ".png";
+  document.getElementById("charm2").src = "/static/images/" + spellnamedict.charm2 + ".png";
+  document.getElementById("charm3").src = "/static/images/" + spellnamedict.charm3 + ".png";
 
 }
 

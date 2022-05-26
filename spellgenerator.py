@@ -5,53 +5,17 @@
 
 import random
 
+# Set exactly one of the following variables to True, to select which spells you'll play with
+starter_game = False
+core = True
+equinox = False
+apocalypse = False
+all_spells = False
 
 
 
-### FULL MAJOR LIST: ['Flourish', 'Erupt', 'Bewitch', 'Starfall', 'Nirvana', 'Tempest', 'Syzygy', 'Onslaught', 'Inferno', 'Blossom', 'Harvest']
 
-### FULL MINOR LIST: ['Grow', 'Fire', 'Ice', 'Meteor', 'Levity', 'Thunder', 'Eclipse', 'Fury', 'Gravity', 'Scatter', 'Gather']
-
-### FULL CHARM LIST: ['Sprout', 'Spark', 'Frost', 'Blink', 'Summer', 'Gust', 'Apex', 'Stomp', 'Winter', 'Spring', 'Autumn']
-
-
-allmajorspells = ['Flourish', 'Erupt', 'Bewitch', 'Starfall', 'Nirvana', 'Tempest', 'Syzygy', 'Onslaught', 'Inferno', 'Blossom', 'Harvest']
-
-allminorspells = ['Grow', 'Fire', 'Ice', 'Meteor', 'Levity', 'Thunder', 'Eclipse', 'Fury', 'Gravity', 'Scatter', 'Gather']
-
-allcharms = ['Sprout', 'Spark', 'Frost', 'Blink', 'Summer', 'Gust', 'Apex', 'Stomp', 'Winter', 'Spring', 'Autumn']
-
-
-majorspells = random.sample(allmajorspells, 3)
-minorspells = random.sample(allminorspells, 3)
-charms = random.sample(allcharms, 3)
-
-major1 = "spellfile." + majorspells[0] + "(self, self.positions[1], '" + majorspells[0] + "1')"
-
-major2 = "spellfile." + majorspells[1] + "(self, self.positions[2], '" + majorspells[1] + "2')"
-
-major3 = "spellfile." + majorspells[2] + "(self, self.positions[3], '" + majorspells[2] + "3')"
-
-
-minor1 = "spellfile." + minorspells[0] + "(self, self.positions[4], '" + minorspells[0] + "1')"
-
-minor2 = "spellfile." + minorspells[1] + "(self, self.positions[5], '" + minorspells[1] + "2')"
-
-minor3 = "spellfile." + minorspells[2] + "(self, self.positions[6], '" + minorspells[2] + "3')"
-
-
-charm1 = "spellfile." + charms[0] + "(self, self.positions[7], '" + charms[0] + "1')"
-
-charm2 = "spellfile." + charms[1] + "(self, self.positions[8], '" + charms[1] + "2')"
-
-charm3 = "spellfile." + charms[2] + "(self, self.positions[9], '" + charms[2] + "3')"
-
-
-
-spell_list = [major1, major2, major3, minor1, minor2, minor3, charm1, charm2, charm3]
-
-
-### should be a list of strings, which will turn into the spell objects
+### These should be lists of strings, which will turn into the spell objects
 ### when we hit them with eval()
 
 ### MUST BE READY TO INSTANTIATE when we eval() them!
@@ -66,28 +30,62 @@ spell_list = [major1, major2, major3, minor1, minor2, minor3, charm1, charm2, ch
 ### should be written as 'self.positions[i]' for the i-th spell.
 ### Then 'name' can be a string.
 
-core1 = "spellfile.Flourish(self, self.positions[1], 'Flourish1')"
+core_rituals = ['Creeping_Vines', 'Flame_Front', 'Ice_Mirror', 'Starfall', 'Heat_Shimmer']
+equinox_rituals = ['Planetary_Alignment', 'Blossom', 'Harvest']
+apocalypse_rituals = ['Tidal_Wave', 'Tempest', 'Consuming_Darkness']
 
-core2 = "spellfile.Erupt(self, self.positions[2], 'Erupt2')"
+core_sorceries = ['Spreading_Ivy', 'Searing_Wind', 'Hail_Storm', 'Meteor', 'Field_of_Flowers']
+equinox_sorceries = ['Full_Moon', 'Scattered_Seeds', 'Fallen_Leaves']
+apocalypse_sorceries = ['Rushing_Waters', 'Thunder', 'Blinding_Snow']
 
-core3 = "spellfile.Bewitch(self, self.positions[3], 'Bewitch3')"
-
-core4 = "spellfile.Grow(self, self.positions[4], 'Grow1')"
-
-core5 = "spellfile.Fire(self, self.positions[5], 'Fire2')"
-
-core6 = "spellfile.Ice(self, self.positions[6], 'Ice3')"
-
-core7 = "spellfile.Sprout(self, self.positions[7], 'Sprout1')"
-
-core8 = "spellfile.Spark(self, self.positions[8], 'Spark2')"
-
-core9 = "spellfile.Frost(self, self.positions[9], 'Frost3')"
+core_charms = ['Sprout', 'Spark', 'Frost', 'Blink', 'Summer']
+equinox_charms = ['Eclipse', 'Spring', 'Autumn']
+apocalypse_charms = ['Gush', 'Lightning', 'Winter']
 
 
-### UNCOMMENT THE LINE BELOW TO PLAY CORE
+if starter_game:
+	rituals = core_rituals[:3]
+	sorceries = core_sorceries[:3]
+	charms = core_charms[:3]
 
-spell_list = [core1, core2, core3, core4, core5, core6, core7, core8, core9]
+if core:
+	rituals = random.sample(core_rituals, 3)
+	sorceries = random.sample(core_sorceries, 3)
+	charms = random.sample(core_charms, 3)
+
+if equinox:
+	rituals = random.sample(equinox_rituals, 3)
+	sorceries = random.sample(equinox_sorceries, 3)
+	charms = random.sample(equinox_charms, 3)
+
+if apocalypse:
+	rituals = random.sample(apocalypse_rituals, 3)
+	sorceries = random.sample(apocalypse_sorceries, 3)
+	charms = random.sample(apocalypse_charms, 3)
+
+if all_spells:
+	rituals = random.sample(core_rituals + equinox_rituals + apocalypse_rituals, 3)
+	sorceries = random.sample(core_sorceries + equinox_sorceries + apocalypse_sorceries, 3)
+	charms = random.sample(core_charms + equinox_charms + apocalypse_charms, 3)
+
+
+ritual1 = "spellfile." + rituals[0] + "(self, self.positions[1], '" + rituals[0] + "')"
+ritual2 = "spellfile." + rituals[1] + "(self, self.positions[2], '" + rituals[1] + "')"
+ritual3 = "spellfile." + rituals[2] + "(self, self.positions[3], '" + rituals[2] + "')"
+
+sorcery1 = "spellfile." + sorceries[0] + "(self, self.positions[4], '" + sorceries[0] + "')"
+sorcery2 = "spellfile." + sorceries[1] + "(self, self.positions[5], '" + sorceries[1] + "')"
+sorcery3 = "spellfile." + sorceries[2] + "(self, self.positions[6], '" + sorceries[2] + "')"
+
+charm1 = "spellfile." + charms[0] + "(self, self.positions[7], '" + charms[0] + "')"
+charm2 = "spellfile." + charms[1] + "(self, self.positions[8], '" + charms[1] + "')"
+charm3 = "spellfile." + charms[2] + "(self, self.positions[9], '" + charms[2] + "')"
+
+spell_list = [ritual1, ritual2, ritual3, sorcery1, sorcery2, sorcery3, charm1, charm2, charm3]
+
+
+
+
 
 
 
