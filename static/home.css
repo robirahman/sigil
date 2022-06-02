@@ -69,7 +69,7 @@ body {background-color: #1b0a26;}
 
 
 
-.tutorialbutton {
+#tutorialbutton {
     position: absolute;
     top: 180px;
     left: 290px;
@@ -86,14 +86,14 @@ body {background-color: #1b0a26;}
 
   }
 
-  .tutorialbutton:hover {
+  #tutorialbutton:hover {
     background-color: white;
     transition-property: color, background-color;
     color: #000000;
     transition-duration: .1s;
   }
 
-  .singleplayerbutton {
+  #singleplayerbutton {
     position: absolute;
     top: 180px;
     left: 530px;
@@ -110,14 +110,14 @@ body {background-color: #1b0a26;}
 
   }
 
-  .singleplayerbutton:hover {
+  #singleplayerbutton:hover {
     background-color: white;
     transition-property: color, background-color;
     color: #000000;
     transition-duration: .1s;
   }
 
-  .privatematchbutton {
+  #privatematchbutton {
     position: absolute;
     top: 180px;
     left: 820px;
@@ -134,14 +134,14 @@ body {background-color: #1b0a26;}
 
   }
 
-  .privatematchbutton:hover {
+  #privatematchbutton:hover {
     background-color: white;
     color: #000000;
     transition-property: color, background-color;
     transition-duration: .1s;
   }
 
-  .laddermatchbutton {
+  #laddermatchbutton {
     position: absolute;
     top: 180px;
     left: 1100px;
@@ -158,7 +158,7 @@ body {background-color: #1b0a26;}
 
   }
 
-  .laddermatchbutton:hover {
+  #laddermatchbutton:hover {
     background-color: white;
     transition-property: color, background-color;
     color: #000000;

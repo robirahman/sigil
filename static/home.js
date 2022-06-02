@@ -12,4 +12,9 @@ function main() {
 	document.getElementById("singleplayerbutton").onmouseout = function() {document.getElementById("singleplayertext").style.display="none";};
 	document.getElementById("privatematchbutton").onmouseout = function() {document.getElementById("privatematchtext").style.display="none";};
 	document.getElementById("laddermatchbutton").onmouseout = function() {document.getElementById("laddermatchtext").style.display="none";};
+
+	document.getElementById("tutorialbutton").addEventListener('click', function() {document.getElementById("tutorialtext").style.display="none";});
+	document.getElementById("singleplayerbutton").addEventListener('click', function() {document.getElementById("singleplayertext").style.display="none";});
+	document.getElementById("privatematchbutton").addEventListener('click', function() {document.getElementById("privatematchtext").style.display="none";});
+	document.getElementById("laddermatchbutton").addEventListener('click', function() {document.getElementById("laddermatchtext").style.display="none";});
 }
