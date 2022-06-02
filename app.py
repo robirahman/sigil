@@ -7,6 +7,7 @@ import time
 from flask import Flask, render_template
 from flask_sock import Sock
 from random import randint
+from threading import Thread
 
 from game import Board, Player, resetException
 			
@@ -20,23 +21,19 @@ from game import Board, Player, resetException
 ### everyone as parameters to everyone else: doing it
 ### in two layers, using the board.addplayers method
 
+playercount = 0
+playerlist = []
 
-board = Board()
-red = Player(board, 'red')
-blue = Player(board, 'blue')
-board.addplayers(red, blue)
-red.opp = blue
-blue.opp = red
+chattercount = 0
+chatterlist = []
+
 
 
 app = Flask(__name__)
 sock = Sock(app)
+# ping every 2 seconds
+app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 2}
 
-totalplayers = 0
-whoisred = randint(1,2)
-whoisblue = 3 - whoisred
-redjoined = False
-bluejoined = False
 
 @app.route('/')
 def home():
@@ -50,6 +47,10 @@ def gameboard():
 def tutorial():
     return render_template('tutorial.html')
 
+@app.route('/singleplayer')
+def singleplayer():
+    return render_template('singleplayer.html')
+
 @app.route('/laddermatch')
 def laddermatch():
     return render_template('laddermatch.html')
@@ -60,64 +61,33 @@ def privatematch():
 
 @sock.route('/api/game')
 def playgame(ws):
-	global totalplayers
-	global redjoined
-	global bluejoined
-	totalplayers += 1
-	if totalplayers == whoisred:
-		red.ws = ws
-		red.jmessage("You are RED this game.")
-
-
-		### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
-		### and values "Searing_Wind", "Creeping_Vines", etc.
-		egress = { "type": "spellsetup" }
-
-		egress["major1"] = board.spells[0].name
-		egress["major2"] = board.spells[1].name
-		egress["major3"] = board.spells[2].name
-		egress["minor1"] = board.spells[3].name
-		egress["minor2"] = board.spells[4].name
-		egress["minor3"] = board.spells[5].name
-		egress["charm1"] = board.spells[6].name
-		egress["charm2"] = board.spells[7].name
-		egress["charm3"] = board.spells[8].name
-		
-		red.ws.send(json.dumps(egress))
-
-		egress = { "type": "spelltextsetup" }
-
-		egress["major1"] = board.spells[0].text
-		egress["major2"] = board.spells[1].text
-		egress["major3"] = board.spells[2].text
-		egress["minor1"] = board.spells[3].text
-		egress["minor2"] = board.spells[4].text
-		egress["minor3"] = board.spells[5].text
-		egress["charm1"] = board.spells[6].text
-		egress["charm2"] = board.spells[7].text
-		egress["charm3"] = board.spells[8].text
-		
-		red.ws.send(json.dumps(egress))
-
+	global playerlist
+	global playercount
+	playerlist.append(ws)
+	playercount += 1
+	if playercount %2 == 1:
+		egress =  {"type": "message", "message": "Waiting for opponent to join...", "awaiting": None, }
+		ws.send(json.dumps(egress))
 		while True:
-			ingress = red.ws.receive()
-			message = json.loads(ingress)['message']
-			if message == 'ping':
-				red.pong()
-				continue
-			elif message == 'joinedgame':
-				redjoined = True
-				break
-				
-		if not bluejoined:
-			red.jmessage("Waiting for opponent to join...")
-		while True:
-			red.pong()
 			time.sleep(1)
+	else:
+		opp_ws = playerlist[-2]
+		board = Board()
+		red = Player(board, 'red')
+		blue = Player(board, 'blue')
+		board.addplayers(red, blue)
+		red.opp = blue
+		blue.opp = red
+		whoisred = randint(1,2)
+		if whoisred == 1:
+			red.ws = ws
+			blue.ws = opp_ws
+		else:
+			red.ws = opp_ws
+			blue.ws = ws
 
 
-	elif totalplayers == whoisblue:
-		blue.ws = ws
+		red.jmessage("You are RED this game.")
 		blue.jmessage("You are BLUE this game.")
 
 
@@ -135,8 +105,8 @@ def playgame(ws):
 		egress["charm2"] = board.spells[7].name
 		egress["charm3"] = board.spells[8].name
 		
+		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
-
 
 		egress = { "type": "spelltextsetup" }
 
@@ -150,29 +120,10 @@ def playgame(ws):
 		egress["charm2"] = board.spells[7].text
 		egress["charm3"] = board.spells[8].text
 		
+		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
 
-		while True:
-			ingress = blue.ws.receive()
-			message = json.loads(ingress)['message']
-			if message == 'ping':
-				blue.pong()
-				continue
-			elif message == 'joinedgame':
-				bluejoined = True
-				break
-		alreadymessaged = False
-		while True:
-			if redjoined:
-				break
-			else:
-				if not alreadymessaged:
-					blue.jmessage("Waiting for opponent to join...")
-					alreadymessaged = True
-				time.sleep(.1)
 
-		red.jmessage("Ready to play!")
-		blue.jmessage("Ready to play!")
 		board.nodes['a1'].stone = 'red'
 		board.nodes['b1'].stone = 'blue'
 		board.update()
@@ -264,57 +215,54 @@ def playgame(ws):
 
 
 
+def opp_chat_listen(ws, opp_ws):
+	while True:
+		ingress = opp_ws.receive()
+		message = json.loads(ingress)['message']
+		if message == "ping":
+			egress =  {"type": "pong"}
+			opp_ws.send(json.dumps(egress))
+			continue
+		else:
+			egress = {"type": "chatmessage", "player": "Me:", "message": message }
+			opp_ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+			ws.send(json.dumps(egress))
 
-totalchatters = 0
-redchatws = None
-bluechatws = None
+
 
 @sock.route('/api/chat')
 def chat(ws):
-
-	global totalchatters
-	global redchatws
-	global bluechatws
-	totalchatters += 1
-	if totalchatters == 1:
-		redchatws = ws
+	global chatterlist
+	global chattercount
+	chatterlist.append(ws)
+	chattercount += 1
+	if chattercount %2 == 1:
 		while True:
-			ingress = redchatws.receive()
+			time.sleep(1)
+	else:
+		opp_ws = chatterlist[-2]
+
+		t = Thread(target=opp_chat_listen, args=(ws, opp_ws))
+		t.start()
+
+		while True:
+			ingress = ws.receive()
 			message = json.loads(ingress)['message']
 			if message == "ping":
 				egress =  {"type": "pong"}
-				redchatws.send(json.dumps(egress))
+				ws.send(json.dumps(egress))
 				continue
 			else:
-				egress = {"type": "chatmessage", "player": "Red:", "message": message }
-				redchatws.send(json.dumps(egress))
-				if totalchatters == 2:
-					bluechatws.send(json.dumps(egress))
+				egress = {"type": "chatmessage", "player": "Me:", "message": message }
+				ws.send(json.dumps(egress))
+				egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+				opp_ws.send(json.dumps(egress))
 
-				
-			
-
-	elif totalchatters == 2:
-		bluechatws = ws
-		while True:
-			ingress = bluechatws.receive()
-			message = json.loads(ingress)['message']
-
-			if message == "ping":
-				egress =  {"type": "pong"}
-				bluechatws.send(json.dumps(egress))
-				continue
-
-			else:
-				egress = {"type": "chatmessage", "player": "Blue:", "message": message }
-				
-				redchatws.send(json.dumps(egress))
-				bluechatws.send(json.dumps(egress))
+		t.join()
 
 
-
-
-
-
+if __name__ == "__main__":
+    app.run(host='0.0.0.0')
 
 

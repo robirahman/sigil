@@ -1461,7 +1461,7 @@
   opacity: 0;
   font-family: Papyrus;
   width:18%;
-  height:20%;
+  height:17.5%;
   border: 1px solid black;
   overflow: scroll;
   position: absolute;
@@ -1481,7 +1481,7 @@
   width: 18%;
   height: 4%;
   position: absolute;
-  top: 175px;
+  top: 185px;
   left: 1030px;
   transition-property: opacity;
   transition-duration: 2s;

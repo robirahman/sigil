@@ -1,6 +1,7 @@
 import spellgenerator
 import spellfile
 import json
+import time
 
 
 
@@ -390,7 +391,7 @@ class Board():
 		### spellnames is just a list of strings which are the names
 		### of the spells to be instantiated, in order of their
 		### position, 1-9.
-		spellnames = spellgenerator.spell_list
+		spellnames = spellgenerator.generate_spell_list()
 
 		### Convert this spellnames list into a list of spell objects
 		### and return that in-order list of spell objects
@@ -481,13 +482,14 @@ class Player():
 	def receivemessage(self):
 		while True:
 			ingress = self.ws.receive()
+
 			if json.loads(ingress)['message'] == 'ping':
 				self.pong()
 				self.opp.pong()
 				continue
 			else:
 				break
-			
+		
 		if json.loads(ingress)['message'] == 'reset':
 			raise resetException()
 

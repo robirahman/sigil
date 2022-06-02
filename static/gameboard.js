@@ -12,11 +12,11 @@ function main() {
 
 
   // SpellDict will be a dictionary with keys "major2", "charm3", etc.,
-  // and values "Flourish2", "Sprout3", etc.
+  // and values "Searing_Wind", "Creeping_Vines", etc.
   SpellDict = null;
 
 
-  // ReverseSpellDict will be a dictionary with keys "Flourish2", "Sprout3", etc.,
+  // ReverseSpellDict will be a dictionary with keys "Searing_Wind", "Creeping_Vines", etc.,
   // and values "major2", "charm3", etc.
   ReverseSpellDict = null;
 
@@ -30,7 +30,7 @@ function main() {
     "minor3": "c2",
   };
 
-  // lockdict will be a dictionary with keys "Flourish2", "Sprout3", etc.,
+  // lockdict will be a dictionary with keys "Searing_Wind", "Creeping_Vines", etc.,
   // and values "a1", "c2", etc.  It is initialized at the same time as SpellDict,
   // once the spell setup JSON is received.
   lockdict = {};
@@ -109,7 +109,7 @@ function spellClick(spellposition) {
   //This is ONLY triggered for spells, not charms
 
   // Takes in a spell position, e.g., "major2", "minor3"
-  // and sends a spellname, e.g., 'Flourish3', 'Grow3'
+  // and sends a spellname, e.g., 'Searing_Wind', 'Creeping_Vines'
   var spellname = SpellDict[spellposition];
   if ((awaiting == 'action') && actionlist.includes(spellname)) {
     var payload = {'message': spellname};
@@ -289,8 +289,6 @@ function doneselectingClick(button) {
 
 function startClick(button) {
   joinedgame = true;
-  var payload = {'message': 'joinedgame'};
-  events.send(JSON.stringify(payload));
   fadeIn();
 }
 

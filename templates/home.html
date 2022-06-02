@@ -12,15 +12,52 @@
   <body onload="main();">
 
     <div id="WelcomeBox">
-      <b>Welcome to Sigil Online!</b>
+      <b>Sigil Online</b>
     </div>
 
-    <ul>
-      <li><a href="{{ url_for('tutorial') }}">Tutorial</a></li>
-      <li><a href="{{ url_for('laddermatch') }}">Ladder Match</a></li>
-      <li><a href="{{ url_for('privatematch') }}">Private Match</a></li>
-    </ul>
+    <div id="sigildescription">
+      <b>Battle your opponent for control of the Sigil in this strategy board game of arcane magic</b>
+    </div>
 
+    <div>
+      <button type="button" id="tutorialbutton" class="tutorialbutton" onclick="window.location.href='{{ url_for('tutorial') }}';">
+        <b>Tutorial</b>
+      </button>
+    </div>
+
+    <p id="tutorialtext" class="buttontext">Learn to play Sigil</p>
+
+    <div>
+      <button type="button" id="singleplayerbutton" class="singleplayerbutton" onclick="window.location.href='{{ url_for('singleplayer') }}';">
+        <b>Single Player</b>
+      </button>
+    </div>
+
+    <p id="singleplayertext" class="buttontext">Play a game against BetaSigil,<br>our rudimentary AI<br>(AlphaSigil is still in development)</p>
+
+    <div>
+      <button type="button" id="privatematchbutton" class="privatematchbutton" onclick="window.location.href='{{ url_for('privatematch') }}';">
+        <b>Private Match</b>
+      </button>
+    </div>
+
+    <p id="privatematchtext" class="buttontext">Play a private, unranked<br>game against a friend</p>
+
+    <div>
+      <button type="button" id="laddermatchbutton" class="laddermatchbutton" onclick="window.location.href='{{ url_for('laddermatch') }}';">
+        <b>Ladder Match</b>
+      </button>
+    </div>
+
+    <p id="laddermatchtext" class="buttontext">Play a ranked game<br>against a random opponent</p>
+
+    <div>
+        <img id="newboard" src="/static/images/newboard.png"/>
+    </div>
+
+    <div id="pineislandgames">
+        Sigil will also be available as a tabletop game (coming soon to Kickstarter!) from <a href="https://www.pineislandgames.com" style="color: hotpink;">Pine Island Games</a>.<br>Join the Pine Island mailing list for details and updates!</b>
+    </div>
   </body>
 </html>
 
