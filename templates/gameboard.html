@@ -9,7 +9,8 @@
 
   <script src="/static/gameboard.js"></script>
 
-  <body onload="main();">
+  <body onload="main({{privategamename}});">
+
     
     <div id="fullBoard" >
 
@@ -304,7 +305,7 @@
 
 
   <div id="majordiv2">
-        <img id="major2" src="/static/images/Creeping_Vines.png">
+        <img id="major2" src="/static/images/emptystone.png">
         <img id="majornodes2" src="/static/images/majornodes.png">
 
          <div>
@@ -330,7 +331,7 @@
 
 
   <div id="minordiv1">
-        <img id="minor1" src="/static/images/Spreading_Ivy.png">
+        <img id="minor1" src="/static/images/emptystone.png">
         <img id="minornodes1" src="/static/images/minornodes.png">
 
         <div>
@@ -348,7 +349,7 @@
       <p id="charmtext1" class="spelltext"></p>
 
       <div id="charmdiv1">
-        <img id="charm1" src="/static/images/Sprout.png">
+        <img id="charm1" src="/static/images/emptystone.png">
         <img id="charmnodes1" src="/static/images/charmnodes.png">
 
       <div>
@@ -361,7 +362,7 @@
 
 
   <div id="majordiv1">
-        <img id="major1" src="/static/images/Creeping_Vines.png">
+        <img id="major1" src="/static/images/emptystone.png">
         <img id="majornodes1" src="/static/images/majornodes.png">
 
         <div>
@@ -385,7 +386,7 @@
 
 
   <div id="minordiv2">
-        <img id="minor2" src="/static/images/Spreading_Ivy.png">
+        <img id="minor2" src="/static/images/emptystone.png">
         <img id="minornodes2" src="/static/images/minornodes.png">
 
         <div>
@@ -403,7 +404,7 @@
       <p id="charmtext2" class="spelltext"></p>
 
   <div id="charmdiv2">
-        <img id="charm2" src="/static/images/Sprout.png">
+        <img id="charm2" src="/static/images/emptystone.png">
         <img id="charmnodes2" src="/static/images/charmnodes.png">
 
         <div>
@@ -415,7 +416,7 @@
 
 
   <div id="charmdiv3">
-        <img id="charm3" src="/static/images/Sprout.png">
+        <img id="charm3" src="/static/images/emptystone.png">
         <img id="charmnodes3" src="/static/images/charmnodes.png">
 
         <div>
@@ -427,7 +428,7 @@
   <p id="majortext3" class="spelltext"></p>
 
   <div id="majordiv3">
-        <img id="major3" src="/static/images/Creeping_Vines.png">
+        <img id="major3" src="/static/images/emptystone.png">
         <img id="majornodes3" src="/static/images/majornodes.png">
 
         <div>
@@ -452,7 +453,7 @@
 
 
       <div id="minordiv3">
-        <img id="minor3" src="/static/images/Spreading_Ivy.png">
+        <img id="minor3" src="/static/images/emptystone.png">
         <img id="minornodes3" src="/static/images/minornodes.png">
 
         <div>
@@ -511,14 +512,6 @@
     <div>
       <button type="button" id="doneselectingbutton" class="doneselectingbutton">
         <b>Done</b>
-      </button>
-    </div>
-
-
-
-    <div>
-      <button type="button" id="startbutton" class="startbutton">
-        <b>Join Game</b>
       </button>
     </div>
 

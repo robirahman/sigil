@@ -12,8 +12,41 @@
   <body onload="main();">
 
     <div id="privatematchdescription">
-      <b>Private match system still under construction, try back later!</b>
+      <b>Play a private, unranked game against a friend.</b>
     </div>
+
+    <div>
+      <button type="button" id="creategamebutton">
+        <b>Create Game</b>
+      </button>
+    </div>
+
+    <p id="creategametext" class="buttontext">Create a new private game<br>that a friend can join.</p>
+
+    <div>
+      <button type="button" id="joingamebutton">
+        <b>Join Game</b>
+      </button>
+    </div>
+
+    <p id="joingametext" class="buttontext">Join a private game<br>that a friend has created.</p>
+
+
+    <form id="creategameform">
+      <label for="gamename">Game Name:</label><br>
+      <input type="text" id="gamename" name="gamename" style="font-size: 15px;"><br>
+      <label for="gamepwd">Game Password:</label><br>
+      <input type="password" id="gamepwd" name="gamepwd" style="font-size: 15px;"><br>
+      <input type="submit" class="submitbutton" value="Submit">
+    </form>
+
+    <form id="joingameform">
+      <label for="gamename">Game Name:</label><br>
+      <input type="text" id="gamename" name="gamename" style="font-size: 15px;"><br>
+      <label for="gamepwd">Game Password:</label><br>
+      <input type="password" id="gamepwd" name="gamepwd" style="font-size: 15px;"><br>
+      <input type="submit" class="submitbutton" value="Submit">
+    </form>
 
   </body>
 </html>

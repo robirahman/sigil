@@ -17,4 +17,47 @@ function main() {
 	document.getElementById("singleplayerbutton").addEventListener('click', function() {document.getElementById("singleplayertext").style.display="none";});
 	document.getElementById("privatematchbutton").addEventListener('click', function() {document.getElementById("privatematchtext").style.display="none";});
 	document.getElementById("laddermatchbutton").addEventListener('click', function() {document.getElementById("laddermatchtext").style.display="none";});
+
+
+	document.getElementById("ritual1").onmouseover = function() {document.getElementById("ritual1text").style.display="inline";};
+	document.getElementById("ritual2").onmouseover = function() {document.getElementById("ritual2text").style.display="inline";};
+	document.getElementById("ritual3").onmouseover = function() {document.getElementById("ritual3text").style.display="inline";};
+
+	document.getElementById("ritual1").onmouseout = function() {document.getElementById("ritual1text").style.display="none";};
+	document.getElementById("ritual2").onmouseout = function() {document.getElementById("ritual2text").style.display="none";};
+	document.getElementById("ritual3").onmouseout = function() {document.getElementById("ritual3text").style.display="none";};
+
+	document.getElementById("sorcery1").onmouseover = function() {document.getElementById("sorcery1text").style.display="inline";};
+	document.getElementById("sorcery2").onmouseover = function() {document.getElementById("sorcery2text").style.display="inline";};
+	document.getElementById("sorcery3").onmouseover = function() {document.getElementById("sorcery3text").style.display="inline";};
+
+	document.getElementById("sorcery1").onmouseout = function() {document.getElementById("sorcery1text").style.display="none";};
+	document.getElementById("sorcery2").onmouseout = function() {document.getElementById("sorcery2text").style.display="none";};
+	document.getElementById("sorcery3").onmouseout = function() {document.getElementById("sorcery3text").style.display="none";};
+
+	document.getElementById("charm1").onmouseover = function() {document.getElementById("charm1text").style.display="inline";};
+	document.getElementById("charm2").onmouseover = function() {document.getElementById("charm2text").style.display="inline";};
+	document.getElementById("charm3").onmouseover = function() {document.getElementById("charm3text").style.display="inline";};
+
+	document.getElementById("charm1").onmouseout = function() {document.getElementById("charm1text").style.display="none";};
+	document.getElementById("charm2").onmouseout = function() {document.getElementById("charm2text").style.display="none";};
+	document.getElementById("charm3").onmouseout = function() {document.getElementById("charm3text").style.display="none";};
+
+	document.getElementById("mana1").onmouseover = function() {document.getElementById("mana1text").style.display="inline";};
+	document.getElementById("mana2").onmouseover = function() {document.getElementById("mana2text").style.display="inline";};
+	document.getElementById("mana3").onmouseover = function() {document.getElementById("mana3text").style.display="inline";};
+
+	document.getElementById("mana1").onmouseout = function() {document.getElementById("mana1text").style.display="none";};
+	document.getElementById("mana2").onmouseout = function() {document.getElementById("mana2text").style.display="none";};
+	document.getElementById("mana3").onmouseout = function() {document.getElementById("mana3text").style.display="none";};
+
+	document.getElementById("scorekeeper").onmouseover = function() {document.getElementById("scorekeepertext").style.display="inline";};
+	document.getElementById("scorekeeper").onmouseout = function() {document.getElementById("scorekeepertext").style.display="none";};
 }
+
+
+
+
+
+
+

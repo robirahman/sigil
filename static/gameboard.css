@@ -1,18 +1,6 @@
-  
+  /* CSS for game board */
 
-
-  .moonrefill {
-  position: relative;
-  top: -3px;
-  width: 17px;
-  height: 24px;
-  }
-
-  .sunrefill {
-  filter: brightness(130%);
-  width: 30px;
-  height: 30px;
-  }
+  body {background-color: #1b0a26;}
 
   #fullBoard {
   position: relative;
@@ -679,34 +667,10 @@
 
 
 
-  .startbutton{
-    position: absolute;
-    top: 100px;
-    left: 450px;
-    font-family: Papyrus;
-    text-align: center;
-    font-size: 25px;
-    border-radius: 9px;
-    border: 2px solid black;
-    background-color: MediumSeaGreen;
-    padding: 20px 28px;
-    transition-property: background-color;
-    transition-duration: .5s;
-  }
-
-  .startbutton:hover {
-    background-color: SpringGreen;
-    transition-property: background-color;
-    transition-duration: .5s;
-  }
-
-
-
-
-
 
 #actionBox {
   font-family: Papyrus;
+  color: white;
   width:20%;
   height:20%;
   border: none;
@@ -716,6 +680,7 @@
 
   #whoseturndisplay {
   font-family: Papyrus;
+  color: white;
   width:20%;
   height: 10%;
   border: none;
@@ -723,31 +688,31 @@
   }
 
   #redcountdown {
-  font-family: Papyrus;
-  width:20%;
-  height: 10%;
-  border: none;
-  font-size: 18px;
-
+    color: white;
+    font-family: Papyrus;
+    width:20%;
+    height: 10%;
+    border: none;
+    font-size: 18px;
   }
 
   #bluecountdown {
-  font-family: Papyrus;
-  width:20%;
-  height: 10%;
-  border: none;
-  font-size: 18px;
-
+    color: white;
+    font-family: Papyrus;
+    width:20%;
+    height: 10%;
+    border: none;
+    font-size: 18px;
   }
 
 
   #scorekeeper {
-  width: 30px;
-  height: 30px;
-  opacity: 0;
-  transition-duration: 1s;
-  transition-property: left, top, opacity;
-  animation: twinkle 4s linear infinite;
+    width: 30px;
+    height: 30px;
+    opacity: 0;
+    transition-duration: 1s;
+    transition-property: left, top, opacity;
+    animation: twinkle 4s linear infinite;
   }
 
 
@@ -1458,34 +1423,36 @@
 
 
   #chatBox {
-  opacity: 0;
-  font-family: Papyrus;
-  width:18%;
-  height:17.5%;
-  border: 1px solid black;
-  overflow: scroll;
-  position: absolute;
-  top: 0px;
-  left: 1030px;
-  transition-property: opacity;
-  transition-duration: 2s;
-  transition-delay: 3s;
+    color: white;
+    opacity: 0;
+    font-family: Papyrus;
+    width:18%;
+    height:17.5%;
+    overflow: scroll;
+    position: absolute;
+    top: 0px;
+    left: 1030px;
+    transition-property: opacity;
+    transition-duration: 2s;
+    transition-delay: 3s;
   }
 
   #chatInput {
-  visibility: hidden;
-  opacity: 0;
-  font-family: Papyrus;
-  font-size: 15px;
-  border: 1px solid black;
-  width: 18%;
-  height: 4%;
-  position: absolute;
-  top: 185px;
-  left: 1030px;
-  transition-property: opacity;
-  transition-duration: 2s;
-  transition-delay: 3s;
+    visibility: hidden;
+    background-color: #800080;
+    color: white;
+    opacity: 0;
+    font-family: Papyrus;
+    font-size: 15px;
+    border: 2px solid black;
+    width: 18%;
+    height: 4%;
+    position: absolute;
+    top: 185px;
+    left: 1030px;
+    transition-property: opacity;
+    transition-duration: 2s;
+    transition-delay: 3s;
 
   }
 

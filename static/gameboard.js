@@ -1,5 +1,7 @@
 
-function main() {
+function main(privategamename) {
+  // gamename is empty for ladder games, nonempty otherwise
+
   // awaiting is a global variable set to null when not awaiting anything,
   // set to 'node' when the server is awaiting a node name,
   //set to 'spell' when the server is awaiting a choice of spell,
@@ -8,7 +10,6 @@ function main() {
   // actionlist is the list of available actions, when awaiting == 'action'.
   awaiting = null;
   actionlist = null;
-  joinedgame = false;
 
 
   // SpellDict will be a dictionary with keys "major2", "charm3", etc.,
@@ -42,12 +43,21 @@ function main() {
 
 
   // This needs to be "ws://" for locally running Flask, and "wss://" on Heroku
-  events = new WebSocket("ws://" + location.host + "/api/game");
-  events.onmessage = incomingEvent;
+  if (privategamename == "") {
+    events = new WebSocket("ws://" + location.host + "/api/game");
+    events.onmessage = incomingEvent;
 
 
-  chat = new WebSocket("ws://" + location.host + "/api/chat");
-  chat.onmessage = chatEvent;
+    chat = new WebSocket("ws://" + location.host + "/api/chat");
+    chat.onmessage = chatEvent;
+  } else {
+    events = new WebSocket("ws://" + location.host + "/api/privategame/" + privategamename);
+    events.onmessage = incomingEvent;
+
+
+    chat = new WebSocket("ws://" + location.host + "/api/privatechat/" + privategamename);
+    chat.onmessage = chatEvent;
+  }
 
 
   allnodenames = [
@@ -93,15 +103,12 @@ function main() {
   document.getElementById("doneselectingbutton").addEventListener(
     'click', function() {doneselectingClick(this);}, false);
 
-  document.getElementById("startbutton").addEventListener(
-    'click', function() {startClick(this);}, false);
-
   document.addEventListener("keydown", keyDownFunction, false);
 
 
-setInterval(ping, 3000);
+  setInterval(ping, 3000);
 
-
+  fadeIn();
 }
 
 
@@ -165,6 +172,16 @@ function setupSpells(spellnamedict) {
   document.getElementById("charm2").src = "/static/images/" + spellnamedict.charm2 + ".png";
   document.getElementById("charm3").src = "/static/images/" + spellnamedict.charm3 + ".png";
 
+  document.getElementById("majornodes1").style.opacity = .7;
+  document.getElementById("majornodes2").style.opacity = .7;
+  document.getElementById("majornodes3").style.opacity = .7;
+  document.getElementById("minornodes1").style.opacity = .7;
+  document.getElementById("minornodes2").style.opacity = .7;
+  document.getElementById("minornodes3").style.opacity = .7;
+  document.getElementById("charmnodes1").style.opacity = .7;
+  document.getElementById("charmnodes2").style.opacity = .7;
+  document.getElementById("charmnodes3").style.opacity = .7;
+
 }
 
 
@@ -185,7 +202,6 @@ function setupSpellText(spelltextdict) {
 
 
 function fadeIn() {
-  document.getElementById("startbutton").style.display = "none";
 
   document.getElementById("board").style.opacity = 1;
   document.getElementById("major3").style.opacity = 1;
@@ -198,15 +214,6 @@ function fadeIn() {
   document.getElementById("minor3").style.opacity = 1;
   document.getElementById("charm3").style.opacity = 1;
 
-  document.getElementById("majornodes1").style.opacity = .7;
-  document.getElementById("majornodes2").style.opacity = .7;
-  document.getElementById("majornodes3").style.opacity = .7;
-  document.getElementById("minornodes1").style.opacity = .7;
-  document.getElementById("minornodes2").style.opacity = .7;
-  document.getElementById("minornodes3").style.opacity = .7;
-  document.getElementById("charmnodes1").style.opacity = .7;
-  document.getElementById("charmnodes2").style.opacity = .7;
-  document.getElementById("charmnodes3").style.opacity = .7;
 
   document.getElementById("chatInput").style.visibility = "visible";
   document.getElementById("chatBox").style.opacity = 1;
@@ -287,14 +294,7 @@ function doneselectingClick(button) {
 }
 
 
-function startClick(button) {
-  joinedgame = true;
-  fadeIn();
-}
-
-
 function nodeClick(node) {
-  if (joinedgame){
   if (awaiting == 'node') {
     var payload = {'message': node.id, };
     // Sends a string like 'a12', 'c3', etc, as the message
@@ -327,7 +327,6 @@ function nodeClick(node) {
 
     };
 
-  };
   };
 }
 
@@ -378,12 +377,6 @@ function incomingEvent(event) {
 
   } else if (payload.type == "whoseturndisplay") {
     var turnbox = document.getElementById("whoseturndisplay");
-    if (payload.color == "red") {
-      turnbox.style.color = "Crimson";
-    }
-    else if (payload.color == "blue") {
-      turnbox.style.color = "Blue";
-    }
     turnbox.innerHTML = payload.message;
 
   } else if (payload.type == "boardstate") {
