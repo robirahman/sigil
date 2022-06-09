@@ -41,7 +41,6 @@ function main(privategamename) {
   };
 
 
-
   // This needs to be "ws://" for locally running Flask, and "wss://" on Heroku
   if (privategamename == "") {
     events = new WebSocket("ws://" + location.host + "/api/game");
@@ -219,9 +218,9 @@ function fadeIn() {
   document.getElementById("chatBox").style.opacity = 1;
   document.getElementById("chatInput").style.opacity = 1;
 
-  setTimeout(scorekeeperFadeIn, 5000);
+  setTimeout(scorekeeperFadeIn, 1000);
 
-  setTimeout(addSpellLabels, 6000);
+  setTimeout(addSpellLabels, 2000);
 }
 
 function scorekeeperFadeIn (){
@@ -463,43 +462,49 @@ function updateBoard(boardstate) {
     }
   }
 
-  var lastplayname = boardstate["last_play"]
-  var lastplayer = boardstate["last_player"]
-  document.getElementById(lastplayname).src = "/static/images/"+lastplayer+"stonehalo.png";
-  document.getElementById(lastplayname).style.opacity = 1;
+  if (boardstate["last_play"] != null) {
+    var lastplayname = boardstate["last_play"];
+    var lastplayer = boardstate["last_player"];
+    document.getElementById(lastplayname).src = "/static/images/"+lastplayer+"stonehalo.png";
+    document.getElementById(lastplayname).style.opacity = 1;
+  }
 
 
 
     var redlockedspellname = boardstate["redlock"];
     var bluelockedspellname = boardstate["bluelock"];
-    // These are the locked spell names, e.g., "Flourish2", "Grow3"
+    // These are the locked spell names, e.g., "Searing_Wind", "Creeping_Vines"
+
 
     for (lockIdentifierChars of ['a1', 'b1', 'c1', 'a2', 'b2', 'c2']){
-      if ((document.getElementById("redlockcircle" + lockIdentifierChars).className == "redlockcircleend") &&
+      if ((document.getElementById("redlock" + lockIdentifierChars).style.opacity == 1) &&
         lockdict[redlockedspellname] != lockIdentifierChars) {
         deactivateLock(lockIdentifierChars, "red");
       };
 
-      if ((document.getElementById("redlockcircle" + lockIdentifierChars + "alt").className == "redlockcircleend") &&
+      if ((document.getElementById("redlock" + lockIdentifierChars + "alt").style.opacity == 1) &&
         lockdict[redlockedspellname] != lockIdentifierChars) {
         deactivateLock(lockIdentifierChars + "alt", "red");
       };
 
-      if ((document.getElementById("bluelockcircle" + lockIdentifierChars).className == "bluelockcircleend") &&
+      if ((document.getElementById("bluelock" + lockIdentifierChars).style.opacity == 1) &&
         lockdict[bluelockedspellname] != lockIdentifierChars) {
         deactivateLock(lockIdentifierChars, "blue");
       };
 
-      if ((document.getElementById("bluelockcircle" + lockIdentifierChars + "alt").className == "bluelockcircleend") &&
+      if ((document.getElementById("bluelock" + lockIdentifierChars + "alt").style.opacity == 1) &&
         lockdict[bluelockedspellname] != lockIdentifierChars) {
         deactivateLock(lockIdentifierChars + "alt", "blue");
       };
     };
 
     if (redlockedspellname) {
-      if ((document.getElementById("redlockcircle" + lockdict[redlockedspellname]).className == "redlockcirclestart") &&
-        (document.getElementById("redlockcircle" + lockdict[redlockedspellname] + "alt").className == "redlockcirclestart")) {
-        if (document.getElementById("bluelockcircle" + lockdict[redlockedspellname]).className == "bluelockcirclestart"){
+
+      if ((document.getElementById("redlock" + lockdict[redlockedspellname]).style.opacity == 0) &&
+        (document.getElementById("redlock" + lockdict[redlockedspellname] + "alt").style.opacity == 0)) {
+
+        if (document.getElementById("bluelock" + lockdict[redlockedspellname]).style.opacity == 0){
+
           activateLock(lockdict[redlockedspellname], "red");
         } else {activateLock(lockdict[redlockedspellname] + "alt", "red");
         };
@@ -509,9 +514,9 @@ function updateBoard(boardstate) {
     };
 
     if (bluelockedspellname) {
-      if ((document.getElementById("bluelockcircle" + lockdict[bluelockedspellname]).className == "bluelockcirclestart") &&
-        (document.getElementById("bluelockcircle" + lockdict[bluelockedspellname] + "alt").className == "bluelockcirclestart")) {
-        if (document.getElementById("redlockcircle" + lockdict[bluelockedspellname]).className == "redlockcirclestart"){
+      if ((document.getElementById("bluelock" + lockdict[bluelockedspellname]).style.opacity == 0) &&
+        (document.getElementById("bluelock" + lockdict[bluelockedspellname] + "alt").style.opacity == 0)) {
+        if (document.getElementById("redlock" + lockdict[bluelockedspellname]).style.opacity == 0){
           activateLock(lockdict[bluelockedspellname], "blue");
         } else {activateLock(lockdict[bluelockedspellname] + "alt", "blue");
         };
@@ -537,22 +542,13 @@ function updateBoard(boardstate) {
 
 
 
+
 function activateLock(lockIdentifierChars, color) {
-  document.getElementById(color + "lock" + lockIdentifierChars).className = color + "lock" + lockIdentifierChars + "end";
-  document.getElementById(color + "lockcircle" + lockIdentifierChars).className = color + "lockcircleend";
-  document.getElementById(color + "leftbar" + lockIdentifierChars).className = color + "leftbarend";
-  document.getElementById(color + "rightbar" + lockIdentifierChars).className = color + "rightbarend";
-  document.getElementById(color + "topbar" + lockIdentifierChars).className = color + "topbarend";
-  document.getElementById(color + "bottombar" + lockIdentifierChars).className = color + "bottombarend";
+  document.getElementById(color + "lock" + lockIdentifierChars).style.opacity = 1;
 }
 
 function deactivateLock(lockIdentifierChars, color) {
-  document.getElementById(color + "lock" + lockIdentifierChars).className = color + "lock" + lockIdentifierChars +"start";
-  document.getElementById(color + "lockcircle" + lockIdentifierChars).className = color + "lockcirclestart";
-  document.getElementById(color + "leftbar" + lockIdentifierChars).className = color + "leftbarstart";
-  document.getElementById(color + "rightbar" + lockIdentifierChars).className = color + "rightbarstart";
-  document.getElementById(color + "topbar" + lockIdentifierChars).className = color + "topbarstart";
-  document.getElementById(color + "bottombar" + lockIdentifierChars).className = color + "bottombarstart";
+  document.getElementById(color + "lock" + lockIdentifierChars).style.opacity = 0;
 }
 
 

@@ -235,7 +235,7 @@ class Board():
 			redcountdownstring = "{} Red spells".format(self.redplayer.countdown)
 		elif self.redplayer.countdown == 1:
 			redcountdownstring = "1 Red spell"
-		elif self.redplayer.countdown == 0:
+		else:
 			redcountdownstring = "Zero Red spells"
 
 		jboard["redcountdown"] = redcountdownstring
@@ -244,7 +244,7 @@ class Board():
 			bluecountdownstring = "{} Blue spells".format(self.blueplayer.countdown)
 		elif self.blueplayer.countdown == 1:
 			bluecountdownstring = "1 Blue spell"
-		elif self.blueplayer.countdown == 0:
+		else:
 			bluecountdownstring = "Zero Blue spells"
 
 

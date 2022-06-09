@@ -197,9 +197,9 @@ body {background-color: #1b0a26;}
 #runering {
   animation: rotation 40s infinite linear;
   position: absolute;
-  top: 355px;
-  left: 595px;
-  width: 373px;
+  top: 385px;
+  left: 632px;
+  width: 300px;
   height: auto;
   z-index: -2;
 }
