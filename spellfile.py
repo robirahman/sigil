@@ -28,7 +28,8 @@ class Spell():
 		### number based on mana
 		pname = player.color[0].upper() + player.color[1:]
 		player.jmessage(pname + " casts " + self.name)
-		player.opp.jmessage(pname + " casts " + self.name)
+		if player.opp.ishuman:
+			player.opp.jmessage(pname + " casts " + self.name)
 		if self.ischarm:
 			for node in self.position:
 				node.stone = None
@@ -89,7 +90,8 @@ class Spell():
 				player.springlock = self
 				pname = player.color[0].upper() + player.color[1:]
 				player.jmessage(self.name + " is Springlocked for " + pname)
-				player.opp.jmessage(self.name + " is Springlocked for " + pname)
+				if player.opp.ishuman:
+					player.opp.jmessage(self.name + " is Springlocked for " + pname)
 			else:
 				player.lock = self
 				player.springlock = None

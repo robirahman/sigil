@@ -18,8 +18,6 @@ import time
 
 
 
-class resetException(Exception):
-	pass
 
 
 
@@ -37,7 +35,7 @@ class Node():
 
 
 
-class Board():
+class SPBoard():
 	def __init__(self):
 
 		self.turncounter = 0
@@ -81,6 +79,9 @@ class Board():
 		### after the board setup has been finished!
 		self.redplayer = None
 		self.blueplayer = None
+
+		self.humanplayer = None
+		self.aiplayer = None
 
 
 
@@ -218,7 +219,7 @@ class Board():
 
 
 
-		### Sends a json dictionary to the players.
+		### Sends a json dictionary to the human player.
 		### Tells which stones are where, and also which locks are where.
 
 		jboard = {"type": "boardstate", }
@@ -256,8 +257,7 @@ class Board():
 		jboard["last_player"] = self.last_player
 		jboard["last_play"] = self.last_play
 		
-		self.redplayer.ws.send(json.dumps(jboard))
-		self.blueplayer.ws.send(json.dumps(jboard))
+		self.humanplayer.ws.send(json.dumps(jboard))
 
 
 	def end_game(self):
@@ -265,13 +265,10 @@ class Board():
 		### just prints some silly stuff.
 		### But this would be a good place to put any 'store the data'
 		### type code.
-		self.redplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
+		self.humanplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
 							   " !!!")
-		self.blueplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
-								" !!!")
 		for i in range(3):
-			self.redplayer.jmessage(self.winner.upper() + " VICTORY")
-			self.blueplayer.jmessage(self.winner.upper() + " VICTORY")
+			self.humanplayer.jmessage(self.winner.upper() + " VICTORY")
 
 	def make_board(self):
 		nodelist = []
@@ -417,19 +414,26 @@ class Board():
 
 		return d
 
-	def addplayers(self, redplayer, blueplayer):
+	def addplayers(self, human, ai):
 		### Call this method AFTER building the board and the players.
 		### This is my hack-y way of giving players the board as parameter,
 		### and also giving the board players as parameters.
 
-		self.redplayer = redplayer
-		self.blueplayer = blueplayer
+		self.humanplayer = human
+		self.aiplayer = ai
+
+		if human.color == 'red':
+			self.redplayer = human
+			self.blueplayer = ai
+		else:
+			self.redplayer = ai
+			self.blueplayer = human
 
 
-class Player():
-	### color parameter should be 'red' or 'blue'
+class AIPlayer():
+	### Just like a humanplayer, but with no websocket.
 	def __init__(self, board, color):
-		self.ishuman = True
+		self.ishuman = False
 		self.board = board
 		self.color = color
 		if self.color == 'red':
@@ -466,41 +470,16 @@ class Player():
 		### player.opp will be the opponent player object.
 		self.opp = None
 
-		### The player.ws attribute will be where we store
-		### the object which is the ws connection to each player.
-		self.ws = None
 
 
-	def jmessage(self, message, awaiting= None):
-		egress =  {"type": "message", "message": message, "awaiting": awaiting, }
-		self.ws.send(json.dumps(egress))
-
-
-	def pong(self):
-		egress =  {"type": "pong"}
-		self.ws.send(json.dumps(egress))
-
-	def receivemessage(self):
-		while True:
-			ingress = self.ws.receive()
-
-			if json.loads(ingress)['message'] == 'ping':
-				self.pong()
-				if self.opp.ishuman:
-					self.opp.pong()
-				continue
-			else:
-				break
-		
-		if json.loads(ingress)['message'] == 'reset':
-			raise resetException()
-
-		actualmessage = json.loads(ingress)['message']
-		return actualmessage
 
 
 	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
 		self.board.update(True)
+
+		### One second delay between actions, for more realistic-feeling AI
+		time.sleep(1)
+
 
 		actions = []
 		spelllist = []
@@ -537,36 +516,18 @@ class Player():
 								spelllist.append(spell.name)
 			actions.append('pass')
 
-		self.jmessage("\nSelect an action:")
+		
 
 
-		egress =  {"type": "message", "message": str(actions), 
-		"awaiting": "action", "actionlist": actions}
+		### Select 1 action from the actions list. BetaSigil will just move, then pass.
 
-		self.ws.send(json.dumps(egress))
-
-		action = self.receivemessage()
-
-
-		### This clause performs the 'move' action with the node name preloaded.
-		### In this case action == the name of a node.
-		if 'move' in actions:
-			shortcuts = self.board.nodes.keys()
+		if 'pass' in actions:
+			action = 'pass'
 		else:
-			shortcuts = []
+			action = 'move'
+	
 
-		if action not in actions and action not in shortcuts:
-			self.jmessage("Invalid action!")
-			self.taketurn(canmove, candash, canspell, cansummer)
-			return None
-
-		elif action in shortcuts:
-			self.move(action, standardmove=True)
-			self.board.currentplayerhasmoved = True
-			self.taketurn(False, candash, canspell, cansummer)
-			return None
-
-		elif action == 'move':
+		if action == 'move':
 			self.move(standardmove=True)
 			self.board.currentplayerhasmoved = True
 			self.taketurn(False, candash, canspell, cansummer)
@@ -601,9 +562,7 @@ class Player():
 		### variables gameover = True and winner = self.enemy
 
 		if 'Inferno' in [spell.name for spell in self.charged_spells]:
-			self.jmessage("DEATH BY INFERNO!")
-			if self.opp.ishuman:
-				self.opp.jmessage("DEATH BY INFERNO!")
+			self.board.humanplayer.jmessage("DEATH BY INFERNO!")
 			self.board.gameover = True
 			self.board.winner = self.enemy
 
@@ -622,9 +581,7 @@ class Player():
 	
 
 		if 'Inferno' in [spell.name for spell in self.charged_spells]:
-			self.jmessage("INFERNO TRIGGER!")
-			if self.opp.ishuman:
-				self.opp.jmessage("INFERNO TRIGGER!")
+			self.board.humanplayer.jmessage("INFERNO TRIGGER!")
 			for name in board.nodes:
 				node = board.nodes[name]
 				if node.stone == self.enemy:
@@ -672,205 +629,51 @@ class Player():
 
 
 
-	def move(self, preloaded = False, standardmove = False, sorcery_only=False, ritual_only=False):
-		### If the user clicked on a node while they had 'move' action available,
-		### we call this move function with preloaded == the node they clicked.
-
+	def move(self, standardmove = False):
 		### standardmove is True iff this is the player's standard move for the turn.
-		if not preloaded:
-			self.jmessage("Where would you like to move? ", "node")
-			nodename = self.receivemessage()
-		else:
-			nodename = preloaded
 
-		node = self.board.nodes[nodename]
-		adjacent = False
-		for neighbor in node.neighbors:
-			if neighbor.stone == self.color:
-				adjacent = True
+		legalmoves = []
 
-		if node.stone == self.color:
-			self.jmessage("Invalid move-- you already have a stone there!")
-			self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
-			return None
-
-		elif not adjacent:
-			if not (standardmove and ("Field_of_Flowers" in [spell.name for spell in self.charged_spells])):
-				self.jmessage("Invalid move-- that's not adjacent to you!")
-				self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
-				return None
+		for name in self.board.nodes:
+			node = self.board.nodes[name]
+			color = node.stone
+			if color == self.color:
+				continue
 			else:
-				if node.stone == None:
-					node.stone = self.color
-					self.board.last_play = node.name
-					self.board.last_player = self.color
-					self.board.update()
-				else:
-					if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
-						self.jmessage("You can only make soft moves under Gravity.")
-						self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
-						return None
-					self.pushenemy(node)
+				adjacent = False
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						adjacent = True
+				if adjacent:
+					legalmoves.append(node)
 
-
-		elif node.stone == None:
-			if sorcery_only:
-				if node in self.board.positions[4] + self.board.positions[5] + self.board.positions[6]:
-					pass
-				else:
-					self.jmessage("You must move in a Sorcery.")
-					self.move(sorcery_only=True)
-					return None
-			if ritual_only:
-				if node in self.board.positions[1] + self.board.positions[2] + self.board.positions[3]:
-					pass
-				else:
-					self.jmessage("You must move in a Ritual.")
-					self.move(ritual_only=True)
-					return None
-
+		### node is the chosen place to move
+		node = legalmoves[0]
+		nodename = node.name
+		if node.stone == None:
 			node.stone = self.color
-			self.board.last_play = node.name
+			self.board.last_play = nodename
 			self.board.last_player = self.color
 			self.board.update()
-
-		elif node.stone == self.enemy:
-			if sorcery_only:
-				if node in self.board.positions[4] + self.board.positions[5] + self.board.positions[6]:
-					pass
-				else:
-					self.jmessage("You must move in a Sorcery.")
-					self.move(sorcery_only=True)
-					return None
-			if ritual_only:
-				if node in self.board.positions[1] + self.board.positions[2] + self.board.positions[3]:
-					pass
-				else:
-					self.jmessage("You must move in a Ritual.")
-					self.move(ritual_only=True)
-					return None
-			if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
-				self.jmessage("You can only make soft moves under Gravity.")
-				self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
-				return None
+		else:
 			self.pushenemy(node)
 
 
 
 	def softmove(self):
-		self.jmessage("Where would you like to soft move? ", "node")
-		
-		
-		nodename = self.receivemessage()
-		node = self.board.nodes[nodename]
-		adjacent = False
-		for neighbor in node.neighbors:
-			if neighbor.stone == self.color:
-				adjacent = True
+		### not implemented yet
+		return None
 
-		if node.stone == None and adjacent:
-			node.stone = self.color
-			self.board.last_play = nodename
-			self.board.last_player = self.color
-			self.board.update()
-
-		elif node.stone == self.color:
-			self.jmessage("Invalid move-- you already have a stone there!")
-			self.softmove()
-			return None
-
-		elif not adjacent:
-			self.jmessage("Invalid move-- that's not adjacent to you!")
-			self.softmove()
-			return None
-
-		elif node.stone == self.enemy:
-			self.jmessage("Invalid move-- that's not a soft move!")
-			self.softmove()
-			return None
 
 	def hardmove(self):
-		self.jmessage("Where would you like to hard move? ", "node")
+		### not implemented yet
+		return None
 
-		nodename = self.receivemessage()
-		node = self.board.nodes[nodename]
-		adjacent = False
-		for neighbor in node.neighbors:
-			if neighbor.stone == self.color:
-				adjacent = True
-
-		if not adjacent:
-			self.jmessage("Invalid move-- that's not adjacent to you!")
-			self.hardmove()
-			return None
-
-		elif node.stone == self.color:
-			self.jmessage("Invalid move-- you already have a stone there!")
-			self.hardmove()
-			return None
-
-		elif node.stone != self.enemy:
-			self.jmessage("Invalid move-- that's not a hard move!")
-			self.hardmove()
-			return None
-
-		else:
-			self.pushenemy(node)
 
 	def dash(self, shimmer=False):
-		if shimmer:
-			while True:
-				self.jmessage("Select a stone to sacrifice. ", "node")
-			
-				actualmessage = self.receivemessage()
-				if actualmessage in self.board.nodes:
-					node = self.board.nodes[actualmessage]
-					if (node.stone != self.color):
-						continue
-					else:
-						node.stone = None
-						if (self.board.last_play == node):
-							self.board.last_play = None
-							self.board.last_player = None
-						self.board.update()
-						break
-			self.move()
-			self.board.update(True)
+		### not implemented yet
+		return None
 
-		else:
-			while True:
-				self.jmessage("Select your first stone to sacrifice. ", "node")
-				
-				actualmessage = self.receivemessage()
-				if actualmessage in self.board.nodes:
-					node = self.board.nodes[actualmessage]
-					if (node.stone != self.color):
-						continue
-					else:
-						node.stone = None
-						if (self.board.last_play == node):
-							self.board.last_play = None
-							self.board.last_player = None
-						self.board.update()
-						break
-
-			while True:
-				self.jmessage("Select your second stone to sacrifice. ", "node")
-				
-				actualmessage = self.receivemessage()
-				if actualmessage in self.board.nodes:
-					node = self.board.nodes[actualmessage]
-					if (node.stone != self.color):
-						continue
-					else:
-						node.stone = None
-						if (self.board.last_play == node):
-							self.board.last_play = None
-							self.board.last_player = None
-						self.board.update()
-						break
-			self.move()
-			self.board.update(True)
 
 	def pushenemy(self, node):
 		node.stone = self.color
@@ -885,7 +688,7 @@ class Player():
 		### This loop searches for a first valid pushing option
 		while pushingoptions == []:
 			if pushingqueue == []:
-				self.jmessage("Enemy stone crushed!")
+				### enemy stone crushed
 				self.board.update()
 				return None
 			nextpair = pushingqueue.pop(0)
@@ -919,20 +722,13 @@ class Player():
 			self.board.update()
 			return None
 
-		while True:
-			egress = {"type": "pushingoptions", }
-			for nodename in pushingoptionnames:
-				egress[nodename] = self.enemy
-
-			self.ws.send(json.dumps(egress))
-
-			self.jmessage("Where would you like to push the enemy stone? ", "node")
-			
-			push = self.receivemessage()
-			if push not in pushingoptionnames:
-				self.jmessage("Invalid option!")
-				continue
-			self.board.nodes[push].stone = self.enemy
+		else:
+			### Choose to push to the first spot in the list
+			self.board.nodes[pushingoptionnames[0]].stone = self.enemy
 			self.board.update()
-			self.jmessage("Enemy stone pushed to " + push)
-			break
+			return None
+
+
+
+
+

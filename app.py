@@ -10,6 +10,7 @@ from random import randint, randrange
 from threading import Thread
 
 from game import Board, Player, resetException
+from singleplayergame import SPBoard, AIPlayer
 			
 
 
@@ -45,6 +46,10 @@ def home():
 @app.route('/gameboard')
 def gameboard():
     return render_template('gameboard.html', privategamename="''")
+
+@app.route('/singleplayergameboard')
+def singleplayergameboard():
+    return render_template('singleplayergameboard.html')
 
 @app.route('/tutorial')
 def tutorial():
@@ -406,6 +411,152 @@ def playprivategame(ws, privategamename):
 				board.update(True)
 
 				continue
+
+
+
+@sock.route('/api/singleplayergame')
+def playsingleplayergame(ws):
+	board = SPBoard()
+	humancolor = randint(1,2)
+	if humancolor == 1:
+		human = Player(board, 'red')
+		ai = AIPlayer(board, 'blue')
+		board.addplayers(human, ai)
+		human.opp = ai
+		ai.opp = human
+		human.ws = ws
+		human.jmessage("You are RED this game.")
+		red = human
+		blue = ai
+
+	else:
+		human = Player(board, 'blue')
+		ai = AIPlayer(board, 'red')
+		board.addplayers(human, ai)
+		human.opp = ai
+		ai.opp = human
+		human.ws = ws
+		human.jmessage("You are BLUE this game.")
+		blue = human
+		red = ai
+
+
+	### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
+	### and values "Searing_Wind", "Creeping_Vines", etc.
+	egress = { "type": "spellsetup" }
+
+	egress["major1"] = board.spells[0].name
+	egress["major2"] = board.spells[1].name
+	egress["major3"] = board.spells[2].name
+	egress["minor1"] = board.spells[3].name
+	egress["minor2"] = board.spells[4].name
+	egress["minor3"] = board.spells[5].name
+	egress["charm1"] = board.spells[6].name
+	egress["charm2"] = board.spells[7].name
+	egress["charm3"] = board.spells[8].name
+	
+	human.ws.send(json.dumps(egress))
+
+	egress = { "type": "spelltextsetup" }
+
+	egress["major1"] = board.spells[0].text
+	egress["major2"] = board.spells[1].text
+	egress["major3"] = board.spells[2].text
+	egress["minor1"] = board.spells[3].text
+	egress["minor2"] = board.spells[4].text
+	egress["minor3"] = board.spells[5].text
+	egress["charm1"] = board.spells[6].text
+	egress["charm2"] = board.spells[7].text
+	egress["charm3"] = board.spells[8].text
+	
+	human.ws.send(json.dumps(egress))
+
+
+	board.nodes['a1'].stone = 'red'
+	board.nodes['b1'].stone = 'blue'
+	board.update()
+	time.sleep(3)
+
+
+	while True:
+		### First take a snapshot of the board,
+		### which we will revert to in case of a reset exception.
+		board.take_snapshot()
+
+		board.turncounter += 1
+		board.currentplayerhasmoved = False
+
+		if board.turncounter % 2 == 1:
+			activeplayer = red
+			board.whoseturn = 'red'
+		else:
+			activeplayer = blue
+			board.whoseturn = 'blue'
+
+		
+		try:
+			if board.whoseturn == 'red':
+				message = "Red Turn " + str((board.turncounter // 2) + 1)
+			elif board.whoseturn == 'blue':
+				message = "Blue Turn " + str(board.turncounter // 2)
+
+			egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+			human.ws.send(json.dumps(egress))
+
+			activeplayer.bot_triggers()
+			if board.gameover:
+				board.end_game()
+				break
+
+			if board.whoseturn == 'red':
+				red.taketurn()
+			else:
+				blue.taketurn()
+
+			activeplayer.eot_triggers()
+			board.update(True)
+			if board.gameover:
+				board.end_game()
+				break
+
+		except resetException:
+			### Reset all attributes of the game & board
+			### to the way they were in board.snapshot , 
+			### then we restart the turn loop.
+			human.jmessage("Resetting Turn")
+
+			snapshot = board.snapshot
+
+			board.turncounter = snapshot["turncounter"]
+			board.currentplayerhasmoved = snapshot["currentplayerhasmoved"]
+			board.gameover = snapshot["gameover"]
+			board.winner = snapshot["winner"]
+			board.score = snapshot["score"]
+
+			egress = {"type": "doneselecting"}
+			human.ws.send(json.dumps(egress))
+
+
+			for nodename in board.nodes:
+				board.nodes[nodename].stone = snapshot[nodename]
+			if snapshot["redlock"]:
+				red.lock = board.spelldict[snapshot["redlock"]]
+			else:
+				red.lock = None
+			
+			if snapshot["bluelock"]:
+				blue.lock = board.spelldict[snapshot["bluelock"]]
+			else:
+				blue.lock = None
+
+			red.countdown = snapshot["redcountdown"]
+			blue.countdown = snapshot["bluecountdown"]
+			board.last_play = snapshot["last_play"]
+			board.last_player = snapshot["last_player"]
+
+			board.update(True)
+
+			continue
 
 
 def opp_chat_listen(ws, opp_ws):
