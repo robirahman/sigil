@@ -55,6 +55,26 @@ def singleplayergameboard():
 def tutorial():
     return render_template('tutorial.html')
 
+@app.route('/tutorialpartone')
+def tutorialpartone():
+    return render_template('tutorialpartone.html')
+
+@app.route('/tutorialparttwo')
+def tutorialparttwo():
+    return render_template('tutorialparttwo.html')
+
+@app.route('/tutorialpartthree')
+def tutorialpartthree():
+    return render_template('tutorialpartthree.html')
+
+@app.route('/tutorialbasicspells')
+def tutorialbasicspells():
+    return render_template('tutorialbasicspells.html')
+
+@app.route('/tutorialadvancedspells')
+def tutorialadvancedspells():
+    return render_template('tutorialadvancedspells.html')
+
 @app.route('/singleplayer')
 def singleplayer():
     return render_template('singleplayer.html')
