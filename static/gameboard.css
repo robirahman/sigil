@@ -66,9 +66,10 @@
     border: 2px solid black;
     background-color: BurlyWood;
     padding: 15px 15px;
+    z-index: 1;
   }
 
-  #major1 {
+  #ritual1 {
   position: absolute;
   top: 519px;
   left: 107px;
@@ -81,7 +82,7 @@
   transition-delay: 2.5s;
   }
 
-  #majornodes1 {
+  #ritualnodes1 {
   position: absolute;
   top: 519px;
   left: 107px;
@@ -94,13 +95,13 @@
   transition-delay: 5s;
   }
 
-  #majortext1 {
+  #ritualtext1 {
   position: absolute;
   top: 560px;
   left: 318px;
 }
 
-  #major2 {
+  #ritual2 {
   position: absolute;
   top: 519px;
   left: 638px;
@@ -113,7 +114,7 @@
   transition-delay: 2.5s;
   }
 
-  #majornodes2 {
+  #ritualnodes2 {
   position: absolute;
   top: 519px;
   left: 638px;
@@ -126,13 +127,13 @@
   transition-delay: 5s;
   }
 
-  #majortext2 {
+  #ritualtext2 {
   position: absolute;
   top: 560px;
   left: 845px;
 }
 
-  #major3 {
+  #ritual3 {
   position: absolute;
   top: 64px;
   left: 372px;
@@ -147,7 +148,7 @@
 
 
 
-#majornodes3 {
+#ritualnodes3 {
   position: absolute;
   top: 64px;
   left: 372px;
@@ -160,13 +161,13 @@
   transition-delay: 5s;
 }
 
- #majortext3 {
+ #ritualtext3 {
   position: absolute;
   top: 100px;
   left: 578px;
 }
 
-  #minor1 {
+  #sorcery1 {
   position:absolute;
   top: 693.5px;
   left: 394.5px;
@@ -178,7 +179,7 @@
   transition-delay: 3.5s;
   }
 
-  #minornodes1 {
+  #sorcerynodes1 {
   position:absolute;
   top: 693.5px;
   left: 394.5px;
@@ -190,7 +191,7 @@
   transition-delay: 5s;
   }
 
-  #minortext1 {
+  #sorcerytext1 {
   position:absolute;
   top: 715px;
   left: 557px;
@@ -198,7 +199,7 @@
   }
 
 
-  #minor2 {
+  #sorcery2 {
   position:absolute;
   top: 237px;
   left: 660.5px;
@@ -211,7 +212,7 @@
   transition-delay: 1.5s;
   }
 
-  #minornodes2 {
+  #sorcerynodes2 {
   position:absolute;
   top: 237px;
   left: 660.5px;
@@ -224,13 +225,13 @@
   transition-delay: 5s;
   }
 
-  #minortext2 {
+  #sorcerytext2 {
   position:absolute;
   top: 255px;
   left: 823px;
   }
 
-  #minor3 {
+  #sorcery3 {
   position:absolute;
   top: 236.5px;
   left: 128px;
@@ -244,7 +245,7 @@
   }
 
 
-  #minornodes3 {
+  #sorcerynodes3 {
   position:absolute;
   top: 236.5px;
   left: 128px;
@@ -257,7 +258,7 @@
   transition-delay: 5s;
   }
 
-  #minortext3 {
+  #sorcerytext3 {
   position:absolute;
   top: 252px;
   left: 294px;
@@ -1027,10 +1028,6 @@
 /* End of Lock-Related Stuff */
 
 
-
-#actionInput {
-    visibility: hidden;
-  }
 
 
   #chatBox {

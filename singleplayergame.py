@@ -8,18 +8,6 @@ import time
 
 
 
-# The only core game feature
-# not yet implemented is detecting that the game
-# is going in a loop (after 5 repeats of the board state)
-# and making blue win in this case (after giving red fair warning).
-# But I'll save that for another time.
-
-
-
-
-
-
-
 
 
 class Node():
@@ -557,7 +545,7 @@ class AIPlayer():
 			return None
 
 	def bot_triggers(self):
-		### Put any spell-specific BOT triggers here,
+		### Put any spell-specific beginning-of-turn triggers here,
 		### like Inferno, which should set the global
 		### variables gameover = True and winner = self.enemy
 
@@ -569,7 +557,7 @@ class AIPlayer():
 
 	def eot_triggers(self):
 		### Put code in here for every specific spell
-		### that causes eot triggers.
+		### that causes end-of-turn triggers.
 		### It must come BEFORE the end-game code below!
 
 		### Check whether someone is up by 3 or more.

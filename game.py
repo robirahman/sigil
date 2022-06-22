@@ -8,15 +8,6 @@ import time
 
 
 
-# The only core game feature
-# not yet implemented is detecting that the game
-# is going in a loop (after 5 repeats of the board state)
-# and making blue win in this case (after giving red fair warning).
-# But I'll save that for another time.
-
-
-
-
 
 class resetException(Exception):
 	pass
@@ -476,22 +467,8 @@ class Player():
 		self.ws.send(json.dumps(egress))
 
 
-	def pong(self):
-		egress =  {"type": "pong"}
-		self.ws.send(json.dumps(egress))
-
 	def receivemessage(self):
-		while True:
-			ingress = self.ws.receive()
-
-			if json.loads(ingress)['message'] == 'ping':
-				self.pong()
-				if self.opp.ishuman:
-					self.opp.pong()
-				continue
-			else:
-				break
-		
+		ingress = self.ws.receive()
 		if json.loads(ingress)['message'] == 'reset':
 			raise resetException()
 
@@ -596,7 +573,7 @@ class Player():
 			return None
 
 	def bot_triggers(self):
-		### Put any spell-specific BOT triggers here,
+		### Put any beginning-of-turn triggers here,
 		### like Inferno, which should set the global
 		### variables gameover = True and winner = self.enemy
 
@@ -610,7 +587,7 @@ class Player():
 
 	def eot_triggers(self):
 		### Put code in here for every specific spell
-		### that causes eot triggers.
+		### that causes end-of-turn triggers.
 		### It must come BEFORE the end-game code below!
 
 		### Check whether someone is up by 3 or more.
@@ -936,3 +913,10 @@ class Player():
 			self.board.update()
 			self.jmessage("Enemy stone pushed to " + push)
 			break
+
+
+
+
+
+
+			

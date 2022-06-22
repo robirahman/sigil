@@ -1,6 +1,6 @@
 
 function main(privategamename) {
-  // gamename is empty for ladder games, nonempty otherwise
+  // privategamename is empty for ladder games, nonempty for private games
 
   // awaiting is a global variable set to null when not awaiting anything,
   // set to 'node' when the server is awaiting a node name,
@@ -12,23 +12,23 @@ function main(privategamename) {
   actionlist = null;
 
 
-  // SpellDict will be a dictionary with keys "major2", "charm3", etc.,
+  // SpellDict will be a dictionary with keys "ritual2", "charm3", etc.,
   // and values "Searing_Wind", "Creeping_Vines", etc.
   SpellDict = null;
 
 
   // ReverseSpellDict will be a dictionary with keys "Searing_Wind", "Creeping_Vines", etc.,
-  // and values "major2", "charm3", etc.
+  // and values "ritual2", "charm3", etc.
   ReverseSpellDict = null;
 
 
   auxlockdict = {
-    "major1": "a1",
-    "major2": "b1",
-    "major3": "c1",
-    "minor1": "a2",
-    "minor2": "b2",
-    "minor3": "c2",
+    "ritual1": "a1",
+    "ritual2": "b1",
+    "ritual3": "c1",
+    "sorcery1": "a2",
+    "sorcery2": "b2",
+    "sorcery3": "c2",
   };
 
   // lockdict will be a dictionary with keys "Searing_Wind", "Creeping_Vines", etc.,
@@ -41,7 +41,7 @@ function main(privategamename) {
   };
 
 
-  // This needs to be "ws://" for locally running Flask, and "wss://" on Heroku
+  // This needs to be "ws://" for HTTP, and "wss://" for HTTPS. Might need to change it later.
   if (privategamename == "") {
     events = new WebSocket("ws://" + location.host + "/api/game");
     events.onmessage = incomingEvent;
@@ -70,23 +70,23 @@ function main(privategamename) {
     allstones[i].addEventListener('click', function () {nodeClick(this);}, false);
   };
 
-  document.getElementById("majornodes1").addEventListener(
-    'click', function() {spellClick("major1");}, false);
+  document.getElementById("ritualnodes1").addEventListener(
+    'click', function() {spellClick("ritual1");}, false);
 
-  document.getElementById("majornodes2").addEventListener(
-    'click', function() {spellClick("major2");}, false);
+  document.getElementById("ritualnodes2").addEventListener(
+    'click', function() {spellClick("ritual2");}, false);
 
-  document.getElementById("majornodes3").addEventListener(
-    'click', function() {spellClick("major3");}, false);
+  document.getElementById("ritualnodes3").addEventListener(
+    'click', function() {spellClick("ritual3");}, false);
 
-  document.getElementById("minornodes1").addEventListener(
-    'click', function() {spellClick("minor1");}, false);
+  document.getElementById("sorcerynodes1").addEventListener(
+    'click', function() {spellClick("sorcery1");}, false);
 
-  document.getElementById("minornodes2").addEventListener(
-    'click', function() {spellClick("minor2");}, false);
+  document.getElementById("sorcerynodes2").addEventListener(
+    'click', function() {spellClick("sorcery2");}, false);
 
-  document.getElementById("minornodes3").addEventListener(
-    'click', function() {spellClick("minor3");}, false);
+  document.getElementById("sorcerynodes3").addEventListener(
+    'click', function() {spellClick("sorcery3");}, false);
 
 
 
@@ -105,7 +105,6 @@ function main(privategamename) {
   document.addEventListener("keydown", keyDownFunction, false);
 
 
-  setInterval(ping, 3000);
 
   fadeIn();
 }
@@ -114,7 +113,7 @@ function main(privategamename) {
 function spellClick(spellposition) {
   //This is ONLY triggered for spells, not charms
 
-  // Takes in a spell position, e.g., "major2", "minor3"
+  // Takes in a spell position, e.g., "ritual2", "sorcery3"
   // and sends a spellname, e.g., 'Searing_Wind', 'Creeping_Vines'
   var spellname = SpellDict[spellposition];
   if ((awaiting == 'action') && actionlist.includes(spellname)) {
@@ -134,22 +133,22 @@ function spellClick(spellposition) {
 
 
 function addSpellLabels() {
-  document.getElementById("majordiv1").onmouseover = function() {document.getElementById("majortext1").style.display="inline";};
-  document.getElementById("majordiv2").onmouseover = function() {document.getElementById("majortext2").style.display="inline";};
-  document.getElementById("majordiv3").onmouseover = function() {document.getElementById("majortext3").style.display="inline";};
-  document.getElementById("minordiv1").onmouseover = function() {document.getElementById("minortext1").style.display="inline";};
-  document.getElementById("minordiv2").onmouseover = function() {document.getElementById("minortext2").style.display="inline";};
-  document.getElementById("minordiv3").onmouseover = function() {document.getElementById("minortext3").style.display="inline";};
+  document.getElementById("ritualdiv1").onmouseover = function() {document.getElementById("ritualtext1").style.display="inline";};
+  document.getElementById("ritualdiv2").onmouseover = function() {document.getElementById("ritualtext2").style.display="inline";};
+  document.getElementById("ritualdiv3").onmouseover = function() {document.getElementById("ritualtext3").style.display="inline";};
+  document.getElementById("sorcerydiv1").onmouseover = function() {document.getElementById("sorcerytext1").style.display="inline";};
+  document.getElementById("sorcerydiv2").onmouseover = function() {document.getElementById("sorcerytext2").style.display="inline";};
+  document.getElementById("sorcerydiv3").onmouseover = function() {document.getElementById("sorcerytext3").style.display="inline";};
   document.getElementById("charmdiv1").onmouseover = function() {document.getElementById("charmtext1").style.display="inline";};
   document.getElementById("charmdiv2").onmouseover = function() {document.getElementById("charmtext2").style.display="inline";};
   document.getElementById("charmdiv3").onmouseover = function() {document.getElementById("charmtext3").style.display="inline";};
 
-  document.getElementById("majordiv1").onmouseout = function() {document.getElementById("majortext1").style.display="none";};
-  document.getElementById("majordiv2").onmouseout = function() {document.getElementById("majortext2").style.display="none";};
-  document.getElementById("majordiv3").onmouseout = function() {document.getElementById("majortext3").style.display="none";};
-  document.getElementById("minordiv1").onmouseout = function() {document.getElementById("minortext1").style.display="none";};
-  document.getElementById("minordiv2").onmouseout = function() {document.getElementById("minortext2").style.display="none";};
-  document.getElementById("minordiv3").onmouseout = function() {document.getElementById("minortext3").style.display="none";};
+  document.getElementById("ritualdiv1").onmouseout = function() {document.getElementById("ritualtext1").style.display="none";};
+  document.getElementById("ritualdiv2").onmouseout = function() {document.getElementById("ritualtext2").style.display="none";};
+  document.getElementById("ritualdiv3").onmouseout = function() {document.getElementById("ritualtext3").style.display="none";};
+  document.getElementById("sorcerydiv1").onmouseout = function() {document.getElementById("sorcerytext1").style.display="none";};
+  document.getElementById("sorcerydiv2").onmouseout = function() {document.getElementById("sorcerytext2").style.display="none";};
+  document.getElementById("sorcerydiv3").onmouseout = function() {document.getElementById("sorcerytext3").style.display="none";};
   document.getElementById("charmdiv1").onmouseout = function() {document.getElementById("charmtext1").style.display="none";};
   document.getElementById("charmdiv2").onmouseout = function() {document.getElementById("charmtext2").style.display="none";};
   document.getElementById("charmdiv3").onmouseout = function() {document.getElementById("charmtext3").style.display="none";};
@@ -159,24 +158,24 @@ function addSpellLabels() {
 
 
 function setupSpells(spellnamedict) {
-  // spellnamedict is a JSON dictionary with keys "major2", "charm3", etc.,
+  // spellnamedict is a JSON dictionary with keys "ritual2", "charm3", etc.,
   // and values "Searing_Wind", "Creeping_Vines", etc.
-  document.getElementById("major1").src = "/static/images/" + spellnamedict.major1 + ".png";
-  document.getElementById("major2").src = "/static/images/" + spellnamedict.major2 + ".png";
-  document.getElementById("major3").src = "/static/images/" + spellnamedict.major3 + ".png";
-  document.getElementById("minor1").src = "/static/images/" + spellnamedict.minor1 + ".png";
-  document.getElementById("minor2").src = "/static/images/" + spellnamedict.minor2 + ".png";
-  document.getElementById("minor3").src = "/static/images/" + spellnamedict.minor3 + ".png";
+  document.getElementById("ritual1").src = "/static/images/" + spellnamedict.ritual1 + ".png";
+  document.getElementById("ritual2").src = "/static/images/" + spellnamedict.ritual2 + ".png";
+  document.getElementById("ritual3").src = "/static/images/" + spellnamedict.ritual3 + ".png";
+  document.getElementById("sorcery1").src = "/static/images/" + spellnamedict.sorcery1 + ".png";
+  document.getElementById("sorcery2").src = "/static/images/" + spellnamedict.sorcery2 + ".png";
+  document.getElementById("sorcery3").src = "/static/images/" + spellnamedict.sorcery3 + ".png";
   document.getElementById("charm1").src = "/static/images/" + spellnamedict.charm1 + ".png";
   document.getElementById("charm2").src = "/static/images/" + spellnamedict.charm2 + ".png";
   document.getElementById("charm3").src = "/static/images/" + spellnamedict.charm3 + ".png";
 
-  document.getElementById("majornodes1").style.opacity = .7;
-  document.getElementById("majornodes2").style.opacity = .7;
-  document.getElementById("majornodes3").style.opacity = .7;
-  document.getElementById("minornodes1").style.opacity = .7;
-  document.getElementById("minornodes2").style.opacity = .7;
-  document.getElementById("minornodes3").style.opacity = .7;
+  document.getElementById("ritualnodes1").style.opacity = .7;
+  document.getElementById("ritualnodes2").style.opacity = .7;
+  document.getElementById("ritualnodes3").style.opacity = .7;
+  document.getElementById("sorcerynodes1").style.opacity = .7;
+  document.getElementById("sorcerynodes2").style.opacity = .7;
+  document.getElementById("sorcerynodes3").style.opacity = .7;
   document.getElementById("charmnodes1").style.opacity = .7;
   document.getElementById("charmnodes2").style.opacity = .7;
   document.getElementById("charmnodes3").style.opacity = .7;
@@ -187,12 +186,12 @@ function setupSpells(spellnamedict) {
 function setupSpellText(spelltextdict) {
   // spelltextdict is a JSON dictionary with keys "major2", "charm3", etc.,
   // and values == the innerhtml strings for those respective text boxes
-  document.getElementById("majortext1").innerHTML = spelltextdict.major1;
-  document.getElementById("majortext2").innerHTML = spelltextdict.major2;
-  document.getElementById("majortext3").innerHTML = spelltextdict.major3;
-  document.getElementById("minortext1").innerHTML = spelltextdict.minor1;
-  document.getElementById("minortext2").innerHTML = spelltextdict.minor2;
-  document.getElementById("minortext3").innerHTML = spelltextdict.minor3;
+  document.getElementById("ritualtext1").innerHTML = spelltextdict.ritual1;
+  document.getElementById("ritualtext2").innerHTML = spelltextdict.ritual2;
+  document.getElementById("ritualtext3").innerHTML = spelltextdict.ritual3;
+  document.getElementById("sorcerytext1").innerHTML = spelltextdict.sorcery1;
+  document.getElementById("sorcerytext2").innerHTML = spelltextdict.sorcery2;
+  document.getElementById("sorcerytext3").innerHTML = spelltextdict.sorcery3;
   document.getElementById("charmtext1").innerHTML = spelltextdict.charm1;
   document.getElementById("charmtext2").innerHTML = spelltextdict.charm2;
   document.getElementById("charmtext3").innerHTML = spelltextdict.charm3;
@@ -203,14 +202,14 @@ function setupSpellText(spelltextdict) {
 function fadeIn() {
 
   document.getElementById("board").style.opacity = 1;
-  document.getElementById("major3").style.opacity = 1;
-  document.getElementById("minor2").style.opacity = 1;
-  document.getElementById("charm2").style.opacity = 1;
-  document.getElementById("major2").style.opacity = 1;
-  document.getElementById("minor1").style.opacity = 1;
+  document.getElementById("ritual1").style.opacity = 1;
+  document.getElementById("sorcery1").style.opacity = 1;
   document.getElementById("charm1").style.opacity = 1;
-  document.getElementById("major1").style.opacity = 1;
-  document.getElementById("minor3").style.opacity = 1;
+  document.getElementById("ritual2").style.opacity = 1;
+  document.getElementById("sorcery2").style.opacity = 1;
+  document.getElementById("charm2").style.opacity = 1;
+  document.getElementById("ritual3").style.opacity = 1;
+  document.getElementById("sorcery3").style.opacity = 1;
   document.getElementById("charm3").style.opacity = 1;
 
 
@@ -227,13 +226,6 @@ function scorekeeperFadeIn (){
   document.getElementById("scorekeeper").style.opacity = 1;
 }
 
-
-
-function ping() {
-  var payload = {"message": "ping"};
-  events.send(JSON.stringify(payload));
-  chat.send(JSON.stringify(payload));
-}
 
 function keyDownFunction(e) {
   if (e.target == document.getElementById("chatInput")) {;} else {
@@ -335,7 +327,7 @@ function incomingEvent(event) {
   var payload = JSON.parse(event.data);
   var box = document.getElementById('actionBox');
 
-  if (payload.type == "pong") {;} else if (payload.type == "selectingNoButton") {
+  if (payload.type == "selectingNoButton") {
 
     document.getElementById("dashbutton").style.visibility = "hidden";
     document.getElementById("passbutton").style.visibility = "hidden";
@@ -372,7 +364,6 @@ function incomingEvent(event) {
   } else if (payload.type == "message") {
     box.innerHTML = payload.message;
 
-    box.scrollTop = box.scrollHeight;
 
   } else if (payload.type == "whoseturndisplay") {
     var turnbox = document.getElementById("whoseturndisplay");
@@ -390,14 +381,6 @@ function incomingEvent(event) {
         document.getElementById(nodename).style.opacity = .6;
       };
     };
-  } else if (payload.type == "firstturnpass") {
-    awaiting = 'action';
-    actionlist = [ "pass" ];
-    document.getElementById("passbutton").style.visibility = "visible";
-    document.getElementById("resetbutton").style.visibility = "visible";
-
-
-
   } else if (payload.type == "chooserefills") {
 
     for (nodename of allnodenames) {
@@ -553,20 +536,10 @@ function deactivateLock(lockIdentifierChars, color) {
 
 
 
-function actionInputKeypress(e) {
-  e = e || window.event;
-  if (e.keyCode == 13) {
-    var message = document.getElementById('actionInput').value;
-    var payload = {"message": message};
-    events.send(JSON.stringify(payload));
-    document.getElementById('actionInput').value = '';
-  };
-}
-
 function chatEvent(event) {
   var payload = JSON.parse(event.data);
   var box = document.getElementById('chatBox');
-  if (payload.type == "pong") {;} else if (payload.type == "chatmessage") {
+  if (payload.type == "chatmessage") {
   box.innerHTML += '<br /><b>' + payload.player + '</b> ' + payload.message;
   box.scrollTop = box.scrollHeight;
   };

@@ -158,16 +158,16 @@ def playgame(ws):
 		blue.jmessage("You are BLUE this game.")
 
 
-		### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
+		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
 		### and values "Searing_Wind", "Creeping_Vines", etc.
 		egress = { "type": "spellsetup" }
 
-		egress["major1"] = board.spells[0].name
-		egress["major2"] = board.spells[1].name
-		egress["major3"] = board.spells[2].name
-		egress["minor1"] = board.spells[3].name
-		egress["minor2"] = board.spells[4].name
-		egress["minor3"] = board.spells[5].name
+		egress["ritual1"] = board.spells[0].name
+		egress["ritual2"] = board.spells[1].name
+		egress["ritual3"] = board.spells[2].name
+		egress["sorcery1"] = board.spells[3].name
+		egress["sorcery2"] = board.spells[4].name
+		egress["sorcery3"] = board.spells[5].name
 		egress["charm1"] = board.spells[6].name
 		egress["charm2"] = board.spells[7].name
 		egress["charm3"] = board.spells[8].name
@@ -177,12 +177,12 @@ def playgame(ws):
 
 		egress = { "type": "spelltextsetup" }
 
-		egress["major1"] = board.spells[0].text
-		egress["major2"] = board.spells[1].text
-		egress["major3"] = board.spells[2].text
-		egress["minor1"] = board.spells[3].text
-		egress["minor2"] = board.spells[4].text
-		egress["minor3"] = board.spells[5].text
+		egress["ritual1"] = board.spells[0].text
+		egress["ritual2"] = board.spells[1].text
+		egress["ritual3"] = board.spells[2].text
+		egress["sorcery1"] = board.spells[3].text
+		egress["sorcery2"] = board.spells[4].text
+		egress["sorcery3"] = board.spells[5].text
 		egress["charm1"] = board.spells[6].text
 		egress["charm2"] = board.spells[7].text
 		egress["charm3"] = board.spells[8].text
@@ -310,16 +310,16 @@ def playprivategame(ws, privategamename):
 		blue.jmessage("You are BLUE this game.")
 
 
-		### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
+		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
 		### and values "Searing_Wind", "Creeping_Vines", etc.
 		egress = { "type": "spellsetup" }
 
-		egress["major1"] = board.spells[0].name
-		egress["major2"] = board.spells[1].name
-		egress["major3"] = board.spells[2].name
-		egress["minor1"] = board.spells[3].name
-		egress["minor2"] = board.spells[4].name
-		egress["minor3"] = board.spells[5].name
+		egress["ritual1"] = board.spells[0].name
+		egress["ritual2"] = board.spells[1].name
+		egress["ritual3"] = board.spells[2].name
+		egress["sorcery1"] = board.spells[3].name
+		egress["sorcery2"] = board.spells[4].name
+		egress["sorcery3"] = board.spells[5].name
 		egress["charm1"] = board.spells[6].name
 		egress["charm2"] = board.spells[7].name
 		egress["charm3"] = board.spells[8].name
@@ -329,12 +329,12 @@ def playprivategame(ws, privategamename):
 
 		egress = { "type": "spelltextsetup" }
 
-		egress["major1"] = board.spells[0].text
-		egress["major2"] = board.spells[1].text
-		egress["major3"] = board.spells[2].text
-		egress["minor1"] = board.spells[3].text
-		egress["minor2"] = board.spells[4].text
-		egress["minor3"] = board.spells[5].text
+		egress["ritual1"] = board.spells[0].text
+		egress["ritual2"] = board.spells[1].text
+		egress["ritual3"] = board.spells[2].text
+		egress["sorcery1"] = board.spells[3].text
+		egress["sorcery2"] = board.spells[4].text
+		egress["sorcery3"] = board.spells[5].text
 		egress["charm1"] = board.spells[6].text
 		egress["charm2"] = board.spells[7].text
 		egress["charm3"] = board.spells[8].text
@@ -461,16 +461,16 @@ def playsingleplayergame(ws):
 		red = ai
 
 
-	### spellsetup is a JSON dictionary with keys "major2", "charm3", etc.,
+	### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
 	### and values "Searing_Wind", "Creeping_Vines", etc.
 	egress = { "type": "spellsetup" }
 
-	egress["major1"] = board.spells[0].name
-	egress["major2"] = board.spells[1].name
-	egress["major3"] = board.spells[2].name
-	egress["minor1"] = board.spells[3].name
-	egress["minor2"] = board.spells[4].name
-	egress["minor3"] = board.spells[5].name
+	egress["ritual1"] = board.spells[0].name
+	egress["ritual2"] = board.spells[1].name
+	egress["ritual3"] = board.spells[2].name
+	egress["sorcery1"] = board.spells[3].name
+	egress["sorcery2"] = board.spells[4].name
+	egress["sorcery3"] = board.spells[5].name
 	egress["charm1"] = board.spells[6].name
 	egress["charm2"] = board.spells[7].name
 	egress["charm3"] = board.spells[8].name
@@ -479,12 +479,12 @@ def playsingleplayergame(ws):
 
 	egress = { "type": "spelltextsetup" }
 
-	egress["major1"] = board.spells[0].text
-	egress["major2"] = board.spells[1].text
-	egress["major3"] = board.spells[2].text
-	egress["minor1"] = board.spells[3].text
-	egress["minor2"] = board.spells[4].text
-	egress["minor3"] = board.spells[5].text
+	egress["ritual1"] = board.spells[0].text
+	egress["ritual2"] = board.spells[1].text
+	egress["ritual3"] = board.spells[2].text
+	egress["sorcery1"] = board.spells[3].text
+	egress["sorcery2"] = board.spells[4].text
+	egress["sorcery3"] = board.spells[5].text
 	egress["charm1"] = board.spells[6].text
 	egress["charm2"] = board.spells[7].text
 	egress["charm3"] = board.spells[8].text
@@ -583,15 +583,10 @@ def opp_chat_listen(ws, opp_ws):
 	while True:
 		ingress = opp_ws.receive()
 		message = json.loads(ingress)['message']
-		if message == "ping":
-			egress =  {"type": "pong"}
-			opp_ws.send(json.dumps(egress))
-			continue
-		else:
-			egress = {"type": "chatmessage", "player": "Me:", "message": message }
-			opp_ws.send(json.dumps(egress))
-			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
-			ws.send(json.dumps(egress))
+		egress = {"type": "chatmessage", "player": "Me:", "message": message }
+		opp_ws.send(json.dumps(egress))
+		egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+		ws.send(json.dumps(egress))
 
 
 
@@ -613,15 +608,10 @@ def chat(ws):
 		while True:
 			ingress = ws.receive()
 			message = json.loads(ingress)['message']
-			if message == "ping":
-				egress =  {"type": "pong"}
-				ws.send(json.dumps(egress))
-				continue
-			else:
-				egress = {"type": "chatmessage", "player": "Me:", "message": message }
-				ws.send(json.dumps(egress))
-				egress = {"type": "chatmessage", "player": "Opp:", "message": message }
-				opp_ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Me:", "message": message }
+			ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+			opp_ws.send(json.dumps(egress))
 
 		t.join()
 
@@ -645,15 +635,10 @@ def privatechat(ws, privatechatname):
 		while True:
 			ingress = ws.receive()
 			message = json.loads(ingress)['message']
-			if message == "ping":
-				egress =  {"type": "pong"}
-				ws.send(json.dumps(egress))
-				continue
-			else:
-				egress = {"type": "chatmessage", "player": "Me:", "message": message }
-				ws.send(json.dumps(egress))
-				egress = {"type": "chatmessage", "player": "Opp:", "message": message }
-				opp_ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Me:", "message": message }
+			ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+			opp_ws.send(json.dumps(egress))
 
 		t.join()
 
