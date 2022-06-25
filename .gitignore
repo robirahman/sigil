@@ -1,0 +1,6 @@
+# production
+/__pycache__
+
+# misc
+.DS_Store
+node_modules
