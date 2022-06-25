@@ -1,7 +1,3 @@
 // JavaScript for ladder match page
-
-
-function main() {
-
-
-}
+// eslint-disable-next-line no-unused-vars
+function main() {}

@@ -1,109 +1,103 @@
 /* CSS for tutorial page */
 
-body {background-color: #1b0a26;}
+body { background-color: #1b0a26; }
 
 #tutorialdescription {
-    position: absolute;
-    top: 50px;
-    left: 400px;
-    text-align: center;
-    font-size: 20px;
-    font-family: Papyrus;
-    color: white;
+	position: absolute;
+	top: 50px;
+	left: 400px;
+	text-align: center;
+	font-size: 20px;
+	font-family: Papyrus, serif;
+	color: white;
 }
 
-
 .tutorialpartbutton {
-    font-family: Papyrus;
-    text-align: center;
-    font-size: 25px;
-    border-radius: 9px;
-    border: 2px solid black;
-    background-color: #800080;
-    color: white;
-    padding: 20px 28px;
-    transition-property: color, background-color;
+	font-family: Papyrus, serif;
+	text-align: center;
+	font-size: 25px;
+	border-radius: 9px;
+	border: 2px solid black;
+	background-color: #800080;
+	color: white;
+	padding: 20px 28px;
+	transition-property: color, background-color;
 }
 
 .tutorialpartbutton:hover {
-  background-color: white;
-  transition-property: color, background-color;
-  color: #000000;
+	background-color: white;
+	transition-property: color, background-color;
+	color: #000;
 }
 
-
-.buttontext{
-    display: none;
-    font-family: Papyrus;
-    text-align: center;
-    font-size: 15px;
-    border-radius: 9px;
-    border: 2px solid black;
-    background-color: BurlyWood;
-    padding: 15px 15px;
-    z-index: 1;
+.buttontext {
+	display: none;
+	font-family: Papyrus, serif;
+	text-align: center;
+	font-size: 15px;
+	border-radius: 9px;
+	border: 2px solid black;
+	background-color: burlywood;
+	padding: 15px;
+	z-index: 1;
 }
 
 #partone {
-    position: absolute;
-    top: 180px;
-    left: 100px;
+	position: absolute;
+	top: 180px;
+	left: 100px;
 }
 
 #partonetext {
-    position: absolute;
-    top: 225px;
-    left: 170px;
+	position: absolute;
+	top: 225px;
+	left: 170px;
 }
 
 #parttwo {
-    position: absolute;
-    top: 180px;
-    left: 300px;
+	position: absolute;
+	top: 180px;
+	left: 300px;
 }
 
 #parttwotext {
-    position: absolute;
-    top: 225px;
-    left: 370px;
+	position: absolute;
+	top: 225px;
+	left: 370px;
 }
 
 #partthree {
-    position: absolute;
-    top: 180px;
-    left: 500px;
+	position: absolute;
+	top: 180px;
+	left: 500px;
 }
 
 #partthreetext {
-    position: absolute;
-    top: 225px;
-    left: 570px;
+	position: absolute;
+	top: 225px;
+	left: 570px;
 }
 
 #basicspells {
-    position: absolute;
-    top: 180px;
-    left: 700px;
+	position: absolute;
+	top: 180px;
+	left: 700px;
 }
+
 #basicspellstext {
-    position: absolute;
-    top: 225px;
-    left: 820px;
+	position: absolute;
+	top: 225px;
+	left: 820px;
 }
 
 #advancedspells {
-    position: absolute;
-    top: 180px;
-    left: 1000px;
+	position: absolute;
+	top: 180px;
+	left: 1000px;
 }
 
 #advancedspellstext {
-    position: absolute;
-    top: 225px;
-    left: 1140px;
+	position: absolute;
+	top: 225px;
+	left: 1140px;
 }
-
-
-
-
-

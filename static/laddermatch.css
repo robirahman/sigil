@@ -1,13 +1,13 @@
 /* CSS for private match page */
 
-body {background-color: #1b0a26;}
+body { background-color: #1b0a26; }
 
 #laddermatchdescription {
-    position: absolute;
-    top: 50px;
-    left: 150px;
-    text-align: center;
-    font-size: 20px;
-    font-family: Papyrus;
-    color: white;
-  }
+	position: absolute;
+	top: 50px;
+	left: 150px;
+	text-align: center;
+	font-size: 20px;
+	font-family: Papyrus, serif;
+	color: white;
+}

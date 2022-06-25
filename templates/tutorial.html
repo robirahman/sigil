@@ -1,62 +1,116 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-  <head>
-    <title>Sigil Online Tutorial</title>
+	<head>
+		<title>Sigil Online Tutorial</title>
 
-    <link rel="stylesheet" href="/static/tutorial.css">
-    <link rel="icon" href="data:,">
-  </head>
+		<link
+			rel="stylesheet"
+			href="/static/tutorial.css"
+		/>
+		<link
+			rel="icon"
+			href="data:,"
+		/>
+	</head>
 
-  <script src="/static/tutorial.js"></script>
+	<script src="/static/tutorial.js"></script>
 
-  <body onload="main();">
+	<body onload="main();">
+		<div id="tutorialdescription">
+			<b
+				>Learn to play Sigil in three quick lessons.<br />Once you've mastered the basics, go over
+				strategy tips for all 15 spells.</b
+			>
+		</div>
 
-    <div id="tutorialdescription">
-      <b>Learn to play Sigil in three quick lessons.<br>Once you've mastered the basics, go over strategy tips for all 15 spells.</b>
-    </div>
+		<div>
+			<button
+				type="button"
+				id="partone"
+				class="tutorialpartbutton"
+				onclick="window.location.href='{{ url_for('tutorialpartone') }}';"
+			>
+				<b>Part 1</b>
+			</button>
+		</div>
 
-    <div>
-      <button type="button" id="partone" class="tutorialpartbutton" onclick="window.location.href='{{ url_for('tutorialpartone') }}';">
-        <b>Part 1</b>
-      </button>
-    </div>
+		<p
+			id="partonetext"
+			class="buttontext"
+		>
+			Learn the basics of Sigil:<br />making moves and keeping score.
+		</p>
 
-    <p id="partonetext" class="buttontext">Learn the basics of Sigil:<br>making moves and keeping score.</p>
+		<div>
+			<button
+				type="button"
+				id="parttwo"
+				class="tutorialpartbutton"
+				onclick="window.location.href='{{ url_for('tutorialparttwo') }}';"
+			>
+				<b>Part 2</b>
+			</button>
+		</div>
 
-    <div>
-      <button type="button" id="parttwo" class="tutorialpartbutton" onclick="window.location.href='{{ url_for('tutorialparttwo') }}';">
-        <b>Part 2</b>
-      </button>
-    </div>
+		<p
+			id="parttwotext"
+			class="buttontext"
+		>
+			Learn about spells,<br />mana, and locks.
+		</p>
 
-    <p id="parttwotext" class="buttontext">Learn about spells,<br>mana, and locks.</p>
+		<div>
+			<button
+				type="button"
+				id="partthree"
+				class="tutorialpartbutton"
+				onclick="window.location.href='{{ url_for('tutorialpartthree') }}';"
+			>
+				<b>Part 3</b>
+			</button>
+		</div>
 
-    <div>
-      <button type="button" id="partthree" class="tutorialpartbutton" onclick="window.location.href='{{ url_for('tutorialpartthree') }}';">
-        <b>Part 3</b>
-      </button>
-    </div>
+		<p
+			id="partthreetext"
+			class="buttontext"
+		>
+			Learn about soft and hard moves,<br />surrounding enemy stones, and dashing.
+		</p>
 
-    <p id="partthreetext" class="buttontext">Learn about soft and hard moves,<br>surrounding enemy stones, and dashing.</p>
+		<div>
+			<button
+				type="button"
+				id="basicspells"
+				class="tutorialpartbutton"
+				onclick="window.location.href='{{ url_for('tutorialbasicspells') }}';"
+			>
+				<b>Basic Spells</b>
+			</button>
+		</div>
 
+		<p
+			id="basicspellstext"
+			class="buttontext"
+		>
+			Overview of the 9 basic spells<br />with strategy tips.
+		</p>
 
-    <div>
-      <button type="button" id="basicspells" class="tutorialpartbutton" onclick="window.location.href='{{ url_for('tutorialbasicspells') }}';">
-        <b>Basic Spells</b>
-      </button>
-    </div>
+		<div>
+			<button
+				type="button"
+				id="advancedspells"
+				class="tutorialpartbutton"
+				onclick="window.location.href='{{ url_for('tutorialadvancedspells') }}';"
+			>
+				<b>Advanced Spells</b>
+			</button>
+		</div>
 
-    <p id="basicspellstext" class="buttontext">Overview of the 9 basic spells<br>with strategy tips.</p>
-
-
-    <div>
-      <button type="button" id="advancedspells" class="tutorialpartbutton" onclick="window.location.href='{{ url_for('tutorialadvancedspells') }}';">
-        <b>Advanced Spells</b>
-      </button>
-    </div>
-
-    <p id="advancedspellstext" class="buttontext">Overview of the 6 advanced spells<br>with strategy tips.</p>
-
-  </body>
+		<p
+			id="advancedspellstext"
+			class="buttontext"
+		>
+			Overview of the 6 advanced spells<br />with strategy tips.
+		</p>
+	</body>
 </html>
-
