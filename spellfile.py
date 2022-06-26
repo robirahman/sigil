@@ -82,8 +82,7 @@ class Spell():
 		self.board.update()
 		self.resolve(player)
 
-		### Update the score on board
-		self.board.update(True)
+		self.board.update()
 
 		if not self.ischarm:
 			if player.lock == self:

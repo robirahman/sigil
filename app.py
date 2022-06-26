@@ -203,7 +203,6 @@ def playgame(ws):
 			board.take_snapshot()
 
 			board.turncounter += 1
-			board.currentplayerhasmoved = False
 
 			if board.turncounter % 2 == 1:
 				activeplayer = red
@@ -249,7 +248,6 @@ def playgame(ws):
 				snapshot = board.snapshot
 
 				board.turncounter = snapshot["turncounter"]
-				board.currentplayerhasmoved = snapshot["currentplayerhasmoved"]
 				board.gameover = snapshot["gameover"]
 				board.winner = snapshot["winner"]
 				board.score = snapshot["score"]
@@ -355,7 +353,6 @@ def playprivategame(ws, privategamename):
 			board.take_snapshot()
 
 			board.turncounter += 1
-			board.currentplayerhasmoved = False
 
 			if board.turncounter % 2 == 1:
 				activeplayer = red
@@ -401,7 +398,6 @@ def playprivategame(ws, privategamename):
 				snapshot = board.snapshot
 
 				board.turncounter = snapshot["turncounter"]
-				board.currentplayerhasmoved = snapshot["currentplayerhasmoved"]
 				board.gameover = snapshot["gameover"]
 				board.winner = snapshot["winner"]
 				board.score = snapshot["score"]
@@ -504,7 +500,6 @@ def playsingleplayergame(ws):
 		board.take_snapshot()
 
 		board.turncounter += 1
-		board.currentplayerhasmoved = False
 
 		if board.turncounter % 2 == 1:
 			activeplayer = red
@@ -548,7 +543,6 @@ def playsingleplayergame(ws):
 			snapshot = board.snapshot
 
 			board.turncounter = snapshot["turncounter"]
-			board.currentplayerhasmoved = snapshot["currentplayerhasmoved"]
 			board.gameover = snapshot["gameover"]
 			board.winner = snapshot["winner"]
 			board.score = snapshot["score"]

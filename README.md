@@ -22,7 +22,7 @@ Then run `npm install`.
 
 ### Linting and formatting
 
-[Prettier](https://prettier.io/), [ESLint](https://eslint.org/) and [StyleLint](https://stylelint.io/) are used to format, find and fix  errors in HTML, JS and CSS files.
+[Prettier](https://prettier.io/), [ESLint](https://eslint.org/) and [StyleLint](https://stylelint.io/) are used to format, find and fix errors in HTML, JS and CSS files.
 
 Running `npm run format` will try to format and fix all files (first CSS, then HTML and JS), however, errors occurred by 1 process will prevent the others from continuing.
 

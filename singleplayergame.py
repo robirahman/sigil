@@ -30,8 +30,6 @@ class SPBoard():
 
 		self.whoseturn = None
 
-		self.currentplayerhasmoved = False
-
 		self.gameover = False
 
 		self.winner = None
@@ -98,7 +96,6 @@ class SPBoard():
 		snapshot["gameover"] = self.gameover
 		snapshot["winner"] = self.winner
 		snapshot["score"] = self.score
-		snapshot["currentplayerhasmoved"] = self.currentplayerhasmoved
 		snapshot["redcountdown"] = self.redplayer.countdown
 		snapshot["bluecountdown"] = self.blueplayer.countdown
 		for nodename in self.nodes:
@@ -149,36 +146,15 @@ class SPBoard():
 
 
 		if update_score:
-			### score should be a string like 'r1', 'b2' , etc.
-			if self.whoseturn == 'red':
-				if self.currentplayerhasmoved:
-					nextmove = 'blue'
-				else:
-					nextmove = 'red'
-
-			elif self.whoseturn == 'blue':
-				if self.currentplayerhasmoved:
-					nextmove = 'red'
-				else:
-					nextmove = 'blue'
-
-			if nextmove == 'red':
-				if redscore >= bluescore:
-					scorenum = min(3, (redscore +1) - bluescore)
-					score = 'r' + str(scorenum)
-				else:
-					scorenum = min(3, bluescore - redscore)
-					score = 'b' + str(scorenum)
-
-			elif nextmove == 'blue':
-				if bluescore >= redscore:
-					scorenum = min(3, (bluescore + 1) - redscore)
-					score = 'b' + str(scorenum)
-				else:
-					scorenum = min(3, redscore - bluescore)
-					score = 'r' + str(scorenum)
-
-			self.score = score
+			### score should be a string like 'tied', 'r1', 'b2' , etc.
+			if redscore == bluescore:
+				self.score = 'tied'
+			elif redscore > bluescore:
+				scorenum = min(3, redscore - bluescore)
+				self.score = 'r' + str(scorenum)
+			elif bluescore > redscore:
+				scorenum = min(3, bluescore - redscore)
+				self.score = 'b' + str(scorenum)
 
 
 		redcharged = []
@@ -463,7 +439,7 @@ class AIPlayer():
 
 
 	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
-		self.board.update(True)
+		self.board.update()
 
 		### One second delay between actions, for more realistic-feeling AI
 		time.sleep(1)
@@ -517,7 +493,6 @@ class AIPlayer():
 
 		if action == 'move':
 			self.move(standardmove=True)
-			self.board.currentplayerhasmoved = True
 			self.taketurn(False, candash, canspell, cansummer)
 			return None
 
@@ -579,7 +554,7 @@ class AIPlayer():
 							if (self.board.last_play == node.name):
 								self.board.last_play = None
 								self.board.last_player = None
-			board.update(True)
+			board.update()
 
 		### END OF SPELL-SPECIFIC EOT EFFECTS
 
