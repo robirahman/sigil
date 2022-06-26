@@ -1,0 +1,29 @@
+{
+  "name": "sigilonline",
+  "version": "1.0.0",
+  "description": "Sigil Online",
+  "main": "app.py",
+  "scripts": {
+    "format": "npm run lint-css && prettier --write . && npm run lint-js",
+    "lint-css": "stylelint \"**/*.css\" --fix",
+    "lint-js": "eslint . --ext .js --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sigilite/sigilonline.git"
+  },
+  "author": "Andreas Voellmer",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sigilite/sigilonline/issues"
+  },
+  "homepage": "https://github.com/sigilite/sigilonline",
+  "devDependencies": {
+    "eslint": "^8.18.0",
+    "eslint-plugin-import": "^2.26.0",
+    "prettier": "^2.7.1",
+    "stylelint": "^14.9.1",
+    "stylelint-config-standard": "^26.0.0"
+  },
+  "private": true
+}

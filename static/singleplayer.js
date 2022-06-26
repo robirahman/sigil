@@ -1,7 +1,3 @@
 // JavaScript for singleplayer page
-
-
-function main() {
-
-
-}
+// eslint-disable-next-line no-unused-vars
+function main() {}

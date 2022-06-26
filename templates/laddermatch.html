@@ -1,20 +1,28 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-  <head>
-    <title>Sigil Online Ladder Match</title>
+	<head>
+		<title>Sigil Online Ladder Match</title>
 
-    <link rel="stylesheet" href="/static/laddermatch.css">
-    <link rel="icon" href="data:,">
-  </head>
+		<link
+			rel="stylesheet"
+			href="/static/laddermatch.css"
+		/>
+		<link
+			rel="icon"
+			href="data:,"
+		/>
+	</head>
 
-  <script src="/static/laddermatch.js"></script>
+	<script src="/static/laddermatch.js"></script>
 
-  <body onload="main();">
-
-    <div id="laddermatchdescription">
-      <b>Join the queue to play a ranked game against a random opponent.</b><br>
-      <a href="{{ url_for('gameboard') }}" style="color:hotpink;">Join Ladder Match Queue</a>
-    </div>
-
-  </body>
+	<body onload="main();">
+		<div id="laddermatchdescription">
+			<b>Join the queue to play a ranked game against a random opponent.</b><br />
+			<a
+				href="{{ url_for('gameboard') }}"
+				style="color: hotpink"
+				>Join Ladder Match Queue</a
+			>
+		</div>
+	</body>
 </html>
