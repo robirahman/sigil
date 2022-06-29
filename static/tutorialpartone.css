@@ -36,7 +36,7 @@ body { background-color: #1b0a26; }
 	height: 840px;
 	opacity: 0;
 	transition-property: opacity;
-	transition-duration: 5s;
+	transition-duration: 1s;
 }
 
 #latinring {
@@ -95,6 +95,98 @@ body { background-color: #1b0a26; }
 	color: #000;
 }
 
+.arrow {
+	filter: invert(1);
+	width: 100px;
+	height: auto;
+	opacity: 0;
+	transition-property: opacity, left;
+	transition-duration: 3s;
+}
+
+#arrowscorekeeper {
+	position: absolute;
+	top: 451px;
+	left: 200px;
+}
+
+#arrowredmana {
+	position: absolute;
+	top: 550px;
+	left: -178px;
+}
+
+#arrowbluemana {
+	position: absolute;
+	top: 755px;
+	left: 915px;
+	transform: rotate(180deg);
+}
+
+#arrowneutralmana {
+	position: absolute;
+	top: 50px;
+	left: 740px;
+	transform: rotate(180deg);
+}
+
+#arrowritual1 {
+	position: absolute;
+	top: 640px;
+	left: -105px;
+}
+
+#arrowsorcery1 {
+	position: absolute;
+	top: 790px;
+	left: 185px;
+}
+
+#arrowcharm1 {
+	position: absolute;
+	top: 605px;
+	left: 170px;
+}
+
+#arrowritual2 {
+	position: absolute;
+	top: 605px;
+	left: 965px;
+	transform: rotate(180deg);
+}
+
+#arrowsorcery2 {
+	position: absolute;
+	top: 300px;
+	left: 945px;
+	transform: rotate(180deg);
+}
+
+#arrowcharm2 {
+	position: absolute;
+	top: 407px;
+	left: 800px;
+	transform: rotate(180deg);
+}
+
+#arrowritual3 {
+	position: absolute;
+	top: 110px;
+	left: 160px;
+}
+
+#arrowsorcery3 {
+	position: absolute;
+	top: 300px;
+	left: -95px;
+}
+
+#arrowcharm3 {
+	position: absolute;
+	top: 340px;
+	left: 95px;
+}
+
 #ritual1 {
 	position: absolute;
 	top: 519px;
@@ -105,7 +197,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 2.5s;
 }
 
 #ritualnodes1 {
@@ -118,7 +209,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #ritual2 {
@@ -131,7 +221,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 2.5s;
 }
 
 #ritualnodes2 {
@@ -144,7 +233,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #ritual3 {
@@ -157,7 +245,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 1s;
 }
 
 #ritualnodes3 {
@@ -170,7 +257,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #sorcery1 {
@@ -182,7 +268,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 3.5s;
 }
 
 #sorcerynodes1 {
@@ -194,7 +279,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #sorcery2 {
@@ -207,7 +291,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 1.5s;
 }
 
 #sorcerynodes2 {
@@ -220,7 +303,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #sorcery3 {
@@ -233,7 +315,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 1.5s;
 }
 
 #sorcerynodes3 {
@@ -246,7 +327,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #charm1 {
@@ -258,7 +338,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 3s;
 }
 
 #charmnodes1 {
@@ -270,7 +349,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #charm2 {
@@ -283,7 +361,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 2s;
 }
 
 #charmnodes2 {
@@ -296,7 +373,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 #charm3 {
@@ -309,7 +385,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 2s;
 }
 
 #charmnodes3 {
@@ -322,7 +397,6 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
-	transition-delay: 5s;
 }
 
 .stone {
