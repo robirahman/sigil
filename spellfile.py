@@ -141,6 +141,7 @@ class Sprout(Spell):
 		player.softmove()
 
 
+
 class Spreading_Ivy(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
