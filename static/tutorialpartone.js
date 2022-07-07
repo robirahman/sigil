@@ -72,7 +72,7 @@ function main() {
 	tutorialtext6 =
 		"Let's place spells<br>onto the board now.";
 
-	tutorialtext7 = "Now we're ready to begin the game.";
+	tutorialtext7 = "Now we're ready to begin.";
 
 	tutorialtext8 = 'Each side starts with just<br>one stone on the board.';
 
@@ -97,83 +97,91 @@ function main() {
 
 	tutorialtext17 = "Each spell has a different<br>effect. Hover over a spell<br>to see its effect.";
 
-	tutorialtext18 = "For example, Searing Wind<br>has the effect 'Destroy<br>all enemy stones which are<br>touching you.'";
+	tutorialtext18 = "The three largest spells are called Rituals.<br>Rituals have five nodes inside them.";
 
-	tutorialtext19 = "If you place a stone to fill<br>Searing Wind, then cast it,<br>you will first sacrifice the<br>three stones from Searing Wind.";
+	tutorialtext19 = "The three medium-sized spells<br>are called Sorceries.<br>Sorceries have three nodes inside them.";
 
-	tutorialtext20 = "Then all enemy stones<br>anywhere on the board<br>which are touching your<br>stones will be destroyed.";
+	tutorialtext20 = "The three small spells,<br>with just a single node,<br>are called Charms.";
 
-	tutorialtext21 = "Notice that the three<br>stones on Searing Wind are<br>already gone by the time<br>the effect resolves; so<br>they don't count for<br>Searing Wind's effect.";
+	tutorialtext21 = "Let's look at Searing Wind as an<br>example. This is a Sorcery<br>with the effect 'Destroy all enemy<br>stones which are touching you.'";
 
-	tutorialtext22 = "Ideally, you'd like to destroy<br>at least three enemy stones<br>when you cast Searing Wind,<br>to make up for the three<br>you sacrificed.";
+	tutorialtext22 = "If you fill Searing Wind<br>with your stones, then cast it,<br>you will first sacrifice the<br>three stones from Searing Wind.";
 
-	tutorialtext23 = "If you'd rather save<br>a spell for later, you don't<br>have to cast it immediately.";
+	tutorialtext23 = "Then all enemy stones<br>anywhere on the board<br>which are touching your<br>stones will be destroyed.";
 
-	tutorialtext24 = "In this position, blue<br>might want to wait until<br>their Searing Wind would<br>destroy more enemy stones.";
+	tutorialtext24 = "Your three stones on Searing Wind<br>are sacrificed BEFORE the effect<br>resolves; so they will not burn away<br>enemy stones that were touching them.";
 
-	tutorialtext25 = "There are also three<br>special <b>mana</b> nodes around<br>the edge of the board.";
+	tutorialtext25 = "Ideally, you'd like to destroy<br>at least three enemy stones<br>when you cast Searing Wind,<br>to make up for the three<br>you sacrificed.";
+
+	tutorialtext26 = "If you'd rather save<br>a spell for later, you don't<br>have to cast it immediately.";
+
+	tutorialtext27 = "In this position, if blue casts<br>Searing Wind, it will only destroy a<br>single red stone (because the three<br>stones on Searing Wind will be gone<br>when the effect resolves). So blue<br>might want to save their<br>Searing Wind for later.";
+
+	tutorialtext28 = "There are also three<br>special <b>mana</b> nodes around<br>the edge of the board.";
 	
-	tutorialtext26 = "One of the mana nodes is red's<br>starting location.";
+	tutorialtext29 = "One of the mana nodes is red's<br>starting location.";
 
-	tutorialtext27 = "Another one is blue's<br>starting location.";
+	tutorialtext30 = "Another one is blue's<br>starting location.";
 
-	tutorialtext28 = "The third mana node at the<br>top of the board is neutral--<br>neither player starts with a<br>stone there.";
+	tutorialtext31 = "The third mana node at the<br>top of the board is neutral--<br>neither player starts with a<br>stone there.";
 
-	tutorialtext29 = "Mana is the most important resource<br>in Sigil; if you gain control of<br>two out of three mana, it<br>will give you a big advantage.";
+	tutorialtext32 = "Mana nodes are some of the<br>most important positions on the<br>board. You want to control<br>as many mana nodes as possible.";
 
-	tutorialtext30 = "This is because your spells become<br>more powerful with each additional<br>mana you control.";
+	tutorialtext33 = "This is because mana makes<br>your Sorcery and Ritual spells<br>more efficient.";
 
-	tutorialtext31 = "When you cast a spell, you<br>sacrifice one fewer stone<br>for each mana you control.";
+	tutorialtext34 = "When you cast a Ritual or<br>Sorcery spell, you sacrifice<br>one fewer stone for<br>each mana you control.";
 
-	tutorialtext32 = "For example, if you control<br>one mana, and have filled<br>Searing Wind with your stones,<br>then you only need to sacrifice<br>two of them to cast it.";
+	tutorialtext35 = "For example, if you control<br>one mana, and have filled<br>Searing Wind with your stones,<br>then you only need to sacrifice<br>two of them to cast it.";
 
-	tutorialtext33 = "With two mana, you would<br>only have to sacrifice one<br>stone to cast it.";
+	tutorialtext36 = "With two mana, you would<br>only have to sacrifice one<br>stone to cast it.";
 
-	tutorialtext34 = "With all three mana,<br>you wouldn't have to sacrifice<br>any stones at all.";
+	tutorialtext37 = "With all three mana,<br>you wouldn't have to sacrifice<br>any stones at all.";
 
-	tutorialtext35 = "The spell must always<br>be filled with your stones<br>before you can cast it.<br>Controlling mana just means<br>you will get to keep some stones<br>in the spell afterwards.";
+	tutorialtext38 = "The spell must always<br>be filled with your stones<br>before you can cast it.<br>Controlling mana just means<br>you will get to keep some stones<br>in the spell afterwards.";
 
-	tutorialtext36 = "Although each player starts with<br>one mana, there is no guarantee<br>that they will keep it forever.";
+	tutorialtext39 = "Mana does not affect your<br>Charms at all; you always<br>have to sacrifice the one<br>stone in a Charm to cast it.";
 
-	tutorialtext37 = "In Sigil, players can steal territory<br>from each other by moving into<br>enemy-occupied nodes.";
+	tutorialtext40 = "Although each player starts with<br>one mana, there is no guarantee<br>that they will keep it forever.";
 
-	tutorialtext38 = "So your opponent might try to<br>steal your starting mana, and<br>make you fight to defend it!";
+	tutorialtext41 = "In Sigil, players can steal territory<br>from each other by moving into<br>enemy-occupied nodes.";
 
-	tutorialtext39 = "Or you might spot an opportunity<br>to attack your opponent's starting<br>mana and take it from them.";
+	tutorialtext42 = "So your opponent might try to<br>steal your starting mana, and<br>make you fight to defend it.";
 
-	tutorialtext40 = "You win the game if you have<br>three more stones than your opponent<br>at the end of your turn.";
+	tutorialtext43 = "Or you might spot an opportunity<br>to attack your opponent's starting<br>mana and take it from them.";
 
-	tutorialtext41 = "But if players just take turns<br>placing one new stone at a<br>time, nobody will ever get<br>a three-stone advantage.";
+	tutorialtext44 = "You win the game if you have<br>three more stones than your opponent<br>at the end of your turn.";
 
-	tutorialtext42 = "Casting spells like Searing<br>Wind is one way to get a stone<br>advantage, if you destroy<br>more enemy stones than<br>you had to sacrifice.";
+	tutorialtext45 = "But if players just take turns<br>placing one new stone at a<br>time, nobody will ever get<br>a three-stone advantage.";
 
-	tutorialtext43 = "The more mana you control,<br>the more likely that<br>your spells will give<br>you a stone advantage.";
+	tutorialtext46 = "Casting spells like Searing<br>Wind is one way to get a stone<br>advantage, if you destroy<br>more enemy stones than<br>you had to sacrifice.";
 
-	tutorialtext44 = "In Part 3, we'll see that surrounding<br>a group of enemy stones is<br> another way to get a stone advantage.";
+	tutorialtext47 = "The more mana you control,<br>the more likely that<br>your spells will give<br>you a stone advantage.";
 
-	tutorialtext45 = "To keep track of which color has<br>a stone advantage, we use the<br>scorekeeping area in the middle<br>of the Sigil board.";
+	tutorialtext48 = "In Part 3, we'll see that surrounding<br>a group of enemy stones is<br> another way to get a stone advantage.";
 
-	tutorialtext46 = "A single blue stone is used<br>to track the current score.";
+	tutorialtext49 = "To keep track of which color has<br>a stone advantage, we use the<br>scorekeeping area in the middle<br>of the Sigil board.";
 
-	tutorialtext47 = "If both colors have the same<br>number of stones on the board,<br>the scorekeeper goes in the middle.";
+	tutorialtext50 = "A single blue stone is used<br>to track the current score.";
 
-	tutorialtext48 = "If one color has more stones,<br>the scorekeeper moves to mark<br>how big of an advantage they have.";
+	tutorialtext51 = "If both colors have the same<br>number of stones on the board,<br>the scorekeeper goes in the middle.";
 
-	tutorialtext49 = "When the scorekeeper marks<br>a three-stone advantage for one<br>color, that player wins.";
+	tutorialtext52 = "If one color has more stones,<br>the scorekeeper moves to mark<br>how big of an advantage they have.";
 
-	tutorialtext50 = "The scorekeeper stone itself<br>counts as a blue stone. So at<br>the start of the game, blue has<br>a one-stone advantage.";
+	tutorialtext53 = "When the scorekeeper marks<br>a three-stone advantage for one<br>color, that player wins.";
 
-	tutorialtext51 = "But red gets to move first,<br>and after they place a stone<br>on their first turn, the score<br>will be tied at two stones each.";
+	tutorialtext54 = "The scorekeeper stone itself<br>counts as a blue stone. So at<br>the start of the game, blue has<br>a one-stone advantage.";
 
-	tutorialtext52 = "Then blue will move and get<br>a one-stone advantage again.";
+	tutorialtext55 = "But red gets to move first,<br>and after they place a stone<br>on their first turn, the score<br>will be tied at two stones each.";
 
-	tutorialtext53 = "At the end of each player's turn,<br>that player moves the scorekeeper stone<br>to mark the current stone advantage.";
+	tutorialtext56 = "Then blue will move and get<br>a one-stone advantage again.";
 
-	tutorialtext54 = "In the physical Sigil board game,<br>this is also how you show that<br>you're finished with your turn.";
+	tutorialtext57 = "At the end of each player's turn,<br>that player moves the scorekeeper stone<br>to mark the current stone advantage.";
 
-	tutorialtext55 = "In Sigil Online, you can just press<br>the 'End Turn' button (or Space) and<br>the scorekeeper stone will update<br>automatically.";
+	tutorialtext58 = "In the physical Sigil board game,<br>this is also how you show that<br>you're finished with your turn.";
 
-	tutorialtext56 = "This concludes Part 1 of the<br>tutorial. See you in Part 2!";
+	tutorialtext59 = "In Sigil Online, you can just press<br>the 'End Turn' button (or Space) and<br>the scorekeeper stone will update<br>automatically.";
+
+	tutorialtext60 = "This concludes Part 1 of the<br>tutorial. See you in Part 2!";
 
 
 	fadeIn();
@@ -269,74 +277,16 @@ function arrowBlueManaFadeIn() {
 	document.getElementById('arrowbluemana').style.left = '815px';
 }
 
-function arrowRedManaFadeIn() {
-	document.getElementById('arrowredmana').style.visibility = "visible";
-	document.getElementById('arrowredmana').style.opacity = 1;
-	document.getElementById('arrowredmana').style.left = '-78px';
-}
-
-function arrowNeutralManaFadeIn() {
-	document.getElementById('arrowneutralmana').style.visibility = "visible";
-	document.getElementById('arrowneutralmana').style.opacity = 1;
-	document.getElementById('arrowneutralmana').style.left = '640px';
-}
-
-function arrowScorekeeperFadeIn() {
-	document.getElementById('arrowscorekeeper').style.opacity = 1;
-	document.getElementById('arrowscorekeeper').style.left = '300px';
-}
-
-function arrowRitual1FadeIn() {
-	document.getElementById('arrowritual1').style.opacity = 1;
-	document.getElementById('arrowritual1').style.left = '-5px';
-}
-
-function arrowSorcery1FadeIn() {
-	document.getElementById('arrowsorcery1').style.opacity = 1;
-	document.getElementById('arrowsorcery1').style.left = '285px';
-}
-
-function arrowCharm1FadeIn() {
-	document.getElementById('arrowcharm1').style.opacity = 1;
-	document.getElementById('arrowcharm1').style.left = '270px';
-}
-
-function arrowRitual2FadeIn() {
-	document.getElementById('arrowritual2').style.opacity = 1;
-	document.getElementById('arrowritual2').style.left = '865px';
-}
-
-function arrowSorcery2FadeIn() {
-	document.getElementById('arrowsorcery2').style.opacity = 1;
-	document.getElementById('arrowsorcery2').style.left = '845px';
-}
-
-function arrowCharm2FadeIn() {
-	document.getElementById('arrowcharm2').style.opacity = 1;
-	document.getElementById('arrowcharm2').style.left = '700px';
-}
-
-function arrowRitual3FadeIn() {
-	document.getElementById('arrowritual3').style.opacity = 1;
-	document.getElementById('arrowritual3').style.left = '260px';
-}
-
-function arrowSorcery3FadeIn() {
-	document.getElementById('arrowsorcery3').style.opacity = 1;
-	document.getElementById('arrowsorcery3').style.left = '5px';
-}
-
-function arrowCharm3FadeIn() {
-	document.getElementById('arrowcharm3').style.opacity = 1;
-	document.getElementById('arrowcharm3').style.left = '195px';
-}
-
-
-
 function arrowBlueManaFadeOut() {
 	document.getElementById('arrowbluemana').style.visibility = "hidden";
 	document.getElementById('arrowbluemana').style.opacity = 0;
 	document.getElementById('arrowbluemana').style.left = '915px';
+}
+
+function arrowRedManaFadeIn() {
+	document.getElementById('arrowredmana').style.visibility = "visible";
+	document.getElementById('arrowredmana').style.opacity = 1;
+	document.getElementById('arrowredmana').style.left = '-78px';
 }
 
 function arrowRedManaFadeOut() {
@@ -345,11 +295,137 @@ function arrowRedManaFadeOut() {
 	document.getElementById('arrowredmana').style.left = '-178px';
 }
 
+function arrowNeutralManaFadeIn() {
+	document.getElementById('arrowneutralmana').style.visibility = "visible";
+	document.getElementById('arrowneutralmana').style.opacity = 1;
+	document.getElementById('arrowneutralmana').style.left = '640px';
+}
+
 function arrowNeutralManaFadeOut() {
 	document.getElementById('arrowneutralmana').style.visibility = "hidden";
 	document.getElementById('arrowneutralmana').style.opacity = 0;
 	document.getElementById('arrowneutralmana').style.left = '740px';
 }
+
+
+
+function arrowScorekeeperFadeIn() {
+	document.getElementById('arrowscorekeeper').style.opacity = 1;
+	document.getElementById('arrowscorekeeper').style.left = '300px';
+}
+
+
+
+function arrowRitual1FadeIn() {
+	document.getElementById('arrowritual1').style.visibility = "visible";
+	document.getElementById('arrowritual1').style.opacity = 1;
+	document.getElementById('arrowritual1').style.left = '-5px';
+}
+
+function arrowSorcery1FadeIn() {
+	document.getElementById('arrowsorcery1').style.visibility = "visible";
+	document.getElementById('arrowsorcery1').style.opacity = 1;
+	document.getElementById('arrowsorcery1').style.left = '285px';
+}
+
+function arrowCharm1FadeIn() {
+	document.getElementById('arrowcharm1').style.visibility = "visible";
+	document.getElementById('arrowcharm1').style.opacity = 1;
+	document.getElementById('arrowcharm1').style.left = '270px';
+}
+
+function arrowRitual2FadeIn() {
+	document.getElementById('arrowritual2').style.visibility = "visible";
+	document.getElementById('arrowritual2').style.opacity = 1;
+	document.getElementById('arrowritual2').style.left = '865px';
+}
+
+function arrowSorcery2FadeIn() {
+	document.getElementById('arrowsorcery2').style.visibility = "visible";
+	document.getElementById('arrowsorcery2').style.opacity = 1;
+	document.getElementById('arrowsorcery2').style.left = '845px';
+}
+
+function arrowCharm2FadeIn() {
+	document.getElementById('arrowcharm2').style.visibility = "visible";
+	document.getElementById('arrowcharm2').style.opacity = 1;
+	document.getElementById('arrowcharm2').style.left = '700px';
+}
+
+function arrowRitual3FadeIn() {
+	document.getElementById('arrowritual3').style.visibility = "visible";
+	document.getElementById('arrowritual3').style.opacity = 1;
+	document.getElementById('arrowritual3').style.left = '260px';
+}
+
+function arrowSorcery3FadeIn() {
+	document.getElementById('arrowsorcery3').style.visibility = "visible";
+	document.getElementById('arrowsorcery3').style.opacity = 1;
+	document.getElementById('arrowsorcery3').style.left = '5px';
+}
+
+function arrowCharm3FadeIn() {
+	document.getElementById('arrowcharm3').style.visibility = "visible";
+	document.getElementById('arrowcharm3').style.opacity = 1;
+	document.getElementById('arrowcharm3').style.left = '195px';
+}
+
+function arrowRitual1FadeOut() {
+	document.getElementById('arrowritual1').style.visibility = "hidden";
+	document.getElementById('arrowritual1').style.opacity = 0;
+	document.getElementById('arrowritual1').style.left = '-105px';
+}
+
+function arrowSorcery1FadeOut() {
+	document.getElementById('arrowsorcery1').style.visibility = "hidden";
+	document.getElementById('arrowsorcery1').style.opacity = 0;
+	document.getElementById('arrowsorcery1').style.left = '185px';
+}
+
+function arrowCharm1FadeOut() {
+	document.getElementById('arrowcharm1').style.visibility = "hidden";
+	document.getElementById('arrowcharm1').style.opacity = 0;
+	document.getElementById('arrowcharm1').style.left = '170px';
+}
+
+function arrowRitual2FadeOut() {
+	document.getElementById('arrowritual2').style.visibility = "hidden";
+	document.getElementById('arrowritual2').style.opacity = 0;
+	document.getElementById('arrowritual2').style.left = '965px';
+}
+
+function arrowSorcery2FadeOut() {
+	document.getElementById('arrowsorcery2').style.visibility = "hidden";
+	document.getElementById('arrowsorcery2').style.opacity = 0;
+	document.getElementById('arrowsorcery2').style.left = '945px';
+}
+
+function arrowCharm2FadeOut() {
+	document.getElementById('arrowcharm2').style.visibility = "hidden";
+	document.getElementById('arrowcharm2').style.opacity = 0;
+	document.getElementById('arrowcharm2').style.left = '800px';
+}
+
+function arrowRitual3FadeOut() {
+	document.getElementById('arrowritual3').style.visibility = "hidden";
+	document.getElementById('arrowritual3').style.opacity = 0;
+	document.getElementById('arrowritual3').style.left = '160px';
+}
+
+function arrowSorcery3FadeOut() {
+	document.getElementById('arrowsorcery3').style.visibility = "hidden";
+	document.getElementById('arrowsorcery3').style.opacity = 0;
+	document.getElementById('arrowsorcery3').style.left = '-95px';
+}
+
+function arrowCharm3FadeOut() {
+	document.getElementById('arrowcharm3').style.visibility = "hidden";
+	document.getElementById('arrowcharm3').style.opacity = 0;
+	document.getElementById('arrowcharm3').style.left = '95px';
+}
+
+
+
 
 function startingStonesFadeIn() {
 	document.getElementById('a1').src = '/static/images/redstone.png';
@@ -362,6 +438,19 @@ function keyDownFunction(e) {
 		e.preventDefault();
 		document.getElementById('nextbutton').click();
 	}
+}
+
+function sampleBoardOne() {
+	bluenodelist = ['b4', 'b7', 'b8', 'b9', 'b10'];
+	rednodelist = ['c2', 'c5', 'c6', 'c11', 'c12'];
+
+	for (var node of bluenodelist) {
+		document.getElementById(node).src = '/static/images/bluestone.png';
+	}
+	for (var node of rednodelist) {
+		document.getElementById(node).src = '/static/images/redstone.png';
+	}
+	
 }
 
 
@@ -449,15 +538,15 @@ function nextClick() {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext5;
 	} else if (tutorialcounter == 6) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext6;
-		document.getElementById('arrowritual1').style.visibility = "hidden";
-		document.getElementById('arrowritual2').style.visibility = "hidden";
-		document.getElementById('arrowritual3').style.visibility = "hidden";
-		document.getElementById('arrowsorcery1').style.visibility = "hidden";
-		document.getElementById('arrowsorcery2').style.visibility = "hidden";
-		document.getElementById('arrowsorcery3').style.visibility = "hidden";
-		document.getElementById('arrowcharm1').style.visibility = "hidden";
-		document.getElementById('arrowcharm2').style.visibility = "hidden";
-		document.getElementById('arrowcharm3').style.visibility = "hidden";
+		arrowRitual1FadeOut();
+		arrowRitual2FadeOut();
+		arrowRitual3FadeOut();
+		arrowSorcery1FadeOut();
+		arrowSorcery2FadeOut();
+		arrowSorcery3FadeOut();
+		arrowCharm1FadeOut();
+		arrowCharm2FadeOut();
+		arrowCharm3FadeOut();
 	} else if (tutorialcounter == 7) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext7;
 		fadeInSpells();
@@ -491,14 +580,35 @@ function nextClick() {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext17;
 	} else if (tutorialcounter == 18) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext18;
+		arrowRitual1FadeIn();
+		arrowRitual2FadeIn();
+		arrowRitual3FadeIn();
 	} else if (tutorialcounter == 19) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext19;
+		arrowRitual1FadeOut();
+		arrowRitual2FadeOut();
+		arrowRitual3FadeOut();
+		arrowSorcery1FadeIn();
+		arrowSorcery2FadeIn();
+		arrowSorcery3FadeIn();
 	} else if (tutorialcounter == 20) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext20;
+		arrowSorcery1FadeOut();
+		arrowSorcery2FadeOut();
+		arrowSorcery3FadeOut();
+		arrowCharm1FadeIn();
+		arrowCharm2FadeIn();
+		arrowCharm3FadeIn();
 	} else if (tutorialcounter == 21) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext21;
+		arrowSorcery2FadeIn();
+		arrowCharm1FadeOut();
+		arrowCharm2FadeOut();
+		arrowCharm3FadeOut();
 	} else if (tutorialcounter == 22) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext22;
+		arrowSorcery2FadeOut();
+		sampleBoardOne();
 	} else if (tutorialcounter == 23) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext23;
 	} else if (tutorialcounter == 24) {
@@ -507,24 +617,25 @@ function nextClick() {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext25;
 	} else if (tutorialcounter == 26) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext26;
-		arrowRedManaFadeIn();
 	} else if (tutorialcounter == 27) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext27;
-		arrowBlueManaFadeIn();
-		arrowRedManaFadeOut();
 	} else if (tutorialcounter == 28) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext28;
-		arrowBlueManaFadeOut();
-		arrowNeutralManaFadeIn();
+		clearBoard();
 	} else if (tutorialcounter == 29) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext29;
-		arrowNeutralManaFadeOut();
+		arrowRedManaFadeIn();
 	} else if (tutorialcounter == 30) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext30;
+		arrowBlueManaFadeIn();
+		arrowRedManaFadeOut();
 	} else if (tutorialcounter == 31) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext31;
+		arrowBlueManaFadeOut();
+		arrowNeutralManaFadeIn();
 	} else if (tutorialcounter == 32) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext32;
+		arrowNeutralManaFadeOut();
 	} else if (tutorialcounter == 33) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext33;
 	} else if (tutorialcounter == 34) {
@@ -551,39 +662,47 @@ function nextClick() {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext44;
 	} else if (tutorialcounter == 45) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext45;
-		arrowScorekeeperFadeIn();
 	} else if (tutorialcounter == 46) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext46;
-		document.getElementById('arrowscorekeeper').style.visibility = "hidden";
-		document.getElementById('scorekeeper').style.opacity = 1;
 	} else if (tutorialcounter == 47) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext47;
-		document.getElementById('scorekeeper').className = "scoretied";
 	} else if (tutorialcounter == 48) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext48;
-		document.getElementById('scorekeeper').className = "scorer1";
 	} else if (tutorialcounter == 49) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext49;
-		document.getElementById('scorekeeper').className = "scorer3";
+		arrowScorekeeperFadeIn();
 	} else if (tutorialcounter == 50) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext50;
-		startingStonesFadeIn();
-		document.getElementById('scorekeeper').className = "scoreb1";
+		document.getElementById('arrowscorekeeper').style.visibility = "hidden";
+		document.getElementById('scorekeeper').style.opacity = 1;
 	} else if (tutorialcounter == 51) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext51;
-		document.getElementById('a2').src = '/static/images/redstone.png';
 		document.getElementById('scorekeeper').className = "scoretied";
 	} else if (tutorialcounter == 52) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext52;
-		document.getElementById('b2').src = '/static/images/bluestone.png';
-		document.getElementById('scorekeeper').className = "scoreb1";
+		document.getElementById('scorekeeper').className = "scorer1";
 	} else if (tutorialcounter == 53) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext53;
+		document.getElementById('scorekeeper').className = "scorer3";
 	} else if (tutorialcounter == 54) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext54;
+		startingStonesFadeIn();
+		document.getElementById('scorekeeper').className = "scoreb1";
 	} else if (tutorialcounter == 55) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext55;
+		document.getElementById('a2').src = '/static/images/redstone.png';
+		document.getElementById('scorekeeper').className = "scoretied";
 	} else if (tutorialcounter == 56) {
 		document.getElementById('tutorialtext').innerHTML = tutorialtext56;
+		document.getElementById('b2').src = '/static/images/bluestone.png';
+		document.getElementById('scorekeeper').className = "scoreb1";
+	} else if (tutorialcounter == 57) {
+		document.getElementById('tutorialtext').innerHTML = tutorialtext57;
+	} else if (tutorialcounter == 58) {
+		document.getElementById('tutorialtext').innerHTML = tutorialtext58;
+	} else if (tutorialcounter == 59) {
+		document.getElementById('tutorialtext').innerHTML = tutorialtext59;
+	} else if (tutorialcounter == 60) {
+		document.getElementById('tutorialtext').innerHTML = tutorialtext60;
 	}
 }

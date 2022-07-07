@@ -114,6 +114,7 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity, left;
 	transition-duration: 3s;
+	z-index: 2;
 }
 
 #arrowscorekeeper {
