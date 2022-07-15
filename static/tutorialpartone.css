@@ -59,6 +59,18 @@ body { background-color: #1b0a26; }
 	z-index: -2;
 }
 
+.spelltext {
+	display: none;
+	font-family: Papyrus, serif;
+	text-align: center;
+	font-size: 15px;
+	border-radius: 9px;
+	border: 2px solid black;
+	background-color: burlywood;
+	padding: 15px;
+	z-index: 1;
+}
+
 #tutorialtext {
 	position: absolute;
 	top: 10px;
@@ -102,6 +114,7 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity, left;
 	transition-duration: 3s;
+	z-index: 2;
 }
 
 #arrowscorekeeper {
@@ -211,6 +224,12 @@ body { background-color: #1b0a26; }
 	transition-duration: 2s;
 }
 
+#ritualtext1 {
+	position: absolute;
+	top: 560px;
+	left: 318px;
+}
+
 #ritual2 {
 	position: absolute;
 	top: 519px;
@@ -233,6 +252,12 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
+}
+
+#ritualtext2 {
+	position: absolute;
+	top: 560px;
+	left: 845px;
 }
 
 #ritual3 {
@@ -259,6 +284,12 @@ body { background-color: #1b0a26; }
 	transition-duration: 2s;
 }
 
+#ritualtext3 {
+	position: absolute;
+	top: 100px;
+	left: 578px;
+}
+
 #sorcery1 {
 	position: absolute;
 	top: 693.5px;
@@ -279,6 +310,12 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
+}
+
+#sorcerytext1 {
+	position: absolute;
+	top: 715px;
+	left: 557px;
 }
 
 #sorcery2 {
@@ -305,6 +342,12 @@ body { background-color: #1b0a26; }
 	transition-duration: 2s;
 }
 
+#sorcerytext2 {
+	position: absolute;
+	top: 255px;
+	left: 823px;
+}
+
 #sorcery3 {
 	position: absolute;
 	top: 236.5px;
@@ -329,6 +372,12 @@ body { background-color: #1b0a26; }
 	transition-duration: 2s;
 }
 
+#sorcerytext3 {
+	position: absolute;
+	top: 252px;
+	left: 294px;
+}
+
 #charm1 {
 	position: absolute;
 	top: 584px;
@@ -349,6 +398,12 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
+}
+
+#charmtext1 {
+	position: absolute;
+	top: 570px;
+	left: 478px;
 }
 
 #charm2 {
@@ -375,6 +430,12 @@ body { background-color: #1b0a26; }
 	transition-duration: 2s;
 }
 
+#charmtext2 {
+	position: absolute;
+	top: 375px;
+	left: 697px;
+}
+
 #charm3 {
 	position: absolute;
 	top: 308px;
@@ -397,6 +458,12 @@ body { background-color: #1b0a26; }
 	opacity: 0;
 	transition-property: opacity;
 	transition-duration: 2s;
+}
+
+#charmtext3 {
+	position: absolute;
+	top: 285px;
+	left: 420px;
 }
 
 .stone {
