@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html
+	class="height:100%"
+	lang="en"
+>
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0"
+		/>
+		<meta
+			http-equiv="X-UA-Compatible"
+			content="ie=edge"
+		/>
+		<title>Sigil Online</title>
+		<link
+			href="/static/css/styles.css"
+			rel="stylesheet"
+		/>
+		<link
+			rel="preconnect"
+			href="https://fonts.googleapis.com"
+		/>
+		<link
+			rel="preconnect"
+			href="https://fonts.gstatic.com"
+			crossorigin
+		/>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap"
+			rel="stylesheet"
+		/>
+		<script
+			defer
+			src="https://unpkg.com/alpinejs@3.10.2/dist/cdn.min.js"
+		></script>
+		<script src="/static/scripts/game-board.js"></script>
+	</head>
+	<body class="display:flex flex-direction:column height:100% justify-content:space-between">
+		<div>
+			<header class="background-color:0d0513 padding:32 position:relative text-align:center">
+				<h1>
+					<a href="/v2"
+						><span class="visually-hidden">Sigil Online</span
+						><img
+							class="max-width:100%"
+							alt=""
+							src="/static/images/v2/sigil-online-logo.svg"
+							height="36"
+							width="287"
+					/></a>
+				</h1>
+				<img
+					class="bottom:0 left:50% position:absolute transform:translate(-50%_50%)"
+					alt=""
+					src="/static/images/v2/swoosh-separator.svg"
+					height="14"
+					width="116"
+				/>
+			</header>
+		</div>
+		<div
+			class="overflow:auto text-align:center"
+			x-data="gameBoard"
+		>
+			<div class="display:inline-block position:relative">
+				<img
+					class="game-board max-width:100%"
+					src="/static/images/v2/game-board.jpg"
+					alt=""
+				/>
+				<div class="spells">
+					<img
+						class="charm-node charm-node--1 charm-spell charm-spell--1"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="charm1"
+					/>
+					<img
+						class="charm-node charm-node--2 charm-spell charm-spell--2"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="charm2"
+					/>
+					<img
+						class="charm-node charm-node--3 charm-spell charm-spell--3"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="charm3"
+					/>
+
+					<img
+						class="ritual-node ritual-node--1 ritual-spell ritual-spell--1"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="ritual1"
+					/>
+					<img
+						class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="ritual2"
+					/>
+					<img
+						class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="ritual3"
+					/>
+
+					<img
+						class="sorcery-node sorcery-node--1 sorcery-spell sorcery-spell--1"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="sorcery1"
+					/>
+					<img
+						class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="sorcery2"
+					/>
+					<img
+						class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
+						alt=""
+						src="/static/images/v2/spacer.gif"
+						x-ref="sorcery3"
+					/>
+				</div>
+				<div class="spell-nodes">
+					<img
+						class="charm-node charm-node--1"
+						alt=""
+						src="/static/images/v2/charm-nodes.png"
+					/>
+					<img
+						class="charm-node charm-node--2"
+						alt=""
+						src="/static/images/v2/charm-nodes.png"
+					/>
+					<img
+						class="charm-node charm-node--3"
+						alt=""
+						src="/static/images/v2/charm-nodes.png"
+					/>
+
+					<img
+						class="ritual-node ritual-node--1"
+						alt=""
+						src="/static/images/v2/ritual-nodes.png"
+					/>
+					<img
+						class="ritual-node ritual-node--2"
+						alt=""
+						src="/static/images/v2/ritual-nodes.png"
+					/>
+					<img
+						class="ritual-node ritual-node--3"
+						alt=""
+						src="/static/images/v2/ritual-nodes.png"
+					/>
+
+					<img
+						class="sorcery-node sorcery-node--1"
+						alt=""
+						src="/static/images/v2/sorcery-nodes.png"
+					/>
+					<img
+						class="sorcery-node sorcery-node--2"
+						alt=""
+						src="/static/images/v2/sorcery-nodes.png"
+					/>
+					<img
+						class="sorcery-node sorcery-node--3"
+						alt=""
+						src="/static/images/v2/sorcery-nodes.png"
+					/>
+				</div>
+				<div class="stone-nodes">
+					<button class="stone-node stone-node--a1">a1</button>
+					<button class="stone-node stone-node--a2">a2</button>
+					<button class="stone-node stone-node--a3">a3</button>
+					<button class="stone-node stone-node--a4">a4</button>
+					<button class="stone-node stone-node--a5">a5</button>
+					<button class="stone-node stone-node--a6">a6</button>
+					<button class="stone-node stone-node--a7">a7</button>
+					<button class="stone-node stone-node--a8">a8</button>
+					<button class="stone-node stone-node--a9">a9</button>
+					<button class="stone-node stone-node--a10">a10</button>
+					<button class="stone-node stone-node--a11">a11</button>
+					<button class="stone-node stone-node--a12">a12</button>
+					<button class="stone-node stone-node--a13">a13</button>
+					<button class="stone-node stone-node--b1">b1</button>
+					<button class="stone-node stone-node--b2">b2</button>
+					<button class="stone-node stone-node--b3">b3</button>
+					<button class="stone-node stone-node--b4">b4</button>
+					<button class="stone-node stone-node--b5">b5</button>
+					<button class="stone-node stone-node--b6">b6</button>
+					<button class="stone-node stone-node--b7">b7</button>
+					<button class="stone-node stone-node--b8">b8</button>
+					<button class="stone-node stone-node--b9">b9</button>
+					<button class="stone-node stone-node--b10">b10</button>
+					<button class="stone-node stone-node--b11">b11</button>
+					<button class="stone-node stone-node--b12">b12</button>
+					<button class="stone-node stone-node--b13">b13</button>
+					<button class="stone-node stone-node--c1">c1</button>
+					<button class="stone-node stone-node--c2">c2</button>
+					<button class="stone-node stone-node--c3">c3</button>
+					<button class="stone-node stone-node--c4">c4</button>
+					<button class="stone-node stone-node--c5">c5</button>
+					<button class="stone-node stone-node--c6">c6</button>
+					<button class="stone-node stone-node--c7">c7</button>
+					<button class="stone-node stone-node--c8">c8</button>
+					<button class="stone-node stone-node--c9">c9</button>
+					<button class="stone-node stone-node--c10">c10</button>
+					<button class="stone-node stone-node--c11">c11</button>
+					<button class="stone-node stone-node--c12">c12</button>
+					<button class="stone-node stone-node--c13">c13</button>
+				</div>
+			</div>
+		</div>
+		<div
+			class="display:grid gap:24 margin-horizontal:auto max-width:600 padding:16 text-align:center"
+		>
+			<a href="https://www.pineislandgames.com/"
+				><img
+					class="@mq-700--width:200"
+					alt="Pine Island Games"
+					src="/static/images/v2/pine-island-games-logo.png"
+					width="140"
+			/></a>
+		</div>
+	</body>
+</html>

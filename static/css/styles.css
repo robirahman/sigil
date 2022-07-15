@@ -1,0 +1,828 @@
+/* <Reset> */
+*,
+*::after,
+*::before {
+	box-sizing: border-box;
+}
+
+blockquote,
+body,
+button,
+canvas,
+caption,
+dd,
+details,
+dialog,
+dl,
+fieldset,
+figure,
+form,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+hr,
+html,
+iframe,
+img,
+legend,
+li,
+menu,
+ol,
+p,
+pre,
+table,
+tbody,
+td,
+tfoot,
+th,
+thead,
+tr,
+ul {
+	border: none;
+	margin: 0;
+	padding: 0;
+}
+
+article,
+aside,
+details,
+figcaption,
+figure,
+footer,
+header,
+hgroup,
+main,
+menu,
+nav,
+section,
+summary {
+	display: block;
+}
+
+audio,
+canvas,
+video {
+	display: inline-block;
+}
+
+audio:not([controls]) {
+	display: none;
+	height: 0;
+}
+
+[hidden],
+template {
+	display: none;
+}
+
+a {
+	display: inline-block;
+	text-decoration: none;
+}
+
+b,
+strong {
+	font-weight: bolder;
+}
+
+button {
+	background: none;
+	border: none;
+	cursor: pointer;
+	display: inline-block;
+	line-height: 1;
+}
+
+button::-moz-focus-inner {
+	border: none;
+	padding: 0;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+	color: inherit;
+	font-family: inherit;
+	font-size: 1em;
+	font-weight: inherit;
+	margin: 0;
+	padding: 0;
+}
+
+[disabled],
+:disabled {
+	cursor: default;
+	pointer-events: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-size: inherit;
+	font-weight: inherit;
+}
+
+html {
+	background-color: #160820;
+	font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+	line-height: normal;
+	-moz-osx-font-smoothing: grayscale;
+	-webkit-font-smoothing: antialiased;
+	overflow-x: hidden;
+	overflow-y: scroll;
+	-ms-overflow-style: scrollbar;
+	text-size-adjust: 100%;
+	text-rendering: optimizelegibility;
+}
+
+img {
+	vertical-align: bottom;
+}
+
+ol,
+ul {
+	list-style: none;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+td,
+th {
+	box-sizing: content-box;
+}
+
+[type="button"],
+[type="reset"],
+[type="submit"] {
+	appearance: button;
+}
+
+[type="email"],
+[type="search"],
+[type="tel"],
+[type="text"],
+[type="url"],
+textarea {
+	appearance: textfield;
+}
+
+[type="number"] {
+	appearance: textfield;
+}
+
+[type="number"]::-webkit-outer-spin-button,
+[type="number"]::-webkit-inner-spin-button {
+	appearance: none;
+	margin: 0;
+}
+
+::placeholder {
+	color: #737373;
+	opacity: 1;
+}
+
+::-webkit-search-decoration {
+	appearance: none;
+	margin: 0;
+}
+
+/* </Reset> */
+
+/* <AtomicStylesToDelete> */
+.align-items\:center {
+	align-items: center;
+}
+
+.background-color\:0d0513 {
+	background-color: #0d0513;
+}
+
+.background-color\:0d0513-160820 {
+	background-color: #0d0513;
+	background-image: linear-gradient(to bottom, #0d0513, #0d0513);
+}
+
+.background-color\:160820 {
+	background-color: #160820;
+}
+
+.background-color\:115f77 {
+	background-color: #115f77;
+}
+
+.background-color\:272b49 {
+	background-color: #272b49;
+}
+
+.\:hocus--background-color\:004962:hover,
+.\:hocus--background-color\:004962:focus {
+	background-color: #004962;
+}
+
+.\:hocus--background-color\:1e2139:hover,
+.\:hocus--background-color\:1e2139:focus {
+	background-color: #1e2139;
+}
+
+.border-radius\:full {
+	border-radius: 999px;
+}
+
+.box-shadow\:2_2_0e0514 {
+	box-shadow: 2px 2px #0e0514;
+}
+
+.bottom\:0 {
+	bottom: 0;
+}
+
+.color\:dddcdd {
+	color: #dddcdd;
+}
+
+.color\:f0f0f0 {
+	color: #f0f0f0;
+}
+
+.column-gap\:44 {
+	column-gap: 44px;
+}
+
+.display\:block {
+	display: block;
+}
+
+.display\:flex {
+	display: flex;
+}
+
+.display\:grid {
+	display: grid;
+}
+
+.display\:inline-block {
+	display: inline-block;
+}
+
+.display\:inline-flex {
+	display: inline-flex;
+}
+
+.flex-basis\:296px {
+	flex-basis: 296px;
+}
+
+.flex-direction\:column {
+	flex-direction: column;
+}
+
+.flex-grow\:1 {
+	flex-grow: 1;
+}
+
+.flex-wrap\:wrap {
+	flex-wrap: wrap;
+}
+
+.font-family\:arvo {
+	font-family: Arvo, serif;
+}
+
+.font-family\:overlock {
+	font-family: Overlock, serif;
+}
+
+.font-size\:16 {
+	font-size: 16px;
+}
+
+.font-size\:31 {
+	font-size: 31px;
+}
+
+@media (min-width: 700px) {
+	.\@mq-700--font-size\:20 {
+		font-size: 20px;
+	}
+}
+
+.gap\:16 {
+	gap: 16px;
+}
+
+.gap\:24 {
+	gap: 24px;
+}
+
+.gap\:66 {
+	gap: 66px;
+}
+
+@media (min-width: 768px) {
+	.\@mq-768--gap\:66 {
+		gap: 66px;
+	}
+}
+
+.height\:66 {
+	height: 66px;
+}
+
+.height\:100\% {
+	height: 100%;
+}
+
+.justify-content\:center {
+	justify-content: center;
+}
+
+.justify-content\:space-between {
+	justify-content: space-between;
+}
+
+.left\:50\% {
+	left: 50%;
+}
+
+.line-height\:1\.4194 {
+	line-height: 1.4194;
+}
+
+.line-height\:1\.4375 {
+	line-height: 1.4375;
+}
+
+.margin-horizontal\:auto {
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.max-width\:100\% {
+	max-width: 100%;
+}
+
+.max-width\:600 {
+	max-width: 600px;
+}
+
+.max-width\:800 {
+	max-width: 800px;
+}
+
+.opacity\:0\.4 {
+	opacity: 0.4;
+}
+
+.opacity\:0\.86 {
+	opacity: 0.86;
+}
+
+.overflow\:auto {
+	overflow: auto;
+}
+
+.padding\:16 {
+	padding: 16px;
+}
+
+.padding\:32 {
+	padding: 32px;
+}
+
+.padding-horizontal\:32 {
+	padding-left: 32px;
+	padding-right: 32px;
+}
+
+@media (min-width: 700px) {
+	.\@mq-700--padding-vertical\:64 {
+		padding-bottom: 64px;
+		padding-top: 64px;
+	}
+}
+
+.position\:absolute {
+	position: absolute;
+}
+
+.position\:relative {
+	position: relative;
+}
+
+.row-gap\:16 {
+	row-gap: 16px;
+}
+
+.row-gap\:32 {
+	row-gap: 32px;
+}
+
+@media (min-width: 700px) {
+	.\@mq-700--row-gap\:32 {
+		row-gap: 32px;
+	}
+}
+
+.text-align\:center {
+	text-align: center;
+}
+
+.transform\:translate\(-50\%_50\%\) {
+	transform: translate(-50%, 50%);
+}
+
+.visually-hidden {
+	border: none;
+	clip: rect(0, 0, 0, 0);
+	height: 1;
+	margin: -1;
+	overflow: hidden;
+	padding: 0;
+	position: absolute;
+	white-space: nowrap;
+	width: 1;
+}
+
+@media (min-width: 700px) {
+	.\@mq-700--width\:200 {
+		width: 200px;
+	}
+}
+
+/* </AtomicStylesToDelete> */
+
+/* <BoardAndNodes> */
+.game-board {
+	max-height: 95vh;
+	min-height: 898px;
+	min-width: 898px;
+}
+
+.charm-node {
+	--size: calc(60 / 1476 * 100%);
+
+	position: absolute;
+
+	--translate: -50%;
+
+	height: var(--size);
+	transform-origin: left top;
+	width: var(--size);
+}
+
+.charm-node--1 {
+	left: calc(673 / 1476 * 100%);
+	top: calc(984.5 / 1476 * 100%);
+	transform: translate(var(--translate), var(--translate));
+}
+
+.charm-node--2 {
+	left: calc(984 / 1476 * 100%);
+	top: calc(671 / 1476 * 100%);
+	transform: translate(var(--translate), var(--translate));
+}
+
+.charm-node--3 {
+	left: calc(557.2 / 1476 * 100%);
+	top: calc(558 / 1476 * 100%);
+	transform: translate(var(--translate), var(--translate));
+}
+
+.charm-spell {
+	--size: calc(144 / 1476 * 100%);
+}
+
+.ritual-node {
+	--size: calc(316 / 1476 * 100%);
+
+	position: absolute;
+
+	--translate: -50%;
+
+	height: var(--size);
+	transform-origin: left top;
+	width: var(--size);
+}
+
+.ritual-node--1 {
+	left: calc(1145 / 1476 * 100%);
+	top: calc(973 / 1476 * 100%);
+	transform: rotate(-60deg) translate(var(--translate), var(--translate));
+}
+
+.ritual-node--2 {
+	left: calc(331.3 / 1476 * 100%);
+	top: calc(973.1 / 1476 * 100%);
+	transform: rotate(60deg) translate(var(--translate), var(--translate));
+}
+
+.ritual-node--3 {
+	left: calc(738 / 1476 * 100%);
+	top: calc(267.8 / 1476 * 100%);
+	transform: rotate(180deg) translate(var(--translate), var(--translate));
+}
+
+.sorcery-node {
+	--size: calc(242 / 1476 * 100%);
+
+	position: absolute;
+
+	--translate: -50%;
+
+	height: var(--size);
+	transform-origin: left top;
+	width: var(--size);
+}
+
+.sorcery-node--1 {
+	left: calc(738 / 1476 * 100%);
+	top: calc(1210 / 1476 * 100%);
+	transform: rotate(2deg) translate(var(--translate), var(--translate));
+}
+
+.sorcery-node--2 {
+	left: calc(1147 / 1476 * 100%);
+	top: calc(502 / 1476 * 100%);
+	transform: rotate(-120deg) translate(var(--translate), var(--translate));
+}
+
+.sorcery-node--3 {
+	left: calc(329 / 1476 * 100%);
+	top: calc(502 / 1476 * 100%);
+	transform: rotate(120deg) translate(var(--translate), var(--translate));
+}
+
+.stone-node {
+	--size: calc(46 / 1476 * 100%);
+	--translate: -50%;
+
+	background: pink;
+	border-radius: 999px;
+	position: absolute;
+	height: var(--size);
+	transform: translate(var(--translate), var(--translate));
+	width: var(--size);
+}
+
+.stone-node:hover,
+.stone-node:focus {
+	background: green;
+	color: #fff;
+}
+
+.stone-node--a1 {
+	left: calc(113 / 1476 * 100%);
+	top: calc(888.5 / 1476 * 100%);
+}
+
+.stone-node--a2 {
+	left: calc(253.5 / 1476 * 100%);
+	top: calc(1020.5 / 1476 * 100%);
+}
+
+.stone-node--a3 {
+	left: calc(352 / 1476 * 100%);
+	top: calc(1063 / 1476 * 100%);
+}
+
+.stone-node--a4 {
+	left: calc(422.4 / 1476 * 100%);
+	top: calc(980.8 / 1476 * 100%);
+}
+
+.stone-node--a5 {
+	left: calc(366.8 / 1476 * 100%);
+	top: calc(890.5 / 1476 * 100%);
+}
+
+.stone-node--a6 {
+	left: calc(262.5 / 1476 * 100%);
+	top: calc(913.8 / 1476 * 100%);
+}
+
+.stone-node--a7 {
+	left: calc(672.6 / 1476 * 100%);
+	top: calc(984.5 / 1476 * 100%);
+}
+
+.stone-node--a8 {
+	left: calc(741 / 1476 * 100%);
+	top: calc(1144.4 / 1476 * 100%);
+}
+
+.stone-node--a9 {
+	left: calc(679.5 / 1476 * 100%);
+	top: calc(1240.5 / 1476 * 100%);
+}
+
+.stone-node--a10 {
+	left: calc(795 / 1476 * 100%);
+	top: calc(1245 / 1476 * 100%);
+}
+
+.stone-node--a11 {
+	left: calc(231.5 / 1476 * 100%);
+	top: calc(738 / 1476 * 100%);
+}
+
+.stone-node--a12 {
+	left: calc(453.3 / 1476 * 100%);
+	top: calc(738 / 1476 * 100%);
+}
+
+.stone-node--a13 {
+	left: calc(484.5 / 1476 * 100%);
+	top: calc(1176.5 / 1476 * 100%);
+}
+
+.stone-node--b1 {
+	left: calc(1181 / 1476 * 100%);
+	top: calc(1204.5 / 1476 * 100%);
+}
+
+.stone-node--b2 {
+	left: calc(1224.9 / 1476 * 100%);
+	top: calc(1016.5 / 1476 * 100%);
+}
+
+.stone-node--b3 {
+	left: calc(1212.5 / 1476 * 100%);
+	top: calc(910.1 / 1476 * 100%);
+}
+
+.stone-node--b4 {
+	left: calc(1106.1 / 1476 * 100%);
+	top: calc(890.3 / 1476 * 100%);
+}
+
+.stone-node--b5 {
+	left: calc(1055.8 / 1476 * 100%);
+	top: calc(983.6 / 1476 * 100%);
+}
+
+.stone-node--b6 {
+	left: calc(1128.1 / 1476 * 100%);
+	top: calc(1062.3 / 1476 * 100%);
+}
+
+.stone-node--b7 {
+	left: calc(983.6 / 1476 * 100%);
+	top: calc(671 / 1476 * 100%);
+}
+
+.stone-node--b8 {
+	left: calc(1090 / 1476 * 100%);
+	top: calc(535.5 / 1476 * 100%);
+}
+
+.stone-node--b9 {
+	left: calc(1204.5 / 1476 * 100%);
+	top: calc(535.5 / 1476 * 100%);
+}
+
+.stone-node--b10 {
+	left: calc(1146.5 / 1476 * 100%);
+	top: calc(436.5 / 1476 * 100%);
+}
+
+.stone-node--b11 {
+	left: calc(991.5 / 1476 * 100%);
+	top: calc(1176.5 / 1476 * 100%);
+}
+
+.stone-node--b12 {
+	left: calc(880.5 / 1476 * 100%);
+	top: calc(984.5 / 1476 * 100%);
+}
+
+.stone-node--b13 {
+	left: calc(1245 / 1476 * 100%);
+	top: calc(738 / 1476 * 100%);
+}
+
+.stone-node--c1 {
+	left: calc(920 / 1476 * 100%);
+	top: calc(121 / 1476 * 100%);
+}
+
+.stone-node--c2 {
+	left: calc(735.7 / 1476 * 100%);
+	top: calc(176.8 / 1476 * 100%);
+}
+
+.stone-node--c3 {
+	left: calc(649.7 / 1476 * 100%);
+	top: calc(240.8 / 1476 * 100%);
+}
+
+.stone-node--c4 {
+	left: calc(685.7 / 1476 * 100%);
+	top: calc(342.8 / 1476 * 100%);
+}
+
+.stone-node--c5 {
+	left: calc(791.7 / 1476 * 100%);
+	top: calc(339.8 / 1476 * 100%);
+}
+
+.stone-node--c6 {
+	left: calc(823.7 / 1476 * 100%);
+	top: calc(237.8 / 1476 * 100%);
+}
+
+.stone-node--c7 {
+	left: calc(556.8 / 1476 * 100%);
+	top: calc(558 / 1476 * 100%);
+}
+
+.stone-node--c8 {
+	left: calc(387 / 1476 * 100%);
+	top: calc(535.5 / 1476 * 100%);
+}
+
+.stone-node--c9 {
+	left: calc(330.3 / 1476 * 100%);
+	top: calc(436.5 / 1476 * 100%);
+}
+
+.stone-node--c10 {
+	left: calc(272.5 / 1476 * 100%);
+	top: calc(535.5 / 1476 * 100%);
+}
+
+.stone-node--c11 {
+	left: calc(991 / 1476 * 100%);
+	top: calc(299 / 1476 * 100%);
+}
+
+.stone-node--c12 {
+	left: calc(880.5 / 1476 * 100%);
+	top: calc(491.5 / 1476 * 100%);
+}
+
+.stone-node--c13 {
+	left: calc(485 / 1476 * 100%);
+	top: calc(299 / 1476 * 100%);
+}
+
+.charm-spell,
+.ritual-spell,
+.sorcery-spell {
+	opacity: 0;
+	transition-duration: 2s;
+	transition-property: opacity;
+}
+
+.charm-spell.visible,
+.ritual-spell.visible,
+.sorcery-spell.visible {
+	opacity: 1;
+}
+
+.charm-spell--1 {
+	transition-delay: 3s;
+}
+
+.charm-spell--2 {
+	transition-delay: 2.25s;
+}
+
+.charm-spell--3 {
+	transition-delay: 2s;
+}
+
+.ritual-spell--1 {
+	transition-delay: 2.75s;
+}
+
+.ritual-spell--2 {
+	transition-delay: 2.5s;
+}
+
+.ritual-spell--3 {
+	transition-delay: 1s;
+}
+
+.sorcery-spell--1 {
+	transition-delay: 3.5s;
+}
+
+.sorcery-spell--2 {
+	transition-delay: 1.75s;
+}
+
+.sorcery-spell--3 {
+	transition-delay: 1.5s;
+}
+
+/* </BoardAndNodes> */
