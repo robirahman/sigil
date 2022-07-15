@@ -4,9 +4,10 @@
   "description": "Sigil Online",
   "main": "app.py",
   "scripts": {
-    "format": "npm run lint-css && prettier --write . && npm run lint-js",
-    "lint-css": "stylelint \"**/*.css\" --fix",
-    "lint-js": "eslint . --ext .js --fix"
+    "dev": "FLASK_APP=app.py FLASK_ENV=development flask run",
+    "format": "npm run lint-css && prettier --write \"./static/css/*.css\" \"./static/scripts/*.js\" \"./templates/v2/*.html\" && npm run lint-js",
+    "lint-css": "stylelint \"static/css/*.css\" --fix",
+    "lint-js": "eslint \"./static/scripts/**\" --fix"
   },
   "repository": {
     "type": "git",
@@ -22,6 +23,7 @@
     "eslint": "^8.18.0",
     "eslint-plugin-import": "^2.26.0",
     "prettier": "^2.7.1",
+    "prettier-plugin-organize-attributes": "^0.0.5",
     "stylelint": "^14.9.1",
     "stylelint-config-standard": "^26.0.0"
   },

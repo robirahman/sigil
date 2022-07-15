@@ -11,7 +11,7 @@ from threading import Thread
 
 from game import Board, Player, resetException
 from singleplayergame import SPBoard, AIPlayer
-			
+
 
 
 
@@ -38,7 +38,20 @@ sock = Sock(app)
 # ping every 2 seconds
 app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 2}
 
+# v2
+@app.route('/v2')
+def homeV2():
+	return render_template('v2/index.html')
 
+@app.route('/v2/tutorial-and-rules')
+def tutorialAndRulesV2():
+	return render_template('v2/tutorial-and-rules.html')
+
+@app.route('/v2/single-player')
+def singlePlayerV2():
+    return render_template('v2/single-player.html')
+
+# v1
 @app.route('/')
 def home():
     return render_template('home.html')
@@ -123,7 +136,7 @@ def joingame(ws):
 @app.route('/privategameboard/<gamename>')
 def privategameboard(gamename):
 	return render_template('gameboard.html', privategamename= "'" + gamename + "'")
-		
+
 
 
 @sock.route('/api/game')
@@ -171,7 +184,7 @@ def playgame(ws):
 		egress["charm1"] = board.spells[6].name
 		egress["charm2"] = board.spells[7].name
 		egress["charm3"] = board.spells[8].name
-		
+
 		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
 
@@ -186,7 +199,7 @@ def playgame(ws):
 		egress["charm1"] = board.spells[6].text
 		egress["charm2"] = board.spells[7].text
 		egress["charm3"] = board.spells[8].text
-		
+
 		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
 
@@ -211,7 +224,7 @@ def playgame(ws):
 				activeplayer = blue
 				board.whoseturn = 'blue'
 
-			
+
 			try:
 				if board.whoseturn == 'red':
 					message = "Red Turn " + str((board.turncounter // 2) + 1)
@@ -240,7 +253,7 @@ def playgame(ws):
 
 			except resetException:
 				### Reset all attributes of the game & board
-				### to the way they were in board.snapshot , 
+				### to the way they were in board.snapshot ,
 				### then we restart the turn loop.
 				red.jmessage("Resetting Turn")
 				blue.jmessage("Resetting Turn")
@@ -263,7 +276,7 @@ def playgame(ws):
 					red.lock = board.spelldict[snapshot["redlock"]]
 				else:
 					red.lock = None
-				
+
 				if snapshot["bluelock"]:
 					blue.lock = board.spelldict[snapshot["bluelock"]]
 				else:
@@ -321,7 +334,7 @@ def playprivategame(ws, privategamename):
 		egress["charm1"] = board.spells[6].name
 		egress["charm2"] = board.spells[7].name
 		egress["charm3"] = board.spells[8].name
-		
+
 		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
 
@@ -336,7 +349,7 @@ def playprivategame(ws, privategamename):
 		egress["charm1"] = board.spells[6].text
 		egress["charm2"] = board.spells[7].text
 		egress["charm3"] = board.spells[8].text
-		
+
 		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
 
@@ -361,7 +374,7 @@ def playprivategame(ws, privategamename):
 				activeplayer = blue
 				board.whoseturn = 'blue'
 
-			
+
 			try:
 				if board.whoseturn == 'red':
 					message = "Red Turn " + str((board.turncounter // 2) + 1)
@@ -390,7 +403,7 @@ def playprivategame(ws, privategamename):
 
 			except resetException:
 				### Reset all attributes of the game & board
-				### to the way they were in board.snapshot , 
+				### to the way they were in board.snapshot ,
 				### then we restart the turn loop.
 				red.jmessage("Resetting Turn")
 				blue.jmessage("Resetting Turn")
@@ -413,7 +426,7 @@ def playprivategame(ws, privategamename):
 					red.lock = board.spelldict[snapshot["redlock"]]
 				else:
 					red.lock = None
-				
+
 				if snapshot["bluelock"]:
 					blue.lock = board.spelldict[snapshot["bluelock"]]
 				else:
@@ -470,7 +483,7 @@ def playsingleplayergame(ws):
 	egress["charm1"] = board.spells[6].name
 	egress["charm2"] = board.spells[7].name
 	egress["charm3"] = board.spells[8].name
-	
+
 	human.ws.send(json.dumps(egress))
 
 	egress = { "type": "spelltextsetup" }
@@ -484,7 +497,7 @@ def playsingleplayergame(ws):
 	egress["charm1"] = board.spells[6].text
 	egress["charm2"] = board.spells[7].text
 	egress["charm3"] = board.spells[8].text
-	
+
 	human.ws.send(json.dumps(egress))
 
 
@@ -508,7 +521,7 @@ def playsingleplayergame(ws):
 			activeplayer = blue
 			board.whoseturn = 'blue'
 
-		
+
 		try:
 			if board.whoseturn == 'red':
 				message = "Red Turn " + str((board.turncounter // 2) + 1)
@@ -536,7 +549,7 @@ def playsingleplayergame(ws):
 
 		except resetException:
 			### Reset all attributes of the game & board
-			### to the way they were in board.snapshot , 
+			### to the way they were in board.snapshot ,
 			### then we restart the turn loop.
 			human.jmessage("Resetting Turn")
 
@@ -557,7 +570,7 @@ def playsingleplayergame(ws):
 				red.lock = board.spelldict[snapshot["redlock"]]
 			else:
 				red.lock = None
-			
+
 			if snapshot["bluelock"]:
 				blue.lock = board.spelldict[snapshot["bluelock"]]
 			else:
@@ -639,5 +652,3 @@ def privatechat(ws, privatechatname):
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
-
-
