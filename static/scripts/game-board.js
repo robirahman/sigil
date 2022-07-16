@@ -1,8 +1,17 @@
 document.addEventListener('alpine:init', () => {
 	Alpine.data('gameBoard', () => ({
+		// available in template
+		message: '',
+		nodes: {},
+		spells: {
+			images: {},
+			text: {},
+		},
+
 		init() {
 			const _this = this;
 			// TODO
+			// awaiting is the next action you're expected to take
 			// let awaiting;
 			// let actionList;
 			let spellDict = {};
@@ -26,13 +35,34 @@ document.addEventListener('alpine:init', () => {
 				console.log(`event`, event);
 				console.log(`payload`, payload);
 
+				if (type === 'message') {
+					handleMessageEvent(payload);
+					return;
+				}
+
 				if (type === 'spellsetup') {
-					handleSpellSetup(payload);
+					handleSpellSetupEvent(payload);
+					return;
+				}
+
+				if (type === 'spelltextsetup') {
+					handleSpellTextSetupEvent(payload);
+					return;
+				}
+
+				if (type === 'boardstate') {
+					handleBoardStateEvent(payload);
+					return;
 				}
 			}
 
-			function handleSpellSetup(spellObj) {
-				spellDict = spellObj;
+			function handleMessageEvent(payload) {
+				_this.message = payload.message;
+				// TODO: payload.awaiting?
+			}
+
+			function handleSpellSetupEvent(payload) {
+				spellDict = payload;
 				for (let key in spellDict) {
 					reverseSpellDict[spellDict[key]] = key;
 				}
@@ -42,9 +72,17 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				Object.entries(spellDict).forEach(([key, value]) => {
-					_this.$refs[key].src = `/static/images/v2/spells/${value}.png`;
-					_this.$refs[key].classList.add('visible');
+					_this.spells.images[key] = `/static/images/v2/spells/${value}.png`;
 				});
+			}
+
+			function handleSpellTextSetupEvent(payload) {
+				_this.spells.text = payload;
+			}
+
+			function handleBoardStateEvent(payload) {
+				const { bluecountdown, last_play, last_player, redcountdown, ...nodes } = payload;
+				_this.nodes = nodes;
 			}
 		},
 	}));

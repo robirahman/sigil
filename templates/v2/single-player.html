@@ -37,7 +37,10 @@
 		></script>
 		<script src="/static/scripts/game-board.js"></script>
 	</head>
-	<body class="display:flex flex-direction:column height:100% justify-content:space-between">
+	<body
+		class="display:flex flex-direction:column height:100% justify-content:space-between"
+		x-data="gameBoard"
+	>
 		<div>
 			<header class="background-color:0d0513 padding:32 position:relative text-align:center">
 				<h1>
@@ -59,11 +62,19 @@
 					width="116"
 				/>
 			</header>
+			<div class="margin-horizontal:auto max-width:800">
+				<p
+					class="color:dddcdd font-family:overlock font-size:16 padding:16"
+					x-text="message"
+				></p>
+				<p
+					class="color:dddcdd font-family:overlock font-size:16 position:absolute"
+					style="right: 0; z-index: 1; width: 200px"
+					x-text="JSON.stringify(spells.text)"
+				></p>
+			</div>
 		</div>
-		<div
-			class="overflow:auto text-align:center"
-			x-data="gameBoard"
-		>
+		<div class="overflow:auto text-align:center">
 			<div class="display:inline-block position:relative">
 				<img
 					class="game-board max-width:100%"
@@ -75,148 +86,352 @@
 						class="charm-node charm-node--1 charm-spell charm-spell--1"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="charm1"
+						x-bind:class="spells.images.charm1 && 'visible'"
+						x-bind:src="spells.images.charm1"
 					/>
 					<img
 						class="charm-node charm-node--2 charm-spell charm-spell--2"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="charm2"
+						x-bind:src="spells.images.charm2"
+						x-bind:class="spells.images.charm2 && 'visible'"
 					/>
 					<img
 						class="charm-node charm-node--3 charm-spell charm-spell--3"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="charm3"
+						x-bind:src="spells.images.charm3"
+						x-bind:class="spells.images.charm3 && 'visible'"
 					/>
 
 					<img
 						class="ritual-node ritual-node--1 ritual-spell ritual-spell--1"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="ritual1"
+						x-bind:src="spells.images.ritual1"
+						x-bind:class="spells.images.ritual1 && 'visible'"
 					/>
 					<img
 						class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="ritual2"
+						x-bind:src="spells.images.ritual2"
+						x-bind:class="spells.images.ritual2 && 'visible'"
 					/>
 					<img
 						class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="ritual3"
+						x-bind:src="spells.images.ritual3"
+						x-bind:class="spells.images.ritual3 && 'visible'"
 					/>
 
 					<img
 						class="sorcery-node sorcery-node--1 sorcery-spell sorcery-spell--1"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="sorcery1"
+						x-bind:src="spells.images.sorcery1"
+						x-bind:class="spells.images.sorcery1 && 'visible'"
 					/>
 					<img
 						class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="sorcery2"
+						x-bind:src="spells.images.sorcery2"
+						x-bind:class="spells.images.sorcery2 && 'visible'"
 					/>
 					<img
 						class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="sorcery3"
+						x-bind:src="spells.images.sorcery3"
+						x-bind:class="spells.images.sorcery3 && 'visible'"
 					/>
 				</div>
 				<div class="spell-nodes">
 					<img
 						class="charm-node charm-node--1"
 						alt=""
-						src="/static/images/v2/charm-nodes.png"
+						src="/static/images/v2/nodes/charm.png"
 					/>
 					<img
 						class="charm-node charm-node--2"
 						alt=""
-						src="/static/images/v2/charm-nodes.png"
+						src="/static/images/v2/nodes/charm.png"
 					/>
 					<img
 						class="charm-node charm-node--3"
 						alt=""
-						src="/static/images/v2/charm-nodes.png"
+						src="/static/images/v2/nodes/charm.png"
 					/>
 
 					<img
 						class="ritual-node ritual-node--1"
 						alt=""
-						src="/static/images/v2/ritual-nodes.png"
+						src="/static/images/v2/nodes/ritual.png"
 					/>
 					<img
 						class="ritual-node ritual-node--2"
 						alt=""
-						src="/static/images/v2/ritual-nodes.png"
+						src="/static/images/v2/nodes/ritual.png"
 					/>
 					<img
 						class="ritual-node ritual-node--3"
 						alt=""
-						src="/static/images/v2/ritual-nodes.png"
+						src="/static/images/v2/nodes/ritual.png"
 					/>
 
 					<img
 						class="sorcery-node sorcery-node--1"
 						alt=""
-						src="/static/images/v2/sorcery-nodes.png"
+						src="/static/images/v2/nodes/sorcery.png"
 					/>
 					<img
 						class="sorcery-node sorcery-node--2"
 						alt=""
-						src="/static/images/v2/sorcery-nodes.png"
+						src="/static/images/v2/nodes/sorcery.png"
 					/>
 					<img
 						class="sorcery-node sorcery-node--3"
 						alt=""
-						src="/static/images/v2/sorcery-nodes.png"
+						src="/static/images/v2/nodes/sorcery.png"
 					/>
 				</div>
 				<div class="stone-nodes">
-					<button class="stone-node stone-node--a1">a1</button>
-					<button class="stone-node stone-node--a2">a2</button>
-					<button class="stone-node stone-node--a3">a3</button>
-					<button class="stone-node stone-node--a4">a4</button>
-					<button class="stone-node stone-node--a5">a5</button>
-					<button class="stone-node stone-node--a6">a6</button>
-					<button class="stone-node stone-node--a7">a7</button>
-					<button class="stone-node stone-node--a8">a8</button>
-					<button class="stone-node stone-node--a9">a9</button>
-					<button class="stone-node stone-node--a10">a10</button>
-					<button class="stone-node stone-node--a11">a11</button>
-					<button class="stone-node stone-node--a12">a12</button>
-					<button class="stone-node stone-node--a13">a13</button>
-					<button class="stone-node stone-node--b1">b1</button>
-					<button class="stone-node stone-node--b2">b2</button>
-					<button class="stone-node stone-node--b3">b3</button>
-					<button class="stone-node stone-node--b4">b4</button>
-					<button class="stone-node stone-node--b5">b5</button>
-					<button class="stone-node stone-node--b6">b6</button>
-					<button class="stone-node stone-node--b7">b7</button>
-					<button class="stone-node stone-node--b8">b8</button>
-					<button class="stone-node stone-node--b9">b9</button>
-					<button class="stone-node stone-node--b10">b10</button>
-					<button class="stone-node stone-node--b11">b11</button>
-					<button class="stone-node stone-node--b12">b12</button>
-					<button class="stone-node stone-node--b13">b13</button>
-					<button class="stone-node stone-node--c1">c1</button>
-					<button class="stone-node stone-node--c2">c2</button>
-					<button class="stone-node stone-node--c3">c3</button>
-					<button class="stone-node stone-node--c4">c4</button>
-					<button class="stone-node stone-node--c5">c5</button>
-					<button class="stone-node stone-node--c6">c6</button>
-					<button class="stone-node stone-node--c7">c7</button>
-					<button class="stone-node stone-node--c8">c8</button>
-					<button class="stone-node stone-node--c9">c9</button>
-					<button class="stone-node stone-node--c10">c10</button>
-					<button class="stone-node stone-node--c11">c11</button>
-					<button class="stone-node stone-node--c12">c12</button>
-					<button class="stone-node stone-node--c13">c13</button>
+					<button
+						class="stone-node stone-node--a1"
+						x-bind:class="nodes.a1"
+					>
+						a1
+					</button>
+					<button
+						class="stone-node stone-node--a2"
+						x-bind:class="nodes.a2"
+					>
+						a2
+					</button>
+					<button
+						class="stone-node stone-node--a3"
+						x-bind:class="nodes.a3"
+					>
+						a3
+					</button>
+					<button
+						class="stone-node stone-node--a4"
+						x-bind:class="nodes.a4"
+					>
+						a4
+					</button>
+					<button
+						class="stone-node stone-node--a5"
+						x-bind:class="nodes.a5"
+					>
+						a5
+					</button>
+					<button
+						class="stone-node stone-node--a6"
+						x-bind:class="nodes.a6"
+					>
+						a6
+					</button>
+					<button
+						class="stone-node stone-node--a7"
+						x-bind:class="nodes.a7"
+					>
+						a7
+					</button>
+					<button
+						class="stone-node stone-node--a8"
+						x-bind:class="nodes.a8"
+					>
+						a8
+					</button>
+					<button
+						class="stone-node stone-node--a9"
+						x-bind:class="nodes.a9"
+					>
+						a9
+					</button>
+					<button
+						class="stone-node stone-node--a10"
+						x-bind:class="nodes.a10"
+					>
+						a10
+					</button>
+					<button
+						class="stone-node stone-node--a11"
+						x-bind:class="nodes.a11"
+					>
+						a11
+					</button>
+					<button
+						class="stone-node stone-node--a12"
+						x-bind:class="nodes.a12"
+					>
+						a12
+					</button>
+					<button
+						class="stone-node stone-node--a13"
+						x-bind:class="nodes.a13"
+					>
+						a13
+					</button>
+					<button
+						class="stone-node stone-node--b1"
+						x-bind:class="nodes.b1"
+					>
+						b1
+					</button>
+					<button
+						class="stone-node stone-node--b2"
+						x-bind:class="nodes.b2"
+					>
+						b2
+					</button>
+					<button
+						class="stone-node stone-node--b3"
+						x-bind:class="nodes.b3"
+					>
+						b3
+					</button>
+					<button
+						class="stone-node stone-node--b4"
+						x-bind:class="nodes.b4"
+					>
+						b4
+					</button>
+					<button
+						class="stone-node stone-node--b5"
+						x-bind:class="nodes.b5"
+					>
+						b5
+					</button>
+					<button
+						class="stone-node stone-node--b6"
+						x-bind:class="nodes.b6"
+					>
+						b6
+					</button>
+					<button
+						class="stone-node stone-node--b7"
+						x-bind:class="nodes.b7"
+					>
+						b7
+					</button>
+					<button
+						class="stone-node stone-node--b8"
+						x-bind:class="nodes.b8"
+					>
+						b8
+					</button>
+					<button
+						class="stone-node stone-node--b9"
+						x-bind:class="nodes.b9"
+					>
+						b9
+					</button>
+					<button
+						class="stone-node stone-node--b10"
+						x-bind:class="nodes.b10"
+					>
+						b10
+					</button>
+					<button
+						class="stone-node stone-node--b11"
+						x-bind:class="nodes.b11"
+					>
+						b11
+					</button>
+					<button
+						class="stone-node stone-node--b12"
+						x-bind:class="nodes.b12"
+					>
+						b12
+					</button>
+					<button
+						class="stone-node stone-node--b13"
+						x-bind:class="nodes.b13"
+					>
+						b13
+					</button>
+					<button
+						class="stone-node stone-node--c1"
+						x-bind:class="nodes.c1"
+					>
+						c1
+					</button>
+					<button
+						class="stone-node stone-node--c2"
+						x-bind:class="nodes.c2"
+					>
+						c2
+					</button>
+					<button
+						class="stone-node stone-node--c3"
+						x-bind:class="nodes.c3"
+					>
+						c3
+					</button>
+					<button
+						class="stone-node stone-node--c4"
+						x-bind:class="nodes.c4"
+					>
+						c4
+					</button>
+					<button
+						class="stone-node stone-node--c5"
+						x-bind:class="nodes.c5"
+					>
+						c5
+					</button>
+					<button
+						class="stone-node stone-node--c6"
+						x-bind:class="nodes.c6"
+					>
+						c6
+					</button>
+					<button
+						class="stone-node stone-node--c7"
+						x-bind:class="nodes.c7"
+					>
+						c7
+					</button>
+					<button
+						class="stone-node stone-node--c8"
+						x-bind:class="nodes.c8"
+					>
+						c8
+					</button>
+					<button
+						class="stone-node stone-node--c9"
+						x-bind:class="nodes.c9"
+					>
+						c9
+					</button>
+					<button
+						class="stone-node stone-node--c10"
+						x-bind:class="nodes.c10"
+					>
+						c10
+					</button>
+					<button
+						class="stone-node stone-node--c11"
+						x-bind:class="nodes.c11"
+					>
+						c11
+					</button>
+					<button
+						class="stone-node stone-node--c12"
+						x-bind:class="nodes.c12"
+					>
+						c12
+					</button>
+					<button
+						class="stone-node stone-node--c13"
+						x-bind:class="nodes.c13"
+					>
+						c13
+					</button>
 				</div>
 			</div>
 		</div>
