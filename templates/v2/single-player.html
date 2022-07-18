@@ -62,16 +62,47 @@
 					width="116"
 				/>
 			</header>
-			<div class="margin-horizontal:auto max-width:800">
-				<p
-					class="color:dddcdd font-family:overlock font-size:16 padding:16"
-					x-text="message"
-				></p>
-				<p
-					class="color:dddcdd font-family:overlock font-size:16 position:absolute"
-					style="right: 0; z-index: 1; width: 200px"
-					x-text="JSON.stringify(spells.text)"
-				></p>
+			<div class="display:flex justify-content:space-between margin-horizontal:auto max-width:800">
+				<div>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="message"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="awaiting"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="actionList"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="whoseTurn"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="blueCountdown"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="redCountdown"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16 position:absolute"
+						style="right: 0; z-index: 1; width: 200px"
+						x-text="JSON.stringify(spells.text)"
+					></p>
+				</div>
+				<div>
+					<button
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-show="actionList && actionList.includes('pass')"
+						x-on:click="handleEndTurn"
+					>
+						End Turn
+					</button>
+				</div>
 			</div>
 		</div>
 		<div class="overflow:auto text-align:center">
@@ -198,240 +229,14 @@
 					/>
 				</div>
 				<div class="stone-nodes">
-					<button
-						class="stone-node stone-node--a1"
-						x-bind:class="nodes.a1"
-					>
-						a1
-					</button>
-					<button
-						class="stone-node stone-node--a2"
-						x-bind:class="nodes.a2"
-					>
-						a2
-					</button>
-					<button
-						class="stone-node stone-node--a3"
-						x-bind:class="nodes.a3"
-					>
-						a3
-					</button>
-					<button
-						class="stone-node stone-node--a4"
-						x-bind:class="nodes.a4"
-					>
-						a4
-					</button>
-					<button
-						class="stone-node stone-node--a5"
-						x-bind:class="nodes.a5"
-					>
-						a5
-					</button>
-					<button
-						class="stone-node stone-node--a6"
-						x-bind:class="nodes.a6"
-					>
-						a6
-					</button>
-					<button
-						class="stone-node stone-node--a7"
-						x-bind:class="nodes.a7"
-					>
-						a7
-					</button>
-					<button
-						class="stone-node stone-node--a8"
-						x-bind:class="nodes.a8"
-					>
-						a8
-					</button>
-					<button
-						class="stone-node stone-node--a9"
-						x-bind:class="nodes.a9"
-					>
-						a9
-					</button>
-					<button
-						class="stone-node stone-node--a10"
-						x-bind:class="nodes.a10"
-					>
-						a10
-					</button>
-					<button
-						class="stone-node stone-node--a11"
-						x-bind:class="nodes.a11"
-					>
-						a11
-					</button>
-					<button
-						class="stone-node stone-node--a12"
-						x-bind:class="nodes.a12"
-					>
-						a12
-					</button>
-					<button
-						class="stone-node stone-node--a13"
-						x-bind:class="nodes.a13"
-					>
-						a13
-					</button>
-					<button
-						class="stone-node stone-node--b1"
-						x-bind:class="nodes.b1"
-					>
-						b1
-					</button>
-					<button
-						class="stone-node stone-node--b2"
-						x-bind:class="nodes.b2"
-					>
-						b2
-					</button>
-					<button
-						class="stone-node stone-node--b3"
-						x-bind:class="nodes.b3"
-					>
-						b3
-					</button>
-					<button
-						class="stone-node stone-node--b4"
-						x-bind:class="nodes.b4"
-					>
-						b4
-					</button>
-					<button
-						class="stone-node stone-node--b5"
-						x-bind:class="nodes.b5"
-					>
-						b5
-					</button>
-					<button
-						class="stone-node stone-node--b6"
-						x-bind:class="nodes.b6"
-					>
-						b6
-					</button>
-					<button
-						class="stone-node stone-node--b7"
-						x-bind:class="nodes.b7"
-					>
-						b7
-					</button>
-					<button
-						class="stone-node stone-node--b8"
-						x-bind:class="nodes.b8"
-					>
-						b8
-					</button>
-					<button
-						class="stone-node stone-node--b9"
-						x-bind:class="nodes.b9"
-					>
-						b9
-					</button>
-					<button
-						class="stone-node stone-node--b10"
-						x-bind:class="nodes.b10"
-					>
-						b10
-					</button>
-					<button
-						class="stone-node stone-node--b11"
-						x-bind:class="nodes.b11"
-					>
-						b11
-					</button>
-					<button
-						class="stone-node stone-node--b12"
-						x-bind:class="nodes.b12"
-					>
-						b12
-					</button>
-					<button
-						class="stone-node stone-node--b13"
-						x-bind:class="nodes.b13"
-					>
-						b13
-					</button>
-					<button
-						class="stone-node stone-node--c1"
-						x-bind:class="nodes.c1"
-					>
-						c1
-					</button>
-					<button
-						class="stone-node stone-node--c2"
-						x-bind:class="nodes.c2"
-					>
-						c2
-					</button>
-					<button
-						class="stone-node stone-node--c3"
-						x-bind:class="nodes.c3"
-					>
-						c3
-					</button>
-					<button
-						class="stone-node stone-node--c4"
-						x-bind:class="nodes.c4"
-					>
-						c4
-					</button>
-					<button
-						class="stone-node stone-node--c5"
-						x-bind:class="nodes.c5"
-					>
-						c5
-					</button>
-					<button
-						class="stone-node stone-node--c6"
-						x-bind:class="nodes.c6"
-					>
-						c6
-					</button>
-					<button
-						class="stone-node stone-node--c7"
-						x-bind:class="nodes.c7"
-					>
-						c7
-					</button>
-					<button
-						class="stone-node stone-node--c8"
-						x-bind:class="nodes.c8"
-					>
-						c8
-					</button>
-					<button
-						class="stone-node stone-node--c9"
-						x-bind:class="nodes.c9"
-					>
-						c9
-					</button>
-					<button
-						class="stone-node stone-node--c10"
-						x-bind:class="nodes.c10"
-					>
-						c10
-					</button>
-					<button
-						class="stone-node stone-node--c11"
-						x-bind:class="nodes.c11"
-					>
-						c11
-					</button>
-					<button
-						class="stone-node stone-node--c12"
-						x-bind:class="nodes.c12"
-					>
-						c12
-					</button>
-					<button
-						class="stone-node stone-node--c13"
-						x-bind:class="nodes.c13"
-					>
-						c13
-					</button>
+					<template x-for="node in Object.keys(nodes)">
+						<button
+							class="stone-node"
+							x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${nodes[node]}`]: true, 'stone-node--halo': lastPlay === node }"
+							x-on:click="handleNodeClick(node)"
+							x-text="node"
+						></button>
+					</template>
 				</div>
 			</div>
 		</div>

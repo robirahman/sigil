@@ -1,19 +1,51 @@
 document.addEventListener('alpine:init', () => {
 	Alpine.data('gameBoard', () => ({
 		// available in template
+		events: {},
+		awaiting: '',
+		actionList: [],
+		blueCountdown: '',
+		redCountdown: '',
+		lastPlay: '',
+		whoseTurn: '',
 		message: '',
-		nodes: {},
+		nodes: {
+			...['a', 'b', 'c'].reduce((acc, curr) => {
+				new Array(13).fill(true).forEach((node, index) => {
+					acc[`${curr}${index + 1}`] = null;
+				});
+				return acc;
+			}, {}),
+		},
 		spells: {
 			images: {},
 			text: {},
 		},
 
+		sendEvent(message) {
+			this.events.send(JSON.stringify({ message }));
+		},
+
+		handleEndTurn() {
+			this.sendEvent('pass');
+			this.actionList = [];
+		},
+
+		handleNodeClick(node) {
+			console.log(`node, this.awaiting`, node, this.awaiting);
+			if (this.awaiting === 'node') {
+				this.sendEvent(node);
+			} else if (this.awaiting === 'action') {
+				if (this.actionList.includes('move')) {
+					this.sendEvent(node);
+				}
+			}
+			this.awaiting = null;
+		},
+
 		init() {
 			const _this = this;
-			// TODO
 			// awaiting is the next action you're expected to take
-			// let awaiting;
-			// let actionList;
 			let spellDict = {};
 			let reverseSpellDict = {};
 			let auxLockDict = {
@@ -27,13 +59,14 @@ document.addEventListener('alpine:init', () => {
 			let lockDict = {};
 
 			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
-			const events = new WebSocket('ws://' + location.host + '/api/singleplayergame');
-			events.onmessage = handleIncomingEvent;
+			_this.events = new WebSocket('ws://' + location.host + '/api/singleplayergame');
+			_this.events.onmessage = handleIncomingEvent;
 
 			function handleIncomingEvent(event) {
 				const { type, ...payload } = JSON.parse(event.data);
-				console.log(`event`, event);
+				console.group(type);
 				console.log(`payload`, payload);
+				console.groupEnd(type);
 
 				if (type === 'message') {
 					handleMessageEvent(payload);
@@ -54,11 +87,17 @@ document.addEventListener('alpine:init', () => {
 					handleBoardStateEvent(payload);
 					return;
 				}
+
+				if (type === 'whoseturndisplay') {
+					handleWhoseTurnEvent(payload);
+					return;
+				}
 			}
 
 			function handleMessageEvent(payload) {
+				_this.actionList = payload.actionlist;
+				_this.awaiting = payload.awaiting;
 				_this.message = payload.message;
-				// TODO: payload.awaiting?
 			}
 
 			function handleSpellSetupEvent(payload) {
@@ -81,8 +120,16 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleBoardStateEvent(payload) {
+				// eslint-disable-next-line no-unused-vars
 				const { bluecountdown, last_play, last_player, redcountdown, ...nodes } = payload;
+				_this.blueCountdown = bluecountdown;
+				_this.lastPlay = last_play;
 				_this.nodes = nodes;
+				_this.redCountdown = redcountdown;
+			}
+
+			function handleWhoseTurnEvent(payload) {
+				_this.whoseTurn = payload.message;
 			}
 		},
 	}));

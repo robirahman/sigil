@@ -562,10 +562,17 @@ textarea {
 	transform: rotate(120deg) translate(var(--translate), var(--translate));
 }
 
+@keyframes stone-twinkle {
+	0% { filter: brightness(80%); }
+	50% { filter: brightness(120%); }
+	100% { filter: brightness(80%); }
+}
+
 .stone-node {
 	--size: calc(46 / 1476 * 100%);
 	--translate: -50%;
 
+	animation: stone-twinkle 4s linear infinite;
 	background-size: cover;
 	border-radius: 999px;
 	position: absolute;
@@ -574,18 +581,16 @@ textarea {
 	width: var(--size);
 }
 
-.stone-node:hover,
-.stone-node:focus {
-	background: green;
-	color: #fff;
-}
-
-.stone-node.blue {
+.stone-node--blue {
 	background-image: url("/static/images/v2/stones/blue.png");
 }
 
-.stone-node.red {
+.stone-node--red {
 	background-image: url("/static/images/v2/stones/red.png");
+}
+
+.stone-node--halo {
+	outline: 5px solid #f3ec4e;
 }
 
 .stone-node--a1 {
