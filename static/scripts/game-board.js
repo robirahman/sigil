@@ -1,7 +1,6 @@
 document.addEventListener('alpine:init', () => {
 	Alpine.data('gameBoard', () => ({
 		// available in template
-		events: {},
 		awaiting: '',
 		actionList: [],
 		blueCountdown: '',
@@ -22,13 +21,20 @@ document.addEventListener('alpine:init', () => {
 			text: {},
 		},
 
-		sendEvent(message) {
-			this.events.send(JSON.stringify({ message }));
+		handleDash() {
+			this.sendEvent('dash');
+			this.actionList = [];
 		},
 
 		handleEndTurn() {
 			this.sendEvent('pass');
 			this.actionList = [];
+		},
+
+		handleReset() {
+			this.sendEvent('reset');
+			this.actionList = null;
+			this.awaiting = null;
 		},
 
 		handleNodeClick(node) {
@@ -61,6 +67,10 @@ document.addEventListener('alpine:init', () => {
 			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
 			_this.events = new WebSocket('ws://' + location.host + '/api/singleplayergame');
 			_this.events.onmessage = handleIncomingEvent;
+
+			_this.sendEvent = function sendEvent(message) {
+				_this.events.send(JSON.stringify({ message }));
+			};
 
 			function handleIncomingEvent(event) {
 				const { type, ...payload } = JSON.parse(event.data);

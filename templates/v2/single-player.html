@@ -90,17 +90,31 @@
 					></p>
 					<p
 						class="color:dddcdd font-family:overlock font-size:16 position:absolute"
-						style="right: 0; z-index: 1; width: 200px"
+						style="pointer-events: none; right: 0; z-index: 1; width: 200px"
 						x-text="JSON.stringify(spells.text)"
 					></p>
 				</div>
-				<div>
+				<div class="display:flex">
+					<button
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-show="actionList && !actionList.includes('move')"
+						x-on:click="handleReset"
+					>
+						Reset
+					</button>
 					<button
 						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
 						x-show="actionList && actionList.includes('pass')"
 						x-on:click="handleEndTurn"
 					>
 						End Turn
+					</button>
+					<button
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-show="actionList && actionList.includes('dash')"
+						x-on:click="handleDash"
+					>
+						Dash
 					</button>
 				</div>
 			</div>
