@@ -37,7 +37,10 @@
 		></script>
 		<script src="/static/scripts/game-board.js"></script>
 	</head>
-	<body class="display:flex flex-direction:column height:100% justify-content:space-between">
+	<body
+		class="display:flex flex-direction:column height:100% justify-content:space-between"
+		x-data="gameBoard"
+	>
 		<div>
 			<header class="background-color:0d0513 padding:32 position:relative text-align:center">
 				<h1>
@@ -59,11 +62,64 @@
 					width="116"
 				/>
 			</header>
+			<div class="display:flex justify-content:space-between margin-horizontal:auto max-width:800">
+				<div>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="message"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="awaiting"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="actionList"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="whoseTurn"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="blueCountdown"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16"
+						x-text="redCountdown"
+					></p>
+					<p
+						class="color:dddcdd font-family:overlock font-size:16 position:absolute"
+						style="pointer-events: none; right: 0; z-index: 1; width: 200px"
+						x-text="JSON.stringify(spells.text)"
+					></p>
+				</div>
+				<div class="display:flex">
+					<button
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-show="actionList && !actionList.includes('move')"
+						x-on:click="handleReset"
+					>
+						Reset
+					</button>
+					<button
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-show="actionList && actionList.includes('pass')"
+						x-on:click="handleEndTurn"
+					>
+						End Turn
+					</button>
+					<button
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-show="actionList && actionList.includes('dash')"
+						x-on:click="handleDash"
+					>
+						Dash
+					</button>
+				</div>
+			</div>
 		</div>
-		<div
-			class="overflow:auto text-align:center"
-			x-data="gameBoard"
-		>
+		<div class="overflow:auto text-align:center">
 			<div class="display:inline-block position:relative">
 				<img
 					class="game-board max-width:100%"
@@ -75,148 +131,141 @@
 						class="charm-node charm-node--1 charm-spell charm-spell--1"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="charm1"
+						x-bind:class="spells.images.charm1 && 'visible'"
+						x-bind:src="spells.images.charm1"
 					/>
 					<img
 						class="charm-node charm-node--2 charm-spell charm-spell--2"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="charm2"
+						x-bind:src="spells.images.charm2"
+						x-bind:class="spells.images.charm2 && 'visible'"
 					/>
 					<img
 						class="charm-node charm-node--3 charm-spell charm-spell--3"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="charm3"
+						x-bind:src="spells.images.charm3"
+						x-bind:class="spells.images.charm3 && 'visible'"
 					/>
 
 					<img
 						class="ritual-node ritual-node--1 ritual-spell ritual-spell--1"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="ritual1"
+						x-bind:src="spells.images.ritual1"
+						x-bind:class="spells.images.ritual1 && 'visible'"
 					/>
 					<img
 						class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="ritual2"
+						x-bind:src="spells.images.ritual2"
+						x-bind:class="spells.images.ritual2 && 'visible'"
 					/>
 					<img
 						class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="ritual3"
+						x-bind:src="spells.images.ritual3"
+						x-bind:class="spells.images.ritual3 && 'visible'"
 					/>
 
 					<img
 						class="sorcery-node sorcery-node--1 sorcery-spell sorcery-spell--1"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="sorcery1"
+						x-bind:src="spells.images.sorcery1"
+						x-bind:class="spells.images.sorcery1 && 'visible'"
 					/>
 					<img
 						class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="sorcery2"
+						x-bind:src="spells.images.sorcery2"
+						x-bind:class="spells.images.sorcery2 && 'visible'"
 					/>
 					<img
 						class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
 						alt=""
 						src="/static/images/v2/spacer.gif"
-						x-ref="sorcery3"
+						x-bind:src="spells.images.sorcery3"
+						x-bind:class="spells.images.sorcery3 && 'visible'"
 					/>
 				</div>
 				<div class="spell-nodes">
 					<img
-						class="charm-node charm-node--1"
+						class="charm-node charm-node--1 spell"
 						alt=""
-						src="/static/images/v2/charm-nodes.png"
+						src="/static/images/v2/nodes/charm.png"
+						x-bind:class="actionList && actionList.includes(spellDict['charm1']) && 'spell--available'"
 					/>
 					<img
-						class="charm-node charm-node--2"
+						class="charm-node charm-node--2 spell"
 						alt=""
-						src="/static/images/v2/charm-nodes.png"
+						src="/static/images/v2/nodes/charm.png"
+						x-bind:class="actionList && actionList.includes(spellDict['charm2']) && 'spell--available'"
 					/>
 					<img
-						class="charm-node charm-node--3"
+						class="charm-node charm-node--3 spell"
 						alt=""
-						src="/static/images/v2/charm-nodes.png"
-					/>
-
-					<img
-						class="ritual-node ritual-node--1"
-						alt=""
-						src="/static/images/v2/ritual-nodes.png"
-					/>
-					<img
-						class="ritual-node ritual-node--2"
-						alt=""
-						src="/static/images/v2/ritual-nodes.png"
-					/>
-					<img
-						class="ritual-node ritual-node--3"
-						alt=""
-						src="/static/images/v2/ritual-nodes.png"
+						src="/static/images/v2/nodes/charm.png"
+						x-bind:class="actionList && actionList.includes(spellDict['charm3']) && 'spell--available'"
 					/>
 
 					<img
-						class="sorcery-node sorcery-node--1"
+						class="ritual-node ritual-node--1 spell"
 						alt=""
-						src="/static/images/v2/sorcery-nodes.png"
+						src="/static/images/v2/nodes/ritual.png"
+						x-on:click="handleSpellClick('ritual1')"
+						x-bind:class="actionList && actionList.includes(spellDict['ritual1']) && 'spell--available'"
 					/>
 					<img
-						class="sorcery-node sorcery-node--2"
+						class="ritual-node ritual-node--2 spell"
 						alt=""
-						src="/static/images/v2/sorcery-nodes.png"
+						src="/static/images/v2/nodes/ritual.png"
+						x-on:click="handleSpellClick('ritual2')"
+						x-bind:class="actionList && actionList.includes(spellDict['ritual2']) && 'spell--available'"
 					/>
 					<img
-						class="sorcery-node sorcery-node--3"
+						class="ritual-node ritual-node--3 spell"
 						alt=""
-						src="/static/images/v2/sorcery-nodes.png"
+						src="/static/images/v2/nodes/ritual.png"
+						x-on:click="handleSpellClick('ritual3')"
+						x-bind:class="actionList && actionList.includes(spellDict['ritual3']) && 'spell--available'"
+					/>
+
+					<img
+						class="sorcery-node sorcery-node--1 spell"
+						alt=""
+						src="/static/images/v2/nodes/sorcery.png"
+						x-on:click="handleSpellClick('sorcery1')"
+						x-bind:class="actionList && actionList.includes(spellDict['sorcery1']) && 'spell--available'"
+					/>
+					<img
+						class="sorcery-node sorcery-node--2 spell"
+						alt=""
+						src="/static/images/v2/nodes/sorcery.png"
+						x-on:click="handleSpellClick('sorcery2')"
+						x-bind:class="actionList && actionList.includes(spellDict['sorcery2']) && 'spell--available'"
+					/>
+					<img
+						class="sorcery-node sorcery-node--3 spell"
+						alt=""
+						src="/static/images/v2/nodes/sorcery.png"
+						x-on:click="handleSpellClick('sorcery3')"
+						x-bind:class="actionList && actionList.includes(spellDict['sorcery3']) && 'spell--available'"
 					/>
 				</div>
 				<div class="stone-nodes">
-					<button class="stone-node stone-node--a1">a1</button>
-					<button class="stone-node stone-node--a2">a2</button>
-					<button class="stone-node stone-node--a3">a3</button>
-					<button class="stone-node stone-node--a4">a4</button>
-					<button class="stone-node stone-node--a5">a5</button>
-					<button class="stone-node stone-node--a6">a6</button>
-					<button class="stone-node stone-node--a7">a7</button>
-					<button class="stone-node stone-node--a8">a8</button>
-					<button class="stone-node stone-node--a9">a9</button>
-					<button class="stone-node stone-node--a10">a10</button>
-					<button class="stone-node stone-node--a11">a11</button>
-					<button class="stone-node stone-node--a12">a12</button>
-					<button class="stone-node stone-node--a13">a13</button>
-					<button class="stone-node stone-node--b1">b1</button>
-					<button class="stone-node stone-node--b2">b2</button>
-					<button class="stone-node stone-node--b3">b3</button>
-					<button class="stone-node stone-node--b4">b4</button>
-					<button class="stone-node stone-node--b5">b5</button>
-					<button class="stone-node stone-node--b6">b6</button>
-					<button class="stone-node stone-node--b7">b7</button>
-					<button class="stone-node stone-node--b8">b8</button>
-					<button class="stone-node stone-node--b9">b9</button>
-					<button class="stone-node stone-node--b10">b10</button>
-					<button class="stone-node stone-node--b11">b11</button>
-					<button class="stone-node stone-node--b12">b12</button>
-					<button class="stone-node stone-node--b13">b13</button>
-					<button class="stone-node stone-node--c1">c1</button>
-					<button class="stone-node stone-node--c2">c2</button>
-					<button class="stone-node stone-node--c3">c3</button>
-					<button class="stone-node stone-node--c4">c4</button>
-					<button class="stone-node stone-node--c5">c5</button>
-					<button class="stone-node stone-node--c6">c6</button>
-					<button class="stone-node stone-node--c7">c7</button>
-					<button class="stone-node stone-node--c8">c8</button>
-					<button class="stone-node stone-node--c9">c9</button>
-					<button class="stone-node stone-node--c10">c10</button>
-					<button class="stone-node stone-node--c11">c11</button>
-					<button class="stone-node stone-node--c12">c12</button>
-					<button class="stone-node stone-node--c13">c13</button>
+					<template x-for="node in Object.keys(nodes)">
+						<button
+							class="stone-node"
+							x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${nodes[node]}`]: true, 'stone-node--halo': lastPlay === node, 'stone-node--refill': nodesToRefill[node] }"
+							x-on:click="handleNodeClick(node)"
+							x-text="node"
+						></button>
+					</template>
 				</div>
 			</div>
 		</div>

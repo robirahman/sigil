@@ -468,6 +468,11 @@ textarea {
 	min-width: 898px;
 }
 
+.spell--available {
+	border-radius: 50%;
+	outline: 4px solid red;
+}
+
 .charm-node {
 	--size: calc(60 / 1476 * 100%);
 
@@ -515,15 +520,15 @@ textarea {
 }
 
 .ritual-node--1 {
-	left: calc(1145 / 1476 * 100%);
-	top: calc(973 / 1476 * 100%);
-	transform: rotate(-60deg) translate(var(--translate), var(--translate));
-}
-
-.ritual-node--2 {
 	left: calc(331.3 / 1476 * 100%);
 	top: calc(973.1 / 1476 * 100%);
 	transform: rotate(60deg) translate(var(--translate), var(--translate));
+}
+
+.ritual-node--2 {
+	left: calc(1145 / 1476 * 100%);
+	top: calc(973 / 1476 * 100%);
+	transform: rotate(-60deg) translate(var(--translate), var(--translate));
 }
 
 .ritual-node--3 {
@@ -562,11 +567,18 @@ textarea {
 	transform: rotate(120deg) translate(var(--translate), var(--translate));
 }
 
+@keyframes stone-twinkle {
+	0% { filter: brightness(80%); }
+	50% { filter: brightness(120%); }
+	100% { filter: brightness(80%); }
+}
+
 .stone-node {
 	--size: calc(46 / 1476 * 100%);
 	--translate: -50%;
 
-	background: pink;
+	animation: stone-twinkle 4s linear infinite;
+	background-size: cover;
 	border-radius: 999px;
 	position: absolute;
 	height: var(--size);
@@ -574,10 +586,20 @@ textarea {
 	width: var(--size);
 }
 
-.stone-node:hover,
-.stone-node:focus {
-	background: green;
-	color: #fff;
+.stone-node--blue {
+	background-image: url("/static/images/v2/stones/blue.png");
+}
+
+.stone-node--red {
+	background-image: url("/static/images/v2/stones/red.png");
+}
+
+.stone-node--halo {
+	outline: 5px solid #f3ec4e;
+}
+
+.stone-node--refill {
+	opacity: 0.6;
 }
 
 .stone-node--a1 {
@@ -802,11 +824,11 @@ textarea {
 }
 
 .ritual-spell--1 {
-	transition-delay: 2.75s;
+	transition-delay: 2.5s;
 }
 
 .ritual-spell--2 {
-	transition-delay: 2.5s;
+	transition-delay: 2.75s;
 }
 
 .ritual-spell--3 {
