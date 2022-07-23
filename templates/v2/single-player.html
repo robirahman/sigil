@@ -195,58 +195,73 @@
 				</div>
 				<div class="spell-nodes">
 					<img
-						class="charm-node charm-node--1"
+						class="charm-node charm-node--1 spell"
 						alt=""
 						src="/static/images/v2/nodes/charm.png"
+						x-bind:class="actionList && actionList.includes(spellDict['charm1']) && 'spell--available'"
 					/>
 					<img
-						class="charm-node charm-node--2"
+						class="charm-node charm-node--2 spell"
 						alt=""
 						src="/static/images/v2/nodes/charm.png"
+						x-bind:class="actionList && actionList.includes(spellDict['charm2']) && 'spell--available'"
 					/>
 					<img
-						class="charm-node charm-node--3"
+						class="charm-node charm-node--3 spell"
 						alt=""
 						src="/static/images/v2/nodes/charm.png"
+						x-bind:class="actionList && actionList.includes(spellDict['charm3']) && 'spell--available'"
 					/>
 
 					<img
-						class="ritual-node ritual-node--1"
+						class="ritual-node ritual-node--1 spell"
 						alt=""
 						src="/static/images/v2/nodes/ritual.png"
+						x-on:click="handleSpellClick('ritual1')"
+						x-bind:class="actionList && actionList.includes(spellDict['ritual1']) && 'spell--available'"
 					/>
 					<img
-						class="ritual-node ritual-node--2"
+						class="ritual-node ritual-node--2 spell"
 						alt=""
 						src="/static/images/v2/nodes/ritual.png"
+						x-on:click="handleSpellClick('ritual2')"
+						x-bind:class="actionList && actionList.includes(spellDict['ritual2']) && 'spell--available'"
 					/>
 					<img
-						class="ritual-node ritual-node--3"
+						class="ritual-node ritual-node--3 spell"
 						alt=""
 						src="/static/images/v2/nodes/ritual.png"
+						x-on:click="handleSpellClick('ritual3')"
+						x-bind:class="actionList && actionList.includes(spellDict['ritual3']) && 'spell--available'"
 					/>
 
 					<img
-						class="sorcery-node sorcery-node--1"
+						class="sorcery-node sorcery-node--1 spell"
 						alt=""
 						src="/static/images/v2/nodes/sorcery.png"
+						x-on:click="handleSpellClick('sorcery1')"
+						x-bind:class="actionList && actionList.includes(spellDict['sorcery1']) && 'spell--available'"
 					/>
 					<img
-						class="sorcery-node sorcery-node--2"
+						class="sorcery-node sorcery-node--2 spell"
 						alt=""
 						src="/static/images/v2/nodes/sorcery.png"
+						x-on:click="handleSpellClick('sorcery2')"
+						x-bind:class="actionList && actionList.includes(spellDict['sorcery2']) && 'spell--available'"
 					/>
 					<img
-						class="sorcery-node sorcery-node--3"
+						class="sorcery-node sorcery-node--3 spell"
 						alt=""
 						src="/static/images/v2/nodes/sorcery.png"
+						x-on:click="handleSpellClick('sorcery3')"
+						x-bind:class="actionList && actionList.includes(spellDict['sorcery3']) && 'spell--available'"
 					/>
 				</div>
 				<div class="stone-nodes">
 					<template x-for="node in Object.keys(nodes)">
 						<button
 							class="stone-node"
-							x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${nodes[node]}`]: true, 'stone-node--halo': lastPlay === node }"
+							x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${nodes[node]}`]: true, 'stone-node--halo': lastPlay === node, 'stone-node--refill': nodesToRefill[node] }"
 							x-on:click="handleNodeClick(node)"
 							x-text="node"
 						></button>

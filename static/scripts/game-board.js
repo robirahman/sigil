@@ -1,6 +1,9 @@
 document.addEventListener('alpine:init', () => {
 	Alpine.data('gameBoard', () => ({
 		// available in template
+		spellDict: {},
+		reverseSpellDict: {},
+		// awaiting is the next action you're expected to take
 		awaiting: '',
 		actionList: [],
 		blueCountdown: '',
@@ -16,6 +19,7 @@ document.addEventListener('alpine:init', () => {
 				return acc;
 			}, {}),
 		},
+		nodesToRefill: {},
 		spells: {
 			images: {},
 			text: {},
@@ -31,9 +35,23 @@ document.addEventListener('alpine:init', () => {
 			this.actionList = [];
 		},
 
+		handleSpellClick(spell) {
+			// This is ONLY triggered for spells, not charms
+			// Takes a spell position, e.g., "ritual2", "sorcery3"
+			// and sends a spellName, e.g., 'Searing_Wind', 'Creeping_Vines'
+			const spellName = this.spellDict[spell];
+			if (
+				this.awaiting == 'spell' ||
+				(this.awaiting === 'action' && this.actionList.includes(spellName))
+			) {
+				this.sendEvent(spellName);
+				awaiting = null;
+			}
+		},
+
 		handleReset() {
 			this.sendEvent('reset');
-			this.actionList = null;
+			this.actionList = [];
 			this.awaiting = null;
 		},
 
@@ -51,10 +69,7 @@ document.addEventListener('alpine:init', () => {
 
 		init() {
 			const _this = this;
-			// awaiting is the next action you're expected to take
-			let spellDict = {};
-			let reverseSpellDict = {};
-			let auxLockDict = {
+			_this.auxLockDict = {
 				ritual1: 'a1',
 				ritual2: 'b1',
 				ritual3: 'c1',
@@ -62,7 +77,7 @@ document.addEventListener('alpine:init', () => {
 				sorcery2: 'b2',
 				sorcery3: 'c2',
 			};
-			let lockDict = {};
+			_this.lockDict = {};
 
 			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
 			_this.events = new WebSocket('ws://' + location.host + '/api/singleplayergame');
@@ -102,6 +117,16 @@ document.addEventListener('alpine:init', () => {
 					handleWhoseTurnEvent(payload);
 					return;
 				}
+
+				if (type === 'chooserefills') {
+					handleChooseRefillsEvent(payload);
+					return;
+				}
+
+				if (type === 'donerefilling') {
+					handleDoneRefillingEvent();
+					return;
+				}
 			}
 
 			function handleMessageEvent(payload) {
@@ -111,16 +136,16 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleSpellSetupEvent(payload) {
-				spellDict = payload;
-				for (let key in spellDict) {
-					reverseSpellDict[spellDict[key]] = key;
+				_this.spellDict = payload;
+				for (let key in _this.spellDict) {
+					_this.reverseSpellDict[_this.spellDict[key]] = key;
 				}
 
-				for (let key in reverseSpellDict) {
-					lockDict[key] = auxLockDict[reverseSpellDict[key]];
+				for (let key in _this.reverseSpellDict) {
+					_this.lockDict[key] = _this.auxLockDict[_this.reverseSpellDict[key]];
 				}
 
-				Object.entries(spellDict).forEach(([key, value]) => {
+				Object.entries(_this.spellDict).forEach(([key, value]) => {
 					_this.spells.images[key] = `/static/images/v2/spells/${value}.png`;
 				});
 			}
@@ -140,6 +165,14 @@ document.addEventListener('alpine:init', () => {
 
 			function handleWhoseTurnEvent(payload) {
 				_this.whoseTurn = payload.message;
+			}
+
+			function handleChooseRefillsEvent(payload) {
+				_this.nodesToRefill = payload;
+			}
+
+			function handleDoneRefillingEvent() {
+				_this.nodesToRefill = {};
 			}
 		},
 	}));
