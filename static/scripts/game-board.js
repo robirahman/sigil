@@ -7,6 +7,7 @@ document.addEventListener('alpine:init', () => {
 		blueLock: '',
 		lastPlay: '',
 		message: '',
+		messageHistory: [],
 		nodes: {
 			...['a', 'b', 'c'].reduce((acc, curr) => {
 				new Array(13).fill(true).forEach((node, index) => {
@@ -127,6 +128,7 @@ document.addEventListener('alpine:init', () => {
 
 				if (type === 'whoseturndisplay') {
 					handleWhoseTurnEvent(payload);
+					_this.messageHistory.push(payload.message);
 					return;
 				}
 
@@ -145,6 +147,10 @@ document.addEventListener('alpine:init', () => {
 				_this.actionList = payload.actionlist;
 				_this.awaiting = payload.awaiting;
 				_this.message = payload.message;
+
+				if (_this.awaiting !== 'action') {
+					_this.messageHistory.push(payload.message);
+				}
 			}
 
 			function handleSpellSetupEvent(payload) {

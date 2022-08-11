@@ -63,7 +63,28 @@
 				/>
 			</header>
 			<div class="display:flex justify-content:space-between margin-horizontal:auto max-width:800">
-				<div>
+				<div
+					class="color:dddcdd font-family:overlock font-size:16"
+					style="
+						background: rgba(0, 0, 0, 0.5);
+						height: 240px;
+						left: 0;
+						padding: 16px;
+						overflow: auto;
+						position: absolute;
+						width: 240px;
+						z-index: 1;
+					"
+				>
+					<template x-if="messageHistory.length > 0">
+						<ul style="display: flex; flex-direction: column-reverse">
+							<template x-for="message in messageHistory">
+								<li x-text="message"></li>
+							</template>
+						</ul>
+					</template>
+				</div>
+				<div style="margin-left: 240px">
 					<p
 						class="color:dddcdd font-family:overlock font-size:16"
 						x-text="message"
