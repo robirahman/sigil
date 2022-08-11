@@ -468,11 +468,6 @@ textarea {
 	min-width: 898px;
 }
 
-.spell--available {
-	border-radius: 50%;
-	outline: 4px solid red;
-}
-
 .charm-node {
 	--size: calc(60 / 1476 * 100%);
 
@@ -800,15 +795,30 @@ textarea {
 .charm-spell,
 .ritual-spell,
 .sorcery-spell {
+	border-radius: 50%;
 	opacity: 0;
 	transition-duration: 2s;
 	transition-property: opacity;
 }
 
-.charm-spell.visible,
-.ritual-spell.visible,
-.sorcery-spell.visible {
+.spell--visible {
 	opacity: 1;
+}
+
+.spell--available {
+	box-shadow: -4px 4px 12px #fff, 4px 4px 12px #fff, -4px -4px 12px #fff, 4px -4px 12px #fff;
+}
+
+.spell--blue-lock {
+	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #3250ba, 4px -4px #3250ba;
+}
+
+.spell--red-lock {
+	box-shadow: -4px 4px #e84c3c, 4px 4px #e84c3c, -4px -4px #e84c3c, 4px -4px #e84c3c;
+}
+
+.spell--blue-lock.spell--red-lock {
+	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #e84c3c, 4px -4px #e84c3c;
 }
 
 .charm-spell--1 {

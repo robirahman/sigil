@@ -1,15 +1,11 @@
 document.addEventListener('alpine:init', () => {
 	Alpine.data('gameBoard', () => ({
-		// available in template
-		spellDict: {},
-		reverseSpellDict: {},
+		actionList: [],
 		// awaiting is the next action you're expected to take
 		awaiting: '',
-		actionList: [],
 		blueCountdown: '',
-		redCountdown: '',
+		blueLock: '',
 		lastPlay: '',
-		whoseTurn: '',
 		message: '',
 		nodes: {
 			...['a', 'b', 'c'].reduce((acc, curr) => {
@@ -20,10 +16,15 @@ document.addEventListener('alpine:init', () => {
 			}, {}),
 		},
 		nodesToRefill: {},
+		redCountdown: '',
+		redLock: '',
+		reverseSpellDict: {},
+		spellDict: {},
 		spells: {
 			images: {},
 			text: {},
 		},
+		whoseTurn: '',
 
 		handleDash() {
 			this.sendEvent('dash');
@@ -156,11 +157,14 @@ document.addEventListener('alpine:init', () => {
 
 			function handleBoardStateEvent(payload) {
 				// eslint-disable-next-line no-unused-vars
-				const { bluecountdown, last_play, last_player, redcountdown, ...nodes } = payload;
+				const { bluecountdown, bluelock, last_play, last_player, redcountdown, redlock, ...nodes } =
+					payload;
 				_this.blueCountdown = bluecountdown;
+				_this.blueLock = bluelock;
 				_this.lastPlay = last_play;
 				_this.nodes = nodes;
 				_this.redCountdown = redcountdown;
+				_this.redLock = redlock;
 			}
 
 			function handleWhoseTurnEvent(payload) {
