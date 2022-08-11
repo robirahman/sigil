@@ -138,6 +138,7 @@
 							'spell--visible': spells.images.charm1,
 						}"
 						x-bind:src="spells.images.charm1"
+						x-on:click="handleCharmClick('charm1')"
 					/>
 					<img
 						class="charm-node charm-node--2 charm-spell charm-spell--2"
@@ -150,6 +151,7 @@
 							'spell--red-lock': redLock === spellDict['charm2'],
 							'spell--visible': spells.images.charm2,
 						}"
+						x-on:click="handleCharmClick('charm2')"
 					/>
 					<img
 						class="charm-node charm-node--3 charm-spell charm-spell--3"
@@ -162,6 +164,7 @@
 							'spell--red-lock': redLock === spellDict['charm3'],
 							'spell--visible': spells.images.charm3,
 						}"
+						x-on:click="handleCharmClick('charm3')"
 					/>
 
 					<img
@@ -175,6 +178,7 @@
 							'spell--red-lock': redLock === spellDict['ritual1'],
 							'spell--visible': spells.images.ritual1,
 						}"
+						x-on:click="handleSpellClick('ritual1')"
 					/>
 					<img
 						class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
@@ -187,6 +191,7 @@
 							'spell--red-lock': redLock === spellDict['ritual2'],
 							'spell--visible': spells.images.ritual2,
 						}"
+						x-on:click="handleSpellClick('ritual2')"
 					/>
 					<img
 						class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
@@ -199,6 +204,7 @@
 							'spell--red-lock': redLock === spellDict['ritual3'],
 							'spell--visible': spells.images.ritual3,
 						}"
+						x-on:click="handleSpellClick('ritual3')"
 					/>
 
 					<img
@@ -212,6 +218,7 @@
 							'spell--red-lock': redLock === spellDict['sorcery1'],
 							'spell--visible': spells.images.sorcery1,
 						}"
+						x-on:click="handleSpellClick('sorcery1')"
 					/>
 					<img
 						class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
@@ -224,6 +231,7 @@
 							'spell--red-lock': redLock === spellDict['sorcery2'],
 							'spell--visible': spells.images.sorcery2,
 						}"
+						x-on:click="handleSpellClick('sorcery2')"
 					/>
 					<img
 						class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
@@ -236,6 +244,7 @@
 							'spell--red-lock': redLock === spellDict['sorcery3'],
 							'spell--visible': spells.images.sorcery3,
 						}"
+						x-on:click="handleSpellClick('sorcery3')"
 					/>
 				</div>
 				<div class="spell-nodes">
@@ -259,38 +268,32 @@
 						class="ritual-node ritual-node--1 spell"
 						alt=""
 						src="/static/images/v2/nodes/ritual.png"
-						x-on:click="handleSpellClick('ritual1')"
 					/>
 					<img
 						class="ritual-node ritual-node--2 spell"
 						alt=""
 						src="/static/images/v2/nodes/ritual.png"
-						x-on:click="handleSpellClick('ritual2')"
 					/>
 					<img
 						class="ritual-node ritual-node--3 spell"
 						alt=""
 						src="/static/images/v2/nodes/ritual.png"
-						x-on:click="handleSpellClick('ritual3')"
 					/>
 
 					<img
 						class="sorcery-node sorcery-node--1 spell"
 						alt=""
 						src="/static/images/v2/nodes/sorcery.png"
-						x-on:click="handleSpellClick('sorcery1')"
 					/>
 					<img
 						class="sorcery-node sorcery-node--2 spell"
 						alt=""
 						src="/static/images/v2/nodes/sorcery.png"
-						x-on:click="handleSpellClick('sorcery2')"
 					/>
 					<img
 						class="sorcery-node sorcery-node--3 spell"
 						alt=""
 						src="/static/images/v2/nodes/sorcery.png"
-						x-on:click="handleSpellClick('sorcery3')"
 					/>
 				</div>
 				<div class="stone-nodes">

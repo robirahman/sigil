@@ -801,6 +801,10 @@ textarea {
 	transition-property: opacity;
 }
 
+.spell {
+	pointer-events: none;
+}
+
 .spell--visible {
 	opacity: 1;
 }
