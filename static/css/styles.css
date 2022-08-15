@@ -278,6 +278,10 @@ textarea {
 	display: inline-flex;
 }
 
+.display\:none {
+	display: none;
+}
+
 .flex-basis\:296px {
 	flex-basis: 296px;
 }

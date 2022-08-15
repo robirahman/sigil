@@ -117,22 +117,22 @@
 				</div>
 				<div class="display:flex">
 					<button
-						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-						x-show="actionList && !actionList.includes('move')"
+						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+						x-bind:class="showReset ? 'display:flex' : 'display:none'"
 						x-on:click="handleReset"
 					>
 						Reset
 					</button>
 					<button
 						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-						x-show="actionList && actionList.includes('pass')"
+						x-show="actionList.includes('pass')"
 						x-on:click="handleEndTurn"
 					>
 						End Turn
 					</button>
 					<button
 						class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-						x-show="actionList && actionList.includes('dash')"
+						x-show="actionList.includes('dash')"
 						x-on:click="handleDash"
 					>
 						Dash
@@ -153,7 +153,7 @@
 						alt=""
 						src="/static/images/v2/spacer.gif"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['charm1']),
+							'spell--available': actionList.includes(spellDict['charm1']),
 							'spell--blue-lock': blueLock === spellDict['charm1'],
 							'spell--red-lock': redLock === spellDict['charm1'],
 							'spell--visible': spells.images.charm1,
@@ -167,7 +167,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.charm2"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['charm2']),
+							'spell--available': actionList.includes(spellDict['charm2']),
 							'spell--blue-lock': blueLock === spellDict['charm2'],
 							'spell--red-lock': redLock === spellDict['charm2'],
 							'spell--visible': spells.images.charm2,
@@ -180,7 +180,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.charm3"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['charm3']),
+							'spell--available': actionList.includes(spellDict['charm3']),
 							'spell--blue-lock': blueLock === spellDict['charm3'],
 							'spell--red-lock': redLock === spellDict['charm3'],
 							'spell--visible': spells.images.charm3,
@@ -194,7 +194,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.ritual1"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['ritual1']),
+							'spell--available': actionList.includes(spellDict['ritual1']),
 							'spell--blue-lock': blueLock === spellDict['ritual1'],
 							'spell--red-lock': redLock === spellDict['ritual1'],
 							'spell--visible': spells.images.ritual1,
@@ -207,7 +207,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.ritual2"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['ritual2']),
+							'spell--available': actionList.includes(spellDict['ritual2']),
 							'spell--blue-lock': blueLock === spellDict['ritual2'],
 							'spell--red-lock': redLock === spellDict['ritual2'],
 							'spell--visible': spells.images.ritual2,
@@ -220,7 +220,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.ritual3"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['ritual3']),
+							'spell--available': actionList.includes(spellDict['ritual3']),
 							'spell--blue-lock': blueLock === spellDict['ritual3'],
 							'spell--red-lock': redLock === spellDict['ritual3'],
 							'spell--visible': spells.images.ritual3,
@@ -234,7 +234,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.sorcery1"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['sorcery1']),
+							'spell--available': actionList.includes(spellDict['sorcery1']),
 							'spell--blue-lock': blueLock === spellDict['sorcery1'],
 							'spell--red-lock': redLock === spellDict['sorcery1'],
 							'spell--visible': spells.images.sorcery1,
@@ -247,7 +247,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.sorcery2"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['sorcery2']),
+							'spell--available': actionList.includes(spellDict['sorcery2']),
 							'spell--blue-lock': blueLock === spellDict['sorcery2'],
 							'spell--red-lock': redLock === spellDict['sorcery2'],
 							'spell--visible': spells.images.sorcery2,
@@ -260,7 +260,7 @@
 						src="/static/images/v2/spacer.gif"
 						x-bind:src="spells.images.sorcery3"
 						x-bind:class="{
-							'spell--available': actionList && actionList.includes(spellDict['sorcery3']),
+							'spell--available': actionList.includes(spellDict['sorcery3']),
 							'spell--blue-lock': blueLock === spellDict['sorcery3'],
 							'spell--red-lock': redLock === spellDict['sorcery3'],
 							'spell--visible': spells.images.sorcery3,

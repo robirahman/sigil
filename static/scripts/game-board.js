@@ -20,6 +20,7 @@ document.addEventListener('alpine:init', () => {
 		redCountdown: '',
 		redLock: '',
 		reverseSpellDict: {},
+		showReset: false,
 		spellDict: {},
 		spells: {
 			images: {},
@@ -66,10 +67,13 @@ document.addEventListener('alpine:init', () => {
 			this.sendEvent('reset');
 			this.actionList = [];
 			this.awaiting = null;
+			this.showReset = false;
 		},
 
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
+			this.showReset = true;
+
 			if (this.awaiting === 'node') {
 				this.sendEvent(node);
 			} else if (this.awaiting === 'action') {
@@ -128,7 +132,6 @@ document.addEventListener('alpine:init', () => {
 
 				if (type === 'whoseturndisplay') {
 					handleWhoseTurnEvent(payload);
-					_this.messageHistory.push(payload.message);
 					return;
 				}
 
@@ -144,10 +147,13 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleMessageEvent(payload) {
-				_this.actionList = payload.actionlist;
+				_this.actionList = payload.actionlist || [];
 				_this.awaiting = payload.awaiting;
 				_this.message = payload.message;
 
+				if (_this.message.includes('Invalid move')) {
+					_this.showReset = false;
+				}
 				if (_this.awaiting !== 'action') {
 					_this.messageHistory.push(payload.message);
 				}
@@ -185,6 +191,8 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleWhoseTurnEvent(payload) {
+				_this.showReset = false;
+				_this.messageHistory.push(payload.message);
 				_this.whoseTurn = payload.message;
 			}
 
