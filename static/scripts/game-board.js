@@ -20,6 +20,7 @@ document.addEventListener('alpine:init', () => {
 		redCountdown: '',
 		redLock: '',
 		reverseSpellDict: {},
+		showDone: false,
 		showReset: false,
 		spellDict: {},
 		spells: {
@@ -31,6 +32,11 @@ document.addEventListener('alpine:init', () => {
 		handleDash() {
 			this.sendEvent('dash');
 			this.actionList = [];
+		},
+
+		handleDone() {
+			this.sendEvent('doneselecting');
+			this.showDone = false;
 		},
 
 		handleEndTurn() {
@@ -144,6 +150,11 @@ document.addEventListener('alpine:init', () => {
 					handleDoneRefillingEvent();
 					return;
 				}
+
+				if (type === 'selecting') {
+					handleSelectingEvent();
+					return;
+				}
 			}
 
 			function handleMessageEvent(payload) {
@@ -202,6 +213,10 @@ document.addEventListener('alpine:init', () => {
 
 			function handleDoneRefillingEvent() {
 				_this.nodesToRefill = {};
+			}
+
+			function handleSelectingEvent() {
+				_this.showDone = true;
 			}
 		},
 	}));
