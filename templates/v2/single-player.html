@@ -325,12 +325,16 @@
 					/>
 				</div>
 				<div class="stone-nodes">
+					<div
+						class="stone-node stone-node--blue stone-node--score"
+						x-bind:class="{ [`stone-node--score-${score}`]: true }"
+					></div>
 					<template x-for="node in Object.keys(nodes)">
 						<button
 							class="stone-node"
+							x-bind:aria-label="node"
 							x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${nodes[node]}`]: true, 'stone-node--halo': lastPlay === node, 'stone-node--refill': nodesToRefill[node] }"
 							x-on:click="handleNodeClick(node)"
-							x-text="node"
 						></button>
 					</template>
 				</div>

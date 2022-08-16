@@ -601,6 +601,51 @@ textarea {
 	opacity: 0.6;
 }
 
+.stone-node--score {
+	transform: none;
+	transition-duration: 1s;
+	transition-property: left, opacity, top;
+}
+
+.stone-node--score-unset {
+	opacity: 0;
+}
+
+.stone-node--score-tied {
+	left: calc(715 / 1476 * 100%);
+	top: calc(715 / 1476 * 100%);
+}
+
+.stone-node--score-b1 {
+	left: calc(781 / 1476 * 100%);
+	top: calc(752 / 1476 * 100%);
+}
+
+.stone-node--score-b2 {
+	left: calc(715 / 1476 * 100%);
+	top: calc(791 / 1476 * 100%);
+}
+
+.stone-node--score-b3 {
+	left: calc(649 / 1476 * 100%);
+	top: calc(754 / 1476 * 100%);
+}
+
+.stone-node--score-r1 {
+	left: calc(649 / 1476 * 100%);
+	top: calc(678 / 1476 * 100%);
+}
+
+.stone-node--score-r2 {
+	left: calc(715 / 1476 * 100%);
+	top: calc(639 / 1476 * 100%);
+}
+
+.stone-node--score-r3 {
+	left: calc(781 / 1476 * 100%);
+	top: calc(676 / 1476 * 100%);
+}
+
 .stone-node--a1 {
 	left: calc(113 / 1476 * 100%);
 	top: calc(888.5 / 1476 * 100%);

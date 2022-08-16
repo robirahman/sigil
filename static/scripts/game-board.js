@@ -20,6 +20,7 @@ document.addEventListener('alpine:init', () => {
 		redCountdown: '',
 		redLock: '',
 		reverseSpellDict: {},
+		score: 'unset',
 		showDone: false,
 		showReset: false,
 		spellDict: {},
@@ -190,8 +191,7 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleBoardStateEvent(payload) {
-				// eslint-disable-next-line no-unused-vars
-				const { bluecountdown, bluelock, last_play, last_player, redcountdown, redlock, ...nodes } =
+				const { bluecountdown, bluelock, last_play, redcountdown, redlock, score, ...nodes } =
 					payload;
 				_this.blueCountdown = bluecountdown;
 				_this.blueLock = bluelock;
@@ -199,6 +199,10 @@ document.addEventListener('alpine:init', () => {
 				_this.nodes = nodes;
 				_this.redCountdown = redcountdown;
 				_this.redLock = redlock;
+
+				if (score) {
+					_this.score = score;
+				}
 			}
 
 			function handleWhoseTurnEvent(payload) {
