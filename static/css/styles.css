@@ -278,6 +278,10 @@ textarea {
 	display: inline-flex;
 }
 
+.display\:none {
+	display: none;
+}
+
 .flex-basis\:296px {
 	flex-basis: 296px;
 }
@@ -468,11 +472,6 @@ textarea {
 	min-width: 898px;
 }
 
-.spell--available {
-	border-radius: 50%;
-	outline: 4px solid red;
-}
-
 .charm-node {
 	--size: calc(60 / 1476 * 100%);
 
@@ -600,6 +599,51 @@ textarea {
 
 .stone-node--refill {
 	opacity: 0.6;
+}
+
+.stone-node--score {
+	transform: none;
+	transition-duration: 1s;
+	transition-property: left, opacity, top;
+}
+
+.stone-node--score-unset {
+	opacity: 0;
+}
+
+.stone-node--score-tied {
+	left: calc(715 / 1476 * 100%);
+	top: calc(715 / 1476 * 100%);
+}
+
+.stone-node--score-b1 {
+	left: calc(781 / 1476 * 100%);
+	top: calc(752 / 1476 * 100%);
+}
+
+.stone-node--score-b2 {
+	left: calc(715 / 1476 * 100%);
+	top: calc(791 / 1476 * 100%);
+}
+
+.stone-node--score-b3 {
+	left: calc(649 / 1476 * 100%);
+	top: calc(754 / 1476 * 100%);
+}
+
+.stone-node--score-r1 {
+	left: calc(649 / 1476 * 100%);
+	top: calc(678 / 1476 * 100%);
+}
+
+.stone-node--score-r2 {
+	left: calc(715 / 1476 * 100%);
+	top: calc(639 / 1476 * 100%);
+}
+
+.stone-node--score-r3 {
+	left: calc(781 / 1476 * 100%);
+	top: calc(676 / 1476 * 100%);
 }
 
 .stone-node--a1 {
@@ -800,15 +844,34 @@ textarea {
 .charm-spell,
 .ritual-spell,
 .sorcery-spell {
+	border-radius: 50%;
 	opacity: 0;
 	transition-duration: 2s;
 	transition-property: opacity;
 }
 
-.charm-spell.visible,
-.ritual-spell.visible,
-.sorcery-spell.visible {
+.spell {
+	pointer-events: none;
+}
+
+.spell--visible {
 	opacity: 1;
+}
+
+.spell--available {
+	box-shadow: -4px 4px 12px #fff, 4px 4px 12px #fff, -4px -4px 12px #fff, 4px -4px 12px #fff;
+}
+
+.spell--blue-lock {
+	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #3250ba, 4px -4px #3250ba;
+}
+
+.spell--red-lock {
+	box-shadow: -4px 4px #e84c3c, 4px 4px #e84c3c, -4px -4px #e84c3c, 4px -4px #e84c3c;
+}
+
+.spell--blue-lock.spell--red-lock {
+	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #e84c3c, 4px -4px #e84c3c;
 }
 
 .charm-spell--1 {

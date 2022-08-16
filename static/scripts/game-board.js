@@ -1,16 +1,13 @@
 document.addEventListener('alpine:init', () => {
 	Alpine.data('gameBoard', () => ({
-		// available in template
-		spellDict: {},
-		reverseSpellDict: {},
+		actionList: [],
 		// awaiting is the next action you're expected to take
 		awaiting: '',
-		actionList: [],
 		blueCountdown: '',
-		redCountdown: '',
+		blueLock: '',
 		lastPlay: '',
-		whoseTurn: '',
 		message: '',
+		messageHistory: [],
 		nodes: {
 			...['a', 'b', 'c'].reduce((acc, curr) => {
 				new Array(13).fill(true).forEach((node, index) => {
@@ -20,19 +17,43 @@ document.addEventListener('alpine:init', () => {
 			}, {}),
 		},
 		nodesToRefill: {},
+		redCountdown: '',
+		redLock: '',
+		reverseSpellDict: {},
+		score: 'unset',
+		showDone: false,
+		showReset: false,
+		spellDict: {},
 		spells: {
 			images: {},
 			text: {},
 		},
+		whoseTurn: '',
 
 		handleDash() {
 			this.sendEvent('dash');
 			this.actionList = [];
 		},
 
+		handleDone() {
+			this.sendEvent('doneselecting');
+			this.showDone = false;
+		},
+
 		handleEndTurn() {
 			this.sendEvent('pass');
 			this.actionList = [];
+		},
+
+		handleCharmClick(charm) {
+			// This is ONLY triggered for charms, not spells
+			// Takes a spell position, e.g., "charm1", "charm3"
+			// and sends a spellName, e.g., 'Spark', 'Summer'
+			const charmName = this.spellDict[charm];
+			if (this.awaiting === 'action' && this.actionList.includes(charmName)) {
+				this.sendEvent(charmName);
+				awaiting = null;
+			}
 		},
 
 		handleSpellClick(spell) {
@@ -53,10 +74,13 @@ document.addEventListener('alpine:init', () => {
 			this.sendEvent('reset');
 			this.actionList = [];
 			this.awaiting = null;
+			this.showReset = false;
 		},
 
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
+			this.showReset = true;
+
 			if (this.awaiting === 'node') {
 				this.sendEvent(node);
 			} else if (this.awaiting === 'action') {
@@ -127,12 +151,24 @@ document.addEventListener('alpine:init', () => {
 					handleDoneRefillingEvent();
 					return;
 				}
+
+				if (type === 'selecting') {
+					handleSelectingEvent();
+					return;
+				}
 			}
 
 			function handleMessageEvent(payload) {
-				_this.actionList = payload.actionlist;
+				_this.actionList = payload.actionlist || [];
 				_this.awaiting = payload.awaiting;
 				_this.message = payload.message;
+
+				if (_this.message.includes('Invalid move')) {
+					_this.showReset = false;
+				}
+				if (_this.awaiting !== 'action') {
+					_this.messageHistory.push(payload.message);
+				}
 			}
 
 			function handleSpellSetupEvent(payload) {
@@ -155,15 +191,23 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleBoardStateEvent(payload) {
-				// eslint-disable-next-line no-unused-vars
-				const { bluecountdown, last_play, last_player, redcountdown, ...nodes } = payload;
+				const { bluecountdown, bluelock, last_play, redcountdown, redlock, score, ...nodes } =
+					payload;
 				_this.blueCountdown = bluecountdown;
+				_this.blueLock = bluelock;
 				_this.lastPlay = last_play;
 				_this.nodes = nodes;
 				_this.redCountdown = redcountdown;
+				_this.redLock = redlock;
+
+				if (score) {
+					_this.score = score;
+				}
 			}
 
 			function handleWhoseTurnEvent(payload) {
+				_this.showReset = false;
+				_this.messageHistory.push(payload.message);
 				_this.whoseTurn = payload.message;
 			}
 
@@ -173,6 +217,10 @@ document.addEventListener('alpine:init', () => {
 
 			function handleDoneRefillingEvent() {
 				_this.nodesToRefill = {};
+			}
+
+			function handleSelectingEvent() {
+				_this.showDone = true;
 			}
 		},
 	}));
