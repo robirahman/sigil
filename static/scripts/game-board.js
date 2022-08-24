@@ -1,5 +1,5 @@
 document.addEventListener('alpine:init', () => {
-	Alpine.data('gameBoard', () => ({
+	Alpine.data('gameBoard', ({ gameName = '', playerCount = 0 }) => ({
 		actionList: [],
 		// awaiting is the next action you're expected to take
 		awaiting: '',
@@ -103,8 +103,10 @@ document.addEventListener('alpine:init', () => {
 			};
 			_this.lockDict = {};
 
+			const apiPath =
+				playerCount === 1 ? 'singleplayergame' : gameName ? `privategame/${gameName}` : 'game';
 			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
-			_this.events = new WebSocket('ws://' + location.host + '/api/singleplayergame');
+			_this.events = new WebSocket(`ws://${location.host}/api/${apiPath}`);
 			_this.events.onmessage = handleIncomingEvent;
 
 			_this.sendEvent = function sendEvent(message) {
@@ -191,8 +193,17 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleBoardStateEvent(payload) {
-				const { bluecountdown, bluelock, last_play, redcountdown, redlock, score, ...nodes } =
-					payload;
+				const {
+					bluecountdown,
+					bluelock,
+					last_play,
+					// eslint-disable-next-line no-unused-vars
+					last_player,
+					redcountdown,
+					redlock,
+					score,
+					...nodes
+				} = payload;
 				_this.blueCountdown = bluecountdown;
 				_this.blueLock = bluelock;
 				_this.lastPlay = last_play;
