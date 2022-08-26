@@ -49,56 +49,64 @@ def tutorialAndRulesV2():
 
 @app.route('/v2/single-player')
 def singlePlayerV2():
-    return render_template('v2/single-player.html')
+	return render_template('v2/single-player.html')
+
+@app.route('/v2/private-match')
+def privatematchV2():
+	return render_template('v2/private-match.html')
+
+@app.route('/v2/private-game/<gamename>')
+def privategameboardV2(gamename):
+	return render_template('v2/two-player.html', privategamename= gamename)
 
 # v1
 @app.route('/')
 def home():
-    return render_template('home.html')
+	return render_template('home.html')
 
 @app.route('/gameboard')
 def gameboard():
-    return render_template('gameboard.html', privategamename="''")
+	return render_template('gameboard.html', privategamename="''")
 
 @app.route('/singleplayergameboard')
 def singleplayergameboard():
-    return render_template('singleplayergameboard.html')
+	return render_template('singleplayergameboard.html')
 
 @app.route('/tutorial')
 def tutorial():
-    return render_template('tutorial.html')
+	return render_template('tutorial.html')
 
 @app.route('/tutorialpartone')
 def tutorialpartone():
-    return render_template('tutorialpartone.html')
+	return render_template('tutorialpartone.html')
 
 @app.route('/tutorialparttwo')
 def tutorialparttwo():
-    return render_template('tutorialparttwo.html')
+	return render_template('tutorialparttwo.html')
 
 @app.route('/tutorialpartthree')
 def tutorialpartthree():
-    return render_template('tutorialpartthree.html')
+	return render_template('tutorialpartthree.html')
 
 @app.route('/tutorialbasicspells')
 def tutorialbasicspells():
-    return render_template('tutorialbasicspells.html')
+	return render_template('tutorialbasicspells.html')
 
 @app.route('/tutorialadvancedspells')
 def tutorialadvancedspells():
-    return render_template('tutorialadvancedspells.html')
+	return render_template('tutorialadvancedspells.html')
 
 @app.route('/singleplayer')
 def singleplayer():
-    return render_template('singleplayer.html')
+	return render_template('singleplayer.html')
 
 @app.route('/laddermatch')
 def laddermatch():
-    return render_template('laddermatch.html')
+	return render_template('laddermatch.html')
 
 @app.route('/privatematch')
 def privatematch():
-    return render_template('privatematch.html')
+	return render_template('privatematch.html')
 
 @sock.route('/api/creategame')
 def creategame(ws):
@@ -651,4 +659,4 @@ def privatechat(ws, privatechatname):
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0')
+	app.run(host='0.0.0.0')

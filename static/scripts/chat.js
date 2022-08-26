@@ -1,0 +1,46 @@
+document.addEventListener('alpine:init', () => {
+	Alpine.data('chat', ({ gameName = '' }) => ({
+		chatHistory: [],
+		message: '',
+
+		handleSubmit() {
+			this.sendEvent(this.message);
+			this.message = '';
+			this.$nextTick(() => {
+				this.$refs.chatMessage.focus();
+			});
+		},
+
+		init() {
+			const _this = this;
+
+			const apiPath = gameName ? `privatechat/${gameName}` : 'chat';
+			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
+			_this.events = new WebSocket(`ws://${location.host}/api/${apiPath}`);
+			_this.events.onmessage = handleIncomingEvent;
+
+			_this.sendEvent = function sendEvent(message) {
+				_this.events.send(JSON.stringify({ message }));
+			};
+
+			function handleIncomingEvent(event) {
+				const { type, ...payload } = JSON.parse(event.data);
+
+				if (type === 'chatmessage') {
+					handleChatMessageEvent(payload);
+				}
+			}
+
+			function handleChatMessageEvent(payload) {
+				_this.chatHistory.push({
+					message: payload.message,
+					player: payload.player,
+				});
+
+				_this.$nextTick(() => {
+					_this.$refs.chatHistory.scrollTop = _this.$refs.chatHistory.scrollHeight;
+				});
+			}
+		},
+	}));
+});

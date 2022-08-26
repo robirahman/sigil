@@ -13,7 +13,7 @@
 			http-equiv="X-UA-Compatible"
 			content="ie=edge"
 		/>
-		<title>Single Player - Sigil Online</title>
+		<title>Private Game - Sigil Online</title>
 		<link
 			href="/static/css/styles.css"
 			rel="stylesheet"
@@ -36,11 +36,12 @@
 			src="https://unpkg.com/alpinejs@3.10.2/dist/cdn.min.js"
 		></script>
 		<script src="/static/scripts/game-board.js"></script>
+		<script src="/static/scripts/chat.js"></script>
 	</head>
 	<body class="height:100%">
 		<div
 			class="display:flex flex-direction:column height:100% justify-content:space-between"
-			x-data="gameBoard({ playerCount: 1 })"
+			x-data="gameBoard({ gameName: '{{privategamename}}', playerCount: 2 })"
 		>
 			<div>
 				<header class="background-color:0d0513 padding:32 position:relative text-align:center">
@@ -343,6 +344,63 @@
 					</div>
 				</div>
 			</div>
+		</div>
+		<div
+			class="position:absolute"
+			style="bottom: 16px; right: 16px; z-index: 1"
+			x-data="chat({ gameName: '{{privategamename}}' })"
+		>
+			<template x-if="chatHistory.length > 0">
+				<ul
+					class="color:dddcdd font-family:overlock font-size:16"
+					style="
+						background: rgba(0, 0, 0, 0.8);
+						display: grid;
+						gap: 8px;
+						max-height: 240px;
+						left: 0;
+						margin-bottom: 8px;
+						padding: 16px;
+						overflow: auto;
+						width: 240px;
+						z-index: 1;
+					"
+					x-ref="chatHistory"
+				>
+					<template x-for="chatItem in chatHistory">
+						<li>
+							<strong x-text="chatItem.player"></strong>
+							<span
+								style="overflow-wrap: anywhere; white-space: pre-line"
+								x-text="chatItem.message"
+							></span>
+						</li>
+					</template>
+				</ul>
+			</template>
+			<form
+				class="display:flex"
+				x-on:submit.prevent="handleSubmit"
+			>
+				<label
+					class="visually-hidden"
+					for="message"
+					>Message</label
+				>
+				<textarea
+					id="message"
+					style="padding: 8px"
+					x-model="message"
+					x-ref="chatMessage"
+					x-on:keydown.cmd.enter="handleSubmit"
+					x-on:keydown.ctrl.enter="handleSubmit"
+				></textarea>
+				<button
+					class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 font-size:16 font-family:overlock justify-content:center padding:16 :hocus--background-color:004962"
+				>
+					Send
+				</button>
+			</form>
 		</div>
 	</body>
 </html>
