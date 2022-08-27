@@ -442,10 +442,10 @@ function incomingEvent(event) {
 		for (nodename of allnodenames) {
 			if (payload[nodename]) {
 				if (payload.playercolor == 'red') {
-					document.getElementById.src = '/static/images/redstone.png';
+					document.getElementById(nodename).src = '/static/images/redstone.png';
 					document.getElementById(nodename).style.opacity = 0.6;
 				} else if (payload.playercolor == 'blue') {
-					document.getElementById.src = '/static/images/bluestone.png';
+					document.getElementById(nodename).src = '/static/images/bluestone.png';
 					document.getElementById(nodename).style.opacity = 0.6;
 				}
 			}

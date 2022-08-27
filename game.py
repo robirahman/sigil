@@ -452,6 +452,29 @@ class Player():
 		return actualmessage
 
 
+	def allmoveablenodes(self):
+		answer = []
+		for nodename in self.board.nodes:
+			node = self.board.nodes[nodename]
+			if node.stone != self.color:
+				adjacent = False
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						adjacent = True
+				if adjacent:
+					answer.append(nodename)
+		return answer
+
+
+	def allblinkablenodes(self):
+		answer = []
+		for nodename in self.board.nodes:
+			if self.board.nodes[nodename].stone != self.color:
+				answer.append(nodename)
+		return answer
+
+
+
 	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
 		self.board.update()
 
@@ -460,7 +483,12 @@ class Player():
 
 		if canmove:
 			actions.append('move')
+			if ('Field_of_Flowers' in [s.name for s in self.charged_spells]):
+				moveoptions = self.allblinkablenodes()
+			else:
+				moveoptions = self.allmoveablenodes()
 		else:
+			moveoptions = []
 			if (candash & canspell & (self.totalstones > 2)):
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
@@ -494,7 +522,7 @@ class Player():
 
 
 		egress =  {"type": "message", "message": str(actions), 
-		"awaiting": "action", "actionlist": actions}
+		"awaiting": "action", "actionlist": actions, "moveoptions": moveoptions}
 
 		self.ws.send(json.dumps(egress))
 
