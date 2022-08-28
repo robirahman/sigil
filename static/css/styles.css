@@ -576,7 +576,7 @@ textarea {
 	--size: calc(46 / 1476 * 100%);
 	--translate: -50%;
 
-	animation: stone-twinkle 4s linear infinite;
+	animation: stone-twinkle 3s linear infinite;
 	background-size: cover;
 	border-radius: 999px;
 	position: absolute;
@@ -591,6 +591,14 @@ textarea {
 
 .stone-node--red {
 	background-image: url("/static/images/v2/stones/red.png");
+}
+
+.stone-node--valid-move-blue {
+	outline: 5px solid rgb(50 80 186 / 90%);
+}
+
+.stone-node--valid-move-red {
+	outline: 5px solid rgb(215 88 69 / 90%);
 }
 
 .stone-node--halo {

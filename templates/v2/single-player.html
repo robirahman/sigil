@@ -336,7 +336,13 @@
 							<button
 								class="stone-node"
 								x-bind:aria-label="node"
-								x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${nodes[node]}`]: true, 'stone-node--halo': lastPlay === node, 'stone-node--refill': nodesToRefill[node] }"
+								x-bind:class="{
+									[`stone-node--${node}`]: true,
+									[`stone-node--${nodes[node]}`]: true,
+									[`stone-node--valid-move-${whoseTurn.toLowerCase()}`]: validMoves[node],
+									'stone-node--halo': lastPlay === node,
+									'stone-node--refill': nodesToRefill[node],
+								}"
 								x-on:click="handleNodeClick(node)"
 							></button>
 						</template>
