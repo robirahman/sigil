@@ -28,6 +28,7 @@ document.addEventListener('alpine:init', () => {
 			images: {},
 			text: {},
 		},
+		validMoves: {},
 		whoseTurn: '',
 
 		handleDash() {
@@ -164,6 +165,10 @@ document.addEventListener('alpine:init', () => {
 				_this.actionList = payload.actionlist || [];
 				_this.awaiting = payload.awaiting;
 				_this.message = payload.message;
+				_this.validMoves = payload.moveoptions.reduce((acc, curr) => {
+					acc[curr] = true;
+					return acc;
+				}, {});
 
 				if (_this.message.includes('Invalid move')) {
 					_this.showReset = false;
