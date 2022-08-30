@@ -79,6 +79,10 @@ class Board():
 		### whatever state is saved in board.snapshot.
 		self.snapshot = None
 
+		### A dictionary which stores counts of how many times each boardstate has occurred.
+		### Keys are entire boardstate snapshots ('looping_snapshots') encoded as strings.
+		self.all_looping_snapshot_counts = {}
+
 		### A string that tells which player is winning and by how much.
 		self.score = 'b1'
 
@@ -116,6 +120,41 @@ class Board():
 		snapshot["last_player"] = self.last_player
 
 		self.snapshot = snapshot
+
+
+		### Also take a looping_snapshot, which has only the information needed to check if the game is going in a loop,
+		### encoded as a string
+
+		looping_snapshot = ""
+
+		looping_snapshot += str(self.redplayer.countdown)
+		looping_snapshot += str(self.blueplayer.countdown)
+		for nodename in self.nodes:
+			looping_snapshot += str(self.nodes[nodename].stone)
+		if self.redplayer.lock:
+			looping_snapshot += self.redplayer.lock.name
+		else:
+			looping_snapshot += "None"
+		if self.blueplayer.lock:
+			looping_snapshot += self.blueplayer.lock.name
+		else:
+			looping_snapshot += "None"
+
+
+		if looping_snapshot in self.all_looping_snapshot_counts:
+			self.all_looping_snapshot_counts[looping_snapshot] += 1
+			if self.all_looping_snapshot_counts[looping_snapshot] == 3:
+				self.redplayer.jmessage("The game is going in a loop. If this board state repeats 2 more times, Blue will automatically win.")
+				self.blueplayer.jmessage("The game is going in a loop. If this board state repeats 2 more times, Blue will automatically win.")
+			elif self.all_looping_snapshot_counts[looping_snapshot] == 4:
+				self.redplayer.jmessage("The game is going in a loop. If this board state repeats 1 more time, Blue will automatically win.")
+				self.blueplayer.jmessage("The game is going in a loop. If this board state repeats 1 more time, Blue will automatically win.")
+			elif self.all_looping_snapshot_counts[looping_snapshot] == 5:
+				self.gameover = True
+				self.winner = "blue"
+				self.end_game()
+		else:
+			self.all_looping_snapshot_counts[looping_snapshot] = 1
 
 
 
