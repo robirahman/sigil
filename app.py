@@ -146,6 +146,31 @@ def privategameboard(gamename):
 	return render_template('gameboard.html', privategamename= "'" + gamename + "'")
 
 
+def countdown_timer(red, blue):
+	while True:
+		time.sleep(1)
+		if red.timer_running:
+			red.timer -= 1
+			if red.timer == 0:
+				red.board.gameover = True
+				red.board.winner = 'blue'
+				red.board.end_game()
+				break
+			egress =  {"type": "red_timer", "seconds": red.timer}
+			red.ws.send(json.dumps(egress))
+			blue.ws.send(json.dumps(egress))
+		elif blue.timer_running:
+			blue.timer -= 1
+			if blue.timer == 0:
+				blue.board.gameover = True
+				blue.board.winner = 'red'
+				blue.board.end_game()
+				break
+			egress =  {"type": "blue_timer", "seconds": blue.timer}
+			red.ws.send(json.dumps(egress))
+			blue.ws.send(json.dumps(egress))
+
+
 
 @sock.route('/api/game')
 def playgame(ws):
@@ -216,6 +241,9 @@ def playgame(ws):
 		board.nodes['b1'].stone = 'blue'
 		board.update()
 		time.sleep(3)
+
+		countdown_timer_thread = Thread(target=countdown_timer, args=(red, blue))
+		countdown_timer_thread.start()
 
 
 		while True:

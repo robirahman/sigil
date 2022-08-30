@@ -476,6 +476,13 @@ class Player():
 		### the object which is the ws connection to each player.
 		self.ws = None
 
+		### Countdown timer (measured in seconds).
+		self.timer = 900
+
+		### The timer ticks down only while this is true.
+		self.timer_running = False
+
+
 
 	def jmessage(self, message, awaiting= None):
 		egress =  {"type": "message", "message": message, "awaiting": awaiting, }
@@ -542,6 +549,10 @@ class Player():
 
 	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
 		self.board.update()
+
+		if self.opp.ishuman:
+			self.opp.timer_running = False
+			self.timer_running = True
 
 		actions = []
 		spelllist = []
