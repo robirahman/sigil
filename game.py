@@ -716,6 +716,13 @@ class Player():
 			else:
 				if node.stone == None:
 					node.stone = self.color
+
+					egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+
+					self.ws.send(json.dumps(egress))
+					if self.opp.ishuman:
+						self.opp.ws.send(json.dumps(egress))
+
 					self.board.last_play = node.name
 					self.board.last_player = self.color
 					self.board.update()
@@ -730,6 +737,12 @@ class Player():
 		elif node.stone == None:
 
 			node.stone = self.color
+
+			egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+			self.ws.send(json.dumps(egress))
+			if self.opp.ishuman:
+				self.opp.ws.send(json.dumps(egress))
+
 			self.board.last_play = node.name
 			self.board.last_player = self.color
 			self.board.update()
@@ -760,6 +773,12 @@ class Player():
 
 		if node.stone == None and adjacent:
 			node.stone = self.color
+
+			egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+			self.ws.send(json.dumps(egress))
+			if self.opp.ishuman:
+				self.opp.ws.send(json.dumps(egress))
+				
 			self.board.last_play = nodename
 			self.board.last_player = self.color
 			self.board.update()

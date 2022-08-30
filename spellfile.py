@@ -312,6 +312,12 @@ class Ice_Mirror(Spell):
 				if actualmessage in convert_one_options:
 					node = player.board.nodes[actualmessage]
 					node.stone = player.color
+
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+
 					player.board.update()
 					break
 
@@ -339,6 +345,12 @@ class Ice_Mirror(Spell):
 				if actualmessage in convert_two_options:
 					node2 = player.board.nodes[actualmessage]
 					node2.stone = player.color
+
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": node2.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+
 					player.board.update()
 					break
 
@@ -378,6 +390,12 @@ class Blink(Spell):
 					break
 				else:
 					node.stone = player.color
+
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+
 					player.board.update()
 					break
 
@@ -426,6 +444,12 @@ class Meteor(Spell):
 					break
 				else:
 					node.stone = player.color
+
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+
 					player.board.update()
 					break
 
@@ -499,6 +523,12 @@ class Starfall(Spell):
 				else:
 					node = player.board.nodes[actualmessage]
 					node.stone = player.color
+
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+
 					player.board.update()
 					break
 
@@ -526,6 +556,12 @@ class Starfall(Spell):
 				else:
 					node2 = player.board.nodes[actualmessage]
 					node2.stone = player.color
+
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": node2.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+
 					break
 
 			else:
