@@ -289,24 +289,28 @@ class Ice_Mirror(Spell):
 		player.ws.send(json.dumps(egress))
 
 		while True:
-			player.jmessage("Select an enemy stone to convert.", "node")
+			convert_one_options = []
+			for nodename in self.board.nodes:
+				node = self.board.nodes[nodename]
+				if node.stone == player.enemy:
+					adjacent_to_enemy = False
+					for neighbor in node.neighbors:
+						if neighbor.stone == player.enemy:
+							adjacent_to_enemy = True
+
+					if adjacent_to_enemy:
+						convert_one_options.append(nodename)
+
+			egress =  {"type": "message", "message": "Select an enemy stone to convert.", 
+			"awaiting": "node", "moveoptions": convert_one_options}
+
+			player.ws.send(json.dumps(egress))
 
 			actualmessage = player.receivemessage()
 
 			if actualmessage in player.board.nodes:
-				node = player.board.nodes[actualmessage]
-
-				if node.stone != player.enemy:
-					player.jmessage("Invalid selection")
-					continue
-
-				validstone = False
-
-				for neighbor in node.neighbors:
-					if neighbor.stone == player.enemy:
-						validstone = True
-
-				if validstone:
+				if actualmessage in convert_one_options:
+					node = player.board.nodes[actualmessage]
 					node.stone = player.color
 					player.board.update()
 					break
@@ -319,31 +323,28 @@ class Ice_Mirror(Spell):
 				continue
 
 		while True:
-			player.jmessage("Select an adjacent enemy stone to convert.", "node")
+			convert_two_options = []
+			for neighbor in node.neighbors:
+				if neighbor.stone == player.enemy:
+					convert_two_options.append(neighbor.name)
+
+			egress =  {"type": "message", "message": "Select an adjacent enemy stone to convert.", 
+			"awaiting": "node", "moveoptions": convert_two_options}
+
+			player.ws.send(json.dumps(egress))
 
 			actualmessage = player.receivemessage()
 
 			if actualmessage in player.board.nodes:
-				node2 = player.board.nodes[actualmessage]
-
-				if node2.stone != player.enemy:
-					player.jmessage("Invalid selection")
-					continue
-
-				validstone = False
-				for neighbor in node2.neighbors:
-					if neighbor == node:
-						validstone = True
-
-				if not validstone:
-					player.jmessage("Invalid selection")
-					continue
-
-				else:
+				if actualmessage in convert_two_options:
+					node2 = player.board.nodes[actualmessage]
 					node2.stone = player.color
 					player.board.update()
 					break
 
+				else:
+					player.jmessage("Invalid selection")
+					continue
 			else:
 				continue
 
@@ -359,7 +360,11 @@ class Blink(Spell):
 	def resolve(self, player):
 		
 		while True:
-			player.jmessage("Where would you like to blink?", "node")
+			moveoptions = player.allblinkablenodes()
+			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			"awaiting": "node", "moveoptions": moveoptions}
+
+			player.ws.send(json.dumps(egress))
 
 			actualmessage = player.receivemessage()
 
@@ -403,7 +408,11 @@ class Meteor(Spell):
 
 	def resolve(self, player):
 		while True:
-			player.jmessage("Where would you like to blink?", "node")
+			moveoptions = player.allblinkablenodes()
+			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			"awaiting": "node", "moveoptions": moveoptions}
+
+			player.ws.send(json.dumps(egress))
 
 			actualmessage = player.receivemessage()
 
@@ -463,17 +472,32 @@ class Starfall(Spell):
 
 	def resolve(self, player):
 		while True:
-			player.jmessage("Where would you like to blink?", "node")
+			starfall_one_options = []
+			for nodename in self.board.nodes:
+				node = self.board.nodes[nodename]
+				if node.stone == None:
+					adjacent_to_empty = False
+					for neighbor in node.neighbors:
+						if neighbor.stone == None:
+							adjacent_to_empty = True
+
+					if adjacent_to_empty:
+						starfall_one_options.append(nodename)
+
+			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			"awaiting": "node", "moveoptions": starfall_one_options}
+
+			player.ws.send(json.dumps(egress))
 
 			actualmessage = player.receivemessage()
 
 			if actualmessage in player.board.nodes:
-				node = player.board.nodes[actualmessage]
-				if node.stone != None:
+				if actualmessage not in starfall_one_options:
 					player.jmessage("Invalid option")
 					continue
 
 				else:
+					node = player.board.nodes[actualmessage]
 					node.stone = player.color
 					player.board.update()
 					break
@@ -482,25 +506,26 @@ class Starfall(Spell):
 				continue
 
 		while True:
-			player.jmessage("Where would you like to blink?", "node")
+			starfall_two_options = []
+			for neighbor in node.neighbors:
+				if neighbor.stone == None:
+					starfall_two_options.append(neighbor.name)
+
+			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			"awaiting": "node", "moveoptions": starfall_two_options}
+
+			player.ws.send(json.dumps(egress))
 
 			actualmessage = player.receivemessage()
 
 			if actualmessage in player.board.nodes:
-				node2 = player.board.nodes[actualmessage]
-				if node2.stone != None:
+				if actualmessage not in starfall_two_options:
 					player.jmessage("Invalid option")
 					continue
-				is_adjacent = False
-				for neighbor in node.neighbors:
-					if neighbor == node2:
-						is_adjacent = True
-				if is_adjacent == False:
-					player.jmessage("Invalid option")
-					continue
+
 				else:
+					node2 = player.board.nodes[actualmessage]
 					node2.stone = player.color
-					player.board.update()
 					break
 
 			else:

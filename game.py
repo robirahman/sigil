@@ -683,7 +683,10 @@ class Player():
 
 		### standardmove is True iff this is the player's standard move for the turn.
 		if not preloaded:
-			moveoptions = self.allmoveablenodes()
+			if ('Field_of_Flowers' in [s.name for s in self.charged_spells]):
+				moveoptions = self.allblinkablenodes()
+			else:
+				moveoptions = self.allmoveablenodes()
 
 			egress =  {"type": "message", "message": "Where would you like to move? ", 
 			"awaiting": "node", "moveoptions": moveoptions}
