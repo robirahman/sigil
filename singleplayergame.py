@@ -652,6 +652,10 @@ class AIPlayer():
 		while pushingoptions == []:
 			if pushingqueue == []:
 				### enemy stone crushed
+				egress =  {"type": "crush_animation", "crushed_color": self.enemy, "node": node.name}
+
+				self.opp.ws.send(json.dumps(egress))
+
 				self.board.update()
 				return None
 			nextpair = pushingqueue.pop(0)
@@ -681,13 +685,23 @@ class AIPlayer():
 		pushingoptionnames = [x.name for x in pushingoptions]
 
 		if len(pushingoptionnames) == 1:
-			self.board.nodes[pushingoptionnames[0]].stone = self.enemy
+			push = pushingoptionnames[0]
+			self.board.nodes[push].stone = self.enemy
+			egress =  {"type": "push_animation", "pushed_color": self.enemy, "starting_node": node.name, "ending_node": push}
+
+			self.opp.ws.send(json.dumps(egress))
+
 			self.board.update()
 			return None
 
 		else:
 			### Choose to push to the first spot in the list
-			self.board.nodes[pushingoptionnames[0]].stone = self.enemy
+			push = pushingoptionnames[0]
+			self.board.nodes[push].stone = self.enemy
+			egress =  {"type": "push_animation", "pushed_color": self.enemy, "starting_node": node.name, "ending_node": push}
+
+			self.opp.ws.send(json.dumps(egress))
+			
 			self.board.update()
 			return None
 

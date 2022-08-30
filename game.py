@@ -465,6 +465,32 @@ class Player():
 					answer.append(nodename)
 		return answer
 
+	def allsoftmoveablenodes(self):
+		answer = []
+		for nodename in self.board.nodes:
+			node = self.board.nodes[nodename]
+			if node.stone == None:
+				adjacent = False
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						adjacent = True
+				if adjacent:
+					answer.append(nodename)
+		return answer
+
+	def allhardmoveablenodes(self):
+		answer = []
+		for nodename in self.board.nodes:
+			node = self.board.nodes[nodename]
+			if node.stone == self.enemy:
+				adjacent = False
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						adjacent = True
+				if adjacent:
+					answer.append(nodename)
+		return answer
+
 
 	def allblinkablenodes(self):
 		answer = []
@@ -651,13 +677,19 @@ class Player():
 
 
 
-	def move(self, preloaded = False, standardmove = False, sorcery_only=False, ritual_only=False):
+	def move(self, preloaded = False, standardmove = False):
 		### If the user clicked on a node while they had 'move' action available,
 		### we call this move function with preloaded == the node they clicked.
 
 		### standardmove is True iff this is the player's standard move for the turn.
 		if not preloaded:
-			self.jmessage("Where would you like to move? ", "node")
+			moveoptions = self.allmoveablenodes()
+
+			egress =  {"type": "message", "message": "Where would you like to move? ", 
+			"awaiting": "node", "moveoptions": moveoptions}
+
+			self.ws.send(json.dumps(egress))
+
 			nodename = self.receivemessage()
 		else:
 			nodename = preloaded
@@ -670,13 +702,13 @@ class Player():
 
 		if node.stone == self.color:
 			self.jmessage("Invalid move-- you already have a stone there!")
-			self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
+			self.move(standardmove=standardmove)
 			return None
 
 		elif not adjacent:
 			if not (standardmove and ("Field_of_Flowers" in [spell.name for spell in self.charged_spells])):
 				self.jmessage("Invalid move-- that's not adjacent to you!")
-				self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
+				self.move(standardmove=standardmove)
 				return None
 			else:
 				if node.stone == None:
@@ -687,26 +719,12 @@ class Player():
 				else:
 					if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
 						self.jmessage("You can only make soft moves under Gravity.")
-						self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
+						self.move(standardmove=standardmove)
 						return None
 					self.pushenemy(node)
 
 
 		elif node.stone == None:
-			if sorcery_only:
-				if node in self.board.positions[4] + self.board.positions[5] + self.board.positions[6]:
-					pass
-				else:
-					self.jmessage("You must move in a Sorcery.")
-					self.move(sorcery_only=True)
-					return None
-			if ritual_only:
-				if node in self.board.positions[1] + self.board.positions[2] + self.board.positions[3]:
-					pass
-				else:
-					self.jmessage("You must move in a Ritual.")
-					self.move(ritual_only=True)
-					return None
 
 			node.stone = self.color
 			self.board.last_play = node.name
@@ -714,31 +732,21 @@ class Player():
 			self.board.update()
 
 		elif node.stone == self.enemy:
-			if sorcery_only:
-				if node in self.board.positions[4] + self.board.positions[5] + self.board.positions[6]:
-					pass
-				else:
-					self.jmessage("You must move in a Sorcery.")
-					self.move(sorcery_only=True)
-					return None
-			if ritual_only:
-				if node in self.board.positions[1] + self.board.positions[2] + self.board.positions[3]:
-					pass
-				else:
-					self.jmessage("You must move in a Ritual.")
-					self.move(ritual_only=True)
-					return None
 			if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
 				self.jmessage("You can only make soft moves under Gravity.")
-				self.move(standardmove=standardmove, sorcery_only=sorcery_only, ritual_only=ritual_only)
+				self.move(standardmove=standardmove)
 				return None
 			self.pushenemy(node)
 
 
 
 	def softmove(self):
-		self.jmessage("Where would you like to soft move? ", "node")
-		
+		moveoptions = self.allsoftmoveablenodes()
+			
+		egress =  {"type": "message", "message": "Where would you like to soft move? ", 
+		"awaiting": "node", "moveoptions": moveoptions}
+
+		self.ws.send(json.dumps(egress))
 		
 		nodename = self.receivemessage()
 		node = self.board.nodes[nodename]
@@ -769,7 +777,12 @@ class Player():
 			return None
 
 	def hardmove(self):
-		self.jmessage("Where would you like to hard move? ", "node")
+		moveoptions = self.allhardmoveablenodes()
+			
+		egress =  {"type": "message", "message": "Where would you like to hard move? ", 
+		"awaiting": "node", "moveoptions": moveoptions}
+
+		self.ws.send(json.dumps(egress))
 
 		nodename = self.receivemessage()
 		node = self.board.nodes[nodename]
@@ -865,6 +878,12 @@ class Player():
 		while pushingoptions == []:
 			if pushingqueue == []:
 				self.jmessage("Enemy stone crushed!")
+
+				egress =  {"type": "crush_animation", "crushed_color": self.enemy, "node": node.name}
+
+				self.ws.send(json.dumps(egress))
+				if self.opp.ishuman:
+					self.opp.ws.send(json.dumps(egress))
 				self.board.update()
 				return None
 			nextpair = pushingqueue.pop(0)
@@ -892,15 +911,23 @@ class Player():
 				pushingoptions.append(nextnode)
 
 		pushingoptionnames = [x.name for x in pushingoptions]
+		deduped_pushingoptionnames = list(set(pushingoptionnames))
 
-		if len(pushingoptionnames) == 1:
-			self.board.nodes[pushingoptionnames[0]].stone = self.enemy
+		if len(deduped_pushingoptionnames) == 1:
+			push = deduped_pushingoptionnames[0]
+			self.board.nodes[push].stone = self.enemy
+			egress =  {"type": "push_animation", "pushed_color": self.enemy, "starting_node": node.name, "ending_node": push}
+
+			self.ws.send(json.dumps(egress))
+			if self.opp.ishuman:
+				self.opp.ws.send(json.dumps(egress))
+
 			self.board.update()
 			return None
 
 		while True:
 			egress = {"type": "pushingoptions", }
-			for nodename in pushingoptionnames:
+			for nodename in deduped_pushingoptionnames:
 				egress[nodename] = self.enemy
 
 			self.ws.send(json.dumps(egress))
@@ -908,12 +935,19 @@ class Player():
 			self.jmessage("Where would you like to push the enemy stone? ", "node")
 			
 			push = self.receivemessage()
-			if push not in pushingoptionnames:
+			if push not in deduped_pushingoptionnames:
 				self.jmessage("Invalid option!")
 				continue
 			self.board.nodes[push].stone = self.enemy
-			self.board.update()
 			self.jmessage("Enemy stone pushed to " + push)
+
+			egress =  {"type": "push_animation", "pushed_color": self.enemy, "starting_node": node.name, "ending_node": push}
+
+			self.ws.send(json.dumps(egress))
+			if self.opp.ishuman:
+				self.opp.ws.send(json.dumps(egress))
+
+			self.board.update()
 			break
 
 
