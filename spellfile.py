@@ -289,7 +289,7 @@ class Ice_Mirror(Spell):
 		player.ws.send(json.dumps(egress))
 
 		while True:
-			convert_one_options = []
+			convert_one_options = {}
 			for nodename in self.board.nodes:
 				node = self.board.nodes[nodename]
 				if node.stone == player.enemy:
@@ -299,7 +299,7 @@ class Ice_Mirror(Spell):
 							adjacent_to_enemy = True
 
 					if adjacent_to_enemy:
-						convert_one_options.append(nodename)
+						convert_one_options[nodename] = player.color
 
 			egress =  {"type": "message", "message": "Select an enemy stone to convert.", 
 			"awaiting": "node", "moveoptions": convert_one_options}
@@ -329,10 +329,10 @@ class Ice_Mirror(Spell):
 				continue
 
 		while True:
-			convert_two_options = []
+			convert_two_options = {}
 			for neighbor in node.neighbors:
 				if neighbor.stone == player.enemy:
-					convert_two_options.append(neighbor.name)
+					convert_two_options[neighbor.name] = player.color
 
 			egress =  {"type": "message", "message": "Select an adjacent enemy stone to convert.", 
 			"awaiting": "node", "moveoptions": convert_two_options}
@@ -496,7 +496,7 @@ class Starfall(Spell):
 
 	def resolve(self, player):
 		while True:
-			starfall_one_options = []
+			starfall_one_options = {}
 			for nodename in self.board.nodes:
 				node = self.board.nodes[nodename]
 				if node.stone == None:
@@ -506,7 +506,7 @@ class Starfall(Spell):
 							adjacent_to_empty = True
 
 					if adjacent_to_empty:
-						starfall_one_options.append(nodename)
+						starfall_one_options[nodename] = player.color
 
 			egress =  {"type": "message", "message": "Where would you like to blink? ", 
 			"awaiting": "node", "moveoptions": starfall_one_options}
@@ -536,10 +536,10 @@ class Starfall(Spell):
 				continue
 
 		while True:
-			starfall_two_options = []
+			starfall_two_options = {}
 			for neighbor in node.neighbors:
 				if neighbor.stone == None:
-					starfall_two_options.append(neighbor.name)
+					starfall_two_options[neighbor.name] = player.color
 
 			egress =  {"type": "message", "message": "Where would you like to blink? ", 
 			"awaiting": "node", "moveoptions": starfall_two_options}

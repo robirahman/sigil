@@ -499,7 +499,7 @@ class Player():
 
 
 	def allmoveablenodes(self):
-		answer = []
+		answer = {}
 		for nodename in self.board.nodes:
 			node = self.board.nodes[nodename]
 			if node.stone != self.color:
@@ -508,11 +508,11 @@ class Player():
 					if neighbor.stone == self.color:
 						adjacent = True
 				if adjacent:
-					answer.append(nodename)
+					answer[nodename] = self.color
 		return answer
 
 	def allsoftmoveablenodes(self):
-		answer = []
+		answer = {}
 		for nodename in self.board.nodes:
 			node = self.board.nodes[nodename]
 			if node.stone == None:
@@ -521,11 +521,11 @@ class Player():
 					if neighbor.stone == self.color:
 						adjacent = True
 				if adjacent:
-					answer.append(nodename)
+					answer[nodename] = self.color
 		return answer
 
 	def allhardmoveablenodes(self):
-		answer = []
+		answer = {}
 		for nodename in self.board.nodes:
 			node = self.board.nodes[nodename]
 			if node.stone == self.enemy:
@@ -534,15 +534,15 @@ class Player():
 					if neighbor.stone == self.color:
 						adjacent = True
 				if adjacent:
-					answer.append(nodename)
+					answer[nodename] = self.color
 		return answer
 
 
 	def allblinkablenodes(self):
-		answer = []
+		answer = {}
 		for nodename in self.board.nodes:
 			if self.board.nodes[nodename].stone != self.color:
-				answer.append(nodename)
+				answer[nodename] = self.color
 		return answer
 
 
@@ -564,7 +564,7 @@ class Player():
 			else:
 				moveoptions = self.allmoveablenodes()
 		else:
-			moveoptions = []
+			moveoptions = {}
 			if (candash & canspell & (self.totalstones > 2)):
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
