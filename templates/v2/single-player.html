@@ -339,7 +339,7 @@
 								x-bind:class="{
 									[`stone-node--${node}`]: true,
 									[`stone-node--${nodes[node]}`]: true,
-									[`stone-node--valid-move-${whoseTurn.toLowerCase()}`]: validMoves[node],
+									[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
 									'stone-node--halo': lastPlay === node,
 									'stone-node--refill': nodesToRefill[node],
 								}"

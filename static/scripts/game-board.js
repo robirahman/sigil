@@ -159,16 +159,21 @@ document.addEventListener('alpine:init', () => {
 					handleSelectingEvent();
 					return;
 				}
+
+				if (type === 'pushingoptions') {
+					handleValidMovesEvent(payload);
+					return;
+				}
 			}
 
 			function handleMessageEvent(payload) {
 				_this.actionList = payload.actionlist || [];
 				_this.awaiting = payload.awaiting;
 				_this.message = payload.message;
-				_this.validMoves = payload.moveoptions.reduce((acc, curr) => {
-					acc[curr] = true;
-					return acc;
-				}, {});
+
+				if (payload.moveoptions) {
+					handleValidMovesEvent(payload.moveoptions);
+				}
 
 				if (_this.message.includes('Invalid move')) {
 					_this.showReset = false;
@@ -237,6 +242,10 @@ document.addEventListener('alpine:init', () => {
 
 			function handleSelectingEvent() {
 				_this.showDone = true;
+			}
+
+			function handleValidMovesEvent(payload) {
+				_this.validMoves = payload;
 			}
 		},
 	}));
