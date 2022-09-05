@@ -5,6 +5,7 @@ import json
 import time
 
 from flask import Flask, render_template
+from flask_sqlalchemy import SQLAlchemy
 from flask_sock import Sock
 from random import randint, randrange
 from threading import Thread
