@@ -20,6 +20,46 @@
 			<b>Sigil Online</b>
 		</div>
 
+		<div>
+			<button
+				type="button"
+				id="profilebutton"
+				onclick="window.location.href='{{ url_for('profile') }}';"
+			>
+				<b>Profile</b>
+			</button>
+		</div>
+
+		<div>
+			<button
+				type="button"
+				id="loginbutton"
+				onclick="window.location.href='{{ url_for('login') }}';"
+			>
+				<b>Login</b>
+			</button>
+		</div>
+
+		<div>
+			<button
+				type="button"
+				id="signupbutton"
+				onclick="window.location.href='{{ url_for('signup') }}';"
+			>
+				<b>Sign Up</b>
+			</button>
+		</div>
+
+		<div>
+			<button
+				type="button"
+				id="logoutbutton"
+				onclick="window.location.href='{{ url_for('logout') }}';"
+			>
+				<b>Logout</b>
+			</button>
+		</div>
+
 		<div id="sigildescription">
 			<b
 				>Battle your opponent for control of the Sigil in this strategy board game of arcane
