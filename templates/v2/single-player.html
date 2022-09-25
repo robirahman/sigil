@@ -338,6 +338,7 @@
 								x-bind:aria-label="node"
 								x-bind:class="{
 									[`stone-node--${node}`]: true,
+									[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
 									[`stone-node--${nodes[node]}`]: true,
 									[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
 									'stone-node--halo': lastPlay === node,

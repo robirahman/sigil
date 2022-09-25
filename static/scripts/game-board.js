@@ -17,6 +17,7 @@ document.addEventListener('alpine:init', () => {
 			}, {}),
 		},
 		nodesToRefill: {},
+		playerToRefill: '',
 		redCountdown: '',
 		redLock: '',
 		reverseSpellDict: {},
@@ -75,7 +76,10 @@ document.addEventListener('alpine:init', () => {
 			this.sendEvent('reset');
 			this.actionList = [];
 			this.awaiting = null;
+			this.nodesToRefill = {};
+			this.playerToRefill = '';
 			this.showReset = false;
+			this.validMoves = {};
 		},
 
 		handleNodeClick(node) {
@@ -233,11 +237,14 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function handleChooseRefillsEvent(payload) {
-				_this.nodesToRefill = payload;
+				const { playercolor, ...nodes } = payload;
+				_this.nodesToRefill = nodes;
+				_this.playerToRefill = playercolor;
 			}
 
 			function handleDoneRefillingEvent() {
 				_this.nodesToRefill = {};
+				_this.playerToRefill = '';
 			}
 
 			function handleSelectingEvent() {
