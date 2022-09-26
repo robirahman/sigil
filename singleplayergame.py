@@ -615,6 +615,10 @@ class AIPlayer():
 		nodename = node.name
 		if node.stone == None:
 			node.stone = self.color
+
+			egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+			self.opp.ws.send(json.dumps(egress))
+
 			self.board.last_play = nodename
 			self.board.last_player = self.color
 			self.board.update()
@@ -640,6 +644,10 @@ class AIPlayer():
 
 	def pushenemy(self, node):
 		node.stone = self.color
+
+		egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+		self.opp.ws.send(json.dumps(egress))
+
 		self.board.last_play = node.name
 		self.board.last_player = self.color
 		self.board.update()
