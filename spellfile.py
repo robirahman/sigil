@@ -202,6 +202,8 @@ class Carnage(Spell):
 
 	def resolve(self, player):
 		for i in range(4):
+			if not player.allhardmoveablenodes():
+				break
 			player.hardmove()
 
 
