@@ -342,7 +342,7 @@
 									[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
 									[`stone-node--${nodes[node]}`]: true,
 									[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
-									'stone-node--halo': lastPlay === node,
+									'stone-node--last-play': lastPlay === node,
 									'stone-node--refill': nodesToRefill[node],
 								}"
 								x-on:click="handleNodeClick(node)"
