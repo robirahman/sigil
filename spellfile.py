@@ -142,45 +142,45 @@ class Sprout(Spell):
 
 
 
-class Spreading_Ivy(Spell):
+class Grow(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "<b>Spreading Ivy</b><br /><span style='color:BlueViolet;'>Sorcery</span><br />Make 2 soft moves."
+		self.text = "<b>Grow</b><br /><span style='color:BlueViolet;'>Sorcery</span><br />Make 2 soft moves."
 
 	def resolve(self, player):
 		for i in range(2):
 			player.softmove()
 
 
-class Creeping_Vines(Spell):
+class Flourish(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "<b>Creeping Vines</b><br /><span style='color:BlueViolet;'>Ritual</span><br />Make 4 soft moves."
+		self.text = "<b>Flourish</b><br /><span style='color:BlueViolet;'>Ritual</span><br />Make 4 soft moves."
 
 	def resolve(self, player):
 		for i in range(4):
 			player.softmove()
 
 
-class Spark(Spell):
+class Slash(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.ischarm = True
 
-		self.text = "<b>Spark</b><br /><span style='color:BlueViolet;'>Charm</span><br />Make 1 hard move."
+		self.text = "<b>Slash</b><br /><span style='color:BlueViolet;'>Charm</span><br />Make 1 hard move."
 
 
 	def resolve(self, player):
 		player.hardmove()
 
 
-class Searing_Wind(Spell):
+class Fireblast(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "<b>Searing Wind</b><br /><span style='color:BlueViolet;'>Sorcery</span><br />Destroy all enemy stones<br />which are touching you."
+		self.text = "<b>Fireblast</b><br /><span style='color:BlueViolet;'>Sorcery</span><br />Destroy all enemy stones<br />which are touching you."
 
 	def resolve(self, player):
 		for name in player.board.nodes:
@@ -194,11 +194,11 @@ class Searing_Wind(Spell):
 							player.board.last_player = None
 
 
-class Flame_Front(Spell):
+class Carnage(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "<b>Flame Front</b><br /><span style='color:BlueViolet;'>Ritual</span><br />Make 4 hard moves."
+		self.text = "<b>Carnage</b><br /><span style='color:BlueViolet;'>Ritual</span><br />Make 4 hard moves."
 
 	def resolve(self, player):
 		for i in range(4):
@@ -206,12 +206,12 @@ class Flame_Front(Spell):
 
 
 
-class Frost(Spell):
+class Surge(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.ischarm = True
 
-		self.text = "<b>Frost</b><br /><span style='color:BlueViolet;'>Charm</span><br />Make 1 move if you did<br />not dash this turn."
+		self.text = "<b>Surge</b><br /><span style='color:BlueViolet;'>Charm</span><br />If you dashed this turn,<br />make 1 move."
 
 
 	def resolve(self, player):
@@ -277,11 +277,11 @@ class Hail_Storm(Spell):
 		player.ws.send(json.dumps(egress))
 
 
-class Ice_Mirror(Spell):
+class Bewitch(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "<b>Ice Mirror</b><br /><span style='color:BlueViolet;'>Ritual</span><br />Choose 2 enemy stones touching each other.<br />Convert them to your color."
+		self.text = "<b>Bewitch</b><br /><span style='color:BlueViolet;'>Ritual</span><br />Choose 2 enemy stones touching each other.<br />Convert them to your color."
 
 	def resolve(self, player):
 
@@ -361,12 +361,12 @@ class Ice_Mirror(Spell):
 				continue
 
 
-class Blink(Spell):
+class Comet(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.ischarm = True
 
-		self.text = "<b>Blink</b><br /><span style='color:BlueViolet;'>Charm</span><br />Make 1 blink move,<br />then sacrifice a stone."
+		self.text = "<b>Comet</b><br /><span style='color:BlueViolet;'>Charm</span><br />Make 1 blink move,<br />then sacrifice a stone."
 
 
 	def resolve(self, player):
@@ -584,31 +584,31 @@ class Starfall(Spell):
 				player.board.update()
 
 
-class Summer(Spell):
+class Seal_of_Summer(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.ischarm = True
 		self.static = True
 
-		self.text = "<b>Summer</b><br /><span style='color:BlueViolet;'>Static Charm</span><br />You may cast 2 spells<br />on your turn."
+		self.text = "<b>Seal of Summer</b><br /><span style='color:BlueViolet;'>Static Charm</span><br />You may cast 2 spells<br />on your turn."
 
 
 
-class Field_of_Flowers(Spell):
+class Seal_of_Wind(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.static = True
 
-		self.text = "<b>Field of Flowers</b><br /><span style='color:BlueViolet;'>Static Sorcery</span><br />Your first move each<br />turn is a blink move."
+		self.text = "<b>Seal of Wind</b><br /><span style='color:BlueViolet;'>Static Sorcery</span><br />Your first move each<br />turn is a blink move."
 
 
-class Heat_Shimmer(Spell):
+class Seal_of_Lightning(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
 		self.static = True
 
-		self.text = "<b>Heat Shimmer</b><br /><span style='color:BlueViolet;'>Static Ritual</span><br />Your dash only requires<br />1 sacrifice."
+		self.text = "<b>Seal of Lightning</b><br /><span style='color:BlueViolet;'>Static Ritual</span><br />Your dash only requires<br />1 sacrifice."
 
 
 

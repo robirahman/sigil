@@ -31,15 +31,15 @@ def generate_spell_list():
 	### should be written as 'self.positions[i]' for the i-th spell.
 	### Then 'name' can be a string.
 
-	core_rituals = ['Creeping_Vines', 'Flame_Front', 'Ice_Mirror', 'Starfall', 'Heat_Shimmer']
+	core_rituals = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning']
 	equinox_rituals = ['Planetary_Alignment', 'Blossom', 'Harvest']
 	apocalypse_rituals = ['Tidal_Wave', 'Tempest', 'Consuming_Darkness']
 
-	core_sorceries = ['Spreading_Ivy', 'Searing_Wind', 'Hail_Storm', 'Meteor', 'Field_of_Flowers']
+	core_sorceries = ['Grow', 'Fireblast', 'Hail_Storm', 'Meteor', 'Seal_of_Wind']
 	equinox_sorceries = ['Full_Moon', 'Scattered_Seeds', 'Fallen_Leaves']
 	apocalypse_sorceries = ['Rushing_Waters', 'Thunder', 'Blinding_Snow']
 
-	core_charms = ['Sprout', 'Spark', 'Frost', 'Blink', 'Summer']
+	core_charms = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer']
 	equinox_charms = ['Eclipse', 'Spring', 'Autumn']
 	apocalypse_charms = ['Gush', 'Lightning', 'Winter']
 

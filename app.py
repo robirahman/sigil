@@ -325,7 +325,7 @@ def playgame(ws):
 
 
 			### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-			### and values "Searing_Wind", "Creeping_Vines", etc.
+			### and values "Fireblast", "Flourish", etc.
 			egress = { "type": "spellsetup" }
 
 			egress["ritual1"] = board.spells[0].name
@@ -492,7 +492,7 @@ def playprivategame(ws, privategamename):
 
 
 			### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-			### and values "Searing_Wind", "Creeping_Vines", etc.
+			### and values "Fireblast", "Flourish", etc.
 			egress = { "type": "spellsetup" }
 
 			egress["ritual1"] = board.spells[0].name
@@ -652,7 +652,7 @@ def playsingleplayergame(ws):
 
 
 		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-		### and values "Searing_Wind", "Creeping_Vines", etc.
+		### and values "Fireblast", "Flourish", etc.
 		egress = { "type": "spellsetup" }
 
 		egress["ritual1"] = board.spells[0].name

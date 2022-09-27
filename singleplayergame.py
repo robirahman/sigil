@@ -455,7 +455,7 @@ class AIPlayer():
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
-			if ('Summer' in [s.name for s in self.charged_spells]) and cansummer:
+			if ('Seal_of_Summer' in [s.name for s in self.charged_spells]) and cansummer:
 				summer_active = True
 
 			if (canspell) or (not canspell and summer_active):
@@ -464,8 +464,8 @@ class AIPlayer():
 					if not spell.static:
 						if spell.ischarm:
 							if 'Winter' not in [s.name for s in self.opp.charged_spells]:
-								if spell.name == 'Frost':
-									if candash:
+								if spell.name == 'Surge':
+									if not candash:
 										actions.append(spell.name)
 										spelllist.append(spell.name)
 								else:
@@ -497,7 +497,7 @@ class AIPlayer():
 			return None
 
 		elif action == 'dash':
-			if ('Heat_Shimmer' in [s.name for s in self.charged_spells]):
+			if ('Seal_of_Lightning' in [s.name for s in self.charged_spells]):
 				self.dash(True)
 				self.taketurn(canmove, False, canspell, cansummer)
 				return None
@@ -509,10 +509,10 @@ class AIPlayer():
 		elif action in spelllist:
 			self.board.spelldict[action].cast(self)
 			if canspell:
-				self.taketurn(False, False, False, cansummer)
+				self.taketurn(False, candash, False, cansummer)
 				return None
 			else:
-				self.taketurn(False, False, False, False)
+				self.taketurn(False, candash, False, False)
 				return None
 
 

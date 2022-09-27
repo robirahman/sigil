@@ -559,7 +559,7 @@ class Player():
 
 		if canmove:
 			actions.append('move')
-			if ('Field_of_Flowers' in [s.name for s in self.charged_spells]):
+			if ('Seal_of_Wind' in [s.name for s in self.charged_spells]):
 				moveoptions = self.allblinkablenodes()
 			else:
 				moveoptions = self.allmoveablenodes()
@@ -569,7 +569,7 @@ class Player():
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
-			if ('Summer' in [s.name for s in self.charged_spells]) and cansummer:
+			if ('Seal_of_Summer' in [s.name for s in self.charged_spells]) and cansummer:
 				summer_active = True
 
 			if (canspell) or (not canspell and summer_active):
@@ -578,8 +578,8 @@ class Player():
 					if not spell.static:
 						if spell.ischarm:
 							if 'Winter' not in [s.name for s in self.opp.charged_spells]:
-								if spell.name == 'Frost':
-									if candash:
+								if spell.name == 'Surge':
+									if not candash:
 										actions.append(spell.name)
 										spelllist.append(spell.name)
 								else:
@@ -628,7 +628,7 @@ class Player():
 			return None
 
 		elif action == 'dash':
-			if ('Heat_Shimmer' in [s.name for s in self.charged_spells]):
+			if ('Seal_of_Lightning' in [s.name for s in self.charged_spells]):
 				self.dash(True)
 				self.taketurn(canmove, False, canspell, cansummer)
 				return None
@@ -640,10 +640,10 @@ class Player():
 		elif action in spelllist:
 			self.board.spelldict[action].cast(self)
 			if canspell:
-				self.taketurn(False, False, False, cansummer)
+				self.taketurn(False, candash, False, cansummer)
 				return None
 			else:
-				self.taketurn(False, False, False, False)
+				self.taketurn(False, candash, False, False)
 				return None
 
 
@@ -733,7 +733,7 @@ class Player():
 
 		### standardmove is True iff this is the player's standard move for the turn.
 		if not preloaded:
-			if ('Field_of_Flowers' in [s.name for s in self.charged_spells]):
+			if ('Seal_of_Wind' in [s.name for s in self.charged_spells]):
 				moveoptions = self.allblinkablenodes()
 			else:
 				moveoptions = self.allmoveablenodes()
@@ -759,7 +759,7 @@ class Player():
 			return None
 
 		elif not adjacent:
-			if not (standardmove and ("Field_of_Flowers" in [spell.name for spell in self.charged_spells])):
+			if not (standardmove and ("Seal_of_Wind" in [spell.name for spell in self.charged_spells])):
 				self.jmessage("Invalid move-- that's not adjacent to you!")
 				self.move(standardmove=standardmove)
 				return None

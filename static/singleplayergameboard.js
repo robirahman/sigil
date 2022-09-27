@@ -10,10 +10,10 @@ function main() {
 	actionlist = null;
 
 	// SpellDict will be a dictionary with keys "ritual2", "charm3", etc.,
-	// and values "Searing_Wind", "Creeping_Vines", etc.
+	// and values "Fireblast", "Flourish", etc.
 	SpellDict = null;
 
-	// ReverseSpellDict will be a dictionary with keys "Searing_Wind", "Creeping_Vines", etc.,
+	// ReverseSpellDict will be a dictionary with keys "Fireblast", "Flourish", etc.,
 	// and values "ritual2", "charm3", etc.
 	ReverseSpellDict = null;
 
@@ -26,7 +26,7 @@ function main() {
 		sorcery3: 'c2',
 	};
 
-	// lockdict will be a dictionary with keys "Searing_Wind", "Creeping_Vines", etc.,
+	// lockdict will be a dictionary with keys "Fireblast", "Flourish", etc.,
 	// and values "a1", "c2", etc.  It is initialized at the same time as SpellDict,
 	// once the spell setup JSON is received.
 	lockdict = {};
@@ -181,7 +181,7 @@ function spellClick(spellposition) {
 	//This is ONLY triggered for spells, not charms
 
 	// Takes in a spell position, e.g., "ritual2", "sorcery3"
-	// and sends a spellname, e.g., 'Searing_Wind', 'Creeping_Vines'
+	// and sends a spellname, e.g., 'Fireblast', 'Flourish'
 	var spellname = SpellDict[spellposition];
 	if (awaiting == 'action' && actionlist.includes(spellname)) {
 		var payload = { message: spellname };
@@ -255,7 +255,7 @@ function addSpellLabels() {
 
 function setupSpells(spellnamedict) {
 	// spellnamedict is a JSON dictionary with keys "ritual2", "charm3", etc.,
-	// and values "Searing_Wind", "Creeping_Vines", etc.
+	// and values "Fireblast", "Flourish", etc.
 	document.getElementById('ritual1').src = '/static/images/' + spellnamedict.ritual1 + '.png';
 	document.getElementById('ritual2').src = '/static/images/' + spellnamedict.ritual2 + '.png';
 	document.getElementById('ritual3').src = '/static/images/' + spellnamedict.ritual3 + '.png';
@@ -503,7 +503,7 @@ function updateBoard(boardstate) {
 
 	var redlockedspellname = boardstate['redlock'];
 	var bluelockedspellname = boardstate['bluelock'];
-	// These are the locked spell names, e.g., "Searing_Wind", "Creeping_Vines"
+	// These are the locked spell names, e.g., "Fireblast", "Flourish"
 
 	for (lockIdentifierChars of ['a1', 'b1', 'c1', 'a2', 'b2', 'c2']) {
 		if (

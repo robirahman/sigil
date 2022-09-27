@@ -50,7 +50,7 @@ document.addEventListener('alpine:init', () => {
 		handleCharmClick(charm) {
 			// This is ONLY triggered for charms, not spells
 			// Takes a spell position, e.g., "charm1", "charm3"
-			// and sends a spellName, e.g., 'Spark', 'Summer'
+			// and sends a spellName, e.g., 'Slash', 'Seal_of_Summer'
 			const charmName = this.spellDict[charm];
 			if (this.awaiting === 'action' && this.actionList.includes(charmName)) {
 				this.sendEvent(charmName);
@@ -61,7 +61,7 @@ document.addEventListener('alpine:init', () => {
 		handleSpellClick(spell) {
 			// This is ONLY triggered for spells, not charms
 			// Takes a spell position, e.g., "ritual2", "sorcery3"
-			// and sends a spellName, e.g., 'Searing_Wind', 'Creeping_Vines'
+			// and sends a spellName, e.g., 'Fireblast', 'Flourish'
 			const spellName = this.spellDict[spell];
 			if (
 				this.awaiting == 'spell' ||
