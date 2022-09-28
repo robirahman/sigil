@@ -76,6 +76,7 @@ document.addEventListener('alpine:init', () => {
 			this.sendEvent('reset');
 			this.actionList = [];
 			this.awaiting = null;
+			this.lastPlay = '';
 			this.nodesToRefill = {};
 			this.playerToRefill = '';
 			this.showReset = false;
@@ -149,6 +150,11 @@ document.addEventListener('alpine:init', () => {
 					return;
 				}
 
+				if (type === 'new_stone_animation') {
+					handleNewStonePlacement(payload);
+					return;
+				}
+
 				if (type === 'chooserefills') {
 					handleChooseRefillsEvent(payload);
 					return;
@@ -210,6 +216,7 @@ document.addEventListener('alpine:init', () => {
 				const {
 					bluecountdown,
 					bluelock,
+					// eslint-disable-next-line no-unused-vars
 					last_play,
 					// eslint-disable-next-line no-unused-vars
 					last_player,
@@ -220,7 +227,6 @@ document.addEventListener('alpine:init', () => {
 				} = payload;
 				_this.blueCountdown = bluecountdown;
 				_this.blueLock = bluelock;
-				_this.lastPlay = last_play;
 				_this.nodes = nodes;
 				_this.redCountdown = redcountdown;
 				_this.redLock = redlock;
@@ -234,6 +240,10 @@ document.addEventListener('alpine:init', () => {
 				_this.showReset = false;
 				_this.messageHistory.push(payload.message);
 				_this.whoseTurn = payload.message;
+			}
+
+			function handleNewStonePlacement(payload) {
+				_this.lastPlay = payload.node;
 			}
 
 			function handleChooseRefillsEvent(payload) {

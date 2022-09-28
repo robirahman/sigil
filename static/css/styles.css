@@ -593,16 +593,43 @@ textarea {
 	background-image: url("/static/images/v2/stones/red.png");
 }
 
+.stone-node--last-play {
+	outline: 5px solid #f3ec4e;
+}
+
+@keyframes stone-zoom-out {
+	0% { transform: scale(4); }
+	30% { transform: scale(2); }
+	100% { transform: scale(1); }
+}
+
+.stone-node--last-play::after {
+	animation: stone-zoom-out 0.475s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
+	background-size: contain;
+	content: "";
+	display: block;
+	height: 100%;
+	left: 0;
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	width: 100%;
+}
+
+.stone-node--blue.stone-node--last-play::after {
+	background-image: url("/static/images/v2/stones/blue.png");
+}
+
+.stone-node--red.stone-node--last-play::after {
+	background-image: url("/static/images/v2/stones/red.png");
+}
+
 .stone-node--valid-move-blue {
 	outline: 5px solid rgb(50 80 186 / 90%);
 }
 
 .stone-node--valid-move-red {
 	outline: 5px solid rgb(215 88 69 / 90%);
-}
-
-.stone-node--halo {
-	outline: 5px solid #f3ec4e;
 }
 
 .stone-node--refill {
