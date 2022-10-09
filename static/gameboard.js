@@ -39,16 +39,16 @@ function main(privategamename) {
 
 	// This needs to be "ws://" for HTTP, and "wss://" for HTTPS. Might need to change it later.
 	if (privategamename == '') {
-		events = new WebSocket('ws://' + location.host + '/api/game');
+		events = new WebSocket('wss://' + location.host + '/api/game');
 		events.onmessage = incomingEvent;
 
-		chat = new WebSocket('ws://' + location.host + '/api/chat');
+		chat = new WebSocket('wss://' + location.host + '/api/chat');
 		chat.onmessage = chatEvent;
 	} else {
-		events = new WebSocket('ws://' + location.host + '/api/privategame/' + privategamename);
+		events = new WebSocket('wss://' + location.host + '/api/privategame/' + privategamename);
 		events.onmessage = incomingEvent;
 
-		chat = new WebSocket('ws://' + location.host + '/api/privatechat/' + privategamename);
+		chat = new WebSocket('wss://' + location.host + '/api/privatechat/' + privategamename);
 		chat.onmessage = chatEvent;
 	}
 

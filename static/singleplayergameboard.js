@@ -36,7 +36,7 @@ function main() {
 	}
 
 	// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
-	events = new WebSocket('ws://' + location.host + '/api/singleplayergame');
+	events = new WebSocket('wss://' + location.host + '/api/singleplayergame');
 	events.onmessage = incomingEvent;
 
 	allnodenames = [
