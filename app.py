@@ -438,8 +438,8 @@ def playgame(ws):
 					else:
 						blue.lock = None
 
-					red.countdown = snapshot["redcountdown"]
-					blue.countdown = snapshot["bluecountdown"]
+					red.spellcounter = snapshot["redspellcounter"]
+					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
 
@@ -602,8 +602,8 @@ def playprivategame(ws, privategamename):
 					else:
 						blue.lock = None
 
-					red.countdown = snapshot["redcountdown"]
-					blue.countdown = snapshot["bluecountdown"]
+					red.spellcounter = snapshot["redspellcounter"]
+					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
 
@@ -757,8 +757,8 @@ def playsingleplayergame(ws):
 				else:
 					blue.lock = None
 
-				red.countdown = snapshot["redcountdown"]
-				blue.countdown = snapshot["bluecountdown"]
+				red.spellcounter = snapshot["redspellcounter"]
+				blue.spellcounter = snapshot["bluespellcounter"]
 				board.last_play = snapshot["last_play"]
 				board.last_player = snapshot["last_player"]
 

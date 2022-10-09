@@ -94,7 +94,7 @@ class Spell():
 			else:
 				player.lock = self
 				player.springlock = None
-			player.countdown -= 1
+			player.spellcounter += 1
 
 	def resolve(self, player):
 		### The actual effect!!!

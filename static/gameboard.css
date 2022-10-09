@@ -704,7 +704,7 @@ body { background-color: #1b0a26; }
 	font-size: 18px;
 }
 
-#redcountdown {
+#redspellcounter {
 	color: white;
 	font-family: Papyrus, serif;
 	width: 20%;
@@ -713,7 +713,7 @@ body { background-color: #1b0a26; }
 	font-size: 18px;
 }
 
-#bluecountdown {
+#bluespellcounter {
 	color: white;
 	font-family: Papyrus, serif;
 	width: 20%;

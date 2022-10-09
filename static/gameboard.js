@@ -588,11 +588,11 @@ function updateBoard(boardstate) {
 		document.getElementById('scorekeeper').className = 'score' + score;
 	}
 
-	var redcountdown = boardstate['redcountdown'];
-	document.getElementById('redcountdown').innerHTML = redcountdown;
+	var redspellcounter = boardstate['redspellcounter'];
+	document.getElementById('redspellcounter').innerHTML = redspellcounter;
 
-	var bluecountdown = boardstate['bluecountdown'];
-	document.getElementById('bluecountdown').innerHTML = bluecountdown;
+	var bluespellcounter = boardstate['bluespellcounter'];
+	document.getElementById('bluespellcounter').innerHTML = bluespellcounter;
 }
 
 function activateLock(lockIdentifierChars, color) {

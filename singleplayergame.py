@@ -96,8 +96,8 @@ class SPBoard():
 		snapshot["gameover"] = self.gameover
 		snapshot["winner"] = self.winner
 		snapshot["score"] = self.score
-		snapshot["redcountdown"] = self.redplayer.countdown
-		snapshot["bluecountdown"] = self.blueplayer.countdown
+		snapshot["redspellcounter"] = self.redplayer.spellcounter
+		snapshot["bluespellcounter"] = self.blueplayer.spellcounter
 		for nodename in self.nodes:
 			snapshot[nodename] = self.nodes[nodename].stone
 		if self.redplayer.lock:
@@ -196,24 +196,24 @@ class SPBoard():
 			jboard["bluelock"] = self.blueplayer.lock.name
 
 
-		if self.redplayer.countdown > 1:
-			redcountdownstring = "{} Red spells".format(self.redplayer.countdown)
-		elif self.redplayer.countdown == 1:
-			redcountdownstring = "1 Red spell"
+		if self.redplayer.spellcounter > 1:
+			redspellcounterstring = "{} Red spells cast".format(self.redplayer.spellcounter)
+		elif self.redplayer.spellcounter == 1:
+			redspellcounterstring = "1 Red spell cast"
 		else:
-			redcountdownstring = "Zero Red spells"
+			redspellcounterstring = "Zero Red spells cast"
 
-		jboard["redcountdown"] = redcountdownstring
+		jboard["redspellcounter"] = redspellcounterstring
 
-		if self.blueplayer.countdown > 1:
-			bluecountdownstring = "{} Blue spells".format(self.blueplayer.countdown)
-		elif self.blueplayer.countdown == 1:
-			bluecountdownstring = "1 Blue spell"
+		if self.blueplayer.spellcounter > 1:
+			bluespellcounterstring = "{} Blue spells cast".format(self.blueplayer.spellcounter)
+		elif self.blueplayer.spellcounter == 1:
+			bluespellcounterstring = "1 Blue spell cast"
 		else:
-			bluecountdownstring = "Zero Blue spells"
+			bluespellcounterstring = "Zero Blue spells cast"
 
 
-		jboard["bluecountdown"] = bluecountdownstring
+		jboard["bluespellcounter"] = bluespellcounterstring
 
 		if update_score:
 			jboard["score"] = self.score
@@ -426,10 +426,10 @@ class AIPlayer():
 		### player.springlock is the spell object which is springlocked.
 		self.springlock = None
 
-		### The spell countdown for this player. The EOT trigger checks in
-		### player.taketurn will check if player.countdown == 0,
+		### The spell counter for this player. The EOT trigger checks in
+		### player.taketurn will check if player.spellcounter >= 6,
 		### and if so, end the game appropriately.
-		self.countdown = 6
+		self.spellcounter = 0
 
 		### player.opp will be the opponent player object.
 		self.opp = None
@@ -537,7 +537,7 @@ class AIPlayer():
 
 		### Check whether someone is up by 3 or more.
 
-		### Check whether the countdown == 0.
+		### Check whether the spellcounter >= 6.
 
 
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
@@ -577,7 +577,7 @@ class AIPlayer():
 			self.board.winner = 'blue'
 
 		else:
-			if self.countdown == 0:
+			if self.spellcounter >= 6:
 				self.board.gameover = True
 				if redtotal > bluetotal:
 					self.board.winner = 'red'
