@@ -250,14 +250,14 @@ def countdown_timer(red, blue):
 				egress =  {"type": "blue_timer", "seconds": blue.timer}
 				red.ws.send(json.dumps(egress))
 				blue.ws.send(json.dumps(egress))
-	except ConnectionClosed:
+	except:
 		### determine which player disconnected
 		try:
 			red.jmessage("Opponent disconnected. You Win!")
-		except ConnectionClosed:
+		except:
 			try:
 				blue.jmessage("Opponent disconnected. You Win!")
-			except ConnectionClosed:
+			except:
 				### both are disconnected
 				pass
 
@@ -283,7 +283,7 @@ def cleanup_queue():
 			waiting_player_ws = None
 			waiting_chatter_ws = None
 
-	except ConnectionClosed:
+	except:
 		waiting_player_ws = None
 		waiting_chatter_ws = None
 
@@ -447,14 +447,14 @@ def playgame(ws):
 
 					continue
 
-		except ConnectionClosed:
+		except:
 			### determine which player disconnected
 			try:
 				red.jmessage("Opponent disconnected. You Win!")
-			except ConnectionClosed:
+			except:
 				try:
 					blue.jmessage("Opponent disconnected. You Win!")
-				except ConnectionClosed:
+				except:
 					### both are disconnected
 					pass
 
@@ -610,14 +610,14 @@ def playprivategame(ws, privategamename):
 					board.update(True)
 
 					continue
-		except ConnectionClosed:
+		except:
 			### determine which player disconnected
 			try:
 				red.jmessage("Opponent disconnected. You Win!")
-			except ConnectionClosed:
+			except:
 				try:
 					blue.jmessage("Opponent disconnected. You Win!")
-				except ConnectionClosed:
+				except:
 					### both are disconnected
 					pass
 
@@ -765,7 +765,7 @@ def playsingleplayergame(ws):
 				board.update(True)
 
 				continue
-	except ConnectionClosed:
+	except:
 		pass
 
 
@@ -778,7 +778,7 @@ def opp_chat_listen(ws, opp_ws):
 			opp_ws.send(json.dumps(egress))
 			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
 			ws.send(json.dumps(egress))
-	except ConnectionClosed:
+	except:
 		pass
 
 
@@ -811,7 +811,7 @@ def chat(ws):
 				opp_ws.send(json.dumps(egress))
 
 			t.join()
-	except ConnectionClosed:
+	except:
 		pass
 
 
@@ -842,7 +842,7 @@ def privatechat(ws, privatechatname):
 				opp_ws.send(json.dumps(egress))
 
 			t.join()
-	except ConnectionClosed:
+	except:
 		pass
 
 
