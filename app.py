@@ -12,6 +12,7 @@ from flask_sock import Sock
 from random import randint, randrange
 from threading import Thread
 from simple_websocket import ConnectionClosed
+from datetime import datetime
 
 from game import Board, Player, resetException
 from singleplayergame import SPBoard, AIPlayer
@@ -183,8 +184,9 @@ def privatematch():
 
 
 
-# createdgames is a dict with keys = gamename, values = [player_websocket, is_started]
+# createdgames is a dict with keys = gamename, values = [player_websocket]
 createdgames = {}
+privategamecount = 0
 
 
 
@@ -198,7 +200,7 @@ def creategame(ws):
 		egress =  {"type": "nameconflict"}
 		ws.send(json.dumps(egress))
 	else:
-		createdgames[gamename] = [ws, False]
+		createdgames[gamename] = [ws]
 		egress =  {"type": "success"}
 		ws.send(json.dumps(egress))
 		while True:
@@ -208,13 +210,15 @@ def creategame(ws):
 def joingame(ws):
 	# ws will close as this function exits
 	global createdgames
+	global privategamecount
 	ingress = ws.receive()
 	gamename = json.loads(ingress)['gamename']
-	if (gamename in createdgames) and (createdgames[gamename][1] == False):
+	if (gamename in createdgames):
 		egress =  {"type": "startprivategame", "gamename": gamename + str(randrange(100000000))}
 		createdgames[gamename][0].send(json.dumps(egress))
 		ws.send(json.dumps(egress))
-		createdgames[gamename][1] = True
+		createdgames.pop(gamename, None)
+		privategamecount += 1
 	else:
 		egress =  {"type": "notfound"}
 		ws.send(json.dumps(egress))
@@ -286,11 +290,12 @@ def cleanup_queue():
 		waiting_chatter_ws = None
 
 
-
+laddergamecount = 0
 
 @sock.route('/api/game')
 def playgame(ws):
 	global waiting_player_ws
+	global laddergamecount
 
 	cleanup_queue()
 	
@@ -301,6 +306,7 @@ def playgame(ws):
 		while True:
 			time.sleep(1)
 	else:
+		laddergamecount += 1
 		opp_ws = waiting_player_ws
 		waiting_player_ws = None
 		board = Board()
@@ -842,6 +848,27 @@ def privatechat(ws, privatechatname):
 			t.join()
 	except:
 		pass
+
+
+
+
+def metrics_recorder():
+	while True:
+		time.sleep(3600)
+		now = datetime.now()
+		# Format is dd/mm/YY H:M:S
+		timestamp_string = now.strftime("%d/%m/%Y %H:%M:%S")
+		metrics_file = open("metrics.txt", "a")
+		metrics_file.write(timestamp_string + "   Private Games Played (since reboot): " + str(privategamecount) + "   Ladder Games Played (since reboot): " + str(laddergamecount) + "\n")
+		metrics_file.close()
+		
+
+metrics_file = open("metrics.txt", "a")
+metrics_file.write("REBOOT" + "\n")
+metrics_file.close()
+
+metrics_thread = Thread(target=metrics_recorder)
+metrics_thread.start()
 
 
 if __name__ == "__main__":
