@@ -183,7 +183,7 @@ def privatematch():
 
 
 
-# createdgames is a dict with keys = gamename, values = [gamepwd, player_websocket, is_started]
+# createdgames is a dict with keys = gamename, values = [player_websocket, is_started]
 createdgames = {}
 
 
@@ -193,13 +193,12 @@ def creategame(ws):
 	global createdgames
 	ingress = ws.receive()
 	gamename = json.loads(ingress)['gamename']
-	gamepwd = json.loads(ingress)['gamepwd']
 	if (gamename in createdgames) or (gamename == ""):
 		# ws will close as this function exits
 		egress =  {"type": "nameconflict"}
 		ws.send(json.dumps(egress))
 	else:
-		createdgames[gamename] = [gamepwd, ws, False]
+		createdgames[gamename] = [ws, False]
 		egress =  {"type": "success"}
 		ws.send(json.dumps(egress))
 		while True:
@@ -211,12 +210,11 @@ def joingame(ws):
 	global createdgames
 	ingress = ws.receive()
 	gamename = json.loads(ingress)['gamename']
-	gamepwd = json.loads(ingress)['gamepwd']
-	if (gamename in createdgames) and (createdgames[gamename][0] == gamepwd) and (createdgames[gamename][2] == False):
+	if (gamename in createdgames) and (createdgames[gamename][1] == False):
 		egress =  {"type": "startprivategame", "gamename": gamename + str(randrange(100000000))}
-		createdgames[gamename][1].send(json.dumps(egress))
+		createdgames[gamename][0].send(json.dumps(egress))
 		ws.send(json.dumps(egress))
-		createdgames[gamename][2] = True
+		createdgames[gamename][1] = True
 	else:
 		egress =  {"type": "notfound"}
 		ws.send(json.dumps(egress))

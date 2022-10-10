@@ -33,13 +33,12 @@ function main() {
 		event.preventDefault();
 
 		if (!waitingForOpponent) {
-			// Might need to change this to "wss://" when we set up HTTPS
-			createGameWs = new WebSocket('ws://' + location.host + '/api/creategame');
+			// Changed this to "wss://" when we set up HTTPS
+			createGameWs = new WebSocket('wss://' + location.host + '/api/creategame');
 
 			createGameWs.addEventListener('open', () => {
 				var payload = {
 					gamename: createGameForm.elements['gamename'].value,
-					gamepwd: createGameForm.elements['gamepwd'].value,
 				};
 				createGameWs.send(JSON.stringify(payload));
 			});
@@ -69,13 +68,12 @@ function main() {
 		event.preventDefault();
 
 		if (!waitingForOpponent) {
-			// Might need to change this to "wss://" when we set up HTTPS
-			joinGameWs = new WebSocket('ws://' + location.host + '/api/joingame');
+			// Changed this to "wss://" when we set up HTTPS
+			joinGameWs = new WebSocket('wss://' + location.host + '/api/joingame');
 
 			joinGameWs.addEventListener('open', () => {
 				var payload = {
 					gamename: joinGameForm.elements['gamename'].value,
-					gamepwd: joinGameForm.elements['gamepwd'].value,
 				};
 				joinGameWs.send(JSON.stringify(payload));
 			});
@@ -84,7 +82,7 @@ function main() {
 				var payload = JSON.parse(event.data);
 				if (payload.type == 'notfound') {
 					document.getElementById('privatematchdescription').innerHTML =
-						'That game does not exist, or the password is incorrect.';
+						'That game does not exist.';
 				} else if (payload.type == 'startprivategame') {
 					// Update this if we switch to HTTPS
 					window.location.href = 'privategameboard/' + payload.gamename;
