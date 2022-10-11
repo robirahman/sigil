@@ -13,6 +13,7 @@ from random import randint, randrange
 from threading import Thread
 from simple_websocket import ConnectionClosed
 from datetime import datetime
+from pytz import timezone
 
 from game import Board, Player, resetException
 from singleplayergame import SPBoard, AIPlayer
@@ -855,7 +856,8 @@ def privatechat(ws, privatechatname):
 def metrics_recorder():
 	while True:
 		time.sleep(3600)
-		now = datetime.now()
+		eastern = timezone('US/Eastern')
+		now = datetime.now(eastern)
 		# Format is dd/mm/YY H:M:S
 		timestamp_string = now.strftime("%d/%m/%Y %H:%M:%S")
 		metrics_file = open("metrics.txt", "a")
