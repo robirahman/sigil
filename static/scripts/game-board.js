@@ -3,8 +3,9 @@ document.addEventListener('alpine:init', () => {
 		actionList: [],
 		// awaiting is the next action you're expected to take
 		awaiting: '',
-		blueCountdown: '',
+		blueSpellCounter: 0,
 		blueLock: '',
+		currentPlayer: '',
 		lastPlay: '',
 		message: '',
 		messageHistory: [],
@@ -18,7 +19,7 @@ document.addEventListener('alpine:init', () => {
 		},
 		nodesToRefill: {},
 		playerToRefill: '',
-		redCountdown: '',
+		redSpellCounter: 0,
 		redLock: '',
 		reverseSpellDict: {},
 		score: 'unset',
@@ -79,6 +80,7 @@ document.addEventListener('alpine:init', () => {
 			this.lastPlay = '';
 			this.nodesToRefill = {};
 			this.playerToRefill = '';
+			this.showDone = false;
 			this.showReset = false;
 			this.validMoves = {};
 		},
@@ -86,6 +88,7 @@ document.addEventListener('alpine:init', () => {
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
 			this.showReset = true;
+			this.currentPlayer = this.whoseTurn;
 
 			if (this.awaiting === 'node') {
 				this.sendEvent(node);
@@ -111,8 +114,8 @@ document.addEventListener('alpine:init', () => {
 
 			const apiPath =
 				playerCount === 1 ? 'singleplayergame' : gameName ? `privategame/${gameName}` : 'game';
-			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
-			_this.events = new WebSocket(`ws://${location.host}/api/${apiPath}`);
+			const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
+			_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
 			_this.events.onmessage = handleIncomingEvent;
 
 			_this.sendEvent = function sendEvent(message) {
@@ -124,6 +127,10 @@ document.addEventListener('alpine:init', () => {
 				console.group(type);
 				console.log(`payload`, payload);
 				console.groupEnd(type);
+
+				_this.$nextTick(() => {
+					_this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight;
+				});
 
 				if (type === 'message') {
 					handleMessageEvent(payload);
@@ -188,6 +195,13 @@ document.addEventListener('alpine:init', () => {
 				if (_this.message.includes('Invalid move')) {
 					_this.showReset = false;
 				}
+
+				// TODO: _this.message === 'Opponent disconnected. You Win!'
+				// TODO: _this.message === 'Game over-- the winner is BLUE !!!'
+				// TODO: _this.message === 'Game over-- the winner is RED !!!'
+				// TODO: _this.message === 'BLUE VICTORY'
+				// TODO: _this.message === 'RED VICTORY'
+
 				if (_this.awaiting !== 'action') {
 					_this.messageHistory.push(payload.message);
 				}
@@ -206,6 +220,15 @@ document.addEventListener('alpine:init', () => {
 				Object.entries(_this.spellDict).forEach(([key, value]) => {
 					_this.spells.images[key] = `/static/images/v2/spells/${value}.png`;
 				});
+
+				// HACK: It won't scroll unless it's in an arbitrary timeout
+				setTimeout(() => {
+					_this.$refs.gameBoardContainer.scrollIntoView({
+						behavior: 'smooth',
+						block: 'center',
+						inline: 'center',
+					});
+				}, 100);
 			}
 
 			function handleSpellTextSetupEvent(payload) {
@@ -214,22 +237,22 @@ document.addEventListener('alpine:init', () => {
 
 			function handleBoardStateEvent(payload) {
 				const {
-					bluecountdown,
 					bluelock,
+					bluespellcounter,
 					// eslint-disable-next-line no-unused-vars
 					last_play,
 					// eslint-disable-next-line no-unused-vars
 					last_player,
-					redcountdown,
 					redlock,
+					redspellcounter,
 					score,
 					...nodes
 				} = payload;
-				_this.blueCountdown = bluecountdown;
 				_this.blueLock = bluelock;
+				_this.blueSpellCounter = bluespellcounter;
 				_this.nodes = nodes;
-				_this.redCountdown = redcountdown;
 				_this.redLock = redlock;
+				_this.redSpellCounter = redspellcounter;
 
 				if (score) {
 					_this.score = score;
@@ -239,11 +262,20 @@ document.addEventListener('alpine:init', () => {
 			function handleWhoseTurnEvent(payload) {
 				_this.showReset = false;
 				_this.messageHistory.push(payload.message);
-				_this.whoseTurn = payload.message;
+				_this.whoseTurn = payload.color;
 			}
 
 			function handleNewStonePlacement(payload) {
 				_this.lastPlay = payload.node;
+				// HACK: Alpine doesn't support dynamic refs and
+				// it won't scroll unless it's in an arbitrary timeout
+				if (payload.color !== _this.currentPlayer) {
+					setTimeout(() => {
+						document
+							.getElementById(`stone-node--${payload.node}`)
+							.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+					}, 50);
+				}
 			}
 
 			function handleChooseRefillsEvent(payload) {

@@ -94,7 +94,7 @@ class Board():
 
 		### ADD ALL BOARD ATTRIBUTES TO THE SNAPSHOT
 
-		### Sets board.snapshot to be a dictionary 
+		### Sets board.snapshot to be a dictionary
 		### which describes the current boardstate
 
 		snapshot = {}
@@ -110,7 +110,7 @@ class Board():
 			snapshot["redlock"] = self.redplayer.lock.name
 		else:
 			snapshot["redlock"] = None
-		
+
 		if self.blueplayer.lock:
 			snapshot["bluelock"] = self.blueplayer.lock.name
 		else:
@@ -236,32 +236,16 @@ class Board():
 		if self.blueplayer.lock:
 			jboard["bluelock"] = self.blueplayer.lock.name
 
+		jboard["redspellcounter"] = self.redplayer.spellcounter
 
-		if self.redplayer.spellcounter > 1:
-			redspellcounterstring = "{} Red spells cast".format(self.redplayer.spellcounter)
-		elif self.redplayer.spellcounter == 1:
-			redspellcounterstring = "1 Red spell cast"
-		else:
-			redspellcounterstring = "Zero Red spells cast"
-
-		jboard["redspellcounter"] = redspellcounterstring
-
-		if self.blueplayer.spellcounter > 1:
-			bluespellcounterstring = "{} Blue spells cast".format(self.blueplayer.spellcounter)
-		elif self.blueplayer.spellcounter == 1:
-			bluespellcounterstring = "1 Blue spell cast"
-		else:
-			bluespellcounterstring = "Zero Blue spells cast"
-
-
-		jboard["bluespellcounter"] = bluespellcounterstring
+		jboard["bluespellcounter"] = self.blueplayer.spellcounter
 
 		if update_score:
 			jboard["score"] = self.score
 
 		jboard["last_player"] = self.last_player
 		jboard["last_play"] = self.last_play
-		
+
 		self.redplayer.ws.send(json.dumps(jboard))
 		self.blueplayer.ws.send(json.dumps(jboard))
 
@@ -597,7 +581,7 @@ class Player():
 		self.jmessage("\nSelect an action:")
 
 
-		egress =  {"type": "message", "message": str(actions), 
+		egress =  {"type": "message", "message": str(actions),
 		"awaiting": "action", "actionlist": actions, "moveoptions": moveoptions}
 
 		self.ws.send(json.dumps(egress))
@@ -674,7 +658,7 @@ class Player():
 
 
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
-	
+
 
 		if 'Inferno' in [spell.name for spell in self.charged_spells]:
 			self.jmessage("INFERNO TRIGGER!")
@@ -738,7 +722,7 @@ class Player():
 			else:
 				moveoptions = self.allmoveablenodes()
 
-			egress =  {"type": "message", "message": "Where would you like to move? ", 
+			egress =  {"type": "message", "message": "Where would you like to move? ",
 			"awaiting": "node", "moveoptions": moveoptions}
 
 			self.ws.send(json.dumps(egress))
@@ -808,12 +792,12 @@ class Player():
 
 	def softmove(self):
 		moveoptions = self.allsoftmoveablenodes()
-			
-		egress =  {"type": "message", "message": "Where would you like to soft move? ", 
+
+		egress =  {"type": "message", "message": "Where would you like to soft move? ",
 		"awaiting": "node", "moveoptions": moveoptions}
 
 		self.ws.send(json.dumps(egress))
-		
+
 		nodename = self.receivemessage()
 		node = self.board.nodes[nodename]
 		adjacent = False
@@ -828,7 +812,7 @@ class Player():
 			self.ws.send(json.dumps(egress))
 			if self.opp.ishuman:
 				self.opp.ws.send(json.dumps(egress))
-				
+
 			self.board.last_play = nodename
 			self.board.last_player = self.color
 			self.board.update()
@@ -850,8 +834,8 @@ class Player():
 
 	def hardmove(self):
 		moveoptions = self.allhardmoveablenodes()
-			
-		egress =  {"type": "message", "message": "Where would you like to hard move? ", 
+
+		egress =  {"type": "message", "message": "Where would you like to hard move? ",
 		"awaiting": "node", "moveoptions": moveoptions}
 
 		self.ws.send(json.dumps(egress))
@@ -885,7 +869,7 @@ class Player():
 		if shimmer:
 			while True:
 				self.jmessage("Select a stone to sacrifice. ", "node")
-			
+
 				actualmessage = self.receivemessage()
 				if actualmessage in self.board.nodes:
 					node = self.board.nodes[actualmessage]
@@ -904,7 +888,7 @@ class Player():
 		else:
 			while True:
 				self.jmessage("Select your first stone to sacrifice. ", "node")
-				
+
 				actualmessage = self.receivemessage()
 				if actualmessage in self.board.nodes:
 					node = self.board.nodes[actualmessage]
@@ -920,7 +904,7 @@ class Player():
 
 			while True:
 				self.jmessage("Select your second stone to sacrifice. ", "node")
-				
+
 				actualmessage = self.receivemessage()
 				if actualmessage in self.board.nodes:
 					node = self.board.nodes[actualmessage]
@@ -943,7 +927,7 @@ class Player():
 		self.ws.send(json.dumps(egress))
 		if self.opp.ishuman:
 			self.opp.ws.send(json.dumps(egress))
-			
+
 		self.board.last_play = node.name
 		self.board.last_player = self.color
 		self.board.update()
@@ -1011,7 +995,7 @@ class Player():
 			self.ws.send(json.dumps(egress))
 
 			self.jmessage("Where would you like to push the enemy stone? ", "node")
-			
+
 			push = self.receivemessage()
 			if push not in deduped_pushingoptionnames:
 				self.jmessage("Invalid option!")
@@ -1027,10 +1011,3 @@ class Player():
 
 			self.board.update()
 			break
-
-
-
-
-
-
-			

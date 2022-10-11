@@ -88,7 +88,7 @@ class SPBoard():
 
 		### ADD ALL BOARD ATTRIBUTES TO THE SNAPSHOT
 
-		### Sets board.snapshot to be a dictionary 
+		### Sets board.snapshot to be a dictionary
 		### which describes the current boardstate
 
 		snapshot = {}
@@ -104,7 +104,7 @@ class SPBoard():
 			snapshot["redlock"] = self.redplayer.lock.name
 		else:
 			snapshot["redlock"] = None
-		
+
 		if self.blueplayer.lock:
 			snapshot["bluelock"] = self.blueplayer.lock.name
 		else:
@@ -195,32 +195,16 @@ class SPBoard():
 		if self.blueplayer.lock:
 			jboard["bluelock"] = self.blueplayer.lock.name
 
+		jboard["redspellcounter"] = self.redplayer.spellcounter
 
-		if self.redplayer.spellcounter > 1:
-			redspellcounterstring = "{} Red spells cast".format(self.redplayer.spellcounter)
-		elif self.redplayer.spellcounter == 1:
-			redspellcounterstring = "1 Red spell cast"
-		else:
-			redspellcounterstring = "Zero Red spells cast"
-
-		jboard["redspellcounter"] = redspellcounterstring
-
-		if self.blueplayer.spellcounter > 1:
-			bluespellcounterstring = "{} Blue spells cast".format(self.blueplayer.spellcounter)
-		elif self.blueplayer.spellcounter == 1:
-			bluespellcounterstring = "1 Blue spell cast"
-		else:
-			bluespellcounterstring = "Zero Blue spells cast"
-
-
-		jboard["bluespellcounter"] = bluespellcounterstring
+		jboard["bluespellcounter"] = self.blueplayer.spellcounter
 
 		if update_score:
 			jboard["score"] = self.score
 
 		jboard["last_player"] = self.last_player
 		jboard["last_play"] = self.last_play
-		
+
 		self.humanplayer.ws.send(json.dumps(jboard))
 
 
@@ -480,7 +464,7 @@ class AIPlayer():
 								spelllist.append(spell.name)
 			actions.append('pass')
 
-		
+
 
 
 		### Select 1 action from the actions list. BetaSigil will just move, then pass.
@@ -489,7 +473,7 @@ class AIPlayer():
 			action = 'pass'
 		else:
 			action = 'move'
-	
+
 
 		if action == 'move':
 			self.move(standardmove=True)
@@ -541,7 +525,7 @@ class AIPlayer():
 
 
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
-	
+
 
 		if 'Inferno' in [spell.name for spell in self.charged_spells]:
 			self.board.humanplayer.jmessage("INFERNO TRIGGER!")
@@ -709,11 +693,6 @@ class AIPlayer():
 			egress =  {"type": "push_animation", "pushed_color": self.enemy, "starting_node": node.name, "ending_node": push}
 
 			self.opp.ws.send(json.dumps(egress))
-			
+
 			self.board.update()
 			return None
-
-
-
-
-

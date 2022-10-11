@@ -15,8 +15,8 @@ document.addEventListener('alpine:init', () => {
 			const _this = this;
 
 			const apiPath = gameName ? `privatechat/${gameName}` : 'chat';
-			// This needs to be "ws://" for HTTP and "wss://" for HTTPS. Might need to change this later.
-			_this.events = new WebSocket(`ws://${location.host}/api/${apiPath}`);
+			const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
+			_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
 			_this.events.onmessage = handleIncomingEvent;
 
 			_this.sendEvent = function sendEvent(message) {

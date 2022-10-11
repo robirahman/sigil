@@ -1,8 +1,5 @@
 <!DOCTYPE html>
-<html
-	class="height:100%"
-	lang="en"
->
+<html lang="en">
 	<head>
 		<meta charset="UTF-8" />
 		<meta
@@ -31,322 +28,380 @@
 			href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap"
 			rel="stylesheet"
 		/>
+		<link
+			href="https://use.typekit.net/rot4udi.css"
+			rel="stylesheet"
+		/>
 		<script
 			defer
 			src="https://unpkg.com/alpinejs@3.10.2/dist/cdn.min.js"
 		></script>
 		<script src="/static/scripts/game-board.js"></script>
 	</head>
-	<body class="height:100%">
-		<div
-			class="display:flex flex-direction:column height:100% justify-content:space-between"
-			x-data="gameBoard({ playerCount: 1 })"
-		>
-			<div>
-				<header class="background-color:0d0513 padding:32 position:relative text-align:center">
-					<h1>
-						<a href="/v2"
-							><span class="visually-hidden">Sigil Online</span
-							><img
-								class="max-width:100%"
-								alt=""
-								src="/static/images/v2/sigil-online-logo.svg"
-								height="36"
-								width="287"
-						/></a>
-					</h1>
-					<img
-						class="bottom:0 left:50% position:absolute transform:translate(-50%_50%)"
-						alt=""
-						src="/static/images/v2/swoosh-separator.svg"
-						height="14"
-						width="116"
-					/>
-				</header>
-				<div
-					class="display:flex justify-content:space-between margin-horizontal:auto max-width:800"
-				>
+	<body>
+		<div x-data="gameBoard({ playerCount: 1 })">
+			<header class="masthead">
+				<div class="container">
+					<div class="container__inner">
+						<h1 class="logo">
+							<a href="/v2"
+								><span class="visually-hidden">Sigil Online</span
+								><img
+									alt=""
+									src="/static/images/v2/logo-icon.svg"
+									height="40"
+									width="32"
+							/></a>
+						</h1>
+					</div>
+				</div>
+			</header>
+			<div class="container">
+				<div class="container__inner">
+					<template x-if="messageHistory.length > 0">
+						<ul
+							class="feed feed--history"
+							x-ref="messageHistory"
+						>
+							<template x-for="message in messageHistory">
+								<li x-text="message"></li>
+							</template>
+						</ul>
+					</template>
+
+					<div class="dice">
+						<div
+							class="die die--red"
+							x-bind:data-die-face="redSpellCounter"
+							x-bind:title="`${redSpellCounter} spells cast`"
+						>
+							<div class="die__face die__face--1">
+								<div class="die__pip die__pip--mm"></div>
+							</div>
+							<div class="die__face die__face--2">
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--tl"></div>
+							</div>
+							<div class="die__face die__face--3">
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--mm"></div>
+								<div class="die__pip die__pip--tl"></div>
+							</div>
+							<div class="die__face die__face--4">
+								<div class="die__pip die__pip--bl"></div>
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--tl"></div>
+								<div class="die__pip die__pip--tr"></div>
+							</div>
+							<div class="die__face die__face--5">
+								<div class="die__pip die__pip--bl"></div>
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--mm"></div>
+								<div class="die__pip die__pip--tl"></div>
+								<div class="die__pip die__pip--tr"></div>
+							</div>
+							<div class="die__face die__face--6">
+								<div class="die__pip die__pip--bl"></div>
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--ml"></div>
+								<div class="die__pip die__pip--mr"></div>
+								<div class="die__pip die__pip--tl"></div>
+								<div class="die__pip die__pip--tr"></div>
+							</div>
+							<div class="die__face die__face--0">
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--mm"></div>
+								<div class="die__pip die__pip--tl"></div>
+							</div>
+						</div>
+
+						<div
+							class="die die--blue"
+							x-bind:data-die-face="blueSpellCounter"
+							x-bind:title="`${blueSpellCounter} spells cast`"
+						>
+							<div class="die__face die__face--1">
+								<div class="die__pip die__pip--mm"></div>
+							</div>
+							<div class="die__face die__face--2">
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--tl"></div>
+							</div>
+							<div class="die__face die__face--3">
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--mm"></div>
+								<div class="die__pip die__pip--tl"></div>
+							</div>
+							<div class="die__face die__face--4">
+								<div class="die__pip die__pip--bl"></div>
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--tl"></div>
+								<div class="die__pip die__pip--tr"></div>
+							</div>
+							<div class="die__face die__face--5">
+								<div class="die__pip die__pip--bl"></div>
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--mm"></div>
+								<div class="die__pip die__pip--tl"></div>
+								<div class="die__pip die__pip--tr"></div>
+							</div>
+							<div class="die__face die__face--6">
+								<div class="die__pip die__pip--bl"></div>
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--ml"></div>
+								<div class="die__pip die__pip--mr"></div>
+								<div class="die__pip die__pip--tl"></div>
+								<div class="die__pip die__pip--tr"></div>
+							</div>
+							<div class="die__face die__face--0">
+								<div class="die__pip die__pip--br"></div>
+								<div class="die__pip die__pip--mm"></div>
+								<div class="die__pip die__pip--tl"></div>
+							</div>
+						</div>
+					</div>
+
 					<div
-						class="color:dddcdd font-family:overlock font-size:16"
-						style="
-							background: rgba(0, 0, 0, 0.5);
-							height: 240px;
-							left: 0;
-							padding: 16px;
-							overflow: auto;
-							position: absolute;
-							width: 240px;
-							z-index: 1;
-						"
+						class="actions"
+						x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || showDone || actionList.includes('pass')}"
 					>
-						<template x-if="messageHistory.length > 0">
-							<ul style="display: flex; flex-direction: column-reverse">
-								<template x-for="message in messageHistory">
-									<li x-text="message"></li>
-								</template>
-							</ul>
-						</template>
-					</div>
-					<div style="margin-left: 240px">
-						<p
-							class="color:dddcdd font-family:overlock font-size:16"
-							x-text="message"
-						></p>
-						<p
-							class="color:dddcdd font-family:overlock font-size:16"
-							x-text="awaiting"
-						></p>
-						<p
-							class="color:dddcdd font-family:overlock font-size:16"
-							x-text="actionList"
-						></p>
-						<p
-							class="color:dddcdd font-family:overlock font-size:16"
-							x-text="whoseTurn"
-						></p>
-						<p
-							class="color:dddcdd font-family:overlock font-size:16"
-							x-text="blueCountdown"
-						></p>
-						<p
-							class="color:dddcdd font-family:overlock font-size:16"
-							x-text="redCountdown"
-						></p>
-						<p
-							class="color:dddcdd font-family:overlock font-size:16 position:absolute"
-							style="pointer-events: none; right: 0; z-index: 1; width: 200px"
-							x-text="JSON.stringify(spells.text)"
-						></p>
-					</div>
-					<div class="display:flex">
 						<button
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							x-bind:class="showReset ? 'display:flex' : 'display:none'"
+							class="action-button action-button--reset-turn"
 							x-on:click="handleReset"
+							x-show="showReset"
 						>
-							Reset
+							Reset Turn
 						</button>
 						<button
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							x-show="actionList.includes('pass')"
-							x-on:click="handleEndTurn"
-						>
-							End Turn
-						</button>
-						<button
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							x-show="actionList.includes('dash')"
+							class="action-button action-button--dash"
 							x-on:click="handleDash"
+							x-show="actionList.includes('dash')"
 						>
 							Dash
 						</button>
 						<button
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							x-bind:class="showDone ? 'display:flex' : 'display:none'"
+							class="action-button action-button--done"
 							x-on:click="handleDone"
+							x-show="showDone"
 						>
 							Done
+						</button>
+						<button
+							class="action-button action-button--end-turn"
+							x-on:click="handleEndTurn"
+							x-show="actionList.includes('pass')"
+						>
+							End Turn
 						</button>
 					</div>
 				</div>
 			</div>
-			<div class="overflow:auto text-align:center">
-				<div class="display:inline-block position:relative">
-					<img
-						class="game-board max-width:100%"
-						src="/static/images/v2/game-board.jpg"
-						alt=""
-					/>
-					<div class="spells">
+			<div
+				class="container"
+				style="overflow: auto"
+			>
+				<div
+					class="container__inner game-board-container"
+					x-ref="gameBoardContainer"
+				>
+					<div class="position:relative">
 						<img
-							class="charm-node charm-node--1 charm-spell charm-spell--1"
+							class="game-board max-width:100%"
+							src="/static/images/v2/game-board.jpg"
 							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['charm1']),
-							'spell--blue-lock': blueLock === spellDict['charm1'],
-							'spell--red-lock': redLock === spellDict['charm1'],
-							'spell--visible': spells.images.charm1,
-						}"
-							x-bind:src="spells.images.charm1"
-							x-on:click="handleCharmClick('charm1')"
 						/>
-						<img
-							class="charm-node charm-node--2 charm-spell charm-spell--2"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.charm2"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['charm2']),
-							'spell--blue-lock': blueLock === spellDict['charm2'],
-							'spell--red-lock': redLock === spellDict['charm2'],
-							'spell--visible': spells.images.charm2,
-						}"
-							x-on:click="handleCharmClick('charm2')"
-						/>
-						<img
-							class="charm-node charm-node--3 charm-spell charm-spell--3"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.charm3"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['charm3']),
-							'spell--blue-lock': blueLock === spellDict['charm3'],
-							'spell--red-lock': redLock === spellDict['charm3'],
-							'spell--visible': spells.images.charm3,
-						}"
-							x-on:click="handleCharmClick('charm3')"
-						/>
-
-						<img
-							class="ritual-node ritual-node--1 ritual-spell ritual-spell--1"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.ritual1"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['ritual1']),
-							'spell--blue-lock': blueLock === spellDict['ritual1'],
-							'spell--red-lock': redLock === spellDict['ritual1'],
-							'spell--visible': spells.images.ritual1,
-						}"
-							x-on:click="handleSpellClick('ritual1')"
-						/>
-						<img
-							class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.ritual2"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['ritual2']),
-							'spell--blue-lock': blueLock === spellDict['ritual2'],
-							'spell--red-lock': redLock === spellDict['ritual2'],
-							'spell--visible': spells.images.ritual2,
-						}"
-							x-on:click="handleSpellClick('ritual2')"
-						/>
-						<img
-							class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.ritual3"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['ritual3']),
-							'spell--blue-lock': blueLock === spellDict['ritual3'],
-							'spell--red-lock': redLock === spellDict['ritual3'],
-							'spell--visible': spells.images.ritual3,
-						}"
-							x-on:click="handleSpellClick('ritual3')"
-						/>
-
-						<img
-							class="sorcery-node sorcery-node--1 sorcery-spell sorcery-spell--1"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.sorcery1"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['sorcery1']),
-							'spell--blue-lock': blueLock === spellDict['sorcery1'],
-							'spell--red-lock': redLock === spellDict['sorcery1'],
-							'spell--visible': spells.images.sorcery1,
-						}"
-							x-on:click="handleSpellClick('sorcery1')"
-						/>
-						<img
-							class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.sorcery2"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['sorcery2']),
-							'spell--blue-lock': blueLock === spellDict['sorcery2'],
-							'spell--red-lock': redLock === spellDict['sorcery2'],
-							'spell--visible': spells.images.sorcery2,
-						}"
-							x-on:click="handleSpellClick('sorcery2')"
-						/>
-						<img
-							class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
-							alt=""
-							src="/static/images/v2/spacer.gif"
-							x-bind:src="spells.images.sorcery3"
-							x-bind:class="{
-							'spell--available': actionList.includes(spellDict['sorcery3']),
-							'spell--blue-lock': blueLock === spellDict['sorcery3'],
-							'spell--red-lock': redLock === spellDict['sorcery3'],
-							'spell--visible': spells.images.sorcery3,
-						}"
-							x-on:click="handleSpellClick('sorcery3')"
-						/>
-					</div>
-					<div class="spell-nodes">
-						<img
-							class="charm-node charm-node--1 spell"
-							alt=""
-							src="/static/images/v2/nodes/charm.png"
-						/>
-						<img
-							class="charm-node charm-node--2 spell"
-							alt=""
-							src="/static/images/v2/nodes/charm.png"
-						/>
-						<img
-							class="charm-node charm-node--3 spell"
-							alt=""
-							src="/static/images/v2/nodes/charm.png"
-						/>
-
-						<img
-							class="ritual-node ritual-node--1 spell"
-							alt=""
-							src="/static/images/v2/nodes/ritual.png"
-						/>
-						<img
-							class="ritual-node ritual-node--2 spell"
-							alt=""
-							src="/static/images/v2/nodes/ritual.png"
-						/>
-						<img
-							class="ritual-node ritual-node--3 spell"
-							alt=""
-							src="/static/images/v2/nodes/ritual.png"
-						/>
-
-						<img
-							class="sorcery-node sorcery-node--1 spell"
-							alt=""
-							src="/static/images/v2/nodes/sorcery.png"
-						/>
-						<img
-							class="sorcery-node sorcery-node--2 spell"
-							alt=""
-							src="/static/images/v2/nodes/sorcery.png"
-						/>
-						<img
-							class="sorcery-node sorcery-node--3 spell"
-							alt=""
-							src="/static/images/v2/nodes/sorcery.png"
-						/>
-					</div>
-					<div class="stone-nodes">
-						<div
-							class="stone-node stone-node--blue stone-node--score"
-							x-bind:class="{ [`stone-node--score-${score}`]: true }"
-						></div>
-						<template x-for="node in Object.keys(nodes)">
-							<button
-								class="stone-node"
-								x-bind:aria-label="node"
+						<div class="spells">
+							<img
+								class="charm-node charm-node--1 charm-spell charm-spell--1"
+								alt=""
+								src="/static/images/v2/spacer.gif"
 								x-bind:class="{
-									[`stone-node--${node}`]: true,
-									[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
-									[`stone-node--${nodes[node]}`]: true,
-									[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
-									'stone-node--last-play': lastPlay === node,
-									'stone-node--refill': nodesToRefill[node],
+									'spell--available': actionList.includes(spellDict['charm1']),
+									'spell--blue-lock': blueLock === spellDict['charm1'],
+									'spell--red-lock': redLock === spellDict['charm1'],
+									'spell--visible': spells.images.charm1,
 								}"
-								x-on:click="handleNodeClick(node)"
-							></button>
-						</template>
+								x-bind:src="spells.images.charm1"
+								x-on:click="handleCharmClick('charm1')"
+							/>
+							<img
+								class="charm-node charm-node--2 charm-spell charm-spell--2"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.charm2"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['charm2']),
+									'spell--blue-lock': blueLock === spellDict['charm2'],
+									'spell--red-lock': redLock === spellDict['charm2'],
+									'spell--visible': spells.images.charm2,
+								}"
+								x-on:click="handleCharmClick('charm2')"
+							/>
+							<img
+								class="charm-node charm-node--3 charm-spell charm-spell--3"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.charm3"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['charm3']),
+									'spell--blue-lock': blueLock === spellDict['charm3'],
+									'spell--red-lock': redLock === spellDict['charm3'],
+									'spell--visible': spells.images.charm3,
+								}"
+								x-on:click="handleCharmClick('charm3')"
+							/>
+
+							<img
+								class="ritual-node ritual-node--1 ritual-spell ritual-spell--1"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.ritual1"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['ritual1']),
+									'spell--blue-lock': blueLock === spellDict['ritual1'],
+									'spell--red-lock': redLock === spellDict['ritual1'],
+									'spell--visible': spells.images.ritual1,
+								}"
+								x-on:click="handleSpellClick('ritual1')"
+							/>
+							<img
+								class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.ritual2"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['ritual2']),
+									'spell--blue-lock': blueLock === spellDict['ritual2'],
+									'spell--red-lock': redLock === spellDict['ritual2'],
+									'spell--visible': spells.images.ritual2,
+								}"
+								x-on:click="handleSpellClick('ritual2')"
+							/>
+							<img
+								class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.ritual3"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['ritual3']),
+									'spell--blue-lock': blueLock === spellDict['ritual3'],
+									'spell--red-lock': redLock === spellDict['ritual3'],
+									'spell--visible': spells.images.ritual3,
+								}"
+								x-on:click="handleSpellClick('ritual3')"
+							/>
+
+							<img
+								class="sorcery-node sorcery-node--1 sorcery-spell sorcery-spell--1"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.sorcery1"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['sorcery1']),
+									'spell--blue-lock': blueLock === spellDict['sorcery1'],
+									'spell--red-lock': redLock === spellDict['sorcery1'],
+									'spell--visible': spells.images.sorcery1,
+								}"
+								x-on:click="handleSpellClick('sorcery1')"
+							/>
+							<img
+								class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.sorcery2"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['sorcery2']),
+									'spell--blue-lock': blueLock === spellDict['sorcery2'],
+									'spell--red-lock': redLock === spellDict['sorcery2'],
+									'spell--visible': spells.images.sorcery2,
+								}"
+								x-on:click="handleSpellClick('sorcery2')"
+							/>
+							<img
+								class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
+								alt=""
+								src="/static/images/v2/spacer.gif"
+								x-bind:src="spells.images.sorcery3"
+								x-bind:class="{
+									'spell--available': actionList.includes(spellDict['sorcery3']),
+									'spell--blue-lock': blueLock === spellDict['sorcery3'],
+									'spell--red-lock': redLock === spellDict['sorcery3'],
+									'spell--visible': spells.images.sorcery3,
+								}"
+								x-on:click="handleSpellClick('sorcery3')"
+							/>
+						</div>
+						<div class="spell-nodes">
+							<img
+								class="charm-node charm-node--1 spell"
+								alt=""
+								src="/static/images/v2/nodes/charm.png"
+							/>
+							<img
+								class="charm-node charm-node--2 spell"
+								alt=""
+								src="/static/images/v2/nodes/charm.png"
+							/>
+							<img
+								class="charm-node charm-node--3 spell"
+								alt=""
+								src="/static/images/v2/nodes/charm.png"
+							/>
+
+							<img
+								class="ritual-node ritual-node--1 spell"
+								alt=""
+								src="/static/images/v2/nodes/ritual.png"
+							/>
+							<img
+								class="ritual-node ritual-node--2 spell"
+								alt=""
+								src="/static/images/v2/nodes/ritual.png"
+							/>
+							<img
+								class="ritual-node ritual-node--3 spell"
+								alt=""
+								src="/static/images/v2/nodes/ritual.png"
+							/>
+
+							<img
+								class="sorcery-node sorcery-node--1 spell"
+								alt=""
+								src="/static/images/v2/nodes/sorcery.png"
+							/>
+							<img
+								class="sorcery-node sorcery-node--2 spell"
+								alt=""
+								src="/static/images/v2/nodes/sorcery.png"
+							/>
+							<img
+								class="sorcery-node sorcery-node--3 spell"
+								alt=""
+								src="/static/images/v2/nodes/sorcery.png"
+							/>
+						</div>
+						<div class="stone-nodes">
+							<div
+								class="stone-node stone-node--blue stone-node--score"
+								x-bind:class="{ [`stone-node--score-${score}`]: true }"
+							></div>
+							<template x-for="node in Object.keys(nodes)">
+								<button
+									class="stone-node"
+									x-bind:aria-label="node"
+									x-bind:class="{
+											[`stone-node--${node}`]: true,
+											[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
+											[`stone-node--${nodes[node]}`]: true,
+											[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
+											'stone-node--last-play': lastPlay === node,
+											'stone-node--refill': nodesToRefill[node],
+										}"
+									x-on:click="handleNodeClick(node)"
+									x-bind:id="`stone-node--${node}`"
+								></button>
+							</template>
+						</div>
 					</div>
 				</div>
 			</div>
