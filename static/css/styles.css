@@ -474,9 +474,19 @@ textarea {
 
 /* stylelint-disable-next-line no-duplicate-selectors */
 html {
+	--blue-stone: url("/static/images/v2/stones/blue.png");
+	--red-stone: url("/static/images/v2/stones/red.png");
+
 	background-color: #21122c;
 	background-image: url("/static/images/v2/tiled-background.jpg");
 	background-position: center;
+}
+
+html.webp {
+	--blue-stone: url("/static/images/v2/stones/blue.webp");
+	--red-stone: url("/static/images/v2/stones/red.webp");
+
+	background-image: url("/static/images/v2/tiled-background.webp");
 }
 
 .masthead {
@@ -495,7 +505,7 @@ html {
 .container {
 	margin-left: auto;
 	margin-right: auto;
-	max-width: 1054px;
+	max-width: 1100px;
 	padding-left: 15px;
 	padding-right: 15px;
 	width: 100%;
@@ -539,6 +549,10 @@ html {
 .feed--history {
 	position: fixed;
 	top: 95px;
+}
+
+.feed--history :last-child {
+	font-weight: bold;
 }
 
 .feed--chat {
@@ -822,422 +836,92 @@ html {
 	min-width: 758px;
 }
 
-.charm-node {
-	--size: calc(60 / 1476 * 100%);
-
-	position: absolute;
-
-	--translate: -50%;
-
-	height: var(--size);
-	transform-origin: left top;
-	width: var(--size);
-}
-
-.charm-node--1 {
-	left: calc(673 / 1476 * 100%);
-	top: calc(984.5 / 1476 * 100%);
-	transform: translate(var(--translate), var(--translate));
-}
-
-.charm-node--2 {
-	left: calc(984 / 1476 * 100%);
-	top: calc(671 / 1476 * 100%);
-	transform: translate(var(--translate), var(--translate));
-}
-
-.charm-node--3 {
-	left: calc(557.2 / 1476 * 100%);
-	top: calc(558 / 1476 * 100%);
-	transform: translate(var(--translate), var(--translate));
-}
-
-.charm-spell {
-	--size: calc(144 / 1476 * 100%);
-}
-
-.ritual-node {
-	--size: calc(316 / 1476 * 100%);
-
-	position: absolute;
-
-	--translate: -50%;
-
-	height: var(--size);
-	transform-origin: left top;
-	width: var(--size);
-}
-
-.ritual-node--1 {
-	left: calc(331.3 / 1476 * 100%);
-	top: calc(973.1 / 1476 * 100%);
-	transform: rotate(60deg) translate(var(--translate), var(--translate));
-}
-
-.ritual-node--2 {
-	left: calc(1145 / 1476 * 100%);
-	top: calc(973 / 1476 * 100%);
-	transform: rotate(-60deg) translate(var(--translate), var(--translate));
-}
-
-.ritual-node--3 {
-	left: calc(738 / 1476 * 100%);
-	top: calc(267.8 / 1476 * 100%);
-	transform: rotate(180deg) translate(var(--translate), var(--translate));
-}
-
-.sorcery-node {
-	--size: calc(242 / 1476 * 100%);
-
-	position: absolute;
-
-	--translate: -50%;
-
-	height: var(--size);
-	transform-origin: left top;
-	width: var(--size);
-}
-
-.sorcery-node--1 {
-	left: calc(738 / 1476 * 100%);
-	top: calc(1210 / 1476 * 100%);
-	transform: rotate(2deg) translate(var(--translate), var(--translate));
-}
-
-.sorcery-node--2 {
-	left: calc(1147 / 1476 * 100%);
-	top: calc(502 / 1476 * 100%);
-	transform: rotate(-120deg) translate(var(--translate), var(--translate));
-}
-
-.sorcery-node--3 {
-	left: calc(329 / 1476 * 100%);
-	top: calc(502 / 1476 * 100%);
-	transform: rotate(120deg) translate(var(--translate), var(--translate));
-}
-
-@keyframes stone-twinkle {
-	0% { filter: brightness(80%); }
-	50% { filter: brightness(120%); }
-	100% { filter: brightness(80%); }
-}
-
-.stone-node {
-	--size: calc(46 / 1476 * 100%);
-	--translate: -50%;
-
-	animation: stone-twinkle 3s linear infinite;
-	background-size: cover;
-	border-radius: 999px;
-	position: absolute;
-	height: var(--size);
-	transform: translate(var(--translate), var(--translate));
-	width: var(--size);
-}
-
-.stone-node--blue {
-	background-image: url("/static/images/v2/stones/blue.png");
-}
-
-.stone-node--red {
-	background-image: url("/static/images/v2/stones/red.png");
-}
-
-.stone-node--last-play {
-	outline: 5px solid #f3ec4e;
-}
-
-@keyframes stone-zoom-out {
-	0% { transform: scale(4); }
-	30% { transform: scale(2); }
-	100% { transform: scale(1); }
-}
-
-.stone-node--last-play::after {
-	animation: stone-zoom-out 0.475s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
-	background-size: contain;
-	content: "";
-	display: block;
-	height: 100%;
-	left: 0;
-	pointer-events: none;
-	position: absolute;
-	top: 0;
-	width: 100%;
-}
-
-.stone-node--blue.stone-node--last-play::after {
-	background-image: url("/static/images/v2/stones/blue.png");
-}
-
-.stone-node--red.stone-node--last-play::after {
-	background-image: url("/static/images/v2/stones/red.png");
-}
-
-.stone-node--valid-move-blue {
-	outline: 5px solid rgb(50 80 186 / 90%);
-}
-
-.stone-node--valid-move-red {
-	outline: 5px solid rgb(215 88 69 / 90%);
-}
-
-.stone-node--refill {
-	opacity: 0.6;
-}
-
-.stone-node--score {
-	transform: none;
-	transition-duration: 1s;
-	transition-property: left, opacity, top;
-}
-
-.stone-node--score-unset {
-	opacity: 0;
-}
-
-.stone-node--score-unset,
-.stone-node--score-tied {
-	left: calc(715 / 1476 * 100%);
-	top: calc(715 / 1476 * 100%);
-}
-
-.stone-node--score-b1 {
-	left: calc(781 / 1476 * 100%);
-	top: calc(752 / 1476 * 100%);
-}
-
-.stone-node--score-b2 {
-	left: calc(715 / 1476 * 100%);
-	top: calc(791 / 1476 * 100%);
-}
-
-.stone-node--score-b3 {
-	left: calc(649 / 1476 * 100%);
-	top: calc(754 / 1476 * 100%);
-}
-
-.stone-node--score-r1 {
-	left: calc(649 / 1476 * 100%);
-	top: calc(678 / 1476 * 100%);
-}
-
-.stone-node--score-r2 {
-	left: calc(715 / 1476 * 100%);
-	top: calc(639 / 1476 * 100%);
-}
-
-.stone-node--score-r3 {
-	left: calc(781 / 1476 * 100%);
-	top: calc(676 / 1476 * 100%);
-}
-
-.stone-node--a1 {
-	left: calc(113 / 1476 * 100%);
-	top: calc(888.5 / 1476 * 100%);
-}
-
-.stone-node--a2 {
-	left: calc(253.5 / 1476 * 100%);
-	top: calc(1020.5 / 1476 * 100%);
-}
-
-.stone-node--a3 {
-	left: calc(352 / 1476 * 100%);
-	top: calc(1063 / 1476 * 100%);
-}
-
-.stone-node--a4 {
-	left: calc(422.4 / 1476 * 100%);
-	top: calc(980.8 / 1476 * 100%);
-}
-
-.stone-node--a5 {
-	left: calc(366.8 / 1476 * 100%);
-	top: calc(890.5 / 1476 * 100%);
-}
-
-.stone-node--a6 {
-	left: calc(262.5 / 1476 * 100%);
-	top: calc(913.8 / 1476 * 100%);
-}
-
-.stone-node--a7 {
-	left: calc(672.6 / 1476 * 100%);
-	top: calc(984.5 / 1476 * 100%);
-}
-
-.stone-node--a8 {
-	left: calc(741 / 1476 * 100%);
-	top: calc(1144.4 / 1476 * 100%);
-}
-
-.stone-node--a9 {
-	left: calc(679.5 / 1476 * 100%);
-	top: calc(1240.5 / 1476 * 100%);
-}
-
-.stone-node--a10 {
-	left: calc(795 / 1476 * 100%);
-	top: calc(1245 / 1476 * 100%);
-}
-
-.stone-node--a11 {
-	left: calc(231.5 / 1476 * 100%);
-	top: calc(738 / 1476 * 100%);
-}
-
-.stone-node--a12 {
-	left: calc(453.3 / 1476 * 100%);
-	top: calc(738 / 1476 * 100%);
-}
-
-.stone-node--a13 {
-	left: calc(484.5 / 1476 * 100%);
-	top: calc(1176.5 / 1476 * 100%);
-}
-
-.stone-node--b1 {
-	left: calc(1181 / 1476 * 100%);
-	top: calc(1204.5 / 1476 * 100%);
-}
-
-.stone-node--b2 {
-	left: calc(1224.9 / 1476 * 100%);
-	top: calc(1016.5 / 1476 * 100%);
-}
-
-.stone-node--b3 {
-	left: calc(1212.5 / 1476 * 100%);
-	top: calc(910.1 / 1476 * 100%);
-}
-
-.stone-node--b4 {
-	left: calc(1106.1 / 1476 * 100%);
-	top: calc(890.3 / 1476 * 100%);
-}
-
-.stone-node--b5 {
-	left: calc(1055.8 / 1476 * 100%);
-	top: calc(983.6 / 1476 * 100%);
-}
-
-.stone-node--b6 {
-	left: calc(1128.1 / 1476 * 100%);
-	top: calc(1062.3 / 1476 * 100%);
-}
-
-.stone-node--b7 {
-	left: calc(983.6 / 1476 * 100%);
-	top: calc(671 / 1476 * 100%);
-}
-
-.stone-node--b8 {
-	left: calc(1090 / 1476 * 100%);
-	top: calc(535.5 / 1476 * 100%);
-}
-
-.stone-node--b9 {
-	left: calc(1204.5 / 1476 * 100%);
-	top: calc(535.5 / 1476 * 100%);
-}
-
-.stone-node--b10 {
-	left: calc(1146.5 / 1476 * 100%);
-	top: calc(436.5 / 1476 * 100%);
-}
-
-.stone-node--b11 {
-	left: calc(991.5 / 1476 * 100%);
-	top: calc(1176.5 / 1476 * 100%);
-}
-
-.stone-node--b12 {
-	left: calc(880.5 / 1476 * 100%);
-	top: calc(984.5 / 1476 * 100%);
-}
-
-.stone-node--b13 {
-	left: calc(1245 / 1476 * 100%);
-	top: calc(738 / 1476 * 100%);
-}
-
-.stone-node--c1 {
-	left: calc(920 / 1476 * 100%);
-	top: calc(121 / 1476 * 100%);
-}
-
-.stone-node--c2 {
-	left: calc(735.7 / 1476 * 100%);
-	top: calc(176.8 / 1476 * 100%);
-}
-
-.stone-node--c3 {
-	left: calc(649.7 / 1476 * 100%);
-	top: calc(240.8 / 1476 * 100%);
-}
-
-.stone-node--c4 {
-	left: calc(685.7 / 1476 * 100%);
-	top: calc(342.8 / 1476 * 100%);
-}
-
-.stone-node--c5 {
-	left: calc(791.7 / 1476 * 100%);
-	top: calc(339.8 / 1476 * 100%);
-}
-
-.stone-node--c6 {
-	left: calc(823.7 / 1476 * 100%);
-	top: calc(237.8 / 1476 * 100%);
-}
-
-.stone-node--c7 {
-	left: calc(556.8 / 1476 * 100%);
-	top: calc(558 / 1476 * 100%);
-}
-
-.stone-node--c8 {
-	left: calc(387 / 1476 * 100%);
-	top: calc(535.5 / 1476 * 100%);
-}
-
-.stone-node--c9 {
-	left: calc(330.3 / 1476 * 100%);
-	top: calc(436.5 / 1476 * 100%);
-}
-
-.stone-node--c10 {
-	left: calc(272.5 / 1476 * 100%);
-	top: calc(535.5 / 1476 * 100%);
-}
-
-.stone-node--c11 {
-	left: calc(991 / 1476 * 100%);
-	top: calc(299 / 1476 * 100%);
-}
-
-.stone-node--c12 {
-	left: calc(880.5 / 1476 * 100%);
-	top: calc(491.5 / 1476 * 100%);
-}
-
-.stone-node--c13 {
-	left: calc(485 / 1476 * 100%);
-	top: calc(299 / 1476 * 100%);
-}
-
 .charm-spell,
 .ritual-spell,
 .sorcery-spell {
+	--size: calc(var(--raw-size) / 1480 * 100%);
+
 	border-radius: 50%;
+	height: var(--size);
 	opacity: 0;
+	position: absolute;
 	transition-duration: 2s;
 	transition-property: opacity;
+	width: var(--size);
 }
 
-.spell {
-	pointer-events: none;
+.charm-spell {
+	--raw-size: 148;
+}
+
+.charm-spell--1 {
+	left: calc(599 / 1480 * 100%);
+	top: calc(919 / 1480 * 100%);
+	transition-delay: 3s;
+}
+
+.charm-spell--2 {
+	left: calc(919 / 1480 * 100%);
+	top: calc(597 / 1480 * 100%);
+	transform: rotate(-120deg);
+	transition-delay: 2.25s;
+}
+
+.charm-spell--3 {
+	left: calc(480 / 1480 * 100%);
+	top: calc(480 / 1480 * 100%);
+	transform: rotate(120deg);
+	transition-delay: 2s;
+}
+
+.ritual-spell {
+	--raw-size: 322;
+}
+
+.ritual-spell--1 {
+	left: calc(160 / 1480 * 100%);
+	top: calc(820 / 1480 * 100%);
+	transform: rotate(60deg);
+	transition-delay: 2.5s;
+}
+
+.ritual-spell--2 {
+	left: calc(997 / 1480 * 100%);
+	top: calc(820 / 1480 * 100%);
+	transform: rotate(-60deg);
+	transition-delay: 2.75s;
+}
+
+.ritual-spell--3 {
+	left: calc(579 / 1480 * 100%);
+	top: calc(95 / 1480 * 100%);
+	transform: rotate(180deg);
+	transition-delay: 1s;
+}
+
+.sorcery-spell {
+	--raw-size: 258.9;
+}
+
+.sorcery-spell--1 {
+	left: calc(610 / 1480 * 100%);
+	top: calc(1096 / 1480 * 100%);
+	transform: rotate(180deg);
+	transition-delay: 3.5s;
+}
+
+.sorcery-spell--2 {
+	left: calc(1031 / 1480 * 100%);
+	top: calc(368 / 1480 * 100%);
+	transform: rotate(60deg);
+	transition-delay: 1.75s;
+}
+
+.sorcery-spell--3 {
+	left: calc(190 / 1480 * 100%);
+	top: calc(367 / 1480 * 100%);
+	transform: rotate(-60deg);
+	transition-delay: 1.5s;
 }
 
 .spell--visible {
@@ -1260,40 +944,360 @@ html {
 	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #e84c3c, 4px -4px #e84c3c;
 }
 
-.charm-spell--1 {
-	transition-delay: 3s;
+@keyframes stone-twinkle {
+	0% { filter: brightness(80%); }
+	50% { filter: brightness(110%); }
+	100% { filter: brightness(80%); }
 }
 
-.charm-spell--2 {
-	transition-delay: 2.25s;
+.stone-node {
+	--raw-size: 56;
+	--outline-size: calc(((6 / 1480) * var(--raw-size)) * 1em);
+	--size: calc(var(--raw-size) / 1480 * 100%);
+	--translate: calc(-50% + var(--raw-size)/2);
+
+	animation: stone-twinkle 3s cubic-bezier(0.19, 0.33, 0.34, 1) infinite;
+	background-size: cover;
+	border-radius: 999px;
+	position: absolute;
+	height: var(--size);
+	transform: translate(var(--translate), var(--translate));
+	width: var(--size);
 }
 
-.charm-spell--3 {
-	transition-delay: 2s;
+.stone-node--blue {
+	background-image: var(--blue-stone);
 }
 
-.ritual-spell--1 {
-	transition-delay: 2.5s;
+.stone-node--red {
+	background-image: var(--red-stone);
 }
 
-.ritual-spell--2 {
-	transition-delay: 2.75s;
+.stone-node--last-play {
+	box-shadow: 0 0 0 var(--outline-size) #f3ec4e;
 }
 
-.ritual-spell--3 {
-	transition-delay: 1s;
+@keyframes stone-zoom-out {
+	0% { transform: scale(4); }
+	30% { transform: scale(2); }
+	100% { transform: scale(1); }
 }
 
-.sorcery-spell--1 {
-	transition-delay: 3.5s;
+.stone-node--last-play::after {
+	animation: stone-zoom-out 0.475s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
+	background-size: contain;
+	content: "";
+	display: block;
+	height: 100%;
+	left: 0;
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	width: 100%;
 }
 
-.sorcery-spell--2 {
-	transition-delay: 1.75s;
+.stone-node--blue.stone-node--last-play::after {
+	background-image: var(--blue-stone);
 }
 
-.sorcery-spell--3 {
-	transition-delay: 1.5s;
+.stone-node--red.stone-node--last-play::after {
+	background-image: var(--red-stone);
+}
+
+.stone-node--valid-move-blue {
+	box-shadow: 0 0 0 var(--outline-size) #2757c4;
+}
+
+.stone-node--valid-move-red {
+	box-shadow: 0 0 0 var(--outline-size) #ff4032;
+}
+
+.stone-node--refill {
+	opacity: 0.6;
+}
+
+.stone-node--score {
+	transform: none;
+	transition-duration: 1s;
+	transition-property: left, opacity, top;
+}
+
+.stone-node--score-unset {
+	opacity: 0;
+	transition-duration: 0s;
+}
+
+.stone-node--score-unset,
+.stone-node--score-tied {
+	left: calc(712 / 1480 * 100%);
+	top: calc(712 / 1480 * 100%);
+}
+
+.stone-node--score-b1 {
+	left: calc(779 / 1480 * 100%);
+	top: calc(750 / 1480 * 100%);
+}
+
+.stone-node--score-b2 {
+	left: calc(711 / 1480 * 100%);
+	top: calc(790.5 / 1480 * 100%);
+}
+
+.stone-node--score-b3 {
+	left: calc(643.5 / 1480 * 100%);
+	top: calc(752 / 1480 * 100%);
+}
+
+.stone-node--score-r1 {
+	left: calc(643.8 / 1480 * 100%);
+	top: calc(673.8 / 1480 * 100%);
+}
+
+.stone-node--score-r2 {
+	left: calc(711.7 / 1480 * 100%);
+	top: calc(633.8 / 1480 * 100%);
+}
+
+.stone-node--score-r3 {
+	left: calc(779.5 / 1480 * 100%);
+	top: calc(672.3 / 1480 * 100%);
+}
+
+.stone-node--a1 {
+	left: calc(70 / 1480 * 100%);
+	top: calc(866.5 / 1480 * 100%);
+}
+
+.stone-node--a2 {
+	left: calc(209.5 / 1480 * 100%);
+	top: calc(1002 / 1480 * 100%);
+}
+
+.stone-node--a3 {
+	left: calc(314 / 1480 * 100%);
+	top: calc(1049 / 1480 * 100%);
+}
+
+.stone-node--a4 {
+	left: calc(391.5 / 1480 * 100%);
+	top: calc(963 / 1480 * 100%);
+}
+
+.stone-node--a5 {
+	left: calc(334 / 1480 * 100%);
+	top: calc(863 / 1480 * 100%);
+}
+
+.stone-node--a6 {
+	left: calc(220 / 1480 * 100%);
+	top: calc(889 / 1480 * 100%);
+}
+
+.stone-node--a7 {
+	left: calc(645.6 / 1480 * 100%);
+	top: calc(965.2 / 1480 * 100%);
+}
+
+.stone-node--a8 {
+	left: calc(712 / 1480 * 100%);
+	top: calc(1129 / 1480 * 100%);
+}
+
+.stone-node--a9 {
+	left: calc(653 / 1480 * 100%);
+	top: calc(1230 / 1480 * 100%);
+}
+
+.stone-node--a10 {
+	left: calc(770 / 1480 * 100%);
+	top: calc(1230 / 1480 * 100%);
+}
+
+.stone-node--a11 {
+	left: calc(191.5 / 1480 * 100%);
+	top: calc(712 / 1480 * 100%);
+}
+
+.stone-node--a12 {
+	left: calc(419.8 / 1480 * 100%);
+	top: calc(711.8 / 1480 * 100%);
+}
+
+.stone-node--a13 {
+	left: calc(451.9 / 1480 * 100%);
+	top: calc(1162.8 / 1480 * 100%);
+}
+
+.stone-node--b1 {
+	left: calc(1167.5 / 1480 * 100%);
+	top: calc(1191 / 1480 * 100%);
+}
+
+.stone-node--b2 {
+	left: calc(1214.5 / 1480 * 100%);
+	top: calc(1002 / 1480 * 100%);
+}
+
+.stone-node--b3 {
+	left: calc(1202 / 1480 * 100%);
+	top: calc(887 / 1480 * 100%);
+}
+
+.stone-node--b4 {
+	left: calc(1089 / 1480 * 100%);
+	top: calc(863 / 1480 * 100%);
+}
+
+.stone-node--b5 {
+	left: calc(1031 / 1480 * 100%);
+	top: calc(963 / 1480 * 100%);
+}
+
+.stone-node--b6 {
+	left: calc(1110 / 1480 * 100%);
+	top: calc(1049 / 1480 * 100%);
+}
+
+.stone-node--b7 {
+	left: calc(965 / 1480 * 100%);
+	top: calc(643 / 1480 * 100%);
+}
+
+.stone-node--b8 {
+	left: calc(1074 / 1480 * 100%);
+	top: calc(503 / 1480 * 100%);
+}
+
+.stone-node--b9 {
+	left: calc(1190 / 1480 * 100%);
+	top: calc(503 / 1480 * 100%);
+}
+
+.stone-node--b10 {
+	left: calc(1132 / 1480 * 100%);
+	top: calc(403 / 1480 * 100%);
+}
+
+.stone-node--b11 {
+	left: calc(972.7 / 1480 * 100%);
+	top: calc(1162.8 / 1480 * 100%);
+}
+
+.stone-node--b12 {
+	left: calc(858.6 / 1480 * 100%);
+	top: calc(965.2 / 1480 * 100%);
+}
+
+.stone-node--b13 {
+	left: calc(1233.1 / 1480 * 100%);
+	top: calc(712 / 1480 * 100%);
+}
+
+.stone-node--c1 {
+	left: calc(899.6 / 1480 * 100%);
+	top: calc(78.4 / 1480 * 100%);
+}
+
+.stone-node--c2 {
+	left: calc(711.8 / 1480 * 100%);
+	top: calc(130.5 / 1480 * 100%);
+}
+
+.stone-node--c3 {
+	left: calc(618.5 / 1480 * 100%);
+	top: calc(198.3 / 1480 * 100%);
+}
+
+.stone-node--c4 {
+	left: calc(654.5 / 1480 * 100%);
+	top: calc(308.5 / 1480 * 100%);
+}
+
+.stone-node--c5 {
+	left: calc(769.5 / 1480 * 100%);
+	top: calc(308.5 / 1480 * 100%);
+}
+
+.stone-node--c6 {
+	left: calc(805 / 1480 * 100%);
+	top: calc(197 / 1480 * 100%);
+}
+
+.stone-node--c7 {
+	left: calc(526.4 / 1480 * 100%);
+	top: calc(527.4 / 1480 * 100%);
+}
+
+.stone-node--c8 {
+	left: calc(350 / 1480 * 100%);
+	top: calc(502.2 / 1480 * 100%);
+}
+
+.stone-node--c9 {
+	left: calc(292.2 / 1480 * 100%);
+	top: calc(401.6 / 1480 * 100%);
+}
+
+.stone-node--c10 {
+	left: calc(233.7 / 1480 * 100%);
+	top: calc(502.2 / 1480 * 100%);
+}
+
+.stone-node--c11 {
+	left: calc(972.7 / 1480 * 100%);
+	top: calc(260.8 / 1480 * 100%);
+}
+
+.stone-node--c12 {
+	left: calc(858.5 / 1480 * 100%);
+	top: calc(458.5 / 1480 * 100%);
+}
+
+.stone-node--c13 {
+	left: calc(451.9 / 1480 * 100%);
+	top: calc(260.8 / 1480 * 100%);
 }
 
 /* </BoardAndNodes> */
+
+@keyframes modal-zoom-out {
+	0% {
+		opacity: 0;
+		transform: scale(10);
+	}
+
+	30% {
+		transform: scale(4);
+	}
+
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+.win-modal {
+	align-items: center;
+	background-color: rgb(34 17 44 / 90%);
+	border: 2px solid #fff;
+	border-radius: 15px;
+	box-shadow: 0 0 5px 2px #000;
+	display: flex;
+	gap: 20px;
+	height: 100px;
+	left: calc(50% - 150px);
+	justify-content: center;
+	max-width: 300px;
+	opacity: 0;
+	position: fixed;
+	top: calc(50% - 50px);
+	transform: scale(10);
+	visibility: hidden;
+	width: 100%;
+	z-index: 2;
+}
+
+.win-modal.is-visible {
+	animation: modal-zoom-out 0.35s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
+	visibility: visible;
+}

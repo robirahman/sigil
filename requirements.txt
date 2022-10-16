@@ -20,6 +20,7 @@ packaging==21.3
 pycparser==2.21
 pyOpenSSL==22.0.0
 pyparsing==3.0.7
+pytz==2022.4
 redis==4.2.0
 simple-websocket==0.5.1
 six==1.16.0
