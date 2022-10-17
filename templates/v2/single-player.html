@@ -429,7 +429,7 @@
 				class="win-modal"
 				x-bind:class="{ 'is-visible': winner }"
 			>
-				<picture>
+				<picture x-show="winner === 'blue'">
 					<source
 						type="image/webp"
 						srcset="/static/images/v2/stones/blue.webp"
@@ -439,7 +439,6 @@
 						src="/static/images/v2/stones/blue.png"
 						height="30"
 						width="30"
-						x-show="winner === 'blue'"
 					/>
 				</picture>
 				<img
@@ -449,7 +448,7 @@
 					width="167"
 					x-show="winner === 'blue'"
 				/>
-				<picture>
+				<picture x-show="winner === 'red'">
 					<source
 						type="image/webp"
 						srcset="/static/images/v2/stones/red.webp"
@@ -459,7 +458,6 @@
 						src="/static/images/v2/stones/red.png"
 						height="30"
 						width="30"
-						x-show="winner === 'red'"
 					/>
 				</picture>
 				<img
