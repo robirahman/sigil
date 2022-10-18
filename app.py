@@ -39,7 +39,8 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True) # primary keys are required by SQLAlchemy
     email = db.Column(db.String(100), unique=True)
     password = db.Column(db.String(100))
-    name = db.Column(db.String(1000))
+    name = db.Column(db.String(100))
+    elo = db.Column(db.Integer)
 
 
 login_manager = LoginManager()
@@ -80,7 +81,7 @@ def home():
 @app.route('/profile')
 @login_required
 def profile():
-    return render_template('profile.html', name=current_user.name)
+    return render_template('profile.html', name=current_user.name, elo=current_user.elo)
 
 @app.route('/login')
 def login():
@@ -122,8 +123,14 @@ def signup_post():
         flash('Email address already exists')
         return redirect(url_for('signup'))
 
+    user = User.query.filter_by(name=name).first() # if this returns a user, then the name already exists in database
+
+    if user: # if a user is found, we want to redirect back to signup page so user can try again
+        flash('That name is already taken')
+        return redirect(url_for('signup'))
+
     # create a new user with the form data. Hash the password so the plaintext version isn't saved.
-    new_user = User(email=email, name=name, password=generate_password_hash(password, method='sha256'))
+    new_user = User(email=email, name=name, password=generate_password_hash(password, method='sha256'), elo=1000)
 
     # add the new user to the database
     db.session.add(new_user)
