@@ -36,6 +36,14 @@
 			defer
 			src="https://unpkg.com/alpinejs@3.10.2/dist/cdn.min.js"
 		></script>
+		<script>
+			var webpDetector = new Image();
+			webpDetector.onload = function () {
+				document.documentElement.classList.add('webp');
+			};
+			webpDetector.src =
+				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
+		</script>
 		<script src="/static/scripts/game-board.js"></script>
 	</head>
 	<body>
@@ -205,180 +213,191 @@
 					x-ref="gameBoardContainer"
 				>
 					<div class="position:relative">
-						<img
-							class="game-board max-width:100%"
-							src="/static/images/v2/game-board.jpg"
-							alt=""
-						/>
+						<picture>
+							<source
+								type="image/webp"
+								srcset="/static/images/v2/game-board.webp"
+							/>
+							<img
+								class="game-board max-width:100%"
+								src="/static/images/v2/game-board.jpg"
+								alt=""
+							/>
+						</picture>
 						<div class="spells">
-							<img
-								class="charm-node charm-node--1 charm-spell charm-spell--1"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['charm1']),
-									'spell--blue-lock': blueLock === spellDict['charm1'],
-									'spell--red-lock': redLock === spellDict['charm1'],
-									'spell--visible': spells.images.charm1,
-								}"
-								x-bind:src="spells.images.charm1"
-								x-on:click="handleCharmClick('charm1')"
-							/>
-							<img
-								class="charm-node charm-node--2 charm-spell charm-spell--2"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.charm2"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['charm2']),
-									'spell--blue-lock': blueLock === spellDict['charm2'],
-									'spell--red-lock': redLock === spellDict['charm2'],
-									'spell--visible': spells.images.charm2,
-								}"
-								x-on:click="handleCharmClick('charm2')"
-							/>
-							<img
-								class="charm-node charm-node--3 charm-spell charm-spell--3"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.charm3"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['charm3']),
-									'spell--blue-lock': blueLock === spellDict['charm3'],
-									'spell--red-lock': redLock === spellDict['charm3'],
-									'spell--visible': spells.images.charm3,
-								}"
-								x-on:click="handleCharmClick('charm3')"
-							/>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.charm1?.replace('.png', '.webp')"
+								/>
+								<img
+									class="charm-spell charm-spell--1"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['charm1']),
+										'spell--blue-lock': blueLock === spellDict['charm1'],
+										'spell--red-lock': redLock === spellDict['charm1'],
+										'spell--visible': spells.images.charm1,
+									}"
+									x-bind:src="spells.images.charm1"
+									x-on:click="handleCharmClick('charm1')"
+								/>
+							</picture>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.charm2?.replace('.png', '.webp')"
+								/>
+								<img
+									class="charm-spell charm-spell--2"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.charm2"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['charm2']),
+										'spell--blue-lock': blueLock === spellDict['charm2'],
+										'spell--red-lock': redLock === spellDict['charm2'],
+										'spell--visible': spells.images.charm2,
+									}"
+									x-on:click="handleCharmClick('charm2')"
+								/>
+							</picture>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.charm3?.replace('.png', '.webp')"
+								/>
+								<img
+									class="charm-spell charm-spell--3"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.charm3"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['charm3']),
+										'spell--blue-lock': blueLock === spellDict['charm3'],
+										'spell--red-lock': redLock === spellDict['charm3'],
+										'spell--visible': spells.images.charm3,
+									}"
+									x-on:click="handleCharmClick('charm3')"
+								/>
+							</picture>
 
-							<img
-								class="ritual-node ritual-node--1 ritual-spell ritual-spell--1"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.ritual1"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['ritual1']),
-									'spell--blue-lock': blueLock === spellDict['ritual1'],
-									'spell--red-lock': redLock === spellDict['ritual1'],
-									'spell--visible': spells.images.ritual1,
-								}"
-								x-on:click="handleSpellClick('ritual1')"
-							/>
-							<img
-								class="ritual-node ritual-node--2 ritual-spell ritual-spell--2"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.ritual2"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['ritual2']),
-									'spell--blue-lock': blueLock === spellDict['ritual2'],
-									'spell--red-lock': redLock === spellDict['ritual2'],
-									'spell--visible': spells.images.ritual2,
-								}"
-								x-on:click="handleSpellClick('ritual2')"
-							/>
-							<img
-								class="ritual-node ritual-node--3 ritual-spell ritual-spell--3"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.ritual3"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['ritual3']),
-									'spell--blue-lock': blueLock === spellDict['ritual3'],
-									'spell--red-lock': redLock === spellDict['ritual3'],
-									'spell--visible': spells.images.ritual3,
-								}"
-								x-on:click="handleSpellClick('ritual3')"
-							/>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.ritual1?.replace('.png', '.webp')"
+								/>
+								<img
+									class="ritual-spell ritual-spell--1"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.ritual1"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['ritual1']),
+										'spell--blue-lock': blueLock === spellDict['ritual1'],
+										'spell--red-lock': redLock === spellDict['ritual1'],
+										'spell--visible': spells.images.ritual1,
+									}"
+									x-on:click="handleSpellClick('ritual1')"
+								/>
+							</picture>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.ritual2?.replace('.png', '.webp')"
+								/>
+								<img
+									class="ritual-spell ritual-spell--2"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.ritual2"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['ritual2']),
+										'spell--blue-lock': blueLock === spellDict['ritual2'],
+										'spell--red-lock': redLock === spellDict['ritual2'],
+										'spell--visible': spells.images.ritual2,
+									}"
+									x-on:click="handleSpellClick('ritual2')"
+								/>
+							</picture>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.ritual3?.replace('.png', '.webp')"
+								/>
+								<img
+									class="ritual-spell ritual-spell--3"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.ritual3"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['ritual3']),
+										'spell--blue-lock': blueLock === spellDict['ritual3'],
+										'spell--red-lock': redLock === spellDict['ritual3'],
+										'spell--visible': spells.images.ritual3,
+									}"
+									x-on:click="handleSpellClick('ritual3')"
+								/>
+							</picture>
 
-							<img
-								class="sorcery-node sorcery-node--1 sorcery-spell sorcery-spell--1"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.sorcery1"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['sorcery1']),
-									'spell--blue-lock': blueLock === spellDict['sorcery1'],
-									'spell--red-lock': redLock === spellDict['sorcery1'],
-									'spell--visible': spells.images.sorcery1,
-								}"
-								x-on:click="handleSpellClick('sorcery1')"
-							/>
-							<img
-								class="sorcery-node sorcery-node--2 sorcery-spell sorcery-spell--2"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.sorcery2"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['sorcery2']),
-									'spell--blue-lock': blueLock === spellDict['sorcery2'],
-									'spell--red-lock': redLock === spellDict['sorcery2'],
-									'spell--visible': spells.images.sorcery2,
-								}"
-								x-on:click="handleSpellClick('sorcery2')"
-							/>
-							<img
-								class="sorcery-node sorcery-node--3 sorcery-spell sorcery-spell--3"
-								alt=""
-								src="/static/images/v2/spacer.gif"
-								x-bind:src="spells.images.sorcery3"
-								x-bind:class="{
-									'spell--available': actionList.includes(spellDict['sorcery3']),
-									'spell--blue-lock': blueLock === spellDict['sorcery3'],
-									'spell--red-lock': redLock === spellDict['sorcery3'],
-									'spell--visible': spells.images.sorcery3,
-								}"
-								x-on:click="handleSpellClick('sorcery3')"
-							/>
-						</div>
-						<div class="spell-nodes">
-							<img
-								class="charm-node charm-node--1 spell"
-								alt=""
-								src="/static/images/v2/nodes/charm.png"
-							/>
-							<img
-								class="charm-node charm-node--2 spell"
-								alt=""
-								src="/static/images/v2/nodes/charm.png"
-							/>
-							<img
-								class="charm-node charm-node--3 spell"
-								alt=""
-								src="/static/images/v2/nodes/charm.png"
-							/>
-
-							<img
-								class="ritual-node ritual-node--1 spell"
-								alt=""
-								src="/static/images/v2/nodes/ritual.png"
-							/>
-							<img
-								class="ritual-node ritual-node--2 spell"
-								alt=""
-								src="/static/images/v2/nodes/ritual.png"
-							/>
-							<img
-								class="ritual-node ritual-node--3 spell"
-								alt=""
-								src="/static/images/v2/nodes/ritual.png"
-							/>
-
-							<img
-								class="sorcery-node sorcery-node--1 spell"
-								alt=""
-								src="/static/images/v2/nodes/sorcery.png"
-							/>
-							<img
-								class="sorcery-node sorcery-node--2 spell"
-								alt=""
-								src="/static/images/v2/nodes/sorcery.png"
-							/>
-							<img
-								class="sorcery-node sorcery-node--3 spell"
-								alt=""
-								src="/static/images/v2/nodes/sorcery.png"
-							/>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.sorcery1?.replace('.png', '.webp')"
+								/>
+								<img
+									class="sorcery-spell sorcery-spell--1"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.sorcery1"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['sorcery1']),
+										'spell--blue-lock': blueLock === spellDict['sorcery1'],
+										'spell--red-lock': redLock === spellDict['sorcery1'],
+										'spell--visible': spells.images.sorcery1,
+									}"
+									x-on:click="handleSpellClick('sorcery1')"
+								/>
+							</picture>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.sorcery2?.replace('.png', '.webp')"
+								/>
+								<img
+									class="sorcery-spell sorcery-spell--2"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.sorcery2"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['sorcery2']),
+										'spell--blue-lock': blueLock === spellDict['sorcery2'],
+										'spell--red-lock': redLock === spellDict['sorcery2'],
+										'spell--visible': spells.images.sorcery2,
+									}"
+									x-on:click="handleSpellClick('sorcery2')"
+								/>
+							</picture>
+							<picture>
+								<source
+									type="image/webp"
+									x-bind:srcset="spells.images.sorcery3?.replace('.png', '.webp')"
+								/>
+								<img
+									class="sorcery-spell sorcery-spell--3"
+									alt=""
+									src="/static/images/v2/spacer.gif"
+									x-bind:src="spells.images.sorcery3"
+									x-bind:class="{
+										'spell--available': actionList.includes(spellDict['sorcery3']),
+										'spell--blue-lock': blueLock === spellDict['sorcery3'],
+										'spell--red-lock': redLock === spellDict['sorcery3'],
+										'spell--visible': spells.images.sorcery3,
+									}"
+									x-on:click="handleSpellClick('sorcery3')"
+								/>
+							</picture>
 						</div>
 						<div class="stone-nodes">
 							<div
@@ -404,6 +423,50 @@
 						</div>
 					</div>
 				</div>
+			</div>
+
+			<div
+				class="win-modal"
+				x-bind:class="{ 'is-visible': winner }"
+			>
+				<picture x-show="winner === 'blue'">
+					<source
+						type="image/webp"
+						srcset="/static/images/v2/stones/blue.webp"
+					/>
+					<img
+						alt=""
+						src="/static/images/v2/stones/blue.png"
+						height="30"
+						width="30"
+					/>
+				</picture>
+				<img
+					alt="Blue Wins"
+					src="/static/images/v2/blue-wins.svg"
+					height="26"
+					width="167"
+					x-show="winner === 'blue'"
+				/>
+				<picture x-show="winner === 'red'">
+					<source
+						type="image/webp"
+						srcset="/static/images/v2/stones/red.webp"
+					/>
+					<img
+						alt=""
+						src="/static/images/v2/stones/red.png"
+						height="30"
+						width="30"
+					/>
+				</picture>
+				<img
+					alt="Red Wins"
+					src="/static/images/v2/red-wins.svg"
+					height="26"
+					width="167"
+					x-show="winner === 'red'"
+				/>
 			</div>
 		</div>
 	</body>

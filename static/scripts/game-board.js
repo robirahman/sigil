@@ -32,6 +32,7 @@ document.addEventListener('alpine:init', () => {
 		},
 		validMoves: {},
 		whoseTurn: '',
+		winner: '',
 
 		handleDash() {
 			this.sendEvent('dash');
@@ -87,7 +88,6 @@ document.addEventListener('alpine:init', () => {
 
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
-			this.showReset = true;
 			this.currentPlayer = this.whoseTurn;
 
 			if (this.awaiting === 'node') {
@@ -196,11 +196,17 @@ document.addEventListener('alpine:init', () => {
 					_this.showReset = false;
 				}
 
+				if (_this.message === 'BLUE VICTORY') {
+					_this.showReset = false;
+					_this.winner = 'blue';
+				} else if (_this.message === 'RED VICTORY') {
+					_this.showReset = false;
+					_this.winner = 'red';
+				}
+
 				// TODO: _this.message === 'Opponent disconnected. You Win!'
 				// TODO: _this.message === 'Game over-- the winner is BLUE !!!'
 				// TODO: _this.message === 'Game over-- the winner is RED !!!'
-				// TODO: _this.message === 'BLUE VICTORY'
-				// TODO: _this.message === 'RED VICTORY'
 
 				if (_this.awaiting !== 'action') {
 					_this.messageHistory.push(payload.message);
@@ -267,14 +273,17 @@ document.addEventListener('alpine:init', () => {
 
 			function handleNewStonePlacement(payload) {
 				_this.lastPlay = payload.node;
-				// HACK: Alpine doesn't support dynamic refs and
-				// it won't scroll unless it's in an arbitrary timeout
+
 				if (payload.color !== _this.currentPlayer) {
+					// HACK: Alpine doesn't support dynamic refs and
+					// it won't scroll unless it's in an arbitrary timeout
 					setTimeout(() => {
 						document
 							.getElementById(`stone-node--${payload.node}`)
 							.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
 					}, 50);
+				} else {
+					_this.showReset = true;
 				}
 			}
 
