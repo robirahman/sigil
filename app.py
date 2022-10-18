@@ -348,15 +348,15 @@ def playgame(ws):
 
 			egress = { "type": "spelltextsetup" }
 
-			egress["ritual1"] = board.spells[0].text
-			egress["ritual2"] = board.spells[1].text
-			egress["ritual3"] = board.spells[2].text
-			egress["sorcery1"] = board.spells[3].text
-			egress["sorcery2"] = board.spells[4].text
-			egress["sorcery3"] = board.spells[5].text
-			egress["charm1"] = board.spells[6].text
-			egress["charm2"] = board.spells[7].text
-			egress["charm3"] = board.spells[8].text
+			egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+			egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+			egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+			egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+			egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+			egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+			egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+			egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+			egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
 
 			red.ws.send(json.dumps(egress))
 			blue.ws.send(json.dumps(egress))
@@ -515,15 +515,15 @@ def playprivategame(ws, privategamename):
 
 			egress = { "type": "spelltextsetup" }
 
-			egress["ritual1"] = board.spells[0].text
-			egress["ritual2"] = board.spells[1].text
-			egress["ritual3"] = board.spells[2].text
-			egress["sorcery1"] = board.spells[3].text
-			egress["sorcery2"] = board.spells[4].text
-			egress["sorcery3"] = board.spells[5].text
-			egress["charm1"] = board.spells[6].text
-			egress["charm2"] = board.spells[7].text
-			egress["charm3"] = board.spells[8].text
+			egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+			egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+			egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+			egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+			egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+			egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+			egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+			egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+			egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
 
 			red.ws.send(json.dumps(egress))
 			blue.ws.send(json.dumps(egress))
@@ -674,15 +674,15 @@ def playsingleplayergame(ws):
 
 		egress = { "type": "spelltextsetup" }
 
-		egress["ritual1"] = board.spells[0].text
-		egress["ritual2"] = board.spells[1].text
-		egress["ritual3"] = board.spells[2].text
-		egress["sorcery1"] = board.spells[3].text
-		egress["sorcery2"] = board.spells[4].text
-		egress["sorcery3"] = board.spells[5].text
-		egress["charm1"] = board.spells[6].text
-		egress["charm2"] = board.spells[7].text
-		egress["charm3"] = board.spells[8].text
+		egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+		egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+		egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+		egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+		egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+		egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+		egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+		egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+		egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
 
 		human.ws.send(json.dumps(egress))
 
