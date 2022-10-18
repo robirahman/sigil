@@ -113,8 +113,8 @@ def signup():
 @app.route('/signup', methods=['POST'])
 def signup_post():
     # code to validate and add user to database goes here
-    email = request.form.get('email')
-    name = request.form.get('name')
+    email = request.form.get('email').strip()
+    name = request.form.get('name').strip()
     password = request.form.get('password')
 
     user = User.query.filter_by(email=email).first() # if this returns a user, then the email already exists in database
