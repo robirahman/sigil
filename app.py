@@ -52,31 +52,35 @@ def load_user(user_id):
     # since the user_id is just the primary key of our user table, use it in the query for the user
     return User.query.get(int(user_id))
 
-# v2
-@app.route('/v2')
-def homeV2():
-	return render_template('v2/index.html')
 
-@app.route('/v2/tutorial-and-rules')
-def tutorialAndRulesV2():
-	return render_template('v2/tutorial-and-rules.html')
-
-@app.route('/v2/single-player')
-def singlePlayerV2():
-	return render_template('v2/single-player.html')
-
-@app.route('/v2/private-match')
-def privatematchV2():
-	return render_template('v2/private-match.html')
-
-@app.route('/v2/private-game/<gamename>')
-def privategameboardV2(gamename):
-	return render_template('v2/two-player.html', privategamename= gamename)
-
-# v1
 @app.route('/')
 def home():
-	return render_template('home.html')
+	return render_template('index.html')
+
+@app.route('/tutorial-and-rules')
+def tutorialAndRules():
+	return render_template('tutorial-and-rules.html')
+
+@app.route('/single-player')
+def singlePlayer():
+	return render_template('single-player.html')
+
+@app.route('/private-match')
+def privatematch():
+	return render_template('private-match.html')
+
+@app.route('/ladder-match')
+def laddermatch():
+	return render_template('ladder-match.html')
+
+@app.route('/private-game/<gamename>')
+def privategameboard(gamename):
+	return render_template('two-player.html', privategamename= gamename)
+
+# If privategamename is empty, it's a ladder game
+@app.route('/ladder-game')
+def laddergame():
+	return render_template('two-player.html', privategamename= '')
 
 @app.route('/profile')
 @login_required
@@ -144,51 +148,6 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
-@app.route('/gameboard')
-def gameboard():
-	return render_template('gameboard.html', privategamename="''")
-
-@app.route('/singleplayergameboard')
-def singleplayergameboard():
-	return render_template('singleplayergameboard.html')
-
-@app.route('/tutorial')
-def tutorial():
-	return render_template('tutorial.html')
-
-@app.route('/tutorialpartone')
-def tutorialpartone():
-	return render_template('tutorialpartone.html')
-
-@app.route('/tutorialparttwo')
-def tutorialparttwo():
-	return render_template('tutorialparttwo.html')
-
-@app.route('/tutorialpartthree')
-def tutorialpartthree():
-	return render_template('tutorialpartthree.html')
-
-@app.route('/tutorialbasicspells')
-def tutorialbasicspells():
-	return render_template('tutorialbasicspells.html')
-
-@app.route('/tutorialadvancedspells')
-def tutorialadvancedspells():
-	return render_template('tutorialadvancedspells.html')
-
-@app.route('/singleplayer')
-def singleplayer():
-	return render_template('singleplayer.html')
-
-@app.route('/laddermatch')
-def laddermatch():
-	return render_template('laddermatch.html')
-
-@app.route('/privatematch')
-def privatematch():
-	return render_template('privatematch.html')
-
-
 
 
 
@@ -230,10 +189,6 @@ def joingame(ws):
 	else:
 		egress =  {"type": "notfound"}
 		ws.send(json.dumps(egress))
-
-@app.route('/privategameboard/<gamename>')
-def privategameboard(gamename):
-	return render_template('gameboard.html', privategamename= "'" + gamename + "'")
 
 
 def countdown_timer(red, blue):

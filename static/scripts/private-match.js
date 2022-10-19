@@ -39,7 +39,6 @@ function main() {
 			createGameWs.addEventListener('open', () => {
 				var payload = {
 					gamename: createGameForm.elements['gamename'].value,
-					gamepwd: createGameForm.elements['gamepwd'].value,
 				};
 				createGameWs.send(JSON.stringify(payload));
 			});
@@ -57,7 +56,7 @@ function main() {
 					waitingForOpponent = true;
 				} else if (payload.type == 'startprivategame') {
 					// Update this if we switch to HTTPS
-					window.location.href = '/v2/private-game/' + payload.gamename;
+					window.location.href = '/private-game/' + payload.gamename;
 				}
 			});
 		}
@@ -75,7 +74,6 @@ function main() {
 			joinGameWs.addEventListener('open', () => {
 				var payload = {
 					gamename: joinGameForm.elements['gamename'].value,
-					gamepwd: joinGameForm.elements['gamepwd'].value,
 				};
 				joinGameWs.send(JSON.stringify(payload));
 			});
@@ -87,7 +85,7 @@ function main() {
 						'That game does not exist, or the password is incorrect.';
 				} else if (payload.type == 'startprivategame') {
 					// Update this if we switch to HTTPS
-					window.location.href = '/v2/private-game/' + payload.gamename;
+					window.location.href = '/private-game/' + payload.gamename;
 				}
 			});
 		}
