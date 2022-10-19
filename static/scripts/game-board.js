@@ -181,6 +181,10 @@ document.addEventListener('alpine:init', () => {
 					handleValidMovesEvent(payload);
 					return;
 				}
+
+				if (type === 'ping') {
+					return;
+				}
 			}
 
 			function handleMessageEvent(payload) {

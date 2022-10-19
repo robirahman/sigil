@@ -161,7 +161,7 @@ privategamecount = 0
 def creategame(ws):
 	global createdgames
 	ingress = ws.receive()
-	gamename = json.loads(ingress)['gamename']
+	gamename = json.loads(ingress)['gamename'].upper()
 	if (gamename in createdgames) or (gamename == ""):
 		# ws will close as this function exits
 		egress =  {"type": "nameconflict"}
@@ -179,7 +179,7 @@ def joingame(ws):
 	global createdgames
 	global privategamecount
 	ingress = ws.receive()
-	gamename = json.loads(ingress)['gamename']
+	gamename = json.loads(ingress)['gamename'].upper()
 	if (gamename in createdgames):
 		egress =  {"type": "startprivategame", "gamename": gamename + str(randrange(100000000))}
 		createdgames[gamename][0].send(json.dumps(egress))
@@ -427,6 +427,27 @@ def playgame(ws):
 
 
 
+# Periodically ping both players in a private game so that if one disconnects, the other wins.
+def private_game_ping(red, blue):
+	try:
+		while True:
+			time.sleep(3)
+			egress =  {"type": "ping"}
+			red.ws.send(json.dumps(egress))
+			blue.ws.send(json.dumps(egress))
+	except:
+		### determine which player disconnected
+		try:
+			red.jmessage("Opponent disconnected. You Win!")
+		except:
+			try:
+				blue.jmessage("Opponent disconnected. You Win!")
+			except:
+				### both are disconnected
+				pass
+
+
+
 
 privategamedict = {}
 
@@ -495,6 +516,9 @@ def playprivategame(ws, privategamename):
 			board.nodes['b1'].stone = 'blue'
 			board.update()
 			time.sleep(3)
+
+			private_game_ping_thread = Thread(target=private_game_ping, args=(red, blue))
+			private_game_ping_thread.start()
 
 
 			while True:
