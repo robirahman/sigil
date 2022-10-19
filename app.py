@@ -75,12 +75,13 @@ def laddermatch():
 
 @app.route('/private-game/<gamename>')
 def privategameboard(gamename):
-	return render_template('two-player.html', privategamename= gamename)
+	return render_template('two-player.html', privategamename= gamename, username= '', elo= '')
 
 # If privategamename is empty, it's a ladder game
 @app.route('/ladder-game')
+@login_required
 def laddergame():
-	return render_template('two-player.html', privategamename= '')
+	return render_template('two-player.html', privategamename= '', username=current_user.name, elo=current_user.elo)
 
 @app.route('/profile')
 @login_required
@@ -120,6 +121,9 @@ def signup_post():
     email = request.form.get('email').strip()
     name = request.form.get('name').strip()
     password = request.form.get('password')
+    if (email == '' or name == '' or password == ''):
+    	flash('Fields must not be empty')
+    	return redirect(url_for('signup'))
 
     user = User.query.filter_by(email=email).first() # if this returns a user, then the email already exists in database
 
@@ -227,7 +231,7 @@ def countdown_timer(red, blue):
 				pass
 
 
-### Websocket objects for the waiting player, if there is one
+### Websocket object for the waiting player, if there is one
 waiting_player_ws = None
 waiting_chatter_ws = None
 
@@ -289,6 +293,21 @@ def playgame(ws):
 		try:
 			red.jmessage("You are RED this game.")
 			blue.jmessage("You are BLUE this game.")
+
+			egress = { "type": "username_request" }
+
+			red.ws.send(json.dumps(egress))
+			ingress = red.ws.receive()
+			red_username = json.loads(ingress)['message']
+			red.username = red_username
+
+			blue.ws.send(json.dumps(egress))
+			ingress = blue.ws.receive()
+			blue_username = json.loads(ingress)['message']
+			blue.username = blue_username
+
+			red.jmessage(red_username + " versus " + blue_username)
+			blue.jmessage(red_username + " versus " + blue_username)
 
 
 			### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,

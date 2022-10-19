@@ -460,6 +460,9 @@ class Player():
 		### the object which is the ws connection to each player.
 		self.ws = None
 
+		### Username is only set in ladder matches.
+		self.username = None
+
 		### Countdown timer (measured in seconds).
 		self.timer = 900
 

@@ -1,5 +1,5 @@
 document.addEventListener('alpine:init', () => {
-	Alpine.data('gameBoard', ({ gameName = '', playerCount = 0 }) => ({
+	Alpine.data('gameBoard', ({ gameName = '', playerCount = 0 , username = '', elo = 0}) => ({
 		actionList: [],
 		// awaiting is the next action you're expected to take
 		awaiting: '',
@@ -182,6 +182,11 @@ document.addEventListener('alpine:init', () => {
 					return;
 				}
 
+				if (type === 'username_request') {
+					handleUsernameRequestEvent();
+					return;
+				}
+
 				if (type === 'ping') {
 					return;
 				}
@@ -308,6 +313,10 @@ document.addEventListener('alpine:init', () => {
 
 			function handleValidMovesEvent(payload) {
 				_this.validMoves = payload;
+			}
+
+			function handleUsernameRequestEvent() {
+				_this.sendEvent(username);
 			}
 		},
 	}));
