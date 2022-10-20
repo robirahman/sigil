@@ -15,7 +15,7 @@ from simple_websocket import ConnectionClosed
 from datetime import datetime
 from pytz import timezone
 
-from game import Board, Player, resetException
+from game import Board, Player, resetException, redwinsException, bluewinsException
 from singleplayergame import SPBoard, AIPlayer
 
 
@@ -194,10 +194,26 @@ def joingame(ws):
 		egress =  {"type": "notfound"}
 		ws.send(json.dumps(egress))
 
+def record_elo(winner, loser):
+	if winner.board.elo_recorded:
+		return
+
+	winner.board.elo_recorded = True
+
+	winner_data = User.query.filter_by(name=winner.username).first()
+	loser_data = User.query.filter_by(name=loser.username).first()
+
+	winner_data.elo += 5
+	loser_data.elo -= 5
+	db.session.commit()
+
+	
+
+
 
 def countdown_timer(red, blue):
-	try:
-		while True:
+	while True:
+		try:
 			time.sleep(1)
 			if red.timer_running:
 				red.timer -= 1
@@ -219,16 +235,30 @@ def countdown_timer(red, blue):
 				egress =  {"type": "blue_timer", "seconds": blue.timer}
 				red.ws.send(json.dumps(egress))
 				blue.ws.send(json.dumps(egress))
-	except:
-		### determine which player disconnected
-		try:
-			red.jmessage("Opponent disconnected. You Win!")
+		except redwinsException:
+			record_elo(red, blue)
+			break
+		except bluewinsException:
+			record_elo(blue, red)
+			break
 		except:
-			try:
-				blue.jmessage("Opponent disconnected. You Win!")
-			except:
-				### both are disconnected
-				pass
+			time.sleep(.1)
+			if red.board.elo_recorded:
+				break
+			else:
+				### determine which player disconnected
+				try:
+					red.jmessage("Opponent disconnected. You Win!")
+					record_elo(red, blue)
+					break
+				except:
+					try:
+						blue.jmessage("Opponent disconnected. You Win!")
+						record_elo(blue, red)
+						break
+					except:
+						### both are disconnected
+						break
 
 
 ### Websocket object for the waiting player, if there is one
@@ -246,7 +276,7 @@ def cleanup_queue():
 			egress =  {"type": "message", "message": "Waiting for opponent to join...", "awaiting": None, }
 			waiting_player_ws.send(json.dumps(egress))
 
-			egress = {"type": "chatmessage", "player": "", "message": "Looking for opponent..." }
+			egress = {"type": "chatmessage", "player": "", "message": " " }
 			waiting_chatter_ws.send(json.dumps(egress))
 		else:
 			waiting_player_ws = None
@@ -271,12 +301,16 @@ def playgame(ws):
 		ws.send(json.dumps(egress))
 		waiting_player_ws = ws
 		while True:
+			# make sure the player is still there. If not, an exception will be raised and the thread will terminate.
+			egress =  {"type": "ping"}
+			ws.send(json.dumps(egress))
 			time.sleep(1)
 	else:
 		laddergamecount += 1
 		opp_ws = waiting_player_ws
 		waiting_player_ws = None
 		board = Board()
+		board.ladder_match = True
 		red = Player(board, 'red')
 		blue = Player(board, 'blue')
 		board.addplayers(red, blue)
@@ -290,72 +324,79 @@ def playgame(ws):
 			red.ws = opp_ws
 			blue.ws = ws
 
-		try:
-			red.jmessage("You are RED this game.")
-			blue.jmessage("You are BLUE this game.")
+		red.jmessage("You are RED this game.")
+		blue.jmessage("You are BLUE this game.")
 
-			egress = { "type": "username_request" }
+		egress = { "type": "username_request" }
 
-			red.ws.send(json.dumps(egress))
-			ingress = red.ws.receive()
-			red_username = json.loads(ingress)['message']
-			red.username = red_username
+		red.ws.send(json.dumps(egress))
+		ingress = red.ws.receive()
+		red_username = json.loads(ingress)['message']
+		red.username = red_username
 
-			blue.ws.send(json.dumps(egress))
-			ingress = blue.ws.receive()
-			blue_username = json.loads(ingress)['message']
-			blue.username = blue_username
+		blue.ws.send(json.dumps(egress))
+		ingress = blue.ws.receive()
+		blue_username = json.loads(ingress)['message']
+		blue.username = blue_username
 
-			red.jmessage(red_username + " versus " + blue_username)
-			blue.jmessage(red_username + " versus " + blue_username)
-
-
-			### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-			### and values "Fireblast", "Flourish", etc.
-			egress = { "type": "spellsetup" }
-
-			egress["ritual1"] = board.spells[0].name
-			egress["ritual2"] = board.spells[1].name
-			egress["ritual3"] = board.spells[2].name
-			egress["sorcery1"] = board.spells[3].name
-			egress["sorcery2"] = board.spells[4].name
-			egress["sorcery3"] = board.spells[5].name
-			egress["charm1"] = board.spells[6].name
-			egress["charm2"] = board.spells[7].name
-			egress["charm3"] = board.spells[8].name
-
-			red.ws.send(json.dumps(egress))
-			blue.ws.send(json.dumps(egress))
-
-			egress = { "type": "spelltextsetup" }
-
-			egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
-			egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
-			egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
-			egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
-			egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
-			egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
-			egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
-			egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
-			egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
-
-			red.ws.send(json.dumps(egress))
-			blue.ws.send(json.dumps(egress))
+		red.jmessage(red_username + " versus " + blue_username)
+		blue.jmessage(red_username + " versus " + blue_username)
 
 
-			board.nodes['a1'].stone = 'red'
-			board.nodes['b1'].stone = 'blue'
-			board.update()
-			time.sleep(3)
+		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
+		### and values "Fireblast", "Flourish", etc.
+		egress = { "type": "spellsetup" }
 
-			countdown_timer_thread = Thread(target=countdown_timer, args=(red, blue))
-			countdown_timer_thread.start()
+		egress["ritual1"] = board.spells[0].name
+		egress["ritual2"] = board.spells[1].name
+		egress["ritual3"] = board.spells[2].name
+		egress["sorcery1"] = board.spells[3].name
+		egress["sorcery2"] = board.spells[4].name
+		egress["sorcery3"] = board.spells[5].name
+		egress["charm1"] = board.spells[6].name
+		egress["charm2"] = board.spells[7].name
+		egress["charm3"] = board.spells[8].name
+
+		red.ws.send(json.dumps(egress))
+		blue.ws.send(json.dumps(egress))
+
+		egress = { "type": "spelltextsetup" }
+
+		egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+		egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+		egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+		egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+		egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+		egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+		egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+		egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+		egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
+
+		red.ws.send(json.dumps(egress))
+		blue.ws.send(json.dumps(egress))
 
 
-			while True:
+		board.nodes['a1'].stone = 'red'
+		board.nodes['b1'].stone = 'blue'
+		board.update()
+		time.sleep(3)
+
+		countdown_timer_thread = Thread(target=countdown_timer, args=(red, blue))
+		countdown_timer_thread.start()
+
+
+		while True:
+			try:
 				### First take a snapshot of the board,
 				### which we will revert to in case of a reset exception.
-				board.take_snapshot()
+				try:
+					board.take_snapshot()
+				except redwinsException:
+					record_elo(red, blue)
+					break
+				except bluewinsException:
+					record_elo(blue, red)
+					break
 
 				board.turncounter += 1
 
@@ -392,6 +433,14 @@ def playgame(ws):
 					if board.gameover:
 						board.end_game()
 						break
+
+				except redwinsException:
+					record_elo(red, blue)
+					break
+
+				except bluewinsException:
+					record_elo(blue, red)
+					break
 
 				except resetException:
 					### Reset all attributes of the game & board
@@ -433,37 +482,43 @@ def playgame(ws):
 
 					continue
 
-		except:
-			### determine which player disconnected
-			try:
-				red.jmessage("Opponent disconnected. You Win!")
 			except:
+				### determine which player disconnected
 				try:
-					blue.jmessage("Opponent disconnected. You Win!")
+					red.jmessage("Opponent disconnected. You Win!")
+					record_elo(red, blue)
+					break
 				except:
-					### both are disconnected
-					pass
+					try:
+						blue.jmessage("Opponent disconnected. You Win!")
+						record_elo(blue, red)
+						break
+					except:
+						### both are disconnected
+						break
 
 
 
 # Periodically ping both players in a private game so that if one disconnects, the other wins.
 def private_game_ping(red, blue):
-	try:
-		while True:
+	while True:
+		try:
 			time.sleep(3)
 			egress =  {"type": "ping"}
 			red.ws.send(json.dumps(egress))
 			blue.ws.send(json.dumps(egress))
-	except:
-		### determine which player disconnected
-		try:
-			red.jmessage("Opponent disconnected. You Win!")
 		except:
+			### determine which player disconnected
 			try:
-				blue.jmessage("Opponent disconnected. You Win!")
+				red.jmessage("Opponent disconnected. You Win!")
+				break
 			except:
-				### both are disconnected
-				pass
+				try:
+					blue.jmessage("Opponent disconnected. You Win!")
+					break
+				except:
+					### both are disconnected
+					break
 
 
 
@@ -476,6 +531,9 @@ def playprivategame(ws, privategamename):
 	if privategamename not in privategamedict:
 		privategamedict[privategamename] = ws
 		while True:
+			# make sure the player is still there. If not, an exception will be raised and the thread will terminate.
+			egress =  {"type": "ping"}
+			ws.send(json.dumps(egress))
 			time.sleep(1)
 	else:
 		opp_ws = privategamedict[privategamename]

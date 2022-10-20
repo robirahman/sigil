@@ -12,6 +12,11 @@ import time
 class resetException(Exception):
 	pass
 
+class redwinsException(Exception):
+	pass
+
+class bluewinsException(Exception):
+	pass
 
 
 
@@ -30,6 +35,10 @@ class Node():
 
 class Board():
 	def __init__(self):
+
+		self.ladder_match = False
+
+		self.elo_recorded = False
 
 		self.turncounter = 0
 
@@ -251,10 +260,7 @@ class Board():
 
 
 	def end_game(self):
-		### Right now this doesn't DO anything special,
-		### just prints some silly stuff.
-		### But this would be a good place to put any 'store the data'
-		### type code.
+
 		self.redplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
 							   " !!!")
 		self.blueplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
@@ -262,6 +268,13 @@ class Board():
 		for i in range(3):
 			self.redplayer.jmessage(self.winner.upper() + " VICTORY")
 			self.blueplayer.jmessage(self.winner.upper() + " VICTORY")
+
+		if self.ladder_match:
+			if self.winner == 'red':
+				raise redwinsException()
+			elif self.winner == 'blue':
+				raise bluewinsException()
+
 
 	def make_board(self):
 		nodelist = []

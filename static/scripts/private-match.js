@@ -34,7 +34,7 @@ function main() {
 
 		if (!waitingForOpponent) {
 			// Might need to change this to "wss://" when we set up HTTPS
-			createGameWs = new WebSocket('ws://' + location.host + '/api/creategame');
+			createGameWs = new WebSocket('wss://' + location.host + '/api/creategame');
 
 			createGameWs.addEventListener('open', () => {
 				var payload = {
@@ -69,7 +69,7 @@ function main() {
 
 		if (!waitingForOpponent) {
 			// Might need to change this to "wss://" when we set up HTTPS
-			joinGameWs = new WebSocket('ws://' + location.host + '/api/joingame');
+			joinGameWs = new WebSocket('wss://' + location.host + '/api/joingame');
 
 			joinGameWs.addEventListener('open', () => {
 				var payload = {
