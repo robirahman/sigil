@@ -17,6 +17,11 @@
 	</head>
 
 	{% block content %}
-	<h1 class="title">Welcome, {{ name }}! Your current Sigil rating is {{ elo }}</h1>
+	<h1 class="title">Welcome, {{ name }}!</h1>
+
+	<h2>Your current Sigil rating is {{ elo }}.</h2>
+
+	<h2>You have played {{ ladder_game_count }} ladder matches.</h2>
+
 	{% endblock %}
 </html>

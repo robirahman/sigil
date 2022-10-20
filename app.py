@@ -3,6 +3,7 @@
 
 import json
 import time
+import math
 
 from flask import Flask, render_template, redirect, url_for, request, flash
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -41,6 +42,7 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(100))
     name = db.Column(db.String(100))
     elo = db.Column(db.Integer)
+    ladder_game_count = db.Column(db.Integer)
 
 
 login_manager = LoginManager()
@@ -86,7 +88,7 @@ def laddergame():
 @app.route('/profile')
 @login_required
 def profile():
-    return render_template('profile.html', name=current_user.name, elo=current_user.elo)
+    return render_template('profile.html', name=current_user.name, elo=current_user.elo, ladder_game_count=current_user.ladder_game_count)
 
 @app.route('/login')
 def login():
@@ -138,7 +140,7 @@ def signup_post():
         return redirect(url_for('signup'))
 
     # create a new user with the form data. Hash the password so the plaintext version isn't saved.
-    new_user = User(email=email, name=name, password=generate_password_hash(password, method='sha256'), elo=1000)
+    new_user = User(email=email, name=name, password=generate_password_hash(password, method='sha256'), elo=1000, ladder_game_count=0)
 
     # add the new user to the database
     db.session.add(new_user)
@@ -203,11 +205,22 @@ def record_elo(winner, loser):
 	winner_data = User.query.filter_by(name=winner.username).first()
 	loser_data = User.query.filter_by(name=loser.username).first()
 
-	winner_data.elo += 5
-	loser_data.elo -= 5
-	db.session.commit()
+	winner_elo = winner_data.elo
+	loser_elo = loser_data.elo
 
-	
+	exponent = (winner_elo - loser_elo)/400
+	scaling_factor = 1/(1 + 10**exponent)
+	points_decimal = 32*scaling_factor
+	points = int(math.ceil(points_decimal))
+
+
+	winner_data.elo += points
+	loser_data.elo -= points
+
+	winner_data.ladder_game_count += 1
+	loser_data.ladder_game_count += 1
+
+	db.session.commit()
 
 
 
