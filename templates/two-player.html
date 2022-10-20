@@ -57,7 +57,7 @@
 								><span class="visually-hidden">Sigil Online</span
 								><img
 									alt=""
-									src="/static/images/v2/logo-icon.svg"
+									src="/static/images/logo-icon.svg"
 									height="40"
 									width="32"
 							/></a>
@@ -217,11 +217,11 @@
 						<picture>
 							<source
 								type="image/webp"
-								srcset="/static/images/v2/game-board.webp"
+								srcset="/static/images/game-board.webp"
 							/>
 							<img
 								class="game-board max-width:100%"
-								src="/static/images/v2/game-board.jpg"
+								src="/static/images/game-board.jpg"
 								alt=""
 							/>
 						</picture>
@@ -234,7 +234,7 @@
 								<img
 									class="charm-spell charm-spell--1"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['charm1']),
 										'spell--blue-lock': blueLock === spellDict['charm1'],
@@ -253,7 +253,7 @@
 								<img
 									class="charm-spell charm-spell--2"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.charm2"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['charm2']),
@@ -272,7 +272,7 @@
 								<img
 									class="charm-spell charm-spell--3"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.charm3"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['charm3']),
@@ -292,7 +292,7 @@
 								<img
 									class="ritual-spell ritual-spell--1"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.ritual1"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['ritual1']),
@@ -311,7 +311,7 @@
 								<img
 									class="ritual-spell ritual-spell--2"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.ritual2"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['ritual2']),
@@ -330,7 +330,7 @@
 								<img
 									class="ritual-spell ritual-spell--3"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.ritual3"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['ritual3']),
@@ -350,7 +350,7 @@
 								<img
 									class="sorcery-spell sorcery-spell--1"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.sorcery1"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['sorcery1']),
@@ -369,7 +369,7 @@
 								<img
 									class="sorcery-spell sorcery-spell--2"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.sorcery2"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['sorcery2']),
@@ -388,7 +388,7 @@
 								<img
 									class="sorcery-spell sorcery-spell--3"
 									alt=""
-									src="/static/images/v2/spacer.gif"
+									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.sorcery3"
 									x-bind:class="{
 										'spell--available': actionList.includes(spellDict['sorcery3']),
@@ -433,18 +433,18 @@
 				<picture x-show="winner === 'blue'">
 					<source
 						type="image/webp"
-						srcset="/static/images/v2/stones/blue.webp"
+						srcset="/static/images/stones/blue.webp"
 					/>
 					<img
 						alt=""
-						src="/static/images/v2/stones/blue.png"
+						src="/static/images/stones/blue.png"
 						height="30"
 						width="30"
 					/>
 				</picture>
 				<img
 					alt="Blue Wins"
-					src="/static/images/v2/blue-wins.svg"
+					src="/static/images/blue-wins.svg"
 					height="26"
 					width="167"
 					x-show="winner === 'blue'"
@@ -452,18 +452,18 @@
 				<picture x-show="winner === 'red'">
 					<source
 						type="image/webp"
-						srcset="/static/images/v2/stones/red.webp"
+						srcset="/static/images/stones/red.webp"
 					/>
 					<img
 						alt=""
-						src="/static/images/v2/stones/red.png"
+						src="/static/images/stones/red.png"
 						height="30"
 						width="30"
 					/>
 				</picture>
 				<img
 					alt="Red Wins"
-					src="/static/images/v2/red-wins.svg"
+					src="/static/images/red-wins.svg"
 					height="26"
 					width="167"
 					x-show="winner === 'red'"
@@ -511,7 +511,7 @@
 				<button class="chat__button">
 					<img
 						alt="Send"
-						src="/static/images/v2/send-icon.svg"
+						src="/static/images/send-icon.svg"
 						height="13"
 						width="18"
 					/>

@@ -224,7 +224,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				Object.entries(_this.spellDict).forEach(([key, value]) => {
-					_this.spells.images[key] = `/static/images/v2/spells/${value}.png`;
+					_this.spells.images[key] = `/static/images/spells/${value}.png`;
 				});
 
 				// HACK: It won't scroll unless it's in an arbitrary timeout

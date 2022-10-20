@@ -474,19 +474,19 @@ textarea {
 
 /* stylelint-disable-next-line no-duplicate-selectors */
 html {
-	--blue-stone: url("/static/images/v2/stones/blue.png");
-	--red-stone: url("/static/images/v2/stones/red.png");
+	--blue-stone: url("/static/images/stones/blue.png");
+	--red-stone: url("/static/images/stones/red.png");
 
 	background-color: #21122c;
-	background-image: url("/static/images/v2/tiled-background.jpg");
+	background-image: url("/static/images/tiled-background.jpg");
 	background-position: center;
 }
 
 html.webp {
-	--blue-stone: url("/static/images/v2/stones/blue.webp");
-	--red-stone: url("/static/images/v2/stones/red.webp");
+	--blue-stone: url("/static/images/stones/blue.webp");
+	--red-stone: url("/static/images/stones/red.webp");
 
-	background-image: url("/static/images/v2/tiled-background.webp");
+	background-image: url("/static/images/tiled-background.webp");
 }
 
 .masthead {

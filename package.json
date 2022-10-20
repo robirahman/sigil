@@ -5,7 +5,7 @@
   "main": "app.py",
   "scripts": {
     "dev": "FLASK_APP=app.py FLASK_ENV=development flask run",
-    "format": "npm run lint-css && prettier --write \"./static/css/*.css\" \"./static/scripts/*.js\" \"./templates/v2/*.html\" && npm run lint-js",
+    "format": "npm run lint-css && prettier --write \"./static/css/*.css\" \"./static/scripts/*.js\" \"./templates/*.html\" && npm run lint-js",
     "lint-css": "stylelint \"static/css/*.css\" --fix",
     "lint-js": "eslint \"./static/scripts/**\" --fix"
   },
