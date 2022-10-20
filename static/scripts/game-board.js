@@ -223,7 +223,10 @@ document.addEventListener('alpine:init', () => {
 				// TODO: _this.message === 'Game over-- the winner is RED !!!'
 
 				if (_this.awaiting !== 'action') {
-					_this.messageHistory.push(payload.message);
+					if (payload.message !== '') {
+						_this.messageHistory.push(payload.message);
+					}
+					
 				}
 			}
 

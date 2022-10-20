@@ -173,6 +173,9 @@ class Slash(Spell):
 
 
 	def resolve(self, player):
+		if not player.allhardmoveablenodes():
+			player.jmessage("No legal hard moves")
+			return
 		player.hardmove()
 
 
@@ -203,6 +206,7 @@ class Carnage(Spell):
 	def resolve(self, player):
 		for i in range(4):
 			if not player.allhardmoveablenodes():
+				player.jmessage("No legal hard moves")
 				break
 			player.hardmove()
 
@@ -228,9 +232,6 @@ class Hail_Storm(Spell):
 
 	def resolve(self, player):
 
-		egress = {"type": "selecting"}
-		player.ws.send(json.dumps(egress))
-
 		hailablespells = []
 		### We will use the notation of board.positions to refer to spells.
 		### That is, 1,2,3 are the majors, 4,5,6 are the minors, 7,8,9 charms.
@@ -242,19 +243,16 @@ class Hail_Storm(Spell):
 					hailablespells.append(i)
 					break
 
+		player.jmessage("Select an enemy stone to destroy in each spell.")
 		while len(hailablespells) > 0:
-			player.jmessage("Select an enemy stone to destroy, or press Done if you are done selecting.", "node")
+			player.jmessage("", "node")
 
 			actualmessage = player.receivemessage()
 
-			if actualmessage == 'doneselecting':
-				break
-
-			elif actualmessage in player.board.nodes:
+			if actualmessage in player.board.nodes:
 				node = player.board.nodes[actualmessage]
 
 				if node.stone != player.enemy:
-					player.jmessage("Invalid selection")
 					continue
 
 				validstone = False
@@ -267,16 +265,6 @@ class Hail_Storm(Spell):
 							player.board.last_player = None
 						hailablespells.remove(spellnum)
 						player.board.update()
-						continue
-
-				player.jmessage("Invalid selection")
-				continue
-				
-			else:
-				continue
-
-		egress = {"type": "doneselecting"}
-		player.ws.send(json.dumps(egress))
 
 
 class Bewitch(Spell):
@@ -303,7 +291,7 @@ class Bewitch(Spell):
 					if adjacent_to_enemy:
 						convert_one_options[nodename] = player.color
 
-			egress =  {"type": "message", "message": "Select an enemy stone to convert.", 
+			egress =  {"type": "message", "message": "Choose 2 enemy stones to convert.", 
 			"awaiting": "node", "moveoptions": convert_one_options}
 
 			player.ws.send(json.dumps(egress))
@@ -336,8 +324,7 @@ class Bewitch(Spell):
 				if neighbor.stone == player.enemy:
 					convert_two_options[neighbor.name] = player.color
 
-			egress =  {"type": "message", "message": "Select an adjacent enemy stone to convert.", 
-			"awaiting": "node", "moveoptions": convert_two_options}
+			egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": convert_two_options}
 
 			player.ws.send(json.dumps(egress))
 
@@ -375,7 +362,7 @@ class Comet(Spell):
 		
 		while True:
 			moveoptions = player.allblinkablenodes()
-			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			egress =  {"type": "message", "message": "Make 1 blink move.", 
 			"awaiting": "node", "moveoptions": moveoptions}
 
 			player.ws.send(json.dumps(egress))
@@ -402,7 +389,7 @@ class Comet(Spell):
 					break
 
 		while True:
-			player.jmessage("Select a stone to sacrifice.", "node")
+			player.jmessage("Sacrifice a stone.", "node")
 
 			actualmessage = player.receivemessage()
 
@@ -429,7 +416,7 @@ class Meteor(Spell):
 	def resolve(self, player):
 		while True:
 			moveoptions = player.allblinkablenodes()
-			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			egress =  {"type": "message", "message": "Make 1 blink move.", 
 			"awaiting": "node", "moveoptions": moveoptions}
 
 			player.ws.send(json.dumps(egress))
@@ -469,7 +456,7 @@ class Meteor(Spell):
 
 		if adjacent_enemy_count > 1:
 			while True:
-				player.jmessage("Select an enemy stone to destroy.", "node")
+				player.jmessage("Choose an enemy stone to destroy.", "node")
 
 				actualmessage = player.receivemessage()
 
@@ -510,7 +497,7 @@ class Starfall(Spell):
 					if adjacent_to_empty:
 						starfall_one_options[nodename] = player.color
 
-			egress =  {"type": "message", "message": "Where would you like to blink? ", 
+			egress =  {"type": "message", "message": "Make 2 soft blink moves that touch each other.", 
 			"awaiting": "node", "moveoptions": starfall_one_options}
 
 			player.ws.send(json.dumps(egress))
@@ -543,8 +530,7 @@ class Starfall(Spell):
 				if neighbor.stone == None:
 					starfall_two_options[neighbor.name] = player.color
 
-			egress =  {"type": "message", "message": "Where would you like to blink? ", 
-			"awaiting": "node", "moveoptions": starfall_two_options}
+			egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": starfall_two_options}
 
 			player.ws.send(json.dumps(egress))
 

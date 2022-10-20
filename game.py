@@ -558,6 +558,7 @@ class Player():
 		spelllist = []
 
 		if canmove:
+			self.jmessage("Choose where to move.")
 			actions.append('move')
 			if ('Seal_of_Wind' in [s.name for s in self.charged_spells]):
 				moveoptions = self.allblinkablenodes()
@@ -594,8 +595,6 @@ class Player():
 								spelllist.append(spell.name)
 			actions.append('pass')
 
-		self.jmessage("\nSelect an action:")
-
 
 		egress =  {"type": "message", "message": str(actions),
 		"awaiting": "action", "actionlist": actions, "moveoptions": moveoptions}
@@ -613,7 +612,6 @@ class Player():
 			shortcuts = []
 
 		if action not in actions and action not in shortcuts:
-			self.jmessage("Invalid action!")
 			self.taketurn(canmove, candash, canspell, cansummer)
 			return None
 
@@ -738,7 +736,7 @@ class Player():
 			else:
 				moveoptions = self.allmoveablenodes()
 
-			egress =  {"type": "message", "message": "Where would you like to move? ",
+			egress =  {"type": "message", "message": "Choose where to move.",
 			"awaiting": "node", "moveoptions": moveoptions}
 
 			self.ws.send(json.dumps(egress))
@@ -754,13 +752,11 @@ class Player():
 				adjacent = True
 
 		if node.stone == self.color:
-			self.jmessage("Invalid move-- you already have a stone there!")
 			self.move(standardmove=standardmove)
 			return None
 
 		elif not adjacent:
 			if not (standardmove and ("Seal_of_Wind" in [spell.name for spell in self.charged_spells])):
-				self.jmessage("Invalid move-- that's not adjacent to you!")
 				self.move(standardmove=standardmove)
 				return None
 			else:
@@ -809,7 +805,7 @@ class Player():
 	def softmove(self):
 		moveoptions = self.allsoftmoveablenodes()
 
-		egress =  {"type": "message", "message": "Where would you like to soft move? ",
+		egress =  {"type": "message", "message": "Choose where to soft move.",
 		"awaiting": "node", "moveoptions": moveoptions}
 
 		self.ws.send(json.dumps(egress))
@@ -834,12 +830,10 @@ class Player():
 			self.board.update()
 
 		elif node.stone == self.color:
-			self.jmessage("Invalid move-- you already have a stone there!")
 			self.softmove()
 			return None
 
 		elif not adjacent:
-			self.jmessage("Invalid move-- that's not adjacent to you!")
 			self.softmove()
 			return None
 
@@ -851,7 +845,7 @@ class Player():
 	def hardmove(self):
 		moveoptions = self.allhardmoveablenodes()
 
-		egress =  {"type": "message", "message": "Where would you like to hard move? ",
+		egress =  {"type": "message", "message": "Choose where to hard move.",
 		"awaiting": "node", "moveoptions": moveoptions}
 
 		self.ws.send(json.dumps(egress))
@@ -864,12 +858,10 @@ class Player():
 				adjacent = True
 
 		if not adjacent:
-			self.jmessage("Invalid move-- that's not adjacent to you!")
 			self.hardmove()
 			return None
 
 		elif node.stone == self.color:
-			self.jmessage("Invalid move-- you already have a stone there!")
 			self.hardmove()
 			return None
 
@@ -884,7 +876,7 @@ class Player():
 	def dash(self, shimmer=False):
 		if shimmer:
 			while True:
-				self.jmessage("Select a stone to sacrifice. ", "node")
+				self.jmessage("Choose a stone to sacrifice. ", "node")
 
 				actualmessage = self.receivemessage()
 				if actualmessage in self.board.nodes:
@@ -903,7 +895,7 @@ class Player():
 
 		else:
 			while True:
-				self.jmessage("Select your first stone to sacrifice. ", "node")
+				self.jmessage("Sacrifice two stones.", "node")
 
 				actualmessage = self.receivemessage()
 				if actualmessage in self.board.nodes:
@@ -919,7 +911,7 @@ class Player():
 						break
 
 			while True:
-				self.jmessage("Select your second stone to sacrifice. ", "node")
+				self.jmessage("", "node")
 
 				actualmessage = self.receivemessage()
 				if actualmessage in self.board.nodes:
@@ -1010,7 +1002,7 @@ class Player():
 
 			self.ws.send(json.dumps(egress))
 
-			self.jmessage("Where would you like to push the enemy stone? ", "node")
+			self.jmessage("Choose where to push the enemy stone.", "node")
 
 			push = self.receivemessage()
 			if push not in deduped_pushingoptionnames:
