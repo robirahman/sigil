@@ -20,7 +20,8 @@ from game import Board, Player, resetException, redwinsException, bluewinsExcept
 from singleplayergame import SPBoard, AIPlayer
 
 
-
+class invalidCheckException(Exception):
+	pass
 
 
 
@@ -83,7 +84,7 @@ def privategameboard(gamename):
 @app.route('/ladder-game')
 @login_required
 def laddergame():
-	return render_template('two-player.html', privategamename= '', username=current_user.name, elo=current_user.elo)
+	return render_template('two-player.html', privategamename= '', username=current_user.name, check=current_user.password[8:16], elo=current_user.elo)
 
 @app.route('/profile')
 @login_required
@@ -351,6 +352,28 @@ def playgame(ws):
 		ingress = blue.ws.receive()
 		blue_username = json.loads(ingress)['message']
 		blue.username = blue_username
+
+		egress = { "type": "check_request" }
+
+		red.ws.send(json.dumps(egress))
+		ingress = red.ws.receive()
+		red_check = json.loads(ingress)['message']
+		valid = (User.query.filter_by(name=red_username).first().password[8:16] == red_check)
+		if not valid:
+			red.jmessage("Something went wrong - try again.")
+			blue.jmessage("Something went wrong - try again.")
+			raise invalidCheckException()
+
+		blue.ws.send(json.dumps(egress))
+		ingress = blue.ws.receive()
+		blue_check = json.loads(ingress)['message']
+		valid = (User.query.filter_by(name=blue_username).first().password[8:16] == blue_check)
+		if not valid:
+			red.jmessage("Something went wrong - try again.")
+			blue.jmessage("Something went wrong - try again.")
+			raise invalidCheckException()
+
+
 
 		red.jmessage(red_username + " versus " + blue_username)
 		blue.jmessage(red_username + " versus " + blue_username)
