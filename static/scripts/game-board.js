@@ -56,7 +56,6 @@ document.addEventListener('alpine:init', () => {
 			const charmName = this.spellDict[charm];
 			if (this.awaiting === 'action' && this.actionList.includes(charmName)) {
 				this.sendEvent(charmName);
-				awaiting = null;
 			}
 		},
 
@@ -70,14 +69,12 @@ document.addEventListener('alpine:init', () => {
 				(this.awaiting === 'action' && this.actionList.includes(spellName))
 			) {
 				this.sendEvent(spellName);
-				awaiting = null;
 			}
 		},
 
 		handleReset() {
 			this.sendEvent('reset');
 			this.actionList = [];
-			this.awaiting = null;
 			this.lastPlay = '';
 			this.nodesToRefill = {};
 			this.playerToRefill = '';
@@ -97,7 +94,6 @@ document.addEventListener('alpine:init', () => {
 					this.sendEvent(node);
 				}
 			}
-			this.awaiting = null;
 		},
 
 		init() {
@@ -120,6 +116,7 @@ document.addEventListener('alpine:init', () => {
 
 			_this.sendEvent = function sendEvent(message) {
 				_this.events.send(JSON.stringify({ message }));
+				_this.awaiting = null;
 			};
 
 			function handleIncomingEvent(event) {
@@ -226,7 +223,7 @@ document.addEventListener('alpine:init', () => {
 					if (payload.message !== '') {
 						_this.messageHistory.push(payload.message);
 					}
-					
+
 				}
 			}
 
