@@ -263,11 +263,17 @@ def countdown_timer(red, blue):
 				### determine which player disconnected
 				try:
 					red.jmessage("Opponent disconnected. You Win!")
+					egress = { "type": "game_over" }
+					egress["winner"] = 'red'
+					red.ws.send(json.dumps(egress))
 					record_elo(red, blue)
 					break
 				except:
 					try:
 						blue.jmessage("Opponent disconnected. You Win!")
+						egress = { "type": "game_over" }
+						egress["winner"] = 'blue'
+						blue.ws.send(json.dumps(egress))
 						record_elo(blue, red)
 						break
 					except:
@@ -492,10 +498,6 @@ def playgame(ws):
 					board.winner = snapshot["winner"]
 					board.score = snapshot["score"]
 
-					egress = {"type": "doneselecting"}
-					red.ws.send(json.dumps(egress))
-					blue.ws.send(json.dumps(egress))
-
 
 					for nodename in board.nodes:
 						board.nodes[nodename].stone = snapshot[nodename]
@@ -522,11 +524,17 @@ def playgame(ws):
 				### determine which player disconnected
 				try:
 					red.jmessage("Opponent disconnected. You Win!")
+					egress = { "type": "game_over" }
+					egress["winner"] = 'red'
+					red.ws.send(json.dumps(egress))
 					record_elo(red, blue)
 					break
 				except:
 					try:
 						blue.jmessage("Opponent disconnected. You Win!")
+						egress = { "type": "game_over" }
+						egress["winner"] = 'blue'
+						blue.ws.send(json.dumps(egress))
 						record_elo(blue, red)
 						break
 					except:
@@ -547,10 +555,16 @@ def private_game_ping(red, blue):
 			### determine which player disconnected
 			try:
 				red.jmessage("Opponent disconnected. You Win!")
+				egress = { "type": "game_over" }
+				egress["winner"] = 'red'
+				red.ws.send(json.dumps(egress))
 				break
 			except:
 				try:
 					blue.jmessage("Opponent disconnected. You Win!")
+					egress = { "type": "game_over" }
+					egress["winner"] = 'blue'
+					blue.ws.send(json.dumps(egress))
 					break
 				except:
 					### both are disconnected
@@ -689,10 +703,6 @@ def playprivategame(ws, privategamename):
 					board.winner = snapshot["winner"]
 					board.score = snapshot["score"]
 
-					egress = {"type": "doneselecting"}
-					red.ws.send(json.dumps(egress))
-					blue.ws.send(json.dumps(egress))
-
 
 					for nodename in board.nodes:
 						board.nodes[nodename].stone = snapshot[nodename]
@@ -718,9 +728,15 @@ def playprivategame(ws, privategamename):
 			### determine which player disconnected
 			try:
 				red.jmessage("Opponent disconnected. You Win!")
+				egress = { "type": "game_over" }
+				egress["winner"] = 'red'
+				red.ws.send(json.dumps(egress))
 			except:
 				try:
 					blue.jmessage("Opponent disconnected. You Win!")
+					egress = { "type": "game_over" }
+					egress["winner"] = 'blue'
+					blue.ws.send(json.dumps(egress))
 				except:
 					### both are disconnected
 					pass
@@ -844,9 +860,6 @@ def playsingleplayergame(ws):
 				board.gameover = snapshot["gameover"]
 				board.winner = snapshot["winner"]
 				board.score = snapshot["score"]
-
-				egress = {"type": "doneselecting"}
-				human.ws.send(json.dumps(egress))
 
 
 				for nodename in board.nodes:

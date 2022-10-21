@@ -261,13 +261,10 @@ class Board():
 
 	def end_game(self):
 
-		self.redplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
-							   " !!!")
-		self.blueplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
-								" !!!")
-		for i in range(3):
-			self.redplayer.jmessage(self.winner.upper() + " VICTORY")
-			self.blueplayer.jmessage(self.winner.upper() + " VICTORY")
+		egress = { "type": "game_over" }
+		egress["winner"] = self.winner
+		self.redplayer.ws.send(json.dumps(egress))
+		self.blueplayer.ws.send(json.dumps(egress))
 
 		if self.ladder_match:
 			if self.winner == 'red':
