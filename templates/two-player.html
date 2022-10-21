@@ -48,7 +48,9 @@
 		<script src="/static/scripts/chat.js"></script>
 	</head>
 	<body>
-		<div x-data="gameBoard({ gameName: '{{privategamename}}', playerCount: 2, username: '{{username}}', check: '{{check}}', elo: '{{elo}}' })">
+		<div
+			x-data="gameBoard({ gameName: '{{privategamename}}', playerCount: 2, username: '{{username}}', check: '{{check}}', elo: '{{elo}}' })"
+		>
 			<header class="masthead">
 				<div class="container">
 					<div class="container__inner">
