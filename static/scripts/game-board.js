@@ -22,11 +22,11 @@ document.addEventListener('alpine:init', () => {
 			},
 			nodesToRefill: {},
 			playerToRefill: '',
+			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
 			reverseSpellDict: {},
 			score: 'unset',
-			showDone: false,
 			showReset: false,
 			spellDict: {},
 			spells: {
@@ -40,11 +40,6 @@ document.addEventListener('alpine:init', () => {
 			handleDash() {
 				this.sendEvent('dash');
 				this.actionList = [];
-			},
-
-			handleDone() {
-				this.sendEvent('doneselecting');
-				this.showDone = false;
 			},
 
 			handleEndTurn() {
@@ -81,7 +76,6 @@ document.addEventListener('alpine:init', () => {
 				this.lastPlay = '';
 				this.nodesToRefill = {};
 				this.playerToRefill = '';
-				this.showDone = false;
 				this.showReset = false;
 				this.validMoves = {};
 			},
@@ -111,6 +105,12 @@ document.addEventListener('alpine:init', () => {
 				};
 				_this.lockDict = {};
 
+				_this.$watch('messageHistory', () => {
+					_this.$nextTick(() => {
+						_this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight;
+					});
+				});
+
 				const apiPath =
 					playerCount === 1 ? 'singleplayergame' : gameName ? `privategame/${gameName}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
@@ -128,9 +128,9 @@ document.addEventListener('alpine:init', () => {
 					console.log(`payload`, payload);
 					console.groupEnd(type);
 
-					_this.$nextTick(() => {
-						_this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight;
-					});
+					if (type === 'ping') {
+						return;
+					}
 
 					if (type === 'message') {
 						handleMessageEvent(payload);
@@ -172,13 +172,13 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
-					if (type === 'selecting') {
-						handleSelectingEvent();
+					if (type === 'pushingoptions') {
+						handleValidMovesEvent(payload);
 						return;
 					}
 
-					if (type === 'pushingoptions') {
-						handleValidMovesEvent(payload);
+					if (type === 'game_over') {
+						handleGameOverEvent(payload);
 						return;
 					}
 
@@ -189,10 +189,6 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'check_request') {
 						handleCheckRequestEvent();
-						return;
-					}
-
-					if (type === 'ping') {
 						return;
 					}
 				}
@@ -210,22 +206,8 @@ document.addEventListener('alpine:init', () => {
 						_this.showReset = false;
 					}
 
-					if (_this.message === 'BLUE VICTORY') {
-						_this.showReset = false;
-						_this.winner = 'blue';
-					} else if (_this.message === 'RED VICTORY') {
-						_this.showReset = false;
-						_this.winner = 'red';
-					}
-
-					// TODO: _this.message === 'Opponent disconnected. You Win!'
-					// TODO: _this.message === 'Game over-- the winner is BLUE !!!'
-					// TODO: _this.message === 'Game over-- the winner is RED !!!'
-
-					if (_this.awaiting !== 'action') {
-						if (payload.message !== '') {
-							_this.messageHistory.push(payload.message);
-						}
+					if (_this.awaiting !== 'action' && payload.message !== '') {
+						_this.messageHistory.push(payload.message);
 					}
 				}
 
@@ -258,6 +240,13 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleBoardStateEvent(payload) {
+					const changedBoardState = Object.keys(payload).reduce((acc, curr) => {
+						if (payload[curr] !== _this.previousBoardState[curr]) {
+							acc[curr] = payload[curr];
+						}
+						return acc;
+					}, {});
+
 					const {
 						bluelock,
 						bluespellcounter,
@@ -269,16 +258,29 @@ document.addEventListener('alpine:init', () => {
 						redspellcounter,
 						score,
 						...nodes
-					} = payload;
-					_this.blueLock = bluelock;
-					_this.blueSpellCounter = bluespellcounter;
-					_this.nodes = nodes;
-					_this.redLock = redlock;
-					_this.redSpellCounter = redspellcounter;
+					} = changedBoardState;
 
+					Object.keys(nodes).forEach((node) => {
+						_this.nodes[node] = nodes[node];
+					});
+
+					if (bluelock) {
+						_this.blueLock = bluelock;
+					}
+					if (bluespellcounter) {
+						_this.blueSpellCounter = bluespellcounter;
+					}
+					if (redlock) {
+						_this.redLock = redlock;
+					}
+					if (redspellcounter) {
+						_this.redSpellCounter = redspellcounter;
+					}
 					if (score) {
 						_this.score = score;
 					}
+
+					_this.previousBoardState = payload;
 				}
 
 				function handleWhoseTurnEvent(payload) {
@@ -314,12 +316,16 @@ document.addEventListener('alpine:init', () => {
 					_this.playerToRefill = '';
 				}
 
-				function handleSelectingEvent() {
-					_this.showDone = true;
-				}
-
 				function handleValidMovesEvent(payload) {
 					_this.validMoves = payload;
+				}
+
+				function handleGameOverEvent(payload) {
+					_this.messageHistory.push(
+						`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins`
+					);
+					_this.showReset = false;
+					_this.winner = payload.winner;
 				}
 
 				function handleUsernameRequestEvent() {

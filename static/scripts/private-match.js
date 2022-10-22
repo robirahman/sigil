@@ -33,8 +33,8 @@ function main() {
 		event.preventDefault();
 
 		if (!waitingForOpponent) {
-			// Might need to change this to "wss://" when we set up HTTPS
-			createGameWs = new WebSocket('wss://' + location.host + '/api/creategame');
+			const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
+			createGameWs = new WebSocket(`${apiProtocol}//${location.host}/api/creategame`);
 
 			createGameWs.addEventListener('open', () => {
 				var payload = {
@@ -68,8 +68,8 @@ function main() {
 		event.preventDefault();
 
 		if (!waitingForOpponent) {
-			// Might need to change this to "wss://" when we set up HTTPS
-			joinGameWs = new WebSocket('wss://' + location.host + '/api/joingame');
+			const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
+			joinGameWs = new WebSocket(`${apiProtocol}//${location.host}/api/joingame`);
 
 			joinGameWs.addEventListener('open', () => {
 				var payload = {

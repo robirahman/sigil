@@ -790,15 +790,6 @@ html.webp {
 	background: #277385;
 }
 
-.action-button--done {
-	background: #33384b;
-}
-
-.action-button--done:focus,
-.action-button--done:hover {
-	background: #484e64;
-}
-
 .action-button--end-turn,
 .chat__button {
 	background: #1c3462;
