@@ -34,7 +34,7 @@
 		/>
 		<script
 			defer
-			src="https://unpkg.com/alpinejs@3.10.2/dist/cdn.min.js"
+			src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"
 		></script>
 		<script>
 			var webpDetector = new Image();
@@ -397,7 +397,10 @@
 								class="stone-node stone-node--blue stone-node--score"
 								x-bind:class="{ [`stone-node--score-${score}`]: true }"
 							></div>
-							<template x-for="node in Object.keys(nodes)">
+							<template
+								x-bind:key="node"
+								x-for="node in Object.keys(nodes)"
+							>
 								<button
 									class="stone-node"
 									x-bind:aria-label="node"
@@ -409,8 +412,8 @@
 											'stone-node--last-play': lastPlay === node,
 											'stone-node--refill': nodesToRefill[node],
 										}"
-									x-on:click="handleNodeClick(node)"
 									x-bind:id="`stone-node--${node}`"
+									x-on:click="handleNodeClick(node)"
 								></button>
 							</template>
 						</div>

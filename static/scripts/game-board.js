@@ -22,6 +22,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			nodesToRefill: {},
 			playerToRefill: '',
+			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
 			reverseSpellDict: {},
@@ -239,6 +240,13 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleBoardStateEvent(payload) {
+					const changedBoardState = Object.keys(payload).reduce((acc, curr) => {
+						if (payload[curr] !== _this.previousBoardState[curr]) {
+							acc[curr] = payload[curr];
+						}
+						return acc;
+					}, {});
+
 					const {
 						bluelock,
 						bluespellcounter,
@@ -250,16 +258,29 @@ document.addEventListener('alpine:init', () => {
 						redspellcounter,
 						score,
 						...nodes
-					} = payload;
-					_this.blueLock = bluelock;
-					_this.blueSpellCounter = bluespellcounter;
-					_this.nodes = nodes;
-					_this.redLock = redlock;
-					_this.redSpellCounter = redspellcounter;
+					} = changedBoardState;
 
+					Object.keys(nodes).forEach((node) => {
+						_this.nodes[node] = nodes[node];
+					});
+
+					if (bluelock) {
+						_this.blueLock = bluelock;
+					}
+					if (bluespellcounter) {
+						_this.blueSpellCounter = bluespellcounter;
+					}
+					if (redlock) {
+						_this.redLock = redlock;
+					}
+					if (redspellcounter) {
+						_this.redSpellCounter = redspellcounter;
+					}
 					if (score) {
 						_this.score = score;
 					}
+
+					_this.previousBoardState = payload;
 				}
 
 				function handleWhoseTurnEvent(payload) {
