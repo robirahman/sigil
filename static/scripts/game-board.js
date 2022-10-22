@@ -104,6 +104,12 @@ document.addEventListener('alpine:init', () => {
 				};
 				_this.lockDict = {};
 
+				_this.$watch('messageHistory', () => {
+					_this.$nextTick(() => {
+						_this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight;
+					});
+				});
+
 				const apiPath =
 					playerCount === 1 ? 'singleplayergame' : gameName ? `privategame/${gameName}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
@@ -121,9 +127,9 @@ document.addEventListener('alpine:init', () => {
 					console.log(`payload`, payload);
 					console.groupEnd(type);
 
-					_this.$nextTick(() => {
-						_this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight;
-					});
+					if (type === 'ping') {
+						return;
+					}
 
 					if (type === 'message') {
 						handleMessageEvent(payload);
@@ -184,10 +190,6 @@ document.addEventListener('alpine:init', () => {
 						handleCheckRequestEvent();
 						return;
 					}
-
-					if (type === 'ping') {
-						return;
-					}
 				}
 
 				function handleMessageEvent(payload) {
@@ -203,10 +205,8 @@ document.addEventListener('alpine:init', () => {
 						_this.showReset = false;
 					}
 
-					if (_this.awaiting !== 'action') {
-						if (payload.message !== '') {
-							_this.messageHistory.push(payload.message);
-						}
+					if (_this.awaiting !== 'action' && payload.message !== '') {
+						_this.messageHistory.push(payload.message);
 					}
 				}
 
