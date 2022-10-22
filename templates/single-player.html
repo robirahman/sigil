@@ -171,7 +171,7 @@
 
 					<div
 						class="actions"
-						x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || showDone || actionList.includes('pass')}"
+						x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass')}"
 					>
 						<button
 							class="action-button action-button--reset-turn"
@@ -186,13 +186,6 @@
 							x-show="actionList.includes('dash')"
 						>
 							Dash
-						</button>
-						<button
-							class="action-button action-button--done"
-							x-on:click="handleDone"
-							x-show="showDone"
-						>
-							Done
 						</button>
 						<button
 							class="action-button action-button--end-turn"

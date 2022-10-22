@@ -26,7 +26,6 @@ document.addEventListener('alpine:init', () => {
 			redLock: '',
 			reverseSpellDict: {},
 			score: 'unset',
-			showDone: false,
 			showReset: false,
 			spellDict: {},
 			spells: {
@@ -40,11 +39,6 @@ document.addEventListener('alpine:init', () => {
 			handleDash() {
 				this.sendEvent('dash');
 				this.actionList = [];
-			},
-
-			handleDone() {
-				this.sendEvent('doneselecting');
-				this.showDone = false;
 			},
 
 			handleEndTurn() {
@@ -81,7 +75,6 @@ document.addEventListener('alpine:init', () => {
 				this.lastPlay = '';
 				this.nodesToRefill = {};
 				this.playerToRefill = '';
-				this.showDone = false;
 				this.showReset = false;
 				this.validMoves = {};
 			},
@@ -172,13 +165,13 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
-					if (type === 'selecting') {
-						handleSelectingEvent();
+					if (type === 'pushingoptions') {
+						handleValidMovesEvent(payload);
 						return;
 					}
 
-					if (type === 'pushingoptions') {
-						handleValidMovesEvent(payload);
+					if (type === 'game_over') {
+						handleGameOverEvent(payload);
 						return;
 					}
 
@@ -209,18 +202,6 @@ document.addEventListener('alpine:init', () => {
 					if (_this.message.includes('Invalid move')) {
 						_this.showReset = false;
 					}
-
-					if (_this.message === 'BLUE VICTORY') {
-						_this.showReset = false;
-						_this.winner = 'blue';
-					} else if (_this.message === 'RED VICTORY') {
-						_this.showReset = false;
-						_this.winner = 'red';
-					}
-
-					// TODO: _this.message === 'Opponent disconnected. You Win!'
-					// TODO: _this.message === 'Game over-- the winner is BLUE !!!'
-					// TODO: _this.message === 'Game over-- the winner is RED !!!'
 
 					if (_this.awaiting !== 'action') {
 						if (payload.message !== '') {
@@ -314,12 +295,16 @@ document.addEventListener('alpine:init', () => {
 					_this.playerToRefill = '';
 				}
 
-				function handleSelectingEvent() {
-					_this.showDone = true;
-				}
-
 				function handleValidMovesEvent(payload) {
 					_this.validMoves = payload;
+				}
+
+				function handleGameOverEvent(payload) {
+					_this.messageHistory.push(
+						`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins`
+					);
+					_this.showReset = false;
+					_this.winner = payload.winner;
 				}
 
 				function handleUsernameRequestEvent() {
