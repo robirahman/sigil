@@ -753,145 +753,142 @@ def playprivategame(ws, privategamename):
 
 @sock.route('/api/singleplayergame')
 def playsingleplayergame(ws):
-	try:
-		board = SPBoard()
-		humancolor = randint(1,2)
-		if humancolor == 1:
-			human = Player(board, 'red')
-			ai = AIPlayer(board, 'blue')
-			board.addplayers(human, ai)
-			human.opp = ai
-			ai.opp = human
-			human.ws = ws
-			human.jmessage("You are RED this game.")
-			red = human
-			blue = ai
+	board = SPBoard()
+	humancolor = randint(1,2)
+	if humancolor == 1:
+		human = Player(board, 'red')
+		ai = AIPlayer(board, 'blue')
+		board.addplayers(human, ai)
+		human.opp = ai
+		ai.opp = human
+		human.ws = ws
+		human.jmessage("You are RED this game.")
+		red = human
+		blue = ai
 
+	else:
+		human = Player(board, 'blue')
+		ai = AIPlayer(board, 'red')
+		board.addplayers(human, ai)
+		human.opp = ai
+		ai.opp = human
+		human.ws = ws
+		human.jmessage("You are BLUE this game.")
+		blue = human
+		red = ai
+
+
+	### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
+	### and values "Fireblast", "Flourish", etc.
+	egress = { "type": "spellsetup" }
+
+	egress["ritual1"] = board.spells[0].name
+	egress["ritual2"] = board.spells[1].name
+	egress["ritual3"] = board.spells[2].name
+	egress["sorcery1"] = board.spells[3].name
+	egress["sorcery2"] = board.spells[4].name
+	egress["sorcery3"] = board.spells[5].name
+	egress["charm1"] = board.spells[6].name
+	egress["charm2"] = board.spells[7].name
+	egress["charm3"] = board.spells[8].name
+
+	human.ws.send(json.dumps(egress))
+
+	egress = { "type": "spelltextsetup" }
+
+	egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+	egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+	egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+	egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+	egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+	egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+	egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+	egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+	egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
+
+	human.ws.send(json.dumps(egress))
+
+
+	board.nodes['a1'].stone = 'red'
+	board.nodes['b1'].stone = 'blue'
+	board.update()
+	time.sleep(3)
+
+
+	while True:
+		### First take a snapshot of the board,
+		### which we will revert to in case of a reset exception.
+		board.take_snapshot()
+
+		board.turncounter += 1
+
+		if board.turncounter % 2 == 1:
+			activeplayer = red
+			board.whoseturn = 'red'
 		else:
-			human = Player(board, 'blue')
-			ai = AIPlayer(board, 'red')
-			board.addplayers(human, ai)
-			human.opp = ai
-			ai.opp = human
-			human.ws = ws
-			human.jmessage("You are BLUE this game.")
-			blue = human
-			red = ai
+			activeplayer = blue
+			board.whoseturn = 'blue'
 
 
-		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-		### and values "Fireblast", "Flourish", etc.
-		egress = { "type": "spellsetup" }
+		try:
+			if board.whoseturn == 'red':
+				message = "Red Turn " + str((board.turncounter // 2) + 1)
+			elif board.whoseturn == 'blue':
+				message = "Blue Turn " + str(board.turncounter // 2)
 
-		egress["ritual1"] = board.spells[0].name
-		egress["ritual2"] = board.spells[1].name
-		egress["ritual3"] = board.spells[2].name
-		egress["sorcery1"] = board.spells[3].name
-		egress["sorcery2"] = board.spells[4].name
-		egress["sorcery3"] = board.spells[5].name
-		egress["charm1"] = board.spells[6].name
-		egress["charm2"] = board.spells[7].name
-		egress["charm3"] = board.spells[8].name
+			egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+			human.ws.send(json.dumps(egress))
 
-		human.ws.send(json.dumps(egress))
+			activeplayer.bot_triggers()
+			if board.gameover:
+				board.end_game()
+				break
 
-		egress = { "type": "spelltextsetup" }
-
-		egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
-		egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
-		egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
-		egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
-		egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
-		egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
-		egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
-		egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
-		egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
-
-		human.ws.send(json.dumps(egress))
-
-
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
-		board.update()
-		time.sleep(3)
-
-
-		while True:
-			### First take a snapshot of the board,
-			### which we will revert to in case of a reset exception.
-			board.take_snapshot()
-
-			board.turncounter += 1
-
-			if board.turncounter % 2 == 1:
-				activeplayer = red
-				board.whoseturn = 'red'
+			if board.whoseturn == 'red':
+				red.taketurn()
 			else:
-				activeplayer = blue
-				board.whoseturn = 'blue'
+				blue.taketurn()
+
+			activeplayer.eot_triggers()
+			board.update(True)
+			if board.gameover:
+				board.end_game()
+				break
+
+		except resetException:
+			### Reset all attributes of the game & board
+			### to the way they were in board.snapshot ,
+			### then we restart the turn loop.
+			human.jmessage("Resetting Turn")
+
+			snapshot = board.snapshot
+
+			board.turncounter = snapshot["turncounter"]
+			board.gameover = snapshot["gameover"]
+			board.winner = snapshot["winner"]
+			board.score = snapshot["score"]
 
 
-			try:
-				if board.whoseturn == 'red':
-					message = "Red Turn " + str((board.turncounter // 2) + 1)
-				elif board.whoseturn == 'blue':
-					message = "Blue Turn " + str(board.turncounter // 2)
+			for nodename in board.nodes:
+				board.nodes[nodename].stone = snapshot[nodename]
+			if snapshot["redlock"]:
+				red.lock = board.spelldict[snapshot["redlock"]]
+			else:
+				red.lock = None
 
-				egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
-				human.ws.send(json.dumps(egress))
+			if snapshot["bluelock"]:
+				blue.lock = board.spelldict[snapshot["bluelock"]]
+			else:
+				blue.lock = None
 
-				activeplayer.bot_triggers()
-				if board.gameover:
-					board.end_game()
-					break
+			red.spellcounter = snapshot["redspellcounter"]
+			blue.spellcounter = snapshot["bluespellcounter"]
+			board.last_play = snapshot["last_play"]
+			board.last_player = snapshot["last_player"]
 
-				if board.whoseturn == 'red':
-					red.taketurn()
-				else:
-					blue.taketurn()
+			board.update(True)
 
-				activeplayer.eot_triggers()
-				board.update(True)
-				if board.gameover:
-					board.end_game()
-					break
-
-			except resetException:
-				### Reset all attributes of the game & board
-				### to the way they were in board.snapshot ,
-				### then we restart the turn loop.
-				human.jmessage("Resetting Turn")
-
-				snapshot = board.snapshot
-
-				board.turncounter = snapshot["turncounter"]
-				board.gameover = snapshot["gameover"]
-				board.winner = snapshot["winner"]
-				board.score = snapshot["score"]
-
-
-				for nodename in board.nodes:
-					board.nodes[nodename].stone = snapshot[nodename]
-				if snapshot["redlock"]:
-					red.lock = board.spelldict[snapshot["redlock"]]
-				else:
-					red.lock = None
-
-				if snapshot["bluelock"]:
-					blue.lock = board.spelldict[snapshot["bluelock"]]
-				else:
-					blue.lock = None
-
-				red.spellcounter = snapshot["redspellcounter"]
-				blue.spellcounter = snapshot["bluespellcounter"]
-				board.last_play = snapshot["last_play"]
-				board.last_player = snapshot["last_player"]
-
-				board.update(True)
-
-				continue
-	except:
-		pass
+			continue
 
 
 def opp_chat_listen(ws, opp_ws):

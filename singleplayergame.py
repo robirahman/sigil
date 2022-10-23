@@ -209,14 +209,10 @@ class SPBoard():
 
 
 	def end_game(self):
-		### Right now this doesn't DO anything special,
-		### just prints some silly stuff.
-		### But this would be a good place to put any 'store the data'
-		### type code.
-		self.humanplayer.jmessage("Game over-- the winner is " + self.winner.upper() +
-							   " !!!")
-		for i in range(3):
-			self.humanplayer.jmessage(self.winner.upper() + " VICTORY")
+		egress = { "type": "game_over" }
+		egress["winner"] = self.winner
+		self.humanplayer.ws.send(json.dumps(egress))
+
 
 	def make_board(self):
 		nodelist = []
