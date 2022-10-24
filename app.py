@@ -911,7 +911,7 @@ def chat(ws):
 
 	if not waiting_chatter_ws:
 		waiting_chatter_ws = ws
-		while True:
+		for i in range(5000):
 			time.sleep(1)
 	else:
 		opp_ws = waiting_chatter_ws
@@ -940,7 +940,7 @@ def privatechat(ws, privatechatname):
 
 	if privatechatname not in privatechatdict:
 		privatechatdict[privatechatname] = ws
-		while True:
+		for i in range(5000):
 			time.sleep(1)
 	else:
 		opp_ws = privatechatdict[privatechatname]
