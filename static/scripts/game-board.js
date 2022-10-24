@@ -4,6 +4,7 @@ document.addEventListener('alpine:init', () => {
 		// eslint-disable-next-line no-unused-vars
 		({ check = '', elo = 0, gameName = '', playerCount = 0, username = '' }) => ({
 			actionList: [],
+			activeSpell: '',
 			// awaiting is the next action you're expected to take
 			awaiting: '',
 			blueSpellCounter: 0,
@@ -25,7 +26,7 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
-			reverseSpellDict: {},
+			// reverseSpellDict: {},
 			score: 'unset',
 			showReset: false,
 			spellDict: {},
@@ -70,6 +71,35 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			handleSpellMouseOut(spell) {
+				if (!this.hasTouchScreen && Popper) {
+					console.log(`handleSpellMouseOut spell`, spell);
+					this.activeSpell = '';
+					this.spellTooltip.destroy();
+				}
+			},
+
+			handleSpellMouseOver(spell) {
+				if (!this.hasTouchScreen && Popper) {
+					this.activeSpell = spell;
+					console.log(`this.spells.text[spell].name)`, this.spells.text[spell].name);
+					console.log(`this.spells.text[spell].text)`, this.spells.text[spell].text);
+					const anchor = document.querySelector(`.spell--tooltip-anchor-${spell}`);
+					const tooltip = document.querySelector('.tooltip');
+					this.spellTooltip = Popper.createPopper(anchor, tooltip, {
+						modifiers: [
+							{
+								name: 'offset',
+								options: {
+									offset: [0, 8],
+								},
+							},
+						],
+						placement: 'bottom',
+					});
+				}
+			},
+
 			handleReset() {
 				this.sendEvent('reset');
 				this.actionList = [];
@@ -95,15 +125,16 @@ document.addEventListener('alpine:init', () => {
 
 			init() {
 				const _this = this;
-				_this.auxLockDict = {
-					ritual1: 'a1',
-					ritual2: 'b1',
-					ritual3: 'c1',
-					sorcery1: 'a2',
-					sorcery2: 'b2',
-					sorcery3: 'c2',
-				};
-				_this.lockDict = {};
+				// _this.auxLockDict = {
+				// 	ritual1: 'a1',
+				// 	ritual2: 'b1',
+				// 	ritual3: 'c1',
+				// 	sorcery1: 'a2',
+				// 	sorcery2: 'b2',
+				// 	sorcery3: 'c2',
+				// };
+				// _this.lockDict = {};
+				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
 
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => {
@@ -213,13 +244,13 @@ document.addEventListener('alpine:init', () => {
 
 				function handleSpellSetupEvent(payload) {
 					_this.spellDict = payload;
-					for (let key in _this.spellDict) {
-						_this.reverseSpellDict[_this.spellDict[key]] = key;
-					}
-
-					for (let key in _this.reverseSpellDict) {
-						_this.lockDict[key] = _this.auxLockDict[_this.reverseSpellDict[key]];
-					}
+					// for (let key in _this.spellDict) {
+					// 	_this.reverseSpellDict[_this.spellDict[key]] = key;
+					// }
+					//
+					// for (let key in _this.reverseSpellDict) {
+					// 	_this.lockDict[key] = _this.auxLockDict[_this.reverseSpellDict[key]];
+					// }
 
 					Object.entries(_this.spellDict).forEach(([key, value]) => {
 						_this.spells.images[key] = `/static/images/spells/${value}.png`;

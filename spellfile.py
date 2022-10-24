@@ -183,7 +183,7 @@ class Fireblast(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Destroy all enemy stones<br />which are touching you."
+		self.text = "Destroy all enemy stones which are touching you."
 
 	def resolve(self, player):
 		for name in player.board.nodes:
@@ -217,7 +217,7 @@ class Surge(Spell):
 		super().__init__(board, position, name)
 		self.ischarm = True
 
-		self.text = "If you dashed this turn,<br />make 1 move."
+		self.text = "If you dashed this turn, make 1 move."
 
 
 	def resolve(self, player):
@@ -271,7 +271,7 @@ class Bewitch(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Choose 2 enemy stones touching each other.<br />Convert them to your color."
+		self.text = "Choose 2 enemy stones touching each other. Convert them to your color."
 
 	def resolve(self, player):
 
@@ -355,7 +355,7 @@ class Comet(Spell):
 		super().__init__(board, position, name)
 		self.ischarm = True
 
-		self.text = "Make 1 blink move,<br />then sacrifice a stone."
+		self.text = "Make 1 blink move, then sacrifice a stone."
 
 
 	def resolve(self, player):
@@ -411,7 +411,7 @@ class Meteor(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Make 1 blink move, then destroy<br />1 enemy stone touching it."
+		self.text = "Make 1 blink move, then destroy 1 enemy stone touching it."
 
 	def resolve(self, player):
 		while True:
@@ -481,7 +481,7 @@ class Starfall(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Make 2 soft blink moves that<br />touch each other, then<br />destroy all enemy stones<br />touching them."
+		self.text = "Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them."
 
 	def resolve(self, player):
 		while True:
@@ -578,7 +578,7 @@ class Seal_of_Summer(Spell):
 		self.ischarm = True
 		self.static = True
 
-		self.text = "STATIC: You may cast 2 spells<br />on your turn."
+		self.text = "STATIC: You may cast 2 spells on your turn."
 
 
 
@@ -587,7 +587,7 @@ class Seal_of_Wind(Spell):
 		super().__init__(board, position, name)
 		self.static = True
 
-		self.text = "STATIC: Your first move each<br />turn is a blink move."
+		self.text = "STATIC: Your first move each turn is a blink move."
 
 
 class Seal_of_Lightning(Spell):
@@ -596,7 +596,7 @@ class Seal_of_Lightning(Spell):
 
 		self.static = True
 
-		self.text = "STATIC: Your dash only requires<br />1 sacrifice."
+		self.text = "STATIC: Your dash only requires 1 sacrifice."
 
 
 
@@ -1212,11 +1212,3 @@ class Seal_of_Lightning(Spell):
 
 ######################################################################################
 #####  ACTUAL SPELLS FINISHED
-
-
-
-
-
-
-
-

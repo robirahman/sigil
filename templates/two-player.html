@@ -32,10 +32,6 @@
 			href="https://use.typekit.net/rot4udi.css"
 			rel="stylesheet"
 		/>
-		<script
-			defer
-			src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"
-		></script>
 		<script>
 			var webpDetector = new Image();
 			webpDetector.onload = function () {
@@ -44,8 +40,6 @@
 			webpDetector.src =
 				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
-		<script src="/static/scripts/game-board.js"></script>
-		<script src="/static/scripts/chat.js"></script>
 	</head>
 	<body>
 		<div
@@ -221,13 +215,14 @@
 							/>
 						</picture>
 						<div class="spells">
+							<div class="spell spell--tooltip-anchor charm-spell charm-spell--1"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.charm1?.replace('.png', '.webp')"
 								/>
 								<img
-									class="charm-spell charm-spell--1"
+									class="spell charm-spell charm-spell--1"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:class="{
@@ -240,13 +235,14 @@
 									x-on:click="handleCharmClick('charm1')"
 								/>
 							</picture>
+							<div class="spell spell--tooltip-anchor charm-spell charm-spell--2"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.charm2?.replace('.png', '.webp')"
 								/>
 								<img
-									class="charm-spell charm-spell--2"
+									class="spell charm-spell charm-spell--2"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.charm2"
@@ -259,13 +255,14 @@
 									x-on:click="handleCharmClick('charm2')"
 								/>
 							</picture>
+							<div class="spell spell--tooltip-anchor charm-spell charm-spell--3"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.charm3?.replace('.png', '.webp')"
 								/>
 								<img
-									class="charm-spell charm-spell--3"
+									class="spell charm-spell charm-spell--3"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.charm3"
@@ -279,13 +276,14 @@
 								/>
 							</picture>
 
+							<div class="spell spell--tooltip-anchor ritual-spell ritual-spell--1"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.ritual1?.replace('.png', '.webp')"
 								/>
 								<img
-									class="ritual-spell ritual-spell--1"
+									class="spell ritual-spell ritual-spell--1"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.ritual1"
@@ -298,13 +296,14 @@
 									x-on:click="handleSpellClick('ritual1')"
 								/>
 							</picture>
+							<div class="spell spell--tooltip-anchor ritual-spell ritual-spell--2"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.ritual2?.replace('.png', '.webp')"
 								/>
 								<img
-									class="ritual-spell ritual-spell--2"
+									class="spell ritual-spell ritual-spell--2"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.ritual2"
@@ -317,13 +316,14 @@
 									x-on:click="handleSpellClick('ritual2')"
 								/>
 							</picture>
+							<div class="spell spell--tooltip-anchor ritual-spell ritual-spell--3"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.ritual3?.replace('.png', '.webp')"
 								/>
 								<img
-									class="ritual-spell ritual-spell--3"
+									class="spell ritual-spell ritual-spell--3"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.ritual3"
@@ -337,13 +337,14 @@
 								/>
 							</picture>
 
+							<div class="spell spell--tooltip-anchor sorcery-spell sorcery-spell--1"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.sorcery1?.replace('.png', '.webp')"
 								/>
 								<img
-									class="sorcery-spell sorcery-spell--1"
+									class="spell sorcery-spell sorcery-spell--1"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.sorcery1"
@@ -356,13 +357,14 @@
 									x-on:click="handleSpellClick('sorcery1')"
 								/>
 							</picture>
+							<div class="spell spell--tooltip-anchor sorcery-spell sorcery-spell--2"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.sorcery2?.replace('.png', '.webp')"
 								/>
 								<img
-									class="sorcery-spell sorcery-spell--2"
+									class="spell sorcery-spell sorcery-spell--2"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.sorcery2"
@@ -375,13 +377,14 @@
 									x-on:click="handleSpellClick('sorcery2')"
 								/>
 							</picture>
+							<div class="spell spell--tooltip-anchor sorcery-spell sorcery-spell--3"></div>
 							<picture>
 								<source
 									type="image/webp"
 									x-bind:srcset="spells.images.sorcery3?.replace('.png', '.webp')"
 								/>
 								<img
-									class="sorcery-spell sorcery-spell--3"
+									class="spell sorcery-spell sorcery-spell--3"
 									alt=""
 									src="/static/images/spacer.gif"
 									x-bind:src="spells.images.sorcery3"
@@ -395,7 +398,10 @@
 								/>
 							</picture>
 						</div>
-						<div class="stone-nodes">
+						<div
+							class="stone-nodes"
+							x-cloak
+						>
 							<div
 								class="stone-node stone-node--blue stone-node--score"
 								x-bind:class="{ [`stone-node--score-${score}`]: true }"
@@ -516,5 +522,9 @@
 				</button>
 			</form>
 		</div>
+		<script src="/static/scripts/game-board.js"></script>
+		<script src="/static/scripts/chat.js"></script>
+		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>
