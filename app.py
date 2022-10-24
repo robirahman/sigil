@@ -892,16 +892,13 @@ def playsingleplayergame(ws):
 
 
 def opp_chat_listen(ws, opp_ws):
-	try:
-		while True:
-			ingress = opp_ws.receive()
-			message = json.loads(ingress)['message']
-			egress = {"type": "chatmessage", "player": "Me:", "message": message }
-			opp_ws.send(json.dumps(egress))
-			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
-			ws.send(json.dumps(egress))
-	except:
-		pass
+	while True:
+		ingress = opp_ws.receive()
+		message = json.loads(ingress)['message']
+		egress = {"type": "chatmessage", "player": "Me:", "message": message }
+		opp_ws.send(json.dumps(egress))
+		egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+		ws.send(json.dumps(egress))
 
 
 
@@ -912,29 +909,26 @@ def chat(ws):
 	# wait for cleanup_queue from /api/game to complete
 	time.sleep(.1)
 
-	try:
-		if not waiting_chatter_ws:
-			waiting_chatter_ws = ws
-			while True:
-				time.sleep(1)
-		else:
-			opp_ws = waiting_chatter_ws
-			waiting_chatter_ws = None
+	if not waiting_chatter_ws:
+		waiting_chatter_ws = ws
+		while True:
+			time.sleep(1)
+	else:
+		opp_ws = waiting_chatter_ws
+		waiting_chatter_ws = None
 
-			t = Thread(target=opp_chat_listen, args=(ws, opp_ws))
-			t.start()
+		t = Thread(target=opp_chat_listen, args=(ws, opp_ws))
+		t.start()
 
-			while True:
-				ingress = ws.receive()
-				message = json.loads(ingress)['message']
-				egress = {"type": "chatmessage", "player": "Me:", "message": message }
-				ws.send(json.dumps(egress))
-				egress = {"type": "chatmessage", "player": "Opp:", "message": message }
-				opp_ws.send(json.dumps(egress))
+		while True:
+			ingress = ws.receive()
+			message = json.loads(ingress)['message']
+			egress = {"type": "chatmessage", "player": "Me:", "message": message }
+			ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+			opp_ws.send(json.dumps(egress))
 
-			t.join()
-	except:
-		pass
+		t.join()
 
 
 
@@ -944,28 +938,25 @@ privatechatdict = {}
 def privatechat(ws, privatechatname):
 	global privatechatdict
 
-	try:
-		if privatechatname not in privatechatdict:
-			privatechatdict[privatechatname] = ws
-			while True:
-				time.sleep(1)
-		else:
-			opp_ws = privatechatdict[privatechatname]
+	if privatechatname not in privatechatdict:
+		privatechatdict[privatechatname] = ws
+		while True:
+			time.sleep(1)
+	else:
+		opp_ws = privatechatdict[privatechatname]
 
-			t = Thread(target=opp_chat_listen, args=(ws, opp_ws))
-			t.start()
+		t = Thread(target=opp_chat_listen, args=(ws, opp_ws))
+		t.start()
 
-			while True:
-				ingress = ws.receive()
-				message = json.loads(ingress)['message']
-				egress = {"type": "chatmessage", "player": "Me:", "message": message }
-				ws.send(json.dumps(egress))
-				egress = {"type": "chatmessage", "player": "Opp:", "message": message }
-				opp_ws.send(json.dumps(egress))
+		while True:
+			ingress = ws.receive()
+			message = json.loads(ingress)['message']
+			egress = {"type": "chatmessage", "player": "Me:", "message": message }
+			ws.send(json.dumps(egress))
+			egress = {"type": "chatmessage", "player": "Opp:", "message": message }
+			opp_ws.send(json.dumps(egress))
 
-			t.join()
-	except:
-		pass
+		t.join()
 
 
 
