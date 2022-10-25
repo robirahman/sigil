@@ -1300,50 +1300,33 @@ html.webp {
 }
 
 .tooltip {
-	background: #333;
-	color: white;
+	z-index: 1;
+}
+
+.tooltip:not(.is-visible) {
+	height: 0;
+	overflow: hidden;
+}
+
+.tooltip__inner {
+	background-image: linear-gradient(to bottom, #fff 30%, #a19dab);
+	border: 2px solid #7a478f;
+	border-radius: 10px;
+	box-shadow: 0 4px 14px rgb(0 0 0 / 80%);
+	color: #141216;
+	display: flex;
+	gap: 12px;
+	max-width: 240px;
+	min-width: 140px;
+	flex-direction: column;
+	font-family: mrs-eaves-xl-serif, serif;
+	font-size: 16px;
+	line-height: 18px;
+	padding: 10px 12px;
+	position: relative;
+}
+
+.tooltip__heading {
+	font-size: 17px;
 	font-weight: bold;
-	padding: 4px 8px;
-	font-size: 13px;
-	border-radius: 4px;
-
-	/* display: none; */
-}
-
-/* .tooltip[data-show] {
-        display: block;
-      } */
-
-#arrow,
-#arrow::before {
-	position: absolute;
-	width: 8px;
-	height: 8px;
-	background: inherit;
-}
-
-#arrow {
-	visibility: hidden;
-}
-
-#arrow::before {
-	visibility: visible;
-	content: "";
-	transform: rotate(45deg);
-}
-
-.tooltip[data-popper-placement^="top"] > #arrow {
-	bottom: -4px;
-}
-
-.tooltip[data-popper-placement^="bottom"] > #arrow {
-	top: -4px;
-}
-
-.tooltip[data-popper-placement^="left"] > #arrow {
-	right: -4px;
-}
-
-.tooltip[data-popper-placement^="right"] > #arrow {
-	left: -4px;
 }

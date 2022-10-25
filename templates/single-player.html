@@ -239,7 +239,8 @@
 												[`charm-spell--${i}`] : true
 											}"
 											x-bind:src="spells.images[`charm${i}`]"
-											x-on:click="handleCharmClick(`charm${i}`)"
+											x-on:click.stop="handleCharmClick(`charm${i}`)"
+											x-on:click.outside="closeSpellTooltip"
 											x-on:mouseout="handleSpellMouseOut(`charm${i}`)"
 											x-on:mouseover="handleSpellMouseOver(`charm${i}`)"
 										/>
@@ -273,7 +274,8 @@
 							          [`ritual-spell--${i}`] : true
 							        }"
 											x-bind:src="spells.images[`ritual${i}`]"
-											x-on:click="handleSpellClick(`ritual${i}`)"
+											x-on:click.stop="handleSpellClick(`ritual${i}`)"
+											x-on:click.outside="closeSpellTooltip"
 											x-on:mouseout="handleSpellMouseOut(`ritual${i}`)"
 											x-on:mouseover="handleSpellMouseOver(`ritual${i}`)"
 										/>
@@ -307,8 +309,9 @@
 							          [`sorcery-spell--${i}`] : true
 							        }"
 											x-bind:src="spells.images[`sorcery${i}`]"
-											x-on:click="handleSpellClick(`sorcery${i}`)"
-											x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
+											x-on:click.stop="handleSpellClick(`sorcery${i}`)"
+											x-on:click.outside="closeSpellTooltip"
+											x-on:mouseout="handleSpellMouseOut()"
 											x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 										/>
 									</picture>
@@ -347,14 +350,30 @@
 				</div>
 			</div>
 
-			<div class="tooltip">
-				<h2 x-text="spells.text[activeSpell]?.name"></h2>
-				<p x-text="spells.text[activeSpell]?.text"></p>
-				<div
-					id="arrow"
-					data-popper-arrow
-				></div>
+			<div
+				class="tooltip"
+				x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
+				x-ref="spellTooltip"
+			>
+				<div class="tooltip__inner">
+					<h2
+						class="tooltip__heading"
+						x-text="spells.text[activeSpell]?.name"
+					></h2>
+					<p
+						class="tooltip__content"
+						x-text="spells.text[activeSpell]?.text"
+					></p>
+					<button
+						class="action-button action-button--end-turn"
+						x-on:click="handleCastSpell(activeSpell)"
+						x-show="hasTouchScreen && activeSpellIsCastable"
+					>
+						Cast Spell
+					</button>
+				</div>
 			</div>
+
 			<div
 				class="win-modal"
 				x-bind:class="{ 'is-visible': winner }"
@@ -399,6 +418,7 @@
 				/>
 			</div>
 		</div>
+
 		<script src="/static/scripts/game-board.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
