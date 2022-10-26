@@ -242,8 +242,12 @@ class Board():
 
 		if self.redplayer.lock:
 			jboard["redlock"] = self.redplayer.lock.name
+		else:
+			jboard["redlock"] = None
 		if self.blueplayer.lock:
 			jboard["bluelock"] = self.blueplayer.lock.name
+		else:
+			jboard["bluelock"] = None
 
 		jboard["redspellcounter"] = self.redplayer.spellcounter
 
