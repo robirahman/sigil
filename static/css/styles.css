@@ -471,6 +471,9 @@ textarea {
 }
 
 /* </AtomicStylesToDelete> */
+[x-cloak] {
+	display: none !important;
+}
 
 /* stylelint-disable-next-line no-duplicate-selectors */
 html {
@@ -827,9 +830,7 @@ html.webp {
 	min-width: 758px;
 }
 
-.charm-spell,
-.ritual-spell,
-.sorcery-spell {
+.spell {
 	--size: calc(var(--raw-size) / 1480 * 100%);
 
 	border-radius: 50%;
@@ -839,6 +840,31 @@ html.webp {
 	transition-duration: 2s;
 	transition-property: opacity;
 	width: var(--size);
+}
+
+.spell--visible {
+	opacity: 1;
+}
+
+.spell--available {
+	box-shadow: -4px 4px 12px #fff, 4px 4px 12px #fff, -4px -4px 12px #fff, 4px -4px 12px #fff;
+}
+
+.spell--blue-lock {
+	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #3250ba, 4px -4px #3250ba;
+}
+
+.spell--red-lock {
+	box-shadow: -4px 4px #e84c3c, 4px 4px #e84c3c, -4px -4px #e84c3c, 4px -4px #e84c3c;
+}
+
+.spell--blue-lock.spell--red-lock {
+	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #e84c3c, 4px -4px #e84c3c;
+}
+
+.spell--tooltip-anchor {
+	pointer-events: none;
+	transform: none !important;
 }
 
 .charm-spell {
@@ -913,26 +939,6 @@ html.webp {
 	top: calc(367 / 1480 * 100%);
 	transform: rotate(-60deg);
 	transition-delay: 1.5s;
-}
-
-.spell--visible {
-	opacity: 1;
-}
-
-.spell--available {
-	box-shadow: -4px 4px 12px #fff, 4px 4px 12px #fff, -4px -4px 12px #fff, 4px -4px 12px #fff;
-}
-
-.spell--blue-lock {
-	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #3250ba, 4px -4px #3250ba;
-}
-
-.spell--red-lock {
-	box-shadow: -4px 4px #e84c3c, 4px 4px #e84c3c, -4px -4px #e84c3c, 4px -4px #e84c3c;
-}
-
-.spell--blue-lock.spell--red-lock {
-	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #e84c3c, 4px -4px #e84c3c;
 }
 
 @keyframes stone-twinkle {
@@ -1291,4 +1297,36 @@ html.webp {
 .win-modal.is-visible {
 	animation: modal-zoom-out 0.35s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
 	visibility: visible;
+}
+
+.tooltip {
+	z-index: 1;
+}
+
+.tooltip:not(.is-visible) {
+	height: 0;
+	overflow: hidden;
+}
+
+.tooltip__inner {
+	background-image: linear-gradient(to bottom, #fff 30%, #a19dab);
+	border: 2px solid #7a478f;
+	border-radius: 10px;
+	box-shadow: 0 4px 14px rgb(0 0 0 / 80%);
+	color: #141216;
+	display: flex;
+	gap: 12px;
+	max-width: 240px;
+	min-width: 140px;
+	flex-direction: column;
+	font-family: mrs-eaves-xl-serif, serif;
+	font-size: 16px;
+	line-height: 18px;
+	padding: 10px 12px;
+	position: relative;
+}
+
+.tooltip__heading {
+	font-size: 17px;
+	font-weight: bold;
 }
