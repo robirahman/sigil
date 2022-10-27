@@ -549,6 +549,12 @@ html.webp {
 	}
 }
 
+@media (any-pointer: coarse) {
+	.feed {
+		pointer-events: none;
+	}
+}
+
 .feed--history {
 	position: fixed;
 	top: 95px;
@@ -774,7 +780,9 @@ html.webp {
 	}
 }
 
-.action-button {
+.action-button,
+.tooltip-button,
+.shepherd-button {
 	border-radius: 3px;
 	box-shadow: inset 0 0 2px rgb(0 0 0 / 60%);
 	color: #fff;
@@ -782,6 +790,13 @@ html.webp {
 	font-size: 18px;
 	height: 44px;
 	width: 109px;
+}
+
+.tooltip-button,
+.shepherd-button {
+	padding-left: 16px;
+	padding-right: 16px;
+	width: auto;
 }
 
 .action-button--dash {
@@ -794,14 +809,20 @@ html.webp {
 }
 
 .action-button--end-turn,
-.chat__button {
+.chat__button,
+.tooltip-button,
+.shepherd-button {
 	background: #1c3462;
 }
 
 .action-button--end-turn:focus,
 .action-button--end-turn:hover,
 .chat__button:focus,
-.chat__button:hover {
+.chat__button:hover,
+.tooltip-button:focus,
+.tooltip-button:hover,
+.shepherd-button:focus,
+.shepherd-button:hover {
 	background: #2c4980;
 }
 
@@ -1308,25 +1329,77 @@ html.webp {
 	overflow: hidden;
 }
 
-.tooltip__inner {
-	background-image: linear-gradient(to bottom, #fff 30%, #a19dab);
-	border: 2px solid #7a478f;
+.tooltip__inner,
+.shepherd-content {
+	background-image: linear-gradient(to bottom, #fff 40%, #a19dab);
 	border-radius: 10px;
+	border: 2px solid #7a478f;
 	box-shadow: 0 4px 14px rgb(0 0 0 / 80%);
 	color: #141216;
 	display: flex;
-	gap: 12px;
-	max-width: 240px;
-	min-width: 140px;
 	flex-direction: column;
 	font-family: mrs-eaves-xl-serif, serif;
 	font-size: 16px;
-	line-height: 18px;
+	gap: 12px;
+	line-height: 20px;
+	max-width: 240px;
+	min-width: 140px;
 	padding: 10px 12px;
 	position: relative;
 }
 
-.tooltip__heading {
+.shepherd-tooltip {
+	max-width: 360px;
+	padding: 8px;
+	transition: opacity 0.3s, visibility 0.3s;
+	z-index: 1;
+}
+
+.shepherd-tooltip:focus-visible {
+	outline: none;
+}
+
+.shepherd-tooltip[hidden] {
+	opacity: 0;
+	visibility: hidden;
+}
+
+.shepherd-content,
+.shepherd-text {
+	display: flex;
+	gap: 12px;
+	flex-direction: column;
+}
+
+.tooltip__heading,
+.shepherd-tooltip h2 {
 	font-size: 17px;
 	font-weight: bold;
+}
+
+.shepherd-modal-overlay-container {
+	display: none;
+}
+
+.step-pointer {
+	height: 34px;
+	pointer-events: none;
+	width: 34px;
+}
+
+.step-pointer:not([data-popper-placement]) {
+	position: absolute;
+	visibility: hidden;
+}
+
+.step-pointer[data-popper-placement^="bottom"] .step-pointer__arrow {
+	transform: rotate(-90deg) !important;
+}
+
+.step-pointer[data-popper-placement^="right"] .step-pointer__arrow {
+	transform: rotate(180deg) !important;
+}
+
+.step-pointer[data-popper-placement^="top"] .step-pointer__arrow {
+	transform: rotate(90deg) !important;
 }

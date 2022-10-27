@@ -58,7 +58,7 @@ document.addEventListener('alpine:init', () => {
 							{
 								name: 'offset',
 								options: {
-									offset: [0, 12],
+									offset: [0, 8],
 								},
 							},
 						],
@@ -299,6 +299,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleBoardStateEvent(payload) {
+					const isValidStateKey = (key) => typeof key !== 'undefined';
 					const changedBoardState = Object.keys(payload).reduce((acc, curr) => {
 						if (payload[curr] !== _this.previousBoardState[curr]) {
 							acc[curr] = payload[curr];
@@ -323,19 +324,19 @@ document.addEventListener('alpine:init', () => {
 						_this.nodes[node] = nodes[node];
 					});
 
-					if (bluelock) {
+					if (isValidStateKey(bluelock)) {
 						_this.blueLock = bluelock;
 					}
-					if (bluespellcounter) {
+					if (isValidStateKey(bluespellcounter)) {
 						_this.blueSpellCounter = bluespellcounter;
 					}
-					if (redlock) {
+					if (isValidStateKey(redlock)) {
 						_this.redLock = redlock;
 					}
-					if (redspellcounter) {
+					if (isValidStateKey(redspellcounter)) {
 						_this.redSpellCounter = redspellcounter;
 					}
-					if (score) {
+					if (isValidStateKey(score)) {
 						_this.score = score;
 					}
 

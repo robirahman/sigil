@@ -365,7 +365,7 @@
 						x-text="spells.text[activeSpell]?.text"
 					></p>
 					<button
-						class="action-button action-button--end-turn"
+						class="tooltip-button"
 						x-on:click="handleCastSpell(activeSpell)"
 						x-show="hasTouchScreen && activeSpellIsCastable"
 					>
