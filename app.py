@@ -60,12 +60,20 @@ def load_user(user_id):
 def home():
 	return render_template('index.html')
 
+tutorialcount = 0
+
 @app.route('/tutorial-and-rules')
 def tutorialAndRules():
+	global tutorialcount
+	tutorialcount += 1
 	return render_template('tutorial-and-rules.html')
+
+singleplayercount = 0
 
 @app.route('/single-player')
 def singlePlayer():
+	global singleplayercount
+	singleplayercount += 1
 	return render_template('single-player.html')
 
 @app.route('/private-match')
@@ -969,7 +977,9 @@ def metrics_recorder():
 		# Format is dd/mm/YY H:M:S
 		timestamp_string = now.strftime("%d/%m/%Y %H:%M:%S")
 		metrics_file = open("metrics.txt", "a")
-		metrics_file.write(timestamp_string + "   Private Games Played (since reboot): " + str(privategamecount) + "   Ladder Games Played (since reboot): " + str(laddergamecount) + "\n")
+		# format is:
+		#timestamp,tutorial,singleplayer,privategame,laddergame
+		metrics_file.write(timestamp_string + "," + str(tutorialcount) + "," + str(singleplayercount) + "," + str(privategamecount) + "," + str(laddergamecount) + "\n")
 		metrics_file.close()
 		
 
