@@ -240,7 +240,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>The nine large dark circles on the board are locations for spells to be placed.</p><p>There are three small, three medium, and three large spell locations.</p>',
 					when: {
 						show() {
-							_this.tooltipSelectors = [
+							showTutorialStepPointers([
 								'.charm-spell--1.spell--tooltip-anchor',
 								'.charm-spell--2.spell--tooltip-anchor',
 								'.charm-spell--3.spell--tooltip-anchor',
@@ -250,27 +250,7 @@ document.addEventListener('alpine:init', () => {
 								'.sorcery-spell--1.spell--tooltip-anchor',
 								'.sorcery-spell--2.spell--tooltip-anchor',
 								'.sorcery-spell--3.spell--tooltip-anchor',
-							];
-
-							_this.tooltipSelectors.forEach((selector, index) => {
-								const anchor = document.querySelector(selector);
-								const tooltip = document.querySelector(`.step-pointer--${index + 1}`);
-								const instance = Popper.createPopper(anchor, tooltip, {
-									modifiers: [
-										{
-											name: 'offset',
-											options: {
-												offset: [0, 8],
-											},
-										},
-									],
-									placement: 'bottom',
-								});
-								_this.$nextTick(() => {
-									instance.forceUpdate();
-								});
-								_this.tooltipInstances.push(instance);
-							});
+							]);
 						},
 					},
 				},
@@ -281,11 +261,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Let’s place spells onto the board now.</p>',
 					when: {
 						show() {
-							_this.tooltipInstances.forEach((instance) => {
-								instance.destroy();
-							});
-							_this.tooltipInstances = [];
-							_this.tooltipSelectors = [];
+							hideTutorialStepPointers();
 
 							handleSpellSetupEvent({
 								ritual1: 'Flourish',
@@ -297,6 +273,89 @@ document.addEventListener('alpine:init', () => {
 								charm1: 'Slash',
 								charm2: 'Surge',
 								charm3: 'Sprout',
+							});
+
+							handleSpellTextSetupEvent({
+								ritual1: {
+									name: 'Flourish',
+									text: 'Make 4 soft moves.',
+								},
+								ritual2: {
+									name: 'Carnage',
+									text: 'Make 4 hard moves.',
+								},
+								ritual3: {
+									name: 'Bewitch',
+									text: 'Choose 2 enemy stones touching each other. Convert them to your color.',
+								},
+								sorcery1: {
+									name: 'Fireblast',
+									text: 'Destroy all enemy stones which are touching you.',
+								},
+								sorcery2: {
+									name: 'Hail_Storm',
+									text: 'Destroy 1 enemy stone in each spell.',
+								},
+								sorcery3: {
+									name: 'Grow',
+									text: 'Make 2 soft moves.',
+								},
+								charm1: {
+									name: 'Slash',
+									text: 'Make 1 hard move.',
+								},
+								charm2: {
+									name: 'Surge',
+									text: 'If you dashed this turn, make 1 move.',
+								},
+								charm3: {
+									name: 'Sprout',
+									text: 'Make 1 soft move.',
+								},
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Now we’re ready to begin.</p>',
+				},
+				{
+					text: '<p>Each side starts with just one stone on the board.</p><p>The red circle in the bottom left is Red’s starting location.</p><p>Blue starts with a stone in the bottom right.</p>',
+					when: {
+						show() {
+							showTutorialStepPointers(['.stone-node--a1', '.stone-node--b1']);
+						},
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'red', node: 'a1', showReset: false });
+							setTimeout(
+								() => placeTutorialStone({ color: 'blue', node: 'b1', showReset: false }),
+								500
+							);
+						},
+					},
+				},
+				{
+					text: '<p>You are the Blue player.</p><p>Red always goes first, and Blue always goes second.</p>',
+				},
+				{
+					text: '<p>On each player’s turn, they place one new stone of their color onto the board. This is called a Regular Move.</p><p>Stones must be placed adjacent to where a player already has a stone on the board.</p>',
+				},
+				{
+					text: '<p>Red placed a Stone and passed the turn. Now it’s your turn.</p>',
+					when: {
+						show() {
+							placeTutorialStone({ color: 'red', node: 'a2', showReset: false });
+						},
+					},
+				},
+				{
+					text: '<p>Go ahead and make your move by placing a stone in a node adjacent to where you already have a Stone.</p>',
+					when: {
+						show() {
+							handleValidMovesEvent({
+								b2: 'blue',
+								b11: 'blue',
 							});
 						},
 					},
@@ -456,7 +515,7 @@ document.addEventListener('alpine:init', () => {
 				_this.whoseTurn = payload.color;
 			}
 
-			function handleNewStonePlacement(payload) {
+			function handleNewStonePlacement(payload, showReset = true) {
 				_this.lastPlay = payload.node;
 
 				if (payload.color !== _this.currentPlayer) {
@@ -468,7 +527,7 @@ document.addEventListener('alpine:init', () => {
 							.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
 					}, 50);
 				} else {
-					_this.showReset = true;
+					_this.showReset = showReset;
 				}
 			}
 
@@ -491,6 +550,60 @@ document.addEventListener('alpine:init', () => {
 				_this.messageHistory.push(`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins`);
 				_this.showReset = false;
 				_this.winner = payload.winner;
+			}
+
+			function showTutorialStepPointers(selectors) {
+				_this.tooltipSelectors = selectors;
+
+				_this.tooltipSelectors.forEach((selector, index) => {
+					const anchor = document.querySelector(selector);
+					const tooltip = document.querySelector(`.step-pointer--${index + 1}`);
+					const instance = Popper.createPopper(anchor, tooltip, {
+						modifiers: [
+							{
+								name: 'offset',
+								options: {
+									offset: [0, 8],
+								},
+							},
+							{
+								name: 'flip',
+								options: {
+									fallbackPlacements: ['left'],
+								},
+							},
+						],
+						placement: 'left',
+					});
+					_this.$nextTick(() => {
+						instance.forceUpdate();
+					});
+					_this.tooltipInstances.push(instance);
+				});
+			}
+
+			function hideTutorialStepPointers() {
+				_this.tooltipInstances.forEach((instance) => {
+					instance.destroy();
+				});
+				_this.tooltipInstances = [];
+				_this.tooltipSelectors = [];
+			}
+
+			function placeTutorialStone({ color, node, showReset }) {
+				_this.currentPlayer = color;
+
+				handleBoardStateEvent({
+					[node]: color,
+				});
+
+				handleNewStonePlacement(
+					{
+						color,
+						node: node,
+					},
+					showReset
+				);
 			}
 		},
 	}));
