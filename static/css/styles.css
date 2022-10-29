@@ -1377,6 +1377,10 @@ html.webp {
 	font-weight: bold;
 }
 
+.shepherd-button[disabled] {
+	opacity: 0.4;
+}
+
 .shepherd-modal-overlay-container {
 	display: none;
 }

@@ -3,10 +3,14 @@ document.addEventListener('alpine:init', () => {
 		actionList: [],
 		activeSpell: '',
 		activeSpellIsCastable: false,
+		activeTutorialStep: '',
+		actualTutorialAction: '',
 		// awaiting is the next action you're expected to take
 		awaiting: '',
+		awaitingTutorialAction: '',
 		blueSpellCounter: 0,
 		blueLock: '',
+		correctTutorialAction: false,
 		currentPlayer: '',
 		lastPlay: '',
 		message: '',
@@ -24,6 +28,7 @@ document.addEventListener('alpine:init', () => {
 		previousBoardState: {},
 		redSpellCounter: 0,
 		redLock: '',
+		requiresTutorialActon: false,
 		score: 'unset',
 		showReset: false,
 		spellDict: {},
@@ -35,6 +40,12 @@ document.addEventListener('alpine:init', () => {
 		validMoves: {},
 		whoseTurn: '',
 		winner: '',
+
+		get tutorialCanProgress() {
+			return this.requiresTutorialActon
+				? this.awaitingTutorialAction === this.actualTutorialAction
+				: true;
+		},
 
 		closeSpellTooltip() {
 			this.activeSpell = '';
@@ -67,16 +78,19 @@ document.addEventListener('alpine:init', () => {
 
 		handleCastSpell(spell) {
 			this.sendEvent(this.spellDict[spell]);
+			this.actualTutorialAction = this.spellDict[spell];
 			this.closeSpellTooltip();
 		},
 
 		handleDash() {
 			this.sendEvent('dash');
+			this.actualTutorialAction = 'dash';
 			this.actionList = [];
 		},
 
 		handleEndTurn() {
 			this.sendEvent('pass');
+			this.actualTutorialAction = 'pass';
 			this.actionList = [];
 		},
 
@@ -142,6 +156,7 @@ document.addEventListener('alpine:init', () => {
 
 		handleReset() {
 			this.sendEvent('reset');
+			this.actualTutorialAction = 'reset';
 			this.actionList = [];
 			this.lastPlay = '';
 			this.nodesToRefill = {};
@@ -153,6 +168,10 @@ document.addEventListener('alpine:init', () => {
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
 			this.currentPlayer = this.whoseTurn;
+
+			// if (node === this.awaitingTutorialAction) {
+			this.actualTutorialAction = node;
+			// }
 
 			if (this.awaiting === 'node') {
 				this.sendEvent(node);
@@ -175,7 +194,7 @@ document.addEventListener('alpine:init', () => {
 			});
 
 			_this.sendEvent = function sendEvent(message) {
-				_this.events.send(JSON.stringify({ message }));
+				// _this.events.send(JSON.stringify({ message }));
 				_this.awaiting = null;
 			};
 
@@ -200,22 +219,38 @@ document.addEventListener('alpine:init', () => {
 					document.addEventListener('keydown', (event) => {
 						if (event.code === 'Space' && _this.tutorial.isActive()) {
 							event.preventDefault();
-							_this.tutorial.next();
+							advanceTour();
 						}
 					});
 				});
 			}
 
 			function createTutorialSteps(steps) {
-				steps.forEach((step) => {
+				steps.forEach((step, index) => {
+					const { text, when, ...restOptions } = step;
 					_this.tutorial.addStep({
 						buttons: [
 							{
 								text: 'Next',
-								action: _this.tutorial.next,
+								action: advanceTour,
 							},
 						],
-						...step,
+						id: `tutorial-${index + 1}`,
+						text: text,
+						when: {
+							hide() {
+								if (when && when.hide) {
+									when.hide();
+								}
+							},
+							show() {
+								_this.activeTutorialStep = `tutorial-${index + 1}`;
+								if (when && when.show) {
+									when.show();
+								}
+							},
+						},
+						...restOptions,
 					});
 				});
 			}
@@ -327,11 +362,8 @@ document.addEventListener('alpine:init', () => {
 						},
 						hide() {
 							hideTutorialStepPointers();
-							placeTutorialStone({ color: 'red', node: 'a1', showReset: false });
-							setTimeout(
-								() => placeTutorialStone({ color: 'blue', node: 'b1', showReset: false }),
-								500
-							);
+							placeTutorialStone({ color: 'red', node: 'a1' });
+							placeTutorialStone({ color: 'blue', delay: 750, node: 'b1' });
 						},
 					},
 				},
@@ -342,23 +374,83 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>On each player’s turn, they place one new stone of their color onto the board. This is called a Regular Move.</p><p>Stones must be placed adjacent to where a player already has a stone on the board.</p>',
 				},
 				{
-					text: '<p>Red placed a Stone and passed the turn. Now it’s your turn.</p>',
+					text: '<p>Red placed a Stone and ended their turn.</p>',
 					when: {
 						show() {
-							placeTutorialStone({ color: 'red', node: 'a2', showReset: false });
+							placeTutorialStone({ color: 'red', node: 'a2' });
 						},
 					},
 				},
 				{
-					text: '<p>Go ahead and make your move by placing a stone in a node adjacent to where you already have a Stone.</p>',
+					advanceOn: {
+						event: 'click',
+						selector: '.stone-node--b11',
+					},
+					text: '<p>Now it’s your turn.</p><p>Go ahead and make your move by placing a stone in the left node adjacent to where you already have a Stone.</p>',
 					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'b11' });
+							resetRequiredTutorialAction();
+						},
 						show() {
+							showTutorialStepPointers(['.stone-node--b11']);
+							setRequiredTutorialAction('b11');
 							handleValidMovesEvent({
 								b2: 'blue',
 								b11: 'blue',
 							});
 						},
 					},
+				},
+				{
+					advanceOn: {
+						event: 'click',
+						selector: '.action-button--end-turn',
+					},
+					text: '<p>Well done!</p><p>Now end your turn by clicking the End Turn button.</p>',
+					when: {
+						hide() {
+							resetRequiredTutorialAction();
+						},
+						show() {
+							setRequiredTutorialAction('pass');
+							handleMessageEvent({
+								actionlist: ['pass'],
+								awaiting: 'action',
+								message: '',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Red placed a Stone and ended their the turn.</p>',
+					when: {
+						show() {
+							placeTutorialStone({ color: 'red', node: 'a3' });
+						},
+					},
+				},
+				{
+					text: '<p>Let’s fast forward the game so we can learn about pushing.</p>',
+					when: {
+						show() {
+							setRequiredTutorialAction('delay');
+							placeTutorialStone({ color: 'blue', delay: 750, node: 'b2' });
+							placeTutorialStone({ color: 'red', delay: 1500, node: 'a13' });
+							placeTutorialStone({ color: 'blue', delay: 2250, node: 'a10' });
+							placeTutorialStone({ color: 'red', delay: 3000, node: 'a9' });
+							placeTutorialStone({ color: 'blue', delay: 3750, node: 'a8' });
+							placeTutorialStone(
+								{ color: 'red', delay: 4500, node: 'a11' },
+								resetRequiredTutorialAction
+							);
+						},
+					},
+				},
+
+				{
+					text: 'dummy at the end',
 				},
 			]);
 
@@ -552,6 +644,12 @@ document.addEventListener('alpine:init', () => {
 				_this.winner = payload.winner;
 			}
 
+			function advanceTour() {
+				if (_this.tutorialCanProgress) {
+					_this.tutorial.next();
+				}
+			}
+
 			function showTutorialStepPointers(selectors) {
 				_this.tooltipSelectors = selectors;
 
@@ -590,20 +688,43 @@ document.addEventListener('alpine:init', () => {
 				_this.tooltipSelectors = [];
 			}
 
-			function placeTutorialStone({ color, node, showReset }) {
-				_this.currentPlayer = color;
+			function setRequiredTutorialAction(action) {
+				_this.requiresTutorialActon = true;
+				_this.awaitingTutorialAction = action;
+				document.querySelector(
+					`[data-shepherd-step-id="${_this.activeTutorialStep}"] .shepherd-button`
+				).disabled = true;
+			}
 
-				handleBoardStateEvent({
-					[node]: color,
-				});
+			function resetRequiredTutorialAction() {
+				_this.requiresTutorialActon = false;
+				_this.actualTutorialAction = '';
+				_this.awaitingTutorialAction = '';
+				document.querySelector(
+					`[data-shepherd-step-id="${_this.activeTutorialStep}"] .shepherd-button`
+				).disabled = false;
+			}
 
-				handleNewStonePlacement(
-					{
-						color,
-						node: node,
-					},
-					showReset
-				);
+			function placeTutorialStone({ color, delay = 0, node, showReset = false }, callback) {
+				setTimeout(() => {
+					_this.currentPlayer = color;
+
+					handleBoardStateEvent({
+						[node]: color,
+					});
+
+					handleNewStonePlacement(
+						{
+							color,
+							node: node,
+						},
+						showReset
+					);
+
+					if (callback) {
+						callback();
+					}
+				}, delay);
 			}
 		},
 	}));
