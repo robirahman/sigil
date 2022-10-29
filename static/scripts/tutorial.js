@@ -26,6 +26,7 @@ document.addEventListener('alpine:init', () => {
 		nodesToRefill: {},
 		playerToRefill: '',
 		previousBoardState: {},
+		previousPlayer: '',
 		redSpellCounter: 0,
 		redLock: '',
 		requiresTutorialActon: false,
@@ -167,6 +168,10 @@ document.addEventListener('alpine:init', () => {
 
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
+			if (this.currentPlayer && this.whoseTurn !== this.previousPlayer) {
+				this.previousPlayer = this.currentPlayer
+			}
+
 			this.currentPlayer = this.whoseTurn;
 
 			// if (node === this.awaitingTutorialAction) {
@@ -357,13 +362,13 @@ document.addEventListener('alpine:init', () => {
 				{
 					text: '<p>Each side starts with just one stone on the board.</p><p>The red circle in the bottom left is Red’s starting location.</p><p>Blue starts with a stone in the bottom right.</p>',
 					when: {
-						show() {
-							showTutorialStepPointers(['.stone-node--a1', '.stone-node--b1']);
-						},
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'red', node: 'a1' });
 							placeTutorialStone({ color: 'blue', delay: 750, node: 'b1' });
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--a1', '.stone-node--b1']);
 						},
 					},
 				},
@@ -374,7 +379,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>On each player’s turn, they place one new stone of their color onto the board. This is called a Regular Move.</p><p>Stones must be placed adjacent to where a player already has a stone on the board.</p>',
 				},
 				{
-					text: '<p>Red placed a Stone and ended their turn.</p>',
+					text: '<p>Red placed a stone and ended their turn.</p>',
 					when: {
 						show() {
 							placeTutorialStone({ color: 'red', node: 'a2' });
@@ -386,7 +391,7 @@ document.addEventListener('alpine:init', () => {
 						event: 'click',
 						selector: '.stone-node--b11',
 					},
-					text: '<p>Now it’s your turn.</p><p>Go ahead and make your move by placing a stone in the left node adjacent to where you already have a Stone.</p>',
+					text: '<p>Now it’s your turn.</p><p>Go ahead and make your move by placing a stone in the left node adjacent to where you already have a stone.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -424,7 +429,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Red placed a Stone and ended their the turn.</p>',
+					text: '<p>Red placed a stone and ended their the turn.</p>',
 					when: {
 						show() {
 							placeTutorialStone({ color: 'red', node: 'a3' });
@@ -448,9 +453,122 @@ document.addEventListener('alpine:init', () => {
 						},
 					},
 				},
-
 				{
-					text: 'dummy at the end',
+					advanceOn: {
+						event: 'click',
+						selector: '.stone-node--a9',
+					},
+					text: '<p>Let’s see what happens when you place a stone onto a node occupied by your opponent.</p><p>Try placing a stone here.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'a9' });
+							resetRequiredTutorialAction();
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--a9']);
+							setRequiredTutorialAction('a9');
+							handleValidMovesEvent({
+								a7: 'blue',
+								a9: 'blue',
+								b3: 'blue',
+								b6: 'blue',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>When you place a stone onto an opposing piece, their stone gets pushed to the nearest empty node.</p><p>It can get pushed through pieces of its own color, but not through your stones.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							// TODO: Handle pushing properly
+							placeTutorialStone({ color: 'red', delay: 500, node: 'a4', push: true }, () =>
+								showTutorialStepPointers(['.stone-node--a4'])
+							);
+						},
+					},
+				},
+				{
+					text: '<p>Looks like it’s going to be a fight, your stone got pushed to the closest empty node.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							handleValidMovesEvent({
+								a5: 'red',
+								a6: 'red',
+								a7: 'red',
+								a9: 'red',
+								c10: 'red',
+							});
+							// FIXME: Why does the static red node show before it zooms in?
+							placeTutorialStone({ color: 'red', node: 'a9' });
+							placeTutorialStone({ color: 'blue', delay: 750, node: 'a7', push: true }, () =>
+								showTutorialStepPointers(['.stone-node--a7'])
+							);
+						},
+					},
+				},
+				{
+					advanceOn: {
+						event: 'click',
+						selector: '.stone-node--a9',
+					},
+					text: '<p>Go ahead and place another stone on the contested node.</p>',
+					when: {
+						hide() {
+							placeTutorialStone({ color: 'blue', node: 'a9' });
+							resetRequiredTutorialAction();
+						},
+						show() {
+							setRequiredTutorialAction('a9');
+							handleValidMovesEvent({
+								a4: 'blue',
+								a9: 'blue',
+								b3: 'blue',
+								b6: 'blue',
+								b12: 'blue',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>There are two equally distant empty nodes.</p><p>When it is your turn, you make all the decisions. That means that you get to choose where your opponent’s stone gets pushed.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							handleValidMovesEvent({
+								a5: 'red',
+								a6: 'red',
+							});
+							showTutorialStepPointers(['.stone-node--a5', '.stone-node--a6']);
+						},
+					},
+				},
+				{
+					advanceOn: {
+						event: 'click',
+						selector: '.stone-node--a6',
+					},
+					text: '<p>Go ahead and select the legal node on the left.</p>',
+					when: {
+						hide() {
+							placeTutorialStone({ color: 'red', node: 'a6', push: true });
+							resetRequiredTutorialAction();
+						},
+						show() {
+							setRequiredTutorialAction('a6');
+						},
+					},
+				},
+				{
+					text: '<p>Nicely played!</p><p>Next up, learn about crushing.</p>',
 				},
 			]);
 
@@ -705,26 +823,39 @@ document.addEventListener('alpine:init', () => {
 				).disabled = false;
 			}
 
-			function placeTutorialStone({ color, delay = 0, node, showReset = false }, callback) {
-				setTimeout(() => {
+			function placeTutorialStone(
+				{ color, delay = 0, node, push = false, showReset = false },
+				callback
+			) {
+				const handler = () => {
+					_this.previousPlayer = _this.currentPlayer;
 					_this.currentPlayer = color;
+
+					if (!push) {
+						handleNewStonePlacement(
+							{
+								color,
+								node: node,
+							},
+							showReset
+						);
+					}
 
 					handleBoardStateEvent({
 						[node]: color,
 					});
 
-					handleNewStonePlacement(
-						{
-							color,
-							node: node,
-						},
-						showReset
-					);
+					handleValidMovesEvent({});
 
 					if (callback) {
 						callback();
 					}
-				}, delay);
+				};
+				if (delay) {
+					setTimeout(handler, delay);
+				} else {
+					handler();
+				}
 			}
 		},
 	}));

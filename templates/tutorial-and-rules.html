@@ -342,7 +342,7 @@
 											[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
 											[`stone-node--${nodes[node]}`]: true,
 											[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
-											'stone-node--last-play': lastPlay === node,
+											'stone-node--last-play': lastPlay === node && !validMoves[node] && currentPlayer !== previousPlayer,
 											'stone-node--refill': nodesToRefill[node],
 										}"
 									x-bind:id="`stone-node--${node}`"
