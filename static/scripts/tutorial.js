@@ -26,7 +26,6 @@ document.addEventListener('alpine:init', () => {
 		nodesToRefill: {},
 		playerToRefill: '',
 		previousBoardState: {},
-		previousPlayer: '',
 		redSpellCounter: 0,
 		redLock: '',
 		requiresTutorialActon: false,
@@ -168,9 +167,6 @@ document.addEventListener('alpine:init', () => {
 
 		handleNodeClick(node) {
 			console.log(`node, this.awaiting`, node, this.awaiting);
-			if (this.currentPlayer && this.whoseTurn !== this.previousPlayer) {
-				this.previousPlayer = this.currentPlayer
-			}
 
 			this.currentPlayer = this.whoseTurn;
 
@@ -413,13 +409,17 @@ document.addEventListener('alpine:init', () => {
 						event: 'click',
 						selector: '.action-button--end-turn',
 					},
-					text: '<p>Well done!</p><p>Now end your turn by clicking the End Turn button.</p>',
+					text: '<p>Well done!</p><p>Now end your turn by pressing the End Turn button.</p>',
 					when: {
 						hide() {
 							resetRequiredTutorialAction();
+							hideTutorialStepPointers();
 						},
 						show() {
 							setRequiredTutorialAction('pass');
+							showTutorialStepPointers(['.action-button--end-turn'], {
+								placement: 'right',
+							});
 							handleMessageEvent({
 								actionlist: ['pass'],
 								awaiting: 'action',
@@ -485,8 +485,11 @@ document.addEventListener('alpine:init', () => {
 						},
 						show() {
 							// TODO: Handle pushing properly
+							// FIXME: This stone doesn't animate in (also an issue in the main game)
 							placeTutorialStone({ color: 'red', delay: 500, node: 'a4', push: true }, () =>
-								showTutorialStepPointers(['.stone-node--a4'])
+								showTutorialStepPointers(['.stone-node--a4'], {
+									placement: 'right',
+								})
 							);
 						},
 					},
@@ -494,9 +497,6 @@ document.addEventListener('alpine:init', () => {
 				{
 					text: '<p>Looks like it’s going to be a fight, your stone got pushed to the closest empty node.</p>',
 					when: {
-						hide() {
-							hideTutorialStepPointers();
-						},
 						show() {
 							handleValidMovesEvent({
 								a5: 'red',
@@ -505,10 +505,11 @@ document.addEventListener('alpine:init', () => {
 								a9: 'red',
 								c10: 'red',
 							});
-							// FIXME: Why does the static red node show before it zooms in?
 							placeTutorialStone({ color: 'red', node: 'a9' });
 							placeTutorialStone({ color: 'blue', delay: 750, node: 'a7', push: true }, () =>
-								showTutorialStepPointers(['.stone-node--a7'])
+								showTutorialStepPointers(['.stone-node--a7'], {
+									placement: 'top',
+								})
 							);
 						},
 					},
@@ -525,6 +526,7 @@ document.addEventListener('alpine:init', () => {
 							resetRequiredTutorialAction();
 						},
 						show() {
+							hideTutorialStepPointers();
 							setRequiredTutorialAction('a9');
 							handleValidMovesEvent({
 								a4: 'blue',
@@ -547,7 +549,9 @@ document.addEventListener('alpine:init', () => {
 								a5: 'red',
 								a6: 'red',
 							});
-							showTutorialStepPointers(['.stone-node--a5', '.stone-node--a6']);
+							showTutorialStepPointers(['.stone-node--a5', '.stone-node--a6'], {
+								placement: 'top',
+							});
 						},
 					},
 				},
@@ -569,6 +573,69 @@ document.addEventListener('alpine:init', () => {
 				},
 				{
 					text: '<p>Nicely played!</p><p>Next up, learn about crushing.</p>',
+				},
+				{
+					text: '<p>Let’s take a look at this new board state.</p><p>Some of Red’s stones are surrounded.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								a3: 'blue',
+								a4: 'blue',
+								a9: 'red',
+								c9: 'red',
+								c10: 'red',
+								c13: 'red',
+							});
+							_this.lastPlay = '';
+						},
+					},
+				},
+				{
+					advanceOn: {
+						event: 'click',
+						selector: '.stone-node--a9',
+					},
+					text: '<p>Go ahead and place a stone onto the indicated surrounded Red stone.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'a9' });
+							resetRequiredTutorialAction();
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--a9']);
+							setRequiredTutorialAction('a9');
+						},
+					},
+				},
+				{
+					text: '<p>When a stone is placed onto an opposing stone, if the stone has no empty nodes to get pushed onto, it is crushed and removed from the Game!</p><p>This is the first way that you can start to get an advantage in a game of Sigil.</p>',
+				},
+				{
+					text: '<p>We’ll learn about casting spells in a moment, but first let’s learn about the next turn action: Dashing.</p>',
+				},
+				{
+					advanceOn: {
+						event: 'click',
+						selector: '.action-button--dash',
+					},
+					text: '<p>To make a Dash move after taking your regular move, but before passing the turn, press the Dash button.</p>',
+					when: {
+						hide() {
+							resetRequiredTutorialAction();
+						},
+						show() {
+							setRequiredTutorialAction('dash');
+							showTutorialStepPointers(['.action-button--dash'], {
+								placement: 'right',
+							});
+							handleMessageEvent({
+								actionlist: ['dash'],
+								awaiting: 'action',
+								message: '',
+							});
+						},
+					},
 				},
 			]);
 
@@ -768,7 +835,7 @@ document.addEventListener('alpine:init', () => {
 				}
 			}
 
-			function showTutorialStepPointers(selectors) {
+			function showTutorialStepPointers(selectors, options) {
 				_this.tooltipSelectors = selectors;
 
 				_this.tooltipSelectors.forEach((selector, index) => {
@@ -790,6 +857,7 @@ document.addEventListener('alpine:init', () => {
 							},
 						],
 						placement: 'left',
+						...options,
 					});
 					_this.$nextTick(() => {
 						instance.forceUpdate();
@@ -828,7 +896,6 @@ document.addEventListener('alpine:init', () => {
 				callback
 			) {
 				const handler = () => {
-					_this.previousPlayer = _this.currentPlayer;
 					_this.currentPlayer = color;
 
 					if (!push) {
