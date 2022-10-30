@@ -557,9 +557,20 @@ document.addEventListener('alpine:init', () => {
 					when: {
 						show() {
 							handleBoardStateEvent({
+								a1: 'red',
+								a2: 'red',
 								a3: 'blue',
 								a4: 'blue',
+								a6: 'red',
+								a7: 'blue',
+								a8: 'blue',
 								a9: 'red',
+								a10: 'blue',
+								a11: 'red',
+								a13: 'red',
+								b1: 'blue',
+								b2: 'blue',
+								b11: 'blue',
 								c9: 'red',
 								c10: 'red',
 								c13: 'red',
@@ -588,7 +599,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>We’ll learn about casting spells in a moment, but first let’s learn about the next turn action: Dashing.</p>',
 				},
 				{
-					text: '<p>To make a Dash move after taking your regular move, but before passing the turn, press the Dash button.</p>',
+					text: '<p>To make a dash move after taking your regular move, but before passing the turn, press the Dash button.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -605,6 +616,66 @@ document.addEventListener('alpine:init', () => {
 							});
 						},
 					},
+				},
+				{
+					text: '<p>To dash you first sacrifice 2 stones. Let’s sacrifice these two.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							['.stone-node--a7', '.stone-node--b11'].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.removeEventListener('click', _this.handleCustomNodeClick);
+							});
+							_this.handleCustomNodeClick = undefined;
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--a7', '.stone-node--b11'], {
+								placement: 'top',
+							});
+							setRequiredTutorialActions(['a7', 'b11']);
+
+							_this.handleCustomNodeClick = (event) => {
+								handleBoardStateEvent({
+									[event.target.ariaLabel]: null,
+								});
+							};
+
+							['.stone-node--a7', '.stone-node--b11'].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.addEventListener('click', _this.handleCustomNodeClick);
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Now you get to make a second Regular Move.</p><p>Let’s place our stone here.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'a13' });
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--a13']);
+							setRequiredTutorialActions('a13');
+							handleValidMovesEvent({
+								a2: 'blue',
+								a5: 'blue',
+								a7: 'blue',
+								a13: 'blue',
+								b3: 'blue',
+								b6: 'blue',
+								b11: 'blue',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Well done!</p><p>Remember since you must sacrifice 2 stones in order to dash, dashing puts you down a stone. So, make sure you are dashing for a tactical advantage.</p>',
+				},
+				{
+					text: '<p>Next let’s cast some spells!</p>',
 				},
 			]);
 
