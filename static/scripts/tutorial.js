@@ -266,6 +266,7 @@ document.addEventListener('alpine:init', () => {
 			initTutorial();
 
 			createTutorialSteps([
+				// Section 1
 				{
 					text: '<h2>Welcome to Sigil Online!</h2><p>This is part 1 of a three-part tutorial.</p><p>Click “Next” or press Space to continue.',
 				},
@@ -374,6 +375,7 @@ document.addEventListener('alpine:init', () => {
 				{
 					text: '<p>You are the Blue player.</p><p>Red always goes first, and Blue always goes second.</p>',
 				},
+				// Section 2.a
 				{
 					text: '<p>On each player’s turn, they place one new stone of their color onto the board. This is called a Regular Move.</p><p>Stones must be placed adjacent to where a player already has a stone on the board.</p>',
 				},
@@ -446,6 +448,7 @@ document.addEventListener('alpine:init', () => {
 						},
 					},
 				},
+				// Section 2.b
 				{
 					text: '<p>Let’s see what happens when you place a stone onto a node occupied by your opponent.</p><p>Try placing a stone here.</p>',
 					when: {
@@ -552,6 +555,7 @@ document.addEventListener('alpine:init', () => {
 				{
 					text: '<p>Nicely played!</p><p>Next up, learn about crushing.</p>',
 				},
+				// Section 2.c
 				{
 					text: '<p>Let’s take a look at this new board state.</p><p>Some of Red’s stones are surrounded.</p>',
 					when: {
@@ -598,6 +602,7 @@ document.addEventListener('alpine:init', () => {
 				{
 					text: '<p>We’ll learn about casting spells in a moment, but first let’s learn about the next turn action: Dashing.</p>',
 				},
+				// Section 3
 				{
 					text: '<p>To make a dash move after taking your regular move, but before passing the turn, press the Dash button.</p>',
 					when: {
