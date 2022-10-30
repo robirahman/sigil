@@ -299,7 +299,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleBoardStateEvent(payload) {
-					const isValidStateKey = (key) => typeof key !== 'undefined';
+					const isValidStateKey = (key) => key !== undefined;
 					const changedBoardState = Object.keys(payload).reduce((acc, curr) => {
 						if (payload[curr] !== _this.previousBoardState[curr]) {
 							acc[curr] = payload[curr];

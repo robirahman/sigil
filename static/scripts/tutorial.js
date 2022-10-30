@@ -192,7 +192,7 @@ document.addEventListener('alpine:init', () => {
 			_this.$watch('awaitingTutorialActions', (value, oldValue) => {
 				if (value.length === 0 && oldValue.length > 0) {
 					_this.$nextTick(() => {
-						_this.advanceTour();
+						advanceTour();
 					});
 				}
 			});
@@ -377,7 +377,7 @@ document.addEventListener('alpine:init', () => {
 				},
 				// Section 2.a
 				{
-					text: '<p>On each player’s turn, they place one new stone of their color onto the board. This is called a Regular Move.</p><p>Stones must be placed adjacent to where a player already has a stone on the board.</p>',
+					text: '<p>On each player’s turn, they place one new stone of their color onto the board. This is called a regular move.</p><p>Stones must be placed adjacent to where a player already has a stone on the board.</p>',
 				},
 				{
 					text: '<p>Red placed a stone and ended their turn.</p>',
@@ -450,7 +450,7 @@ document.addEventListener('alpine:init', () => {
 				},
 				// Section 2.b
 				{
-					text: '<p>Let’s see what happens when you place a stone onto a node occupied by your opponent.</p><p>Try placing a stone here.</p>',
+					text: '<p>Let’s see what happens when you place a stone onto a node occupied by your opponent.</p><p>Try placing a stone where indicated.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -486,7 +486,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Looks like it’s going to be a fight, your stone got pushed to the closest empty node.</p>',
+					text: '<p>Looks like it’s going to be a fight for territory! Your stone got pushed to the closest empty node.</p>',
 					when: {
 						show() {
 							handleValidMovesEvent({
@@ -560,6 +560,8 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Let’s take a look at this new board state.</p><p>Some of Red’s stones are surrounded.</p>',
 					when: {
 						show() {
+							_this.lastPlay = '';
+
 							handleBoardStateEvent({
 								a1: 'red',
 								a2: 'red',
@@ -579,12 +581,11 @@ document.addEventListener('alpine:init', () => {
 								c10: 'red',
 								c13: 'red',
 							});
-							_this.lastPlay = '';
 						},
 					},
 				},
 				{
-					text: '<p>Go ahead and place a stone onto the indicated surrounded Red stone.</p>',
+					text: '<p>Go ahead and place a stone onto the surrounded Red stone that’s indicated.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -604,7 +605,7 @@ document.addEventListener('alpine:init', () => {
 				},
 				// Section 3
 				{
-					text: '<p>To make a dash move after taking your regular move, but before passing the turn, press the Dash button.</p>',
+					text: '<p>To make a dash move after taking your regular move, but before ending your the turn, press the Dash button.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -623,7 +624,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>To dash you first sacrifice 2 stones. Let’s sacrifice these two.</p>',
+					text: '<p>To dash, you first sacrifice 2 stones. Let’s sacrifice the 2 indicated.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -655,7 +656,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Now you get to make a second Regular Move.</p><p>Let’s place our stone here.</p>',
+					text: '<p>Now you get to make a second, regular move.</p><p>Let’s place our stone on the red stone indicated.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -677,10 +678,283 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Well done!</p><p>Remember since you must sacrifice 2 stones in order to dash, dashing puts you down a stone. So, make sure you are dashing for a tactical advantage.</p>',
+					text: '<p>Well done, you crushed Red’s stone!</p><p>Remember, since you must sacrifice 2 stones in order to dash, dashing puts you down a stone. So, make sure you are dashing for a tactical advantage.</p>',
 				},
 				{
 					text: '<p>Next let’s cast some spells!</p>',
+				},
+				// Section 4.a
+				{
+					text: '<p>TODO.</p>',
+				},
+				{
+					text: '<p>Well played!</p><p>Next we’ll learn about static spells.</p>',
+				},
+				// Section 4.b
+				{
+					text: '<p>Static spells are denoted by the word “STATIC” before their effect text.</p>',
+				},
+				{
+					text: '<p>They function differently from non-static spells in that they are not cast.</p><p>Instead, they give you a permanent effect while you fully occupy them with your stones.</p>',
+				},
+				{
+					text: '<p>Let’s set up a new board and take a closer look at Seal of Wind.</p>',
+					when: {
+						show() {
+							_this.lastPlay = '';
+
+							handleSpellSetupEvent({
+								ritual1: 'Starfall',
+								ritual2: 'Seal_of_Lightning',
+								ritual3: 'Carnage',
+								sorcery1: 'Seal_of_Wind',
+								sorcery2: 'Fireblast',
+								sorcery3: 'Meteor',
+								charm1: 'Seal_of_Summer',
+								charm2: 'Comet',
+								charm3: 'Surge',
+							});
+
+							handleSpellTextSetupEvent({
+								ritual1: {
+									name: 'Starfall',
+									text: 'Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.',
+								},
+								ritual2: {
+									name: 'Seal_of_Lightning',
+									text: 'STATIC: Your dash only requires 1 sacrifice.',
+								},
+								ritual3: {
+									name: 'Carnage',
+									text: 'Make 4 hard moves.',
+								},
+								sorcery1: {
+									name: 'Seal_of_Wind',
+									text: 'STATIC: Your first move each turn is a blink move.',
+								},
+								sorcery2: {
+									name: 'Fireblast',
+									text: 'Destroy all enemy stones which are touching you.',
+								},
+								sorcery3: {
+									name: 'Meteor',
+									text: 'Make 1 blink move, then destroy 1 enemy stone touching it.',
+								},
+								charm1: {
+									name: 'Seal_of_Summer',
+									text: 'STATIC: You may cast 2 spells on your turn.',
+								},
+								charm2: {
+									name: 'Comet',
+									text: 'Make 1 blink move, then sacrifice a stone.',
+								},
+								charm3: {
+									name: 'Surge',
+									text: 'If you dashed this turn, make 1 move.',
+								},
+							});
+
+							handleBoardStateEvent({
+								a1: 'red',
+								a2: null,
+								a3: null,
+								a4: null,
+								a5: null,
+								a6: null,
+								a7: null,
+								a8: null,
+								a9: null,
+								a10: null,
+								a11: null,
+								a13: null,
+								b1: 'blue',
+								b2: null,
+								b3: null,
+								b6: null,
+								b11: null,
+								c9: null,
+								c10: null,
+								c13: null,
+							});
+
+							showTutorialStepPointers(['.spell--tooltip-anchor-sorcery1']);
+						},
+					},
+				},
+				{
+					text: '<p>Seal of Wind states: “STATIC: Your first move each turn is a blink move.”</p><p>That means that if you fully occupy Seal of Wind, then the first stone you place on your turn can be anywhere on the board!</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+					},
+				},
+				{
+					text: '<p>Let’s fast forward the game so we can see how it works.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								a1: 'red',
+								a2: 'red',
+								a3: 'red',
+								a4: 'red',
+								a5: 'red',
+								a6: 'red',
+								a7: 'red',
+								a8: 'blue',
+								a9: 'blue',
+								a10: 'blue',
+								b1: 'blue',
+								b2: 'blue',
+								b11: 'blue',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Because you fully occupy Seal of Wind, your first move does not need to be adjacent to stones you already have on the board.</p><p>Let’s go ahead and claim this mana.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'c1' });
+						},
+						show() {
+							setRequiredTutorialActions('c1');
+							showTutorialStepPointers(['.stone-node--c1']);
+						},
+					},
+				},
+				{
+					text: '<p>Nicely done!</p><p>Now that we know how to play Sigil, let’s learn how to win!</p>',
+				},
+				// Section 5
+				{
+					text: '<p>A game of Sigil ends under two conditions.</p><p>Let’s reset the board to find out how.',
+					when: {
+						show() {
+							_this.lastPlay = '';
+
+							handleBoardStateEvent({
+								a1: 'red',
+								a2: null,
+								a3: null,
+								a4: null,
+								a5: null,
+								a6: null,
+								a7: null,
+								a8: null,
+								a9: null,
+								a10: null,
+								b1: 'blue',
+								b2: null,
+								b11: null,
+								c1: null,
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Most games end when one player has a <strong>3-Stone advantage</strong> at the end of a turn.</p>',
+				},
+				{
+					text: '<p>The track in the center of the board is the Score Keeping Track.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers(['.score-track']);
+						},
+					},
+				},
+				{
+					text: '<p>A Blue stone is used as the Score Keeping stone.</p><p>It counts the difference in Red stones and Blue stones.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								score: 'b1',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Since Red goes first, the Score Keeping stone counts towards Blue’s score.</p><p>It cannot interact with the game in any way, be sacrificed or destroyed.</p>',
+				},
+				{
+					text: '<p>Let’s look at an example.</p><p>Red has 5 stones.</p><p>Blue has 7 stones: 6 on the board plus the Score Keeping stone.</p><p>Therefore, Blue has a 2-stone advantage.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								a3: 'red',
+								a7: 'red',
+								a8: 'blue',
+								a9: 'blue',
+								a10: 'blue',
+								b1: 'blue',
+								b3: 'blue',
+								b5: 'red',
+								b6: 'red',
+								c1: 'blue',
+								score: 'b2',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>The second, and less common, way that a game ends is when either player casts their 6<sup>th</sup> 3 and/or 5-node spell.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								a3: null,
+								a7: null,
+								a8: null,
+								a9: null,
+								a10: null,
+								b1: null,
+								b3: null,
+								b5: null,
+								b6: null,
+								score: 'b1',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>When a player casts a 3 or 5-node spell, their Spell die’s value increases by 1.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers(['.dice'], {
+								placement: 'right',
+							});
+							handleBoardStateEvent({
+								bluespellcounter: 1,
+							});
+						},
+					},
+				},
+				{
+					text: '<p>At the end of the turn in which either player casts their 6<sup>th</sup> spell, the game ends.</p><p>Whoever has a stone advantage at that time wins!</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								bluespellcounter: 6,
+							});
+						},
+					},
+				},
+				{
+					buttons: [
+						{
+							action() {
+								window.location = '/';
+							},
+							text: 'Play Now',
+						},
+					],
+					text: '<p>And that wraps up our tutorial.</p><p>Do you have what it takes to control the Sigil?</p>',
 				},
 			]);
 
@@ -881,8 +1155,6 @@ document.addEventListener('alpine:init', () => {
 				}
 			}
 
-			_this.advanceTour = advanceTour;
-
 			function showTutorialStepPointers(selectors, options) {
 				_this.tooltipSelectors = selectors;
 
@@ -975,6 +1247,7 @@ document.addEventListener('alpine:init', () => {
 						callback();
 					}
 				};
+
 				if (delay) {
 					setTimeout(handler, delay);
 				} else {
