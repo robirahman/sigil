@@ -4,13 +4,11 @@ document.addEventListener('alpine:init', () => {
 		activeSpell: '',
 		activeSpellIsCastable: false,
 		activeTutorialStep: '',
-		actualTutorialAction: '',
 		// awaiting is the next action you're expected to take
 		awaiting: '',
-		awaitingTutorialAction: '',
+		awaitingTutorialActions: [],
 		blueSpellCounter: 0,
 		blueLock: '',
-		correctTutorialAction: false,
 		currentPlayer: '',
 		lastPlay: '',
 		message: '',
@@ -28,7 +26,6 @@ document.addEventListener('alpine:init', () => {
 		previousBoardState: {},
 		redSpellCounter: 0,
 		redLock: '',
-		requiresTutorialActon: false,
 		score: 'unset',
 		showReset: false,
 		spellDict: {},
@@ -42,9 +39,7 @@ document.addEventListener('alpine:init', () => {
 		winner: '',
 
 		get tutorialCanProgress() {
-			return this.requiresTutorialActon
-				? this.awaitingTutorialAction === this.actualTutorialAction
-				: true;
+			return this.awaitingTutorialActions.length === 0;
 		},
 
 		closeSpellTooltip() {
@@ -78,19 +73,19 @@ document.addEventListener('alpine:init', () => {
 
 		handleCastSpell(spell) {
 			this.sendEvent(this.spellDict[spell]);
-			this.actualTutorialAction = this.spellDict[spell];
+			this.handleRequiredTutorialActions(this.spellDict[spell]);
 			this.closeSpellTooltip();
 		},
 
 		handleDash() {
 			this.sendEvent('dash');
-			this.actualTutorialAction = 'dash';
+			this.handleRequiredTutorialActions('dash');
 			this.actionList = [];
 		},
 
 		handleEndTurn() {
 			this.sendEvent('pass');
-			this.actualTutorialAction = 'pass';
+			this.handleRequiredTutorialActions('pass');
 			this.actionList = [];
 		},
 
@@ -156,7 +151,7 @@ document.addEventListener('alpine:init', () => {
 
 		handleReset() {
 			this.sendEvent('reset');
-			this.actualTutorialAction = 'reset';
+			this.handleRequiredTutorialActions('reset');
 			this.actionList = [];
 			this.lastPlay = '';
 			this.nodesToRefill = {};
@@ -170,8 +165,8 @@ document.addEventListener('alpine:init', () => {
 
 			this.currentPlayer = this.whoseTurn;
 
-			// if (node === this.awaitingTutorialAction) {
-			this.actualTutorialAction = node;
+			// if (node === this.awaitingTutorialActions) {
+			this.handleRequiredTutorialActions(node);
 			// }
 
 			if (this.awaiting === 'node') {
@@ -192,6 +187,14 @@ document.addEventListener('alpine:init', () => {
 				_this.$nextTick(() => {
 					_this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight;
 				});
+			});
+
+			_this.$watch('awaitingTutorialActions', (value, oldValue) => {
+				if (value.length === 0 && oldValue.length > 0) {
+					_this.$nextTick(() => {
+						_this.advanceTour();
+					});
+				}
 			});
 
 			_this.sendEvent = function sendEvent(message) {
@@ -232,8 +235,8 @@ document.addEventListener('alpine:init', () => {
 					_this.tutorial.addStep({
 						buttons: [
 							{
-								text: 'Next',
 								action: advanceTour,
+								text: 'Next',
 							},
 						],
 						id: `tutorial-${index + 1}`,
@@ -383,20 +386,15 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.stone-node--b11',
-					},
 					text: '<p>Now it’s your turn.</p><p>Go ahead and make your move by placing a stone in the left node adjacent to where you already have a stone.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'b11' });
-							resetRequiredTutorialAction();
 						},
 						show() {
 							showTutorialStepPointers(['.stone-node--b11']);
-							setRequiredTutorialAction('b11');
+							setRequiredTutorialActions('b11');
 							handleValidMovesEvent({
 								b2: 'blue',
 								b11: 'blue',
@@ -405,18 +403,13 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.action-button--end-turn',
-					},
 					text: '<p>Well done!</p><p>Now end your turn by pressing the End Turn button.</p>',
 					when: {
 						hide() {
-							resetRequiredTutorialAction();
 							hideTutorialStepPointers();
 						},
 						show() {
-							setRequiredTutorialAction('pass');
+							setRequiredTutorialActions('pass');
 							showTutorialStepPointers(['.action-button--end-turn'], {
 								placement: 'right',
 							});
@@ -440,7 +433,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Let’s fast forward the game so we can learn about pushing.</p>',
 					when: {
 						show() {
-							setRequiredTutorialAction('delay');
+							setRequiredTutorialActions('delay');
 							placeTutorialStone({ color: 'blue', delay: 750, node: 'b2' });
 							placeTutorialStone({ color: 'red', delay: 1500, node: 'a13' });
 							placeTutorialStone({ color: 'blue', delay: 2250, node: 'a10' });
@@ -448,26 +441,21 @@ document.addEventListener('alpine:init', () => {
 							placeTutorialStone({ color: 'blue', delay: 3750, node: 'a8' });
 							placeTutorialStone(
 								{ color: 'red', delay: 4500, node: 'a11' },
-								resetRequiredTutorialAction
+								resetRequiredTutorialActions
 							);
 						},
 					},
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.stone-node--a9',
-					},
 					text: '<p>Let’s see what happens when you place a stone onto a node occupied by your opponent.</p><p>Try placing a stone here.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'a9' });
-							resetRequiredTutorialAction();
 						},
 						show() {
 							showTutorialStepPointers(['.stone-node--a9']);
-							setRequiredTutorialAction('a9');
+							setRequiredTutorialActions('a9');
 							handleValidMovesEvent({
 								a7: 'blue',
 								a9: 'blue',
@@ -515,19 +503,14 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.stone-node--a9',
-					},
 					text: '<p>Go ahead and place another stone on the contested node.</p>',
 					when: {
 						hide() {
 							placeTutorialStone({ color: 'blue', node: 'a9' });
-							resetRequiredTutorialAction();
 						},
 						show() {
 							hideTutorialStepPointers();
-							setRequiredTutorialAction('a9');
+							setRequiredTutorialActions('a9');
 							handleValidMovesEvent({
 								a4: 'blue',
 								a9: 'blue',
@@ -556,18 +539,13 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.stone-node--a6',
-					},
 					text: '<p>Go ahead and select the legal node on the left.</p>',
 					when: {
 						hide() {
 							placeTutorialStone({ color: 'red', node: 'a6', push: true });
-							resetRequiredTutorialAction();
 						},
 						show() {
-							setRequiredTutorialAction('a6');
+							setRequiredTutorialActions('a6');
 						},
 					},
 				},
@@ -591,41 +569,32 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.stone-node--a9',
-					},
 					text: '<p>Go ahead and place a stone onto the indicated surrounded Red stone.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'a9' });
-							resetRequiredTutorialAction();
 						},
 						show() {
 							showTutorialStepPointers(['.stone-node--a9']);
-							setRequiredTutorialAction('a9');
+							setRequiredTutorialActions('a9');
 						},
 					},
 				},
 				{
-					text: '<p>When a stone is placed onto an opposing stone, if the stone has no empty nodes to get pushed onto, it is crushed and removed from the Game!</p><p>This is the first way that you can start to get an advantage in a game of Sigil.</p>',
+					text: '<p>When a stone is placed onto an opposing stone, if the stone has no empty nodes to get pushed onto, it is crushed and removed from the game!</p><p>This is the first way that you can start to get an advantage in a game of Sigil.</p>',
 				},
 				{
 					text: '<p>We’ll learn about casting spells in a moment, but first let’s learn about the next turn action: Dashing.</p>',
 				},
 				{
-					advanceOn: {
-						event: 'click',
-						selector: '.action-button--dash',
-					},
 					text: '<p>To make a Dash move after taking your regular move, but before passing the turn, press the Dash button.</p>',
 					when: {
 						hide() {
-							resetRequiredTutorialAction();
+							hideTutorialStepPointers();
 						},
 						show() {
-							setRequiredTutorialAction('dash');
+							setRequiredTutorialActions('dash');
 							showTutorialStepPointers(['.action-button--dash'], {
 								placement: 'right',
 							});
@@ -831,9 +800,12 @@ document.addEventListener('alpine:init', () => {
 
 			function advanceTour() {
 				if (_this.tutorialCanProgress) {
+					resetRequiredTutorialActions();
 					_this.tutorial.next();
 				}
 			}
+
+			_this.advanceTour = advanceTour;
 
 			function showTutorialStepPointers(selectors, options) {
 				_this.tooltipSelectors = selectors;
@@ -874,18 +846,27 @@ document.addEventListener('alpine:init', () => {
 				_this.tooltipSelectors = [];
 			}
 
-			function setRequiredTutorialAction(action) {
-				_this.requiresTutorialActon = true;
-				_this.awaitingTutorialAction = action;
+			function setRequiredTutorialActions(actions) {
+				if (Array.isArray(actions)) {
+					_this.awaitingTutorialActions.push(...actions);
+				} else {
+					_this.awaitingTutorialActions.push(actions);
+				}
 				document.querySelector(
 					`[data-shepherd-step-id="${_this.activeTutorialStep}"] .shepherd-button`
 				).disabled = true;
 			}
 
-			function resetRequiredTutorialAction() {
-				_this.requiresTutorialActon = false;
-				_this.actualTutorialAction = '';
-				_this.awaitingTutorialAction = '';
+			function handleRequiredTutorialActions(action) {
+				this.awaitingTutorialActions = this.awaitingTutorialActions.filter(
+					(reqAction) => reqAction !== action
+				);
+			}
+
+			_this.handleRequiredTutorialActions = handleRequiredTutorialActions;
+
+			function resetRequiredTutorialActions() {
+				_this.awaitingTutorialActions = [];
 				document.querySelector(
 					`[data-shepherd-step-id="${_this.activeTutorialStep}"] .shepherd-button`
 				).disabled = false;
