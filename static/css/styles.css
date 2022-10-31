@@ -151,6 +151,10 @@ ul {
 	list-style: none;
 }
 
+sup {
+	line-height: 0;
+}
+
 table {
 	border-collapse: collapse;
 }
@@ -543,6 +547,22 @@ html.webp {
 	z-index: 1;
 }
 
+.feed::-webkit-scrollbar-thumb {
+	background: rgb(255 255 255 / 25%);
+	border-radius: 6px;
+}
+
+.feed::-webkit-scrollbar {
+	background: transparent;
+	width: 6px;
+}
+
+.feed::-webkit-scrollbar-button {
+	background: transparent;
+	display: block;
+	height: 8px;
+}
+
 @media (min-height: 648px) and (min-width: 768px) {
 	.feed {
 		height: 278px;
@@ -859,6 +879,15 @@ html.webp {
 	max-height: calc(100vh - 40px);
 	min-height: 758px;
 	min-width: 758px;
+}
+
+.score-track {
+	height: calc(218 / 1480 * 100%);
+	left: 50%;
+	position: absolute;
+	width: calc(199 / 1480 * 100%);
+	top: 50%;
+	transform: translate(-50%, -50%);
 }
 
 .spell {
