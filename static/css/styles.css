@@ -806,6 +806,8 @@ html.webp {
 .action-button,
 .tooltip-button,
 .shepherd-button {
+	appearance: none;
+	border: none;
 	border-radius: 3px;
 	box-shadow: inset 0 0 2px rgb(0 0 0 / 60%);
 	color: #fff;
