@@ -511,12 +511,11 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Go ahead and place another stone on the contested node.</p>',
 					when: {
 						hide() {
-							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'a9' });
 						},
 						show() {
+							// FIXME: a9 needs to have a pointer. Why didn't it work?
 							hideTutorialStepPointers();
-							showTutorialStepPointers(['.stone-node--a9']);
 							setRequiredTutorialActions('a9');
 							handleValidMovesEvent({
 								a4: 'blue',
@@ -1285,6 +1284,13 @@ document.addEventListener('alpine:init', () => {
 					when: {
 						hide() {
 							hideTutorialStepPointers();
+							handleBoardStateEvent({
+								c7: null,
+							});
+							handleMessageEvent({
+								actionlist: null,
+								message: '',
+							});
 						},
 						show() {
 							showTutorialStepPointers(['.spell--tooltip-anchor-charm3'], {
