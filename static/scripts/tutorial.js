@@ -100,6 +100,7 @@ document.addEventListener('alpine:init', () => {
 				if (this.hasTouchScreen) {
 					this.showSpellTooltip(spell);
 				} else {
+					this.handleRequiredTutorialActions(charmName);
 					this.sendEvent(charmName);
 				}
 			} else {
@@ -125,6 +126,7 @@ document.addEventListener('alpine:init', () => {
 				if (this.hasTouchScreen) {
 					this.showSpellTooltip(spell);
 				} else {
+					this.handleRequiredTutorialActions(spellName);
 					this.sendEvent(spellName);
 				}
 			} else {
@@ -268,7 +270,7 @@ document.addEventListener('alpine:init', () => {
 			createTutorialSteps([
 				// Section 1
 				{
-					text: '<h2>Welcome to Sigil Online!</h2><p>This is part 1 of a three-part tutorial.</p><p>Click “Next” or press Space to continue.',
+					text: '<h2>Welcome to Sigil Online!</h2><p>This tutorial will tell you every thing you need to know to play a game of Sigil.</p><p>Press the Next button or Space to continue.',
 				},
 				{
 					text: '<p>Sigil is a battle between the red and blue stones.</p><p>Each side is trying to expand their territory and their opponent’s territory.</p>',
@@ -333,7 +335,7 @@ document.addEventListener('alpine:init', () => {
 									text: 'Destroy all enemy stones which are touching you.',
 								},
 								sorcery2: {
-									name: 'Hail_Storm',
+									name: 'Hail Storm',
 									text: 'Destroy 1 enemy stone in each spell.',
 								},
 								sorcery3: {
@@ -432,7 +434,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Let’s fast forward the game so we can learn about pushing.</p>',
+					text: '<p>Let’s fast-forward the game so we can learn about pushing.</p>',
 					when: {
 						show() {
 							setRequiredTutorialActions('delay');
@@ -509,10 +511,12 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Go ahead and place another stone on the contested node.</p>',
 					when: {
 						hide() {
+							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'a9' });
 						},
 						show() {
 							hideTutorialStepPointers();
+							showTutorialStepPointers(['.stone-node--a9']);
 							setRequiredTutorialActions('a9');
 							handleValidMovesEvent({
 								a4: 'blue',
@@ -542,12 +546,16 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Go ahead and select the legal node on the left.</p>',
+					text: '<p>Go ahead and push their stone to the node indicated.</p>',
 					when: {
 						hide() {
+							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'red', node: 'a6', push: true });
 						},
 						show() {
+							showTutorialStepPointers(['.stone-node--a6'], {
+								placement: 'top',
+							});
 							setRequiredTutorialActions('a6');
 						},
 					},
@@ -685,7 +693,626 @@ document.addEventListener('alpine:init', () => {
 				},
 				// Section 4.a
 				{
-					text: '<p>TODO.</p>',
+					text: '<p>First, let’s set up a new board.</p>',
+					when: {
+						show() {
+							_this.lastPlay = '';
+
+							handleSpellSetupEvent({
+								ritual1: 'Starfall',
+								ritual2: 'Flourish',
+								ritual3: 'Carnage',
+								sorcery1: 'Fireblast',
+								sorcery2: 'Hail_Storm',
+								sorcery3: 'Meteor',
+								charm1: 'Slash',
+								charm2: 'Comet',
+								charm3: 'Sprout',
+							});
+
+							handleSpellTextSetupEvent({
+								ritual1: {
+									name: 'Starfall',
+									text: 'Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.',
+								},
+								ritual2: {
+									name: 'Flourish',
+									text: 'Make 4 soft moves.',
+								},
+								ritual3: {
+									name: 'Carnage',
+									text: 'Make 4 hard moves.',
+								},
+								sorcery1: {
+									name: 'Fireblast',
+									text: 'Destroy all enemy stones which are touching you.',
+								},
+								sorcery2: {
+									name: 'Hail Storm',
+									text: 'Destroy 1 enemy stone in each spell.',
+								},
+								sorcery3: {
+									name: 'Meteor',
+									text: 'Make 1 blink move, then destroy 1 enemy stone touching it.',
+								},
+								charm1: {
+									name: 'Slash',
+									text: 'Make 1 hard move.',
+								},
+								charm2: {
+									name: 'Comet',
+									text: 'Make 1 blink move, then sacrifice a stone.',
+								},
+								charm3: {
+									name: 'Sprout',
+									text: 'Make 1 soft move.',
+								},
+							});
+
+							handleBoardStateEvent({
+								a1: 'red',
+								a2: null,
+								a3: null,
+								a4: null,
+								a6: null,
+								a8: null,
+								a9: null,
+								a10: null,
+								a11: null,
+								a13: null,
+								b1: 'blue',
+								b2: null,
+								c9: null,
+								c10: null,
+								c13: null,
+							});
+						},
+					},
+				},
+				{
+					text: '<p>As mentioned earlier, a game of Sigil is played with 9 random spells.</p>',
+				},
+				{
+					text: '<p>Three 5-node spells.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers([
+								'.spell--tooltip-anchor-ritual1',
+								'.spell--tooltip-anchor-ritual2',
+								'.spell--tooltip-anchor-ritual3',
+							]);
+						},
+					},
+				},
+				{
+					text: '<p>Three 3-node spells.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers([
+								'.spell--tooltip-anchor-sorcery1',
+								'.spell--tooltip-anchor-sorcery2',
+								'.spell--tooltip-anchor-sorcery3',
+							]);
+						},
+					},
+				},
+				{
+					text: '<p>And three 1-node spells.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers([
+								'.spell--tooltip-anchor-charm1',
+								'.spell--tooltip-anchor-charm2',
+								'.spell--tooltip-anchor-charm3',
+							]);
+						},
+					},
+				},
+				{
+					text: '<p>On phones and tablets, you can tap a spell to see what it does, otherwise, you can hover over a spell to see its effect.</p>',
+				},
+				{
+					text: '<p>After your regular move and your optional dash move, you’ll have the option to cast 1 spell on your turn.</p>',
+				},
+				{
+					text: '<p>To cast a spell you must first fully occupy it with your stones.</p>',
+				},
+				{
+					text: '<p>Let’s take a look at this board state.</p><p>You’re only 1 stone away from casting Flourish.',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								a2: 'red',
+								a6: 'red',
+								a11: 'red',
+								b2: 'blue',
+								b4: 'blue',
+								b5: 'blue',
+								b6: 'blue',
+								c8: 'red',
+								c1: 'blue',
+								c9: 'red',
+								c10: 'red',
+								c13: 'red',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Place a stone in Flourish to fully occupy it.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'b3' });
+						},
+						show() {
+							setRequiredTutorialActions('b3');
+							showTutorialStepPointers(['.stone-node--b3'], {
+								placement: 'right',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Excellent!</p><p>Now you can cast Flourish.</p><p>Spells that can be cast are highlighted.</p>',
+					when: {
+						show() {
+							handleMessageEvent({
+								actionlist: ['Flourish'],
+								awaiting: 'action',
+								message: '',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>To cast Flourish, click on it.</p>',
+					when: {
+						show() {
+							setRequiredTutorialActions('Flourish');
+						},
+					},
+				},
+				{
+					text: '<p>When casting a spell you must first sacrifice all of your stones that are on it.</p><p>However, when casting the larger 3 and 5-node spells, you get a discount for each mana that you control.</p>',
+					when: {
+						show() {
+							handleChooseRefillsEvent({
+								b2: 'True',
+								b3: 'True',
+								b4: 'True',
+								b5: 'True',
+								b6: 'True',
+								playercolor: 'blue',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>There are 3 mana nodes on the board. The Red and Blue starting locations, and a third node at the top of the board.</p><p>You control 2 mana nodes, which means you get to leave 2 stones in Flourish.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--a1', '.stone-node--b1', '.stone-node--c1']);
+						},
+					},
+				},
+				{
+					text: '<p>Let’s select these 2 stones to leave on Flourish.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							['.stone-node--b3', '.stone-node--b6'].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.removeEventListener('click', _this.handleCustomNodeClick);
+							});
+							_this.handleCustomNodeClick = undefined;
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--b3', '.stone-node--b6']);
+							setRequiredTutorialActions(['b3', 'b6']);
+
+							_this.handleCustomNodeClick = (event) => {
+								const node = event.target.ariaLabel;
+								handleBoardStateEvent({
+									[node]: 'blue',
+								});
+
+								if (_this.awaitingTutorialActions.length === 1) {
+									handleChooseRefillsEvent({
+										b2: 'True',
+										b4: 'True',
+										b5: 'True',
+										...(node === 'b3' ? { b6: 'True' } : { b3: 'True' }),
+										playercolor: 'blue',
+									});
+								} else {
+									handleDoneRefillingEvent();
+									handleBoardStateEvent({
+										b2: null,
+										b4: null,
+										b5: null,
+									});
+								}
+							};
+
+							['.stone-node--b3', '.stone-node--b6'].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.addEventListener('click', _this.handleCustomNodeClick);
+							});
+						},
+					},
+				},
+				{
+					text: '<p>After sacrificing your stones on Flourish, you can now resolve its effect.</p><p>Flourish states: “Make 4 soft moves.”</p>',
+				},
+				{
+					text: '<p>Spells often place restrictions on how you can place stones.</p> A soft move is a move that must be played onto an unoccupied or empty node. Regular rules on adjacency still apply.</p>',
+				},
+				{
+					text: '<p>Go ahead and resolve Flourish by making 4 soft moves into the indicated nodes.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							['.stone-node--c2', '.stone-node--c3', '.stone-node--c4', '.stone-node--c6'].forEach(
+								(selector) => {
+									document
+										.querySelector(selector)
+										.removeEventListener('click', _this.handleCustomNodeClick);
+								}
+							);
+							_this.handleCustomNodeClick = undefined;
+						},
+						show() {
+							showTutorialStepPointers([
+								'.stone-node--c2',
+								'.stone-node--c3',
+								'.stone-node--c4',
+								'.stone-node--c6',
+							]);
+							setRequiredTutorialActions(['c2', 'c3', 'c4', 'c6']);
+
+							_this.handleCustomNodeClick = (event) => {
+								handleBoardStateEvent({
+									[event.target.ariaLabel]: 'blue',
+								});
+							};
+
+							['.stone-node--c2', '.stone-node--c3', '.stone-node--c4', '.stone-node--c6'].forEach(
+								(selector) => {
+									document
+										.querySelector(selector)
+										.addEventListener('click', _this.handleCustomNodeClick);
+								}
+							);
+						},
+					},
+				},
+				{
+					text: '<p>Well done!</p>',
+				},
+				{
+					text: '<p>After you cast a larger 3 or 5-node spell, the spell becomes locked.</p><p>You can tell a spell is locked by the colored ring around it.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								bluelock: 'Flourish',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>When a spell is locked you cannot cast it again until you first cast another 3 or 5-Node spell.</p><p>At which point, that spell will be locked.</p>',
+				},
+				{
+					text: '<p>Let’s fast-forward 2 turns so you can cast some more spells.</p>',
+					when: {
+						show() {
+							setRequiredTutorialActions('delay');
+							placeTutorialStone({ color: 'red', delay: 750, node: 'a5' });
+							placeTutorialStone(
+								{ color: 'blue', delay: 1500, node: 'c5' },
+								resetRequiredTutorialActions
+							);
+						},
+					},
+				},
+				{
+					text: '<p>Now you can cast Carnage.</p>',
+					when: {
+						show() {
+							handleMessageEvent({
+								actionlist: ['Carnage'],
+								awaiting: 'action',
+								message: '',
+							});
+							setRequiredTutorialActions('Carnage');
+						},
+					},
+				},
+				{
+					text: '<p>Keep the 2 stones indicated.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							['.stone-node--c3', '.stone-node--c4'].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.removeEventListener('click', _this.handleCustomNodeClick);
+							});
+							_this.handleCustomNodeClick = undefined;
+						},
+						show() {
+							handleChooseRefillsEvent({
+								c2: 'True',
+								c3: 'True',
+								c4: 'True',
+								c5: 'True',
+								c6: 'True',
+								playercolor: 'blue',
+							});
+
+							showTutorialStepPointers(['.stone-node--c3', '.stone-node--c4']);
+							setRequiredTutorialActions(['c3', 'c4']);
+
+							_this.handleCustomNodeClick = (event) => {
+								const node = event.target.ariaLabel;
+								handleBoardStateEvent({
+									[node]: 'blue',
+								});
+
+								if (_this.awaitingTutorialActions.length === 1) {
+									handleChooseRefillsEvent({
+										c2: 'True',
+										c5: 'True',
+										c6: 'True',
+										...(node === 'c3' ? { c4: 'True' } : { c3: 'True' }),
+										playercolor: 'blue',
+									});
+								} else {
+									handleDoneRefillingEvent();
+									handleBoardStateEvent({
+										c2: null,
+										c5: null,
+										c6: null,
+									});
+								}
+							};
+
+							['.stone-node--c3', '.stone-node--c4'].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.addEventListener('click', _this.handleCustomNodeClick);
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Carnage states: “Make 4 hard moves.”</p><p>Hard moves are moves that must be made onto nodes occupied by opposing pieces.</p>',
+				},
+				{
+					text: '<p>Let’s resolve Carnage by making 4 hard moves where indicated.</p>',
+					when: {
+						hide() {
+							[
+								'.stone-node--c7',
+								'.stone-node--c8',
+								'.stone-node--c10',
+								'.stone-node--c13',
+							].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.removeEventListener('click', _this.handleCustomNodeClick);
+							});
+							_this.handleCustomNodeClick = undefined;
+
+							handleDoneRefillingEvent();
+							handleBoardStateEvent({
+								bluelock: 'Carnage',
+							});
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--c13']);
+							setRequiredTutorialActions(['dummy']);
+							let awaitingNode = 'c13';
+
+							_this.handleCustomNodeClick = (event) => {
+								const node = event.target.ariaLabel;
+
+								if (awaitingNode === node) {
+									handleBoardStateEvent({
+										[node]: 'blue',
+									});
+
+									if (node === 'c13') {
+										placeTutorialStone({ color: 'blue', node });
+										placeTutorialStone({ color: 'red', push: true, node: 'c7' });
+										hideTutorialStepPointers();
+										showTutorialStepPointers(['.stone-node--c7']);
+										awaitingNode = 'c7';
+									} else if (node === 'c7') {
+										placeTutorialStone({ color: 'red', push: true, node: 'a12' });
+										hideTutorialStepPointers();
+										showTutorialStepPointers(['.stone-node--c8']);
+										awaitingNode = 'c8';
+									} else if (node === 'c8') {
+										placeTutorialStone({ color: 'red', push: true, node: 'a4' });
+										hideTutorialStepPointers();
+										showTutorialStepPointers(['.stone-node--c10']);
+										awaitingNode = 'c10';
+									} else {
+										placeTutorialStone({ color: 'red', push: true, node: 'a3' });
+										hideTutorialStepPointers();
+										resetRequiredTutorialActions();
+									}
+								}
+							};
+
+							[
+								'.stone-node--c7',
+								'.stone-node--c8',
+								'.stone-node--c10',
+								'.stone-node--c13',
+							].forEach((selector) => {
+								document
+									.querySelector(selector)
+									.addEventListener('click', _this.handleCustomNodeClick);
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Nicely played!</p>',
+				},
+				{
+					text: '<p>Let’s fast-forward the game a bit.</p><p>Red has cast Starfall and you can now cast Meteor.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								a3: 'null',
+								a4: 'null',
+								a5: 'null',
+								a7: 'red',
+								c1: 'null',
+								c2: 'red',
+								c3: 'null',
+								c6: 'red',
+								c9: 'blue',
+								redlock: 'Starfall',
+							});
+							handleMessageEvent({
+								actionlist: ['Meteor'],
+								awaiting: 'action',
+								message: '',
+							});
+							_this.lastPlay = '';
+							setRequiredTutorialActions('Meteor');
+						},
+					},
+				},
+				{
+					text: '<p>You now only control 1 mana, so choose the 1 stone indicated to keep on Meteor.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							handleDoneRefillingEvent();
+							handleBoardStateEvent({
+								c8: null,
+								c9: null,
+								c10: 'blue',
+							});
+							placeTutorialStone({ color: 'blue', node: 'c10' });
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--c10']);
+							setRequiredTutorialActions('c10');
+							handleChooseRefillsEvent({
+								c8: 'True',
+								c9: 'True',
+								c10: 'True',
+								playercolor: 'blue',
+							});
+						},
+					},
+				},
+				{
+					text: '<p>Meteor states: “Make 1 blink move, then destroy 1 enemy stone touching it.”</p><p>A blink move is a move that does not have to be adjacent to a stone you already have on the board.</p><p>Unless otherwise specified, it can be either a hard or soft move.</p>',
+				},
+				{
+					text: '<p>Let’s reclaim the top mana.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							handleBoardStateEvent({
+								c1: 'blue',
+							});
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--c1']);
+							setRequiredTutorialActions('c1');
+						},
+					},
+				},
+				{
+					text: '<p>Now destroy the Red stone adjacent to your newly placed stone.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							handleBoardStateEvent({
+								c2: null,
+								bluelock: 'Meteor',
+							});
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--c2']);
+							setRequiredTutorialActions('c2');
+						},
+					},
+				},
+				{
+					text: '<p>Well done!</p>',
+				},
+				{
+					text: '<p>Now let’s fast-forward 2 turns before we cast a 1-node spell.</p>',
+					when: {
+						show() {
+							handleBoardStateEvent({
+								c3: 'blue',
+								c11: 'red',
+							});
+							_this.lastPlay = 'c3';
+						},
+					},
+				},
+				{
+					text: '<p>1-node spells do not have a discount for controlling mana.</p>',
+				},
+				{
+					text: '<p>Click on Sprout to cast it.</p><p>Sprout states: “Make 1 soft move.”',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+						},
+						show() {
+							showTutorialStepPointers(['.spell--tooltip-anchor-charm3'], {
+								position: 'right',
+							});
+							handleMessageEvent({
+								actionlist: ['Sprout'],
+								awaiting: 'action',
+								message: '',
+							});
+							setRequiredTutorialActions('Sprout');
+						},
+					},
+				},
+				{
+					text: '<p>Now resolve Sprout by soft moving where indicated.</p>',
+					when: {
+						hide() {
+							hideTutorialStepPointers();
+							placeTutorialStone({ color: 'blue', node: 'c5' });
+						},
+						show() {
+							showTutorialStepPointers(['.stone-node--c5'], {
+								position: 'right',
+							});
+							setRequiredTutorialActions('c5');
+						},
+					},
 				},
 				{
 					text: '<p>Well played!</p><p>Next we’ll learn about static spells.</p>',
@@ -721,7 +1348,7 @@ document.addEventListener('alpine:init', () => {
 									text: 'Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.',
 								},
 								ritual2: {
-									name: 'Seal_of_Lightning',
+									name: 'Seal of Lightning',
 									text: 'STATIC: Your dash only requires 1 sacrifice.',
 								},
 								ritual3: {
@@ -729,7 +1356,7 @@ document.addEventListener('alpine:init', () => {
 									text: 'Make 4 hard moves.',
 								},
 								sorcery1: {
-									name: 'Seal_of_Wind',
+									name: 'Seal of Wind',
 									text: 'STATIC: Your first move each turn is a blink move.',
 								},
 								sorcery2: {
@@ -741,7 +1368,7 @@ document.addEventListener('alpine:init', () => {
 									text: 'Make 1 blink move, then destroy 1 enemy stone touching it.',
 								},
 								charm1: {
-									name: 'Seal_of_Summer',
+									name: 'Seal of Summer',
 									text: 'STATIC: You may cast 2 spells on your turn.',
 								},
 								charm2: {
@@ -766,15 +1393,25 @@ document.addEventListener('alpine:init', () => {
 								a9: null,
 								a10: null,
 								a11: null,
+								a12: null,
 								a13: null,
 								b1: 'blue',
 								b2: null,
 								b3: null,
 								b6: null,
 								b11: null,
+								bluelock: null,
+								c1: null,
+								c3: null,
+								c4: null,
+								c5: null,
+								c6: null,
+								c7: null,
 								c9: null,
 								c10: null,
+								c11: null,
 								c13: null,
+								redlock: null,
 							});
 
 							showTutorialStepPointers(['.spell--tooltip-anchor-sorcery1']);
@@ -790,7 +1427,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Let’s fast forward the game so we can see how it works.</p>',
+					text: '<p>Let’s fast-forward the game so we can see how it works.</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -812,7 +1449,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Because you fully occupy Seal of Wind, your first move does not need to be adjacent to stones you already have on the board.</p><p>Let’s go ahead and claim this mana.</p>',
+					text: '<p>Because you fully occupy Seal of Wind, your first move does not need to be adjacent to stones you already have on the board.</p><p>Let’s go ahead and claim the mana indicated.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -868,7 +1505,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>A Blue stone is used as the Score Keeping stone.</p><p>It counts the difference in Red stones and Blue stones.</p>',
+					text: '<p>A Blue stone is used as the Score Keeping stone.</p><p>It counts the difference between the Red stones and Blue stones.</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1111,8 +1748,10 @@ document.addEventListener('alpine:init', () => {
 				_this.whoseTurn = payload.color;
 			}
 
-			function handleNewStonePlacement(payload, showReset = true) {
-				_this.lastPlay = payload.node;
+			function handleNewStonePlacement(payload, { lastPlay = true, showReset = true }) {
+				if (lastPlay) {
+					_this.lastPlay = payload.node;
+				}
 
 				if (payload.color !== _this.currentPlayer) {
 					// HACK: Alpine doesn't support dynamic refs and
@@ -1221,7 +1860,7 @@ document.addEventListener('alpine:init', () => {
 			}
 
 			function placeTutorialStone(
-				{ color, delay = 0, node, push = false, showReset = false },
+				{ color, delay = 0, lastPlay = true, node, push = false, showReset = false },
 				callback
 			) {
 				const handler = () => {
@@ -1233,7 +1872,10 @@ document.addEventListener('alpine:init', () => {
 								color,
 								node: node,
 							},
-							showReset
+							{
+								lastPlay,
+								showReset,
+							}
 						);
 					}
 
