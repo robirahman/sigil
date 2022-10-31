@@ -270,10 +270,10 @@ document.addEventListener('alpine:init', () => {
 			createTutorialSteps([
 				// Section 1
 				{
-					text: '<h2>Welcome to Sigil Online!</h2><p>This tutorial will tell you every thing you need to know to play a game of Sigil.</p><p>Press the Next button or Space to continue.',
+					text: '<h2>Welcome to Sigil Online!</h2><p>This tutorial will tell you everything you need to know to play a game of Sigil.</p><p>Press the Next button or Space to continue.',
 				},
 				{
-					text: '<p>Sigil is a battle between the red and blue stones.</p><p>Each side is trying to expand their territory and their opponent’s territory.</p>',
+					text: '<p>Sigil is a battle between the red and blue stones.</p><p>Each side is trying to expand their territory and constrain their opponent’s territory.</p>',
 				},
 				{
 					text: '<p>As your stones expand to different regions of the board, you gain access to special abilities called spells.</p>',
@@ -471,7 +471,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>When you place a stone onto an opposing piece, their stone gets pushed to the nearest empty node.</p><p>It can get pushed through pieces of its own color, but not through your stones.</p>',
+					text: '<p>When you place a stone onto an opposing piece, their stone gets pushed to the nearest empty node.</p><p>It can get pushed through stones of its own color, but not through your stones.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -773,7 +773,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>As mentioned earlier, a game of Sigil is played with 9 random spells.</p>',
 				},
 				{
-					text: '<p>Three 5-node spells.</p>',
+					text: '<p>There are three 5-node spells,</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -788,7 +788,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Three 3-node spells.</p>',
+					text: '<p>Three 3-node spells,</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -818,7 +818,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>On phones and tablets, you can tap a spell to see what it does, otherwise, you can hover over a spell to see its effect.</p>',
+					text: '<p>On phones and tablets, you can tap a spell to see what it does. On a laptop or desktop computer, you can hover over a spell to see its effect.</p>',
 				},
 				{
 					text: '<p>After your regular move and your optional dash move, you’ll have the option to cast 1 spell on your turn.</p>',
@@ -883,7 +883,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>When casting a spell you must first sacrifice all of your stones that are on it.</p><p>However, when casting the larger 3 and 5-node spells, you get a discount for each mana that you control.</p>',
+					text: '<p>When casting a spell you must first sacrifice all of your stones that are on it.</p><p>However, when casting 3- and 5-node spells, you get a discount for each mana that you control.</p>',
 					when: {
 						show() {
 							handleChooseRefillsEvent({
@@ -898,7 +898,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>There are 3 mana nodes on the board. The Red and Blue starting locations, and a third node at the top of the board.</p><p>You control 2 mana nodes, which means you get to leave 2 stones in Flourish.</p>',
+					text: '<p>There are 3 mana nodes on the board: the Red and Blue starting locations, and a third node at the top of the board.</p><p>Right now you control 2 mana nodes, which means you get to leave 2 stones in Flourish.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -960,10 +960,10 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>After sacrificing your stones on Flourish, you can now resolve its effect.</p><p>Flourish states: “Make 4 soft moves.”</p>',
 				},
 				{
-					text: '<p>Spells often place restrictions on how you can place stones.</p> A soft move is a move that must be played onto an unoccupied or empty node. Regular rules on adjacency still apply.</p>',
+					text: '<p>Many spell effects let you place extra stones, aka "make moves", but with restrictions on where they can be placed.</p> A soft move is a move that must be played onto an unoccupied (empty) node. Regular rules on adjacency still apply (that is, it must be touching one of your existing stones).</p>',
 				},
 				{
-					text: '<p>Go ahead and resolve Flourish by making 4 soft moves into the indicated nodes.</p>',
+					text: '<p>Go ahead and resolve Flourish by making 4 soft moves into the indicated nodes. (In a real game, each soft move must be adjacent to one of your existing stones, so the order you place them matters.)</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -1005,7 +1005,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Well done!</p>',
 				},
 				{
-					text: '<p>After you cast a larger 3 or 5-node spell, the spell becomes locked.</p><p>You can tell a spell is locked by the colored ring around it.</p>',
+					text: '<p>After you cast a 3- or 5-node spell, the spell becomes locked.</p><p>You can tell a spell is locked by the colored ring around it.</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1015,16 +1015,16 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>When a spell is locked you cannot cast it again until you first cast another 3 or 5-Node spell.</p><p>At which point, that spell will be locked.</p>',
+					text: "<p>When a spell is locked, you cannot cast it again until after you cast a different 3- or 5-node spell. This will move your lock to the new spell, and the original spell will become unlocked.</p><p>Each player has a separate lock; you can still cast your opponent's locked spell, and vice versa.</p>",
 				},
 				{
 					text: '<p>Let’s fast-forward 2 turns so you can cast some more spells.</p>',
 					when: {
 						show() {
 							setRequiredTutorialActions('delay');
-							placeTutorialStone({ color: 'red', delay: 750, node: 'a5' });
+							placeTutorialStone({ color: 'red', delay: 1750, node: 'a5' });
 							placeTutorialStone(
-								{ color: 'blue', delay: 1500, node: 'c5' },
+								{ color: 'blue', delay: 2500, node: 'c5' },
 								resetRequiredTutorialActions
 							);
 						},
@@ -1101,7 +1101,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Carnage states: “Make 4 hard moves.”</p><p>Hard moves are moves that must be made onto nodes occupied by opposing pieces.</p>',
+					text: '<p>Carnage states: “Make 4 hard moves.”</p><p>Hard moves MUST be onto nodes occupied by enemy stones.</p>',
 				},
 				{
 					text: '<p>Let’s resolve Carnage by making 4 hard moves where indicated.</p>',
@@ -1266,7 +1266,7 @@ document.addEventListener('alpine:init', () => {
 					text: '<p>Well done!</p>',
 				},
 				{
-					text: '<p>Now let’s fast-forward 2 turns before we cast a 1-node spell.</p>',
+					text: '<p>Now let’s fast-forward a bit more and see how to cast a 1-node spell.</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1278,7 +1278,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>1-node spells do not have a discount for controlling mana.</p>',
+					text: '<p>1-node spells do not get a discount for controlling mana. You always have to sacrifice the 1 stone on the spell to cast it.</p>',
 				},
 				{
 					text: '<p>Click on Sprout to cast it.</p><p>Sprout states: “Make 1 soft move.”',
@@ -1505,7 +1505,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>A Blue stone is used as the Score Keeping stone.</p><p>It counts the difference between the Red stones and Blue stones.</p>',
+					text: '<p>A Blue stone is used as the Score Keeping stone. It counts the difference between the number of Red stones and Blue stones.</p><p>When it indicates that one player has a 3-stone advantage at the end of a turn, that player wins.',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1515,10 +1515,10 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Since Red goes first, the Score Keeping stone counts towards Blue’s score.</p><p>It cannot interact with the game in any way, be sacrificed or destroyed.</p>',
+					text: "<p>Since Red always goes first, Blue gets an advantage to offset this. The Score Keeping stone is a Blue stone and it counts towards Blue’s score.</p><p>Other than counting for points, it does not interact with the game in any way, and it cannot be sacrificed or destroyed.</p><p>Notice that at the start of the game, Red has 1 stone and Blue has 2 (including the Score Keeping stone), so Blue has a 1-stone advantage and the Score Keeping stone is on Blue +1.</p>",
 				},
 				{
-					text: '<p>Let’s look at an example.</p><p>Red has 5 stones.</p><p>Blue has 7 stones: 6 on the board plus the Score Keeping stone.</p><p>Therefore, Blue has a 2-stone advantage.</p>',
+					text: '<p>Let’s look at another example.</p><p>Red has 5 stones.</p><p>Blue has 7 stones: 6 on the board plus the Score Keeping stone.</p><p>Therefore, Blue has a 2-stone advantage.</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1538,7 +1538,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>The second, and less common, way that a game ends is when either player casts their 6<sup>th</sup> 3 and/or 5-node spell.</p>',
+					text: '<p>The second, and less common, way that a game ends is when either player casts their 6<sup>th</sup> 3- and/or 5-node spell.</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1557,7 +1557,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>When a player casts a 3 or 5-node spell, their Spell die’s value increases by 1.</p>',
+					text: '<p>When a player casts a 3- or 5-node spell, their Spell die’s value increases by 1.</p>',
 					when: {
 						hide() {
 							hideTutorialStepPointers();
@@ -1573,7 +1573,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>At the end of the turn in which either player casts their 6<sup>th</sup> spell, the game ends.</p><p>Whoever has a stone advantage at that time wins!</p>',
+					text: '<p>At the end of the turn in which either player casts their 6<sup>th</sup> 3- or 5-node spell, the game ends.</p><p>Whoever has a stone advantage at that time wins!</p><p>If the number of stones is tied, then whoever is about to take the next turn wins (because they would have a stone advantage if the game continued).</p>',
 					when: {
 						show() {
 							handleBoardStateEvent({
@@ -1591,7 +1591,7 @@ document.addEventListener('alpine:init', () => {
 							text: 'Play Now',
 						},
 					],
-					text: '<p>And that wraps up our tutorial.</p><p>Do you have what it takes to control the Sigil?</p>',
+					text: '<p>And that wraps up our tutorial!</p><p>Do you have what it takes to control the Sigil?</p>',
 				},
 			]);
 
