@@ -10,7 +10,11 @@
 			http-equiv="X-UA-Compatible"
 			content="ie=edge"
 		/>
-		<title>Single Player - Sigil Online</title>
+		<title>Tutorial - Sigil Online</title>
+		<!-- <link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/shepherd.js@10.0.1/dist/css/shepherd.css"
+		/> -->
 		<link
 			href="/static/css/styles.css"
 			rel="stylesheet"
@@ -318,6 +322,7 @@
 								</div>
 							</template>
 						</div>
+						<div class="score-track"></div>
 						<div
 							class="stone-nodes"
 							x-cloak
@@ -349,6 +354,22 @@
 					</div>
 				</div>
 			</div>
+
+			<template x-for="i in 10">
+				<div
+					class="step-pointer"
+					x-bind:class="{ [`step-pointer--${i}`]: true }"
+				>
+					<img
+						class="step-pointer__arrow"
+						alt=""
+						data-popper-arrow
+						height="34"
+						src="/static/images/step-pointer.svg"
+						width="34"
+					/>
+				</div>
+			</template>
 
 			<div
 				class="tooltip"
@@ -419,8 +440,9 @@
 			</div>
 		</div>
 
-		<script src="/static/scripts/game-board.js"></script>
+		<script src="/static/scripts/tutorial.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/shepherd.js@10.0.1/dist/js/shepherd.min.js"></script>
 		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>

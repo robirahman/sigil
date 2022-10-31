@@ -172,22 +172,22 @@
 					>
 						<button
 							class="action-button action-button--reset-turn"
+							x-bind:class="{ 'is-hidden': !showReset }"
 							x-on:click="handleReset"
-							x-show="showReset"
 						>
 							Reset Turn
 						</button>
 						<button
 							class="action-button action-button--dash"
+							x-bind:class="{ 'is-hidden': !actionList.includes('dash') }"
 							x-on:click="handleDash"
-							x-show="actionList.includes('dash')"
 						>
 							Dash
 						</button>
 						<button
 							class="action-button action-button--end-turn"
+							x-bind:class="{ 'is-hidden': !actionList.includes('pass') }"
 							x-on:click="handleEndTurn"
-							x-show="actionList.includes('pass')"
 						>
 							End Turn
 						</button>
@@ -340,7 +340,7 @@
 											[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
 											[`stone-node--${nodes[node]}`]: true,
 											[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
-											'stone-node--last-play': lastPlay === node,
+											'stone-node--last-play': lastPlay === node && !validMoves[node],
 											'stone-node--refill': nodesToRefill[node],
 										}"
 									x-bind:id="`stone-node--${node}`"
@@ -367,7 +367,7 @@
 						x-text="spells.text[activeSpell]?.text"
 					></p>
 					<button
-						class="action-button action-button--end-turn"
+						class="tooltip-button"
 						x-on:click="handleCastSpell(activeSpell)"
 						x-show="hasTouchScreen && activeSpellIsCastable"
 					>

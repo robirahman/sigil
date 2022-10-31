@@ -62,11 +62,11 @@ def home():
 
 tutorialcount = 0
 
-@app.route('/tutorial-and-rules')
+@app.route('/tutorial')
 def tutorialAndRules():
 	global tutorialcount
 	tutorialcount += 1
-	return render_template('tutorial-and-rules.html')
+	return render_template('tutorial.html')
 
 singleplayercount = 0
 

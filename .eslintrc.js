@@ -8,6 +8,7 @@ module.exports = {
 	globals: {
 		Alpine: 'readable',
 		Popper: 'readable',
+		Shepherd: 'readable',
 		// TODO: Refactor to not use global variables
 		actionlist: 'writable',
 		allnodenames: 'writable',

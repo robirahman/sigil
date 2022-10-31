@@ -3,27 +3,13 @@
 function main() {
 	waitingForOpponent = false;
 
-	document.getElementById('creategamebutton').onmouseover = function () {
-		document.getElementById('creategametext').style.display = 'inline';
-	};
-	document.getElementById('joingamebutton').onmouseover = function () {
-		document.getElementById('joingametext').style.display = 'inline';
-	};
-
-	document.getElementById('creategamebutton').onmouseout = function () {
-		document.getElementById('creategametext').style.display = 'none';
-	};
-	document.getElementById('joingamebutton').onmouseout = function () {
-		document.getElementById('joingametext').style.display = 'none';
-	};
-
 	document.getElementById('creategamebutton').addEventListener('click', function () {
-		document.getElementById('creategameform').style.display = 'inline';
+		document.getElementById('creategameform').style.display = 'flex';
 		document.getElementById('joingameform').style.display = 'none';
 	});
 
 	document.getElementById('joingamebutton').addEventListener('click', function () {
-		document.getElementById('joingameform').style.display = 'inline';
+		document.getElementById('joingameform').style.display = 'flex';
 		document.getElementById('creategameform').style.display = 'none';
 	});
 
