@@ -434,19 +434,21 @@ def playgame(ws):
 		countdown_timer_thread = Thread(target=countdown_timer, args=(red, blue))
 		countdown_timer_thread.start()
 
+		reset_this_turn = False
 
 		while True:
 			try:
-				### First take a snapshot of the board,
-				### which we will revert to in case of a reset exception.
-				try:
-					board.take_snapshot()
-				except redwinsException:
-					record_elo(red, blue)
-					break
-				except bluewinsException:
-					record_elo(blue, red)
-					break
+				if not reset_this_turn:
+					### First take a snapshot of the board,
+					### which we will revert to in case of a reset exception.
+					try:
+						board.take_snapshot()
+					except redwinsException:
+						record_elo(red, blue)
+						break
+					except bluewinsException:
+						record_elo(blue, red)
+						break
 
 				board.turncounter += 1
 
@@ -480,6 +482,7 @@ def playgame(ws):
 
 					activeplayer.eot_triggers()
 					board.update(True)
+					reset_this_turn = False
 					if board.gameover:
 						board.end_game()
 						break
@@ -525,6 +528,7 @@ def playgame(ws):
 					board.last_player = snapshot["last_player"]
 
 					board.update(True)
+					reset_this_turn = True
 
 					continue
 
@@ -656,12 +660,14 @@ def playprivategame(ws, privategamename):
 		private_game_ping_thread = Thread(target=private_game_ping, args=(red, blue))
 		private_game_ping_thread.start()
 
+		reset_this_turn = False
 
 		while True:
 			try:
-				### First take a snapshot of the board,
-				### which we will revert to in case of a reset exception.
-				board.take_snapshot()
+				if not reset_this_turn:
+					### First take a snapshot of the board,
+					### which we will revert to in case of a reset exception.
+					board.take_snapshot()
 
 				board.turncounter += 1
 
@@ -695,6 +701,7 @@ def playprivategame(ws, privategamename):
 
 					activeplayer.eot_triggers()
 					board.update(True)
+					reset_this_turn = False
 					if board.gameover:
 						board.end_game()
 						break
@@ -732,6 +739,7 @@ def playprivategame(ws, privategamename):
 					board.last_player = snapshot["last_player"]
 
 					board.update(True)
+					reset_this_turn = True
 
 					continue
 			except:
@@ -822,11 +830,13 @@ def playsingleplayergame(ws):
 	board.update()
 	time.sleep(3)
 
+	reset_this_turn = False
 
 	while True:
-		### First take a snapshot of the board,
-		### which we will revert to in case of a reset exception.
-		board.take_snapshot()
+		if not reset_this_turn:
+			### First take a snapshot of the board,
+			### which we will revert to in case of a reset exception.
+			board.take_snapshot()
 
 		board.turncounter += 1
 
@@ -859,6 +869,7 @@ def playsingleplayergame(ws):
 
 			activeplayer.eot_triggers()
 			board.update(True)
+			reset_this_turn = False
 			if board.gameover:
 				board.end_game()
 				break
@@ -895,6 +906,7 @@ def playsingleplayergame(ws):
 			board.last_player = snapshot["last_player"]
 
 			board.update(True)
+			reset_this_turn = True
 
 			continue
 
