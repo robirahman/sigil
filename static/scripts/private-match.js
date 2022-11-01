@@ -68,7 +68,7 @@ function main() {
 				var payload = JSON.parse(event.data);
 				if (payload.type == 'notfound') {
 					document.getElementById('privatematchdescription').innerHTML =
-						'That game does not exist, or the password is incorrect.';
+						'That game does not exist.';
 				} else if (payload.type == 'startprivategame') {
 					// Update this if we switch to HTTPS
 					window.location.href = '/private-game/' + payload.gamename;
