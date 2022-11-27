@@ -418,6 +418,19 @@ class AIPlayer():
 		### player.opp will be the opponent player object.
 		self.opp = None
 
+		if self.color == 'red':
+			self.priority_order = ['b1','c1','a1',
+			'b10','b8','b9', 'b2','b3','b4','b5','b6','b7',
+			'c10','c8','c9', 'c2','c3','c4','c5','c6','c7',
+			'a10','a8','a9', 'a2','a3','a4','a5','a6','a7',
+			'b11','b12','b13','c11','c12','c13','a11','a12','a13']
+		else:
+			self.priority_order = ['a1','c1','b1',
+			'a10','a8','a9', 'a2','a3','a4','a5','a6','a7',
+			'c10','c8','c9', 'c2','c3','c4','c5','c6','c7',
+			'b10','b8','b9', 'b2','b3','b4','b5','b6','b7',
+			'a11','a12','a13','c11','c12','c13','b11','b12','b13']
+
 
 
 
@@ -467,12 +480,18 @@ class AIPlayer():
 
 
 
-		### Select 1 action from the actions list. BetaSigil will just move, then pass.
+		### Select 1 action from the actions list.
 
-		if 'pass' in actions:
-			action = 'pass'
-		else:
+		if 'move' in actions:
 			action = 'move'
+		elif 'Flourish' in actions:
+			action = 'Flourish'
+		elif 'Grow' in actions:
+			action = 'Grow'
+		elif 'Sprout' in actions:
+			action = 'Sprout'
+		elif 'pass' in actions:
+			action = 'pass'
 
 
 		if action == 'move':
@@ -574,28 +593,78 @@ class AIPlayer():
 
 		self.board.update()
 
-
-
-	def move(self, standardmove = False):
-		### standardmove is True iff this is the player's standard move for the turn.
-
-		legalmoves = []
-
-		for name in self.board.nodes:
+	def allmoveablenodes(self):
+		answer = []
+		for name in self.priority_order:
 			node = self.board.nodes[name]
-			color = node.stone
-			if color == self.color:
-				continue
-			else:
+			if node.stone != self.color:
 				adjacent = False
 				for neighbor in node.neighbors:
 					if neighbor.stone == self.color:
 						adjacent = True
 				if adjacent:
-					legalmoves.append(node)
+					answer.append(node)
+		return answer
 
-		### node is the chosen place to move
-		node = legalmoves[0]
+
+	def allsoftmoveablenodes(self):
+		answer = []
+		for name in self.priority_order:
+			node = self.board.nodes[name]
+			if node.stone == None:
+				adjacent = False
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						adjacent = True
+				if adjacent:
+					answer.append(node)
+		return answer
+
+
+	def allhardmoveablenodes(self):
+		answer = []
+		for name in self.priority_order:
+			node = self.board.nodes[name]
+			if node.stone == self.enemy:
+				adjacent = False
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						adjacent = True
+				if adjacent:
+					answer.append(node)
+		return answer
+
+
+	def allblinkablenodes(self):
+		answer = []
+		for name in self.priority_order:
+			node = self.board.nodes[name]
+			if node.stone != self.color:
+				answer.append(node)
+		return answer
+
+
+	def move(self, standardmove = False):
+		### standardmove is True iff this is the player's standard move for the turn.
+
+		legalmoves = self.allmoveablenodes()
+
+		### node is the chosen place to move. Try to choose a non-locked node if one exists.
+		if self.lock:
+			dumb_move_nodes = self.lock.position
+		else:
+			dumb_move_nodes = []
+			
+		node = None
+		for potential_node in legalmoves:
+			if not (potential_node in dumb_move_nodes):
+				node = potential_node
+				break
+			else:
+				continue
+		if node == None:
+			node = legalmoves[0]
+
 		nodename = node.name
 		if node.stone == None:
 			node.stone = self.color
@@ -611,14 +680,48 @@ class AIPlayer():
 
 
 
-	def softmove(self):
-		### not implemented yet
-		return None
+	def softmove(self, dumb_move_nodes):
+
+		legalmoves = self.allsoftmoveablenodes()
+		if len(legalmoves) == 0:
+			return
+
+		time.sleep(1)
+
+		### node is the chosen place to move. Try to choose a non-dumb node if one exists.
+		if self.lock:
+			dumb_move_nodes += self.lock.position
+		node = None
+		for potential_node in legalmoves:
+			if not (potential_node in dumb_move_nodes):
+				node = potential_node
+				break
+			else:
+				continue
+		if node == None:
+			node = legalmoves[0]
+
+		nodename = node.name
+		node.stone = self.color
+
+		egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+		self.opp.ws.send(json.dumps(egress))
+
+		self.board.last_play = nodename
+		self.board.last_player = self.color
+		self.board.update()
 
 
 	def hardmove(self):
-		### not implemented yet
-		return None
+		
+		legalmoves = self.allhardmoveablenodes()
+		if len(legalmoves) == 0:
+			return
+
+		### node is the chosen place to move
+		node = legalmoves[0]
+		nodename = node.name
+		self.pushenemy(node)
 
 
 	def dash(self, shimmer=False):

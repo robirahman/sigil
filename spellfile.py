@@ -1,5 +1,6 @@
 
 import json
+import time
 
 
 class Spell():
@@ -27,7 +28,8 @@ class Spell():
 		### sacrifice all stones in it, and refill appropriate
 		### number based on mana
 		pname = player.color[0].upper() + player.color[1:]
-		player.jmessage(pname + " casts " + self.name)
+		if player.ishuman:
+			player.jmessage(pname + " casts " + self.name)
 		if player.opp.ishuman:
 			player.opp.jmessage(pname + " casts " + self.name)
 		if self.ischarm:
@@ -47,37 +49,56 @@ class Spell():
 			refills = player.mana
 
 			if refills > 1:
-				player.jmessage("You get to keep {} stones in ".format(refills)
+				if player.ishuman:
+					player.jmessage("You get to keep {} stones in ".format(refills)
 							   + self.name + ".")
 			elif refills == 1:
-				player.jmessage("You get to keep 1 stone in " + self.name + ".")
+				if player.ishuman:
+					player.jmessage("You get to keep 1 stone in " + self.name + ".")
 
-			while refills > 0:
-				player.jmessage("Select a stone to keep: ", "node")
+			if player.ishuman:
+				while refills > 0:
+					player.jmessage("Select a stone to keep: ", "node")
 
-				egress = { "type": "chooserefills", "playercolor": player.color }
+					egress = { "type": "chooserefills", "playercolor": player.color }
 
-				for node in self.position:
-					if node.stone == None:
-						egress[node.name] = "True"
+					for node in self.position:
+						if node.stone == None:
+							egress[node.name] = "True"
 
+					player.ws.send(json.dumps(egress))
+
+					keep = player.receivemessage()
+					
+					if self.board.nodes[keep] not in self.position:
+						player.jmessage("That's not a node in your spell!")
+
+					elif self.board.nodes[keep].stone != None:
+						player.jmessage("You already kept that stone!")
+						continue
+					else:
+						refills -= 1
+						self.board.nodes[keep].stone = player.color
+						self.board.update()
+
+				egress = { "type": "donerefilling" , "playercolor": player.color}
 				player.ws.send(json.dumps(egress))
 
-				keep = player.receivemessage()
-				
-				if self.board.nodes[keep] not in self.position:
-					player.jmessage("That's not a node in your spell!")
+			else:
 
-				elif self.board.nodes[keep].stone != None:
-					player.jmessage("You already kept that stone!")
-					continue
+				if len(self.position) == 3:
+					refill_priority = [self.position[2], self.position[1], self.position[0]]
 				else:
-					refills -= 1
-					self.board.nodes[keep].stone = player.color
-					self.board.update()
-
-			egress = { "type": "donerefilling" , "playercolor": player.color}
-			player.ws.send(json.dumps(egress))
+					refill_priority = [self.position[2], self.position[3], self.position[4], self.position[0], self.position[1]]
+				for node in refill_priority:
+					if refills > 0:
+						time.sleep(1)
+						node.stone = player.color
+						refills -= 1
+						self.board.update()
+					else:
+						break
+						
 			
 		self.board.update()
 		self.resolve(player)
@@ -88,7 +109,8 @@ class Spell():
 			if player.lock == self:
 				player.springlock = self
 				pname = player.color[0].upper() + player.color[1:]
-				player.jmessage(self.name + " is Springlocked for " + pname)
+				if player.ishuman:
+					player.jmessage(self.name + " is Springlocked for " + pname)
 				if player.opp.ishuman:
 					player.opp.jmessage(self.name + " is Springlocked for " + pname)
 			else:
@@ -138,8 +160,10 @@ class Sprout(Spell):
 
 
 	def resolve(self, player):
-		player.softmove()
-
+		if player.ishuman:
+			player.softmove()
+		else:
+			player.softmove(self.position)
 
 
 class Grow(Spell):
@@ -149,8 +173,13 @@ class Grow(Spell):
 		self.text = "Make 2 soft moves."
 
 	def resolve(self, player):
-		for i in range(2):
-			player.softmove()
+		if player.ishuman:
+			for i in range(2):
+				player.softmove()
+		else:
+			for i in range(2):
+				player.softmove(self.position)
+
 
 
 class Flourish(Spell):
@@ -160,8 +189,12 @@ class Flourish(Spell):
 		self.text = "Make 4 soft moves."
 
 	def resolve(self, player):
-		for i in range(4):
-			player.softmove()
+		if player.ishuman:
+			for i in range(4):
+				player.softmove()
+		else:
+			for i in range(4):
+				player.softmove(self.position)
 
 
 class Slash(Spell):
