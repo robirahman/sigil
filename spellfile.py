@@ -32,6 +32,8 @@ class Spell():
 			player.jmessage(pname + " casts " + self.name)
 		if player.opp.ishuman:
 			player.opp.jmessage(pname + " casts " + self.name)
+		if not player.ishuman:
+			time.sleep(1)
 		if self.ischarm:
 			for node in self.position:
 				node.stone = None
@@ -92,12 +94,12 @@ class Spell():
 					refill_priority = [self.position[2], self.position[3], self.position[4], self.position[0], self.position[1]]
 				for node in refill_priority:
 					if refills > 0:
-						time.sleep(1)
 						node.stone = player.color
 						refills -= 1
-						self.board.update()
 					else:
 						break
+				self.board.update()
+				time.sleep(1)
 						
 			
 		self.board.update()
@@ -124,6 +126,7 @@ class Spell():
 		pass
 
 	def update_charge(self):
+
 		### Sets the 'charged' attribute to correctly reflect
 		### the current board state.  Must be called every time
 		### the board state changes.
@@ -163,7 +166,7 @@ class Sprout(Spell):
 		if player.ishuman:
 			player.softmove()
 		else:
-			player.softmove(self.position)
+			player.softmove(self.position.copy())
 
 
 class Grow(Spell):
@@ -178,7 +181,7 @@ class Grow(Spell):
 				player.softmove()
 		else:
 			for i in range(2):
-				player.softmove(self.position)
+				player.softmove(self.position.copy())
 
 
 
@@ -194,7 +197,7 @@ class Flourish(Spell):
 				player.softmove()
 		else:
 			for i in range(4):
-				player.softmove(self.position)
+				player.softmove(self.position.copy())
 
 
 class Slash(Spell):
@@ -207,7 +210,8 @@ class Slash(Spell):
 
 	def resolve(self, player):
 		if not player.allhardmoveablenodes():
-			player.jmessage("No legal hard moves")
+			if player.ishuman:
+				player.jmessage("No legal hard moves")
 			return
 		player.hardmove()
 
@@ -239,7 +243,8 @@ class Carnage(Spell):
 	def resolve(self, player):
 		for i in range(4):
 			if not player.allhardmoveablenodes():
-				player.jmessage("No legal hard moves")
+				if player.ishuman:
+					player.jmessage("No legal hard moves")
 				break
 			player.hardmove()
 
@@ -264,40 +269,53 @@ class Hail_Storm(Spell):
 		self.text = "Destroy 1 enemy stone in each spell."
 
 	def resolve(self, player):
+		if player.ishuman:
+			hailablespells = []
+			### We will use the notation of board.positions to refer to spells.
+			### That is, 1,2,3 are the majors, 4,5,6 are the minors, 7,8,9 charms.
 
-		hailablespells = []
-		### We will use the notation of board.positions to refer to spells.
-		### That is, 1,2,3 are the majors, 4,5,6 are the minors, 7,8,9 charms.
+			for i in range(1,10):
+				innernodelist = player.board.positions[i]
+				for node in innernodelist:
+					if node.stone == player.enemy:
+						hailablespells.append(i)
+						break
 
-		for i in range(1,10):
-			innernodelist = player.board.positions[i]
-			for node in innernodelist:
-				if node.stone == player.enemy:
-					hailablespells.append(i)
-					break
+			player.jmessage("Select an enemy stone to destroy in each spell.")
+			while len(hailablespells) > 0:
+				player.jmessage("", "node")
 
-		player.jmessage("Select an enemy stone to destroy in each spell.")
-		while len(hailablespells) > 0:
-			player.jmessage("", "node")
+				actualmessage = player.receivemessage()
 
-			actualmessage = player.receivemessage()
+				if actualmessage in player.board.nodes:
+					node = player.board.nodes[actualmessage]
 
-			if actualmessage in player.board.nodes:
-				node = player.board.nodes[actualmessage]
+					if node.stone != player.enemy:
+						continue
 
-				if node.stone != player.enemy:
-					continue
+					validstone = False
 
-				validstone = False
-
-				for spellnum in hailablespells:
-					if node in player.board.positions[spellnum]:
+					for spellnum in hailablespells:
+						if node in player.board.positions[spellnum]:
+							node.stone = None
+							if (player.board.last_play == node.name):
+								player.board.last_play = None
+								player.board.last_player = None
+							hailablespells.remove(spellnum)
+							player.board.update()
+		else:
+			for i in range(1,10):
+				innernodelist = player.board.positions[i]
+				for node in innernodelist:
+					if node.stone == player.enemy:
 						node.stone = None
 						if (player.board.last_play == node.name):
-							player.board.last_play = None
-							player.board.last_player = None
-						hailablespells.remove(spellnum)
+								player.board.last_play = None
+								player.board.last_player = None
 						player.board.update()
+						time.sleep(1)
+						break
+
 
 
 class Bewitch(Spell):
@@ -308,79 +326,110 @@ class Bewitch(Spell):
 
 	def resolve(self, player):
 
-		egress = {"type": "selectingNoButton"}
-		player.ws.send(json.dumps(egress))
+		if player.ishuman:
 
-		while True:
-			convert_one_options = {}
-			for nodename in self.board.nodes:
-				node = self.board.nodes[nodename]
+			egress = {"type": "selectingNoButton"}
+			player.ws.send(json.dumps(egress))
+
+			while True:
+				convert_one_options = {}
+				for nodename in self.board.nodes:
+					node = self.board.nodes[nodename]
+					if node.stone == player.enemy:
+						adjacent_to_enemy = False
+						for neighbor in node.neighbors:
+							if neighbor.stone == player.enemy:
+								adjacent_to_enemy = True
+
+						if adjacent_to_enemy:
+							convert_one_options[nodename] = player.color
+
+				egress =  {"type": "message", "message": "Choose 2 enemy stones to convert.", 
+				"awaiting": "node", "moveoptions": convert_one_options}
+
+				player.ws.send(json.dumps(egress))
+
+				actualmessage = player.receivemessage()
+
+				if actualmessage in player.board.nodes:
+					if actualmessage in convert_one_options:
+						node = player.board.nodes[actualmessage]
+						node.stone = player.color
+
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+						player.ws.send(json.dumps(egress))
+						if player.opp.ishuman:
+							player.opp.ws.send(json.dumps(egress))
+
+						player.board.update()
+						break
+
+					else:
+						player.jmessage("Invalid selection")
+						continue
+
+				else:
+					continue
+
+			while True:
+				convert_two_options = {}
+				for neighbor in node.neighbors:
+					if neighbor.stone == player.enemy:
+						convert_two_options[neighbor.name] = player.color
+
+				egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": convert_two_options}
+
+				player.ws.send(json.dumps(egress))
+
+				actualmessage = player.receivemessage()
+
+				if actualmessage in player.board.nodes:
+					if actualmessage in convert_two_options:
+						node2 = player.board.nodes[actualmessage]
+						node2.stone = player.color
+
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node2.name}
+						player.ws.send(json.dumps(egress))
+						if player.opp.ishuman:
+							player.opp.ws.send(json.dumps(egress))
+
+						player.board.update()
+						break
+
+					else:
+						player.jmessage("Invalid selection")
+						continue
+				else:
+					continue
+		else:
+			for name in player.bewitch_priority_order:
+				node = player.board.nodes[name]
 				if node.stone == player.enemy:
-					adjacent_to_enemy = False
 					for neighbor in node.neighbors:
 						if neighbor.stone == player.enemy:
-							adjacent_to_enemy = True
+							# Potential targets. Make sure they're not surrounded.
+							surrounded = True
+							for other_neighbor in node.neighbors:
+								if other_neighbor.stone != player.enemy:
+									surrounded = False
+							for other_neighbor in neighbor.neighbors:
+								if other_neighbor.stone != player.enemy:
+									surrounded = False
+							if surrounded:
+								continue
+							else:
+								node.stone = player.color
+								egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+								player.opp.ws.send(json.dumps(egress))
+								player.board.update()
+								time.sleep(1)
 
-					if adjacent_to_enemy:
-						convert_one_options[nodename] = player.color
-
-			egress =  {"type": "message", "message": "Choose 2 enemy stones to convert.", 
-			"awaiting": "node", "moveoptions": convert_one_options}
-
-			player.ws.send(json.dumps(egress))
-
-			actualmessage = player.receivemessage()
-
-			if actualmessage in player.board.nodes:
-				if actualmessage in convert_one_options:
-					node = player.board.nodes[actualmessage]
-					node.stone = player.color
-
-					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
-					player.ws.send(json.dumps(egress))
-					if player.opp.ishuman:
-						player.opp.ws.send(json.dumps(egress))
-
-					player.board.update()
-					break
-
-				else:
-					player.jmessage("Invalid selection")
-					continue
-
-			else:
-				continue
-
-		while True:
-			convert_two_options = {}
-			for neighbor in node.neighbors:
-				if neighbor.stone == player.enemy:
-					convert_two_options[neighbor.name] = player.color
-
-			egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": convert_two_options}
-
-			player.ws.send(json.dumps(egress))
-
-			actualmessage = player.receivemessage()
-
-			if actualmessage in player.board.nodes:
-				if actualmessage in convert_two_options:
-					node2 = player.board.nodes[actualmessage]
-					node2.stone = player.color
-
-					egress =  {"type": "new_stone_animation", "color": player.color, "node": node2.name}
-					player.ws.send(json.dumps(egress))
-					if player.opp.ishuman:
-						player.opp.ws.send(json.dumps(egress))
-
-					player.board.update()
-					break
-
-				else:
-					player.jmessage("Invalid selection")
-					continue
-			else:
-				continue
+								neighbor.stone = player.color
+								egress =  {"type": "new_stone_animation", "color": player.color, "node": neighbor.name}
+								player.opp.ws.send(json.dumps(egress))
+								player.board.update()
+								time.sleep(1)
+								return
 
 
 class Comet(Spell):
@@ -393,50 +442,88 @@ class Comet(Spell):
 
 	def resolve(self, player):
 		
-		while True:
-			moveoptions = player.allblinkablenodes()
-			egress =  {"type": "message", "message": "Make 1 blink move.", 
-			"awaiting": "node", "moveoptions": moveoptions}
+		if player.ishuman:
+			while True:
+				moveoptions = player.allblinkablenodes()
+				egress =  {"type": "message", "message": "Make 1 blink move.", 
+				"awaiting": "node", "moveoptions": moveoptions}
 
-			player.ws.send(json.dumps(egress))
+				player.ws.send(json.dumps(egress))
 
-			actualmessage = player.receivemessage()
+				actualmessage = player.receivemessage()
 
-			if actualmessage in player.board.nodes:
-				node = player.board.nodes[actualmessage]
+				if actualmessage in player.board.nodes:
+					node = player.board.nodes[actualmessage]
+					if node.stone == player.color:
+						player.jmessage("Invalid option")
+						continue
+					if node.stone == player.opp.color:
+						player.pushenemy(node)
+						break
+					else:
+						node.stone = player.color
+
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+						player.ws.send(json.dumps(egress))
+						if player.opp.ishuman:
+							player.opp.ws.send(json.dumps(egress))
+
+						player.board.update()
+						break
+
+			while True:
+				player.jmessage("Sacrifice a stone.", "node")
+
+				actualmessage = player.receivemessage()
+
+				if actualmessage in player.board.nodes:
+					node = player.board.nodes[actualmessage]
+					if node.stone != player.color:
+						continue
+
+					else:
+						node.stone = None
+						if (player.board.last_play == node.name):
+							player.board.last_play = None
+							player.board.last_player = None
+						player.board.update()
+						break
+		else:
+			for node in [player.board.nodes['c1'], player.board.nodes['b1'], player.board.nodes['a1']]:
+				already_touching = False
+				adjacent_enemy_count = 0
 				if node.stone == player.color:
-					player.jmessage("Invalid option")
-					continue
-				if node.stone == player.opp.color:
-					player.pushenemy(node)
-					break
+					already_touching = True
 				else:
-					node.stone = player.color
-
-					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
-					player.ws.send(json.dumps(egress))
-					if player.opp.ishuman:
+					if node.stone == player.enemy:
+						adjacent_enemy_count += 1
+					for neighbor in node.neighbors:
+						if neighbor.stone == player.color:
+							already_touching = True
+						elif neighbor.stone == player.enemy:
+							adjacent_enemy_count += 1
+				if (not already_touching) and (adjacent_enemy_count < 2):
+					# blink move into the node
+					if node.stone == player.enemy:
+						player.pushenemy(node)
+						break
+					else:
+						node.stone = player.color
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
 						player.opp.ws.send(json.dumps(egress))
-
-					player.board.update()
-					break
-
-		while True:
-			player.jmessage("Sacrifice a stone.", "node")
-
-			actualmessage = player.receivemessage()
-
-			if actualmessage in player.board.nodes:
-				node = player.board.nodes[actualmessage]
-				if node.stone != player.color:
-					continue
-
-				else:
+						player.board.update()
+						break
+			# sacrifice a stone
+			time.sleep(1)
+			for name in reversed(player.priority_order):
+				node = player.board.nodes[name]
+				if node.stone == player.color:
 					node.stone = None
-					if (player.board.last_play == node.name):
+					if (player.board.last_play == node):
 						player.board.last_play = None
 						player.board.last_player = None
 					player.board.update()
+					time.sleep(1)
 					break
 
 
@@ -447,67 +534,98 @@ class Meteor(Spell):
 		self.text = "Make 1 blink move, then destroy 1 enemy stone touching it."
 
 	def resolve(self, player):
-		while True:
-			moveoptions = player.allblinkablenodes()
-			egress =  {"type": "message", "message": "Make 1 blink move.", 
-			"awaiting": "node", "moveoptions": moveoptions}
-
-			player.ws.send(json.dumps(egress))
-
-			actualmessage = player.receivemessage()
-
-			if actualmessage in player.board.nodes:
-				node = player.board.nodes[actualmessage]
-				if node.stone == player.color:
-					player.jmessage("Invalid option")
-					continue
-				if node.stone == player.opp.color:
-					player.pushenemy(node)
-					break
-				else:
-					node.stone = player.color
-
-					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
-					player.ws.send(json.dumps(egress))
-					if player.opp.ishuman:
-						player.opp.ws.send(json.dumps(egress))
-
-					player.board.update()
-					break
-
-		adjacent_enemy_count = 0
-		for neighbor in node.neighbors:
-			if neighbor.stone == player.opp.color:
-				adjacent_enemy_count += 1
-		if adjacent_enemy_count == 0:
-			return
-		if adjacent_enemy_count == 1:
-			for neighbor in node.neighbors:
-				if neighbor.stone == player.opp.color:
-					neighbor.stone = None
-					player.board.update()
-
-		if adjacent_enemy_count > 1:
+		if player.ishuman:
 			while True:
-				player.jmessage("Choose an enemy stone to destroy.", "node")
+				moveoptions = player.allblinkablenodes()
+				egress =  {"type": "message", "message": "Make 1 blink move.", 
+				"awaiting": "node", "moveoptions": moveoptions}
+
+				player.ws.send(json.dumps(egress))
 
 				actualmessage = player.receivemessage()
 
 				if actualmessage in player.board.nodes:
-					enemy_node = player.board.nodes[actualmessage]
-					if enemy_node.stone != player.opp.color:
+					node = player.board.nodes[actualmessage]
+					if node.stone == player.color:
+						player.jmessage("Invalid option")
 						continue
-					is_adjacent = False
-					for neighbor in node.neighbors:
-						if neighbor == enemy_node:
-							is_adjacent = True
-					if is_adjacent == False:
-						continue
-
+					if node.stone == player.opp.color:
+						player.pushenemy(node)
+						break
 					else:
-						enemy_node.stone = None
+						node.stone = player.color
+
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+						player.ws.send(json.dumps(egress))
+						if player.opp.ishuman:
+							player.opp.ws.send(json.dumps(egress))
+
 						player.board.update()
 						break
+
+			adjacent_enemy_count = 0
+			for neighbor in node.neighbors:
+				if neighbor.stone == player.opp.color:
+					adjacent_enemy_count += 1
+			if adjacent_enemy_count == 0:
+				return
+			if adjacent_enemy_count == 1:
+				for neighbor in node.neighbors:
+					if neighbor.stone == player.opp.color:
+						neighbor.stone = None
+						player.board.update()
+
+			if adjacent_enemy_count > 1:
+				while True:
+					player.jmessage("Choose an enemy stone to destroy.", "node")
+
+					actualmessage = player.receivemessage()
+
+					if actualmessage in player.board.nodes:
+						enemy_node = player.board.nodes[actualmessage]
+						if enemy_node.stone != player.opp.color:
+							continue
+						is_adjacent = False
+						for neighbor in node.neighbors:
+							if neighbor == enemy_node:
+								is_adjacent = True
+						if is_adjacent == False:
+							continue
+
+						else:
+							enemy_node.stone = None
+							player.board.update()
+							break
+		else:
+			legalmoves = player.allblinkablenodes()
+			chosen_node = None
+			for node in legalmoves:
+				adjacent_enemy_count = 0
+				if node.stone == player.enemy:
+					adjacent_enemy_count += 1
+				for neighbor in node.neighbors:
+					if neighbor.stone == player.enemy:
+						adjacent_enemy_count += 1
+				if adjacent_enemy_count == 1:
+					chosen_node = node
+					break
+			if chosen_node == None:
+				chosen_node = legalmoves[0]
+
+			if chosen_node.stone == player.enemy:
+				player.pushenemy(node)
+			else:
+				node.stone = player.color
+				egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+				player.opp.ws.send(json.dumps(egress))
+				player.board.update()
+				time.sleep(1)
+			for neighbor in node.neighbors:
+				if neighbor.stone == player.enemy:
+					neighbor.stone = None
+					player.board.update()
+					break
+			
 
 
 class Starfall(Spell):
@@ -517,92 +635,143 @@ class Starfall(Spell):
 		self.text = "Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them."
 
 	def resolve(self, player):
-		while True:
-			starfall_one_options = {}
-			for nodename in self.board.nodes:
-				node = self.board.nodes[nodename]
-				if node.stone == None:
-					adjacent_to_empty = False
-					for neighbor in node.neighbors:
-						if neighbor.stone == None:
-							adjacent_to_empty = True
+		if player.ishuman:
+			while True:
+				starfall_one_options = {}
+				for nodename in self.board.nodes:
+					node = self.board.nodes[nodename]
+					if node.stone == None:
+						adjacent_to_empty = False
+						for neighbor in node.neighbors:
+							if neighbor.stone == None:
+								adjacent_to_empty = True
 
-					if adjacent_to_empty:
-						starfall_one_options[nodename] = player.color
+						if adjacent_to_empty:
+							starfall_one_options[nodename] = player.color
 
-			egress =  {"type": "message", "message": "Make 2 soft blink moves that touch each other.", 
-			"awaiting": "node", "moveoptions": starfall_one_options}
+				egress =  {"type": "message", "message": "Make 2 soft blink moves that touch each other.", 
+				"awaiting": "node", "moveoptions": starfall_one_options}
 
-			player.ws.send(json.dumps(egress))
+				player.ws.send(json.dumps(egress))
 
-			actualmessage = player.receivemessage()
+				actualmessage = player.receivemessage()
 
-			if actualmessage in player.board.nodes:
-				if actualmessage not in starfall_one_options:
-					player.jmessage("Invalid option")
-					continue
+				if actualmessage in player.board.nodes:
+					if actualmessage not in starfall_one_options:
+						player.jmessage("Invalid option")
+						continue
+
+					else:
+						node = player.board.nodes[actualmessage]
+						node.stone = player.color
+
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
+						player.ws.send(json.dumps(egress))
+						if player.opp.ishuman:
+							player.opp.ws.send(json.dumps(egress))
+
+						player.board.update()
+						break
 
 				else:
-					node = player.board.nodes[actualmessage]
+					continue
+
+			while True:
+				starfall_two_options = {}
+				for neighbor in node.neighbors:
+					if neighbor.stone == None:
+						starfall_two_options[neighbor.name] = player.color
+
+				egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": starfall_two_options}
+
+				player.ws.send(json.dumps(egress))
+
+				actualmessage = player.receivemessage()
+
+				if actualmessage in player.board.nodes:
+					if actualmessage not in starfall_two_options:
+						player.jmessage("Invalid option")
+						continue
+
+					else:
+						node2 = player.board.nodes[actualmessage]
+						node2.stone = player.color
+
+						egress =  {"type": "new_stone_animation", "color": player.color, "node": node2.name}
+						player.ws.send(json.dumps(egress))
+						if player.opp.ishuman:
+							player.opp.ws.send(json.dumps(egress))
+
+						break
+
+				else:
+					continue
+
+			neighbor_union = []
+			for neighbor in node.neighbors:
+				neighbor_union.append(neighbor)
+			for neighbor in node2.neighbors:
+				new = True
+				for already_there in neighbor_union:
+					if neighbor == already_there:
+						new = False
+				if new:
+					neighbor_union.append(neighbor)
+
+			for neighbor in neighbor_union:
+				if neighbor.stone == player.opp.color:
+					neighbor.stone = None
+					player.board.update()
+		else:
+			potential_targets = []
+			for name in player.priority_order:
+				node = player.board.nodes[name]
+				if node.stone == None:
+					for neighbor in node.neighbors:
+						if neighbor.stone == None:
+							# count adjacent enemies to <node, neighbor>
+							alreadyvisited = set()
+							adjacent_enemy_count = 0
+							for first_neighbor in node.neighbors:
+								alreadyvisited.add(first_neighbor)
+								if first_neighbor.stone == player.enemy:
+									adjacent_enemy_count += 1
+							for second_neighbor in neighbor.neighbors:
+								if second_neighbor in alreadyvisited:
+									continue
+								else:
+									if second_neighbor.stone == player.enemy:
+										adjacent_enemy_count += 1
+							if adjacent_enemy_count > 1:
+								potential_targets.append([adjacent_enemy_count, node, neighbor])
+			max_enemies_killed = max([x[0] for x in potential_targets])
+			for target in potential_targets:
+				if target[0] == max_enemies_killed:
+					# drop starfall here
+					node = target[1]
+					neighbor = target[2]
 					node.stone = player.color
-
 					egress =  {"type": "new_stone_animation", "color": player.color, "node": node.name}
-					player.ws.send(json.dumps(egress))
-					if player.opp.ishuman:
-						player.opp.ws.send(json.dumps(egress))
+					player.opp.ws.send(json.dumps(egress))
+					player.board.update()
+					time.sleep(1)
 
+					neighbor.stone = player.color
+					egress =  {"type": "new_stone_animation", "color": player.color, "node": neighbor.name}
+					player.opp.ws.send(json.dumps(egress))
+					player.board.update()
+					time.sleep(1)
+
+					for first_neighbor in node.neighbors:
+						if first_neighbor.stone == player.enemy:
+							first_neighbor.stone = None
+					for second_neighbor in neighbor.neighbors:
+						if second_neighbor.stone == player.enemy:
+							second_neighbor.stone = None
 					player.board.update()
 					break
 
-			else:
-				continue
 
-		while True:
-			starfall_two_options = {}
-			for neighbor in node.neighbors:
-				if neighbor.stone == None:
-					starfall_two_options[neighbor.name] = player.color
-
-			egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": starfall_two_options}
-
-			player.ws.send(json.dumps(egress))
-
-			actualmessage = player.receivemessage()
-
-			if actualmessage in player.board.nodes:
-				if actualmessage not in starfall_two_options:
-					player.jmessage("Invalid option")
-					continue
-
-				else:
-					node2 = player.board.nodes[actualmessage]
-					node2.stone = player.color
-
-					egress =  {"type": "new_stone_animation", "color": player.color, "node": node2.name}
-					player.ws.send(json.dumps(egress))
-					if player.opp.ishuman:
-						player.opp.ws.send(json.dumps(egress))
-
-					break
-
-			else:
-				continue
-
-		neighbor_union = []
-		for neighbor in node.neighbors:
-			neighbor_union.append(neighbor)
-		for neighbor in node2.neighbors:
-			new = True
-			for already_there in neighbor_union:
-				if neighbor == already_there:
-					new = False
-			if new:
-				neighbor_union.append(neighbor)
-
-		for neighbor in neighbor_union:
-			if neighbor.stone == player.opp.color:
-				neighbor.stone = None
-				player.board.update()
 
 
 class Seal_of_Summer(Spell):

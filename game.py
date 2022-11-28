@@ -875,6 +875,8 @@ class Player():
 			self.pushenemy(node)
 
 	def dash(self, shimmer=False):
+		if self.opp.ishuman:
+			self.opp.jmessage("Opponent dashes!")
 		if shimmer:
 			while True:
 				self.jmessage("Choose a stone to sacrifice. ", "node")

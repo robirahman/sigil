@@ -161,6 +161,7 @@ class SPBoard():
 		bluecharged = []
 		for spell in self.spells:
 			spell.update_charge()
+
 			if spell.charged == 'red':
 				redcharged.append(spell)
 			elif spell.charged == 'blue':
@@ -424,11 +425,24 @@ class AIPlayer():
 			'c10','c8','c9', 'c2','c3','c4','c5','c6','c7',
 			'a10','a8','a9', 'a2','a3','a4','a5','a6','a7',
 			'b11','b12','b13','c11','c12','c13','a11','a12','a13']
+
+			self.bewitch_priority_order = [
+			'b10','b8','b9', 'b2','b3','b4','b5','b6','b7','b1',
+			'c10','c8','c9', 'c2','c3','c4','c5','c6','c7','c1',
+			'a10','a8','a9', 'a2','a3','a4','a5','a6','a7','a1',
+			'b11','b12','b13','c11','c12','c13','a11','a12','a13']
+
 		else:
 			self.priority_order = ['a1','c1','b1',
 			'a10','a8','a9', 'a2','a3','a4','a5','a6','a7',
 			'c10','c8','c9', 'c2','c3','c4','c5','c6','c7',
 			'b10','b8','b9', 'b2','b3','b4','b5','b6','b7',
+			'a11','a12','a13','c11','c12','c13','b11','b12','b13']
+
+			self.bewitch_priority_order = [
+			'a10','a8','a9', 'a2','a3','a4','a5','a6','a7','a1',
+			'c10','c8','c9', 'c2','c3','c4','c5','c6','c7','c1',
+			'b10','b8','b9', 'b2','b3','b4','b5','b6','b7','b1',
 			'a11','a12','a13','c11','c12','c13','b11','b12','b13']
 
 
@@ -458,6 +472,7 @@ class AIPlayer():
 			if (canspell) or (not canspell and summer_active):
 				self.board.update()
 				for spell in self.charged_spells:
+
 					if not spell.static:
 						if spell.ischarm:
 							if 'Winter' not in [s.name for s in self.opp.charged_spells]:
@@ -468,6 +483,7 @@ class AIPlayer():
 								else:
 									actions.append(spell.name)
 									spelllist.append(spell.name)
+
 						else:
 							if self.lock == spell and ('Spring' in [s.name for s in self.charged_spells]) and self.springlock != spell:
 								actions.append(spell.name)
@@ -484,12 +500,32 @@ class AIPlayer():
 
 		if 'move' in actions:
 			action = 'move'
+		elif 'dash' in actions and 'Seal_of_Lightning' in [s.name for s in self.charged_spells]:
+			action = 'dash'
+		elif 'Carnage' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Carnage'].position)) > 0:
+			action = 'Carnage'
+		elif 'Starfall' in actions and self.starfalltargetexists():
+			action = 'Starfall'
+		elif 'Bewitch' in actions and self.bewitchtargetexists():
+			action = 'Bewitch'
 		elif 'Flourish' in actions:
 			action = 'Flourish'
+		elif 'Fireblast' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Fireblast'].position)) > 1:
+			action = 'Fireblast'
+		elif 'Hail_Storm' in actions and self.hailablespellcount() > 1:
+			action = 'Hail_Storm'
+		elif 'Meteor' in actions:
+			action = 'Meteor'
 		elif 'Grow' in actions:
 			action = 'Grow'
+		elif 'Surge' in actions:
+			action = 'Surge'
+		elif 'Slash' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Slash'].position)) > 0:
+			action = 'Slash'
 		elif 'Sprout' in actions:
 			action = 'Sprout'
+		elif 'Comet' in actions and self.comettargetexists():
+			action = 'Comet'
 		elif 'pass' in actions:
 			action = 'pass'
 
@@ -621,15 +657,16 @@ class AIPlayer():
 		return answer
 
 
-	def allhardmoveablenodes(self):
+	def allhardmoveablenodes(self,hardmove_spell_nodes=[]):
 		answer = []
 		for name in self.priority_order:
 			node = self.board.nodes[name]
 			if node.stone == self.enemy:
 				adjacent = False
 				for neighbor in node.neighbors:
-					if neighbor.stone == self.color:
-						adjacent = True
+					if not (neighbor in hardmove_spell_nodes):
+						if neighbor.stone == self.color:
+							adjacent = True
 				if adjacent:
 					answer.append(node)
 		return answer
@@ -643,40 +680,120 @@ class AIPlayer():
 				answer.append(node)
 		return answer
 
+	def hailablespellcount(self):
+		hailablespellcount = 0
+
+		for i in range(1,10):
+			innernodelist = self.board.positions[i]
+			for node in innernodelist:
+				if node.stone == self.enemy:
+					hailablespellcount += 1
+					break
+		return hailablespellcount
+
+	def bewitchtargetexists(self):
+		target_exists = False
+		for name in self.priority_order:
+			node = self.board.nodes[name]
+			if node.stone == self.enemy:
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.enemy:
+							target_exists = True
+		return target_exists
+
+	def comettargetexists(self):
+		for node in [self.board.nodes['a1'], self.board.nodes['b1'], self.board.nodes['c1']]:
+			already_touching = False
+			adjacent_enemy_count = 0
+			if node.stone == self.color:
+				already_touching = True
+			else:
+				if node.stone == self.enemy:
+					adjacent_enemy_count += 1
+				for neighbor in node.neighbors:
+					if neighbor.stone == self.color:
+						already_touching = True
+					elif neighbor.stone == self.enemy:
+						adjacent_enemy_count += 1
+			if (not already_touching) and (adjacent_enemy_count < 2):
+				return True
+		return False
+
+	def starfalltargetexists(self):
+		for name in self.priority_order:
+			node = self.board.nodes[name]
+			if node.stone == None:
+				adjacent_to_empty = False
+				adjacent_enemy_count = 0
+				for neighbor in node.neighbors:
+					if neighbor.stone == None:
+						adjacent_to_empty = True
+					elif neighbor.stone == self.enemy:
+						adjacent_enemy_count += 1
+				if adjacent_to_empty and adjacent_enemy_count > 1:
+					return True
+		return False
+
+
 
 	def move(self, standardmove = False):
 		### standardmove is True iff this is the player's standard move for the turn.
 
-		legalmoves = self.allmoveablenodes()
+		time.sleep(1)
 
-		### node is the chosen place to move. Try to choose a non-locked node if one exists.
-		if self.lock:
-			dumb_move_nodes = self.lock.position
+		if standardmove and 'Seal_of_Wind' in [s.name for s in self.charged_spells]:
+			legalmoves = self.allblinkablenodes()
+			for node in legalmoves:
+				adjacent_nonenemy_count = 0
+				if node.stone == None:
+					adjacent_nonenemy_count += 1
+				for neighbor in node.neighbors:
+					if neighbor.stone != self.enemy:
+						adjacent_nonenemy_count += 1
+				if adjacent_nonenemy_count > 1:
+					# blink move into the node
+					if node.stone == self.enemy:
+						self.pushenemy(node)
+						return
+					else:
+						node.stone = self.color
+						egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+						self.opp.ws.send(json.dumps(egress))
+						self.board.update()
+						return
+
+
 		else:
-			dumb_move_nodes = []
-			
-		node = None
-		for potential_node in legalmoves:
-			if not (potential_node in dumb_move_nodes):
-				node = potential_node
-				break
+			legalmoves = self.allmoveablenodes()
+
+			### node is the chosen place to move. Try to choose a non-locked node if one exists.
+			if self.lock:
+				dumb_move_nodes = self.lock.position
 			else:
-				continue
-		if node == None:
-			node = legalmoves[0]
+				dumb_move_nodes = []
 
-		nodename = node.name
-		if node.stone == None:
-			node.stone = self.color
+			node = None
+			for potential_node in legalmoves:
+				if not (potential_node in dumb_move_nodes):
+					node = potential_node
+					break
+				else:
+					continue
+			if node == None:
+				node = legalmoves[0]
 
-			egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
-			self.opp.ws.send(json.dumps(egress))
+			nodename = node.name
+			if node.stone == None:
+				node.stone = self.color
 
-			self.board.last_play = nodename
-			self.board.last_player = self.color
-			self.board.update()
-		else:
-			self.pushenemy(node)
+				egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+				self.opp.ws.send(json.dumps(egress))
+
+				self.board.last_play = nodename
+				self.board.last_player = self.color
+				self.board.update()
+			else:
+				self.pushenemy(node)
 
 
 
@@ -718,15 +835,30 @@ class AIPlayer():
 		if len(legalmoves) == 0:
 			return
 
+		time.sleep(1)
+
 		### node is the chosen place to move
 		node = legalmoves[0]
 		nodename = node.name
 		self.pushenemy(node)
 
 
-	def dash(self, shimmer=False):
-		### not implemented yet
-		return None
+	def dash(self, seal_of_lightning=False):
+		self.opp.jmessage("Opponent dashes!")
+		time.sleep(1)
+		if seal_of_lightning:
+			for name in reversed(self.priority_order):
+				node = self.board.nodes[name]
+				if node.stone == self.color:
+					node.stone = None
+					if (self.board.last_play == node):
+						self.board.last_play = None
+						self.board.last_player = None
+					self.board.update()
+					time.sleep(1)
+					break
+		self.move()
+
 
 
 	def pushenemy(self, node):
