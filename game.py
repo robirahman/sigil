@@ -1012,7 +1012,6 @@ class Player():
 				self.jmessage("Invalid option!")
 				continue
 			self.board.nodes[push].stone = self.enemy
-			self.jmessage("Enemy stone pushed to " + push)
 
 			egress =  {"type": "push_animation", "pushed_color": self.enemy, "starting_node": node.name, "ending_node": push}
 
