@@ -177,8 +177,9 @@ document.addEventListener('alpine:init', () => {
 					});
 				});
 
-				const apiPath =
-					playerCount === 1 ? 'singleplayergame' : gameName ? `privategame/${gameName}` : 'game';
+				const apiPath = playerCount === 1
+					? 'singleplayergame'
+					: `privategame/${gameName || 'game'}`;
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 				_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
 				_this.events.onmessage = handleIncomingEvent;
