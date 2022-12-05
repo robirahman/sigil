@@ -908,10 +908,6 @@ html.webp {
 	opacity: 1;
 }
 
-.spell--available {
-	box-shadow: -4px 4px 12px #fff, 4px 4px 12px #fff, -4px -4px 12px #fff, 4px -4px 12px #fff;
-}
-
 .spell--blue-lock {
 	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #3250ba, 4px -4px #3250ba;
 }
@@ -1001,6 +997,33 @@ html.webp {
 	top: calc(367 / 1480 * 100%);
 	transform: rotate(-60deg);
 	transition-delay: 1.5s;
+}
+
+.spell--available:hover {
+	filter: saturate(225%);
+}
+
+.spell--available {
+	animation: spellAvailableFrames 1.25s infinite ease-in-out alternate;
+
+	transition: filter 0.5s ease-out;
+	transition-delay: 0;
+}
+@keyframes spellAvailableFrames {
+	from {
+		box-shadow:
+			-1px  1px 9px #fff,
+			 1px  1px 9px #fff,
+			-1px -1px 9px #fff,
+			 1px -1px 9px #fff;
+	}
+	to {
+		box-shadow: 
+			-1px  1px 3px #fff,
+			 1px  1px 3px #fff,
+			-1px -1px 3px #fff,
+			 1px -1px 3px #fff;
+	}
 }
 
 @keyframes stone-twinkle {
