@@ -1107,12 +1107,38 @@ html.webp {
 	background-image: var(--red-stone);
 }
 
-.stone-node--valid-move-blue {
-	box-shadow: 0 0 0 var(--outline-size) #2757c4;
+.stone-node--valid-move-red {
+	animation: valid-move-red-frames 0.75s infinite ease-in-out alternate;
+}
+@keyframes valid-move-red-frames {
+	from {
+		box-shadow: 0 0 1px var(--outline-size) #ff4032;
+	}
+	to {
+		box-shadow: 0 0 2px calc(var(--outline-size) + 0.5px) #ff4032;
+	}
 }
 
-.stone-node--valid-move-red {
-	box-shadow: 0 0 0 var(--outline-size) #ff4032;
+.stone-node--valid-move-blue {
+	animation: valid-move-blue-frames 0.75s infinite ease-in-out alternate;
+}
+@keyframes valid-move-blue-frames {
+	from {
+		box-shadow: 0 0 1px var(--outline-size) #2757c4;
+	}
+	to {
+		box-shadow: 0 0 2px calc(var(--outline-size) + 0.5px) #2757c4;
+	}
+}
+
+.stone-node--valid-move-red,
+.stone-node--valid-move-blue {
+	transition: filter 0.5s ease-out;
+}
+
+.stone-node--valid-move-red:hover,
+.stone-node--valid-move-blue:hover {
+	filter: saturate(175%);
 }
 
 .stone-node--refill {
