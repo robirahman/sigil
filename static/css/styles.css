@@ -1063,16 +1063,19 @@ html.webp {
 }
 
 .stone-node--crushed {
-	animation: stone-crush-frames 0.75s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
-	animation-delay: calc(0.475s * 0.5);
+	animation: stone-crush-frames 1s ease-out forwards;
 }
 @keyframes stone-crush-frames {
 	0% {
 		transform: scale(1);
 		opacity: 1;
 	}
+	60% {
+		transform: scale(2.8);
+		opacity: 0.25;
+	}
 	100% {
-		transform: scale(2.75);
+		transform: scale(2);
 		opacity: 0;
 	}
 }
