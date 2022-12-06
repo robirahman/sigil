@@ -1004,12 +1004,12 @@ html.webp {
 }
 
 .spell--available {
-	animation: spellAvailableFrames 1.25s infinite ease-in-out alternate;
+	animation: spell-available-frames 1.25s infinite ease-in-out alternate;
 
 	transition: filter 0.5s ease-out;
 	transition-delay: 0;
 }
-@keyframes spellAvailableFrames {
+@keyframes spell-available-frames {
 	from {
 		box-shadow:
 			-1px  1px 9px #fff,
