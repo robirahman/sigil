@@ -189,6 +189,13 @@ document.addEventListener('alpine:init', () => {
 					_this.awaiting = null;
 				};
 
+				//HACK: this is just to make testing event handlers easier during development
+				window.debug_spoofEvent = (data) => {
+					handleIncomingEvent({
+						data: JSON.stringify(data)
+					});
+				};
+
 				function handleIncomingEvent(event) {
 					const { type, ...payload } = JSON.parse(event.data);
 					console.group(type);
