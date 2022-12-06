@@ -241,6 +241,11 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
+					if (type === 'crush_animation') {
+						handleCrushAnimation(payload);
+						return;
+					}
+
 					if (type === 'chooserefills') {
 						handleChooseRefillsEvent(payload);
 						return;
@@ -402,6 +407,22 @@ document.addEventListener('alpine:init', () => {
 						endNodeElem.style.transition = `transform 750ms ease-in-out`;
 						endNodeElem.style.transform = '';
 					}, 50);
+				}
+
+				//debug_spoofEvent({type: 'new_stone_animation', color: 'blue', node: 'b1'}); debug_spoofEvent({type: 'crush_animation', crushed_color: 'red', node: 'b1'})
+				function handleCrushAnimation(payload) {
+					const { node, crushed_color } = payload;
+					const nodeElem = document.querySelector(`#stone-node--${node}`);
+
+					//create temporary stone element, use it for crush animation, and then remove it
+					const crushStone = document.createElement('button');
+					crushStone.setAttribute('class',
+						`stone-node stone-node--crushed stone-node--${node} stone-node--${crushed_color}`
+					);
+					crushStone.addEventListener('animationend', () => {
+						crushStone.remove();
+					});
+					nodeElem.parentNode.insertBefore(crushStone, nodeElem);
 				}
 
 				function handleChooseRefillsEvent(payload) {

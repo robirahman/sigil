@@ -1062,6 +1062,21 @@ html.webp {
 	box-shadow: 0 0 0 var(--outline-size) #f3ec4e;
 }
 
+.stone-node--crushed {
+	animation: stone-crush-frames 0.75s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
+	animation-delay: calc(0.475s * 0.5);
+}
+@keyframes stone-crush-frames {
+	0% {
+		transform: scale(1);
+		opacity: 1;
+	}
+	100% {
+		transform: scale(2.75);
+		opacity: 0;
+	}
+}
+
 @keyframes stone-zoom-out {
 	0% { transform: scale(4); }
 	30% { transform: scale(2); }
