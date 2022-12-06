@@ -1036,15 +1036,18 @@ html.webp {
 	--raw-size: 56;
 	--outline-size: calc(((6 / 1480) * var(--raw-size)) * 1em);
 	--size: calc(var(--raw-size) / 1480 * 100%);
-	--translate: calc(-50% + var(--raw-size)/2);
-
+	
 	animation: stone-twinkle 3s cubic-bezier(0.19, 0.33, 0.34, 1) infinite;
 	background-size: cover;
 	border-radius: 999px;
 	position: absolute;
 	height: var(--size);
-	transform: translate(var(--translate), var(--translate));
 	width: var(--size);
+
+	/* this transform appears to be cruft (seems to do nothing) but leaving it here commented out for a while just in case
+	--translate: calc(-50% + var(--raw-size)/2);
+	transform: translate(var(--translate), var(--translate));
+	*/
 }
 
 .stone-node--blue {

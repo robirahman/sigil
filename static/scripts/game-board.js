@@ -236,6 +236,11 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
+					if (type === 'push_animation') {
+						handlePushAnimation(payload);
+						return;
+					}
+
 					if (type === 'chooserefills') {
 						handleChooseRefillsEvent(payload);
 						return;
@@ -371,6 +376,32 @@ document.addEventListener('alpine:init', () => {
 					} else {
 						_this.showReset = true;
 					}
+				}
+
+				//debug_spoofEvent({type: 'push_animation', pushed_color: 'red', starting_node: 'a12', ending_node: 'a1'})
+				function handlePushAnimation(payload) {
+					const startNodeElem = document.querySelector(`#stone-node--${payload.starting_node}`);
+					const endNodeElem = document.querySelector(`#stone-node--${payload.ending_node}`);
+
+					const {
+						x: xStart,
+						y: yStart
+					} = startNodeElem.getBoundingClientRect();
+					const {
+						x: xEnd,
+						y: yEnd
+					} = endNodeElem.getBoundingClientRect();
+					const xDiff = xStart - xEnd;
+					const yDiff = yStart - yEnd;
+
+					//move stone to start node (instant)
+					endNodeElem.style.transition = 'transform 0s';
+					endNodeElem.style.transform = `translate(${xDiff}px, ${yDiff}px)`;
+					setTimeout(() => {
+						//move stone back again (animated)
+						endNodeElem.style.transition = `transform 750ms ease-in-out`;
+						endNodeElem.style.transform = '';
+					}, 50);
 				}
 
 				function handleChooseRefillsEvent(payload) {
