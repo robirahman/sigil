@@ -289,6 +289,10 @@ textarea {
 	flex-basis: 296px;
 }
 
+.flex-basis\:592px {
+	flex-basis: 592px;
+}
+
 .flex-direction\:column {
 	flex-direction: column;
 }
