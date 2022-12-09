@@ -1521,7 +1521,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: "<p>Since Red always goes first, Blue gets an advantage to offset this. The Score Keeping stone is a Blue stone and it counts towards Blue’s score.</p><p>Other than counting for points, it does not interact with the game in any way, and it cannot be sacrificed or destroyed.</p><p>Notice that at the start of the game, Red has 1 stone and Blue has 2 (including the Score Keeping stone), so Blue has a 1-stone advantage and the Score Keeping stone is on Blue +1.</p>",
+					text: '<p>Since Red always goes first, Blue gets an advantage to offset this. The Score Keeping stone is a Blue stone and it counts towards Blue’s score.</p><p>Other than counting for points, it does not interact with the game in any way, and it cannot be sacrificed or destroyed.</p><p>Notice that at the start of the game, Red has 1 stone and Blue has 2 (including the Score Keeping stone), so Blue has a 1-stone advantage and the Score Keeping stone is on Blue +1.</p>',
 				},
 				{
 					text: '<p>Let’s look at another example.</p><p>Red has 5 stones.</p><p>Blue has 7 stones: 6 on the board plus the Score Keeping stone.</p><p>Therefore, Blue has a 2-stone advantage.</p>',

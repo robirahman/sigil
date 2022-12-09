@@ -177,9 +177,8 @@ document.addEventListener('alpine:init', () => {
 					});
 				});
 
-				const apiPath = playerCount === 1
-					? 'singleplayergame'
-					: `privategame/${gameName || 'game'}`;
+				const apiPath =
+					playerCount === 1 ? 'singleplayergame' : `privategame/${gameName || 'game'}`;
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 				_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
 				_this.events.onmessage = handleIncomingEvent;
@@ -192,7 +191,7 @@ document.addEventListener('alpine:init', () => {
 				//HACK: this is just to make testing event handlers easier during development
 				window.debug_spoofEvent = (data) => {
 					handleIncomingEvent({
-						data: JSON.stringify(data)
+						data: JSON.stringify(data),
 					});
 				};
 
@@ -388,14 +387,8 @@ document.addEventListener('alpine:init', () => {
 					const startNodeElem = document.querySelector(`#stone-node--${payload.starting_node}`);
 					const endNodeElem = document.querySelector(`#stone-node--${payload.ending_node}`);
 
-					const {
-						x: xStart,
-						y: yStart
-					} = startNodeElem.getBoundingClientRect();
-					const {
-						x: xEnd,
-						y: yEnd
-					} = endNodeElem.getBoundingClientRect();
+					const { x: xStart, y: yStart } = startNodeElem.getBoundingClientRect();
+					const { x: xEnd, y: yEnd } = endNodeElem.getBoundingClientRect();
 					const xDiff = xStart - xEnd;
 					const yDiff = yStart - yEnd;
 
@@ -416,7 +409,8 @@ document.addEventListener('alpine:init', () => {
 
 					//create temporary stone element, use it for crush animation, and then remove it
 					const crushStone = document.createElement('button');
-					crushStone.setAttribute('class',
+					crushStone.setAttribute(
+						'class',
 						`stone-node stone-node--crushed stone-node--${node} stone-node--${crushed_color}`
 					);
 					crushStone.addEventListener('animationend', () => {
