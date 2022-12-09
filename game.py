@@ -732,7 +732,7 @@ class Player():
 
 		### standardmove is True iff this is the player's standard move for the turn.
 		if not preloaded:
-			if ('Seal_of_Wind' in [s.name for s in self.charged_spells]):
+			if ('Seal_of_Wind' in [s.name for s in self.charged_spells]) and standardmove:
 				moveoptions = self.allblinkablenodes()
 			else:
 				moveoptions = self.allmoveablenodes()
