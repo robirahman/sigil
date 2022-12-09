@@ -1,0 +1,19 @@
+form .input:focus {
+	border-color: rgba(0,0,0,0);
+	box-shadow: 0 0 3px 0.125em rgb(255 255 255 / 20%);
+}
+
+form .button {
+	font-family: mrs-eaves-xl-serif, serif;
+	border-width: 0;
+}
+
+form .button-prime {
+	background: #1c3462;
+	color: white;
+}
+
+form .button-prime:hover {
+	background: #2c4980;
+	color: white;
+}
