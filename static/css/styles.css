@@ -1005,16 +1005,6 @@ html.webp {
 	transition-delay: 1.5s;
 }
 
-.spell--available:hover {
-	filter: saturate(225%);
-}
-
-.spell--available {
-	animation: spell-available-frames 1.25s infinite ease-in-out alternate;
-	transition: filter 0.5s ease-out;
-	transition-delay: 0;
-}
-
 @keyframes spell-available-frames {
 	from {
 		box-shadow:
@@ -1031,6 +1021,17 @@ html.webp {
 			-1px -1px 3px #fff,
 			1px -1px 3px #fff;
 	}
+}
+
+.spell--available {
+	animation: spell-available-frames 1.25s infinite ease-in-out alternate;
+	transition: filter 0.5s ease-out;
+	transition-delay: 0;
+}
+
+.spell--available:focus,
+.spell--available:hover {
+	filter: saturate(225%);
 }
 
 @keyframes stone-twinkle {

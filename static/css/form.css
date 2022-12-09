@@ -13,6 +13,7 @@ form .button-prime {
 	color: white;
 }
 
+form .button-prime:focus,
 form .button-prime:hover {
 	background: #2c4980;
 	color: white;
@@ -22,6 +23,7 @@ form .checkbox {
 	color: white;
 }
 
+form .checkbox:focus,
 form .checkbox:hover {
 	color: white;
 }
