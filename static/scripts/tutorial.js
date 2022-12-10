@@ -868,7 +868,7 @@ document.addEventListener('alpine:init', () => {
 					},
 				},
 				{
-					text: '<p>Excellent!</p><p>Now you can cast Flourish.</p><p>Spells that can be cast are highlighted.</p>',
+					text: '<p>Excellent!</p><p>Now you can cast Flourish.</p><p>Spells that can be cast are highlighted.</p><p>To cast Flourish, click on it.</p>',
 					when: {
 						show() {
 							handleMessageEvent({
@@ -876,13 +876,6 @@ document.addEventListener('alpine:init', () => {
 								awaiting: 'action',
 								message: '',
 							});
-						},
-					},
-				},
-				{
-					text: '<p>To cast Flourish, click on it.</p>',
-					when: {
-						show() {
 							setRequiredTutorialActions('Flourish');
 						},
 					},
