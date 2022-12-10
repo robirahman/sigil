@@ -1741,7 +1741,7 @@ document.addEventListener('alpine:init', () => {
 						endNodeElem.style.transition = `transform 750ms ease-in-out`;
 						endNodeElem.style.transform = '';
 					}, 50);
-				}, 1);
+				}, 25);
 			}
 
 			function handleCrushAnimation(payload) {
