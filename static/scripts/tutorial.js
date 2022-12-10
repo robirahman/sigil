@@ -514,8 +514,8 @@ document.addEventListener('alpine:init', () => {
 							placeTutorialStone({ color: 'blue', node: 'a9' });
 						},
 						show() {
-							// FIXME: a9 needs to have a pointer. Why didn't it work?
 							hideTutorialStepPointers();
+							showTutorialStepPointers(['.stone-node--a9']);
 							setRequiredTutorialActions('a9');
 							handleValidMovesEvent({
 								a4: 'blue',
