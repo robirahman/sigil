@@ -683,7 +683,7 @@ class AIPlayer():
 	def hailablespellcount(self):
 		hailablespellcount = 0
 
-		for i in range(1,10):
+		for i in range(1,7):
 			innernodelist = self.board.positions[i]
 			for node in innernodelist:
 				if node.stone == self.enemy:
