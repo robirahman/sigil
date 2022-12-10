@@ -1603,67 +1603,6 @@ document.addEventListener('alpine:init', () => {
 
 			startTutorial();
 
-			function handleIncomingEvent(event) {
-				const { type, ...payload } = JSON.parse(event.data);
-				console.group(type);
-				console.log(`payload`, payload);
-				console.groupEnd(type);
-
-				if (type === 'ping') {
-					return;
-				}
-
-				if (type === 'message') {
-					handleMessageEvent(payload);
-					return;
-				}
-
-				if (type === 'spellsetup') {
-					handleSpellSetupEvent(payload);
-					return;
-				}
-
-				if (type === 'spelltextsetup') {
-					handleSpellTextSetupEvent(payload);
-					return;
-				}
-
-				if (type === 'boardstate') {
-					handleBoardStateEvent(payload);
-					return;
-				}
-
-				if (type === 'whoseturndisplay') {
-					handleWhoseTurnEvent(payload);
-					return;
-				}
-
-				if (type === 'new_stone_animation') {
-					handleNewStonePlacement(payload);
-					return;
-				}
-
-				if (type === 'chooserefills') {
-					handleChooseRefillsEvent(payload);
-					return;
-				}
-
-				if (type === 'donerefilling') {
-					handleDoneRefillingEvent();
-					return;
-				}
-
-				if (type === 'pushingoptions') {
-					handleValidMovesEvent(payload);
-					return;
-				}
-
-				if (type === 'game_over') {
-					handleGameOverEvent(payload);
-					return;
-				}
-			}
-
 			function handleMessageEvent(payload) {
 				_this.actionList = payload.actionlist || [];
 				_this.awaiting = payload.awaiting;
@@ -1748,12 +1687,6 @@ document.addEventListener('alpine:init', () => {
 				_this.previousBoardState = payload;
 			}
 
-			function handleWhoseTurnEvent(payload) {
-				_this.showReset = false;
-				_this.messageHistory.push(payload.message);
-				_this.whoseTurn = payload.color;
-			}
-
 			function handleNewStonePlacement(payload, { lastPlay = true, showReset = true }) {
 				if (lastPlay) {
 					_this.lastPlay = payload.node;
@@ -1785,12 +1718,6 @@ document.addEventListener('alpine:init', () => {
 
 			function handleValidMovesEvent(payload) {
 				_this.validMoves = payload;
-			}
-
-			function handleGameOverEvent(payload) {
-				_this.messageHistory.push(`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins`);
-				_this.showReset = false;
-				_this.winner = payload.winner;
 			}
 
 			function advanceTour() {
