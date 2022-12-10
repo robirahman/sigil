@@ -498,7 +498,7 @@ document.addEventListener('alpine:init', () => {
 								a9: 'red',
 								c10: 'red',
 							});
-							placeTutorialStone({ color: 'red', node: 'a9' });
+							placeTutorialStone({ color: 'red', delay: 50, node: 'a9' });
 							placeTutorialStone({ color: 'blue', delay: 750, node: 'a7', push: true }, () =>
 								showTutorialStepPointers(['.stone-node--a7'], {
 									placement: 'top',
