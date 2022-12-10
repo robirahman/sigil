@@ -266,7 +266,7 @@ class Hail_Storm(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Destroy 1 enemy stone in each spell."
+		self.text = "Destroy 1 enemy stone in each 3-node and 5-node spell."
 
 	def resolve(self, player):
 		if player.ishuman:
@@ -274,14 +274,14 @@ class Hail_Storm(Spell):
 			### We will use the notation of board.positions to refer to spells.
 			### That is, 1,2,3 are the majors, 4,5,6 are the minors, 7,8,9 charms.
 
-			for i in range(1,10):
+			for i in range(1,7):
 				innernodelist = player.board.positions[i]
 				for node in innernodelist:
 					if node.stone == player.enemy:
 						hailablespells.append(i)
 						break
 
-			player.jmessage("Select an enemy stone to destroy in each spell.")
+			player.jmessage("Select an enemy stone to destroy in each 3-node and 5-node spell.")
 			while len(hailablespells) > 0:
 				player.jmessage("", "node")
 
@@ -304,7 +304,7 @@ class Hail_Storm(Spell):
 							hailablespells.remove(spellnum)
 							player.board.update()
 		else:
-			for i in range(1,10):
+			for i in range(1,7):
 				innernodelist = player.board.positions[i]
 				for node in innernodelist:
 					if node.stone == player.enemy:
