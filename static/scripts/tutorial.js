@@ -477,13 +477,12 @@ document.addEventListener('alpine:init', () => {
 							hideTutorialStepPointers();
 						},
 						show() {
-							// TODO: Handle pushing properly
-							// FIXME: This stone doesn't animate in (also an issue in the main game)
-							placeTutorialStone({ color: 'red', delay: 500, node: 'a4', push: true }, () =>
+							placeTutorialStone({ color: 'red', node: 'a4', push: true }, () => {
+								handlePushAnimation({starting_node: 'a9', ending_node: 'a4'});
 								showTutorialStepPointers(['.stone-node--a4'], {
 									placement: 'right',
-								})
-							);
+								});
+							});
 						},
 					},
 				},
@@ -499,11 +498,12 @@ document.addEventListener('alpine:init', () => {
 								c10: 'red',
 							});
 							placeTutorialStone({ color: 'red', delay: 50, node: 'a9' });
-							placeTutorialStone({ color: 'blue', delay: 750, node: 'a7', push: true }, () =>
+							placeTutorialStone({ color: 'blue', delay: 50, node: 'a7', push: true }, () => {
+								handlePushAnimation({starting_node: 'a9', ending_node: 'a7'});
 								showTutorialStepPointers(['.stone-node--a7'], {
 									placement: 'top',
-								})
-							);
+								});
+							});
 						},
 					},
 				},
@@ -549,7 +549,9 @@ document.addEventListener('alpine:init', () => {
 					when: {
 						hide() {
 							hideTutorialStepPointers();
-							placeTutorialStone({ color: 'red', node: 'a6', push: true });
+							placeTutorialStone({ color: 'red', node: 'a6', push: true }, () => {
+								handlePushAnimation({starting_node: 'a9', ending_node: 'a6'});
+							});
 						},
 						show() {
 							showTutorialStepPointers(['.stone-node--a6'], {
@@ -596,7 +598,9 @@ document.addEventListener('alpine:init', () => {
 					when: {
 						hide() {
 							hideTutorialStepPointers();
-							placeTutorialStone({ color: 'blue', node: 'a9' });
+							placeTutorialStone({ color: 'blue', node: 'a9' }, () => {
+								handleCrushAnimation({crushed_color: 'red', node: 'a9'});
+							});
 						},
 						show() {
 							showTutorialStepPointers(['.stone-node--a9']);
@@ -667,7 +671,9 @@ document.addEventListener('alpine:init', () => {
 					when: {
 						hide() {
 							hideTutorialStepPointers();
-							placeTutorialStone({ color: 'blue', node: 'a13' });
+							placeTutorialStone({ color: 'blue', node: 'a13' }, () => {
+								handleCrushAnimation({crushed_color: 'red', node: 'a13'});
+							});
 						},
 						show() {
 							showTutorialStepPointers(['.stone-node--a13']);
@@ -1138,22 +1144,30 @@ document.addEventListener('alpine:init', () => {
 
 									if (node === 'c13') {
 										placeTutorialStone({ color: 'blue', node });
-										placeTutorialStone({ color: 'red', push: true, node: 'c7' });
+										placeTutorialStone({ color: 'red', push: true, node: 'c7' }, () => {
+											handlePushAnimation({starting_node: 'c13', ending_node: 'c7'});
+										});
 										hideTutorialStepPointers();
 										showTutorialStepPointers(['.stone-node--c7']);
 										awaitingNode = 'c7';
 									} else if (node === 'c7') {
-										placeTutorialStone({ color: 'red', push: true, node: 'a12' });
+										placeTutorialStone({ color: 'red', push: true, node: 'a12' }, () => {
+											handlePushAnimation({starting_node: 'c7', ending_node: 'a12'});
+										});
 										hideTutorialStepPointers();
 										showTutorialStepPointers(['.stone-node--c8']);
 										awaitingNode = 'c8';
 									} else if (node === 'c8') {
-										placeTutorialStone({ color: 'red', push: true, node: 'a4' });
+										placeTutorialStone({ color: 'red', push: true, node: 'a4' }, () => {
+											handlePushAnimation({starting_node: 'c8', ending_node: 'a4'});
+										});
 										hideTutorialStepPointers();
 										showTutorialStepPointers(['.stone-node--c10']);
 										awaitingNode = 'c10';
 									} else {
-										placeTutorialStone({ color: 'red', push: true, node: 'a3' });
+										placeTutorialStone({ color: 'red', push: true, node: 'a3' }, () => {
+											handlePushAnimation({starting_node: 'c10', ending_node: 'a3'});
+										});
 										hideTutorialStepPointers();
 										resetRequiredTutorialActions();
 									}
@@ -1703,6 +1717,47 @@ document.addEventListener('alpine:init', () => {
 				} else {
 					_this.showReset = showReset;
 				}
+			}
+
+			function handlePushAnimation(payload) {
+				const startNodeElem = document.querySelector(`#stone-node--${payload.starting_node}`);
+				const endNodeElem = document.querySelector(`#stone-node--${payload.ending_node}`);
+
+				const { x: xStart, y: yStart } = startNodeElem.getBoundingClientRect();
+				const { x: xEnd, y: yEnd } = endNodeElem.getBoundingClientRect();
+				const xDiff = xStart - xEnd;
+				const yDiff = yStart - yEnd;
+
+				//tutorial push animation need to wait a tick before moving stone to start node
+				//	otherwise telling the tutorial step pointer to point at the end node can wind up pointing at where
+				//	the end node is when the push animation begins (instead of where it'll be when push animation ends)
+				setTimeout(() => {
+					//move stone to start node (instant)
+					endNodeElem.style.transition = 'transform 0s';
+					endNodeElem.style.transform = `translate(${xDiff}px, ${yDiff}px)`;
+
+					setTimeout(() => {
+						//move stone back again (animated)
+						endNodeElem.style.transition = `transform 750ms ease-in-out`;
+						endNodeElem.style.transform = '';
+					}, 50);
+				}, 1);
+			}
+
+			function handleCrushAnimation(payload) {
+				const { node, crushed_color } = payload;
+				const nodeElem = document.querySelector(`#stone-node--${node}`);
+
+				//create temporary stone element, use it for crush animation, and then remove it
+				const crushStone = document.createElement('button');
+				crushStone.setAttribute(
+					'class',
+					`stone-node stone-node--crushed stone-node--${node} stone-node--${crushed_color}`
+				);
+				crushStone.addEventListener('animationend', () => {
+					crushStone.remove();
+				});
+				nodeElem.parentNode.insertBefore(crushStone, nodeElem);
 			}
 
 			function handleChooseRefillsEvent(payload) {
