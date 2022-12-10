@@ -199,7 +199,7 @@ document.addEventListener('alpine:init', () => {
 				}
 			});
 
-			_this.sendEvent = function sendEvent(message) {
+			_this.sendEvent = function sendEvent() {
 				// _this.events.send(JSON.stringify({ message }));
 				_this.awaiting = null;
 			};
