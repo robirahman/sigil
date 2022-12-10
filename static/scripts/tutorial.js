@@ -478,7 +478,7 @@ document.addEventListener('alpine:init', () => {
 						},
 						show() {
 							placeTutorialStone({ color: 'red', node: 'a4', push: true }, () => {
-								handlePushAnimation({starting_node: 'a9', ending_node: 'a4'});
+								handlePushAnimation({ starting_node: 'a9', ending_node: 'a4' });
 								showTutorialStepPointers(['.stone-node--a4'], {
 									placement: 'right',
 								});
@@ -499,7 +499,7 @@ document.addEventListener('alpine:init', () => {
 							});
 							placeTutorialStone({ color: 'red', delay: 50, node: 'a9' });
 							placeTutorialStone({ color: 'blue', delay: 50, node: 'a7', push: true }, () => {
-								handlePushAnimation({starting_node: 'a9', ending_node: 'a7'});
+								handlePushAnimation({ starting_node: 'a9', ending_node: 'a7' });
 								showTutorialStepPointers(['.stone-node--a7'], {
 									placement: 'top',
 								});
@@ -550,7 +550,7 @@ document.addEventListener('alpine:init', () => {
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'red', node: 'a6', push: true }, () => {
-								handlePushAnimation({starting_node: 'a9', ending_node: 'a6'});
+								handlePushAnimation({ starting_node: 'a9', ending_node: 'a6' });
 							});
 						},
 						show() {
@@ -599,7 +599,7 @@ document.addEventListener('alpine:init', () => {
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'a9' }, () => {
-								handleCrushAnimation({crushed_color: 'red', node: 'a9'});
+								handleCrushAnimation({ crushed_color: 'red', node: 'a9' });
 							});
 						},
 						show() {
@@ -672,7 +672,7 @@ document.addEventListener('alpine:init', () => {
 						hide() {
 							hideTutorialStepPointers();
 							placeTutorialStone({ color: 'blue', node: 'a13' }, () => {
-								handleCrushAnimation({crushed_color: 'red', node: 'a13'});
+								handleCrushAnimation({ crushed_color: 'red', node: 'a13' });
 							});
 						},
 						show() {
@@ -1138,28 +1138,28 @@ document.addEventListener('alpine:init', () => {
 									if (node === 'c13') {
 										placeTutorialStone({ color: 'blue', node });
 										placeTutorialStone({ color: 'red', push: true, node: 'c7' }, () => {
-											handlePushAnimation({starting_node: 'c13', ending_node: 'c7'});
+											handlePushAnimation({ starting_node: 'c13', ending_node: 'c7' });
 										});
 										hideTutorialStepPointers();
 										showTutorialStepPointers(['.stone-node--c7']);
 										awaitingNode = 'c7';
 									} else if (node === 'c7') {
 										placeTutorialStone({ color: 'red', push: true, node: 'a12' }, () => {
-											handlePushAnimation({starting_node: 'c7', ending_node: 'a12'});
+											handlePushAnimation({ starting_node: 'c7', ending_node: 'a12' });
 										});
 										hideTutorialStepPointers();
 										showTutorialStepPointers(['.stone-node--c8']);
 										awaitingNode = 'c8';
 									} else if (node === 'c8') {
 										placeTutorialStone({ color: 'red', push: true, node: 'a4' }, () => {
-											handlePushAnimation({starting_node: 'c8', ending_node: 'a4'});
+											handlePushAnimation({ starting_node: 'c8', ending_node: 'a4' });
 										});
 										hideTutorialStepPointers();
 										showTutorialStepPointers(['.stone-node--c10']);
 										awaitingNode = 'c10';
 									} else {
 										placeTutorialStone({ color: 'red', push: true, node: 'a3' }, () => {
-											handlePushAnimation({starting_node: 'c10', ending_node: 'a3'});
+											handlePushAnimation({ starting_node: 'c10', ending_node: 'a3' });
 										});
 										hideTutorialStepPointers();
 										resetRequiredTutorialActions();
