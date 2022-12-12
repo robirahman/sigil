@@ -1558,14 +1558,38 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	visibility: hidden;
 }
 
-.step-pointer[data-popper-placement^="bottom"] .step-pointer__arrow {
-	transform: rotate(-90deg) !important;
+@keyframes step-pointer-left-frames {
+	from { transform: translateX(0) rotate(0deg); }
+	to { transform: translateX(3px) rotate(0deg); }
+}
+
+@keyframes step-pointer-right-frames {
+	from { transform: translateX(0) rotate(180deg); }
+	to { transform: translateX(-3px) rotate(180deg); }
+}
+
+@keyframes step-pointer-top-frames {
+	from { transform: translateY(0) rotate(90deg); }
+	to { transform: translateY(3px) rotate(90deg); }
+}
+
+@keyframes step-pointer-bottom-frames {
+	from { transform: translateY(0) rotate(-90deg); }
+	to { transform: translateY(-3px) rotate(-90deg); }
+}
+
+.step-pointer[data-popper-placement^="left"] .step-pointer__arrow {
+	animation: step-pointer-left-frames 1s infinite ease-in-out alternate;
 }
 
 .step-pointer[data-popper-placement^="right"] .step-pointer__arrow {
-	transform: rotate(180deg) !important;
+	animation: step-pointer-right-frames 1s infinite ease-in-out alternate;
 }
 
 .step-pointer[data-popper-placement^="top"] .step-pointer__arrow {
-	transform: rotate(90deg) !important;
+	animation: step-pointer-top-frames 1s infinite ease-in-out alternate;
+}
+
+.step-pointer[data-popper-placement^="bottom"] .step-pointer__arrow {
+	animation: step-pointer-bottom-frames 1s infinite ease-in-out alternate;
 }
