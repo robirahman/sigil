@@ -336,7 +336,7 @@ document.addEventListener('alpine:init', () => {
 								},
 								sorcery2: {
 									name: 'Hail Storm',
-									text: 'Destroy 1 enemy stone in each spell.',
+									text: 'Destroy 1 enemy stone in each 3-node and 5-node spell.',
 								},
 								sorcery3: {
 									name: 'Grow',
