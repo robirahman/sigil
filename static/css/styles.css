@@ -1051,11 +1051,6 @@ html.webp {
 	position: absolute;
 	height: var(--size);
 	width: var(--size);
-
-	/* this transform appears to be cruft (seems to do nothing) but leaving it here commented out for a while just in case
-	--translate: calc(-50% + var(--raw-size)/2);
-	transform: translate(var(--translate), var(--translate));
-	*/
 }
 
 /* stone background-image must not use var(--whatever) in place of url("whatever") because it causes safari (v13.1.3)
