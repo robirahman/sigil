@@ -497,8 +497,8 @@ document.addEventListener('alpine:init', () => {
 								a9: 'red',
 								c10: 'red',
 							});
-							placeTutorialStone({ color: 'red', delay: 50, node: 'a9' });
-							placeTutorialStone({ color: 'blue', delay: 50, node: 'a7', push: true }, () => {
+							placeTutorialStone({ color: 'red', delay: 750, node: 'a9' });
+							placeTutorialStone({ color: 'blue', delay: 750, node: 'a7', push: true }, () => {
 								handlePushAnimation({ starting_node: 'a9', ending_node: 'a7' });
 								showTutorialStepPointers(['.stone-node--a7'], {
 									placement: 'top',
@@ -1724,7 +1724,10 @@ document.addEventListener('alpine:init', () => {
 				//tutorial push animation need to wait a tick before moving stone to start node
 				//	otherwise telling the tutorial step pointer to point at the end node can wind up pointing at where
 				//	the end node is when the push animation begins (instead of where it'll be when push animation ends)
+				endNodeElem.style.opacity = 0;
 				setTimeout(() => {
+					endNodeElem.style.opacity = 1;
+
 					//move stone to start node (instant)
 					endNodeElem.style.transition = 'transform 0s';
 					endNodeElem.style.transform = `translate(${xDiff}px, ${yDiff}px)`;
