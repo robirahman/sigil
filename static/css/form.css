@@ -27,3 +27,10 @@ form .checkbox:focus,
 form .checkbox:hover {
 	color: white;
 }
+
+form .cross-link {
+	display: flex;
+	justify-content: center;
+	padding: 25px;
+	color: ghostwhite;
+}
