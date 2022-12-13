@@ -21,6 +21,7 @@
 						name="email"
 						placeholder="Your Email"
 						autofocus=""
+						value="{{ email }}"
 						required
 					/>
 				</div>
@@ -33,6 +34,7 @@
 						type="password"
 						name="password"
 						placeholder="Your Password"
+						value="{{ password }}"
 						required
 					/>
 				</div>
@@ -43,7 +45,9 @@
 					<input
 						type="checkbox"
 						name="remember"
+						{% if remember != False %}
 						checked
+						{% endif %}
 					/>
 					Remember me
 				</label>

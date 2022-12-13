@@ -116,7 +116,7 @@ def login_post():
     # take the user-supplied password, hash it, and compare it to the hashed password in the database
     if not user or not check_password_hash(user.password, password):
         flash('Please check your login details and try again.')
-        return redirect(url_for('login')) # if the user doesn't exist or password is wrong, reload the page
+        return render_template('login.html', email=email, password=password, remember=remember)
 
     # if the above check passes, then we know the user has the right credentials
     login_user(user, remember=remember)
@@ -133,20 +133,20 @@ def signup_post():
     name = request.form.get('name').strip()
     password = request.form.get('password')
     if (email == '' or name == '' or password == ''):
-    	flash('Fields must not be empty')
-    	return redirect(url_for('signup'))
+        flash('Fields must not be empty')
+        return render_template('signup.html', email=email, name=name, password=password)
 
     user = User.query.filter_by(email=email).first() # if this returns a user, then the email already exists in database
 
     if user: # if a user is found, we want to redirect back to signup page so user can try again
         flash('Email address already exists')
-        return redirect(url_for('signup'))
+        return render_template('signup.html', email=email, name=name, password=password)
 
     user = User.query.filter_by(name=name).first() # if this returns a user, then the name already exists in database
 
     if user: # if a user is found, we want to redirect back to signup page so user can try again
         flash('That name is already taken')
-        return redirect(url_for('signup'))
+        return render_template('signup.html', email=email, name=name, password=password)
 
     # create a new user with the form data. Hash the password so the plaintext version isn't saved.
     new_user = User(email=email, name=name, password=generate_password_hash(password, method='sha256'), elo=1000, ladder_game_count=0)
