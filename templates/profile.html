@@ -1,27 +1,33 @@
-<!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="utf-8" />
-		<meta
-			http-equiv="X-UA-Compatible"
-			content="IE=edge"
-		/>
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1"
-		/>
-		<link
-			rel="stylesheet"
-			href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css"
-		/>
-	</head>
+{% extends "layout.html" %}
 
-	{% block content %}
-	<h1 class="title">Welcome, {{ name }}!</h1>
+{% block title %}Profile{% endblock %}
 
-	<h2>Your current Sigil rating is {{ elo }}.</h2>
+{% block head %}
+{{ super() }}
+<style>
+	.profile {
+		display: flex;
+		justify-content: center;
+		font-size: 18px;
+		color: white;
+	}
 
-	<h2>You have played {{ ladder_game_count }} ladder matches.</h2>
+	.profile .title {
+		font-size: 24px;
+	}
+</style>
+{% endblock %}
 
-	{% endblock %}
-</html>
+{% block content %}
+{{ super() }}
+<div style="height: 5vh;"></div>
+<div class="profile">
+	<div>
+		<h1 class="title">Welcome, {{ name }}!</h1>
+		<br/>
+		<h2>Your current Sigil rating is {{ elo }}.</h2>
+		<br/>
+		<h2>You have played {{ ladder_game_count }} ladder matches.</h2>
+	</div>
+</div>
+{% endblock %}
