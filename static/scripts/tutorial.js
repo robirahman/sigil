@@ -653,8 +653,10 @@ document.addEventListener('alpine:init', () => {
 							setRequiredTutorialActions(['a7', 'b11']);
 
 							_this.handleCustomNodeClick = (event) => {
+								//Note: Using .getAttribute('aria-label') instead of .ariaLabel because .ariaLabel is undefined in firefox (v108.0)
+								const node = event.target.getAttribute('aria-label');
 								handleBoardStateEvent({
-									[event.target.ariaLabel]: null,
+									[node]: null,
 								});
 							};
 
@@ -923,7 +925,7 @@ document.addEventListener('alpine:init', () => {
 							setRequiredTutorialActions(['b3', 'b6']);
 
 							_this.handleCustomNodeClick = (event) => {
-								const node = event.target.ariaLabel;
+								const node = event.target.getAttribute('aria-label');
 								handleBoardStateEvent({
 									[node]: 'blue',
 								});
@@ -984,8 +986,9 @@ document.addEventListener('alpine:init', () => {
 							setRequiredTutorialActions(['c2', 'c3', 'c4', 'c6']);
 
 							_this.handleCustomNodeClick = (event) => {
+								const node = event.target.getAttribute('aria-label');
 								handleBoardStateEvent({
-									[event.target.ariaLabel]: 'blue',
+									[node]: 'blue',
 								});
 							};
 
@@ -1067,7 +1070,7 @@ document.addEventListener('alpine:init', () => {
 							setRequiredTutorialActions(['c3', 'c4']);
 
 							_this.handleCustomNodeClick = (event) => {
-								const node = event.target.ariaLabel;
+								const node = event.target.getAttribute('aria-label');
 								handleBoardStateEvent({
 									[node]: 'blue',
 								});
@@ -1128,7 +1131,7 @@ document.addEventListener('alpine:init', () => {
 							let awaitingNode = 'c13';
 
 							_this.handleCustomNodeClick = (event) => {
-								const node = event.target.ariaLabel;
+								const node = event.target.getAttribute('aria-label');
 
 								if (awaitingNode === node) {
 									handleBoardStateEvent({
