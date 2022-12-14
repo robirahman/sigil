@@ -875,18 +875,21 @@ html.webp {
 
 /* <BoardAndNodes> */
 .game-board-container {
-	align-items: center;
+	--margin-top: 25px;
+
 	display: flex;
-	height: 100vh;
+	align-items: center;
 	justify-content: center;
-	min-height: 758px;
-	min-width: 758px;
+	height: calc(100vh - var(--margin-top));
+	min-height: calc(758px - var(--margin-top));
+	min-width: calc(758px - var(--margin-top));
+	margin-top: var(--margin-top);
 }
 
 .game-board {
 	max-height: calc(100vh - 40px);
-	min-height: 758px;
-	min-width: 758px;
+	min-height: calc(758px - var(--margin-top));
+	min-width: calc(758px - var(--margin-top));
 }
 
 .score-track {
