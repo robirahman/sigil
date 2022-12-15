@@ -16,6 +16,10 @@
 			rel="stylesheet"
 		/>
 		<link
+			href="/static/css/ladder.css"
+			rel="stylesheet"
+		/>
+		<link
 			rel="preconnect"
 			href="https://fonts.googleapis.com"
 		/>
@@ -61,6 +65,28 @@
 					</div>
 				</div>
 			</header>
+			<div class="ladder-details" x-show="'{{privategamename}}' === ''">
+				<div class="ladder-details__inner">
+					<div class="red">
+						<span class="name">?</span>&nbsp;(<span class="elo">?</span>)
+					</div>
+					<div class="timer">
+						<div class="main">
+							<div class="red" x-text="secondsToTimerStr(redTimerSeconds)"></div>
+							<div>&nbsp;-&nbsp;</div>
+							<div class="blue" x-text="secondsToTimerStr(blueTimerSeconds)"></div>
+						</div>
+						<div class="bar">
+							<div style="width: 2px;"></div>
+							<div class="bar--red" x-bind:style="{ width: 100 * redTimerSeconds / (redTimerSeconds + blueTimerSeconds) + '%' }"></div>
+							<div class="bar--blue" x-bind:style="{ width: 100 * blueTimerSeconds / (redTimerSeconds + blueTimerSeconds) + '%' }"></div>
+						</div>
+					</div>
+					<div class="blue">
+						<span class="name">?</span>&nbsp;(<span class="elo">?</span>)
+					</div>
+				</div>
+			</div>
 			<div class="container">
 				<div class="container__inner">
 					<template x-if="messageHistory.length > 0">

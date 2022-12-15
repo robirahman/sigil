@@ -38,6 +38,14 @@ document.addEventListener('alpine:init', () => {
 			validMoves: {},
 			whoseTurn: '',
 			winner: '',
+			redTimerSeconds: 900,
+			blueTimerSeconds: 900,
+
+			secondsToTimerStr(secondsRemaining) {
+				const sec = secondsRemaining % 60;
+				const min = (secondsRemaining - sec) / 60;
+				return `${min}:${sec.toString().padStart(2, '0')}`;
+			},
 
 			closeSpellTooltip() {
 				this.activeSpell = '';
@@ -274,6 +282,16 @@ document.addEventListener('alpine:init', () => {
 						handleCheckRequestEvent();
 						return;
 					}
+
+					if (type === 'red_timer') {
+						handleColorTimerEvent(payload, 'red');
+						return;
+					}
+
+					if (type === 'blue_timer') {
+						handleColorTimerEvent(payload, 'blue');
+						return;
+					}
 				}
 
 				function handleMessageEvent(payload) {
@@ -448,6 +466,16 @@ document.addEventListener('alpine:init', () => {
 
 				function handleCheckRequestEvent() {
 					_this.sendEvent(check);
+				}
+
+				//debug_spoofEvent({ type: 'red_timer', seconds: 9 });
+				function handleColorTimerEvent(payload, color) {
+					const remainingSeconds = payload.seconds;
+					if (color === 'red') {
+						_this.redTimerSeconds = remainingSeconds;
+					} else {
+						_this.blueTimerSeconds = remainingSeconds;
+					}
 				}
 			},
 		})
