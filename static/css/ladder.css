@@ -58,6 +58,7 @@
 	border-top-left-radius: 2px;
 	border-bottom-left-radius: 2px;
 }
+
 .ladder-details__inner > .timer .bar--blue {
 	border-bottom: 2px solid #295ccd;
 	border-top-right-radius: 2px;
@@ -77,7 +78,7 @@
 	.ladder-details__inner > div {
 		padding: 2px 0;
 	}
-	
+
 	.ladder-details__inner > .red,
 	.ladder-details__inner > .timer,
 	.ladder-details__inner > .blue {
