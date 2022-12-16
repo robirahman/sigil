@@ -369,10 +369,13 @@ def playgame(ws):
 
 		egress = { "type": "check_request" }
 
+		red_user = User.query.filter_by(name=red_username).first()
+		blue_user = User.query.filter_by(name=blue_username).first()
+
 		red.ws.send(json.dumps(egress))
 		ingress = red.ws.receive()
 		red_check = json.loads(ingress)['message']
-		valid = (User.query.filter_by(name=red_username).first().password[8:16] == red_check)
+		valid = (red_user.password[8:16] == red_check)
 		if not valid:
 			red.jmessage("Something went wrong - try again.")
 			blue.jmessage("Something went wrong - try again.")
@@ -381,7 +384,7 @@ def playgame(ws):
 		blue.ws.send(json.dumps(egress))
 		ingress = blue.ws.receive()
 		blue_check = json.loads(ingress)['message']
-		valid = (User.query.filter_by(name=blue_username).first().password[8:16] == blue_check)
+		valid = (blue_user.password[8:16] == blue_check)
 		if not valid:
 			red.jmessage("Something went wrong - try again.")
 			blue.jmessage("Something went wrong - try again.")
@@ -391,6 +394,18 @@ def playgame(ws):
 
 		red.jmessage(red_username + " versus " + blue_username)
 		blue.jmessage(red_username + " versus " + blue_username)
+
+		egress = { "type": "laddersetup" }
+
+		egress["red_name"] = red_user.name
+		egress["blue_name"] = blue_user.name
+		egress["red_elo"] = red_user.elo
+		egress["blue_elo"] = blue_user.elo
+		egress["red_timer"] = red.timer
+		egress["blue_timer"] = blue.timer
+
+		red.ws.send(json.dumps(egress))
+		blue.ws.send(json.dumps(egress))
 
 
 		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
