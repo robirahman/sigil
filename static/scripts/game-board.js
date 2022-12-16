@@ -38,12 +38,17 @@ document.addEventListener('alpine:init', () => {
 			validMoves: {},
 			whoseTurn: '',
 			winner: '',
-			redTimerSeconds: 900,
-			blueTimerSeconds: 900,
+			redName: '',
+			blueName: '',
+			redElo: 0,
+			blueElo: 0,
+			redTimer: 0,
+			blueTimer: 0,
+			isLadder: false,
 
-			secondsToTimerStr(secondsRemaining) {
-				const sec = secondsRemaining % 60;
-				const min = (secondsRemaining - sec) / 60;
+			formatTimer(timerSeconds) {
+				const sec = timerSeconds % 60;
+				const min = (timerSeconds - sec) / 60;
 				return `${min}:${sec.toString().padStart(2, '0')}`;
 			},
 
@@ -215,6 +220,11 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'message') {
 						handleMessageEvent(payload);
+						return;
+					}
+
+					if (type === 'laddersetup') {
+						handleLadderSetupEvent(payload);
 						return;
 					}
 
@@ -470,12 +480,23 @@ document.addEventListener('alpine:init', () => {
 
 				//debug_spoofEvent({ type: 'red_timer', seconds: 9 });
 				function handleColorTimerEvent(payload, color) {
-					const remainingSeconds = payload.seconds;
+					const timerSeconds = payload.seconds;
 					if (color === 'red') {
-						_this.redTimerSeconds = remainingSeconds;
+						_this.redTimer = timerSeconds;
 					} else {
-						_this.blueTimerSeconds = remainingSeconds;
+						_this.blueTimer = timerSeconds;
 					}
+				}
+
+				//debug_spoofEvent({ type: 'laddersetup', red_name: 'Rachel', blue_name: 'Basil', red_elo: 1001, blue_elo: 999, red_timer: 900, blue_timer: 900 });
+				function handleLadderSetupEvent(payload) {
+					_this.redName = payload.red_name;
+					_this.blueName = payload.blue_name;
+					_this.redElo = payload.red_elo;
+					_this.blueElo = payload.blue_elo;
+					_this.redTimer = payload.red_timer;
+					_this.blueTimer = payload.blue_timer;
+					_this.isLadder = true;
 				}
 			},
 		})
