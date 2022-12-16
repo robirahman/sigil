@@ -32,7 +32,7 @@
 }
 
 .ladder-details__inner > .timer {
-	--timer-width: 95px;
+	--timer-width: 6em;
 
 	flex-direction: column;
 	flex-basis: 0;
