@@ -1,28 +1,45 @@
-<!DOCTYPE html>
-<html>
-	<head>
-		<title>Sigil Online Ladder Match</title>
+{% extends "layout.html" %}
 
-		<link
-			rel="stylesheet"
-			href="/static/laddermatch.css"
-		/>
-		<link
-			rel="icon"
-			href="data:,"
-		/>
-	</head>
+{% block title %}Ladder Match{% endblock %}
 
-	<script src="/static/laddermatch.js"></script>
+{% block head %}
+{{ super() }}
+<style>
+	.ladder-match {
+		display: flex;
+		text-align: center;
+		align-items: center;
+		flex-direction: column;
+		font-family: Papyrus, serif;
+		font-size: 20px;
+		color: white;
+	}
 
-	<body onload="main();">
-		<div id="laddermatchdescription">
-			<b>Join the queue to play a ranked game against a random opponent.</b><br />
-			<a
-				href="{{ url_for('laddergame') }}"
-				style="color: hotpink"
-				>Join Ladder Match Queue</a
-			>
-		</div>
-	</body>
-</html>
+	.ladder-match .prompt {
+		font-weight: bold;
+		padding: 10px;
+		padding-bottom: 20px;
+	}
+
+	@media (max-width: 400px) {
+		.ladder-match .prompt br {
+			display: none;
+		}
+	}
+</style>
+{% endblock %}
+
+{% block content %}
+{{ super() }}
+<div class="ladder-match">
+	<div class="prompt">
+		Join the queue to play a ranked game<br/>
+		against a random opponent.
+	</div>
+	<a
+		class="menu-button"
+		href="{{ url_for('laddergame') }}"
+		>Join Ladder Match Queue</a
+	>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+.menu-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 20px;
+	padding: 25px 30px;
+	border-radius: 1000px;
+	background-color: #115f77;
+	box-shadow: 2px 2px #0e0514;
+	color: #f0f0f0;
+	font-size: 20px;
+	font-family: overlock;
+}
+
+.menu-button:focus,
+.menu-button:hover {
+	background-color: #004962;
+}
