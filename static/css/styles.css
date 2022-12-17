@@ -875,7 +875,7 @@ html.webp {
 
 /* <BoardAndNodes> */
 .game-board-container {
-	--margin-top: 25px;
+	--margin-top: 30px;
 
 	display: flex;
 	align-items: center;

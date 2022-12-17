@@ -67,23 +67,25 @@
 			</header>
 			<div class="ladder-details" x-show="isLadder" x-cloak>
 				<div class="ladder-details__inner">
-					<div class="red">
-						<span class="name" x-text="redName"></span>&nbsp;(<span class="elo" x-text="redElo"></span>)
-					</div>
-					<div class="timer">
-						<div class="main">
-							<div class="red" x-text="formatTimer(redTimer)"></div>
-							<div>&nbsp;-&nbsp;</div>
-							<div class="blue" x-text="formatTimer(blueTimer)"></div>
+					<div class="ladder-details__card">
+						<div class="red">
+							<span class="name" x-text="redName"></span>&nbsp;(<span class="elo" x-text="redElo"></span>)
 						</div>
-						<div class="bar">
-							<div style="width: 2px;"></div>
-							<div class="bar--red" x-bind:style="{ width: 100 * redTimer / (redTimer + blueTimer) + '%' }"></div>
-							<div class="bar--blue" x-bind:style="{ width: 100 * blueTimer / (redTimer + blueTimer) + '%' }"></div>
+						<div class="timer">
+							<div class="main">
+								<div class="red" x-text="formatTimer(redTimer)"></div>
+								<div>&nbsp;-&nbsp;</div>
+								<div class="blue" x-text="formatTimer(blueTimer)"></div>
+							</div>
+							<div class="bar">
+								<div style="width: 2px;"></div>
+								<div class="bar--red" x-bind:style="{ width: 100 * redTimer / (redTimer + blueTimer) + '%' }"></div>
+								<div class="bar--blue" x-bind:style="{ width: 100 * blueTimer / (redTimer + blueTimer) + '%' }"></div>
+							</div>
 						</div>
-					</div>
-					<div class="blue">
-						<span class="name" x-text="blueName"></span>&nbsp;(<span class="elo" x-text="blueElo"></span>)
+						<div class="blue">
+							<span class="name" x-text="blueName"></span>&nbsp;(<span class="elo" x-text="blueElo"></span>)
+						</div>
 					</div>
 				</div>
 			</div>

@@ -2,7 +2,7 @@
 	display: flex;
 	justify-content: center;
 	position: absolute;
-	padding: 15px;
+	padding: 12px;
 	width: 100%;
 	z-index: 1;
 }
@@ -11,27 +11,38 @@
 	display: flex;
 	justify-content: center;
 	font-family: sans-serif;
-	width: 100%;
 	color: white;
+	width: 100%;
 }
 
-.ladder-details__inner > div {
+.ladder-details__card {
+	display: flex;
+	border-radius: 10px;
+	background: black;
+	padding: 5px 8px;
+	width: fit-content;
+	text-shadow: 0 2px 2px #000;
+	box-shadow: 0px 2px 8px #000;
+	opacity: 0.9;
+}
+
+.ladder-details__card > div {
 	display: flex;
 }
 
-.ladder-details__inner > .red {
+.ladder-details__card > .red {
 	justify-content: flex-end;
 	flex-basis: 100%;
 	color: #fa3f32;
 }
 
-.ladder-details__inner > .blue {
+.ladder-details__card > .blue {
 	justify-content: flex-start;
 	flex-basis: 100%;
 	color: #295ccd;
 }
 
-.ladder-details__inner > .timer {
+.ladder-details__card > .timer {
 	--timer-width: 6em;
 
 	flex-direction: column;
@@ -39,27 +50,27 @@
 	padding: 0 8px;
 }
 
-.ladder-details__inner .timer .main {
+.ladder-details__card .timer .main {
 	display: flex;
 	align-self: center;
 	justify-content: space-between;
 	width: var(--timer-width);
 }
 
-.ladder-details__inner .timer .bar {
+.ladder-details__card .timer .bar {
 	display: flex;
 	justify-content: center;
 	width: var(--timer-width);
 	margin: 0 auto;
 }
 
-.ladder-details__inner > .timer .bar--red {
+.ladder-details__card > .timer .bar--red {
 	border-bottom: 2px solid #fa3f32;
 	border-top-left-radius: 2px;
 	border-bottom-left-radius: 2px;
 }
 
-.ladder-details__inner > .timer .bar--blue {
+.ladder-details__card > .timer .bar--blue {
 	border-bottom: 2px solid #295ccd;
 	border-top-right-radius: 2px;
 	border-bottom-right-radius: 2px;
@@ -71,17 +82,17 @@
 }
 
 @media (max-width: 500px) {
-	.ladder-details__inner {
+	.ladder-details__card {
 		display: block;
 	}
 
-	.ladder-details__inner > div {
+	.ladder-details__card > div {
 		padding: 2px 0;
 	}
 
-	.ladder-details__inner > .red,
-	.ladder-details__inner > .timer,
-	.ladder-details__inner > .blue {
+	.ladder-details__card > .red,
+	.ladder-details__card > .timer,
+	.ladder-details__card > .blue {
 		justify-content: center;
 	}
 }
