@@ -41,6 +41,22 @@
 		/>
 		<title>{% block title %}{% endblock %}Sigil Online</title>
 		{% endblock %}
+
+		<style>
+			.header-container {
+				display: flex;
+			}
+
+			.header-container > * {
+				display: flex;
+				flex-basis: 100%;
+				color: white;
+			}
+
+			.header-container .login-status-container {
+				justify-content: flex-end;
+			}
+		</style>
 	</head>
 
 	<body>
@@ -49,7 +65,8 @@
 			style="pointer-events: auto; position: static"
 		>
 			<div class="container">
-				<div class="container__inner">
+				<div class="header-container">
+					<div></div>
 					<h1 class="text-align:center">
 						<a href="/">
 							<span class="visually-hidden">Sigil Online</span>
@@ -62,11 +79,21 @@
 							/>
 						</a>
 					</h1>
+					<div class="login-status-container" x-data="{ name: '{{current_user_name}}' }">
+						<div class="log-status-out" x-show="name === ''" x-cloak>
+							<a href="/login">Login</a> / <a href="/signup">Sign Up</a>
+						</div>
+						<div class="log-status-in" x-show="name !== ''" x-cloak>
+							<span x-text="name"></span> <a href="/logout">Logout</a>
+						</div>
+					</div>
 				</div>
 			</div>
 		</header>
 		<div style="height: 5vh"></div>
 
 		{% block content %} {% endblock %}
+
+		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>

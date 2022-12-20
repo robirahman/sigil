@@ -82,7 +82,7 @@ def privatematch():
 
 @app.route('/ladder-match')
 def laddermatch():
-	return render_template('ladder-match.html')
+	return render_template('ladder-match.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/private-game/<gamename>')
 def privategameboard(gamename):
@@ -97,11 +97,11 @@ def laddergame():
 @app.route('/profile')
 @login_required
 def profile():
-    return render_template('profile.html', name=current_user.name, elo=current_user.elo, ladder_game_count=current_user.ladder_game_count)
+    return render_template('profile.html', current_user_name=current_user.name, elo=current_user.elo, ladder_game_count=current_user.ladder_game_count)
 
 @app.route('/login')
 def login():
-    return render_template('login.html')
+    return render_template('login.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/login', methods=['POST'])
 def login_post():
@@ -116,7 +116,7 @@ def login_post():
     # take the user-supplied password, hash it, and compare it to the hashed password in the database
     if not user or not check_password_hash(user.password, password):
         flash('Please check your login details and try again.')
-        return render_template('login.html', email=email, password=password, remember=remember)
+        return render_template('login.html', email=email, password=password, remember=remember, current_user_name=getattr(current_user, 'name', ''))
 
     # if the above check passes, then we know the user has the right credentials
     login_user(user, remember=remember)
@@ -124,7 +124,7 @@ def login_post():
 
 @app.route('/signup')
 def signup():
-    return render_template('signup.html')
+    return render_template('signup.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/signup', methods=['POST'])
 def signup_post():
@@ -134,19 +134,19 @@ def signup_post():
     password = request.form.get('password')
     if (email == '' or name == '' or password == ''):
         flash('Fields must not be empty')
-        return render_template('signup.html', email=email, name=name, password=password)
+        return render_template('signup.html', email=email, name=name, password=password, current_user_name=getattr(current_user, 'name', ''))
 
     user = User.query.filter_by(email=email).first() # if this returns a user, then the email already exists in database
 
     if user: # if a user is found, we want to redirect back to signup page so user can try again
         flash('Email address already exists')
-        return render_template('signup.html', email=email, name=name, password=password)
+        return render_template('signup.html', email=email, name=name, password=password, current_user_name=getattr(current_user, 'name', ''))
 
     user = User.query.filter_by(name=name).first() # if this returns a user, then the name already exists in database
 
     if user: # if a user is found, we want to redirect back to signup page so user can try again
         flash('That name is already taken')
-        return render_template('signup.html', email=email, name=name, password=password)
+        return render_template('signup.html', email=email, name=name, password=password, current_user_name=getattr(current_user, 'name', ''))
 
     # create a new user with the form data. Hash the password so the plaintext version isn't saved.
     new_user = User(email=email, name=name, password=generate_password_hash(password, method='sha256'), elo=1000, ladder_game_count=0)
