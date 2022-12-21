@@ -64,20 +64,44 @@
 							/>
 						</a>
 					</h1>
-					<div class="login-status-container" x-data="{ name: '{{current_user_name}}' }">
-						<div class="log-status-out" x-show="name === ''" x-cloak>
-							<a class="link" href="/login">Login</a> / <a class="link" href="/signup">Sign Up</a>
+					<div
+						class="login-status-container"
+						x-data="{ name: '{{current_user_name}}' }"
+					>
+						<div
+							class="log-status-out"
+							x-show="name === ''"
+							x-cloak
+						>
+							<a
+								class="link"
+								href="/login"
+								>Login</a
+							>
+							/
+							<a
+								class="link"
+								href="/signup"
+								>Sign Up</a
+							>
 						</div>
-						<div class="log-status-in" x-show="name !== ''" x-cloak>
-							<span x-text="name"></span> <a class="link" href="/logout">Logout</a>
+						<div
+							class="log-status-in"
+							x-show="name !== ''"
+							x-cloak
+						>
+							<span x-text="name"></span>
+							<a
+								class="link"
+								href="/logout"
+								>Logout</a
+							>
 						</div>
 					</div>
 				</div>
 			</div>
 		</header>
-		<div class="main">
-			{% block content %} {% endblock %}
-		</div>
+		<div class="main">{% block content %} {% endblock %}</div>
 		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>
