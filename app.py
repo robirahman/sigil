@@ -58,7 +58,7 @@ def load_user(user_id):
 
 @app.route('/')
 def home():
-	return render_template('index.html')
+	return render_template('index.html', current_user_name=getattr(current_user, 'name', ''))
 
 tutorialcount = 0
 

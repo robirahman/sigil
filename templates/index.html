@@ -1,167 +1,102 @@
-<!DOCTYPE html>
-<html
-	class="height:100%"
-	lang="en"
->
-	<head>
-		<meta charset="UTF-8" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1.0"
-		/>
-		<meta
-			http-equiv="X-UA-Compatible"
-			content="ie=edge"
-		/>
-		<title>Sigil Online</title>
-		<link
-			href="/static/css/styles.css"
-			rel="stylesheet"
-		/>
-		<link
-			rel="preconnect"
-			href="https://fonts.googleapis.com"
-		/>
-		<link
-			rel="preconnect"
-			href="https://fonts.gstatic.com"
-			crossorigin
-		/>
-		<link
-			href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap"
-			rel="stylesheet"
-		/>
-	</head>
-	<body class="display:flex flex-direction:column height:100% justify-content:space-between">
-		<div>
-			<header
-				class="masthead"
-				style="pointer-events: auto; position: static"
-			>
-				<div class="container">
-					<div class="container__inner">
-						<h1 class="text-align:center">
-							<a href="/"
-								><span class="visually-hidden">Sigil Online</span
-								><img
-									class="max-width:100%"
-									alt=""
-									src="/static/images/sigil-online-logo.svg"
-									height="36"
-									width="287"
-							/></a>
-						</h1>
-					</div>
-				</div>
-			</header>
-			<div class="margin-horizontal:auto max-width:800">
-				<p
-					class="color:dddcdd font-family:overlock font-size:31 padding:32 @mq-700--padding-vertical:64"
-				>
-					Battle your opponent for control of the Sigil in this strategy board game of arcane magic.
-				</p>
+{% extends "layout.html" %}
 
-				<!-- <div>
-					<button
-						id="profilebutton"
-						type="button"
-						style="color: white"
-						onclick="window.location.href='{{ url_for('profile') }}';"
-					>
-						<b>Profile</b>
-					</button>
-				</div>
+{% block head %}
+{{ super() }}
+<style>
+	body > .main {
+		padding-top: 0;
+	}
+	
+	ul > li {
+		flex-grow: 1;
+		flex-basis: 592px;
+	}
 
-				<div>
-					<button
-						id="loginbutton"
-						type="button"
-						style="color: white"
-						onclick="window.location.href='{{ url_for('login') }}';"
-					>
-						<b>Login</b>
-					</button>
-				</div>
+	ul > li.half {
+		flex-basis: 296px;
+	}
 
-				<div>
-					<button
-						id="signupbutton"
-						type="button"
-						style="color: white"
-						onclick="window.location.href='{{ url_for('signup') }}';"
-					>
-						<b>Sign Up</b>
-					</button>
-				</div>
+	.intro {
+		color: #dddcdd;
+		font-family: overlock, sans-serif;
+		font-size: 31px;
+		padding: 32px;
+		padding-top: 32px;
+	}
 
-				<div>
-					<button
-						id="logoutbutton"
-						type="button"
-						style="color: white"
-						onclick="window.location.href='{{ url_for('logout') }}';"
-					>
-						<b>Logout</b>
-					</button>
-				</div> -->
+	@media (min-width: 700px) {
+		.intro {
+			padding-bottom: 64px;
+			padding-top: 64px;
+		}
+	}
+</style>
+{% endblock %}
 
-				<ul
-					class="display:flex flex-wrap:wrap column-gap:44 padding-horizontal:32 row-gap:16 @mq-700--row-gap:32"
-				>
-					<li class="flex-basis:296px flex-grow:1">
-						<a
-							class="align-items:center background-color:272b49 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:1e2139"
-							href="/tutorial"
-							>Tutorial</a
-						>
-					</li>
-					<li class="flex-basis:296px flex-grow:1">
-						<a
-							class="align-items:center background-color:272b49 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:1e2139"
-							href="https://discord.gg/vTSjFjydFE"
-							>Discord</a
-						>
-					</li>
-					<li class="flex-basis:592px flex-grow:1">
-						<a
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							href="/single-player"
-							>Single Player</a
-						>
-					</li>
-					<li class="flex-basis:592px flex-grow:1">
-						<a
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							href="/private-match"
-							>Private Match</a
-						>
-					</li>
-					<!-- <li class="flex-basis:296px flex-grow:1">
-						<a
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							href="/ladder-match"
-							>Ladder Match</a
-						>
-					</li> -->
-				</ul>
-			</div>
-		</div>
-		<div class="padding-vertical:row-gap"></div>
-		<div
-			class="display:grid gap:24 margin-horizontal:auto max-width:600 padding:32 text-align:center"
+{% block content %}
+{{ super() }}
+<div>
+	<div class="margin-horizontal:auto max-width:800">
+		<p class="intro">
+			Battle your opponent for control of the Sigil in this strategy board game of arcane magic.
+		</p>
+
+		<ul
+			class="display:flex flex-wrap:wrap column-gap:44 padding-horizontal:32 row-gap:16 @mq-700--row-gap:32"
 		>
-			<p
-				class="color:dddcdd font-family:arvo font-size:16 line-height:1.4375 @mq-700--font-size:20"
-			>
-				Sigil will also be available as a tabletop game and coming soon to Kickstarter!
-			</p>
-			<a href="https://www.pineislandgames.com/"
-				><img
-					class="@mq-700--width:200"
-					alt="Pine Island Games"
-					src="/static/images/pine-island-games-logo.png"
-					width="140"
-			/></a>
-		</div>
-	</body>
-</html>
+			<li class="half">
+				<a
+					class="menu-button large dark"
+					href="/tutorial"
+					>Tutorial</a
+				>
+			</li>
+			<li class="half">
+				<a
+					class="menu-button large dark"
+					href="https://discord.gg/vTSjFjydFE"
+					>Discord</a
+				>
+			</li>
+			<li>
+				<a
+					class="menu-button large"
+					href="/single-player"
+					>Single Player</a
+				>
+			</li>
+			<li>
+				<a
+					class="menu-button large"
+					href="/private-match"
+					>Private Match</a
+				>
+			</li>
+			<!-- <li>
+				<a
+					class="menu-button large"
+					href="/ladder-match"
+					>Ladder Match</a
+				>
+			</li> -->
+		</ul>
+	</div>
+</div>
+<div style="flex-basis: 100vh;"></div>
+<div
+	class="display:grid gap:24 margin-horizontal:auto max-width:600 padding:32 text-align:center"
+>
+	<p
+		class="color:dddcdd font-family:arvo font-size:16 line-height:1.4375 @mq-700--font-size:20"
+	>
+		Sigil will also be available as a tabletop game and coming soon to Kickstarter!
+	</p>
+	<a href="https://www.pineislandgames.com/"
+		><img
+			class="@mq-700--width:200"
+			alt="Pine Island Games"
+			src="/static/images/pine-island-games-logo.png"
+			width="140"
+	/></a>
+</div>
+{% endblock %}

@@ -17,6 +17,20 @@
 	background-color: #004962;
 }
 
+.menu-button.dark {
+	background-color: #272b49;
+}
+
+.menu-button.dark:focus,
+.menu-button.dark:hover {
+	background-color: #1e2139;
+}
+
+.menu-button.large {
+	font-size: 31px;
+	height: 66px;
+}
+
 .link {
 	color: #485fc7;
 }

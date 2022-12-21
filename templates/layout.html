@@ -19,6 +19,10 @@
 			rel="stylesheet"
 		/>
 		<link
+			href="/static/css/layout.css"
+			rel="stylesheet"
+		/>
+		<link
 			href="/static/css/styles.css"
 			rel="stylesheet"
 		/>
@@ -41,33 +45,14 @@
 		/>
 		<title>{% block title %}{% endblock %}Sigil Online</title>
 		{% endblock %}
-
-		<style>
-			.header-container {
-				display: flex;
-			}
-
-			.header-container > * {
-				display: flex;
-				flex-basis: 100%;
-				color: white;
-			}
-
-			.header-container .login-status-container {
-				justify-content: flex-end;
-			}
-		</style>
 	</head>
 
 	<body>
-		<header
-			class="masthead"
-			style="pointer-events: auto; position: static"
-		>
+		<header>
 			<div class="container">
 				<div class="header-container">
 					<div></div>
-					<h1 class="text-align:center">
+					<h1>
 						<a href="/">
 							<span class="visually-hidden">Sigil Online</span>
 							<img
@@ -90,10 +75,9 @@
 				</div>
 			</div>
 		</header>
-		<div style="height: 5vh"></div>
-
-		{% block content %} {% endblock %}
-
+		<div class="main">
+			{% block content %} {% endblock %}
+		</div>
 		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>

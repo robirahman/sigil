@@ -446,17 +446,9 @@ textarea {
 	row-gap: 32px;
 }
 
-.padding-vertical\:row-gap {
-	padding: 16px;
-}
-
 @media (min-width: 700px) {
 	.\@mq-700--row-gap\:32 {
 		row-gap: 32px;
-	}
-
-	.padding-vertical\:row-gap {
-		padding: 32px;
 	}
 }
 

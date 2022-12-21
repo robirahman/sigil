@@ -1,0 +1,39 @@
+body {
+	height: 100%;
+}
+
+body > header {
+	background-image: linear-gradient(to bottom, #000, transparent);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 80px;
+	width: 100%;
+	z-index: 1;
+}
+
+body > .main {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	height: calc(100% - 80px);
+	padding-top: 5vh;
+}
+
+.header-container {
+	display: flex;
+}
+
+.header-container > * {
+	display: flex;
+	flex-basis: 100%;
+	color: white;
+}
+
+.header-container > h1 {
+	justify-content: center;
+}
+
+.header-container > .login-status-container {
+	justify-content: flex-end;
+}
