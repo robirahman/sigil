@@ -26,11 +26,12 @@ body > .main {
 
 .header-container > * {
 	display: flex;
-	flex-basis: 100%;
+	flex-basis: 25%;
 	color: white;
 }
 
 .header-container > h1 {
+	flex-basis: 50%;
 	justify-content: center;
 }
 
