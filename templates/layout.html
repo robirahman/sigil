@@ -81,10 +81,10 @@
 					</h1>
 					<div class="login-status-container" x-data="{ name: '{{current_user_name}}' }">
 						<div class="log-status-out" x-show="name === ''" x-cloak>
-							<a href="/login">Login</a> / <a href="/signup">Sign Up</a>
+							<a class="link" href="/login">Login</a> / <a class="link" href="/signup">Sign Up</a>
 						</div>
 						<div class="log-status-in" x-show="name !== ''" x-cloak>
-							<span x-text="name"></span> <a href="/logout">Logout</a>
+							<span x-text="name"></span> <a class="link" href="/logout">Logout</a>
 						</div>
 					</div>
 				</div>

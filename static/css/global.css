@@ -16,3 +16,12 @@
 .menu-button:hover {
 	background-color: #004962;
 }
+
+.link {
+	color: #485fc7;
+}
+
+.link:focus,
+.link:hover {
+	color: #2c4980;
+}
