@@ -38,3 +38,7 @@ body > .main {
 .header-container > .login-status-container {
 	justify-content: flex-end;
 }
+
+.header-container > .login-status-container > * {
+    text-align: right;
+}
