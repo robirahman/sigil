@@ -15,11 +15,7 @@ module.exports = {
 		auxlockdict: 'writable',
 		awaiting: 'writable',
 		chat: 'writable',
-		createGameForm: 'writable',
-		createGameWs: 'writable',
 		events: 'writable',
-		joinGameForm: 'writable',
-		joinGameWs: 'writable',
 		lockIdentifierChars: 'writable',
 		lockdict: 'writable',
 		nodename: 'writable',
@@ -46,7 +42,6 @@ module.exports = {
 		tutorialtext17: 'writable',
 		tutorialtext18: 'writable',
 		tutorialtext19: 'writable',
-		waitingForOpponent: 'writable',
 	},
 	rules: {
 		'import/order': [
