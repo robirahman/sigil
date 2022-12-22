@@ -69,7 +69,6 @@
 						x-data="{ name: '{{current_user_name}}' }"
 					>
 						<div
-							class="log-status-out"
 							x-show="name === ''"
 							x-cloak
 						>
@@ -78,15 +77,8 @@
 								href="/login"
 								>Login</a
 							>
-							/
-							<a
-								class="link"
-								href="/signup"
-								>Sign Up</a
-							>
 						</div>
 						<div
-							class="log-status-in"
 							x-show="name !== ''"
 							x-cloak
 						>
