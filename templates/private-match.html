@@ -1,163 +1,110 @@
-<!DOCTYPE html>
-<html
-	class="height:100%"
-	lang="en"
->
-	<head>
-		<title>Private Match - Sigil Online</title>
+{% extends "layout.html" %}
 
-		<meta charset="UTF-8" />
-		<meta
-			name="viewport"
-			content="width=device-width, initial-scale=1.0"
-		/>
-		<meta
-			http-equiv="X-UA-Compatible"
-			content="ie=edge"
-		/>
-		<title>Sigil Online</title>
-		<link
-			href="/static/css/styles.css"
-			rel="stylesheet"
-		/>
-		<link
-			rel="preconnect"
-			href="https://fonts.googleapis.com"
-		/>
-		<link
-			rel="preconnect"
-			href="https://fonts.gstatic.com"
-			crossorigin
-		/>
-		<link
-			href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap"
-			rel="stylesheet"
-		/>
-		<link
-			href="https://use.typekit.net/rot4udi.css"
-			rel="stylesheet"
-		/>
-		<link
-			rel="stylesheet"
-			href="/static/privatematch.css"
-		/>
-	</head>
+{% block title %}Private Match - {% endblock %}
 
-	<script src="/static/scripts/private-match.js"></script>
+{% block head %}
+{{ super() }}
+<link
+	rel="stylesheet"
+	href="/static/privatematch.css"
+/>
+<style>
+	body > .main {
+		padding-top: 0;
+	}
+</style>
+<script src="/static/scripts/private-match.js"></script>
+{% endblock %}
 
-	<body
-		class="display:flex flex-direction:column height:100% justify-content:space-between"
-		onload="main();"
-	>
-		<div>
-			<header
-				class="masthead"
-				style="pointer-events: auto; position: static"
-			>
-				<div class="container">
-					<div class="container__inner">
-						<h1 class="text-align:center">
-							<a href="/"
-								><span class="visually-hidden">Sigil Online</span
-								><img
-									class="max-width:100%"
-									alt=""
-									src="/static/images/sigil-online-logo.svg"
-									height="36"
-									width="287"
-							/></a>
-						</h1>
-					</div>
-				</div>
-			</header>
+{% block content %}
+{{ super() }}
+<div>
+	<div class="margin-horizontal:auto max-width:800">
+		<p
+			class="color:dddcdd font-family:overlock font-size:31 padding:32 @mq-700--padding-vertical:64 text-align:center"
+			id="privatematchdescription"
+			name="privatematchdescription"
+		>
+			Play a private, unranked game against a friend.
+		</p>
+	</div>
 
-			<div class="margin-horizontal:auto max-width:800">
-				<p
-					class="color:dddcdd font-family:overlock font-size:31 padding:32 @mq-700--padding-vertical:64 text-align:center"
-					id="privatematchdescription"
-					name="privatematchdescription"
+	<div class="margin-horizontal:auto max-width:800">
+		<div
+			class="display:flex flex-wrap:wrap column-gap:44 padding-horizontal:32 row-gap:16 @mq-700--row-gap:32"
+		>
+			<div class="flex-basis:296px flex-grow:1">
+				<button
+					class="align-items:center background-color:272b49 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:1e2139"
+					id="creategamebutton"
+					style="margin-bottom: 16px; width: 100%"
+					type="button"
 				>
-					Play a private, unranked game against a friend.
+					Create Game
+				</button>
+
+				<p
+					class="color:dddcdd font-family:arvo font-size:16 line-height:1.4375"
+					style="margin-bottom: 16px"
+				>
+					Create a new private game a friend can join.
 				</p>
+
+				<form
+					class="color:dddcdd flex-direction:column font-family:arvo font-size:16 gap:16 line-height:1.4375"
+					id="creategameform"
+				>
+					<label for="gamename"><b>Game Name:</b></label>
+					<input
+						id="gamename"
+						style="color: #111; padding: 4px"
+						type="text"
+						name="gamename"
+					/>
+					<input
+						class="tooltip-button"
+						type="submit"
+						value="Submit"
+					/>
+				</form>
 			</div>
 
-			<div class="margin-horizontal:auto max-width:800">
-				<div
-					class="display:flex flex-wrap:wrap column-gap:44 padding-horizontal:32 row-gap:16 @mq-700--row-gap:32"
+			<div class="flex-basis:296px flex-grow:1">
+				<button
+					class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
+					id="joingamebutton"
+					style="margin-bottom: 16px; width: 100%"
+					type="button"
 				>
-					<div class="flex-basis:296px flex-grow:1">
-						<button
-							class="align-items:center background-color:272b49 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:1e2139"
-							id="creategamebutton"
-							style="margin-bottom: 16px; width: 100%"
-							type="button"
-						>
-							Create Game
-						</button>
+					Join Game
+				</button>
 
-						<p
-							class="color:dddcdd font-family:arvo font-size:16 line-height:1.4375"
-							style="margin-bottom: 16px"
-						>
-							Create a new private game a friend can join.
-						</p>
+				<p
+					class="color:dddcdd font-family:arvo font-size:16 line-height:1.4375"
+					style="margin-bottom: 16px"
+				>
+					Join a private game that a friend has created.
+				</p>
 
-						<form
-							class="color:dddcdd flex-direction:column font-family:arvo font-size:16 gap:16 line-height:1.4375"
-							id="creategameform"
-						>
-							<label for="gamename"><b>Game Name:</b></label>
-							<input
-								id="gamename"
-								style="color: #111; padding: 4px"
-								type="text"
-								name="gamename"
-							/>
-							<input
-								class="tooltip-button"
-								type="submit"
-								value="Submit"
-							/>
-						</form>
-					</div>
-
-					<div class="flex-basis:296px flex-grow:1">
-						<button
-							class="align-items:center background-color:115f77 border-radius:full box-shadow:2_2_0e0514 color:f0f0f0 display:flex font-size:31 font-family:overlock height:66 justify-content:center :hocus--background-color:004962"
-							id="joingamebutton"
-							style="margin-bottom: 16px; width: 100%"
-							type="button"
-						>
-							Join Game
-						</button>
-
-						<p
-							class="color:dddcdd font-family:arvo font-size:16 line-height:1.4375"
-							style="margin-bottom: 16px"
-						>
-							Join a private game that a friend has created.
-						</p>
-
-						<form
-							class="color:dddcdd flex-direction:column font-family:arvo font-size:16 gap:16 line-height:1.4375"
-							id="joingameform"
-						>
-							<label for="gamename"><b>Game Name:</b></label>
-							<input
-								id="gamename"
-								style="color: #111; padding: 4px"
-								type="text"
-								name="gamename"
-							/>
-							<input
-								class="tooltip-button"
-								type="submit"
-								value="Submit"
-							/>
-						</form>
-					</div>
-				</div>
+				<form
+					class="color:dddcdd flex-direction:column font-family:arvo font-size:16 gap:16 line-height:1.4375"
+					id="joingameform"
+				>
+					<label for="gamename"><b>Game Name:</b></label>
+					<input
+						id="gamename"
+						style="color: #111; padding: 4px"
+						type="text"
+						name="gamename"
+					/>
+					<input
+						class="tooltip-button"
+						type="submit"
+						value="Submit"
+					/>
+				</form>
 			</div>
 		</div>
-	</body>
-</html>
+	</div>
+</div>
+{% endblock %}

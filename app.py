@@ -78,7 +78,7 @@ def singlePlayer():
 
 @app.route('/private-match')
 def privatematch():
-	return render_template('private-match.html')
+	return render_template('private-match.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/ladder-match')
 def laddermatch():
