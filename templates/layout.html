@@ -82,12 +82,16 @@
 							x-show="name !== ''"
 							x-cloak
 						>
-							<span x-text="name"></span>
-							<a
-								class="link"
-								href="/logout"
-								>Logout</a
-							>
+							<div class="menu-container">
+								<div class="menu-container__inner">
+									<input id="menu" type="checkbox" name="menu" />
+									<label for="menu" x-text="name" class="link"></label>
+									<ul class="submenu">
+										<li><a href="/profile" class="link">Profile</a></li>
+										<li><a href="/logout" class="link">Logout</a></li>
+									</ul>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>

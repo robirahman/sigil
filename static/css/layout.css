@@ -1,5 +1,6 @@
 body {
 	height: 100%;
+	line-height: 1.5;
 }
 
 body > header {
@@ -30,15 +31,69 @@ body > .main {
 	color: white;
 }
 
-.header-container > h1 {
+.header-container h1 {
 	flex-basis: 50%;
 	justify-content: center;
 }
 
-.header-container > .login-status-container {
-	justify-content: flex-end;
+.header-container h1 a {
+	display: flex;
+	align-items: center;
 }
 
-.header-container > .login-status-container > * {
-    text-align: right;
+.header-container .login-status-container {
+	justify-content: flex-end;
+	align-items: flex-end;
+	font-size: 20px;
+	font-family: overlock, sans-serif;
+}
+
+.header-container .login-status-container > * {
+	display: flex;
+	align-items: center;
+	text-align: right;
+	padding: 10px;
+	height: 36px;
+}
+
+.menu-container {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	height: 100%;
+}
+
+.menu-container .menu-container__inner {
+	position: absolute;
+}
+
+.menu-container input,
+.menu-container ul.submenu {
+	display: none;
+	position: absolute;
+	white-space: nowrap;
+	text-align: left;
+	right: 0;
+}
+
+.menu-container label,
+.menu-container ul.submenu li {
+	position: relative;
+	display: block;
+	cursor: pointer;
+	padding: 5px 10px;
+}
+
+.menu-container ul.submenu {
+	display: block;
+	background: black;
+	transition: transform 0.2s ease-in-out;
+	transform: scaleY(0);
+	transform-origin: top left;
+}
+
+.menu-container input:checked ~ ul.submenu {
+	transform: scaleY(1);
+	border-radius: 5px;
 }
