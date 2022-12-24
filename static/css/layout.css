@@ -88,12 +88,17 @@ body > .main {
 .menu-container ul.submenu {
 	display: block;
 	background: black;
-	transition: transform 0.2s ease-in-out;
 	transform: scaleY(0);
 	transform-origin: top left;
 }
 
+.menu-container label:focus ~ ul.submenu,
+.menu-container label:hover ~ ul.submenu {
+	transition: transform 0.2s ease-in-out;
+}
+
 .menu-container input:checked ~ ul.submenu {
+	transition: transform 0.2s ease-in-out;
 	transform: scaleY(1);
 	border-radius: 5px;
 }
