@@ -1,4 +1,8 @@
 document.addEventListener('alpine:init', () => {
+	const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+	let warnBeforeUnload = !isSafari;
+	window.onbeforeunload = () => warnBeforeUnload ? true : null;
+
 	Alpine.data(
 		'gameBoard',
 		// eslint-disable-next-line no-unused-vars
@@ -468,6 +472,7 @@ document.addEventListener('alpine:init', () => {
 					);
 					_this.showReset = false;
 					_this.winner = payload.winner;
+					warnBeforeUnload = false;
 				}
 
 				function handleUsernameRequestEvent() {
