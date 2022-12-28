@@ -102,3 +102,20 @@ body > .main {
 	transform: scaleY(1);
 	border-radius: 5px;
 }
+
+.login-status-container label,
+.login-status-container .login {
+	border: 1px solid;
+	border-radius: 20px;
+	padding: 5px 10px;
+}
+
+.login-status-container input:checked ~ label {
+	transition: border-radius 0.2s ease-in-out;
+	border-radius: 10px;
+}
+
+.login-status-container label:focus,
+.login-status-container label:hover {
+	transition: border-radius 0.2s ease-in-out;
+}
