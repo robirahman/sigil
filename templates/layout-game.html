@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+
+{% block head %}
+{{ super() }}
+<style>
+	header {
+		position: fixed;
+	}
+	
+	body > .main {
+		height: 100%;
+		padding-top: 0;
+	}
+</style>
+<script>
+	var webpDetector = new Image();
+	webpDetector.onload = function () {
+		document.documentElement.classList.add('webp');
+	};
+	webpDetector.src =
+		'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
+</script>
+{% endblock %}
+
+{% block headerLeft %}
+<h1 class="logo">
+	<a href="/"
+		><span class="visually-hidden">Sigil Online</span
+		><img
+			alt=""
+			src="/static/images/logo-icon.svg"
+			height="40"
+			width="32"
+	/></a>
+</h1>
+{% endblock %}
+
+{% block headerMiddle %}{% endblock %}

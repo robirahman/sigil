@@ -52,8 +52,12 @@
 		<header>
 			<div class="container">
 				<div class="header-container">
-					<div></div>
+					<div>
+						{% block headerLeft %}
+						{% endblock %}
+					</div>
 					<h1>
+						{% block headerMiddle %}
 						<a href="/">
 							<span class="visually-hidden">Sigil Online</span>
 							<img
@@ -64,6 +68,7 @@
 								width="287"
 							/>
 						</a>
+						{% endblock %}
 					</h1>
 					<div
 						class="login-status-container"
