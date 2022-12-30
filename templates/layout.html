@@ -83,6 +83,9 @@
 							x-show="name !== ''"
 							x-cloak
 						>
+							<div x-text="name" class="spacer">
+								<!-- spacer so that, when user is logged in and screen is narrow, the user name doesn't overlap logo -->
+							</div>
 							<div class="menu-container">
 								<div class="menu-container__inner">
 									<input

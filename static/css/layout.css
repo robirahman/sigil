@@ -77,19 +77,19 @@ body > .main {
 	right: 0;
 }
 
+.menu-container ul.submenu {
+	display: block;
+	background: black;
+	transform: scaleY(0);
+	transform-origin: top left;
+}
+
 .menu-container label,
 .menu-container ul.submenu li {
 	position: relative;
 	display: block;
 	cursor: pointer;
 	padding: 5px 10px;
-}
-
-.menu-container ul.submenu {
-	display: block;
-	background: black;
-	transform: scaleY(0);
-	transform-origin: top left;
 }
 
 .menu-container label:focus ~ ul.submenu,
@@ -107,6 +107,11 @@ body > .main {
 .login-status-container .login {
 	border: 1px solid;
 	border-radius: 20px;
+	padding: 5px 10px;
+}
+
+.login-status-container .spacer {
+	visibility: hidden;
 	padding: 5px 10px;
 }
 
