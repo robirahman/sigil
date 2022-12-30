@@ -30,26 +30,6 @@
 			padding-top: 64px;
 		}
 	}
-
-	#ladder a[disabled=true] {
-		filter: grayscale(85%);
-		opacity: 0.4;
-	}
-
-	#ladder .hocus {
-		display: none;
-		font-size: min(5vw, 31px);
-	}
-
-	#ladder a[disabled=true]:focus .default,
-	#ladder:hover a[disabled=true] .default {
-		display: none;
-	}
-
-	#ladder a[disabled=true]:focus .hocus,
-	#ladder:hover a[disabled=true] .hocus {
-		display: inline;
-	}
 </style>
 {% endblock %}
 
@@ -92,31 +72,14 @@
 					>Private Match</a
 				>
 			</li>
-			<li id="ladder">
+			<li>
 				<a
 					class="menu-button large"
 					href="/ladder-match"
+					>Ladder Match</a
 				>
-					<span class="default">Ladder Match</span>
-					<span class="hocus">Thursdays 6pm - 12pm ET</span>
-				</a>
 			</li>
 		</ul>
-
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.40/moment-timezone-with-data-10-year-range.min.js"></script>
-		<script>
-			//disable ladder button unless within time window
-			const nowEastern = moment().tz('America/New_York');
-			const isThursdayEastern = nowEastern.format('dddd') === 'Thursday';
-			const startEastern = moment(nowEastern).hour(12+6).minute(0).second(0);
-			const endEastern = moment(startEastern).add(6, 'h');
-			const enableLadder = isThursdayEastern && nowEastern.isBetween(startEastern, endEastern);
-			if (!enableLadder) {
-				const ladderBtn = document.querySelector('#ladder a');
-				ladderBtn.setAttribute('disabled', 'true');
-			}
-		</script>
 	</div>
 </div>
 <div style="flex-basis: 100vh; min-height: 32px"></div>
