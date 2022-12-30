@@ -27,7 +27,7 @@
 		}
 	}
 
-	#ladder a[disabled=true] {
+	#ladder a[disabled='true'] {
 		filter: grayscale(85%);
 		opacity: 0.4;
 		min-width: 260px;
@@ -38,13 +38,13 @@
 		display: none;
 	}
 
-	#ladder a[disabled=true]:focus .default,
-	#ladder:hover a[disabled=true] .default {
+	#ladder a[disabled='true']:focus .default,
+	#ladder:hover a[disabled='true'] .default {
 		display: none;
 	}
 
-	#ladder a[disabled=true]:focus .hocus,
-	#ladder:hover a[disabled=true] .hocus {
+	#ladder a[disabled='true']:focus .hocus,
+	#ladder:hover a[disabled='true'] .hocus {
 		display: inline;
 	}
 
@@ -119,7 +119,10 @@
 		//disable Join Ladder Match Queue button unless within time window
 		const nowEastern = moment().tz('America/New_York');
 		const isThursdayEastern = nowEastern.format('dddd') === 'Thursday';
-		const startEastern = moment(nowEastern).hour(12+6).minute(0).second(0);
+		const startEastern = moment(nowEastern)
+			.hour(12 + 6)
+			.minute(0)
+			.second(0);
 		const endEastern = moment(startEastern).add(6, 'h');
 		const enableLadder = isThursdayEastern && nowEastern.isBetween(startEastern, endEastern);
 		if (!enableLadder) {
@@ -129,14 +132,14 @@
 
 		//populate leaderboard
 		fetch('/api/leaderboard')
-			.then(res => res.json())
-			.then(leaderboard => {
+			.then((res) => res.json())
+			.then((leaderboard) => {
 				const tableElem = document.querySelector('table');
 				let html = tableElem.innerHTML;
 				for (let leaderRow of leaderboard) {
 					html += '<tr>';
-					html += 	`<td>${leaderRow.name}</td>`;
-					html += 	`<td>${leaderRow.elo}</td>`;
+					html += `<td>${leaderRow.name}</td>`;
+					html += `<td>${leaderRow.elo}</td>`;
 					html += '</tr>';
 				}
 				tableElem.innerHTML = html;

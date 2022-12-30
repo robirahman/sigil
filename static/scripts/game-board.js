@@ -1,7 +1,7 @@
 document.addEventListener('alpine:init', () => {
 	const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 	let warnBeforeUnload = !isSafari;
-	window.onbeforeunload = () => warnBeforeUnload ? true : null;
+	window.onbeforeunload = () => (warnBeforeUnload ? true : null);
 
 	Alpine.data(
 		'gameBoard',
