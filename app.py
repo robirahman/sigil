@@ -163,6 +163,19 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
+@app.route('/api/leaderboard')
+def leaderboard():
+	allUsers = User.query.order_by(User.elo.desc()).all()
+
+	leaderboard = []
+	for user in allUsers:
+		if user.ladder_game_count > 0:
+			leaderboard.append({
+				'name': user.name,
+				'elo': user.elo
+			})
+
+	return json.dumps(leaderboard)
 
 
 

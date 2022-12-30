@@ -26,6 +26,44 @@
 			display: none;
 		}
 	}
+
+	.leaderboard {
+		display: flex;
+		justify-content: center;
+		margin-top: 75px;
+
+		border: 1px solid #ccc;
+		border-radius: 10px;
+		padding: 20px;
+	}
+
+	.leaderboard table {
+		font-family: overlock, serif;
+		min-width: 260px;
+	}
+
+	.leaderboard table td,
+	.leaderboard table th {
+		padding-bottom: 5px;
+	}
+
+	.leaderboard table td:first-child,
+	.leaderboard table th:first-child {
+		text-align: left;
+	}
+
+	.leaderboard table td:last-child,
+	.leaderboard table th:last-child {
+		text-align: right;
+	}
+
+	.leaderboard table th {
+		border-bottom: 1px solid #ccc;
+	}
+
+	.leaderboard table tr:first-child td {
+		padding-top: 10px;
+	}
 </style>
 {% endblock %}
 
@@ -41,5 +79,28 @@
 		href="{{ url_for('laddergame') }}"
 		>Join Ladder Match Queue</a
 	>
+	<div class="leaderboard">
+		<table>
+			<tr>
+				<th>Name</th>
+				<th>Rating</th>
+			</tr>
+		</table>
+		<script>
+			fetch('/api/leaderboard')
+				.then(res => res.json())
+				.then(leaderboard => {
+					const tableElem = document.querySelector('table');
+					let html = tableElem.innerHTML;
+					for (let leaderRow of leaderboard) {
+						html += '<tr>';
+						html += 	`<td>${leaderRow.name}</td>`;
+						html += 	`<td>${leaderRow.elo}</td>`;
+						html += '</tr>';
+					}
+					tableElem.innerHTML = html;
+				});
+		</script>
+	</div>
 </div>
 {% endblock %}
