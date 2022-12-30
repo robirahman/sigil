@@ -177,6 +177,19 @@ def leaderboard():
 	return json.dumps(leaderboard)
 
 
+@app.route('/api/currentladderstats')
+def currentladderstats():
+	global laddergamesinprogress
+	global waiting_player_ws
+
+	currentladderstats = {
+		'laddergamesinprogress': laddergamesinprogress,
+		'waiting_player': waiting_player_ws != None
+	}
+
+	return json.dumps(currentladderstats)
+
+
 
 # createdgames is a dict with keys = gamename, values = [player_websocket]
 createdgames = {}
@@ -218,10 +231,13 @@ def joingame(ws):
 		ws.send(json.dumps(egress))
 
 def record_elo(winner, loser):
+	global laddergamesinprogress
+
 	if winner.board.elo_recorded:
 		return
 
 	winner.board.elo_recorded = True
+	laddergamesinprogress -= 1
 
 	winner_data = User.query.filter_by(name=winner.username).first()
 	loser_data = User.query.filter_by(name=loser.username).first()
@@ -328,11 +344,13 @@ def cleanup_queue():
 
 
 laddergamecount = 0
+laddergamesinprogress = 0
 
 @sock.route('/api/game')
 def playgame(ws):
 	global waiting_player_ws
 	global laddergamecount
+	global laddergamesinprogress
 
 	cleanup_queue()
 	
@@ -347,6 +365,7 @@ def playgame(ws):
 			time.sleep(1)
 	else:
 		laddergamecount += 1
+		laddergamesinprogress += 1
 		opp_ws = waiting_player_ws
 		waiting_player_ws = None
 		board = Board()

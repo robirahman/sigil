@@ -112,6 +112,9 @@
 			</tr>
 		</table>
 	</div>
+	<div class="currentladderstats">
+		
+	</div>
 
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.40/moment-timezone-with-data-10-year-range.min.js"></script>
@@ -143,6 +146,14 @@
 					html += '</tr>';
 				}
 				tableElem.innerHTML = html;
+			});
+
+		//populate currentladderstats
+		fetch('/api/currentladderstats')
+			.then((res) => res.json())
+			.then((currentladderstats) => {
+				document.querySelector('.currentladderstats').innerHTML += currentladderstats.laddergamesinprogress;
+				document.querySelector('.currentladderstats').innerHTML += currentladderstats.waiting_player;
 			});
 	</script>
 </div>
