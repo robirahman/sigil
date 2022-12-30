@@ -109,7 +109,7 @@
 			//disable ladder button unless within time window
 			const nowEastern = moment().tz('America/New_York');
 			const isThursdayEastern = nowEastern.format('dddd') === 'Thursday';
-			const startEastern = moment.tz('6:00 PM', 'hh:mm A', 'America/New_York');
+			const startEastern = moment(nowEastern).hour(12+6).minute(0).second(0);
 			const endEastern = moment(startEastern).add(6, 'h');
 			const enableLadder = isThursdayEastern && nowEastern.isBetween(startEastern, endEastern);
 			if (!enableLadder) {
