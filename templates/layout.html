@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html
-	id="html"
 	class="height:100%"
+	id="html"
 	lang="en"
 >
 	<head>
@@ -88,6 +88,12 @@
 							x-show="name !== ''"
 							x-cloak
 						>
+							<div
+								class="spacer"
+								x-text="name"
+							>
+								<!-- spacer so that, when user is logged in and screen is narrow, the user name doesn't overlap logo -->
+							</div>
 							<div class="menu-container">
 								<div class="menu-container__inner">
 									<input
@@ -127,4 +133,3 @@
 		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>
-

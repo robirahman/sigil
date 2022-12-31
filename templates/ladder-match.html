@@ -26,6 +26,72 @@
 			display: none;
 		}
 	}
+
+	#ladder a[disabled='true'] {
+		filter: grayscale(85%);
+		opacity: 0.4;
+		min-width: 260px;
+		padding: 25px;
+	}
+
+	#ladder .hocus {
+		display: none;
+	}
+
+	#ladder a[disabled='true']:focus .default,
+	#ladder:hover a[disabled='true'] .default {
+		display: none;
+	}
+
+	#ladder a[disabled='true']:focus .hocus,
+	#ladder:hover a[disabled='true'] .hocus {
+		display: inline;
+	}
+
+	.current-ladder-stats {
+		display: flex;
+		flex-direction: column;
+		padding-top: 20px;
+		color: #aaa;
+	}
+
+	.leaderboard {
+		display: flex;
+		justify-content: center;
+		margin-top: 75px;
+		margin-bottom: 20px;
+		border: 1px solid #ccc;
+		border-radius: 10px;
+		padding: 20px;
+	}
+
+	.leaderboard table {
+		font-family: overlock, serif;
+		min-width: min(260px, 70vw);
+	}
+
+	.leaderboard table td,
+	.leaderboard table th {
+		padding-bottom: 5px;
+	}
+
+	.leaderboard table td:first-child,
+	.leaderboard table th:first-child {
+		text-align: left;
+	}
+
+	.leaderboard table td:last-child,
+	.leaderboard table th:last-child {
+		text-align: right;
+	}
+
+	.leaderboard table th {
+		border-bottom: 1px solid #ccc;
+	}
+
+	.leaderboard table tr:first-child td {
+		padding-top: 10px;
+	}
 </style>
 {% endblock %}
 
@@ -36,10 +102,82 @@
 		Join the queue to play a ranked game<br />
 		against a random opponent.
 	</div>
-	<a
-		class="menu-button"
-		href="{{ url_for('laddergame') }}"
-		>Join Ladder Match Queue</a
-	>
+	<div id="ladder">
+		<a
+			class="menu-button join"
+			href="{{ url_for('laddergame') }}"
+		>
+			<span class="default">Join Ladder Match Queue</span>
+			<span class="hocus">Thursdays 6pm - 12pm ET</span>
+		</a>
+	</div>
+	<div class="current-ladder-stats">
+		<div class="progress"></div>
+		<div class="queued"></div>
+	</div>
+	<div class="leaderboard" style="visibility: hidden">
+		<table>
+			<tr>
+				<th>Name</th>
+				<th>Rating</th>
+			</tr>
+		</table>
+	</div>
+
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.40/moment-timezone-with-data-10-year-range.min.js"></script>
+	<script>
+		//disable Join Ladder Match Queue button unless within time window
+		const nowEastern = moment().tz('America/New_York');
+		const isThursdayEastern = nowEastern.format('dddd') === 'Thursday';
+		const startEastern = moment(nowEastern)
+			.hour(12 + 6)
+			.minute(0)
+			.second(0);
+		const endEastern = moment(startEastern).add(6, 'h');
+		const enableLadder = isThursdayEastern && nowEastern.isBetween(startEastern, endEastern);
+		const ladderBtn = document.querySelector('#ladder .join');
+		if (!enableLadder) {
+			ladderBtn.setAttribute('disabled', 'true');
+		}
+
+		//populate current-ladder-stats
+		fetch('/api/currentladderstats')
+			.then((res) => res.json())
+			.then((currentLadderStats) => {
+				const progressElem = document.querySelector('.current-ladder-stats .progress');
+				const queuedElem = document.querySelector('.current-ladder-stats .queued');
+				const gamesInProgress = currentLadderStats.laddergamesinprogress;
+				const isWaitingPlayer = currentLadderStats.waiting_player;
+
+				if (gamesInProgress > 0) {
+					progressElem.innerHTML = `${gamesInProgress} match${gamesInProgress === 1 ? '' : 'es'} in progress`;
+				}
+
+				if (isWaitingPlayer) {
+					queuedElem.innerHTML = `${isWaitingPlayer ? 1 : 0} player${isWaitingPlayer ? '' : 's'} in queue`;
+				}
+
+				if (isWaitingPlayer) {
+					ladderBtn.removeAttribute('disabled');
+				}
+			});
+
+		//populate leaderboard
+		fetch('/api/leaderboard')
+			.then((res) => res.json())
+			.then((leaderboard) => {
+				const tableElem = document.querySelector('table');
+				let html = tableElem.innerHTML;
+				for (let leaderRow of leaderboard) {
+					html += '<tr>';
+					html += `<td>${leaderRow.name}</td>`;
+					html += `<td>${leaderRow.elo}</td>`;
+					html += '</tr>';
+				}
+				tableElem.innerHTML = html;
+				document.querySelector('.leaderboard').style.visibility = 'visible';
+			});
+	</script>
 </div>
 {% endblock %}

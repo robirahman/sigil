@@ -29,7 +29,7 @@ class invalidCheckException(Exception):
 app = Flask(__name__)
 sock = Sock(app)
 # ping every 2 seconds
-app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 2}
+app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 300}
 app.config['SECRET_KEY'] = 'such-high-entropy-wow47830874dh3'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -163,6 +163,31 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
+@app.route('/api/leaderboard')
+def leaderboard():
+	leaderUsers = User.query.filter(User.ladder_game_count > 0).order_by(User.elo.desc()).limit(100).all()
+
+	leaderboard = []
+	for leaderUser in leaderUsers:
+		leaderboard.append({
+			'name': leaderUser.name,
+			'elo': leaderUser.elo
+		})
+
+	return json.dumps(leaderboard)
+
+
+@app.route('/api/currentladderstats')
+def currentladderstats():
+	global laddergamesinprogress
+	global waiting_player_ws
+
+	currentladderstats = {
+		'laddergamesinprogress': laddergamesinprogress,
+		'waiting_player': waiting_player_ws != None
+	}
+
+	return json.dumps(currentladderstats)
 
 
 
@@ -206,10 +231,13 @@ def joingame(ws):
 		ws.send(json.dumps(egress))
 
 def record_elo(winner, loser):
+	global laddergamesinprogress
+
 	if winner.board.elo_recorded:
 		return
 
 	winner.board.elo_recorded = True
+	laddergamesinprogress -= 1
 
 	winner_data = User.query.filter_by(name=winner.username).first()
 	loser_data = User.query.filter_by(name=loser.username).first()
@@ -316,11 +344,13 @@ def cleanup_queue():
 
 
 laddergamecount = 0
+laddergamesinprogress = 0
 
 @sock.route('/api/game')
 def playgame(ws):
 	global waiting_player_ws
 	global laddergamecount
+	global laddergamesinprogress
 
 	cleanup_queue()
 	
@@ -335,6 +365,7 @@ def playgame(ws):
 			time.sleep(1)
 	else:
 		laddergamecount += 1
+		laddergamesinprogress += 1
 		opp_ws = waiting_player_ws
 		waiting_player_ws = None
 		board = Board()
