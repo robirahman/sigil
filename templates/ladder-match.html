@@ -104,7 +104,7 @@
 			<span class="hocus">Thursdays 6pm - 12pm ET</span>
 		</a>
 	</div>
-	<div class="leaderboard">
+	<div class="leaderboard" style="visibility: hidden">
 		<table>
 			<tr>
 				<th>Name</th>
@@ -146,6 +146,7 @@
 					html += '</tr>';
 				}
 				tableElem.innerHTML = html;
+				document.querySelector('.leaderboard').style.visibility = 'visible';
 			});
 
 		//populate currentladderstats
