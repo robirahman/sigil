@@ -48,6 +48,13 @@
 		display: inline;
 	}
 
+	.current-ladder-stats {
+		display: flex;
+		flex-direction: column;
+		padding-top: 20px;
+		color: #aaa;
+	}
+
 	.leaderboard {
 		display: flex;
 		justify-content: center;
@@ -104,6 +111,10 @@
 			<span class="hocus">Thursdays 6pm - 12pm ET</span>
 		</a>
 	</div>
+	<div class="current-ladder-stats">
+		<div class="progress"></div>
+		<div class="queued"></div>
+	</div>
 	<div class="leaderboard" style="visibility: hidden">
 		<table>
 			<tr>
@@ -111,9 +122,6 @@
 				<th>Rating</th>
 			</tr>
 		</table>
-	</div>
-	<div class="currentladderstats">
-		
 	</div>
 
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
@@ -128,10 +136,32 @@
 			.second(0);
 		const endEastern = moment(startEastern).add(6, 'h');
 		const enableLadder = isThursdayEastern && nowEastern.isBetween(startEastern, endEastern);
+		const ladderBtn = document.querySelector('#ladder .join');
 		if (!enableLadder) {
-			const ladderBtn = document.querySelector('#ladder .join');
 			ladderBtn.setAttribute('disabled', 'true');
 		}
+
+		//populate current-ladder-stats
+		fetch('/api/currentladderstats')
+			.then((res) => res.json())
+			.then((currentLadderStats) => {
+				const progressElem = document.querySelector('.current-ladder-stats .progress');
+				const queuedElem = document.querySelector('.current-ladder-stats .queued');
+				const gamesInProgress = currentLadderStats.laddergamesinprogress;
+				const isWaitingPlayer = currentLadderStats.waiting_player;
+
+				if (gamesInProgress > 0) {
+					progressElem.innerHTML = `${gamesInProgress} match${gamesInProgress === 1 ? '' : 'es'} in progress`;
+				}
+
+				if (isWaitingPlayer) {
+					queuedElem.innerHTML = `${isWaitingPlayer ? 1 : 0} player${isWaitingPlayer ? '' : 's'} in queue`;
+				}
+
+				if (isWaitingPlayer) {
+					ladderBtn.removeAttribute('disabled');
+				}
+			});
 
 		//populate leaderboard
 		fetch('/api/leaderboard')
@@ -147,14 +177,6 @@
 				}
 				tableElem.innerHTML = html;
 				document.querySelector('.leaderboard').style.visibility = 'visible';
-			});
-
-		//populate currentladderstats
-		fetch('/api/currentladderstats')
-			.then((res) => res.json())
-			.then((currentladderstats) => {
-				document.querySelector('.currentladderstats').innerHTML += currentladderstats.laddergamesinprogress;
-				document.querySelector('.currentladderstats').innerHTML += currentladderstats.waiting_player;
 			});
 	</script>
 </div>
