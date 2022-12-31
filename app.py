@@ -74,7 +74,7 @@ singleplayercount = 0
 def singlePlayer():
 	global singleplayercount
 	singleplayercount += 1
-	return render_template('single-player.html')
+	return render_template('single-player.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/private-match')
 def privatematch():
