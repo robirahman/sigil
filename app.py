@@ -82,6 +82,7 @@ def privatematch():
 
 @app.route('/ladder-match')
 def laddermatch():
+	cleanup_queue()
 	return render_template('ladder-match.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/private-game/<gamename>')
