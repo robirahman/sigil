@@ -76,7 +76,7 @@
 	border-bottom-right-radius: 2px;
 }
 
-.ladder-details .name {
+.ladder-details__card .name {
 	white-space: nowrap;
 	font-weight: bold;
 }
