@@ -30,7 +30,7 @@ class invalidCheckException(Exception):
 app = Flask(__name__)
 sock = Sock(app)
 # ping every 2 seconds
-app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 300}
+app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 2}
 app.config['SECRET_KEY'] = 'such-high-entropy-wow47830874dh3'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
