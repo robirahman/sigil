@@ -42,12 +42,6 @@ document.addEventListener('alpine:init', () => {
 			whoseTurn: '',
 			winner: '',
 
-			formatTimer(timerSeconds) {
-				const sec = timerSeconds % 60;
-				const min = (timerSeconds - sec) / 60;
-				return `${min}:${sec.toString().padStart(2, '0')}`;
-			},
-
 			closeSpellTooltip() {
 				this.activeSpell = '';
 				if (this.spellTooltip.destroy) {
