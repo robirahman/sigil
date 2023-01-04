@@ -86,13 +86,13 @@ def laddermatch():
 
 @app.route('/private-game/<gamename>')
 def privategameboard(gamename):
-	return render_template('two-player.html', privategamename= gamename, username= '', elo= '')
+	return render_template('two-player.html', privategamename=gamename, elo='', current_user_name=getattr(current_user, 'name', ''))
 
 # If privategamename is empty, it's a ladder game
 @app.route('/ladder-game')
 @login_required
 def laddergame():
-	return render_template('two-player.html', privategamename= '', username=current_user.name, check=current_user.password[8:16], elo=current_user.elo)
+	return render_template('two-player.html', privategamename='', check=current_user.password[8:16], elo=current_user.elo, current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/profile')
 @login_required
