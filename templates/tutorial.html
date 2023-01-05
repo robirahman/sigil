@@ -8,6 +8,32 @@
 	rel="stylesheet"
 	href="https://cdn.jsdelivr.net/npm/shepherd.js@10.0.1/dist/css/shepherd.css"
 /> -->
+<style>
+	.shepherd-tooltip .shepherd-footer {
+		display: flex;
+		justify-content: space-between;
+	}
+
+	.shepherd-tooltip .shepherd-text {
+		transition: max-height 0.5s ease-in-out;
+		max-height: 500px;
+		overflow: hidden;
+	}
+
+	.shepherd-tooltip .shepherd-footer button:last-child div {
+		transition: transform 0.5s ease-in-out;
+		transform: rotate(0deg);
+	}
+
+	.shepherd-tooltip.collapsed .shepherd-text {
+		transition: max-height 0.5s ease-in-out;
+		max-height: 0;
+	}
+
+	.shepherd-tooltip.collapsed .shepherd-footer button:last-child div {
+		transform: rotate(-90deg);
+	}
+</style>
 {% endblock %}
 
 {% block content %}

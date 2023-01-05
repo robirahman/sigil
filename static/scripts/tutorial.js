@@ -240,6 +240,10 @@ document.addEventListener('alpine:init', () => {
 								action: advanceTour,
 								text: 'Next',
 							},
+							{
+								action: toggleStepCollapsed,
+								text: '<div>^</div>',
+							},
 						],
 						id: `tutorial-${index + 1}`,
 						text: text,
@@ -1779,6 +1783,11 @@ document.addEventListener('alpine:init', () => {
 					resetRequiredTutorialActions();
 					_this.tutorial.next();
 				}
+			}
+
+			function toggleStepCollapsed() {
+				const shepherdStepElem = document.querySelector('.shepherd-tooltip:last-child');
+				shepherdStepElem.classList.toggle('collapsed');
 			}
 
 			function showTutorialStepPointers(selectors, options) {
