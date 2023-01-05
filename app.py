@@ -92,7 +92,7 @@ def privategameboard(gamename):
 @app.route('/ladder-game')
 @login_required
 def laddergame():
-	return render_template('two-player.html', privategamename='', check=current_user.password[8:16], elo=current_user.elo, current_user_name=getattr(current_user, 'name', ''))
+	return render_template('two-player.html', privategamename='', check=current_user.password[8:16], elo=current_user.elo, current_user_name=current_user.name)
 
 @app.route('/profile')
 @login_required
