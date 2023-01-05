@@ -15,6 +15,7 @@ from threading import Thread
 from simple_websocket import ConnectionClosed
 from datetime import datetime
 from pytz import timezone
+from sqlalchemy import func
 
 from game import Board, Player, resetException, redwinsException, bluewinsException
 from singleplayergame import SPBoard, AIPlayer
@@ -29,7 +30,7 @@ class invalidCheckException(Exception):
 app = Flask(__name__)
 sock = Sock(app)
 # ping every 2 seconds
-app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 300}
+app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 2}
 app.config['SECRET_KEY'] = 'such-high-entropy-wow47830874dh3'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -82,6 +83,7 @@ def privatematch():
 
 @app.route('/ladder-match')
 def laddermatch():
+	cleanup_queue()
 	return render_template('ladder-match.html', current_user_name=getattr(current_user, 'name', ''))
 
 @app.route('/private-game/<gamename>')
@@ -110,7 +112,7 @@ def login_post():
     password = request.form.get('password')
     remember = True if request.form.get('remember') else False
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter(func.lower(User.email) == func.lower(email)).first()
 
     # check if the user actually exists
     # take the user-supplied password, hash it, and compare it to the hashed password in the database

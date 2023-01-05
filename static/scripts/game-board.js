@@ -1,5 +1,6 @@
 document.addEventListener('alpine:init', () => {
-	let warnBeforeUnload = true;
+	const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+	let warnBeforeUnload = !isSafari;
 	window.onbeforeunload = () => (warnBeforeUnload ? true : null);
 
 	Alpine.data(
