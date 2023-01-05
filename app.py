@@ -66,7 +66,7 @@ tutorialcount = 0
 def tutorialAndRules():
 	global tutorialcount
 	tutorialcount += 1
-	return render_template('tutorial.html')
+	return render_template('tutorial.html', current_user_name=getattr(current_user, 'name', ''))
 
 singleplayercount = 0
 

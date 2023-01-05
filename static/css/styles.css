@@ -1512,7 +1512,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	max-width: 360px;
 	padding: 8px;
 	transition: opacity 0.3s, visibility 0.3s;
-	z-index: 1;
+	z-index: 2;
 }
 
 .shepherd-tooltip:focus-visible {
