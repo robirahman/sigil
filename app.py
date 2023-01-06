@@ -331,11 +331,9 @@ def cleanup_queue():
 
 	try:
 		if waiting_player_ws and waiting_chatter_ws:
-			egress =  {"type": "message", "message": "Waiting for opponent to join...", "awaiting": None, }
+			egress =  {"type": "message", "message": "Searching for an opponent...", "awaiting": None, }
 			waiting_player_ws.send(json.dumps(egress))
 
-			egress = {"type": "chatmessage", "player": "", "message": " " }
-			waiting_chatter_ws.send(json.dumps(egress))
 		else:
 			waiting_player_ws = None
 			waiting_chatter_ws = None
@@ -357,7 +355,7 @@ def playgame(ws):
 	cleanup_queue()
 	
 	if not waiting_player_ws:
-		egress =  {"type": "message", "message": "Waiting for opponent to join...", "awaiting": None, }
+		egress =  {"type": "message", "message": "Searching for an opponent...", "awaiting": None, }
 		ws.send(json.dumps(egress))
 		waiting_player_ws = ws
 		while True:
