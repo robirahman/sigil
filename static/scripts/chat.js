@@ -22,8 +22,14 @@ document.addEventListener('alpine:init', () => {
 			const apiPath = gameName ? `privatechat/${gameName}` : 'chat';
 			const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 			_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
-			_this.events.onclose = () => Alpine.store('dcModal').onSocketDisconnect(apiPath);
 			_this.events.onmessage = handleIncomingEvent;
+
+			_this.events.onclose = () => {
+				const gameIsOver = _this.chatHistory.slice(-1).includes('Game over');
+				if (!gameIsOver) {
+					Alpine.store('dcModal').onSocketDisconnect(apiPath);
+				}
+			};
 
 			_this.sendEvent = function sendEvent(message) {
 				_this.events.send(JSON.stringify({ message }));
