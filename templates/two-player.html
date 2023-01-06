@@ -26,14 +26,6 @@
 				const sec = timerSeconds % 60;
 				const min = (timerSeconds - sec) / 60;
 				return `${min}:${sec.toString().padStart(2, '0')}`;
-			},
-
-			getDisplayName(name) {
-				if (name.length > 6) {
-					return name.substr(0, 4) + '...';
-				} else {
-					return name;
-				}
 			}
 		});
 	});
@@ -48,8 +40,7 @@
 		<div class="red">
 			<span
 				class="name"
-				x-bind:title="redName"
-				x-text="getDisplayName(redName)"
+				x-text="redName"
 			></span
 			>&nbsp;(<span
 				class="elo"
@@ -84,8 +75,7 @@
 		<div class="blue">
 			<span
 				class="name"
-				x-bind:title="blueName"
-				x-text="getDisplayName(blueName)"
+				x-text="blueName"
 			></span
 			>&nbsp;(<span
 				class="elo"
