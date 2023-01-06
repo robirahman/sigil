@@ -496,8 +496,7 @@
 			id="message"
 			x-model="message"
 			x-ref="chatMessage"
-			x-on:keydown.cmd.enter="handleSubmit"
-			x-on:keydown.ctrl.enter="handleSubmit"
+			x-on:keydown.enter="handleSubmit"
 		></textarea>
 		<button class="chat__button">
 			<img

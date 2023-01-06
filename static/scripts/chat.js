@@ -3,10 +3,13 @@ document.addEventListener('alpine:init', () => {
 		chatHistory: [],
 		message: '',
 
-		handleSubmit() {
+		handleSubmit(e) {
+			if (e.shiftKey && e.key === 'Enter') return;
+			if (!this.message) return;
+
 			this.sendEvent(this.message);
-			this.message = '';
 			this.$nextTick(() => {
+				this.message = '';
 				this.$refs.chatMessage.focus();
 			});
 		},
