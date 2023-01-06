@@ -5,9 +5,11 @@ document.addEventListener('alpine:init', () => {
 
 		handleSubmit(e) {
 			if (e.shiftKey && e.key === 'Enter') return;
-			if (!this.message) return;
 
-			this.sendEvent(this.message);
+			if (this.message.trim()) {
+				this.sendEvent(this.message);
+			}
+			
 			this.$nextTick(() => {
 				this.message = '';
 				this.$refs.chatMessage.focus();
