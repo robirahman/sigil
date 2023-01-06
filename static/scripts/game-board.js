@@ -185,6 +185,7 @@ document.addEventListener('alpine:init', () => {
 					playerCount === 1 ? 'singleplayergame' : gameName ? `privategame/${gameName}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 				_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
+				_this.events.onclose = () => Alpine.store('dcModal').onSocketDisconnect(apiPath);
 				_this.events.onmessage = handleIncomingEvent;
 
 				_this.sendEvent = function sendEvent(message) {

@@ -124,3 +124,40 @@ body > .main {
 	transition: border-radius 0.2s ease-in-out;
 	border-radius: 10px;
 }
+
+.dc-modal-holder {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	pointer-events: none;
+	z-index: 10;
+}
+
+.dc-modal-holder .modal {
+	padding: min(35px, 10vw);
+	border-radius: 15px;
+	background: black;
+	color: white;
+	font-size: min(24px, 5vw);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	pointer-events: all;
+	border: 3px solid orangered;
+	box-shadow: 0px 0px 6px 3px black;
+}
+
+.dc-modal-holder li {
+    color: grey;
+	text-align: center;
+}
+
+.dc-modal-holder button {
+	margin-top: 10px;
+}
