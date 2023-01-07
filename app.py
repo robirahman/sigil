@@ -167,7 +167,7 @@ def logout():
 
 @app.route('/api/leaderboard')
 def leaderboard():
-	leaderUsers = User.query.filter(User.ladder_game_count > 0).order_by(User.elo.desc()).limit(100).all()
+	leaderUsers = User.query.filter(User.ladder_game_count > 0).order_by(User.elo.desc()).limit(15).all()
 
 	leaderboard = []
 	for leaderUser in leaderUsers:
