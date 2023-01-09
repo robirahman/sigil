@@ -26,7 +26,6 @@ class invalidCheckException(Exception):
 
 
 
-
 app = Flask(__name__)
 sock = Sock(app)
 # ping every 2 seconds
