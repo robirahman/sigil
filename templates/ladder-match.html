@@ -115,7 +115,10 @@
 		<div class="progress"></div>
 		<div class="queued"></div>
 	</div>
-	<div class="leaderboard" style="visibility: hidden">
+	<div
+		class="leaderboard"
+		style="visibility: hidden"
+	>
 		<table>
 			<tr>
 				<th>Name</th>
@@ -151,11 +154,15 @@
 				const isWaitingPlayer = currentLadderStats.waiting_player;
 
 				if (gamesInProgress > 0) {
-					progressElem.innerHTML = `${gamesInProgress} match${gamesInProgress === 1 ? '' : 'es'} in progress`;
+					progressElem.innerHTML = `${gamesInProgress} match${
+						gamesInProgress === 1 ? '' : 'es'
+					} in progress`;
 				}
 
 				if (isWaitingPlayer) {
-					queuedElem.innerHTML = `${isWaitingPlayer ? 1 : 0} player${isWaitingPlayer ? '' : 's'} in queue`;
+					queuedElem.innerHTML = `${isWaitingPlayer ? 1 : 0} player${
+						isWaitingPlayer ? '' : 's'
+					} in queue`;
 				}
 
 				if (isWaitingPlayer) {

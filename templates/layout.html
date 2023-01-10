@@ -52,10 +52,7 @@
 		<header>
 			<div class="container">
 				<div class="header-container">
-					<div>
-						{% block headerLeft %}
-						{% endblock %}
-					</div>
+					<div>{% block headerLeft %}{% endblock %}</div>
 					<h1>
 						{% block headerMiddle %}
 						<a href="/">
@@ -136,10 +133,10 @@
 			document.addEventListener('alpine:init', () => {
 				Alpine.store('dcModal', {
 					dcSocketNames: [],
-					
+
 					onSocketDisconnect(name) {
 						this.dcSocketNames.push(name);
-					}
+					},
 				});
 			});
 		</script>
@@ -159,8 +156,9 @@
 				<button
 					class="link"
 					x-on:click="dcSocketNames.length = 0"
-					>OK</button
 				>
+					OK
+				</button>
 			</div>
 		</div>
 

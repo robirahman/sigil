@@ -9,7 +9,7 @@ document.addEventListener('alpine:init', () => {
 			if (this.message.trim()) {
 				this.sendEvent(this.message);
 			}
-			
+
 			this.$nextTick(() => {
 				this.message = '';
 				this.$refs.chatMessage.focus();

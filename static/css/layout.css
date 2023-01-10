@@ -21,6 +21,15 @@ body > .main {
 	padding-top: 5vh;
 }
 
+.dc-modal-holder li {
+	color: grey;
+	text-align: center;
+}
+
+.dc-modal-holder button {
+	margin-top: 10px;
+}
+
 .header-container {
 	display: flex;
 }
@@ -150,14 +159,5 @@ body > .main {
 	align-items: center;
 	pointer-events: all;
 	border: 3px solid orangered;
-	box-shadow: 0px 0px 6px 3px black;
-}
-
-.dc-modal-holder li {
-    color: grey;
-	text-align: center;
-}
-
-.dc-modal-holder button {
-	margin-top: 10px;
+	box-shadow: 0 0 6px 3px black;
 }
