@@ -42,6 +42,19 @@ document.addEventListener('alpine:init', () => {
 			validMoves: {},
 			whoseTurn: '',
 			winner: '',
+			redName: '',
+			blueName: '',
+			redElo: 0,
+			blueElo: 0,
+			redTimer: 0,
+			blueTimer: 0,
+			isLadder: false,
+
+			formatTimer(timerSeconds) {
+				const sec = timerSeconds % 60;
+				const min = (timerSeconds - sec) / 60;
+				return `${min}:${sec.toString().padStart(2, '0')}`;
+			},
 
 			closeSpellTooltip() {
 				this.activeSpell = '';
@@ -479,29 +492,26 @@ document.addEventListener('alpine:init', () => {
 
 				//debug_spoofEvent({ type: 'red_timer', seconds: 9 });
 				function handleColorTimerEvent(payload, color) {
-					const ladderDetailsStore = Alpine.store('ladderDetails');
-					if (!ladderDetailsStore) return;
-
 					const timerSeconds = payload.seconds;
 					if (color === 'red') {
-						ladderDetailsStore.redTimer = timerSeconds;
+						_this.redTimer = timerSeconds;
 					} else {
-						ladderDetailsStore.blueTimer = timerSeconds;
+						_this.blueTimer = timerSeconds;
 					}
 				}
 
 				//debug_spoofEvent({ type: 'laddersetup', red_name: 'Rachel', blue_name: 'Basil', red_elo: 1001, blue_elo: 999, red_timer: 900, blue_timer: 900 });
 				function handleLadderSetupEvent(payload) {
-					const ladderDetailsStore = Alpine.store('ladderDetails');
-					if (!ladderDetailsStore) return;
-					
-					ladderDetailsStore.redName = payload.red_name;
-					ladderDetailsStore.blueName = payload.blue_name;
-					ladderDetailsStore.redElo = payload.red_elo;
-					ladderDetailsStore.blueElo = payload.blue_elo;
-					ladderDetailsStore.redTimer = payload.red_timer;
-					ladderDetailsStore.blueTimer = payload.blue_timer;
-					ladderDetailsStore.isLadder = true;
+					_this.redName = payload.red_name;
+					_this.blueName = payload.blue_name;
+					_this.redElo = payload.red_elo;
+					_this.blueElo = payload.blue_elo;
+					_this.redTimer = payload.red_timer;
+					_this.blueTimer = payload.blue_timer;
+					_this.isLadder = true;
+
+					const loginStatusContainerElem = document.querySelector('.login-status-container');
+					loginStatusContainerElem.classList.add('ladder-game-started');
 				}
 			},
 		})
