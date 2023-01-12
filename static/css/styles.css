@@ -581,7 +581,26 @@ html.webp {
 	top: 95px;
 }
 
+.feed--history li {
+	color: white;
+}
+
+@keyframes new-message-frames {
+	0% {
+		color: red;
+	}
+
+	66% {
+		color: red;
+	}
+
+	100% {
+		color: white;
+	}
+}
+
 .feed--history :last-child {
+	animation: new-message-frames 3s ease-in;
 	font-weight: bold;
 }
 
