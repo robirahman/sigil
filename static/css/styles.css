@@ -798,11 +798,10 @@ html.webp {
 /* </dice> */
 
 .actions {
-	bottom: 15px;
+	bottom: 55px;
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	left: 15px;
 	position: fixed;
 	pointer-events: none;
 	visibility: hidden;
@@ -1491,7 +1490,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	transform: scale(10);
 	visibility: hidden;
 	width: 100%;
-	z-index: 2;
+	z-index: 3;
 }
 
 .win-modal.is-visible {
@@ -1531,7 +1530,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	max-width: 360px;
 	padding: 8px;
 	transition: opacity 0.3s, visibility 0.3s;
-	z-index: 2;
+	z-index: 3;
 }
 
 .shepherd-tooltip:focus-visible {
