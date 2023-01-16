@@ -570,7 +570,6 @@ html.webp {
 }
 
 @media (any-pointer: coarse) {
-	.feed,
 	.dice {
 		pointer-events: none;
 	}
