@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		showContent();
 	});
 
+	const labelElem = document.querySelector('.help-menu-container label');
+	const submenuContainerElem = document.querySelector('.help-menu-container .submenu-container');
 	const helpMenuCheckbox = document.querySelector('.help-menu-container #help-menu');
 	helpMenuCheckbox.addEventListener('change', () => {
 		const isOpening = helpMenuCheckbox.checked;
@@ -36,6 +38,15 @@ document.addEventListener('DOMContentLoaded', () => {
 			contentElem.classList.remove('after-open-transition');
 
 			containerElem.classList.add('open');
+
+			//close on click away
+			const onAnyClick = event => {
+				if (!submenuContainerElem.contains(event.target) && !labelElem.contains(event.target)) {
+					helpMenuCheckbox.checked = false; //close
+					document.removeEventListener('click', onAnyClick);
+				}
+			}
+			document.addEventListener('click', onAnyClick);
 		} else {
 			containerElem.classList.remove('open');
 		}
