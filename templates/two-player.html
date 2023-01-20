@@ -178,7 +178,7 @@
 
 			<div
 				class="actions"
-				x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass')}"
+				x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass') || !(isLadder || !winner)}"
 			>
 				<button
 					class="action-button action-button--reset-turn"
@@ -200,6 +200,22 @@
 					x-on:click="handleEndTurn"
 				>
 					End Turn
+				</button>
+				<button
+					class="action-button action-button--rematch"
+					x-bind:class="{ 'is-hidden': isLadder || !winner }"
+					x-on:click="offerOrAcceptRematch"
+					x-bind:disabled="selfOfferedRematch || rematchOpponentDisconnected"
+				>
+					<span x-show="!rematchOpponentDisconnected">
+						<span x-show="!selfOfferedRematch && !opponentOfferedRematch">Offer Rematch</span>
+						<span x-show="!selfOfferedRematch && opponentOfferedRematch">Accept Rematch</span>
+						<span x-show="selfOfferedRematch && !opponentOfferedRematch">Offering Rematch</span>
+						<span x-show="selfOfferedRematch && opponentOfferedRematch">Starting Rematch</span>
+					</span>
+					<span x-show="rematchOpponentDisconnected">
+						Opponent Disconnected
+					</span>
 				</button>
 			</div>
 		</div>

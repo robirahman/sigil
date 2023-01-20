@@ -49,6 +49,13 @@ document.addEventListener('alpine:init', () => {
 			redTimer: 0,
 			blueTimer: 0,
 			isLadder: false,
+			selfOfferedRematch: false,
+			opponentOfferedRematch: false,
+			rematchOpponentDisconnected: false,
+			
+			offerOrAcceptRematch() {
+				console.log('Cannot offer/accept rematch until game has ended.');
+			},
 
 			formatTimer(timerSeconds) {
 				const sec = timerSeconds % 60;
@@ -480,6 +487,63 @@ document.addEventListener('alpine:init', () => {
 					_this.showReset = false;
 					_this.winner = payload.winner;
 					warnBeforeUnload = false;
+
+					//build rematchGameName
+					const regex = /(.*?)_REMATCH(\d+)$/;
+					const matches = gameName.match(regex) || [];
+					const baseGameName = matches[1] || gameName;
+					const rematchNumber = matches[2] || 0;
+					const rematchGameName = `${baseGameName}_REMATCH${+rematchNumber + 1}`;
+
+					const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
+					const rematchWs = new WebSocket(`${apiProtocol}//${location.host}/api/rematch/${rematchGameName}`);
+
+					rematchWs.onclose = () => {
+						//wait a second so dc modal doesn't appear as user is being redirected
+						setTimeout(() => {
+							if (!_this.rematchOpponentDisconnected) {
+								Alpine.store('dcModal').onSocketDisconnect(`rematch/${rematchGameName}`);
+							}
+						}, 1000);
+					};
+	
+					rematchWs.addEventListener('message', event => {
+						const payload = JSON.parse(event.data);
+						switch (payload.type) {
+							case 'offeredrematch':
+								_this.opponentOfferedRematch = true;
+								break;
+							case 'startprivategame':
+								// Update this if we switch to HTTPS
+								window.location.href = '/private-game/' + payload.gamename;
+								break;
+							case 'opponentdisconnected':
+								_this.rematchOpponentDisconnected = true;
+								rematchWs.send(JSON.stringify({
+									type: 'disconnect'
+								}));
+								break;
+							case 'ping':
+								break;
+							default:
+								console.error(`Error: Socket /api/rematch/${rematchGameName} received message with unknown type: ${payload.type}`);
+						}
+					});
+
+					_this.offerOrAcceptRematch = () => {
+						if (_this.opponentOfferedRematch) {
+							const payload = {
+								type: 'acceptrematch'
+							};
+							rematchWs.send(JSON.stringify(payload));
+						} else {
+							_this.selfOfferedRematch = true;
+							const payload = {
+								type: 'offerrematch'
+							};
+							rematchWs.send(JSON.stringify(payload));
+						}
+					};
 				}
 
 				function handleUsernameRequestEvent() {

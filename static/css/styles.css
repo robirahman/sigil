@@ -885,6 +885,19 @@ html.webp {
 	background: #8f1e1e;
 }
 
+.action-button--rematch {
+	background: #18751c;
+}
+
+.action-button--rematch:focus,
+.action-button--rematch:hover {
+	background: #1e9623;
+}
+
+.action-button--rematch:disabled {
+	filter: grayscale(1);
+}
+
 /* <BoardAndNodes> */
 .game-board-container {
 	--margin-top: 40px;

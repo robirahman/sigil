@@ -238,6 +238,72 @@ def joingame(ws):
 		egress =  {"type": "notfound"}
 		ws.send(json.dumps(egress))
 
+
+
+# Periodically ping both players considering a rematch private game so that if one disconnects, the other is told.
+def rematch_game_ping(wslist):
+	while True:
+		try:
+			egress =  {"type": "ping"}
+			for ws in wslist:
+				ws.send(json.dumps(egress))
+			time.sleep(3)
+		except:
+			for ws in wslist:
+				try:
+					egress = {"type": "opponentdisconnected"}
+					ws.send(json.dumps(egress))
+				except:
+					pass
+			break
+
+rematchwslistbygamename = {}
+
+@sock.route('/api/rematch/<privategamename>')
+def rematch(ws, privategamename):
+	# ws will close as this function exits
+	global rematchwslistbygamename
+	global privategamecount
+
+	rematchwslistbygamename[privategamename] = rematchwslistbygamename.get(privategamename, [])
+	rematchwslistbygamename[privategamename].append(ws)
+	time.sleep(3)
+	rematchwslist = rematchwslistbygamename[privategamename]
+
+	if (len(rematchwslist) < 2):
+		for rematchws in rematchwslist:
+			egress = {"type": "opponentdisconnected"}
+			rematchws.send(json.dumps(egress))
+		return
+
+	rematch_game_ping_thread = Thread(target=rematch_game_ping, kwargs={"wslist": rematchwslist})
+	rematch_game_ping_thread.start()
+
+	while True:
+		ingress = ws.receive()
+		msgtype = json.loads(ingress)['type']
+
+		if (msgtype == 'offerrematch'):
+			for rematchws in rematchwslist:
+				if rematchws != ws:
+					egress =  {"type": "offeredrematch"}
+					rematchws.send(json.dumps(egress))
+		elif (msgtype == 'acceptrematch'):
+			egress =  {"type": "startprivategame", "gamename": privategamename}
+			for rematchws in rematchwslist:
+				rematchws.send(json.dumps(egress))
+				rematchws.close()
+			privategamecount += 1
+			break
+		elif (msgtype == 'disconnect'):
+			for rematchws in rematchwslist:
+				rematchws.close()
+			break
+		else:
+			raise 'Error: Socket /api/rematch/' + privategamename + ' received message with unknown type: ' + msgtype
+
+
+
 def record_elo(winner, loser):
 	global laddergamesinprogress
 
