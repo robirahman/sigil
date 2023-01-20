@@ -213,6 +213,13 @@ def creategame(ws):
 		ws.send(json.dumps(egress))
 		while True:
 			time.sleep(1)
+			# make sure the player is still there. If not, allow thread to die.
+			try:
+				egress =  {"type": "ping"}
+				ws.send(json.dumps(egress))
+			except:
+				### disconnected
+				break
 
 @sock.route('/api/joingame')
 def joingame(ws):
