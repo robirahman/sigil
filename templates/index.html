@@ -30,6 +30,45 @@
 			padding-top: 64px;
 		}
 	}
+
+	.menu-buttons li .hocus-holder {
+		display: flex;
+		justify-content: center;
+		overflow: visible;
+		height: 0;
+	}
+
+	.menu-buttons li .hocus-holder > div {
+		color: white;
+		width: fit-content;
+		height: fit-content;
+		max-width: 60%;
+		border: 1px solid black;
+		box-shadow: 0px 1px 3px black;
+		border-radius: 5px;
+		margin-top: -10px;
+		padding: 5px;
+		z-index: 1;
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.menu-buttons li .hocus-holder > div:hover,
+	.menu-buttons li a:focus ~ .hocus-holder > div,
+	.menu-buttons li a:hover ~ .hocus-holder > div {
+		color: white;
+		background: black;
+		border: 1px solid black;
+		border-radius: 5px;
+		padding: 5px;
+		opacity: 1;
+		transition: opacity 0.2s ease-out;
+		transition-delay: 0.8s;
+	}
+
+	.menu-buttons li a:focus ~ .hocus-holder > div {
+		transition-delay: 0.2s;
+	}
 </style>
 {% endblock %}
 
@@ -42,55 +81,67 @@
 		</p>
 
 		<ul
-			class="display:flex flex-wrap:wrap column-gap:44 padding-horizontal:32 row-gap:16 @mq-700--row-gap:32"
+			class="menu-buttons display:flex flex-wrap:wrap column-gap:44 padding-horizontal:32 row-gap:16 @mq-700--row-gap:32"
 		>
 			<li class="half">
 				<a
 					class="menu-button large dark"
-					title="Learn to play"
 					href="/tutorial"
 					>Tutorial</a
 				>
+				<div class="hocus-holder">
+					<div>Learn to play</div>
+				</div>
 			</li>
 			<li class="half">
 				<a
 					class="menu-button large dark"
-					title="Strategy guides, product updates, and more"
 					href="https://pineislandgames.com/sigil"
 					>Learn More</a
 				>
+				<div class="hocus-holder">
+					<div>Strategy guides, product updates, and more</div>
+				</div>
 			</li>
 			<li class="half">
 				<a
 					class="menu-button large dark"
-					title="Talk strategy & find opponents"
 					href="https://discord.gg/vTSjFjydFE"
 					>Discord</a
 				>
+				<div class="hocus-holder">
+					<div>Talk strategy & find opponents</div>
+				</div>
 			</li>
 			<li>
 				<a
 					class="menu-button large"
-					title="Hone your skills"
 					href="/single-player"
 					>Single Player</a
 				>
+				<div class="hocus-holder">
+					<div>Hone your skills</div>
+				</div>
 			</li>
 			<li>
 				<a
 					class="menu-button large"
-					title="Challenge your friends"
 					href="/private-match"
 					>Private Match</a
 				>
+				<div class="hocus-holder">
+					<div>Challenge your friends</div>
+				</div>
 			</li>
 			<li>
 				<a
 					class="menu-button large"
-					title="Test your skills"
 					href="/ladder-match"
 					>Ladder Match</a
 				>
+				<div class="hocus-holder">
+					<div>Test your skills</div>
+				</div>
 			</li>
 		</ul>
 	</div>
