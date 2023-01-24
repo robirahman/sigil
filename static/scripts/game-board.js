@@ -52,7 +52,7 @@ document.addEventListener('alpine:init', () => {
 			selfOfferedRematch: false,
 			opponentOfferedRematch: false,
 			rematchOpponentDisconnected: false,
-			
+
 			offerOrAcceptRematch() {
 				console.log('Cannot offer/accept rematch until game has ended.');
 			},
@@ -496,7 +496,9 @@ document.addEventListener('alpine:init', () => {
 					const rematchGameName = `${baseGameName}_REMATCH${+rematchNumber + 1}`;
 
 					const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
-					const rematchWs = new WebSocket(`${apiProtocol}//${location.host}/api/rematch/${rematchGameName}`);
+					const rematchWs = new WebSocket(
+						`${apiProtocol}//${location.host}/api/rematch/${rematchGameName}`
+					);
 
 					rematchWs.onclose = () => {
 						//wait a second so dc modal doesn't appear as user is being redirected
@@ -506,8 +508,8 @@ document.addEventListener('alpine:init', () => {
 							}
 						}, 1000);
 					};
-	
-					rematchWs.addEventListener('message', event => {
+
+					rematchWs.addEventListener('message', (event) => {
 						const payload = JSON.parse(event.data);
 						switch (payload.type) {
 							case 'offeredrematch':
@@ -519,27 +521,31 @@ document.addEventListener('alpine:init', () => {
 								break;
 							case 'opponentdisconnected':
 								_this.rematchOpponentDisconnected = true;
-								rematchWs.send(JSON.stringify({
-									type: 'disconnect'
-								}));
+								rematchWs.send(
+									JSON.stringify({
+										type: 'disconnect',
+									})
+								);
 								break;
 							case 'ping':
 								break;
 							default:
-								console.error(`Error: Socket /api/rematch/${rematchGameName} received message with unknown type: ${payload.type}`);
+								console.error(
+									`Error: Socket /api/rematch/${rematchGameName} received message with unknown type: ${payload.type}`
+								);
 						}
 					});
 
 					_this.offerOrAcceptRematch = () => {
 						if (_this.opponentOfferedRematch) {
 							const payload = {
-								type: 'acceptrematch'
+								type: 'acceptrematch',
 							};
 							rematchWs.send(JSON.stringify(payload));
 						} else {
 							_this.selfOfferedRematch = true;
 							const payload = {
-								type: 'offerrematch'
+								type: 'offerrematch',
 							};
 							rematchWs.send(JSON.stringify(payload));
 						}

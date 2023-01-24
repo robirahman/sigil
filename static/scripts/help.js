@@ -40,12 +40,12 @@ document.addEventListener('DOMContentLoaded', () => {
 			containerElem.classList.add('open');
 
 			//close on click away
-			const onAnyClick = event => {
+			const onAnyClick = (event) => {
 				if (!submenuContainerElem.contains(event.target) && !labelElem.contains(event.target)) {
 					helpMenuCheckbox.checked = false; //close
 					document.removeEventListener('click', onAnyClick);
 				}
-			}
+			};
 			document.addEventListener('click', onAnyClick);
 		} else {
 			containerElem.classList.remove('open');
