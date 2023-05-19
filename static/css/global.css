@@ -40,3 +40,17 @@
 .link:hover {
 	color: #2c4980;
 }
+
+.link--white {
+	color: #fff;
+}
+
+.link--white:focus,
+.link--white:hover {
+	color: #d9d9d9;
+}
+
+.text-link:focus,
+.text-link:hover {
+	text-decoration: underline;
+}
