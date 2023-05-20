@@ -586,11 +586,11 @@ html.webp {
 
 @keyframes new-message-frames {
 	0% {
-		color: red;
+		color: #d63227;
 	}
 
 	66% {
-		color: red;
+		color: #d63227;
 	}
 
 	100% {
