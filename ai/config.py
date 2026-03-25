@@ -21,7 +21,7 @@ SPELL_TO_ID = {
     'Surge': 12, 'Comet': 13, 'Seal_of_Summer': 14,
 }
 
-# ---- Network architecture ----
+# ---- Network architecture (medium — 2.17M params) ----
 SPELL_EMBED_DIM = 16        # Embedding dimension per spell
 RAW_FEATURE_DIM = 250       # Non-spell raw features
 TRUNK_DIM = 400             # ResNet trunk width
@@ -29,6 +29,13 @@ NUM_RES_BLOCKS = 6          # Residual blocks in trunk
 POLICY_HIDDEN_DIM = 256     # Policy head hidden dimension
 VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
 TURN_FEATURE_DIM = 64       # Per-turn encoding size
+
+# ---- Network architecture (hard — ~44M params, NNUE-style shallow+wide) ----
+HARD_SPELL_EMBED_DIM = 32   # Wider spell embedding
+HARD_WIDE_DIM = 4096        # Width of hidden layers
+HARD_SQUEEZE_DIM = 2048     # Squeeze before heads
+HARD_POLICY_DIM = 256       # Policy head projection
+HARD_VALUE_DIM = 256        # Value head hidden
 
 # ---- MCTS ----
 C_PUCT = 2.0               # Exploration constant

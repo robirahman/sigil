@@ -21,6 +21,8 @@ from game import Board, Player, resetException, redwinsException, bluewinsExcept
 from singleplayergame import SPBoard, AIPlayer
 from nn_ai_player import NNAIPlayer
 from ai.mcts_ai_player import MCTSAIPlayer
+from ai.sigil_net import SigilNet
+from ai.sigil_net_hard import SigilNetHard
 from notation import GameRecorder
 import os
 
@@ -967,9 +969,15 @@ def _load_save(save_id):
 def playsingleplayergame(ws):
 	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy')
 
+@sock.route('/api/singleplayergame_medium')
+def playsingleplayergame_medium(ws):
+	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='medium',
+						   ai_kwargs={'net_class': SigilNet})
+
 @sock.route('/api/singleplayergame_hard')
 def playsingleplayergame_hard(ws):
-	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='hard')
+	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='hard',
+						   ai_kwargs={'net_class': SigilNetHard})
 
 @sock.route('/api/singleplayergame_load')
 def playsingleplayergame_load(ws):
@@ -983,12 +991,21 @@ def playsingleplayergame_load(ws):
 		ws.send(json.dumps({"type": "message", "message": "Failed to load save."}))
 		return
 	difficulty = save_data.get('difficulty', 'easy')
-	ai_class = MCTSAIPlayer if difficulty == 'hard' else AIPlayer
+	if difficulty == 'hard':
+		ai_class = MCTSAIPlayer
+		ai_kwargs = {'net_class': SigilNetHard}
+	elif difficulty == 'medium':
+		ai_class = MCTSAIPlayer
+		ai_kwargs = {'net_class': SigilNet}
+	else:
+		ai_class = AIPlayer
+		ai_kwargs = {}
 	_run_singleplayer_game(ws, ai_class=ai_class, difficulty=difficulty,
+						   ai_kwargs=ai_kwargs,
 						   load_save=save_data, save_id=save_id)
 
 def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
-						   load_save=None, save_id=None):
+						   ai_kwargs=None, load_save=None, save_id=None):
 	from notation import sfn_to_dict
 	import uuid
 
@@ -1004,9 +1021,12 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 	else:
 		humancolor = randint(1,2)
 
+	if ai_kwargs is None:
+		ai_kwargs = {}
+
 	if humancolor == 1:
 		human = Player(board, 'red')
-		ai = ai_class(board, 'blue')
+		ai = ai_class(board, 'blue', **ai_kwargs)
 		board.addplayers(human, ai)
 		human.opp = ai
 		ai.opp = human
@@ -1017,7 +1037,7 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 
 	else:
 		human = Player(board, 'blue')
-		ai = ai_class(board, 'red')
+		ai = ai_class(board, 'red', **ai_kwargs)
 		board.addplayers(human, ai)
 		human.opp = ai
 		ai.opp = human

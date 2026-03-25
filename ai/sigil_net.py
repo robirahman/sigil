@@ -164,6 +164,7 @@ class SigilNet(nn.Module):
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
         torch.save({
             'model_state_dict': self.state_dict(),
+            'arch': 'SigilNet',
         }, path)
 
     @classmethod

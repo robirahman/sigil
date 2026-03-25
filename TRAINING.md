@@ -183,3 +183,34 @@ To use it, update `ai/mcts_ai_player.py` to load the NumPy model instead.
 - **First iteration bootstrap.** The very first training run starts from a
   random network, so the self-play games will be low quality. This is normal.
   Quality improves rapidly after the first training cycle.
+
+## Git Branch Strategy
+
+Training data and model weights are managed across two branches:
+
+- **`main`** — Production code and the latest/best model checkpoint
+  (`ai/models/best_model.pt`). Training data files (`training_data/`,
+  `training_data_v2/`, `ai/data/`) should NOT be committed here. Only
+  update `best_model.pt` on main when a new model passes gating.
+
+- **`training-data`** — All self-play training data (JSONL files, SGN game
+  transcripts). This branch tracks main and adds the data on top. Use it
+  for development and training runs.
+
+When you produce a new trained model:
+
+```bash
+# On training-data branch: commit new self-play data
+git checkout training-data
+git add ai/data/selfplay_gen03.jsonl
+git commit -m "Add gen03 self-play data (10K games)"
+
+# After gating passes: update best model on main
+git checkout main
+cp ai/models/candidate_gen03.pt ai/models/best_model.pt
+git add ai/models/best_model.pt
+git commit -m "Update best model to gen03"
+```
+
+This keeps the main branch lightweight (the model checkpoint is ~9 MB)
+while preserving the full training history on the data branch.
