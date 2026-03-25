@@ -1,0 +1,88 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "blue"]
+[Spells "Seal_of_Lightning,Flourish,Bewitch,Seal_of_Wind,Hail_Storm,Meteor,Comet,Seal_of_Summer,Sprout"]
+
+R1. M:a2 P
+B1. M:b11 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:b6 P
+R3. M:a3 D:a3,a2:a2 M:a2 P
+B3. M:b5 D:b11,b6:b2 M:b2 P
+R4. M:a3 P
+B4. M:b4 D:b5,b4:b3 M:b3 P
+R5. M:a13 P
+B5. M:b4 D:b4,b3:b3 M:b3 P
+R6. M:a9 D:a13,a9:a4 M:a4 P
+B6. M:b6 P
+R7. M:a7 C:Comet B:c1 P
+B7. M:b5 P
+R8. M:a7 C:Comet B:b1 P
+B8. M:b12 P
+R9. H:b2>b4 D:b2,b1:a5 M:a5 P
+B9. M:b1 D:b12,b11:b2 M:b2 C:Flourish[b4] M:b7 M:b8 M:b9 M:b10 P
+R10. M:a7 C:Comet B:c1 P
+B10. M:b2 C:Hail_Storm[b10] P
+R11. M:a7 C:Comet B:b1 P
+B11. M:a10 D:b11,b10:a8 M:a8 P
+R12. M:a2 P
+B12. H:b1>b11 D:b7,b4:a7 M:a7 C:Comet B:c1 P
+R13. M:a6 DL:b11:a7 M:a7 C:Comet B:c1 P
+B13. M:c3 P
+R14. H:c2>c6 DL:c2:a7 M:a7 C:Comet B:b1 P
+B14. H:b1>X D:c6,c3:a7 M:a7 C:Comet B:c1 P
+R15. M:a11 DL:a11:a7 M:a7 C:Comet B:c1 P
+B15. M:a7 D:c2,b11:a4 H:a4>a13 C:Comet B:c1 P
+R16. M:c6 P
+B16. H:a3>a9 D:c1,b2:a2 H:a2>a11 P
+R17. H:a10>b11 D:c6,c2:a2 H:a2>a7 P
+B17. H:a2>c10 D:b11,b1:a1 H:a1>c8 C:Comet B:c1 P
+R18. M:c9 C:Meteor B:a8 P
+B18. H:a6>a12 D:c1,a6:a5 H:a5>a6 P
+R19. M:a7 D:a13,a12:a1 H:a1>a13 C:Comet B:c1 P
+B19. H:a9>a7 D:a13,a9:a1 H:a1>c10 P
+R20. H:a1>a13 D:c10,c1:a2 H:a2>a9 C:Comet B:c1 P
+B20. M:a7 D:a13,a9:a2 H:a2>c10 C:Comet B:c1 P
+R21. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B21. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R22. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B22. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R23. M:a7 D:c10,c2:a2 H:a2>a13 P
+B23. H:a7>b12 D:c1,a13:a2 H:a2>c10 C:Comet B:c1 P
+R24. M:a7 D:c10,b12:a2 H:a2>a13 C:Comet B:c1 P
+B24. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R25. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B25. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R26. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B26. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R27. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B27. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R28. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B28. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R29. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B29. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R30. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B30. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R31. M:a7 D:c10,c2:a2 H:a2>a13 C:Comet B:c1 P
+B31. M:a7 D:c2,a13:a2 H:a2>c10 C:Comet B:c1 P
+R32. M:c6 P
+B32. H:a6>c8 DL:c1:a1 H:a1>c9 P
+R33. M:a9 P
+B33. H:a11>c7 DL:a11:a7 M:a7 C:Comet B:c1 P
+R34. B:a1 D:c10,c9:a2 H:a2>a13 C:Sprout M:a7 P
+B34. H:a7>b12 C:Comet B:b1 P
+R35. M:a7 D:c8,c6:a3 H:a3>a12 C:Comet B:b1 P
+B35. M:a7 D:b2,a13:a1 H:a1>a13 C:Comet B:c1 P
+R36. M:a7 D:b12,b1:a1 H:a1>c10 C:Comet B:c1 P
+B36. M:a7 D:c10,c2:a1 H:a1>b11 C:Comet B:c1 P
+R37. B:b7 P
+B37. H:a2>a7 D:c1,a12:a3 H:a3>b12 P
+R38. B:a1 D:c2,b12:a2 H:a2>a12 C:Comet B:c1 P
+B38. M:a7 D:c10,a12:a1 H:a1>X C:Comet B:c1 P
+R39. M:a7 D:c2,b11:a1 H:a1>c10 C:Comet B:c1 P
+B39. M:a7 D:c10,c2:a1 H:a1>X C:Comet B:c1 P
+R40. B:b13 P
+B40. H:a2>X DL:c1:a7 M:a7 C:Comet B:c1 P
+R41. M:a7 D:c2,b13:a3 H:a3>a12 C:Comet B:c1 P
+B41. H:a3>a7 DL:c2:a7 H:a7>b12 C:Comet B:c1 P

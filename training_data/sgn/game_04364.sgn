@@ -1,0 +1,116 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "red"]
+[Spells "Starfall,Flourish,Seal_of_Lightning,Hail_Storm,Fireblast,Seal_of_Wind,Slash,Seal_of_Summer,Sprout"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a6 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a5 D:a6,a5:a3 M:a3 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a4 D:a4,a3:a3 M:a3 P
+B4. M:b3 D:b3,b2:b2 M:b2 P
+R5. M:a4 D:a4,a3:a3 M:a3 P
+B5. M:b3 D:b3,b2:b2 M:b2 P
+R6. M:a4 D:a4,a3:a3 M:a3 P
+B6. M:b3 D:b3,b2:b2 M:b2 P
+R7. M:a4 D:a4,a3:a3 M:a3 P
+B7. M:b3 D:b3,b2:b2 M:b2 P
+R8. M:a4 D:a4,a3:a3 M:a3 P
+B8. M:b3 D:b3,b2:b2 M:b2 P
+R9. M:a4 D:a4,a3:a3 M:a3 P
+B9. M:b3 D:b3,b2:b2 M:b2 P
+R10. M:a13 P
+B10. M:b3 D:b3,b2:b2 M:b2 P
+R11. M:a9 D:a13,a9:a4 M:a4 P
+B11. M:b3 D:b3,b2:b2 M:b2 P
+R12. M:a7 C:Slash P
+B12. M:b3 D:b3,b2:b2 M:b2 P
+R13. M:a7 C:Slash P
+B13. M:b3 P
+R14. M:a7 C:Slash P
+B14. M:b4 D:b4,b3:b3 M:b3 P
+R15. M:a7 C:Slash P
+B15. M:b4 D:b4,b3:b3 M:b3 P
+R16. M:a7 C:Slash P
+B16. M:b4 D:b4,b3:b3 M:b3 P
+R17. M:a5 D:a5,a4:a4 M:a4 P
+B17. M:b4 D:b4,b3:b3 M:b3 P
+R18. M:a7 C:Slash P
+B18. M:b4 D:b4,b3:b3 M:b3 P
+R19. M:a7 C:Slash P
+B19. M:b4 D:b4,b3:b3 M:b3 P
+R20. M:a7 C:Slash P
+B20. M:b4 D:b4,b3:b3 M:b3 P
+R21. M:a11 P
+B21. M:b4 D:b4,b3:b3 M:b3 P
+R22. M:a7 C:Slash P
+B22. M:b4 D:b4,b3:b3 M:b3 P
+R23. M:a7 C:Slash P
+B23. M:b11 D:b11,b3:b3 M:b3 P
+R24. M:c10 D:c10,a11:a5 M:a5 P
+B24. M:b4 D:b4,b3:b3 M:b3 P
+R25. M:a6 C:Starfall[a4] P
+B25. M:b2 P
+R26. M:a5 D:b11,b6:a2 M:a2 P
+B26. M:b4 D:b4,b3:b1 M:b1 P
+R27. M:a7 C:Slash P
+B27. M:b3 D:b3,b2:b2 M:b2 P
+R28. M:a7 C:Slash P
+B28. M:b3 D:b3,b2:b2 M:b2 P
+R29. M:a7 C:Slash P
+B29. M:b3 D:b3,b2:b2 M:b2 P
+R30. M:a7 C:Slash P
+B30. M:b6 P
+R31. M:a7 C:Slash P
+B31. M:b5 D:b6,b5:b3 M:b3 P
+R32. M:a7 C:Slash P
+B32. M:b4 D:b4,b3:b3 M:b3 P
+R33. M:a6 D:a6,a5:a3 M:a3 P
+B33. M:b4 D:b4,b3:b3 M:b3 P
+R34. M:a7 C:Slash P
+B34. M:b4 D:b4,b3:b3 M:b3 P
+R35. M:a7 C:Slash P
+B35. M:b4 D:b4,b3:b3 M:b3 P
+R36. M:a7 C:Slash P
+B36. M:b4 D:b4,b3:b3 M:b3 P
+R37. M:a7 D:a7,a4:a4 M:a4 P
+B37. M:b4 D:b4,b3:b3 M:b3 P
+R38. M:a7 C:Slash P
+B38. M:b4 D:b4,b3:b3 M:b3 P
+R39. M:a7 C:Slash P
+B39. M:b4 D:b4,b3:b3 M:b3 P
+R40. M:a7 C:Slash P
+B40. M:b4 D:b4,b3:b3 M:b3 P
+R41. M:a7 C:Slash P
+B41. M:b4 D:b4,b3:b3 M:b3 P
+R42. M:a7 C:Slash P
+B42. M:b4 D:b4,b3:b3 M:b3 P
+R43. M:a5 D:a5,a4:a4 M:a4 P
+B43. M:b11 P
+R44. M:a7 C:Slash P
+B44. M:a10 D:b11,b3:a8 M:a8 P
+R45. M:a7 C:Slash P
+B45. M:a9 P
+R46. M:a11 D:a11,a4:a4 M:a4 P
+B46. M:a7 D:b2,b1:a4 H:a4>a5 C:Slash H:a3>a13 P
+R47. H:a9>a7 D:a13,a9:a3 H:a3>a13 P
+B47. H:a3>a11 D:a13,a10:a2 H:a2>c10 C:Slash H:a1>c8 P
+R48. B:a7 D:c10,c9:a1 H:a1>a13 C:Slash H:a2>a7 P
+B48. H:a2>c10 D:a13,a9:a1 H:a1>c9 C:Slash H:a5>a12 P
+R49. B:a7 D:c10,c9:a1 H:a1>a13 C:Slash H:a2>a7 P
+B49. H:a6>c10 D:a13,a9:a2 H:a2>c9 C:Starfall P
+R50. B:a6 D:c10,c9:a2 H:a2>a1 C:Sprout M:a3 P
+B50. H:a12>c7 D:a12,a8:a2 H:a2>a4 C:Slash H:a3>a13 P
+R51. H:a2>a11 D:c8,c7:a1 H:a1>c10 C:Slash H:a3>X P
+B51. H:a6>a7 P
+R52. H:a11>c8 D:a13,a11:a5 H:a5>a12 C:Slash H:a6>a11 P
+B52. B:a7 D:c10,c9:a1 H:a1>a13 C:Slash H:a2>a7 P
+R53. H:a2>c10 D:a13,a9:a1 H:a1>c9 C:Slash H:a11>c7 P
+B53. B:a7 D:c13,c10:a4 H:a4>a13 C:Slash H:a3>a9 P
+R54. M:a7 D:a13,a11:a3 H:a3>a13 C:Slash H:a4>a7 P
+B54. M:c4 D:c9,c8:a3 H:a3>a11 C:Slash H:a2>c10 P
+R55. M:a10 D:c10,c8:a2 H:a2>X P
+B55. M:a7 D:c7,c4:a2 H:a2>c10 C:Slash H:a1>c8 P

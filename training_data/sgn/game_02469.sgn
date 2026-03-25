@@ -1,0 +1,61 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "blue"]
+[Spells "Bewitch,Carnage,Flourish,Hail_Storm,Seal_of_Wind,Meteor,Sprout,Slash,Surge"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:b11 P
+R3. M:a11 P
+B3. M:a10 D:b11,b2:a8 M:a8 P
+R4. M:c10 D:c10,a11:a3 M:a3 P
+B4. M:a7 D:b1,a10:a4 M:a4 C:Sprout M:a5 P
+R5. M:a11 D:a11,a3:a3 M:a3 P
+B5. H:a3>a13 D:a8,a5:a2 H:a2>a6 P
+R6. H:a2>a5 D:a13,a6:a3 H:a3>a13 P
+B6. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R7. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B7. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R8. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B8. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R9. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B9. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R10. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B10. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R11. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B11. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R12. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B12. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R13. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B13. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R14. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B14. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R15. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B15. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R16. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B16. M:a6 P
+R17. H:a6>a11 D:a6,a3:a3 M:a3 P
+B17. M:a7 D:a13,a11:a3 H:a3>a13 C:Sprout M:a6 P
+R18. M:a11 P
+B18. M:a7 C:Sprout M:a12 P
+R19. H:a3>a7 D:a13,a11:a4 H:a4>a8 P
+B19. H:a2>a11 D:a12,a8:a1 H:a1>c10 C:Sprout M:a12 P
+R20. M:a7 D:c10,a11:a2 H:a2>a11 C:Sprout M:a13 P
+B20. H:a2>a7 D:a12,a11:a3 H:a3>a9 P
+R21. H:a5>a12 D:a13,a9:a3 H:a3>a13 C:Sprout M:a7 P
+B21. M:c7 D:c7,a13:a3 H:a3>a13 P
+R22. H:a12>c7 D:a13,a12:a3 H:a3>a13 C:Sprout M:a12 P
+B22. H:a3>a7 D:c7,a13:a4 H:a4>a8 P
+R23. H:a4>a13 D:a12,a8:a3 H:a3>a9 C:Sprout M:a12 P
+B23. H:a3>a7 D:a13,a9:a4 H:a4>a8 P
+R24. H:a4>a13 D:a12,a8:a3 H:a3>a9 C:Sprout M:a12 P
+B24. H:a3>a7 D:a13,a9:a4 H:a4>a8 P
+R25. H:a4>a13 D:a12,a8:a3 H:a3>a9 C:Sprout M:a12 P
+B25. H:a3>a7 D:a13,a9:a4 H:a4>a8 P
+R26. H:a4>a13 D:a12,a8:a3 H:a3>a9 C:Sprout M:a12 P
+B26. H:a3>a7 D:a13,a9:a4 H:a4>a8 P
+R27. H:a6>a11 C:Sprout M:a9 P
+B27. H:a6>c7 D:a11,a6:a5 H:a5>a6 P
+R28. M:a10 D:c7,a12:a2 H:a2>a11 C:Hail_Storm P

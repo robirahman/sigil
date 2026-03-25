@@ -1,0 +1,179 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "HeuristicPolicy"]
+[Result "red"]
+[Spells "Seal_of_Lightning,Starfall,Carnage,Seal_of_Wind,Meteor,Grow,Slash,Comet,Sprout"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a3 D:a3,a2:a2 M:a2 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a3 D:a3,a2:a2 M:a2 P
+B4. M:b3 D:b3,b2:b2 M:b2 P
+R5. M:a3 D:a3,a2:a2 M:a2 P
+B5. M:b3 D:b3,b2:b2 M:b2 P
+R6. M:a3 D:a3,a2:a2 M:a2 P
+B6. M:b3 D:b3,b2:b2 M:b2 P
+R7. M:a3 D:a3,a2:a2 M:a2 P
+B7. M:b3 D:b3,b2:b2 M:b2 P
+R8. M:a3 D:a3,a2:a2 M:a2 P
+B8. M:b3 D:b3,b2:b2 M:b2 P
+R9. M:a3 D:a3,a2:a2 M:a2 P
+B9. M:b3 D:b3,b2:b2 M:b2 P
+R10. M:a3 D:a3,a2:a2 M:a2 P
+B10. M:b3 D:b3,b2:b2 M:b2 P
+R11. M:a3 D:a3,a2:a2 M:a2 P
+B11. M:b3 D:b3,b2:b2 M:b2 P
+R12. M:a3 D:a3,a2:a2 M:a2 P
+B12. M:b3 D:b3,b2:b2 M:b2 P
+R13. M:a3 D:a3,a2:a2 M:a2 P
+B13. M:b3 D:b3,b2:b2 M:b2 P
+R14. M:a11 D:a11,a2:a2 M:a2 P
+B14. M:b3 D:b3,b2:b2 M:b2 P
+R15. M:a6 D:a6,a2:a2 M:a2 P
+B15. M:b3 D:b3,b2:b2 M:b2 P
+R16. M:a3 D:a3,a2:a2 M:a2 P
+B16. M:b3 D:b3,b2:b2 M:b2 P
+R17. M:a3 D:a3,a2:a2 M:a2 P
+B17. M:b3 D:b3,b2:b2 M:b2 P
+R18. M:a3 D:a3,a2:a2 M:a2 P
+B18. M:b3 D:b3,b2:b2 M:b2 P
+R19. M:a3 D:a3,a2:a2 M:a2 P
+B19. M:b3 D:b3,b2:b2 M:b2 P
+R20. M:a3 D:a3,a2:a2 M:a2 P
+B20. M:b3 D:b3,b2:b2 M:b2 P
+R21. M:a3 D:a3,a2:a2 M:a2 P
+B21. M:b3 D:b3,b2:b2 M:b2 P
+R22. M:a3 D:a3,a2:a2 M:a2 P
+B22. M:b3 D:b3,b2:b2 M:b2 P
+R23. M:a3 D:a3,a2:a2 M:a2 P
+B23. M:b3 D:b3,b2:b2 M:b2 P
+R24. M:a3 D:a3,a2:a2 M:a2 P
+B24. M:b3 D:b3,b2:b2 M:b2 P
+R25. M:a3 D:a3,a2:a2 M:a2 P
+B25. M:b3 D:b3,b2:b2 M:b2 P
+R26. M:a3 D:a3,a2:a2 M:a2 P
+B26. M:b3 D:b3,b2:b2 M:b2 P
+R27. M:a3 D:a3,a2:a2 M:a2 P
+B27. M:b3 D:b3,b2:b2 M:b2 P
+R28. M:a11 D:a11,a2:a2 M:a2 P
+B28. M:b3 D:b3,b2:b2 M:b2 P
+R29. M:a3 D:a3,a2:a2 M:a2 P
+B29. M:b3 D:b3,b2:b2 M:b2 P
+R30. M:a3 D:a3,a2:a2 M:a2 P
+B30. M:b3 D:b3,b2:b2 M:b2 P
+R31. M:a3 D:a3,a2:a2 M:a2 P
+B31. M:b3 D:b3,b2:b2 M:b2 P
+R32. M:a3 P
+B32. M:b3 D:b3,b2:b2 M:b2 P
+R33. M:a13 P
+B33. M:b3 D:b3,b2:b2 M:b2 P
+R34. M:a6 D:a13,a6:a4 M:a4 P
+B34. M:b3 D:b3,b2:b2 M:b2 P
+R35. M:a7 C:Slash P
+B35. M:b3 D:b3,b2:b2 M:b2 P
+R36. M:a7 C:Slash P
+B36. M:b3 D:b3,b2:b2 M:b2 P
+R37. M:a7 C:Slash P
+B37. M:b3 D:b3,b2:b2 M:b2 P
+R38. M:a7 C:Slash P
+B38. M:b3 D:b3,b2:b2 M:b2 P
+R39. M:a7 C:Slash P
+B39. M:b3 D:b3,b2:b2 M:b2 P
+R40. M:a7 C:Slash P
+B40. M:b3 D:b3,b2:b2 M:b2 P
+R41. M:a7 D:a7,a4:a4 M:a4 P
+B41. M:b3 D:b3,b2:b2 M:b2 P
+R42. M:a7 C:Slash P
+B42. M:b3 D:b3,b2:b2 M:b2 P
+R43. M:a7 C:Slash P
+B43. M:b3 D:b3,b2:b2 M:b2 P
+R44. M:a7 C:Slash P
+B44. M:b3 D:b3,b2:b2 M:b2 P
+R45. M:a7 C:Slash P
+B45. M:b3 D:b3,b2:b2 M:b2 P
+R46. M:a7 C:Slash P
+B46. M:b3 D:b3,b2:b2 M:b2 P
+R47. M:a7 C:Slash P
+B47. M:b3 D:b3,b2:b2 M:b2 P
+R48. M:a7 C:Slash P
+B48. M:b3 D:b3,b2:b2 M:b2 P
+R49. M:a7 C:Slash P
+B49. M:b3 D:b3,b2:b2 M:b2 P
+R50. M:a7 C:Slash P
+B50. M:b3 D:b3,b2:b2 M:b2 P
+R51. M:a7 C:Slash P
+B51. M:b3 D:b3,b2:b2 M:b2 P
+R52. M:a7 C:Slash P
+B52. M:b3 D:b3,b2:b2 M:b2 P
+R53. M:a7 C:Slash P
+B53. M:b3 D:b3,b2:b2 M:b2 P
+R54. M:a7 C:Slash P
+B54. M:b3 D:b3,b2:b2 M:b2 P
+R55. M:a7 C:Slash P
+B55. M:b3 D:b3,b2:b2 M:b2 P
+R56. M:a7 C:Slash P
+B56. M:b3 D:b3,b2:b2 M:b2 P
+R57. M:a7 C:Slash P
+B57. M:b3 D:b3,b2:b2 M:b2 P
+R58. M:a7 C:Slash P
+B58. M:b3 D:b3,b2:b2 M:b2 P
+R59. M:a5 D:a5,a4:a4 M:a4 P
+B59. M:b3 D:b3,b2:b2 M:b2 P
+R60. M:a7 D:a7,a4:a4 M:a4 P
+B60. M:b3 D:b3,b2:b2 M:b2 P
+R61. M:a7 C:Slash P
+B61. M:b3 D:b3,b2:b2 M:b2 P
+R62. M:a7 C:Slash P
+B62. M:b3 D:b3,b2:b2 M:b2 P
+R63. M:a7 C:Slash P
+B63. M:b3 D:b3,b2:b2 M:b2 P
+R64. M:a7 C:Slash P
+B64. M:b3 D:b3,b2:b2 M:b2 P
+R65. M:a7 C:Slash P
+B65. M:b3 D:b3,b2:b2 M:b2 P
+R66. M:a7 C:Slash P
+B66. M:b3 D:b3,b2:b2 M:b2 P
+R67. M:a7 C:Slash P
+B67. M:b3 D:b3,b2:b2 M:b2 P
+R68. M:a7 C:Slash P
+B68. M:b3 D:b3,b2:b2 M:b2 P
+R69. M:a7 C:Slash P
+B69. M:b3 D:b3,b2:b2 M:b2 P
+R70. M:a7 C:Slash P
+B70. M:b3 D:b3,b2:b2 M:b2 P
+R71. M:a7 C:Slash P
+B71. M:b3 D:b3,b2:b2 M:b2 P
+R72. M:a7 C:Slash P
+B72. M:b3 D:b3,b2:b2 M:b2 P
+R73. M:a7 C:Slash P
+B73. M:b3 D:b3,b2:b2 M:b2 P
+R74. M:a7 C:Slash P
+B74. M:b3 D:b3,b2:b2 M:b2 P
+R75. M:a7 C:Slash P
+B75. M:b3 D:b3,b2:b2 M:b2 P
+R76. M:a6 P
+B76. M:b3 D:b3,b2:b2 M:b2 P
+R77. M:a7 C:Slash P
+B77. M:b3 D:b3,b2:b2 M:b2 P
+R78. M:a7 C:Slash P
+B78. M:b3 D:b3,b2:b2 M:b2 P
+R79. M:a7 C:Slash P
+B79. M:b3 D:b3,b2:b2 M:b2 P
+R80. M:a7 D:a7,a6:a5 M:a5 P
+B80. M:b3 D:b3,b2:b2 M:b2 P
+R81. M:a7 C:Slash P
+B81. M:b3 D:b3,b2:b2 M:b2 P
+R82. M:a7 C:Slash P
+B82. M:b3 D:b3,b2:b2 M:b2 P
+R83. M:a7 C:Slash P
+B83. M:b3 D:b3,b2:b2 M:b2 P
+R84. M:a7 C:Slash P
+B84. M:b3 D:b3,b2:b2 M:b2 P
+R85. M:a7 C:Slash P
+B85. M:b3 D:b3,b2:b2 M:b2 P
+R86. M:a12 D:a12,a5:a5 M:a5 P
+B86. M:b3 D:b3,b2:b2 M:b2 P
+R87. M:a13 P

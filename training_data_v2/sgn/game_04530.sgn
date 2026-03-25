@@ -1,0 +1,15 @@
+[Date "2026-03-24"]
+[Red "RandomPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "red"]
+[Spells "Starfall,Carnage,Flourish,Fireblast,Hail_Storm,Meteor,Surge,Sprout,Slash"]
+
+R1. M:a11 P
+B1. M:b2 P
+R2. M:c10 P
+B2. M:b11 P
+R3. M:c9 P
+B3. M:a10 D:b11,b2:a8 M:a8 P
+R4. M:c8 P
+B4. M:a9 C:Fireblast[a10] P
+R5. M:a2 C:Meteor[c10] B:a8 P

@@ -1,0 +1,26 @@
+[Date "2026-03-24"]
+[Red "RandomPolicy"]
+[Blue "RandomPolicy"]
+[Result "blue"]
+[Spells "Bewitch,Flourish,Seal_of_Lightning,Grow,Meteor,Seal_of_Wind,Slash,Comet,Sprout"]
+
+R1. M:a11 P
+B1. M:b2 P
+R2. M:a6 P
+B2. M:b11 D:b11,b2:b2 M:b2 P
+R3. M:a2 D:a11,a6:a3 M:a3 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a13 P
+B4. M:b6 D:b6,b2:b2 M:b2 P
+R5. M:a4 P
+B5. M:b11 P
+R6. M:a5 D:a13,a5:a5 M:a5 P
+B6. M:b3 P
+R7. M:a11 P
+B7. M:b13 P
+R8. M:a7 P
+B8. M:b6 P
+R9. M:b12 D:b12,a11:a6 M:a6 C:Slash P
+B9. M:b4 P
+R10. M:a7 C:Bewitch[a4] P
+B10. H:b1>X D:b13,b11:b2 H:b2>X P

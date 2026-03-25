@@ -1,0 +1,14 @@
+[Date "2026-03-24"]
+[Red "RandomPolicy"]
+[Blue "RandomPolicy"]
+[Result "blue"]
+[Spells "Starfall,Bewitch,Flourish,Grow,Fireblast,Hail_Storm,Sprout,Surge,Slash"]
+
+R1. M:a11 P
+B1. M:b2 P
+R2. M:c10 P
+B2. M:b3 P
+R3. M:a6 D:c10,a11:a2 M:a2 P
+B3. M:b4 P
+R4. M:a3 D:a6,a3:a3 M:a3 P
+B4. M:b7 P

@@ -1,0 +1,36 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "RandomPolicy"]
+[Result "blue"]
+[Spells "Starfall,Seal_of_Lightning,Carnage,Grow,Hail_Storm,Fireblast,Comet,Surge,Seal_of_Summer"]
+
+R1. M:a2 P
+B1. M:b11 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:a10 D:b11,b1:a8 M:a8 P
+R3. M:a6 P
+B3. M:b11 D:b11,a10:a7 M:a7 C:Comet B:c1 P
+R4. M:a5 D:a6,a5:a3 M:a3 P
+B4. M:a7 P
+R5. M:a4 D:a4,a3:a3 M:a3 P
+B5. M:a9 D:c1,a9:a4 M:a4 P
+R6. H:a4>a5 D:a4,a3:a3 M:a3 P
+B6. M:a6 D:a8,a7:a2 H:a2>a11 P
+R7. H:a6>a4 D:a11,a6:a2 H:a2>a6 P
+B7. H:a2>a11 D:a6,a5:a1 H:a1>a6 P
+R8. H:a1>X D:a11,a6:a2 H:a2>a6 P
+B8. H:a2>a11 D:a6,a4:a1 H:a1>a6 P
+R9. M:a4 P
+B9. H:a11>c10 D:a11,a2:a2 M:a2 P
+R10. H:a2>a11 D:c10,a6:a1 H:a1>a6 P
+B10. M:a5 P
+R11. M:a7 P
+B11. M:a12 D:a12,a11:a2 H:a2>a11 P
+R12. M:c10 D:c10,a11:a2 H:a2>a11 C:Comet B:c1 P
+B12. H:a1>a13 D:a11,a6:a2 H:a2>a6 P
+R13. H:a5>a12 D:c1,a13:a2 H:a2>a11 C:Starfall P
+B13. M:c7 P
+R14. M:a3 D:a6,a3:a1 M:a1 P
+B14. M:c4 P
+R15. M:a3 D:a3,a2:a2 M:a2 P
+B15. M:c8 P

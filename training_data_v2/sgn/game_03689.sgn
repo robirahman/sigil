@@ -1,0 +1,71 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "red"]
+[Spells "Starfall,Flourish,Bewitch,Hail_Storm,Grow,Fireblast,Sprout,Slash,Comet"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a6 D:a6,a2:a2 M:a2 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a6 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a5 D:a6,a5:a3 M:a3 P
+B4. M:b3 D:b3,b2:b2 M:b2 P
+R5. M:a4 D:a4,a3:a3 M:a3 P
+B5. M:b3 D:b3,b2:b2 M:b2 P
+R6. M:a4 D:a4,a3:a3 M:a3 P
+B6. M:b11 D:b11,b2:b2 M:b2 P
+R7. M:a4 D:a4,a3:a3 M:a3 P
+B7. M:b3 P
+R8. M:a4 D:a4,a3:a3 M:a3 P
+B8. M:b4 D:b4,b3:b3 M:b3 P
+R9. M:a4 D:a4,a3:a3 M:a3 P
+B9. M:b4 D:b4,b3:b3 M:b3 P
+R10. M:a4 D:a4,a3:a3 M:a3 P
+B10. M:b4 D:b4,b3:b3 M:b3 P
+R11. M:a4 D:a4,a3:a3 M:a3 P
+B11. M:b6 D:b6,b3:b3 M:b3 P
+R12. M:a6 P
+B12. M:b4 D:b4,b3:b3 M:b3 P
+R13. M:a5 D:a6,a5:a4 M:a4 P
+B13. M:b4 D:b4,b3:b3 M:b3 P
+R14. M:a7 C:Sprout M:a5 P
+B14. M:b4 D:b4,b3:b3 M:b3 P
+R15. M:a6 C:Starfall[a4] P
+B15. M:b2 P
+R16. M:a7 D:b11,b6:a2 M:a2 C:Sprout M:a3 P
+B16. M:b6 P
+R17. M:a7 C:Sprout M:a5 P
+B17. M:b5 P
+R18. M:a7 C:Sprout M:a6 P
+B18. M:b13 P
+R19. M:a7 C:Sprout M:a11 P
+B19. M:b4 C:Flourish M:b9 M:b8 M:b7 M:b10 P
+R20. M:c10 D:c10,a11:a7 M:a7 C:Sprout M:a11 P
+B20. M:c11 D:c11,b13:b4 M:b4 C:Grow M:b3 M:b2 P
+R21. M:c10 D:c10,a11:a7 M:a7 P
+B21. M:b1 C:Slash P
+R22. M:a8 D:a8,a7:a7 M:a7 C:Sprout M:a11 P
+B22. M:b7 C:Slash P
+R23. M:c10 D:c10,a11:a7 M:a7 C:Sprout M:a11 P
+B23. M:b7 C:Slash P
+R24. M:c10 D:c10,a11:a7 M:a7 C:Sprout M:a11 P
+B24. M:b7 C:Slash P
+R25. M:a13 D:a13,a11:a7 M:a7 P
+B25. M:b11 D:b11,b4:b4 M:b4 P
+R26. M:a8 D:a8,a7:a7 M:a7 C:Sprout M:a11 P
+B26. M:b7 C:Slash P
+R27. M:c10 D:c10,a11:a7 M:a7 C:Sprout M:a11 P
+B27. M:b7 C:Slash P
+R28. M:c10 D:c10,a11:a7 M:a7 C:Sprout M:a11 P
+B28. M:b7 C:Slash P
+R29. M:c10 D:c10,a11:a7 M:a7 P
+B29. M:b7 C:Slash P
+R30. M:a8 D:a8,a7:a7 M:a7 C:Sprout M:a11 P
+B30. M:b7 C:Slash P
+R31. M:a12 D:a12,a11:a7 M:a7 P
+B31. M:b7 C:Slash P
+R32. M:a8 D:a8,a7:a7 M:a7 C:Sprout M:a11 P
+B32. M:b7 C:Slash P
+R33. M:c10 P

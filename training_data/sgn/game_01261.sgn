@@ -1,0 +1,78 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "blue"]
+[Spells "Bewitch,Seal_of_Lightning,Flourish,Grow,Hail_Storm,Fireblast,Surge,Seal_of_Summer,Slash"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a3 D:a3,a2:a2 M:a2 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a3 D:a3,a2:a2 M:a2 P
+B4. M:b3 D:b3,b2:b2 M:b2 P
+R5. M:a3 D:a3,a2:a2 M:a2 P
+B5. M:b3 D:b3,b2:b2 M:b2 P
+R6. M:a3 D:a3,a2:a2 M:a2 P
+B6. M:b3 D:b3,b2:b2 M:b2 P
+R7. M:a3 D:a3,a2:a2 M:a2 P
+B7. M:b3 D:b3,b2:b2 M:b2 P
+R8. M:a3 D:a3,a2:a2 M:a2 P
+B8. M:b3 D:b3,b2:b2 M:b2 P
+R9. M:a3 D:a3,a2:a2 M:a2 P
+B9. M:b3 P
+R10. M:a3 D:a3,a2:a2 M:a2 P
+B10. M:b4 D:b4,b3:b3 M:b3 P
+R11. M:a3 D:a3,a2:a2 M:a2 P
+B11. M:b4 D:b4,b3:b3 M:b3 P
+R12. M:a11 P
+B12. M:b4 D:b4,b3:b3 M:b3 P
+R13. M:a3 D:a11,a3:a3 M:a3 P
+B13. M:b4 D:b4,b3:b3 M:b3 P
+R14. M:a4 D:a4,a3:a3 M:a3 P
+B14. M:b4 D:b4,b3:b3 M:b3 P
+R15. M:a4 D:a4,a3:a3 M:a3 P
+B15. M:b4 D:b4,b3:b3 M:b3 P
+R16. M:a4 D:a4,a3:a3 M:a3 P
+B16. M:b4 D:b4,b3:b3 M:b3 P
+R17. M:a4 D:a4,a3:a3 M:a3 P
+B17. M:b4 D:b4,b3:b3 M:b3 P
+R18. M:a4 D:a4,a3:a3 M:a3 P
+B18. M:b4 D:b4,b3:b3 M:b3 P
+R19. M:a4 D:a4,a3:a3 M:a3 P
+B19. M:b4 D:b4,b3:b3 M:b3 P
+R20. M:a4 D:a4,a3:a3 M:a3 P
+B20. M:b4 D:b4,b3:b3 M:b3 P
+R21. M:a4 D:a4,a3:a3 M:a3 P
+B21. M:b4 D:b4,b3:b3 M:b3 P
+R22. M:a4 D:a4,a3:a3 M:a3 P
+B22. M:b4 D:b4,b3:b3 M:b3 P
+R23. M:a4 D:a4,a3:a3 M:a3 P
+B23. M:b6 P
+R24. M:a11 P
+B24. M:b5 D:b6,b5:b4 M:b4 P
+R25. M:a6 P
+B25. M:b6 D:b6,b4:b4 M:b4 P
+R26. M:c10 D:c10,a11:a4 M:a4 P
+B26. M:b11 P
+R27. M:a5 C:Bewitch[a4] P
+B27. H:b1>b6 D:b11,b4:b2 H:b2>b5 P
+R28. H:b2>b11 P
+B28. H:b6>b4 D:b11,b6:b2 H:b2>b6 P
+R29. M:b7 D:b7,b6:a2 M:a2 P
+B29. H:b4>b7 D:b4,b3:b3 M:b3 P
+R30. M:b8 D:b8,b7:a3 M:a3 P
+B30. M:b4 D:b4,b3:b3 M:b3 P
+R31. M:b4 D:b5,b4:a5 M:a5 P
+B31. M:b4 P
+R32. M:a11 D:a11,a5:a5 M:a5 P
+B32. M:b6 D:b6,b4:b4 M:b4 P
+R33. M:a6 D:a6,a5:a5 M:a5 P
+B33. M:b13 P
+R34. M:a6 D:a6,a5:a5 M:a5 P
+B34. M:b9 D:b13,b9:b5 M:b5 P
+R35. M:a6 D:a6,a5:a5 M:a5 P
+B35. M:b6 DL:b6:b6 M:b6 P
+R36. M:a6 D:a6,a5:a5 M:a5 P
+B36. M:b11 DL:b11:b7 M:b7 P

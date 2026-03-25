@@ -1,0 +1,18 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "RandomPolicy"]
+[Result "blue"]
+[Spells "Seal_of_Lightning,Carnage,Bewitch,Meteor,Hail_Storm,Seal_of_Wind,Sprout,Slash,Surge"]
+
+R1. M:a11 P
+B1. M:b11 P
+R2. M:a2 D:a11,a2:a2 M:a2 P
+B2. M:a10 D:b11,b1:a8 M:a8 P
+R3. M:a6 P
+B3. M:a7 D:a10,a8:a4 M:a4 P
+R4. M:a5 D:a6,a5:a3 M:a3 P
+B4. M:a5 C:Sprout M:a6 P
+R5. H:a4>a7 D:a4,a3:a3 M:a3 P
+B5. M:a12 C:Sprout M:a4 P
+R6. M:a11 D:a11,a3:a3 M:a3 P
+B6. M:a7 C:Sprout M:a11 P

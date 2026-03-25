@@ -1,0 +1,82 @@
+[Date "2026-03-24"]
+[Red "HeuristicPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "blue"]
+[Spells "Bewitch,Flourish,Starfall,Seal_of_Wind,Hail_Storm,Fireblast,Slash,Sprout,Surge"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a3 D:a3,a2:a2 M:a2 P
+B3. M:b11 P
+R4. M:a3 D:a3,a2:a2 M:a2 P
+B4. M:a10 D:b11,b2:a8 M:a8 P
+R5. M:a3 D:a3,a2:a2 M:a2 P
+B5. M:a9 D:b1,a10:a7 M:a7 C:Slash P
+R6. M:a3 D:a3,a2:a2 M:a2 P
+B6. M:a10 D:a10,a9:a7 M:a7 C:Slash P
+R7. M:a3 D:a3,a2:a2 M:a2 P
+B7. M:a7 C:Slash P
+R8. M:a3 D:a3,a2:a2 M:a2 P
+B8. M:a7 C:Slash P
+R9. M:a3 D:a3,a2:a2 M:a2 P
+B9. M:a7 C:Slash P
+R10. M:a3 D:a3,a2:a2 M:a2 P
+B10. M:a7 C:Slash P
+R11. M:a3 D:a3,a2:a2 M:a2 P
+B11. M:a7 C:Slash P
+R12. M:a3 D:a3,a2:a2 M:a2 P
+B12. M:a10 P
+R13. M:a3 D:a3,a2:a2 M:a2 P
+B13. M:a9 D:a10,a9:a7 M:a7 C:Slash P
+R14. M:a3 D:a3,a2:a2 M:a2 P
+B14. M:a7 C:Slash P
+R15. M:a3 D:a3,a2:a2 M:a2 P
+B15. M:a7 P
+R16. M:a3 D:a3,a2:a2 M:a2 P
+B16. M:a10 D:a10,a8:a4 M:a4 C:Slash P
+R17. M:a3 D:a3,a2:a2 M:a2 P
+B17. M:a7 C:Slash P
+R18. M:a3 D:a3,a2:a2 M:a2 P
+B18. M:a7 C:Slash P
+R19. M:a3 D:a3,a2:a2 M:a2 P
+B19. M:a7 C:Slash P
+R20. M:a3 D:a3,a2:a2 M:a2 P
+B20. M:a7 C:Slash P
+R21. M:a3 D:a3,a2:a2 M:a2 P
+B21. M:a7 C:Slash P
+R22. M:a3 D:a3,a2:a2 M:a2 P
+B22. M:a7 C:Slash P
+R23. M:a3 D:a3,a2:a2 M:a2 P
+B23. M:a7 C:Slash P
+R24. M:a3 D:a3,a2:a2 M:a2 P
+B24. M:a7 C:Slash P
+R25. M:a3 D:a3,a2:a2 M:a2 P
+B25. M:a7 C:Slash P
+R26. M:a3 D:a3,a2:a2 M:a2 P
+B26. M:a7 C:Slash P
+R27. M:a3 D:a3,a2:a2 M:a2 P
+B27. M:a5 P
+R28. M:a3 D:a3,a2:a2 M:a2 P
+B28. M:a3 D:a5,a4:a2 H:a2>a6 P
+R29. M:a5 D:a6,a5:a2 H:a2>a6 P
+B29. H:a2>a11 D:a6,a3:a1 H:a1>a6 P
+R30. H:a1>a3 D:a11,a6:a2 H:a2>a6 P
+B30. H:a2>a11 D:a6,a3:a1 H:a1>a6 P
+R31. H:a1>a3 D:a11,a6:a2 H:a2>a6 P
+B31. H:a2>a11 D:a6,a3:a1 H:a1>a6 P
+R32. H:a1>a3 D:a11,a6:a2 H:a2>a6 P
+B32. M:a11 P
+R33. H:a3>a4 D:a3,a2:a2 M:a2 P
+B33. M:a7 C:Slash H:a1>a3 P
+R34. H:a4>a5 D:a13,a4:a1 H:a1>c10 P
+B34. H:a1>a4 D:c10,a11:a2 H:a2>a13 P
+R35. H:a2>a11 D:a13,a4:a1 H:a1>c10 P
+B35. H:a1>a4 D:c10,a11:a2 H:a2>a13 P
+R36. H:a2>a11 D:a13,a4:a1 H:a1>c10 P
+B36. H:a1>a4 D:c10,a11:a2 H:a2>a13 P
+R37. H:a2>a11 D:a13,a4:a1 H:a1>c10 P
+B37. H:a1>a4 D:c10,a11:a2 H:a2>a13 P
+R38. H:a2>a11 D:a13,a4:a1 H:a1>c10 P
+B38. M:a4 P

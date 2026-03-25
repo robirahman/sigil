@@ -1,0 +1,126 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "EpsilonGreedyPolicy"]
+[Result "blue"]
+[Spells "Seal_of_Lightning,Flourish,Starfall,Fireblast,Meteor,Seal_of_Wind,Sprout,Surge,Slash"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a3 D:a3,a2:a2 M:a2 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a3 D:a3,a2:a2 M:a2 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a3 D:a3,a2:a2 M:a2 P
+B4. M:b3 D:b3,b2:b2 M:b2 P
+R5. M:a3 D:a3,a2:a2 M:a2 P
+B5. M:b3 D:b3,b2:b2 M:b2 P
+R6. M:a3 D:a3,a2:a2 M:a2 P
+B6. M:b6 P
+R7. M:a6 D:a6,a2:a2 M:a2 P
+B7. M:b5 D:b6,b5:b3 M:b3 P
+R8. M:a3 D:a3,a2:a2 M:a2 P
+B8. M:b4 D:b4,b3:b3 M:b3 P
+R9. M:a3 D:a3,a2:a2 M:a2 P
+B9. M:b6 D:b6,b3:b3 M:b3 P
+R10. M:a6 P
+B10. M:b4 D:b4,b3:b3 M:b3 P
+R11. M:a5 D:a6,a5:a3 M:a3 P
+B11. M:b4 D:b4,b3:b3 M:b3 P
+R12. M:a4 D:a4,a3:a3 M:a3 P
+B12. M:b6 P
+R13. M:a4 D:a4,a3:a3 M:a3 P
+B13. M:b5 D:b6,b5:b4 M:b4 P
+R14. M:a4 D:a4,a3:a3 M:a3 P
+B14. M:b6 D:b6,b4:b4 M:b4 P
+R15. M:a4 D:a4,a3:a3 M:a3 P
+B15. M:b6 D:b6,b4:b4 M:b4 P
+R16. M:a4 D:a4,a3:a3 M:a3 P
+B16. M:b6 D:b6,b4:b4 M:b4 P
+R17. M:a4 D:a4,a3:a3 M:a3 P
+B17. M:b6 D:b6,b4:b4 M:b4 P
+R18. M:a4 D:a4,a3:a3 M:a3 P
+B18. M:b6 D:b6,b4:b4 M:b4 P
+R19. M:a4 D:a4,a3:a3 M:a3 P
+B19. M:b6 D:b6,b4:b4 M:b4 P
+R20. M:a4 D:a4,a3:a3 M:a3 P
+B20. M:b6 D:b6,b4:b4 M:b4 P
+R21. M:a11 P
+B21. M:b6 D:b6,b4:b4 M:b4 P
+R22. M:c10 D:c10,a11:a4 M:a4 P
+B22. M:b6 D:b6,b4:b4 M:b4 P
+R23. M:a11 D:a11,a4:a4 M:a4 P
+B23. M:b6 P
+R24. M:a7 C:Sprout M:a5 P
+B24. M:b5 C:Flourish[b4] M:b7 M:b8 M:b9 M:b10 P
+R25. M:a7 C:Sprout M:a6 P
+B25. M:b3 C:Meteor[b10] B:a7 P
+R26. M:a11 D:a11,a6:a4 M:a4 P
+B26. H:a4>a13 D:b10,b7:a3 H:a3>a6 C:Sprout M:b2 P
+R27. H:a3>a7 D:a13,a6:a4 H:a4>a8 P
+B27. H:a4>a13 D:b4,b3:a3 H:a3>a6 C:Sprout M:a9 P
+R28. H:a9>a10 D:a13,a9:a3 H:a3>a13 P
+B28. M:a9 D:b2,b1:a3 H:a3>a11 C:Fireblast P
+R29. M:a2 D:a11,a6:a3 H:a3>a5 P
+B29. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R30. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B30. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R31. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B31. H:a3>a6 D:a13,a5:a2 H:a2>a11 P
+R32. H:a2>a13 D:a11,a6:a3 H:a3>a5 P
+B32. M:a7 C:Sprout M:a6 P
+R33. H:a4>a7 D:a4,a3:a3 M:a3 P
+B33. M:a8 D:a13,a8:a2 H:a2>a11 C:Sprout M:a4 P
+R34. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+B34. M:a8 D:a11,a8:a2 H:a2>a11 C:Sprout M:a4 P
+R35. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+B35. H:a1>a4 D:a11,a7:a2 H:a2>a13 P
+R36. H:a2>a11 P
+B36. H:a2>a7 D:a11,a6:a3 H:a3>a9 P
+R37. H:a5>a6 D:a13,a9:a3 H:a3>a13 C:Sprout M:a12 P
+B37. H:a5>a7 D:a13,a6:a3 H:a3>a13 P
+R38. M:c7 C:Slash H:a3>a6 P
+B38. H:a3>a9 D:a11,a6:a4 H:a4>a8 P
+R39. M:a10 D:a13,a12:a4 H:a4>a13 C:Fireblast P
+B39. M:a9 D:a13,a9:a3 M:a3 P
+R40. H:a3>a13 D:a7,a4:a2 H:a2>a6 P
+B40. H:a2>a4 D:a13,a6:a3 H:a3>a13 P
+R41. H:a3>a6 D:a13,a4:a2 H:a2>a11 P
+B41. H:a2>a4 D:a11,a6:a3 H:a3>a13 P
+R42. H:a3>a6 D:a13,a4:a2 H:a2>a11 P
+B42. H:a2>a4 D:a11,a6:a3 H:a3>a13 P
+R43. M:a5 D:a13,a5:a3 H:a3>a13 P
+B43. H:a3>a5 D:a13,a3:a3 M:a3 P
+R44. H:a3>a13 D:a5,a4:a2 H:a2>a6 P
+B44. H:a2>a4 D:a13,a6:a3 H:a3>a13 P
+R45. H:a3>a6 D:a13,a4:a2 H:a2>a11 P
+B45. M:a5 D:a11,a6:a2 H:a2>a6 P
+R46. M:a11 P
+B46. H:a6>c10 D:a6,a5:a3 H:a3>a4 P
+R47. M:a7 D:c10,a11:a3 H:a3>a13 C:Sprout M:a5 P
+B47. M:a9 D:a13,a9:a3 H:a3>a13 P
+R48. M:a7 D:a13,a7:a3 H:a3>a13 P
+B48. M:a9 D:a13,a9:a3 H:a3>a13 P
+R49. M:a7 C:Sprout M:a6 P
+B49. M:a11 D:a11,a3:a3 M:a3 P
+R50. H:a2>a11 D:a13,a6:a1 H:a1>a6 P
+B50. H:a1>X D:a11,a6:a2 H:a2>a6 P
+R51. H:a2>a11 D:a6,a5:a1 H:a1>a6 P
+B51. M:a13 D:a13,a11:a2 H:a2>a11 P
+R52. H:a2>a13 D:a11,a4:a3 H:a3>a4 P
+B52. H:a2>a11 D:a13,a6:a1 H:a1>a6 P
+R53. H:a4>a5 P
+B53. H:a4>a7 D:a5,a4:a3 H:a3>a4 P
+R54. M:c10 D:c10,a11:a2 H:a2>a11 C:Sprout M:a5 P
+B54. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+R55. M:c10 D:c10,a11:a2 H:a2>a11 C:Sprout M:a4 P
+B55. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+R56. M:c10 D:c10,a11:a2 H:a2>a11 C:Sprout M:a4 P
+B56. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+R57. M:c10 D:c10,a11:a2 H:a2>a11 C:Sprout M:a4 P
+B57. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+R58. M:c10 D:c10,a11:a2 H:a2>a11 C:Sprout M:a4 P
+B58. H:a4>a7 D:a11,a4:a2 H:a2>a11 P
+R59. M:c10 D:c10,a11:a2 H:a2>a11 C:Sprout M:a4 P
+B59. H:a6>a12 P
+R60. M:c7 C:Slash H:a1>c10 P
+B60. M:c7 D:c10,c8:a1 H:a1>X C:Slash H:a2>X P

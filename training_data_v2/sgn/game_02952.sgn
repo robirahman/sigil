@@ -1,0 +1,23 @@
+[Date "2026-03-24"]
+[Red "RandomPolicy"]
+[Blue "HeuristicPolicy"]
+[Result "red"]
+[Spells "Starfall,Seal_of_Lightning,Carnage,Seal_of_Wind,Meteor,Hail_Storm,Slash,Comet,Seal_of_Summer"]
+
+R1. M:a11 P
+B1. M:b2 P
+R2. M:c10 P
+B2. M:b3 D:b3,b2:b2 M:b2 P
+R3. M:a2 D:c10,a11:a3 M:a3 P
+B3. M:b3 D:b3,b2:b2 M:b2 P
+R4. M:a4 P
+B4. M:b3 D:b3,b2:b2 M:b2 P
+R5. M:a13 D:a13,a4:a4 M:a4 P
+B5. M:b3 D:b3,b2:b2 M:b2 P
+R6. M:a7 P
+B6. M:b3 D:b3,b2:b2 M:b2 P
+R7. M:a8 D:a8,a7:a5 M:a5 P
+B7. M:b3 D:b3,b2:b2 M:b2 P
+R8. M:a11 D:a11,a5:a5 M:a5 P
+B8. M:b3 D:b3,b2:b2 M:b2 P
+R9. M:a11 P

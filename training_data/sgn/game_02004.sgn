@@ -1,0 +1,23 @@
+[Date "2026-03-24"]
+[Red "EpsilonGreedyPolicy"]
+[Blue "RandomPolicy"]
+[Result "red"]
+[Spells "Bewitch,Starfall,Flourish,Fireblast,Grow,Hail_Storm,Sprout,Surge,Comet"]
+
+R1. M:a2 P
+B1. M:b2 P
+R2. M:a3 P
+B2. M:b3 P
+R3. M:a11 P
+B3. M:b6 D:b6,b3:b3 M:b3 P
+R4. M:c10 D:c10,a11:a4 M:a4 P
+B4. M:b4 P
+R5. M:a7 C:Sprout M:a5 P
+B5. M:b6 D:b6,b4:b4 M:b4 P
+R6. M:a6 C:Bewitch[a4] P
+B6. H:b2>b6 D:b4,b3:b1 H:b1>b11 P
+R7. M:a7 D:b11,b6:a2 M:a2 C:Sprout M:a3 P
+B7. M:b11 D:b11,b2:b2 M:b2 P
+R8. M:a7 C:Sprout M:a5 P
+B8. M:b3 D:b3,b2:b2 M:b2 P
+R9. M:a7 C:Sprout M:a6 P
