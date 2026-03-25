@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 from ai.sigil_net import SigilNet
+from ai.sigil_net_hard import SigilNetHard
 from ai.features import board_to_tensor
 from ai.config import (
     BATCH_SIZE, LR_INIT, LR_FINAL, WEIGHT_DECAY,
@@ -285,15 +286,21 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=LR_INIT)
     parser.add_argument('--max-records', type=int, default=DATA_WINDOW)
     parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--net', type=str, default='medium',
+                        choices=['medium', 'hard'],
+                        help='Network architecture: medium (2M) or hard (44M)')
     args = parser.parse_args()
+
+    # Select network class
+    net_class = SigilNetHard if args.net == 'hard' else SigilNet
 
     # Load or create model
     if args.model and os.path.exists(args.model):
-        model = SigilNet.load(args.model, device=args.device)
+        model = net_class.load(args.model, device=args.device)
         print(f"Loaded model from {args.model}")
     else:
-        model = SigilNet()
-        print("Created new SigilNet")
+        model = net_class()
+        print(f"Created new {net_class.__name__}")
 
     print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 

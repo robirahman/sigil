@@ -13,12 +13,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from nn_ai_player import NNAIPlayer, _live_board_to_simboard
 from ai.sigil_net import SigilNet
+from ai.sigil_net_hard import SigilNetHard
 from ai.mcts import mcts_search
 from ai.config import NUM_SIMS_PLAY, MODELS_DIR
 
 
-# Default model path
-_DEFAULT_MODEL = os.path.join(MODELS_DIR, 'best_model.pt')
+# Model paths by difficulty
+_MEDIUM_MODEL = os.path.join(MODELS_DIR, 'best_model.pt')
+_HARD_MODEL = os.path.join(MODELS_DIR, 'best_model_hard.pt')
 
 
 class MCTSAIPlayer(NNAIPlayer):
@@ -27,30 +29,35 @@ class MCTSAIPlayer(NNAIPlayer):
     Drop-in replacement for NNAIPlayer. Inherits all game engine
     interface methods (_execute_turn, pushenemy, softmove, etc.)
     and only overrides taketurn() with MCTS search.
+
+    Args:
+        net_class: SigilNet (medium/2M) or SigilNetHard (hard/44M)
+        model_path: path to model checkpoint
     """
 
-    def __init__(self, board, color, model_path=None, time_limit=8.0,
-                 num_simulations=None, **kwargs):
-        # Initialize the base NNAIPlayer (loads genetic policy + old NN as fallback)
+    def __init__(self, board, color, model_path=None, net_class=None,
+                 time_limit=8.0, num_simulations=None, **kwargs):
         super().__init__(board, color, **kwargs)
 
         self.time_limit = time_limit
         self.num_simulations = num_simulations or NUM_SIMS_PLAY
 
-        # Load SigilNet (PyTorch model)
+        if net_class is None:
+            net_class = SigilNet
+        if model_path is None:
+            model_path = _HARD_MODEL if net_class is SigilNetHard else _MEDIUM_MODEL
+
+        # Load the appropriate SigilNet variant
         self.sigil_net = None
-        mpath = model_path or _DEFAULT_MODEL
-        if os.path.exists(mpath):
+        if os.path.exists(model_path):
             try:
-                self.sigil_net = SigilNet.load(mpath)
+                self.sigil_net = net_class.load(model_path)
                 self.sigil_net.eval()
             except Exception:
                 self.sigil_net = None
 
-        # If no trained model exists yet, use a fresh random network
-        # (still better than nothing — MCTS explores regardless)
         if self.sigil_net is None:
-            self.sigil_net = SigilNet()
+            self.sigil_net = net_class()
             self.sigil_net.eval()
 
     def taketurn(self, canmove=True, candash=True, canspell=True,

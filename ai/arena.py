@@ -11,6 +11,7 @@ import argparse
 import os
 import sys
 import time
+import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -19,6 +20,7 @@ from search import _apply_turn
 from selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
+from ai.sigil_net_hard import SigilNetHard
 from ai.mcts import mcts_search
 from ai.config import MAX_TURNS, GATE_THRESHOLD, GATE_GAMES, MODELS_DIR
 
@@ -117,6 +119,14 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200):
     return m1_wins, m2_wins, draws, win_rate
 
 
+def _load_any_net(path):
+    """Load a model checkpoint, auto-detecting architecture."""
+    checkpoint = torch.load(path, map_location='cpu', weights_only=True)
+    if checkpoint.get('arch') == 'SigilNetHard':
+        return SigilNetHard.load(path)
+    return SigilNet.load(path)
+
+
 def gate_model(candidate_path, current_best_path=None, num_games=None,
                sims_per_move=200):
     """Test if candidate model is stronger than current best.
@@ -132,9 +142,9 @@ def gate_model(candidate_path, current_best_path=None, num_games=None,
 
     print(f"Gating: {candidate_path} vs {current_best_path}")
 
-    current = SigilNet.load(current_best_path)
+    current = _load_any_net(current_best_path)
     current.eval()
-    candidate = SigilNet.load(candidate_path)
+    candidate = _load_any_net(candidate_path)
     candidate.eval()
 
     # Candidate is model1
