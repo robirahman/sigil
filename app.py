@@ -19,6 +19,10 @@ from sqlalchemy import func
 
 from game import Board, Player, resetException, redwinsException, bluewinsException
 from singleplayergame import SPBoard, AIPlayer
+from nn_ai_player import NNAIPlayer
+from ai.mcts_ai_player import MCTSAIPlayer
+from notation import GameRecorder
+import os
 
 
 class invalidCheckException(Exception):
@@ -74,7 +78,18 @@ singleplayercount = 0
 def singlePlayer():
 	global singleplayercount
 	singleplayercount += 1
-	return render_template('single-player.html', current_user_name=getattr(current_user, 'name', ''))
+	difficulty = request.args.get('difficulty', 'easy')
+	load_id = request.args.get('load', '')
+	return render_template('single-player.html', current_user_name=getattr(current_user, 'name', ''), difficulty=difficulty, load_id=load_id)
+
+@app.route('/single-player-menu')
+def singlePlayerMenu():
+	saves = _list_saves()
+	return render_template('single-player-menu.html', current_user_name=getattr(current_user, 'name', ''), saves=saves)
+
+@app.route('/api/saves')
+def api_saves():
+	return json.dumps(_list_saves())
 
 @app.route('/private-match')
 def privatematch():
@@ -885,13 +900,113 @@ def playprivategame(ws, privategamename):
 
 
 
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _save_sgn(recorder):
+	games_dir = os.path.join(_APP_DIR, 'games')
+	os.makedirs(games_dir, exist_ok=True)
+	from datetime import datetime as dt
+	timestamp = dt.now().strftime('%Y%m%d_%H%M%S_%f')
+	filepath = os.path.join(games_dir, f'game_{timestamp}.sgn')
+	with open(filepath, 'w') as f:
+		f.write(recorder.to_sgn())
+
+def _save_game_state(board, recorder, human_color, difficulty, save_id):
+	"""Auto-save the current game state so it can be resumed later."""
+	from notation import board_to_sfn
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	os.makedirs(saves_dir, exist_ok=True)
+	filepath = os.path.join(saves_dir, f'{save_id}.json')
+	data = {
+		'sfn': board_to_sfn(board),
+		'human_color': human_color,
+		'difficulty': difficulty,
+		'sgn_so_far': recorder.to_sgn(),
+		'finished': board.gameover,
+	}
+	with open(filepath, 'w') as f:
+		json.dump(data, f)
+
+def _delete_save(save_id):
+	filepath = os.path.join(_APP_DIR, 'saves', f'{save_id}.json')
+	if os.path.exists(filepath):
+		os.remove(filepath)
+
+def _list_saves():
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	if not os.path.isdir(saves_dir):
+		return []
+	saves = []
+	for fname in sorted(os.listdir(saves_dir), reverse=True):
+		if not fname.endswith('.json'):
+			continue
+		try:
+			with open(os.path.join(saves_dir, fname)) as f:
+				data = json.load(f)
+			if data.get('finished'):
+				continue
+			from notation import sfn_to_dict
+			state = sfn_to_dict(data['sfn'])
+			saves.append({
+				'id': fname[:-5],
+				'human_color': data['human_color'],
+				'difficulty': data['difficulty'],
+				'turn': state['turncounter'],
+				'score': state['score'],
+			})
+		except Exception:
+			continue
+	return saves
+
+def _load_save(save_id):
+	filepath = os.path.join(_APP_DIR, 'saves', f'{save_id}.json')
+	with open(filepath) as f:
+		return json.load(f)
+
 @sock.route('/api/singleplayergame')
 def playsingleplayergame(ws):
+	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy')
+
+@sock.route('/api/singleplayergame_hard')
+def playsingleplayergame_hard(ws):
+	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='hard')
+
+@sock.route('/api/singleplayergame_load')
+def playsingleplayergame_load(ws):
+	# First message from client tells us which save to load
+	ingress = ws.receive()
+	msg = json.loads(ingress)
+	save_id = msg.get('message', '')
+	try:
+		save_data = _load_save(save_id)
+	except Exception:
+		ws.send(json.dumps({"type": "message", "message": "Failed to load save."}))
+		return
+	difficulty = save_data.get('difficulty', 'easy')
+	ai_class = MCTSAIPlayer if difficulty == 'hard' else AIPlayer
+	_run_singleplayer_game(ws, ai_class=ai_class, difficulty=difficulty,
+						   load_save=save_data, save_id=save_id)
+
+def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
+						   load_save=None, save_id=None):
+	from notation import sfn_to_dict
+	import uuid
+
+	if save_id is None:
+		save_id = str(uuid.uuid4())[:8]
+
 	board = SPBoard()
-	humancolor = randint(1,2)
+
+	if load_save is not None:
+		# Restore from save
+		human_color = load_save['human_color']
+		humancolor = 1 if human_color == 'red' else 2
+	else:
+		humancolor = randint(1,2)
+
 	if humancolor == 1:
 		human = Player(board, 'red')
-		ai = AIPlayer(board, 'blue')
+		ai = ai_class(board, 'blue')
 		board.addplayers(human, ai)
 		human.opp = ai
 		ai.opp = human
@@ -902,7 +1017,7 @@ def playsingleplayergame(ws):
 
 	else:
 		human = Player(board, 'blue')
-		ai = AIPlayer(board, 'red')
+		ai = ai_class(board, 'red')
 		board.addplayers(human, ai)
 		human.opp = ai
 		ai.opp = human
@@ -911,6 +1026,30 @@ def playsingleplayergame(ws):
 		blue = human
 		red = ai
 
+
+	human_color = human.color
+
+	### If loading a saved game, restore the board state from SFN
+	if load_save is not None:
+		state = sfn_to_dict(load_save['sfn'])
+		board.set_spells_from_names(state['spell_names'])
+		for nodename in board.nodes:
+			board.nodes[nodename].stone = state['stones'][nodename]
+		board.turncounter = state['turncounter']
+		board.whoseturn = state['turn']
+		board.score = state['score']
+		red.spellcounter = state['red_spellcounter']
+		blue.spellcounter = state['blue_spellcounter']
+		if state['red_lock']:
+			red.lock = board.spelldict[state['red_lock']]
+		if state['blue_lock']:
+			blue.lock = board.spelldict[state['blue_lock']]
+		if state['red_springlock']:
+			red.springlock = board.spelldict[state['red_springlock']]
+		if state['blue_springlock']:
+			blue.springlock = board.spelldict[state['blue_springlock']]
+		board.update()
+		human.jmessage("Resuming saved game...")
 
 	### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
 	### and values "Fireblast", "Flourish", etc.
@@ -943,90 +1082,131 @@ def playsingleplayergame(ws):
 	human.ws.send(json.dumps(egress))
 
 
-	board.nodes['a1'].stone = 'red'
-	board.nodes['b1'].stone = 'blue'
-	board.update()
+	spell_names = [board.spells[i].name for i in range(9)]
+	red_name = 'Human' if human.color == 'red' else 'AI'
+	blue_name = 'Human' if human.color == 'blue' else 'AI'
+	recorder = GameRecorder(spell_names, red_name=red_name, blue_name=blue_name)
+	board.recorder = recorder
+
+	if load_save is None:
+		board.nodes['a1'].stone = 'red'
+		board.nodes['b1'].stone = 'blue'
+		board.update()
+
 	time.sleep(3)
 
 	reset_this_turn = False
+	game_saved = False
 
-	while True:
-		if not reset_this_turn:
-			### First take a snapshot of the board,
-			### which we will revert to in case of a reset exception.
-			board.take_snapshot()
+	try:
+		while True:
+			if not reset_this_turn:
+				### First take a snapshot of the board,
+				### which we will revert to in case of a reset exception.
+				board.take_snapshot()
+				### Auto-save the game state so it can be resumed if disconnected
+				try:
+					_save_game_state(board, recorder, human_color, difficulty, save_id)
+				except Exception:
+					pass
 
-		board.turncounter += 1
+			board.turncounter += 1
 
-		if board.turncounter % 2 == 1:
-			activeplayer = red
-			board.whoseturn = 'red'
-		else:
-			activeplayer = blue
-			board.whoseturn = 'blue'
+			if board.turncounter % 2 == 1:
+				activeplayer = red
+				board.whoseturn = 'red'
+			else:
+				activeplayer = blue
+				board.whoseturn = 'blue'
 
 
-		try:
-			if board.whoseturn == 'red':
-				message = "Red Turn " + str((board.turncounter // 2) + 1)
-			elif board.whoseturn == 'blue':
-				message = "Blue Turn " + str(board.turncounter // 2)
+			try:
+				if board.whoseturn == 'red':
+					turn_num = (board.turncounter // 2) + 1
+					message = "Red Turn " + str(turn_num)
+				elif board.whoseturn == 'blue':
+					turn_num = board.turncounter // 2
+					message = "Blue Turn " + str(turn_num)
 
-			egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
-			human.ws.send(json.dumps(egress))
+				board.start_turn_recording(board.whoseturn, turn_num)
 
-			activeplayer.bot_triggers()
-			if board.gameover:
+				egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+				human.ws.send(json.dumps(egress))
+
+				activeplayer.bot_triggers()
+				if board.gameover:
+					board.end_game_recording()
+					_save_sgn(recorder)
+					_delete_save(save_id)
+					game_saved = True
+					board.end_game()
+					break
+
+				if board.whoseturn == 'red':
+					red.taketurn()
+				else:
+					blue.taketurn()
+
+				activeplayer.eot_triggers()
+				board.update(True)
+				reset_this_turn = False
+				if board.gameover:
+					board.end_game_recording()
+					_save_sgn(recorder)
+					_delete_save(save_id)
+					game_saved = True
+					board.end_game()
+					break
+
+			except resetException:
+				### Reset all attributes of the game & board
+				### to the way they were in board.snapshot ,
+				### then we restart the turn loop.
+				human.jmessage("Resetting Turn")
+
+				snapshot = board.snapshot
+
+				board.turncounter = snapshot["turncounter"]
+				board.gameover = snapshot["gameover"]
+				board.winner = snapshot["winner"]
+				board.score = snapshot["score"]
+
+
+				for nodename in board.nodes:
+					board.nodes[nodename].stone = snapshot[nodename]
+				if snapshot["redlock"]:
+					red.lock = board.spelldict[snapshot["redlock"]]
+				else:
+					red.lock = None
+
+				if snapshot["bluelock"]:
+					blue.lock = board.spelldict[snapshot["bluelock"]]
+				else:
+					blue.lock = None
+
+				red.spellcounter = snapshot["redspellcounter"]
+				blue.spellcounter = snapshot["bluespellcounter"]
+				board.last_play = snapshot["last_play"]
+				board.last_player = snapshot["last_player"]
+
+				board.update(True)
+				reset_this_turn = True
+
+				continue
+	except Exception:
+		# If the game ended but end_game() wasn't reached, try to send game_over
+		if board.gameover and not game_saved:
+			try:
 				board.end_game()
-				break
-
-			if board.whoseturn == 'red':
-				red.taketurn()
-			else:
-				blue.taketurn()
-
-			activeplayer.eot_triggers()
-			board.update(True)
-			reset_this_turn = False
-			if board.gameover:
-				board.end_game()
-				break
-
-		except resetException:
-			### Reset all attributes of the game & board
-			### to the way they were in board.snapshot ,
-			### then we restart the turn loop.
-			human.jmessage("Resetting Turn")
-
-			snapshot = board.snapshot
-
-			board.turncounter = snapshot["turncounter"]
-			board.gameover = snapshot["gameover"]
-			board.winner = snapshot["winner"]
-			board.score = snapshot["score"]
-
-
-			for nodename in board.nodes:
-				board.nodes[nodename].stone = snapshot[nodename]
-			if snapshot["redlock"]:
-				red.lock = board.spelldict[snapshot["redlock"]]
-			else:
-				red.lock = None
-
-			if snapshot["bluelock"]:
-				blue.lock = board.spelldict[snapshot["bluelock"]]
-			else:
-				blue.lock = None
-
-			red.spellcounter = snapshot["redspellcounter"]
-			blue.spellcounter = snapshot["bluespellcounter"]
-			board.last_play = snapshot["last_play"]
-			board.last_player = snapshot["last_player"]
-
-			board.update(True)
-			reset_this_turn = True
-
-			continue
+			except Exception:
+				pass
+	finally:
+		if not game_saved:
+			try:
+				recorder.end_game(board.winner)
+				_save_sgn(recorder)
+			except Exception:
+				pass
 
 
 def opp_chat_listen(ws, opp_ws):
