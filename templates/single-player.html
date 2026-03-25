@@ -4,7 +4,7 @@
 
 {% block content %}
 {{ super() }}
-<div x-data="gameBoard({ playerCount: 1 })">
+<div x-data="gameBoard({ playerCount: 1, difficulty: '{{ difficulty }}', loadId: '{{ load_id }}' })">
 	<div class="container">
 		<div class="container__inner">
 			<template x-if="messageHistory.length > 0">

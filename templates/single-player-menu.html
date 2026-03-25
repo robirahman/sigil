@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+
+{% block head %}
+{{ super() }}
+<style>
+	body > .main {
+		padding-top: 0;
+	}
+
+	.sp-menu {
+		max-width: 600px;
+		margin: 0 auto;
+		padding: 32px;
+	}
+
+	.sp-menu h2 {
+		color: #dddcdd;
+		font-family: overlock, sans-serif;
+		font-size: 28px;
+		margin-bottom: 24px;
+		text-align: center;
+	}
+
+	.sp-menu ul {
+		list-style: none;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.sp-menu .section-label {
+		color: #aaa;
+		font-family: arvo, serif;
+		font-size: 14px;
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		margin-top: 24px;
+		margin-bottom: 8px;
+		padding-left: 4px;
+	}
+
+	.sp-menu .save-info {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-family: arvo, serif;
+		font-size: 14px;
+		color: #aaa;
+		margin-top: 4px;
+		padding: 0 4px;
+	}
+
+	.sp-menu .no-saves {
+		color: #666;
+		font-family: arvo, serif;
+		font-size: 14px;
+		text-align: center;
+		padding: 12px;
+	}
+</style>
+{% endblock %}
+
+{% block title %}Single Player - {% endblock %}
+
+{% block content %}
+{{ super() }}
+<div class="sp-menu">
+	<h2>Single Player</h2>
+
+	<ul>
+		<li>
+			<a class="menu-button large" href="/single-player?difficulty=easy">
+				New Game (Easy)
+			</a>
+		</li>
+		<li>
+			<a class="menu-button large" href="/single-player?difficulty=hard">
+				New Game (Hard)
+			</a>
+		</li>
+	</ul>
+
+	<div class="section-label">Saved Games</div>
+
+	{% if saves %}
+	<ul>
+		{% for save in saves %}
+		<li>
+			<a class="menu-button large dark" href="/single-player?load={{ save.id }}">
+				Resume Game
+			</a>
+			<div class="save-info">
+				<span>Playing {{ save.human_color }} ({{ save.difficulty }})</span>
+				<span>Turn {{ save.turn }} &middot; Score: {{ save.score }}</span>
+			</div>
+		</li>
+		{% endfor %}
+	</ul>
+	{% else %}
+	<div class="no-saves">
+		No saved games. Start a new game and it will auto-save your progress.
+	</div>
+	{% endif %}
+</div>
+{% endblock %}
