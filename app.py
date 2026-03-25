@@ -1139,7 +1139,6 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 					_save_sgn(recorder)
 					_delete_save(save_id)
 					game_saved = True
-					board.end_game()
 					break
 
 				if board.whoseturn == 'red':
@@ -1155,7 +1154,6 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 					_save_sgn(recorder)
 					_delete_save(save_id)
 					game_saved = True
-					board.end_game()
 					break
 
 			except resetException:
@@ -1194,13 +1192,14 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 
 				continue
 	except Exception:
-		# If the game ended but end_game() wasn't reached, try to send game_over
-		if board.gameover and not game_saved:
+		pass
+	finally:
+		if board.gameover:
 			try:
 				board.end_game()
+				time.sleep(1)
 			except Exception:
 				pass
-	finally:
 		if not game_saved:
 			try:
 				recorder.end_game(board.winner)
