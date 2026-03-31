@@ -2,9 +2,36 @@
 
 {% block title %}Local 1v1 - {% endblock %}
 
+{% block head %}
+{{ super() }}
+<style>
+	.import-form {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px 0;
+	}
+	.import-form textarea {
+		width: 100%;
+		min-height: 48px;
+		font-family: monospace;
+		font-size: 12px;
+		padding: 8px;
+		border-radius: 4px;
+		border: 1px solid #555;
+		background: #1a1a2e;
+		color: #ddd;
+		resize: vertical;
+	}
+	.import-form button {
+		align-self: flex-start;
+	}
+</style>
+{% endblock %}
+
 {% block content %}
 {{ super() }}
-<div x-data="gameBoard({ playerCount: 2, gameMode: 'local1v1' })">
+<div x-data="gameBoard({ playerCount: 2, gameMode: '{{ game_mode }}', importSfn: {{ import_sfn | tojson }} })">
 	<div class="container">
 		<div class="container__inner">
 			<template x-if="messageHistory.length > 0">
@@ -112,7 +139,7 @@
 
 			<div
 				class="actions"
-				x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass')}"
+				x-bind:class="{ 'actions--visible': currentSfn || showReset || actionList.includes('dash') || actionList.includes('pass')}"
 			>
 				<button
 					class="action-button action-button--reset-turn"
@@ -134,6 +161,30 @@
 					x-on:click="handleEndTurn"
 				>
 					End Turn
+				</button>
+				<button
+					class="action-button"
+					x-bind:class="{ 'is-hidden': !currentSfn }"
+					x-on:click="exportPosition"
+					x-text="exportCopied ? 'Copied!' : 'Export Position'"
+				>
+					Export Position
+				</button>
+			</div>
+			<div
+				class="import-form"
+				x-show="!whoseTurn && !currentSfn"
+			>
+				<textarea
+					x-model="importSfn"
+					placeholder="Paste an SFN string to import a position..."
+				></textarea>
+				<button
+					class="action-button"
+					x-on:click="window.location.href = '/local-1v1?sfn=' + encodeURIComponent(importSfn)"
+					x-bind:disabled="!importSfn.trim()"
+				>
+					Import Position
 				</button>
 			</div>
 		</div>

@@ -23,7 +23,7 @@ from nn_ai_player import NNAIPlayer
 from ai.mcts_ai_player import MCTSAIPlayer
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
-from notation import GameRecorder
+from notation import GameRecorder, board_to_sfn, sfn_to_dict
 import os
 
 
@@ -95,7 +95,10 @@ def api_saves():
 
 @app.route('/local-1v1')
 def local1v1():
-	return render_template('local-1v1.html', current_user_name=getattr(current_user, 'name', ''))
+	import_sfn = request.args.get('sfn', '')
+	game_mode = 'local1v1_import' if import_sfn else 'local1v1'
+	return render_template('local-1v1.html', current_user_name=getattr(current_user, 'name', ''),
+						   game_mode=game_mode, import_sfn=import_sfn)
 
 @app.route('/private-match')
 def privatematch():
@@ -1020,6 +1023,15 @@ class _DedupWebSocket:
 
 @sock.route('/api/local1v1game')
 def play_local_1v1(ws):
+	_run_local_1v1_game(ws)
+
+@sock.route('/api/local1v1game_import')
+def play_local_1v1_import(ws):
+	ingress = ws.receive()
+	sfn_str = json.loads(ingress).get('message', '')
+	_run_local_1v1_game(ws, load_sfn=sfn_str)
+
+def _run_local_1v1_game(ws, load_sfn=None):
 	board = Board()
 	red = Player(board, 'red')
 	blue = Player(board, 'blue')
@@ -1031,7 +1043,28 @@ def play_local_1v1(ws):
 	red.ws = _DedupWebSocket(ws, shared_state)
 	blue.ws = _DedupWebSocket(ws, shared_state)
 
-	red.jmessage("Local 1v1 — Red goes first.")
+	if load_sfn:
+		state = sfn_to_dict(load_sfn)
+		board.set_spells_from_names(state['spell_names'])
+		for nodename in board.nodes:
+			board.nodes[nodename].stone = state['stones'][nodename]
+		board.turncounter = state['turncounter']
+		board.whoseturn = state['turn']
+		board.score = state['score']
+		red.spellcounter = state['red_spellcounter']
+		blue.spellcounter = state['blue_spellcounter']
+		if state['red_lock']:
+			red.lock = board.spelldict[state['red_lock']]
+		if state['blue_lock']:
+			blue.lock = board.spelldict[state['blue_lock']]
+		if state['red_springlock']:
+			red.springlock = board.spelldict[state['red_springlock']]
+		if state['blue_springlock']:
+			blue.springlock = board.spelldict[state['blue_springlock']]
+		next_turn = 'Red' if state['turncounter'] % 2 == 0 else 'Blue'
+		red.jmessage("Imported position — " + next_turn + "'s turn.")
+	else:
+		red.jmessage("Local 1v1 — Red goes first.")
 
 	egress = { "type": "spellsetup" }
 	egress["ritual1"] = board.spells[0].name
@@ -1057,10 +1090,20 @@ def play_local_1v1(ws):
 	egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
 	red.ws.send(json.dumps(egress))
 
-	board.nodes['a1'].stone = 'red'
-	board.nodes['b1'].stone = 'blue'
-	board.update()
+	if load_sfn:
+		board.update()
+	else:
+		board.nodes['a1'].stone = 'red'
+		board.nodes['b1'].stone = 'blue'
+		board.update()
+
 	time.sleep(2)
+
+	def send_sfn():
+		sfn = board_to_sfn(board)
+		red.ws.send(json.dumps({"type": "sfn_update", "sfn": sfn}))
+
+	send_sfn()
 
 	reset_this_turn = False
 
@@ -1099,6 +1142,7 @@ def play_local_1v1(ws):
 
 					activeplayer.eot_triggers()
 					board.update(True)
+					send_sfn()
 					reset_this_turn = False
 					if board.gameover:
 						break
@@ -1130,6 +1174,7 @@ def play_local_1v1(ws):
 					board.last_player = snapshot["last_player"]
 
 					board.update(True)
+					send_sfn()
 					reset_this_turn = True
 					continue
 			except Exception:
