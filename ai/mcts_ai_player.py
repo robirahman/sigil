@@ -15,7 +15,8 @@ from nn_ai_player import NNAIPlayer, _live_board_to_simboard
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
 from ai.mcts import mcts_search
-from ai.config import NUM_SIMS_PLAY, MODELS_DIR
+from ai.features import encode_all_turns
+from ai.config import NUM_SIMS_PLAY, MODELS_DIR, SPELL_TO_ID
 
 
 # Model paths by difficulty
@@ -46,6 +47,9 @@ class MCTSAIPlayer(NNAIPlayer):
             net_class = SigilNet
         if model_path is None:
             model_path = _HARD_MODEL if net_class is SigilNetHard else _MEDIUM_MODEL
+
+        # Collected training positions from MCTS searches
+        self.training_positions = []
 
         # Load the appropriate SigilNet variant
         self.sigil_net = None
@@ -80,6 +84,22 @@ class MCTSAIPlayer(NNAIPlayer):
 
         if best_turn is None:
             return None
+
+        # Record position data for training
+        try:
+            sfn = sim.to_sfn()
+            spell_ids = [SPELL_TO_ID.get(sim.spell_names[i], 0) for i in range(9)]
+            legal_turns = list(sim.get_legal_turns(self.color))
+            turn_feats = encode_all_turns(legal_turns, sim, self.color)
+            self.training_positions.append({
+                'sfn': sfn,
+                'spell_ids': spell_ids,
+                'policy': policy.tolist(),
+                'turn_encodings': turn_feats.numpy().tolist(),
+                'side': self.color,
+            })
+        except Exception:
+            pass  # Don't let training data collection break gameplay
 
         # Execute the chosen turn on the live board
         # (inherited from NNAIPlayer)

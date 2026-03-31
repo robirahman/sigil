@@ -50,8 +50,10 @@ for iter in $(seq 1 $MAX_ITERATIONS); do
 
     # --- Train ---
     echo "[$(date +%H:%M:%S)] Training ${TRAIN_EPOCHS} epochs on GPU..."
+    # Collect all training data: self-play + human games
+    TRAIN_FILES=$(ls ${DATA_DIR}/*_all.jsonl ${DATA_DIR}/human_game_*.jsonl 2>/dev/null)
     python3 -m ai.train_sigil --net hard \
-        --data ${DATA_DIR}/*_all.jsonl \
+        --data $TRAIN_FILES \
         --model $HARD_MODEL \
         --output $HARD_MODEL \
         --epochs $TRAIN_EPOCHS \

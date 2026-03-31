@@ -93,6 +93,10 @@ def singlePlayerMenu():
 def api_saves():
 	return json.dumps(_list_saves())
 
+@app.route('/local-1v1')
+def local1v1():
+	return render_template('local-1v1.html', current_user_name=getattr(current_user, 'name', ''))
+
 @app.route('/private-match')
 def privatematch():
 	return render_template('private-match.html', current_user_name=getattr(current_user, 'name', ''))
@@ -913,6 +917,34 @@ def _save_sgn(recorder):
 	with open(filepath, 'w') as f:
 		f.write(recorder.to_sgn())
 
+def _save_training_data(ai_player, winner):
+	"""Save MCTS positions from a human-vs-AI game as training data."""
+	from ai.config import DATA_DIR
+	positions = getattr(ai_player, 'training_positions', None)
+	if not positions:
+		return
+	os.makedirs(DATA_DIR, exist_ok=True)
+	from datetime import datetime as dt
+	timestamp = dt.now().strftime('%Y%m%d_%H%M%S_%f')
+	filepath = os.path.join(DATA_DIR, f'human_game_{timestamp}.jsonl')
+	with open(filepath, 'w') as f:
+		for pos in positions:
+			side = pos['side']
+			if winner == side:
+				outcome = 1.0
+			elif winner is not None:
+				outcome = -1.0
+			else:
+				outcome = 0.0
+			record = {
+				'sfn': pos['sfn'],
+				'spell_ids': pos['spell_ids'],
+				'policy': pos['policy'],
+				'turn_encodings': pos['turn_encodings'],
+				'outcome': outcome,
+			}
+			f.write(json.dumps(record) + '\n')
+
 def _save_game_state(board, recorder, human_color, difficulty, save_id):
 	"""Auto-save the current game state so it can be resumed later."""
 	from notation import board_to_sfn
@@ -964,6 +996,152 @@ def _load_save(save_id):
 	filepath = os.path.join(_APP_DIR, 'saves', f'{save_id}.json')
 	with open(filepath) as f:
 		return json.load(f)
+
+class _DedupState:
+	"""Shared state for deduplicating WebSocket sends across two player objects."""
+	def __init__(self):
+		self.last_sent = None
+
+class _DedupWebSocket:
+	"""Wraps a WebSocket so that consecutive identical sends are skipped.
+	Two instances sharing the same _DedupState will deduplicate across both."""
+	def __init__(self, ws, shared_state):
+		self._ws = ws
+		self._state = shared_state
+
+	def send(self, data):
+		if data != self._state.last_sent:
+			self._ws.send(data)
+			self._state.last_sent = data
+
+	def receive(self):
+		return self._ws.receive()
+
+
+@sock.route('/api/local1v1game')
+def play_local_1v1(ws):
+	board = Board()
+	red = Player(board, 'red')
+	blue = Player(board, 'blue')
+	board.addplayers(red, blue)
+	red.opp = blue
+	blue.opp = red
+
+	shared_state = _DedupState()
+	red.ws = _DedupWebSocket(ws, shared_state)
+	blue.ws = _DedupWebSocket(ws, shared_state)
+
+	red.jmessage("Local 1v1 — Red goes first.")
+
+	egress = { "type": "spellsetup" }
+	egress["ritual1"] = board.spells[0].name
+	egress["ritual2"] = board.spells[1].name
+	egress["ritual3"] = board.spells[2].name
+	egress["sorcery1"] = board.spells[3].name
+	egress["sorcery2"] = board.spells[4].name
+	egress["sorcery3"] = board.spells[5].name
+	egress["charm1"] = board.spells[6].name
+	egress["charm2"] = board.spells[7].name
+	egress["charm3"] = board.spells[8].name
+	red.ws.send(json.dumps(egress))
+
+	egress = { "type": "spelltextsetup" }
+	egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+	egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+	egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+	egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+	egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+	egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+	egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+	egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+	egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
+	red.ws.send(json.dumps(egress))
+
+	board.nodes['a1'].stone = 'red'
+	board.nodes['b1'].stone = 'blue'
+	board.update()
+	time.sleep(2)
+
+	reset_this_turn = False
+
+	try:
+		while True:
+			try:
+				if not reset_this_turn:
+					board.take_snapshot()
+
+				board.turncounter += 1
+
+				if board.turncounter % 2 == 1:
+					activeplayer = red
+					board.whoseturn = 'red'
+				else:
+					activeplayer = blue
+					board.whoseturn = 'blue'
+
+				try:
+					if board.whoseturn == 'red':
+						message = "Red Turn " + str((board.turncounter // 2) + 1)
+					elif board.whoseturn == 'blue':
+						message = "Blue Turn " + str(board.turncounter // 2)
+
+					egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+					red.ws.send(json.dumps(egress))
+
+					activeplayer.bot_triggers()
+					if board.gameover:
+						break
+
+					if board.whoseturn == 'red':
+						red.taketurn()
+					else:
+						blue.taketurn()
+
+					activeplayer.eot_triggers()
+					board.update(True)
+					reset_this_turn = False
+					if board.gameover:
+						break
+
+				except resetException:
+					red.jmessage("Resetting Turn")
+
+					snapshot = board.snapshot
+
+					board.turncounter = snapshot["turncounter"]
+					board.gameover = snapshot["gameover"]
+					board.winner = snapshot["winner"]
+					board.score = snapshot["score"]
+
+					for nodename in board.nodes:
+						board.nodes[nodename].stone = snapshot[nodename]
+					if snapshot["redlock"]:
+						red.lock = board.spelldict[snapshot["redlock"]]
+					else:
+						red.lock = None
+					if snapshot["bluelock"]:
+						blue.lock = board.spelldict[snapshot["bluelock"]]
+					else:
+						blue.lock = None
+
+					red.spellcounter = snapshot["redspellcounter"]
+					blue.spellcounter = snapshot["bluespellcounter"]
+					board.last_play = snapshot["last_play"]
+					board.last_player = snapshot["last_player"]
+
+					board.update(True)
+					reset_this_turn = True
+					continue
+			except Exception:
+				break
+	finally:
+		if board.gameover:
+			try:
+				board.end_game()
+				time.sleep(1)
+			except Exception:
+				pass
+
 
 @sock.route('/api/singleplayergame')
 def playsingleplayergame(ws):
@@ -1226,6 +1404,11 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 				_save_sgn(recorder)
 			except Exception:
 				pass
+		# Save MCTS training data from this game
+		try:
+			_save_training_data(ai, board.winner)
+		except Exception:
+			pass
 
 
 def opp_chat_listen(ws, opp_ws):
