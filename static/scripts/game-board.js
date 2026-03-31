@@ -6,7 +6,7 @@ document.addEventListener('alpine:init', () => {
 	Alpine.data(
 		'gameBoard',
 		// eslint-disable-next-line no-unused-vars
-		({ check = '', elo = 0, gameName = '', playerCount = 0, username = '', difficulty = 'easy', loadId = '' }) => ({
+		({ check = '', elo = 0, gameName = '', playerCount = 0, username = '', difficulty = 'easy', loadId = '', gameMode = '' }) => ({
 			actionList: [],
 			activeSpell: '',
 			activeSpellIsCastable: false,
@@ -202,9 +202,11 @@ document.addEventListener('alpine:init', () => {
 				});
 
 				const apiPath =
-					playerCount === 1
-						? (loadId ? 'singleplayergame_load' : (difficulty === 'hard' ? 'singleplayergame_hard' : 'singleplayergame'))
-						: gameName ? `privategame/${gameName}` : 'game';
+					gameMode === 'local1v1'
+						? 'local1v1game'
+						: playerCount === 1
+							? (loadId ? 'singleplayergame_load' : (difficulty === 'hard' ? 'singleplayergame_hard' : 'singleplayergame'))
+							: gameName ? `privategame/${gameName}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 				_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
 				_this.events.onmessage = handleIncomingEvent;
