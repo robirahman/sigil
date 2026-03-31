@@ -45,6 +45,7 @@ DIRICHLET_ALPHA = 0.5       # Noise parameter (higher = more uniform)
 DIRICHLET_EPSILON = 0.25    # Fraction of noise mixed into root prior
 TEMP_THRESHOLD = 30         # Turn after which temperature drops
 TEMP_PLAY = 0.01            # Temperature in production (near-greedy)
+MCTS_BATCH_SIZE = 8         # Leaf evaluations batched together per NN call
 
 # ---- Training ----
 BATCH_SIZE = 512
@@ -58,3 +59,8 @@ GAMES_PER_ITERATION = 10_000
 GATE_THRESHOLD = 0.55       # New model must win this fraction to be accepted
 GATE_GAMES = 400            # Games played for gating evaluation
 MAX_TURNS = 200             # Safety limit per game
+
+# ---- Resignation ----
+RESIGN_THRESHOLD = 0.85     # Resign if value < -threshold
+RESIGN_CONSECUTIVE = 3      # Must be this many turns in a row
+RESIGN_DISABLE_PROB = 0.1   # 10% of games play out to verify

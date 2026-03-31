@@ -28,6 +28,7 @@ from ai.features import board_to_tensor, encode_all_turns
 from ai.config import (
     NUM_SIMS_TRAIN, TEMP_THRESHOLD, MAX_TURNS,
     MODELS_DIR, DATA_DIR, SPELL_TO_ID,
+    RESIGN_THRESHOLD, RESIGN_CONSECUTIVE, RESIGN_DISABLE_PROB,
 )
 
 
@@ -46,6 +47,8 @@ def play_selfplay_game(model, num_simulations=None):
 
     positions = []
     turn_num = 0
+    resign_count = 0
+    resign_disabled = np.random.random() < RESIGN_DISABLE_PROB
 
     while not board.gameover and turn_num < MAX_TURNS:
         turn_num += 1
@@ -68,6 +71,9 @@ def play_selfplay_game(model, num_simulations=None):
         sfn = board.to_sfn()
         spell_ids = [SPELL_TO_ID.get(board.spell_names[i], 0) for i in range(9)]
 
+        # Pre-cache raw features so training skips SFN reconstruction
+        raw, _ = board_to_tensor(board, color)
+
         # Store legal turns and policy
         legal_turns = list(board.get_legal_turns(color))
         turn_feats = encode_all_turns(legal_turns, board, color)
@@ -75,10 +81,23 @@ def play_selfplay_game(model, num_simulations=None):
         positions.append({
             'sfn': sfn,
             'spell_ids': spell_ids,
+            'raw_features': raw.numpy().tolist(),
             'policy': policy.tolist(),
             'turn_encodings': turn_feats.numpy().tolist(),
             'side': color,
         })
+
+        # Resignation check: if value is very negative for several turns in a row
+        if not resign_disabled:
+            if value < -RESIGN_THRESHOLD:
+                resign_count += 1
+                if resign_count >= RESIGN_CONSECUTIVE:
+                    enemy = 'blue' if color == 'red' else 'red'
+                    board.gameover = True
+                    board.winner = enemy
+                    break
+            else:
+                resign_count = 0
 
         # Apply the chosen turn
         _apply_turn(board, best_turn, color)
@@ -131,6 +150,7 @@ def generate_training_data(model, num_games, output_path, num_simulations=None):
                 record = {
                     'sfn': pos['sfn'],
                     'spell_ids': pos['spell_ids'],
+                    'raw_features': pos['raw_features'],
                     'policy': pos['policy'],
                     'turn_encodings': pos['turn_encodings'],
                     'outcome': outcome,
