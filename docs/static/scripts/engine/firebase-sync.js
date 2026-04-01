@@ -35,8 +35,6 @@ class FirebaseSync {
 			created: Date.now(),
 			red: { connected: true },
 			blue: { connected: false },
-			actions: {},
-			actionCount: 0,
 		};
 
 		const roomRef = this.db.ref('rooms/' + code);

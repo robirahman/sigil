@@ -249,13 +249,19 @@
 
 				async createRoom() {
 					if (!this.sync) return;
-					const spellNames = generateSpellList();
-					this.roomCode = await this.sync.createRoom(spellNames);
-					this.phase = 'waiting';
+					this.lobbyError = '';
+					try {
+						const spellNames = generateSpellList();
+						this.roomCode = await this.sync.createRoom(spellNames);
+						this.phase = 'waiting';
 
-					this.sync.onOpponentJoin = () => {
-						this._startOnlineGame(spellNames, 'red');
-					};
+						this.sync.onOpponentJoin = () => {
+							this._startOnlineGame(spellNames, 'red');
+						};
+					} catch (e) {
+						this.lobbyError = 'Failed to create room: ' + e.message;
+						console.error('createRoom error:', e);
+					}
 				},
 
 				async joinRoom() {
