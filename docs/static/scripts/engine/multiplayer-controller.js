@@ -14,16 +14,10 @@ class MultiplayerController {
 		this._inputResolve = null;
 		this._resetRequested = false;
 		this.spellNames = spellNames;
-		this._gameLog = []; // Record (sfn, action, color) for each position
+		this._gameLog = [];
 
-		// When opponent sends an action, resolve the pending input
-		sync.onOpponentAction = (action) => {
-			if (this._inputResolve) {
-				const resolve = this._inputResolve;
-				this._inputResolve = null;
-				resolve(action);
-			}
-		};
+		// Buffer for local player's actions during a turn (sent only when turn completes)
+		this._turnBuffer = [];
 
 		sync.onOpponentDisconnect = () => {
 			this.emit({ type: 'message', message: 'Opponent disconnected.', awaiting: null });
@@ -32,8 +26,9 @@ class MultiplayerController {
 
 	handlePlayerAction(message) {
 		if (message === 'reset') {
-			// Reset only works on your own turn
 			this._resetRequested = true;
+			// Clear buffered actions — they were never sent
+			this._turnBuffer = [];
 			if (this._inputResolve) {
 				this._inputResolve('__reset__');
 				this._inputResolve = null;
@@ -41,17 +36,23 @@ class MultiplayerController {
 			return;
 		}
 
-		// Send action to Firebase AND resolve locally
-		const board = this.board;
-		const currentColor = board ? board.whoseTurn : null;
-		if (currentColor === this.myColor) {
-			this.sync.sendAction(message);
+		// Buffer the action locally (don't send yet)
+		if (this.board && this.board.whoseTurn === this.myColor) {
+			this._turnBuffer.push(message);
 		}
 
 		if (this._inputResolve) {
 			const resolve = this._inputResolve;
 			this._inputResolve = null;
 			resolve(message);
+		}
+	}
+
+	/** Flush buffered actions to Firebase. Called when a turn completes successfully. */
+	async _flushTurnBuffer() {
+		if (this._turnBuffer.length > 0) {
+			await this.sync.sendTurn(this._turnBuffer);
+			this._turnBuffer = [];
 		}
 	}
 
@@ -63,12 +64,21 @@ class MultiplayerController {
 	}
 
 	async getInput(payload) {
-		const resp = await this._waitForInput(payload);
-		if (this._resetRequested && this.board && this.board.whoseTurn === this.myColor) {
-			throw new ResetError();
+		const isMyTurn = this.board && this.board.whoseTurn === this.myColor;
+
+		if (isMyTurn) {
+			// Local player: wait for UI click
+			const resp = await this._waitForInput(payload);
+			if (this._resetRequested) {
+				throw new ResetError();
+			}
+			this._resetRequested = false;
+			return resp;
+		} else {
+			// Opponent's turn: get next action from Firebase queue
+			this.emit(payload);
+			return await this.sync.getNextOpponentAction();
 		}
-		this._resetRequested = false;
-		return resp;
 	}
 
 	async startGame() {
@@ -146,14 +156,16 @@ class MultiplayerController {
 				}
 
 				this._resetRequested = false;
+				this._turnBuffer = [];
 
 				// Record position before the turn is taken
 				const turnSfn = boardToSfn(board);
 
+				await this._takeTurn(color, true, true, true, true);
+
+				// Turn completed successfully — send buffered actions to opponent
 				if (color === this.myColor) {
-					await this._takeTurn(color, true, true, true, true);
-				} else {
-					await this._takeTurn(color, true, true, true, true);
+					await this._flushTurnBuffer();
 				}
 
 				// Record the turn: SFN before, SFN after

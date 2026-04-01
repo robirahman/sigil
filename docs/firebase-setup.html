@@ -207,9 +207,9 @@
         ".read": true,
         ".write": true,
         ".validate": "newData.hasChildren(['spellNames', 'status', 'created'])",
-        "actions": {
-          "$actionId": {
-            ".validate": "newData.hasChildren(['color', 'action', 'timestamp'])"
+        "turns": {
+          "$turnId": {
+            ".validate": "newData.hasChildren(['color', 'actions', 'timestamp'])"
           }
         }
       }
@@ -229,7 +229,7 @@
 			<ul>
 				<li>Allow anyone to read and write game rooms (no authentication required)</li>
 				<li>Require room data to include <code>spellNames</code>, <code>status</code>, and <code>created</code> fields</li>
-				<li>Require each action to include <code>color</code>, <code>action</code>, and <code>timestamp</code></li>
+				<li>Require each turn record to include <code>color</code>, <code>actions</code> (array), and <code>timestamp</code></li>
 				<li>Allow writing completed games to <code>/completed_games</code> (write-only &mdash; only the site owner can read them via the Firebase console or Admin SDK)</li>
 				<li>Block all other access</li>
 			</ul>
@@ -344,19 +344,19 @@ exports.cleanupRooms = functions.pubsub
 				<tr><td><code>created</code></td><td>Number</td><td>Timestamp (ms since epoch) when the room was created</td></tr>
 				<tr><td><code>red/connected</code></td><td>Boolean</td><td>Whether Red player is currently connected</td></tr>
 				<tr><td><code>blue/connected</code></td><td>Boolean</td><td>Whether Blue player is currently connected</td></tr>
-				<tr><td><code>actions/{pushId}</code></td><td>Object</td><td>Each player action, in order</td></tr>
-				<tr><td><code>actions/{pushId}/color</code></td><td>String</td><td><code>"red"</code> or <code>"blue"</code></td></tr>
-				<tr><td><code>actions/{pushId}/action</code></td><td>String</td><td>The action message (node name, spell name, <code>"pass"</code>, <code>"dash"</code>, etc.)</td></tr>
-				<tr><td><code>actions/{pushId}/timestamp</code></td><td>Number</td><td>When the action was sent</td></tr>
+				<tr><td><code>turns/{pushId}</code></td><td>Object</td><td>Each completed turn, in order</td></tr>
+				<tr><td><code>turns/{pushId}/color</code></td><td>String</td><td><code>"red"</code> or <code>"blue"</code></td></tr>
+				<tr><td><code>turns/{pushId}/actions</code></td><td>Array</td><td>Ordered list of action strings for this turn (node names, spell names, <code>"pass"</code>, <code>"dash"</code>, etc.)</td></tr>
+				<tr><td><code>turns/{pushId}/timestamp</code></td><td>Number</td><td>When the turn was finalized</td></tr>
 			</table>
 
 			<h2>How Sync Works</h2>
 			<p>The multiplayer system uses a simple protocol:</p>
 			<ol>
-				<li><strong>Room creation:</strong> Player 1 generates a random 6-character room code, writes the initial room data (spell names, status) to Firebase, and starts listening for actions.</li>
-				<li><strong>Room joining:</strong> Player 2 enters the code, reads the room data to get the spell names, marks themselves as connected, and starts listening for actions.</li>
-				<li><strong>Gameplay:</strong> Both players run the full game engine locally. When it's your turn, your clicks are sent as actions to Firebase <em>and</em> applied locally. When it's the opponent's turn, the game engine waits for an action to arrive from Firebase.</li>
-				<li><strong>Action format:</strong> Actions are the same strings the UI sends in local mode: node names (<code>"a2"</code>, <code>"b7"</code>), spell names (<code>"Flourish"</code>), or commands (<code>"pass"</code>, <code>"dash"</code>).</li>
+				<li><strong>Room creation:</strong> Player 1 generates a random 6-character room code, writes the initial room data (spell names, status) to Firebase, and starts listening for turns.</li>
+				<li><strong>Room joining:</strong> Player 2 enters the code, reads the room data to get the spell names, marks themselves as connected, and starts listening for turns.</li>
+				<li><strong>Gameplay:</strong> Both players run the full game engine locally. When it's your turn, your actions are applied locally but <strong>buffered</strong> &mdash; they are not sent to Firebase until the turn is finalized (End Turn / Pass). This means Reset Turn works correctly without affecting the opponent's state. When it's the opponent's turn, the game engine waits for their completed turn to arrive from Firebase and replays the actions locally.</li>
+				<li><strong>Turn format:</strong> Each turn is sent as an ordered array of action strings: node names (<code>"a2"</code>, <code>"b7"</code>), spell names (<code>"Flourish"</code>), or commands (<code>"pass"</code>, <code>"dash"</code>). The opponent's engine consumes these one at a time in order.</li>
 				<li><strong>Disconnect detection:</strong> Each player sets an <code>onDisconnect</code> handler that marks them as disconnected when their browser closes.</li>
 			</ol>
 

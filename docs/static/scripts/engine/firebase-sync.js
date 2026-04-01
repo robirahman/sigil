@@ -5,8 +5,8 @@
  * 1. Player 1 creates a room (gets room code)
  * 2. Player 2 joins with room code
  * 3. Both connect to the same Firebase path
- * 4. Turns are written as actions to /rooms/{code}/actions
- * 5. Each player listens for opponent's actions and replays them locally
+ * 4. Turns are sent as batches to /rooms/{code}/turns
+ * 5. Each player listens for opponent's turns and replays them locally
  */
 
 class FirebaseSync {
@@ -15,15 +15,15 @@ class FirebaseSync {
 		this.roomCode = null;
 		this.roomRef = null;
 		this.myColor = null;
-		this.onOpponentAction = null;
 		this.onOpponentJoin = null;
 		this.onOpponentDisconnect = null;
-		this._actionIndex = 0;
+
+		// Queue of opponent actions received from Firebase, waiting to be consumed
+		this._incomingQueue = [];
+		// Resolver for the next getInput() call waiting for an opponent action
+		this._waitingResolver = null;
 	}
 
-	/**
-	 * Create a new game room. Returns the room code.
-	 */
 	async createRoom(spellNames) {
 		const code = _generateRoomCode();
 		this.roomCode = code;
@@ -37,56 +37,21 @@ class FirebaseSync {
 			blue: { connected: false },
 		};
 
-		console.log('[FirebaseSync] Creating room', code, 'with data:', roomData);
-
-		let roomRef;
-		try {
-			roomRef = this.db.ref('rooms/' + code);
-			console.log('[FirebaseSync] Got ref, calling set()...');
-		} catch (e) {
-			throw new Error('Failed to get database ref: ' + e.message);
-		}
-
-		try {
-			await roomRef.set(roomData);
-			console.log('[FirebaseSync] set() succeeded');
-		} catch (e) {
-			throw new Error('Failed to write room data: ' + e.message);
-		}
-
+		const roomRef = this.db.ref('rooms/' + code);
+		await roomRef.set(roomData);
 		this.roomRef = roomRef;
 
-		try {
-			roomRef.child('blue/connected').on('value', (snap) => {
-				if (snap.val() === true && this.onOpponentJoin) {
-					this.onOpponentJoin();
-				}
-			});
-			console.log('[FirebaseSync] Listening for blue join');
-		} catch (e) {
-			throw new Error('Failed to listen for opponent: ' + e.message);
-		}
+		roomRef.child('blue/connected').on('value', (snap) => {
+			if (snap.val() === true && this.onOpponentJoin) {
+				this.onOpponentJoin();
+			}
+		});
 
-		try {
-			this._listenForActions();
-			console.log('[FirebaseSync] Listening for actions');
-		} catch (e) {
-			throw new Error('Failed to listen for actions: ' + e.message);
-		}
-
-		try {
-			roomRef.child('red/connected').onDisconnect().set(false);
-			console.log('[FirebaseSync] Set disconnect handler');
-		} catch (e) {
-			throw new Error('Failed to set disconnect handler: ' + e.message);
-		}
-
+		this._listenForTurns();
+		roomRef.child('red/connected').onDisconnect().set(false);
 		return code;
 	}
 
-	/**
-	 * Join an existing room. Returns the spell names.
-	 */
 	async joinRoom(code) {
 		this.roomCode = code;
 		this.myColor = 'blue';
@@ -99,53 +64,66 @@ class FirebaseSync {
 		if (!data) throw new Error('Room not found');
 		if (data.status !== 'waiting') throw new Error('Game already in progress');
 
-		// Mark blue as connected
 		await roomRef.child('blue/connected').set(true);
 		await roomRef.child('status').set('playing');
-
-		// Set disconnect handler
 		roomRef.child('blue/connected').onDisconnect().set(false);
 
-		// Listen for disconnect of opponent
 		roomRef.child('red/connected').on('value', (snap) => {
 			if (snap.val() === false && this.onOpponentDisconnect) {
 				this.onOpponentDisconnect();
 			}
 		});
 
-		// Listen for actions
-		this._listenForActions();
-
+		this._listenForTurns();
 		return data.spellNames;
 	}
 
 	/**
-	 * Send an action to the room.
+	 * Send a completed turn's actions as a batch.
+	 * @param {string[]} actions - ordered list of action strings for this turn
 	 */
-	async sendAction(action) {
+	async sendTurn(actions) {
 		if (!this.roomRef) return;
-		const actionsRef = this.roomRef.child('actions');
-		await actionsRef.push({
+		await this.roomRef.child('turns').push({
 			color: this.myColor,
-			action: action,
+			actions: actions,
 			timestamp: Date.now(),
 		});
 	}
 
-	_listenForActions() {
-		const actionsRef = this.roomRef.child('actions');
-		actionsRef.on('child_added', (snap) => {
+	/**
+	 * Get the next opponent action. Returns a Promise that resolves with the
+	 * action string. If actions are already queued, resolves immediately.
+	 */
+	getNextOpponentAction() {
+		if (this._incomingQueue.length > 0) {
+			return Promise.resolve(this._incomingQueue.shift());
+		}
+		return new Promise(resolve => {
+			this._waitingResolver = resolve;
+		});
+	}
+
+	_listenForTurns() {
+		const turnsRef = this.roomRef.child('turns');
+		turnsRef.on('child_added', (snap) => {
 			const data = snap.val();
-			if (data.color !== this.myColor && this.onOpponentAction) {
-				this.onOpponentAction(data.action);
+			if (data.color === this.myColor) return; // ignore own turns
+
+			// Enqueue each action from the opponent's turn
+			const actions = data.actions || [];
+			for (const action of actions) {
+				if (this._waitingResolver) {
+					const resolve = this._waitingResolver;
+					this._waitingResolver = null;
+					resolve(action);
+				} else {
+					this._incomingQueue.push(action);
+				}
 			}
 		});
 	}
 
-	/**
-	 * Save a completed game to /completed_games for training data.
-	 * Only one player (red) writes this to avoid duplicates.
-	 */
 	async saveCompletedGame(gameRecord) {
 		if (!this.db || this.myColor !== 'red') return;
 		try {
