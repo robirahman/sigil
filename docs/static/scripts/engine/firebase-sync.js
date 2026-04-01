@@ -37,22 +37,49 @@ class FirebaseSync {
 			blue: { connected: false },
 		};
 
-		const roomRef = this.db.ref('rooms/' + code);
-		await roomRef.set(roomData);
+		console.log('[FirebaseSync] Creating room', code, 'with data:', roomData);
+
+		let roomRef;
+		try {
+			roomRef = this.db.ref('rooms/' + code);
+			console.log('[FirebaseSync] Got ref, calling set()...');
+		} catch (e) {
+			throw new Error('Failed to get database ref: ' + e.message);
+		}
+
+		try {
+			await roomRef.set(roomData);
+			console.log('[FirebaseSync] set() succeeded');
+		} catch (e) {
+			throw new Error('Failed to write room data: ' + e.message);
+		}
+
 		this.roomRef = roomRef;
 
-		// Listen for blue to join
-		roomRef.child('blue/connected').on('value', (snap) => {
-			if (snap.val() === true && this.onOpponentJoin) {
-				this.onOpponentJoin();
-			}
-		});
+		try {
+			roomRef.child('blue/connected').on('value', (snap) => {
+				if (snap.val() === true && this.onOpponentJoin) {
+					this.onOpponentJoin();
+				}
+			});
+			console.log('[FirebaseSync] Listening for blue join');
+		} catch (e) {
+			throw new Error('Failed to listen for opponent: ' + e.message);
+		}
 
-		// Listen for actions from opponent
-		this._listenForActions();
+		try {
+			this._listenForActions();
+			console.log('[FirebaseSync] Listening for actions');
+		} catch (e) {
+			throw new Error('Failed to listen for actions: ' + e.message);
+		}
 
-		// Set disconnect handler
-		roomRef.child('red/connected').onDisconnect().set(false);
+		try {
+			roomRef.child('red/connected').onDisconnect().set(false);
+			console.log('[FirebaseSync] Set disconnect handler');
+		} catch (e) {
+			throw new Error('Failed to set disconnect handler: ' + e.message);
+		}
 
 		return code;
 	}
