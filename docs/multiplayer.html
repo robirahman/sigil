@@ -154,8 +154,8 @@
 			<p class="status-msg">Waiting for Player 2 to join...</p>
 		</div>
 
-		<!-- Game (hidden until game starts) -->
-		<div x-show="phase === 'playing'" x-cloak>
+		<!-- Game (only mounts when game starts) -->
+		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })">
 				<div class="container"><div class="container__inner">
 					<template x-if="messageHistory.length > 0">
@@ -197,7 +197,7 @@
 					<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
 				</div>
 			</div>
-		</div>
+		</template>
 	</div>
 
 	<script>
