@@ -320,6 +320,20 @@
 			messagingSenderId: "174679859896",
 			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 		});
+		// Inline test: does ref() work at all?
+		try {
+			var _db = firebase.database();
+			console.log('[Firebase test] database() returned:', typeof _db, _db);
+			var _ref = _db.ref('_connectivity_test');
+			console.log('[Firebase test] ref() returned:', typeof _ref, _ref);
+			_ref.set({ t: Date.now() }).then(function() {
+				console.log('[Firebase test] set() succeeded - database is working');
+			}).catch(function(err) {
+				console.error('[Firebase test] set() failed:', err.code, err.message);
+			});
+		} catch (e) {
+			console.error('[Firebase test] FAILED at SDK level:', e.message, e);
+		}
 	</script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
