@@ -18,7 +18,7 @@ from ai.features import board_to_tensor, encode_all_turns
 from ai.config import (
     C_PUCT, NUM_SIMS_PLAY, NUM_SIMS_TRAIN,
     DIRICHLET_ALPHA, DIRICHLET_EPSILON, TEMP_THRESHOLD, TEMP_PLAY,
-    MCTS_BATCH_SIZE,
+    MCTS_BATCH_SIZE, FPU_REDUCTION,
 )
 
 
@@ -292,17 +292,24 @@ def _batch_evaluate(model, eval_inputs):
 
 
 def _select_action(node):
-    """Select action using PUCT formula with virtual loss."""
+    """Select action using PUCT formula with virtual loss and FPU reduction."""
     total_n = node.total_visits
     sqrt_total = math.sqrt(total_n) if total_n > 0 else 1.0
 
     n = node.visit_count
     vl = node.virtual_loss
 
+    # Compute parent value for FPU (First Play Urgency)
+    if total_n > 0:
+        parent_q = node.total_value.sum() / total_n
+    else:
+        parent_q = 0.0
+    fpu_value = parent_q - FPU_REDUCTION
+
     # Virtual loss: treat in-flight edges as if they returned a loss
     effective_n = n + vl
     with np.errstate(divide='ignore', invalid='ignore'):
-        q = np.where(effective_n > 0, (node.total_value - vl) / effective_n, 0.0)
+        q = np.where(effective_n > 0, (node.total_value - vl) / effective_n, fpu_value)
     u = C_PUCT * node.prior * sqrt_total / (1.0 + effective_n)
 
     scores = q + u

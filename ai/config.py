@@ -12,6 +12,7 @@ DATA_DIR = os.path.join(AI_DIR, 'data')
 NUM_NODES = 39
 NUM_SPELL_SLOTS = 9
 NUM_POSSIBLE_SPELLS = 15
+NUM_SPELL_POSITIONS = 9
 
 # Spell name -> integer ID (fixed mapping for embedding layer)
 SPELL_TO_ID = {
@@ -23,12 +24,12 @@ SPELL_TO_ID = {
 
 # ---- Network architecture (medium — 2.17M params) ----
 SPELL_EMBED_DIM = 16        # Embedding dimension per spell
-RAW_FEATURE_DIM = 250       # Non-spell raw features
+RAW_FEATURE_DIM = 294       # Non-spell raw features (250 base + 44 strategic)
 TRUNK_DIM = 400             # ResNet trunk width
 NUM_RES_BLOCKS = 6          # Residual blocks in trunk
 POLICY_HIDDEN_DIM = 256     # Policy head hidden dimension
 VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
-TURN_FEATURE_DIM = 64       # Per-turn encoding size
+TURN_FEATURE_DIM = 80       # Per-turn encoding size (64 base + 16 strategic)
 
 # ---- Network architecture (hard — ~44M params, NNUE-style shallow+wide) ----
 HARD_SPELL_EMBED_DIM = 32   # Wider spell embedding
@@ -40,12 +41,13 @@ HARD_VALUE_DIM = 256        # Value head hidden
 # ---- MCTS ----
 C_PUCT = 2.0               # Exploration constant
 NUM_SIMS_TRAIN = 400        # Simulations per move during self-play
-NUM_SIMS_PLAY = 800         # Simulations per move in production
+NUM_SIMS_PLAY = 1600        # Simulations per move in production
 DIRICHLET_ALPHA = 0.5       # Noise parameter (higher = more uniform)
 DIRICHLET_EPSILON = 0.25    # Fraction of noise mixed into root prior
 TEMP_THRESHOLD = 30         # Turn after which temperature drops
 TEMP_PLAY = 0.01            # Temperature in production (near-greedy)
 MCTS_BATCH_SIZE = 8         # Leaf evaluations batched together per NN call
+FPU_REDUCTION = 0.25        # First Play Urgency: unvisited children get Q = parent_value - this
 
 # ---- Training ----
 BATCH_SIZE = 512
