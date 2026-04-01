@@ -1,0 +1,131 @@
+.help-menu-container {
+	display: flex;
+	flex-direction: column-reverse;
+	position: fixed;
+	bottom: 12px;
+	z-index: 2;
+	pointer-events: none;
+}
+
+.help-menu-container.open {
+	pointer-events: all;
+}
+
+.help-menu-container input,
+.help-menu-container .submenu-container {
+	display: none;
+	white-space: nowrap;
+	box-shadow: 0 0 4px 1px black;
+	border: 1px solid #333;
+}
+
+.help-menu-container label {
+	width: fit-content;
+	border: 1px solid;
+	border-radius: 20px;
+	background: black;
+	padding: 5px 10px;
+	height: 36px;
+	z-index: 1;
+	pointer-events: all;
+}
+
+.help-menu-container .submenu-container {
+	display: block;
+	background: black;
+	transform: scaleY(0);
+	transform-origin: bottom left;
+	border-radius: 5px;
+	padding: 0;
+	height: 0;
+	width: 0;
+}
+
+.help-menu-container label:focus ~ .submenu-container,
+.help-menu-container label:hover ~ .submenu-container,
+.help-menu-container input:checked ~ .submenu-container {
+	padding: 5px 5px 5px 10px;
+	height: auto;
+	width: auto;
+}
+
+.help-menu-container label,
+.help-menu-container .submenu-container li {
+	position: relative;
+	display: block;
+	cursor: pointer;
+}
+
+.help-menu-container .submenu-container li {
+	padding: 5px 0;
+}
+
+.help-menu-container label:focus ~ .submenu-container,
+.help-menu-container label:hover ~ .submenu-container {
+	transition: transform 0.2s ease-in-out;
+}
+
+.help-menu-container input:checked ~ .submenu-container {
+	transition: transform 0.2s ease-in-out;
+	transform: scaleY(1);
+}
+
+.help-menu-container label:focus,
+.help-menu-container label:hover {
+	transition: border-radius 0.2s ease-in-out;
+}
+
+.help-menu-container input:checked ~ label {
+	transition: border-radius 0.2s ease-in-out;
+	border-radius: 10px;
+}
+
+.help-menu-container .content {
+	max-width: 0;
+	max-height: 0;
+	white-space: normal;
+	color: white;
+	overflow: hidden;
+}
+
+.help-menu-container .content.after-open-transition {
+	overflow-y: auto;
+}
+
+.help-menu-container .content.show {
+	max-width: 80vw;
+	max-height: calc(100vh - 50px - 120px);
+	transition-property: max-height;
+	transition-duration: 0.5s;
+	transition-timing-function: ease-in-out;
+}
+
+.help-menu-container .submenu,
+.help-menu-container .content > div {
+	display: none;
+}
+
+.help-menu-container .submenu.show,
+.help-menu-container .content > div.show {
+	display: block;
+}
+
+.help-menu-container .content .turn-structure .indent {
+	padding-left: 8px;
+}
+
+.help-menu-container .content::-webkit-scrollbar {
+	background: transparent;
+	width: 6px;
+}
+
+.help-menu-container .content::-webkit-scrollbar-button {
+	background: transparent;
+	display: block;
+	height: 0;
+}
+
+.help-menu-container .content::-webkit-scrollbar-thumb {
+	background: rgb(255 255 255 / 25%);
+	border-radius: 6px;
+}

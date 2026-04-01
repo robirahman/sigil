@@ -1,0 +1,56 @@
+.menu-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 20px;
+	padding: 25px 30px;
+	border-radius: 1000px;
+	background-color: #115f77;
+	box-shadow: 2px 2px #0e0514;
+	color: #f0f0f0;
+	font-size: 20px;
+	font-family: overlock, serif;
+	white-space: nowrap;
+}
+
+.menu-button:focus,
+.menu-button:hover {
+	background-color: #004962;
+}
+
+.menu-button.dark {
+	background-color: #272b49;
+}
+
+.menu-button.dark:focus,
+.menu-button.dark:hover {
+	background-color: #1e2139;
+}
+
+.menu-button.large {
+	font-size: 31px;
+	height: 66px;
+}
+
+.link {
+	color: #485fc7;
+}
+
+.link:focus,
+.link:hover {
+	color: #2c4980;
+}
+
+.link--white {
+	color: #fff;
+}
+
+.link--white:focus,
+.link--white:hover {
+	color: #d9d9d9;
+}
+
+.text-link:focus,
+.text-link:hover {
+	text-decoration: underline;
+}

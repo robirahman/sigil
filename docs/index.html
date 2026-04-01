@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html
+	class="height:100%"
+	id="html"
+	lang="en"
+>
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0"
+		/>
+		<meta
+			http-equiv="X-UA-Compatible"
+			content="ie=edge"
+		/>
+		<link
+			href="static/css/global.css?v202305191"
+			rel="stylesheet"
+		/>
+		<link
+			href="static/css/layout.css"
+			rel="stylesheet"
+		/>
+		<link
+			href="static/css/styles.css"
+			rel="stylesheet"
+		/>
+		<link
+			rel="preconnect"
+			href="https://fonts.googleapis.com"
+		/>
+		<link
+			rel="preconnect"
+			href="https://fonts.gstatic.com"
+			crossorigin
+		/>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap"
+			rel="stylesheet"
+		/>
+		<link
+			href="https://use.typekit.net/rot4udi.css"
+			rel="stylesheet"
+		/>
+		<link
+			href="static/css/help.css"
+			rel="stylesheet"
+		/>
+		<title>Local 1v1 - Sigil Online</title>
+		<style>
+			header {
+				position: absolute;
+			}
+
+			body > .main {
+				padding-top: 0px;
+			}
+
+			.import-form {
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
+				padding: 12px 0;
+			}
+			.import-form textarea {
+				width: 100%;
+				min-height: 48px;
+				font-family: monospace;
+				font-size: 12px;
+				padding: 8px;
+				border-radius: 4px;
+				border: 1px solid #555;
+				background: #1a1a2e;
+				color: #ddd;
+				resize: vertical;
+			}
+			.import-form button {
+				align-self: flex-start;
+			}
+		</style>
+		<script>
+			var webpDetector = new Image();
+			webpDetector.onload = function () {
+				document.documentElement.classList.add('webp');
+			};
+			webpDetector.src =
+				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
+		</script>
+	</head>
+
+	<body>
+		<header>
+			<div class="container">
+				<div class="header-container">
+					<div>
+						<h1 class="logo">
+							<a href="./"
+								><span class="visually-hidden">Sigil Online</span
+								><img
+									alt=""
+									src="static/images/logo-icon.svg"
+									height="40"
+									width="32"
+							/></a>
+						</h1>
+					</div>
+					<h1></h1>
+					<div></div>
+				</div>
+			</div>
+		</header>
+
+		<div class="main">
+			<!-- Rules menu -->
+			<div class="container">
+				<div class="help-menu-container">
+					<input
+						id="help-menu"
+						type="checkbox"
+					/>
+					<label
+						class="link"
+						for="help-menu"
+						>Rules</label
+					>
+					<div class="submenu-container">
+						<ul class="submenu">
+							<li>
+								<button class="link turn-structure-btn">Turn Structure</button>
+							</li>
+							<li>
+								<button class="link glossary-btn">Glossary</button>
+							</li>
+						</ul>
+						<div class="content">
+							<div class="glossary">
+								<p>
+									<strong>Soft Move</strong><br />
+									Place a stone into an empty node (cannot push/crush an enemy). Must still be adjacent to
+									one of your stones, unless it's a soft blink move.
+								</p>
+								<br />
+								<p>
+									<strong>Hard Move</strong><br />
+									Place a stone into an enemy-occupied node (MUST push/crush an enemy). Must still be
+									adjacent to one of your stones, unless it's a hard blink move.
+								</p>
+								<br />
+								<p>
+									<strong>Blink Move</strong><br />
+									Place a stone anywhere on the board (need not be adjacent to one of your stones).
+								</p>
+								<br />
+								<p>
+									<strong>Dash</strong><br />
+									Optional action after your standard move but before casting a spell. First sacrifice 2
+									stones, then make 1 move (hard or soft). Must still be adjacent.
+								</p>
+								<br />
+								<p>
+									<strong>Static</strong><br />
+									A spell that grants a permanent effect and is not cast. You must fully occupy the spell
+									to gain its effect.
+								</p>
+							</div>
+							<div class="turn-structure">
+								<div>1. Standard move</div>
+								<div>2. Dash (optional)</div>
+								<div>3. Cast spell (optional)</div>
+								<div class="indent">
+									&bull; sacrifice stones<br />
+									&bull; mana refill (3 and 5 node only)<br />
+									&bull; resolve effect<br />
+									&bull; lock spell (3 and 5 node only)<br />
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Game board -->
+			<div x-data="gameBoard({ importSfn: new URLSearchParams(window.location.search).get('sfn') || '' })">
+				<div class="container">
+					<div class="container__inner">
+						<template x-if="messageHistory.length > 0">
+							<ul
+								class="feed feed--history"
+								x-ref="messageHistory"
+							>
+								<template x-for="message in messageHistory">
+									<li x-text="message"></li>
+								</template>
+							</ul>
+						</template>
+
+						<div class="dice">
+							<div
+								class="die die--red"
+								x-bind:data-die-face="redSpellCounter"
+								x-bind:title="`${redSpellCounter} spells cast`"
+							>
+								<div class="die__face die__face--1">
+									<div class="die__pip die__pip--mm"></div>
+								</div>
+								<div class="die__face die__face--2">
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--tl"></div>
+								</div>
+								<div class="die__face die__face--3">
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--mm"></div>
+									<div class="die__pip die__pip--tl"></div>
+								</div>
+								<div class="die__face die__face--4">
+									<div class="die__pip die__pip--bl"></div>
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--tl"></div>
+									<div class="die__pip die__pip--tr"></div>
+								</div>
+								<div class="die__face die__face--5">
+									<div class="die__pip die__pip--bl"></div>
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--mm"></div>
+									<div class="die__pip die__pip--tl"></div>
+									<div class="die__pip die__pip--tr"></div>
+								</div>
+								<div class="die__face die__face--6">
+									<div class="die__pip die__pip--bl"></div>
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--ml"></div>
+									<div class="die__pip die__pip--mr"></div>
+									<div class="die__pip die__pip--tl"></div>
+									<div class="die__pip die__pip--tr"></div>
+								</div>
+								<div class="die__face die__face--0">
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--mm"></div>
+									<div class="die__pip die__pip--tl"></div>
+								</div>
+							</div>
+
+							<div
+								class="die die--blue"
+								x-bind:data-die-face="blueSpellCounter"
+								x-bind:title="`${blueSpellCounter} spells cast`"
+							>
+								<div class="die__face die__face--1">
+									<div class="die__pip die__pip--mm"></div>
+								</div>
+								<div class="die__face die__face--2">
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--tl"></div>
+								</div>
+								<div class="die__face die__face--3">
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--mm"></div>
+									<div class="die__pip die__pip--tl"></div>
+								</div>
+								<div class="die__face die__face--4">
+									<div class="die__pip die__pip--bl"></div>
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--tl"></div>
+									<div class="die__pip die__pip--tr"></div>
+								</div>
+								<div class="die__face die__face--5">
+									<div class="die__pip die__pip--bl"></div>
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--mm"></div>
+									<div class="die__pip die__pip--tl"></div>
+									<div class="die__pip die__pip--tr"></div>
+								</div>
+								<div class="die__face die__face--6">
+									<div class="die__pip die__pip--bl"></div>
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--ml"></div>
+									<div class="die__pip die__pip--mr"></div>
+									<div class="die__pip die__pip--tl"></div>
+									<div class="die__pip die__pip--tr"></div>
+								</div>
+								<div class="die__face die__face--0">
+									<div class="die__pip die__pip--br"></div>
+									<div class="die__pip die__pip--mm"></div>
+									<div class="die__pip die__pip--tl"></div>
+								</div>
+							</div>
+						</div>
+
+						<div
+							class="actions"
+							x-bind:class="{ 'actions--visible': currentSfn || showReset || actionList.includes('dash') || actionList.includes('pass')}"
+						>
+							<button
+								class="action-button action-button--reset-turn"
+								x-bind:class="{ 'is-hidden': !showReset }"
+								x-on:click="handleReset"
+							>
+								Reset Turn
+							</button>
+							<button
+								class="action-button action-button--dash"
+								x-bind:class="{ 'is-hidden': !actionList.includes('dash') }"
+								x-on:click="handleDash"
+							>
+								Dash
+							</button>
+							<button
+								class="action-button action-button--end-turn"
+								x-bind:class="{ 'is-hidden': !actionList.includes('pass') }"
+								x-on:click="handleEndTurn"
+							>
+								End Turn
+							</button>
+							<button
+								class="action-button"
+								x-bind:class="{ 'is-hidden': !currentSfn }"
+								x-on:click="exportPosition"
+								x-text="exportCopied ? 'Copied!' : 'Export Position'"
+							>
+								Export Position
+							</button>
+						</div>
+						<div
+							class="import-form"
+							x-show="!whoseTurn && !currentSfn"
+						>
+							<textarea
+								x-model="importSfn"
+								placeholder="Paste an SFN string to import a position..."
+							></textarea>
+							<button
+								class="action-button"
+								x-on:click="window.location.href = '?sfn=' + encodeURIComponent(importSfn)"
+								x-bind:disabled="!importSfn.trim()"
+							>
+								Import Position
+							</button>
+						</div>
+					</div>
+				</div>
+				<div
+					class="container"
+					style="overflow: auto"
+				>
+					<div
+						class="container__inner game-board-container"
+						x-ref="gameBoardContainer"
+					>
+						<div class="position:relative">
+							<picture>
+								<source
+									type="image/webp"
+									srcset="static/images/game-board.webp"
+								/>
+								<img
+									class="game-board max-width:100%"
+									src="static/images/game-board.jpg"
+									alt=""
+								/>
+							</picture>
+							<div class="spells">
+								<template x-for="i in 3">
+									<div>
+										<div
+											class="spell spell--tooltip-anchor charm-spell"
+											x-bind:class="{
+											[`charm-spell--${i}`] : true,
+											[`spell--tooltip-anchor-charm${i}`] : true,
+										}"
+										></div>
+										<picture>
+											<source
+												type="image/webp"
+												x-bind:srcset="spells.images[`charm${i}`]?.replace('.png', '.webp')"
+											/>
+											<img
+												class="spell charm-spell"
+												alt=""
+												src="static/images/spacer.gif"
+												x-bind:class="{
+													'spell--available': actionList.includes(spellDict[`charm${i}`]),
+													'spell--blue-lock': blueLock === spellDict[`charm${i}`],
+													'spell--red-lock': redLock === spellDict[`charm${i}`],
+													'spell--visible': spells.images[`charm${i}`],
+													[`charm-spell--${i}`] : true
+												}"
+												x-bind:src="spells.images[`charm${i}`]"
+												x-on:click.stop="handleCharmClick(`charm${i}`)"
+												x-on:click.outside="closeSpellTooltip"
+												x-on:mouseout="handleSpellMouseOut(`charm${i}`)"
+												x-on:mouseover="handleSpellMouseOver(`charm${i}`)"
+											/>
+										</picture>
+									</div>
+								</template>
+
+								<template x-for="i in 3">
+									<div>
+										<div
+											class="spell spell--tooltip-anchor ritual-spell"
+											x-bind:class="{
+									  [`ritual-spell--${i}`] : true,
+									  [`spell--tooltip-anchor-ritual${i}`] : true,
+									}"
+										></div>
+										<picture>
+											<source
+												type="image/webp"
+												x-bind:srcset="spells.images[`ritual${i}`]?.replace('.png', '.webp')"
+											/>
+											<img
+												class="spell ritual-spell"
+												alt=""
+												src="static/images/spacer.gif"
+												x-bind:class="{
+										  'spell--available': actionList.includes(spellDict[`ritual${i}`]),
+										  'spell--blue-lock': blueLock === spellDict[`ritual${i}`],
+										  'spell--red-lock': redLock === spellDict[`ritual${i}`],
+										  'spell--visible': spells.images[`ritual${i}`],
+										  [`ritual-spell--${i}`] : true
+										}"
+												x-bind:src="spells.images[`ritual${i}`]"
+												x-on:click.stop="handleSpellClick(`ritual${i}`)"
+												x-on:click.outside="closeSpellTooltip"
+												x-on:mouseout="handleSpellMouseOut(`ritual${i}`)"
+												x-on:mouseover="handleSpellMouseOver(`ritual${i}`)"
+											/>
+										</picture>
+									</div>
+								</template>
+
+								<template x-for="i in 3">
+									<div>
+										<div
+											class="spell spell--tooltip-anchor sorcery-spell"
+											x-bind:class="{
+									  [`sorcery-spell--${i}`] : true,
+									  [`spell--tooltip-anchor-sorcery${i}`] : true,
+									}"
+										></div>
+										<picture>
+											<source
+												type="image/webp"
+												x-bind:srcset="spells.images[`sorcery${i}`]?.replace('.png', '.webp')"
+											/>
+											<img
+												class="spell sorcery-spell"
+												alt=""
+												src="static/images/spacer.gif"
+												x-bind:class="{
+										  'spell--available': actionList.includes(spellDict[`sorcery${i}`]),
+										  'spell--blue-lock': blueLock === spellDict[`sorcery${i}`],
+										  'spell--red-lock': redLock === spellDict[`sorcery${i}`],
+										  'spell--visible': spells.images[`sorcery${i}`],
+										  [`sorcery-spell--${i}`] : true
+										}"
+												x-bind:src="spells.images[`sorcery${i}`]"
+												x-on:click.stop="handleSpellClick(`sorcery${i}`)"
+												x-on:click.outside="closeSpellTooltip"
+												x-on:mouseout="handleSpellMouseOut()"
+												x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
+											/>
+										</picture>
+									</div>
+								</template>
+							</div>
+							<div
+								class="stone-nodes"
+								x-cloak
+							>
+								<div
+									class="stone-node stone-node--blue stone-node--score"
+									x-bind:class="{ [`stone-node--score-${score}`]: true }"
+								></div>
+								<template
+									x-bind:key="node"
+									x-for="node in Object.keys(nodes)"
+								>
+									<button
+										class="stone-node"
+										x-bind:aria-label="node"
+										x-bind:class="{
+												[`stone-node--${node}`]: true,
+												[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
+												[`stone-node--${nodes[node]}`]: true,
+												[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
+												'stone-node--last-play': lastPlay === node && !validMoves[node],
+												'stone-node--refill': nodesToRefill[node],
+											}"
+										x-bind:id="`stone-node--${node}`"
+										x-on:click="handleNodeClick(node)"
+									></button>
+								</template>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="tooltip"
+					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
+					x-ref="spellTooltip"
+				>
+					<div class="tooltip__inner">
+						<h2
+							class="tooltip__heading"
+							x-text="spells.text[activeSpell]?.name"
+						></h2>
+						<p
+							class="tooltip__content"
+							x-text="spells.text[activeSpell]?.text"
+						></p>
+						<button
+							class="tooltip-button"
+							x-on:click="handleCastSpell(activeSpell)"
+							x-show="hasTouchScreen && activeSpellIsCastable"
+						>
+							Cast Spell
+						</button>
+					</div>
+				</div>
+
+				<div
+					class="win-modal"
+					x-bind:class="{ 'is-visible': winner }"
+				>
+					<picture x-show="winner === 'blue'">
+						<source
+							type="image/webp"
+							srcset="static/images/stones/blue.webp"
+						/>
+						<img
+							alt=""
+							src="static/images/stones/blue.png"
+							height="30"
+							width="30"
+						/>
+					</picture>
+					<img
+						alt="Blue Wins"
+						src="static/images/blue-wins.svg"
+						height="26"
+						width="167"
+						x-show="winner === 'blue'"
+					/>
+					<picture x-show="winner === 'red'">
+						<source
+							type="image/webp"
+							srcset="static/images/stones/red.webp"
+						/>
+						<img
+							alt=""
+							src="static/images/stones/red.png"
+							height="30"
+							width="30"
+						/>
+					</picture>
+					<img
+						alt="Red Wins"
+						src="static/images/red-wins.svg"
+						height="26"
+						width="167"
+						x-show="winner === 'red'"
+					/>
+				</div>
+			</div>
+		</div>
+
+		<!-- Engine scripts (order matters) -->
+		<script src="static/scripts/engine/constants.js"></script>
+		<script src="static/scripts/engine/notation.js"></script>
+		<script src="static/scripts/engine/board.js"></script>
+		<script src="static/scripts/engine/moves.js"></script>
+		<script src="static/scripts/engine/spells.js"></script>
+		<script src="static/scripts/engine/game-controller.js"></script>
+		<script src="static/scripts/game-board-local.js"></script>
+		<script src="static/scripts/help.js"></script>
+		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+	</body>
+</html>
