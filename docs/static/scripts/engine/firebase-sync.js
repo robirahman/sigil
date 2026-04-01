@@ -83,12 +83,18 @@ class FirebaseSync {
 	 * @param {string[]} actions - ordered list of action strings for this turn
 	 */
 	async sendTurn(actions) {
-		if (!this.roomRef) return;
-		await this.roomRef.child('turns').push({
-			color: this.myColor,
-			actions: actions,
-			timestamp: Date.now(),
-		});
+		if (!this.roomRef) { console.error('[Sync] sendTurn: no roomRef!'); return; }
+		console.log('[Sync] sendTurn:', this.myColor, actions);
+		try {
+			await this.roomRef.child('turns').push({
+				color: this.myColor,
+				actions: actions,
+				timestamp: Date.now(),
+			});
+			console.log('[Sync] sendTurn succeeded');
+		} catch (e) {
+			console.error('[Sync] sendTurn FAILED:', e.code, e.message);
+		}
 	}
 
 	/**
@@ -106,12 +112,15 @@ class FirebaseSync {
 
 	_listenForTurns() {
 		const turnsRef = this.roomRef.child('turns');
+		console.log('[Sync] Listening for turns at', turnsRef.toString());
 		turnsRef.on('child_added', (snap) => {
 			const data = snap.val();
+			console.log('[Sync] Turn received:', data.color, data.actions, 'myColor:', this.myColor);
 			if (data.color === this.myColor) return; // ignore own turns
 
 			// Enqueue each action from the opponent's turn
 			const actions = data.actions || [];
+			console.log('[Sync] Processing', actions.length, 'actions, waitingResolver:', !!this._waitingResolver);
 			for (const action of actions) {
 				if (this._waitingResolver) {
 					const resolve = this._waitingResolver;

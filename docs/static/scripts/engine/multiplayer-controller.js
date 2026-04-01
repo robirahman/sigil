@@ -50,6 +50,7 @@ class MultiplayerController {
 
 	/** Flush buffered actions to Firebase. Called when a turn completes successfully. */
 	async _flushTurnBuffer() {
+		console.log('[Controller] Flushing turn buffer:', this._turnBuffer);
 		if (this._turnBuffer.length > 0) {
 			await this.sync.sendTurn(this._turnBuffer);
 			this._turnBuffer = [];
