@@ -212,12 +212,9 @@
 				sync: null,
 
 				init() {
-					const saved = localStorage.getItem('sigil_firebase_config');
-					if (saved) {
-						this.firebaseConfigText = saved;
-						this._initFirebase(JSON.parse(saved));
-						this.phase = 'lobby';
-					}
+					// Firebase is pre-configured via hardcoded script tag
+					this.sync = new FirebaseSync(firebase.database());
+					this.phase = 'lobby';
 				},
 
 				saveFirebaseConfig() {
@@ -307,6 +304,17 @@
 	<!-- Firebase SDK -->
 	<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 </body>

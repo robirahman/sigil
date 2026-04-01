@@ -117,6 +117,19 @@ class FirebaseSync {
 		});
 	}
 
+	/**
+	 * Save a completed game to /completed_games for training data.
+	 * Only one player (red) writes this to avoid duplicates.
+	 */
+	async saveCompletedGame(gameRecord) {
+		if (!this.db || this.myColor !== 'red') return;
+		try {
+			await this.db.ref('completed_games').push(gameRecord);
+		} catch (e) {
+			console.error('Failed to save completed game:', e);
+		}
+	}
+
 	destroy() {
 		if (this.roomRef) {
 			this.roomRef.off();

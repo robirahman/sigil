@@ -14,6 +14,7 @@ class MultiplayerController {
 		this._inputResolve = null;
 		this._resetRequested = false;
 		this.spellNames = spellNames;
+		this._gameLog = []; // Record (sfn, action, color) for each position
 
 		// When opponent sends an action, resolve the pending input
 		sync.onOpponentAction = (action) => {
@@ -121,6 +122,7 @@ class MultiplayerController {
 						board.gameover = true;
 						board.winner = 'blue';
 						this.emit({ type: 'game_over', winner: 'blue' });
+						this._saveGameRecord('blue');
 						return;
 					}
 				}
@@ -139,19 +141,28 @@ class MultiplayerController {
 
 				if (board.gameover) {
 					this.emit({ type: 'game_over', winner: board.winner });
+					this._saveGameRecord(board.winner);
 					return;
 				}
 
 				this._resetRequested = false;
 
+				// Record position before the turn is taken
+				const turnSfn = boardToSfn(board);
+
 				if (color === this.myColor) {
-					// My turn — use the full interactive _takeTurn
 					await this._takeTurn(color, true, true, true, true);
 				} else {
-					// Opponent's turn — wait for actions from Firebase
-					// We still run the same state machine but input comes from Firebase
 					await this._takeTurn(color, true, true, true, true);
 				}
+
+				// Record the turn: SFN before, SFN after
+				this._gameLog.push({
+					color: color,
+					turnNumber: board.turnCounter,
+					sfnBefore: turnSfn,
+					sfnAfter: boardToSfn(board),
+				});
 
 				this._eotTriggers(color);
 				board.update();
@@ -161,6 +172,7 @@ class MultiplayerController {
 
 				if (board.gameover) {
 					this.emit({ type: 'game_over', winner: board.winner });
+					this._saveGameRecord(board.winner);
 					return;
 				}
 
@@ -255,6 +267,18 @@ class MultiplayerController {
 			else await this._takeTurn(color, false, candash, false, false);
 			return;
 		}
+	}
+
+	_saveGameRecord(winner) {
+		if (!this.sync) return;
+		const record = {
+			spellNames: this.board.spellNames,
+			winner: winner,
+			turns: this._gameLog,
+			roomCode: this.sync.roomCode,
+			timestamp: Date.now(),
+		};
+		this.sync.saveCompletedGame(record);
 	}
 
 	// These methods are identical to GameController's — just reuse the logic

@@ -214,6 +214,13 @@
         }
       }
     },
+    "completed_games": {
+      ".read": false,
+      ".write": true,
+      "$gameId": {
+        ".validate": "newData.hasChildren(['spellNames', 'winner', 'turns', 'timestamp'])"
+      }
+    },
     ".read": false,
     ".write": false
   }
@@ -223,7 +230,8 @@
 				<li>Allow anyone to read and write game rooms (no authentication required)</li>
 				<li>Require room data to include <code>spellNames</code>, <code>status</code>, and <code>created</code> fields</li>
 				<li>Require each action to include <code>color</code>, <code>action</code>, and <code>timestamp</code></li>
-				<li>Block access to everything outside <code>/rooms</code></li>
+				<li>Allow writing completed games to <code>/completed_games</code> (write-only &mdash; only the site owner can read them via the Firebase console or Admin SDK)</li>
+				<li>Block all other access</li>
 			</ul>
 			<div class="note">
 				<strong>Note:</strong> These are permissive rules suitable for a game with no user accounts. Anyone with the room code can join. For production use with abuse concerns, consider adding
@@ -260,11 +268,35 @@
   this.phase = 'lobby';
 },</pre>
 
-			<h3><span class="step-num">6</span> (Optional) Add Room Cleanup</h3>
+			<h3><span class="step-num">6</span> Training Data from Human Games</h3>
 			<p>
-				Game rooms accumulate in the database over time. To clean up old rooms, you can set up a
-				<a href="https://firebase.google.com/docs/functions/schedule-functions" target="_blank">scheduled Cloud Function</a>
-				that deletes rooms older than 24 hours:
+				Completed multiplayer games are automatically saved to <code>/completed_games</code> in Firebase.
+				Each record includes the spell list, SFN board snapshots before and after every turn, and the winner.
+				This data can be downloaded and converted into training examples for the AI.
+			</p>
+			<p>To export human games as training data:</p>
+<pre># From the project root directory:
+python -m ai.import_human_games \
+  --db-url https://YOUR_PROJECT-default-rtdb.firebaseio.com \
+  --output ai/data/human_games.jsonl</pre>
+			<p>
+				This replays each game position, enumerates all legal turns, finds the one the human chose (by comparing the before/after SFN snapshots), and writes a training example with <code>policy = 1.0</code> for that turn.
+				The output JSONL format is identical to self-play data, so you can train on it directly:
+			</p>
+<pre># Train on human games (behavioral cloning):
+python -m ai.train_sigil --data ai/data/human_games.jsonl
+
+# Or combine with self-play data:
+cat ai/data/selfplay_*.jsonl ai/data/human_games.jsonl > ai/data/combined.jsonl
+python -m ai.train_sigil --data ai/data/combined.jsonl</pre>
+			<div class="note">
+				<strong>Note:</strong> The security rules set <code>/completed_games</code> as write-only (players can write but not read). To download games, either temporarily enable read access in the Firebase console, or use a <a href="https://firebase.google.com/docs/admin/setup" target="_blank">service account key</a> with the <code>--service-account</code> flag.
+			</div>
+
+			<h3><span class="step-num">7</span> (Optional) Room Cleanup</h3>
+			<p>
+				Game rooms in <code>/rooms</code> accumulate over time. You can delete old ones manually from the Firebase console,
+				or set up a <a href="https://firebase.google.com/docs/functions/schedule-functions" target="_blank">scheduled Cloud Function</a>:
 			</p>
 <pre>// Cloud Function (Node.js)
 const functions = require('firebase-functions');
@@ -288,7 +320,7 @@ exports.cleanupRooms = functions.pubsub
     }
   });</pre>
 			<div class="note">
-				<strong>Note:</strong> Cloud Functions require the Blaze (pay-as-you-go) plan, but the free tier usage should keep costs at $0 for low traffic. Alternatively, you can manually delete old rooms from the Firebase console.
+				<strong>Note:</strong> Cloud Functions require the Blaze (pay-as-you-go) plan, but the free tier usage should keep costs at $0 for low traffic.
 			</div>
 
 			<h2>Option B: Per-User Setup</h2>
