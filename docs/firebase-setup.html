@@ -147,16 +147,8 @@
 			<p>
 				Firebase's free Spark plan provides 1 GB storage and 10 GB/month of data transfer, which is far more than enough for Sigil games (each game uses roughly 5&ndash;20 KB of data).
 			</p>
-			<p>
-				You have two options for setup:
-			</p>
-			<ul>
-				<li><strong>Site owner setup</strong> &mdash; configure Firebase once and hardcode the config so all visitors can play without any setup. This is the recommended approach.</li>
-				<li><strong>Per-user setup</strong> &mdash; each player pastes their own Firebase config into the multiplayer lobby. This is the current default, requiring no server-side changes.</li>
-			</ul>
-
-			<h2>Option A: Site Owner Setup (Recommended)</h2>
-			<p>If you're deploying this site, follow these steps once to enable multiplayer for everyone.</p>
+			<h2>Setup</h2>
+			<p>Follow these steps once to enable multiplayer for your site.</p>
 
 			<h3><span class="step-num">1</span> Create a Firebase Project</h3>
 			<ol>
@@ -321,17 +313,6 @@ exports.cleanupRooms = functions.pubsub
   });</pre>
 			<div class="note">
 				<strong>Note:</strong> Cloud Functions require the Blaze (pay-as-you-go) plan, but the free tier usage should keep costs at $0 for low traffic.
-			</div>
-
-			<h2>Option B: Per-User Setup</h2>
-			<p>
-				This is the default behavior. Each player creates their own Firebase project and pastes the config JSON into the multiplayer lobby. The config is saved in <code>localStorage</code> so they only need to do it once per browser.
-			</p>
-			<p>
-				Players should follow steps 1&ndash;4 above. Instead of step 5, they paste their config JSON into the text box on the multiplayer page.
-			</p>
-			<div class="warn">
-				<strong>Limitation:</strong> Both players must use the <strong>same</strong> Firebase project to connect. If Player 1 creates a room using their Firebase project, Player 2 must also have that same project's config pasted in. In practice, one player should share their config with the other.
 			</div>
 
 			<h2>Database Structure</h2>

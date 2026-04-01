@@ -71,27 +71,6 @@
 			margin: 12px 0;
 		}
 		.error-msg { color: #e66; }
-		.firebase-setup {
-			max-width: 500px;
-			margin: 80px auto 0;
-			padding: 24px;
-			text-align: center;
-		}
-		.firebase-setup p { color: #aaa; line-height: 1.6; margin: 10px 0; }
-		.firebase-setup textarea {
-			width: 100%;
-			min-height: 200px;
-			font-family: monospace;
-			font-size: 12px;
-			padding: 12px;
-			border-radius: 6px;
-			border: 1px solid #555;
-			background: #1a1a2e;
-			color: #ddd;
-			margin: 12px 0;
-		}
-		.import-form textarea { /* reuse existing */ }
-		.import-form button { align-self: flex-start; }
 	</style>
 	<script>
 		var webpDetector = new Image();
@@ -113,27 +92,7 @@
 	</header>
 
 	<div class="main" x-data="multiplayerLobby()">
-		<!-- Firebase config setup (shown only if not configured) -->
-		<div class="firebase-setup" x-show="phase === 'setup'" x-cloak>
-			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Firebase Setup</h2>
-			<p>
-				Online multiplayer uses Firebase Realtime Database for game state sync.
-				To play, paste your Firebase config JSON below.
-			</p>
-			<p style="font-size: 0.85em;">
-				Create a free Firebase project at
-				<a href="https://console.firebase.google.com/" target="_blank" style="color: #8af;">console.firebase.google.com</a>,
-				enable Realtime Database (in test mode), and copy your web app config.
-				See the <a href="firebase-setup.html" style="color: #8af;">full setup guide</a> for detailed instructions.
-			</p>
-			<textarea x-model="firebaseConfigText" placeholder='{"apiKey": "...", "databaseURL": "https://your-project.firebaseio.com", ...}'></textarea>
-			<button class="lobby-button" x-on:click="saveFirebaseConfig" x-bind:disabled="!firebaseConfigText.trim()">
-				Save &amp; Connect
-			</button>
-			<p class="error-msg" x-text="setupError"></p>
-		</div>
-
-		<!-- Lobby (shown after Firebase is configured) -->
+		<!-- Lobby -->
 		<div class="lobby" x-show="phase === 'lobby'" x-cloak>
 			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Online Multiplayer</h2>
 			<button class="lobby-button" x-on:click="createRoom">Create Game</button>
@@ -141,9 +100,6 @@
 			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" />
 			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="joinCode.length < 4">Join Game</button>
 			<p class="error-msg" x-text="lobbyError"></p>
-			<button class="lobby-button" style="margin-top: 24px; font-size: 0.85em; border-color: #444;" x-on:click="resetFirebaseConfig">
-				Change Firebase Config
-			</button>
 		</div>
 
 		<!-- Waiting for opponent -->
@@ -206,46 +162,12 @@
 
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('multiplayerLobby', () => ({
-				phase: 'setup',
-				firebaseConfigText: '',
-				setupError: '',
+				phase: 'lobby',
 				joinCode: '',
 				lobbyError: '',
 				roomCode: '',
 
 				init() {
-					// Firebase is pre-configured via hardcoded script tag
-					_firebaseSync = new FirebaseSync(firebase.database());
-					this.phase = 'lobby';
-				},
-
-				saveFirebaseConfig() {
-					try {
-						const config = JSON.parse(this.firebaseConfigText.trim());
-						if (!config.databaseURL) { this.setupError = 'Config must include databaseURL'; return; }
-						localStorage.setItem('sigil_firebase_config', JSON.stringify(config));
-						this._initFirebase(config);
-						this.phase = 'lobby';
-						this.setupError = '';
-					} catch (e) {
-						this.setupError = 'Invalid JSON: ' + e.message;
-					}
-				},
-
-				resetFirebaseConfig() {
-					localStorage.removeItem('sigil_firebase_config');
-					this.phase = 'setup';
-					this.firebaseConfigText = '';
-				},
-
-				_initFirebase(config) {
-					if (typeof firebase === 'undefined') {
-						this.setupError = 'Firebase SDK not loaded. Check your internet connection.';
-						return;
-					}
-					if (!firebase.apps.length) {
-						firebase.initializeApp(config);
-					}
 					_firebaseSync = new FirebaseSync(firebase.database());
 				},
 
