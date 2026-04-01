@@ -201,6 +201,9 @@
 	</div>
 
 	<script>
+		// Store sync outside Alpine to avoid Proxy wrapping Firebase objects
+		let _firebaseSync = null;
+
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('multiplayerLobby', () => ({
 				phase: 'setup',
@@ -209,11 +212,10 @@
 				joinCode: '',
 				lobbyError: '',
 				roomCode: '',
-				sync: null,
 
 				init() {
 					// Firebase is pre-configured via hardcoded script tag
-					this.sync = new FirebaseSync(firebase.database());
+					_firebaseSync = new FirebaseSync(firebase.database());
 					this.phase = 'lobby';
 				},
 
@@ -244,18 +246,18 @@
 					if (!firebase.apps.length) {
 						firebase.initializeApp(config);
 					}
-					this.sync = new FirebaseSync(firebase.database());
+					_firebaseSync = new FirebaseSync(firebase.database());
 				},
 
 				async createRoom() {
-					if (!this.sync) return;
+					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
 						const spellNames = generateSpellList();
-						this.roomCode = await this.sync.createRoom(spellNames);
+						this.roomCode = await _firebaseSync.createRoom(spellNames);
 						this.phase = 'waiting';
 
-						this.sync.onOpponentJoin = () => {
+						_firebaseSync.onOpponentJoin = () => {
 							this._startOnlineGame(spellNames, 'red');
 						};
 					} catch (e) {
@@ -265,10 +267,10 @@
 				},
 
 				async joinRoom() {
-					if (!this.sync) return;
+					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
-						const spellNames = await this.sync.joinRoom(this.joinCode.toUpperCase());
+						const spellNames = await _firebaseSync.joinRoom(this.joinCode.toUpperCase());
 						this._startOnlineGame(spellNames, 'blue');
 					} catch (e) {
 						this.lobbyError = e.message;
@@ -277,10 +279,8 @@
 
 				_startOnlineGame(spellNames, myColor) {
 					this.phase = 'playing';
-					// The game board will be initialized by the gameBoard Alpine component
-					// We store the multiplayer state for the game board to pick up
 					window._multiplayerState = {
-						sync: this.sync,
+						sync: _firebaseSync,
 						spellNames: spellNames,
 						myColor: myColor,
 					};
@@ -320,20 +320,6 @@
 			messagingSenderId: "174679859896",
 			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 		});
-		// Inline test: does ref() work at all?
-		try {
-			var _db = firebase.database();
-			console.log('[Firebase test] database() returned:', typeof _db, _db);
-			var _ref = _db.ref('_connectivity_test');
-			console.log('[Firebase test] ref() returned:', typeof _ref, _ref);
-			_ref.set({ t: Date.now() }).then(function() {
-				console.log('[Firebase test] set() succeeded - database is working');
-			}).catch(function(err) {
-				console.error('[Firebase test] set() failed:', err.code, err.message);
-			});
-		} catch (e) {
-			console.error('[Firebase test] FAILED at SDK level:', e.message, e);
-		}
 	</script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
