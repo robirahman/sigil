@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<title>Firebase Setup Guide - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; padding-bottom: 60px; }
+		.guide {
+			max-width: 720px;
+			margin: 0 auto;
+			padding: 0 20px;
+			color: #ccc;
+			font-family: 'Overlock', sans-serif;
+			line-height: 1.7;
+		}
+		.guide h1 {
+			font-family: 'Arvo', serif;
+			color: #e0d0b0;
+			font-size: 1.6em;
+			margin-bottom: 8px;
+		}
+		.guide h2 {
+			font-family: 'Arvo', serif;
+			color: #e0d0b0;
+			font-size: 1.2em;
+			margin-top: 36px;
+			margin-bottom: 12px;
+			padding-bottom: 6px;
+			border-bottom: 1px solid #444;
+		}
+		.guide h3 {
+			font-family: 'Arvo', serif;
+			color: #d0c0a0;
+			font-size: 1.05em;
+			margin-top: 24px;
+			margin-bottom: 8px;
+		}
+		.guide p { margin: 10px 0; }
+		.guide ol, .guide ul { padding-left: 24px; margin: 10px 0; }
+		.guide li { margin: 6px 0; }
+		.guide a { color: #8af; }
+		.guide code {
+			background: #1a1a2e;
+			padding: 2px 6px;
+			border-radius: 3px;
+			font-size: 0.9em;
+			color: #f0e0c0;
+		}
+		.guide pre {
+			background: #1a1a2e;
+			padding: 16px;
+			border-radius: 6px;
+			overflow-x: auto;
+			font-size: 0.85em;
+			line-height: 1.5;
+			color: #ddd;
+			margin: 12px 0;
+		}
+		.guide .note {
+			background: #1a2a1e;
+			border-left: 3px solid #4a8;
+			padding: 12px 16px;
+			border-radius: 0 6px 6px 0;
+			margin: 16px 0;
+			font-size: 0.95em;
+		}
+		.guide .warn {
+			background: #2a1a1e;
+			border-left: 3px solid #a64;
+			padding: 12px 16px;
+			border-radius: 0 6px 6px 0;
+			margin: 16px 0;
+			font-size: 0.95em;
+		}
+		.guide .step-num {
+			display: inline-block;
+			background: #3a3a6e;
+			color: #e0d0b0;
+			width: 28px;
+			height: 28px;
+			line-height: 28px;
+			text-align: center;
+			border-radius: 50%;
+			font-weight: bold;
+			font-size: 0.85em;
+			margin-right: 8px;
+		}
+		.guide .subtitle {
+			color: #999;
+			font-size: 0.95em;
+			margin-bottom: 24px;
+		}
+		.guide table {
+			width: 100%;
+			border-collapse: collapse;
+			margin: 12px 0;
+		}
+		.guide th, .guide td {
+			text-align: left;
+			padding: 8px 12px;
+			border-bottom: 1px solid #333;
+		}
+		.guide th {
+			color: #e0d0b0;
+			font-family: 'Arvo', serif;
+			font-size: 0.9em;
+		}
+		.guide td code { white-space: nowrap; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="menu.html"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1>
+					<a href="menu.html">
+						<span class="visually-hidden">Sigil Online</span>
+						<img class="max-width:100%" alt="" src="static/images/sigil-online-logo.svg" height="36" width="287" />
+					</a>
+				</h1>
+				<div></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="guide">
+			<h1>Firebase Setup Guide</h1>
+			<p class="subtitle">How to configure Firebase Realtime Database for Sigil online multiplayer</p>
+
+			<h2>Overview</h2>
+			<p>
+				Sigil's online multiplayer runs entirely in the browser. There is no game server &mdash; both players run the game engine locally, and their moves are synchronized through
+				<a href="https://firebase.google.com/docs/database" target="_blank">Firebase Realtime Database</a>.
+			</p>
+			<p>
+				Firebase's free Spark plan provides 1 GB storage and 10 GB/month of data transfer, which is far more than enough for Sigil games (each game uses roughly 5&ndash;20 KB of data).
+			</p>
+			<p>
+				You have two options for setup:
+			</p>
+			<ul>
+				<li><strong>Site owner setup</strong> &mdash; configure Firebase once and hardcode the config so all visitors can play without any setup. This is the recommended approach.</li>
+				<li><strong>Per-user setup</strong> &mdash; each player pastes their own Firebase config into the multiplayer lobby. This is the current default, requiring no server-side changes.</li>
+			</ul>
+
+			<h2>Option A: Site Owner Setup (Recommended)</h2>
+			<p>If you're deploying this site, follow these steps once to enable multiplayer for everyone.</p>
+
+			<h3><span class="step-num">1</span> Create a Firebase Project</h3>
+			<ol>
+				<li>Go to <a href="https://console.firebase.google.com/" target="_blank">console.firebase.google.com</a></li>
+				<li>Click <strong>Add project</strong></li>
+				<li>Name it (e.g., <code>sigil-online</code>)</li>
+				<li>Google Analytics is optional &mdash; you can disable it</li>
+				<li>Click <strong>Create project</strong></li>
+			</ol>
+
+			<h3><span class="step-num">2</span> Enable Realtime Database</h3>
+			<ol>
+				<li>In the Firebase console sidebar, click <strong>Build &rarr; Realtime Database</strong></li>
+				<li>Click <strong>Create Database</strong></li>
+				<li>Choose a location (pick the one closest to most of your players)</li>
+				<li>Select <strong>Start in test mode</strong> (we'll add proper security rules in step 4)</li>
+				<li>Click <strong>Enable</strong></li>
+			</ol>
+
+			<h3><span class="step-num">3</span> Get Your Web App Config</h3>
+			<ol>
+				<li>In the Firebase console, click the <strong>gear icon &rarr; Project settings</strong></li>
+				<li>Scroll down to <strong>Your apps</strong></li>
+				<li>Click the <strong>&lt;/&gt;</strong> (Web) icon to register a web app</li>
+				<li>Name it anything (e.g., "Sigil Web")</li>
+				<li>You do <strong>not</strong> need Firebase Hosting &mdash; uncheck it</li>
+				<li>Click <strong>Register app</strong></li>
+				<li>Copy the <code>firebaseConfig</code> object. It looks like this:</li>
+			</ol>
+<pre>{
+  "apiKey": "AIzaSyD...",
+  "authDomain": "sigil-online.firebaseapp.com",
+  "databaseURL": "https://sigil-online-default-rtdb.firebaseio.com",
+  "projectId": "sigil-online",
+  "storageBucket": "sigil-online.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abc123"
+}</pre>
+
+			<h3><span class="step-num">4</span> Set Security Rules</h3>
+			<p>
+				In the Firebase console, go to <strong>Realtime Database &rarr; Rules</strong> and replace the default rules with:
+			</p>
+<pre>{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren(['spellNames', 'status', 'created'])",
+        "actions": {
+          "$actionId": {
+            ".validate": "newData.hasChildren(['color', 'action', 'timestamp'])"
+          }
+        }
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}</pre>
+			<p>These rules:</p>
+			<ul>
+				<li>Allow anyone to read and write game rooms (no authentication required)</li>
+				<li>Require room data to include <code>spellNames</code>, <code>status</code>, and <code>created</code> fields</li>
+				<li>Require each action to include <code>color</code>, <code>action</code>, and <code>timestamp</code></li>
+				<li>Block access to everything outside <code>/rooms</code></li>
+			</ul>
+			<div class="note">
+				<strong>Note:</strong> These are permissive rules suitable for a game with no user accounts. Anyone with the room code can join. For production use with abuse concerns, consider adding
+				<a href="https://firebase.google.com/docs/auth/web/anonymous-auth" target="_blank">Anonymous Authentication</a>
+				and rate limiting.
+			</div>
+
+			<h3><span class="step-num">5</span> Hardcode the Config in Your Site</h3>
+			<p>
+				To skip the per-user config step, edit <code>multiplayer.html</code> and add a <code>&lt;script&gt;</code> block that auto-initializes Firebase before Alpine loads.
+				Find this section near the bottom of the file:
+			</p>
+<pre>&lt;!-- Firebase SDK --&gt;
+&lt;script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"&gt;&lt;/script&gt;
+&lt;script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"&gt;&lt;/script&gt;</pre>
+			<p>Add this <strong>immediately after</strong> those two script tags:</p>
+<pre>&lt;script&gt;
+  firebase.initializeApp({
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  });
+&lt;/script&gt;</pre>
+			<p>
+				Then, in the <code>multiplayerLobby</code> Alpine component's <code>init()</code> method, change the initial phase from <code>'setup'</code> to <code>'lobby'</code> and initialize the sync object directly:
+			</p>
+<pre>init() {
+  // Skip config UI &mdash; Firebase is pre-configured
+  this.sync = new FirebaseSync(firebase.database());
+  this.phase = 'lobby';
+},</pre>
+
+			<h3><span class="step-num">6</span> (Optional) Add Room Cleanup</h3>
+			<p>
+				Game rooms accumulate in the database over time. To clean up old rooms, you can set up a
+				<a href="https://firebase.google.com/docs/functions/schedule-functions" target="_blank">scheduled Cloud Function</a>
+				that deletes rooms older than 24 hours:
+			</p>
+<pre>// Cloud Function (Node.js)
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+
+exports.cleanupRooms = functions.pubsub
+  .schedule('every 6 hours')
+  .onRun(async () => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const db = admin.database();
+    const snap = await db.ref('rooms')
+      .orderByChild('created')
+      .endAt(cutoff)
+      .once('value');
+    const updates = {};
+    snap.forEach(child => { updates[child.key] = null; });
+    if (Object.keys(updates).length > 0) {
+      await db.ref('rooms').update(updates);
+      console.log(`Deleted ${Object.keys(updates).length} old rooms`);
+    }
+  });</pre>
+			<div class="note">
+				<strong>Note:</strong> Cloud Functions require the Blaze (pay-as-you-go) plan, but the free tier usage should keep costs at $0 for low traffic. Alternatively, you can manually delete old rooms from the Firebase console.
+			</div>
+
+			<h2>Option B: Per-User Setup</h2>
+			<p>
+				This is the default behavior. Each player creates their own Firebase project and pastes the config JSON into the multiplayer lobby. The config is saved in <code>localStorage</code> so they only need to do it once per browser.
+			</p>
+			<p>
+				Players should follow steps 1&ndash;4 above. Instead of step 5, they paste their config JSON into the text box on the multiplayer page.
+			</p>
+			<div class="warn">
+				<strong>Limitation:</strong> Both players must use the <strong>same</strong> Firebase project to connect. If Player 1 creates a room using their Firebase project, Player 2 must also have that same project's config pasted in. In practice, one player should share their config with the other.
+			</div>
+
+			<h2>Database Structure</h2>
+			<p>Each game room is stored at <code>/rooms/{ROOM_CODE}</code> with this structure:</p>
+
+			<table>
+				<tr><th>Path</th><th>Type</th><th>Description</th></tr>
+				<tr><td><code>spellNames</code></td><td>Array[9]</td><td>The 9 spell names for this game</td></tr>
+				<tr><td><code>status</code></td><td>String</td><td><code>"waiting"</code>, <code>"playing"</code>, or <code>"finished"</code></td></tr>
+				<tr><td><code>created</code></td><td>Number</td><td>Timestamp (ms since epoch) when the room was created</td></tr>
+				<tr><td><code>red/connected</code></td><td>Boolean</td><td>Whether Red player is currently connected</td></tr>
+				<tr><td><code>blue/connected</code></td><td>Boolean</td><td>Whether Blue player is currently connected</td></tr>
+				<tr><td><code>actions/{pushId}</code></td><td>Object</td><td>Each player action, in order</td></tr>
+				<tr><td><code>actions/{pushId}/color</code></td><td>String</td><td><code>"red"</code> or <code>"blue"</code></td></tr>
+				<tr><td><code>actions/{pushId}/action</code></td><td>String</td><td>The action message (node name, spell name, <code>"pass"</code>, <code>"dash"</code>, etc.)</td></tr>
+				<tr><td><code>actions/{pushId}/timestamp</code></td><td>Number</td><td>When the action was sent</td></tr>
+			</table>
+
+			<h2>How Sync Works</h2>
+			<p>The multiplayer system uses a simple protocol:</p>
+			<ol>
+				<li><strong>Room creation:</strong> Player 1 generates a random 6-character room code, writes the initial room data (spell names, status) to Firebase, and starts listening for actions.</li>
+				<li><strong>Room joining:</strong> Player 2 enters the code, reads the room data to get the spell names, marks themselves as connected, and starts listening for actions.</li>
+				<li><strong>Gameplay:</strong> Both players run the full game engine locally. When it's your turn, your clicks are sent as actions to Firebase <em>and</em> applied locally. When it's the opponent's turn, the game engine waits for an action to arrive from Firebase.</li>
+				<li><strong>Action format:</strong> Actions are the same strings the UI sends in local mode: node names (<code>"a2"</code>, <code>"b7"</code>), spell names (<code>"Flourish"</code>), or commands (<code>"pass"</code>, <code>"dash"</code>).</li>
+				<li><strong>Disconnect detection:</strong> Each player sets an <code>onDisconnect</code> handler that marks them as disconnected when their browser closes.</li>
+			</ol>
+
+			<h2>Troubleshooting</h2>
+
+			<h3>Errors when connecting</h3>
+			<ul>
+				<li><strong>"Firebase SDK not loaded"</strong> &mdash; Check your internet connection. The Firebase SDK is loaded from Google's CDN.</li>
+				<li><strong>"Config must include databaseURL"</strong> &mdash; Make sure you copied the full config object, including the <code>databaseURL</code> field.</li>
+				<li><strong>"Permission denied"</strong> &mdash; Your security rules may be too restrictive. Check step 4 above.</li>
+			</ul>
+
+			<h3>Room not found</h3>
+			<ul>
+				<li>Room codes are case-insensitive (auto-uppercased). Double-check the code.</li>
+				<li>Rooms are only valid while at least one player is connected. If both players disconnect, the room data persists in Firebase but the game cannot be resumed.</li>
+				<li>If you set up room cleanup, rooms older than 24 hours will be deleted.</li>
+			</ul>
+
+			<h3>Moves not syncing</h3>
+			<ul>
+				<li>Both players <strong>must</strong> be using the same Firebase project. If your configs point to different databases, actions won't be shared.</li>
+				<li>Check the browser console for Firebase errors.</li>
+				<li>Verify the Realtime Database is in the correct region and accessible.</li>
+			</ul>
+
+			<h2>Cost Estimate</h2>
+			<p>On Firebase's free Spark plan:</p>
+			<table>
+				<tr><th>Resource</th><th>Free Limit</th><th>Per Game</th><th>Games/Month</th></tr>
+				<tr><td>Storage</td><td>1 GB</td><td>~10 KB</td><td>~100,000</td></tr>
+				<tr><td>Downloads</td><td>10 GB/month</td><td>~50 KB</td><td>~200,000</td></tr>
+				<tr><td>Connections</td><td>100 simultaneous</td><td>2</td><td>50 concurrent games</td></tr>
+			</table>
+			<p>
+				The free tier is sufficient for hundreds of games per day. The main bottleneck is 100 simultaneous connections, meaning at most ~50 concurrent games.
+			</p>
+		</div>
+	</div>
+</body>
+</html>

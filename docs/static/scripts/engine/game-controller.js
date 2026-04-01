@@ -5,11 +5,19 @@
  * The UI calls handlePlayerAction(message) which resolves the pending promise.
  */
 class GameController {
-	constructor(emitEvent) {
+	/**
+	 * @param {Function} emitEvent - callback to send events to the UI
+	 * @param {Object} [options]
+	 * @param {string} [options.aiColor] - 'blue' if AI plays blue, null for local 2-player
+	 * @param {Object} [options.ai] - AI player instance (GreedyAI or NeuralAI)
+	 */
+	constructor(emitEvent, options) {
 		this.emit = emitEvent;
 		this.board = null;
 		this._inputResolve = null;
 		this._resetRequested = false;
+		this.aiColor = (options && options.aiColor) || null;
+		this.ai = (options && options.ai) || null;
 	}
 
 	/** Called by UI when the player clicks a node, spell, dash, pass, or reset. */
@@ -151,7 +159,11 @@ class GameController {
 
 				// Take turn
 				this._resetRequested = false;
-				await this._takeTurn(color, true, true, true, true);
+				if (this.ai && color === this.aiColor) {
+					await this._takeAITurn(color);
+				} else {
+					await this._takeTurn(color, true, true, true, true);
+				}
 
 				// EOT triggers
 				this._eotTriggers(color);
@@ -502,6 +514,15 @@ class GameController {
 
 		board.update();
 		this.emit(board.getBoardStatePayload());
+	}
+
+	async _takeAITurn(color) {
+		const board = this.board;
+		this.emit({ type: 'message', message: 'AI is thinking...', awaiting: null });
+		await this._delay(300);
+
+		const turn = this.ai.pickTurn(board, color);
+		await applyAITurn(board, turn, color, this.emit);
 	}
 
 	_eotTriggers(color) {

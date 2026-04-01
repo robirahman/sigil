@@ -195,18 +195,44 @@ document.addEventListener('alpine:init', () => {
 				});
 
 				// --- Local engine instead of WebSocket ---
-				const engine = new GameController(function emitEvent(eventObj) {
-					handleIncomingEvent(eventObj);
-				});
+				const aiMode = new URLSearchParams(window.location.search).get('ai');
 
-				_this.sendEvent = function sendEvent(message) {
-					engine.handlePlayerAction(message);
-					_this.awaiting = null;
-				};
+				async function initEngine() {
+					let options = {};
 
-				// Start the game
-				const sfnToLoad = _this.importSfn || null;
-				engine.startGame(sfnToLoad);
+					if (aiMode === 'easy') {
+						options.aiColor = 'blue';
+						options.ai = new GreedyAI();
+					} else if (aiMode === 'medium') {
+						// Load neural network model
+						try {
+							const model = await SigilNetJS.load(
+								'static/models/sigil_net.json',
+								'static/models/sigil_net.bin'
+							);
+							options.aiColor = 'blue';
+							options.ai = new NeuralAI(model, 100);
+						} catch (e) {
+							console.error('Failed to load AI model, falling back to greedy:', e);
+							options.aiColor = 'blue';
+							options.ai = new GreedyAI();
+						}
+					}
+
+					const engine = new GameController(function emitEvent(eventObj) {
+						handleIncomingEvent(eventObj);
+					}, options);
+
+					_this.sendEvent = function sendEvent(message) {
+						engine.handlePlayerAction(message);
+						_this.awaiting = null;
+					};
+
+					const sfnToLoad = _this.importSfn || null;
+					engine.startGame(sfnToLoad);
+				}
+
+				initEngine();
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
