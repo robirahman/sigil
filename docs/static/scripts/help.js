@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
 	const containerElem = document.querySelector('.help-menu-container');
+	if (!containerElem) return;
 	const submenuElem = document.querySelector('.help-menu-container .submenu');
 	const contentElem = document.querySelector('.help-menu-container .content');
 	const glossaryElem = document.querySelector('.help-menu-container .glossary');
