@@ -22,6 +22,7 @@ class FirebaseSync {
 		this._incomingQueue = [];
 		// Resolver for the next getInput() call waiting for an opponent action
 		this._waitingResolver = null;
+		this._isReconnect = false;
 	}
 
 	async createRoom(spellNames) {
@@ -54,7 +55,6 @@ class FirebaseSync {
 
 	async joinRoom(code) {
 		this.roomCode = code;
-		this.myColor = 'blue';
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
@@ -62,20 +62,62 @@ class FirebaseSync {
 		const snap = await roomRef.once('value');
 		const data = snap.val();
 		if (!data) throw new Error('Room not found');
-		if (data.status !== 'waiting') throw new Error('Game already in progress');
 
-		await roomRef.child('blue/connected').set(true);
-		await roomRef.child('status').set('playing');
-		roomRef.child('blue/connected').onDisconnect().set(false);
+		if (data.status === 'waiting') {
+			// Normal first join as blue
+			this.myColor = 'blue';
+			await roomRef.child('blue/connected').set(true);
+			await roomRef.child('status').set('playing');
+			roomRef.child('blue/connected').onDisconnect().set(false);
 
-		roomRef.child('red/connected').on('value', (snap) => {
-			if (snap.val() === false && this.onOpponentDisconnect) {
-				this.onOpponentDisconnect();
+			roomRef.child('red/connected').on('value', (snap) => {
+				if (snap.val() === false && this.onOpponentDisconnect) {
+					this.onOpponentDisconnect();
+				}
+			});
+
+			this._listenForTurns();
+			return { spellNames: data.spellNames, myColor: 'blue' };
+		}
+
+		if (data.status === 'playing') {
+			// Reconnection — figure out which color is disconnected
+			const blueDisconnected = data.blue && data.blue.connected === false;
+			const redDisconnected = data.red && data.red.connected === false;
+
+			if (blueDisconnected) {
+				this.myColor = 'blue';
+			} else if (redDisconnected) {
+				this.myColor = 'red';
+			} else {
+				throw new Error('Game already in progress');
 			}
-		});
 
-		this._listenForTurns();
-		return data.spellNames;
+			await roomRef.child(this.myColor + '/connected').set(true);
+			roomRef.child(this.myColor + '/connected').onDisconnect().set(false);
+
+			const opponentColor = this.myColor === 'red' ? 'blue' : 'red';
+			roomRef.child(opponentColor + '/connected').on('value', (snap) => {
+				if (snap.val() === false && this.onOpponentDisconnect) {
+					this.onOpponentDisconnect();
+				}
+			});
+
+			this._isReconnect = true;
+			await this._listenForTurns();
+			return { spellNames: data.spellNames, myColor: this.myColor, sfn: data.currentSfn || null };
+		}
+
+		throw new Error('Room not found');
+	}
+
+	async saveGameState(sfn) {
+		if (!this.roomRef) return;
+		try {
+			await this.roomRef.child('currentSfn').set(sfn);
+		} catch (e) {
+			console.error('[Sync] saveGameState FAILED:', e);
+		}
 	}
 
 	/**
@@ -110,10 +152,27 @@ class FirebaseSync {
 		});
 	}
 
-	_listenForTurns() {
+	async _listenForTurns() {
 		const turnsRef = this.roomRef.child('turns');
 		console.log('[Sync] Listening for turns at', turnsRef.toString());
+
+		// Count existing turns so we can skip them on reconnection
+		let existingCount = 0;
+		if (this._isReconnect) {
+			const existingSnap = await turnsRef.once('value');
+			if (existingSnap.val()) {
+				existingCount = Object.keys(existingSnap.val()).length;
+			}
+			console.log('[Sync] Reconnecting, skipping', existingCount, 'existing turns');
+		}
+
+		let skipped = 0;
 		turnsRef.on('child_added', (snap) => {
+			if (skipped < existingCount) {
+				skipped++;
+				return;
+			}
+
 			const data = snap.val();
 			console.log('[Sync] Turn received:', data.color, data.actions, 'myColor:', this.myColor);
 			if (data.color === this.myColor) return; // ignore own turns

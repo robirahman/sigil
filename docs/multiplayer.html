@@ -120,8 +120,24 @@
 						</ul>
 					</template>
 					<div class="dice">
-						<div class="die die--red" x-bind:data-die-face="redSpellCounter"><div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div></div>
-						<div class="die die--blue" x-bind:data-die-face="blueSpellCounter"><div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div></div>
+						<div class="die die--red" x-bind:data-die-face="redSpellCounter">
+								<div class="die__face die__face--1"><div class="die__pip die__pip--mm"></div></div>
+								<div class="die__face die__face--2"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--3"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--4"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--5"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--6"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--ml"></div><div class="die__pip die__pip--mr"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+							</div>
+						<div class="die die--blue" x-bind:data-die-face="blueSpellCounter">
+								<div class="die__face die__face--1"><div class="die__pip die__pip--mm"></div></div>
+								<div class="die__face die__face--2"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--3"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--4"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--5"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--6"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--ml"></div><div class="die__pip die__pip--mr"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+							</div>
 					</div>
 					<div class="actions" x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass')}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
@@ -192,19 +208,20 @@
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
-						const spellNames = await _firebaseSync.joinRoom(this.joinCode.toUpperCase());
-						this._startOnlineGame(spellNames, 'blue');
+						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase());
+						this._startOnlineGame(result.spellNames, result.myColor, result.sfn);
 					} catch (e) {
 						this.lobbyError = e.message;
 					}
 				},
 
-				_startOnlineGame(spellNames, myColor) {
+				_startOnlineGame(spellNames, myColor, reconnectSfn) {
 					this.phase = 'playing';
 					window._multiplayerState = {
 						sync: _firebaseSync,
 						spellNames: spellNames,
 						myColor: myColor,
+						reconnectSfn: reconnectSfn || null,
 					};
 				},
 			}));

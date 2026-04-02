@@ -87,7 +87,7 @@ document.addEventListener('alpine:init', () => {
 				const waitForState = setInterval(() => {
 					if (!window._multiplayerState) return;
 					clearInterval(waitForState);
-					const { sync, spellNames, myColor } = window._multiplayerState;
+					const { sync, spellNames, myColor, reconnectSfn } = window._multiplayerState;
 
 					const engine = new MultiplayerController(
 						function emitEvent(eventObj) { handleIncomingEvent(eventObj); },
@@ -99,7 +99,7 @@ document.addEventListener('alpine:init', () => {
 						_this.awaiting = null;
 					};
 
-					engine.startGame();
+					engine.startGame(reconnectSfn);
 				}, 100);
 
 				function handleIncomingEvent(payload) {

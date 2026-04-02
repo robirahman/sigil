@@ -82,9 +82,13 @@ class MultiplayerController {
 		}
 	}
 
-	async startGame() {
+	async startGame(reconnectSfn) {
 		this.board = new SigilBoard(this.spellNames);
-		this.board.setupInitial();
+		if (reconnectSfn) {
+			this.board.loadFromSfn(reconnectSfn);
+		} else {
+			this.board.setupInitial();
+		}
 
 		// Send spell setup
 		const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
@@ -105,7 +109,11 @@ class MultiplayerController {
 		this.emit(this.board.getBoardStatePayload());
 
 		const colorName = this.myColor[0].toUpperCase() + this.myColor.slice(1);
-		this.emit({ type: 'message', message: 'You are ' + colorName + '. Red goes first.', awaiting: null });
+		if (reconnectSfn) {
+			this.emit({ type: 'message', message: 'Reconnected as ' + colorName + '.', awaiting: null });
+		} else {
+			this.emit({ type: 'message', message: 'You are ' + colorName + '. Red goes first.', awaiting: null });
+		}
 
 		this._emitSfn();
 		await this._delay(500);
@@ -181,6 +189,7 @@ class MultiplayerController {
 				board.update();
 				this.emit(board.getBoardStatePayload());
 				this._emitSfn();
+				this.sync.saveGameState(boardToSfn(board));
 				resetThisTurn = false;
 
 				if (board.gameover) {
