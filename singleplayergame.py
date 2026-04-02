@@ -477,6 +477,121 @@ class AIPlayer():
 
 
 
+	def _stone_advantage(self):
+		"""How many stones ahead we are in scoring (negative = behind).
+		Blue has +1 phantom stone."""
+		if self.color == 'red':
+			return self.totalstones - (self.opp.totalstones + 1)
+		else:
+			return (self.totalstones + 1) - self.opp.totalstones
+
+	def _score_move_target(self, node):
+		"""Score a potential move target node. Higher = better."""
+		score = 0
+		name = node.name
+
+		# Mana nodes are very valuable -- contest them
+		if name in ('a1', 'b1', 'c1'):
+			score += 10
+
+		# Prefer soft moves (place on empty) over hard moves (push enemy)
+		if node.stone is None:
+			score += 3
+		else:
+			# Hard move is riskier but useful if pushing off a key node
+			if name in ('a1', 'b1', 'c1'):
+				score += 5
+			else:
+				score += 1
+
+		# Spell charging: prefer nodes that help complete a spell charge
+		for spell in self.board.spells:
+			if spell.static:
+				continue
+			if node in spell.position:
+				own_count = sum(1 for n in spell.position if n.stone == self.color)
+				total = len(spell.position)
+				if own_count == total - 1:
+					score += 6
+				elif own_count >= total - 2:
+					score += 3
+				elif own_count >= 1:
+					score += 1
+
+		# Connectivity: prefer moves adjacent to own stones (build groups)
+		own_neighbors = sum(1 for n in node.neighbors if n.stone == self.color)
+		score += own_neighbors
+
+		# Surrounding: bonus for moves adjacent to enemy stones
+		enemy_neighbors = sum(1 for n in node.neighbors if n.stone == self.enemy)
+		score += enemy_neighbors * 0.5
+
+		# Avoid placing into our own locked spell position
+		if self.lock and node in self.lock.position:
+			score -= 4
+
+		return score
+
+	def _evaluate_spell(self, spell_name):
+		"""Score how valuable it is to cast this spell now. Positive = worth casting."""
+		spell = self.board.spelldict[spell_name]
+
+		# For non-charm spells, consider the stone cost of casting
+		if not spell.ischarm:
+			stones_in_position = sum(1 for n in spell.position if n.stone == self.color)
+			refills = self.mana
+			net_cost = stones_in_position - refills
+			# Don't cast if we'd lose too many stones while behind or at parity
+			if net_cost > 1 and self._stone_advantage() < 2:
+				return -1
+
+		if spell_name == 'Carnage':
+			targets = len(self.allhardmoveablenodes(spell.position))
+			if targets >= 2:
+				return 8
+			elif targets >= 1:
+				return 4
+			return -1
+
+		elif spell_name == 'Starfall':
+			return 7 if self.starfalltargetexists() else -1
+
+		elif spell_name == 'Bewitch':
+			return 6 if self.bewitchtargetexists() else -1
+
+		elif spell_name == 'Flourish':
+			return 5
+
+		elif spell_name == 'Fireblast':
+			targets = len(self.allhardmoveablenodes(spell.position))
+			return 5 if targets >= 2 else -1
+
+		elif spell_name == 'Hail_Storm':
+			count = self.hailablespellcount()
+			return count * 2 if count >= 2 else -1
+
+		elif spell_name == 'Meteor':
+			return 4
+
+		elif spell_name == 'Grow':
+			return 3
+
+		elif spell_name == 'Comet':
+			return 3 if self.comettargetexists() else -1
+
+		elif spell_name == 'Surge':
+			return 2
+
+		elif spell_name == 'Slash':
+			targets = len(self.allhardmoveablenodes(spell.position))
+			return 2 if targets >= 1 else -1
+
+		elif spell_name == 'Sprout':
+			return 2
+
+		else:
+			return 1
+
 	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
 		self.board.update()
 
@@ -490,9 +605,17 @@ class AIPlayer():
 		if canmove:
 			actions.append('move')
 		else:
-			if (candash & canspell & (self.totalstones > 2)):
+			# Dash: only consider when strategically worthwhile
+			if candash and canspell and self.totalstones > 2:
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
-					actions.append('dash')
+					has_lightning = 'Seal_of_Lightning' in [s.name for s in self.charged_spells]
+					# With Lightning (costs 1 stone): dash if we're ahead by 2+ stones
+					# Without Lightning (costs 2 stones): dash only if ahead by 3+ stones
+					if has_lightning and self._stone_advantage() >= 2:
+						actions.append('dash')
+					elif not has_lightning and self._stone_advantage() >= 3 and self.totalstones > 4:
+						actions.append('dash')
+
 			summer_active = False
 			if ('Seal_of_Summer' in [s.name for s in self.charged_spells]) and cansummer:
 				summer_active = True
@@ -522,40 +645,30 @@ class AIPlayer():
 			actions.append('pass')
 
 
-
-
 		### Select 1 action from the actions list.
 
 		if 'move' in actions:
 			action = 'move'
-		elif 'dash' in actions and 'Seal_of_Lightning' in [s.name for s in self.charged_spells]:
-			action = 'dash'
-		elif 'Carnage' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Carnage'].position)) > 0:
-			action = 'Carnage'
-		elif 'Starfall' in actions and self.starfalltargetexists():
-			action = 'Starfall'
-		elif 'Bewitch' in actions and self.bewitchtargetexists():
-			action = 'Bewitch'
-		elif 'Flourish' in actions:
-			action = 'Flourish'
-		elif 'Fireblast' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Fireblast'].position)) > 1:
-			action = 'Fireblast'
-		elif 'Hail_Storm' in actions and self.hailablespellcount() > 1:
-			action = 'Hail_Storm'
-		elif 'Meteor' in actions:
-			action = 'Meteor'
-		elif 'Grow' in actions:
-			action = 'Grow'
-		elif 'Surge' in actions:
-			action = 'Surge'
-		elif 'Slash' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Slash'].position)) > 0:
-			action = 'Slash'
-		elif 'Sprout' in actions:
-			action = 'Sprout'
-		elif 'Comet' in actions and self.comettargetexists():
-			action = 'Comet'
-		elif 'pass' in actions:
-			action = 'pass'
+		else:
+			# Evaluate each possible action and pick the best one
+			best_action = 'pass'
+			best_score = 0
+
+			for act in actions:
+				if act == 'pass':
+					continue
+				elif act == 'dash':
+					# Dash is moderately valuable when allowed
+					score = 3
+				else:
+					# It's a spell -- evaluate it
+					score = self._evaluate_spell(act)
+
+				if score > best_score:
+					best_score = score
+					best_action = act
+
+			action = best_action
 
 
 		if action == 'move':
@@ -772,6 +885,9 @@ class AIPlayer():
 
 		if standardmove and 'Seal_of_Wind' in [s.name for s in self.charged_spells]:
 			legalmoves = self.allblinkablenodes()
+			# Score blink targets and pick the best one
+			best_node = None
+			best_score = -999
 			for node in legalmoves:
 				adjacent_nonenemy_count = 0
 				if node.stone == None:
@@ -780,53 +896,57 @@ class AIPlayer():
 					if neighbor.stone != self.enemy:
 						adjacent_nonenemy_count += 1
 				if adjacent_nonenemy_count > 1:
-					# blink move into the node
-					if node.stone == self.enemy:
-						self.board.record('blink', node=node.name)
-						self.pushenemy(node)
-						return
-					else:
-						node.stone = self.color
-						self.board.record('blink', node=node.name)
-						egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
-						self.opp.ws.send(json.dumps(egress))
-						self.board.update()
-						return
+					score = self._score_move_target(node)
+					if score > best_score:
+						best_score = score
+						best_node = node
 
-
-		else:
-			legalmoves = self.allmoveablenodes()
-
-			### node is the chosen place to move. Try to choose a non-locked node if one exists.
-			if self.lock:
-				dumb_move_nodes = self.lock.position
-			else:
-				dumb_move_nodes = []
-
-			node = None
-			for potential_node in legalmoves:
-				if not (potential_node in dumb_move_nodes):
-					node = potential_node
-					break
+			if best_node is not None:
+				if best_node.stone == self.enemy:
+					self.board.record('blink', node=best_node.name)
+					self.pushenemy(best_node)
+					return
 				else:
-					continue
-			if node == None:
-				node = legalmoves[0]
+					best_node.stone = self.color
+					self.board.record('blink', node=best_node.name)
+					egress =  {"type": "new_stone_animation", "color": self.color, "node": best_node.name}
+					self.opp.ws.send(json.dumps(egress))
+					self.board.update()
+					return
+			# Fall through to normal move if no good blink target
 
-			nodename = node.name
-			if node.stone == None:
-				node.stone = self.color
-				self.board.record('move', node=nodename)
 
-				egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
-				self.opp.ws.send(json.dumps(egress))
+		legalmoves = self.allmoveablenodes()
+		if len(legalmoves) == 0:
+			return
 
-				self.board.last_play = nodename
-				self.board.last_player = self.color
-				self.board.update()
-			else:
-				self.board.record('hard_move', node=nodename, pushed_to='pending')
-				self.pushenemy(node)
+		# Score each legal move and pick the best
+		best_node = None
+		best_score = -999
+		for node in legalmoves:
+			score = self._score_move_target(node)
+			if score > best_score:
+				best_score = score
+				best_node = node
+
+		if best_node is None:
+			best_node = legalmoves[0]
+
+		node = best_node
+		nodename = node.name
+		if node.stone == None:
+			node.stone = self.color
+			self.board.record('move', node=nodename)
+
+			egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}
+			self.opp.ws.send(json.dumps(egress))
+
+			self.board.last_play = nodename
+			self.board.last_player = self.color
+			self.board.update()
+		else:
+			self.board.record('hard_move', node=nodename, pushed_to='pending')
+			self.pushenemy(node)
 
 
 
@@ -838,19 +958,24 @@ class AIPlayer():
 
 		time.sleep(1)
 
-		### node is the chosen place to move. Try to choose a non-dumb node if one exists.
+		### Score each legal soft move, avoiding dumb_move_nodes
 		if self.lock:
 			dumb_move_nodes += self.lock.position
-		node = None
-		for potential_node in legalmoves:
-			if not (potential_node in dumb_move_nodes):
-				node = potential_node
-				break
-			else:
-				continue
-		if node == None:
-			node = legalmoves[0]
 
+		best_node = None
+		best_score = -999
+		for node in legalmoves:
+			score = self._score_move_target(node)
+			if node in dumb_move_nodes:
+				score -= 8
+			if score > best_score:
+				best_score = score
+				best_node = node
+
+		if best_node is None:
+			best_node = legalmoves[0]
+
+		node = best_node
 		nodename = node.name
 		node.stone = self.color
 		self.board.record('move', node=nodename)
@@ -871,8 +996,19 @@ class AIPlayer():
 
 		time.sleep(1)
 
-		### node is the chosen place to move
-		node = legalmoves[0]
+		### Score each target and pick the best one to push
+		best_node = None
+		best_score = -999
+		for node in legalmoves:
+			score = self._score_move_target(node)
+			if score > best_score:
+				best_score = score
+				best_node = node
+
+		if best_node is None:
+			best_node = legalmoves[0]
+
+		node = best_node
 		nodename = node.name
 		self.board.record('hard_move', node=nodename, pushed_to='pending')
 		self.pushenemy(node)
@@ -888,7 +1024,7 @@ class AIPlayer():
 				if node.stone == self.color:
 					sacrificed.append(name)
 					node.stone = None
-					if (self.board.last_play == node):
+					if self.board.last_play == name:
 						self.board.last_play = None
 						self.board.last_player = None
 					self.board.update()
@@ -896,7 +1032,22 @@ class AIPlayer():
 					break
 			self.board.record('dash_lightning', sacrificed=sacrificed, dest='pending')
 		else:
-			self.board.record('dash', sacrificed=[], dest='pending')
+			# Sacrifice 2 stones (least valuable first)
+			count = 0
+			for name in reversed(self.priority_order):
+				if count >= 2:
+					break
+				node = self.board.nodes[name]
+				if node.stone == self.color:
+					sacrificed.append(name)
+					node.stone = None
+					if self.board.last_play == name:
+						self.board.last_play = None
+						self.board.last_player = None
+					count += 1
+					self.board.update()
+					time.sleep(1)
+			self.board.record('dash', sacrificed=sacrificed, dest='pending')
 		self.move()
 
 
