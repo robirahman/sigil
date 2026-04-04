@@ -199,13 +199,13 @@
 				nextPage() { if (this.page < this.totalPages - 1) this.page++; },
 
 				async init() {
+					const db = firebase.database();
+
+					// Seed AI entries (best-effort, never blocks the read)
+					try { await this._seedAIs(db); } catch (e) { console.warn('AI seeding skipped:', e.message); }
+
+					// Fetch leaderboard
 					try {
-						const db = firebase.database();
-
-						// Ensure AI entries exist in the leaderboard
-						await this._seedAIs(db);
-
-						// Fetch all leaderboard entries
 						const snap = await db.ref('leaderboard')
 							.orderByChild('elo')
 							.once('value');
@@ -222,15 +222,27 @@
 							});
 						});
 
-						// orderByChild is ascending; reverse for descending
 						this.allPlayers = results.reverse();
 					} catch (e) {
 						console.error('Failed to load leaderboard:', e);
 					}
+
+					// If still empty, show AI defaults client-side
+					if (this.allPlayers.length === 0) {
+						this.allPlayers = [
+							{ uid: '__ai_easy__', displayName: 'AI (Easy)', elo: 1000, gamesPlayed: 0, isAI: true },
+							{ uid: '__ai_medium__', displayName: 'AI (Medium)', elo: 1000, gamesPlayed: 0, isAI: true },
+						];
+					}
+
 					this.loading = false;
 				},
 
 				async _seedAIs(db) {
+					// Authenticate if needed (writes require auth)
+					if (!firebase.auth().currentUser) {
+						await firebase.auth().signInAnonymously();
+					}
 					const ais = [
 						{ uid: '__ai_easy__', name: 'AI (Easy)' },
 						{ uid: '__ai_medium__', name: 'AI (Medium)' },
@@ -238,29 +250,21 @@
 					for (const ai of ais) {
 						const snap = await db.ref('leaderboard/' + ai.uid).once('value');
 						if (!snap.exists()) {
-							// Ensure we're authenticated for writes
-							if (!firebase.auth().currentUser) {
-								try { await firebase.auth().signInAnonymously(); } catch(e) { return; }
-							}
 							await db.ref('leaderboard/' + ai.uid).set({
 								displayName: ai.name,
 								elo: 1000,
 								gamesPlayed: 0,
 								isAI: true,
 							});
-							// Also seed the users entry
-							const userSnap = await db.ref('users/' + ai.uid).once('value');
-							if (!userSnap.exists()) {
-								await db.ref('users/' + ai.uid).set({
-									displayName: ai.name,
-									elo: 1000,
-									gamesPlayed: 0,
-									wins: 0,
-									losses: 0,
-									created: Date.now(),
-									isAI: true,
-								});
-							}
+							await db.ref('users/' + ai.uid).set({
+								displayName: ai.name,
+								elo: 1000,
+								gamesPlayed: 0,
+								wins: 0,
+								losses: 0,
+								created: Date.now(),
+								isAI: true,
+							});
 						}
 					}
 				},
