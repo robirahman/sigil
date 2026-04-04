@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<title>Account - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.account {
+			max-width: 400px;
+			margin: 0 auto;
+			padding: 24px;
+			text-align: center;
+		}
+		.account h2 {
+			font-family: 'Arvo', serif;
+			color: #e0d0b0;
+			margin-bottom: 20px;
+		}
+		.account-form {
+			margin: 16px 0;
+			text-align: left;
+		}
+		.account-form label {
+			display: block;
+			font-family: 'Overlock', sans-serif;
+			color: #aaa;
+			margin: 12px 0 4px;
+			font-size: 0.9em;
+		}
+		.account-form input {
+			display: block;
+			width: 100%;
+			padding: 10px 12px;
+			border-radius: 6px;
+			border: 2px solid #555;
+			background: #1a1a2e;
+			color: #e0d0b0;
+			font-family: 'Overlock', sans-serif;
+			font-size: 1em;
+			box-sizing: border-box;
+		}
+		.account-form input:focus {
+			border-color: #8af;
+			outline: none;
+		}
+		.account-button {
+			display: block;
+			width: 100%;
+			padding: 14px;
+			margin: 10px 0;
+			background: #2a2a4e;
+			border: 2px solid #555;
+			border-radius: 8px;
+			color: #e0d0b0;
+			font-family: 'Arvo', serif;
+			font-size: 1em;
+			cursor: pointer;
+		}
+		.account-button:hover { background: #3a3a6e; border-color: #aaa; }
+		.account-button:disabled { opacity: 0.5; cursor: not-allowed; }
+		.account-button--google {
+			background: #4285f4;
+			border-color: #4285f4;
+			color: #fff;
+		}
+		.account-button--google:hover { background: #5a95f5; border-color: #5a95f5; }
+		.account-button--signout {
+			background: #4a2a2a;
+			border-color: #744;
+		}
+		.account-button--signout:hover { background: #5a3a3a; border-color: #a66; }
+		.error-msg { color: #e66; font-family: 'Overlock', sans-serif; margin: 8px 0; font-size: 0.9em; }
+		.success-msg { color: #6e6; font-family: 'Overlock', sans-serif; margin: 8px 0; font-size: 0.9em; }
+		.divider {
+			margin: 16px 0;
+			color: #777;
+			font-family: 'Overlock', sans-serif;
+		}
+		.profile-card {
+			background: #1a1a2e;
+			border-radius: 8px;
+			padding: 20px;
+			margin: 16px 0;
+			text-align: left;
+		}
+		.profile-card__name {
+			font-family: 'Arvo', serif;
+			color: #f0e0c0;
+			font-size: 1.4em;
+			margin-bottom: 12px;
+		}
+		.profile-card__stats {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 12px;
+		}
+		.profile-card__stat {
+			font-family: 'Overlock', sans-serif;
+		}
+		.profile-card__stat-label {
+			color: #888;
+			font-size: 0.8em;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+		}
+		.profile-card__stat-value {
+			color: #e0d0b0;
+			font-size: 1.3em;
+			font-family: 'Arvo', serif;
+		}
+		.tab-bar {
+			display: flex;
+			gap: 0;
+			margin-bottom: 16px;
+		}
+		.tab-bar__tab {
+			flex: 1;
+			padding: 10px;
+			background: #1a1a2e;
+			border: 2px solid #555;
+			color: #888;
+			font-family: 'Arvo', serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.tab-bar__tab:first-child { border-radius: 8px 0 0 8px; }
+		.tab-bar__tab:last-child { border-radius: 0 8px 8px 0; }
+		.tab-bar__tab--active {
+			background: #2a2a4e;
+			border-color: #aaa;
+			color: #e0d0b0;
+		}
+		.back-link {
+			display: inline-block;
+			margin-top: 16px;
+			color: #8af;
+			font-family: 'Overlock', sans-serif;
+			text-decoration: none;
+		}
+		.back-link:hover { text-decoration: underline; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="accountPage()">
+		<!-- Loading -->
+		<div class="account" x-show="loading" x-cloak>
+			<p style="color: #aaa; font-family: 'Overlock', sans-serif;">Loading...</p>
+		</div>
+
+		<!-- Logged Out -->
+		<div class="account" x-show="!loading && !user" x-cloak>
+			<h2>Account</h2>
+
+			<div class="tab-bar">
+				<button class="tab-bar__tab" x-bind:class="{ 'tab-bar__tab--active': tab === 'login' }" x-on:click="tab = 'login'">Sign In</button>
+				<button class="tab-bar__tab" x-bind:class="{ 'tab-bar__tab--active': tab === 'signup' }" x-on:click="tab = 'signup'">Sign Up</button>
+			</div>
+
+			<!-- Login Form -->
+			<div x-show="tab === 'login'">
+				<div class="account-form">
+					<label for="login-email">Email</label>
+					<input id="login-email" type="email" x-model="loginEmail" x-on:keydown.enter="signIn" />
+					<label for="login-password">Password</label>
+					<input id="login-password" type="password" x-model="loginPassword" x-on:keydown.enter="signIn" />
+				</div>
+				<button class="account-button" x-on:click="signIn" x-bind:disabled="busy">Sign In</button>
+			</div>
+
+			<!-- Sign Up Form -->
+			<div x-show="tab === 'signup'">
+				<div class="account-form">
+					<label for="signup-name">Display Name</label>
+					<input id="signup-name" type="text" x-model="signupName" maxlength="20" x-on:keydown.enter="signUp" />
+					<label for="signup-email">Email</label>
+					<input id="signup-email" type="email" x-model="signupEmail" x-on:keydown.enter="signUp" />
+					<label for="signup-password">Password</label>
+					<input id="signup-password" type="password" x-model="signupPassword" x-on:keydown.enter="signUp" />
+				</div>
+				<button class="account-button" x-on:click="signUp" x-bind:disabled="busy">Create Account</button>
+			</div>
+
+			<div class="divider">- or -</div>
+			<button class="account-button account-button--google" x-on:click="signInGoogle" x-bind:disabled="busy">Sign in with Google</button>
+
+			<p class="error-msg" x-text="error"></p>
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+
+		<!-- Logged In -->
+		<div class="account" x-show="!loading && user" x-cloak>
+			<h2>Your Profile</h2>
+
+			<div class="profile-card">
+				<div class="profile-card__name" x-text="profile?.displayName || user?.displayName || 'Player'"></div>
+				<div class="profile-card__stats">
+					<div class="profile-card__stat">
+						<div class="profile-card__stat-label">Rating</div>
+						<div class="profile-card__stat-value" x-text="profile?.elo ?? '—'"></div>
+					</div>
+					<div class="profile-card__stat">
+						<div class="profile-card__stat-label">Games</div>
+						<div class="profile-card__stat-value" x-text="profile?.gamesPlayed ?? 0"></div>
+					</div>
+					<div class="profile-card__stat">
+						<div class="profile-card__stat-label">Wins</div>
+						<div class="profile-card__stat-value" x-text="profile?.wins ?? 0"></div>
+					</div>
+					<div class="profile-card__stat">
+						<div class="profile-card__stat-label">Losses</div>
+						<div class="profile-card__stat-value" x-text="profile?.losses ?? 0"></div>
+					</div>
+				</div>
+			</div>
+
+			<p class="success-msg" x-text="successMsg"></p>
+			<p class="error-msg" x-text="error"></p>
+
+			<button class="account-button" x-on:click="goToMultiplayer">Play Online</button>
+			<a class="account-button" href="leaderboard.html" style="text-decoration: none; text-align: center;">Leaderboard</a>
+			<button class="account-button account-button--signout" x-on:click="doSignOut">Sign Out</button>
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+
+	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+
+	<script>
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('accountPage', () => ({
+				loading: true,
+				user: null,
+				profile: null,
+				tab: 'login',
+				loginEmail: '',
+				loginPassword: '',
+				signupName: '',
+				signupEmail: '',
+				signupPassword: '',
+				error: '',
+				successMsg: '',
+				busy: false,
+
+				init() {
+					this._authManager = new AuthManager();
+					this._authManager.onAuthChanged(async (user) => {
+						this.user = user && !user.isAnonymous ? user : null;
+						if (this.user) {
+							await this._authManager.loadProfile(firebase.database());
+							this.profile = this._authManager.userProfile;
+						} else {
+							this.profile = null;
+						}
+						this.loading = false;
+					});
+				},
+
+				async signIn() {
+					this.error = '';
+					this.busy = true;
+					try {
+						await this._authManager.signInWithEmail(this.loginEmail, this.loginPassword);
+					} catch (e) {
+						this.error = _friendlyError(e);
+					}
+					this.busy = false;
+				},
+
+				async signUp() {
+					this.error = '';
+					if (!this.signupName.trim()) { this.error = 'Display name is required.'; return; }
+					if (this.signupName.trim().length > 20) { this.error = 'Display name must be 20 characters or less.'; return; }
+					this.busy = true;
+					try {
+						await this._authManager.signUpWithEmail(this.signupEmail, this.signupPassword, this.signupName.trim());
+					} catch (e) {
+						this.error = _friendlyError(e);
+					}
+					this.busy = false;
+				},
+
+				async signInGoogle() {
+					this.error = '';
+					this.busy = true;
+					try {
+						await this._authManager.signInWithGoogle();
+					} catch (e) {
+						this.error = _friendlyError(e);
+					}
+					this.busy = false;
+				},
+
+				async doSignOut() {
+					await this._authManager.signOut();
+				},
+
+				goToMultiplayer() {
+					window.location.href = 'multiplayer.html';
+				},
+			}));
+		});
+
+		function _friendlyError(e) {
+			const map = {
+				'auth/email-already-in-use': 'An account with this email already exists.',
+				'auth/invalid-email': 'Invalid email address.',
+				'auth/weak-password': 'Password must be at least 6 characters.',
+				'auth/user-not-found': 'No account found with this email.',
+				'auth/wrong-password': 'Incorrect password.',
+				'auth/invalid-credential': 'Invalid email or password.',
+				'auth/too-many-requests': 'Too many attempts. Please try again later.',
+				'auth/popup-closed-by-user': 'Sign-in popup was closed.',
+			};
+			return map[e.code] || e.message;
+		}
+	</script>
+</body>
+</html>

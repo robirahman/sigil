@@ -1,0 +1,48 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth !== null && auth.uid === $uid",
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
+        },
+        "elo": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000"
+        },
+        "gamesPlayed": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "wins": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "losses": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        }
+      }
+    },
+    "leaderboard": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth !== null",
+        "elo": { ".validate": "newData.isNumber()" },
+        "displayName": { ".validate": "newData.isString()" },
+        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" }
+      },
+      ".indexOn": ["elo"]
+    },
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "completed_games": {
+      ".read": false,
+      "$gameId": {
+        ".write": "auth !== null",
+        ".validate": "newData.hasChildren(['spellNames', 'winner', 'turns', 'timestamp'])"
+      }
+    }
+  }
+}

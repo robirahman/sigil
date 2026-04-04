@@ -19,6 +19,12 @@ class MultiplayerController {
 		// Buffer for local player's actions during a turn (sent only when turn completes)
 		this._turnBuffer = [];
 
+		// Timer state
+		this._timerInterval = null;
+		this._timerState = { red: 0, blue: 0, activeColor: null, lastUpdated: 0 };
+		this._timeControl = sync.timeControl || { type: 'none' };
+		this._timedOut = false;
+
 		sync.onOpponentDisconnect = () => {
 			this.emit({ type: 'message', message: 'Opponent disconnected.', awaiting: null });
 		};
@@ -52,8 +58,110 @@ class MultiplayerController {
 	async _flushTurnBuffer() {
 		console.log('[Controller] Flushing turn buffer:', this._turnBuffer);
 		if (this._turnBuffer.length > 0) {
-			await this.sync.sendTurn(this._turnBuffer);
+			const timerUpdate = this._computeTimerUpdate();
+			await this.sync.sendTurn(this._turnBuffer, timerUpdate);
 			this._turnBuffer = [];
+		}
+	}
+
+	/**
+	 * Compute timer update for end-of-turn.
+	 * Returns null if no timer, or { red, blue, activeColor } with updated values.
+	 */
+	_computeTimerUpdate() {
+		if (this._timeControl.type === 'none') return null;
+
+		const ts = this._timerState;
+		const now = this.sync.serverNow();
+		const elapsed = now - ts.lastUpdated;
+		const opponent = this.myColor === 'red' ? 'blue' : 'red';
+
+		if (this._timeControl.type === 'realtime') {
+			const myRemaining = Math.max(0, ts[this.myColor] - elapsed + (this._timeControl.increment || 0));
+			return {
+				red: this.myColor === 'red' ? myRemaining : ts.red,
+				blue: this.myColor === 'blue' ? myRemaining : ts.blue,
+				activeColor: opponent,
+			};
+		}
+
+		if (this._timeControl.type === 'correspondence') {
+			// Set opponent's deadline to now + moveTimeout
+			const deadline = now + this._timeControl.moveTimeout;
+			return {
+				red: opponent === 'red' ? deadline : ts.red,
+				blue: opponent === 'blue' ? deadline : ts.blue,
+				activeColor: opponent,
+			};
+		}
+
+		return null;
+	}
+
+	/** Start the timer display interval and listen for timer updates. */
+	_startTimer() {
+		if (this._timeControl.type === 'none') return;
+
+		this.sync.listenToTimer((data) => {
+			this._timerState = data;
+		});
+
+		this._timerInterval = setInterval(() => {
+			this._tickTimer();
+		}, 250);
+	}
+
+	/** Called every 250ms to update the timer display and check for timeout. */
+	_tickTimer() {
+		const ts = this._timerState;
+		if (!ts.activeColor || !ts.lastUpdated) return;
+
+		const now = this.sync.serverNow();
+		const elapsed = now - ts.lastUpdated;
+
+		if (this._timeControl.type === 'realtime') {
+			const activeRemaining = ts[ts.activeColor] - elapsed;
+			const inactiveColor = ts.activeColor === 'red' ? 'blue' : 'red';
+
+			this.emit({
+				type: 'timer_tick',
+				red: ts.activeColor === 'red' ? activeRemaining : ts.red,
+				blue: ts.activeColor === 'blue' ? activeRemaining : ts.blue,
+			});
+
+			// Check timeout
+			if (activeRemaining <= 0 && !this._timedOut) {
+				this._timedOut = true;
+				const winner = inactiveColor;
+				this.emit({ type: 'game_over', winner });
+				this.sync.writeTimeout(winner);
+				this._stopTimer();
+			}
+		} else if (this._timeControl.type === 'correspondence') {
+			// Show deadlines as absolute timestamps
+			this.emit({
+				type: 'timer_tick',
+				red: ts.red,
+				blue: ts.blue,
+			});
+
+			// Check if active player's deadline has passed
+			const deadline = ts[ts.activeColor];
+			if (deadline > 0 && now > deadline && !this._timedOut) {
+				this._timedOut = true;
+				const winner = ts.activeColor === 'red' ? 'blue' : 'red';
+				this.emit({ type: 'game_over', winner });
+				this.sync.writeTimeout(winner);
+				this._stopTimer();
+			}
+		}
+	}
+
+	/** Stop the timer interval. */
+	_stopTimer() {
+		if (this._timerInterval) {
+			clearInterval(this._timerInterval);
+			this._timerInterval = null;
 		}
 	}
 
@@ -115,6 +223,12 @@ class MultiplayerController {
 			this.emit({ type: 'message', message: 'You are ' + colorName + '. Red goes first.', awaiting: null });
 		}
 
+		// Initialize timer (room creator only, on fresh games)
+		if (this.myColor === 'red' && !reconnectSfn) {
+			await this.sync.initTimer(this._timeControl);
+		}
+		this._startTimer();
+
 		this._emitSfn();
 		await this._delay(500);
 		this._runGameLoop();
@@ -142,6 +256,7 @@ class MultiplayerController {
 						board.winner = 'blue';
 						this.emit({ type: 'game_over', winner: 'blue' });
 						this._saveGameRecord('blue');
+						this._stopTimer();
 						return;
 					}
 				}
@@ -161,6 +276,7 @@ class MultiplayerController {
 				if (board.gameover) {
 					this.emit({ type: 'game_over', winner: board.winner });
 					this._saveGameRecord(board.winner);
+					this._stopTimer();
 					return;
 				}
 
@@ -195,6 +311,7 @@ class MultiplayerController {
 				if (board.gameover) {
 					this.emit({ type: 'game_over', winner: board.winner });
 					this._saveGameRecord(board.winner);
+					this._stopTimer();
 					return;
 				}
 

@@ -40,6 +40,28 @@ document.addEventListener('alpine:init', () => {
 			currentSfn: '',
 			winner: '',
 
+			// Player names and timer
+			redName: '',
+			blueName: '',
+			redTimer: 0,
+			blueTimer: 0,
+			timerType: 'none',
+			isSpectator: false,
+
+			formatTimer(ms) {
+				if (this.timerType === 'correspondence') {
+					// Show as deadline date/time
+					if (ms <= 0) return 'Expired';
+					const d = new Date(ms);
+					return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+				}
+				// Real-time: show M:SS
+				const totalSec = Math.max(0, Math.ceil(ms / 1000));
+				const min = Math.floor(totalSec / 60);
+				const sec = totalSec % 60;
+				return min + ':' + String(sec).padStart(2, '0');
+			},
+
 			closeSpellTooltip() { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); },
 			showSpellTooltip(spell) {
 				this.activeSpell = spell;
@@ -50,9 +72,9 @@ document.addEventListener('alpine:init', () => {
 					this.spellTooltip.forceUpdate();
 				});
 			},
-			handleCastSpell(spell) { this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
-			handleDash() { this.sendEvent('dash'); this.actionList = []; },
-			handleEndTurn() { this.sendEvent('pass'); this.actionList = []; },
+			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
+			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
+			handleEndTurn() { if (this.isSpectator) return; this.sendEvent('pass'); this.actionList = []; },
 			handleCharmClick(spell) {
 				const cn = this.spellDict[spell];
 				if (this.awaiting === 'action' && this.actionList.includes(cn)) {
@@ -69,8 +91,9 @@ document.addEventListener('alpine:init', () => {
 			},
 			handleSpellMouseOut() { if (!this.hasTouchScreen) { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); } },
 			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) this.showSpellTooltip(spell); },
-			handleReset() { this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; },
+			handleReset() { if (this.isSpectator) return; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; },
 			handleNodeClick(node) {
+				if (this.isSpectator) return;
 				this.currentPlayer = this.whoseTurn;
 				if (this.awaiting === 'node') this.sendEvent(node);
 				else if (this.awaiting === 'action' && this.actionList.includes('move')) this.sendEvent(node);
@@ -87,17 +110,33 @@ document.addEventListener('alpine:init', () => {
 				const waitForState = setInterval(() => {
 					if (!window._multiplayerState) return;
 					clearInterval(waitForState);
-					const { sync, spellNames, myColor, reconnectSfn } = window._multiplayerState;
+					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, redDisplayName, blueDisplayName } = window._multiplayerState;
 
-					const engine = new MultiplayerController(
-						function emitEvent(eventObj) { handleIncomingEvent(eventObj); },
-						sync, myColor, spellNames
-					);
+					// Set player names and timer type
+					_this.redName = redDisplayName || '';
+					_this.blueName = blueDisplayName || '';
+					_this.timerType = (timeControl && timeControl.type) || 'none';
+					_this.isSpectator = isSpectator || false;
 
-					_this.sendEvent = function(message) {
-						engine.handlePlayerAction(message);
-						_this.awaiting = null;
-					};
+					let engine;
+					if (isSpectator) {
+						engine = new SpectatorController(
+							function emitEvent(eventObj) { handleIncomingEvent(eventObj); },
+							sync, spellNames
+						);
+						// Spectators have no sendEvent
+						_this.sendEvent = function() {};
+					} else {
+						engine = new MultiplayerController(
+							function emitEvent(eventObj) { handleIncomingEvent(eventObj); },
+							sync, myColor, spellNames
+						);
+
+						_this.sendEvent = function(message) {
+							engine.handlePlayerAction(message);
+							_this.awaiting = null;
+						};
+					}
 
 					engine.startGame(reconnectSfn);
 				}, 100);
@@ -129,6 +168,7 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'chooserefills') { const { playercolor, ...n } = rest; _this.nodesToRefill = n; _this.playerToRefill = playercolor; }
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
 					else if (type === 'pushingoptions') { _this.validMoves = rest; }
+					else if (type === 'timer_tick') { _this.redTimer = rest.red; _this.blueTimer = rest.blue; }
 					else if (type === 'game_over') { _this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins`); _this.showReset = false; _this.winner = rest.winner; }
 				}
 			},

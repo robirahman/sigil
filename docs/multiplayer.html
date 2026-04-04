@@ -7,6 +7,7 @@
 	<link href="static/css/layout.css" rel="stylesheet" />
 	<link href="static/css/styles.css" rel="stylesheet" />
 	<link href="static/css/help.css" rel="stylesheet" />
+	<link href="static/css/ladder.css" rel="stylesheet" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
@@ -71,6 +72,97 @@
 			margin: 12px 0;
 		}
 		.error-msg { color: #e66; }
+		.auth-status {
+			font-family: 'Overlock', sans-serif;
+			color: #aaa;
+			font-size: 0.9em;
+			margin-bottom: 16px;
+			padding: 8px 12px;
+			background: #1a1a2e;
+			border-radius: 6px;
+		}
+		.auth-status a { color: #8af; text-decoration: none; }
+		.auth-status a:hover { text-decoration: underline; }
+		.auth-status__name { color: #e0d0b0; font-weight: bold; }
+		.auth-status__elo { color: #f0e0c0; }
+		.time-control {
+			margin: 16px 0;
+			text-align: left;
+		}
+		.time-control__label {
+			font-family: 'Overlock', sans-serif;
+			color: #aaa;
+			font-size: 0.85em;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			margin-bottom: 8px;
+		}
+		.time-control__options {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+		.time-control__option {
+			padding: 6px 12px;
+			border: 2px solid #555;
+			border-radius: 6px;
+			background: #1a1a2e;
+			color: #aaa;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.time-control__option:hover { border-color: #888; color: #e0d0b0; }
+		.time-control__option--active { border-color: #8af; color: #e0d0b0; background: #2a2a4e; }
+		.spectator-banner {
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			background: rgba(40, 40, 80, 0.95);
+			color: #e0d0b0;
+			font-family: 'Arvo', serif;
+			text-align: center;
+			padding: 8px;
+			z-index: 100;
+			font-size: 0.9em;
+			letter-spacing: 0.05em;
+		}
+		.resume-section {
+			margin-top: 24px;
+			border-top: 1px solid #333;
+			padding-top: 16px;
+		}
+		.resume-section h3 {
+			font-family: 'Arvo', serif;
+			color: #e0d0b0;
+			font-size: 0.95em;
+			margin-bottom: 8px;
+		}
+		.resume-game {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 8px 12px;
+			background: #1a1a2e;
+			border-radius: 6px;
+			margin: 6px 0;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+		}
+		.resume-game__code { color: #f0e0c0; font-family: monospace; letter-spacing: 0.1em; }
+		.resume-game__status { color: #aaa; }
+		.resume-game__status--your-turn { color: #6e6; }
+		.resume-game__join {
+			padding: 4px 10px;
+			background: #2a2a4e;
+			border: 1px solid #555;
+			border-radius: 4px;
+			color: #e0d0b0;
+			cursor: pointer;
+			font-size: 0.85em;
+		}
+		.resume-game__join:hover { background: #3a3a6e; }
 	</style>
 	<script>
 		var webpDetector = new Image();
@@ -92,14 +184,75 @@
 	</header>
 
 	<div class="main" x-data="multiplayerLobby()">
+		<!-- Spectator banner -->
+		<div class="spectator-banner" x-show="isSpectator" x-cloak>Spectating</div>
+
 		<!-- Lobby -->
 		<div class="lobby" x-show="phase === 'lobby'" x-cloak>
 			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Online Multiplayer</h2>
+
+			<!-- Auth status -->
+			<div class="auth-status" x-show="authReady">
+				<template x-if="authUser">
+					<span>Playing as <span class="auth-status__name" x-text="authDisplayName"></span>
+					<template x-if="authElo !== null"> (<span class="auth-status__elo" x-text="authElo"></span>)</template>
+					&mdash; <a href="account.html">Account</a></span>
+				</template>
+				<template x-if="!authUser">
+					<span>Playing as Guest &mdash; <a href="account.html">Sign in</a> for ranked play</span>
+				</template>
+			</div>
+
+			<!-- Time control selection -->
+			<div class="time-control">
+				<div class="time-control__label">Time Control</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'none' }" x-on:click="tcType = 'none'">None</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'realtime' }" x-on:click="tcType = 'realtime'">Real-time</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'correspondence' }" x-on:click="tcType = 'correspondence'">Correspondence</button>
+				</div>
+			</div>
+
+			<!-- Real-time presets -->
+			<div class="time-control" x-show="tcType === 'realtime'">
+				<div class="time-control__label">Time Preset</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '3+0' }" x-on:click="setTimePreset('3+0')">3+0</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '5+0' }" x-on:click="setTimePreset('5+0')">5+0</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '5+5' }" x-on:click="setTimePreset('5+5')">5+5</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '10+0' }" x-on:click="setTimePreset('10+0')">10+0</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '10+5' }" x-on:click="setTimePreset('10+5')">10+5</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '15+10' }" x-on:click="setTimePreset('15+10')">15+10</button>
+				</div>
+			</div>
+
+			<!-- Correspondence presets -->
+			<div class="time-control" x-show="tcType === 'correspondence'">
+				<div class="time-control__label">Time per Move</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '12h' }" x-on:click="tcCorr = '12h'">12 hours</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '24h' }" x-on:click="tcCorr = '24h'">24 hours</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '3d' }" x-on:click="tcCorr = '3d'">3 days</button>
+				</div>
+			</div>
+
 			<button class="lobby-button" x-on:click="createRoom">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" />
 			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="joinCode.length < 4">Join Game</button>
 			<p class="error-msg" x-text="lobbyError"></p>
+
+			<!-- Resume correspondence games -->
+			<div class="resume-section" x-show="activeGames.length > 0">
+				<h3>Active Games</h3>
+				<template x-for="game in activeGames" x-bind:key="game.roomCode">
+					<div class="resume-game">
+						<span class="resume-game__code" x-text="game.roomCode"></span>
+						<span class="resume-game__status" x-bind:class="{ 'resume-game__status--your-turn': game.isYourTurn }" x-text="game.statusText"></span>
+						<button class="resume-game__join" x-on:click="resumeGame(game.roomCode)">Resume</button>
+					</div>
+				</template>
+			</div>
 		</div>
 
 		<!-- Waiting for opponent -->
@@ -113,6 +266,36 @@
 		<!-- Game (only mounts when game starts) -->
 		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })">
+				<!-- Player names and timer bar -->
+				<div class="ladder-details" x-show="redName || blueName">
+					<div class="ladder-details__inner">
+						<div class="ladder-details__card">
+							<div class="red">
+								<span class="name" x-text="redName"></span>
+							</div>
+							<div class="timer">
+								<div class="main">
+									<template x-if="timerType !== 'none'">
+										<span x-text="formatTimer(redTimer)" style="color: #fa3f32;"></span>
+									</template>
+									<span>vs</span>
+									<template x-if="timerType !== 'none'">
+										<span x-text="formatTimer(blueTimer)" style="color: #295ccd;"></span>
+									</template>
+								</div>
+								<template x-if="timerType !== 'none'">
+									<div style="display: flex; width: var(--timer-width, 6em);">
+										<div class="bar bar--red" x-bind:style="'flex:' + Math.max(redTimer, 0)"></div>
+										<div class="bar bar--blue" x-bind:style="'flex:' + Math.max(blueTimer, 0)"></div>
+									</div>
+								</template>
+							</div>
+							<div class="blue">
+								<span class="name" x-text="blueName"></span>
+							</div>
+						</div>
+					</div>
+				</div>
 				<div class="container"><div class="container__inner">
 					<template x-if="messageHistory.length > 0">
 						<ul class="feed feed--history" x-ref="messageHistory">
@@ -139,7 +322,7 @@
 								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
 							</div>
 					</div>
-					<div class="actions" x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass')}">
+					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass'))}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
 						<button class="action-button action-button--dash" x-bind:class="{ 'is-hidden': !actionList.includes('dash') }" x-on:click="handleDash">Dash</button>
 						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
@@ -173,8 +356,9 @@
 	</div>
 
 	<script>
-		// Store sync outside Alpine to avoid Proxy wrapping Firebase objects
+		// Store sync and auth outside Alpine to avoid Proxy wrapping Firebase objects
 		let _firebaseSync = null;
+		let _authManager = null;
 
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('multiplayerLobby', () => ({
@@ -182,9 +366,65 @@
 				joinCode: '',
 				lobbyError: '',
 				roomCode: '',
+				isSpectator: false,
+
+				// Auth state
+				authReady: false,
+				authUser: null,
+				authDisplayName: 'Guest',
+				authElo: null,
+
+				// Time control
+				tcType: 'none',
+				tcPreset: '5+0',
+				tcCorr: '24h',
+
+				// Active correspondence games
+				activeGames: [],
 
 				init() {
 					_firebaseSync = new FirebaseSync(firebase.database());
+					_authManager = new AuthManager();
+
+					_authManager.onAuthChanged(async (user) => {
+						if (user && !user.isAnonymous) {
+							this.authUser = user;
+							await _authManager.loadProfile(firebase.database());
+							this.authDisplayName = _authManager.displayName;
+							this.authElo = _authManager.elo;
+						} else {
+							this.authUser = null;
+							this.authDisplayName = 'Guest';
+							this.authElo = null;
+						}
+						this.authReady = true;
+					});
+
+					this._loadActiveGames();
+				},
+
+				setTimePreset(preset) {
+					this.tcPreset = preset;
+				},
+
+				_getTimeControl() {
+					if (this.tcType === 'none') return { type: 'none' };
+					if (this.tcType === 'realtime') {
+						const [min, inc] = this.tcPreset.split('+').map(Number);
+						return {
+							type: 'realtime',
+							initialTime: min * 60 * 1000,
+							increment: inc * 1000,
+						};
+					}
+					if (this.tcType === 'correspondence') {
+						const msMap = { '12h': 12*60*60*1000, '24h': 24*60*60*1000, '3d': 3*24*60*60*1000 };
+						return {
+							type: 'correspondence',
+							moveTimeout: msMap[this.tcCorr] || 24*60*60*1000,
+						};
+					}
+					return { type: 'none' };
 				},
 
 				async createRoom() {
@@ -192,11 +432,13 @@
 					this.lobbyError = '';
 					try {
 						const spellNames = generateSpellList();
-						this.roomCode = await _firebaseSync.createRoom(spellNames);
+						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						const timeControl = this._getTimeControl();
+						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl);
 						this.phase = 'waiting';
 
 						_firebaseSync.onOpponentJoin = () => {
-							this._startOnlineGame(spellNames, 'red');
+							this._startOnlineGame(spellNames, 'red', null, false, timeControl);
 						};
 					} catch (e) {
 						this.lobbyError = 'Failed to create room: ' + e.message;
@@ -208,21 +450,80 @@
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
-						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase());
-						this._startOnlineGame(result.spellNames, result.myColor, result.sfn);
+						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo);
+						if (result.isSpectator) {
+							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl);
+						} else {
+							this._startOnlineGame(result.spellNames, result.myColor, result.sfn, false, result.timeControl);
+							// Track correspondence games
+							if (result.timeControl && result.timeControl.type === 'correspondence') {
+								this._trackCorrespondenceGame(this.joinCode.toUpperCase(), result.myColor);
+							}
+						}
 					} catch (e) {
 						this.lobbyError = e.message;
 					}
 				},
 
-				_startOnlineGame(spellNames, myColor, reconnectSfn) {
+				async resumeGame(roomCode) {
+					this.joinCode = roomCode;
+					await this.joinRoom();
+				},
+
+				_startOnlineGame(spellNames, myColor, reconnectSfn, isSpectator, timeControl) {
 					this.phase = 'playing';
+					this.isSpectator = isSpectator || false;
 					window._multiplayerState = {
 						sync: _firebaseSync,
 						spellNames: spellNames,
 						myColor: myColor,
 						reconnectSfn: reconnectSfn || null,
+						isSpectator: isSpectator || false,
+						timeControl: timeControl || { type: 'none' },
+						redDisplayName: _firebaseSync.redDisplayName || 'Guest',
+						blueDisplayName: _firebaseSync.blueDisplayName || 'Guest',
 					};
+				},
+
+				_trackCorrespondenceGame(roomCode, myColor) {
+					const key = 'sigil_active_games';
+					let games = [];
+					try { games = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
+					if (!games.find(g => g.roomCode === roomCode)) {
+						games.push({ roomCode, myColor, created: Date.now() });
+						localStorage.setItem(key, JSON.stringify(games));
+					}
+				},
+
+				async _loadActiveGames() {
+					const key = 'sigil_active_games';
+					let games = [];
+					try { games = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
+					if (games.length === 0) return;
+
+					const db = firebase.database();
+					const active = [];
+					const stillAlive = [];
+
+					for (const game of games) {
+						try {
+							const snap = await db.ref('rooms/' + game.roomCode).once('value');
+							const data = snap.val();
+							if (!data || data.status === 'finished') continue;
+							stillAlive.push(game);
+							const isYourTurn = data.timer && data.timer.activeColor === game.myColor;
+							active.push({
+								roomCode: game.roomCode,
+								myColor: game.myColor,
+								isYourTurn: isYourTurn,
+								statusText: isYourTurn ? 'Your turn' : 'Waiting...',
+							});
+						} catch(e) { /* skip unreadable rooms */ }
+					}
+
+					localStorage.setItem(key, JSON.stringify(stillAlive));
+					this.activeGames = active;
 				},
 			}));
 		});
@@ -240,8 +541,11 @@
 	<script src="static/scripts/engine/mcts.js"></script>
 	<script src="static/scripts/engine/ai-player.js"></script>
 	<script src="static/scripts/engine/game-controller.js"></script>
+	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="static/scripts/engine/elo.js"></script>
 	<script src="static/scripts/engine/firebase-sync.js"></script>
 	<script src="static/scripts/engine/multiplayer-controller.js"></script>
+	<script src="static/scripts/engine/spectator-controller.js"></script>
 	<script src="static/scripts/game-board-multiplayer.js"></script>
 	<script src="static/scripts/help.js"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
@@ -249,6 +553,7 @@
 	<!-- Firebase SDK (compat builds provide the v8 API with modern internals) -->
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 	<script>
 		firebase.initializeApp({
 			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
