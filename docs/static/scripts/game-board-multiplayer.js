@@ -48,6 +48,37 @@ document.addEventListener('alpine:init', () => {
 			timerType: 'none',
 			isSpectator: false,
 
+			// Game review state
+			reviewMode: false,
+			reviewIndex: 0,
+			reviewSfns: [],
+			reviewTurnLabels: [],
+
+			startReview() {
+				if (this.reviewSfns.length === 0) return;
+				this.reviewMode = true;
+				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+			},
+			reviewPrev() { if (this.reviewIndex > 0) { this.reviewIndex--; this._showReviewPosition(); } },
+			reviewNext() { if (this.reviewIndex < this.reviewSfns.length - 1) { this.reviewIndex++; this._showReviewPosition(); } },
+			reviewFirst() { this.reviewIndex = 0; this._showReviewPosition(); },
+			reviewLast() { this.reviewIndex = this.reviewSfns.length - 1; this._showReviewPosition(); },
+			exitReview() { this.reviewMode = false; this.reviewIndex = this.reviewSfns.length - 1; this._showReviewPosition(); },
+			_showReviewPosition() {
+				const sfn = this.reviewSfns[this.reviewIndex];
+				if (!sfn) return;
+				const state = sfnToDict(sfn);
+				for (const node of Object.keys(this.nodes)) { this.nodes[node] = state.stones[node] || null; }
+				this.redSpellCounter = state.red_spellcounter || 0;
+				this.blueSpellCounter = state.blue_spellcounter || 0;
+				this.redLock = state.red_lock || '';
+				this.blueLock = state.blue_lock || '';
+				this.score = state.score || 'unset';
+				this.validMoves = {};
+				this.lastPlay = '';
+			},
+
 			formatTimer(ms) {
 				if (this.timerType === 'correspondence') {
 					// Show as deadline date/time
@@ -169,7 +200,23 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
 					else if (type === 'pushingoptions') { _this.validMoves = rest; }
 					else if (type === 'timer_tick') { _this.redTimer = rest.red; _this.blueTimer = rest.blue; }
-					else if (type === 'game_over') { _this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins`); _this.showReset = false; _this.winner = rest.winner; }
+					else if (type === 'game_over') {
+						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins`);
+						_this.showReset = false;
+						_this.winner = rest.winner;
+						if (rest.gameLog && rest.gameLog.length > 0) {
+							const sfns = [rest.gameLog[0].sfnBefore];
+							const labels = ['Start'];
+							for (const turn of rest.gameLog) {
+								sfns.push(turn.sfnAfter);
+								const cn = turn.color[0].toUpperCase() + turn.color.slice(1);
+								const tn = turn.color === 'red' ? Math.floor(turn.turnNumber / 2) + 1 : Math.floor(turn.turnNumber / 2);
+								labels.push(cn + ' ' + tn);
+							}
+							_this.reviewSfns = sfns;
+							_this.reviewTurnLabels = labels;
+						}
+					}
 				}
 			},
 		})

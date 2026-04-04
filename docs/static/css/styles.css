@@ -1491,14 +1491,16 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	border-radius: 15px;
 	box-shadow: 0 0 5px 2px #000;
 	display: flex;
-	gap: 20px;
-	height: 100px;
-	left: calc(50% - 150px);
+	flex-direction: column;
+	gap: 4px;
+	left: 50%;
+	margin-left: -150px;
 	justify-content: center;
 	max-width: 300px;
 	opacity: 0;
+	padding: 20px;
 	position: fixed;
-	top: calc(50% - 50px);
+	top: calc(50% - 70px);
 	transform: scale(10);
 	visibility: hidden;
 	width: 100%;
@@ -1508,6 +1510,113 @@ html.webp .stone-node--red.stone-node--last-play::after {
 .win-modal.is-visible {
 	animation: modal-zoom-out 0.35s cubic-bezier(0.06, 0.78, 0.8, 1.01) forwards;
 	visibility: visible;
+}
+
+.win-modal__result {
+	display: flex;
+	align-items: center;
+	gap: 20px;
+}
+
+.win-modal__actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+	width: 100%;
+	justify-content: center;
+}
+
+.win-modal__btn {
+	padding: 8px 16px;
+	border: 1px solid rgba(255, 255, 255, 0.4);
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.1);
+	color: #e0d0b0;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.85em;
+	cursor: pointer;
+	text-decoration: none;
+	text-align: center;
+}
+
+.win-modal__btn:hover {
+	background: rgba(255, 255, 255, 0.2);
+	border-color: rgba(255, 255, 255, 0.6);
+}
+
+.review-bar {
+	position: fixed;
+	bottom: 16px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 14px;
+	background: rgba(0, 0, 0, 0.9);
+	border: 2px solid #555;
+	border-radius: 10px;
+	box-shadow: 0 2px 8px #000;
+	z-index: 10;
+	visibility: hidden;
+	opacity: 0;
+	transition: opacity 0.2s;
+}
+
+.review-bar.is-visible {
+	visibility: visible;
+	opacity: 1;
+}
+
+.review-bar__btn {
+	width: 34px;
+	height: 34px;
+	border: 1px solid #555;
+	border-radius: 6px;
+	background: #1a1a2e;
+	color: #e0d0b0;
+	font-size: 1em;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.review-bar__btn:hover:not(:disabled) {
+	background: #2a2a4e;
+	border-color: #aaa;
+}
+
+.review-bar__btn:disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
+.review-bar__btn--exit {
+	background: #3a1a1a;
+	border-color: #744;
+	margin-left: 6px;
+}
+
+.review-bar__btn--exit:hover {
+	background: #4a2a2a;
+	border-color: #a66;
+}
+
+.review-bar__label {
+	font-family: 'Arvo', serif;
+	color: #e0d0b0;
+	font-size: 0.85em;
+	min-width: 60px;
+	text-align: center;
+}
+
+.review-bar__pos {
+	font-family: 'Overlock', sans-serif;
+	color: #888;
+	font-size: 0.8em;
+	min-width: 40px;
+	text-align: center;
 }
 
 .tooltip {

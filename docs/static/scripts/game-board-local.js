@@ -44,6 +44,12 @@ document.addEventListener('alpine:init', () => {
 			exportCopied: false,
 			winner: '',
 
+			// Game review state
+			reviewMode: false,
+			reviewIndex: 0,
+			reviewSfns: [],
+			reviewTurnLabels: [],
+
 			formatTimer(timerSeconds) {
 				const sec = timerSeconds % 60;
 				const min = (timerSeconds - sec) / 60;
@@ -86,6 +92,60 @@ document.addEventListener('alpine:init', () => {
 						setTimeout(() => { this.exportCopied = false; }, 2000);
 					});
 				}
+			},
+
+			startReview() {
+				if (this.reviewSfns.length === 0) return;
+				this.reviewMode = true;
+				this.reviewIndex = this.reviewSfns.length - 1; // start at final position
+				this._showReviewPosition();
+			},
+
+			reviewPrev() {
+				if (this.reviewIndex > 0) {
+					this.reviewIndex--;
+					this._showReviewPosition();
+				}
+			},
+
+			reviewNext() {
+				if (this.reviewIndex < this.reviewSfns.length - 1) {
+					this.reviewIndex++;
+					this._showReviewPosition();
+				}
+			},
+
+			reviewFirst() {
+				this.reviewIndex = 0;
+				this._showReviewPosition();
+			},
+
+			reviewLast() {
+				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+			},
+
+			exitReview() {
+				this.reviewMode = false;
+				// Restore final board state
+				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+			},
+
+			_showReviewPosition() {
+				const sfn = this.reviewSfns[this.reviewIndex];
+				if (!sfn) return;
+				const state = sfnToDict(sfn);
+				for (const node of Object.keys(this.nodes)) {
+					this.nodes[node] = state.stones[node] || null;
+				}
+				this.redSpellCounter = state.red_spellcounter || 0;
+				this.blueSpellCounter = state.blue_spellcounter || 0;
+				this.redLock = state.red_lock || '';
+				this.blueLock = state.blue_lock || '';
+				this.score = state.score || 'unset';
+				this.validMoves = {};
+				this.lastPlay = '';
 			},
 
 			handleCastSpell(spell) {
@@ -472,6 +532,22 @@ document.addEventListener('alpine:init', () => {
 					_this.showReset = false;
 					_this.winner = payload.winner;
 					warnBeforeUnload = false;
+
+					// Build review data from game log
+					if (payload.gameLog && payload.gameLog.length > 0) {
+						const sfns = [payload.gameLog[0].sfnBefore];
+						const labels = ['Start'];
+						for (const turn of payload.gameLog) {
+							sfns.push(turn.sfnAfter);
+							const colorName = turn.color[0].toUpperCase() + turn.color.slice(1);
+							const turnNum = turn.color === 'red'
+								? Math.floor(turn.turnNumber / 2) + 1
+								: Math.floor(turn.turnNumber / 2);
+							labels.push(colorName + ' ' + turnNum);
+						}
+						_this.reviewSfns = sfns;
+						_this.reviewTurnLabels = labels;
+					}
 
 					// Process Elo for rated AI games
 					if (aiMode && _aiAuthManager && _aiAuthManager.isAuthenticated) {

@@ -18,6 +18,7 @@ class GameController {
 		this._resetRequested = false;
 		this.aiColor = (options && options.aiColor) || null;
 		this.ai = (options && options.ai) || null;
+		this._gameLog = [];
 	}
 
 	/** Called by UI when the player clicks a node, spell, dash, pass, or reset. */
@@ -122,7 +123,7 @@ class GameController {
 					} else if (loopCount >= 5) {
 						board.gameover = true;
 						board.winner = 'blue';
-						this.emit({ type: 'game_over', winner: 'blue' });
+						this.emit({ type: 'game_over', winner: 'blue', gameLog: this._gameLog });
 						return;
 					}
 				}
@@ -148,17 +149,19 @@ class GameController {
 					this.emit({ type: 'message', message: 'DEATH BY INFERNO!', awaiting: null });
 					board.gameover = true;
 					board.winner = board.enemy(color);
-					this.emit({ type: 'game_over', winner: board.winner });
+					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
 
 				if (board.gameover) {
-					this.emit({ type: 'game_over', winner: board.winner });
+					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
 
 				// Take turn
 				this._resetRequested = false;
+				const turnSfn = boardToSfn(board);
+
 				if (this.ai && color === this.aiColor) {
 					await this._takeAITurn(color);
 				} else {
@@ -172,10 +175,18 @@ class GameController {
 				this.emit(board.getBoardStatePayload());
 				this._emitSfn();
 
+				// Record turn for game review
+				this._gameLog.push({
+					color: color,
+					turnNumber: board.turnCounter,
+					sfnBefore: turnSfn,
+					sfnAfter: boardToSfn(board),
+				});
+
 				resetThisTurn = false;
 
 				if (board.gameover) {
-					this.emit({ type: 'game_over', winner: board.winner });
+					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
 

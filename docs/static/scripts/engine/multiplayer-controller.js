@@ -133,7 +133,7 @@ class MultiplayerController {
 			if (activeRemaining <= 0 && !this._timedOut) {
 				this._timedOut = true;
 				const winner = inactiveColor;
-				this.emit({ type: 'game_over', winner });
+				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
 				this.sync.writeTimeout(winner);
 				this._stopTimer();
 			}
@@ -150,7 +150,7 @@ class MultiplayerController {
 			if (deadline > 0 && now > deadline && !this._timedOut) {
 				this._timedOut = true;
 				const winner = ts.activeColor === 'red' ? 'blue' : 'red';
-				this.emit({ type: 'game_over', winner });
+				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
 				this.sync.writeTimeout(winner);
 				this._stopTimer();
 			}
@@ -254,7 +254,7 @@ class MultiplayerController {
 					if (loopCount >= 5) {
 						board.gameover = true;
 						board.winner = 'blue';
-						this.emit({ type: 'game_over', winner: 'blue' });
+						this.emit({ type: 'game_over', winner: 'blue', gameLog: this._gameLog });
 						this._saveGameRecord('blue');
 						this._stopTimer();
 						return;
@@ -274,7 +274,7 @@ class MultiplayerController {
 				this.emit({ type: 'whoseturndisplay', color, message: turnMsg });
 
 				if (board.gameover) {
-					this.emit({ type: 'game_over', winner: board.winner });
+					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					this._saveGameRecord(board.winner);
 					this._stopTimer();
 					return;
@@ -309,7 +309,7 @@ class MultiplayerController {
 				resetThisTurn = false;
 
 				if (board.gameover) {
-					this.emit({ type: 'game_over', winner: board.winner });
+					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					this._saveGameRecord(board.winner);
 					this._stopTimer();
 					return;

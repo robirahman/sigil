@@ -521,48 +521,26 @@
 					</div>
 				</div>
 
-				<div
-					class="win-modal"
-					x-bind:class="{ 'is-visible': winner }"
-				>
-					<picture x-show="winner === 'blue'">
-						<source
-							type="image/webp"
-							srcset="static/images/stones/blue.webp"
-						/>
-						<img
-							alt=""
-							src="static/images/stones/blue.png"
-							height="30"
-							width="30"
-						/>
-					</picture>
-					<img
-						alt="Blue Wins"
-						src="static/images/blue-wins.svg"
-						height="26"
-						width="167"
-						x-show="winner === 'blue'"
-					/>
-					<picture x-show="winner === 'red'">
-						<source
-							type="image/webp"
-							srcset="static/images/stones/red.webp"
-						/>
-						<img
-							alt=""
-							src="static/images/stones/red.png"
-							height="30"
-							width="30"
-						/>
-					</picture>
-					<img
-						alt="Red Wins"
-						src="static/images/red-wins.svg"
-						height="26"
-						width="167"
-						x-show="winner === 'red'"
-					/>
+				<div class="win-modal" x-bind:class="{ 'is-visible': winner && !reviewMode }">
+					<div class="win-modal__result">
+						<picture x-show="winner === 'blue'"><source type="image/webp" srcset="static/images/stones/blue.webp" /><img alt="" src="static/images/stones/blue.png" height="30" width="30" /></picture>
+						<img alt="Blue Wins" src="static/images/blue-wins.svg" height="26" width="167" x-show="winner === 'blue'" />
+						<picture x-show="winner === 'red'"><source type="image/webp" srcset="static/images/stones/red.webp" /><img alt="" src="static/images/stones/red.png" height="30" width="30" /></picture>
+						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
+					</div>
+					<div class="win-modal__actions">
+						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
+						<a class="win-modal__btn" href="./">Main Menu</a>
+					</div>
+				</div>
+				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
+					<button class="review-bar__btn" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0">&#x23EE;</button>
+					<button class="review-bar__btn" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0">&#x25C0;</button>
+					<span class="review-bar__label" x-text="reviewTurnLabels[reviewIndex] || ''"></span>
+					<span class="review-bar__pos" x-text="(reviewIndex + 1) + '/' + reviewSfns.length"></span>
+					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1">&#x25B6;</button>
+					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1">&#x23ED;</button>
+					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
 				</div>
 			</div>
 		</div>
