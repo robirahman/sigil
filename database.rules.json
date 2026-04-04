@@ -3,7 +3,7 @@
     "users": {
       "$uid": {
         ".read": true,
-        ".write": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && (auth.uid === $uid || $uid.beginsWith('__ai_'))",
         "displayName": {
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
         },

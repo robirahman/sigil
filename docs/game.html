@@ -579,9 +579,28 @@
 		<script src="static/scripts/engine/mcts.js"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
+		<script src="static/scripts/engine/auth-manager.js"></script>
+		<script src="static/scripts/engine/elo.js"></script>
 		<script src="static/scripts/game-board-local.js"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+
+		<!-- Firebase SDK -->
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+		<script>
+			firebase.initializeApp({
+				apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+				authDomain: "sigil-js.firebaseapp.com",
+				databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+				projectId: "sigil-js",
+				storageBucket: "sigil-js.firebasestorage.app",
+				messagingSenderId: "174679859896",
+				appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+			});
+		</script>
+
 		<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 	</body>
 </html>

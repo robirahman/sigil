@@ -70,10 +70,12 @@ async function processEloClientSide(db, gameId, game) {
 	updates['leaderboard/' + winnerUid + '/elo'] = newWinnerElo;
 	updates['leaderboard/' + winnerUid + '/displayName'] = winnerData.displayName || 'Unknown';
 	updates['leaderboard/' + winnerUid + '/gamesPlayed'] = (winnerData.gamesPlayed || 0) + 1;
+	if (winnerData.isAI) updates['leaderboard/' + winnerUid + '/isAI'] = true;
 
 	updates['leaderboard/' + loserUid + '/elo'] = newLoserElo;
 	updates['leaderboard/' + loserUid + '/displayName'] = loserData.displayName || 'Unknown';
 	updates['leaderboard/' + loserUid + '/gamesPlayed'] = (loserData.gamesPlayed || 0) + 1;
+	if (loserData.isAI) updates['leaderboard/' + loserUid + '/isAI'] = true;
 
 	// Mark as processed
 	updates['completed_games/' + gameId + '/eloProcessed'] = true;

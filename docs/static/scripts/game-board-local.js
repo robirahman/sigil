@@ -197,6 +197,12 @@ document.addEventListener('alpine:init', () => {
 				// --- Local engine instead of WebSocket ---
 				const aiMode = new URLSearchParams(window.location.search).get('ai');
 
+				// Auth manager for rated AI games
+				let _aiAuthManager = null;
+				if (aiMode && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
+					_aiAuthManager = new AuthManager();
+				}
+
 				async function initEngine() {
 					let options = {};
 
@@ -466,6 +472,70 @@ document.addEventListener('alpine:init', () => {
 					_this.showReset = false;
 					_this.winner = payload.winner;
 					warnBeforeUnload = false;
+
+					// Process Elo for rated AI games
+					if (aiMode && _aiAuthManager && _aiAuthManager.isAuthenticated) {
+						_processAiElo(payload.winner, aiMode, _aiAuthManager);
+					}
+				}
+
+				async function _processAiElo(winner, difficulty, authManager) {
+					if (typeof processEloClientSide !== 'function') return;
+					try {
+						const db = firebase.database();
+						const aiUid = '__ai_' + difficulty + '__';
+						const humanUid = authManager.uid;
+						const humanColor = 'red'; // human is always red vs AI
+
+						// Ensure AI user exists
+						await _ensureAiUser(db, aiUid, difficulty);
+						// Ensure human profile is loaded
+						await authManager.ensureUserProfile(db);
+
+						const gameRecord = {
+							spellNames: [],
+							winner: winner,
+							turns: [],
+							timestamp: Date.now(),
+							redUid: humanUid,
+							blueUid: aiUid,
+							ranked: true,
+						};
+
+						const ref = await db.ref('completed_games').push(gameRecord);
+						const result = await processEloClientSide(db, ref.key, gameRecord);
+						if (result) {
+							const youWon = winner === humanColor;
+							const sign = youWon ? '+' : '-';
+							_this.messageHistory.push('Rating: ' + sign + result.points + ' (' + (youWon ? result.newWinnerElo : result.newLoserElo) + ')');
+						}
+					} catch (e) {
+						console.error('Failed to process AI Elo:', e);
+					}
+				}
+
+				async function _ensureAiUser(db, aiUid, difficulty) {
+					const ref = db.ref('users/' + aiUid);
+					const snap = await ref.once('value');
+					if (!snap.exists()) {
+						const name = difficulty === 'easy' ? 'AI (Easy)' : 'AI (Medium)';
+						await ref.set({
+							displayName: name,
+							elo: 1000,
+							gamesPlayed: 0,
+							wins: 0,
+							losses: 0,
+							created: Date.now(),
+							isAI: true,
+						});
+						// Also seed leaderboard entry
+						await db.ref('leaderboard/' + aiUid).set({
+							displayName: name,
+							elo: 1000,
+							gamesPlayed: 0,
+							isAI: true,
+						});
+					}
 				}
 			},
 		})

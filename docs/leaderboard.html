@@ -58,6 +58,7 @@
 		.leaderboard-table tr:nth-child(2) td:first-child { color: #c0c0c0; }
 		.leaderboard-table tr:nth-child(3) td:first-child { color: #cd7f32; }
 		.leaderboard-table .name { font-weight: bold; }
+		.leaderboard-table .name--ai { color: #a8c8ff; }
 		.leaderboard-table .elo {
 			font-family: 'Arvo', serif;
 			color: #f0e0c0;
@@ -80,6 +81,31 @@
 			text-decoration: none;
 		}
 		.back-link:hover { text-decoration: underline; }
+		.pagination {
+			margin-top: 16px;
+			display: flex;
+			justify-content: center;
+			gap: 8px;
+		}
+		.pagination__btn {
+			padding: 6px 14px;
+			border: 2px solid #555;
+			border-radius: 6px;
+			background: #1a1a2e;
+			color: #e0d0b0;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.pagination__btn:hover { border-color: #888; }
+		.pagination__btn:disabled { opacity: 0.4; cursor: default; }
+		.pagination__info {
+			padding: 6px 0;
+			color: #888;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			align-self: center;
+		}
 	</style>
 </head>
 <body>
@@ -100,9 +126,9 @@
 			<h2>Leaderboard</h2>
 
 			<p class="loading-msg" x-show="loading" x-cloak>Loading rankings...</p>
-			<p class="empty-msg" x-show="!loading && players.length === 0" x-cloak>No ranked games played yet.</p>
+			<p class="empty-msg" x-show="!loading && allPlayers.length === 0" x-cloak>No ranked games played yet.</p>
 
-			<table class="leaderboard-table" x-show="!loading && players.length > 0" x-cloak>
+			<table class="leaderboard-table" x-show="!loading && allPlayers.length > 0" x-cloak>
 				<thead>
 					<tr>
 						<th>#</th>
@@ -112,16 +138,22 @@
 					</tr>
 				</thead>
 				<tbody>
-					<template x-for="(player, index) in players" x-bind:key="player.uid">
+					<template x-for="(player, index) in pagePlayers" x-bind:key="player.uid">
 						<tr>
-							<td x-text="index + 1"></td>
-							<td class="name" x-text="player.displayName"></td>
+							<td x-text="pageStart + index + 1"></td>
+							<td class="name" x-bind:class="{ 'name--ai': player.isAI }" x-text="player.displayName"></td>
 							<td class="elo" x-text="player.elo"></td>
 							<td x-text="player.gamesPlayed"></td>
 						</tr>
 					</template>
 				</tbody>
 			</table>
+
+			<div class="pagination" x-show="totalPages > 1" x-cloak>
+				<button class="pagination__btn" x-on:click="prevPage" x-bind:disabled="page === 0">&larr; Prev</button>
+				<span class="pagination__info" x-text="(page + 1) + ' / ' + totalPages"></span>
+				<button class="pagination__btn" x-on:click="nextPage" x-bind:disabled="page >= totalPages - 1">Next &rarr;</button>
+			</div>
 
 			<a class="back-link" href="./">&larr; Back to menu</a>
 		</div>
@@ -145,27 +177,50 @@
 	<script>
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('leaderboardPage', () => ({
-				players: [],
+				allPlayers: [],
 				loading: true,
+				page: 0,
+				perPage: 100,
+
+				get totalPages() {
+					return Math.max(1, Math.ceil(this.allPlayers.length / this.perPage));
+				},
+
+				get pageStart() {
+					return this.page * this.perPage;
+				},
+
+				get pagePlayers() {
+					return this.allPlayers.slice(this.pageStart, this.pageStart + this.perPage);
+				},
+
+				prevPage() { if (this.page > 0) this.page--; },
+				nextPage() { if (this.page < this.totalPages - 1) this.page++; },
 
 				async init() {
 					try {
 						const db = firebase.database();
+						// Fetch all leaderboard entries (no limit)
 						const snap = await db.ref('leaderboard')
 							.orderByChild('elo')
-							.limitToLast(50)
 							.once('value');
 
 						const results = [];
 						snap.forEach((child) => {
 							const data = child.val();
 							if (data.gamesPlayed > 0) {
-								results.push({ uid: child.key, ...data });
+								results.push({
+									uid: child.key,
+									displayName: data.displayName,
+									elo: data.elo,
+									gamesPlayed: data.gamesPlayed,
+									isAI: data.isAI || false,
+								});
 							}
 						});
 
 						// orderByChild is ascending; reverse for descending
-						this.players = results.reverse();
+						this.allPlayers = results.reverse();
 					} catch (e) {
 						console.error('Failed to load leaderboard:', e);
 					}
