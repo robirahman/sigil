@@ -354,7 +354,7 @@ class SimBoard {
 				}
 				this.update();
 				for (const name of [...NODE_ORDER].reverse()) {
-					if (this.stones[name] === color) {
+					if (this.stones[name] === color && name !== target) {
 						this.stones[name] = null;
 						actions.push(new SimAction('sacrifice', { node: name }));
 						break;
