@@ -256,6 +256,7 @@ document.addEventListener('alpine:init', () => {
 
 				// --- Local engine instead of WebSocket ---
 				const aiMode = new URLSearchParams(window.location.search).get('ai');
+				let _engineRef = null;
 
 				// Auth manager for rated AI games
 				let _aiAuthManager = null;
@@ -288,6 +289,7 @@ document.addEventListener('alpine:init', () => {
 					const engine = new GameController(function emitEvent(eventObj) {
 						handleIncomingEvent(eventObj);
 					}, options);
+					_engineRef = engine;
 
 					_this.sendEvent = function sendEvent(message) {
 						engine.handlePlayerAction(message);
@@ -569,9 +571,9 @@ document.addEventListener('alpine:init', () => {
 						await authManager.ensureUserProfile(db);
 
 						const gameRecord = {
-							spellNames: [],
+							spellNames: _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'],
 							winner: winner,
-							turns: [],
+							turns: _engineRef ? _engineRef._gameLog : ['none'],
 							timestamp: Date.now(),
 							redUid: humanUid,
 							blueUid: aiUid,

@@ -41,7 +41,7 @@
       ".read": false,
       "$gameId": {
         ".write": "auth !== null",
-        ".validate": "newData.hasChildren(['spellNames', 'winner', 'turns', 'timestamp'])"
+        ".validate": "newData.hasChildren(['winner', 'timestamp'])"
       }
     }
   }
