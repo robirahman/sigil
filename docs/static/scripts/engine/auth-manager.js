@@ -95,10 +95,12 @@ class AuthManager {
 		const ref = db.ref('users/' + uid);
 		const snap = await ref.once('value');
 
+		const name = displayName || this.currentUser.displayName || 'Player';
+
 		if (!snap.exists()) {
 			// First time: create profile with defaults
 			const profile = {
-				displayName: displayName || this.currentUser.displayName || 'Player',
+				displayName: name,
 				elo: 1000,
 				gamesPlayed: 0,
 				wins: 0,
@@ -110,11 +112,21 @@ class AuthManager {
 		} else {
 			this.userProfile = snap.val();
 			// Update displayName if it changed on the Auth side
-			const name = displayName || this.currentUser.displayName;
 			if (name && name !== this.userProfile.displayName) {
 				await ref.child('displayName').set(name);
 				this.userProfile.displayName = name;
 			}
+		}
+
+		// Ensure leaderboard entry exists
+		const lbRef = db.ref('leaderboard/' + uid);
+		const lbSnap = await lbRef.once('value');
+		if (!lbSnap.exists()) {
+			await lbRef.set({
+				displayName: this.userProfile.displayName,
+				elo: this.userProfile.elo || 1000,
+				gamesPlayed: this.userProfile.gamesPlayed || 0,
+			});
 		}
 	}
 
