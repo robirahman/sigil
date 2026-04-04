@@ -3,9 +3,9 @@
     "users": {
       "$uid": {
         ".read": true,
-        ".write": "auth !== null && (auth.uid === $uid || $uid.beginsWith('__ai_'))",
+        ".write": "auth !== null",
         "displayName": {
-          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
         },
         "elo": {
           ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000"

@@ -162,6 +162,7 @@
 	<!-- Firebase SDK -->
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 	<script>
 		firebase.initializeApp({
 			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
@@ -200,7 +201,11 @@
 				async init() {
 					try {
 						const db = firebase.database();
-						// Fetch all leaderboard entries (no limit)
+
+						// Ensure AI entries exist in the leaderboard
+						await this._seedAIs(db);
+
+						// Fetch all leaderboard entries
 						const snap = await db.ref('leaderboard')
 							.orderByChild('elo')
 							.once('value');
@@ -208,15 +213,13 @@
 						const results = [];
 						snap.forEach((child) => {
 							const data = child.val();
-							if (data.gamesPlayed > 0) {
-								results.push({
-									uid: child.key,
-									displayName: data.displayName,
-									elo: data.elo,
-									gamesPlayed: data.gamesPlayed,
-									isAI: data.isAI || false,
-								});
-							}
+							results.push({
+								uid: child.key,
+								displayName: data.displayName || 'Unknown',
+								elo: data.elo ?? 1000,
+								gamesPlayed: data.gamesPlayed || 0,
+								isAI: data.isAI || false,
+							});
 						});
 
 						// orderByChild is ascending; reverse for descending
@@ -225,6 +228,41 @@
 						console.error('Failed to load leaderboard:', e);
 					}
 					this.loading = false;
+				},
+
+				async _seedAIs(db) {
+					const ais = [
+						{ uid: '__ai_easy__', name: 'AI (Easy)' },
+						{ uid: '__ai_medium__', name: 'AI (Medium)' },
+					];
+					for (const ai of ais) {
+						const snap = await db.ref('leaderboard/' + ai.uid).once('value');
+						if (!snap.exists()) {
+							// Ensure we're authenticated for writes
+							if (!firebase.auth().currentUser) {
+								try { await firebase.auth().signInAnonymously(); } catch(e) { return; }
+							}
+							await db.ref('leaderboard/' + ai.uid).set({
+								displayName: ai.name,
+								elo: 1000,
+								gamesPlayed: 0,
+								isAI: true,
+							});
+							// Also seed the users entry
+							const userSnap = await db.ref('users/' + ai.uid).once('value');
+							if (!userSnap.exists()) {
+								await db.ref('users/' + ai.uid).set({
+									displayName: ai.name,
+									elo: 1000,
+									gamesPlayed: 0,
+									wins: 0,
+									losses: 0,
+									created: Date.now(),
+									isAI: true,
+								});
+							}
+						}
+					}
 				},
 			}));
 		});
