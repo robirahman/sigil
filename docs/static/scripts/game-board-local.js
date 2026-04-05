@@ -264,11 +264,15 @@ document.addEventListener('alpine:init', () => {
 					_aiAuthManager = new AuthManager();
 				}
 
+				// Randomize which color the AI plays
+				const _aiColor = Math.random() < 0.5 ? 'red' : 'blue';
+				const _humanColor = _aiColor === 'red' ? 'blue' : 'red';
+
 				async function initEngine() {
 					let options = {};
 
 					if (aiMode === 'easy') {
-						options.aiColor = 'blue';
+						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
 					} else if (aiMode === 'medium') {
 						// Load neural network model
@@ -277,11 +281,11 @@ document.addEventListener('alpine:init', () => {
 								'static/models/sigil_net.json',
 								'static/models/sigil_net.bin'
 							);
-							options.aiColor = 'blue';
+							options.aiColor = _aiColor;
 							options.ai = new NeuralAI(model, 100);
 						} catch (e) {
 							console.error('Failed to load AI model, falling back to greedy:', e);
-							options.aiColor = 'blue';
+							options.aiColor = _aiColor;
 							options.ai = new GreedyAI();
 						}
 					}
@@ -301,6 +305,20 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				initEngine();
+
+				// Keyboard shortcuts
+				document.addEventListener('keydown', (e) => {
+					const tag = document.activeElement?.tagName;
+					if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+					if (e.key === 'Enter' && _this.actionList.includes('pass')) {
+						e.preventDefault();
+						_this.handleEndTurn();
+					}
+					if (e.key === 'd' && _this.actionList.includes('dash')) {
+						e.preventDefault();
+						_this.handleDash();
+					}
+				});
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
@@ -386,6 +404,15 @@ document.addEventListener('alpine:init', () => {
 						_this.showReset = false;
 					}
 
+					// Spell cast sound + visual effect
+					if (_this.message && _this.message.includes(' casts ')) {
+						if (typeof soundManager !== 'undefined') soundManager.play('spellCast');
+						if (typeof playSpellEffect === 'function') {
+							const spellName = _this.message.split(' casts ')[1]?.replace(/ /g, '_');
+							if (spellName) playSpellEffect(_this.$refs.spellFxOverlay, _this.$refs.gameBoardContainer, spellName);
+						}
+					}
+
 					if (_this.awaiting !== 'action' && payload.message !== '' && payload.message) {
 						_this.messageHistory.push(payload.message);
 					}
@@ -457,14 +484,18 @@ document.addEventListener('alpine:init', () => {
 					_this.previousBoardState = payload;
 				}
 
+				let _turnCount = 0;
 				function handleWhoseTurnEvent(payload) {
 					_this.showReset = false;
 					_this.messageHistory.push(payload.message);
 					_this.whoseTurn = payload.color;
+					if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart');
+					_turnCount++;
 				}
 
 				function handleNewStonePlacement(payload) {
 					_this.lastPlay = payload.node;
+					if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced');
 
 					if (payload.color !== _this.currentPlayer) {
 						setTimeout(() => {
@@ -479,6 +510,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handlePushAnimation(payload) {
+					if (typeof soundManager !== 'undefined') soundManager.play('stonePushed');
 					const startNodeElem = document.querySelector(`#stone-node--${payload.starting_node}`);
 					const endNodeElem = document.querySelector(`#stone-node--${payload.ending_node}`);
 					if (!startNodeElem || !endNodeElem) return;
@@ -497,6 +529,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleCrushAnimation(payload) {
+					if (typeof soundManager !== 'undefined') soundManager.play('stoneCrushed');
 					const { node, crushed_color } = payload;
 					const nodeElem = document.querySelector(`#stone-node--${node}`);
 					if (!nodeElem) return;
@@ -528,6 +561,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleGameOverEvent(payload) {
+					if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
 					_this.messageHistory.push(
 						`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins`
 					);
@@ -580,7 +614,6 @@ document.addEventListener('alpine:init', () => {
 						const db = firebase.database();
 						const aiUid = '__ai_' + difficulty + '__';
 						const humanUid = _aiAuthManager.uid;
-						const humanColor = 'red'; // human is always red vs AI
 
 						// Ensure AI user exists
 						await _ensureAiUser(db, aiUid, difficulty);
@@ -592,15 +625,15 @@ document.addEventListener('alpine:init', () => {
 							winner: winner,
 							turns: _engineRef ? _engineRef._gameLog : ['none'],
 							timestamp: Date.now(),
-							redUid: humanUid,
-							blueUid: aiUid,
+							redUid: _humanColor === 'red' ? humanUid : aiUid,
+							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
 							ranked: true,
 						};
 
 						const ref = await db.ref('completed_games').push(gameRecord);
 						const result = await processEloClientSide(db, ref.key, gameRecord);
 						if (result) {
-							const youWon = winner === humanColor;
+							const youWon = winner === _humanColor;
 							const sign = youWon ? '+' : '-';
 							_this.messageHistory.push('Rating: ' + sign + result.points + ' (' + (youWon ? result.newWinnerElo : result.newLoserElo) + ')');
 						} else {

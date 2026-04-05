@@ -87,6 +87,7 @@
 			webpDetector.src =
 				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
+		<script src="static/scripts/theme-manager.js"></script>
 	</head>
 
 	<body>
@@ -182,6 +183,7 @@
 
 			<!-- Game board -->
 			<div x-data="gameBoard({ importSfn: new URLSearchParams(window.location.search).get('sfn') || '' })">
+				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: localStorage.getItem('sigil_muted') === 'true' }"></button>
 				<div class="container">
 					<div class="container__inner">
 						<template x-if="messageHistory.length > 0">
@@ -348,6 +350,7 @@
 						x-ref="gameBoardContainer"
 					>
 						<div class="position:relative">
+							<div class="spell-fx-overlay" x-ref="spellFxOverlay"></div>
 							<picture>
 								<source
 									type="image/webp"
@@ -559,6 +562,8 @@
 		<script src="static/scripts/engine/game-controller.js"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js"></script>
+		<script src="static/scripts/sound-manager.js"></script>
+		<script src="static/scripts/spell-effects.js"></script>
 		<script src="static/scripts/game-board-local.js"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>

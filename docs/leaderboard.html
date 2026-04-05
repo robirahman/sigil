@@ -10,6 +10,7 @@
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
 	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
 	<title>Leaderboard - Sigil Online</title>
 	<style>
 		body > .main { padding-top: 80px; }
@@ -240,7 +241,11 @@
 				},
 
 				async _seedAIs(db) {
-					// Authenticate if needed (writes require auth)
+					// Wait for auth state to resolve before deciding whether to sign in
+					await new Promise(resolve => {
+						const unsub = firebase.auth().onAuthStateChanged(() => { unsub(); resolve(); });
+					});
+					// Only sign in anonymously if truly no user (don't overwrite real sessions)
 					if (!firebase.auth().currentUser) {
 						await firebase.auth().signInAnonymously();
 					}

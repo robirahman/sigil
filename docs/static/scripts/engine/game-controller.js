@@ -87,6 +87,9 @@ class GameController {
 		if (importSfn) {
 			const nextTurn = this.board.turnCounter % 2 === 0 ? 'Red' : 'Blue';
 			this.emit({ type: 'message', message: "Imported position \u2014 " + nextTurn + "'s turn.", awaiting: null });
+		} else if (this.aiColor) {
+			const humanColor = this.aiColor === 'red' ? 'Blue' : 'Red';
+			this.emit({ type: 'message', message: "vs AI \u2014 You are " + humanColor + ". Red goes first.", awaiting: null });
 		} else {
 			this.emit({ type: 'message', message: "Local 1v1 \u2014 Red goes first.", awaiting: null });
 		}

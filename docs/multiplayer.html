@@ -169,6 +169,7 @@
 		webpDetector.onload = function () { document.documentElement.classList.add('webp'); };
 		webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 	</script>
+	<script src="static/scripts/theme-manager.js"></script>
 </head>
 <body>
 	<header>
@@ -266,6 +267,7 @@
 		<!-- Game (only mounts when game starts) -->
 		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })">
+				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: localStorage.getItem('sigil_muted') === 'true' }"></button>
 				<!-- Player names and timer bar -->
 				<div class="ladder-details" x-show="redName || blueName">
 					<div class="ladder-details__inner">
@@ -330,6 +332,7 @@
 				</div></div>
 				<div class="container" style="overflow: auto"><div class="container__inner game-board-container" x-ref="gameBoardContainer">
 					<div class="position:relative">
+						<div class="spell-fx-overlay" x-ref="spellFxOverlay"></div>
 						<picture><source type="image/webp" srcset="static/images/game-board.webp" /><img class="game-board max-width:100%" src="static/images/game-board.jpg" alt="" /></picture>
 						<div class="spells">
 							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor charm-spell" x-bind:class="{ [`charm-spell--${i}`]: true, [`spell--tooltip-anchor-charm${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="spells.images[`charm${i}`]?.replace('.png', '.webp')" /><img class="spell charm-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`charm${i}`]), 'spell--blue-lock': blueLock === spellDict[`charm${i}`], 'spell--red-lock': redLock === spellDict[`charm${i}`], 'spell--visible': spells.images[`charm${i}`], [`charm-spell--${i}`]: true }" x-bind:src="spells.images[`charm${i}`]" x-on:click.stop="handleCharmClick(`charm${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`charm${i}`)" /></picture></div></template>
@@ -561,6 +564,8 @@
 	<script src="static/scripts/engine/firebase-sync.js"></script>
 	<script src="static/scripts/engine/multiplayer-controller.js"></script>
 	<script src="static/scripts/engine/spectator-controller.js"></script>
+	<script src="static/scripts/sound-manager.js"></script>
+	<script src="static/scripts/spell-effects.js"></script>
 	<script src="static/scripts/game-board-multiplayer.js"></script>
 	<script src="static/scripts/help.js"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>

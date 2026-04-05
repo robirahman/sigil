@@ -60,6 +60,7 @@
 		webpDetector.onload = function () { document.documentElement.classList.add('webp'); };
 		webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 	</script>
+	<script src="static/scripts/theme-manager.js"></script>
 </head>
 <body>
 	<header>
@@ -104,6 +105,27 @@
 				Account
 				<small>Sign in for ranked play and ratings</small>
 			</a>
+			<a class="mode-button" href="static/Sigil_Rulebook.pdf" target="_blank" rel="noopener">
+				Rulebook
+				<small>Official rules (PDF)</small>
+			</a>
+			<div style="margin-top: 20px;">
+				<label style="font-family: 'Overlock', sans-serif; color: #999; font-size: 0.85em;">Theme</label>
+				<select id="theme-select" style="display: block; width: 100%; margin-top: 4px; padding: 10px 12px; border-radius: 6px; border: 2px solid #555; background: #1a1a2e; color: #e0d0b0; font-family: 'Overlock', sans-serif; font-size: 1em; cursor: pointer;" onchange="themeManager.apply(this.value)">
+				</select>
+			</div>
+			<script>
+				(function() {
+					const sel = document.getElementById('theme-select');
+					themeManager.getThemeList().forEach(t => {
+						const opt = document.createElement('option');
+						opt.value = t.id;
+						opt.textContent = t.name;
+						if (t.id === themeManager.current) opt.selected = true;
+						sel.appendChild(opt);
+					});
+				})();
+			</script>
 		</div>
 	</div>
 
