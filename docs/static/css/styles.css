@@ -59,9 +59,6 @@
 	--color-spectator-banner: rgba(40, 40, 80, 0.95);
 	--color-review-bar-bg: rgba(0, 0, 0, 0.9);
 
-	/* Background images */
-	--bg-image: url("../images/tiled-background.jpg");
-	--bg-image-webp: url("../images/tiled-background.webp");
 }
 
 /* <Reset> */
@@ -572,12 +569,30 @@ textarea {
 /* stylelint-disable-next-line no-duplicate-selectors */
 html {
 	background-color: var(--color-bg);
-	background-image: var(--bg-image);
+	background-image: url("../images/tiled-background.jpg");
 	background-position: center;
 }
 
 html.webp {
-	background-image: var(--bg-image-webp);
+	background-image: url("../images/tiled-background.webp");
+}
+
+/* Themed backgrounds — use attribute selectors so url() resolves relative to this CSS file */
+html[data-theme="frost"],
+html[data-theme="frost"].webp {
+	background-image: url("../images/themes/tiled-background-frost.jpg");
+}
+html[data-theme="parchment"],
+html[data-theme="parchment"].webp {
+	background-image: url("../images/themes/tiled-background-parchment.jpg");
+}
+html[data-theme="forest"],
+html[data-theme="forest"].webp {
+	background-image: url("../images/themes/tiled-background-forest.jpg");
+}
+html[data-theme="volcanic"],
+html[data-theme="volcanic"].webp {
+	background-image: url("../images/themes/tiled-background-volcanic.jpg");
 }
 
 .masthead {
