@@ -22,7 +22,7 @@
 		}
 		.account h2 {
 			font-family: 'Arvo', serif;
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			margin-bottom: 20px;
 		}
 		.account-form {
@@ -32,7 +32,7 @@
 		.account-form label {
 			display: block;
 			font-family: 'Overlock', sans-serif;
-			color: #aaa;
+			color: var(--color-border-hover);
 			margin: 12px 0 4px;
 			font-size: 0.9em;
 		}
@@ -41,15 +41,15 @@
 			width: 100%;
 			padding: 10px 12px;
 			border-radius: 6px;
-			border: 2px solid #555;
-			background: #1a1a2e;
-			color: #e0d0b0;
+			border: 2px solid var(--color-border);
+			background: var(--color-surface);
+			color: var(--color-text-warm);
 			font-family: 'Overlock', sans-serif;
 			font-size: 1em;
 			box-sizing: border-box;
 		}
 		.account-form input:focus {
-			border-color: #8af;
+			border-color: var(--color-accent);
 			outline: none;
 		}
 		.account-button {
@@ -57,15 +57,15 @@
 			width: 100%;
 			padding: 14px;
 			margin: 10px 0;
-			background: #2a2a4e;
-			border: 2px solid #555;
+			background: var(--color-surface-raised);
+			border: 2px solid var(--color-border);
 			border-radius: 8px;
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			font-family: 'Arvo', serif;
 			font-size: 1em;
 			cursor: pointer;
 		}
-		.account-button:hover { background: #3a3a6e; border-color: #aaa; }
+		.account-button:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
 		.account-button:disabled { opacity: 0.5; cursor: not-allowed; }
 		.account-button--google {
 			background: #4285f4;
@@ -74,19 +74,19 @@
 		}
 		.account-button--google:hover { background: #5a95f5; border-color: #5a95f5; }
 		.account-button--signout {
-			background: #4a2a2a;
+			background: var(--color-btn-reset);
 			border-color: #744;
 		}
-		.account-button--signout:hover { background: #5a3a3a; border-color: #a66; }
-		.error-msg { color: #e66; font-family: 'Overlock', sans-serif; margin: 8px 0; font-size: 0.9em; }
-		.success-msg { color: #6e6; font-family: 'Overlock', sans-serif; margin: 8px 0; font-size: 0.9em; }
+		.account-button--signout:hover { background: var(--color-btn-reset-hover); border-color: #a66; }
+		.error-msg { color: var(--color-error); font-family: 'Overlock', sans-serif; margin: 8px 0; font-size: 0.9em; }
+		.success-msg { color: var(--color-success); font-family: 'Overlock', sans-serif; margin: 8px 0; font-size: 0.9em; }
 		.divider {
 			margin: 16px 0;
-			color: #777;
+			color: var(--color-text-faint);
 			font-family: 'Overlock', sans-serif;
 		}
 		.profile-card {
-			background: #1a1a2e;
+			background: var(--color-surface);
 			border-radius: 8px;
 			padding: 20px;
 			margin: 16px 0;
@@ -94,7 +94,7 @@
 		}
 		.profile-card__name {
 			font-family: 'Arvo', serif;
-			color: #f0e0c0;
+			color: var(--color-text-bright);
 			font-size: 1.4em;
 			margin-bottom: 12px;
 		}
@@ -107,13 +107,13 @@
 			font-family: 'Overlock', sans-serif;
 		}
 		.profile-card__stat-label {
-			color: #888;
+			color: var(--color-text-dim);
 			font-size: 0.8em;
 			text-transform: uppercase;
 			letter-spacing: 0.05em;
 		}
 		.profile-card__stat-value {
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			font-size: 1.3em;
 			font-family: 'Arvo', serif;
 		}
@@ -125,9 +125,9 @@
 		.tab-bar__tab {
 			flex: 1;
 			padding: 10px;
-			background: #1a1a2e;
-			border: 2px solid #555;
-			color: #888;
+			background: var(--color-surface);
+			border: 2px solid var(--color-border);
+			color: var(--color-text-dim);
 			font-family: 'Arvo', serif;
 			font-size: 0.9em;
 			cursor: pointer;
@@ -135,14 +135,14 @@
 		.tab-bar__tab:first-child { border-radius: 8px 0 0 8px; }
 		.tab-bar__tab:last-child { border-radius: 0 8px 8px 0; }
 		.tab-bar__tab--active {
-			background: #2a2a4e;
-			border-color: #aaa;
-			color: #e0d0b0;
+			background: var(--color-surface-raised);
+			border-color: var(--color-border-hover);
+			color: var(--color-text-warm);
 		}
 		.back-link {
 			display: inline-block;
 			margin-top: 16px;
-			color: #8af;
+			color: var(--color-accent);
 			font-family: 'Overlock', sans-serif;
 			text-decoration: none;
 		}

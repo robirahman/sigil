@@ -17,7 +17,7 @@
 .ladder-details__card {
 	display: flex;
 	border-radius: 10px;
-	background: black;
+	background: var(--color-bg-dark);
 	padding: 5px 8px;
 	width: fit-content;
 	text-shadow: 0 2px 2px #000;
@@ -33,13 +33,13 @@
 .ladder-details__card > .red {
 	justify-content: flex-end;
 	flex-basis: 100%;
-	color: #fa3f32;
+	color: var(--color-red-player);
 }
 
 .ladder-details__card > .blue {
 	justify-content: flex-start;
 	flex-basis: 100%;
-	color: #295ccd;
+	color: var(--color-blue-player);
 }
 
 .ladder-details__card > .timer {
@@ -65,13 +65,13 @@
 }
 
 .ladder-details__card > .timer .bar--red {
-	border-bottom: 2px solid #fa3f32;
+	border-bottom: 2px solid var(--color-red-player);
 	border-top-left-radius: 2px;
 	border-bottom-left-radius: 2px;
 }
 
 .ladder-details__card > .timer .bar--blue {
-	border-bottom: 2px solid #295ccd;
+	border-bottom: 2px solid var(--color-blue-player);
 	border-top-right-radius: 2px;
 	border-bottom-right-radius: 2px;
 }

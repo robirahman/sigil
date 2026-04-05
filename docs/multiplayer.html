@@ -24,7 +24,7 @@
 		}
 		.lobby h2 {
 			font-family: 'Arvo', serif;
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			margin-bottom: 20px;
 		}
 		.lobby-button {
@@ -32,21 +32,21 @@
 			width: 100%;
 			padding: 14px;
 			margin: 10px 0;
-			background: #2a2a4e;
-			border: 2px solid #555;
+			background: var(--color-surface-raised);
+			border: 2px solid var(--color-border);
 			border-radius: 8px;
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			font-family: 'Arvo', serif;
 			font-size: 1em;
 			cursor: pointer;
 		}
-		.lobby-button:hover { background: #3a3a6e; border-color: #aaa; }
+		.lobby-button:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
 		.room-code {
 			font-family: monospace;
 			font-size: 2em;
 			letter-spacing: 0.2em;
-			color: #f0e0c0;
-			background: #1a1a2e;
+			color: var(--color-text-bright);
+			background: var(--color-surface);
 			padding: 16px 24px;
 			border-radius: 8px;
 			margin: 16px 0;
@@ -60,38 +60,38 @@
 			text-align: center;
 			padding: 12px;
 			border-radius: 6px;
-			border: 2px solid #555;
-			background: #1a1a2e;
-			color: #e0d0b0;
+			border: 2px solid var(--color-border);
+			background: var(--color-surface);
+			color: var(--color-text-warm);
 			width: 200px;
 			text-transform: uppercase;
 		}
 		.status-msg {
-			color: #aaa;
+			color: var(--color-border-hover);
 			font-family: 'Overlock', sans-serif;
 			margin: 12px 0;
 		}
-		.error-msg { color: #e66; }
+		.error-msg { color: var(--color-error); }
 		.auth-status {
 			font-family: 'Overlock', sans-serif;
-			color: #aaa;
+			color: var(--color-border-hover);
 			font-size: 0.9em;
 			margin-bottom: 16px;
 			padding: 8px 12px;
-			background: #1a1a2e;
+			background: var(--color-surface);
 			border-radius: 6px;
 		}
-		.auth-status a { color: #8af; text-decoration: none; }
+		.auth-status a { color: var(--color-accent); text-decoration: none; }
 		.auth-status a:hover { text-decoration: underline; }
-		.auth-status__name { color: #e0d0b0; font-weight: bold; }
-		.auth-status__elo { color: #f0e0c0; }
+		.auth-status__name { color: var(--color-text-warm); font-weight: bold; }
+		.auth-status__elo { color: var(--color-text-bright); }
 		.time-control {
 			margin: 16px 0;
 			text-align: left;
 		}
 		.time-control__label {
 			font-family: 'Overlock', sans-serif;
-			color: #aaa;
+			color: var(--color-border-hover);
 			font-size: 0.85em;
 			text-transform: uppercase;
 			letter-spacing: 0.05em;
@@ -104,23 +104,23 @@
 		}
 		.time-control__option {
 			padding: 6px 12px;
-			border: 2px solid #555;
+			border: 2px solid var(--color-border);
 			border-radius: 6px;
-			background: #1a1a2e;
-			color: #aaa;
+			background: var(--color-surface);
+			color: var(--color-border-hover);
 			font-family: 'Overlock', sans-serif;
 			font-size: 0.9em;
 			cursor: pointer;
 		}
-		.time-control__option:hover { border-color: #888; color: #e0d0b0; }
-		.time-control__option--active { border-color: #8af; color: #e0d0b0; background: #2a2a4e; }
+		.time-control__option:hover { border-color: var(--color-text-dim); color: var(--color-text-warm); }
+		.time-control__option--active { border-color: var(--color-accent); color: var(--color-text-warm); background: var(--color-surface-raised); }
 		.spectator-banner {
 			position: fixed;
 			top: 0;
 			left: 0;
 			right: 0;
-			background: rgba(40, 40, 80, 0.95);
-			color: #e0d0b0;
+			background: var(--color-spectator-banner);
+			color: var(--color-text-warm);
 			font-family: 'Arvo', serif;
 			text-align: center;
 			padding: 8px;
@@ -130,12 +130,12 @@
 		}
 		.resume-section {
 			margin-top: 24px;
-			border-top: 1px solid #333;
+			border-top: 1px solid var(--color-border);
 			padding-top: 16px;
 		}
 		.resume-section h3 {
 			font-family: 'Arvo', serif;
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			font-size: 0.95em;
 			margin-bottom: 8px;
 		}
@@ -144,25 +144,25 @@
 			justify-content: space-between;
 			align-items: center;
 			padding: 8px 12px;
-			background: #1a1a2e;
+			background: var(--color-surface);
 			border-radius: 6px;
 			margin: 6px 0;
 			font-family: 'Overlock', sans-serif;
 			font-size: 0.9em;
 		}
-		.resume-game__code { color: #f0e0c0; font-family: monospace; letter-spacing: 0.1em; }
-		.resume-game__status { color: #aaa; }
-		.resume-game__status--your-turn { color: #6e6; }
+		.resume-game__code { color: var(--color-text-bright); font-family: monospace; letter-spacing: 0.1em; }
+		.resume-game__status { color: var(--color-border-hover); }
+		.resume-game__status--your-turn { color: var(--color-success); }
 		.resume-game__join {
 			padding: 4px 10px;
-			background: #2a2a4e;
-			border: 1px solid #555;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
 			border-radius: 4px;
-			color: #e0d0b0;
+			color: var(--color-text-warm);
 			cursor: pointer;
 			font-size: 0.85em;
 		}
-		.resume-game__join:hover { background: #3a3a6e; }
+		.resume-game__join:hover { background: var(--color-surface-hover); }
 	</style>
 	<script>
 		var webpDetector = new Image();

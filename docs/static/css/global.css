@@ -5,9 +5,9 @@
 	height: 20px;
 	padding: 25px 30px;
 	border-radius: 1000px;
-	background-color: #115f77;
-	box-shadow: 2px 2px #0e0514;
-	color: #f0f0f0;
+	background-color: var(--color-btn-menu);
+	box-shadow: 2px 2px var(--color-bg-dark);
+	color: var(--color-text-light);
 	font-size: 20px;
 	font-family: overlock, serif;
 	white-space: nowrap;
@@ -15,16 +15,16 @@
 
 .menu-button:focus,
 .menu-button:hover {
-	background-color: #004962;
+	background-color: var(--color-btn-menu-hover);
 }
 
 .menu-button.dark {
-	background-color: #272b49;
+	background-color: var(--color-btn-menu-dark);
 }
 
 .menu-button.dark:focus,
 .menu-button.dark:hover {
-	background-color: #1e2139;
+	background-color: var(--color-btn-menu-dark-hover);
 }
 
 .menu-button.large {
@@ -33,12 +33,12 @@
 }
 
 .link {
-	color: #485fc7;
+	color: var(--color-link);
 }
 
 .link:focus,
 .link:hover {
-	color: #2c4980;
+	color: var(--color-link-hover);
 }
 
 .link--white {

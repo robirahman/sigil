@@ -4,7 +4,7 @@ body {
 }
 
 body > header {
-	background-image: linear-gradient(to bottom, #000, transparent);
+	background-image: linear-gradient(to bottom, var(--color-header-bg), transparent);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -88,7 +88,7 @@ body > .main {
 
 .menu-container ul.submenu {
 	display: block;
-	background: black;
+	background: var(--color-bg-dark);
 	transform: scaleY(0);
 	transform-origin: top left;
 }

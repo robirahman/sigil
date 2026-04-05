@@ -1,24 +1,67 @@
 /* --- Theme custom properties --- */
 :root {
+	/* Page backgrounds */
 	--color-bg: #21122c;
 	--color-bg-dark: #0d0513;
 	--color-bg-mid: #160820;
+	--color-header-bg: #000;
+
+	/* Player colors */
 	--color-red-player: #e84c3b;
 	--color-blue-player: #3b41e8;
 	--color-red-glow: #ff4032;
 	--color-blue-glow: #2757c4;
+	--color-red-lock: #e84c3c;
+	--color-blue-lock: #3250ba;
 	--color-last-play-outline: #f3ec4e;
+
+	/* Text */
 	--color-text: #dddcdd;
 	--color-text-light: #f0f0f0;
 	--color-text-warm: #e0d0b0;
+	--color-text-bright: #f0e0c0;
+	--color-text-muted: #999;
+	--color-text-dim: #888;
+	--color-text-faint: #777;
+
+	/* Surfaces (cards, inputs, panels) */
+	--color-surface: #1a1a2e;
+	--color-surface-raised: #2a2a4e;
+	--color-surface-hover: #3a3a6e;
+	--color-border: #555;
+	--color-border-hover: #aaa;
+
+	/* Accent / links */
+	--color-accent: #8af;
+	--color-link: #485fc7;
+	--color-link-hover: #2c4980;
+
+	/* Feedback */
+	--color-error: #e66;
+	--color-success: #6e6;
+
+	/* Buttons */
 	--color-btn-end-turn: #1c3462;
 	--color-btn-end-turn-hover: #2c4980;
 	--color-btn-dash: #185766;
 	--color-btn-dash-hover: #277385;
 	--color-btn-reset: #6e1010;
 	--color-btn-reset-hover: #8f1e1e;
+	--color-btn-rematch: #18751c;
+	--color-btn-rematch-hover: #1e9623;
+	--color-btn-menu: #115f77;
+	--color-btn-menu-hover: #004962;
+	--color-btn-menu-dark: #272b49;
+	--color-btn-menu-dark-hover: #1e2139;
+
+	/* Modals / overlays */
 	--color-win-modal-bg: rgb(34 17 44 / 90%);
-	--color-header-bg: #000;
+	--color-spectator-banner: rgba(40, 40, 80, 0.95);
+	--color-review-bar-bg: rgba(0, 0, 0, 0.9);
+
+	/* Background images */
+	--bg-image: url("../images/tiled-background.jpg");
+	--bg-image-webp: url("../images/tiled-background.webp");
 }
 
 /* <Reset> */
@@ -230,34 +273,34 @@ textarea {
 }
 
 .background-color\:0d0513 {
-	background-color: #0d0513;
+	background-color: var(--color-bg-dark);
 }
 
 .background-color\:0d0513-160820 {
-	background-color: #0d0513;
-	background-image: linear-gradient(to bottom, #0d0513, #0d0513);
+	background-color: var(--color-bg-dark);
+	background-image: linear-gradient(to bottom, var(--color-bg-dark), var(--color-bg-dark));
 }
 
 .background-color\:160820 {
-	background-color: #160820;
+	background-color: var(--color-bg-mid);
 }
 
 .background-color\:115f77 {
-	background-color: #115f77;
+	background-color: var(--color-btn-menu);
 }
 
 .background-color\:272b49 {
-	background-color: #272b49;
+	background-color: var(--color-btn-menu-dark);
 }
 
 .\:hocus--background-color\:004962:hover,
 .\:hocus--background-color\:004962:focus {
-	background-color: #004962;
+	background-color: var(--color-btn-menu-hover);
 }
 
 .\:hocus--background-color\:1e2139:hover,
 .\:hocus--background-color\:1e2139:focus {
-	background-color: #1e2139;
+	background-color: var(--color-btn-menu-dark-hover);
 }
 
 .border-radius\:full {
@@ -265,7 +308,7 @@ textarea {
 }
 
 .box-shadow\:2_2_0e0514 {
-	box-shadow: 2px 2px #0e0514;
+	box-shadow: 2px 2px var(--color-bg-dark);
 }
 
 .bottom\:0 {
@@ -273,11 +316,11 @@ textarea {
 }
 
 .color\:dddcdd {
-	color: #dddcdd;
+	color: var(--color-text);
 }
 
 .color\:f0f0f0 {
-	color: #f0f0f0;
+	color: var(--color-text-light);
 }
 
 .column-gap\:44 {
@@ -514,11 +557,11 @@ textarea {
 }
 
 .auth-status__name {
-	color: #e0d0b0;
+	color: var(--color-text-warm);
 }
 
 .auth-status__link {
-	color: #8af;
+	color: var(--color-accent);
 	text-decoration: none;
 }
 
@@ -529,12 +572,12 @@ textarea {
 /* stylelint-disable-next-line no-duplicate-selectors */
 html {
 	background-color: var(--color-bg);
-	background-image: url("../images/tiled-background.jpg");
+	background-image: var(--bg-image);
 	background-position: center;
 }
 
 html.webp {
-	background-image: url("../images/tiled-background.webp");
+	background-image: var(--bg-image-webp);
 }
 
 .masthead {
@@ -929,12 +972,12 @@ html.webp {
 }
 
 .action-button--rematch {
-	background: #18751c;
+	background: var(--color-btn-rematch);
 }
 
 .action-button--rematch:focus,
 .action-button--rematch:hover {
-	background: #1e9623;
+	background: var(--color-btn-rematch-hover);
 }
 
 .action-button--rematch:disabled {
@@ -986,15 +1029,15 @@ html.webp {
 }
 
 .spell--blue-lock {
-	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #3250ba, 4px -4px #3250ba;
+	box-shadow: -4px 4px var(--color-blue-lock), 4px 4px var(--color-blue-lock), -4px -4px var(--color-blue-lock), 4px -4px var(--color-blue-lock);
 }
 
 .spell--red-lock {
-	box-shadow: -4px 4px #e84c3c, 4px 4px #e84c3c, -4px -4px #e84c3c, 4px -4px #e84c3c;
+	box-shadow: -4px 4px var(--color-red-lock), 4px 4px var(--color-red-lock), -4px -4px var(--color-red-lock), 4px -4px var(--color-red-lock);
 }
 
 .spell--blue-lock.spell--red-lock {
-	box-shadow: -4px 4px #3250ba, 4px 4px #3250ba, -4px -4px #e84c3c, 4px -4px #e84c3c;
+	box-shadow: -4px 4px var(--color-blue-lock), 4px 4px var(--color-blue-lock), -4px -4px var(--color-red-lock), 4px -4px var(--color-red-lock);
 }
 
 .spell--tooltip-anchor {
@@ -1574,7 +1617,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	border: 1px solid rgba(255, 255, 255, 0.4);
 	border-radius: 6px;
 	background: rgba(255, 255, 255, 0.1);
-	color: #e0d0b0;
+	color: var(--color-text-warm);
 	font-family: 'Overlock', sans-serif;
 	font-size: 0.85em;
 	cursor: pointer;
@@ -1596,8 +1639,8 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	align-items: center;
 	gap: 6px;
 	padding: 8px 14px;
-	background: rgba(0, 0, 0, 0.9);
-	border: 2px solid #555;
+	background: var(--color-review-bar-bg);
+	border: 2px solid var(--color-border);
 	border-radius: 10px;
 	box-shadow: 0 2px 8px #000;
 	z-index: 10;
@@ -1614,10 +1657,10 @@ html.webp .stone-node--red.stone-node--last-play::after {
 .review-bar__btn {
 	width: 34px;
 	height: 34px;
-	border: 1px solid #555;
+	border: 1px solid var(--color-border);
 	border-radius: 6px;
-	background: #1a1a2e;
-	color: #e0d0b0;
+	background: var(--color-surface);
+	color: var(--color-text-warm);
 	font-size: 1em;
 	cursor: pointer;
 	display: flex;
@@ -1626,8 +1669,8 @@ html.webp .stone-node--red.stone-node--last-play::after {
 }
 
 .review-bar__btn:hover:not(:disabled) {
-	background: #2a2a4e;
-	border-color: #aaa;
+	background: var(--color-surface-raised);
+	border-color: var(--color-border-hover);
 }
 
 .review-bar__btn:disabled {
@@ -1648,7 +1691,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 
 .review-bar__label {
 	font-family: 'Arvo', serif;
-	color: #e0d0b0;
+	color: var(--color-text-warm);
 	font-size: 0.85em;
 	min-width: 60px;
 	text-align: center;
@@ -1656,7 +1699,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 
 .review-bar__pos {
 	font-family: 'Overlock', sans-serif;
-	color: #888;
+	color: var(--color-text-dim);
 	font-size: 0.8em;
 	min-width: 40px;
 	text-align: center;
@@ -1776,35 +1819,12 @@ html.webp .stone-node--red.stone-node--last-play::after {
 
 /* --- Theme overrides --- */
 
-/* Shared: all non-default themes remove the tiled background */
-html[data-theme="frost"],
-html[data-theme="parchment"],
-html[data-theme="forest"],
-html[data-theme="volcanic"] {
-	background-image: none;
-}
-
-/* Shared: feed gradient uses theme-aware dark color */
+/* Shared: feed gradient uses theme-aware dark color for non-default themes */
 html[data-theme="frost"] .feed,
 html[data-theme="parchment"] .feed,
 html[data-theme="forest"] .feed,
 html[data-theme="volcanic"] .feed {
 	background-image: linear-gradient(to bottom, var(--color-bg-dark), transparent);
-}
-
-/* Shared: win modal button text follows theme */
-html[data-theme="frost"] .win-modal__btn,
-html[data-theme="parchment"] .win-modal__btn,
-html[data-theme="forest"] .win-modal__btn,
-html[data-theme="volcanic"] .win-modal__btn {
-	color: var(--color-text-warm);
-}
-
-/* Shared: action button text in light theme */
-html[data-theme="parchment"] .action-button,
-html[data-theme="parchment"] .tooltip-button,
-html[data-theme="parchment"] .shepherd-button {
-	color: #f0f0f0;
 }
 
 /* --- Frost / Ice --- */
@@ -1817,12 +1837,8 @@ html[data-theme="parchment"] .game-board {
 	filter: brightness(1.15) sepia(0.35) saturate(0.8);
 }
 
-html[data-theme="parchment"] .masthead {
-	background-image: linear-gradient(to bottom, var(--color-header-bg), transparent);
-}
-
 html[data-theme="parchment"] .win-modal {
-	border-color: #8a7a5a;
+	border-color: var(--color-border);
 }
 
 html[data-theme="parchment"] .win-modal__btn {
@@ -1837,8 +1853,13 @@ html[data-theme="parchment"] .win-modal__btn:hover {
 
 html[data-theme="parchment"] .mute-toggle {
 	background: rgba(160, 140, 110, 0.6);
-	border-color: #8a7a5a;
-	color: #3a2a14;
+	color: var(--color-text);
+}
+
+html[data-theme="parchment"] .review-bar__btn--exit {
+	background: var(--color-btn-reset);
+	border-color: var(--color-btn-reset);
+	color: #f0e0d0;
 }
 
 /* --- Forest / Nature --- */
@@ -1914,9 +1935,9 @@ html[data-theme="volcanic"] .game-board {
 	right: 12px;
 	z-index: 100;
 	background: rgba(0, 0, 0, 0.5);
-	border: 1px solid #555;
+	border: 1px solid var(--color-border);
 	border-radius: 6px;
-	color: #e0d0b0;
+	color: var(--color-text-warm);
 	font-size: 18px;
 	width: 36px;
 	height: 36px;
@@ -1928,5 +1949,5 @@ html[data-theme="volcanic"] .game-board {
 }
 .mute-toggle:hover {
 	background: rgba(0, 0, 0, 0.7);
-	border-color: #888;
+	border-color: var(--color-text-dim);
 }
