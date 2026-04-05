@@ -483,6 +483,26 @@ textarea {
 	display: none !important;
 }
 
+#auth-status {
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.85em;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.auth-status__name {
+	color: #e0d0b0;
+}
+
+.auth-status__link {
+	color: #8af;
+	text-decoration: none;
+}
+
+.auth-status__link:hover {
+	text-decoration: underline;
+}
+
 /* stylelint-disable-next-line no-duplicate-selectors */
 html {
 	background-color: #21122c;

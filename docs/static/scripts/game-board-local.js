@@ -552,23 +552,40 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					// Process Elo for rated AI games
-					if (aiMode && _aiAuthManager && _aiAuthManager.isAuthenticated) {
-						_processAiElo(payload.winner, aiMode, _aiAuthManager);
+					if (aiMode) {
+						_processAiElo(payload.winner, aiMode);
 					}
 				}
 
-				async function _processAiElo(winner, difficulty, authManager) {
-					if (typeof processEloClientSide !== 'function') return;
+				async function _processAiElo(winner, difficulty) {
+					// Wait for auth state to resolve if needed
+					if (_aiAuthManager && !_aiAuthManager.currentUser) {
+						await new Promise(resolve => {
+							const timeout = setTimeout(resolve, 3000); // max 3s wait
+							_aiAuthManager.onAuthChanged(() => { clearTimeout(timeout); resolve(); });
+						});
+					}
+
+					if (!_aiAuthManager || !_aiAuthManager.isAuthenticated) {
+						_this.messageHistory.push('Sign in to track your rating.');
+						return;
+					}
+
+					if (typeof processEloClientSide !== 'function') {
+						_this.messageHistory.push('Rating update unavailable.');
+						return;
+					}
+
 					try {
 						const db = firebase.database();
 						const aiUid = '__ai_' + difficulty + '__';
-						const humanUid = authManager.uid;
+						const humanUid = _aiAuthManager.uid;
 						const humanColor = 'red'; // human is always red vs AI
 
 						// Ensure AI user exists
 						await _ensureAiUser(db, aiUid, difficulty);
 						// Ensure human profile is loaded
-						await authManager.ensureUserProfile(db);
+						await _aiAuthManager.ensureUserProfile(db);
 
 						const gameRecord = {
 							spellNames: _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'],
@@ -586,9 +603,12 @@ document.addEventListener('alpine:init', () => {
 							const youWon = winner === humanColor;
 							const sign = youWon ? '+' : '-';
 							_this.messageHistory.push('Rating: ' + sign + result.points + ' (' + (youWon ? result.newWinnerElo : result.newLoserElo) + ')');
+						} else {
+							_this.messageHistory.push('Rating update failed.');
 						}
 					} catch (e) {
 						console.error('Failed to process AI Elo:', e);
+						_this.messageHistory.push('Rating error: ' + e.message);
 					}
 				}
 

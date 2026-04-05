@@ -72,7 +72,7 @@
 						<img class="max-width:100%" alt="" src="static/images/sigil-online-logo.svg" height="36" width="287" />
 					</a>
 				</h1>
-				<div></div>
+				<div id="auth-status"></div>
 			</div>
 		</div>
 	</header>
@@ -106,5 +106,22 @@
 			</a>
 		</div>
 	</div>
+
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
 </body>
 </html>
