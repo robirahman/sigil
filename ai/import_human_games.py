@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from notation import sfn_to_dict, NODE_ORDER
+from notation import sfn_to_dict, NODE_ORDER, POSITIONS
 from simboard import SimBoard, CORE_SPELLS
 from search import _apply_turn
 from ai.features import board_to_tensor, encode_all_turns
@@ -49,11 +49,11 @@ def download_games(db_url, service_account_path=None):
 
             creds = service_account.Credentials.from_service_account_file(
                 service_account_path,
-                scopes=['https://www.googleapis.com/auth/firebase.database']
+                scopes=['https://www.googleapis.com/auth/firebase.database',
+                        'https://www.googleapis.com/auth/userinfo.email']
             )
             creds.refresh(google.auth.transport.requests.Request())
-            headers = {'Authorization': 'Bearer ' + creds.token}
-            resp = requests.get(url, headers=headers)
+            resp = requests.get(url, params={'access_token': creds.token})
         except ImportError:
             print("Install google-auth for service account support: pip install google-auth")
             sys.exit(1)
@@ -77,7 +77,12 @@ def download_games(db_url, service_account_path=None):
 
 
 def find_matching_turn(board, color, sfn_after):
-    """Enumerate legal turns and find the one that produces sfn_after.
+    """Find the legal turn that best matches the human's actual play.
+
+    First tries an exact full-board match (works for non-spell turns).
+    If that fails, falls back to matching on the initial move action,
+    since spell resolution is interactive in JS but greedy in Python —
+    the human's spell targets often differ from the Python heuristic.
 
     Returns (turn_index, legal_turns) or (None, legal_turns) if no match.
     """
@@ -87,22 +92,93 @@ def find_matching_turn(board, color, sfn_after):
 
     target_state = sfn_to_dict(sfn_after)
 
+    # Pass 1: exact full-board match (handles non-spell turns perfectly)
     for idx, turn in enumerate(legal_turns):
         test_board = board.copy()
         _apply_turn(test_board, turn, color)
         test_board.update()
 
-        # Compare stone positions (the most discriminative check)
-        match = True
-        for node in NODE_ORDER:
-            if test_board.stones[node] != target_state['stones'][node]:
-                match = False
-                break
-
-        if match:
+        if all(test_board.stones[n] == target_state['stones'][n]
+               for n in NODE_ORDER):
             return idx, legal_turns
 
-    return None, legal_turns
+    # Pass 2: match by move action + turn structure.
+    # The initial move (soft/hard/blink) is always player-chosen and
+    # deterministic; spell sub-actions diverge due to greedy vs interactive
+    # resolution.  We match the move node and whether a spell was cast.
+    before_stones = {n: board.stones[n] for n in NODE_ORDER}
+    after_stones = target_state['stones']
+
+    # Identify which nodes gained this color's stone
+    new_own = set(n for n in NODE_ORDER
+                  if after_stones[n] == color and before_stones[n] != color)
+    # Identify which nodes lost this color's stone (sacrificed/destroyed)
+    lost_own = set(n for n in NODE_ORDER
+                   if before_stones[n] == color and after_stones[n] != color)
+    # Did the opponent lose stones? (spell effects or hard moves)
+    enemy = 'blue' if color == 'red' else 'red'
+    enemy_lost = set(n for n in NODE_ORDER
+                     if before_stones[n] == enemy and after_stones[n] != enemy)
+
+    best_idx = None
+    best_score = -1
+
+    for idx, turn in enumerate(legal_turns):
+        actions = turn.actions
+        first = actions[0]
+
+        # Skip pass-only turns unless the board barely changed
+        if first.type == 'pass':
+            if not new_own and not lost_own and not enemy_lost:
+                return idx, legal_turns
+            continue
+
+        # Collect all action nodes in this turn (move, dash destination, etc.)
+        # The initial move node might have been sacrificed by a later dash,
+        # so it may not appear in new_own. Check all action nodes.
+        action_nodes = set()
+        for a in actions:
+            if a.node:
+                action_nodes.add(a.node)
+
+        # At least one action node should match a new stone in the diff
+        if not action_nodes & new_own:
+            continue
+        move_node = first.node
+
+        has_cast = any(a.type == 'cast' for a in actions)
+        has_dash = any(a.type in ('dash', 'dash_lightning') for a in actions)
+        cast_spell = next((a.spell for a in actions if a.type == 'cast'), None)
+
+        # Large diffs imply a spell was cast
+        total_diff = len(new_own) + len(lost_own) + len(enemy_lost)
+        spell_likely = total_diff > 2
+
+        score = 1  # base: move node matches
+
+        # Reward matching turn structure
+        if has_cast and spell_likely:
+            score += 2
+        if not has_cast and not spell_likely:
+            score += 2
+        if has_dash and lost_own:
+            score += 1
+
+        # Bonus: if a spell was cast, check if the spell position nodes
+        # were sacrificed (they should be absent in after_stones)
+        if cast_spell:
+            spell_idx = board.spell_names.index(cast_spell)
+            pos_nodes = POSITIONS[spell_idx + 1]
+            # If spell position nodes lost our stones, this cast is plausible
+            pos_sacrificed = sum(1 for n in pos_nodes if n in lost_own)
+            if pos_sacrificed > 0:
+                score += 2
+
+        if score > best_score:
+            best_score = score
+            best_idx = idx
+
+    return best_idx, legal_turns
 
 
 def convert_game(game_record):

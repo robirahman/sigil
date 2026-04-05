@@ -293,7 +293,11 @@ class MultiplayerController {
 					await this._flushTurnBuffer();
 				}
 
-				// Record the turn: SFN before, SFN after
+				this._eotTriggers(color);
+				board.update();
+
+				// Record the turn: SFN before, SFN after (after EOT triggers,
+				// matching GameController's ordering)
 				this._gameLog.push({
 					color: color,
 					turnNumber: board.turnCounter,
@@ -301,8 +305,6 @@ class MultiplayerController {
 					sfnAfter: boardToSfn(board),
 				});
 
-				this._eotTriggers(color);
-				board.update();
 				this.emit(board.getBoardStatePayload());
 				this._emitSfn();
 				this.sync.saveGameState(boardToSfn(board));
