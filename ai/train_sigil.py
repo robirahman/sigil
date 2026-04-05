@@ -194,7 +194,7 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
             # Value loss: MSE
             v_loss = F.mse_loss(value.squeeze(-1), target_outcome)
 
-            # Policy loss: cross-entropy between predicted and MCTS policy
+            # Policy loss: cross-entropy between predicted and target policy
             # Mask invalid turns
             max_t = logits.size(1)
             mask = torch.arange(max_t, device=device).unsqueeze(0) < turn_counts.unsqueeze(1)
@@ -204,8 +204,18 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
             log_probs = F.log_softmax(logits_masked + 1e-8, dim=1)
             # Clamp log_probs to avoid NaN from -inf * 0
             log_probs = log_probs.clamp(min=-30.0)
-            # Only compute loss on valid turns
-            p_loss = -(target_policy * log_probs).sum(dim=1).mean()
+            # Per-sample cross-entropy
+            p_loss_per_sample = -(target_policy * log_probs).sum(dim=1)
+
+            # Outcome-weighted policy: only learn from winning positions.
+            # Winner (outcome=+1): full policy weight.
+            # Loser (outcome=-1): zero policy weight.
+            # Draw (outcome=0): zero policy weight.
+            policy_weight = (target_outcome > 0).float()
+            if policy_weight.sum() > 0:
+                p_loss = (p_loss_per_sample * policy_weight).sum() / policy_weight.sum()
+            else:
+                p_loss = p_loss_per_sample.mean()
 
             loss = (1 - POLICY_LOSS_WEIGHT) * v_loss + POLICY_LOSS_WEIGHT * p_loss
 
@@ -248,7 +258,12 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
                 mask = torch.arange(max_t, device=device).unsqueeze(0) < turn_counts.unsqueeze(1)
                 logits_masked = logits.masked_fill(~mask, float('-inf'))
                 log_probs = F.log_softmax(logits_masked + 1e-8, dim=1).clamp(min=-30.0)
-                p_loss = -(target_policy * log_probs).sum(dim=1).mean()
+                p_loss_per_sample = -(target_policy * log_probs).sum(dim=1)
+                policy_weight = (target_outcome > 0).float()
+                if policy_weight.sum() > 0:
+                    p_loss = (p_loss_per_sample * policy_weight).sum() / policy_weight.sum()
+                else:
+                    p_loss = p_loss_per_sample.mean()
 
                 loss = (1 - POLICY_LOSS_WEIGHT) * v_loss + POLICY_LOSS_WEIGHT * p_loss
                 val_loss += loss.item()
