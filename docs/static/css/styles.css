@@ -1843,13 +1843,26 @@ html[data-theme="volcanic"] .feed {
 }
 
 /* --- Frost / Ice --- */
-html[data-theme="frost"] .game-board {
-	filter: hue-rotate(180deg) saturate(0.8) brightness(0.85);
+html[data-theme="frost"] .game-board-container {
+	filter: hue-rotate(-55deg) saturate(0.6) brightness(0.8);
 }
 
 /* --- Parchment / Light --- */
 html[data-theme="parchment"] .game-board {
-	filter: brightness(1.15) sepia(0.35) saturate(0.8);
+	filter: invert(0.85) hue-rotate(-40deg) sepia(0.8) saturate(0.8) brightness(0.85);
+}
+
+html[data-theme="parchment"] .stone-node {
+	background-color: #c4b08a;
+}
+
+html[data-theme="parchment"] .stone-node--blue,
+html[data-theme="parchment"] .stone-node--red {
+	background-color: transparent;
+}
+
+html[data-theme="parchment"] .spell {
+	filter: sepia(0.7) saturate(0.4) brightness(1.35) contrast(0.8);
 }
 
 html[data-theme="parchment"] .win-modal {
@@ -1878,13 +1891,13 @@ html[data-theme="parchment"] .review-bar__btn--exit {
 }
 
 /* --- Forest / Nature --- */
-html[data-theme="forest"] .game-board {
-	filter: hue-rotate(90deg) saturate(0.9) brightness(0.85);
+html[data-theme="forest"] .game-board-container {
+	filter: hue-rotate(180deg) saturate(0.9) brightness(0.85);
 }
 
 /* --- Volcanic / Fire --- */
-html[data-theme="volcanic"] .game-board {
-	filter: hue-rotate(-30deg) saturate(1.5) brightness(0.85);
+html[data-theme="volcanic"] .game-board-container {
+	filter: hue-rotate(90deg) saturate(1.2) brightness(0.65);
 }
 
 /* --- Spell visual effects --- */
