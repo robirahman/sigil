@@ -580,19 +580,19 @@ html.webp {
 /* Themed backgrounds — use attribute selectors so url() resolves relative to this CSS file */
 html[data-theme="frost"],
 html[data-theme="frost"].webp {
-	background-image: url("../images/themes/tiled-background-frost.jpg");
+	background-image: url("../images/themes/tiled-background-frost.jpg?v2");
 }
 html[data-theme="parchment"],
 html[data-theme="parchment"].webp {
-	background-image: url("../images/themes/tiled-background-parchment.jpg");
+	background-image: url("../images/themes/tiled-background-parchment.jpg?v2");
 }
 html[data-theme="forest"],
 html[data-theme="forest"].webp {
-	background-image: url("../images/themes/tiled-background-forest.jpg");
+	background-image: url("../images/themes/tiled-background-forest.jpg?v2");
 }
 html[data-theme="volcanic"],
 html[data-theme="volcanic"].webp {
-	background-image: url("../images/themes/tiled-background-volcanic.jpg");
+	background-image: url("../images/themes/tiled-background-volcanic.jpg?v2");
 }
 
 .masthead {
