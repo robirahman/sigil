@@ -207,13 +207,20 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
             # Per-sample cross-entropy
             p_loss_per_sample = -(target_policy * log_probs).sum(dim=1)
 
-            # Outcome-weighted policy: only learn from winning positions.
-            # Winner (outcome=+1): full policy weight.
-            # Loser (outcome=-1): zero policy weight.
-            # Draw (outcome=0): zero policy weight.
-            policy_weight = (target_outcome > 0).float()
-            if policy_weight.sum() > 0:
-                p_loss = (p_loss_per_sample * policy_weight).sum() / policy_weight.sum()
+            # Outcome-weighted policy: positive reinforcement for winner,
+            # negative reinforcement for loser.
+            # Winner (outcome=+1): minimize cross-entropy (imitate move).
+            # Loser (outcome=-1): maximize cross-entropy (avoid move).
+            # Draw (outcome=0): no policy gradient.
+            # Scale loser weight by 0.5 to keep training stable.
+            policy_weight = torch.where(
+                target_outcome > 0, torch.ones_like(target_outcome),
+                torch.where(target_outcome < 0,
+                            -0.5 * torch.ones_like(target_outcome),
+                            torch.zeros_like(target_outcome)))
+            denom = policy_weight.abs().sum()
+            if denom > 0:
+                p_loss = (p_loss_per_sample * policy_weight).sum() / denom
             else:
                 p_loss = p_loss_per_sample.mean()
 
@@ -259,9 +266,14 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
                 logits_masked = logits.masked_fill(~mask, float('-inf'))
                 log_probs = F.log_softmax(logits_masked + 1e-8, dim=1).clamp(min=-30.0)
                 p_loss_per_sample = -(target_policy * log_probs).sum(dim=1)
-                policy_weight = (target_outcome > 0).float()
-                if policy_weight.sum() > 0:
-                    p_loss = (p_loss_per_sample * policy_weight).sum() / policy_weight.sum()
+                policy_weight = torch.where(
+                    target_outcome > 0, torch.ones_like(target_outcome),
+                    torch.where(target_outcome < 0,
+                                -0.5 * torch.ones_like(target_outcome),
+                                torch.zeros_like(target_outcome)))
+                denom = policy_weight.abs().sum()
+                if denom > 0:
+                    p_loss = (p_loss_per_sample * policy_weight).sum() / denom
                 else:
                     p_loss = p_loss_per_sample.mean()
 
