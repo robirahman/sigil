@@ -53,8 +53,8 @@ const THEMES = {
 			'--color-win-modal-bg': 'rgba(8, 16, 28, 0.92)',
 			'--color-spectator-banner': 'rgba(10, 25, 50, 0.95)',
 			'--color-review-bar-bg': 'rgba(6, 14, 24, 0.92)',
-			'--bg-image': 'url("../images/themes/tiled-background-frost.jpg")',
-			'--bg-image-webp': 'url("../images/themes/tiled-background-frost.jpg")',
+			'--bg-image': 'url("static/images/themes/tiled-background-frost.jpg")',
+			'--bg-image-webp': 'url("static/images/themes/tiled-background-frost.jpg")',
 		}
 	},
 	parchment: {
@@ -103,8 +103,8 @@ const THEMES = {
 			'--color-win-modal-bg': 'rgba(200, 185, 155, 0.95)',
 			'--color-spectator-banner': 'rgba(180, 165, 135, 0.95)',
 			'--color-review-bar-bg': 'rgba(180, 160, 130, 0.95)',
-			'--bg-image': 'url("../images/themes/tiled-background-parchment.jpg")',
-			'--bg-image-webp': 'url("../images/themes/tiled-background-parchment.jpg")',
+			'--bg-image': 'url("static/images/themes/tiled-background-parchment.jpg")',
+			'--bg-image-webp': 'url("static/images/themes/tiled-background-parchment.jpg")',
 		}
 	},
 	forest: {
@@ -153,8 +153,8 @@ const THEMES = {
 			'--color-win-modal-bg': 'rgba(10, 22, 10, 0.92)',
 			'--color-spectator-banner': 'rgba(10, 30, 10, 0.95)',
 			'--color-review-bar-bg': 'rgba(6, 15, 6, 0.92)',
-			'--bg-image': 'url("../images/themes/tiled-background-forest.jpg")',
-			'--bg-image-webp': 'url("../images/themes/tiled-background-forest.jpg")',
+			'--bg-image': 'url("static/images/themes/tiled-background-forest.jpg")',
+			'--bg-image-webp': 'url("static/images/themes/tiled-background-forest.jpg")',
 		}
 	},
 	volcanic: {
@@ -203,8 +203,8 @@ const THEMES = {
 			'--color-win-modal-bg': 'rgba(26, 10, 10, 0.92)',
 			'--color-spectator-banner': 'rgba(40, 15, 10, 0.95)',
 			'--color-review-bar-bg': 'rgba(16, 5, 5, 0.92)',
-			'--bg-image': 'url("../images/themes/tiled-background-volcanic.jpg")',
-			'--bg-image-webp': 'url("../images/themes/tiled-background-volcanic.jpg")',
+			'--bg-image': 'url("static/images/themes/tiled-background-volcanic.jpg")',
+			'--bg-image-webp': 'url("static/images/themes/tiled-background-volcanic.jpg")',
 		}
 	}
 };
