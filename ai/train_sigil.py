@@ -204,12 +204,21 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
             log_probs = F.log_softmax(logits_masked + 1e-8, dim=1)
             # Clamp log_probs to avoid NaN from -inf * 0
             log_probs = log_probs.clamp(min=-30.0)
-            # Per-sample cross-entropy
-            p_loss_per_sample = -(target_policy * log_probs).sum(dim=1)
+            # For winner positions: lightly penalize unchosen legal moves
+            # by setting their target to -0.03 (pushes probability down).
+            # target_policy is 1.0 for chosen, 0.0 for others.
+            adjusted_policy = target_policy.clone()
+            is_winner = (target_outcome > 0).unsqueeze(1)  # (B, 1)
+            unchosen_legal = mask & (target_policy == 0)    # legal but not chosen
+            adjusted_policy[is_winner.expand_as(adjusted_policy) & unchosen_legal] = -0.01
+
+            # Per-sample cross-entropy (with adjusted targets)
+            p_loss_per_sample = -(adjusted_policy * log_probs).sum(dim=1)
 
             # Outcome-weighted policy: positive reinforcement for winner,
             # negative reinforcement for loser.
-            # Winner (outcome=+1): minimize cross-entropy (imitate move).
+            # Winner (outcome=+1): minimize cross-entropy (imitate move),
+            #   plus small penalty on unchosen moves.
             # Loser (outcome=-1): maximize cross-entropy (avoid move).
             # Draw (outcome=0): no policy gradient.
             # Scale loser weight by 0.5 to keep training stable.
@@ -265,7 +274,11 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
                 mask = torch.arange(max_t, device=device).unsqueeze(0) < turn_counts.unsqueeze(1)
                 logits_masked = logits.masked_fill(~mask, float('-inf'))
                 log_probs = F.log_softmax(logits_masked + 1e-8, dim=1).clamp(min=-30.0)
-                p_loss_per_sample = -(target_policy * log_probs).sum(dim=1)
+                adjusted_policy = target_policy.clone()
+                is_winner = (target_outcome > 0).unsqueeze(1)
+                unchosen_legal = mask & (target_policy == 0)
+                adjusted_policy[is_winner.expand_as(adjusted_policy) & unchosen_legal] = -0.01
+                p_loss_per_sample = -(adjusted_policy * log_probs).sum(dim=1)
                 policy_weight = torch.where(
                     target_outcome > 0, torch.ones_like(target_outcome),
                     torch.where(target_outcome < 0,
