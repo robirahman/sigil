@@ -189,6 +189,8 @@ def convert_game(game_record):
     spell_names = game_record.get('spellNames', [])
     winner = game_record.get('winner')
     turns = game_record.get('turns', [])
+    red_elo = game_record.get('redEloBefore')
+    blue_elo = game_record.get('blueEloBefore')
 
     if not spell_names or not turns or not winner:
         return []
@@ -233,14 +235,22 @@ def convert_game(game_record):
         else:
             outcome = 0.0
 
-        positions.append({
+        position = {
             'sfn': sfn,
             'spell_ids': spell_ids,
             'raw_features': raw.numpy().tolist(),
             'policy': policy.tolist(),
             'turn_encodings': turn_feats.numpy().tolist(),
             'outcome': outcome,
-        })
+        }
+        # Player's own rating from their POV; opponent's for context. Optional.
+        own_elo = red_elo if color == 'red' else blue_elo
+        opp_elo = blue_elo if color == 'red' else red_elo
+        if own_elo is not None:
+            position['player_elo'] = own_elo
+        if opp_elo is not None:
+            position['opponent_elo'] = opp_elo
+        positions.append(position)
 
     if unmatched > 0:
         print(f"  Warning: {unmatched} turns could not be matched to legal turns")
@@ -274,6 +284,7 @@ def main():
         for i, game in enumerate(games):
             positions = convert_game(game)
             for pos in positions:
+                pos['game_index'] = i
                 f.write(json.dumps(pos) + '\n')
                 total_positions += 1
 

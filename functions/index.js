@@ -59,6 +59,15 @@ exports.processElo = functions.database
 		updates[`completed_games/${context.params.gameId}/eloProcessed`] = true;
 		updates[`completed_games/${context.params.gameId}/eloChange`] = points;
 
+		const redBefore = game.winner === 'red' ? winnerElo : loserElo;
+		const blueBefore = game.winner === 'red' ? loserElo : winnerElo;
+		const redAfter = game.winner === 'red' ? newWinnerElo : newLoserElo;
+		const blueAfter = game.winner === 'red' ? newLoserElo : newWinnerElo;
+		updates[`completed_games/${context.params.gameId}/redEloBefore`] = redBefore;
+		updates[`completed_games/${context.params.gameId}/blueEloBefore`] = blueBefore;
+		updates[`completed_games/${context.params.gameId}/redEloAfter`] = redAfter;
+		updates[`completed_games/${context.params.gameId}/blueEloAfter`] = blueAfter;
+
 		await db.ref().update(updates);
 		return null;
 	});

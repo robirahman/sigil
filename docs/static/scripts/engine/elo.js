@@ -81,6 +81,16 @@ async function processEloClientSide(db, gameId, game) {
 	updates['completed_games/' + gameId + '/eloProcessed'] = true;
 	updates['completed_games/' + gameId + '/eloChange'] = points;
 
+	// Snapshot per-player ratings on the game record (PGN-style WhiteElo/BlackElo)
+	const redBefore = game.winner === 'red' ? winnerElo : loserElo;
+	const blueBefore = game.winner === 'red' ? loserElo : winnerElo;
+	const redAfter = game.winner === 'red' ? newWinnerElo : newLoserElo;
+	const blueAfter = game.winner === 'red' ? newLoserElo : newWinnerElo;
+	updates['completed_games/' + gameId + '/redEloBefore'] = redBefore;
+	updates['completed_games/' + gameId + '/blueEloBefore'] = blueBefore;
+	updates['completed_games/' + gameId + '/redEloAfter'] = redAfter;
+	updates['completed_games/' + gameId + '/blueEloAfter'] = blueAfter;
+
 	await db.ref().update(updates);
 
 	console.log('[Elo] Processed:', winnerData.displayName, '+' + points, '(' + newWinnerElo + '),',

@@ -92,11 +92,16 @@ def load_training_data(data_paths, max_records=None):
 
     records = []
     for path in data_paths:
+        bad_lines = 0
         with open(path) as f:
             for line in f:
                 if not line.strip():
                     continue
-                d = json.loads(line)
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    bad_lines += 1
+                    continue
 
                 # Convert SFN to features if raw_features not cached
                 if 'raw_features' not in d:
@@ -128,6 +133,8 @@ def load_training_data(data_paths, max_records=None):
 
                 if max_records and len(records) >= max_records:
                     break
+        if bad_lines:
+            print(f"  {path}: skipped {bad_lines} malformed line(s)")
         if max_records and len(records) >= max_records:
             break
 
