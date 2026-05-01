@@ -207,7 +207,7 @@ def split_by_game(records, val_fraction=0.1, seed=0):
     return train_idx, val_idx
 
 
-def compute_losses(model, batch, device):
+def compute_losses(model, batch, device, label_smoothing=0.0):
     raw = batch['raw_features'].to(device)
     spell_ids = batch['spell_ids'].to(device)
     turn_enc = batch['turn_encodings'].to(device)
@@ -229,6 +229,16 @@ def compute_losses(model, batch, device):
             < turn_counts.unsqueeze(1))
     logits_masked = logits.masked_fill(~mask, float('-inf'))
     log_probs = F.log_softmax(logits_masked, dim=1).clamp(min=-30.0)
+
+    # Optional label smoothing: blend target with uniform-over-legal.
+    # Reduces overconfidence on the chosen move, which helps generalization
+    # when targets are one-hot (human BC) or noisy MCTS visit counts.
+    if label_smoothing > 0:
+        legal_count = mask.float().sum(dim=1, keepdim=True).clamp(min=1)
+        uniform_legal = mask.float() / legal_count
+        target_policy = (target_policy * (1 - label_smoothing)
+                         + uniform_legal * label_smoothing)
+
     p_per = -(target_policy * log_probs).sum(dim=1)  # CE per sample
     pol_w = weights * pol_elig
     denom = pol_w.sum().clamp(min=1e-6)
@@ -285,7 +295,17 @@ def train(args):
     model = model.to(args.device)
     print(f'Parameters: {sum(p.numel() for p in model.parameters()):,}')
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+    # Optional: freeze the policy head so only the value head + trunk update.
+    # Useful for fine-tuning value estimation when the policy is already good.
+    if args.freeze_policy:
+        for name, p in model.named_parameters():
+            if 'policy_proj' in name or 'turn_proj' in name:
+                p.requires_grad = False
+        n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'Policy head frozen. Trainable params: {n_train:,}')
+
+    trainable = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.Adam(trainable, lr=args.lr,
                                  weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.epochs, eta_min=args.lr * 0.1)
@@ -300,8 +320,10 @@ def train(args):
         t_v_sum = t_p_sum = 0.0
         n_batches = 0
         for batch in train_loader:
-            v_loss, p_loss, _, _ = compute_losses(model, batch, args.device)
-            loss = 0.5 * v_loss + 0.5 * p_loss
+            v_loss, p_loss, _, _ = compute_losses(
+                model, batch, args.device,
+                label_smoothing=args.label_smoothing)
+            loss = args.value_weight * v_loss + args.policy_weight * p_loss
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -321,7 +343,8 @@ def train(args):
         with torch.no_grad():
             for batch in val_loader:
                 v_loss, p_loss, vc, vn = compute_losses(
-                    model, batch, args.device)
+                    model, batch, args.device,
+                    label_smoothing=args.label_smoothing)
                 v_v_sum += v_loss.item()
                 v_p_sum += p_loss.item()
                 v_correct += vc.item()
@@ -329,7 +352,7 @@ def train(args):
                 n_val_batches += 1
         val_v = v_v_sum / max(n_val_batches, 1)
         val_p = v_p_sum / max(n_val_batches, 1)
-        val_loss = 0.5 * val_v + 0.5 * val_p
+        val_loss = args.value_weight * val_v + args.policy_weight * val_p
         val_acc = v_correct / max(v_n, 1)
 
         improved = val_loss < best_val - 1e-4
@@ -377,6 +400,12 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--min-elo', type=int, default=0)
     parser.add_argument('--self-play-weight', type=float, default=0.3)
+    parser.add_argument('--label-smoothing', type=float, default=0.0,
+                        help='Smoothing factor for policy targets in [0, 1)')
+    parser.add_argument('--value-weight', type=float, default=0.5)
+    parser.add_argument('--policy-weight', type=float, default=0.5)
+    parser.add_argument('--freeze-policy', action='store_true',
+                        help='Freeze policy head; only update value head + trunk')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 

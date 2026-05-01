@@ -32,7 +32,7 @@ from ai.config import (
 )
 
 
-def play_selfplay_game(model, num_simulations=None):
+def play_selfplay_game(model, num_simulations=None, force_no_resign=False):
     """Play a single self-play game using MCTS.
 
     Returns list of (sfn, spell_ids, turn_encodings, policy, side_to_move) tuples
@@ -48,7 +48,8 @@ def play_selfplay_game(model, num_simulations=None):
     positions = []
     turn_num = 0
     resign_count = 0
-    resign_disabled = np.random.random() < RESIGN_DISABLE_PROB
+    resign_disabled = (force_no_resign
+                      or np.random.random() < RESIGN_DISABLE_PROB)
 
     while not board.gameover and turn_num < MAX_TURNS:
         turn_num += 1
@@ -120,7 +121,8 @@ def play_selfplay_game(model, num_simulations=None):
     return positions, board.winner
 
 
-def generate_training_data(model, num_games, output_path, num_simulations=None):
+def generate_training_data(model, num_games, output_path, num_simulations=None,
+                           force_no_resign=False):
     """Generate training data from self-play games.
 
     Writes JSONL with fields: sfn, spell_ids, policy, turn_encodings, outcome
@@ -134,7 +136,8 @@ def generate_training_data(model, num_games, output_path, num_simulations=None):
     with open(output_path, 'w') as f:
         for game_idx in range(num_games):
             game_start = time.time()
-            positions, winner = play_selfplay_game(model, num_simulations)
+            positions, winner = play_selfplay_game(
+                model, num_simulations, force_no_resign=force_no_resign)
             game_time = time.time() - game_start
 
             for pos in positions:
@@ -182,6 +185,8 @@ if __name__ == '__main__':
     parser.add_argument('--net', type=str, default='medium',
                         choices=['medium', 'hard'],
                         help='Network architecture: medium (2M) or hard (44M)')
+    parser.add_argument('--no-resign', action='store_true',
+                        help='Force resignation off in every game')
     args = parser.parse_args()
 
     # Select network class
@@ -198,5 +203,6 @@ if __name__ == '__main__':
         os.makedirs(DATA_DIR, exist_ok=True)
         args.output = os.path.join(DATA_DIR, f'selfplay_{int(time.time())}.jsonl')
 
-    generate_training_data(model, args.games, args.output, args.sims)
+    generate_training_data(model, args.games, args.output, args.sims,
+                           force_no_resign=args.no_resign)
     print(f"Data saved to {args.output}")
