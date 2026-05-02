@@ -704,6 +704,43 @@ html[data-theme="volcanic"].webp {
 	font-weight: bold;
 }
 
+.annotation-bar {
+	position: fixed;
+	bottom: 16px;
+	left: 15px;
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	background: var(--color-surface, rgba(0,0,0,0.85));
+	border: 1px solid var(--color-border, #555);
+	border-radius: 6px;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.9em;
+	color: var(--color-text-warm, #eee);
+	flex-wrap: wrap;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.annotation-bar__label { color: var(--color-text-dim, #aaa); }
+.annotation-bar__btn {
+	background: transparent;
+	border: 1px solid var(--color-border, #555);
+	border-radius: 4px;
+	color: var(--color-text-warm, #eee);
+	padding: 4px 10px;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.9em;
+	cursor: pointer;
+}
+.annotation-bar__btn:hover { background: var(--color-surface-hover, rgba(255,255,255,0.05)); }
+.annotation-bar__btn--active {
+	background: var(--color-accent, #c8a96a);
+	border-color: var(--color-accent, #c8a96a);
+	color: #000;
+	font-weight: bold;
+}
+
 .feed--chat {
 	margin-bottom: 10px;
 }

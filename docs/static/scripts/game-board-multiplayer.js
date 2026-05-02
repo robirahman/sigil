@@ -54,6 +54,30 @@ document.addEventListener('alpine:init', () => {
 			reviewSfns: [],
 			reviewTurnLabels: [],
 
+			// Annotation state
+			myColor: '',
+			annotationMode: false,
+			lastOpponentTurn: null, // { turnNumber, color } or null
+			annotations: {},        // { turnNumber: 'good' | 'bad' }
+			setAnnotation(value) {
+				if (!this.annotationMode || !this.lastOpponentTurn) return;
+				if (this.isSpectator) return;
+				const tn = this.lastOpponentTurn.turnNumber;
+				const current = this.annotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) {
+					delete this.annotations[tn];
+				} else {
+					this.annotations[tn] = next;
+				}
+				if (this._engine && typeof this._engine.setAnnotation === 'function') {
+					this._engine.setAnnotation(tn, next);
+				}
+				if (next === 'good') this.messageHistory.push('You marked turn ' + tn + ' as a good move.');
+				else if (next === 'bad') this.messageHistory.push('You marked turn ' + tn + ' as a bad move.');
+				else this.messageHistory.push('Annotation cleared for turn ' + tn + '.');
+			},
+
 			startReview() {
 				if (this.reviewSfns.length === 0) return;
 				this.reviewMode = true;
@@ -141,13 +165,15 @@ document.addEventListener('alpine:init', () => {
 				const waitForState = setInterval(() => {
 					if (!window._multiplayerState) return;
 					clearInterval(waitForState);
-					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, redDisplayName, blueDisplayName } = window._multiplayerState;
+					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, redDisplayName, blueDisplayName, annotationMode } = window._multiplayerState;
 
 					// Set player names and timer type
 					_this.redName = redDisplayName || '';
 					_this.blueName = blueDisplayName || '';
 					_this.timerType = (timeControl && timeControl.type) || 'none';
 					_this.isSpectator = isSpectator || false;
+					_this.myColor = myColor || '';
+					_this.annotationMode = !!annotationMode && !_this.isSpectator;
 
 					let engine;
 					if (isSpectator) {
@@ -169,6 +195,7 @@ document.addEventListener('alpine:init', () => {
 						};
 					}
 
+					_this._engine = engine;
 					engine.startGame(reconnectSfn);
 				}, 100);
 
@@ -217,6 +244,13 @@ document.addEventListener('alpine:init', () => {
 						_this.previousBoardState = rest;
 					}
 					else if (type === 'whoseturndisplay') { _this.showReset = false; _this.messageHistory.push(rest.message); _this.whoseTurn = rest.color; if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart'); _turnCount++; }
+					else if (type === 'turn_complete') {
+						// Track the most recent opponent turn for annotation eligibility.
+						const t = rest.turn;
+						if (t && t.color && t.color !== _this.myColor) {
+							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
+						}
+					}
 					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
 					else if (type === 'push_animation') {
 						if (typeof soundManager !== 'undefined') soundManager.play('stonePushed');

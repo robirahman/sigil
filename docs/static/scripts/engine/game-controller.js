@@ -179,12 +179,14 @@ class GameController {
 				this._emitSfn();
 
 				// Record turn for game review
-				this._gameLog.push({
+				const turnEntry = {
 					color: color,
 					turnNumber: board.turnCounter,
 					sfnBefore: turnSfn,
 					sfnAfter: boardToSfn(board),
-				});
+				};
+				this._gameLog.push(turnEntry);
+				this.emit({ type: 'turn_complete', turn: turnEntry });
 
 				resetThisTurn = false;
 

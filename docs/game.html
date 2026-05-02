@@ -197,6 +197,26 @@
 							</ul>
 						</template>
 
+						<div class="annotation-bar"
+							x-show="annotationMode && lastOpponentTurn && whoseTurn === myColor"
+							x-cloak>
+							<span class="annotation-bar__label">
+								Mark turn <span x-text="lastOpponentTurn?.turnNumber"></span>:
+							</span>
+							<button class="annotation-bar__btn"
+								x-bind:class="{ 'annotation-bar__btn--active': annotations[lastOpponentTurn?.turnNumber] === 'good' }"
+								x-on:click="setAnnotation('good')"
+								title="Mark this opponent move as a good move">
+								<span aria-hidden="true">&#x1F44D;</span> Good
+							</button>
+							<button class="annotation-bar__btn"
+								x-bind:class="{ 'annotation-bar__btn--active': annotations[lastOpponentTurn?.turnNumber] === 'bad' }"
+								x-on:click="setAnnotation('bad')"
+								title="Mark this opponent move as a bad move">
+								<span aria-hidden="true">&#x1F44E;</span> Bad
+							</button>
+						</div>
+
 						<div class="dice">
 							<div
 								class="die die--red"

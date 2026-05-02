@@ -298,12 +298,14 @@ class MultiplayerController {
 
 				// Record the turn: SFN before, SFN after (after EOT triggers,
 				// matching GameController's ordering)
-				this._gameLog.push({
+				const turnEntry = {
 					color: color,
 					turnNumber: board.turnCounter,
 					sfnBefore: turnSfn,
 					sfnAfter: boardToSfn(board),
-				});
+				};
+				this._gameLog.push(turnEntry);
+				this.emit({ type: 'turn_complete', turn: turnEntry });
 
 				this.emit(board.getBoardStatePayload());
 				this._emitSfn();
@@ -420,6 +422,12 @@ class MultiplayerController {
 			timestamp: Date.now(),
 		};
 		this.sync.saveCompletedGame(record);
+	}
+
+	/** Annotate the opponent's most recent turn (or clear an existing annotation). */
+	setAnnotation(turnNumber, value) {
+		if (!this.sync) return;
+		return this.sync.setAnnotation(turnNumber, value);
 	}
 
 	// These methods are identical to GameController's — just reuse the logic

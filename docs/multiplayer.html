@@ -304,6 +304,25 @@
 							<template x-for="message in messageHistory"><li x-text="message"></li></template>
 						</ul>
 					</template>
+					<div class="annotation-bar"
+						x-show="annotationMode && lastOpponentTurn && whoseTurn === myColor"
+						x-cloak>
+						<span class="annotation-bar__label">
+							Mark turn <span x-text="lastOpponentTurn?.turnNumber"></span>:
+						</span>
+						<button class="annotation-bar__btn"
+							x-bind:class="{ 'annotation-bar__btn--active': annotations[lastOpponentTurn?.turnNumber] === 'good' }"
+							x-on:click="setAnnotation('good')"
+							title="Mark this opponent move as a good move">
+							<span aria-hidden="true">&#x1F44D;</span> Good
+						</button>
+						<button class="annotation-bar__btn"
+							x-bind:class="{ 'annotation-bar__btn--active': annotations[lastOpponentTurn?.turnNumber] === 'bad' }"
+							x-on:click="setAnnotation('bad')"
+							title="Mark this opponent move as a bad move">
+							<span aria-hidden="true">&#x1F44E;</span> Bad
+						</button>
+					</div>
 					<div class="dice">
 						<div class="die die--red" x-bind:data-die-face="redSpellCounter">
 								<div class="die__face die__face--1"><div class="die__pip die__pip--mm"></div></div>
@@ -501,6 +520,7 @@
 						timeControl: timeControl || { type: 'none' },
 						redDisplayName: _firebaseSync.redDisplayName || 'Guest',
 						blueDisplayName: _firebaseSync.blueDisplayName || 'Guest',
+						annotationMode: !!(_authManager && _authManager.annotationMode),
 					};
 				},
 

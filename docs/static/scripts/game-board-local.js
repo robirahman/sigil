@@ -50,6 +50,26 @@ document.addEventListener('alpine:init', () => {
 			reviewSfns: [],
 			reviewTurnLabels: [],
 
+			// Annotation state (only used in vs-AI mode with mode enabled)
+			myColor: '',
+			annotationMode: false,
+			lastOpponentTurn: null,
+			annotations: {},
+			setAnnotation(value) {
+				if (!this.annotationMode || !this.lastOpponentTurn) return;
+				const tn = this.lastOpponentTurn.turnNumber;
+				const current = this.annotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) {
+					delete this.annotations[tn];
+				} else {
+					this.annotations[tn] = next;
+				}
+				if (next === 'good') this.messageHistory.push('You marked turn ' + tn + ' as a good move.');
+				else if (next === 'bad') this.messageHistory.push('You marked turn ' + tn + ' as a bad move.');
+				else this.messageHistory.push('Annotation cleared for turn ' + tn + '.');
+			},
+
 			formatTimer(timerSeconds) {
 				const sec = timerSeconds % 60;
 				const min = (timerSeconds - sec) / 60;
@@ -262,11 +282,23 @@ document.addEventListener('alpine:init', () => {
 				let _aiAuthManager = null;
 				if (aiMode && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
 					_aiAuthManager = new AuthManager();
+					_aiAuthManager.onAuthChanged(async (user) => {
+						if (user && !user.isAnonymous) {
+							try {
+								await _aiAuthManager.loadProfile(firebase.database());
+								_this.annotationMode = !!_aiAuthManager.annotationMode;
+							} catch (e) {
+								// Non-fatal; just leave annotation mode off
+								console.warn('Could not load annotation preference:', e);
+							}
+						}
+					});
 				}
 
 				// Randomize which color the AI plays
 				const _aiColor = Math.random() < 0.5 ? 'red' : 'blue';
 				const _humanColor = _aiColor === 'red' ? 'blue' : 'red';
+				_this.myColor = _humanColor;
 
 				async function initEngine() {
 					let options = {};
@@ -352,6 +384,14 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'whoseturndisplay') {
 						handleWhoseTurnEvent(rest);
+						return;
+					}
+
+					if (type === 'turn_complete') {
+						const t = rest.turn;
+						if (t && t.color && t.color !== _this.myColor) {
+							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
+						}
 						return;
 					}
 
@@ -629,6 +669,11 @@ document.addEventListener('alpine:init', () => {
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
 							ranked: true,
 						};
+
+						// Attach any annotations the human made during the game.
+						if (_this.annotations && Object.keys(_this.annotations).length > 0) {
+							gameRecord.annotations = Object.assign({}, _this.annotations);
+						}
 
 						const ref = await db.ref('completed_games').push(gameRecord);
 						const result = await processEloClientSide(db, ref.key, gameRecord);

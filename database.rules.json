@@ -18,6 +18,9 @@
         },
         "losses": {
           ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "annotationMode": {
+          ".validate": "newData.isBoolean()"
         }
       }
     },
@@ -41,7 +44,12 @@
       ".read": false,
       "$gameId": {
         ".write": "auth !== null",
-        ".validate": "newData.hasChildren(['winner', 'timestamp'])"
+        ".validate": "newData.hasChildren(['winner', 'timestamp'])",
+        "annotations": {
+          "$turnNumber": {
+            ".validate": "newData.val() === 'good' || newData.val() === 'bad' || !newData.exists()"
+          }
+        }
       }
     }
   }

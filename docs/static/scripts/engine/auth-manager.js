@@ -66,6 +66,20 @@ class AuthManager {
 		await this.auth.signOut();
 	}
 
+	/** Update the user's annotationMode preference. */
+	async updateAnnotationMode(enabled) {
+		if (!this.currentUser) throw new Error('Not signed in');
+		const db = firebase.database();
+		await db.ref('users/' + this.currentUser.uid + '/annotationMode').set(!!enabled);
+		if (this.userProfile) {
+			this.userProfile.annotationMode = !!enabled;
+		}
+	}
+
+	get annotationMode() {
+		return !!(this.userProfile && this.userProfile.annotationMode);
+	}
+
 	/** Update the user's display name (Auth profile + RTDB). */
 	async updateDisplayName(newName) {
 		if (!this.currentUser) throw new Error('Not signed in');

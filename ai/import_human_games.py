@@ -191,6 +191,17 @@ def convert_game(game_record):
     turns = game_record.get('turns', [])
     red_elo = game_record.get('redEloBefore')
     blue_elo = game_record.get('blueEloBefore')
+    # Player-supplied per-turn annotations: { '<turnNumber>': 'good' | 'bad' }.
+    # Firebase keys are strings; we coerce to int below for matching.
+    raw_annotations = game_record.get('annotations') or {}
+    annotations = {}
+    for k, v in raw_annotations.items():
+        if v not in ('good', 'bad'):
+            continue
+        try:
+            annotations[int(k)] = v
+        except (TypeError, ValueError):
+            continue
 
     if not spell_names or not turns or not winner:
         return []
@@ -202,6 +213,7 @@ def convert_game(game_record):
         color = turn_data.get('color')
         sfn_before = turn_data.get('sfnBefore')
         sfn_after = turn_data.get('sfnAfter')
+        turn_number = turn_data.get('turnNumber')
 
         if not color or not sfn_before or not sfn_after:
             continue
@@ -250,6 +262,10 @@ def convert_game(game_record):
             position['player_elo'] = own_elo
         if opp_elo is not None:
             position['opponent_elo'] = opp_elo
+        # Human-supplied annotation, if any. Each annotation is set by the
+        # OPPOSITE-color player about the move whose turnNumber this is.
+        if turn_number is not None and turn_number in annotations:
+            position['annotation'] = annotations[turn_number]
         positions.append(position)
 
     if unmatched > 0:

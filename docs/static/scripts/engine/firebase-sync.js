@@ -427,6 +427,18 @@ class FirebaseSync {
 		gameRecord.redUid = this.redUid || null;
 		gameRecord.blueUid = this.blueUid || null;
 		gameRecord.ranked = this.ranked || false;
+		// Merge any room-level annotations (written live by either player) into
+		// the game record before pushing.
+		try {
+			const annotSnap = await this.roomRef.child('annotations').once('value');
+			const roomAnnotations = annotSnap.val();
+			if (roomAnnotations) {
+				gameRecord.annotations = Object.assign(
+					{}, gameRecord.annotations || {}, roomAnnotations);
+			}
+		} catch (e) {
+			console.error('Failed to read room annotations:', e);
+		}
 		try {
 			const ref = await this.db.ref('completed_games').push(gameRecord);
 			// Process Elo client-side for ranked games
@@ -439,6 +451,21 @@ class FirebaseSync {
 			}
 		} catch (e) {
 			console.error('Failed to save completed game:', e);
+		}
+	}
+
+	/** Write a single annotation to the shared room path. Either player can call. */
+	async setAnnotation(turnNumber, value) {
+		if (!this.roomRef) return;
+		const ref = this.roomRef.child('annotations').child(String(turnNumber));
+		try {
+			if (value === 'good' || value === 'bad') {
+				await ref.set(value);
+			} else {
+				await ref.remove();
+			}
+		} catch (e) {
+			console.error('Failed to write annotation:', e);
 		}
 	}
 

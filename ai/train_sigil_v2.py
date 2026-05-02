@@ -130,6 +130,7 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0):
                 'source': source,
                 'weight': w,
                 'game_id': gid,
+                'annotation': d.get('annotation'),
             })
     if bad:
         print(f"  {path}: skipped {bad} malformed line(s)")
@@ -164,6 +165,13 @@ def collate_fn(batch):
         (b['source'] == 'selfplay') or (b['outcome'] > 0)
         for b in batch
     ], dtype=torch.float32)
+    # Encode annotation: +1 = 'good' (override into policy loss with extra
+    # weight), -1 = 'bad' (negative weight, push prob away from chosen move),
+    # 0 = no annotation.
+    annotation_code = torch.tensor([
+        {'good': 1.0, 'bad': -1.0}.get(b.get('annotation'), 0.0)
+        for b in batch
+    ], dtype=torch.float32)
 
     max_turns = max(b['num_turns'] for b in batch)
     B = len(batch)
@@ -187,6 +195,7 @@ def collate_fn(batch):
         'outcomes': outcomes,
         'weights': weights,
         'policy_eligible': policy_eligible,
+        'annotation_code': annotation_code,
     }
 
 
@@ -207,7 +216,8 @@ def split_by_game(records, val_fraction=0.1, seed=0):
     return train_idx, val_idx
 
 
-def compute_losses(model, batch, device, label_smoothing=0.0):
+def compute_losses(model, batch, device, label_smoothing=0.0,
+                   annotation_good_weight=3.0, annotation_bad_weight=2.0):
     raw = batch['raw_features'].to(device)
     spell_ids = batch['spell_ids'].to(device)
     turn_enc = batch['turn_encodings'].to(device)
@@ -216,6 +226,9 @@ def compute_losses(model, batch, device, label_smoothing=0.0):
     target_outcome = batch['outcomes'].to(device)
     weights = batch['weights'].to(device)
     pol_elig = batch['policy_eligible'].to(device)
+    ann_code = batch.get('annotation_code')
+    if ann_code is not None:
+        ann_code = ann_code.to(device)
 
     value, logits = model(raw, spell_ids, turn_enc, turn_counts)
 
@@ -241,7 +254,20 @@ def compute_losses(model, batch, device, label_smoothing=0.0):
 
     p_per = -(target_policy * log_probs).sum(dim=1)  # CE per sample
     pol_w = weights * pol_elig
-    denom = pol_w.sum().clamp(min=1e-6)
+    # Apply human-curated annotation overrides. 'good' moves get policy
+    # eligibility (regardless of outcome) with extra positive weight.
+    # 'bad' moves get a negative weight, which flips the CE gradient and
+    # pushes prob away from the chosen move — high-precision because the
+    # signal is human-curated rather than aggregate game outcome.
+    if ann_code is not None:
+        good_mask = (ann_code > 0).float()
+        bad_mask = (ann_code < 0).float()
+        pol_w = pol_w * (1 - good_mask - bad_mask) \
+                + good_mask * (weights * annotation_good_weight) \
+                + bad_mask * (weights * -annotation_bad_weight)
+    # Normalize by total absolute weight so the loss magnitude stays
+    # comparable to the unannotated case.
+    denom = pol_w.abs().sum().clamp(min=1e-6)
     p_loss = (p_per * pol_w).sum() / denom
 
     # Value accuracy on val (sign-match), unweighted.
@@ -322,7 +348,9 @@ def train(args):
         for batch in train_loader:
             v_loss, p_loss, _, _ = compute_losses(
                 model, batch, args.device,
-                label_smoothing=args.label_smoothing)
+                label_smoothing=args.label_smoothing,
+                annotation_good_weight=args.annotation_good_weight,
+                annotation_bad_weight=args.annotation_bad_weight)
             loss = args.value_weight * v_loss + args.policy_weight * p_loss
             optimizer.zero_grad()
             loss.backward()
@@ -344,7 +372,9 @@ def train(args):
             for batch in val_loader:
                 v_loss, p_loss, vc, vn = compute_losses(
                     model, batch, args.device,
-                    label_smoothing=args.label_smoothing)
+                    label_smoothing=args.label_smoothing,
+                    annotation_good_weight=args.annotation_good_weight,
+                    annotation_bad_weight=args.annotation_bad_weight)
                 v_v_sum += v_loss.item()
                 v_p_sum += p_loss.item()
                 v_correct += vc.item()
@@ -406,6 +436,10 @@ if __name__ == '__main__':
     parser.add_argument('--policy-weight', type=float, default=0.5)
     parser.add_argument('--freeze-policy', action='store_true',
                         help='Freeze policy head; only update value head + trunk')
+    parser.add_argument('--annotation-good-weight', type=float, default=3.0,
+                        help='Per-sample policy weight for human-marked "good" moves')
+    parser.add_argument('--annotation-bad-weight', type=float, default=2.0,
+                        help='Magnitude of negative policy weight for human-marked "bad" moves')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 
