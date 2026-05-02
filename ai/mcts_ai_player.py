@@ -16,12 +16,26 @@ from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
 from ai.mcts import mcts_search
 from ai.features import encode_all_turns
-from ai.config import NUM_SIMS_PLAY, MODELS_DIR, SPELL_TO_ID
+from ai.config import NUM_SIMS_PLAY, MODELS_DIR, SPELL_TO_ID, DATA_DIR
+from ai.forbidden_moves import ForbiddenMoves
 
 
 # Model paths by difficulty
 _MEDIUM_MODEL = os.path.join(MODELS_DIR, 'best_model.pt')
 _HARD_MODEL = os.path.join(MODELS_DIR, 'best_model_hard.pt')
+
+# Lazy-loaded singleton: human-curated 'bad' moves to forbid at inference.
+_FORBIDDEN_MOVES = None
+
+
+def _get_forbidden_moves():
+    global _FORBIDDEN_MOVES
+    if _FORBIDDEN_MOVES is None:
+        try:
+            _FORBIDDEN_MOVES = ForbiddenMoves.from_default()
+        except Exception:
+            _FORBIDDEN_MOVES = ForbiddenMoves()
+    return _FORBIDDEN_MOVES
 
 
 class MCTSAIPlayer(NNAIPlayer):
@@ -80,6 +94,7 @@ class MCTSAIPlayer(NNAIPlayer):
             time_limit=self.time_limit,
             add_noise=False,
             temperature=None,  # Greedy in production
+            forbidden_moves=_get_forbidden_moves(),
         )
 
         if best_turn is None:

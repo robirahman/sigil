@@ -28,7 +28,8 @@ class MCTSNode:
     __slots__ = ('board', 'color', 'parent', 'parent_action_idx',
                  'children', 'legal_turns', 'prior', 'visit_count',
                  'total_value', 'virtual_loss',
-                 'is_terminal', 'terminal_value', 'is_expanded')
+                 'is_terminal', 'terminal_value', 'is_expanded',
+                 'forbidden_mask')
 
     def __init__(self, board, color, parent=None, parent_action_idx=None):
         self.board = board
@@ -44,6 +45,7 @@ class MCTSNode:
         self.is_terminal = False
         self.terminal_value = 0.0
         self.is_expanded = False
+        self.forbidden_mask = None  # np.array(bool) of forbidden actions
 
     @property
     def total_visits(self):
@@ -53,7 +55,7 @@ class MCTSNode:
 
 
 def mcts_search(board, color, model, num_simulations=None, time_limit=None,
-                add_noise=False, temperature=None):
+                add_noise=False, temperature=None, forbidden_moves=None):
     """Run MCTS with batched leaf evaluation and return best turn + policy.
 
     Args:
@@ -64,6 +66,8 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
         time_limit: optional wall-clock limit in seconds
         add_noise: whether to add Dirichlet noise at root (for training)
         temperature: if None, pick greedily; else sample with this temperature
+        forbidden_moves: optional ForbiddenMoves; flagged actions get prior 0
+            and are masked out of selection so the AI never picks them.
 
     Returns:
         best_turn: CompleteTurn
@@ -74,7 +78,7 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
         num_simulations = NUM_SIMS_PLAY
 
     root = MCTSNode(board.copy(), color)
-    _expand_node(root, model)
+    _expand_node(root, model, forbidden_moves=forbidden_moves)
 
     if root.is_terminal or root.legal_turns is None or len(root.legal_turns) == 0:
         from simboard import CompleteTurn, Action
@@ -84,6 +88,12 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
     if add_noise and root.prior is not None and len(root.prior) > 0:
         noise = np.random.dirichlet([DIRICHLET_ALPHA] * len(root.prior))
         root.prior = (1 - DIRICHLET_EPSILON) * root.prior + DIRICHLET_EPSILON * noise
+        # Re-apply forbidden mask after noise injection
+        if root.forbidden_mask is not None and root.forbidden_mask.any():
+            root.prior[root.forbidden_mask] = 0.0
+            s = root.prior.sum()
+            if s > 0:
+                root.prior = root.prior / s
 
     deadline = time.time() + time_limit if time_limit else None
 
@@ -94,14 +104,22 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
             break
 
         batch_size = min(MCTS_BATCH_SIZE, num_simulations - sims_done)
-        _simulate_batch(root, model, batch_size)
+        _simulate_batch(root, model, batch_size, forbidden_moves=forbidden_moves)
         sims_done += batch_size
 
-    # Extract policy from visit counts
-    visits = root.visit_count
+    # Extract policy from visit counts (zero out forbidden as a safety net)
+    visits = root.visit_count.copy()
+    if root.forbidden_mask is not None and root.forbidden_mask.any():
+        visits[root.forbidden_mask] = 0.0
     total = visits.sum()
     if total == 0:
-        policy = np.ones(len(root.legal_turns)) / len(root.legal_turns)
+        # If everything was masked or unvisited, fall back to a uniform over
+        # any non-forbidden legal turns so the AI still produces a move.
+        if root.forbidden_mask is not None and not root.forbidden_mask.all():
+            allowed = (~root.forbidden_mask).astype(np.float32)
+            policy = allowed / allowed.sum()
+        else:
+            policy = np.ones(len(root.legal_turns)) / len(root.legal_turns)
     else:
         policy = visits / total
 
@@ -111,8 +129,12 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
     else:
         # Temperature-based sampling
         adjusted = visits ** (1.0 / temperature)
-        prob = adjusted / adjusted.sum()
-        action_idx = np.random.choice(len(root.legal_turns), p=prob)
+        s_adj = adjusted.sum()
+        if s_adj <= 0:
+            action_idx = int(np.argmax(policy))
+        else:
+            prob = adjusted / s_adj
+            action_idx = np.random.choice(len(root.legal_turns), p=prob)
 
     # Root value estimate
     if total > 0:
@@ -123,7 +145,7 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
     return root.legal_turns[action_idx], policy, root_value
 
 
-def _simulate_batch(root, model, batch_size):
+def _simulate_batch(root, model, batch_size, forbidden_moves=None):
     """Run batch_size MCTS simulations with batched leaf NN evaluation.
 
     Uses virtual loss to encourage different simulations to explore
@@ -200,6 +222,9 @@ def _simulate_batch(root, model, batch_size):
         node.visit_count = np.zeros(n_turns, dtype=np.float32)
         node.total_value = np.zeros(n_turns, dtype=np.float32)
         node.virtual_loss = np.zeros(n_turns, dtype=np.float32)
+        if forbidden_moves is not None:
+            node.forbidden_mask = forbidden_moves.legal_mask(
+                board, node.color, node.legal_turns)
 
         raw, spell_ids = board_to_tensor(board, node.color)
         turn_feats = encode_all_turns(node.legal_turns, board, node.color)
@@ -224,6 +249,12 @@ def _simulate_batch(root, model, batch_size):
     for idx_in_eval, leaf_idx in enumerate(needs_eval):
         node = leaves[leaf_idx][0]
         value, policy = eval_results[idx_in_eval]
+        if node.forbidden_mask is not None and node.forbidden_mask.any():
+            policy = policy.copy()
+            policy[node.forbidden_mask] = 0.0
+            s = policy.sum()
+            if s > 0:
+                policy = policy / s
         node.prior = policy
         node.is_expanded = True
         leaf_values[leaf_idx] = value
@@ -306,10 +337,17 @@ def _select_action(node):
     u = C_PUCT * node.prior * sqrt_total / (1.0 + effective_n)
 
     scores = q + u
+    if node.forbidden_mask is not None and node.forbidden_mask.any():
+        # If at least one allowed action exists, mask forbidden to -inf so
+        # they're never selected. If everything is forbidden (degenerate),
+        # fall back to PUCT scores so MCTS still produces something.
+        if not node.forbidden_mask.all():
+            scores = scores.copy()
+            scores[node.forbidden_mask] = -np.inf
     return int(np.argmax(scores))
 
 
-def _expand_node(node, model):
+def _expand_node(node, model, forbidden_moves=None):
     """Expand a leaf node: enumerate legal turns, get NN evaluation.
 
     Returns: value estimate from current player's perspective.
@@ -341,12 +379,21 @@ def _expand_node(node, model):
     node.visit_count = np.zeros(n_turns, dtype=np.float32)
     node.total_value = np.zeros(n_turns, dtype=np.float32)
     node.virtual_loss = np.zeros(n_turns, dtype=np.float32)
+    if forbidden_moves is not None:
+        node.forbidden_mask = forbidden_moves.legal_mask(
+            board, node.color, node.legal_turns)
 
     # Get NN evaluation
     raw, spell_ids = board_to_tensor(board, node.color)
     turn_feats = encode_all_turns(node.legal_turns, board, node.color)
 
     value, policy = model.evaluate_with_policy(raw, spell_ids, turn_feats)
+    if node.forbidden_mask is not None and node.forbidden_mask.any():
+        policy = policy.copy()
+        policy[node.forbidden_mask] = 0.0
+        s = policy.sum()
+        if s > 0:
+            policy = policy / s
     node.prior = policy
     node.is_expanded = True
 

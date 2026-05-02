@@ -77,12 +77,17 @@ def rating_weight(elo):
     return float(np.clip((elo - 800) / 400, 0.5, 2.0))
 
 
-def load_jsonl(path, source, default_weight=1.0, min_elo=0):
+def load_jsonl(path, source, default_weight=1.0, min_elo=0,
+               bad_oversample=1):
     """Load a JSONL into list of records, tagged with source / weight / game_id.
 
     source: 'human' or 'selfplay' — drives policy-loss eligibility.
     default_weight: applied to every position from this file before rating boost.
     min_elo: skip human positions whose player_elo is below this threshold.
+    bad_oversample: replicate each annotation=='bad' record this many times.
+        With only a handful of bad annotations in 7K positions, replication is
+        the simplest way to ensure the negative signal is seen often enough
+        per epoch to drive the loss.
     """
     records = []
     bad = 0
@@ -120,7 +125,7 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0):
 
             _materialize_features(d)
 
-            records.append({
+            rec = {
                 'raw_features': d['raw_features'],
                 'spell_ids': d['spell_ids'],
                 'turn_encodings': d.get('turn_encodings', []),
@@ -131,7 +136,11 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0):
                 'weight': w,
                 'game_id': gid,
                 'annotation': d.get('annotation'),
-            })
+            }
+            records.append(rec)
+            if rec['annotation'] == 'bad' and bad_oversample > 1:
+                for _ in range(bad_oversample - 1):
+                    records.append(rec)
     if bad:
         print(f"  {path}: skipped {bad} malformed line(s)")
     print(f"  {path}: loaded {len(records)} records (source={source})")
@@ -285,7 +294,8 @@ def train(args):
     for path in args.human or []:
         records.extend(load_jsonl(path, 'human',
                                   default_weight=1.0,
-                                  min_elo=args.min_elo))
+                                  min_elo=args.min_elo,
+                                  bad_oversample=args.bad_oversample))
     for path in args.self_play or []:
         records.extend(load_jsonl(path, 'selfplay',
                                   default_weight=args.self_play_weight))
@@ -440,6 +450,8 @@ if __name__ == '__main__':
                         help='Per-sample policy weight for human-marked "good" moves')
     parser.add_argument('--annotation-bad-weight', type=float, default=2.0,
                         help='Magnitude of negative policy weight for human-marked "bad" moves')
+    parser.add_argument('--bad-oversample', type=int, default=1,
+                        help='Replicate annotation=="bad" records this many times in the dataset')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 

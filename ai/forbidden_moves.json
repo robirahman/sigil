@@ -1,0 +1,1532 @@
+[
+  {
+    "stones": "rrbbbr.bbbr.bbb........b..r..rrr.rrr..r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Flourish",
+      "Grow",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Summer",
+      "Surge",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:a6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrrr.rbrb..rb.bbbb....br..............",
+    "spells": [
+      "Carnage",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Meteor",
+      "Grow",
+      "Hail_Storm",
+      "Sprout",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:b12:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r..r..rbrr..rbbbbrrb.b.rrb.............",
+    "spells": [
+      "Carnage",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Meteor",
+      "Grow",
+      "Hail_Storm",
+      "Sprout",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rr..r..r..rbrbbbrbb.rrrb...........b.",
+    "spells": [
+      "Carnage",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Meteor",
+      "Grow",
+      "Hail_Storm",
+      "Sprout",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:c5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rbb..b.bbbb.bb........rb..rrr....rrrr.r",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Grow",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:b8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rbb..b.bbbb.bb......r.rb..rrrr.rrrbbr.r",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Grow",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:a2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rbbb.b.bbbb.bb......r.rb..rrrr.rrrbbr.r",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Grow",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:c5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.bbb.r.bbr.bb...rr....b..r..rr..r.r..r",
+    "spells": [
+      "Carnage",
+      "Flourish",
+      "Starfall",
+      "Hail_Storm",
+      "Grow",
+      "Meteor",
+      "Sprout",
+      "Surge",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a12:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr.bbb........b..rrr.....rr..r",
+    "spells": [
+      "Carnage",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Sprout",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.b.....bbr.bbb........b..rrrr.r.r.r..r",
+    "spells": [
+      "Carnage",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Sprout",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a4:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......b.br..bb........b....r.....rr..r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Flourish",
+      "Bewitch",
+      "Meteor",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Slash",
+      "Sprout",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a9:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr.bbb........b..rrr.....rr..r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Flourish",
+      "Bewitch",
+      "Meteor",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Slash",
+      "Sprout",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rr...b.b...b.........b..r............",
+    "spells": [
+      "Seal_of_Lightning",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Grow",
+      "Meteor",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a7:None|dash:a4:None|hard_move:a4:None|cast:None:Comet|blink:c1:None|sacrifice:c1:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rr...b.b................br...r.......",
+    "spells": [
+      "Seal_of_Lightning",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Grow",
+      "Meteor",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rr...b.b.............b..br...r....r..",
+    "spells": [
+      "Seal_of_Lightning",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Grow",
+      "Meteor",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a9:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rr...bbb.............b..rr...r....r..",
+    "spells": [
+      "Seal_of_Lightning",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Grow",
+      "Meteor",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "blink:a11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rbrr.r.bbbr..r...b.....b..rr.b.r...br..",
+    "spells": [
+      "Seal_of_Lightning",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Grow",
+      "Meteor",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "blink:a12:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrr.r.bbbrb.r...b.....b..rr.b.r...br..",
+    "spells": [
+      "Seal_of_Lightning",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Grow",
+      "Meteor",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "blink:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.......b.r..b.........b..bbbb..rrrr..r",
+    "spells": [
+      "Bewitch",
+      "Flourish",
+      "Starfall",
+      "Meteor",
+      "Seal_of_Wind",
+      "Grow",
+      "Comet",
+      "Surge",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.......b.rr.b.........b..bbbb.brrrr..r",
+    "spells": [
+      "Bewitch",
+      "Flourish",
+      "Starfall",
+      "Meteor",
+      "Seal_of_Wind",
+      "Grow",
+      "Comet",
+      "Surge",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..b....b....b...rr.....rr..r",
+    "spells": [
+      "Flourish",
+      "Seal_of_Lightning",
+      "Bewitch",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Grow",
+      "Slash",
+      "Surge",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..b...bb....b..rrr.....rr..r",
+    "spells": [
+      "Flourish",
+      "Seal_of_Lightning",
+      "Bewitch",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Grow",
+      "Slash",
+      "Surge",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b12:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr.bbb........b..rrr.....rr..r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Carnage",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Comet",
+      "Slash",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.bbb...bbrbbbb.......rb..rrrrrr.r.rr.r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Carnage",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Comet",
+      "Slash",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rb......b.r..bbb....bbbb.brrr....rrrr.r",
+    "spells": [
+      "Carnage",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Meteor",
+      "Grow",
+      "Fireblast",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:c6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "bb...r.bbbr..bbb....bb.b.brrr..r.rrrr.r",
+    "spells": [
+      "Carnage",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Meteor",
+      "Grow",
+      "Fireblast",
+      "Comet",
+      "Seal_of_Summer",
+      "Slash"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:b10:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r........br..b.........b..........rr...",
+    "spells": [
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Flourish",
+      "Meteor",
+      "Hail_Storm",
+      "Grow",
+      "Slash",
+      "Comet",
+      "Sprout"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrrr..bbb...b.........b...............",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Carnage",
+      "Fireblast",
+      "Grow",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:a6:None|cast:None:Flourish|move:a7:None|move:a11:None|move:b12:None|move:b5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r..r..rbbbr..b.rrbb....br..............",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Carnage",
+      "Fireblast",
+      "Grow",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:a8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrrrr.rrrrrrbbb.bb.bb.b.bbb..bbr...b..",
+    "spells": [
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Grow",
+      "Hail_Storm",
+      "Meteor",
+      "Sprout",
+      "Surge",
+      "Slash"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:a7:None|cast:None:Slash|hard_move:b11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.b....rbrr.bbb...b.r.rb..r......rrr...",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Hail_Storm",
+      "Seal_of_Wind",
+      "Sprout",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......rrrr..bbrbbbbrr.bb.r.rbb..rrr.b.",
+    "spells": [
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Flourish",
+      "Fireblast",
+      "Grow",
+      "Seal_of_Wind",
+      "Surge",
+      "Comet",
+      "Sprout"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:c7:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.....rr.rr..bbbbbbbrr.bbbr...r..rrr.b.",
+    "spells": [
+      "Bewitch",
+      "Starfall",
+      "Carnage",
+      "Hail_Storm",
+      "Grow",
+      "Seal_of_Wind",
+      "Comet",
+      "Surge",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:c5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.....rr.rr..b.bbbbbrr.bbbr..rbr.rrrrb.",
+    "spells": [
+      "Bewitch",
+      "Starfall",
+      "Carnage",
+      "Hail_Storm",
+      "Grow",
+      "Seal_of_Wind",
+      "Comet",
+      "Surge",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........r..b.b....bbb...rbrr.b..rrb.r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Flourish",
+      "Grow",
+      "Hail_Storm",
+      "Meteor",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........rr.b......b.b...brrbbbr.r.bbr",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Flourish",
+      "Grow",
+      "Hail_Storm",
+      "Meteor",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........rr.b............bbbbbbr.rr.br",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Flourish",
+      "Grow",
+      "Hail_Storm",
+      "Meteor",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.......b.r..b......b.bb..brrrbbr.rrb.r",
+    "spells": [
+      "Seal_of_Lightning",
+      "Bewitch",
+      "Flourish",
+      "Seal_of_Wind",
+      "Grow",
+      "Hail_Storm",
+      "Surge",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:c8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrrrrr...rr.bb.bbbbbb....b.bb..rrr.bbr",
+    "spells": [
+      "Seal_of_Lightning",
+      "Bewitch",
+      "Flourish",
+      "Seal_of_Wind",
+      "Grow",
+      "Hail_Storm",
+      "Surge",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:a8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......b.br..bb........b....r.....rr..r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Meteor",
+      "Fireblast",
+      "Hail_Storm",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a9:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr.bbb........b..rrr.....rr..r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Meteor",
+      "Fireblast",
+      "Hail_Storm",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrb.....bbr.bb.........b..rrr....r.r..r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Meteor",
+      "Fireblast",
+      "Hail_Storm",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b2:None|dash:a2:None|hard_move:a2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........r..bbbbb...r...........rrr...",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Bewitch",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r........rr..bbbbbb..r.br........rrr...",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Bewitch",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b13:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r........rr..bbbbbbbrr.brb.......rrr.r.",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Bewitch",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:b8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r........rr..bbbbbbbrrrbrb.......rrr.r.",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Bewitch",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:b8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r........rr..bbbbbbbrrrbrb.......rrrrr.",
+    "spells": [
+      "Seal_of_Lightning",
+      "Starfall",
+      "Bewitch",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:b8:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rb..bbrrr.rb...bb....b.........rrr...",
+    "spells": [
+      "Flourish",
+      "Seal_of_Lightning",
+      "Carnage",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Fireblast",
+      "Seal_of_Summer",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b4:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rbb..b....r..bbb......b..brr.....rrrr..",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Grow",
+      "Meteor",
+      "Seal_of_Wind",
+      "Slash",
+      "Surge",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:c6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "bb...b....b..bbb......b...rr...r.rrrr.r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Grow",
+      "Meteor",
+      "Seal_of_Wind",
+      "Slash",
+      "Surge",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "blink:a1:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "bbb..b...rb..bbb.bb...b.r.rr...r.rrrr.r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Grow",
+      "Meteor",
+      "Seal_of_Wind",
+      "Slash",
+      "Surge",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "blink:a13:None|dash:a3:None|hard_move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........r..b.........b...........r...",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Seal_of_Lightning",
+      "Seal_of_Wind",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..bb........b....r....rrr..r",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Seal_of_Lightning",
+      "Seal_of_Wind",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "blink:a11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r....r.bbbr..bb........b....r....rrr..r",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Seal_of_Lightning",
+      "Seal_of_Wind",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "blink:a11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rr...r.bbbr..bb........b....r....rrr..r",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Seal_of_Lightning",
+      "Seal_of_Wind",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Comet",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "blink:a11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........r..bbb.........b........rr...",
+    "spells": [
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Grow",
+      "Seal_of_Wind",
+      "Fireblast",
+      "Surge",
+      "Slash",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:c8:None|cast:None:Fireblast|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r....r....r..bbbbb...............rrr...",
+    "spells": [
+      "Starfall",
+      "Bewitch",
+      "Carnage",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Fireblast",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.rrrrbb.br..bbbbb.b..bb..r.r.....rr..r",
+    "spells": [
+      "Starfall",
+      "Bewitch",
+      "Carnage",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Fireblast",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b12:None|dash:a4:None|hard_move:a4:None|cast:None:Comet|blink:c1:None|sacrifice:c1:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrbrrbb.br..bbbbb....b...rrr.....rrb.r",
+    "spells": [
+      "Starfall",
+      "Bewitch",
+      "Carnage",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Fireblast",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:c1:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrbrrbb.b...bbbbb..b.b...rrr..r..rrr..",
+    "spells": [
+      "Starfall",
+      "Bewitch",
+      "Carnage",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Fireblast",
+      "Surge",
+      "Comet",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:c11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........r..bbb......b..b.b.r.b..rr..r",
+    "spells": [
+      "Flourish",
+      "Seal_of_Lightning",
+      "Starfall",
+      "Meteor",
+      "Fireblast",
+      "Hail_Storm",
+      "Surge",
+      "Slash",
+      "Seal_of_Summer"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:a2:None|dash:a3:None|move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr.bbb........b..rrr.....rr..r",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.b.....bbr.bbb.......rb..rrr....r.rr.r",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a4:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.bb....bbr.bbb......rrb..rrr....r.rr.r",
+    "spells": [
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Grow",
+      "Hail_Storm",
+      "Slash",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..b.........b..rbrr.b..rrb.r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Seal_of_Wind",
+      "Fireblast",
+      "Grow",
+      "Surge",
+      "Comet",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..b........bb..rbrr.b..rrb.r",
+    "spells": [
+      "Starfall",
+      "Flourish",
+      "Seal_of_Lightning",
+      "Seal_of_Wind",
+      "Fireblast",
+      "Grow",
+      "Surge",
+      "Comet",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........r..bbb.....b...b........rr..r",
+    "spells": [
+      "Bewitch",
+      "Starfall",
+      "Flourish",
+      "Grow",
+      "Hail_Storm",
+      "Fireblast",
+      "Slash",
+      "Seal_of_Summer",
+      "Surge"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:c8:None|cast:None:Fireblast|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrrrrrb..rr.bbbbb.bbbb..bbr.rr.r.r.bb.",
+    "spells": [
+      "Carnage",
+      "Starfall",
+      "Flourish",
+      "Hail_Storm",
+      "Seal_of_Wind",
+      "Grow",
+      "Slash",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:a8:None|dash:a9:None|hard_move:a9:None|cast:None:Carnage|hard_move:a10:None|hard_move:b11:None|hard_move:b1:None|hard_move:b2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........rr.bbbb.........b.rbbr.rrrr..",
+    "spells": [
+      "Bewitch",
+      "Starfall",
+      "Carnage",
+      "Hail_Storm",
+      "Meteor",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:c3:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.........rr.bbbb.....r...rbbbbr.rrrrr.",
+    "spells": [
+      "Bewitch",
+      "Starfall",
+      "Carnage",
+      "Hail_Storm",
+      "Meteor",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:c1:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r...r.....rr.bbbb...r.r...bbbbrrbrrrrrb",
+    "spells": [
+      "Bewitch",
+      "Starfall",
+      "Carnage",
+      "Hail_Storm",
+      "Meteor",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:a12:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r.....bbbbr..bb.....rr.b..r......rrr...",
+    "spells": [
+      "Seal_of_Lightning",
+      "Bewitch",
+      "Starfall",
+      "Meteor",
+      "Hail_Storm",
+      "Seal_of_Wind",
+      "Surge",
+      "Sprout",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:a4:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrbbr.bbbbr.bbrr..r....br.r......rrr...",
+    "spells": [
+      "Seal_of_Lightning",
+      "Bewitch",
+      "Starfall",
+      "Meteor",
+      "Hail_Storm",
+      "Seal_of_Wind",
+      "Surge",
+      "Sprout",
+      "Comet"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:b2:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rb...b.b..b..b.........b..r......rrrr..",
+    "spells": [
+      "Flourish",
+      "Carnage",
+      "Starfall",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Surge",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "blink:b12:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "bb.bbb.b.bb..b.........rr.r.....rrrrr..",
+    "spells": [
+      "Flourish",
+      "Carnage",
+      "Starfall",
+      "Meteor",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Seal_of_Summer",
+      "Surge",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "move:b10:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..b........bb..rrbb.b.rrrr.r",
+    "spells": [
+      "Flourish",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Meteor",
+      "Hail_Storm",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r......bbbr..b........bb..rrbbbr.rrrb.r",
+    "spells": [
+      "Flourish",
+      "Carnage",
+      "Starfall",
+      "Seal_of_Wind",
+      "Meteor",
+      "Hail_Storm",
+      "Seal_of_Summer",
+      "Slash",
+      "Comet"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:c11:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrbrrrbbbbrrbbb...b....bb.rrr...rrr...r",
+    "spells": [
+      "Flourish",
+      "Starfall",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Seal_of_Wind",
+      "Hail_Storm",
+      "Slash",
+      "Surge",
+      "Seal_of_Summer"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b5:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r..rr....rr.rbbbbbbbbbrrb.r..rr..r.rrbb",
+    "spells": [
+      "Starfall",
+      "Seal_of_Lightning",
+      "Flourish",
+      "Hail_Storm",
+      "Meteor",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:b1:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r..rr...rrr.rbbbbbbbbbrbb.r..rr..r.rrbb",
+    "spells": [
+      "Starfall",
+      "Seal_of_Lightning",
+      "Flourish",
+      "Hail_Storm",
+      "Meteor",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:b9:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "r..rr..rrbr.rbbbbbbbbbrb.br..rrr.r.rrbb",
+    "spells": [
+      "Starfall",
+      "Seal_of_Lightning",
+      "Flourish",
+      "Hail_Storm",
+      "Meteor",
+      "Seal_of_Wind",
+      "Surge",
+      "Seal_of_Summer",
+      "Sprout"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:b9:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rbb..b.bbbb.bb.........b..rrr...rrrrr.r",
+    "spells": [
+      "Flourish",
+      "Carnage",
+      "Seal_of_Lightning",
+      "Fireblast",
+      "Meteor",
+      "Grow",
+      "Sprout",
+      "Comet",
+      "Slash"
+    ],
+    "color": "red",
+    "signatures": [
+      "hard_move:a2:None|dash:a3:None|hard_move:a3:None|cast:None:Slash|hard_move:a4:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrbbrrbbbbr.bbbr....rr.b..r......rrr...",
+    "spells": [
+      "Starfall",
+      "Bewitch",
+      "Carnage",
+      "Fireblast",
+      "Meteor",
+      "Seal_of_Wind",
+      "Slash",
+      "Seal_of_Summer",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b6:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrbbrrbbbbr.bbbrbbb.rr.b..r..rrr.rrr...",
+    "spells": [
+      "Starfall",
+      "Bewitch",
+      "Carnage",
+      "Fireblast",
+      "Meteor",
+      "Seal_of_Wind",
+      "Slash",
+      "Seal_of_Summer",
+      "Surge"
+    ],
+    "color": "blue",
+    "signatures": [
+      "move:b7:None|pass:None:None"
+    ]
+  },
+  {
+    "stones": "rrrr..rrrb..rbbbbbbbrr.b.............r.",
+    "spells": [
+      "Flourish",
+      "Carnage",
+      "Bewitch",
+      "Seal_of_Wind",
+      "Fireblast",
+      "Meteor",
+      "Seal_of_Summer",
+      "Sprout",
+      "Slash"
+    ],
+    "color": "blue",
+    "signatures": [
+      "hard_move:a8:None|pass:None:None"
+    ]
+  }
+]
