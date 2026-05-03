@@ -36,6 +36,7 @@ import torch
 from simboard import SimBoard, CompleteTurn, Action
 from ai.features import board_to_tensor, encode_all_turns
 from ai.strategic_eval import strategic_scores
+from ai.enumerator import get_legal_turns_exhaustive, NARROW_CAPS
 
 
 _INF = 1e9
@@ -95,15 +96,24 @@ def _eval_leaf(board, color, model):
     return float(v.item())
 
 
-def _ordered_turns(board, color, model, ordering_alpha=1.0):
+def _ordered_turns(board, color, model, ordering_alpha=1.0, exhaustive=False):
     """Return legal turns sorted by (log policy + strategic_score), descending.
 
     Strong move ordering is what makes alpha-beta efficient — the first
     move evaluated should be the best one, so subsequent moves can be
     cut off quickly. We use the same policy + strategic-eval signal
     that the production search relies on, computed once per node.
+
+    When `exhaustive=True`, uses ai.enumerator.get_legal_turns_exhaustive
+    instead of the engine's default greedy enumerator. That includes
+    every dash sacrifice combination, every post-sacrifice move target,
+    and every variant of choice-bearing spells (Bewitch pair, Carnage
+    target, Meteor/Comet blink target, Starfall pair, …).
     """
-    turns = list(board.get_legal_turns(color))
+    if exhaustive:
+        turns = list(get_legal_turns_exhaustive(board, color, caps=NARROW_CAPS))
+    else:
+        turns = list(board.get_legal_turns(color))
     if not turns:
         return []
     if len(turns) == 1:
@@ -122,14 +132,23 @@ class _Timeout(Exception):
 
 
 def _alphabeta(board, color, depth, alpha, beta, model, deadline,
-               ordering_alpha=1.0):
-    """Negamax alpha-beta. Returns (score from `color`'s perspective, best move)."""
+               ordering_alpha=1.0, exhaustive_root=False, _is_root=True):
+    """Negamax alpha-beta. Returns (score from `color`'s perspective, best move).
+
+    `exhaustive_root`: if True, the *root* call enumerates every dash and
+    spell variant via ai.enumerator. Deeper plies still use the engine's
+    standard greedy enumeration to keep the opponent's branching small.
+    """
     if time.time() > deadline:
         raise _Timeout()
     if board.gameover or depth == 0:
         return _eval_leaf(board, color, model), None
 
-    turns = _ordered_turns(board, color, model, ordering_alpha=ordering_alpha)
+    turns = _ordered_turns(
+        board, color, model,
+        ordering_alpha=ordering_alpha,
+        exhaustive=(exhaustive_root and _is_root),
+    )
     if not turns:
         return _eval_leaf(board, color, model), None
 
@@ -144,6 +163,7 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
         sub_score, _sub_move = _alphabeta(
             sim, enemy, depth - 1, -beta, -alpha, model, deadline,
             ordering_alpha=ordering_alpha,
+            exhaustive_root=exhaustive_root, _is_root=False,
         )
         score = -sub_score
         if score > best_score:
@@ -157,7 +177,7 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
 
 
 def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
-                   ordering_alpha=1.0, verbose=False):
+                   ordering_alpha=1.0, exhaustive_root=False, verbose=False):
     """Iterative-deepening alpha-beta search.
 
     Returns the best CompleteTurn found within `time_limit` seconds, up
@@ -165,12 +185,23 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
     search would exceed the budget — guarantees we always return *some*
     move and never run over time by more than the cost of evaluating
     the current depth's last subtree.
+
+    When `exhaustive_root=True`, every legal turn variant the engine
+    can produce — every dash sacrifice combination, post-dash move
+    target, and choice-bearing spell variant (e.g. all valid Bewitch
+    pairs) — is enumerated at the *root* and ordered by network policy
+    + strategic-eval. Opponent responses at deeper plies still use the
+    engine's default greedy enumeration to keep cost bounded.
     """
-    legal = list(board.get_legal_turns(color))
+    if exhaustive_root:
+        legal = list(get_legal_turns_exhaustive(board, color, caps=NARROW_CAPS))
+    else:
+        legal = list(board.get_legal_turns(color))
     if not legal:
         return CompleteTurn([Action('pass')])
 
-    # Mate-in-1: cheap special case.
+    # Mate-in-1: cheap special case. Iterate over the (possibly
+    # exhaustive) root variants so we don't miss a winning Bewitch pair.
     for turn in legal:
         sim = _apply_turn(board, turn, color)
         if sim.gameover and sim.winner == color:
@@ -187,6 +218,7 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
             score, move = _alphabeta(
                 board, color, depth, -_INF, _INF, model, deadline,
                 ordering_alpha=ordering_alpha,
+                exhaustive_root=exhaustive_root, _is_root=True,
             )
             if move is not None:
                 best_move = move

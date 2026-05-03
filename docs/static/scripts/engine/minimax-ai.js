@@ -55,8 +55,13 @@ function _minimaxEvalLeaf(board, color, model) {
 	return value;
 }
 
-function _minimaxOrderedTurns(board, color, model, orderingAlpha) {
-	const turns = [...board.getLegalTurns(color)];
+function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustive) {
+	let turns;
+	if (exhaustive && typeof getLegalTurnsExhaustive === 'function') {
+		turns = getLegalTurnsExhaustive(board, color);
+	} else {
+		turns = [...board.getLegalTurns(color)];
+	}
 	if (turns.length <= 1) return turns;
 	const { raw, spellIds } = boardToTensor(board, color);
 	const tf = encodeAllTurns(turns, board, color);
@@ -82,12 +87,15 @@ function _minimaxOrderedTurns(board, color, model, orderingAlpha) {
 }
 
 function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
-                           orderingAlpha) {
+                           orderingAlpha, exhaustiveRoot, isRoot) {
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
 		return { score: _minimaxEvalLeaf(board, color, model), move: null };
 	}
-	const turns = _minimaxOrderedTurns(board, color, model, orderingAlpha);
+	const turns = _minimaxOrderedTurns(
+		board, color, model, orderingAlpha,
+		exhaustiveRoot && isRoot,
+	);
 	if (turns.length === 0) {
 		return { score: _minimaxEvalLeaf(board, color, model), move: null };
 	}
@@ -100,7 +108,8 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 			return { score: MINIMAX_WIN, move: turn };
 		}
 		const sub = _minimaxAlphaBeta(sim, enemy, depth - 1, -beta, -alpha,
-		                              model, deadline, orderingAlpha);
+		                              model, deadline, orderingAlpha,
+		                              exhaustiveRoot, false);
 		const score = -sub.score;
 		if (score > bestScore) { bestScore = score; bestMove = turn; }
 		if (bestScore > alpha) alpha = bestScore;
@@ -123,9 +132,15 @@ function minimaxSearch(board, color, model, opts) {
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 12.0;
 	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 3;
 	const orderingAlpha = opts.orderingAlpha !== undefined ? opts.orderingAlpha : 1.0;
+	const exhaustiveRoot = !!opts.exhaustiveRoot;
 	const verbose = opts.verbose;
 
-	const legal = [...board.getLegalTurns(color)];
+	let legal;
+	if (exhaustiveRoot && typeof getLegalTurnsExhaustive === 'function') {
+		legal = getLegalTurnsExhaustive(board, color);
+	} else {
+		legal = [...board.getLegalTurns(color)];
+	}
 	if (legal.length === 0) return new SimTurn([new SimAction('pass')]);
 	// Mate-in-1
 	for (const turn of legal) {
@@ -140,7 +155,8 @@ function minimaxSearch(board, color, model, opts) {
 		const t0 = Date.now();
 		try {
 			const r = _minimaxAlphaBeta(board, color, depth, -MINIMAX_INF, MINIMAX_INF,
-			                            model, deadline, orderingAlpha);
+			                            model, deadline, orderingAlpha,
+			                            exhaustiveRoot, true);
 			if (r.move) { bestMove = r.move; completedDepth = depth; }
 			if (verbose) console.log(`minimax: depth=${depth} done in ${(Date.now()-t0)/1000}s score=${r.score.toFixed(3)}`);
 			if (Math.abs(r.score) >= MINIMAX_WIN - 1) break;

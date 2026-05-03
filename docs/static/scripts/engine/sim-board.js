@@ -261,27 +261,41 @@ class SimBoard {
 		return null;
 	}
 
-	// --- Greedy spell resolution ---
-	_resolveSpell(spellName, color, posNodes) {
+	// --- Spell resolution: greedy by default, branching via overrides ---
+	_resolveSpell(spellName, color, posNodes, targetOverrides) {
 		const info = CORE_SPELLS[spellName];
 		if (!info || info.resolve === null) return [];
 		const actions = [];
 		const enemy = this._enemy(color);
 		const rt = info.resolve;
+		const overrides = targetOverrides || {};
 
 		if (rt === 'soft_moves') {
+			const overrideTargets = (overrides.soft_move_targets || []).slice();
 			for (let i = 0; i < info.count; i++) {
 				const targets = this._softMoveable(color);
 				if (!targets.length) break;
-				const chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
+				let chosen = null;
+				while (overrideTargets.length && chosen === null) {
+					const cand = overrideTargets.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
 				actions.push(this._doSoftMove(color, chosen));
 				this.update();
 			}
 		} else if (rt === 'hard_moves') {
+			const overrideTargets = (overrides.hard_move_targets || []).slice();
 			for (let i = 0; i < info.count; i++) {
 				const targets = this._hardMoveable(color);
 				if (!targets.length) break;
-				actions.push(this._doHardMove(color, targets[0]));
+				let chosen = null;
+				while (overrideTargets.length && chosen === null) {
+					const cand = overrideTargets.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets[0];
+				actions.push(this._doHardMove(color, chosen));
 				this.update();
 			}
 		} else if (rt === 'fireblast') {
@@ -312,6 +326,18 @@ class SimBoard {
 			}
 			if (destroyed.length) actions.push(new SimAction('hail_storm', { destroyed }));
 		} else if (rt === 'bewitch') {
+			const ovr = overrides.bewitch_pair;
+			if (ovr) {
+				const [n1, n2] = ovr;
+				if (this.stones[n1] === enemy && this.stones[n2] === enemy
+				    && ADJACENCY[n1].includes(n2)) {
+					this.stones[n1] = color;
+					this.stones[n2] = color;
+					actions.push(new SimAction('bewitch', { node: n1, node2: n2 }));
+					this.update();
+					return actions;
+				}
+			}
 			for (const name of NODE_ORDER) {
 				if (this.stones[name] === enemy) {
 					for (const nb of ADJACENCY[name]) {
@@ -413,7 +439,7 @@ class SimBoard {
 		return actions;
 	}
 
-	_castSpell(spellName, color) {
+	_castSpell(spellName, color, targetOverrides) {
 		const idx = this.spellNames.indexOf(spellName);
 		const posNodes = POSITIONS[idx + 1];
 		const info = CORE_SPELLS[spellName];
@@ -431,7 +457,7 @@ class SimBoard {
 			}
 		}
 		this.update();
-		const resolveActions = this._resolveSpell(spellName, color, posNodes);
+		const resolveActions = this._resolveSpell(spellName, color, posNodes, targetOverrides);
 		this.update();
 
 		if (!info.ischarm) {
