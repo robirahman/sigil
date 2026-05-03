@@ -417,17 +417,26 @@ document.addEventListener('alpine:init', () => {
 					if (aiMode === 'easy') {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
-					} else if (aiMode === 'medium' || aiMode === 'aux' || aiMode === 'graph') {
+					} else if (
+						aiMode === 'medium' || aiMode === 'aux' ||
+						aiMode === 'graph' || aiMode === 'minimax'
+					) {
 						// Each mode loads a different experimental model so I
 						// can A/B them against each other on rated games. The
 						// strategic-eval search-time guardrail is on by default
 						// for all neural variants — it costs nothing per move
 						// and consistently suppresses naked dashes / lets-the-
 						// enemy-Fireblast-grow turns regardless of model.
+						//
+						// 'minimax' uses iterative-deepening alpha-beta over
+						// the same v27 model + strategic eval. Slower per move
+						// (3-ply at ~5-12s budget) but plays meaningfully
+						// stronger because it enumerates opponent responses.
 						const variant = {
-							medium: { name: 'sigil_net',       loader: SigilNetJS },
-							aux:    { name: 'sigil_net_aux',   loader: SigilNetJS },
-							graph:  { name: 'sigil_net_graph', loader: SigilNetGraphJS },
+							medium:  { name: 'sigil_net',       loader: SigilNetJS },
+							aux:     { name: 'sigil_net_aux',   loader: SigilNetJS },
+							graph:   { name: 'sigil_net_graph', loader: SigilNetGraphJS },
+							minimax: { name: 'sigil_net',       loader: SigilNetJS },
 						}[aiMode];
 						try {
 							const model = await variant.loader.load(
@@ -435,7 +444,15 @@ document.addEventListener('alpine:init', () => {
 								`static/models/${variant.name}.bin`,
 							);
 							options.aiColor = _aiColor;
-							options.ai = new NeuralAI(model, 100, 1.0);
+							if (aiMode === 'minimax') {
+								options.ai = new MinimaxAI(model, {
+									maxDepth: 3,
+									timeLimit: 12.0,
+									orderingAlpha: 1.0,
+								});
+							} else {
+								options.ai = new NeuralAI(model, 100, 1.0);
+							}
 						} catch (e) {
 							console.error('Failed to load AI model, falling back to greedy:', e);
 							options.aiColor = _aiColor;
@@ -858,6 +875,7 @@ document.addEventListener('alpine:init', () => {
 						medium: 'AI (Medium)',
 						aux: 'AI (Tactical Aux)',
 						graph: 'AI (Graph Trunk)',
+						minimax: 'AI (Minimax 3-ply)',
 					};
 					return labels[difficulty] || ('AI (' + difficulty + ')');
 				}
@@ -878,6 +896,7 @@ document.addEventListener('alpine:init', () => {
 							medium: 'AI (Medium)',
 							aux: 'AI (Tactical Aux)',
 							graph: 'AI (Graph Trunk)',
+							minimax: 'AI (Minimax 3-ply)',
 						};
 						const name = labels[difficulty] || `AI (${difficulty})`;
 						await ref.set({

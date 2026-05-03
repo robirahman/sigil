@@ -306,6 +306,25 @@ class NeuralAI {
 }
 
 /**
+ * Decision-time tactical search. Iterative-deepening alpha-beta with
+ * NN value head + strategic-eval move ordering. Slower per move than
+ * NeuralAI (depth-3 search at typical branching factors takes ~5–10s
+ * in browser) but plays meaningfully stronger by enumerating opponent
+ * responses instead of sampling them.
+ */
+class MinimaxAI {
+	constructor(model, options) {
+		this.model = model;
+		this.options = options || { maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0 };
+	}
+
+	pickTurn(board, color) {
+		const simBoard = SimBoard.fromSigilBoard(board);
+		return minimaxSearch(simBoard, color, this.model, this.options);
+	}
+}
+
+/**
  * Apply a SimTurn to a real SigilBoard with UI events.
  * This replays the AI's chosen actions with proper animations.
  */
