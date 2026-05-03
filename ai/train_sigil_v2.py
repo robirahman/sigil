@@ -253,7 +253,8 @@ def split_by_game(records, val_fraction=0.1, seed=0):
 
 def compute_losses(model, batch, device, label_smoothing=0.0,
                    annotation_good_weight=3.0, annotation_bad_weight=2.0,
-                   blunder_weight=0.0, blunder_pos_weight=1.0):
+                   blunder_weight=0.0, blunder_pos_weight=1.0,
+                   tactical_weight=0.0):
     raw = batch['raw_features'].to(device)
     spell_ids = batch['spell_ids'].to(device)
     turn_enc = batch['turn_encodings'].to(device)
@@ -267,13 +268,20 @@ def compute_losses(model, batch, device, label_smoothing=0.0,
         ann_code = ann_code.to(device)
 
     return_blunder = blunder_weight > 0
+    return_tactical = tactical_weight > 0
     out = model(raw, spell_ids, turn_enc, turn_counts,
-                return_blunder=return_blunder)
-    if return_blunder:
+                return_blunder=return_blunder,
+                return_tactical=return_tactical)
+    blunder_logits = None
+    tactical_logits = None
+    if return_blunder and return_tactical:
+        value, logits, blunder_logits, tactical_logits = out
+    elif return_blunder:
         value, logits, blunder_logits = out
+    elif return_tactical:
+        value, logits, tactical_logits = out
     else:
         value, logits = out
-        blunder_logits = None
 
     # Value: weighted MSE over all samples.
     v_per = (value.squeeze(-1) - target_outcome) ** 2
@@ -342,12 +350,34 @@ def compute_losses(model, batch, device, label_smoothing=0.0,
         denom_b = loss_mask.sum().clamp(min=1.0)
         b_loss = (bce * loss_mask).sum() / denom_b
 
+    # Auxiliary tactical head — predicts (best_own_attack, current_own_threat)
+    # for the current side to move, both normalized to [0, 1]. Provides a
+    # supervised signal aligned with the tactical concepts that would
+    # otherwise have to be inferred indirectly through value/policy targets.
+    t_loss = torch.tensor(0.0, device=device)
+    if tactical_logits is not None:
+        # Target a — max over legal turns of the per-turn 'enemy crushed'
+        # field (TURN_FEATURE_DIM index 64, already normalized by 3).
+        max_t = turn_enc.size(1)
+        legal_mask = (
+            torch.arange(max_t, device=device).unsqueeze(0)
+            < turn_counts.unsqueeze(1)
+        ).float()
+        crushed_per_turn = turn_enc[:, :, 64] * legal_mask
+        target_attack = crushed_per_turn.amax(dim=1)            # (B,)
+        # Target b — current count of own-crushable stones, normalized
+        # by 3. Located at raw_features index 250 + 2*39 .. 250 + 3*39.
+        own_crush = raw[:, 250 + 2 * 39:250 + 3 * 39].sum(dim=1)
+        target_threat = (own_crush / 3.0).clamp(max=1.0)
+        target_t = torch.stack([target_attack, target_threat], dim=1)
+        t_loss = F.mse_loss(tactical_logits, target_t)
+
     # Value accuracy on val (sign-match), unweighted.
     pred_sign = (value.squeeze(-1) > 0)
     target_sign = (target_outcome > 0)
     v_correct = (pred_sign == target_sign).float().sum()
 
-    return v_loss, p_loss, b_loss, v_correct, target_outcome.numel()
+    return v_loss, p_loss, b_loss, t_loss, v_correct, target_outcome.numel()
 
 
 def train(args):
@@ -431,19 +461,21 @@ def train(args):
     for epoch in range(args.epochs):
         # Train
         model.train()
-        t_v_sum = t_p_sum = t_b_sum = 0.0
+        t_v_sum = t_p_sum = t_b_sum = t_t_sum = 0.0
         n_batches = 0
         for batch in train_loader:
-            v_loss, p_loss, b_loss, _, _ = compute_losses(
+            v_loss, p_loss, b_loss, t_loss, _, _ = compute_losses(
                 model, batch, args.device,
                 label_smoothing=args.label_smoothing,
                 annotation_good_weight=args.annotation_good_weight,
                 annotation_bad_weight=args.annotation_bad_weight,
                 blunder_weight=args.blunder_weight,
-                blunder_pos_weight=args.blunder_pos_weight)
+                blunder_pos_weight=args.blunder_pos_weight,
+                tactical_weight=args.tactical_weight)
             loss = (args.value_weight * v_loss
                     + args.policy_weight * p_loss
-                    + args.blunder_weight * b_loss)
+                    + args.blunder_weight * b_loss
+                    + args.tactical_weight * t_loss)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -451,45 +483,53 @@ def train(args):
             t_v_sum += v_loss.item()
             t_p_sum += p_loss.item()
             t_b_sum += b_loss.item()
+            t_t_sum += t_loss.item()
             n_batches += 1
         scheduler.step()
         train_v = t_v_sum / max(n_batches, 1)
         train_p = t_p_sum / max(n_batches, 1)
         train_b = t_b_sum / max(n_batches, 1)
+        train_t = t_t_sum / max(n_batches, 1)
 
         # Val
         model.eval()
-        v_v_sum = v_p_sum = v_b_sum = 0.0
+        v_v_sum = v_p_sum = v_b_sum = v_t_sum = 0.0
         v_correct = v_n = 0
         n_val_batches = 0
         with torch.no_grad():
             for batch in val_loader:
-                v_loss, p_loss, b_loss, vc, vn = compute_losses(
+                v_loss, p_loss, b_loss, t_loss, vc, vn = compute_losses(
                     model, batch, args.device,
                     label_smoothing=args.label_smoothing,
                     annotation_good_weight=args.annotation_good_weight,
                     annotation_bad_weight=args.annotation_bad_weight,
-                    blunder_weight=args.blunder_weight)
+                    blunder_weight=args.blunder_weight,
+                    blunder_pos_weight=args.blunder_pos_weight,
+                    tactical_weight=args.tactical_weight)
                 v_v_sum += v_loss.item()
                 v_p_sum += p_loss.item()
                 v_b_sum += b_loss.item()
+                v_t_sum += t_loss.item()
                 v_correct += vc.item()
                 v_n += vn
                 n_val_batches += 1
         val_v = v_v_sum / max(n_val_batches, 1)
         val_p = v_p_sum / max(n_val_batches, 1)
         val_b = v_b_sum / max(n_val_batches, 1)
+        val_t = v_t_sum / max(n_val_batches, 1)
         val_loss = (args.value_weight * val_v
                     + args.policy_weight * val_p
-                    + args.blunder_weight * val_b)
+                    + args.blunder_weight * val_b
+                    + args.tactical_weight * val_t)
         val_acc = v_correct / max(v_n, 1)
 
         improved = val_loss < best_val - 1e-4
         marker = ' *' if improved else ''
         print(f'Epoch {epoch+1}/{args.epochs}: '
-              f'train v={train_v:.4f} p={train_p:.4f} b={train_b:.4f} | '
-              f'val v={val_v:.4f} p={val_p:.4f} b={val_b:.4f} acc={val_acc:.3f} '
-              f'lr={scheduler.get_last_lr()[0]:.6f}{marker}', flush=True)
+              f'train v={train_v:.4f} p={train_p:.4f} b={train_b:.4f} t={train_t:.4f} | '
+              f'val v={val_v:.4f} p={val_p:.4f} b={val_b:.4f} t={val_t:.4f} '
+              f'acc={val_acc:.3f} lr={scheduler.get_last_lr()[0]:.6f}{marker}',
+              flush=True)
 
         if improved:
             best_val = val_loss
@@ -551,6 +591,10 @@ if __name__ == '__main__':
     parser.add_argument('--blunder-only', action='store_true',
                         help='Freeze everything except the blunder head. '
                              'Use to bolt the head onto a frozen checkpoint.')
+    parser.add_argument('--tactical-weight', type=float, default=0.0,
+                        help='Loss weight for the auxiliary tactical head '
+                             '(predicts best_own_attack and current_own_threat). '
+                             '0 disables it.')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 

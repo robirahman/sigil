@@ -73,6 +73,14 @@ class SigilNet(nn.Module):
         self.blunder_turn_proj = nn.Linear(TURN_FEATURE_DIM, BLUNDER_HIDDEN_DIM)
         self.blunder_bias = nn.Parameter(torch.zeros(1))
 
+        # Auxiliary tactical head: predicts (best_own_crush, best_enemy_crush)
+        # — the maximum crush count achievable by either side on its next
+        # turn, clipped to [0, 3]. Provides supervised gradient on the
+        # trunk aligned with the strategic 'who has the next attack'
+        # concept that's hard to extract from raw features alone. Used at
+        # training time only; inference ignores this head.
+        self.tactical_head = nn.Linear(TRUNK_DIM, 2)
+
     def _trunk_forward(self, raw_features, spell_ids):
         """Shared trunk computation.
 
@@ -90,7 +98,7 @@ class SigilNet(nn.Module):
         return x
 
     def forward(self, raw_features, spell_ids, turn_features=None, turn_counts=None,
-                return_blunder=False):
+                return_blunder=False, return_tactical=False):
         """Forward pass.
 
         Args:
@@ -140,9 +148,14 @@ class SigilNet(nn.Module):
                     bl = bl.masked_fill(mask, 0.0)
                 blunder_logits = bl
 
+        outputs = (v, policy_logits)
         if return_blunder:
-            return v, policy_logits, blunder_logits
-        return v, policy_logits
+            outputs = outputs + (blunder_logits,)
+        if return_tactical:
+            outputs = outputs + (self.tactical_head(x),)
+        if len(outputs) == 2:
+            return outputs[0], outputs[1]
+        return outputs
 
     def evaluate(self, raw_features, spell_ids):
         """Value-only evaluation (no policy). For use in search.
