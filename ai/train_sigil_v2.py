@@ -53,21 +53,46 @@ from torch.utils.data import Dataset, DataLoader
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
 from ai.config import (
-    BATCH_SIZE, WEIGHT_DECAY, MODELS_DIR, TURN_FEATURE_DIM,
+    BATCH_SIZE, WEIGHT_DECAY, MODELS_DIR, TURN_FEATURE_DIM, RAW_FEATURE_DIM,
 )
 from notation import sfn_to_dict
 from simboard import SimBoard
-from ai.features import board_to_tensor
+from ai.features import board_to_tensor, encode_all_turns
 
 
 def _materialize_features(d):
-    """Compute raw_features/spell_ids if not cached on the record."""
-    if 'raw_features' not in d:
+    """Compute raw_features / spell_ids / turn_encodings on the record.
+
+    Re-computes if cached values exist but have stale dimensionality
+    (e.g. JSONLs produced under an older RAW_FEATURE_DIM /
+    TURN_FEATURE_DIM). The current feature schema is the source of
+    truth; cached values are an optimization, not the contract.
+    """
+    raw_cached = d.get('raw_features')
+    if raw_cached is None or len(raw_cached) != RAW_FEATURE_DIM:
         sb = SimBoard.from_sfn(d['sfn'])
         side = sfn_to_dict(d['sfn'])['turn']
         raw, spell_ids = board_to_tensor(sb, side)
         d['raw_features'] = raw.numpy().tolist()
         d['spell_ids'] = spell_ids.numpy().tolist()
+        # Turn encodings are tied to feature schema too — recompute.
+        legal = list(sb.get_legal_turns(side))
+        if legal:
+            tf = encode_all_turns(legal, sb, side)
+            d['turn_encodings'] = tf.numpy().tolist()
+        else:
+            d['turn_encodings'] = []
+    elif d.get('turn_encodings'):
+        first_row = d['turn_encodings'][0] if d['turn_encodings'] else None
+        if first_row is None or len(first_row) != TURN_FEATURE_DIM:
+            sb = SimBoard.from_sfn(d['sfn'])
+            side = sfn_to_dict(d['sfn'])['turn']
+            legal = list(sb.get_legal_turns(side))
+            if legal:
+                tf = encode_all_turns(legal, sb, side)
+                d['turn_encodings'] = tf.numpy().tolist()
+            else:
+                d['turn_encodings'] = []
 
 
 def rating_weight(elo):
@@ -226,7 +251,8 @@ def split_by_game(records, val_fraction=0.1, seed=0):
 
 
 def compute_losses(model, batch, device, label_smoothing=0.0,
-                   annotation_good_weight=3.0, annotation_bad_weight=2.0):
+                   annotation_good_weight=3.0, annotation_bad_weight=2.0,
+                   blunder_weight=0.0, blunder_pos_weight=1.0):
     raw = batch['raw_features'].to(device)
     spell_ids = batch['spell_ids'].to(device)
     turn_enc = batch['turn_encodings'].to(device)
@@ -239,7 +265,14 @@ def compute_losses(model, batch, device, label_smoothing=0.0,
     if ann_code is not None:
         ann_code = ann_code.to(device)
 
-    value, logits = model(raw, spell_ids, turn_enc, turn_counts)
+    return_blunder = blunder_weight > 0
+    out = model(raw, spell_ids, turn_enc, turn_counts,
+                return_blunder=return_blunder)
+    if return_blunder:
+        value, logits, blunder_logits = out
+    else:
+        value, logits = out
+        blunder_logits = None
 
     # Value: weighted MSE over all samples.
     v_per = (value.squeeze(-1) - target_outcome) ** 2
@@ -279,12 +312,41 @@ def compute_losses(model, batch, device, label_smoothing=0.0,
     denom = pol_w.abs().sum().clamp(min=1e-6)
     p_loss = (p_per * pol_w).sum() / denom
 
+    # Auxiliary blunder head — BCE over ALL legal turns at annotated
+    # positions. The played turn carries the annotation label (1 if 'bad',
+    # 0 if 'good'); every other legal turn at the same position is
+    # labeled 0. This teaches the head to discriminate "this specific
+    # turn is a blunder here" from "this turn is fine here," instead of
+    # learning a per-position constant that uniformly offsets all moves.
+    # Trunk gradient is detached inside the model (see SigilNet.forward),
+    # so this loss only updates the blunder projections.
+    b_loss = torch.tensor(0.0, device=device)
+    if blunder_logits is not None and ann_code is not None:
+        played_idx = target_policy.argmax(dim=1)
+        max_t = blunder_logits.size(1)
+        ar = torch.arange(max_t, device=device).unsqueeze(0)  # (1, max_t)
+        # Per-row target: 1.0 only at played_idx for bad rows; 0.0 elsewhere.
+        is_bad = (ann_code < 0).float().unsqueeze(1)          # (B, 1)
+        played_one_hot = (ar == played_idx.unsqueeze(1)).float()  # (B, max_t)
+        target_b = is_bad * played_one_hot                       # (B, max_t)
+
+        # Loss is averaged only over (annotated row, legal turn) pairs.
+        ann_mask_row = (ann_code != 0).float().unsqueeze(1)      # (B, 1)
+        legal_mask = (ar < turn_counts.unsqueeze(1)).float()     # (B, max_t)
+        loss_mask = ann_mask_row * legal_mask                    # (B, max_t)
+
+        pw = torch.tensor(blunder_pos_weight, device=device)
+        bce = F.binary_cross_entropy_with_logits(
+            blunder_logits, target_b, reduction='none', pos_weight=pw)
+        denom_b = loss_mask.sum().clamp(min=1.0)
+        b_loss = (bce * loss_mask).sum() / denom_b
+
     # Value accuracy on val (sign-match), unweighted.
     pred_sign = (value.squeeze(-1) > 0)
     target_sign = (target_outcome > 0)
     v_correct = (pred_sign == target_sign).float().sum()
 
-    return v_loss, p_loss, v_correct, target_outcome.numel()
+    return v_loss, p_loss, b_loss, v_correct, target_outcome.numel()
 
 
 def train(args):
@@ -340,6 +402,16 @@ def train(args):
         n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f'Policy head frozen. Trainable params: {n_train:,}')
 
+    # Optional: freeze EVERYTHING except the blunder head. Use this to
+    # bolt the blunder head onto a frozen production checkpoint so
+    # playing strength is preserved by construction.
+    if args.blunder_only:
+        for name, p in model.named_parameters():
+            if 'blunder' not in name:
+                p.requires_grad = False
+        n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'Trunk/policy/value frozen. Trainable params: {n_train:,}')
+
     trainable = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(trainable, lr=args.lr,
                                  weight_decay=WEIGHT_DECAY)
@@ -353,53 +425,64 @@ def train(args):
     for epoch in range(args.epochs):
         # Train
         model.train()
-        t_v_sum = t_p_sum = 0.0
+        t_v_sum = t_p_sum = t_b_sum = 0.0
         n_batches = 0
         for batch in train_loader:
-            v_loss, p_loss, _, _ = compute_losses(
+            v_loss, p_loss, b_loss, _, _ = compute_losses(
                 model, batch, args.device,
                 label_smoothing=args.label_smoothing,
                 annotation_good_weight=args.annotation_good_weight,
-                annotation_bad_weight=args.annotation_bad_weight)
-            loss = args.value_weight * v_loss + args.policy_weight * p_loss
+                annotation_bad_weight=args.annotation_bad_weight,
+                blunder_weight=args.blunder_weight,
+                blunder_pos_weight=args.blunder_pos_weight)
+            loss = (args.value_weight * v_loss
+                    + args.policy_weight * p_loss
+                    + args.blunder_weight * b_loss)
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             t_v_sum += v_loss.item()
             t_p_sum += p_loss.item()
+            t_b_sum += b_loss.item()
             n_batches += 1
         scheduler.step()
         train_v = t_v_sum / max(n_batches, 1)
         train_p = t_p_sum / max(n_batches, 1)
+        train_b = t_b_sum / max(n_batches, 1)
 
         # Val
         model.eval()
-        v_v_sum = v_p_sum = 0.0
+        v_v_sum = v_p_sum = v_b_sum = 0.0
         v_correct = v_n = 0
         n_val_batches = 0
         with torch.no_grad():
             for batch in val_loader:
-                v_loss, p_loss, vc, vn = compute_losses(
+                v_loss, p_loss, b_loss, vc, vn = compute_losses(
                     model, batch, args.device,
                     label_smoothing=args.label_smoothing,
                     annotation_good_weight=args.annotation_good_weight,
-                    annotation_bad_weight=args.annotation_bad_weight)
+                    annotation_bad_weight=args.annotation_bad_weight,
+                    blunder_weight=args.blunder_weight)
                 v_v_sum += v_loss.item()
                 v_p_sum += p_loss.item()
+                v_b_sum += b_loss.item()
                 v_correct += vc.item()
                 v_n += vn
                 n_val_batches += 1
         val_v = v_v_sum / max(n_val_batches, 1)
         val_p = v_p_sum / max(n_val_batches, 1)
-        val_loss = args.value_weight * val_v + args.policy_weight * val_p
+        val_b = v_b_sum / max(n_val_batches, 1)
+        val_loss = (args.value_weight * val_v
+                    + args.policy_weight * val_p
+                    + args.blunder_weight * val_b)
         val_acc = v_correct / max(v_n, 1)
 
         improved = val_loss < best_val - 1e-4
         marker = ' *' if improved else ''
         print(f'Epoch {epoch+1}/{args.epochs}: '
-              f'train v={train_v:.4f} p={train_p:.4f} | '
-              f'val v={val_v:.4f} p={val_p:.4f} acc={val_acc:.3f} '
+              f'train v={train_v:.4f} p={train_p:.4f} b={train_b:.4f} | '
+              f'val v={val_v:.4f} p={val_p:.4f} b={val_b:.4f} acc={val_acc:.3f} '
               f'lr={scheduler.get_last_lr()[0]:.6f}{marker}', flush=True)
 
         if improved:
@@ -452,6 +535,16 @@ if __name__ == '__main__':
                         help='Magnitude of negative policy weight for human-marked "bad" moves')
     parser.add_argument('--bad-oversample', type=int, default=1,
                         help='Replicate annotation=="bad" records this many times in the dataset')
+    parser.add_argument('--blunder-weight', type=float, default=0.0,
+                        help='Loss weight for the auxiliary blunder head '
+                             '(BCE on annotated rows). 0 disables it.')
+    parser.add_argument('--blunder-pos-weight', type=float, default=1.0,
+                        help='pos_weight passed to BCEWithLogitsLoss for the '
+                             'blunder head, to compensate for the heavy '
+                             'class imbalance (~1 bad turn per ~25 legal).')
+    parser.add_argument('--blunder-only', action='store_true',
+                        help='Freeze everything except the blunder head. '
+                             'Use to bolt the head onto a frozen checkpoint.')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 

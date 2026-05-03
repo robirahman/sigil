@@ -55,7 +55,8 @@ class MCTSNode:
 
 
 def mcts_search(board, color, model, num_simulations=None, time_limit=None,
-                add_noise=False, temperature=None, forbidden_moves=None):
+                add_noise=False, temperature=None, forbidden_moves=None,
+                blunder_lambda=0.0):
     """Run MCTS with batched leaf evaluation and return best turn + policy.
 
     Args:
@@ -78,7 +79,8 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
         num_simulations = NUM_SIMS_PLAY
 
     root = MCTSNode(board.copy(), color)
-    _expand_node(root, model, forbidden_moves=forbidden_moves)
+    _expand_node(root, model, forbidden_moves=forbidden_moves,
+                 blunder_lambda=blunder_lambda)
 
     if root.is_terminal or root.legal_turns is None or len(root.legal_turns) == 0:
         from simboard import CompleteTurn, Action
@@ -104,7 +106,8 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
             break
 
         batch_size = min(MCTS_BATCH_SIZE, num_simulations - sims_done)
-        _simulate_batch(root, model, batch_size, forbidden_moves=forbidden_moves)
+        _simulate_batch(root, model, batch_size, forbidden_moves=forbidden_moves,
+                        blunder_lambda=blunder_lambda)
         sims_done += batch_size
 
     # Extract policy from visit counts (zero out forbidden as a safety net)
@@ -145,7 +148,7 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
     return root.legal_turns[action_idx], policy, root_value
 
 
-def _simulate_batch(root, model, batch_size, forbidden_moves=None):
+def _simulate_batch(root, model, batch_size, forbidden_moves=None, blunder_lambda=0.0):
     """Run batch_size MCTS simulations with batched leaf NN evaluation.
 
     Uses virtual loss to encourage different simulations to explore
@@ -236,10 +239,11 @@ def _simulate_batch(root, model, batch_size, forbidden_moves=None):
     if len(eval_inputs) == 1:
         # Single leaf — use the regular (non-batched) method
         raw, spell_ids, turn_feats = eval_inputs[0]
-        value, policy = model.evaluate_with_policy(raw, spell_ids, turn_feats)
+        value, policy = model.evaluate_with_policy(
+            raw, spell_ids, turn_feats, blunder_lambda=blunder_lambda)
         eval_results = [(value, policy)]
     elif len(eval_inputs) > 1:
-        eval_results = _batch_evaluate(model, eval_inputs)
+        eval_results = _batch_evaluate(model, eval_inputs, blunder_lambda=blunder_lambda)
     else:
         eval_results = []
 
@@ -284,7 +288,7 @@ def _simulate_batch(root, model, batch_size, forbidden_moves=None):
             value = -value
 
 
-def _batch_evaluate(model, eval_inputs):
+def _batch_evaluate(model, eval_inputs, blunder_lambda=0.0):
     """Evaluate multiple positions in a single batched NN forward pass.
 
     Args:
@@ -308,15 +312,26 @@ def _batch_evaluate(model, eval_inputs):
         turn_batch[i, :n] = inp[2]
     turn_counts_t = torch.tensor(turn_counts, dtype=torch.long)
 
+    return_blunder = blunder_lambda > 0
     with torch.no_grad():
-        values, logits = model.forward(raw_batch, spell_batch, turn_batch, turn_counts_t)
+        out = model.forward(raw_batch, spell_batch, turn_batch, turn_counts_t,
+                            return_blunder=return_blunder)
+    if return_blunder:
+        values, logits, blunder_logits = out
+    else:
+        values, logits = out
+        blunder_logits = None
 
     results = []
     for i in range(B):
         v = values[i].item()
         n = turn_counts[i]
         turn_logits = logits[i, :n]
-        policy = F.softmax(turn_logits, dim=0).cpu().numpy()
+        if blunder_logits is not None:
+            adj = turn_logits - blunder_lambda * torch.sigmoid(blunder_logits[i, :n])
+        else:
+            adj = turn_logits
+        policy = F.softmax(adj, dim=0).cpu().numpy()
         results.append((v, policy))
 
     return results
@@ -347,7 +362,7 @@ def _select_action(node):
     return int(np.argmax(scores))
 
 
-def _expand_node(node, model, forbidden_moves=None):
+def _expand_node(node, model, forbidden_moves=None, blunder_lambda=0.0):
     """Expand a leaf node: enumerate legal turns, get NN evaluation.
 
     Returns: value estimate from current player's perspective.
@@ -387,7 +402,8 @@ def _expand_node(node, model, forbidden_moves=None):
     raw, spell_ids = board_to_tensor(board, node.color)
     turn_feats = encode_all_turns(node.legal_turns, board, node.color)
 
-    value, policy = model.evaluate_with_policy(raw, spell_ids, turn_feats)
+    value, policy = model.evaluate_with_policy(
+        raw, spell_ids, turn_feats, blunder_lambda=blunder_lambda)
     if node.forbidden_mask is not None and node.forbidden_mask.any():
         policy = policy.copy()
         policy[node.forbidden_mask] = 0.0

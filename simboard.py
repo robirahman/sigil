@@ -235,6 +235,57 @@ class SimBoard:
         """Return list of all nodes not occupied by color."""
         return [n for n in NODE_ORDER if self.stones[n] != color]
 
+    def escape_distance(self, node_name, defender_color, max_dist=6):
+        """Minimum BFS distance from node_name through defender stones to
+        the nearest empty cell, mirroring the push-chain logic in
+        _push_enemy. Used by feature engineering as a 'liberty' analogue.
+
+        Returns max_dist if no empty cell is reachable through a chain
+        of defender stones (i.e. the stone at node_name would be crushed
+        if the attacker pushed it).
+
+        Non-mutating.
+        """
+        attacker = 'blue' if defender_color == 'red' else 'red'
+        queue = deque()
+        for nb in self._adjacent_nodes(node_name):
+            queue.append((nb, 1))
+        visited = {node_name}
+        shortest = None
+        while queue:
+            next_node, dist = queue.popleft()
+            if next_node in visited:
+                continue
+            visited.add(next_node)
+            if shortest is not None and dist > shortest:
+                break
+            if dist > max_dist:
+                break
+            stone = self.stones[next_node]
+            if stone == attacker:
+                # Attacker's own stones block the push chain.
+                continue
+            elif stone == defender_color:
+                for nb in self._adjacent_nodes(next_node):
+                    if nb not in visited:
+                        queue.append((nb, dist + 1))
+            else:  # empty
+                return dist
+        return max_dist
+
+    def is_crushable(self, node_name, attacker_color):
+        """True iff a hard-move into node_name by attacker_color would
+        crush the stone there (no empty cell reachable through the push
+        chain). Returns False if node_name isn't occupied by the defender.
+
+        Non-mutating; pure read of self.stones.
+        """
+        defender = 'blue' if attacker_color == 'red' else 'red'
+        if self.stones[node_name] != defender:
+            return False
+        # Use 39 as the unreachable sentinel — graph has 39 nodes total.
+        return self.escape_distance(node_name, defender, max_dist=39) >= 39
+
     def _push_enemy(self, node_name, color):
         """Push enemy stone from node_name. Returns push destination or 'X' for crush.
 

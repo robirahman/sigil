@@ -17,7 +17,6 @@ class MCTSNode {
 		this.prior = null;
 		this.visitCount = null;
 		this.totalValue = null;
-		this.forbiddenMask = null;
 		this.isTerminal = false;
 		this.terminalValue = 0;
 		this.isExpanded = false;
@@ -39,12 +38,11 @@ class MCTSNode {
  * @param {number} numSimulations
  * @returns {{ turn: SimTurn, policy: Float32Array, value: number }}
  */
-function mctsSearch(board, color, model, numSimulations, forbiddenMoves) {
+function mctsSearch(board, color, model, numSimulations) {
 	numSimulations = numSimulations || MCTS_DEFAULT_SIMS;
-	forbiddenMoves = forbiddenMoves || null;
 
 	const root = new MCTSNode(board.copy(), color);
-	_mctsExpand(root, model, forbiddenMoves);
+	_mctsExpand(root, model);
 
 	if (root.isTerminal || !root.legalTurns || root.legalTurns.length === 0) {
 		return {
@@ -97,7 +95,7 @@ function mctsSearch(board, color, model, numSimulations, forbiddenMoves) {
 		} else if (node.isExpanded) {
 			leafValue = 0;
 		} else {
-			leafValue = _mctsExpand(node, model, forbiddenMoves);
+			leafValue = _mctsExpand(node, model);
 		}
 
 		// Backup
@@ -110,25 +108,14 @@ function mctsSearch(board, color, model, numSimulations, forbiddenMoves) {
 		}
 	}
 
-	// Extract policy from visit counts (mask out forbidden moves first)
+	// Extract policy from visit counts
 	const visits = root.visitCount;
-	if (root.forbiddenMask) {
-		let allForbidden = true;
-		for (let i = 0; i < root.forbiddenMask.length; i++) {
-			if (!root.forbiddenMask[i]) { allForbidden = false; break; }
-		}
-		if (!allForbidden) {
-			for (let i = 0; i < visits.length; i++) {
-				if (root.forbiddenMask[i]) visits[i] = 0;
-			}
-		}
-	}
 	let totalV = 0;
 	for (let i = 0; i < visits.length; i++) totalV += visits[i];
 	const policy = new Float32Array(visits.length);
 	for (let i = 0; i < visits.length; i++) policy[i] = totalV > 0 ? visits[i] / totalV : 1.0 / visits.length;
 
-	// Pick best (greedy) — forbidden moves are excluded via zero visits above
+	// Pick best (greedy)
 	let bestIdx = 0, bestVisits = -1;
 	for (let i = 0; i < visits.length; i++) {
 		if (visits[i] > bestVisits) { bestVisits = visits[i]; bestIdx = i; }
@@ -144,7 +131,7 @@ function mctsSearch(board, color, model, numSimulations, forbiddenMoves) {
 	return { turn: root.legalTurns[bestIdx], policy, value: rootValue };
 }
 
-function _mctsExpand(node, model, forbiddenMoves) {
+function _mctsExpand(node, model) {
 	const board = node.board;
 
 	if (board.gameover) {
@@ -173,28 +160,6 @@ function _mctsExpand(node, model, forbiddenMoves) {
 	const turnFeats = encodeAllTurns(node.legalTurns, board, node.color);
 	const { value, policy } = model.evaluateWithPolicy(raw, spellIds, turnFeats, N);
 	node.prior = policy;
-
-	if (forbiddenMoves) {
-		const fmask = forbiddenMoves.legalMask(board, node.color, node.legalTurns);
-		let anyForbidden = false, allForbidden = true;
-		for (let i = 0; i < fmask.length; i++) {
-			if (fmask[i]) anyForbidden = true; else allForbidden = false;
-		}
-		if (anyForbidden && !allForbidden) {
-			node.forbiddenMask = fmask;
-			let s = 0;
-			for (let i = 0; i < N; i++) {
-				if (fmask[i]) node.prior[i] = 0;
-				s += node.prior[i];
-			}
-			if (s > 0) {
-				for (let i = 0; i < N; i++) node.prior[i] /= s;
-			} else {
-				for (let i = 0; i < N; i++) node.prior[i] = fmask[i] ? 0 : 1.0 / Math.max(1, N - fmask.filter(Boolean).length);
-			}
-		}
-	}
-
 	node.isExpanded = true;
 	return value;
 }
@@ -202,11 +167,9 @@ function _mctsExpand(node, model, forbiddenMoves) {
 function _mctsSelectAction(node) {
 	const totalN = node.totalVisits;
 	const sqrtTotal = totalN > 0 ? Math.sqrt(totalN) : 1;
-	const fmask = node.forbiddenMask;
 
 	let bestScore = -Infinity, bestIdx = 0;
 	for (let i = 0; i < node.prior.length; i++) {
-		if (fmask && fmask[i]) continue;
 		const n = node.visitCount[i];
 		const q = n > 0 ? node.totalValue[i] / n : 0;
 		const u = MCTS_C_PUCT * node.prior[i] * sqrtTotal / (1 + n);

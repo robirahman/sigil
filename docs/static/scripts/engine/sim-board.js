@@ -167,6 +167,47 @@ class SimBoard {
 		return NODE_ORDER.filter(n => this.stones[n] !== color);
 	}
 
+	/**
+	 * Minimum BFS distance from nodeName through defenderColor stones to
+	 * the nearest empty cell. Mirrors the push-chain logic of _pushEnemy
+	 * but does not mutate. Used by feature engineering as a Go-style
+	 * "liberty" analogue. Returns maxDist if no escape route exists.
+	 */
+	escapeDistance(nodeName, defenderColor, maxDist) {
+		if (maxDist === undefined) maxDist = 6;
+		const attacker = defenderColor === 'red' ? 'blue' : 'red';
+		const queue = [];
+		for (const nb of (ADJACENCY[nodeName] || [])) queue.push([nb, 1]);
+		const visited = new Set([nodeName]);
+		while (queue.length > 0) {
+			const [nn, dist] = queue.shift();
+			if (visited.has(nn)) continue;
+			visited.add(nn);
+			if (dist > maxDist) break;
+			const s = this.stones[nn];
+			if (s === attacker) continue;
+			else if (s === defenderColor) {
+				for (const nb of (ADJACENCY[nn] || [])) {
+					if (!visited.has(nb)) queue.push([nb, dist + 1]);
+				}
+			} else {
+				return dist;
+			}
+		}
+		return maxDist;
+	}
+
+	/**
+	 * True iff a hard-move into nodeName by attackerColor would crush
+	 * the defender stone (no empty cell reachable through the push chain).
+	 * Returns false if nodeName isn't occupied by the defender. Non-mutating.
+	 */
+	isCrushable(nodeName, attackerColor) {
+		const defender = attackerColor === 'red' ? 'blue' : 'red';
+		if (this.stones[nodeName] !== defender) return false;
+		return this.escapeDistance(nodeName, defender, 39) >= 39;
+	}
+
 	_pushEnemy(nodeName, color) {
 		const enemy = this._enemy(color);
 		this.stones[nodeName] = color;

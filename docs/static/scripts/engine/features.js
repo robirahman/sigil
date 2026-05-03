@@ -1,6 +1,8 @@
 /**
  * Feature extraction for SigilNet inference in the browser.
- * Ported from ai/features.py.
+ * Ported from ai/features.py — must produce identical output dim-for-dim
+ * or the deployed model receives garbage. The cross-check at the end of
+ * ai/test_feature_parity.py validates this on every commit.
  */
 
 const SPELL_TO_ID = {
@@ -17,14 +19,129 @@ const _NEIGHBOR_INDICES = NODE_ORDER.map(name =>
 	(ADJACENCY[name] || []).map(nb => _NODE_TO_IDX[nb])
 );
 
+const _SPELL_POSITION_NODES = [];
+for (let i = 0; i < 9; i++) _SPELL_POSITION_NODES.push(POSITIONS[i + 1] || []);
+
 const NUM_NODES = 39;
 const NUM_SPELL_SLOTS = 9;
-const RAW_FEATURE_DIM = 250;
-const TURN_FEATURE_DIM = 64;
+const ESCAPE_MAX = 6;
+// Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat + 8 tempo = 450
+const RAW_FEATURE_DIM = 450;
+const TURN_FEATURE_DIM = 80;
+
+/**
+ * Per-stone life-status block: 4 channels × 39 = 156 dims.
+ * Channels: own_escape, enemy_escape, own_crushable_now, enemy_crushable_now.
+ */
+function _lifeStatusFeatures(board, sideToMove, enemy) {
+	const ownEscape = new Float32Array(NUM_NODES);
+	const enemyEscape = new Float32Array(NUM_NODES);
+	const ownCrush = new Float32Array(NUM_NODES);
+	const enemyCrush = new Float32Array(NUM_NODES);
+	for (let i = 0; i < NUM_NODES; i++) {
+		const name = NODE_ORDER[i];
+		const s = board.stones[name];
+		if (s === sideToMove) {
+			const d = board.escapeDistance(name, sideToMove, ESCAPE_MAX);
+			ownEscape[i] = d / ESCAPE_MAX;
+			let hasAttacker = false;
+			for (const nb of (ADJACENCY[name] || [])) {
+				if (board.stones[nb] === enemy) { hasAttacker = true; break; }
+			}
+			if (hasAttacker && board.isCrushable(name, enemy)) ownCrush[i] = 1.0;
+		} else if (s === enemy) {
+			const d = board.escapeDistance(name, enemy, ESCAPE_MAX);
+			enemyEscape[i] = d / ESCAPE_MAX;
+			let hasOurs = false;
+			for (const nb of (ADJACENCY[name] || [])) {
+				if (board.stones[nb] === sideToMove) { hasOurs = true; break; }
+			}
+			if (hasOurs && board.isCrushable(name, sideToMove)) enemyCrush[i] = 1.0;
+		}
+	}
+	return { ownEscape, enemyEscape, ownCrush, enemyCrush };
+}
+
+function _spellFillFeatures(board, sideToMove, enemy) {
+	const own = new Float32Array(NUM_SPELL_SLOTS);
+	const enm = new Float32Array(NUM_SPELL_SLOTS);
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) {
+		const nodes = _SPELL_POSITION_NODES[i];
+		if (!nodes || !nodes.length) continue;
+		let nOwn = 0, nEnm = 0;
+		for (const n of nodes) {
+			if (board.stones[n] === sideToMove) nOwn++;
+			else if (board.stones[n] === enemy) nEnm++;
+		}
+		own[i] = nOwn / nodes.length;
+		enm[i] = nEnm / nodes.length;
+	}
+	return { own, enm };
+}
+
+function _netStoneDeltaIfCast(board, spellName, color) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+	const ownBefore = board.totalStones[color];
+	const enmBefore = board.totalStones[enemy];
+	let sim;
+	try {
+		sim = board.copy();
+		sim._castSpell(spellName, color);
+		sim.update();
+	} catch (e) {
+		return 0.0;
+	}
+	const ownAfter = sim.totalStones[color];
+	const enmAfter = sim.totalStones[enemy];
+	return ((ownAfter - ownBefore) - (enmAfter - enmBefore)) / NUM_NODES;
+}
+
+function _threatOfActivationFeatures(board, sideToMove, enemy) {
+	const own = new Float32Array(NUM_SPELL_SLOTS);
+	const enm = new Float32Array(NUM_SPELL_SLOTS);
+	const ownCharged = new Set(board.chargedSpells[sideToMove] || []);
+	const enmCharged = new Set(board.chargedSpells[enemy] || []);
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) {
+		const sn = board.spellNames[i];
+		if (ownCharged.has(sn)) own[i] = _netStoneDeltaIfCast(board, sn, sideToMove);
+		if (enmCharged.has(sn)) enm[i] = _netStoneDeltaIfCast(board, sn, enemy);
+	}
+	return { own, enm };
+}
+
+function _tempoScalarFeatures(board, sideToMove, enemy,
+                              ownEscape, enemyEscape, ownFill, enmFill,
+                              ownThreat, enmThreat) {
+	let ownCanCast = 0, enmCanCast = 0;
+	let ownEscapeSum = 0, enemyEscapeSum = 0;
+	let ownThreatMax = 0, enmThreatMax = 0;
+	let raceAhead = 0;
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) {
+		if (ownFill[i] >= 0.999) ownCanCast++;
+		if (enmFill[i] >= 0.999) enmCanCast++;
+		if (ownThreat[i] > ownThreatMax) ownThreatMax = ownThreat[i];
+		if (enmThreat[i] > enmThreatMax) enmThreatMax = enmThreat[i];
+		if (ownFill[i] > enmFill[i]) raceAhead++;
+	}
+	for (let i = 0; i < NUM_NODES; i++) {
+		ownEscapeSum += ownEscape[i];
+		enemyEscapeSum += enemyEscape[i];
+	}
+	return new Float32Array([
+		ownCanCast / NUM_SPELL_SLOTS,
+		enmCanCast / NUM_SPELL_SLOTS,
+		(board.mana[sideToMove] - board.mana[enemy]) / 3.0,
+		ownEscapeSum / NUM_NODES,
+		enemyEscapeSum / NUM_NODES,
+		ownThreatMax,
+		enmThreatMax,
+		raceAhead / NUM_SPELL_SLOTS,
+	]);
+}
 
 /**
  * Convert a SimBoard to raw feature array + spell ID array.
- * Returns { raw: Float32Array(250), spellIds: Int32Array(9) }
+ * Returns { raw: Float32Array(450), spellIds: Int32Array(9) }
  */
 function boardToTensor(board, sideToMove) {
 	if (!sideToMove) sideToMove = board.whoseTurn;
@@ -100,6 +217,32 @@ function boardToTensor(board, sideToMove) {
 	features[fi++] = board.turnCounter / 200.0;
 	features[fi++] = board.turnCounter > 100 ? 1 : 0;
 
+	// === Tactical blocks (v22 onward) ===
+	// Life-status: 4 x 39 = 156
+	const life = _lifeStatusFeatures(board, sideToMove, enemy);
+	for (let i = 0; i < NUM_NODES; i++) features[fi++] = life.ownEscape[i];
+	for (let i = 0; i < NUM_NODES; i++) features[fi++] = life.enemyEscape[i];
+	for (let i = 0; i < NUM_NODES; i++) features[fi++] = life.ownCrush[i];
+	for (let i = 0; i < NUM_NODES; i++) features[fi++] = life.enemyCrush[i];
+
+	// Spell-position fill: 9 x 2 = 18
+	const fill = _spellFillFeatures(board, sideToMove, enemy);
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) features[fi++] = fill.own[i];
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) features[fi++] = fill.enm[i];
+
+	// Threat-of-activation: 9 x 2 = 18
+	const threat = _threatOfActivationFeatures(board, sideToMove, enemy);
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) features[fi++] = threat.own[i];
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) features[fi++] = threat.enm[i];
+
+	// Tempo scalars: 8
+	const tempo = _tempoScalarFeatures(
+		board, sideToMove, enemy,
+		life.ownEscape, life.enemyEscape, fill.own, fill.enm,
+		threat.own, threat.enm,
+	);
+	for (let i = 0; i < tempo.length; i++) features[fi++] = tempo[i];
+
 	// Spell IDs
 	const spellIds = new Int32Array(NUM_SPELL_SLOTS);
 	for (let i = 0; i < NUM_SPELL_SLOTS; i++) {
@@ -109,14 +252,62 @@ function boardToTensor(board, sideToMove) {
 	return { raw: features, spellIds };
 }
 
+function _countCrushable(board, defender, attacker) {
+	let n = 0;
+	for (let i = 0; i < NUM_NODES; i++) {
+		const name = NODE_ORDER[i];
+		if (board.stones[name] !== defender) continue;
+		let hasAttacker = false;
+		for (const nb of (ADJACENCY[name] || [])) {
+			if (board.stones[nb] === attacker) { hasAttacker = true; break; }
+		}
+		if (hasAttacker && board.isCrushable(name, attacker)) n++;
+	}
+	return n;
+}
+
+function _simulateTurn(board, turn, color) {
+	try {
+		const sim = board.copy();
+		applySimTurn(sim, turn, color);
+		sim.update();
+		return sim;
+	} catch (e) {
+		return null;
+	}
+}
+
+function _hasCastableSpell(board, color) {
+	for (let i = 0; i < NUM_SPELL_SLOTS; i++) {
+		const sn = board.spellNames[i];
+		const info = CORE_SPELLS[sn];
+		if (!info || info.static || info.ischarm) continue;
+		const nodes = _SPELL_POSITION_NODES[i];
+		if (!nodes || !nodes.length) continue;
+		let allOwn = true;
+		for (const n of nodes) {
+			if (board.stones[n] !== color) { allOwn = false; break; }
+		}
+		if (allOwn) return true;
+	}
+	return false;
+}
+
 /**
  * Encode a SimTurn as a fixed-size feature vector.
- * Returns Float32Array(64)
+ * Returns Float32Array(80). Layout matches ai/features.py:encode_turn.
  */
 function encodeTurn(turn, board, color) {
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const features = new Float32Array(TURN_FEATURE_DIM);
 	let moveTarget = null;
+	let softCount = 0, hardCount = 0;
+	let spellPosDelta = 0;
+	let claimedMana = false;
+
+	const crushableOwnBefore = _countCrushable(board, color, enemy);
+	const crushableEnmBefore = _countCrushable(board, enemy, color);
+	const simAfter = _simulateTurn(board, turn, color);
 
 	for (const action of turn.actions) {
 		if (action.type === 'move' && action.node) {
@@ -126,6 +317,14 @@ function encodeTurn(turn, board, color) {
 				moveTarget = action.node;
 			}
 			features[59] += 1.0 / 39.0;
+			softCount++;
+			if (MANA_NODES.includes(action.node) && board.stones[action.node] === null) {
+				claimedMana = true;
+			}
+			for (let sp = 0; sp < NUM_SPELL_SLOTS; sp++) {
+				const nodes = _SPELL_POSITION_NODES[sp];
+				if (nodes && nodes.includes(action.node)) { spellPosDelta++; break; }
+			}
 		} else if (action.type === 'hard_move' && action.node) {
 			const idx = _NODE_TO_IDX[action.node];
 			if (idx !== undefined && moveTarget === null) {
@@ -133,6 +332,7 @@ function encodeTurn(turn, board, color) {
 				moveTarget = action.node;
 			}
 			features[39] = 1;
+			hardCount++;
 		} else if (action.type === 'blink' && action.node) {
 			const idx = _NODE_TO_IDX[action.node];
 			if (idx !== undefined && moveTarget === null) {
@@ -145,6 +345,7 @@ function encodeTurn(turn, board, color) {
 			features[41] = 1;
 			const sacCount = action.sacrificed ? action.sacrificed.length : 0;
 			features[59] -= sacCount / 39.0;
+			features[66] = 1;
 		} else if (action.type === 'cast') {
 			features[42] = 1;
 			const spellId = SPELL_TO_ID[action.spell] || 0;
@@ -154,6 +355,32 @@ function encodeTurn(turn, board, color) {
 
 	features[58] = turn.actions.length / 5.0;
 	if (turn.actions.length === 1 && turn.actions[0].type === 'pass') features[60] = 1;
+
+	if (simAfter !== null) {
+		const ownBefore = board.totalStones[color];
+		const ownAfter = simAfter.totalStones[color];
+		const enmBefore = board.totalStones[enemy];
+		const enmAfter = simAfter.totalStones[enemy];
+		const enemyCrushed = Math.max(0, enmBefore - enmAfter);
+		const ownLost = Math.max(0, ownBefore - ownAfter);
+		features[64] = Math.min(enemyCrushed, 3) / 3.0;
+		features[65] = Math.min(ownLost, 3) / 3.0;
+		if (features[41] > 0) {
+			features[67] = (enemyCrushed >= 1 || claimedMana) ? 1.0 : 0.0;
+		}
+		const crushableOwnAfter = _countCrushable(simAfter, color, enemy);
+		const crushableEnmAfter = _countCrushable(simAfter, enemy, color);
+		const newThreats = Math.max(0, crushableOwnAfter - crushableOwnBefore);
+		const clearedThreats = Math.max(0, crushableEnmBefore - crushableEnmAfter);
+		features[68] = Math.min(newThreats, 3) / 3.0;
+		features[69] = Math.min(clearedThreats, 3) / 3.0;
+		features[70] = _hasCastableSpell(simAfter, color) ? 1.0 : 0.0;
+	}
+
+	features[71] = claimedMana ? 1.0 : 0.0;
+	features[72] = Math.min(softCount, 3) / 3.0;
+	features[73] = Math.min(hardCount, 3) / 3.0;
+	features[74] = Math.min(Math.max(spellPosDelta, -3), 3) / 3.0;
 
 	return features;
 }
