@@ -307,14 +307,17 @@ document.addEventListener('alpine:init', () => {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
 					} else if (aiMode === 'medium') {
-						// Load neural network model
+						// Load neural network model + forbidden-move table
 						try {
-							const model = await SigilNetJS.load(
-								'static/models/sigil_net.json',
-								'static/models/sigil_net.bin'
-							);
+							const [model, forbidden] = await Promise.all([
+								SigilNetJS.load(
+									'static/models/sigil_net.json',
+									'static/models/sigil_net.bin'
+								),
+								ForbiddenMovesJS.load('static/models/forbidden_moves.json'),
+							]);
 							options.aiColor = _aiColor;
-							options.ai = new NeuralAI(model, 100);
+							options.ai = new NeuralAI(model, 100, forbidden);
 						} catch (e) {
 							console.error('Failed to load AI model, falling back to greedy:', e);
 							options.aiColor = _aiColor;

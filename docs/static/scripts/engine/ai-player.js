@@ -289,14 +289,17 @@ class GreedyAI {
 }
 
 class NeuralAI {
-	constructor(model, numSimulations) {
+	constructor(model, numSimulations, forbiddenMoves) {
 		this.model = model;
 		this.numSimulations = numSimulations || MCTS_DEFAULT_SIMS;
+		this.forbiddenMoves = forbiddenMoves || null;
 	}
 
 	pickTurn(board, color) {
 		const simBoard = SimBoard.fromSigilBoard(board);
-		const { turn } = mctsSearch(simBoard, color, this.model, this.numSimulations);
+		const { turn } = mctsSearch(
+			simBoard, color, this.model, this.numSimulations, this.forbiddenMoves,
+		);
 		return turn;
 	}
 }
