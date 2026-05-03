@@ -52,6 +52,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
+from ai.sigil_net_graph import SigilNetGraph
 from ai.config import (
     BATCH_SIZE, WEIGHT_DECAY, MODELS_DIR, TURN_FEATURE_DIM, RAW_FEATURE_DIM,
 )
@@ -383,7 +384,12 @@ def train(args):
                             shuffle=False, collate_fn=collate_fn)
 
     # Model
-    net_class = SigilNetHard if args.net == 'hard' else SigilNet
+    if args.net == 'hard':
+        net_class = SigilNetHard
+    elif args.net == 'graph':
+        net_class = SigilNetGraph
+    else:
+        net_class = SigilNet
     if args.model and os.path.exists(args.model):
         model = net_class.load(args.model, device=args.device)
         print(f'Loaded model from {args.model}')
@@ -514,7 +520,7 @@ if __name__ == '__main__':
                         help='Starting checkpoint to fine-tune')
     parser.add_argument('--output', required=True,
                         help='Output checkpoint path')
-    parser.add_argument('--net', default='medium', choices=['medium', 'hard'])
+    parser.add_argument('--net', default='medium', choices=['medium', 'hard', 'graph'])
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--patience', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=BATCH_SIZE)

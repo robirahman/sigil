@@ -20,6 +20,7 @@ import torch
 from ai.forbidden_moves import position_key, turn_signature
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
+from ai.sigil_net_graph import SigilNetGraph
 from ai.mcts import mcts_search
 from ai.features import board_to_tensor, encode_all_turns
 from notation import sfn_to_dict
@@ -28,8 +29,11 @@ from simboard import SimBoard
 
 def _load_model(path):
     ckpt = torch.load(path, map_location='cpu', weights_only=False)
-    if ckpt.get('arch') == 'SigilNetHard':
+    arch = ckpt.get('arch')
+    if arch == 'SigilNetHard':
         m = SigilNetHard.load(path)
+    elif arch == 'SigilNetGraph':
+        m = SigilNetGraph.load(path)
     else:
         m = SigilNet.load(path)
     m.eval()

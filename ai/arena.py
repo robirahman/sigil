@@ -21,6 +21,7 @@ from selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
+from ai.sigil_net_graph import SigilNetGraph
 from ai.mcts import mcts_search
 from ai.config import MAX_TURNS, GATE_THRESHOLD, GATE_GAMES, MODELS_DIR
 
@@ -130,8 +131,11 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
 def _load_any_net(path):
     """Load a model checkpoint, auto-detecting architecture."""
     checkpoint = torch.load(path, map_location='cpu', weights_only=True)
-    if checkpoint.get('arch') == 'SigilNetHard':
+    arch = checkpoint.get('arch')
+    if arch == 'SigilNetHard':
         return SigilNetHard.load(path)
+    if arch == 'SigilNetGraph':
+        return SigilNetGraph.load(path)
     return SigilNet.load(path)
 
 
