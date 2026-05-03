@@ -34,8 +34,8 @@ TRUNK_DIM = 400             # ResNet trunk width
 NUM_RES_BLOCKS = 6          # Residual blocks in trunk
 POLICY_HIDDEN_DIM = 256     # Policy head hidden dimension
 VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
-# Per-turn encoding: 64 base + 16 tactical = 80
-TURN_FEATURE_DIM = 80
+# Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27) = 84
+TURN_FEATURE_DIM = 84
 
 # ---- Network architecture (hard — ~44M params, NNUE-style shallow+wide) ----
 HARD_SPELL_EMBED_DIM = 32   # Wider spell embedding

@@ -305,7 +305,7 @@ def board_to_tensor(board, side_to_move=None):
 def encode_turn(turn, board, color):
     """Encode a CompleteTurn as a fixed-size feature vector.
 
-    Returns: Tensor of shape (TURN_FEATURE_DIM,)  [80 features]
+    Returns: Tensor of shape (TURN_FEATURE_DIM,)  [84 features]
     """
     enemy = 'blue' if color == 'red' else 'red'
     features = np.zeros(TURN_FEATURE_DIM, dtype=np.float32)
@@ -333,10 +333,22 @@ def encode_turn(turn, board, color):
     #  [72]    — soft move count (number of soft moves this turn / 3)
     #  [73]    — hard move count
     #  [74]    — net spell-position stones added by this turn
-    #  [75:80] — reserved
+    #  [75]    — net stone change this turn  (signed, [-3,3]/3)  [v27]
+    #  [76]    — enemy threat-of-activation growth (max post-pre, [0,1])  [v27]
+    #  [77]    — own threat-of-activation growth (max post-pre, [0,1])  [v27]
+    #  [78]    — disrupts enemy mana-to-mana chain (count / 3)  [v27]
+    #  [79:84] — reserved
 
     crushable_own_before = _count_crushable(board, color, enemy)
     crushable_enm_before = _count_crushable(board, enemy, color)
+    # Pre-turn enemy/own threat-of-activation maxima (only currently-charged
+    # spells contribute non-zero entries; others are 0). Used by the v27
+    # threat-growth features.
+    pre_own_threat, pre_enm_threat = _threat_of_activation_features(
+        board, color, enemy)
+    pre_max_own_threat = float(pre_own_threat.max(initial=0.0))
+    pre_max_enm_threat = float(pre_enm_threat.max(initial=0.0))
+    pre_enemy_chains = _chain_count(board, enemy)
     sim_after = _simulate_turn(board, turn, color)
 
     move_target = None
@@ -420,12 +432,78 @@ def encode_turn(turn, board, color):
 
         features[70] = 1.0 if _has_castable_spell(sim_after, color) else 0.0
 
+        # --- v27: per-turn lookahead features (75–78) ---
+        net = (own_after - own_before) - (enm_after - enm_before)
+        features[75] = max(-3, min(3, net)) / 3.0
+
+        post_own_threat, post_enm_threat = _threat_of_activation_features(
+            sim_after, color, enemy)
+        # Enemy growing their own threat is bad for us (opponent's spell
+        # gets stronger after our move).
+        enemy_growth = max(
+            0.0,
+            float(post_enm_threat.max(initial=0.0)) - pre_max_enm_threat,
+        )
+        own_growth = max(
+            0.0,
+            float(post_own_threat.max(initial=0.0)) - pre_max_own_threat,
+        )
+        features[76] = min(enemy_growth, 1.0)
+        features[77] = min(own_growth, 1.0)
+
+        # Mana-to-mana chain disruption — how many enemy chains existed
+        # before that no longer do after our turn. Burch's "break the
+        # bridge stone" heuristic, computed mechanically.
+        post_enemy_chains = _chain_count(sim_after, enemy)
+        chains_broken = max(0, pre_enemy_chains - post_enemy_chains)
+        features[78] = min(chains_broken, 3) / 3.0
+
     features[71] = 1.0 if claimed_mana else 0.0
     features[72] = min(soft_count, 3) / 3.0
     features[73] = min(hard_count, 3) / 3.0
     features[74] = min(max(spell_pos_delta, -3), 3) / 3.0
 
     return torch.tensor(features, dtype=torch.float32)
+
+
+def _chain_count(board, color):
+    """Count mana-pair chains owned by `color`.
+
+    A chain is a path of `color` stones (via ADJACENCY, allowing the
+    mana-node endpoints themselves to be the bridge stones) connecting
+    two distinct mana nodes. With three mana nodes a1/b1/c1 there are
+    C(3,2) = 3 possible pairs; the helper returns how many of those
+    pairs have at least one such path. Used by the per-turn
+    `disrupts_enemy_chain` feature.
+    """
+    # Find connected components among `color`'s stones, *including* the
+    # mana nodes if they're occupied by `color`. Standard BFS.
+    visited = set()
+    components = []  # list of sets of node names
+    for n in NODE_ORDER:
+        if n in visited or board.stones[n] != color:
+            continue
+        comp = set()
+        stack = [n]
+        while stack:
+            cur = stack.pop()
+            if cur in comp:
+                continue
+            comp.add(cur)
+            for nb in ADJACENCY.get(cur, []):
+                if nb not in comp and board.stones[nb] == color:
+                    stack.append(nb)
+        visited |= comp
+        components.append(comp)
+
+    chains = 0
+    pairs = (('a1', 'b1'), ('a1', 'c1'), ('b1', 'c1'))
+    for x, y in pairs:
+        for comp in components:
+            if x in comp and y in comp:
+                chains += 1
+                break
+    return chains
 
 
 def _count_crushable(board, defender, attacker):

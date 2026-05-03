@@ -27,7 +27,8 @@ const NUM_SPELL_SLOTS = 9;
 const ESCAPE_MAX = 6;
 // Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat + 8 tempo = 450
 const RAW_FEATURE_DIM = 450;
-const TURN_FEATURE_DIM = 80;
+// Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27) = 84
+const TURN_FEATURE_DIM = 84;
 
 /**
  * Per-stone life-status block: 4 channels × 39 = 156 dims.
@@ -252,6 +253,39 @@ function boardToTensor(board, sideToMove) {
 	return { raw: features, spellIds };
 }
 
+/**
+ * Count mana-pair chains owned by `color`. Mirror of ai/features.py:_chain_count.
+ * A chain is a path of `color` stones (including any of {a1,b1,c1} when held
+ * by `color`) connecting two distinct mana nodes via ADJACENCY.
+ */
+function _chainCount(board, color) {
+	const visited = new Set();
+	const components = [];
+	for (const n of NODE_ORDER) {
+		if (visited.has(n) || board.stones[n] !== color) continue;
+		const comp = new Set();
+		const stack = [n];
+		while (stack.length) {
+			const cur = stack.pop();
+			if (comp.has(cur)) continue;
+			comp.add(cur);
+			for (const nb of (ADJACENCY[cur] || [])) {
+				if (!comp.has(nb) && board.stones[nb] === color) stack.push(nb);
+			}
+		}
+		for (const x of comp) visited.add(x);
+		components.push(comp);
+	}
+	const pairs = [['a1', 'b1'], ['a1', 'c1'], ['b1', 'c1']];
+	let chains = 0;
+	for (const [x, y] of pairs) {
+		for (const comp of components) {
+			if (comp.has(x) && comp.has(y)) { chains++; break; }
+		}
+	}
+	return chains;
+}
+
 function _countCrushable(board, defender, attacker) {
 	let n = 0;
 	for (let i = 0; i < NUM_NODES; i++) {
@@ -293,9 +327,18 @@ function _hasCastableSpell(board, color) {
 	return false;
 }
 
+function _maxThreatOfActivation(board, color, enemy) {
+	const t = _threatOfActivationFeatures(board, color, enemy);
+	let m = 0;
+	for (let i = 0; i < t.own.length; i++) if (t.own[i] > m) m = t.own[i];
+	let n = 0;
+	for (let i = 0; i < t.enm.length; i++) if (t.enm[i] > n) n = t.enm[i];
+	return { ownMax: m, enmMax: n };
+}
+
 /**
  * Encode a SimTurn as a fixed-size feature vector.
- * Returns Float32Array(80). Layout matches ai/features.py:encode_turn.
+ * Returns Float32Array(84). Layout matches ai/features.py:encode_turn.
  */
 function encodeTurn(turn, board, color) {
 	const enemy = color === 'red' ? 'blue' : 'red';
@@ -307,6 +350,8 @@ function encodeTurn(turn, board, color) {
 
 	const crushableOwnBefore = _countCrushable(board, color, enemy);
 	const crushableEnmBefore = _countCrushable(board, enemy, color);
+	const preThreats = _maxThreatOfActivation(board, color, enemy);
+	const preEnemyChains = _chainCount(board, enemy);
 	const simAfter = _simulateTurn(board, turn, color);
 
 	for (const action of turn.actions) {
@@ -375,6 +420,20 @@ function encodeTurn(turn, board, color) {
 		features[68] = Math.min(newThreats, 3) / 3.0;
 		features[69] = Math.min(clearedThreats, 3) / 3.0;
 		features[70] = _hasCastableSpell(simAfter, color) ? 1.0 : 0.0;
+
+		// --- v27: per-turn lookahead features (75–78) ---
+		const net = (ownAfter - ownBefore) - (enmAfter - enmBefore);
+		features[75] = Math.max(-3, Math.min(3, net)) / 3.0;
+
+		const postThreats = _maxThreatOfActivation(simAfter, color, enemy);
+		const enemyGrowth = Math.max(0.0, postThreats.enmMax - preThreats.enmMax);
+		const ownGrowth = Math.max(0.0, postThreats.ownMax - preThreats.ownMax);
+		features[76] = Math.min(enemyGrowth, 1.0);
+		features[77] = Math.min(ownGrowth, 1.0);
+
+		const postEnemyChains = _chainCount(simAfter, enemy);
+		const chainsBroken = Math.max(0, preEnemyChains - postEnemyChains);
+		features[78] = Math.min(chainsBroken, 3) / 3.0;
 	}
 
 	features[71] = claimedMana ? 1.0 : 0.0;

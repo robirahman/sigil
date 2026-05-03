@@ -56,7 +56,7 @@ class MCTSNode:
 
 def mcts_search(board, color, model, num_simulations=None, time_limit=None,
                 add_noise=False, temperature=None, forbidden_moves=None,
-                blunder_lambda=0.0):
+                blunder_lambda=0.0, strategic_alpha=0.0):
     """Run MCTS with batched leaf evaluation and return best turn + policy.
 
     Args:
@@ -80,7 +80,8 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
 
     root = MCTSNode(board.copy(), color)
     _expand_node(root, model, forbidden_moves=forbidden_moves,
-                 blunder_lambda=blunder_lambda)
+                 blunder_lambda=blunder_lambda,
+                 strategic_alpha=strategic_alpha)
 
     if root.is_terminal or root.legal_turns is None or len(root.legal_turns) == 0:
         from simboard import CompleteTurn, Action
@@ -107,7 +108,8 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
 
         batch_size = min(MCTS_BATCH_SIZE, num_simulations - sims_done)
         _simulate_batch(root, model, batch_size, forbidden_moves=forbidden_moves,
-                        blunder_lambda=blunder_lambda)
+                        blunder_lambda=blunder_lambda,
+                        strategic_alpha=strategic_alpha)
         sims_done += batch_size
 
     # Extract policy from visit counts (zero out forbidden as a safety net)
@@ -148,7 +150,8 @@ def mcts_search(board, color, model, num_simulations=None, time_limit=None,
     return root.legal_turns[action_idx], policy, root_value
 
 
-def _simulate_batch(root, model, batch_size, forbidden_moves=None, blunder_lambda=0.0):
+def _simulate_batch(root, model, batch_size, forbidden_moves=None,
+                    blunder_lambda=0.0, strategic_alpha=0.0):
     """Run batch_size MCTS simulations with batched leaf NN evaluation.
 
     Uses virtual loss to encourage different simulations to explore
@@ -259,6 +262,13 @@ def _simulate_batch(root, model, batch_size, forbidden_moves=None, blunder_lambd
             s = policy.sum()
             if s > 0:
                 policy = policy / s
+        if strategic_alpha > 0:
+            tf_np = eval_inputs[idx_in_eval][2].cpu().numpy()
+            from ai.strategic_eval import adjust_policy
+            policy = adjust_policy(
+                policy, tf_np, alpha=strategic_alpha,
+                forbidden_mask=node.forbidden_mask,
+            )
         node.prior = policy
         node.is_expanded = True
         leaf_values[leaf_idx] = value
@@ -362,7 +372,8 @@ def _select_action(node):
     return int(np.argmax(scores))
 
 
-def _expand_node(node, model, forbidden_moves=None, blunder_lambda=0.0):
+def _expand_node(node, model, forbidden_moves=None, blunder_lambda=0.0,
+                 strategic_alpha=0.0):
     """Expand a leaf node: enumerate legal turns, get NN evaluation.
 
     Returns: value estimate from current player's perspective.
@@ -410,6 +421,12 @@ def _expand_node(node, model, forbidden_moves=None, blunder_lambda=0.0):
         s = policy.sum()
         if s > 0:
             policy = policy / s
+    if strategic_alpha > 0:
+        from ai.strategic_eval import adjust_policy
+        policy = adjust_policy(
+            policy, turn_feats.cpu().numpy(), alpha=strategic_alpha,
+            forbidden_mask=node.forbidden_mask,
+        )
     node.prior = policy
     node.is_expanded = True
 

@@ -222,6 +222,9 @@ class SigilNetGraph(nn.Module):
         policy_logits = None
         blunder_logits = None
         if turn_features is not None:
+            expected = self.turn_proj.in_features
+            if turn_features.size(-1) > expected:
+                turn_features = turn_features[..., :expected]
             board_proj = self.policy_proj(x)
             turn_proj = self.turn_proj(turn_features)
             logits = torch.bmm(turn_proj, board_proj.unsqueeze(-1)).squeeze(-1)
@@ -276,7 +279,20 @@ class SigilNetGraph(nn.Module):
     def load(cls, path, device='cpu'):
         net = cls()
         ckpt = torch.load(path, map_location=device, weights_only=True)
-        net.load_state_dict(ckpt['model_state_dict'], strict=False)
+        state = ckpt['model_state_dict']
+        # Resize turn-feature-keyed projections to match an older
+        # checkpoint's TURN_FEATURE_DIM if it differs from the current
+        # constant — same approach as SigilNet.load.
+        if 'turn_proj.weight' in state:
+            d = state['turn_proj.weight'].shape[1]
+            if d != net.turn_proj.in_features:
+                net.turn_proj = nn.Linear(d, POLICY_HIDDEN_DIM)
+        if 'blunder_turn_proj.weight' in state:
+            d = state['blunder_turn_proj.weight'].shape[1]
+            if d != net.blunder_turn_proj.in_features:
+                from ai.sigil_net import BLUNDER_HIDDEN_DIM
+                net.blunder_turn_proj = nn.Linear(d, BLUNDER_HIDDEN_DIM)
+        net.load_state_dict(state, strict=False)
         net.eval()
         return net
 

@@ -123,6 +123,12 @@ class SigilNet(nn.Module):
         policy_logits = None
         blunder_logits = None
         if turn_features is not None:
+            # Allow callers to pass turn vectors longer than this checkpoint
+            # was trained on (e.g. v22b at 80-dim under v27's 84-dim feature
+            # schema). The model only sees the prefix it was trained on.
+            expected = self.turn_proj.in_features
+            if turn_features.size(-1) > expected:
+                turn_features = turn_features[..., :expected]
             board_proj = self.policy_proj(x)              # (B, 256)
             turn_proj = self.turn_proj(turn_features)     # (B, max_turns, 256)
             # Dot product: (B, max_turns, 256) @ (B, 256, 1) -> (B, max_turns)
@@ -140,8 +146,12 @@ class SigilNet(nn.Module):
                 # so its gradient does NOT flow back through policy_proj.
                 # Detach to keep the trunk training stable when blunder
                 # weight is high.
+                blunder_expected = self.blunder_turn_proj.in_features
+                tb_input = (turn_features[..., :blunder_expected]
+                            if turn_features.size(-1) > blunder_expected
+                            else turn_features)
                 bb = self.blunder_board_proj(x.detach())                 # (B, H)
-                tb = self.blunder_turn_proj(turn_features)               # (B, max_t, H)
+                tb = self.blunder_turn_proj(tb_input)                    # (B, max_t, H)
                 bl = torch.bmm(tb, bb.unsqueeze(-1)).squeeze(-1)         # (B, max_t)
                 bl = bl + self.blunder_bias
                 if turn_counts is not None:
@@ -227,10 +237,31 @@ class SigilNet(nn.Module):
         Uses strict=False so older checkpoints (predating the blunder head)
         still load — the blunder projections fall back to their freshly
         initialized weights and need to be trained before they're useful.
+
+        Also resizes layers whose input dim depends on TURN_FEATURE_DIM
+        (turn_proj, blunder_turn_proj) to match the checkpoint, so a
+        v22b checkpoint trained at TURN_FEATURE_DIM=80 still loads even
+        when the constant has since been bumped to 84.
         """
         net = cls()
         checkpoint = torch.load(path, map_location=device, weights_only=True)
-        net.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        state = checkpoint['model_state_dict']
+        # Resize turn-feature-keyed projections to the checkpoint's dim
+        # before load_state_dict, otherwise we get shape mismatches.
+        if 'turn_proj.weight' in state:
+            ckpt_turn_dim = state['turn_proj.weight'].shape[1]
+            if ckpt_turn_dim != net.turn_proj.in_features:
+                net.turn_proj = nn.Linear(ckpt_turn_dim, POLICY_HIDDEN_DIM)
+        if 'blunder_turn_proj.weight' in state:
+            ckpt_blunder_dim = state['blunder_turn_proj.weight'].shape[1]
+            if ckpt_blunder_dim != net.blunder_turn_proj.in_features:
+                net.blunder_turn_proj = nn.Linear(ckpt_blunder_dim, BLUNDER_HIDDEN_DIM)
+        net.load_state_dict(state, strict=False)
+        net._turn_feature_dim = (
+            state['turn_proj.weight'].shape[1]
+            if 'turn_proj.weight' in state
+            else net.turn_proj.in_features
+        )
         net.eval()
         return net
 

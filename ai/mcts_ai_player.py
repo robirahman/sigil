@@ -30,6 +30,12 @@ _HARD_MODEL = os.path.join(MODELS_DIR, 'best_model_hard.pt')
 # moves arbitrarily — keep at 0 until a future model trains the head.
 BLUNDER_LAMBDA = 0.0
 
+# Strength of the hand-coded strategic evaluator (ai/strategic_eval.py).
+# 0 = disabled (network policy used as-is). 1.0 = bias priors moderately
+# toward turns with positive net stones, no enemy threat growth, chain
+# disruption, etc. Higher values override the network more aggressively.
+STRATEGIC_ALPHA = 1.0
+
 
 class MCTSAIPlayer(NNAIPlayer):
     """AI player using MCTS + SigilNet.
@@ -88,6 +94,7 @@ class MCTSAIPlayer(NNAIPlayer):
             add_noise=False,
             temperature=None,  # Greedy in production
             blunder_lambda=BLUNDER_LAMBDA,
+            strategic_alpha=STRATEGIC_ALPHA,
         )
 
         if best_turn is None:

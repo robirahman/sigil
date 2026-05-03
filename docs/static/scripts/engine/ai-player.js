@@ -289,14 +289,18 @@ class GreedyAI {
 }
 
 class NeuralAI {
-	constructor(model, numSimulations) {
+	constructor(model, numSimulations, strategicAlpha) {
 		this.model = model;
 		this.numSimulations = numSimulations || MCTS_DEFAULT_SIMS;
+		this.strategicAlpha = strategicAlpha || 0;
 	}
 
 	pickTurn(board, color) {
 		const simBoard = SimBoard.fromSigilBoard(board);
-		const { turn } = mctsSearch(simBoard, color, this.model, this.numSimulations);
+		const { turn } = mctsSearch(
+			simBoard, color, this.model, this.numSimulations,
+			this.strategicAlpha,
+		);
 		return turn;
 	}
 }

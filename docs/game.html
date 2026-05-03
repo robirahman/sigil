@@ -336,7 +336,7 @@
 							</button>
 							<button
 								class="action-button"
-								x-bind:class="{ 'is-hidden': !currentSfn }"
+								x-bind:class="{ 'is-hidden': !currentSfn || winner }"
 								x-on:click="exportPosition"
 								x-text="exportCopied ? 'Copied!' : 'Export Position'"
 							>
@@ -345,7 +345,7 @@
 						</div>
 						<div
 							class="import-form"
-							x-show="!whoseTurn && !currentSfn"
+							x-show="!whoseTurn && !currentSfn && !reviewMode"
 						>
 							<textarea
 								x-model="importSfn"
@@ -357,6 +357,17 @@
 								x-bind:disabled="!importSfn.trim()"
 							>
 								Import Position
+							</button>
+							<textarea
+								x-model="importGameText"
+								placeholder="...or paste an exported game to review it"
+							></textarea>
+							<button
+								class="action-button"
+								x-on:click="importGame"
+								x-bind:disabled="!importGameText.trim()"
+							>
+								Import Game
 							</button>
 						</div>
 					</div>
@@ -553,6 +564,7 @@
 					</div>
 					<div class="win-modal__actions">
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
+						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<a class="win-modal__btn" href="./">Main Menu</a>
 					</div>
 				</div>
@@ -578,6 +590,7 @@
 		<script src="static/scripts/engine/features.js"></script>
 		<script src="static/scripts/engine/sigil-net.js"></script>
 		<script src="static/scripts/engine/sigil-net-graph.js"></script>
+		<script src="static/scripts/engine/strategic-eval.js"></script>
 		<script src="static/scripts/engine/mcts.js"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>

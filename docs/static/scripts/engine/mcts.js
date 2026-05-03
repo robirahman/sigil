@@ -38,11 +38,12 @@ class MCTSNode {
  * @param {number} numSimulations
  * @returns {{ turn: SimTurn, policy: Float32Array, value: number }}
  */
-function mctsSearch(board, color, model, numSimulations) {
+function mctsSearch(board, color, model, numSimulations, strategicAlpha) {
 	numSimulations = numSimulations || MCTS_DEFAULT_SIMS;
+	strategicAlpha = strategicAlpha || 0;
 
 	const root = new MCTSNode(board.copy(), color);
-	_mctsExpand(root, model);
+	_mctsExpand(root, model, strategicAlpha);
 
 	if (root.isTerminal || !root.legalTurns || root.legalTurns.length === 0) {
 		return {
@@ -95,7 +96,7 @@ function mctsSearch(board, color, model, numSimulations) {
 		} else if (node.isExpanded) {
 			leafValue = 0;
 		} else {
-			leafValue = _mctsExpand(node, model);
+			leafValue = _mctsExpand(node, model, strategicAlpha);
 		}
 
 		// Backup
@@ -131,7 +132,7 @@ function mctsSearch(board, color, model, numSimulations) {
 	return { turn: root.legalTurns[bestIdx], policy, value: rootValue };
 }
 
-function _mctsExpand(node, model) {
+function _mctsExpand(node, model, strategicAlpha) {
 	const board = node.board;
 
 	if (board.gameover) {
@@ -159,7 +160,13 @@ function _mctsExpand(node, model) {
 	const { raw, spellIds } = boardToTensor(board, node.color);
 	const turnFeats = encodeAllTurns(node.legalTurns, board, node.color);
 	const { value, policy } = model.evaluateWithPolicy(raw, spellIds, turnFeats, N);
-	node.prior = policy;
+	let adjusted = policy;
+	if (strategicAlpha && strategicAlpha > 0) {
+		adjusted = strategicAdjustPolicy(
+			policy, turnFeats, N, TURN_FEATURE_DIM, strategicAlpha,
+		);
+	}
+	node.prior = adjusted;
 	node.isExpanded = true;
 	return value;
 }

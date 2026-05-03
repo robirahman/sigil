@@ -41,7 +41,9 @@ document.addEventListener('alpine:init', () => {
 			whoseTurn: '',
 			currentSfn: '',
 			importSfn: initialImportSfn,
+			importGameText: '',
 			exportCopied: false,
+			gameExportCopied: false,
 			winner: '',
 
 			// Game review state
@@ -49,6 +51,86 @@ document.addEventListener('alpine:init', () => {
 			reviewIndex: 0,
 			reviewSfns: [],
 			reviewTurnLabels: [],
+			_spellNamesForExport: [],
+			_redNameForExport: 'Red',
+			_blueNameForExport: 'Blue',
+			_gameLogForExport: null,
+
+			importGame() {
+				const text = (this.importGameText || '').trim();
+				if (!text) return;
+				let payload;
+				try {
+					payload = JSON.parse(text);
+				} catch (e) {
+					alert('Could not parse game data: ' + e.message);
+					return;
+				}
+				if (!payload || payload.type !== 'sigil-game' || !Array.isArray(payload.sfns)) {
+					alert('Not a Sigil game export.');
+					return;
+				}
+				try {
+					sessionStorage.setItem('sigil_import_game', text);
+					window.location.href = window.location.pathname + '?review=session';
+				} catch (e) {
+					// sessionStorage unavailable — load in-place as fallback
+					this._loadReviewFromPayload(payload);
+				}
+			},
+
+			_loadReviewFromPayload(payload) {
+				const spellNames = payload.spellNames || [];
+				const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
+				const dict = {};
+				const images = {};
+				const text = {};
+				for (let i = 0; i < 9 && i < spellNames.length; i++) {
+					const name = spellNames[i];
+					dict[posNames[i]] = name;
+					images[posNames[i]] = 'static/images/spells/' + name + '.png';
+					text[posNames[i]] = {
+						name: name.replace(/_/g, ' '),
+						text: (typeof SPELL_TEXTS !== 'undefined' && SPELL_TEXTS[name]) || '',
+					};
+				}
+				this.spellDict = dict;
+				this.spells.images = images;
+				this.spells.text = text;
+				this.reviewSfns = payload.sfns.slice();
+				this.reviewTurnLabels = (payload.turnLabels || []).slice();
+				this.winner = payload.winner || '';
+				this._spellNamesForExport = spellNames.slice();
+				this._redNameForExport = payload.redName || 'Red';
+				this._blueNameForExport = payload.blueName || 'Blue';
+				this.annotations = Object.assign({}, payload.annotations || {});
+				this.reviewMode = true;
+				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+				this.messageHistory.push('Loaded imported game for review.');
+			},
+
+			exportGame() {
+				if (this.reviewSfns.length === 0) return;
+				const payload = {
+					v: 1,
+					type: 'sigil-game',
+					spellNames: this._spellNamesForExport,
+					winner: this.winner,
+					redName: this._redNameForExport,
+					blueName: this._blueNameForExport,
+					timestamp: Date.now(),
+					sfns: this.reviewSfns.slice(),
+					turnLabels: this.reviewTurnLabels.slice(),
+					annotations: Object.assign({}, this.annotations || {}),
+					gameLog: this._gameLogForExport || null,
+				};
+				const text = JSON.stringify(payload);
+				navigator.clipboard.writeText(text).then(() => {
+					this.gameExportCopied = true;
+					setTimeout(() => { this.gameExportCopied = false; }, 2000);
+				});
+			},
 
 			// Annotation state (only used in vs-AI mode with mode enabled)
 			myColor: '',
@@ -274,6 +356,35 @@ document.addEventListener('alpine:init', () => {
 					});
 				});
 
+				// Direct review-mode entry from import flow:
+				//   ?review=session  → JSON stashed in sessionStorage by importGame()
+				//   ?review=<json>   → inline JSON (fallback for short payloads / shared URLs)
+				const reviewBlob = new URLSearchParams(window.location.search).get('review');
+				if (reviewBlob) {
+					let raw = null;
+					if (reviewBlob === 'session') {
+						try {
+							raw = sessionStorage.getItem('sigil_import_game');
+							sessionStorage.removeItem('sigil_import_game');
+						} catch (e) { /* sessionStorage blocked */ }
+					} else {
+						try { raw = decodeURIComponent(reviewBlob); } catch (e) { raw = null; }
+					}
+					if (raw) {
+						try {
+							const payload = JSON.parse(raw);
+							if (payload && payload.type === 'sigil-game') {
+								warnBeforeUnload = false;
+								_this._loadReviewFromPayload(payload);
+								_this.sendEvent = function() {};
+								return;
+							}
+						} catch (e) {
+							console.error('Bad review payload:', e);
+						}
+					}
+				}
+
 				// --- Local engine instead of WebSocket ---
 				const aiMode = new URLSearchParams(window.location.search).get('ai');
 				let _engineRef = null;
@@ -308,7 +419,11 @@ document.addEventListener('alpine:init', () => {
 						options.ai = new GreedyAI();
 					} else if (aiMode === 'medium' || aiMode === 'aux' || aiMode === 'graph') {
 						// Each mode loads a different experimental model so I
-						// can A/B them against each other on rated games.
+						// can A/B them against each other on rated games. The
+						// strategic-eval search-time guardrail is on by default
+						// for all neural variants — it costs nothing per move
+						// and consistently suppresses naked dashes / lets-the-
+						// enemy-Fireblast-grow turns regardless of model.
 						const variant = {
 							medium: { name: 'sigil_net',       loader: SigilNetJS },
 							aux:    { name: 'sigil_net_aux',   loader: SigilNetJS },
@@ -320,7 +435,7 @@ document.addEventListener('alpine:init', () => {
 								`static/models/${variant.name}.bin`,
 							);
 							options.aiColor = _aiColor;
-							options.ai = new NeuralAI(model, 100);
+							options.ai = new NeuralAI(model, 100, 1.0);
 						} catch (e) {
 							console.error('Failed to load AI model, falling back to greedy:', e);
 							options.aiColor = _aiColor;
@@ -629,6 +744,17 @@ document.addEventListener('alpine:init', () => {
 						}
 						_this.reviewSfns = sfns;
 						_this.reviewTurnLabels = labels;
+						_this._gameLogForExport = payload.gameLog;
+						if (_engineRef && _engineRef.board && _engineRef.board.spellNames) {
+							_this._spellNamesForExport = _engineRef.board.spellNames.slice();
+						}
+						if (aiMode) {
+							_this._redNameForExport = _aiColor === 'red' ? ('AI (' + aiMode + ')') : 'You';
+							_this._blueNameForExport = _aiColor === 'blue' ? ('AI (' + aiMode + ')') : 'You';
+						} else {
+							_this._redNameForExport = 'Red';
+							_this._blueNameForExport = 'Blue';
+						}
 					}
 
 					// Process Elo for rated AI games
@@ -666,11 +792,41 @@ document.addEventListener('alpine:init', () => {
 						// Ensure human profile is loaded
 						await _aiAuthManager.ensureUserProfile(db);
 
+						const spellNamesArr = _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'];
+						const gameTurns = _engineRef ? _engineRef._gameLog : [];
+						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
+						const humanName = aiLabel || _aiAuthManager.displayName || 'You';
+						const aiName = _aiNameFor(difficulty);
+
+						// Create a /rooms entry so the game is replayable from the
+						// profile page via multiplayer.html?id=CODE. AI games don't
+						// have a real room during play, but we synthesize one here
+						// purely as a replay record.
+						const roomCode = _generateLocalRoomCode();
+						try {
+							await db.ref('rooms/' + roomCode).set({
+								spellNames: spellNamesArr,
+								status: 'finished',
+								created: Date.now(),
+								finishedAt: Date.now(),
+								red: { connected: false, uid: _humanColor === 'red' ? humanUid : aiUid, displayName: _humanColor === 'red' ? humanName : aiName },
+								blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
+								ranked: true,
+								winner: winner,
+								gameLog: gameTurns,
+								allowSpectators: true,
+								timeControl: { type: 'none' },
+							});
+						} catch (e) {
+							console.warn('Could not save AI replay room:', e.message);
+						}
+
 						const gameRecord = {
-							spellNames: _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'],
+							spellNames: spellNamesArr,
 							winner: winner,
-							turns: _engineRef ? _engineRef._gameLog : ['none'],
+							turns: gameTurns,
 							timestamp: Date.now(),
+							roomCode: roomCode,
 							redUid: _humanColor === 'red' ? humanUid : aiUid,
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
 							ranked: true,
@@ -694,6 +850,23 @@ document.addEventListener('alpine:init', () => {
 						console.error('Failed to process AI Elo:', e);
 						_this.messageHistory.push('Rating error: ' + e.message);
 					}
+				}
+
+				function _aiNameFor(difficulty) {
+					const labels = {
+						easy: 'AI (Easy)',
+						medium: 'AI (Medium)',
+						aux: 'AI (Tactical Aux)',
+						graph: 'AI (Graph Trunk)',
+					};
+					return labels[difficulty] || ('AI (' + difficulty + ')');
+				}
+
+				function _generateLocalRoomCode() {
+					const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+					let code = '';
+					for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+					return code;
 				}
 
 				async function _ensureAiUser(db, aiUid, difficulty) {
