@@ -306,12 +306,18 @@ document.addEventListener('alpine:init', () => {
 					if (aiMode === 'easy') {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
-					} else if (aiMode === 'medium') {
-						// Load neural network model
+					} else if (aiMode === 'medium' || aiMode === 'aux' || aiMode === 'graph') {
+						// Each mode loads a different experimental model so I
+						// can A/B them against each other on rated games.
+						const variant = {
+							medium: { name: 'sigil_net',       loader: SigilNetJS },
+							aux:    { name: 'sigil_net_aux',   loader: SigilNetJS },
+							graph:  { name: 'sigil_net_graph', loader: SigilNetGraphJS },
+						}[aiMode];
 						try {
-							const model = await SigilNetJS.load(
-								'static/models/sigil_net.json',
-								'static/models/sigil_net.bin'
+							const model = await variant.loader.load(
+								`static/models/${variant.name}.json`,
+								`static/models/${variant.name}.bin`,
 							);
 							options.aiColor = _aiColor;
 							options.ai = new NeuralAI(model, 100);
@@ -694,7 +700,13 @@ document.addEventListener('alpine:init', () => {
 					const ref = db.ref('users/' + aiUid);
 					const snap = await ref.once('value');
 					if (!snap.exists()) {
-						const name = difficulty === 'easy' ? 'AI (Easy)' : 'AI (Medium)';
+						const labels = {
+							easy: 'AI (Easy)',
+							medium: 'AI (Medium)',
+							aux: 'AI (Tactical Aux)',
+							graph: 'AI (Graph Trunk)',
+						};
+						const name = labels[difficulty] || `AI (${difficulty})`;
 						await ref.set({
 							displayName: name,
 							elo: 1000,
