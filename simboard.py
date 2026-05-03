@@ -515,9 +515,12 @@ class SimBoard:
                     self.stones[target] = color
                     actions.append(Action('blink', node=target))
                 self.update()
-                # Sacrifice the least valuable stone
+                # Sacrifice the least valuable stone — but never the
+                # just-placed blink target (that defeats the purpose of
+                # the spell). JS implementation skips `target`; this
+                # matches it for cross-engine feature parity.
                 for name in reversed(NODE_ORDER):
-                    if self.stones[name] == color:
+                    if self.stones[name] == color and name != target:
                         self.stones[name] = None
                         actions.append(Action('sacrifice', node=name))
                         break
