@@ -418,8 +418,7 @@ document.addEventListener('alpine:init', () => {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
 					} else if (
-						aiMode === 'medium' ||
-						aiMode === 'graph' || aiMode === 'minimax' ||
+						aiMode === 'medium' || aiMode === 'minimax' ||
 						aiMode === 'hard'
 					) {
 						// Each mode loads a different experimental model so I
@@ -439,10 +438,9 @@ document.addEventListener('alpine:init', () => {
 						// closed the gap on this data, so the production "Hard"
 						// tier is search-deep rather than network-bigger.
 						const variant = {
-							medium:  { name: 'sigil_net',       loader: SigilNetJS },
-							graph:   { name: 'sigil_net_graph', loader: SigilNetGraphJS },
-							minimax: { name: 'sigil_net',       loader: SigilNetJS },
-							hard:    { name: 'sigil_net',       loader: SigilNetJS },
+							medium:  { name: 'sigil_net', loader: SigilNetJS },
+							minimax: { name: 'sigil_net', loader: SigilNetJS },
+							hard:    { name: 'sigil_net', loader: SigilNetJS },
 						}[aiMode];
 						const useMinimax = (aiMode === 'minimax' || aiMode === 'hard');
 						try {
@@ -881,7 +879,6 @@ document.addEventListener('alpine:init', () => {
 						easy: 'AI (Easy)',
 						medium: 'AI (Medium)',
 						hard: 'AI (Hard)',
-						graph: 'AI (Graph Trunk)',
 						minimax: 'AI (Minimax 3-ply)',
 					};
 					return labels[difficulty] || ('AI (' + difficulty + ')');
@@ -901,7 +898,6 @@ document.addEventListener('alpine:init', () => {
 						const labels = {
 							easy: 'AI (Easy)',
 							medium: 'AI (Medium)',
-							graph: 'AI (Graph Trunk)',
 							minimax: 'AI (Minimax 3-ply)',
 						};
 						const name = labels[difficulty] || `AI (${difficulty})`;
