@@ -206,7 +206,7 @@ function _minimaxEvalLeaf(board, color, model) {
 	return value;
 }
 
-function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps) {
+function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps, blunderLambda) {
 	let turns;
 	if (exhaustiveCaps && typeof getLegalTurnsExhaustive === 'function') {
 		turns = getLegalTurnsExhaustive(board, color, exhaustiveCaps);
@@ -217,14 +217,26 @@ function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps
 	const { raw, spellIds } = boardToTensor(board, color);
 	const tf = encodeAllTurns(turns, board, color);
 	const N = turns.length;
-	const { value, policyLogits } = model.forward(raw, spellIds, tf, N);
+	blunderLambda = blunderLambda || 0;
+	const useBlunder = blunderLambda > 0;
+	const { value, policyLogits, blunderLogits } = model.forward(
+		raw, spellIds, tf, N, useBlunder);
 	void value;
-	// Softmax to get policy
+	// Softmax to get policy (with optional blunder suppression)
+	const adj = useBlunder && blunderLogits
+		? new Float32Array(N)
+		: policyLogits;
+	if (useBlunder && blunderLogits) {
+		for (let i = 0; i < N; i++) {
+			const sig = 1 / (1 + Math.exp(-blunderLogits[i]));
+			adj[i] = policyLogits[i] - blunderLambda * sig;
+		}
+	}
 	let maxL = -Infinity;
-	for (let i = 0; i < N; i++) if (policyLogits[i] > maxL) maxL = policyLogits[i];
+	for (let i = 0; i < N; i++) if (adj[i] > maxL) maxL = adj[i];
 	const policy = new Float32Array(N);
 	let sum = 0;
-	for (let i = 0; i < N; i++) { policy[i] = Math.exp(policyLogits[i] - maxL); sum += policy[i]; }
+	for (let i = 0; i < N; i++) { policy[i] = Math.exp(adj[i] - maxL); sum += policy[i]; }
 	for (let i = 0; i < N; i++) policy[i] /= sum;
 	// Score = log(policy) + alpha * strategic_score
 	const order = [];
@@ -239,7 +251,7 @@ function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps
 
 function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
                            orderingAlpha, exhaustiveRoot, exhaustiveOpponent,
-                           isRoot, tt, killers, ply) {
+                           blunderLambda, isRoot, tt, killers, ply) {
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
 		return { score: _minimaxEvalLeaf(board, color, model), move: null };
@@ -278,7 +290,7 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 	} else if (exhaustiveOpponent && ply === 1) {
 		caps = (typeof OPPONENT_ENUM_CAPS !== 'undefined') ? OPPONENT_ENUM_CAPS : null;
 	}
-	const turns = _minimaxOrderedTurns(board, color, model, orderingAlpha, caps);
+	const turns = _minimaxOrderedTurns(board, color, model, orderingAlpha, caps, blunderLambda);
 	if (turns.length === 0) {
 		return { score: _minimaxEvalLeaf(board, color, model), move: null };
 	}
@@ -303,6 +315,7 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 		const sub = _minimaxAlphaBeta(sim, enemy, depth - 1, -beta, -alpha,
 		                              model, deadline, orderingAlpha,
 		                              exhaustiveRoot, exhaustiveOpponent,
+		                              blunderLambda,
 		                              false, tt, killers, ply + 1);
 		const score = -sub.score;
 		if (score > bestScore) { bestScore = score; bestMove = turn; }
@@ -342,6 +355,7 @@ function minimaxSearch(board, color, model, opts) {
 	const orderingAlpha = opts.orderingAlpha !== undefined ? opts.orderingAlpha : 1.0;
 	const exhaustiveRoot = !!opts.exhaustiveRoot;
 	const exhaustiveOpponent = !!opts.exhaustiveOpponent;
+	const blunderLambda = opts.blunderLambda || 0;
 	const enableTT = opts.enableTT !== undefined ? !!opts.enableTT : true;
 	const enableKillers = opts.enableKillers !== undefined ? !!opts.enableKillers : true;
 	const aspirationDelta = opts.aspirationDelta !== undefined ? opts.aspirationDelta : 0.15;
@@ -387,6 +401,7 @@ function minimaxSearch(board, color, model, opts) {
 				r = _minimaxAlphaBeta(board, color, depth, alpha, beta,
 				                     model, deadline, orderingAlpha,
 				                     exhaustiveRoot, exhaustiveOpponent,
+				                     blunderLambda,
 				                     true, tt, killers, 0);
 				if (r.score <= alpha && alpha > -MINIMAX_INF) {
 					alpha = -MINIMAX_INF;

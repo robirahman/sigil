@@ -28,6 +28,7 @@ class SigilNetJS {
 	}
 
 	_getW(key) { return this.w[key].data; }
+	_hasW(key) { return this.w && (key in this.w); }
 	_getShape(key) { return this.w[key].shape; }
 
 	// Matrix multiply: (M,K) x (K,N) -> (M,N)
@@ -124,9 +125,11 @@ class SigilNetJS {
 	 * @param {Int32Array} spellIds - (9,) single position
 	 * @param {Float32Array|null} turnFeatures - (N * 64) flat, N legal turns
 	 * @param {number} numTurns - number of turns
-	 * @returns {{ value: number, policyLogits: Float32Array|null }}
+	 * @param {boolean} returnBlunder - also return per-turn blunder logits
+	 * @returns {{ value: number, policyLogits: Float32Array|null,
+	 *            blunderLogits: Float32Array|null }}
 	 */
-	forward(rawFeatures, spellIds, turnFeatures, numTurns) {
+	forward(rawFeatures, spellIds, turnFeatures, numTurns, returnBlunder) {
 		const cfg = this.config;
 
 		// Spell embedding lookup
@@ -166,6 +169,7 @@ class SigilNetJS {
 
 		// Policy head
 		let policyLogits = null;
+		let blunderLogits = null;
 		if (turnFeatures && numTurns > 0) {
 			// board projection: (1, 400) -> (1, 256)
 			const boardProj = this._linear(trunk, 1, trunkDim, 'policy_proj.weight', 'policy_proj.bias');
@@ -181,32 +185,74 @@ class SigilNetJS {
 				}
 				policyLogits[i] = dot;
 			}
+
+			// Auxiliary blunder head (mirror SigilNet.forward in Python).
+			// Bilinear: blunder_board_proj(trunk) · blunder_turn_proj(turn)
+			//          + blunder_bias. Bias scalar applied per-turn.
+			if (returnBlunder && this._hasW('blunder_board_proj.weight')) {
+				const bbWeight = this._getW('blunder_board_proj.weight');
+				const bH = (bbWeight.length / trunkDim) | 0;  // hidden dim
+				const bbBoard = this._linear(
+					trunk, 1, trunkDim,
+					'blunder_board_proj.weight', 'blunder_board_proj.bias');
+				const bbTurn = this._linear(
+					turnFeatures, numTurns, cfg.turn_feature_dim,
+					'blunder_turn_proj.weight', 'blunder_turn_proj.bias');
+				const bias = this._getW('blunder_bias')[0];
+				blunderLogits = new Float32Array(numTurns);
+				for (let i = 0; i < numTurns; i++) {
+					let dot = 0;
+					for (let j = 0; j < bH; j++) {
+						dot += bbTurn[i * bH + j] * bbBoard[j];
+					}
+					blunderLogits[i] = dot + bias;
+				}
+			}
 		}
 
-		return { value, policyLogits };
+		return { value, policyLogits, blunderLogits };
 	}
 
 	/**
 	 * Full evaluation: value + softmax policy.
+	 *
+	 * `blunderLambda > 0` activates the auxiliary blunder head and
+	 * subtracts `blunderLambda * sigmoid(blunderLogit)` from each
+	 * policy logit before softmax — suppresses moves the head flags
+	 * as human-curated blunders. Mirrors `evaluate_with_policy` in
+	 * ai/sigil_net.py.
+	 *
 	 * Returns { value: number, policy: Float32Array(N) }
 	 */
-	evaluateWithPolicy(rawFeatures, spellIds, turnFeatures, numTurns) {
-		const { value, policyLogits } = this.forward(rawFeatures, spellIds, turnFeatures, numTurns);
+	evaluateWithPolicy(rawFeatures, spellIds, turnFeatures, numTurns, blunderLambda) {
+		blunderLambda = blunderLambda || 0;
+		const useBlunder = blunderLambda > 0;
+		const { value, policyLogits, blunderLogits } = this.forward(
+			rawFeatures, spellIds, turnFeatures, numTurns, useBlunder);
 
 		let policy;
 		if (policyLogits && policyLogits.length > 0) {
+			// Apply blunder suppression to logits before softmax.
+			let adj = policyLogits;
+			if (useBlunder && blunderLogits) {
+				adj = new Float32Array(policyLogits.length);
+				for (let i = 0; i < policyLogits.length; i++) {
+					const sig = 1 / (1 + Math.exp(-blunderLogits[i]));
+					adj[i] = policyLogits[i] - blunderLambda * sig;
+				}
+			}
 			// Softmax
 			let maxVal = -Infinity;
-			for (let i = 0; i < policyLogits.length; i++) {
-				if (policyLogits[i] > maxVal) maxVal = policyLogits[i];
+			for (let i = 0; i < adj.length; i++) {
+				if (adj[i] > maxVal) maxVal = adj[i];
 			}
-			const exp = new Float32Array(policyLogits.length);
+			const exp = new Float32Array(adj.length);
 			let sum = 0;
-			for (let i = 0; i < policyLogits.length; i++) {
-				exp[i] = Math.exp(policyLogits[i] - maxVal);
+			for (let i = 0; i < adj.length; i++) {
+				exp[i] = Math.exp(adj[i] - maxVal);
 				sum += exp[i];
 			}
-			policy = new Float32Array(policyLogits.length);
+			policy = new Float32Array(adj.length);
 			for (let i = 0; i < policy.length; i++) policy[i] = exp[i] / sum;
 		} else {
 			policy = new Float32Array([1.0]);

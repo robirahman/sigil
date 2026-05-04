@@ -303,7 +303,7 @@ def _eval_leaf(board, color, model):
 
 
 def _ordered_turns(board, color, model, ordering_alpha=1.0,
-                   exhaustive_caps=None):
+                   exhaustive_caps=None, blunder_lambda=0.0):
     """Return legal turns sorted by (log policy + strategic_score), descending.
 
     Strong move ordering is what makes alpha-beta efficient — the first
@@ -318,6 +318,11 @@ def _ordered_turns(board, color, model, ordering_alpha=1.0,
     move target, and every variant of choice-bearing spells (Bewitch
     pair, Carnage target, Meteor/Comet blink target, Starfall pair,
     …). Pass None for greedy (the engine's default).
+
+    When `blunder_lambda > 0`, the trained auxiliary blunder head's
+    sigmoid output is subtracted from the policy logit (scaled by
+    `blunder_lambda`), suppressing turns the head flags as
+    human-curated blunders. Mirrors `model.evaluate_with_policy`.
     """
     if exhaustive_caps is not None:
         turns = list(get_legal_turns_exhaustive(board, color, caps=exhaustive_caps))
@@ -329,7 +334,8 @@ def _ordered_turns(board, color, model, ordering_alpha=1.0,
         return turns
     raw, spell_ids = board_to_tensor(board, color)
     tf = encode_all_turns(turns, board, color)
-    _v, policy = model.evaluate_with_policy(raw, spell_ids, tf)
+    _v, policy = model.evaluate_with_policy(
+        raw, spell_ids, tf, blunder_lambda=blunder_lambda)
     strat = strategic_scores(tf.cpu().numpy())
     score = np.log(np.maximum(policy, 1e-6)) + ordering_alpha * strat
     order = np.argsort(-score)
@@ -342,7 +348,8 @@ class _Timeout(Exception):
 
 def _alphabeta(board, color, depth, alpha, beta, model, deadline,
                ordering_alpha=1.0, exhaustive_root=False,
-               exhaustive_opponent=False, _is_root=True,
+               exhaustive_opponent=False, blunder_lambda=0.0,
+               _is_root=True,
                tt=None, killers=None, hasher=None, ply=0):
     """Negamax alpha-beta. Returns (score from `color`'s perspective, best move).
 
@@ -397,6 +404,7 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
         board, color, model,
         ordering_alpha=ordering_alpha,
         exhaustive_caps=caps,
+        blunder_lambda=blunder_lambda,
     )
     if not turns:
         return _eval_leaf(board, color, model), None
@@ -421,7 +429,9 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
             sim, enemy, depth - 1, -beta, -alpha, model, deadline,
             ordering_alpha=ordering_alpha,
             exhaustive_root=exhaustive_root,
-            exhaustive_opponent=exhaustive_opponent, _is_root=False,
+            exhaustive_opponent=exhaustive_opponent,
+            blunder_lambda=blunder_lambda,
+            _is_root=False,
             tt=tt, killers=killers, hasher=hasher, ply=ply + 1,
         )
         score = -sub_score
@@ -451,7 +461,8 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
 
 def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
                    ordering_alpha=1.0, exhaustive_root=False,
-                   exhaustive_opponent=False, verbose=False,
+                   exhaustive_opponent=False, blunder_lambda=0.0,
+                   verbose=False,
                    enable_tt=True, enable_killers=True,
                    aspiration_delta=0.15,
                    tt_max_size=200_000, max_ply=8, tt=None):
@@ -531,7 +542,9 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
                     board, color, depth, alpha, beta, model, deadline,
                     ordering_alpha=ordering_alpha,
                     exhaustive_root=exhaustive_root,
-                    exhaustive_opponent=exhaustive_opponent, _is_root=True,
+                    exhaustive_opponent=exhaustive_opponent,
+                    blunder_lambda=blunder_lambda,
+                    _is_root=True,
                     tt=tt_obj, killers=killers, hasher=hasher, ply=0,
                 )
                 if score <= alpha and alpha > -_INF:

@@ -289,17 +289,23 @@ class GreedyAI {
 }
 
 class NeuralAI {
-	constructor(model, numSimulations, strategicAlpha) {
+	constructor(model, numSimulations, strategicAlpha, blunderLambda) {
 		this.model = model;
 		this.numSimulations = numSimulations || MCTS_DEFAULT_SIMS;
 		this.strategicAlpha = strategicAlpha || 0;
+		// Auxiliary blunder head suppression strength. The head was
+		// trained on Firebase-curated 'bad' annotations and arena-passed
+		// at lambda=1.0 (11-9 vs lambda=0). When the head's
+		// generalization improves with more annotation data, this can
+		// be raised; for now 1.0 is the production default.
+		this.blunderLambda = blunderLambda !== undefined ? blunderLambda : 1.0;
 	}
 
 	pickTurn(board, color) {
 		const simBoard = SimBoard.fromSigilBoard(board);
 		const { turn } = mctsSearch(
 			simBoard, color, this.model, this.numSimulations,
-			this.strategicAlpha,
+			this.strategicAlpha, this.blunderLambda,
 		);
 		return turn;
 	}
@@ -335,6 +341,7 @@ class MinimaxAI {
 				orderingAlpha: 1.0,
 				exhaustiveRoot: true,
 				exhaustiveOpponent: false,
+				blunderLambda: 1.0,
 				enableTT: true,
 				enableKillers: true,
 				aspirationDelta: 0.15,

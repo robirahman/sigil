@@ -25,10 +25,11 @@ _HARD_MODEL = os.path.join(MODELS_DIR, 'best_model_hard.pt')
 
 # Strength of the auxiliary blunder head's suppression at inference.
 # 0 = head ignored. ~8 = strong suppression of moves the head flags.
-# v22 was trained without a blunder-head loss, so the head's weights
-# are randomly initialized and using them at inference would suppress
-# moves arbitrarily — keep at 0 until a future model trains the head.
-BLUNDER_LAMBDA = 0.0
+# Trained on Firebase annotations as of 2026-05-04 (160 'bad' / 21
+# 'good' rows). Arena vs blunder=0 came in at 11-9 (55%) — passes the
+# 0.55 gate. Set lambda=1.0 in production; can be raised once we have
+# more annotations and the head's signal generalizes more widely.
+BLUNDER_LAMBDA = 1.0
 
 # Strength of the hand-coded strategic evaluator (ai/strategic_eval.py).
 # 0 = disabled (network policy used as-is). 1.0 = bias priors moderately

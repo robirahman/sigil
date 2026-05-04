@@ -43,14 +43,40 @@ def build_node_runner(sfns):
     parts.append(r"""
 // --- Stub model: deterministic, no neural net ---
 class StubModel {
-    forward(raw, spellIds, tf, N) {
+    forward(raw, spellIds, tf, N, returnBlunder) {
         // Value: zero-centered, weakly correlated with raw[0]
         const value = Math.tanh((raw && raw.length ? raw[0] : 0) * 0.1);
-        if (!N || N <= 0) return { value, policyLogits: null };
+        if (!N || N <= 0) return { value, policyLogits: null, blunderLogits: null };
         // Policy: linear ramp so highest index has highest logit.
         const policyLogits = new Float32Array(N);
         for (let i = 0; i < N; i++) policyLogits[i] = -i * 0.1;
-        return { value, policyLogits };
+        // Blunder: alternate +/- so half the moves register as 'blunder'.
+        let blunderLogits = null;
+        if (returnBlunder) {
+            blunderLogits = new Float32Array(N);
+            for (let i = 0; i < N; i++) blunderLogits[i] = i % 2 === 0 ? 2.0 : -3.0;
+        }
+        return { value, policyLogits, blunderLogits };
+    }
+    evaluateWithPolicy(raw, spellIds, tf, N, blunderLambda) {
+        const { value, policyLogits, blunderLogits } = this.forward(
+            raw, spellIds, tf, N, blunderLambda > 0);
+        if (!N || N <= 0) return { value, policy: new Float32Array([1.0]) };
+        const adj = (blunderLambda > 0 && blunderLogits)
+            ? new Float32Array(N) : policyLogits;
+        if (blunderLambda > 0 && blunderLogits) {
+            for (let i = 0; i < N; i++) {
+                const sig = 1 / (1 + Math.exp(-blunderLogits[i]));
+                adj[i] = policyLogits[i] - blunderLambda * sig;
+            }
+        }
+        let m = -Infinity;
+        for (let i = 0; i < N; i++) if (adj[i] > m) m = adj[i];
+        const policy = new Float32Array(N);
+        let s = 0;
+        for (let i = 0; i < N; i++) { policy[i] = Math.exp(adj[i] - m); s += policy[i]; }
+        for (let i = 0; i < N; i++) policy[i] /= s;
+        return { value, policy };
     }
 }
 
@@ -81,6 +107,7 @@ for (const sfn of sfns) {
             exhaustiveRoot: true, exhaustiveOpponent: true,
             enableTT: true, enableKillers: true,
             aspirationDelta: 0.15,
+            blunderLambda: 1.0,  // exercise the blunder suppression path
         });
         const elapsed = Date.now() - t0;
         results.push({
