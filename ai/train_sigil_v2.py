@@ -151,10 +151,20 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
 
             _materialize_features(d)
 
+            # Defensive consistency check: the engine's legal-turn
+            # enumeration sometimes drifts after rule fixes (e.g., the
+            # Comet sacrifice patch), leaving cached `policy` longer
+            # than the regenerated `turn_encodings`. Drop the row in
+            # that case rather than crash the collate.
+            te = d.get('turn_encodings') or []
+            if len(te) < len(policy):
+                bad += 1
+                continue
+
             rec = {
                 'raw_features': d['raw_features'],
                 'spell_ids': d['spell_ids'],
-                'turn_encodings': d.get('turn_encodings', []),
+                'turn_encodings': te,
                 'policy': policy,
                 'outcome': d['outcome'],
                 'num_turns': len(policy),

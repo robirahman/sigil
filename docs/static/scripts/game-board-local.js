@@ -419,7 +419,8 @@ document.addEventListener('alpine:init', () => {
 						options.ai = new GreedyAI();
 					} else if (
 						aiMode === 'medium' || aiMode === 'aux' ||
-						aiMode === 'graph' || aiMode === 'minimax'
+						aiMode === 'graph' || aiMode === 'minimax' ||
+						aiMode === 'hard'
 					) {
 						// Each mode loads a different experimental model so I
 						// can A/B them against each other on rated games. The
@@ -428,23 +429,30 @@ document.addEventListener('alpine:init', () => {
 						// and consistently suppresses naked dashes / lets-the-
 						// enemy-Fireblast-grow turns regardless of model.
 						//
-						// 'minimax' uses iterative-deepening alpha-beta over
-						// the same v27 model + strategic eval. Slower per move
-						// (3-ply at ~5-12s budget) but plays meaningfully
-						// stronger because it enumerates opponent responses.
+						// 'hard' and 'minimax' both use iterative-deepening
+						// alpha-beta over the same v27 medium model + strategic
+						// eval. Slower per move (3-ply at ~5-12s budget) but
+						// plays ~75% over MCTS-200 in arena because it enumerates
+						// opponent responses instead of sampling them. Trying
+						// SigilNetHard (44M params) on the current feature set
+						// only ties Medium at MCTS-200 — capacity alone hasn't
+						// closed the gap on this data, so the production "Hard"
+						// tier is search-deep rather than network-bigger.
 						const variant = {
 							medium:  { name: 'sigil_net',       loader: SigilNetJS },
 							aux:     { name: 'sigil_net_aux',   loader: SigilNetJS },
 							graph:   { name: 'sigil_net_graph', loader: SigilNetGraphJS },
 							minimax: { name: 'sigil_net',       loader: SigilNetJS },
+							hard:    { name: 'sigil_net',       loader: SigilNetJS },
 						}[aiMode];
+						const useMinimax = (aiMode === 'minimax' || aiMode === 'hard');
 						try {
 							const model = await variant.loader.load(
 								`static/models/${variant.name}.json`,
 								`static/models/${variant.name}.bin`,
 							);
 							options.aiColor = _aiColor;
-							if (aiMode === 'minimax') {
+							if (useMinimax) {
 								options.ai = new MinimaxAI(model, {
 									maxDepth: 3,
 									timeLimit: 12.0,
@@ -873,6 +881,7 @@ document.addEventListener('alpine:init', () => {
 					const labels = {
 						easy: 'AI (Easy)',
 						medium: 'AI (Medium)',
+						hard: 'AI (Hard)',
 						aux: 'AI (Tactical Aux)',
 						graph: 'AI (Graph Trunk)',
 						minimax: 'AI (Minimax 3-ply)',

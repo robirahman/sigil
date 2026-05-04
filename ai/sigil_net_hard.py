@@ -87,18 +87,14 @@ class SigilNetHard(nn.Module):
         x = _clipped_relu(self.ln3(self.wide3(x)))                  # (B, 2048)
         return x
 
-    def forward(self, raw_features, spell_ids, turn_features=None, turn_counts=None):
-        """Forward pass — same interface as SigilNet for drop-in use.
+    def forward(self, raw_features, spell_ids, turn_features=None, turn_counts=None,
+                return_blunder=False, return_tactical=False):
+        """Forward pass — drop-in compatible with SigilNet.forward.
 
-        Args:
-            raw_features: (B, RAW_FEATURE_DIM)
-            spell_ids: (B, 9) LongTensor
-            turn_features: optional (B, max_turns, TURN_FEATURE_DIM)
-            turn_counts: optional (B,) LongTensor
-
-        Returns:
-            value: (B, 1) in [-1, 1]
-            policy_logits: (B, max_turns) or None
+        SigilNetHard has no blunder head or tactical aux head; the extra
+        kwargs are accepted (and the corresponding return-positions emit
+        None) so callers in MCTS / minimax don't need to special-case
+        the architecture.
         """
         x = self._trunk_forward(raw_features, spell_ids)
 
@@ -109,6 +105,11 @@ class SigilNetHard(nn.Module):
         # Policy head
         policy_logits = None
         if turn_features is not None:
+            # Truncate if caller passes more dims than this checkpoint was
+            # trained on (matches SigilNet.forward's behavior).
+            expected = self.turn_proj.in_features
+            if turn_features.size(-1) > expected:
+                turn_features = turn_features[..., :expected]
             board_proj = self.policy_proj(x)                         # (B, 256)
             turn_proj = self.turn_proj(turn_features)                # (B, T, 256)
             logits = torch.bmm(turn_proj, board_proj.unsqueeze(-1)).squeeze(-1)
@@ -120,7 +121,14 @@ class SigilNetHard(nn.Module):
 
             policy_logits = logits
 
-        return v, policy_logits
+        outputs = (v, policy_logits)
+        if return_blunder:
+            outputs = outputs + (None,)
+        if return_tactical:
+            outputs = outputs + (None,)
+        if len(outputs) == 2:
+            return outputs[0], outputs[1]
+        return outputs
 
     def evaluate(self, raw_features, spell_ids):
         """Value-only evaluation (no policy). For use in search."""
@@ -136,8 +144,14 @@ class SigilNetHard(nn.Module):
             return v.item()
         return v.squeeze(-1)
 
-    def evaluate_with_policy(self, raw_features, spell_ids, turn_features):
-        """Full evaluation: value + policy priors for MCTS."""
+    def evaluate_with_policy(self, raw_features, spell_ids, turn_features,
+                             blunder_lambda=0.0):
+        """Full evaluation: value + policy priors for MCTS.
+
+        `blunder_lambda` is accepted for SigilNet API compatibility but
+        ignored — SigilNetHard has no blunder head.
+        """
+        del blunder_lambda  # no-op for this arch
         raw_features = raw_features.unsqueeze(0)
         spell_ids = spell_ids.unsqueeze(0)
         turn_features = turn_features.unsqueeze(0)
@@ -164,13 +178,30 @@ class SigilNetHard(nn.Module):
 
     @classmethod
     def load(cls, path, device='cpu'):
-        """Load model from checkpoint. Auto-casts float16 weights to float32."""
+        """Load model from checkpoint. Auto-casts float16 weights to float32.
+
+        Resizes raw_proj / turn_proj / spell_embed input dims to match the
+        checkpoint when they differ from the current constants — same
+        approach as SigilNet.load. Lets older Hard checkpoints (trained
+        on RAW_FEATURE_DIM=250 / TURN_FEATURE_DIM=64) still load when
+        the constants have since been bumped.
+        """
         net = cls()
         checkpoint = torch.load(path, map_location=device, weights_only=True)
         sd = checkpoint['model_state_dict']
         if checkpoint.get('storage') == 'float16':
             sd = {k: v.float() for k, v in sd.items()}
-        net.load_state_dict(sd)
+        # Resize input-dim-keyed layers to checkpoint shapes before load.
+        if 'turn_proj.weight' in sd:
+            ckpt_turn_dim = sd['turn_proj.weight'].shape[1]
+            if ckpt_turn_dim != net.turn_proj.in_features:
+                net.turn_proj = nn.Linear(ckpt_turn_dim, HARD_POLICY_DIM)
+        if 'raw_proj.weight' in sd:
+            ckpt_raw_dim = sd['raw_proj.weight'].shape[1]
+            if ckpt_raw_dim != net.raw_proj.in_features:
+                spell_flat_dim = NUM_SPELL_SLOTS * HARD_SPELL_EMBED_DIM
+                net.raw_proj = nn.Linear(ckpt_raw_dim, HARD_WIDE_DIM - spell_flat_dim)
+        net.load_state_dict(sd, strict=False)
         net.eval()
         return net
 
