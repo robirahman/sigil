@@ -418,7 +418,7 @@ document.addEventListener('alpine:init', () => {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
 					} else if (
-						aiMode === 'medium' || aiMode === 'aux' ||
+						aiMode === 'medium' ||
 						aiMode === 'graph' || aiMode === 'minimax' ||
 						aiMode === 'hard'
 					) {
@@ -440,7 +440,6 @@ document.addEventListener('alpine:init', () => {
 						// tier is search-deep rather than network-bigger.
 						const variant = {
 							medium:  { name: 'sigil_net',       loader: SigilNetJS },
-							aux:     { name: 'sigil_net_aux',   loader: SigilNetJS },
 							graph:   { name: 'sigil_net_graph', loader: SigilNetGraphJS },
 							minimax: { name: 'sigil_net',       loader: SigilNetJS },
 							hard:    { name: 'sigil_net',       loader: SigilNetJS },
@@ -882,7 +881,6 @@ document.addEventListener('alpine:init', () => {
 						easy: 'AI (Easy)',
 						medium: 'AI (Medium)',
 						hard: 'AI (Hard)',
-						aux: 'AI (Tactical Aux)',
 						graph: 'AI (Graph Trunk)',
 						minimax: 'AI (Minimax 3-ply)',
 					};
@@ -903,7 +901,6 @@ document.addEventListener('alpine:init', () => {
 						const labels = {
 							easy: 'AI (Easy)',
 							medium: 'AI (Medium)',
-							aux: 'AI (Tactical Aux)',
 							graph: 'AI (Graph Trunk)',
 							minimax: 'AI (Minimax 3-ply)',
 						};
