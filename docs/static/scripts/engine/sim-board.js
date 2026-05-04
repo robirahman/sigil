@@ -352,14 +352,31 @@ class SimBoard {
 				}
 			}
 		} else if (rt === 'starfall') {
-			let best = null, bestCount = 0;
-			for (const name of NODE_ORDER) {
-				if (this.stones[name] !== null) continue;
-				for (const nb of ADJACENCY[name]) {
-					if (this.stones[nb] !== null) continue;
-					const union = new Set([...ADJACENCY[name], ...ADJACENCY[nb]]);
-					const ec = [...union].filter(n => this.stones[n] === enemy).length;
-					if (ec > bestCount) { bestCount = ec; best = [name, nb]; }
+			const ovr = overrides.starfall_pair;
+			let best = null;
+			if (ovr) {
+				const [a, b] = ovr;
+				if (this.stones[a] === null && this.stones[b] === null && ADJACENCY[a].includes(b)) {
+					best = [a, b];
+				}
+			}
+			if (!best) {
+				// Heuristic: max enemy stones destroyed; ties broken by
+				// destroying an enemy on a mana node (a1/b1/c1).
+				let bestScore = [-1, -1];
+				for (const name of NODE_ORDER) {
+					if (this.stones[name] !== null) continue;
+					for (const nb of ADJACENCY[name]) {
+						if (this.stones[nb] !== null) continue;
+						const union = new Set([...ADJACENCY[name], ...ADJACENCY[nb]]);
+						const enemies = [...union].filter(n => this.stones[n] === enemy);
+						const ec = enemies.length;
+						const mana = enemies.filter(n => MANA_NODES.includes(n)).length;
+						if (ec > bestScore[0] || (ec === bestScore[0] && mana > bestScore[1])) {
+							bestScore = [ec, mana];
+							best = [name, nb];
+						}
+					}
 				}
 			}
 			if (best) {
@@ -377,12 +394,30 @@ class SimBoard {
 		} else if (rt === 'meteor') {
 			const targets = this._blinkable(color);
 			let chosen = null;
-			for (const t of targets) {
-				let ae = this.stones[t] === enemy ? 1 : 0;
-				ae += ADJACENCY[t].filter(nb => this.stones[nb] === enemy).length;
-				if (ae === 1) { chosen = t; break; }
+			const ovr = overrides.meteor_target;
+			if (ovr && targets.includes(ovr)) {
+				chosen = ovr;
+			} else {
+				// Heuristic: max enemies destroyed (push-crush + the one
+				// adjacent kill); ties broken in favor of eliminating
+				// enemy mana stones.
+				let bestScore = [-1, -1];
+				for (const t of targets) {
+					const crush = (this.stones[t] === enemy
+					               && this.isCrushable(t, color));
+					const crushKills = crush ? 1 : 0;
+					const crushMana = (crush && MANA_NODES.includes(t)) ? 1 : 0;
+					const adjEnemies = ADJACENCY[t].filter(nb => this.stones[nb] === enemy);
+					const kill = adjEnemies.length > 0 ? 1 : 0;
+					const killMana = adjEnemies.some(n => MANA_NODES.includes(n)) ? 1 : 0;
+					const score = [crushKills + kill, crushMana + killMana];
+					if (score[0] > bestScore[0] || (score[0] === bestScore[0] && score[1] > bestScore[1])) {
+						bestScore = score;
+						chosen = t;
+					}
+				}
+				if (chosen === null && targets.length) chosen = targets[0];
 			}
-			if (!chosen && targets.length) chosen = targets[0];
 			if (chosen) {
 				if (this.stones[chosen] === enemy) {
 					const dest = this._pushEnemy(chosen, color);
@@ -392,12 +427,13 @@ class SimBoard {
 					actions.push(new SimAction('blink', { node: chosen }));
 				}
 				this.update();
-				for (const nb of ADJACENCY[chosen]) {
-					if (this.stones[nb] === enemy) {
-						this.stones[nb] = null;
-						actions.push(new SimAction('meteor_destroy', { node: nb }));
-						break;
-					}
+				// Destroy 1 adjacent enemy — prefer one on a mana node.
+				const adjEnemies = ADJACENCY[chosen].filter(nb => this.stones[nb] === enemy);
+				let killTarget = adjEnemies.find(n => MANA_NODES.includes(n));
+				if (!killTarget && adjEnemies.length) killTarget = adjEnemies[0];
+				if (killTarget) {
+					this.stones[killTarget] = null;
+					actions.push(new SimAction('meteor_destroy', { node: killTarget }));
 				}
 				this.update();
 			}

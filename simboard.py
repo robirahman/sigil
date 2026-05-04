@@ -490,19 +490,28 @@ class SimBoard:
                         and self.stones[n2] is None
                         and n2 in self._adjacent_nodes(n1)):
                     best = (n1, n2)
-            best_count = 0
             if best is None:
+                # Heuristic: max enemy stones destroyed; ties broken in
+                # favor of pairs that destroy an enemy on a mana node
+                # (a1/b1/c1). Mana destruction is strictly better than
+                # destruction elsewhere because losing mana stalls the
+                # opponent's spell tempo.
+                best_score = (-1, -1)
                 for name in NODE_ORDER:
                     if self.stones[name] is not None:
                         continue
                     for nb in self._adjacent_nodes(name):
                         if self.stones[nb] is not None:
                             continue
-                        # Count adjacent enemies
-                        neighbors_union = set(self._adjacent_nodes(name)) | set(self._adjacent_nodes(nb))
-                        enemy_count = sum(1 for n in neighbors_union if self.stones[n] == enemy)
-                        if enemy_count > best_count:
-                            best_count = enemy_count
+                        neighbors_union = (set(self._adjacent_nodes(name))
+                                           | set(self._adjacent_nodes(nb)))
+                        enemy_targets = [n for n in neighbors_union
+                                         if self.stones[n] == enemy]
+                        enemy_count = len(enemy_targets)
+                        mana_kills = sum(1 for n in enemy_targets if n in MANA_NODES)
+                        score = (enemy_count, mana_kills)
+                        if score > best_score:
+                            best_score = score
                             best = (name, nb)
             if best:
                 n1, n2 = best
@@ -526,14 +535,36 @@ class SimBoard:
             if override is not None and override in targets:
                 chosen = override
             else:
-                # Prefer node adjacent to exactly 1 enemy
+                # Heuristic: maximize total enemies destroyed (push-crush
+                # if blinking onto an enemy with no escape, plus the one
+                # adjacent enemy the spell destroys). Ties broken in
+                # favor of options that eliminate an enemy mana stone —
+                # via crush of a mana-occupant or via the adjacent-kill
+                # falling on a mana node.
+                best_score = (-1, -1)
                 for t in targets:
-                    adj_enemies = sum(1 for nb in self._adjacent_nodes(t) if self.stones[nb] == enemy)
-                    if self.stones[t] == enemy:
-                        adj_enemies += 1
-                    if adj_enemies == 1:
+                    crush = (self.stones[t] == enemy
+                             and self.is_crushable(t, color))
+                    crush_kills = 1 if crush else 0
+                    crush_mana = 1 if (crush and t in MANA_NODES) else 0
+                    # After the blink, t is owned by us. Find the first
+                    # adjacent enemy (matches the actual resolver's
+                    # iteration order), preferring one on a mana node.
+                    adj_enemies = [
+                        nb for nb in self._adjacent_nodes(t)
+                        if self.stones[nb] == enemy
+                    ]
+                    if adj_enemies:
+                        kill = 1
+                        # Prefer killing a mana stone if available.
+                        kill_mana = 1 if any(n in MANA_NODES for n in adj_enemies) else 0
+                    else:
+                        kill = 0
+                        kill_mana = 0
+                    score = (crush_kills + kill, crush_mana + kill_mana)
+                    if score > best_score:
+                        best_score = score
                         chosen = t
-                        break
                 if chosen is None and targets:
                     chosen = targets[0]
             if chosen:
@@ -544,12 +575,22 @@ class SimBoard:
                     self.stones[chosen] = color
                     actions.append(Action('blink', node=chosen))
                 self.update()
-                # Destroy 1 adjacent enemy
-                for nb in self._adjacent_nodes(chosen):
-                    if self.stones[nb] == enemy:
-                        self.stones[nb] = None
-                        actions.append(Action('meteor_destroy', node=nb))
+                # Destroy 1 adjacent enemy — prefer one on a mana node so
+                # the heuristic's mana-tiebreak choice is realized.
+                adj_enemies = [
+                    nb for nb in self._adjacent_nodes(chosen)
+                    if self.stones[nb] == enemy
+                ]
+                kill_target = None
+                for nb in adj_enemies:
+                    if nb in MANA_NODES:
+                        kill_target = nb
                         break
+                if kill_target is None and adj_enemies:
+                    kill_target = adj_enemies[0]
+                if kill_target is not None:
+                    self.stones[kill_target] = None
+                    actions.append(Action('meteor_destroy', node=kill_target))
                 self.update()
 
         elif resolve_type == 'comet':
