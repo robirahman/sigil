@@ -17,6 +17,22 @@ const NARROW_ENUM_CAPS = {
 	comet: 1,
 };
 
+// Opponent-response caps (depth=1 in minimax). Expand the destructive
+// responses the engine collapses today: bewitch chain breaks and
+// hard-move bumps (Carnage / Slash). Only the variants the JS enumerator
+// supports above are bumped; dash sacrifice / starfall / meteor / comet
+// stay at their NARROW values because the JS port doesn't enumerate
+// multiple variants for those (yet).
+const OPPONENT_ENUM_CAPS = {
+	dash_sac: 1,
+	dash_move: 1,
+	bewitch: 4,
+	starfall: 1,
+	hard_moves: 2,
+	meteor: 1,
+	comet: 1,
+};
+
 function _adjacentEnemyPairs(board, color) {
 	const enemy = board._enemy(color);
 	const seen = new Set();

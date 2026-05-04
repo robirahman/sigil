@@ -317,10 +317,28 @@ class MinimaxAI {
 		this.model = model;
 		// Default: 3-ply alpha-beta with exhaustive enumeration at the
 		// root (every Bewitch pair, every Carnage target, …) and the
-		// engine's standard greedy enumeration at deeper plies. Arena
-		// shows this beats greedy 3-ply by ~25 percentage points.
+		// engine's standard greedy enumeration at deeper plies.
+		// Transposition table, killer moves, and aspiration windows
+		// are on by default — pure search-engineering speedups that
+		// let iterative deepening reach a deeper iteration within the
+		// same time budget without changing what gets searched.
+		// `exhaustiveOpponent` defaults off: it expands the
+		// opponent-response branch with OPPONENT_ENUM_CAPS, which
+		// gives a more accurate evaluation but ~50% more depth-1
+		// nodes. With 50 ms-per-leaf in the browser that risks
+		// blowing the 12 s budget at depth 3, so we prefer the safer
+		// default and revisit once we've measured live latency.
 		this.options = Object.assign(
-			{ maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0, exhaustiveRoot: true },
+			{
+				maxDepth: 3,
+				timeLimit: 12.0,
+				orderingAlpha: 1.0,
+				exhaustiveRoot: true,
+				exhaustiveOpponent: false,
+				enableTT: true,
+				enableKillers: true,
+				aspirationDelta: 0.15,
+			},
 			options || {},
 		);
 	}

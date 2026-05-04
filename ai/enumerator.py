@@ -69,6 +69,24 @@ NARROW_CAPS = {
 }
 
 
+# Caps for the opponent's response (depth=1 in minimax). We expand the
+# attacker's options that empirically destroy our stones: bewitch
+# (chain-disrupting our mana connections), hard-move spells (bumping
+# our stones into a crush), starfall/meteor (mass-clear or surgical
+# kill), and a couple of dash sacrifice variants. Branching averages
+# ~25 vs NARROW's ~13 — doable inside the 12s budget at depth 3 with
+# the transposition table doing the cross-iteration heavy lifting.
+OPPONENT_CAPS = {
+    'dash_sac': 2,
+    'dash_move': 1,
+    'bewitch': 4,
+    'starfall': 2,
+    'hard_moves': 2,
+    'meteor': 2,
+    'comet': 1,
+}
+
+
 def _adjacent_enemy_pairs(board, color):
     """Unique unordered pairs of adjacent enemy stones."""
     enemy = board._enemy(color)
