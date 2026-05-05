@@ -725,7 +725,10 @@
 						let spellNames = (opts && Array.isArray(opts.spellNames) && opts.spellNames.length === 9)
 							? opts.spellNames.slice()
 							: null;
-						if (!spellNames) spellNames = generateSpellList();
+						if (!spellNames) {
+							const packKey = localStorage.getItem('sigilSpellPack') || 'core';
+							spellNames = generateSpellList(packKey);
+						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
 						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators);

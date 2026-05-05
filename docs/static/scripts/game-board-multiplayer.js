@@ -43,6 +43,8 @@ document.addEventListener('alpine:init', () => {
 			// Player names and timer
 			redName: '',
 			blueName: '',
+			redUid: '',
+			blueUid: '',
 			redTimer: 0,
 			blueTimer: 0,
 			timerType: 'none',
@@ -53,6 +55,22 @@ document.addEventListener('alpine:init', () => {
 			reviewIndex: 0,
 			reviewSfns: [],
 			reviewTurnLabels: [],
+
+			// Share link
+			shareUrl: '',
+			linkCopied: false,
+			copyGameLink() {
+				if (!this.shareUrl) return;
+				navigator.clipboard.writeText(this.shareUrl).then(() => {
+					this.linkCopied = true;
+					setTimeout(() => { this.linkCopied = false; }, 2000);
+				});
+			},
+
+			// Export-game state
+			gameExportCopied: false,
+			_spellNamesForExport: [],
+			_gameLogForExport: null,
 
 			// Rematch state — populated at game start from window._multiplayerState
 			// so the win-modal "Play Again" buttons can return to the lobby and
@@ -80,6 +98,56 @@ document.addEventListener('alpine:init', () => {
 					}
 				} catch (e) { /* sessionStorage blocked */ }
 				window.location.href = 'multiplayer.html';
+			},
+			exportGame() {
+				const log = this._gameLogForExport;
+				if (!Array.isArray(log) || log.length === 0) return;
+				const turns = log.map(entry => ({
+					n: entry.turnNumber,
+					color: entry.color,
+					actions: Array.isArray(entry.actions) ? entry.actions.slice() : [],
+				}));
+				const lastEntry = log[log.length - 1];
+				const nextToMove = this.winner
+					? null
+					: (lastEntry && lastEntry.color === 'red' ? 'blue' : 'red');
+				const payload = {
+					v: 2,
+					type: 'sigil-game',
+					spellNames: this._spellNamesForExport,
+					winner: this.winner || null,
+					nextToMove,
+					redName: this.redName || 'Red',
+					blueName: this.blueName || 'Blue',
+					timestamp: Date.now(),
+					turns,
+					annotations: Object.assign({}, this.annotations || {}),
+				};
+				const text = JSON.stringify(payload);
+				navigator.clipboard.writeText(text).then(() => {
+					this.gameExportCopied = true;
+					setTimeout(() => { this.gameExportCopied = false; }, 2000);
+				});
+			},
+
+			// Rematch handshake state — driven by controller events. The button on the
+			// win-modal cycles: Offer Rematch → Offering Rematch / Accept Rematch →
+			// Starting Rematch… (or Opponent Disconnected if presence flips).
+			selfOfferedRematch: false,
+			opponentOfferedRematch: false,
+			rematchOpponentDisconnected: false,
+			rematchPending: false,
+			offerOrAcceptRematch() {
+				if (this.isSpectator || !this._engine) return;
+				if (this.rematchOpponentDisconnected || this.rematchPending) return;
+				if (typeof this._engine.offerRematch !== 'function') return;
+				if (this.selfOfferedRematch) {
+					this._engine.cancelRematch();
+					this.selfOfferedRematch = false;
+				} else {
+					this._engine.offerRematch();
+					this.selfOfferedRematch = true;
+				}
 			},
 
 			// Annotation state
@@ -110,6 +178,50 @@ document.addEventListener('alpine:init', () => {
 				if (this.reviewSfns.length === 0) return;
 				this.reviewMode = true;
 				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+			},
+			_initReviewMode(spellNames, gameLog, winner) {
+				if (!gameLog || gameLog.length === 0) {
+					this.messageHistory.push('No game log available for review.');
+					return;
+				}
+				// Populate spell setup from spellNames (same mapping as engine)
+				const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
+				const dict = {};
+				const images = {};
+				const text = {};
+				for (let i = 0; i < 9 && i < spellNames.length; i++) {
+					const name = spellNames[i];
+					dict[posNames[i]] = name;
+					images[posNames[i]] = 'static/images/spells/' + name + '.png';
+					text[posNames[i]] = {
+						name: name.replace(/_/g, ' '),
+						text: (typeof SPELL_TEXTS !== 'undefined' && SPELL_TEXTS[name]) || '',
+					};
+				}
+				this.spellDict = dict;
+				this.spells.images = images;
+				this.spells.text = text;
+
+				// Build reviewSfns/reviewTurnLabels from gameLog (same shape as live mode)
+				const sfns = [gameLog[0].sfnBefore];
+				const labels = ['Start'];
+				for (const turn of gameLog) {
+					sfns.push(turn.sfnAfter);
+					const cn = turn.color[0].toUpperCase() + turn.color.slice(1);
+					const tn = turn.color === 'red'
+						? Math.floor(turn.turnNumber / 2) + 1
+						: Math.floor(turn.turnNumber / 2);
+					labels.push(cn + ' ' + tn);
+				}
+				this.reviewSfns = sfns;
+				this.reviewTurnLabels = labels;
+				this.winner = winner || '';
+				this._gameLogForExport = gameLog;
+				this._spellNamesForExport = (spellNames || []).slice();
+				this.messageHistory.push('Reviewing game. Use the controls to navigate turns.');
+				this.reviewMode = true;
+				this.reviewIndex = sfns.length - 1;
 				this._showReviewPosition();
 			},
 			reviewPrev() { if (this.reviewIndex > 0) { this.reviewIndex--; this._showReviewPosition(); } },
@@ -193,17 +305,28 @@ document.addEventListener('alpine:init', () => {
 				const waitForState = setInterval(() => {
 					if (!window._multiplayerState) return;
 					clearInterval(waitForState);
-					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, redDisplayName, blueDisplayName, annotationMode } = window._multiplayerState;
+					const state = window._multiplayerState;
+					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, redDisplayName, blueDisplayName, redUid, blueUid, annotationMode, reviewMode, gameLog, winner, shareUrl } = state;
 
 					// Set player names and timer type
 					_this.redName = redDisplayName || '';
 					_this.blueName = blueDisplayName || '';
+					_this.redUid = redUid || '';
+					_this.blueUid = blueUid || '';
 					_this.timerType = (timeControl && timeControl.type) || 'none';
 					_this.isSpectator = isSpectator || false;
 					_this.myColor = myColor || '';
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
+					_this.shareUrl = shareUrl || '';
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
+
+					if (reviewMode) {
+						// Skip engine entirely — render finished game in review mode
+						_this.sendEvent = function() {};
+						_this._initReviewMode(spellNames || [], gameLog || [], winner || null);
+						return;
+					}
 
 					let engine;
 					if (isSpectator) {
@@ -292,6 +415,20 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
 					else if (type === 'pushingoptions') { _this.validMoves = rest; }
 					else if (type === 'timer_tick') { _this.redTimer = rest.red; _this.blueTimer = rest.blue; }
+					else if (type === 'rematch_state_changed') {
+						const r = rest.rematch || {};
+						const myColor = _this.myColor;
+						const opponentColor = myColor === 'red' ? 'blue' : 'red';
+						_this.selfOfferedRematch = r[myColor] === 'offered';
+						_this.opponentOfferedRematch = r[opponentColor] === 'offered';
+						_this.rematchPending = !!r.newRoomCode;
+					}
+					else if (type === 'rematch_room_ready') {
+						window.location.href = 'multiplayer.html?id=' + encodeURIComponent(rest.newRoomCode);
+					}
+					else if (type === 'opponent_disconnect') {
+						_this.rematchOpponentDisconnected = true;
+					}
 					else if (type === 'game_over') {
 						if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins`);
@@ -308,6 +445,10 @@ document.addEventListener('alpine:init', () => {
 							}
 							_this.reviewSfns = sfns;
 							_this.reviewTurnLabels = labels;
+							_this._gameLogForExport = rest.gameLog;
+							if (_this._engine && _this._engine.board && _this._engine.board.spellNames) {
+								_this._spellNamesForExport = _this._engine.board.spellNames.slice();
+							}
 						}
 					}
 				}

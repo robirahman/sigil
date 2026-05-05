@@ -1658,21 +1658,23 @@ html.webp .stone-node--red.stone-node--last-play::after {
 
 .win-modal__actions {
 	display: flex;
-	flex-wrap: wrap;
+	flex-direction: column;
 	gap: 8px;
 	margin-top: 12px;
 	width: 100%;
-	justify-content: center;
+	align-items: stretch;
 }
 
 .win-modal__btn {
-	padding: 8px 16px;
+	padding: 10px 16px;
+	width: 100%;
+	box-sizing: border-box;
 	border: 1px solid rgba(255, 255, 255, 0.4);
 	border-radius: 6px;
 	background: rgba(255, 255, 255, 0.1);
 	color: var(--color-text-warm);
 	font-family: 'Overlock', sans-serif;
-	font-size: 0.85em;
+	font-size: 0.95em;
 	cursor: pointer;
 	text-decoration: none;
 	text-align: center;
@@ -1681,6 +1683,23 @@ html.webp .stone-node--red.stone-node--last-play::after {
 .win-modal__btn:hover {
 	background: rgba(255, 255, 255, 0.2);
 	border-color: rgba(255, 255, 255, 0.6);
+}
+
+.win-modal__btn--rematch {
+	background: var(--color-btn-rematch);
+	border-color: var(--color-btn-rematch);
+	color: #fff;
+	font-weight: bold;
+}
+
+.win-modal__btn--rematch:hover:not(:disabled) {
+	background: var(--color-btn-rematch-hover);
+	border-color: var(--color-btn-rematch-hover);
+}
+
+.win-modal__btn--rematch:disabled {
+	opacity: 0.7;
+	cursor: default;
 }
 
 .review-bar {

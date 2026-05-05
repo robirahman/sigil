@@ -19,6 +19,10 @@ class MultiplayerController {
 		// Buffer for local player's actions during a turn (sent only when turn completes)
 		this._turnBuffer = [];
 
+		// Actions consumed during the current turn from any source (local or opponent),
+		// captured for the gameLog so review/export can replay move-by-move.
+		this._currentTurnActions = [];
+
 		// Timer state
 		this._timerInterval = null;
 		this._timerState = { red: 0, blue: 0, activeColor: null, lastUpdated: 0 };
@@ -27,7 +31,60 @@ class MultiplayerController {
 
 		sync.onOpponentDisconnect = () => {
 			this.emit({ type: 'message', message: 'Opponent disconnected.', awaiting: null });
+			this.emit({ type: 'opponent_disconnect' });
 		};
+
+		// Rematch handshake: subscribe once we know our color/room. The sync.roomRef
+		// may not exist yet at construction time — defer until startGame().
+		this._rematchUnsubscribe = null;
+		this._rematchCreating = false;
+	}
+
+	_subscribeToRematch() {
+		if (this._rematchUnsubscribe || !this.sync || typeof this.sync.onRematchStateChange !== 'function') return;
+		this._rematchUnsubscribe = this.sync.onRematchStateChange((state) => {
+			this.emit({ type: 'rematch_state_changed', rematch: state });
+			if (state.newRoomCode) {
+				this.emit({ type: 'rematch_room_ready', newRoomCode: state.newRoomCode });
+				return;
+			}
+			// Designated rematch-room creator is the red player. When both colors have
+			// offered, red generates a new room and publishes the code on the old room.
+			if (
+				this.myColor === 'red'
+				&& state.red === 'offered'
+				&& state.blue === 'offered'
+				&& !this._rematchCreating
+			) {
+				this._rematchCreating = true;
+				this._createRematchRoom().catch((e) => {
+					console.error('[Controller] Rematch room creation failed:', e);
+					this._rematchCreating = false;
+				});
+			}
+		});
+	}
+
+	async _createRematchRoom() {
+		const sync = this.sync;
+		const code = await sync.createRematchRoom(
+			this.board.spellNames,
+			sync.timeControl,
+			sync.allowSpectators,
+			{ uid: sync.redUid, displayName: sync.redDisplayName },
+			{ uid: sync.blueUid, displayName: sync.blueDisplayName },
+			!!sync.ranked
+		);
+		await sync.setRematchNewRoomCode(code);
+	}
+
+	offerRematch() {
+		this._subscribeToRematch();
+		return this.sync.offerRematch();
+	}
+
+	cancelRematch() {
+		return this.sync.cancelRematch();
 	}
 
 	handlePlayerAction(message) {
@@ -135,6 +192,9 @@ class MultiplayerController {
 				const winner = inactiveColor;
 				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
 				this.sync.writeTimeout(winner);
+				if (this.myColor === 'red') {
+					this.sync.writeRoomFinalState(winner, this._gameLog);
+				}
 				this._stopTimer();
 			}
 		} else if (this._timeControl.type === 'correspondence') {
@@ -152,6 +212,9 @@ class MultiplayerController {
 				const winner = ts.activeColor === 'red' ? 'blue' : 'red';
 				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
 				this.sync.writeTimeout(winner);
+				if (this.myColor === 'red') {
+					this.sync.writeRoomFinalState(winner, this._gameLog);
+				}
 				this._stopTimer();
 			}
 		}
@@ -175,19 +238,21 @@ class MultiplayerController {
 	async getInput(payload) {
 		const isMyTurn = this.board && this.board.whoseTurn === this.myColor;
 
+		let resp;
 		if (isMyTurn) {
 			// Local player: wait for UI click
-			const resp = await this._waitForInput(payload);
+			resp = await this._waitForInput(payload);
 			if (this._resetRequested) {
 				throw new ResetError();
 			}
 			this._resetRequested = false;
-			return resp;
 		} else {
 			// Opponent's turn: get next action from Firebase queue
 			this.emit(payload);
-			return await this.sync.getNextOpponentAction();
+			resp = await this.sync.getNextOpponentAction();
 		}
+		this._currentTurnActions.push(resp);
+		return resp;
 	}
 
 	async startGame(reconnectSfn) {
@@ -197,6 +262,8 @@ class MultiplayerController {
 		} else {
 			this.board.setupInitial();
 		}
+
+		this._subscribeToRematch();
 
 		// Send spell setup
 		const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
@@ -282,6 +349,7 @@ class MultiplayerController {
 
 				this._resetRequested = false;
 				this._turnBuffer = [];
+				this._currentTurnActions = [];
 
 				// Record position before the turn is taken
 				const turnSfn = boardToSfn(board);
@@ -296,13 +364,14 @@ class MultiplayerController {
 				this._eotTriggers(color);
 				board.update();
 
-				// Record the turn: SFN before, SFN after (after EOT triggers,
-				// matching GameController's ordering)
+				// Record the turn: SFN before/after plus the action sequence so
+				// the gameLog is sufficient to drive an animated replay.
 				const turnEntry = {
 					color: color,
 					turnNumber: board.turnCounter,
 					sfnBefore: turnSfn,
 					sfnAfter: boardToSfn(board),
+					actions: this._currentTurnActions.slice(),
 				};
 				this._gameLog.push(turnEntry);
 				this.emit({ type: 'turn_complete', turn: turnEntry });
@@ -369,7 +438,7 @@ class MultiplayerController {
 						if (canspell || (!canspell && summerActive)) { actions.push(spellName); spellList.push(spellName); }
 					} else {
 						if (board.lock[color] === spellName) {
-							if (board.chargedSpells[color].includes('Spring') && board.springlock[color] !== spellName) { actions.push(spellName); spellList.push(spellName); }
+							if (board.chargedSpells[color].includes('Seal_of_Spring') && board.springlock[color] !== spellName) { actions.push(spellName); spellList.push(spellName); }
 						} else { actions.push(spellName); spellList.push(spellName); }
 					}
 				}
@@ -422,6 +491,11 @@ class MultiplayerController {
 			timestamp: Date.now(),
 		};
 		this.sync.saveCompletedGame(record);
+		// Mark the room finished so the same `?id=CODE` URL serves review mode.
+		// Either player calls this — it's an idempotent update.
+		if (this.myColor === 'red') {
+			this.sync.writeRoomFinalState(winner, this._gameLog);
+		}
 	}
 
 	/** Annotate the opponent's most recent turn (or clear an existing annotation). */

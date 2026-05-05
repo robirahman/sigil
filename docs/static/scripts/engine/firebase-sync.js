@@ -598,6 +598,60 @@ class FirebaseSync {
 			}
 		}
 	}
+
+	/* ----- Rematch handshake ----- */
+
+	/** Mark this color as having offered a rematch on the current room. */
+	async offerRematch() {
+		if (!this.roomRef || !this.myColor) return;
+		await this.roomRef.child('rematch/' + this.myColor).set('offered');
+	}
+
+	/** Withdraw a rematch offer from this color. */
+	async cancelRematch() {
+		if (!this.roomRef || !this.myColor) return;
+		await this.roomRef.child('rematch/' + this.myColor).set(null);
+	}
+
+	/**
+	 * Subscribe to rooms/{room}/rematch updates. callback receives the rematch
+	 * object: { red, blue, newRoomCode } (any of which may be null/undefined).
+	 * Returns an unsubscribe function.
+	 */
+	onRematchStateChange(callback) {
+		if (!this.roomRef) return () => {};
+		const ref = this.roomRef.child('rematch');
+		const handler = (snap) => callback(snap.val() || {});
+		ref.on('value', handler);
+		return () => ref.off('value', handler);
+	}
+
+	/**
+	 * Create a rematch room with both players already pre-joined (status: 'playing').
+	 * Skips the lobby join step so both clients can navigate straight in.
+	 * Returns the new 6-char room code.
+	 */
+	async createRematchRoom(spellNames, timeControl, allowSpectators, redInfo, blueInfo, ranked) {
+		const code = _generateRoomCode();
+		const roomData = {
+			spellNames: spellNames,
+			status: 'playing',
+			created: Date.now(),
+			red: { connected: false, uid: redInfo?.uid || null, displayName: redInfo?.displayName || 'Guest' },
+			blue: { connected: false, uid: blueInfo?.uid || null, displayName: blueInfo?.displayName || 'Guest' },
+			ranked: !!ranked,
+			timeControl: timeControl || { type: 'none' },
+			allowSpectators: allowSpectators !== false,
+		};
+		await this.db.ref('rooms/' + code).set(roomData);
+		return code;
+	}
+
+	/** Publish the rematch room code on the OLD room so both clients can navigate to it. */
+	async setRematchNewRoomCode(code) {
+		if (!this.roomRef) return;
+		await this.roomRef.child('rematch/newRoomCode').set(code);
+	}
 }
 
 function _generateRoomCode() {
