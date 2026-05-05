@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<title>Sigil: Cataclysm</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.mode-menu {
+			max-width: 500px;
+			margin: 0 auto;
+			text-align: center;
+			padding: 20px;
+		}
+		.mode-menu h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin-bottom: 8px;
+			font-size: 1.5em;
+		}
+		.mode-menu .subtitle {
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-muted);
+			font-size: 0.95em;
+			margin-bottom: 28px;
+		}
+		.mode-button {
+			display: block;
+			width: 100%;
+			padding: 20px 24px;
+			margin: 14px 0;
+			background: var(--color-surface-raised);
+			border: 2px solid var(--color-border);
+			border-radius: 8px;
+			color: var(--color-text-warm);
+			font-family: 'Arvo', serif;
+			font-size: 1.1em;
+			cursor: pointer;
+			transition: all 0.2s;
+			text-decoration: none;
+		}
+		.mode-button:hover {
+			background: var(--color-surface-hover);
+			border-color: var(--color-border-hover);
+		}
+		.mode-button small {
+			display: block;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.75em;
+			color: var(--color-text-muted);
+			margin-top: 4px;
+		}
+		.mode-button .player-tags {
+			display: flex;
+			gap: 6px;
+			justify-content: center;
+			margin-top: 8px;
+		}
+		.mode-button .player-tag {
+			display: inline-block;
+			width: 14px;
+			height: 14px;
+			border-radius: 50%;
+			border: 1px solid rgba(255, 255, 255, 0.2);
+		}
+		.player-tag.tag-red { background: #e84c3c; }
+		.player-tag.tag-blue { background: #3250ba; }
+		.player-tag.tag-green { background: #2ecc71; }
+		.player-tag.tag-yellow { background: #f1c40f; }
+		.player-tag.tag-neutral { background: #888; }
+		.back-link {
+			display: inline-block;
+			margin-top: 24px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-link);
+			text-decoration: none;
+		}
+		.back-link:hover {
+			color: var(--color-link-hover);
+		}
+	</style>
+	<script src="static/scripts/theme-manager.js"></script>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div></div>
+				<h1>
+					<a href="./">
+						<span class="visually-hidden">Sigil Online</span>
+						<img class="max-width:100%" alt="" src="static/images/sigil-online-logo.svg" height="36" width="287" />
+					</a>
+				</h1>
+				<div></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="mode-menu">
+			<h2>Sigil: Cataclysm</h2>
+			<p class="subtitle">New maps, new battles</p>
+
+			<a class="mode-button" href="cataclysm-game.html?map=rectangular-1v1">
+				Rectangular Arena
+				<small>1v1 on a grid — fight over the center</small>
+				<div class="player-tags">
+					<span class="player-tag tag-red"></span>
+					<span class="player-tag tag-neutral"></span>
+					<span class="player-tag tag-blue"></span>
+				</div>
+			</a>
+
+			<a class="mode-button" href="cataclysm-game.html?map=hexagonal-2v2">
+				Hexagonal Arena
+				<small>2v2 teams on a hexagonal battlefield</small>
+				<div class="player-tags">
+					<span class="player-tag tag-red"></span>
+					<span class="player-tag tag-green"></span>
+					<span class="player-tag tag-neutral"></span>
+					<span class="player-tag tag-blue"></span>
+					<span class="player-tag tag-yellow"></span>
+				</div>
+			</a>
+
+			<a class="mode-button" href="cataclysm-game.html?map=triangular-3p">
+				Triangular Arena
+				<small>3-player free-for-all</small>
+				<div class="player-tags">
+					<span class="player-tag tag-red"></span>
+					<span class="player-tag tag-blue"></span>
+					<span class="player-tag tag-green"></span>
+				</div>
+			</a>
+
+			<a class="back-link" href="./">&larr; Back to main menu</a>
+		</div>
+	</div>
+</body>
+</html>
