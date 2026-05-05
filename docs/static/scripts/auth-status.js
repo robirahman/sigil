@@ -20,7 +20,7 @@
 				const snap = await firebase.database().ref('users/' + user.uid + '/displayName').once('value');
 				if (snap.exists()) name = snap.val();
 			} catch (e) { /* ignore */ }
-			el.innerHTML = '<span class="auth-status__name">' + _escHtml(name) + '</span>';
+			el.innerHTML = '<a class="auth-status__name" href="profile.html?uid=' + encodeURIComponent(user.uid) + '" style="color: inherit; text-decoration: none;">' + _escHtml(name) + '</a>';
 		} else {
 			el.innerHTML = '<a class="auth-status__link" href="account.html">Sign in</a>';
 		}
