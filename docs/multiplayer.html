@@ -460,6 +460,8 @@
 						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
 					</div>
 					<div class="win-modal__actions">
+						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator">Play Again</button>
+						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === 9">Play Again (Same Layout)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<button class="win-modal__btn" x-on:click="copyGameLink" x-show="shareUrl" x-text="linkCopied ? 'Link Copied!' : 'Copy Share Link'"></button>
@@ -532,13 +534,57 @@
 
 					this._loadActiveGames();
 
+					// "Play Again" from the win-modal returns here with a sessionStorage
+					// flag — auto-create a new room (optionally with the prior spells /
+					// time control) so the player lands on the waiting-for-opponent
+					// screen instead of having to click Create Game again.
+					let rematchHandled = false;
+					try {
+						if (sessionStorage.getItem('sigil_rematch_create')) {
+							sessionStorage.removeItem('sigil_rematch_create');
+							const spellsRaw = sessionStorage.getItem('sigil_rematch_spells');
+							sessionStorage.removeItem('sigil_rematch_spells');
+							const tcRaw = sessionStorage.getItem('sigil_rematch_time_control');
+							sessionStorage.removeItem('sigil_rematch_time_control');
+							let rematchSpells = null;
+							if (spellsRaw) {
+								try {
+									const parsed = JSON.parse(spellsRaw);
+									if (Array.isArray(parsed) && parsed.length === 9) rematchSpells = parsed;
+								} catch (e) {}
+							}
+							let rematchTc = null;
+							if (tcRaw) {
+								try { rematchTc = JSON.parse(tcRaw); } catch (e) {}
+							}
+							if (rematchTc && rematchTc.type) {
+								this.tcType = rematchTc.type;
+								if (rematchTc.type === 'realtime' && rematchTc.initialTime) {
+									const min = Math.round(rematchTc.initialTime / 60000);
+									const inc = Math.round((rematchTc.increment || 0) / 1000);
+									this.tcPreset = min + '+' + inc;
+								} else if (rematchTc.type === 'correspondence' && rematchTc.moveTimeout) {
+									const m = rematchTc.moveTimeout;
+									this.tcCorr = m >= 3*24*60*60*1000 ? '3d' : (m >= 24*60*60*1000 ? '24h' : '12h');
+								}
+							}
+							rematchHandled = true;
+							this._waitForAuth().then(() => {
+								this.createRoom({ spellNames: rematchSpells });
+							});
+						}
+					} catch (e) { /* sessionStorage blocked — fall through to lobby */ }
+
 					// Auto-join from `?id=CODE` URL param. Wait for auth to resolve
-					// first so the creator-reconnect uid check works.
-					const urlId = new URLSearchParams(window.location.search).get('id');
-					if (urlId && /^[A-Z0-9]{4,10}$/.test(urlId.toUpperCase())) {
-						this._waitForAuth().then(() => {
-							this._handleSharedLink(urlId.toUpperCase());
-						});
+					// first so the creator-reconnect uid check works. Skipped if a
+					// rematch was already kicked off above.
+					if (!rematchHandled) {
+						const urlId = new URLSearchParams(window.location.search).get('id');
+						if (urlId && /^[A-Z0-9]{4,10}$/.test(urlId.toUpperCase())) {
+							this._waitForAuth().then(() => {
+								this._handleSharedLink(urlId.toUpperCase());
+							});
+						}
 					}
 				},
 
@@ -672,11 +718,14 @@
 					return { type: 'none' };
 				},
 
-				async createRoom() {
+				async createRoom(opts) {
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
-						const spellNames = generateSpellList();
+						let spellNames = (opts && Array.isArray(opts.spellNames) && opts.spellNames.length === 9)
+							? opts.spellNames.slice()
+							: null;
+						if (!spellNames) spellNames = generateSpellList();
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
 						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators);

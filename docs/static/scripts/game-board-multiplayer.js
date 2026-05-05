@@ -54,6 +54,34 @@ document.addEventListener('alpine:init', () => {
 			reviewSfns: [],
 			reviewTurnLabels: [],
 
+			// Rematch state — populated at game start from window._multiplayerState
+			// so the win-modal "Play Again" buttons can return to the lobby and
+			// optionally re-create a room with the same nine spells / time control.
+			_rematchSpells: [],
+			_rematchTimeControl: null,
+			playAgain() {
+				try {
+					sessionStorage.setItem('sigil_rematch_create', '1');
+					if (this._rematchTimeControl) {
+						sessionStorage.setItem('sigil_rematch_time_control', JSON.stringify(this._rematchTimeControl));
+					}
+					sessionStorage.removeItem('sigil_rematch_spells');
+				} catch (e) { /* sessionStorage blocked */ }
+				window.location.href = 'multiplayer.html';
+			},
+			playAgainSameLayout() {
+				try {
+					sessionStorage.setItem('sigil_rematch_create', '1');
+					if (this._rematchTimeControl) {
+						sessionStorage.setItem('sigil_rematch_time_control', JSON.stringify(this._rematchTimeControl));
+					}
+					if (this._rematchSpells && this._rematchSpells.length === 9) {
+						sessionStorage.setItem('sigil_rematch_spells', JSON.stringify(this._rematchSpells));
+					}
+				} catch (e) { /* sessionStorage blocked */ }
+				window.location.href = 'multiplayer.html';
+			},
+
 			// Annotation state
 			myColor: '',
 			annotationMode: false,
@@ -174,6 +202,8 @@ document.addEventListener('alpine:init', () => {
 					_this.isSpectator = isSpectator || false;
 					_this.myColor = myColor || '';
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
+					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
+					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
 
 					let engine;
 					if (isSpectator) {

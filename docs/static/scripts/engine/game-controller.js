@@ -10,6 +10,7 @@ class GameController {
 	 * @param {Object} [options]
 	 * @param {string} [options.aiColor] - 'blue' if AI plays blue, null for local 2-player
 	 * @param {Object} [options.ai] - AI player instance (GreedyAI or NeuralAI)
+	 * @param {string[]} [options.spellNames] - 9-spell list to use instead of generating one (e.g. for "play again with same layout")
 	 */
 	constructor(emitEvent, options) {
 		this.emit = emitEvent;
@@ -18,6 +19,9 @@ class GameController {
 		this._resetRequested = false;
 		this.aiColor = (options && options.aiColor) || null;
 		this.ai = (options && options.ai) || null;
+		this.spellNamesOverride = (options && Array.isArray(options.spellNames) && options.spellNames.length === 9)
+			? options.spellNames.slice()
+			: null;
 		this._gameLog = [];
 	}
 
@@ -57,7 +61,8 @@ class GameController {
 	}
 
 	async startGame(importSfn) {
-		this.board = new SigilBoard();
+		const spellNames = (!importSfn && this.spellNamesOverride) ? this.spellNamesOverride : null;
+		this.board = new SigilBoard(spellNames);
 
 		if (importSfn) {
 			this.board.loadFromSfn(importSfn);

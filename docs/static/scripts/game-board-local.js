@@ -203,6 +203,25 @@ document.addEventListener('alpine:init', () => {
 				this._showReviewPosition();
 			},
 
+			playAgain() {
+				warnBeforeUnload = false;
+				const params = new URLSearchParams(window.location.search);
+				params.delete('sfn');
+				params.delete('review');
+				const qs = params.toString();
+				window.location.href = window.location.pathname + (qs ? '?' + qs : '');
+			},
+
+			playAgainSameLayout() {
+				const spells = this._spellNamesForExport;
+				if (spells && spells.length === 9) {
+					try {
+						sessionStorage.setItem('sigil_rematch_spells', JSON.stringify(spells));
+					} catch (e) { /* sessionStorage blocked */ }
+				}
+				this.playAgain();
+			},
+
 			reviewPrev() {
 				if (this.reviewIndex > 0) {
 					this.reviewIndex--;
@@ -411,8 +430,24 @@ document.addEventListener('alpine:init', () => {
 				const _humanColor = _aiColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
 
+				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it
+				// up here on next page load and feed it into the engine so the new match
+				// uses the same nine spells.
+				let _rematchSpells = null;
+				try {
+					const raw = sessionStorage.getItem('sigil_rematch_spells');
+					if (raw) {
+						sessionStorage.removeItem('sigil_rematch_spells');
+						const parsed = JSON.parse(raw);
+						if (Array.isArray(parsed) && parsed.length === 9) {
+							_rematchSpells = parsed;
+						}
+					}
+				} catch (e) { /* sessionStorage blocked or bad payload */ }
+
 				async function initEngine() {
 					let options = {};
+					if (_rematchSpells) options.spellNames = _rematchSpells;
 
 					if (aiMode === 'easy') {
 						options.aiColor = _aiColor;
@@ -751,6 +786,12 @@ document.addEventListener('alpine:init', () => {
 					_this.showReset = false;
 					_this.winner = payload.winner;
 					warnBeforeUnload = false;
+
+					// Cache the spell list for "Play Again (Same Layout)" regardless of
+					// whether a game log was produced.
+					if (_engineRef && _engineRef.board && _engineRef.board.spellNames) {
+						_this._spellNamesForExport = _engineRef.board.spellNames.slice();
+					}
 
 					// Build review data from game log
 					if (payload.gameLog && payload.gameLog.length > 0) {

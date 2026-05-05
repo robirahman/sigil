@@ -1658,6 +1658,7 @@ html.webp .stone-node--red.stone-node--last-play::after {
 
 .win-modal__actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 	margin-top: 12px;
 	width: 100%;

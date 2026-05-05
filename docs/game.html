@@ -563,6 +563,8 @@
 						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
 					</div>
 					<div class="win-modal__actions">
+						<button class="win-modal__btn" x-on:click="playAgain()">Play Again</button>
+						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="_spellNamesForExport && _spellNamesForExport.length === 9">Play Again (Same Layout)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<a class="win-modal__btn" href="./">Main Menu</a>
