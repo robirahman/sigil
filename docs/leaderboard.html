@@ -142,7 +142,9 @@
 					<template x-for="(player, index) in pagePlayers" x-bind:key="player.uid">
 						<tr>
 							<td x-text="pageStart + index + 1"></td>
-							<td class="name" x-bind:class="{ 'name--ai': player.isAI }" x-text="player.displayName"></td>
+							<td class="name" x-bind:class="{ 'name--ai': player.isAI }">
+								<a x-bind:href="'profile.html?uid=' + player.uid" x-bind:class="{ 'name--ai': player.isAI }" style="color: inherit; text-decoration: none;" x-text="player.displayName"></a>
+							</td>
 							<td class="elo" x-text="player.elo"></td>
 							<td x-text="player.gamesPlayed"></td>
 						</tr>
@@ -215,11 +217,13 @@
 						const results = [];
 						snap.forEach((child) => {
 							const data = child.val();
+							const gamesPlayed = data.gamesPlayed || 0;
+							if (gamesPlayed === 0) return;
 							results.push({
 								uid: child.key,
 								displayName: data.displayName || 'Unknown',
 								elo: data.elo ?? 1000,
-								gamesPlayed: data.gamesPlayed || 0,
+								gamesPlayed: gamesPlayed,
 								isAI: data.isAI || false,
 							});
 						});
@@ -227,14 +231,6 @@
 						this.allPlayers = results.reverse();
 					} catch (e) {
 						console.error('Failed to load leaderboard:', e);
-					}
-
-					// If still empty, show AI defaults client-side
-					if (this.allPlayers.length === 0) {
-						this.allPlayers = [
-							{ uid: '__ai_easy__', displayName: 'AI (Easy)', elo: 1000, gamesPlayed: 0, isAI: true },
-							{ uid: '__ai_medium__', displayName: 'AI (Medium)', elo: 1000, gamesPlayed: 0, isAI: true },
-						];
 					}
 
 					this.loading = false;
