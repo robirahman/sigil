@@ -91,6 +91,45 @@ async function processEloClientSide(db, gameId, game) {
 	updates['completed_games/' + gameId + '/redEloAfter'] = redAfter;
 	updates['completed_games/' + gameId + '/blueEloAfter'] = blueAfter;
 
+	// Per-user game index for profile pages (one entry per player).
+	// Profile pages read /user_games/{uid} to list a player's games and
+	// derive rating history.
+	const redData = game.winner === 'red' ? winnerData : loserData;
+	const blueData = game.winner === 'red' ? loserData : winnerData;
+	const redName = redData.displayName || 'Red';
+	const blueName = blueData.displayName || 'Blue';
+	const roomCode = game.roomCode || null;
+	const ts = game.timestamp || Date.now();
+
+	// Red's entry (opponent is blue)
+	updates['user_games/' + game.redUid + '/' + gameId] = {
+		timestamp: ts,
+		roomCode: roomCode,
+		gameId: gameId,
+		opponent: blueName,
+		opponentUid: game.blueUid,
+		opponentIsAI: !!blueData.isAI,
+		color: 'red',
+		result: game.winner === 'red' ? 'win' : 'loss',
+		eloBefore: redBefore,
+		eloAfter: redAfter,
+		eloChange: redAfter - redBefore,
+	};
+	// Blue's entry (opponent is red)
+	updates['user_games/' + game.blueUid + '/' + gameId] = {
+		timestamp: ts,
+		roomCode: roomCode,
+		gameId: gameId,
+		opponent: redName,
+		opponentUid: game.redUid,
+		opponentIsAI: !!redData.isAI,
+		color: 'blue',
+		result: game.winner === 'blue' ? 'win' : 'loss',
+		eloBefore: blueBefore,
+		eloAfter: blueAfter,
+		eloChange: blueAfter - blueBefore,
+	};
+
 	await db.ref().update(updates);
 
 	console.log('[Elo] Processed:', winnerData.displayName, '+' + points, '(' + newWinnerElo + '),',
