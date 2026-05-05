@@ -108,13 +108,19 @@ class AuthManager {
 		const uid = this.currentUser.uid;
 		const ref = db.ref('users/' + uid);
 		const snap = await ref.once('value');
+		const existing = snap.val() || {};
 
-		const name = displayName || this.currentUser.displayName || 'Player';
+		// Priority: explicit signup arg → existing RTDB record → Auth profile → 'Player'.
+		// 'Player' is reachable only when no name has ever been recorded anywhere.
+		const resolvedName =
+			displayName ||
+			existing.displayName ||
+			this.currentUser.displayName ||
+			'Player';
 
 		if (!snap.exists()) {
-			// First time: create profile with defaults
 			const profile = {
-				displayName: name,
+				displayName: resolvedName,
 				elo: 1000,
 				gamesPlayed: 0,
 				wins: 0,
@@ -124,18 +130,23 @@ class AuthManager {
 			await ref.set(profile);
 			this.userProfile = profile;
 		} else {
-			this.userProfile = snap.val();
-			// Update displayName if it changed on the Auth side
-			if (name && name !== this.userProfile.displayName) {
-				await ref.child('displayName').set(name);
-				this.userProfile.displayName = name;
+			this.userProfile = existing;
+			// Only update the stored name when the caller explicitly passed one
+			// (sign-up flow). Never overwrite an existing real name with a fallback.
+			if (displayName && displayName !== existing.displayName) {
+				await ref.child('displayName').set(displayName);
+				this.userProfile.displayName = displayName;
+			} else if (!existing.displayName && this.currentUser.displayName) {
+				// Skeletal record (created by elo.js multi-path update without a name).
+				// Backfill from Auth profile only — never write the 'Player' literal.
+				await ref.child('displayName').set(this.currentUser.displayName);
+				this.userProfile.displayName = this.currentUser.displayName;
 			}
 		}
 
-		// Ensure leaderboard entry exists
 		const lbRef = db.ref('leaderboard/' + uid);
 		const lbSnap = await lbRef.once('value');
-		if (!lbSnap.exists()) {
+		if (!lbSnap.exists() && this.userProfile.displayName) {
 			await lbRef.set({
 				displayName: this.userProfile.displayName,
 				elo: this.userProfile.elo || 1000,
