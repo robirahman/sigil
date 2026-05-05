@@ -613,7 +613,7 @@ class Player():
 									actions.append(spell.name)
 									spelllist.append(spell.name)
 						else:
-							if self.lock == spell and ('Spring' in [s.name for s in self.charged_spells]) and self.springlock != spell:
+							if self.lock == spell and ('Seal_of_Spring' in [s.name for s in self.charged_spells]) and self.springlock != spell:
 								actions.append(spell.name)
 								spelllist.append(spell.name)
 							if self.lock != spell:

@@ -803,6 +803,287 @@ class Seal_of_Lightning(Spell):
 
 
 
+###############################################################################################
+#####  EXPANSION SPELLS: Springtime + Celestial
+
+
+# Helper: place player.color onto `node`, handling enemy-push and animations.
+def _place_into(player, node, record_hard=True):
+	if node.stone == player.enemy:
+		if record_hard:
+			player.board.record('hard_move', node=node.name, pushed_to='pending')
+		player.pushenemy(node)
+	else:
+		node.stone = player.color
+		anim = {"type": "new_stone_animation", "color": player.color, "node": node.name}
+		if player.ishuman:
+			player.ws.send(json.dumps(anim))
+		if player.opp.ishuman:
+			player.opp.ws.send(json.dumps(anim))
+		player.board.last_play = node.name
+		player.board.last_player = player.color
+		player.board.record('move', node=node.name)
+		player.board.update()
+
+
+# Helper: returns the spell-position index (1..9) containing `node`, or None.
+def _spell_index_of(player, node):
+	for i in range(1, 10):
+		if node in player.board.positions[i]:
+			return i
+	return None
+
+
+class Seal_of_Spring(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.static = True
+
+		self.text = "STATIC: You may cast your locked spells a second time."
+
+
+class Scatter(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 1 soft blink move into each of 2 spells."
+
+	def resolve(self, player):
+		used_spells = set()
+		for move_num in range(2):
+			# Soft blink: any empty node in a spell we haven't placed in yet.
+			options = {}
+			for i in range(1, 10):
+				if i in used_spells:
+					continue
+				for node in player.board.positions[i]:
+					if node.stone is None:
+						options[node.name] = player.color
+			if not options:
+				return  # ends early
+			if player.ishuman:
+				egress = {"type": "message",
+				          "message": "Soft blink into spell {} of 2 (any empty node).".format(move_num + 1),
+				          "awaiting": "node", "moveoptions": options}
+				player.ws.send(json.dumps(egress))
+				while True:
+					resp = player.receivemessage()
+					if resp not in options:
+						continue
+					node = player.board.nodes[resp]
+					used_spells.add(_spell_index_of(player, node))
+					_place_into(player, node, record_hard=False)
+					break
+			else:
+				node_name = next(iter(options))
+				node = player.board.nodes[node_name]
+				used_spells.add(_spell_index_of(player, node))
+				node.stone = player.color
+				player.board.update()
+
+
+class Blossom(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 1 soft blink move into each other 3-node and 5-node spell."
+
+	def resolve(self, player):
+		my_idx = _spell_index_of(player, self.position[0])
+		target_indices = [i for i in range(1, 7) if i != my_idx]
+		used_spells = set()
+		for _ in target_indices:
+			remaining = [i for i in target_indices if i not in used_spells]
+			options = {}
+			for i in remaining:
+				for node in player.board.positions[i]:
+					if node.stone is None:
+						options[node.name] = player.color
+			if not options:
+				return  # ends early
+			if player.ishuman:
+				egress = {"type": "message",
+				          "message": "Soft blink into a remaining 3-node or 5-node spell.",
+				          "awaiting": "node", "moveoptions": options}
+				player.ws.send(json.dumps(egress))
+				while True:
+					resp = player.receivemessage()
+					if resp not in options:
+						continue
+					node = player.board.nodes[resp]
+					used_spells.add(_spell_index_of(player, node))
+					_place_into(player, node, record_hard=False)
+					break
+			else:
+				node_name = next(iter(options))
+				node = player.board.nodes[node_name]
+				used_spells.add(_spell_index_of(player, node))
+				node.stone = player.color
+				player.board.update()
+
+
+# Builds {node_name -> color} for nodes within `spell_indices` that are legal
+# soft-or-hard move targets (adjacency to player.color required).
+def _move_options_in_spells(player, spell_indices):
+	options = {}
+	for idx in spell_indices:
+		for node in player.board.positions[idx]:
+			if node.stone == player.color:
+				continue
+			if any(nb.stone == player.color for nb in node.neighbors):
+				options[node.name] = player.color
+	return options
+
+
+class Azimuth(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+
+		self.text = "Make 1 move into a spell where you control all but 1 node."
+
+	def resolve(self, player):
+		qualifying = []
+		for i in range(1, 10):
+			uncontrolled = sum(1 for n in player.board.positions[i] if n.stone != player.color)
+			if uncontrolled == 1:
+				qualifying.append(i)
+		if not qualifying:
+			return
+		options = _move_options_in_spells(player, qualifying)
+		if not options:
+			return
+		if player.ishuman:
+			egress = {"type": "message",
+			          "message": "Move into a spell where you control all but 1 node.",
+			          "awaiting": "node", "moveoptions": options}
+			player.ws.send(json.dumps(egress))
+			while True:
+				resp = player.receivemessage()
+				if resp not in options:
+					continue
+				_place_into(player, player.board.nodes[resp])
+				break
+		else:
+			node_name = next(iter(options))
+			_place_into(player, player.board.nodes[node_name])
+
+
+class Eclipse(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 2 moves into a spell where you control all but 2 nodes."
+
+	def resolve(self, player):
+		candidates = []
+		for i in range(1, 10):
+			uncontrolled = sum(1 for n in player.board.positions[i] if n.stone != player.color)
+			if uncontrolled == 2:
+				candidates.append(i)
+		if not candidates:
+			return
+		options = _move_options_in_spells(player, candidates)
+		if not options:
+			return
+		chosen_spell = None
+		if player.ishuman:
+			egress = {"type": "message",
+			          "message": "Make 2 moves into a spell. Pick the first.",
+			          "awaiting": "node", "moveoptions": options}
+			player.ws.send(json.dumps(egress))
+			while True:
+				resp = player.receivemessage()
+				if resp not in options:
+					continue
+				node = player.board.nodes[resp]
+				chosen_spell = _spell_index_of(player, node)
+				_place_into(player, node)
+				break
+		else:
+			node_name = next(iter(options))
+			node = player.board.nodes[node_name]
+			chosen_spell = _spell_index_of(player, node)
+			_place_into(player, node)
+		if chosen_spell is None:
+			return
+		options2 = _move_options_in_spells(player, [chosen_spell])
+		if not options2:
+			return  # ends early
+		if player.ishuman:
+			egress = {"type": "message",
+			          "message": "Make the second move into the same spell.",
+			          "awaiting": "node", "moveoptions": options2}
+			player.ws.send(json.dumps(egress))
+			while True:
+				resp = player.receivemessage()
+				if resp not in options2:
+					continue
+				_place_into(player, player.board.nodes[resp])
+				break
+		else:
+			node_name = next(iter(options2))
+			_place_into(player, player.board.nodes[node_name])
+
+
+# Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
+SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
+
+
+class Syzygy(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell."
+
+	def resolve(self, player):
+		my_idx = _spell_index_of(player, self.position[0])
+		if my_idx not in SYZYGY_OPPOSITE:
+			return
+		charm_idx, sorcery_idx = SYZYGY_OPPOSITE[my_idx]
+		charm_node = player.board.positions[charm_idx][0]
+		sorcery_nodes = player.board.positions[sorcery_idx]
+
+		# Step 1: 1 blink move into the opposite 1-node spell.
+		if charm_node.stone != player.color:
+			if player.ishuman:
+				opts = {charm_node.name: player.color}
+				egress = {"type": "message", "message": "Blink into the opposite 1-node spell.",
+				          "awaiting": "node", "moveoptions": opts}
+				player.ws.send(json.dumps(egress))
+				while True:
+					resp = player.receivemessage()
+					if resp != charm_node.name:
+						continue
+					_place_into(player, charm_node)
+					break
+			else:
+				_place_into(player, charm_node)
+
+		# Step 2: up to 3 blink moves into the opposite 3-node spell.
+		for move in range(3):
+			opts = {n.name: player.color for n in sorcery_nodes if n.stone != player.color}
+			if not opts:
+				return
+			if player.ishuman:
+				egress = {"type": "message",
+				          "message": "Blink into the opposite 3-node spell ({}/3).".format(move + 1),
+				          "awaiting": "node", "moveoptions": opts}
+				player.ws.send(json.dumps(egress))
+				while True:
+					resp = player.receivemessage()
+					if resp not in opts:
+						continue
+					_place_into(player, player.board.nodes[resp])
+					break
+			else:
+				node_name = next(iter(opts))
+				_place_into(player, player.board.nodes[node_name])
+
+
+
+
 
 # class Winter(Spell):
 # 	def __init__(self, board, position, name):
