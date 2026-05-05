@@ -454,7 +454,7 @@ document.addEventListener('alpine:init', () => {
 						options.ai = new GreedyAI();
 					} else if (
 						aiMode === 'medium' || aiMode === 'minimax' ||
-						aiMode === 'hard'
+						aiMode === 'hard' || aiMode === 'very_hard'
 					) {
 						// Each mode loads a different experimental model so I
 						// can A/B them against each other on rated games. The
@@ -473,11 +473,12 @@ document.addEventListener('alpine:init', () => {
 						// closed the gap on this data, so the production "Hard"
 						// tier is search-deep rather than network-bigger.
 						const variant = {
-							medium:  { name: 'sigil_net', loader: SigilNetJS },
-							minimax: { name: 'sigil_net', loader: SigilNetJS },
-							hard:    { name: 'sigil_net', loader: SigilNetJS },
+							medium:    { name: 'sigil_net', loader: SigilNetJS },
+							minimax:   { name: 'sigil_net', loader: SigilNetJS },
+							hard:      { name: 'sigil_net', loader: SigilNetJS },
+							very_hard: { name: 'sigil_net', loader: SigilNetJS },
 						}[aiMode];
-						const useMinimax = (aiMode === 'minimax' || aiMode === 'hard');
+						const useMinimax = (aiMode === 'minimax' || aiMode === 'hard' || aiMode === 'very_hard');
 						try {
 							const model = await variant.loader.load(
 								`static/models/${variant.name}.json`,
@@ -485,11 +486,10 @@ document.addEventListener('alpine:init', () => {
 							);
 							options.aiColor = _aiColor;
 							if (useMinimax) {
-								options.ai = new MinimaxAI(model, {
-									maxDepth: 3,
-									timeLimit: 12.0,
-									orderingAlpha: 1.0,
-								});
+								const minimaxOpts = aiMode === 'very_hard'
+									? { maxDepth: 4, timeLimit: 30.0, orderingAlpha: 1.0 }
+									: { maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0 };
+								options.ai = new MinimaxAI(model, minimaxOpts);
 							} else {
 								options.ai = new NeuralAI(model, 100, 1.0);
 							}
@@ -935,6 +935,7 @@ document.addEventListener('alpine:init', () => {
 						easy: 'AI (Easy)',
 						medium: 'AI (Medium)',
 						hard: 'AI (Hard)',
+						very_hard: 'AI (Very Hard)',
 						minimax: 'AI (Minimax 3-ply)',
 					};
 					return labels[difficulty] || ('AI (' + difficulty + ')');
@@ -954,6 +955,8 @@ document.addEventListener('alpine:init', () => {
 						const labels = {
 							easy: 'AI (Easy)',
 							medium: 'AI (Medium)',
+							hard: 'AI (Hard)',
+							very_hard: 'AI (Very Hard)',
 							minimax: 'AI (Minimax 3-ply)',
 						};
 						const name = labels[difficulty] || `AI (${difficulty})`;
