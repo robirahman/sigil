@@ -56,6 +56,14 @@ const CORE_SPELLS = {
 	Surge:             { resolve: 'surge_move', static: false, ischarm: true },
 	Comet:             { resolve: 'comet',      static: false, ischarm: true },
 	Seal_of_Summer:    { resolve: null,         static: true,  ischarm: true },
+	// Springtime expansion
+	Seal_of_Spring:    { resolve: null,         static: true,  ischarm: true },
+	Scatter:           { resolve: 'scatter',    static: false, ischarm: false },
+	Blossom:           { resolve: 'blossom',    static: false, ischarm: false },
+	// Celestial expansion
+	Azimuth:           { resolve: 'azimuth',    static: false, ischarm: true },
+	Eclipse:           { resolve: 'eclipse',    static: false, ischarm: false },
+	Syzygy:            { resolve: 'syzygy',     static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -74,11 +82,48 @@ const SPELL_TEXTS = {
 	Surge:             'If you dashed this turn, make 1 move.',
 	Comet:             'Make 1 blink move, then sacrifice a stone.',
 	Seal_of_Summer:    'STATIC: You may cast 2 spells on your turn.',
+	Seal_of_Spring:    'STATIC: You may cast your locked spells a second time.',
+	Scatter:           'Make 1 soft blink move into each of 2 spells.',
+	Blossom:           'Make 1 soft blink move into each other 3-node and 5-node spell.',
+	Azimuth:           'Make 1 move into a spell where you control all but 1 node.',
+	Eclipse:           'Make 2 moves into a spell where you control all but 2 nodes.',
+	Syzygy:            'Make 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
 const CORE_SORCERIES = ['Grow', 'Fireblast', 'Hail_Storm', 'Meteor', 'Seal_of_Wind'];
 const CORE_CHARMS = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer'];
+
+const SPRINGTIME_RITUALS = ['Blossom'];
+const SPRINGTIME_SORCERIES = ['Scatter'];
+const SPRINGTIME_CHARMS = ['Seal_of_Spring'];
+
+const CELESTIAL_RITUALS = ['Syzygy'];
+const CELESTIAL_SORCERIES = ['Eclipse'];
+const CELESTIAL_CHARMS = ['Azimuth'];
+
+const SPELL_PACKS = {
+	core: {
+		rituals: CORE_RITUALS,
+		sorceries: CORE_SORCERIES,
+		charms: CORE_CHARMS,
+	},
+	springtime: {
+		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES],
+		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS],
+	},
+	celestial: {
+		rituals: [...CORE_RITUALS, ...CELESTIAL_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...CELESTIAL_SORCERIES],
+		charms: [...CORE_CHARMS, ...CELESTIAL_CHARMS],
+	},
+	all: {
+		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS, ...CELESTIAL_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES, ...CELESTIAL_SORCERIES],
+		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS, ...CELESTIAL_CHARMS],
+	},
+};
 
 function shuffleArray(arr) {
 	const a = arr.slice();
@@ -89,9 +134,10 @@ function shuffleArray(arr) {
 	return a;
 }
 
-function generateSpellList() {
-	const rituals = shuffleArray(CORE_RITUALS).slice(0, 3);
-	const sorceries = shuffleArray(CORE_SORCERIES).slice(0, 3);
-	const charms = shuffleArray(CORE_CHARMS).slice(0, 3);
+function generateSpellList(packKey) {
+	const pack = SPELL_PACKS[packKey] || SPELL_PACKS.core;
+	const rituals = shuffleArray(pack.rituals).slice(0, 3);
+	const sorceries = shuffleArray(pack.sorceries).slice(0, 3);
+	const charms = shuffleArray(pack.charms).slice(0, 3);
 	return [...rituals, ...sorceries, ...charms];
 }

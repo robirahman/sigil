@@ -116,6 +116,10 @@
 				vs AI (Hard)
 				<small>Neural network + 3-ply lookahead (10s per turn)</small>
 			</a>
+			<a class="mode-button" href="game.html?ai=very_hard">
+				vs AI (Very Hard)
+				<small>Neural network + 4-ply lookahead (30s per turn)</small>
+			</a>
 <a class="mode-button" href="multiplayer.html">
 				Online Multiplayer
 				<small>Play with a friend over the internet</small>
@@ -140,6 +144,25 @@
 				Rulebook
 				<small>Official rules (PDF)</small>
 			</a>
+			<div style="margin-top: 20px;">
+				<label class="theme-label">Spell pack <small style="opacity:0.7;">(expansion AI games are unrated)</small></label>
+				<select id="spell-pack-select" class="theme-select">
+					<option value="core">Core</option>
+					<option value="springtime">Springtime expansion</option>
+					<option value="celestial">Celestial expansion</option>
+					<option value="all">All packs combined</option>
+				</select>
+			</div>
+			<script>
+				(function() {
+					var sel = document.getElementById('spell-pack-select');
+					var stored = localStorage.getItem('sigilSpellPack') || 'core';
+					sel.value = stored;
+					sel.addEventListener('change', function() {
+						localStorage.setItem('sigilSpellPack', sel.value);
+					});
+				})();
+			</script>
 			<div style="margin-top: 20px;">
 				<label class="theme-label">Theme</label>
 				<select id="theme-select" class="theme-select" onchange="themeManager.apply(this.value)">

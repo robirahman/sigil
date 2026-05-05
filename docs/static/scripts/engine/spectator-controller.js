@@ -154,7 +154,7 @@ class SpectatorController {
 						if (canspell || (!canspell && summerActive)) { actions.push(spellName); spellList.push(spellName); }
 					} else {
 						if (board.lock[color] === spellName) {
-							if (board.chargedSpells[color].includes('Spring') && board.springlock[color] !== spellName) { actions.push(spellName); spellList.push(spellName); }
+							if (board.chargedSpells[color].includes('Seal_of_Spring') && board.springlock[color] !== spellName) { actions.push(spellName); spellList.push(spellName); }
 						} else { actions.push(spellName); spellList.push(spellName); }
 					}
 				}

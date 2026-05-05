@@ -845,6 +845,15 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
+					// Expansion spells make the game unrated — the trained model has not
+					// seen them, so the rating signal would be biased.
+					const EXPANSION_SPELLS = new Set([
+						'Seal_of_Spring', 'Scatter', 'Blossom',
+						'Azimuth', 'Eclipse', 'Syzygy',
+					]);
+					const _spellNames = _engineRef && _engineRef.board ? _engineRef.board.spellNames : [];
+					const _isExpansionGame = _spellNames.some(s => EXPANSION_SPELLS.has(s));
+
 					try {
 						const db = firebase.database();
 						const aiUid = '__ai_' + difficulty + '__';
@@ -874,7 +883,7 @@ document.addEventListener('alpine:init', () => {
 								finishedAt: Date.now(),
 								red: { connected: false, uid: _humanColor === 'red' ? humanUid : aiUid, displayName: _humanColor === 'red' ? humanName : aiName },
 								blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
-								ranked: true,
+								ranked: !_isExpansionGame,
 								winner: winner,
 								gameLog: gameTurns,
 								allowSpectators: true,
@@ -892,7 +901,7 @@ document.addEventListener('alpine:init', () => {
 							roomCode: roomCode,
 							redUid: _humanColor === 'red' ? humanUid : aiUid,
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
-							ranked: true,
+							ranked: !_isExpansionGame,
 						};
 
 						// Attach any annotations the human made during the game.
@@ -901,6 +910,12 @@ document.addEventListener('alpine:init', () => {
 						}
 
 						const ref = await db.ref('completed_games').push(gameRecord);
+
+						if (_isExpansionGame) {
+							_this.messageHistory.push('Unrated: expansion-pack games do not affect rating.');
+							return;
+						}
+
 						const result = await processEloClientSide(db, ref.key, gameRecord);
 						if (result) {
 							const youWon = winner === _humanColor;

@@ -61,7 +61,18 @@ class GameController {
 	}
 
 	async startGame(importSfn) {
-		const spellNames = (!importSfn && this.spellNamesOverride) ? this.spellNamesOverride : null;
+		let spellNames = null;
+		if (!importSfn) {
+			if (this.spellNamesOverride) {
+				spellNames = this.spellNamesOverride;
+			} else {
+				let packKey = 'core';
+				if (typeof localStorage !== 'undefined') {
+					packKey = localStorage.getItem('sigilSpellPack') || 'core';
+				}
+				spellNames = generateSpellList(packKey);
+			}
+		}
 		this.board = new SigilBoard(spellNames);
 
 		if (importSfn) {
@@ -268,7 +279,7 @@ class GameController {
 						}
 					} else {
 						if (board.lock[color] === spellName) {
-							if (board.chargedSpells[color].includes('Spring') && board.springlock[color] !== spellName) {
+							if (board.chargedSpells[color].includes('Seal_of_Spring') && board.springlock[color] !== spellName) {
 								actions.push(spellName);
 								spellList.push(spellName);
 							}

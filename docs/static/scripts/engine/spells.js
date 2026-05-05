@@ -4,6 +4,39 @@
 // getInput(payload) sends a message/event to the UI and returns a Promise
 // that resolves with the player's response (a node name, etc.).
 
+// Returns position indices (1..9) where `color` controls all but exactly `n` nodes.
+// `opts.size`, if set, restricts to spells with that many nodes.
+function spellsWhereControlAllButN(board, color, n, opts = {}) {
+	const result = [];
+	for (let i = 1; i <= 9; i++) {
+		const nodes = POSITIONS[i];
+		if (!nodes) continue;
+		if (opts.size && nodes.length !== opts.size) continue;
+		let uncontrolled = 0;
+		for (const node of nodes) {
+			if (board.stones[node] !== color) uncontrolled++;
+		}
+		if (uncontrolled === n) result.push(i);
+	}
+	return result;
+}
+
+// Returns the position index (1..9) that contains `nodeName`, or null.
+function spellPositionOfNode(nodeName) {
+	for (let i = 1; i <= 9; i++) {
+		if (POSITIONS[i] && POSITIONS[i].includes(nodeName)) return i;
+	}
+	return null;
+}
+
+// Maps a 5-node ritual position to its "opposite" charm (1-node) and sorcery (3-node)
+// positions, rotating zones A→B→C→A.
+const SYZYGY_OPPOSITE = {
+	1: { charm: 8, sorcery: 5 },
+	2: { charm: 9, sorcery: 6 },
+	3: { charm: 7, sorcery: 4 },
+};
+
 const SpellResolvers = {
 
 	// --- Soft move spells ---
@@ -356,6 +389,266 @@ const SpellResolvers = {
 				}
 				board.update();
 				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Azimuth (celestial charm) ---
+	async azimuth(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const qualifying = spellsWhereControlAllButN(board, color, 1);
+		if (qualifying.length === 0) {
+			emit({ type: 'message', message: 'No spell qualifies (need to control all but 1 node).', awaiting: null });
+			return;
+		}
+		const allMoves = getAllMoveTargets(board, color);
+		const targets = {};
+		for (const node of Object.keys(allMoves)) {
+			for (const idx of qualifying) {
+				if (POSITIONS[idx].includes(node)) { targets[node] = color; break; }
+			}
+		}
+		if (Object.keys(targets).length === 0) {
+			emit({ type: 'message', message: 'No legal move into a qualifying spell.', awaiting: null });
+			return;
+		}
+		while (true) {
+			const resp = await getInput({
+				type: 'message',
+				message: 'Move into a spell where you control all but 1 node.',
+				awaiting: 'node',
+				moveoptions: targets,
+			});
+			if (!targets[resp]) continue;
+			if (board.stones[resp] === enemy) {
+				await doPushEnemy(board, resp, color, getInput, emit);
+			} else {
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+			}
+			break;
+		}
+	},
+
+	// --- Eclipse (celestial sorcery) ---
+	async eclipse(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const candidates = spellsWhereControlAllButN(board, color, 2);
+		if (candidates.length === 0) {
+			emit({ type: 'message', message: 'No spell qualifies (need to control all but 2 nodes).', awaiting: null });
+			return;
+		}
+
+		// Move 1: target lies in any candidate spell
+		const moves1 = getAllMoveTargets(board, color);
+		const targets1 = {};
+		for (const node of Object.keys(moves1)) {
+			for (const idx of candidates) {
+				if (POSITIONS[idx].includes(node)) { targets1[node] = color; break; }
+			}
+		}
+		if (Object.keys(targets1).length === 0) {
+			emit({ type: 'message', message: 'No legal move into a qualifying spell.', awaiting: null });
+			return;
+		}
+
+		let chosenSpell = null;
+		while (true) {
+			const resp = await getInput({
+				type: 'message',
+				message: 'Make 2 moves into a spell where you control all but 2 nodes. Pick the first.',
+				awaiting: 'node',
+				moveoptions: targets1,
+			});
+			if (!targets1[resp]) continue;
+			chosenSpell = spellPositionOfNode(resp);
+			if (board.stones[resp] === enemy) {
+				await doPushEnemy(board, resp, color, getInput, emit);
+			} else {
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+			}
+			break;
+		}
+
+		// Move 2: must be in the chosen spell
+		const moves2 = getAllMoveTargets(board, color);
+		const targets2 = {};
+		for (const n of POSITIONS[chosenSpell]) {
+			if (moves2[n]) targets2[n] = color;
+		}
+		if (Object.keys(targets2).length === 0) {
+			emit({ type: 'message', message: 'No legal second move; Eclipse ends early.', awaiting: null });
+			return;
+		}
+		while (true) {
+			const resp = await getInput({
+				type: 'message',
+				message: 'Make the second move into the same spell.',
+				awaiting: 'node',
+				moveoptions: targets2,
+			});
+			if (!targets2[resp]) continue;
+			if (board.stones[resp] === enemy) {
+				await doPushEnemy(board, resp, color, getInput, emit);
+			} else {
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+			}
+			break;
+		}
+	},
+
+	// --- Scatter (springtime sorcery) ---
+	async scatter(board, color, spellName, getInput, emit) {
+		const usedSpells = new Set();
+		for (let move = 0; move < 2; move++) {
+			const targets = {};
+			for (let i = 1; i <= 9; i++) {
+				if (usedSpells.has(i)) continue;
+				for (const n of POSITIONS[i]) {
+					if (board.stones[n] === null) targets[n] = color;
+				}
+			}
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No remaining empty nodes; Scatter ends early.', awaiting: null });
+				return;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Soft blink into spell ${move + 1} of 2 (any empty node).`,
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				const idx = spellPositionOfNode(resp);
+				usedSpells.add(idx);
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Blossom (springtime ritual) ---
+	async blossom(board, color, spellName, getInput, emit) {
+		const selfIdx = board.spellNames.indexOf(spellName) + 1;
+		const usedSpells = new Set([selfIdx]);
+		// Target: each other 3-node and 5-node spell (positions 1..6 minus self)
+		const required = [1, 2, 3, 4, 5, 6].filter(i => i !== selfIdx).length;
+		for (let move = 0; move < required; move++) {
+			const targets = {};
+			for (let i = 1; i <= 6; i++) {
+				if (usedSpells.has(i)) continue;
+				for (const n of POSITIONS[i]) {
+					if (board.stones[n] === null) targets[n] = color;
+				}
+			}
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No remaining empty nodes; Blossom ends early.', awaiting: null });
+				return;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Soft blink into a remaining 3-node or 5-node spell (${move + 1}/${required}).`,
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				const idx = spellPositionOfNode(resp);
+				usedSpells.add(idx);
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Syzygy (celestial ritual) ---
+	async syzygy(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const spellIdx = board.spellNames.indexOf(spellName) + 1;
+		const opp = SYZYGY_OPPOSITE[spellIdx];
+		if (!opp) return;
+
+		// Step 1: 1 blink move into the 1-node opposite spell
+		const charmNode = POSITIONS[opp.charm][0];
+		if (board.stones[charmNode] !== color) {
+			const targets = { [charmNode]: color };
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: 'Blink into the opposite 1-node spell.',
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (resp !== charmNode) continue;
+				if (board.stones[charmNode] === enemy) {
+					await doPushEnemy(board, charmNode, color, getInput, emit);
+				} else {
+					board.stones[charmNode] = color;
+					emit({ type: 'new_stone_animation', color, node: charmNode });
+					board.lastPlay = charmNode;
+					board.lastPlayer = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+				}
+				break;
+			}
+		}
+
+		// Step 2: up to 3 blink moves into the opposite 3-node spell
+		const sorceryNodes = POSITIONS[opp.sorcery];
+		for (let move = 0; move < 3; move++) {
+			const targets = {};
+			for (const n of sorceryNodes) {
+				if (board.stones[n] !== color) targets[n] = color;
+			}
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'Opposite 3-node spell fully yours; Syzygy ends.', awaiting: null });
+				return;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Blink into the opposite 3-node spell (${move + 1}/3).`,
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				if (board.stones[resp] === enemy) {
+					await doPushEnemy(board, resp, color, getInput, emit);
+				} else {
+					board.stones[resp] = color;
+					emit({ type: 'new_stone_animation', color, node: resp });
+					board.lastPlay = resp;
+					board.lastPlayer = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+				}
 				break;
 			}
 		}

@@ -471,6 +471,119 @@ class SimBoard {
 				actions.push(this._doMove(color, targets[0], false));
 				this.update();
 			}
+		} else if (rt === 'azimuth') {
+			// 1 move into a spell where this color controls all but 1 node.
+			const qualifying = [];
+			for (let i = 1; i <= 9; i++) {
+				let unc = 0;
+				for (const n of POSITIONS[i]) if (this.stones[n] !== color) unc++;
+				if (unc === 1) qualifying.push(i);
+			}
+			const moves = this._allMoveable(color);
+			let chosen = null;
+			for (const idx of qualifying) {
+				for (const n of POSITIONS[idx]) {
+					if (moves.includes(n)) { chosen = n; break; }
+				}
+				if (chosen) break;
+			}
+			if (chosen) {
+				actions.push(this._doMove(color, chosen, false));
+				this.update();
+			}
+		} else if (rt === 'eclipse') {
+			// 2 moves into a spell where this color controls all but 2 nodes.
+			const candidates = [];
+			for (let i = 1; i <= 9; i++) {
+				let unc = 0;
+				for (const n of POSITIONS[i]) if (this.stones[n] !== color) unc++;
+				if (unc === 2) candidates.push(i);
+			}
+			let chosenSpell = null;
+			let firstNode = null;
+			outer: for (const idx of candidates) {
+				const moves = this._allMoveable(color);
+				for (const n of POSITIONS[idx]) {
+					if (moves.includes(n)) { chosenSpell = idx; firstNode = n; break outer; }
+				}
+			}
+			if (firstNode) {
+				actions.push(this._doMove(color, firstNode, false));
+				this.update();
+				const moves2 = this._allMoveable(color);
+				for (const n of POSITIONS[chosenSpell]) {
+					if (moves2.includes(n)) {
+						actions.push(this._doMove(color, n, false));
+						this.update();
+						break;
+					}
+				}
+			}
+		} else if (rt === 'scatter') {
+			// 1 soft blink into each of 2 different spells (any empty node).
+			const usedSpells = new Set();
+			for (let move = 0; move < 2; move++) {
+				let placed = null;
+				for (let i = 1; i <= 9; i++) {
+					if (usedSpells.has(i)) continue;
+					for (const n of POSITIONS[i]) {
+						if (this.stones[n] === null) { placed = { n, idx: i }; break; }
+					}
+					if (placed) break;
+				}
+				if (!placed) break;
+				this.stones[placed.n] = color;
+				usedSpells.add(placed.idx);
+				actions.push(new SimAction('blink', { node: placed.n }));
+				this.update();
+			}
+		} else if (rt === 'blossom') {
+			// 1 soft blink into each other 3-node and 5-node spell.
+			const selfIdx = this.spellNames.indexOf(spellName) + 1;
+			for (let i = 1; i <= 6; i++) {
+				if (i === selfIdx) continue;
+				let placed = null;
+				for (const n of POSITIONS[i]) {
+					if (this.stones[n] === null) { placed = n; break; }
+				}
+				if (!placed) break; // ends early
+				this.stones[placed] = color;
+				actions.push(new SimAction('blink', { node: placed }));
+				this.update();
+			}
+		} else if (rt === 'syzygy') {
+			// 1 blink into the opposite 1-node spell, then up to 3 into the opposite 3-node spell.
+			const SYZ_OPP = { 1: { charm: 8, sorcery: 5 }, 2: { charm: 9, sorcery: 6 }, 3: { charm: 7, sorcery: 4 } };
+			const spellIdx = this.spellNames.indexOf(spellName) + 1;
+			const opp = SYZ_OPP[spellIdx];
+			if (opp) {
+				const charmNode = POSITIONS[opp.charm][0];
+				if (this.stones[charmNode] !== color) {
+					if (this.stones[charmNode] === enemy) {
+						const dest = this._pushEnemy(charmNode, color);
+						actions.push(new SimAction('blink', { node: charmNode, pushed_to: dest }));
+					} else {
+						this.stones[charmNode] = color;
+						actions.push(new SimAction('blink', { node: charmNode }));
+					}
+					this.update();
+				}
+				for (let move = 0; move < 3; move++) {
+					let target = null;
+					for (const n of POSITIONS[opp.sorcery]) {
+						if (this.stones[n] !== color) { target = n; break; }
+					}
+					if (!target) break;
+					if (this.stones[target] === enemy) {
+						const dest = this._pushEnemy(target, color);
+						actions.push(new SimAction('blink', { node: target, pushed_to: dest }));
+					} else {
+						this.stones[target] = color;
+						actions.push(new SimAction('blink', { node: target }));
+					}
+					this.update();
+				}
+			}
 		}
 		return actions;
 	}
@@ -520,7 +633,7 @@ class SimBoard {
 				if (canSpell || (!canSpell && hasSummer && canSummer)) castable.push(spellName);
 			} else {
 				if (this.lock[color] === spellName) {
-					if (this.chargedSpells[color].includes('Spring') && this.springlock[color] !== spellName)
+					if (this.chargedSpells[color].includes('Seal_of_Spring') && this.springlock[color] !== spellName)
 						castable.push(spellName);
 				} else {
 					castable.push(spellName);

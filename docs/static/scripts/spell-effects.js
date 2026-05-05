@@ -14,6 +14,14 @@ const SPELL_FX = {
 	Sprout:           { type: 'burst', color: '#88ee66', shake: false },
 	Slash:            { type: 'flash', color: '#ee2222', shake: false },
 	Surge:            { type: 'pulse', color: '#22bbee', shake: false },
+	// Springtime expansion (greens + pinks)
+	Seal_of_Spring:   { type: 'burst', color: '#aaee88', shake: false },
+	Scatter:          { type: 'burst', color: '#ff88cc', shake: false },
+	Blossom:          { type: 'burst', color: '#ffaadd', shake: false },
+	// Celestial expansion (blues + purples)
+	Azimuth:          { type: 'pulse', color: '#7744cc', shake: false },
+	Eclipse:          { type: 'flash', color: '#2233aa', shake: true  },
+	Syzygy:           { type: 'burst', color: '#5544bb', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {
