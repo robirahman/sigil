@@ -51,8 +51,9 @@ class FirebaseSync {
 	 * @param {string[]} spellNames
 	 * @param {object} [userInfo] - { uid, displayName, elo, isAnonymous }
 	 * @param {object} [timeControl] - { type, initialTime, increment, moveTimeout }
+	 * @param {boolean} [allowSpectators] - whether spectators can watch (default true)
 	 */
-	async createRoom(spellNames, userInfo, timeControl) {
+	async createRoom(spellNames, userInfo, timeControl, allowSpectators) {
 		const code = _generateRoomCode();
 		this.roomCode = code;
 		this.myColor = 'red';
@@ -60,6 +61,7 @@ class FirebaseSync {
 		this.redUid = userInfo?.uid || null;
 		this.redDisplayName = userInfo?.displayName || 'Guest';
 		this.timeControl = timeControl || { type: 'none' };
+		this.allowSpectators = allowSpectators !== false;
 
 		const roomData = {
 			spellNames: spellNames,
@@ -69,11 +71,14 @@ class FirebaseSync {
 			blue: { connected: false },
 			ranked: false,
 			timeControl: this.timeControl,
+			allowSpectators: this.allowSpectators,
 		};
 
 		const roomRef = this.db.ref('rooms/' + code);
 		await roomRef.set(roomData);
 		this.roomRef = roomRef;
+
+		this._writeActiveGameIndex('red');
 
 		roomRef.child('blue/connected').on('value', (snap) => {
 			if (snap.val() === true && this.onOpponentJoin) {
@@ -103,6 +108,7 @@ class FirebaseSync {
 		if (!data) throw new Error('Room not found');
 
 		this.timeControl = data.timeControl || { type: 'none' };
+		this.allowSpectators = data.allowSpectators !== false;
 
 		// Store player info from room data
 		if (data.red) {
@@ -130,6 +136,8 @@ class FirebaseSync {
 				await roomRef.child('ranked').set(true);
 			}
 
+			this._writeActiveGameIndex('blue');
+
 			roomRef.child('red/connected').on('value', (snap) => {
 				if (snap.val() === false && this.onOpponentDisconnect) {
 					this.onOpponentDisconnect();
@@ -147,16 +155,27 @@ class FirebaseSync {
 		}
 
 		if (data.status === 'playing') {
-			// Reconnection — figure out which color is disconnected
+			// Reconnection — figure out if this user is one of the players (by uid)
+			const myUid = userInfo?.uid || null;
+			const isRedPlayer = myUid && data.red && data.red.uid === myUid;
+			const isBluePlayer = myUid && data.blue && data.blue.uid === myUid;
 			const blueDisconnected = data.blue && data.blue.connected === false;
 			const redDisconnected = data.red && data.red.connected === false;
 
-			if (blueDisconnected) {
+			if (isRedPlayer) {
+				this.myColor = 'red';
+			} else if (isBluePlayer) {
 				this.myColor = 'blue';
-			} else if (redDisconnected) {
+			} else if (blueDisconnected && (!data.blue || !data.blue.uid)) {
+				// Anonymous reconnection slot
+				this.myColor = 'blue';
+			} else if (redDisconnected && (!data.red || !data.red.uid)) {
 				this.myColor = 'red';
 			} else {
-				// Both players connected — join as spectator
+				// Not a player — join as spectator if allowed
+				if (data.allowSpectators === false) {
+					throw new Error('Spectators are not allowed in this game');
+				}
 				return this._joinAsSpectator(data);
 			}
 
@@ -168,6 +187,8 @@ class FirebaseSync {
 
 			await roomRef.child(this.myColor + '/connected').set(true);
 			roomRef.child(this.myColor + '/connected').onDisconnect().set(false);
+
+			this._writeActiveGameIndex(this.myColor);
 
 			const opponentColor = this.myColor === 'red' ? 'blue' : 'red';
 			roomRef.child(opponentColor + '/connected').on('value', (snap) => {
@@ -196,6 +217,9 @@ class FirebaseSync {
 	 * @param {object} data - room snapshot data
 	 */
 	_joinAsSpectator(data) {
+		if (data.allowSpectators === false) {
+			throw new Error('Spectators are not allowed in this game');
+		}
 		this.myColor = null;
 		if (data.blue) {
 			this.blueUid = data.blue.uid || null;
@@ -366,6 +390,7 @@ class FirebaseSync {
 			return; // abort if already finished
 		});
 		await this.roomRef.child('winner').set(winner);
+		this._removeActiveGameIndex();
 	}
 
 	/**
@@ -418,6 +443,102 @@ class FirebaseSync {
 					this._incomingQueue.push(action);
 				}
 			}
+		});
+	}
+
+	/** Get a snapshot of a room without joining. Used by `?id=CODE` URL handler. */
+	async getRoomSnapshot(code) {
+		const snap = await this.db.ref('rooms/' + code).once('value');
+		return snap.val();
+	}
+
+	/**
+	 * Re-establish the creator (red) side of a waiting room after a page reload.
+	 * Caller must have already verified that userInfo.uid matches data.red.uid.
+	 */
+	async reconnectAsCreator(code, userInfo, roomData) {
+		this.roomCode = code;
+		this.myColor = 'red';
+		this.redUid = userInfo?.uid || null;
+		this.redDisplayName = userInfo?.displayName || (roomData.red && roomData.red.displayName) || 'Guest';
+		this.timeControl = roomData.timeControl || { type: 'none' };
+		this.allowSpectators = roomData.allowSpectators !== false;
+
+		const roomRef = this.db.ref('rooms/' + code);
+		this.roomRef = roomRef;
+
+		await roomRef.child('red/connected').set(true);
+		roomRef.child('red/connected').onDisconnect().set(false);
+
+		this._writeActiveGameIndex('red');
+
+		roomRef.child('blue/connected').on('value', (snap) => {
+			if (snap.val() === true && this.onOpponentJoin) {
+				this.onOpponentJoin();
+			}
+		});
+
+		this._listenForTurns();
+	}
+
+	/**
+	 * Mark the room as finished and persist the gameLog so future visitors can
+	 * load review mode. Called by either player when the game ends.
+	 * @param {string} winner - 'red' or 'blue'
+	 * @param {Array} gameLog - turn-by-turn SFNs
+	 */
+	async writeRoomFinalState(winner, gameLog) {
+		if (!this.roomRef) return;
+		try {
+			await this.roomRef.update({
+				status: 'finished',
+				winner: winner,
+				gameLog: gameLog,
+				finishedAt: Date.now(),
+			});
+		} catch (e) {
+			console.error('Failed to write room final state:', e);
+		}
+		this._removeActiveGameIndex();
+	}
+
+	/**
+	 * Write a /user_active_games/{uid}/{roomCode} entry for the local player so
+	 * they can find this game on the active-games page.
+	 */
+	_writeActiveGameIndex(myColor) {
+		if (!this.roomCode || !this.db) return;
+		const myUid = myColor === 'red' ? this.redUid : this.blueUid;
+		if (!myUid) return; // anonymous players aren't indexed
+		const opponentColor = myColor === 'red' ? 'blue' : 'red';
+		const opponentUid = myColor === 'red' ? this.blueUid : this.redUid;
+		const opponentName = myColor === 'red' ? this.blueDisplayName : this.redDisplayName;
+		const entry = {
+			roomCode: this.roomCode,
+			myColor: myColor,
+			opponentColor: opponentColor,
+			opponentUid: opponentUid || null,
+			opponentDisplayName: opponentName || null,
+			timeControlType: (this.timeControl && this.timeControl.type) || 'none',
+			created: Date.now(),
+		};
+		this.db.ref('user_active_games/' + myUid + '/' + this.roomCode).set(entry).catch((e) => {
+			console.warn('Failed to write user_active_games entry:', e);
+		});
+	}
+
+	/**
+	 * Remove /user_active_games entries for this room.
+	 * Removes the local player's entry and, when known, the opponent's too.
+	 */
+	_removeActiveGameIndex() {
+		if (!this.roomCode || !this.db) return;
+		const updates = {};
+		if (this.redUid) updates['user_active_games/' + this.redUid + '/' + this.roomCode] = null;
+		if (this.blueUid) updates['user_active_games/' + this.blueUid + '/' + this.roomCode] = null;
+		if (Object.keys(updates).length === 0) return;
+		this.db.ref().update(updates).catch((e) => {
+			console.warn('Failed to remove user_active_games entries:', e);
 		});
 	}
 

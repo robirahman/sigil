@@ -51,6 +51,23 @@
           }
         }
       }
+    },
+    "user_games": {
+      "$uid": {
+        ".read": true,
+        ".indexOn": ["timestamp"],
+        "$gameId": {
+          ".write": "auth !== null"
+        }
+      }
+    },
+    "user_active_games": {
+      "$uid": {
+        ".read": true,
+        "$roomCode": {
+          ".write": "auth !== null"
+        }
+      }
     }
   }
 }
