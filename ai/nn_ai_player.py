@@ -10,8 +10,8 @@ import time
 import os
 
 from simboard import SimBoard, NODE_ORDER, POSITIONS, ADJACENCY, CORE_SPELLS
-from nn_evaluator import SigilEvalNet
-from search import iterative_deepening_search, _apply_turn
+from ai.nn_evaluator import SigilEvalNet
+from ai.search import iterative_deepening_search, _apply_turn
 
 
 # Default model paths
@@ -80,7 +80,7 @@ class NNAIPlayer:
         self.genetic_policy = None
         gp = genome_path or GENOME_PATH
         if os.path.exists(gp):
-            from genetic import GeneticPolicy, load_genome
+            from ai.genetic import GeneticPolicy, load_genome
             genome = load_genome(gp)
             self.genetic_policy = GeneticPolicy(genome)
 

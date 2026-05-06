@@ -19,7 +19,7 @@ from sqlalchemy import func
 
 from game import Board, Player, resetException, redwinsException, bluewinsException
 from singleplayergame import SPBoard, AIPlayer
-from nn_ai_player import NNAIPlayer
+from ai.nn_ai_player import NNAIPlayer
 from ai.mcts_ai_player import MCTSAIPlayer
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard

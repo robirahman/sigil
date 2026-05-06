@@ -22,8 +22,8 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from simboard import SimBoard
-from search import _apply_turn
-from selfplay import random_core_spells
+from ai.search import _apply_turn
+from ai.selfplay import random_core_spells
 
 from ai.config import MAX_TURNS, MODELS_DIR
 from ai.sigil_net import SigilNet

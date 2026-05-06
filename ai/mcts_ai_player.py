@@ -11,7 +11,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nn_ai_player import NNAIPlayer, _live_board_to_simboard
+from ai.nn_ai_player import NNAIPlayer, _live_board_to_simboard
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
 from ai.mcts import mcts_search

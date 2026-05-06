@@ -14,7 +14,7 @@ import time
 
 from simboard import SimBoard, NODE_ORDER
 from notation import GameRecorder
-from policies import RandomPolicy, HeuristicPolicy, EpsilonGreedyPolicy
+from ai.policies import RandomPolicy, HeuristicPolicy, EpsilonGreedyPolicy
 
 # Core spell pools
 CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning']
@@ -183,7 +183,7 @@ def run_selfplay(num_games, output_dir, policy_mix='mixed'):
     # Load evolved genomes if available
     genome_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
     try:
-        from genetic import GeneticPolicy, load_genome
+        from ai.genetic import GeneticPolicy, load_genome
         best_genome_path = os.path.join(genome_dir, 'best_genome.json')
         if os.path.exists(best_genome_path):
             best_genome = load_genome(best_genome_path)

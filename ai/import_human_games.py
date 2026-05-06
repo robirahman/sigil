@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from notation import sfn_to_dict, NODE_ORDER, POSITIONS
 from simboard import SimBoard, CORE_SPELLS
-from search import _apply_turn
+from ai.search import _apply_turn
 from ai.features import board_to_tensor, encode_all_turns
 from ai.config import SPELL_TO_ID, DATA_DIR
 

@@ -18,8 +18,8 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from simboard import SimBoard
-from search import _apply_turn as _apply_turn_in_place
-from selfplay import random_core_spells
+from ai.search import _apply_turn as _apply_turn_in_place
+from ai.selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
 from ai.minimax_ai import minimax_search

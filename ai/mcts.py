@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from search import _apply_turn
+from ai.search import _apply_turn
 from ai.features import board_to_tensor, encode_all_turns
 from ai.config import (
     C_PUCT, NUM_SIMS_PLAY, NUM_SIMS_TRAIN,

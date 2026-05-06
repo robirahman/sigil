@@ -18,8 +18,8 @@ import numpy as np
 import torch
 
 from simboard import SimBoard
-from search import _apply_turn
-from selfplay import random_core_spells
+from ai.search import _apply_turn
+from ai.selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard

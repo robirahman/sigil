@@ -24,8 +24,8 @@ import copy
 import numpy as np
 
 from simboard import SimBoard, CompleteTurn, Action, NODE_ORDER, ADJACENCY, POSITIONS, CORE_SPELLS
-from search import _apply_turn
-from selfplay import random_core_spells, MAX_TURNS
+from ai.search import _apply_turn
+from ai.selfplay import random_core_spells, MAX_TURNS
 
 # -------------------------------------------------------------------
 # Genome layout

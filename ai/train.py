@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from nn_evaluator import SigilEvalNet, board_to_features, INPUT_SIZE
+from ai.nn_evaluator import SigilEvalNet, board_to_features, INPUT_SIZE
 
 
 def load_training_data(data_path):
