@@ -164,6 +164,47 @@
 				})();
 			</script>
 			<div style="margin-top: 20px;">
+				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+					<input type="checkbox" id="variant-competitive" />
+					<span>Competitive variant</span>
+				</label>
+				<small style="display: block; opacity: 0.7; font-family: 'Overlock', sans-serif; margin-top: 4px;">
+					Empty board start; both players blink onto any node for their first move.
+				</small>
+			</div>
+			<script>
+				(function() {
+					var cb = document.getElementById('variant-competitive');
+					var stored = localStorage.getItem('sigilVariant') === 'competitive';
+					cb.checked = stored;
+
+					// Mode buttons whose href points at game.html (not multiplayer,
+					// account, etc.). Toggling the checkbox rewrites these hrefs
+					// to add or strip the variant query param.
+					function applyVariant(checked) {
+						var links = document.querySelectorAll('a.mode-button');
+						links.forEach(function(a) {
+							var href = a.getAttribute('href') || '';
+							// Only touch local-game links; leave multiplayer / account / pdf alone.
+							if (href.indexOf('game.html') !== 0) return;
+							// Strip any existing variant param first.
+							href = href.replace(/([?&])variant=[^&]*(&|$)/, function(_m, pre, post) {
+								return post === '&' ? pre : (pre === '?' ? '' : '');
+							});
+							if (checked) {
+								href += (href.indexOf('?') >= 0 ? '&' : '?') + 'variant=competitive';
+							}
+							a.setAttribute('href', href);
+						});
+					}
+					applyVariant(cb.checked);
+					cb.addEventListener('change', function() {
+						localStorage.setItem('sigilVariant', cb.checked ? 'competitive' : 'standard');
+						applyVariant(cb.checked);
+					});
+				})();
+			</script>
+			<div style="margin-top: 20px;">
 				<label class="theme-label">Theme</label>
 				<select id="theme-select" class="theme-select" onchange="themeManager.apply(this.value)">
 				</select>

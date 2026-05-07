@@ -264,7 +264,7 @@ def get_legal_turns_exhaustive(board, color, caps=None):
     enemy = board._enemy(color)
 
     # Competitive variant opening: blink to any empty node, no spells.
-    if getattr(board, 'variant', 'standard') == 'competitive' and board.turn_counter < 2:
+    if getattr(board, 'variant', 'standard') == 'competitive' and board.turn_counter <= 2:
         for n in NODE_ORDER:
             if board.stones[n] is not None:
                 continue

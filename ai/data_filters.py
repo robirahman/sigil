@@ -19,6 +19,14 @@ from datetime import date, datetime
 # unaffected by the rule change and remain valid regardless of date.
 FIREBLAST_RULE_CHANGE_CUTOFF = date(2026, 5, 7)
 
+# Day the off-by-one in the Competitive variant's opening-pass gate
+# was fixed. Before this date, blue's opening-blink turn could trip
+# the immediate-loss rule against a player legitimately at zero
+# stones, producing 1- or 2-turn "wins" that don't reflect real play.
+# Any competitive-variant record written before this date is
+# excluded from training.
+COMPETITIVE_FIX_CUTOFF = date(2026, 5, 8)
+
 
 _FILENAME_DATE_RE = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
 
@@ -55,6 +63,19 @@ def sfn_has_fireblast(sfn):
     return 'Fireblast' in spells_part.split(',')
 
 
+def sfn_variant(sfn):
+    """Return the variant token from an SFN string, defaulting to
+    'standard' for legacy strings that don't include the optional
+    trailing token. Mirrors notation.sfn_to_dict but is cheap (just
+    inspects the last whitespace-separated field)."""
+    if not sfn:
+        return 'standard'
+    parts = sfn.strip().split(' ')
+    if len(parts) > 7:
+        return parts[7] or 'standard'
+    return 'standard'
+
+
 def is_pre_cutoff_fireblast_record(path, sfn,
                                    cutoff=FIREBLAST_RULE_CHANGE_CUTOFF):
     """Return True iff this record should be skipped due to the
@@ -69,6 +90,27 @@ def is_pre_cutoff_fireblast_record(path, sfn,
     positives would silently shrink the training corpus).
     """
     if not sfn_has_fireblast(sfn):
+        return False
+    file_date = file_effective_date(path)
+    if file_date is None:
+        return False
+    return file_date < cutoff
+
+
+def is_pre_competitive_fix_record(path, sfn,
+                                  cutoff=COMPETITIVE_FIX_CUTOFF):
+    """Return True iff this record should be skipped because it was
+    generated under the buggy Competitive variant (off-by-one in the
+    opening-pass gate). The record is skipped when:
+
+      - The SFN's variant token is 'competitive', AND
+      - The data file's effective date is strictly before ``cutoff``.
+
+    Standard-variant records are unaffected. Records whose date can't
+    be determined are kept (same conservative default as the Fireblast
+    filter).
+    """
+    if sfn_variant(sfn) != 'competitive':
         return False
     file_date = file_effective_date(path)
     if file_date is None:

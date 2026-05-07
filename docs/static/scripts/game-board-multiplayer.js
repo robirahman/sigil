@@ -77,11 +77,17 @@ document.addEventListener('alpine:init', () => {
 			// optionally re-create a room with the same nine spells / time control.
 			_rematchSpells: [],
 			_rematchTimeControl: null,
+			_rematchVariant: 'standard',
 			playAgain() {
 				try {
 					sessionStorage.setItem('sigil_rematch_create', '1');
 					if (this._rematchTimeControl) {
 						sessionStorage.setItem('sigil_rematch_time_control', JSON.stringify(this._rematchTimeControl));
+					}
+					if (this._rematchVariant && this._rematchVariant !== 'standard') {
+						sessionStorage.setItem('sigil_rematch_variant', this._rematchVariant);
+					} else {
+						sessionStorage.removeItem('sigil_rematch_variant');
 					}
 					sessionStorage.removeItem('sigil_rematch_spells');
 				} catch (e) { /* sessionStorage blocked */ }
@@ -92,6 +98,11 @@ document.addEventListener('alpine:init', () => {
 					sessionStorage.setItem('sigil_rematch_create', '1');
 					if (this._rematchTimeControl) {
 						sessionStorage.setItem('sigil_rematch_time_control', JSON.stringify(this._rematchTimeControl));
+					}
+					if (this._rematchVariant && this._rematchVariant !== 'standard') {
+						sessionStorage.setItem('sigil_rematch_variant', this._rematchVariant);
+					} else {
+						sessionStorage.removeItem('sigil_rematch_variant');
 					}
 					if (this._rematchSpells && this._rematchSpells.length === 9) {
 						sessionStorage.setItem('sigil_rematch_spells', JSON.stringify(this._rematchSpells));
@@ -306,7 +317,7 @@ document.addEventListener('alpine:init', () => {
 					if (!window._multiplayerState) return;
 					clearInterval(waitForState);
 					const state = window._multiplayerState;
-					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, redDisplayName, blueDisplayName, redUid, blueUid, annotationMode, reviewMode, gameLog, winner, shareUrl } = state;
+					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, variant, redDisplayName, blueDisplayName, redUid, blueUid, annotationMode, reviewMode, gameLog, winner, shareUrl } = state;
 
 					// Set player names and timer type
 					_this.redName = redDisplayName || '';
@@ -320,6 +331,7 @@ document.addEventListener('alpine:init', () => {
 					_this.shareUrl = shareUrl || '';
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
+					_this._rematchVariant = variant === 'competitive' ? 'competitive' : 'standard';
 
 					if (reviewMode) {
 						// Skip engine entirely — render finished game in review mode

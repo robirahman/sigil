@@ -166,7 +166,13 @@ class SimBoard:
         # players legitimately start with zero stones during the
         # opening; the rule kicks in only "from that point onward",
         # i.e., once turn_counter >= 2 (after both opening blinks).
-        opening_pass = (self.variant == 'competitive' and self.turn_counter < 2)
+        # The live game-controller (and selfplay_mcts) use 1-indexed
+        # turn numbering: red opens at turn_counter=1, blue at 2, normal
+        # play resumes at 3+. Use `<= 2` so both opening turns are
+        # covered. Also safe under the 0-indexed advance_turn convention
+        # (turn_counter==2 there is red's first regular turn, where both
+        # players already have a stone, so the check is inert).
+        opening_pass = (self.variant == 'competitive' and self.turn_counter <= 2)
         if not self.gameover and not opening_pass:
             if red_count == 0 and blue_count == 0:
                 # Should not occur via any legal action, but guard:
@@ -790,11 +796,11 @@ class SimBoard:
         self.update()
         enemy = self._enemy(color)
 
-        # Competitive variant opening:
-        #   turn_counter == 0 (red): blink to any of the 39 nodes.
-        #   turn_counter == 1 (blue): soft-blink to any empty node
-        #     (38 nodes, since red just placed). No dash, no cast.
-        if self.variant == 'competitive' and self.turn_counter < 2:
+        # Competitive variant opening: red and blue each get a free
+        # blink onto any empty node on their first turn. No dash, no
+        # cast. Bound matches the openingPass gate in update() — see
+        # the comment there for the convention reasoning.
+        if self.variant == 'competitive' and self.turn_counter <= 2:
             for n in NODE_ORDER:
                 if self.stones[n] is not None:
                     continue

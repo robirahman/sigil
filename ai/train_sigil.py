@@ -30,7 +30,10 @@ from ai.config import (
 )
 from notation import sfn_to_dict, NODE_ORDER, POSITIONS
 from simboard import SimBoard, MANA_NODES
-from ai.data_filters import is_pre_cutoff_fireblast_record
+from ai.data_filters import (
+    is_pre_cutoff_fireblast_record,
+    is_pre_competitive_fix_record,
+)
 
 
 class SigilDataset(Dataset):
@@ -95,6 +98,7 @@ def load_training_data(data_paths, max_records=None):
     for path in data_paths:
         bad_lines = 0
         skipped_fireblast = 0
+        skipped_competitive = 0
         with open(path) as f:
             for line in f:
                 if not line.strip():
@@ -105,10 +109,19 @@ def load_training_data(data_paths, max_records=None):
                     bad_lines += 1
                     continue
 
+                sfn = d.get('sfn')
                 # Skip records that pre-date the Fireblast rule change
                 # and contain Fireblast (see ai/data_filters.py).
-                if is_pre_cutoff_fireblast_record(path, d.get('sfn')):
+                if is_pre_cutoff_fireblast_record(path, sfn):
                     skipped_fireblast += 1
+                    continue
+                # Skip records from the buggy Competitive variant
+                # opening (off-by-one in the opening-pass gate, fixed
+                # 2026-05-08). The bug poisons short games where the
+                # immediate-loss rule fires against a player still in
+                # their opening blink.
+                if is_pre_competitive_fix_record(path, sfn):
+                    skipped_competitive += 1
                     continue
 
                 # Convert SFN to features if raw_features not cached
@@ -146,6 +159,9 @@ def load_training_data(data_paths, max_records=None):
         if skipped_fireblast:
             print(f"  {path}: skipped {skipped_fireblast} pre-2026-05-07 "
                   f"Fireblast position(s)")
+        if skipped_competitive:
+            print(f"  {path}: skipped {skipped_competitive} pre-2026-05-08 "
+                  f"Competitive-variant position(s) (opening-pass bug)")
         if max_records and len(records) >= max_records:
             break
 
