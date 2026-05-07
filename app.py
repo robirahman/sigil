@@ -82,7 +82,12 @@ def singlePlayer():
 	singleplayercount += 1
 	difficulty = request.args.get('difficulty', 'easy')
 	load_id = request.args.get('load', '')
-	return render_template('single-player.html', current_user_name=getattr(current_user, 'name', ''), difficulty=difficulty, load_id=load_id)
+	variant = request.args.get('variant', 'standard')
+	if variant not in ('standard', 'competitive'):
+		variant = 'standard'
+	return render_template('single-player.html',
+						   current_user_name=getattr(current_user, 'name', ''),
+						   difficulty=difficulty, load_id=load_id, variant=variant)
 
 @app.route('/single-player-menu')
 def singlePlayerMenu():
@@ -97,8 +102,11 @@ def api_saves():
 def local1v1():
 	import_sfn = request.args.get('sfn', '')
 	game_mode = 'local1v1_import' if import_sfn else 'local1v1'
+	variant = request.args.get('variant', 'standard')
+	if variant not in ('standard', 'competitive'):
+		variant = 'standard'
 	return render_template('local-1v1.html', current_user_name=getattr(current_user, 'name', ''),
-						   game_mode=game_mode, import_sfn=import_sfn)
+						   game_mode=game_mode, import_sfn=import_sfn, variant=variant)
 
 @app.route('/private-match')
 def privatematch():
@@ -568,8 +576,9 @@ def playgame(ws):
 		blue.ws.send(json.dumps(egress))
 
 
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 		time.sleep(3)
 
@@ -794,8 +803,9 @@ def playprivategame(ws, privategamename):
 		blue.ws.send(json.dumps(egress))
 
 
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 		time.sleep(3)
 
@@ -1023,16 +1033,22 @@ class _DedupWebSocket:
 
 @sock.route('/api/local1v1game')
 def play_local_1v1(ws):
-	_run_local_1v1_game(ws)
+	variant = request.args.get('variant', 'standard')
+	_run_local_1v1_game(ws, variant=variant)
 
 @sock.route('/api/local1v1game_import')
 def play_local_1v1_import(ws):
 	ingress = ws.receive()
 	sfn_str = json.loads(ingress).get('message', '')
-	_run_local_1v1_game(ws, load_sfn=sfn_str)
+	# Import inherits the variant from the imported SFN if present.
+	from notation import sfn_to_dict as _sfn_to_dict
+	imported = _sfn_to_dict(sfn_str) if sfn_str else {}
+	variant = imported.get('variant') or request.args.get('variant', 'standard')
+	_run_local_1v1_game(ws, load_sfn=sfn_str, variant=variant)
 
-def _run_local_1v1_game(ws, load_sfn=None):
+def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 	board = Board()
+	board.variant = variant if variant in ('standard', 'competitive') else 'standard'
 	red = Player(board, 'red')
 	blue = Player(board, 'blue')
 	board.addplayers(red, blue)
@@ -1093,8 +1109,11 @@ def _run_local_1v1_game(ws, load_sfn=None):
 	if load_sfn:
 		board.update()
 	else:
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		# Skip the standard a1/b1 setup for the competitive variant —
+		# the first two turns place the stones via a free blink.
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 
 	time.sleep(2)
@@ -1190,17 +1209,20 @@ def _run_local_1v1_game(ws, load_sfn=None):
 
 @sock.route('/api/singleplayergame')
 def playsingleplayergame(ws):
-	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy')
+	variant = request.args.get('variant', 'standard')
+	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy', variant=variant)
 
 @sock.route('/api/singleplayergame_medium')
 def playsingleplayergame_medium(ws):
+	variant = request.args.get('variant', 'standard')
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='medium',
-						   ai_kwargs={'net_class': SigilNet})
+						   ai_kwargs={'net_class': SigilNet}, variant=variant)
 
 @sock.route('/api/singleplayergame_hard')
 def playsingleplayergame_hard(ws):
+	variant = request.args.get('variant', 'standard')
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='hard',
-						   ai_kwargs={'net_class': SigilNetHard})
+						   ai_kwargs={'net_class': SigilNetHard}, variant=variant)
 
 @sock.route('/api/singleplayergame_load')
 def playsingleplayergame_load(ws):
@@ -1228,7 +1250,8 @@ def playsingleplayergame_load(ws):
 						   load_save=save_data, save_id=save_id)
 
 def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
-						   ai_kwargs=None, load_save=None, save_id=None):
+						   ai_kwargs=None, load_save=None, save_id=None,
+						   variant='standard'):
 	from notation import sfn_to_dict
 	import uuid
 
@@ -1236,6 +1259,18 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 		save_id = str(uuid.uuid4())[:8]
 
 	board = SPBoard()
+	# Loaded saves carry their own variant inside the SFN string;
+	# parse it out so we restore play under the same rules. New
+	# (non-loaded) games take the variant from the request.
+	if load_save is not None:
+		try:
+			from notation import sfn_to_dict as _saved_sfn_to_dict
+			saved_state = _saved_sfn_to_dict(load_save['sfn'])
+			board.variant = saved_state.get('variant', 'standard')
+		except Exception:
+			board.variant = 'standard'
+	else:
+		board.variant = variant if variant in ('standard', 'competitive') else 'standard'
 
 	if load_save is not None:
 		# Restore from save
@@ -1328,12 +1363,18 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 	spell_names = [board.spells[i].name for i in range(9)]
 	red_name = 'Human' if human.color == 'red' else 'AI'
 	blue_name = 'Human' if human.color == 'blue' else 'AI'
-	recorder = GameRecorder(spell_names, red_name=red_name, blue_name=blue_name)
+	recorder = GameRecorder(spell_names, red_name=red_name, blue_name=blue_name,
+							variant=board.variant)
 	board.recorder = recorder
 
 	if load_save is None:
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		# Standard variant places the starting stones on a1/b1.
+		# Competitive variant leaves the board empty; the first two
+		# turns will use the special opening blink/soft-blink logic
+		# inside Player.taketurn / AIPlayer.taketurn.
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 
 	time.sleep(3)

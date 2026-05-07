@@ -22,7 +22,11 @@ function boardToSfn(board) {
 	const rspring = board.springlock.red || '-';
 	const bspring = board.springlock.blue || '-';
 	const score = board.score || 'b1';
-	return `${stonesStr}/${spellsStr} ${turn} ${tc} ${rsc}:${bsc} ${rlock}:${block} ${rspring}:${bspring} ${score}`;
+	const base = `${stonesStr}/${spellsStr} ${turn} ${tc} ${rsc}:${bsc} ${rlock}:${block} ${rspring}:${bspring} ${score}`;
+	// Optional trailing variant token; omitted for 'standard' to keep
+	// existing SFN strings byte-identical with the Python writer.
+	const variant = board.variant || 'standard';
+	return variant !== 'standard' ? `${base} ${variant}` : base;
 }
 
 function sfnToDict(sfnStr) {
@@ -52,11 +56,14 @@ function sfnToDict(sfnStr) {
 
 	const score = parts[6];
 
+	// Optional trailing variant token; default 'standard' for legacy SFN.
+	const variant = parts.length > 7 ? parts[7] : 'standard';
+
 	return {
 		stones, spell_names: spellNames, turn, turncounter,
 		red_spellcounter: redSc, blue_spellcounter: blueSc,
 		red_lock: redLock, blue_lock: blueLock,
 		red_springlock: redSpring, blue_springlock: blueSpring,
-		score,
+		score, variant,
 	};
 }

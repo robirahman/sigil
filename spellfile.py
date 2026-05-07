@@ -220,7 +220,7 @@ class Fireblast(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Destroy all enemy stones which are touching you."
+		self.text = "Destroy all enemy stones which are touching you, then sacrifice a stone."
 
 	def resolve(self, player):
 		for name in player.board.nodes:
@@ -232,6 +232,53 @@ class Fireblast(Spell):
 						if (player.board.last_play == node.name):
 							player.board.last_play = None
 							player.board.last_player = None
+
+		player.board.update()
+
+		### If destruction wiped out the opponent's last stone, the
+		### latest-edition rules end the game right now — skip sacrifice.
+		if player.board.gameover:
+			return
+
+		### Sacrifice cost (latest-edition rules).
+		### Skip entirely if the caster has no stones left (the
+		### update() above would have already flagged that as a loss).
+		has_own_stone = any(
+			player.board.nodes[n].stone == player.color
+			for n in player.board.nodes
+		)
+		if not has_own_stone:
+			return
+
+		if player.ishuman:
+			while True:
+				player.jmessage("Sacrifice a stone.", "node")
+
+				actualmessage = player.receivemessage()
+
+				if actualmessage in player.board.nodes:
+					node = player.board.nodes[actualmessage]
+					if node.stone != player.color:
+						continue
+					node.stone = None
+					if (player.board.last_play == node.name):
+						player.board.last_play = None
+						player.board.last_player = None
+					player.board.update()
+					break
+		else:
+			### Bot: sacrifice the lowest-priority own stone.
+			time.sleep(1)
+			for name in reversed(player.priority_order):
+				node = player.board.nodes[name]
+				if node.stone == player.color:
+					node.stone = None
+					if (player.board.last_play == node.name):
+						player.board.last_play = None
+						player.board.last_player = None
+					player.board.update()
+					time.sleep(1)
+					break
 
 
 class Carnage(Spell):

@@ -32,7 +32,7 @@ def random_core_spells():
     return rituals + sorceries + charms
 
 
-def play_game(red_policy, blue_policy, spell_names=None):
+def play_game(red_policy, blue_policy, spell_names=None, variant='standard'):
     """Play one self-play game. Returns (positions, winner, sgn_string).
 
     positions: list of (sfn_string, side_to_move) tuples
@@ -41,11 +41,12 @@ def play_game(red_policy, blue_policy, spell_names=None):
     if spell_names is None:
         spell_names = random_core_spells()
 
-    board = SimBoard(spell_names)
+    board = SimBoard(spell_names, variant=variant)
     board.setup_initial()
 
     recorder = GameRecorder(spell_names, red_name=red_policy.__class__.__name__,
-                            blue_name=blue_policy.__class__.__name__)
+                            blue_name=blue_policy.__class__.__name__,
+                            variant=variant)
 
     positions = []
     turn_num = 0

@@ -24,7 +24,7 @@ class SimTurn {
 }
 
 class SimBoard {
-	constructor(spellNames) {
+	constructor(spellNames, variant = 'standard') {
 		this.stones = {};
 		for (const n of NODE_ORDER) this.stones[n] = null;
 		this.spellNames = spellNames || [];
@@ -39,10 +39,11 @@ class SimBoard {
 		this.totalStones = { red: 0, blue: 0 };
 		this.mana = { red: 0, blue: 0 };
 		this.chargedSpells = { red: [], blue: [] };
+		this.variant = variant;
 	}
 
 	static fromSigilBoard(board) {
-		const sb = new SimBoard(board.spellNames);
+		const sb = new SimBoard(board.spellNames, board.variant || 'standard');
 		for (const n of NODE_ORDER) sb.stones[n] = board.stones[n];
 		sb.turnCounter = board.turnCounter;
 		sb.whoseTurn = board.whoseTurn;
@@ -59,7 +60,7 @@ class SimBoard {
 	}
 
 	copy() {
-		const b = new SimBoard(this.spellNames);
+		const b = new SimBoard(this.spellNames, this.variant);
 		for (const n of NODE_ORDER) b.stones[n] = this.stones[n];
 		b.turnCounter = this.turnCounter;
 		b.whoseTurn = this.whoseTurn;
@@ -86,6 +87,24 @@ class SimBoard {
 		this.totalStones.red = rc;
 		this.totalStones.blue = bc;
 
+		// Immediate-loss (latest-edition rules): zero stones on playable
+		// nodes loses immediately. Blue's +1 phantom counter doesn't count.
+		// Suspended during the competitive variant's empty-board opening
+		// (turnCounter < 2).
+		const openingPass = (this.variant === 'competitive' && this.turnCounter < 2);
+		if (!this.gameover && !openingPass) {
+			if (rc === 0 && bc === 0) {
+				this.gameover = true;
+				this.winner = this.whoseTurn === 'red' ? 'blue' : 'red';
+			} else if (rc === 0) {
+				this.gameover = true;
+				this.winner = 'blue';
+			} else if (bc === 0) {
+				this.gameover = true;
+				this.winner = 'red';
+			}
+		}
+
 		const rs = rc, bs = bc + 1;
 		if (rs === bs) this.score = 'tied';
 		else if (rs > bs) this.score = 'r' + Math.min(3, rs - bs);
@@ -107,6 +126,9 @@ class SimBoard {
 	}
 
 	checkGameOver(activeColor) {
+		// update() may already have flagged immediate-loss (zero stones).
+		if (this.gameover) return true;
+
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
 		if (rt > bt + 2) { this.gameover = true; this.winner = 'red'; return true; }
 		if (bt > rt + 2) { this.gameover = true; this.winner = 'blue'; return true; }
@@ -311,7 +333,30 @@ class SimBoard {
 					}
 				}
 			}
-			if (destroyed.length) actions.push(new SimAction('fireblast', { destroyed }));
+			actions.push(new SimAction('fireblast', { destroyed }));
+			this.update();
+			// If destruction wiped out the opponent's last stone, the
+			// game ends immediately — no sacrifice happens.
+			if (this.gameover) return actions;
+			// Sacrifice cost (latest-edition rules): pick lowest-priority
+			// own stone by reverse NODE_ORDER, mirroring Comet's heuristic.
+			const sacOverride = overrides.fireblast_sacrifice;
+			let sacDone = false;
+			if (sacOverride && this.stones[sacOverride] === color) {
+				this.stones[sacOverride] = null;
+				actions.push(new SimAction('sacrifice', { node: sacOverride }));
+				sacDone = true;
+			}
+			if (!sacDone) {
+				for (const name of [...NODE_ORDER].reverse()) {
+					if (this.stones[name] === color) {
+						this.stones[name] = null;
+						actions.push(new SimAction('sacrifice', { node: name }));
+						break;
+					}
+				}
+			}
+			this.update();
 		} else if (rt === 'hail_storm') {
 			const destroyed = [];
 			for (let pos = 1; pos <= 6; pos++) {
@@ -733,6 +778,20 @@ class SimBoard {
 
 	* getLegalTurns(color) {
 		this.update();
+
+		// Competitive variant opening: red turn-0 / blue turn-1 each get a
+		// free blink onto any empty node. No spells, no dash.
+		if (this.variant === 'competitive' && this.turnCounter < 2) {
+			for (const n of NODE_ORDER) {
+				if (this.stones[n] !== null) continue;
+				yield new SimTurn([
+					new SimAction('blink', { node: n }),
+					new SimAction('pass'),
+				]);
+			}
+			return;
+		}
+
 		const hasWind = this.chargedSpells[color].includes('Seal_of_Wind');
 		const moveTargets = hasWind ? this._blinkable(color) : this._allMoveable(color);
 

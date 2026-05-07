@@ -86,6 +86,10 @@ class HeuristicPolicy:
                     score += (len(self.SPELL_PRIORITY) - idx) * 3
             elif action.type == 'dash' or action.type == 'dash_lightning':
                 score += 1  # Dash is sometimes good
+            elif action.type == 'sacrifice':
+                # Mirrors the +5 weight on stone_diff below: Fireblast/
+                # Comet's forced sacrifice is a -1 net stone for us.
+                score -= 5
             elif action.type == 'pass':
                 pass
 

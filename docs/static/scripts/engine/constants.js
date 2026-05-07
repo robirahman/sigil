@@ -73,7 +73,7 @@ const SPELL_TEXTS = {
 	Starfall:          'Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.',
 	Seal_of_Lightning: 'STATIC: Your dash only requires 1 sacrifice.',
 	Grow:              'Make 2 soft moves.',
-	Fireblast:         'Destroy all enemy stones which are touching you.',
+	Fireblast:         'Destroy all enemy stones which are touching you, then sacrifice a stone.',
 	Hail_Storm:        'Destroy 1 enemy stone in each 3-node and 5-node spell.',
 	Meteor:            'Make 1 blink move, then destroy 1 enemy stone touching it.',
 	Seal_of_Wind:      'STATIC: Your first move each turn is a blink move.',

@@ -22,6 +22,7 @@ class GameController {
 		this.spellNamesOverride = (options && Array.isArray(options.spellNames) && options.spellNames.length === 9)
 			? options.spellNames.slice()
 			: null;
+		this.variant = (options && options.variant === 'competitive') ? 'competitive' : 'standard';
 		this._gameLog = [];
 	}
 
@@ -73,10 +74,17 @@ class GameController {
 				spellNames = generateSpellList(packKey);
 			}
 		}
-		this.board = new SigilBoard(spellNames);
+		this.board = new SigilBoard(spellNames, this.variant);
 
 		if (importSfn) {
 			this.board.loadFromSfn(importSfn);
+			// loadFromSfn replays the imported state but doesn't change
+			// `variant`. The imported SFN may carry its own variant
+			// token; honor it when present.
+			try {
+				const imported = sfnToDict(importSfn);
+				if (imported && imported.variant) this.board.variant = imported.variant;
+			} catch (e) { /* tolerate non-strict imports */ }
 		} else {
 			this.board.setupInitial();
 		}
@@ -228,6 +236,30 @@ class GameController {
 	async _takeTurn(color, canmove, candash, canspell, cansummer) {
 		const board = this.board;
 		board.update();
+
+		// Competitive variant opening: this player has no stones yet —
+		// their entire turn is a single free blink onto any empty node.
+		if (canmove && board.variant === 'competitive' && board.totalStones[color] === 0) {
+			const moveoptions = {};
+			for (const n of NODE_ORDER) {
+				if (board.stones[n] === null) moveoptions[n] = color;
+			}
+			const resp = await this.getInput({
+				type: 'message',
+				message: 'Place your first stone (Competitive opening).',
+				awaiting: 'node',
+				moveoptions,
+			});
+			if (moveoptions[resp]) {
+				board.stones[resp] = color;
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				this.emit({ type: 'new_stone_animation', color, node: resp });
+				this.emit(board.getBoardStatePayload());
+			}
+			return;
+		}
 
 		const enemy = board.enemy(color);
 		const actions = [];

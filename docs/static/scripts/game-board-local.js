@@ -406,6 +406,10 @@ document.addEventListener('alpine:init', () => {
 
 				// --- Local engine instead of WebSocket ---
 				const aiMode = new URLSearchParams(window.location.search).get('ai');
+				// Game-rule variant (separate concept from `aiMode`'s "model
+				// variant" naming below): 'standard' or 'competitive'.
+				const gameVariantParam = new URLSearchParams(window.location.search).get('variant');
+				const gameVariant = gameVariantParam === 'competitive' ? 'competitive' : 'standard';
 				let _engineRef = null;
 
 				// Auth manager for rated AI games
@@ -448,6 +452,7 @@ document.addEventListener('alpine:init', () => {
 				async function initEngine() {
 					let options = {};
 					if (_rematchSpells) options.spellNames = _rematchSpells;
+					options.variant = gameVariant;
 
 					if (aiMode === 'easy') {
 						options.aiColor = _aiColor;

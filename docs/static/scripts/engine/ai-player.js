@@ -187,7 +187,10 @@ class GreedyAI {
 		if (spellName === 'Flourish') return 5;
 		if (spellName === 'Fireblast') {
 			const targets = this._countHardMoveTargets(board, color, spellName);
-			return targets >= 2 ? 5 : -1;
+			// Latest-edition rules: Fireblast forces a sacrifice, so net
+			// stone gain is (targets - 1). Need 3+ destruction targets to
+			// match the old "destroy 2" net advantage that triggered cast.
+			return targets >= 3 ? 5 : -1;
 		}
 		if (spellName === 'Hail_Storm') {
 			const count = this._hailableSpellCount(board, color);

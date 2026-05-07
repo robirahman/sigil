@@ -32,7 +32,8 @@ from ai.config import (
 )
 
 
-def play_selfplay_game(model, num_simulations=None, force_no_resign=False):
+def play_selfplay_game(model, num_simulations=None, force_no_resign=False,
+                       variant='standard'):
     """Play a single self-play game using MCTS.
 
     Returns list of (sfn, spell_ids, turn_encodings, policy, side_to_move) tuples
@@ -42,7 +43,7 @@ def play_selfplay_game(model, num_simulations=None, force_no_resign=False):
         num_simulations = NUM_SIMS_TRAIN
 
     spells = random_core_spells()
-    board = SimBoard(spells)
+    board = SimBoard(spells, variant=variant)
     board.setup_initial()
 
     positions = []
@@ -122,22 +123,36 @@ def play_selfplay_game(model, num_simulations=None, force_no_resign=False):
 
 
 def generate_training_data(model, num_games, output_path, num_simulations=None,
-                           force_no_resign=False):
+                           force_no_resign=False, competitive_fraction=0.0):
     """Generate training data from self-play games.
 
-    Writes JSONL with fields: sfn, spell_ids, policy, turn_encodings, outcome
+    Writes JSONL with fields: sfn, spell_ids, policy, turn_encodings, outcome.
+
+    `competitive_fraction` in [0.0, 1.0] is the probability that any given
+    self-play game is played under the competitive variant. The default of
+    0.0 keeps existing pipelines reproducing standard data; pass 0.5 (for
+    example) to mix variants 50/50 in the resulting file. The variant is
+    encoded into each position's SFN, so downstream training can either
+    ignore it or condition on it.
     """
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.',
                 exist_ok=True)
 
     total_positions = 0
+    competitive_games = 0
     start_time = time.time()
 
     with open(output_path, 'w') as f:
         for game_idx in range(num_games):
+            variant = ('competitive'
+                       if np.random.random() < competitive_fraction
+                       else 'standard')
+            if variant == 'competitive':
+                competitive_games += 1
             game_start = time.time()
             positions, winner = play_selfplay_game(
-                model, num_simulations, force_no_resign=force_no_resign)
+                model, num_simulations, force_no_resign=force_no_resign,
+                variant=variant)
             game_time = time.time() - game_start
 
             for pos in positions:
@@ -171,7 +186,8 @@ def generate_training_data(model, num_games, output_path, num_simulations=None,
 
     elapsed = time.time() - start_time
     print(f"\nGenerated {total_positions} positions from {num_games} games "
-          f"in {elapsed:.0f}s ({total_positions/num_games:.0f} pos/game avg)")
+          f"in {elapsed:.0f}s ({total_positions/num_games:.0f} pos/game avg) "
+          f"[competitive: {competitive_games}/{num_games}]")
     return total_positions
 
 
@@ -187,6 +203,9 @@ if __name__ == '__main__':
                         help='Network architecture: medium (2M) or hard (44M)')
     parser.add_argument('--no-resign', action='store_true',
                         help='Force resignation off in every game')
+    parser.add_argument('--competitive-fraction', type=float, default=0.0,
+                        help='Fraction of games to play under the competitive '
+                             'variant (0.0 = all standard, 1.0 = all competitive)')
     args = parser.parse_args()
 
     # Select network class
@@ -204,5 +223,6 @@ if __name__ == '__main__':
         args.output = os.path.join(DATA_DIR, f'selfplay_{int(time.time())}.jsonl')
 
     generate_training_data(model, args.games, args.output, args.sims,
-                           force_no_resign=args.no_resign)
+                           force_no_resign=args.no_resign,
+                           competitive_fraction=args.competitive_fraction)
     print(f"Data saved to {args.output}")

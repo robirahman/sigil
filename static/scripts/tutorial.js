@@ -336,7 +336,7 @@ document.addEventListener('alpine:init', () => {
 								},
 								sorcery1: {
 									name: 'Fireblast',
-									text: 'Destroy all enemy stones which are touching you.',
+									text: 'Destroy all enemy stones which are touching you, then sacrifice a stone.',
 								},
 								sorcery2: {
 									name: 'Hail Storm',
@@ -736,7 +736,7 @@ document.addEventListener('alpine:init', () => {
 								},
 								sorcery1: {
 									name: 'Fireblast',
-									text: 'Destroy all enemy stones which are touching you.',
+									text: 'Destroy all enemy stones which are touching you, then sacrifice a stone.',
 								},
 								sorcery2: {
 									name: 'Hail Storm',
@@ -1381,7 +1381,7 @@ document.addEventListener('alpine:init', () => {
 								},
 								sorcery2: {
 									name: 'Fireblast',
-									text: 'Destroy all enemy stones which are touching you.',
+									text: 'Destroy all enemy stones which are touching you, then sacrifice a stone.',
 								},
 								sorcery3: {
 									name: 'Meteor',

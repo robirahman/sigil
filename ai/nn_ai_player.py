@@ -23,7 +23,7 @@ GENOME_PATH = os.path.join(_DIR, 'models', 'best_genome.json')
 def _live_board_to_simboard(board):
     """Convert a live SPBoard to a SimBoard."""
     spell_names = [board.spells[i].name for i in range(9)]
-    sim = SimBoard(spell_names)
+    sim = SimBoard(spell_names, variant=getattr(board, 'variant', 'standard'))
 
     for name in NODE_ORDER:
         sim.stones[name] = board.nodes[name].stone

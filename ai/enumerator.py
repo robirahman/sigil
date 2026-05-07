@@ -24,7 +24,7 @@ Used by ai/minimax_ai.py when ``exhaustive=True`` is set.
 
 from itertools import combinations
 
-from notation import NODE_ORDER
+from notation import NODE_ORDER, POSITIONS
 from simboard import Action, CompleteTurn, CORE_SPELLS
 
 
@@ -37,6 +37,7 @@ DEFAULT_STARFALL_CAP = 6        # Starfall pair variants
 DEFAULT_HARD_MOVES_CAP = 4      # Carnage/Slash first-target variants
 DEFAULT_METEOR_CAP = 4          # Meteor blink target variants
 DEFAULT_COMET_CAP = 3           # Comet (target × sacrifice) cap
+DEFAULT_FIREBLAST_CAP = 3       # Fireblast sacrifice variants
 
 
 # Tighter "balanced" caps: keep total branching low enough that 3-ply
@@ -49,6 +50,7 @@ BALANCED_CAPS = {
     'hard_moves': 3,
     'meteor': 2,
     'comet': 2,
+    'fireblast': 2,
 }
 
 # Surgical caps: only expand the choice points that empirically matter
@@ -66,6 +68,7 @@ NARROW_CAPS = {
     'hard_moves': 3,
     'meteor': 1,
     'comet': 1,
+    'fireblast': 2,
 }
 
 
@@ -84,6 +87,7 @@ OPPONENT_CAPS = {
     'hard_moves': 2,
     'meteor': 2,
     'comet': 1,
+    'fireblast': 2,
 }
 
 
@@ -166,7 +170,22 @@ def _spell_overrides(board, color, spell_name, caps):
                     out.append({'comet_target': target, 'comet_sacrifice': sac})
                     added += 1
                     break
-    # soft_moves, fireblast, hail_storm, surge_move: greedy is fine.
+    elif rt == 'fireblast':
+        # Branch over which own stone is sacrificed. We're called on
+        # the pre-cast board, but cast() will consume the spell's own
+        # position nodes — so prefer stones outside the spell as
+        # sacrifice candidates (those still exist when the resolver
+        # runs). Resolver falls back greedy on any invalid override.
+        try:
+            spell_idx = board.spell_names.index(spell_name)
+            spell_pos = set(POSITIONS[spell_idx + 1])
+        except (ValueError, KeyError):
+            spell_pos = set()
+        own = [n for n in NODE_ORDER
+               if board.stones[n] == color and n not in spell_pos]
+        for sac in own[:caps['fireblast']]:
+            out.append({'fireblast_sacrifice': sac})
+    # soft_moves, hail_storm, surge_move: greedy is fine.
     # Deduplicate just in case.
     seen = set()
     deduped = []
@@ -238,10 +257,23 @@ def get_legal_turns_exhaustive(board, color, caps=None):
         'hard_moves': caps.get('hard_moves', DEFAULT_HARD_MOVES_CAP),
         'meteor': caps.get('meteor', DEFAULT_METEOR_CAP),
         'comet': caps.get('comet', DEFAULT_COMET_CAP),
+        'fireblast': caps.get('fireblast', DEFAULT_FIREBLAST_CAP),
     }
 
     board.update()
     enemy = board._enemy(color)
+
+    # Competitive variant opening: blink to any empty node, no spells.
+    if getattr(board, 'variant', 'standard') == 'competitive' and board.turn_counter < 2:
+        for n in NODE_ORDER:
+            if board.stones[n] is not None:
+                continue
+            yield CompleteTurn([
+                Action('blink', node=n),
+                Action('pass'),
+            ])
+        return
+
     has_seal_of_wind = 'Seal_of_Wind' in board.charged_spells.get(color, [])
     if has_seal_of_wind:
         move_targets = board._blinkable(color)

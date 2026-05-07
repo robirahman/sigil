@@ -71,11 +71,21 @@ class CompleteTurn:
 class SimBoard:
     """Lightweight, copyable board for simulation."""
 
+    # Recognized variants. 'standard' = the classic two-stone opening with
+    # red on a1 and blue on b1. 'competitive' = empty board (all three mana
+    # nodes neutral); red's turn-0 is a free blink to any of the 39 nodes;
+    # blue's turn-1 is a free soft-blink to any of the remaining 38 empty
+    # nodes; play proceeds normally from turn 2.
+    VARIANTS = ('standard', 'competitive')
+
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
-                 'springlock', 'totalstones', 'mana', 'charged_spells')
+                 'springlock', 'totalstones', 'mana', 'charged_spells',
+                 'variant')
 
-    def __init__(self, spell_names=None):
+    def __init__(self, spell_names=None, variant='standard'):
+        if variant not in self.VARIANTS:
+            raise ValueError(f"Unknown variant: {variant!r}")
         self.stones = {n: None for n in NODE_ORDER}
         self.spell_names = spell_names or ['Flourish', 'Carnage', 'Bewitch',
                                            'Grow', 'Fireblast', 'Hail_Storm',
@@ -91,6 +101,7 @@ class SimBoard:
         self.totalstones = {'red': 0, 'blue': 0}
         self.mana = {'red': 0, 'blue': 0}
         self.charged_spells = {'red': [], 'blue': []}
+        self.variant = variant
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -108,12 +119,22 @@ class SimBoard:
         b.mana = dict(self.mana)
         b.charged_spells = {'red': list(self.charged_spells['red']),
                             'blue': list(self.charged_spells['blue'])}
+        b.variant = self.variant
         return b
 
     def setup_initial(self):
-        """Set up initial board state with starting stones."""
-        self.stones['a1'] = 'red'
-        self.stones['b1'] = 'blue'
+        """Set up the starting board for this board's variant.
+
+        Standard: red on a1, blue on b1.
+        Competitive: empty board (mana nodes neutral); both players will
+        place their first stone via the special opening moves.
+        """
+        if self.variant == 'competitive':
+            # Empty board; first two turns will use the competitive opening.
+            pass
+        else:
+            self.stones['a1'] = 'red'
+            self.stones['b1'] = 'blue'
         self.update()
 
     def update(self):
@@ -128,7 +149,8 @@ class SimBoard:
         self.totalstones['red'] = red_count
         self.totalstones['blue'] = blue_count
 
-        # Score: blue gets +1 phantom stone
+        # Score: blue gets +1 phantom stone (a counter token off the
+        # playable board — counts toward score only).
         redscore = red_count
         bluescore = blue_count + 1
         if redscore == bluescore:
@@ -137,6 +159,26 @@ class SimBoard:
             self.score = 'r' + str(min(3, redscore - bluescore))
         else:
             self.score = 'b' + str(min(3, bluescore - redscore))
+
+        # Immediate-loss: a player with zero stones on playable nodes
+        # loses right away (latest-edition rules). Blue's +1 phantom
+        # counter does NOT save them. In the competitive variant, both
+        # players legitimately start with zero stones during the
+        # opening; the rule kicks in only "from that point onward",
+        # i.e., once turn_counter >= 2 (after both opening blinks).
+        opening_pass = (self.variant == 'competitive' and self.turn_counter < 2)
+        if not self.gameover and not opening_pass:
+            if red_count == 0 and blue_count == 0:
+                # Should not occur via any legal action, but guard:
+                # whoever's turn it is to move is responsible for the state.
+                self.gameover = True
+                self.winner = 'blue' if self.whose_turn == 'red' else 'red'
+            elif red_count == 0:
+                self.gameover = True
+                self.winner = 'blue'
+            elif blue_count == 0:
+                self.gameover = True
+                self.winner = 'red'
 
         # Mana
         for color in ('red', 'blue'):
@@ -159,6 +201,10 @@ class SimBoard:
 
     def check_game_over(self, active_color):
         """Check win conditions after a turn. Returns True if game is over."""
+        # update() may already have flagged immediate-loss (zero stones).
+        if self.gameover:
+            return True
+
         red_total = self.totalstones['red']
         blue_total = self.totalstones['blue'] + 1  # phantom stone
 
@@ -374,6 +420,9 @@ class SimBoard:
           - 'meteor_target': node — blink target.
           - 'comet_target': node — blink target.
           - 'comet_sacrifice': node — own stone to sacrifice (≠ target).
+          - 'fireblast_sacrifice': node — own stone to sacrifice after
+              Fireblast's destruction (any own stone, including the
+              casting stone — the player picks).
           - 'hard_move_targets': [node, …] — for Carnage/Slash, the order in
               which to apply hard moves (first valid ones used).
           - 'soft_move_targets': [node, …] — for Flourish/Grow/Sprout.
@@ -437,8 +486,27 @@ class SimBoard:
                             self.stones[name] = None
                             destroyed.append(name)
                             break
-            if destroyed:
-                actions.append(Action('fireblast', destroyed=destroyed))
+            actions.append(Action('fireblast', destroyed=destroyed))
+            self.update()
+            # If destruction wiped out the opponent's last stone, the
+            # game ends immediately — no sacrifice happens.
+            if self.gameover:
+                return actions
+            # Sacrifice cost (latest-edition rules): pick lowest-priority
+            # own stone by reverse NODE_ORDER, mirroring Comet's heuristic.
+            sac_override = overrides.get('fireblast_sacrifice')
+            sac_done = False
+            if sac_override is not None and self.stones.get(sac_override) == color:
+                self.stones[sac_override] = None
+                actions.append(Action('sacrifice', node=sac_override))
+                sac_done = True
+            if not sac_done:
+                for name in reversed(NODE_ORDER):
+                    if self.stones[name] == color:
+                        self.stones[name] = None
+                        actions.append(Action('sacrifice', node=name))
+                        break
+            self.update()
 
         elif resolve_type == 'hail_storm':
             destroyed = []
@@ -722,6 +790,20 @@ class SimBoard:
         self.update()
         enemy = self._enemy(color)
 
+        # Competitive variant opening:
+        #   turn_counter == 0 (red): blink to any of the 39 nodes.
+        #   turn_counter == 1 (blue): soft-blink to any empty node
+        #     (38 nodes, since red just placed). No dash, no cast.
+        if self.variant == 'competitive' and self.turn_counter < 2:
+            for n in NODE_ORDER:
+                if self.stones[n] is not None:
+                    continue
+                yield CompleteTurn([
+                    Action('blink', node=n),
+                    Action('pass'),
+                ])
+            return
+
         has_seal_of_wind = 'Seal_of_Wind' in self.charged_spells[color]
         has_seal_of_lightning = 'Seal_of_Lightning' in self.charged_spells[color]
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
@@ -910,6 +992,7 @@ class SimBoard:
         board.whoseturn = self.whose_turn
         board.turncounter = self.turn_counter
         board.score = self.score
+        board.variant = self.variant
         board.redplayer = _Adapter()
         board.blueplayer = _Adapter()
         board.redplayer.spellcounter = self.spell_counter['red']
@@ -932,7 +1015,7 @@ class SimBoard:
     def from_sfn(cls, sfn_str):
         from notation import sfn_to_dict
         d = sfn_to_dict(sfn_str)
-        b = cls(spell_names=d['spell_names'])
+        b = cls(spell_names=d['spell_names'], variant=d.get('variant', 'standard'))
         b.stones = dict(d['stones'])
         b.whose_turn = d['turn']
         b.turn_counter = d['turncounter']

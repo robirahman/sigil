@@ -74,6 +74,28 @@ const CatSpellResolvers = {
 		}
 		board.update();
 		emit(board.getBoardStatePayload());
+
+		// Sacrifice cost (latest-edition rules). Skip if the caster has
+		// no stones left — they have already lost.
+		const hasOwn = board.nodeOrder.some(n => board.stones[n] === color);
+		if (!hasOwn) return;
+
+		while (true) {
+			const resp = await getInput({
+				type: 'message', message: 'Sacrifice a stone.',
+				awaiting: 'node', moveoptions: {},
+			});
+			if (board.stones[resp] === color) {
+				board.stones[resp] = null;
+				if (board.lastPlay === resp) {
+					board.lastPlay = null;
+					board.lastPlayer = null;
+				}
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
 	},
 
 	async hail_storm(board, color, spellName, getInput, emit) {

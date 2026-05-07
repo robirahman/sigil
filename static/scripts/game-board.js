@@ -6,7 +6,7 @@ document.addEventListener('alpine:init', () => {
 	Alpine.data(
 		'gameBoard',
 		// eslint-disable-next-line no-unused-vars
-		({ check = '', elo = 0, gameName = '', playerCount = 0, username = '', difficulty = 'easy', loadId = '', gameMode = '', importSfn: initialImportSfn = '' }) => ({
+		({ check = '', elo = 0, gameName = '', playerCount = 0, username = '', difficulty = 'easy', loadId = '', gameMode = '', importSfn: initialImportSfn = '', variant = 'standard' }) => ({
 			actionList: [],
 			activeSpell: '',
 			activeSpellIsCastable: false,
@@ -222,7 +222,14 @@ document.addEventListener('alpine:init', () => {
 								? (loadId ? 'singleplayergame_load' : (difficulty === 'hard' ? 'singleplayergame_hard' : 'singleplayergame'))
 								: gameName ? `privategame/${gameName}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
-				_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}`);
+				// Forward the game variant (set by the menu page or URL
+				// query param) to the server so the WebSocket handler can
+				// configure the new game accordingly. Saved games carry
+				// variant inside the SFN, so loadId paths skip this.
+				const variantQS = (variant && variant !== 'standard' && !loadId)
+					? `?variant=${encodeURIComponent(variant)}`
+					: '';
+				_this.events = new WebSocket(`${apiProtocol}//${location.host}/api/${apiPath}${variantQS}`);
 				_this.events.onmessage = handleIncomingEvent;
 
 				if (loadId) {

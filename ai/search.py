@@ -123,6 +123,11 @@ def _apply_turn(board, turn, color):
                 for sac in action.sacrificed:
                     board.stones[sac] = None
         board.update()
+        # Immediate-loss can fire mid-turn (e.g. dash sacrifice empties
+        # the active player; Fireblast destruction empties the opponent).
+        # Stop applying queued actions once the game ends.
+        if board.gameover:
+            return
 
 
 def iterative_deepening_search(board, color, model, max_depth=2,

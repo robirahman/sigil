@@ -1,5 +1,15 @@
+// Recognized game variants. See SimBoard (Python) for the full rule
+// description: 'standard' = the classic two-stone opening with red on
+// a1 and blue on b1; 'competitive' = empty board, red's turn-0 is a
+// free blink to any of the 39 nodes, blue's turn-1 is a free
+// soft-blink to any of the remaining 38 empty nodes.
+const SIGIL_VARIANTS = ['standard', 'competitive'];
+
 class SigilBoard {
-	constructor(spellNames) {
+	constructor(spellNames, variant = 'standard') {
+		if (!SIGIL_VARIANTS.includes(variant)) {
+			throw new Error(`Unknown variant: ${variant}`);
+		}
 		this.stones = {};
 		for (const n of NODE_ORDER) {
 			this.stones[n] = null;
@@ -20,11 +30,16 @@ class SigilBoard {
 		this.lastPlayer = null;
 		this.snapshot = null;
 		this.allLoopingSnapshotCounts = {};
+		this.variant = variant;
 	}
 
 	setupInitial() {
-		this.stones.a1 = 'red';
-		this.stones.b1 = 'blue';
+		// Standard: red on a1, blue on b1.
+		// Competitive: empty board; first two turns place stones via blink.
+		if (this.variant !== 'competitive') {
+			this.stones.a1 = 'red';
+			this.stones.b1 = 'blue';
+		}
 		this.update();
 	}
 
@@ -41,7 +56,27 @@ class SigilBoard {
 		this.totalStones.red = redCount;
 		this.totalStones.blue = blueCount;
 
-		// Score: blue gets +1 phantom stone
+		// Immediate-loss (latest-edition rules): a player with zero
+		// stones on playable nodes loses right away. Blue's +1 phantom
+		// counter token doesn't count for survival. The competitive
+		// variant suspends this check during the empty-board opening
+		// (turnCounter < 2), since both players legitimately start at 0.
+		const openingPass = (this.variant === 'competitive' && this.turnCounter < 2);
+		if (!this.gameover && !openingPass) {
+			if (redCount === 0 && blueCount === 0) {
+				this.gameover = true;
+				this.winner = this.whoseTurn === 'red' ? 'blue' : 'red';
+			} else if (redCount === 0) {
+				this.gameover = true;
+				this.winner = 'blue';
+			} else if (blueCount === 0) {
+				this.gameover = true;
+				this.winner = 'red';
+			}
+		}
+
+		// Score: blue gets +1 phantom stone (counter token off the
+		// playable board — counts toward score only).
 		const redscore = redCount;
 		const bluescore = blueCount + 1;
 		if (redscore === bluescore) {
@@ -142,6 +177,9 @@ class SigilBoard {
 	}
 
 	checkGameOver(activeColor) {
+		// update() may already have flagged immediate-loss (zero stones).
+		if (this.gameover) return true;
+
 		const redTotal = this.totalStones.red;
 		const blueTotal = this.totalStones.blue + 1; // phantom stone
 

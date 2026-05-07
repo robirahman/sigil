@@ -113,6 +113,33 @@ const SpellResolvers = {
 		}
 		board.update();
 		emit(board.getBoardStatePayload());
+
+		// If destruction wiped out the opponent's last stone, the game
+		// ends immediately (latest-edition rules) — no sacrifice prompt.
+		if (board.gameover) return;
+
+		// Sacrifice cost (latest-edition rules). If the caster has no
+		// stones left, skip — they have already lost; the update() call
+		// above would have flagged that.
+		const hasOwn = NODE_ORDER.some(n => board.stones[n] === color);
+		if (!hasOwn) return;
+
+		while (true) {
+			const resp = await getInput({
+				type: 'message', message: 'Sacrifice a stone.',
+				awaiting: 'node', moveoptions: {},
+			});
+			if (board.stones[resp] === color) {
+				board.stones[resp] = null;
+				if (board.lastPlay === resp) {
+					board.lastPlay = null;
+					board.lastPlayer = null;
+				}
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
 	},
 
 	// --- Hail Storm ---
