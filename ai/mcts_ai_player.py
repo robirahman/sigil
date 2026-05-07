@@ -17,11 +17,16 @@ from ai.sigil_net_hard import SigilNetHard
 from ai.mcts import mcts_search
 from ai.features import encode_all_turns
 from ai.config import NUM_SIMS_PLAY, MODELS_DIR, SPELL_TO_ID, DATA_DIR
+from ai.model_assembly import ensure_assembled
 
 
 # Model paths by difficulty
 _MEDIUM_MODEL = os.path.join(MODELS_DIR, 'best_model.pt')
 _HARD_MODEL = os.path.join(MODELS_DIR, 'best_model_hard.pt')
+
+# The Hard checkpoint is committed split (>100 MB hits GitHub's hard
+# push cap). Reassemble at import time if only the parts are present.
+ensure_assembled(_HARD_MODEL)
 
 # Strength of the auxiliary blunder head's suppression at inference.
 # 0 = head ignored. ~8 = strong suppression of moves the head flags.
