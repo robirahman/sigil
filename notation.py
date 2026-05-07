@@ -63,7 +63,11 @@ def _char_to_stone(ch):
 def board_to_sfn(board):
     """Serialize a Board or SPBoard to an SFN string.
 
-    Format: <stones>/<spells> <turn> <turncount> <rsc>:<bsc> <rlock>:<block> <rspring>:<bspring> <score>
+    Format: <stones>/<spells> <turn> <turncount> <rsc>:<bsc> <rlock>:<block> <rspring>:<bspring> <score> [<variant>]
+
+    The trailing variant token is omitted when the variant is 'standard'
+    so old SFN strings remain valid; readers default to 'standard' when
+    the token is absent.
     """
     stones = ''.join(_stone_char(board.nodes[n].stone) for n in NODE_ORDER)
 
@@ -84,7 +88,12 @@ def board_to_sfn(board):
 
     score = board.score or 'b1'
 
-    return f"{stones}/{spells_str} {turn} {tc} {rsc}:{bsc} {rlock}:{block} {rspring}:{bspring} {score}"
+    base = (f"{stones}/{spells_str} {turn} {tc} {rsc}:{bsc} "
+            f"{rlock}:{block} {rspring}:{bspring} {score}")
+    variant = getattr(board, 'variant', 'standard') or 'standard'
+    if variant != 'standard':
+        return f"{base} {variant}"
+    return base
 
 
 def sfn_to_dict(sfn_str):
@@ -120,6 +129,10 @@ def sfn_to_dict(sfn_str):
 
     score = parts[6]
 
+    # Optional variant token; default 'standard' for back-compat with
+    # SFN strings written before the variant field existed.
+    variant = parts[7] if len(parts) > 7 else 'standard'
+
     return {
         'stones': stones,
         'spell_names': spell_names,
@@ -132,6 +145,7 @@ def sfn_to_dict(sfn_str):
         'red_springlock': red_spring,
         'blue_springlock': blue_spring,
         'score': score,
+        'variant': variant,
     }
 
 
@@ -142,10 +156,12 @@ class GameRecorder:
     at each action. Call to_sgn() after the game ends.
     """
 
-    def __init__(self, spell_names, red_name='Red', blue_name='Blue'):
+    def __init__(self, spell_names, red_name='Red', blue_name='Blue',
+                 variant='standard'):
         self.spell_names = spell_names
         self.red_name = red_name
         self.blue_name = blue_name
+        self.variant = variant
         self.result = None
         self.turns = []       # list of (color, turn_number, [action_strings])
         self._current_turn = None
@@ -219,6 +235,11 @@ class GameRecorder:
         result_str = self.result if self.result else '*'
         lines.append(f'[Result "{result_str}"]')
         lines.append(f'[Spells "{",".join(self.spell_names)}"]')
+        # Only emit the Variant header for non-standard games so legacy
+        # SGN transcripts remain bit-identical and parsers without the
+        # field default correctly to 'standard'.
+        if getattr(self, 'variant', 'standard') != 'standard':
+            lines.append(f'[Variant "{self.variant}"]')
         lines.append('')
 
         for color, num, actions in self.turns:
@@ -263,5 +284,6 @@ def parse_sgn(sgn_str):
         'blue': headers.get('Blue'),
         'result': headers.get('Result'),
         'spell_names': spell_names,
+        'variant': headers.get('Variant', 'standard'),
         'turns': turns,
     }

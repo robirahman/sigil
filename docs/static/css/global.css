@@ -1,0 +1,56 @@
+.menu-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 20px;
+	padding: 25px 30px;
+	border-radius: 1000px;
+	background-color: var(--color-btn-menu);
+	box-shadow: 2px 2px var(--color-bg-dark);
+	color: var(--color-text-light);
+	font-size: 20px;
+	font-family: overlock, serif;
+	white-space: nowrap;
+}
+
+.menu-button:focus,
+.menu-button:hover {
+	background-color: var(--color-btn-menu-hover);
+}
+
+.menu-button.dark {
+	background-color: var(--color-btn-menu-dark);
+}
+
+.menu-button.dark:focus,
+.menu-button.dark:hover {
+	background-color: var(--color-btn-menu-dark-hover);
+}
+
+.menu-button.large {
+	font-size: 31px;
+	height: 66px;
+}
+
+.link {
+	color: var(--color-link);
+}
+
+.link:focus,
+.link:hover {
+	color: var(--color-link-hover);
+}
+
+.link--white {
+	color: #fff;
+}
+
+.link--white:focus,
+.link--white:hover {
+	color: #d9d9d9;
+}
+
+.text-link:focus,
+.text-link:hover {
+	text-decoration: underline;
+}

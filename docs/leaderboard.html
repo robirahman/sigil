@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Leaderboard - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.leaderboard {
+			max-width: 500px;
+			margin: 0 auto;
+			padding: 24px;
+			text-align: center;
+		}
+		.leaderboard h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin-bottom: 20px;
+		}
+		.leaderboard-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-family: 'Overlock', sans-serif;
+		}
+		.leaderboard-table th {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-dim);
+			font-size: 0.8em;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			padding: 8px 12px;
+			border-bottom: 2px solid var(--color-border);
+			text-align: left;
+		}
+		.leaderboard-table th:first-child { text-align: center; width: 40px; }
+		.leaderboard-table th:nth-child(3),
+		.leaderboard-table th:nth-child(4) { text-align: right; }
+		.leaderboard-table td {
+			padding: 10px 12px;
+			border-bottom: 1px solid var(--color-bg-mid);
+			color: var(--color-text-warm);
+		}
+		.leaderboard-table td:first-child {
+			text-align: center;
+			color: var(--color-text-dim);
+			font-family: 'Arvo', serif;
+		}
+		.leaderboard-table td:nth-child(3),
+		.leaderboard-table td:nth-child(4) { text-align: right; }
+		.leaderboard-table tr:nth-child(1) td:first-child { color: #ffd700; }
+		.leaderboard-table tr:nth-child(2) td:first-child { color: #c0c0c0; }
+		.leaderboard-table tr:nth-child(3) td:first-child { color: #cd7f32; }
+		.leaderboard-table .name { font-weight: bold; }
+		.leaderboard-table .name--ai { color: var(--color-accent); }
+		.leaderboard-table .elo {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-bright);
+		}
+		.loading-msg {
+			color: var(--color-border-hover);
+			font-family: 'Overlock', sans-serif;
+			padding: 40px 0;
+		}
+		.empty-msg {
+			color: var(--color-text-faint);
+			font-family: 'Overlock', sans-serif;
+			padding: 40px 0;
+		}
+		.back-link {
+			display: inline-block;
+			margin-top: 20px;
+			color: var(--color-accent);
+			font-family: 'Overlock', sans-serif;
+			text-decoration: none;
+		}
+		.back-link:hover { text-decoration: underline; }
+		.pagination {
+			margin-top: 16px;
+			display: flex;
+			justify-content: center;
+			gap: 8px;
+		}
+		.pagination__btn {
+			padding: 6px 14px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-surface);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.pagination__btn:hover { border-color: var(--color-text-dim); }
+		.pagination__btn:disabled { opacity: 0.4; cursor: default; }
+		.pagination__info {
+			padding: 6px 0;
+			color: var(--color-text-dim);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			align-self: center;
+		}
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="leaderboardPage()">
+		<div class="leaderboard">
+			<h2>Leaderboard</h2>
+
+			<p class="loading-msg" x-show="loading" x-cloak>Loading rankings...</p>
+			<p class="empty-msg" x-show="!loading && allPlayers.length === 0" x-cloak>No ranked games played yet.</p>
+
+			<table class="leaderboard-table" x-show="!loading && allPlayers.length > 0" x-cloak>
+				<thead>
+					<tr>
+						<th>#</th>
+						<th>Player</th>
+						<th>Rating</th>
+						<th>Games</th>
+					</tr>
+				</thead>
+				<tbody>
+					<template x-for="(player, index) in pagePlayers" x-bind:key="player.uid">
+						<tr>
+							<td x-text="pageStart + index + 1"></td>
+							<td class="name" x-bind:class="{ 'name--ai': player.isAI }">
+								<a x-bind:href="'profile.html?uid=' + player.uid" x-bind:class="{ 'name--ai': player.isAI }" style="color: inherit; text-decoration: none;" x-text="player.displayName"></a>
+							</td>
+							<td class="elo" x-text="player.elo"></td>
+							<td x-text="player.gamesPlayed"></td>
+						</tr>
+					</template>
+				</tbody>
+			</table>
+
+			<div class="pagination" x-show="totalPages > 1" x-cloak>
+				<button class="pagination__btn" x-on:click="prevPage" x-bind:disabled="page === 0">&larr; Prev</button>
+				<span class="pagination__info" x-text="(page + 1) + ' / ' + totalPages"></span>
+				<button class="pagination__btn" x-on:click="nextPage" x-bind:disabled="page >= totalPages - 1">Next &rarr;</button>
+			</div>
+
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+
+	<script>
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('leaderboardPage', () => ({
+				allPlayers: [],
+				loading: true,
+				page: 0,
+				perPage: 100,
+
+				get totalPages() {
+					return Math.max(1, Math.ceil(this.allPlayers.length / this.perPage));
+				},
+
+				get pageStart() {
+					return this.page * this.perPage;
+				},
+
+				get pagePlayers() {
+					return this.allPlayers.slice(this.pageStart, this.pageStart + this.perPage);
+				},
+
+				prevPage() { if (this.page > 0) this.page--; },
+				nextPage() { if (this.page < this.totalPages - 1) this.page++; },
+
+				async init() {
+					const db = firebase.database();
+
+					// Seed AI entries (best-effort, never blocks the read)
+					try { await this._seedAIs(db); } catch (e) { console.warn('AI seeding skipped:', e.message); }
+
+					// Fetch leaderboard
+					try {
+						const snap = await db.ref('leaderboard')
+							.orderByChild('elo')
+							.once('value');
+
+						const results = [];
+						snap.forEach((child) => {
+							const data = child.val();
+							const gamesPlayed = data.gamesPlayed || 0;
+							if (gamesPlayed === 0) return;
+							results.push({
+								uid: child.key,
+								displayName: data.displayName || 'Unknown',
+								elo: data.elo ?? 1000,
+								gamesPlayed: gamesPlayed,
+								isAI: data.isAI || false,
+							});
+						});
+
+						this.allPlayers = results.reverse();
+					} catch (e) {
+						console.error('Failed to load leaderboard:', e);
+					}
+
+					this.loading = false;
+				},
+
+				async _seedAIs(db) {
+					// Wait for auth state to resolve before deciding whether to sign in
+					await new Promise(resolve => {
+						const unsub = firebase.auth().onAuthStateChanged(() => { unsub(); resolve(); });
+					});
+					// Only sign in anonymously if truly no user (don't overwrite real sessions)
+					if (!firebase.auth().currentUser) {
+						await firebase.auth().signInAnonymously();
+					}
+					const ais = [
+						{ uid: '__ai_easy__', name: 'AI (Easy)' },
+						{ uid: '__ai_medium__', name: 'AI (Medium)' },
+					];
+					for (const ai of ais) {
+						const snap = await db.ref('leaderboard/' + ai.uid).once('value');
+						if (!snap.exists()) {
+							await db.ref('leaderboard/' + ai.uid).set({
+								displayName: ai.name,
+								elo: 1000,
+								gamesPlayed: 0,
+								isAI: true,
+							});
+							await db.ref('users/' + ai.uid).set({
+								displayName: ai.name,
+								elo: 1000,
+								gamesPlayed: 0,
+								wins: 0,
+								losses: 0,
+								created: Date.now(),
+								isAI: true,
+							});
+						}
+					}
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

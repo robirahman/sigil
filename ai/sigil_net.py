@@ -21,6 +21,9 @@ from ai.config import (
 )
 
 
+BLUNDER_HIDDEN_DIM = 64
+
+
 class ResBlock(nn.Module):
     """Pre-activation residual block with LayerNorm."""
 
@@ -63,6 +66,21 @@ class SigilNet(nn.Module):
         self.policy_proj = nn.Linear(TRUNK_DIM, POLICY_HIDDEN_DIM)
         self.turn_proj = nn.Linear(TURN_FEATURE_DIM, POLICY_HIDDEN_DIM)
 
+        # Auxiliary blunder head: (board, turn) → P(blunder).
+        # Trained only on human-annotated rows; subtracted from policy
+        # logits at inference to suppress moves the head flags.
+        self.blunder_board_proj = nn.Linear(TRUNK_DIM, BLUNDER_HIDDEN_DIM)
+        self.blunder_turn_proj = nn.Linear(TURN_FEATURE_DIM, BLUNDER_HIDDEN_DIM)
+        self.blunder_bias = nn.Parameter(torch.zeros(1))
+
+        # Auxiliary tactical head: predicts (best_own_crush, best_enemy_crush)
+        # — the maximum crush count achievable by either side on its next
+        # turn, clipped to [0, 3]. Provides supervised gradient on the
+        # trunk aligned with the strategic 'who has the next attack'
+        # concept that's hard to extract from raw features alone. Used at
+        # training time only; inference ignores this head.
+        self.tactical_head = nn.Linear(TRUNK_DIM, 2)
+
     def _trunk_forward(self, raw_features, spell_ids):
         """Shared trunk computation.
 
@@ -79,7 +97,8 @@ class SigilNet(nn.Module):
         x = self.trunk(x)                              # (B, 400)
         return x
 
-    def forward(self, raw_features, spell_ids, turn_features=None, turn_counts=None):
+    def forward(self, raw_features, spell_ids, turn_features=None, turn_counts=None,
+                return_blunder=False, return_tactical=False):
         """Forward pass.
 
         Args:
@@ -87,10 +106,12 @@ class SigilNet(nn.Module):
             spell_ids: (B, 9) LongTensor
             turn_features: optional (B, max_turns, TURN_FEATURE_DIM) — padded turn encodings
             turn_counts: optional (B,) LongTensor — number of valid turns per sample
+            return_blunder: if True, also return blunder_logits (B, max_turns)
 
         Returns:
             value: (B, 1) in [-1, 1]
             policy_logits: (B, max_turns) or None if turn_features not provided
+            blunder_logits: (B, max_turns) — only if return_blunder=True
         """
         x = self._trunk_forward(raw_features, spell_ids)
 
@@ -100,7 +121,14 @@ class SigilNet(nn.Module):
 
         # Policy head
         policy_logits = None
+        blunder_logits = None
         if turn_features is not None:
+            # Allow callers to pass turn vectors longer than this checkpoint
+            # was trained on (e.g. v22b at 80-dim under v27's 84-dim feature
+            # schema). The model only sees the prefix it was trained on.
+            expected = self.turn_proj.in_features
+            if turn_features.size(-1) > expected:
+                turn_features = turn_features[..., :expected]
             board_proj = self.policy_proj(x)              # (B, 256)
             turn_proj = self.turn_proj(turn_features)     # (B, max_turns, 256)
             # Dot product: (B, max_turns, 256) @ (B, 256, 1) -> (B, max_turns)
@@ -111,10 +139,33 @@ class SigilNet(nn.Module):
                 max_t = turn_features.size(1)
                 mask = torch.arange(max_t, device=logits.device).unsqueeze(0) >= turn_counts.unsqueeze(1)
                 logits = logits.masked_fill(mask, float('-inf'))
-
             policy_logits = logits
 
-        return v, policy_logits
+            if return_blunder:
+                # Blunder head reuses trunk(x) but has its own projections
+                # so its gradient does NOT flow back through policy_proj.
+                # Detach to keep the trunk training stable when blunder
+                # weight is high.
+                blunder_expected = self.blunder_turn_proj.in_features
+                tb_input = (turn_features[..., :blunder_expected]
+                            if turn_features.size(-1) > blunder_expected
+                            else turn_features)
+                bb = self.blunder_board_proj(x.detach())                 # (B, H)
+                tb = self.blunder_turn_proj(tb_input)                    # (B, max_t, H)
+                bl = torch.bmm(tb, bb.unsqueeze(-1)).squeeze(-1)         # (B, max_t)
+                bl = bl + self.blunder_bias
+                if turn_counts is not None:
+                    bl = bl.masked_fill(mask, 0.0)
+                blunder_logits = bl
+
+        outputs = (v, policy_logits)
+        if return_blunder:
+            outputs = outputs + (blunder_logits,)
+        if return_tactical:
+            outputs = outputs + (self.tactical_head(x),)
+        if len(outputs) == 2:
+            return outputs[0], outputs[1]
+        return outputs
 
     def evaluate(self, raw_features, spell_ids):
         """Value-only evaluation (no policy). For use in search.
@@ -137,13 +188,17 @@ class SigilNet(nn.Module):
             return v.item()
         return v.squeeze(-1)
 
-    def evaluate_with_policy(self, raw_features, spell_ids, turn_features):
+    def evaluate_with_policy(self, raw_features, spell_ids, turn_features,
+                             blunder_lambda=0.0):
         """Full evaluation: value + policy priors for MCTS.
 
         Args:
             raw_features: (RAW_FEATURE_DIM,) single position
             spell_ids: (9,) single position
             turn_features: (N, TURN_FEATURE_DIM) all legal turns
+            blunder_lambda: if > 0, subtract `blunder_lambda * sigmoid(blunder_logit)`
+                from each policy logit before softmax — suppresses moves the
+                auxiliary blunder head flags as human-curated 'bad'.
 
         Returns: (value: float, policy: np.array of shape (N,))
         """
@@ -152,11 +207,19 @@ class SigilNet(nn.Module):
         turn_features = turn_features.unsqueeze(0)     # (1, N, 64)
         turn_counts = torch.tensor([turn_features.size(1)], dtype=torch.long)
 
+        return_blunder = blunder_lambda > 0
         with torch.no_grad():
-            v, logits = self.forward(raw_features, spell_ids, turn_features, turn_counts)
+            out = self.forward(raw_features, spell_ids, turn_features, turn_counts,
+                               return_blunder=return_blunder)
+        if return_blunder:
+            v, logits, blunder_logits = out
+            adj = logits - blunder_lambda * torch.sigmoid(blunder_logits)
+        else:
+            v, logits = out
+            adj = logits
 
         value = v.item()
-        policy = F.softmax(logits.squeeze(0), dim=0).cpu().numpy()
+        policy = F.softmax(adj.squeeze(0), dim=0).cpu().numpy()
         return value, policy
 
     def save(self, path):
@@ -169,10 +232,36 @@ class SigilNet(nn.Module):
 
     @classmethod
     def load(cls, path, device='cpu'):
-        """Load model from checkpoint."""
+        """Load model from checkpoint.
+
+        Uses strict=False so older checkpoints (predating the blunder head)
+        still load — the blunder projections fall back to their freshly
+        initialized weights and need to be trained before they're useful.
+
+        Also resizes layers whose input dim depends on TURN_FEATURE_DIM
+        (turn_proj, blunder_turn_proj) to match the checkpoint, so a
+        v22b checkpoint trained at TURN_FEATURE_DIM=80 still loads even
+        when the constant has since been bumped to 84.
+        """
         net = cls()
         checkpoint = torch.load(path, map_location=device, weights_only=True)
-        net.load_state_dict(checkpoint['model_state_dict'])
+        state = checkpoint['model_state_dict']
+        # Resize turn-feature-keyed projections to the checkpoint's dim
+        # before load_state_dict, otherwise we get shape mismatches.
+        if 'turn_proj.weight' in state:
+            ckpt_turn_dim = state['turn_proj.weight'].shape[1]
+            if ckpt_turn_dim != net.turn_proj.in_features:
+                net.turn_proj = nn.Linear(ckpt_turn_dim, POLICY_HIDDEN_DIM)
+        if 'blunder_turn_proj.weight' in state:
+            ckpt_blunder_dim = state['blunder_turn_proj.weight'].shape[1]
+            if ckpt_blunder_dim != net.blunder_turn_proj.in_features:
+                net.blunder_turn_proj = nn.Linear(ckpt_blunder_dim, BLUNDER_HIDDEN_DIM)
+        net.load_state_dict(state, strict=False)
+        net._turn_feature_dim = (
+            state['turn_proj.weight'].shape[1]
+            if 'turn_proj.weight' in state
+            else net.turn_proj.in_features
+        )
         net.eval()
         return net
 

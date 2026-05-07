@@ -71,11 +71,21 @@ class CompleteTurn:
 class SimBoard:
     """Lightweight, copyable board for simulation."""
 
+    # Recognized variants. 'standard' = the classic two-stone opening with
+    # red on a1 and blue on b1. 'competitive' = empty board (all three mana
+    # nodes neutral); red's turn-0 is a free blink to any of the 39 nodes;
+    # blue's turn-1 is a free soft-blink to any of the remaining 38 empty
+    # nodes; play proceeds normally from turn 2.
+    VARIANTS = ('standard', 'competitive')
+
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
-                 'springlock', 'totalstones', 'mana', 'charged_spells')
+                 'springlock', 'totalstones', 'mana', 'charged_spells',
+                 'variant')
 
-    def __init__(self, spell_names=None):
+    def __init__(self, spell_names=None, variant='standard'):
+        if variant not in self.VARIANTS:
+            raise ValueError(f"Unknown variant: {variant!r}")
         self.stones = {n: None for n in NODE_ORDER}
         self.spell_names = spell_names or ['Flourish', 'Carnage', 'Bewitch',
                                            'Grow', 'Fireblast', 'Hail_Storm',
@@ -91,6 +101,7 @@ class SimBoard:
         self.totalstones = {'red': 0, 'blue': 0}
         self.mana = {'red': 0, 'blue': 0}
         self.charged_spells = {'red': [], 'blue': []}
+        self.variant = variant
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -108,12 +119,22 @@ class SimBoard:
         b.mana = dict(self.mana)
         b.charged_spells = {'red': list(self.charged_spells['red']),
                             'blue': list(self.charged_spells['blue'])}
+        b.variant = self.variant
         return b
 
     def setup_initial(self):
-        """Set up initial board state with starting stones."""
-        self.stones['a1'] = 'red'
-        self.stones['b1'] = 'blue'
+        """Set up the starting board for this board's variant.
+
+        Standard: red on a1, blue on b1.
+        Competitive: empty board (mana nodes neutral); both players will
+        place their first stone via the special opening moves.
+        """
+        if self.variant == 'competitive':
+            # Empty board; first two turns will use the competitive opening.
+            pass
+        else:
+            self.stones['a1'] = 'red'
+            self.stones['b1'] = 'blue'
         self.update()
 
     def update(self):
@@ -128,7 +149,8 @@ class SimBoard:
         self.totalstones['red'] = red_count
         self.totalstones['blue'] = blue_count
 
-        # Score: blue gets +1 phantom stone
+        # Score: blue gets +1 phantom stone (a counter token off the
+        # playable board — counts toward score only).
         redscore = red_count
         bluescore = blue_count + 1
         if redscore == bluescore:
@@ -137,6 +159,26 @@ class SimBoard:
             self.score = 'r' + str(min(3, redscore - bluescore))
         else:
             self.score = 'b' + str(min(3, bluescore - redscore))
+
+        # Immediate-loss: a player with zero stones on playable nodes
+        # loses right away (latest-edition rules). Blue's +1 phantom
+        # counter does NOT save them. In the competitive variant, both
+        # players legitimately start with zero stones during the
+        # opening; the rule kicks in only "from that point onward",
+        # i.e., once turn_counter >= 2 (after both opening blinks).
+        opening_pass = (self.variant == 'competitive' and self.turn_counter < 2)
+        if not self.gameover and not opening_pass:
+            if red_count == 0 and blue_count == 0:
+                # Should not occur via any legal action, but guard:
+                # whoever's turn it is to move is responsible for the state.
+                self.gameover = True
+                self.winner = 'blue' if self.whose_turn == 'red' else 'red'
+            elif red_count == 0:
+                self.gameover = True
+                self.winner = 'blue'
+            elif blue_count == 0:
+                self.gameover = True
+                self.winner = 'red'
 
         # Mana
         for color in ('red', 'blue'):
@@ -159,6 +201,10 @@ class SimBoard:
 
     def check_game_over(self, active_color):
         """Check win conditions after a turn. Returns True if game is over."""
+        # update() may already have flagged immediate-loss (zero stones).
+        if self.gameover:
+            return True
+
         red_total = self.totalstones['red']
         blue_total = self.totalstones['blue'] + 1  # phantom stone
 
@@ -235,6 +281,57 @@ class SimBoard:
         """Return list of all nodes not occupied by color."""
         return [n for n in NODE_ORDER if self.stones[n] != color]
 
+    def escape_distance(self, node_name, defender_color, max_dist=6):
+        """Minimum BFS distance from node_name through defender stones to
+        the nearest empty cell, mirroring the push-chain logic in
+        _push_enemy. Used by feature engineering as a 'liberty' analogue.
+
+        Returns max_dist if no empty cell is reachable through a chain
+        of defender stones (i.e. the stone at node_name would be crushed
+        if the attacker pushed it).
+
+        Non-mutating.
+        """
+        attacker = 'blue' if defender_color == 'red' else 'red'
+        queue = deque()
+        for nb in self._adjacent_nodes(node_name):
+            queue.append((nb, 1))
+        visited = {node_name}
+        shortest = None
+        while queue:
+            next_node, dist = queue.popleft()
+            if next_node in visited:
+                continue
+            visited.add(next_node)
+            if shortest is not None and dist > shortest:
+                break
+            if dist > max_dist:
+                break
+            stone = self.stones[next_node]
+            if stone == attacker:
+                # Attacker's own stones block the push chain.
+                continue
+            elif stone == defender_color:
+                for nb in self._adjacent_nodes(next_node):
+                    if nb not in visited:
+                        queue.append((nb, dist + 1))
+            else:  # empty
+                return dist
+        return max_dist
+
+    def is_crushable(self, node_name, attacker_color):
+        """True iff a hard-move into node_name by attacker_color would
+        crush the stone there (no empty cell reachable through the push
+        chain). Returns False if node_name isn't occupied by the defender.
+
+        Non-mutating; pure read of self.stones.
+        """
+        defender = 'blue' if attacker_color == 'red' else 'red'
+        if self.stones[node_name] != defender:
+            return False
+        # Use 39 as the unreachable sentinel — graph has 39 nodes total.
+        return self.escape_distance(node_name, defender, max_dist=39) >= 39
+
     def _push_enemy(self, node_name, color):
         """Push enemy stone from node_name. Returns push destination or 'X' for crush.
 
@@ -305,10 +402,31 @@ class SimBoard:
             return act
         return None  # invalid
 
-    # ---- Spell resolution (greedy, no branching) ----
+    # ---- Spell resolution (greedy by default, branching via overrides) ----
 
-    def _resolve_spell(self, spell_name, color, spell_position_nodes):
-        """Resolve a spell's effect greedily. Returns list of Actions describing what happened."""
+    def _resolve_spell(self, spell_name, color, spell_position_nodes,
+                       target_overrides=None):
+        """Resolve a spell's effect. Returns list of Actions describing what
+        happened.
+
+        Defaults to greedy choices for spells with target options. Pass
+        `target_overrides` (a dict) to force a specific resolution — used
+        by the exhaustive turn enumerator to branch over target choices.
+
+        Recognized override keys:
+          - 'bewitch_pair': (node1, node2) — both must be enemy stones,
+              adjacent to each other.
+          - 'starfall_pair': (node1, node2) — both must be empty, adjacent.
+          - 'meteor_target': node — blink target.
+          - 'comet_target': node — blink target.
+          - 'comet_sacrifice': node — own stone to sacrifice (≠ target).
+          - 'fireblast_sacrifice': node — own stone to sacrifice after
+              Fireblast's destruction (any own stone, including the
+              casting stone — the player picks).
+          - 'hard_move_targets': [node, …] — for Carnage/Slash, the order in
+              which to apply hard moves (first valid ones used).
+          - 'soft_move_targets': [node, …] — for Flourish/Grow/Sprout.
+        """
         info = CORE_SPELLS.get(spell_name)
         if info is None or info['resolve'] is None:
             return []
@@ -316,19 +434,27 @@ class SimBoard:
         actions = []
         enemy = self._enemy(color)
         resolve_type = info['resolve']
+        overrides = target_overrides or {}
 
         if resolve_type == 'soft_moves':
             count = info['count']
+            override_targets = list(overrides.get('soft_move_targets') or [])
             for _ in range(count):
                 targets = self._soft_moveable(color)
                 if not targets:
                     break
-                # Prefer nodes not in the spell position
                 chosen = None
-                for t in targets:
-                    if t not in spell_position_nodes:
-                        chosen = t
-                        break
+                # Apply override targets in order, skipping any no longer legal.
+                while override_targets and chosen is None:
+                    candidate = override_targets.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    # Greedy fallback: prefer nodes not in the spell position
+                    for t in targets:
+                        if t not in spell_position_nodes:
+                            chosen = t
+                            break
                 if chosen is None:
                     chosen = targets[0]
                 actions.append(self._do_soft_move(color, chosen))
@@ -336,11 +462,18 @@ class SimBoard:
 
         elif resolve_type == 'hard_moves':
             count = info['count']
+            override_targets = list(overrides.get('hard_move_targets') or [])
             for _ in range(count):
                 targets = self._hard_moveable(color)
                 if not targets:
                     break
-                chosen = targets[0]
+                chosen = None
+                while override_targets and chosen is None:
+                    candidate = override_targets.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    chosen = targets[0]
                 actions.append(self._do_hard_move(color, chosen))
                 self.update()
 
@@ -353,8 +486,27 @@ class SimBoard:
                             self.stones[name] = None
                             destroyed.append(name)
                             break
-            if destroyed:
-                actions.append(Action('fireblast', destroyed=destroyed))
+            actions.append(Action('fireblast', destroyed=destroyed))
+            self.update()
+            # If destruction wiped out the opponent's last stone, the
+            # game ends immediately — no sacrifice happens.
+            if self.gameover:
+                return actions
+            # Sacrifice cost (latest-edition rules): pick lowest-priority
+            # own stone by reverse NODE_ORDER, mirroring Comet's heuristic.
+            sac_override = overrides.get('fireblast_sacrifice')
+            sac_done = False
+            if sac_override is not None and self.stones.get(sac_override) == color:
+                self.stones[sac_override] = None
+                actions.append(Action('sacrifice', node=sac_override))
+                sac_done = True
+            if not sac_done:
+                for name in reversed(NODE_ORDER):
+                    if self.stones[name] == color:
+                        self.stones[name] = None
+                        actions.append(Action('sacrifice', node=name))
+                        break
+            self.update()
 
         elif resolve_type == 'hail_storm':
             destroyed = []
@@ -370,7 +522,19 @@ class SimBoard:
                 actions.append(Action('hail_storm', destroyed=destroyed))
 
         elif resolve_type == 'bewitch':
-            # Find two adjacent enemy stones, convert them
+            # Convert two adjacent enemy stones. Override picks a specific
+            # pair; otherwise fall back to first-found by NODE_ORDER.
+            override = overrides.get('bewitch_pair')
+            if override is not None:
+                n1, n2 = override
+                if (self.stones[n1] == enemy
+                        and self.stones[n2] == enemy
+                        and n2 in self._adjacent_nodes(n1)):
+                    self.stones[n1] = color
+                    self.stones[n2] = color
+                    actions.append(Action('bewitch', node=n1, node2=n2))
+                    self.update()
+                    return actions
             for name in NODE_ORDER:
                 if self.stones[name] == enemy:
                     for nb in self._adjacent_nodes(name):
@@ -383,21 +547,40 @@ class SimBoard:
             # No valid target found
 
         elif resolve_type == 'starfall':
-            # Find two adjacent empty nodes that maximize enemy destruction
+            # Place two adjacent stones on empty nodes, then destroy
+            # neighboring enemies. Override picks a specific empty pair;
+            # otherwise the greedy choice maximizes enemy destruction.
             best = None
-            best_count = 0
-            for name in NODE_ORDER:
-                if self.stones[name] is not None:
-                    continue
-                for nb in self._adjacent_nodes(name):
-                    if self.stones[nb] is not None:
+            override = overrides.get('starfall_pair')
+            if override is not None:
+                n1, n2 = override
+                if (self.stones[n1] is None
+                        and self.stones[n2] is None
+                        and n2 in self._adjacent_nodes(n1)):
+                    best = (n1, n2)
+            if best is None:
+                # Heuristic: max enemy stones destroyed; ties broken in
+                # favor of pairs that destroy an enemy on a mana node
+                # (a1/b1/c1). Mana destruction is strictly better than
+                # destruction elsewhere because losing mana stalls the
+                # opponent's spell tempo.
+                best_score = (-1, -1)
+                for name in NODE_ORDER:
+                    if self.stones[name] is not None:
                         continue
-                    # Count adjacent enemies
-                    neighbors_union = set(self._adjacent_nodes(name)) | set(self._adjacent_nodes(nb))
-                    enemy_count = sum(1 for n in neighbors_union if self.stones[n] == enemy)
-                    if enemy_count > best_count:
-                        best_count = enemy_count
-                        best = (name, nb)
+                    for nb in self._adjacent_nodes(name):
+                        if self.stones[nb] is not None:
+                            continue
+                        neighbors_union = (set(self._adjacent_nodes(name))
+                                           | set(self._adjacent_nodes(nb)))
+                        enemy_targets = [n for n in neighbors_union
+                                         if self.stones[n] == enemy]
+                        enemy_count = len(enemy_targets)
+                        mana_kills = sum(1 for n in enemy_targets if n in MANA_NODES)
+                        score = (enemy_count, mana_kills)
+                        if score > best_score:
+                            best_score = score
+                            best = (name, nb)
             if best:
                 n1, n2 = best
                 self.stones[n1] = color
@@ -412,19 +595,46 @@ class SimBoard:
                 self.update()
 
         elif resolve_type == 'meteor':
-            # Blink move, then destroy 1 adjacent enemy
+            # Blink move, then destroy 1 adjacent enemy. Override picks
+            # a specific blink target.
             targets = self._blinkable(color)
             chosen = None
-            # Prefer node adjacent to exactly 1 enemy
-            for t in targets:
-                adj_enemies = sum(1 for nb in self._adjacent_nodes(t) if self.stones[nb] == enemy)
-                if self.stones[t] == enemy:
-                    adj_enemies += 1
-                if adj_enemies == 1:
-                    chosen = t
-                    break
-            if chosen is None and targets:
-                chosen = targets[0]
+            override = overrides.get('meteor_target')
+            if override is not None and override in targets:
+                chosen = override
+            else:
+                # Heuristic: maximize total enemies destroyed (push-crush
+                # if blinking onto an enemy with no escape, plus the one
+                # adjacent enemy the spell destroys). Ties broken in
+                # favor of options that eliminate an enemy mana stone —
+                # via crush of a mana-occupant or via the adjacent-kill
+                # falling on a mana node.
+                best_score = (-1, -1)
+                for t in targets:
+                    crush = (self.stones[t] == enemy
+                             and self.is_crushable(t, color))
+                    crush_kills = 1 if crush else 0
+                    crush_mana = 1 if (crush and t in MANA_NODES) else 0
+                    # After the blink, t is owned by us. Find the first
+                    # adjacent enemy (matches the actual resolver's
+                    # iteration order), preferring one on a mana node.
+                    adj_enemies = [
+                        nb for nb in self._adjacent_nodes(t)
+                        if self.stones[nb] == enemy
+                    ]
+                    if adj_enemies:
+                        kill = 1
+                        # Prefer killing a mana stone if available.
+                        kill_mana = 1 if any(n in MANA_NODES for n in adj_enemies) else 0
+                    else:
+                        kill = 0
+                        kill_mana = 0
+                    score = (crush_kills + kill, crush_mana + kill_mana)
+                    if score > best_score:
+                        best_score = score
+                        chosen = t
+                if chosen is None and targets:
+                    chosen = targets[0]
             if chosen:
                 if self.stones[chosen] == enemy:
                     dest = self._push_enemy(chosen, color)
@@ -433,29 +643,46 @@ class SimBoard:
                     self.stones[chosen] = color
                     actions.append(Action('blink', node=chosen))
                 self.update()
-                # Destroy 1 adjacent enemy
-                for nb in self._adjacent_nodes(chosen):
-                    if self.stones[nb] == enemy:
-                        self.stones[nb] = None
-                        actions.append(Action('meteor_destroy', node=nb))
+                # Destroy 1 adjacent enemy — prefer one on a mana node so
+                # the heuristic's mana-tiebreak choice is realized.
+                adj_enemies = [
+                    nb for nb in self._adjacent_nodes(chosen)
+                    if self.stones[nb] == enemy
+                ]
+                kill_target = None
+                for nb in adj_enemies:
+                    if nb in MANA_NODES:
+                        kill_target = nb
                         break
+                if kill_target is None and adj_enemies:
+                    kill_target = adj_enemies[0]
+                if kill_target is not None:
+                    self.stones[kill_target] = None
+                    actions.append(Action('meteor_destroy', node=kill_target))
                 self.update()
 
         elif resolve_type == 'comet':
-            # Blink move to a mana node if possible, then sacrifice a stone
+            # Blink move (typically to a mana node), then sacrifice a stone.
+            # Override picks a specific blink target.
             target = None
-            for mn in reversed(MANA_NODES):
-                if self.stones[mn] != color:
-                    adj_enemy = sum(1 for nb in self._adjacent_nodes(mn) if self.stones[nb] == enemy)
-                    already_touching = self.stones[mn] == color or any(
-                        self.stones[nb] == color for nb in self._adjacent_nodes(mn))
-                    if not already_touching and adj_enemy < 2:
-                        target = mn
-                        break
+            override = overrides.get('comet_target')
+            if override is not None:
+                blinkable = self._blinkable(color)
+                if override in blinkable:
+                    target = override
             if target is None:
-                targets = self._blinkable(color)
-                if targets:
-                    target = targets[0]
+                for mn in reversed(MANA_NODES):
+                    if self.stones[mn] != color:
+                        adj_enemy = sum(1 for nb in self._adjacent_nodes(mn) if self.stones[nb] == enemy)
+                        already_touching = self.stones[mn] == color or any(
+                            self.stones[nb] == color for nb in self._adjacent_nodes(mn))
+                        if not already_touching and adj_enemy < 2:
+                            target = mn
+                            break
+                if target is None:
+                    targets = self._blinkable(color)
+                    if targets:
+                        target = targets[0]
             if target:
                 if self.stones[target] == enemy:
                     dest = self._push_enemy(target, color)
@@ -464,25 +691,41 @@ class SimBoard:
                     self.stones[target] = color
                     actions.append(Action('blink', node=target))
                 self.update()
-                # Sacrifice the least valuable stone
-                for name in reversed(NODE_ORDER):
-                    if self.stones[name] == color:
-                        self.stones[name] = None
-                        actions.append(Action('sacrifice', node=name))
-                        break
+                # Sacrifice the least valuable stone — but never the
+                # just-placed blink target (that defeats the purpose of
+                # the spell). JS implementation skips `target`; this
+                # matches it for cross-engine feature parity.
+                sac_override = overrides.get('comet_sacrifice')
+                sac_done = False
+                if sac_override is not None and sac_override != target:
+                    if self.stones[sac_override] == color:
+                        self.stones[sac_override] = None
+                        actions.append(Action('sacrifice', node=sac_override))
+                        sac_done = True
+                if not sac_done:
+                    for name in reversed(NODE_ORDER):
+                        if self.stones[name] == color and name != target:
+                            self.stones[name] = None
+                            actions.append(Action('sacrifice', node=name))
+                            break
                 self.update()
 
         elif resolve_type == 'surge_move':
-            # Make 1 move
+            # Make 1 move. Override picks a specific target.
             targets = self._all_moveable(color)
-            if targets:
+            override = overrides.get('surge_target')
+            chosen = None
+            if override is not None and override in targets:
+                chosen = override
+            elif targets:
                 chosen = targets[0]
+            if chosen:
                 actions.append(self._do_move(color, chosen))
                 self.update()
 
         return actions
 
-    def _cast_spell(self, spell_name, color):
+    def _cast_spell(self, spell_name, color, target_overrides=None):
         """Cast a spell: sacrifice nodes, refill by mana, resolve effect.
 
         Mutates board state. Returns list of Actions.
@@ -517,8 +760,9 @@ class SimBoard:
 
         self.update()
 
-        # Resolve spell effect
-        resolve_actions = self._resolve_spell(spell_name, color, position_nodes)
+        # Resolve spell effect (optionally with target overrides)
+        resolve_actions = self._resolve_spell(
+            spell_name, color, position_nodes, target_overrides=target_overrides)
         actions.extend(resolve_actions)
 
         self.update()
@@ -545,6 +789,20 @@ class SimBoard:
         """
         self.update()
         enemy = self._enemy(color)
+
+        # Competitive variant opening:
+        #   turn_counter == 0 (red): blink to any of the 39 nodes.
+        #   turn_counter == 1 (blue): soft-blink to any empty node
+        #     (38 nodes, since red just placed). No dash, no cast.
+        if self.variant == 'competitive' and self.turn_counter < 2:
+            for n in NODE_ORDER:
+                if self.stones[n] is not None:
+                    continue
+                yield CompleteTurn([
+                    Action('blink', node=n),
+                    Action('pass'),
+                ])
+            return
 
         has_seal_of_wind = 'Seal_of_Wind' in self.charged_spells[color]
         has_seal_of_lightning = 'Seal_of_Lightning' in self.charged_spells[color]
@@ -734,6 +992,7 @@ class SimBoard:
         board.whoseturn = self.whose_turn
         board.turncounter = self.turn_counter
         board.score = self.score
+        board.variant = self.variant
         board.redplayer = _Adapter()
         board.blueplayer = _Adapter()
         board.redplayer.spellcounter = self.spell_counter['red']
@@ -756,7 +1015,7 @@ class SimBoard:
     def from_sfn(cls, sfn_str):
         from notation import sfn_to_dict
         d = sfn_to_dict(sfn_str)
-        b = cls(spell_names=d['spell_names'])
+        b = cls(spell_names=d['spell_names'], variant=d.get('variant', 'standard'))
         b.stones = dict(d['stones'])
         b.whose_turn = d['turn']
         b.turn_counter = d['turncounter']

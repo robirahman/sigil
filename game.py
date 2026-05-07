@@ -48,6 +48,11 @@ class Board():
 
 		self.winner = None
 
+		### Game variant: 'standard' or 'competitive'.
+		### See SimBoard.VARIANTS for the rules of each. Set by the
+		### game-start code in app.py before calling setup_initial().
+		self.variant = 'standard'
+
 		### nodes is a dict that takes strings (names)
 		### and returns the corresponding node objects
 		self.nodes = self.make_board()
@@ -203,6 +208,22 @@ class Board():
 				bluetotalstones += 1
 		self.redplayer.totalstones = redtotalstones
 		self.blueplayer.totalstones = bluetotalstones
+
+		### Immediate-loss (latest-edition rules): a player with zero
+		### stones on playable nodes loses right away. Blue's +1 phantom
+		### counter token doesn't save them — only on-board stones count.
+		### The game loop checks board.gameover between phases and ends
+		### the game; spell resolvers check it to skip remaining steps.
+		if not self.gameover:
+			if redtotalstones == 0 and bluetotalstones == 0:
+				self.gameover = True
+				self.winner = 'blue' if self.whoseturn == 'red' else 'red'
+			elif redtotalstones == 0:
+				self.gameover = True
+				self.winner = 'blue'
+			elif bluetotalstones == 0:
+				self.gameover = True
+				self.winner = 'red'
 
 		redscore = redtotalstones
 		bluescore = bluetotalstones + 1
@@ -434,6 +455,18 @@ class Board():
 
 		return d
 
+	def set_spells_from_names(self, spell_names):
+		"""Rebuild the spell objects from a list of 9 spell name strings."""
+		spells = []
+		for i, name in enumerate(spell_names):
+			pos_idx = i + 1
+			spell_obj = eval("spellfile." + name + "(self, self.positions[" + str(pos_idx) + "], '" + name + "')")
+			spells.append(spell_obj)
+		for charm in spells[6:]:
+			charm.ischarm = True
+		self.spells = spells
+		self.spelldict = self.make_spelldict()
+
 	def addplayers(self, redplayer, blueplayer):
 		### Call this method AFTER building the board and the players.
 		### This is my hack-y way of giving players the board as parameter,
@@ -567,6 +600,34 @@ class Player():
 		if self.opp.ishuman:
 			self.opp.timer_running = False
 			self.timer_running = True
+
+		### Competitive variant opening: when this player has zero stones
+		### and the variant is 'competitive', their entire turn is a single
+		### free blink onto any empty node. No dash, no cast.
+		if (canmove and self.board.variant == 'competitive'
+				and self.totalstones == 0):
+			moveoptions = {}
+			for nodename in self.board.nodes:
+				if self.board.nodes[nodename].stone is None:
+					moveoptions[nodename] = self.color
+			self.jmessage("Place your first stone (Competitive opening).")
+			egress = {"type": "message", "message": "Place your first stone.",
+			          "awaiting": "node", "moveoptions": moveoptions}
+			self.ws.send(json.dumps(egress))
+			while True:
+				resp = self.receivemessage()
+				if resp in moveoptions:
+					node = self.board.nodes[resp]
+					node.stone = self.color
+					self.board.last_play = node.name
+					self.board.last_player = self.color
+					self.board.record('blink', node=resp)
+					self.board.update()
+					new_stone = {"type": "new_stone_animation", "color": self.color, "node": resp}
+					self.ws.send(json.dumps(new_stone))
+					if self.opp.ishuman:
+						self.opp.ws.send(json.dumps(new_stone))
+					return None
 
 		actions = []
 		spelllist = []

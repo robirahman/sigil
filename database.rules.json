@@ -1,0 +1,73 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": "auth !== null",
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "elo": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000"
+        },
+        "gamesPlayed": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "wins": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "losses": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "annotationMode": {
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
+    "leaderboard": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth !== null",
+        "elo": { ".validate": "newData.isNumber()" },
+        "displayName": { ".validate": "newData.isString()" },
+        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" }
+      },
+      ".indexOn": ["elo"]
+    },
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "completed_games": {
+      ".read": false,
+      "$gameId": {
+        ".write": "auth !== null",
+        ".validate": "newData.hasChildren(['winner', 'timestamp'])",
+        "annotations": {
+          "$turnNumber": {
+            ".validate": "newData.val() === 'good' || newData.val() === 'bad' || !newData.exists()"
+          }
+        }
+      }
+    },
+    "user_games": {
+      "$uid": {
+        ".read": true,
+        ".indexOn": ["timestamp"],
+        "$gameId": {
+          ".write": "auth !== null"
+        }
+      }
+    },
+    "user_active_games": {
+      "$uid": {
+        ".read": true,
+        "$roomCode": {
+          ".write": "auth !== null"
+        }
+      }
+    }
+  }
+}

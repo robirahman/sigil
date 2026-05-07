@@ -4,10 +4,10 @@
 set -e
 
 NUM_WORKERS=128
-GAMES_PER_WORKER=5
-SIMS=50
+GAMES_PER_WORKER=2
+SIMS=200
 TRAIN_EPOCHS=5
-ARENA_GAMES=20
+ARENA_GAMES=100
 ARENA_SIMS=100
 TARGET_WINRATE=0.50
 MAX_ITERATIONS=20
@@ -50,8 +50,10 @@ for iter in $(seq 1 $MAX_ITERATIONS); do
 
     # --- Train ---
     echo "[$(date +%H:%M:%S)] Training ${TRAIN_EPOCHS} epochs on GPU..."
+    # Collect all training data: self-play + human games
+    TRAIN_FILES=$(ls ${DATA_DIR}/*_all.jsonl ${DATA_DIR}/human_game_*.jsonl 2>/dev/null)
     python3 -m ai.train_sigil --net hard \
-        --data ${DATA_DIR}/*_all.jsonl \
+        --data $TRAIN_FILES \
         --model $HARD_MODEL \
         --output $HARD_MODEL \
         --epochs $TRAIN_EPOCHS \
@@ -90,16 +92,6 @@ else:
         exit 0
     fi
 
-    # After iteration 3, increase sims for better quality data
-    if [ $iter -eq 3 ]; then
-        SIMS=100
-        echo "(Increasing sims to $SIMS for better data quality)"
-    fi
-    if [ $iter -eq 6 ]; then
-        SIMS=200
-        GAMES_PER_WORKER=3
-        echo "(Increasing sims to $SIMS, reducing games to $GAMES_PER_WORKER)"
-    fi
 done
 
 echo "Max iterations reached without hitting target."

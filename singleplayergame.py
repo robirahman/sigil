@@ -34,6 +34,11 @@ class SPBoard():
 
 		self.winner = None
 
+		### Game variant: 'standard' or 'competitive'.
+		### See SimBoard.VARIANTS for the rules of each. Set by the
+		### game-start code in app.py before calling setup_initial().
+		self.variant = 'standard'
+
 		### nodes is a dict that takes strings (names)
 		### and returns the corresponding node objects
 		self.nodes = self.make_board()
@@ -153,6 +158,20 @@ class SPBoard():
 				bluetotalstones += 1
 		self.redplayer.totalstones = redtotalstones
 		self.blueplayer.totalstones = bluetotalstones
+
+		### Immediate-loss (latest-edition rules): a player with zero
+		### stones on playable nodes loses right away. Blue's +1 phantom
+		### counter token doesn't save them — only on-board stones count.
+		if not self.gameover:
+			if redtotalstones == 0 and bluetotalstones == 0:
+				self.gameover = True
+				self.winner = 'blue' if self.whoseturn == 'red' else 'red'
+			elif redtotalstones == 0:
+				self.gameover = True
+				self.winner = 'blue'
+			elif bluetotalstones == 0:
+				self.gameover = True
+				self.winner = 'red'
 
 		redscore = redtotalstones
 		bluescore = bluetotalstones + 1
@@ -483,6 +502,26 @@ class AIPlayer():
 		### One second delay between actions, for more realistic-feeling AI
 		time.sleep(1)
 
+		### Competitive variant opening (red: turncounter==1, blue: turncounter==2):
+		### the bot plays a free blink onto its preferred mana node, mirroring
+		### the standard game's opening positions for sane heuristic play.
+		if (canmove and self.board.variant == 'competitive'
+				and self.totalstones == 0):
+			preferred = 'a1' if self.color == 'red' else 'b1'
+			target = preferred if self.board.nodes[preferred].stone is None else None
+			if target is None:
+				for name in self.priority_order:
+					if self.board.nodes[name].stone is None:
+						target = name
+						break
+			if target is not None:
+				node = self.board.nodes[target]
+				node.stone = self.color
+				self.board.last_play = node.name
+				self.board.last_player = self.color
+				self.board.record('blink', node=target)
+				self.board.update()
+				return None
 
 		actions = []
 		spelllist = []
@@ -538,7 +577,7 @@ class AIPlayer():
 			action = 'Bewitch'
 		elif 'Flourish' in actions:
 			action = 'Flourish'
-		elif 'Fireblast' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Fireblast'].position)) > 1:
+		elif 'Fireblast' in actions and len(self.allhardmoveablenodes(self.board.spelldict['Fireblast'].position)) > 2:
 			action = 'Fireblast'
 		elif 'Hail_Storm' in actions and self.hailablespellcount() > 1:
 			action = 'Hail_Storm'

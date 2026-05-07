@@ -21,14 +21,23 @@ SPELL_TO_ID = {
     'Surge': 12, 'Comet': 13, 'Seal_of_Summer': 14,
 }
 
-# ---- Network architecture (medium — 2.17M params) ----
+# ---- Network architecture (medium) ----
 SPELL_EMBED_DIM = 16        # Embedding dimension per spell
-RAW_FEATURE_DIM = 250       # Non-spell raw features
+# Raw feature breakdown (must match features.board_to_tensor):
+#   250 — base block (stones, neighborhood, charges, mana, counters, lock, ...)
+#         (note: includes the side-to-move stone differential at index 244)
+#   156 — per-stone life-status (own/enemy escape_distance and crushable_now)
+#    18 — spell-position fill (own/enemy stone counts in each of 9 spell positions)
+#    18 — threat-of-activation (own/enemy net stones if each spell is cast now)
+#     6 — mana-pressure (own + enemy adjacency-graph distance to a1/b1/c1)
+#     8 — tempo scalars (min castable, count castable, mana diff, escape sums, ...)
+RAW_FEATURE_DIM = 250 + 156 + 18 + 18 + 6 + 8  # 456
 TRUNK_DIM = 400             # ResNet trunk width
 NUM_RES_BLOCKS = 6          # Residual blocks in trunk
 POLICY_HIDDEN_DIM = 256     # Policy head hidden dimension
 VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
-TURN_FEATURE_DIM = 64       # Per-turn encoding size
+# Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27) = 84
+TURN_FEATURE_DIM = 84
 
 # ---- Network architecture (hard — ~44M params, NNUE-style shallow+wide) ----
 HARD_SPELL_EMBED_DIM = 32   # Wider spell embedding
@@ -45,6 +54,7 @@ DIRICHLET_ALPHA = 0.5       # Noise parameter (higher = more uniform)
 DIRICHLET_EPSILON = 0.25    # Fraction of noise mixed into root prior
 TEMP_THRESHOLD = 30         # Turn after which temperature drops
 TEMP_PLAY = 0.01            # Temperature in production (near-greedy)
+MCTS_BATCH_SIZE = 8         # Leaf evaluations batched together per NN call
 
 # ---- Training ----
 BATCH_SIZE = 512
@@ -58,3 +68,8 @@ GAMES_PER_ITERATION = 10_000
 GATE_THRESHOLD = 0.55       # New model must win this fraction to be accepted
 GATE_GAMES = 400            # Games played for gating evaluation
 MAX_TURNS = 200             # Safety limit per game
+
+# ---- Resignation ----
+RESIGN_THRESHOLD = 0.85     # Resign if value < -threshold
+RESIGN_CONSECUTIVE = 3      # Must be this many turns in a row
+RESIGN_DISABLE_PROB = 0.1   # 10% of games play out to verify

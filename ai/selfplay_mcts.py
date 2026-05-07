@@ -18,8 +18,8 @@ import numpy as np
 import torch
 
 from simboard import SimBoard
-from search import _apply_turn
-from selfplay import random_core_spells
+from ai.search import _apply_turn
+from ai.selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
@@ -28,10 +28,12 @@ from ai.features import board_to_tensor, encode_all_turns
 from ai.config import (
     NUM_SIMS_TRAIN, TEMP_THRESHOLD, MAX_TURNS,
     MODELS_DIR, DATA_DIR, SPELL_TO_ID,
+    RESIGN_THRESHOLD, RESIGN_CONSECUTIVE, RESIGN_DISABLE_PROB,
 )
 
 
-def play_selfplay_game(model, num_simulations=None):
+def play_selfplay_game(model, num_simulations=None, force_no_resign=False,
+                       variant='standard'):
     """Play a single self-play game using MCTS.
 
     Returns list of (sfn, spell_ids, turn_encodings, policy, side_to_move) tuples
@@ -41,11 +43,14 @@ def play_selfplay_game(model, num_simulations=None):
         num_simulations = NUM_SIMS_TRAIN
 
     spells = random_core_spells()
-    board = SimBoard(spells)
+    board = SimBoard(spells, variant=variant)
     board.setup_initial()
 
     positions = []
     turn_num = 0
+    resign_count = 0
+    resign_disabled = (force_no_resign
+                      or np.random.random() < RESIGN_DISABLE_PROB)
 
     while not board.gameover and turn_num < MAX_TURNS:
         turn_num += 1
@@ -68,6 +73,9 @@ def play_selfplay_game(model, num_simulations=None):
         sfn = board.to_sfn()
         spell_ids = [SPELL_TO_ID.get(board.spell_names[i], 0) for i in range(9)]
 
+        # Pre-cache raw features so training skips SFN reconstruction
+        raw, _ = board_to_tensor(board, color)
+
         # Store legal turns and policy
         legal_turns = list(board.get_legal_turns(color))
         turn_feats = encode_all_turns(legal_turns, board, color)
@@ -75,10 +83,23 @@ def play_selfplay_game(model, num_simulations=None):
         positions.append({
             'sfn': sfn,
             'spell_ids': spell_ids,
+            'raw_features': raw.numpy().tolist(),
             'policy': policy.tolist(),
             'turn_encodings': turn_feats.numpy().tolist(),
             'side': color,
         })
+
+        # Resignation check: if value is very negative for several turns in a row
+        if not resign_disabled:
+            if value < -RESIGN_THRESHOLD:
+                resign_count += 1
+                if resign_count >= RESIGN_CONSECUTIVE:
+                    enemy = 'blue' if color == 'red' else 'red'
+                    board.gameover = True
+                    board.winner = enemy
+                    break
+            else:
+                resign_count = 0
 
         # Apply the chosen turn
         _apply_turn(board, best_turn, color)
@@ -101,21 +122,37 @@ def play_selfplay_game(model, num_simulations=None):
     return positions, board.winner
 
 
-def generate_training_data(model, num_games, output_path, num_simulations=None):
+def generate_training_data(model, num_games, output_path, num_simulations=None,
+                           force_no_resign=False, competitive_fraction=0.0):
     """Generate training data from self-play games.
 
-    Writes JSONL with fields: sfn, spell_ids, policy, turn_encodings, outcome
+    Writes JSONL with fields: sfn, spell_ids, policy, turn_encodings, outcome.
+
+    `competitive_fraction` in [0.0, 1.0] is the probability that any given
+    self-play game is played under the competitive variant. The default of
+    0.0 keeps existing pipelines reproducing standard data; pass 0.5 (for
+    example) to mix variants 50/50 in the resulting file. The variant is
+    encoded into each position's SFN, so downstream training can either
+    ignore it or condition on it.
     """
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.',
                 exist_ok=True)
 
     total_positions = 0
+    competitive_games = 0
     start_time = time.time()
 
     with open(output_path, 'w') as f:
         for game_idx in range(num_games):
+            variant = ('competitive'
+                       if np.random.random() < competitive_fraction
+                       else 'standard')
+            if variant == 'competitive':
+                competitive_games += 1
             game_start = time.time()
-            positions, winner = play_selfplay_game(model, num_simulations)
+            positions, winner = play_selfplay_game(
+                model, num_simulations, force_no_resign=force_no_resign,
+                variant=variant)
             game_time = time.time() - game_start
 
             for pos in positions:
@@ -131,6 +168,7 @@ def generate_training_data(model, num_games, output_path, num_simulations=None):
                 record = {
                     'sfn': pos['sfn'],
                     'spell_ids': pos['spell_ids'],
+                    'raw_features': pos['raw_features'],
                     'policy': pos['policy'],
                     'turn_encodings': pos['turn_encodings'],
                     'outcome': outcome,
@@ -148,7 +186,8 @@ def generate_training_data(model, num_games, output_path, num_simulations=None):
 
     elapsed = time.time() - start_time
     print(f"\nGenerated {total_positions} positions from {num_games} games "
-          f"in {elapsed:.0f}s ({total_positions/num_games:.0f} pos/game avg)")
+          f"in {elapsed:.0f}s ({total_positions/num_games:.0f} pos/game avg) "
+          f"[competitive: {competitive_games}/{num_games}]")
     return total_positions
 
 
@@ -162,6 +201,11 @@ if __name__ == '__main__':
     parser.add_argument('--net', type=str, default='medium',
                         choices=['medium', 'hard'],
                         help='Network architecture: medium (2M) or hard (44M)')
+    parser.add_argument('--no-resign', action='store_true',
+                        help='Force resignation off in every game')
+    parser.add_argument('--competitive-fraction', type=float, default=0.0,
+                        help='Fraction of games to play under the competitive '
+                             'variant (0.0 = all standard, 1.0 = all competitive)')
     args = parser.parse_args()
 
     # Select network class
@@ -178,5 +222,7 @@ if __name__ == '__main__':
         os.makedirs(DATA_DIR, exist_ok=True)
         args.output = os.path.join(DATA_DIR, f'selfplay_{int(time.time())}.jsonl')
 
-    generate_training_data(model, args.games, args.output, args.sims)
+    generate_training_data(model, args.games, args.output, args.sims,
+                           force_no_resign=args.no_resign,
+                           competitive_fraction=args.competitive_fraction)
     print(f"Data saved to {args.output}")

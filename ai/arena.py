@@ -16,16 +16,19 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from simboard import SimBoard
-from search import _apply_turn
-from selfplay import random_core_spells
+from ai.search import _apply_turn
+from ai.selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
+from ai.sigil_net_graph import SigilNetGraph
 from ai.mcts import mcts_search
 from ai.config import MAX_TURNS, GATE_THRESHOLD, GATE_GAMES, MODELS_DIR
 
 
-def play_arena_game(model1, model2, sims_per_move=200):
+def play_arena_game(model1, model2, sims_per_move=200,
+                    blunder_lambda1=0.0, blunder_lambda2=0.0,
+                    strategic_alpha1=0.0, strategic_alpha2=0.0):
     """Play a single game: model1 as red, model2 as blue.
 
     Returns: 'red', 'blue', or None (draw).
@@ -42,11 +45,15 @@ def play_arena_game(model1, model2, sims_per_move=200):
         board.whose_turn = color
 
         model = model1 if color == 'red' else model2
+        bl = blunder_lambda1 if color == 'red' else blunder_lambda2
+        sa = strategic_alpha1 if color == 'red' else strategic_alpha2
         best_turn, _, _ = mcts_search(
             board, color, model,
             num_simulations=sims_per_move,
             add_noise=False,
             temperature=None,
+            blunder_lambda=bl,
+            strategic_alpha=sa,
         )
 
         _apply_turn(board, best_turn, color)
@@ -67,7 +74,9 @@ def play_arena_game(model1, model2, sims_per_move=200):
     return board.winner
 
 
-def evaluate_models(model1, model2, num_games=None, sims_per_move=200):
+def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
+                    blunder_lambda1=0.0, blunder_lambda2=0.0,
+                    strategic_alpha1=0.0, strategic_alpha2=0.0):
     """Play num_games between two models, alternating colors.
 
     Returns: (model1_wins, model2_wins, draws, model1_win_rate)
@@ -85,10 +94,18 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200):
         # Alternate who plays red
         if game_idx % 2 == 0:
             red_model, blue_model = model1, model2
+            bl_red, bl_blue = blunder_lambda1, blunder_lambda2
+            sa_red, sa_blue = strategic_alpha1, strategic_alpha2
         else:
             red_model, blue_model = model2, model1
+            bl_red, bl_blue = blunder_lambda2, blunder_lambda1
+            sa_red, sa_blue = strategic_alpha2, strategic_alpha1
 
-        winner = play_arena_game(red_model, blue_model, sims_per_move)
+        winner = play_arena_game(red_model, blue_model, sims_per_move,
+                                 blunder_lambda1=bl_red,
+                                 blunder_lambda2=bl_blue,
+                                 strategic_alpha1=sa_red,
+                                 strategic_alpha2=sa_blue)
 
         if game_idx % 2 == 0:
             if winner == 'red':
@@ -122,13 +139,18 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200):
 def _load_any_net(path):
     """Load a model checkpoint, auto-detecting architecture."""
     checkpoint = torch.load(path, map_location='cpu', weights_only=True)
-    if checkpoint.get('arch') == 'SigilNetHard':
+    arch = checkpoint.get('arch')
+    if arch == 'SigilNetHard':
         return SigilNetHard.load(path)
+    if arch == 'SigilNetGraph':
+        return SigilNetGraph.load(path)
     return SigilNet.load(path)
 
 
 def gate_model(candidate_path, current_best_path=None, num_games=None,
-               sims_per_move=200):
+               sims_per_move=200, candidate_blunder_lambda=0.0,
+               current_blunder_lambda=0.0, candidate_strategic_alpha=0.0,
+               current_strategic_alpha=0.0):
     """Test if candidate model is stronger than current best.
 
     Returns True if candidate should replace the current best.
@@ -149,7 +171,11 @@ def gate_model(candidate_path, current_best_path=None, num_games=None,
 
     # Candidate is model1
     wins, losses, draws, win_rate = evaluate_models(
-        candidate, current, num_games=num_games, sims_per_move=sims_per_move)
+        candidate, current, num_games=num_games, sims_per_move=sims_per_move,
+        blunder_lambda1=candidate_blunder_lambda,
+        blunder_lambda2=current_blunder_lambda,
+        strategic_alpha1=candidate_strategic_alpha,
+        strategic_alpha2=current_strategic_alpha)
 
     print(f"\nResult: Candidate W={wins} L={losses} D={draws} "
           f"(win rate={win_rate:.3f}, threshold={GATE_THRESHOLD})")
@@ -170,8 +196,20 @@ if __name__ == '__main__':
                         help='Path to second model (current best)')
     parser.add_argument('--games', type=int, default=GATE_GAMES)
     parser.add_argument('--sims', type=int, default=200)
+    parser.add_argument('--blunder-lambda1', type=float, default=0.0,
+                        help='Blunder-head suppression strength for model1')
+    parser.add_argument('--blunder-lambda2', type=float, default=0.0,
+                        help='Blunder-head suppression strength for model2')
+    parser.add_argument('--strategic-alpha1', type=float, default=0.0,
+                        help='Strategic-evaluator bias strength for model1')
+    parser.add_argument('--strategic-alpha2', type=float, default=0.0,
+                        help='Strategic-evaluator bias strength for model2')
     args = parser.parse_args()
 
     accepted = gate_model(args.model1, args.model2,
-                          num_games=args.games, sims_per_move=args.sims)
+                          num_games=args.games, sims_per_move=args.sims,
+                          candidate_blunder_lambda=args.blunder_lambda1,
+                          current_blunder_lambda=args.blunder_lambda2,
+                          candidate_strategic_alpha=args.strategic_alpha1,
+                          current_strategic_alpha=args.strategic_alpha2)
     sys.exit(0 if accepted else 1)

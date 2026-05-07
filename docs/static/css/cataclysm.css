@@ -1,0 +1,384 @@
+/* Cataclysm — Board styles using HTML overlays + SVG edges */
+
+/* SVG edges */
+.board-edge {
+	stroke: #3d2b5a;
+	stroke-width: 2;
+	stroke-opacity: 0.35;
+}
+
+/* Mana node indicator ring (in SVG) */
+.mana-ring {
+	fill: none;
+	stroke: #c9a744;
+	stroke-width: 2.5;
+	stroke-opacity: 0.5;
+	stroke-dasharray: 5 4;
+	animation: mana-pulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes mana-pulse {
+	0% { stroke-opacity: 0.3; }
+	100% { stroke-opacity: 0.7; }
+}
+
+/* Stone nodes */
+.cat-node {
+	border-radius: 999px;
+	border: none;
+	padding: 0;
+	aspect-ratio: 1;
+	cursor: pointer;
+	background-color: rgba(26, 15, 46, 0.6);
+	background-size: cover;
+	background-position: center;
+	animation: stone-twinkle 3s cubic-bezier(0.19, 0.33, 0.34, 1) infinite;
+	transition: box-shadow 0.3s;
+	z-index: 1;
+}
+
+.cat-node:focus {
+	outline: none;
+}
+
+/* Stone colors — using existing stone images */
+.cat-node--red {
+	background-image: url("../images/stones/red.png");
+	background-color: transparent;
+}
+
+.cat-node--blue {
+	background-image: url("../images/stones/blue.png");
+	background-color: transparent;
+}
+
+/* Green + yellow: use CSS gradients (no image asset) */
+.cat-node--green {
+	background: radial-gradient(circle at 35% 35%, #44dd88, #229955);
+}
+
+.cat-node--yellow {
+	background: radial-gradient(circle at 35% 35%, #ffdd44, #ccaa11);
+}
+
+/* Valid move glow */
+.cat-node--valid-red {
+	box-shadow: 0 0 1px 3px var(--color-red-glow, #ff4032);
+	animation: valid-move-pulse 1.25s infinite ease-in-out alternate;
+}
+
+.cat-node--valid-blue {
+	box-shadow: 0 0 1px 3px var(--color-blue-glow, #2757c4);
+	animation: valid-move-pulse 1.25s infinite ease-in-out alternate;
+}
+
+.cat-node--valid-green {
+	box-shadow: 0 0 1px 3px #2ecc71;
+	animation: valid-move-pulse 1.25s infinite ease-in-out alternate;
+}
+
+.cat-node--valid-yellow {
+	box-shadow: 0 0 1px 3px #f1c40f;
+	animation: valid-move-pulse 1.25s infinite ease-in-out alternate;
+}
+
+/* Last play highlight */
+.cat-node--last-play {
+	box-shadow: 0 0 0 3px var(--color-last-play-outline, #f3ec4e);
+}
+
+@keyframes valid-move-pulse {
+	0% { opacity: 0.5; }
+	100% { opacity: 1; }
+}
+
+@keyframes stone-twinkle {
+	0%,
+	100% { filter: brightness(0.85); }
+	50% { filter: brightness(1.1); }
+}
+
+/* Spell images */
+.cat-spell-img {
+	pointer-events: none;
+	z-index: 0;
+	aspect-ratio: 1;
+	height: auto;
+}
+
+.cat-spell--available {
+	animation: spell-available-frames 1.25s infinite ease-in-out alternate;
+	pointer-events: auto !important;
+	cursor: pointer;
+}
+
+.cat-spell--available:hover {
+	filter: saturate(225%);
+}
+
+@keyframes spell-available-frames {
+	from { filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3)); }
+	to { filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.7)); }
+}
+
+/* Spell locks */
+.cat-spell--red-lock {
+	box-shadow: -4px 4px var(--color-red-lock, #e84c3c), 4px 4px var(--color-red-lock, #e84c3c),
+	            -4px -4px var(--color-red-lock, #e84c3c), 4px -4px var(--color-red-lock, #e84c3c);
+}
+
+.cat-spell--blue-lock {
+	box-shadow: -4px 4px var(--color-blue-lock, #3250ba), 4px 4px var(--color-blue-lock, #3250ba),
+	            -4px -4px var(--color-blue-lock, #3250ba), 4px -4px var(--color-blue-lock, #3250ba);
+}
+
+.cat-spell--green-lock {
+	box-shadow: -4px 4px #229955, 4px 4px #229955, -4px -4px #229955, 4px -4px #229955;
+}
+
+.cat-spell--yellow-lock {
+	box-shadow: -4px 4px #ccaa11, 4px 4px #ccaa11, -4px -4px #ccaa11, 4px -4px #ccaa11;
+}
+
+/* Game layout */
+.cat-game-container {
+	display: flex;
+	gap: 16px;
+	margin: 0 auto;
+	padding: 0 10px;
+	height: calc(100vh - 60px);
+}
+
+.cat-board-area {
+	flex: 1 1 0%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+
+.cat-board-wrapper {
+	position: relative;
+	height: 100%;
+	/* Width derived from height * aspect ratio via JS */
+}
+
+.cat-board-wrapper > * {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.cat-sidebar {
+	width: 280px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	overflow-y: auto;
+	padding: 10px 0;
+}
+
+/* Turn indicator */
+.cat-turn-indicator {
+	font-family: 'Arvo', serif;
+	font-size: 1.2em;
+	color: var(--color-text-warm);
+	text-align: center;
+	padding: 10px;
+	border: 2px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
+}
+
+.cat-turn-indicator.turn-red { border-color: #cc3322; }
+.cat-turn-indicator.turn-blue { border-color: #2244aa; }
+.cat-turn-indicator.turn-green { border-color: #229955; }
+.cat-turn-indicator.turn-yellow { border-color: #ccaa11; }
+
+/* Stone counts */
+.cat-stone-counts {
+	display: flex;
+	gap: 8px;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+
+.cat-stone-count {
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.95em;
+	padding: 4px 12px;
+	border-radius: 16px;
+	background: var(--color-surface);
+}
+
+.cat-stone-count.count-red { color: #ff6655; border: 1px solid #cc3322; }
+.cat-stone-count.count-blue { color: #5577dd; border: 1px solid #2244aa; }
+.cat-stone-count.count-green { color: #44dd88; border: 1px solid #229955; }
+.cat-stone-count.count-yellow { color: #ffdd44; border: 1px solid #ccaa11; }
+
+/* Message feed */
+.cat-messages {
+	flex: 1;
+	min-height: 120px;
+	max-height: 300px;
+	overflow-y: auto;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	padding: 8px 12px;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.9em;
+	color: var(--color-text);
+}
+
+.cat-messages p {
+	margin: 4px 0;
+}
+
+/* Action buttons */
+.cat-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.cat-action-btn {
+	flex: 1;
+	min-width: 80px;
+	padding: 10px 16px;
+	border: 2px solid var(--color-border);
+	border-radius: 6px;
+	background: var(--color-surface-raised);
+	color: var(--color-text-warm);
+	font-family: 'Arvo', serif;
+	font-size: 0.9em;
+	cursor: pointer;
+	transition: all 0.2s;
+	text-decoration: none;
+	text-align: center;
+}
+
+.cat-action-btn:hover {
+	background: var(--color-surface-hover);
+	border-color: var(--color-border-hover);
+}
+
+.cat-action-btn.btn-pass {
+	background: var(--color-btn-end-turn);
+}
+
+.cat-action-btn.btn-pass:hover {
+	background: var(--color-btn-end-turn-hover);
+}
+
+.cat-action-btn.btn-dash {
+	background: var(--color-btn-dash);
+}
+
+.cat-action-btn.btn-dash:hover {
+	background: var(--color-btn-dash-hover);
+}
+
+.cat-action-btn.btn-reset {
+	background: var(--color-btn-reset);
+}
+
+.cat-action-btn.btn-reset:hover {
+	background: var(--color-btn-reset-hover);
+}
+
+/* Spell info sidebar */
+.cat-spell-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.cat-spell-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 6px 10px;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.85em;
+	color: var(--color-text);
+	cursor: default;
+}
+
+.cat-spell-item .spell-type {
+	font-size: 0.75em;
+	color: var(--color-text-muted);
+}
+
+.cat-spell-item.charged {
+	border-color: var(--color-accent);
+	color: var(--color-text-bright);
+}
+
+.cat-spell-item.castable {
+	cursor: pointer;
+	border-color: var(--color-accent);
+	background: var(--color-surface-raised);
+}
+
+.cat-spell-item.castable:hover {
+	background: var(--color-surface-hover);
+}
+
+/* Win modal */
+.cat-win-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: var(--color-win-modal-bg, rgba(10, 5, 20, 0.92));
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 100;
+}
+
+.cat-win-modal-content {
+	text-align: center;
+	padding: 40px 60px;
+	border: 2px solid var(--color-border);
+	border-radius: 12px;
+	background: var(--color-surface);
+}
+
+.cat-win-modal h2 {
+	font-family: 'Arvo', serif;
+	font-size: 2em;
+	color: var(--color-text-warm);
+	margin-bottom: 16px;
+}
+
+.cat-win-modal .winner-red { color: #ff6655; }
+.cat-win-modal .winner-blue { color: #5577dd; }
+.cat-win-modal .winner-green { color: #44dd88; }
+.cat-win-modal .winner-yellow { color: #ffdd44; }
+
+/* Responsive */
+@media (max-width: 768px) {
+	.cat-game-container {
+		flex-direction: column;
+		height: auto;
+	}
+
+	.cat-board-area {
+		width: 100%;
+		height: 60vh;
+	}
+
+	.cat-sidebar {
+		width: 100%;
+		order: -1;
+	}
+}

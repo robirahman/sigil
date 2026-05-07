@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Active Games - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.active-games {
+			max-width: 720px;
+			margin: 0 auto;
+			padding: 24px;
+		}
+		.active-games h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin-bottom: 20px;
+			text-align: center;
+		}
+		.games-list {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+		}
+		.game-card {
+			display: grid;
+			grid-template-columns: 1fr auto auto;
+			gap: 12px;
+			align-items: center;
+			padding: 12px 16px;
+			background: var(--color-surface);
+			border: 1px solid var(--color-border);
+			border-radius: 8px;
+			font-family: 'Overlock', sans-serif;
+		}
+		.game-card--your-turn {
+			border-color: var(--color-success);
+			background: var(--color-surface-raised);
+		}
+		.game-card__main { min-width: 0; }
+		.game-card__opp {
+			color: var(--color-text-bright);
+			font-family: 'Arvo', serif;
+			font-size: 1.05em;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.game-card__meta {
+			color: var(--color-text-dim);
+			font-size: 0.85em;
+			margin-top: 4px;
+		}
+		.game-card__color { font-weight: bold; }
+		.game-card__color--red { color: var(--color-red, #fa3f32); }
+		.game-card__color--blue { color: var(--color-blue, #295ccd); }
+		.game-card__clock {
+			font-family: 'Arvo', serif;
+			font-size: 1.2em;
+			color: var(--color-text-warm);
+			text-align: right;
+			min-width: 80px;
+		}
+		.game-card__clock--your-turn { color: var(--color-success); }
+		.game-card__clock--low { color: var(--color-error); }
+		.game-card__status {
+			font-size: 0.8em;
+			color: var(--color-text-dim);
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			margin-top: 2px;
+			text-align: right;
+		}
+		.game-card__status--your-turn { color: var(--color-success); }
+		.game-card__resume {
+			padding: 8px 16px;
+			background: var(--color-surface-raised);
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			color: var(--color-text-warm);
+			font-family: 'Arvo', serif;
+			font-size: 0.95em;
+			text-decoration: none;
+			display: inline-block;
+		}
+		.game-card:hover .game-card__resume {
+			background: var(--color-surface-hover);
+			border-color: var(--color-border-hover);
+		}
+		.loading-msg, .empty-msg, .signin-msg {
+			color: var(--color-text-dim);
+			font-family: 'Overlock', sans-serif;
+			text-align: center;
+			padding: 40px 20px;
+		}
+		.signin-msg a { color: var(--color-accent); text-decoration: none; }
+		.signin-msg a:hover { text-decoration: underline; }
+		.back-link {
+			display: inline-block;
+			margin-top: 20px;
+			color: var(--color-accent);
+			font-family: 'Overlock', sans-serif;
+			text-decoration: none;
+		}
+		.back-link:hover { text-decoration: underline; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="activeGamesPage()">
+		<div class="active-games">
+			<h2>Your Active Games</h2>
+
+			<p class="loading-msg" x-show="loading" x-cloak>Loading games...</p>
+
+			<p class="signin-msg" x-show="!loading && !authUser" x-cloak>
+				<a href="account.html">Sign in</a> to view your active games.
+			</p>
+
+			<p class="empty-msg" x-show="!loading && authUser && games.length === 0" x-cloak>
+				No ongoing games. <a class="back-link" href="multiplayer.html" style="margin: 0;">Start a new game &rarr;</a>
+			</p>
+
+			<div class="games-list" x-show="!loading && games.length > 0" x-cloak>
+				<template x-for="g in sortedGames" x-bind:key="g.roomCode">
+					<a class="game-card" x-bind:class="{ 'game-card--your-turn': g.isYourTurn }" x-bind:href="'multiplayer.html?id=' + g.roomCode">
+						<div class="game-card__main">
+							<div class="game-card__opp" x-text="g.opponentDisplayName || 'Waiting for opponent...'"></div>
+							<div class="game-card__meta">
+								Playing
+								<span class="game-card__color" x-bind:class="'game-card__color--' + g.myColor" x-text="g.myColor === 'red' ? 'Red' : 'Blue'"></span>
+								&middot;
+								<span x-text="g.timeControlLabel"></span>
+								&middot;
+								<span class="game-card__code" style="font-family: monospace;" x-text="g.roomCode"></span>
+							</div>
+						</div>
+						<div>
+							<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.isYourTurn && g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
+							<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+						</div>
+						<span class="game-card__resume">Resume</span>
+					</a>
+				</template>
+			</div>
+
+			<div style="text-align: center;">
+				<a class="back-link" href="./">&larr; Back to menu</a>
+			</div>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+
+	<script>
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('activeGamesPage', () => ({
+				loading: true,
+				authUser: null,
+				games: [],
+				_serverTimeOffset: 0,
+				_tickHandle: null,
+				_now: Date.now(),
+
+				get sortedGames() {
+					// Lower sortKey first; type 'none' / no clock pressure becomes Infinity.
+					const list = this.games.slice();
+					list.sort((a, b) => a.sortKey - b.sortKey);
+					return list;
+				},
+
+				init() {
+					const db = firebase.database();
+					db.ref('.info/serverTimeOffset').on('value', (snap) => {
+						this._serverTimeOffset = snap.val() || 0;
+					});
+
+					firebase.auth().onAuthStateChanged(async (user) => {
+						if (!user || user.isAnonymous) {
+							this.authUser = null;
+							this.games = [];
+							this.loading = false;
+							return;
+						}
+						this.authUser = user;
+						await this._loadGames(db, user.uid);
+						this.loading = false;
+						// Tick once a second to update displayed clocks
+						if (!this._tickHandle) {
+							this._tickHandle = setInterval(() => {
+								this._now = Date.now();
+								this._refreshDerivedFields();
+							}, 1000);
+						}
+					});
+				},
+
+				async _loadGames(db, uid) {
+					let entries = {};
+					try {
+						const snap = await db.ref('user_active_games/' + uid).once('value');
+						entries = snap.val() || {};
+					} catch (e) {
+						console.error('Failed to load active games index:', e);
+						return;
+					}
+
+					const codes = Object.keys(entries);
+					if (codes.length === 0) {
+						this.games = [];
+						return;
+					}
+
+					// Build initial entries; live listeners will populate fields as
+					// soon as each room snapshot arrives.
+					const games = [];
+					for (const code of codes) {
+						const entry = entries[code];
+						games.push(this._initialGameRecord(code, entry));
+					}
+					this.games = games;
+
+					for (const code of codes) {
+						this._attachRoomListener(db, uid, code);
+					}
+				},
+
+				_initialGameRecord(code, entry) {
+					const tcType = entry.timeControlType || 'none';
+					return {
+						roomCode: code,
+						myColor: entry.myColor,
+						opponentDisplayName: entry.opponentDisplayName || '',
+						opponentUid: entry.opponentUid || null,
+						timeControl: { type: tcType },
+						timeControlType: tcType,
+						timer: null,
+						status: 'unknown',
+						nextTurnColor: 'red',
+						isYourTurn: false,
+						clockText: '',
+						statusText: 'Loading...',
+						sortKey: Infinity,
+						urgencyLevel: 'normal',
+						timeControlLabel: this._formatTimeControl({ type: tcType }),
+					};
+				},
+
+				_attachRoomListener(db, uid, code) {
+					const ref = db.ref('rooms/' + code);
+					ref.on('value', (snap) => {
+						const room = snap.val();
+						const idx = this.games.findIndex(g => g.roomCode === code);
+						if (idx === -1) return;
+
+						if (!room || room.status === 'finished') {
+							// Game finished — drop from list and clean up the index.
+							this.games.splice(idx, 1);
+							ref.off();
+							db.ref('user_active_games/' + uid + '/' + code).remove().catch(() => {});
+							return;
+						}
+
+						const g = this.games[idx];
+						const opponentColor = g.myColor === 'red' ? 'blue' : 'red';
+						const opp = room[opponentColor] || {};
+						const tc = room.timeControl || { type: g.timeControlType };
+						const turnsPlayed = room.turns ? Object.keys(room.turns).length : 0;
+
+						g.opponentDisplayName = opp.displayName || g.opponentDisplayName || '';
+						g.opponentUid = opp.uid || g.opponentUid || null;
+						g.timeControl = tc;
+						g.timeControlType = tc.type || 'none';
+						g.timeControlLabel = this._formatTimeControl(tc);
+						g.timer = room.timer || null;
+						g.status = room.status || 'unknown';
+						g.nextTurnColor = turnsPlayed % 2 === 0 ? 'red' : 'blue';
+
+						this._refreshDerivedFields();
+					});
+				},
+
+				/**
+				 * Recompute clock text, isYourTurn, sortKey for every game using the
+				 * current `_now` reading. Runs every second.
+				 *
+				 * Sort priority (ascending sortKey, lower = higher in list):
+				 *   phase 0  — my turn with a running clock (sorted by remaining ms)
+				 *   phase 1  — my turn but no clock pressure (correspondence opp moved, etc.)
+				 *   phase 2  — opponent's turn, my realtime clock has finite stored time
+				 *   phase 3  — opponent's turn under correspondence (no clock pressure)
+				 *   phase 4  — unlimited-time games (always last)
+				 *   phase 5  — waiting for opponent to join
+				 */
+				_refreshDerivedFields() {
+					const now = this._now + this._serverTimeOffset;
+					const PHASE = 1e15;
+					for (const g of this.games) {
+						const tc = g.timeControl || { type: g.timeControlType };
+						const timer = g.timer;
+						const status = g.status;
+
+						if (status === 'waiting') {
+							g.isYourTurn = false;
+							g.clockText = tc.type === 'none' ? '∞' : this._formatStored(tc, g.myColor);
+							g.statusText = 'Waiting';
+							g.sortKey = 5 * PHASE;
+							g.urgencyLevel = 'normal';
+							continue;
+						}
+
+						// Determine whose turn: prefer timer.activeColor, fall back to
+						// turns-played count (used for untimed games and games whose
+						// timer state hasn't been initialized yet).
+						const activeColor = (timer && timer.activeColor) || g.nextTurnColor;
+						const isYourTurn = activeColor === g.myColor;
+						g.isYourTurn = isYourTurn;
+						g.statusText = isYourTurn ? 'Your turn' : "Opponent's turn";
+
+						if (tc.type === 'none') {
+							g.clockText = '∞';
+							g.sortKey = 4 * PHASE + (isYourTurn ? 0 : 1);
+							g.urgencyLevel = 'normal';
+							continue;
+						}
+
+						if (tc.type === 'realtime') {
+							const myStored = (timer && typeof timer[g.myColor] === 'number') ? timer[g.myColor] : (tc.initialTime || 0);
+							const elapsed = (timer && timer.lastUpdated) ? Math.max(0, now - timer.lastUpdated) : 0;
+							const myRemaining = isYourTurn ? Math.max(0, myStored - elapsed) : myStored;
+							g.clockText = this._formatRealtime(myRemaining);
+							g.sortKey = isYourTurn ? myRemaining : (2 * PHASE + myStored);
+							g.urgencyLevel = (isYourTurn && myRemaining < 30000) ? 'low' : 'normal';
+							continue;
+						}
+
+						if (tc.type === 'correspondence') {
+							if (isYourTurn) {
+								const myDeadline = (timer && timer[g.myColor]) || 0;
+								if (myDeadline > 0) {
+									const remaining = Math.max(0, myDeadline - now);
+									g.clockText = this._formatCorrespondence(remaining);
+									g.sortKey = remaining;
+									g.urgencyLevel = remaining < 60 * 60 * 1000 ? 'low' : 'normal';
+								} else {
+									// Deadline not yet recorded for this turn (e.g. opponent
+									// just made a move that didn't write timer state).
+									g.clockText = this._formatCorrespondence(tc.moveTimeout || 0);
+									g.sortKey = 1 * PHASE;
+									g.urgencyLevel = 'normal';
+								}
+							} else {
+								g.clockText = '—';
+								g.sortKey = 3 * PHASE;
+								g.urgencyLevel = 'normal';
+							}
+							continue;
+						}
+
+						g.clockText = '';
+						g.sortKey = 4 * PHASE;
+					}
+				},
+
+				_formatStored(tc, myColor) {
+					if (tc.type === 'realtime') {
+						return this._formatRealtime(tc.initialTime || 0);
+					}
+					if (tc.type === 'correspondence') {
+						return '—';
+					}
+					return '';
+				},
+
+				_formatRealtime(ms) {
+					const total = Math.max(0, Math.ceil(ms / 1000));
+					const min = Math.floor(total / 60);
+					const sec = total % 60;
+					return min + ':' + String(sec).padStart(2, '0');
+				},
+
+				_formatCorrespondence(ms) {
+					if (ms <= 0) return 'Expired';
+					const sec = Math.floor(ms / 1000);
+					const day = 86400, hour = 3600, minute = 60;
+					if (sec >= day) {
+						const d = Math.floor(sec / day);
+						const h = Math.floor((sec % day) / hour);
+						return d + 'd ' + h + 'h';
+					}
+					if (sec >= hour) {
+						const h = Math.floor(sec / hour);
+						const m = Math.floor((sec % hour) / minute);
+						return h + 'h ' + m + 'm';
+					}
+					if (sec >= minute) {
+						return Math.floor(sec / minute) + 'm';
+					}
+					return sec + 's';
+				},
+
+				_formatTimeControl(tc) {
+					if (!tc || tc.type === 'none') return 'Unlimited';
+					if (tc.type === 'realtime') {
+						const min = Math.round((tc.initialTime || 0) / 60000);
+						const inc = Math.round((tc.increment || 0) / 1000);
+						return min + '+' + inc;
+					}
+					if (tc.type === 'correspondence') {
+						const ms = tc.moveTimeout || 0;
+						const day = 86400000;
+						if (ms >= day) return Math.round(ms / day) + 'd/move';
+						return Math.round(ms / 3600000) + 'h/move';
+					}
+					return '';
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

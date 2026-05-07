@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Profile - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.profile {
+			max-width: 720px;
+			margin: 0 auto;
+			padding: 24px;
+		}
+		.profile h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin-bottom: 4px;
+			font-size: 1.6em;
+		}
+		.profile h3 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin: 24px 0 8px;
+			font-size: 1.1em;
+		}
+		.profile__head {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-end;
+			gap: 16px;
+			padding: 12px 16px;
+			background: var(--color-surface);
+			border-radius: 8px;
+			margin-bottom: 16px;
+		}
+		.profile__name { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.4em; }
+		.profile__name--ai { color: var(--color-accent); }
+		.profile__stat-line { font-family: 'Overlock', sans-serif; color: var(--color-border-hover); font-size: 0.95em; }
+		.profile__elo { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; }
+		.profile__elo-label { font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; }
+		.chart-wrap {
+			background: var(--color-surface);
+			border-radius: 8px;
+			padding: 12px;
+		}
+		.chart-svg { width: 100%; height: 200px; display: block; }
+		.chart-axis { stroke: var(--color-text-dim); stroke-width: 1; opacity: 0.5; }
+		.chart-line { fill: none; stroke: var(--color-accent); stroke-width: 2; }
+		.chart-dot { fill: var(--color-accent); }
+		.chart-tick { fill: var(--color-text-dim); font-family: 'Overlock', sans-serif; font-size: 10px; }
+		.opponents-table, .games-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-family: 'Overlock', sans-serif;
+		}
+		.opponents-table th, .games-table th {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-dim);
+			font-size: 0.8em;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			padding: 8px 10px;
+			border-bottom: 2px solid var(--color-border);
+			text-align: left;
+		}
+		.opponents-table td, .games-table td {
+			padding: 8px 10px;
+			border-bottom: 1px solid var(--color-bg-mid);
+			color: var(--color-text-warm);
+		}
+		.games-table .result--win { color: var(--color-success); font-weight: bold; }
+		.games-table .result--loss { color: var(--color-error); font-weight: bold; }
+		.games-table .elo-change--pos { color: var(--color-success); }
+		.games-table .elo-change--neg { color: var(--color-error); }
+		.games-table tr.is-clickable { cursor: pointer; }
+		.games-table tr.is-clickable:hover { background: var(--color-surface-hover); }
+		.games-table .name--ai { color: var(--color-accent); }
+		.opponents-table .name--ai { color: var(--color-accent); }
+		.opponents-table a, .games-table a { color: var(--color-accent); text-decoration: none; }
+		.opponents-table a:hover, .games-table a:hover { text-decoration: underline; }
+		.loading-msg, .empty-msg {
+			color: var(--color-text-dim);
+			font-family: 'Overlock', sans-serif;
+			padding: 12px 0;
+			font-style: italic;
+		}
+		.back-link {
+			display: inline-block;
+			margin-top: 20px;
+			color: var(--color-accent);
+			font-family: 'Overlock', sans-serif;
+			text-decoration: none;
+		}
+		.back-link:hover { text-decoration: underline; }
+		.review-link {
+			color: var(--color-accent);
+			text-decoration: none;
+		}
+		.review-link:hover { text-decoration: underline; }
+		.recent-row { display: flex; gap: 6px; align-items: center; }
+		.recent-row__pip { width: 8px; height: 8px; border-radius: 50%; }
+		.recent-row__pip--win { background: var(--color-success); }
+		.recent-row__pip--loss { background: var(--color-error); }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="profilePage()">
+		<div class="profile">
+			<p class="loading-msg" x-show="loading" x-cloak>Loading profile...</p>
+			<p class="empty-msg" x-show="!loading && !user" x-cloak>User not found.</p>
+
+			<template x-if="!loading && user">
+				<div>
+					<div class="profile__head">
+						<div>
+							<div class="profile__name" x-bind:class="{ 'profile__name--ai': user.isAI }" x-text="user.displayName"></div>
+							<div class="profile__stat-line">
+								<span x-text="user.gamesPlayed + ' games'"></span> &middot;
+								<span x-text="user.wins + ' wins'"></span> &middot;
+								<span x-text="user.losses + ' losses'"></span>
+								<template x-if="user.gamesPlayed > 0">
+									<span> &middot; <span x-text="winRatePercent + '% win rate'"></span></span>
+								</template>
+							</div>
+						</div>
+						<div style="text-align: right;">
+							<div class="profile__elo-label">Rating</div>
+							<div class="profile__elo" x-text="user.elo"></div>
+						</div>
+					</div>
+
+					<h3>Rating History</h3>
+					<div class="chart-wrap">
+						<template x-if="ratingPoints.length === 0">
+							<p class="empty-msg" style="margin: 0;">No ranked games yet.</p>
+						</template>
+						<template x-if="ratingPoints.length > 0">
+							<svg class="chart-svg" x-bind:viewBox="'0 0 ' + chartWidth + ' ' + chartHeight" preserveAspectRatio="none">
+								<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartWidth - chartPad" x-bind:y1="chartHeight - chartPad" x-bind:y2="chartHeight - chartPad"></line>
+								<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartPad" x-bind:y1="chartPad" x-bind:y2="chartHeight - chartPad"></line>
+								<polyline class="chart-line" x-bind:points="chartPolyPoints"></polyline>
+								<template x-for="(p, i) in chartDots" x-bind:key="i">
+									<circle class="chart-dot" x-bind:cx="p.x" x-bind:cy="p.y" r="2"></circle>
+								</template>
+								<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartPad + 4" text-anchor="end" x-text="chartMaxElo"></text>
+								<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartHeight - chartPad" text-anchor="end" x-text="chartMinElo"></text>
+							</svg>
+						</template>
+					</div>
+
+					<h3>Most Frequent Opponents</h3>
+					<template x-if="topOpponents.length === 0">
+						<p class="empty-msg">No opponents yet.</p>
+					</template>
+					<template x-if="topOpponents.length > 0">
+						<table class="opponents-table">
+							<thead>
+								<tr>
+									<th>Opponent</th>
+									<th style="text-align:right;">Games</th>
+									<th style="text-align:right;">W&ndash;L</th>
+								</tr>
+							</thead>
+							<tbody>
+								<template x-for="opp in topOpponents" x-bind:key="opp.uid">
+									<tr>
+										<td>
+											<template x-if="opp.uid">
+												<a x-bind:href="'profile.html?uid=' + opp.uid" x-bind:class="{ 'name--ai': opp.isAI }" x-text="opp.displayName"></a>
+											</template>
+											<template x-if="!opp.uid">
+												<span x-text="opp.displayName"></span>
+											</template>
+										</td>
+										<td style="text-align:right;" x-text="opp.games"></td>
+										<td style="text-align:right;"><span x-text="opp.wins"></span>&ndash;<span x-text="opp.losses"></span></td>
+									</tr>
+								</template>
+							</tbody>
+						</table>
+					</template>
+
+					<h3>Past Games</h3>
+					<template x-if="games.length === 0">
+						<p class="empty-msg">No past games.</p>
+					</template>
+					<template x-if="games.length > 0">
+						<table class="games-table">
+							<thead>
+								<tr>
+									<th>When</th>
+									<th>Color</th>
+									<th>Opponent</th>
+									<th>Result</th>
+									<th style="text-align:right;">Rating</th>
+								</tr>
+							</thead>
+							<tbody>
+								<template x-for="g in pageGames" x-bind:key="g.id">
+									<tr x-bind:class="{ 'is-clickable': g.roomCode }" x-on:click="g.roomCode && (window.location.href = 'multiplayer.html?id=' + g.roomCode)">
+										<td x-text="g.whenText"></td>
+										<td x-text="g.color === 'red' ? 'Red' : 'Blue'"></td>
+										<td>
+											<template x-if="g.opponentUid">
+												<a x-bind:href="'profile.html?uid=' + g.opponentUid" x-bind:class="{ 'name--ai': g.opponentIsAI }" x-text="g.opponent" x-on:click.stop=""></a>
+											</template>
+											<template x-if="!g.opponentUid">
+												<span x-text="g.opponent"></span>
+											</template>
+										</td>
+										<td>
+											<span x-bind:class="g.result === 'win' ? 'result--win' : 'result--loss'" x-text="g.result === 'win' ? 'Win' : 'Loss'"></span>
+											<template x-if="g.roomCode">
+												<span> &middot; <a class="review-link" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-on:click.stop="">review</a></span>
+											</template>
+										</td>
+										<td style="text-align:right;">
+											<span x-text="g.eloAfter"></span>
+											<span x-bind:class="g.eloChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.eloChange >= 0 ? ' (+' : ' (') + g.eloChange + ')'"></span>
+										</td>
+									</tr>
+								</template>
+							</tbody>
+						</table>
+					</template>
+
+					<div class="pagination" x-show="totalPages > 1" x-cloak style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+						<button class="lobby-button" x-on:click="prevPage" x-bind:disabled="page === 0" style="width:auto; padding:6px 14px;">&larr; Prev</button>
+						<span style="align-self:center; font-family:'Overlock',sans-serif; color:var(--color-text-dim); font-size:0.85em;" x-text="(page + 1) + ' / ' + totalPages"></span>
+						<button class="lobby-button" x-on:click="nextPage" x-bind:disabled="page >= totalPages - 1" style="width:auto; padding:6px 14px;">Next &rarr;</button>
+					</div>
+
+					<a class="back-link" href="leaderboard.html">&larr; Back to leaderboard</a>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+
+	<script>
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('profilePage', () => ({
+				loading: true,
+				user: null,
+				games: [],
+				topOpponents: [],
+				ratingPoints: [],
+
+				// Pagination for past games
+				page: 0,
+				perPage: 25,
+
+				// Chart geometry
+				chartWidth: 600,
+				chartHeight: 200,
+				chartPad: 28,
+				chartMinElo: 1000,
+				chartMaxElo: 1000,
+				chartPolyPoints: '',
+				chartDots: [],
+
+				get totalPages() { return Math.max(1, Math.ceil(this.games.length / this.perPage)); },
+				get pageGames() { return this.games.slice(this.page * this.perPage, this.page * this.perPage + this.perPage); },
+				get winRatePercent() { return this.user.gamesPlayed > 0 ? Math.round(100 * this.user.wins / this.user.gamesPlayed) : 0; },
+
+				prevPage() { if (this.page > 0) this.page--; },
+				nextPage() { if (this.page < this.totalPages - 1) this.page++; },
+
+				async init() {
+					const uid = new URLSearchParams(window.location.search).get('uid');
+					if (!uid) { this.loading = false; return; }
+					const db = firebase.database();
+					try {
+						const [userSnap, gamesSnap] = await Promise.all([
+							db.ref('users/' + uid).once('value'),
+							db.ref('user_games/' + uid).orderByChild('timestamp').once('value'),
+						]);
+						const userData = userSnap.val();
+						if (!userData) { this.loading = false; return; }
+						this.user = {
+							uid: uid,
+							displayName: userData.displayName || 'Unknown',
+							elo: userData.elo ?? 1000,
+							gamesPlayed: userData.gamesPlayed || 0,
+							wins: userData.wins || 0,
+							losses: userData.losses || 0,
+							isAI: !!userData.isAI,
+						};
+						const games = [];
+						gamesSnap.forEach((c) => {
+							const v = c.val();
+							games.push({
+								id: c.key,
+								timestamp: v.timestamp || 0,
+								roomCode: v.roomCode || null,
+								gameId: v.gameId || c.key,
+								opponent: v.opponent || 'Unknown',
+								opponentUid: v.opponentUid || null,
+								opponentIsAI: !!v.opponentIsAI,
+								color: v.color || 'red',
+								result: v.result || 'loss',
+								eloBefore: v.eloBefore ?? 1000,
+								eloAfter: v.eloAfter ?? 1000,
+								eloChange: v.eloChange ?? 0,
+							});
+						});
+						// Sort newest-first for the table
+						games.sort((a, b) => b.timestamp - a.timestamp);
+						this.games = games.map((g) => Object.assign({}, g, { whenText: this._formatWhen(g.timestamp) }));
+
+						this._buildOpponentSummary();
+						this._buildRatingChart(games);
+					} catch (e) {
+						console.error('Failed to load profile:', e);
+					}
+					this.loading = false;
+				},
+
+				_buildOpponentSummary() {
+					const map = new Map();
+					for (const g of this.games) {
+						const key = g.opponentUid || ('name:' + g.opponent);
+						const cur = map.get(key) || { uid: g.opponentUid, displayName: g.opponent, isAI: g.opponentIsAI, games: 0, wins: 0, losses: 0 };
+						cur.games++;
+						if (g.result === 'win') cur.wins++; else cur.losses++;
+						map.set(key, cur);
+					}
+					this.topOpponents = Array.from(map.values())
+						.sort((a, b) => b.games - a.games)
+						.slice(0, 8);
+				},
+
+				_buildRatingChart(games) {
+					// games here are oldest-first (from gamesSnap.forEach order)
+					const points = games.map((g) => g.eloAfter);
+					if (points.length === 0) {
+						this.ratingPoints = [];
+						return;
+					}
+					this.ratingPoints = points;
+					let minE = Math.min.apply(null, points);
+					let maxE = Math.max.apply(null, points);
+					if (minE === maxE) { minE -= 20; maxE += 20; }
+					this.chartMinElo = minE;
+					this.chartMaxElo = maxE;
+					const w = this.chartWidth;
+					const h = this.chartHeight;
+					const pad = this.chartPad;
+					const xStep = points.length > 1 ? (w - 2 * pad) / (points.length - 1) : 0;
+					const yScale = (h - 2 * pad) / (maxE - minE || 1);
+					const dots = [];
+					const polyParts = [];
+					for (let i = 0; i < points.length; i++) {
+						const x = pad + i * xStep;
+						const y = h - pad - (points[i] - minE) * yScale;
+						dots.push({ x: x, y: y });
+						polyParts.push(x + ',' + y);
+					}
+					this.chartDots = dots;
+					this.chartPolyPoints = polyParts.join(' ');
+				},
+
+				_formatWhen(ts) {
+					if (!ts) return '';
+					const now = Date.now();
+					const diff = now - ts;
+					const day = 24 * 60 * 60 * 1000;
+					if (diff < 60 * 1000) return 'just now';
+					if (diff < 60 * 60 * 1000) return Math.floor(diff / (60 * 1000)) + 'm ago';
+					if (diff < day) return Math.floor(diff / (60 * 60 * 1000)) + 'h ago';
+					if (diff < 7 * day) return Math.floor(diff / day) + 'd ago';
+					const d = new Date(ts);
+					return d.toLocaleDateString();
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

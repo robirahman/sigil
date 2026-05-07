@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/help.css" rel="stylesheet" />
+	<link href="static/css/ladder.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<title>Online Multiplayer - Sigil Online</title>
+	<style>
+		header { position: absolute; }
+		body > .main { padding-top: 0px; }
+		.lobby {
+			max-width: 400px;
+			margin: 80px auto 0;
+			padding: 24px;
+			text-align: center;
+		}
+		.lobby h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			margin-bottom: 20px;
+		}
+		.lobby-button {
+			display: block;
+			width: 100%;
+			padding: 14px;
+			margin: 10px 0;
+			background: var(--color-surface-raised);
+			border: 2px solid var(--color-border);
+			border-radius: 8px;
+			color: var(--color-text-warm);
+			font-family: 'Arvo', serif;
+			font-size: 1em;
+			cursor: pointer;
+		}
+		.lobby-button:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.room-code {
+			font-family: monospace;
+			font-size: 2em;
+			letter-spacing: 0.2em;
+			color: var(--color-text-bright);
+			background: var(--color-surface);
+			padding: 16px 24px;
+			border-radius: 8px;
+			margin: 16px 0;
+			display: inline-block;
+			user-select: all;
+		}
+		.join-input {
+			font-family: monospace;
+			font-size: 1.4em;
+			letter-spacing: 0.15em;
+			text-align: center;
+			padding: 12px;
+			border-radius: 6px;
+			border: 2px solid var(--color-border);
+			background: var(--color-surface);
+			color: var(--color-text-warm);
+			width: 200px;
+			text-transform: uppercase;
+		}
+		.status-msg {
+			color: var(--color-border-hover);
+			font-family: 'Overlock', sans-serif;
+			margin: 12px 0;
+		}
+		.error-msg { color: var(--color-error); }
+		.auth-status {
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-border-hover);
+			font-size: 0.9em;
+			margin-bottom: 16px;
+			padding: 8px 12px;
+			background: var(--color-surface);
+			border-radius: 6px;
+		}
+		.auth-status a { color: var(--color-accent); text-decoration: none; }
+		.auth-status a:hover { text-decoration: underline; }
+		.auth-status__name { color: var(--color-text-warm); font-weight: bold; }
+		.auth-status__elo { color: var(--color-text-bright); }
+		.time-control {
+			margin: 16px 0;
+			text-align: left;
+		}
+		.time-control__label {
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-border-hover);
+			font-size: 0.85em;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			margin-bottom: 8px;
+		}
+		.time-control__options {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+		.time-control__option {
+			padding: 6px 12px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-surface);
+			color: var(--color-border-hover);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.time-control__option:hover { border-color: var(--color-text-dim); color: var(--color-text-warm); }
+		.time-control__option--active { border-color: var(--color-accent); color: var(--color-text-warm); background: var(--color-surface-raised); }
+		.spectator-banner {
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			background: var(--color-spectator-banner);
+			color: var(--color-text-warm);
+			font-family: 'Arvo', serif;
+			text-align: center;
+			padding: 8px;
+			z-index: 100;
+			font-size: 0.9em;
+			letter-spacing: 0.05em;
+		}
+		.resume-section {
+			margin-top: 24px;
+			border-top: 1px solid var(--color-border);
+			padding-top: 16px;
+		}
+		.resume-section h3 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			font-size: 0.95em;
+			margin-bottom: 8px;
+		}
+		.resume-game {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 8px 12px;
+			background: var(--color-surface);
+			border-radius: 6px;
+			margin: 6px 0;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+		}
+		.resume-game__code { color: var(--color-text-bright); font-family: monospace; letter-spacing: 0.1em; }
+		.resume-game__status { color: var(--color-border-hover); }
+		.resume-game__status--your-turn { color: var(--color-success); }
+		.resume-game__join {
+			padding: 4px 10px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 4px;
+			color: var(--color-text-warm);
+			cursor: pointer;
+			font-size: 0.85em;
+		}
+		.resume-game__join:hover { background: var(--color-surface-hover); }
+		.allow-spec {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			justify-content: center;
+			margin: 12px 0;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-border-hover);
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.allow-spec input { cursor: pointer; }
+		.share-link {
+			display: flex;
+			gap: 6px;
+			justify-content: center;
+			align-items: center;
+			margin: 8px 0;
+		}
+		.share-link__url {
+			font-family: monospace;
+			font-size: 0.85em;
+			color: var(--color-text-bright);
+			background: var(--color-surface);
+			padding: 6px 10px;
+			border-radius: 4px;
+			user-select: all;
+			max-width: 260px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.share-link__btn {
+			padding: 6px 10px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 4px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			cursor: pointer;
+		}
+		.share-link__btn:hover { background: var(--color-surface-hover); }
+		.in-game-share {
+			position: fixed;
+			top: 60px;
+			right: 12px;
+			z-index: 50;
+			padding: 6px 12px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 4px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			cursor: pointer;
+		}
+		.in-game-share:hover { background: var(--color-surface-hover); }
+	</style>
+	<script>
+		var webpDetector = new Image();
+		webpDetector.onload = function () { document.documentElement.classList.add('webp'); };
+		webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
+	</script>
+	<script src="static/scripts/theme-manager.js"></script>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="multiplayerLobby()">
+		<!-- Spectator banner -->
+		<div class="spectator-banner" x-show="isSpectator" x-cloak x-text="bannerText"></div>
+
+		<!-- Lobby -->
+		<div class="lobby" x-show="phase === 'lobby'" x-cloak>
+			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Online Multiplayer</h2>
+
+			<!-- Auth status -->
+			<div class="auth-status" x-show="authReady">
+				<template x-if="authUser">
+					<span>Playing as <span class="auth-status__name" x-text="authDisplayName"></span>
+					<template x-if="authElo !== null"> (<span class="auth-status__elo" x-text="authElo"></span>)</template>
+					&mdash; <a href="account.html">Account</a></span>
+				</template>
+				<template x-if="!authUser">
+					<span>Playing as Guest &mdash; <a href="account.html">Sign in</a> for ranked play</span>
+				</template>
+			</div>
+
+			<!-- Time control selection -->
+			<div class="time-control">
+				<div class="time-control__label">Time Control</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'none' }" x-on:click="tcType = 'none'">None</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'realtime' }" x-on:click="tcType = 'realtime'">Real-time</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcType === 'correspondence' }" x-on:click="tcType = 'correspondence'">Correspondence</button>
+				</div>
+			</div>
+
+			<!-- Real-time presets -->
+			<div class="time-control" x-show="tcType === 'realtime'">
+				<div class="time-control__label">Time Preset</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '3+0' }" x-on:click="setTimePreset('3+0')">3+0</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '5+0' }" x-on:click="setTimePreset('5+0')">5+0</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '5+5' }" x-on:click="setTimePreset('5+5')">5+5</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '10+0' }" x-on:click="setTimePreset('10+0')">10+0</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '10+5' }" x-on:click="setTimePreset('10+5')">10+5</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '15+10' }" x-on:click="setTimePreset('15+10')">15+10</button>
+				</div>
+			</div>
+
+			<!-- Correspondence presets -->
+			<div class="time-control" x-show="tcType === 'correspondence'">
+				<div class="time-control__label">Time per Move</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '12h' }" x-on:click="tcCorr = '12h'">12 hours</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '24h' }" x-on:click="tcCorr = '24h'">24 hours</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '3d' }" x-on:click="tcCorr = '3d'">3 days</button>
+				</div>
+			</div>
+
+			<label class="allow-spec">
+				<input type="checkbox" x-model="allowSpectators" />
+				<span>Allow spectators</span>
+			</label>
+
+			<button class="lobby-button" x-on:click="createRoom">Create Game</button>
+			<div style="margin: 16px 0; color: #777;">- or -</div>
+			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" />
+			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="joinCode.length < 4">Join Game</button>
+			<p class="error-msg" x-text="lobbyError"></p>
+
+			<!-- Resume correspondence games -->
+			<div class="resume-section" x-show="activeGames.length > 0">
+				<h3>Active Games</h3>
+				<template x-for="game in activeGames" x-bind:key="game.roomCode">
+					<div class="resume-game">
+						<span class="resume-game__code" x-text="game.roomCode"></span>
+						<span class="resume-game__status" x-bind:class="{ 'resume-game__status--your-turn': game.isYourTurn }" x-text="game.statusText"></span>
+						<button class="resume-game__join" x-on:click="resumeGame(game.roomCode)">Resume</button>
+					</div>
+				</template>
+			</div>
+		</div>
+
+		<!-- Waiting for opponent -->
+		<div class="lobby" x-show="phase === 'waiting'" x-cloak>
+			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Waiting for Opponent</h2>
+			<p class="status-msg">Share this room code:</p>
+			<div class="room-code" x-text="roomCode"></div>
+			<div class="share-link">
+				<span class="share-link__url" x-text="shareUrl"></span>
+				<button class="share-link__btn" x-on:click="copyShareLink" x-text="shareCopied ? 'Copied!' : 'Copy link'"></button>
+			</div>
+			<p class="status-msg">Waiting for Player 2 to join...</p>
+		</div>
+
+		<!-- Spectator-not-allowed error -->
+		<div class="lobby" x-show="phase === 'denied'" x-cloak>
+			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Spectating Disabled</h2>
+			<p class="status-msg">The players in this game have not allowed spectators.</p>
+			<a class="lobby-button" href="multiplayer.html">Back to Lobby</a>
+		</div>
+
+		<!-- Game (only mounts when game starts) -->
+		<template x-if="phase === 'playing'">
+			<div x-data="gameBoard({ importSfn: '' })">
+				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: localStorage.getItem('sigil_muted') === 'true' }"></button>
+				<button class="in-game-share" x-on:click="copyGameLink" x-text="linkCopied ? 'Copied!' : 'Share game link'"></button>
+				<!-- Player names and timer bar -->
+				<div class="ladder-details" x-show="redName || blueName">
+					<div class="ladder-details__inner">
+						<div class="ladder-details__card">
+							<div class="red">
+								<template x-if="redUid">
+									<a class="name" style="color: inherit; text-decoration: none;" x-bind:href="'profile.html?uid=' + redUid" x-text="redName"></a>
+								</template>
+								<template x-if="!redUid">
+									<span class="name" x-text="redName"></span>
+								</template>
+							</div>
+							<div class="timer">
+								<div class="main">
+									<template x-if="timerType !== 'none'">
+										<span x-text="formatTimer(redTimer)" style="color: #fa3f32;"></span>
+									</template>
+									<span>vs</span>
+									<template x-if="timerType !== 'none'">
+										<span x-text="formatTimer(blueTimer)" style="color: #295ccd;"></span>
+									</template>
+								</div>
+								<template x-if="timerType !== 'none'">
+									<div style="display: flex; width: var(--timer-width, 6em);">
+										<div class="bar bar--red" x-bind:style="'flex:' + Math.max(redTimer, 0)"></div>
+										<div class="bar bar--blue" x-bind:style="'flex:' + Math.max(blueTimer, 0)"></div>
+									</div>
+								</template>
+							</div>
+							<div class="blue">
+								<template x-if="blueUid">
+									<a class="name" style="color: inherit; text-decoration: none;" x-bind:href="'profile.html?uid=' + blueUid" x-text="blueName"></a>
+								</template>
+								<template x-if="!blueUid">
+									<span class="name" x-text="blueName"></span>
+								</template>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="container"><div class="container__inner">
+					<template x-if="messageHistory.length > 0">
+						<ul class="feed feed--history" x-ref="messageHistory">
+							<template x-for="message in messageHistory"><li x-text="message"></li></template>
+						</ul>
+					</template>
+					<div class="annotation-bar"
+						x-show="annotationMode && lastOpponentTurn && whoseTurn === myColor"
+						x-cloak>
+						<span class="annotation-bar__label">
+							Mark turn <span x-text="lastOpponentTurn?.turnNumber"></span>:
+						</span>
+						<button class="annotation-bar__btn"
+							x-bind:class="{ 'annotation-bar__btn--active': annotations[lastOpponentTurn?.turnNumber] === 'good' }"
+							x-on:click="setAnnotation('good')"
+							title="Mark this opponent move as a good move">
+							<span aria-hidden="true">&#x1F44D;</span> Good
+						</button>
+						<button class="annotation-bar__btn"
+							x-bind:class="{ 'annotation-bar__btn--active': annotations[lastOpponentTurn?.turnNumber] === 'bad' }"
+							x-on:click="setAnnotation('bad')"
+							title="Mark this opponent move as a bad move">
+							<span aria-hidden="true">&#x1F44E;</span> Bad
+						</button>
+					</div>
+					<div class="dice">
+						<div class="die die--red" x-bind:data-die-face="redSpellCounter">
+								<div class="die__face die__face--1"><div class="die__pip die__pip--mm"></div></div>
+								<div class="die__face die__face--2"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--3"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--4"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--5"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--6"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--ml"></div><div class="die__pip die__pip--mr"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+							</div>
+						<div class="die die--blue" x-bind:data-die-face="blueSpellCounter">
+								<div class="die__face die__face--1"><div class="die__pip die__pip--mm"></div></div>
+								<div class="die__face die__face--2"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--3"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+								<div class="die__face die__face--4"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--5"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--6"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--ml"></div><div class="die__pip die__pip--mr"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
+								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
+							</div>
+					</div>
+					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass'))}">
+						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
+						<button class="action-button action-button--dash" x-bind:class="{ 'is-hidden': !actionList.includes('dash') }" x-on:click="handleDash">Dash</button>
+						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
+					</div>
+				</div></div>
+				<div class="container" style="overflow: auto"><div class="container__inner game-board-container" x-ref="gameBoardContainer">
+					<div class="position:relative">
+						<div class="spell-fx-overlay" x-ref="spellFxOverlay"></div>
+						<picture><source type="image/webp" srcset="static/images/game-board.webp" /><img class="game-board max-width:100%" src="static/images/game-board.jpg" alt="" /></picture>
+						<div class="spells">
+							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor charm-spell" x-bind:class="{ [`charm-spell--${i}`]: true, [`spell--tooltip-anchor-charm${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="spells.images[`charm${i}`]?.replace('.png', '.webp')" /><img class="spell charm-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`charm${i}`]), 'spell--blue-lock': blueLock === spellDict[`charm${i}`], 'spell--red-lock': redLock === spellDict[`charm${i}`], 'spell--visible': spells.images[`charm${i}`], [`charm-spell--${i}`]: true }" x-bind:src="spells.images[`charm${i}`]" x-on:click.stop="handleCharmClick(`charm${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`charm${i}`)" /></picture></div></template>
+							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor ritual-spell" x-bind:class="{ [`ritual-spell--${i}`]: true, [`spell--tooltip-anchor-ritual${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="spells.images[`ritual${i}`]?.replace('.png', '.webp')" /><img class="spell ritual-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`ritual${i}`]), 'spell--blue-lock': blueLock === spellDict[`ritual${i}`], 'spell--red-lock': redLock === spellDict[`ritual${i}`], 'spell--visible': spells.images[`ritual${i}`], [`ritual-spell--${i}`]: true }" x-bind:src="spells.images[`ritual${i}`]" x-on:click.stop="handleSpellClick(`ritual${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`ritual${i}`)" /></picture></div></template>
+							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor sorcery-spell" x-bind:class="{ [`sorcery-spell--${i}`]: true, [`spell--tooltip-anchor-sorcery${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="spells.images[`sorcery${i}`]?.replace('.png', '.webp')" /><img class="spell sorcery-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`sorcery${i}`]), 'spell--blue-lock': blueLock === spellDict[`sorcery${i}`], 'spell--red-lock': redLock === spellDict[`sorcery${i}`], 'spell--visible': spells.images[`sorcery${i}`], [`sorcery-spell--${i}`]: true }" x-bind:src="spells.images[`sorcery${i}`]" x-on:click.stop="handleSpellClick(`sorcery${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)" /></picture></div></template>
+						</div>
+						<div class="stone-nodes" x-cloak>
+							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }"></div>
+							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
+								<button class="stone-node" x-bind:aria-label="node" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-on:click="handleNodeClick(node)"></button>
+							</template>
+						</div>
+					</div>
+				</div></div>
+				<div class="tooltip" x-bind:class="{ 'is-visible': spells.text[activeSpell] }" x-ref="spellTooltip"><div class="tooltip__inner"><h2 class="tooltip__heading" x-text="spells.text[activeSpell]?.name"></h2><p class="tooltip__content" x-text="spells.text[activeSpell]?.text"></p><button class="tooltip-button" x-on:click="handleCastSpell(activeSpell)" x-show="hasTouchScreen && activeSpellIsCastable">Cast Spell</button></div></div>
+				<div class="win-modal" x-bind:class="{ 'is-visible': winner && !reviewMode }">
+					<div class="win-modal__result">
+						<picture x-show="winner === 'blue'"><source type="image/webp" srcset="static/images/stones/blue.webp" /><img alt="" src="static/images/stones/blue.png" height="30" width="30" /></picture>
+						<img alt="Blue Wins" src="static/images/blue-wins.svg" height="26" width="167" x-show="winner === 'blue'" />
+						<picture x-show="winner === 'red'"><source type="image/webp" srcset="static/images/stones/red.webp" /><img alt="" src="static/images/stones/red.png" height="30" width="30" /></picture>
+						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
+					</div>
+					<div class="win-modal__actions">
+						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator">Play Again</button>
+						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === 9">Play Again (Same Layout)</button>
+						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
+						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
+						<button class="win-modal__btn" x-on:click="copyGameLink" x-show="shareUrl" x-text="linkCopied ? 'Link Copied!' : 'Copy Share Link'"></button>
+						<a class="win-modal__btn" href="./">Main Menu</a>
+					</div>
+				</div>
+				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
+					<button class="review-bar__btn" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0">&#x23EE;</button>
+					<button class="review-bar__btn" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0">&#x25C0;</button>
+					<span class="review-bar__label" x-text="reviewTurnLabels[reviewIndex] || ''"></span>
+					<span class="review-bar__pos" x-text="(reviewIndex + 1) + '/' + reviewSfns.length"></span>
+					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1">&#x25B6;</button>
+					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1">&#x23ED;</button>
+					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
+				</div>
+			</div>
+		</template>
+	</div>
+
+	<script>
+		// Store sync and auth outside Alpine to avoid Proxy wrapping Firebase objects
+		let _firebaseSync = null;
+		let _authManager = null;
+
+		document.addEventListener('alpine:init', () => {
+			Alpine.data('multiplayerLobby', () => ({
+				phase: 'lobby',
+				joinCode: '',
+				lobbyError: '',
+				roomCode: '',
+				isSpectator: false,
+				bannerText: 'Spectating',
+				shareUrl: '',
+				shareCopied: false,
+
+				// Auth state
+				authReady: false,
+				authUser: null,
+				authDisplayName: 'Guest',
+				authElo: null,
+
+				// Time control
+				tcType: 'none',
+				tcPreset: '5+0',
+				tcCorr: '24h',
+
+				// Allow spectators (for created games)
+				allowSpectators: true,
+
+				// Active correspondence games
+				activeGames: [],
+
+				init() {
+					_firebaseSync = new FirebaseSync(firebase.database());
+					_authManager = new AuthManager();
+
+					_authManager.onAuthChanged(async (user) => {
+						if (user && !user.isAnonymous) {
+							this.authUser = user;
+							await _authManager.loadProfile(firebase.database());
+							this.authDisplayName = _authManager.displayName;
+							this.authElo = _authManager.elo;
+						} else {
+							this.authUser = null;
+							this.authDisplayName = 'Guest';
+							this.authElo = null;
+						}
+						this.authReady = true;
+					});
+
+					this._loadActiveGames();
+
+					// "Play Again" from the win-modal returns here with a sessionStorage
+					// flag — auto-create a new room (optionally with the prior spells /
+					// time control) so the player lands on the waiting-for-opponent
+					// screen instead of having to click Create Game again.
+					let rematchHandled = false;
+					try {
+						if (sessionStorage.getItem('sigil_rematch_create')) {
+							sessionStorage.removeItem('sigil_rematch_create');
+							const spellsRaw = sessionStorage.getItem('sigil_rematch_spells');
+							sessionStorage.removeItem('sigil_rematch_spells');
+							const tcRaw = sessionStorage.getItem('sigil_rematch_time_control');
+							sessionStorage.removeItem('sigil_rematch_time_control');
+							let rematchSpells = null;
+							if (spellsRaw) {
+								try {
+									const parsed = JSON.parse(spellsRaw);
+									if (Array.isArray(parsed) && parsed.length === 9) rematchSpells = parsed;
+								} catch (e) {}
+							}
+							let rematchTc = null;
+							if (tcRaw) {
+								try { rematchTc = JSON.parse(tcRaw); } catch (e) {}
+							}
+							if (rematchTc && rematchTc.type) {
+								this.tcType = rematchTc.type;
+								if (rematchTc.type === 'realtime' && rematchTc.initialTime) {
+									const min = Math.round(rematchTc.initialTime / 60000);
+									const inc = Math.round((rematchTc.increment || 0) / 1000);
+									this.tcPreset = min + '+' + inc;
+								} else if (rematchTc.type === 'correspondence' && rematchTc.moveTimeout) {
+									const m = rematchTc.moveTimeout;
+									this.tcCorr = m >= 3*24*60*60*1000 ? '3d' : (m >= 24*60*60*1000 ? '24h' : '12h');
+								}
+							}
+							rematchHandled = true;
+							this._waitForAuth().then(() => {
+								this.createRoom({ spellNames: rematchSpells });
+							});
+						}
+					} catch (e) { /* sessionStorage blocked — fall through to lobby */ }
+
+					// Auto-join from `?id=CODE` URL param. Wait for auth to resolve
+					// first so the creator-reconnect uid check works. Skipped if a
+					// rematch was already kicked off above.
+					if (!rematchHandled) {
+						const urlId = new URLSearchParams(window.location.search).get('id');
+						if (urlId && /^[A-Z0-9]{4,10}$/.test(urlId.toUpperCase())) {
+							this._waitForAuth().then(() => {
+								this._handleSharedLink(urlId.toUpperCase());
+							});
+						}
+					}
+				},
+
+				_waitForAuth() {
+					return new Promise((resolve) => {
+						if (this.authReady) return resolve();
+						const stop = this.$watch('authReady', (val) => {
+							if (val) { stop(); resolve(); }
+						});
+						// Safety timeout — proceed even if auth never resolves.
+						setTimeout(() => resolve(), 2000);
+					});
+				},
+
+				_buildShareUrl(code) {
+					const url = new URL(window.location.href);
+					url.search = '?id=' + code;
+					return url.toString();
+				},
+
+				copyShareLink() {
+					if (!this.shareUrl) return;
+					navigator.clipboard.writeText(this.shareUrl).then(() => {
+						this.shareCopied = true;
+						setTimeout(() => { this.shareCopied = false; }, 2000);
+					});
+				},
+
+				/**
+				 * Handle entry via `?id=CODE` URL. Routes to:
+				 * - waiting screen if room is empty (creator reload)
+				 * - finished review if game over
+				 * - spectate/reconnect via existing joinRoom flow otherwise
+				 */
+				async _handleSharedLink(code) {
+					try {
+						const roomData = await _firebaseSync.getRoomSnapshot(code);
+						if (!roomData) {
+							this.lobbyError = 'Game not found: ' + code;
+							return;
+						}
+						if (roomData.status === 'finished') {
+							this._startReviewMode(code, roomData);
+							return;
+						}
+						if (roomData.status === 'waiting') {
+							// If the user IS the creator (matched by uid), reattach
+							// to red rather than auto-joining as blue.
+							const userInfo = _authManager ? _authManager.getUserInfo() : null;
+							const isCreator = userInfo && userInfo.uid &&
+								roomData.red && roomData.red.uid === userInfo.uid;
+							if (isCreator) {
+								await _firebaseSync.reconnectAsCreator(code, userInfo, roomData);
+								this.roomCode = code;
+								this.shareUrl = this._buildShareUrl(code);
+								this.phase = 'waiting';
+								const spellNames = roomData.spellNames;
+								const timeControl = roomData.timeControl || { type: 'none' };
+								_firebaseSync.onOpponentJoin = () => {
+									this._startOnlineGame(spellNames, 'red', null, false, timeControl);
+								};
+								return;
+							}
+						}
+						// In-progress or waiting (as joining player): use existing flow.
+						this.joinCode = code;
+						await this.joinRoom();
+					} catch (e) {
+						const msg = e.message || String(e);
+						if (msg.includes('Spectators are not allowed')) {
+							this.phase = 'denied';
+							return;
+						}
+						this.lobbyError = msg;
+					}
+				},
+
+				_startReviewMode(code, roomData) {
+					if (roomData.allowSpectators === false) {
+						// Soft check; players viewing their own finished game would
+						// need a separate path, but for now we treat non-shareable
+						// finished games the same.
+						this.phase = 'denied';
+						return;
+					}
+					this.roomCode = code;
+					this.shareUrl = this._buildShareUrl(code);
+					this.isSpectator = true;
+					this.bannerText = 'Game Review';
+					this.phase = 'playing';
+					window._multiplayerState = {
+						sync: null,
+						spellNames: roomData.spellNames || [],
+						myColor: null,
+						reconnectSfn: null,
+						isSpectator: true,
+						timeControl: roomData.timeControl || { type: 'none' },
+						redDisplayName: (roomData.red && roomData.red.displayName) || 'Red',
+						blueDisplayName: (roomData.blue && roomData.blue.displayName) || 'Blue',
+						redUid: (roomData.red && roomData.red.uid) || null,
+						blueUid: (roomData.blue && roomData.blue.uid) || null,
+						annotationMode: false,
+						reviewMode: true,
+						gameLog: roomData.gameLog || [],
+						winner: roomData.winner || null,
+						shareUrl: this.shareUrl,
+					};
+				},
+
+				setTimePreset(preset) {
+					this.tcPreset = preset;
+				},
+
+				_getTimeControl() {
+					if (this.tcType === 'none') return { type: 'none' };
+					if (this.tcType === 'realtime') {
+						const [min, inc] = this.tcPreset.split('+').map(Number);
+						return {
+							type: 'realtime',
+							initialTime: min * 60 * 1000,
+							increment: inc * 1000,
+						};
+					}
+					if (this.tcType === 'correspondence') {
+						const msMap = { '12h': 12*60*60*1000, '24h': 24*60*60*1000, '3d': 3*24*60*60*1000 };
+						return {
+							type: 'correspondence',
+							moveTimeout: msMap[this.tcCorr] || 24*60*60*1000,
+						};
+					}
+					return { type: 'none' };
+				},
+
+				async createRoom(opts) {
+					if (!_firebaseSync) return;
+					this.lobbyError = '';
+					try {
+						let spellNames = (opts && Array.isArray(opts.spellNames) && opts.spellNames.length === 9)
+							? opts.spellNames.slice()
+							: null;
+						if (!spellNames) {
+							const packKey = localStorage.getItem('sigilSpellPack') || 'core';
+							spellNames = generateSpellList(packKey);
+						}
+						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						const timeControl = this._getTimeControl();
+						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators);
+						this.shareUrl = this._buildShareUrl(this.roomCode);
+						this.phase = 'waiting';
+						// Reflect the room code in the URL bar so the creator can copy it.
+						try {
+							window.history.replaceState({}, '', '?id=' + this.roomCode);
+						} catch (e) {}
+
+						_firebaseSync.onOpponentJoin = () => {
+							this._startOnlineGame(spellNames, 'red', null, false, timeControl);
+						};
+					} catch (e) {
+						this.lobbyError = 'Failed to create room: ' + e.message;
+						console.error('createRoom error:', e);
+					}
+				},
+
+				async joinRoom() {
+					if (!_firebaseSync) return;
+					this.lobbyError = '';
+					try {
+						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo);
+						if (result.isSpectator) {
+							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl);
+						} else {
+							this._startOnlineGame(result.spellNames, result.myColor, result.sfn, false, result.timeControl);
+							// Track correspondence games
+							if (result.timeControl && result.timeControl.type === 'correspondence') {
+								this._trackCorrespondenceGame(this.joinCode.toUpperCase(), result.myColor);
+							}
+						}
+					} catch (e) {
+						this.lobbyError = e.message;
+					}
+				},
+
+				async resumeGame(roomCode) {
+					this.joinCode = roomCode;
+					await this.joinRoom();
+				},
+
+				_startOnlineGame(spellNames, myColor, reconnectSfn, isSpectator, timeControl) {
+					this.phase = 'playing';
+					this.isSpectator = isSpectator || false;
+					this.roomCode = _firebaseSync.roomCode || this.roomCode;
+					this.shareUrl = this._buildShareUrl(this.roomCode);
+					try { window.history.replaceState({}, '', '?id=' + this.roomCode); } catch (e) {}
+					window._multiplayerState = {
+						sync: _firebaseSync,
+						spellNames: spellNames,
+						myColor: myColor,
+						reconnectSfn: reconnectSfn || null,
+						isSpectator: isSpectator || false,
+						timeControl: timeControl || { type: 'none' },
+						redDisplayName: _firebaseSync.redDisplayName || 'Guest',
+						blueDisplayName: _firebaseSync.blueDisplayName || 'Guest',
+						redUid: _firebaseSync.redUid || null,
+						blueUid: _firebaseSync.blueUid || null,
+						annotationMode: !!(_authManager && _authManager.annotationMode),
+						reviewMode: false,
+						gameLog: null,
+						winner: null,
+						shareUrl: this.shareUrl,
+					};
+				},
+
+				_trackCorrespondenceGame(roomCode, myColor) {
+					const key = 'sigil_active_games';
+					let games = [];
+					try { games = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
+					if (!games.find(g => g.roomCode === roomCode)) {
+						games.push({ roomCode, myColor, created: Date.now() });
+						localStorage.setItem(key, JSON.stringify(games));
+					}
+				},
+
+				async _loadActiveGames() {
+					const key = 'sigil_active_games';
+					let games = [];
+					try { games = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
+					if (games.length === 0) return;
+
+					const db = firebase.database();
+					const active = [];
+					const stillAlive = [];
+
+					for (const game of games) {
+						try {
+							const snap = await db.ref('rooms/' + game.roomCode).once('value');
+							const data = snap.val();
+							if (!data || data.status === 'finished') continue;
+							stillAlive.push(game);
+							const isYourTurn = data.timer && data.timer.activeColor === game.myColor;
+							active.push({
+								roomCode: game.roomCode,
+								myColor: game.myColor,
+								isYourTurn: isYourTurn,
+								statusText: isYourTurn ? 'Your turn' : 'Waiting...',
+							});
+						} catch(e) { /* skip unreadable rooms */ }
+					}
+
+					localStorage.setItem(key, JSON.stringify(stillAlive));
+					this.activeGames = active;
+				},
+			}));
+		});
+	</script>
+
+	<!-- Engine scripts -->
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/engine/notation.js"></script>
+	<script src="static/scripts/engine/board.js"></script>
+	<script src="static/scripts/engine/moves.js"></script>
+	<script src="static/scripts/engine/spells.js"></script>
+	<script src="static/scripts/engine/sim-board.js"></script>
+	<script src="static/scripts/engine/features.js"></script>
+	<script src="static/scripts/engine/sigil-net.js"></script>
+	<script src="static/scripts/engine/sigil-net-graph.js"></script>
+	<script src="static/scripts/engine/strategic-eval.js"></script>
+	<script src="static/scripts/engine/enumerator.js"></script>
+	<script src="static/scripts/engine/mcts.js"></script>
+	<script src="static/scripts/engine/minimax-ai.js"></script>
+	<script src="static/scripts/engine/ai-player.js"></script>
+	<script src="static/scripts/engine/game-controller.js"></script>
+	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="static/scripts/engine/elo.js"></script>
+	<script src="static/scripts/engine/firebase-sync.js"></script>
+	<script src="static/scripts/engine/multiplayer-controller.js"></script>
+	<script src="static/scripts/engine/spectator-controller.js"></script>
+	<script src="static/scripts/sound-manager.js"></script>
+	<script src="static/scripts/spell-effects.js"></script>
+	<script src="static/scripts/game-board-multiplayer.js"></script>
+	<script src="static/scripts/help.js"></script>
+	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+
+	<!-- Firebase SDK (compat builds provide the v8 API with modern internals) -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

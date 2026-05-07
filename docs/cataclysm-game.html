@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/cataclysm.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<title>Sigil: Cataclysm</title>
+	<script src="static/scripts/theme-manager.js"></script>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div></div>
+				<h1>
+					<a href="./">
+						<span class="visually-hidden">Sigil Online</span>
+						<img class="max-width:100%" alt="" src="static/images/sigil-online-logo.svg" height="36" width="287" />
+					</a>
+				</h1>
+				<div></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="cataclysmGame()" x-cloak>
+		<div class="cat-game-container">
+			<div class="cat-board-area" x-ref="boardArea"></div>
+
+			<div class="cat-sidebar">
+				<!-- Turn indicator -->
+				<div class="cat-turn-indicator" :class="'turn-' + whoseTurn" x-text="turnMessage"></div>
+
+				<!-- Stone counts -->
+				<div class="cat-stone-counts">
+					<template x-for="p in playerList" :key="p.color">
+						<span class="cat-stone-count" :class="'count-' + p.color">
+							<span x-text="p.color[0].toUpperCase() + p.color.slice(1)"></span>:
+							<strong x-text="stoneCounts[p.color] || 0"></strong>
+						</span>
+					</template>
+				</div>
+
+				<!-- Action buttons -->
+				<div class="cat-actions" x-show="actionList.length > 0">
+					<template x-for="action in actionList" :key="action">
+						<button
+							class="cat-action-btn"
+							:class="{
+								'btn-pass': action === 'pass',
+								'btn-dash': action === 'dash',
+								'btn-reset': action === 'reset'
+							}"
+							x-text="formatAction(action)"
+							x-on:click="handleAction(action)"
+							x-show="action !== 'move'"
+						></button>
+					</template>
+					<button class="cat-action-btn btn-reset" x-on:click="handleAction('reset')" x-show="showReset">Reset Turn</button>
+				</div>
+
+				<!-- Spell list -->
+				<div class="cat-spell-list">
+					<template x-for="(spell, idx) in spellNames" :key="idx">
+						<div
+							class="cat-spell-item"
+							:class="{
+								charged: chargedSpellSet.has(spell),
+								castable: actionList.includes(spell)
+							}"
+							x-on:click="actionList.includes(spell) && handleAction(spell)"
+						>
+							<span x-text="spell.replace(/_/g, ' ')"></span>
+							<span class="spell-type" x-text="idx < 3 ? 'Ritual' : idx < 6 ? 'Sorcery' : 'Charm'"></span>
+						</div>
+					</template>
+				</div>
+
+				<!-- Messages -->
+				<div class="cat-messages" x-ref="messagesFeed">
+					<template x-for="(msg, idx) in messageHistory" :key="idx">
+						<p x-text="msg"></p>
+					</template>
+				</div>
+			</div>
+		</div>
+
+		<!-- Win modal -->
+		<div class="cat-win-modal" x-show="winner" x-cloak x-transition>
+			<div class="cat-win-modal-content">
+				<h2>
+					<span :class="'winner-' + winner" x-text="(winner || '')[0]?.toUpperCase() + (winner || '').slice(1)"></span> Wins!
+				</h2>
+				<div style="margin-top: 20px; display: flex; gap: 12px; justify-content: center;">
+					<a class="cat-action-btn" href="cataclysm.html">Back to Menu</a>
+					<button class="cat-action-btn" x-on:click="restartGame()">Play Again</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Engine scripts: load existing constants, then cataclysm engine -->
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/cataclysm/cataclysm-board.js"></script>
+	<script src="static/scripts/cataclysm/cataclysm-moves.js"></script>
+	<script src="static/scripts/cataclysm/cataclysm-spells.js"></script>
+	<script src="static/scripts/cataclysm/cataclysm-controller.js"></script>
+	<script src="static/scripts/cataclysm/cataclysm-renderer.js"></script>
+	<script src="static/scripts/cataclysm/maps/rectangular-1v1.js"></script>
+	<script src="static/scripts/cataclysm/maps/triangular-3p.js"></script>
+	<script src="static/scripts/cataclysm/maps/hexagonal-2v2.js"></script>
+	<script src="static/scripts/sound-manager.js"></script>
+
+	<script>
+		const CAT_MAPS = {
+			'rectangular-1v1': RECTANGULAR_1V1,
+			'triangular-3p': TRIANGULAR_3P,
+			'hexagonal-2v2': HEXAGONAL_2V2,
+		};
+
+		function cataclysmGame() {
+			return {
+				controller: null,
+				renderer: null,
+				mapDef: null,
+				whoseTurn: '',
+				turnMessage: 'Starting...',
+				playerList: [],
+				stoneCounts: {},
+				actionList: [],
+				spellNames: [],
+				chargedSpellSet: new Set(),
+				messageHistory: [],
+				winner: null,
+				showReset: false,
+				validMoves: {},
+				lastPlay: null,
+
+				init() {
+					const params = new URLSearchParams(window.location.search);
+					const mapId = params.get('map') || 'rectangular-1v1';
+					this.mapDef = CAT_MAPS[mapId];
+					if (!this.mapDef) {
+						this.messageHistory.push('Unknown map: ' + mapId);
+						return;
+					}
+
+					this.playerList = this.mapDef.players;
+					this._startGame();
+
+					// Keyboard shortcuts
+					document.addEventListener('keydown', (e) => {
+						const tag = document.activeElement?.tagName;
+						if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+						if (e.key === 'Enter' && this.actionList.includes('pass')) {
+							e.preventDefault();
+							this.handleAction('pass');
+						}
+						if (e.key === 'd' && this.actionList.includes('dash')) {
+							e.preventDefault();
+							this.handleAction('dash');
+						}
+					});
+				},
+
+				_startGame() {
+					const _this = this;
+					this.winner = null;
+					this.messageHistory = [];
+					this.spellNames = [];
+					this.actionList = [];
+					this.stoneCounts = {};
+
+					// Clean up old renderer
+					const boardArea = this.$refs.boardArea;
+					boardArea.innerHTML = '';
+
+					this.renderer = new CataclysmRenderer(boardArea, this.mapDef);
+					this.renderer.build();
+					this.renderer.onNodeClick((node) => _this._handleNodeClick(node));
+					this.renderer.onSpellClick((posName) => _this._handleSpellClick(posName));
+
+					const emitEvent = (payload) => _this._handleEvent(payload);
+					this.controller = new CataclysmController(emitEvent);
+					this.controller.startGame(this.mapDef);
+				},
+
+				restartGame() {
+					this._startGame();
+				},
+
+				handleAction(action) {
+					if (action === 'reset') {
+						this.controller.handlePlayerAction('reset');
+						return;
+					}
+					this.controller.handlePlayerAction(action);
+				},
+
+				_handleNodeClick(node) {
+					this.controller.handlePlayerAction(node);
+				},
+
+				_handleSpellClick(posName) {
+					// posName is like 'ritual1', 'charm2', etc.
+					// Map to spell action name
+					const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
+					const idx = posNames.indexOf(posName);
+					if (idx >= 0 && this.spellNames[idx]) {
+						const spellName = this.spellNames[idx];
+						if (this.actionList.includes(spellName)) {
+							this.controller.handlePlayerAction(spellName);
+						}
+					}
+				},
+
+				formatAction(action) {
+					if (action === 'pass') return 'End Turn';
+					if (action === 'dash') return 'Dash';
+					if (action === 'move') return 'Move';
+					return action.replace(/_/g, ' ');
+				},
+
+				_handleEvent(payload) {
+					switch (payload.type) {
+						case 'spellsetup': {
+							const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
+							this.spellNames = posNames.map(p => payload[p]);
+							// Build spellDict for quick lookup
+							this.spellDict = {};
+							posNames.forEach((p, i) => { this.spellDict[p] = this.spellNames[i]; });
+							if (this.renderer) {
+								this.renderer.setSpellImages(this.spellNames);
+							}
+							break;
+						}
+
+						case 'spelltextsetup':
+							// Could store for tooltips later
+							break;
+
+						case 'boardstate': {
+							const board = this.controller.board;
+							this.lastPlay = payload.last_play;
+							for (const color of board.players) {
+								this.stoneCounts[color] = board.totalStones[color];
+							}
+							// Update charged spells
+							this.chargedSpellSet = new Set();
+							for (const color of board.players) {
+								for (const s of board.chargedSpells[color]) {
+									this.chargedSpellSet.add(s);
+								}
+							}
+							if (this.renderer) {
+								this.renderer.updateBoard(board, this.validMoves, this.lastPlay);
+								this.renderer.updateSpellStates(board, this.actionList, board.lock);
+							}
+							break;
+						}
+
+						case 'message': {
+							if (payload.message) {
+								this.messageHistory.push(payload.message);
+								this.$nextTick(() => {
+									const feed = this.$refs.messagesFeed;
+									if (feed) feed.scrollTop = feed.scrollHeight;
+								});
+							}
+
+							// Play sound on spell cast
+							if (payload.message && payload.message.includes(' casts ') && typeof soundManager !== 'undefined') {
+								soundManager.play('spellCast');
+							}
+
+							if (payload.awaiting === 'action' && payload.actionlist) {
+								this.actionList = payload.actionlist;
+								this.showReset = true;
+								this.validMoves = payload.moveoptions || {};
+							} else if (payload.awaiting === 'node') {
+								this.actionList = [];
+								this.validMoves = payload.moveoptions || {};
+							} else {
+								this.validMoves = {};
+							}
+
+							if (this.renderer && this.controller && this.controller.board) {
+								this.renderer.updateBoard(this.controller.board, this.validMoves, this.lastPlay);
+							}
+							break;
+						}
+
+						case 'whoseturndisplay':
+							this.whoseTurn = payload.color;
+							this.turnMessage = payload.message;
+							this.showReset = false;
+							this.actionList = [];
+							this.validMoves = {};
+							break;
+
+						case 'new_stone_animation':
+							if (typeof soundManager !== 'undefined') {
+								soundManager.play('stonePlaced');
+							}
+							break;
+
+						case 'crush_animation':
+							if (typeof soundManager !== 'undefined') {
+								soundManager.play('stoneCrushed');
+							}
+							break;
+
+						case 'push_animation':
+							if (typeof soundManager !== 'undefined') {
+								soundManager.play('stonePushed');
+							}
+							break;
+
+						case 'game_over':
+							this.winner = payload.winner;
+							this.actionList = [];
+							this.showReset = false;
+							this.validMoves = {};
+							if (typeof soundManager !== 'undefined') {
+								soundManager.play('gameOver');
+							}
+							if (this.renderer && this.controller && this.controller.board) {
+								this.renderer.updateBoard(this.controller.board, {}, this.lastPlay);
+							}
+							break;
+
+						case 'mapinfo':
+							break;
+
+						case 'chooserefills':
+						case 'donerefilling':
+						case 'pushingoptions':
+						case 'sfn_update':
+							break;
+					}
+				},
+			};
+		}
+	</script>
+
+	<script defer src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

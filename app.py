@@ -19,11 +19,11 @@ from sqlalchemy import func
 
 from game import Board, Player, resetException, redwinsException, bluewinsException
 from singleplayergame import SPBoard, AIPlayer
-from nn_ai_player import NNAIPlayer
+from ai.nn_ai_player import NNAIPlayer
 from ai.mcts_ai_player import MCTSAIPlayer
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
-from notation import GameRecorder
+from notation import GameRecorder, board_to_sfn, sfn_to_dict
 import os
 
 
@@ -82,7 +82,12 @@ def singlePlayer():
 	singleplayercount += 1
 	difficulty = request.args.get('difficulty', 'easy')
 	load_id = request.args.get('load', '')
-	return render_template('single-player.html', current_user_name=getattr(current_user, 'name', ''), difficulty=difficulty, load_id=load_id)
+	variant = request.args.get('variant', 'standard')
+	if variant not in ('standard', 'competitive'):
+		variant = 'standard'
+	return render_template('single-player.html',
+						   current_user_name=getattr(current_user, 'name', ''),
+						   difficulty=difficulty, load_id=load_id, variant=variant)
 
 @app.route('/single-player-menu')
 def singlePlayerMenu():
@@ -92,6 +97,16 @@ def singlePlayerMenu():
 @app.route('/api/saves')
 def api_saves():
 	return json.dumps(_list_saves())
+
+@app.route('/local-1v1')
+def local1v1():
+	import_sfn = request.args.get('sfn', '')
+	game_mode = 'local1v1_import' if import_sfn else 'local1v1'
+	variant = request.args.get('variant', 'standard')
+	if variant not in ('standard', 'competitive'):
+		variant = 'standard'
+	return render_template('local-1v1.html', current_user_name=getattr(current_user, 'name', ''),
+						   game_mode=game_mode, import_sfn=import_sfn, variant=variant)
 
 @app.route('/private-match')
 def privatematch():
@@ -561,8 +576,9 @@ def playgame(ws):
 		blue.ws.send(json.dumps(egress))
 
 
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 		time.sleep(3)
 
@@ -787,8 +803,9 @@ def playprivategame(ws, privategamename):
 		blue.ws.send(json.dumps(egress))
 
 
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 		time.sleep(3)
 
@@ -913,6 +930,34 @@ def _save_sgn(recorder):
 	with open(filepath, 'w') as f:
 		f.write(recorder.to_sgn())
 
+def _save_training_data(ai_player, winner):
+	"""Save MCTS positions from a human-vs-AI game as training data."""
+	from ai.config import DATA_DIR
+	positions = getattr(ai_player, 'training_positions', None)
+	if not positions:
+		return
+	os.makedirs(DATA_DIR, exist_ok=True)
+	from datetime import datetime as dt
+	timestamp = dt.now().strftime('%Y%m%d_%H%M%S_%f')
+	filepath = os.path.join(DATA_DIR, f'human_game_{timestamp}.jsonl')
+	with open(filepath, 'w') as f:
+		for pos in positions:
+			side = pos['side']
+			if winner == side:
+				outcome = 1.0
+			elif winner is not None:
+				outcome = -1.0
+			else:
+				outcome = 0.0
+			record = {
+				'sfn': pos['sfn'],
+				'spell_ids': pos['spell_ids'],
+				'policy': pos['policy'],
+				'turn_encodings': pos['turn_encodings'],
+				'outcome': outcome,
+			}
+			f.write(json.dumps(record) + '\n')
+
 def _save_game_state(board, recorder, human_color, difficulty, save_id):
 	"""Auto-save the current game state so it can be resumed later."""
 	from notation import board_to_sfn
@@ -965,19 +1010,219 @@ def _load_save(save_id):
 	with open(filepath) as f:
 		return json.load(f)
 
+class _DedupState:
+	"""Shared state for deduplicating WebSocket sends across two player objects."""
+	def __init__(self):
+		self.last_sent = None
+
+class _DedupWebSocket:
+	"""Wraps a WebSocket so that consecutive identical sends are skipped.
+	Two instances sharing the same _DedupState will deduplicate across both."""
+	def __init__(self, ws, shared_state):
+		self._ws = ws
+		self._state = shared_state
+
+	def send(self, data):
+		if data != self._state.last_sent:
+			self._ws.send(data)
+			self._state.last_sent = data
+
+	def receive(self):
+		return self._ws.receive()
+
+
+@sock.route('/api/local1v1game')
+def play_local_1v1(ws):
+	variant = request.args.get('variant', 'standard')
+	_run_local_1v1_game(ws, variant=variant)
+
+@sock.route('/api/local1v1game_import')
+def play_local_1v1_import(ws):
+	ingress = ws.receive()
+	sfn_str = json.loads(ingress).get('message', '')
+	# Import inherits the variant from the imported SFN if present.
+	from notation import sfn_to_dict as _sfn_to_dict
+	imported = _sfn_to_dict(sfn_str) if sfn_str else {}
+	variant = imported.get('variant') or request.args.get('variant', 'standard')
+	_run_local_1v1_game(ws, load_sfn=sfn_str, variant=variant)
+
+def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
+	board = Board()
+	board.variant = variant if variant in ('standard', 'competitive') else 'standard'
+	red = Player(board, 'red')
+	blue = Player(board, 'blue')
+	board.addplayers(red, blue)
+	red.opp = blue
+	blue.opp = red
+
+	shared_state = _DedupState()
+	red.ws = _DedupWebSocket(ws, shared_state)
+	blue.ws = _DedupWebSocket(ws, shared_state)
+
+	if load_sfn:
+		state = sfn_to_dict(load_sfn)
+		board.set_spells_from_names(state['spell_names'])
+		for nodename in board.nodes:
+			board.nodes[nodename].stone = state['stones'][nodename]
+		board.turncounter = state['turncounter']
+		board.whoseturn = state['turn']
+		board.score = state['score']
+		red.spellcounter = state['red_spellcounter']
+		blue.spellcounter = state['blue_spellcounter']
+		if state['red_lock']:
+			red.lock = board.spelldict[state['red_lock']]
+		if state['blue_lock']:
+			blue.lock = board.spelldict[state['blue_lock']]
+		if state['red_springlock']:
+			red.springlock = board.spelldict[state['red_springlock']]
+		if state['blue_springlock']:
+			blue.springlock = board.spelldict[state['blue_springlock']]
+		next_turn = 'Red' if state['turncounter'] % 2 == 0 else 'Blue'
+		red.jmessage("Imported position — " + next_turn + "'s turn.")
+	else:
+		red.jmessage("Local 1v1 — Red goes first.")
+
+	egress = { "type": "spellsetup" }
+	egress["ritual1"] = board.spells[0].name
+	egress["ritual2"] = board.spells[1].name
+	egress["ritual3"] = board.spells[2].name
+	egress["sorcery1"] = board.spells[3].name
+	egress["sorcery2"] = board.spells[4].name
+	egress["sorcery3"] = board.spells[5].name
+	egress["charm1"] = board.spells[6].name
+	egress["charm2"] = board.spells[7].name
+	egress["charm3"] = board.spells[8].name
+	red.ws.send(json.dumps(egress))
+
+	egress = { "type": "spelltextsetup" }
+	egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
+	egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
+	egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
+	egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
+	egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
+	egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
+	egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
+	egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
+	egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
+	red.ws.send(json.dumps(egress))
+
+	if load_sfn:
+		board.update()
+	else:
+		# Skip the standard a1/b1 setup for the competitive variant —
+		# the first two turns place the stones via a free blink.
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
+		board.update()
+
+	time.sleep(2)
+
+	def send_sfn():
+		sfn = board_to_sfn(board)
+		red.ws.send(json.dumps({"type": "sfn_update", "sfn": sfn}))
+
+	send_sfn()
+
+	reset_this_turn = False
+
+	try:
+		while True:
+			try:
+				if not reset_this_turn:
+					board.take_snapshot()
+
+				board.turncounter += 1
+
+				if board.turncounter % 2 == 1:
+					activeplayer = red
+					board.whoseturn = 'red'
+				else:
+					activeplayer = blue
+					board.whoseturn = 'blue'
+
+				try:
+					if board.whoseturn == 'red':
+						message = "Red Turn " + str((board.turncounter // 2) + 1)
+					elif board.whoseturn == 'blue':
+						message = "Blue Turn " + str(board.turncounter // 2)
+
+					egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+					red.ws.send(json.dumps(egress))
+
+					activeplayer.bot_triggers()
+					if board.gameover:
+						break
+
+					if board.whoseturn == 'red':
+						red.taketurn()
+					else:
+						blue.taketurn()
+
+					activeplayer.eot_triggers()
+					board.update(True)
+					send_sfn()
+					reset_this_turn = False
+					if board.gameover:
+						break
+
+				except resetException:
+					red.jmessage("Resetting Turn")
+
+					snapshot = board.snapshot
+
+					board.turncounter = snapshot["turncounter"]
+					board.gameover = snapshot["gameover"]
+					board.winner = snapshot["winner"]
+					board.score = snapshot["score"]
+
+					for nodename in board.nodes:
+						board.nodes[nodename].stone = snapshot[nodename]
+					if snapshot["redlock"]:
+						red.lock = board.spelldict[snapshot["redlock"]]
+					else:
+						red.lock = None
+					if snapshot["bluelock"]:
+						blue.lock = board.spelldict[snapshot["bluelock"]]
+					else:
+						blue.lock = None
+
+					red.spellcounter = snapshot["redspellcounter"]
+					blue.spellcounter = snapshot["bluespellcounter"]
+					board.last_play = snapshot["last_play"]
+					board.last_player = snapshot["last_player"]
+
+					board.update(True)
+					send_sfn()
+					reset_this_turn = True
+					continue
+			except Exception:
+				break
+	finally:
+		if board.gameover:
+			try:
+				board.end_game()
+				time.sleep(1)
+			except Exception:
+				pass
+
+
 @sock.route('/api/singleplayergame')
 def playsingleplayergame(ws):
-	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy')
+	variant = request.args.get('variant', 'standard')
+	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy', variant=variant)
 
 @sock.route('/api/singleplayergame_medium')
 def playsingleplayergame_medium(ws):
+	variant = request.args.get('variant', 'standard')
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='medium',
-						   ai_kwargs={'net_class': SigilNet})
+						   ai_kwargs={'net_class': SigilNet}, variant=variant)
 
 @sock.route('/api/singleplayergame_hard')
 def playsingleplayergame_hard(ws):
+	variant = request.args.get('variant', 'standard')
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='hard',
-						   ai_kwargs={'net_class': SigilNetHard})
+						   ai_kwargs={'net_class': SigilNetHard}, variant=variant)
 
 @sock.route('/api/singleplayergame_load')
 def playsingleplayergame_load(ws):
@@ -1005,7 +1250,8 @@ def playsingleplayergame_load(ws):
 						   load_save=save_data, save_id=save_id)
 
 def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
-						   ai_kwargs=None, load_save=None, save_id=None):
+						   ai_kwargs=None, load_save=None, save_id=None,
+						   variant='standard'):
 	from notation import sfn_to_dict
 	import uuid
 
@@ -1013,6 +1259,18 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 		save_id = str(uuid.uuid4())[:8]
 
 	board = SPBoard()
+	# Loaded saves carry their own variant inside the SFN string;
+	# parse it out so we restore play under the same rules. New
+	# (non-loaded) games take the variant from the request.
+	if load_save is not None:
+		try:
+			from notation import sfn_to_dict as _saved_sfn_to_dict
+			saved_state = _saved_sfn_to_dict(load_save['sfn'])
+			board.variant = saved_state.get('variant', 'standard')
+		except Exception:
+			board.variant = 'standard'
+	else:
+		board.variant = variant if variant in ('standard', 'competitive') else 'standard'
 
 	if load_save is not None:
 		# Restore from save
@@ -1105,12 +1363,18 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 	spell_names = [board.spells[i].name for i in range(9)]
 	red_name = 'Human' if human.color == 'red' else 'AI'
 	blue_name = 'Human' if human.color == 'blue' else 'AI'
-	recorder = GameRecorder(spell_names, red_name=red_name, blue_name=blue_name)
+	recorder = GameRecorder(spell_names, red_name=red_name, blue_name=blue_name,
+							variant=board.variant)
 	board.recorder = recorder
 
 	if load_save is None:
-		board.nodes['a1'].stone = 'red'
-		board.nodes['b1'].stone = 'blue'
+		# Standard variant places the starting stones on a1/b1.
+		# Competitive variant leaves the board empty; the first two
+		# turns will use the special opening blink/soft-blink logic
+		# inside Player.taketurn / AIPlayer.taketurn.
+		if board.variant != 'competitive':
+			board.nodes['a1'].stone = 'red'
+			board.nodes['b1'].stone = 'blue'
 		board.update()
 
 	time.sleep(3)
@@ -1226,6 +1490,11 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 				_save_sgn(recorder)
 			except Exception:
 				pass
+		# Save MCTS training data from this game
+		try:
+			_save_training_data(ai, board.winner)
+		except Exception:
+			pass
 
 
 def opp_chat_listen(ws, opp_ws):

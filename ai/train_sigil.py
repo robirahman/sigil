@@ -30,6 +30,7 @@ from ai.config import (
 )
 from notation import sfn_to_dict, NODE_ORDER, POSITIONS
 from simboard import SimBoard, MANA_NODES
+from ai.data_filters import is_pre_cutoff_fireblast_record
 
 
 class SigilDataset(Dataset):
@@ -92,11 +93,23 @@ def load_training_data(data_paths, max_records=None):
 
     records = []
     for path in data_paths:
+        bad_lines = 0
+        skipped_fireblast = 0
         with open(path) as f:
             for line in f:
                 if not line.strip():
                     continue
-                d = json.loads(line)
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    bad_lines += 1
+                    continue
+
+                # Skip records that pre-date the Fireblast rule change
+                # and contain Fireblast (see ai/data_filters.py).
+                if is_pre_cutoff_fireblast_record(path, d.get('sfn')):
+                    skipped_fireblast += 1
+                    continue
 
                 # Convert SFN to features if raw_features not cached
                 if 'raw_features' not in d:
@@ -128,6 +141,11 @@ def load_training_data(data_paths, max_records=None):
 
                 if max_records and len(records) >= max_records:
                     break
+        if bad_lines:
+            print(f"  {path}: skipped {bad_lines} malformed line(s)")
+        if skipped_fireblast:
+            print(f"  {path}: skipped {skipped_fireblast} pre-2026-05-07 "
+                  f"Fireblast position(s)")
         if max_records and len(records) >= max_records:
             break
 
@@ -194,7 +212,7 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
             # Value loss: MSE
             v_loss = F.mse_loss(value.squeeze(-1), target_outcome)
 
-            # Policy loss: cross-entropy between predicted and MCTS policy
+            # Policy loss: cross-entropy between predicted and target policy
             # Mask invalid turns
             max_t = logits.size(1)
             mask = torch.arange(max_t, device=device).unsqueeze(0) < turn_counts.unsqueeze(1)
@@ -204,8 +222,34 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
             log_probs = F.log_softmax(logits_masked + 1e-8, dim=1)
             # Clamp log_probs to avoid NaN from -inf * 0
             log_probs = log_probs.clamp(min=-30.0)
-            # Only compute loss on valid turns
-            p_loss = -(target_policy * log_probs).sum(dim=1).mean()
+            # For winner positions: lightly penalize unchosen legal moves
+            # by setting their target to -0.03 (pushes probability down).
+            # target_policy is 1.0 for chosen, 0.0 for others.
+            adjusted_policy = target_policy.clone()
+            is_winner = (target_outcome > 0).unsqueeze(1)  # (B, 1)
+            unchosen_legal = mask & (target_policy == 0)    # legal but not chosen
+            adjusted_policy[is_winner.expand_as(adjusted_policy) & unchosen_legal] = -0.01
+
+            # Per-sample cross-entropy (with adjusted targets)
+            p_loss_per_sample = -(adjusted_policy * log_probs).sum(dim=1)
+
+            # Outcome-weighted policy: positive reinforcement for winner,
+            # negative reinforcement for loser.
+            # Winner (outcome=+1): minimize cross-entropy (imitate move),
+            #   plus small penalty on unchosen moves.
+            # Loser (outcome=-1): maximize cross-entropy (avoid move).
+            # Draw (outcome=0): no policy gradient.
+            # Scale loser weight by 0.5 to keep training stable.
+            policy_weight = torch.where(
+                target_outcome > 0, torch.ones_like(target_outcome),
+                torch.where(target_outcome < 0,
+                            -0.5 * torch.ones_like(target_outcome),
+                            torch.zeros_like(target_outcome)))
+            denom = policy_weight.abs().sum()
+            if denom > 0:
+                p_loss = (p_loss_per_sample * policy_weight).sum() / denom
+            else:
+                p_loss = p_loss_per_sample.mean()
 
             loss = (1 - POLICY_LOSS_WEIGHT) * v_loss + POLICY_LOSS_WEIGHT * p_loss
 
@@ -248,7 +292,21 @@ def train(model, records, epochs=None, batch_size=None, lr=None,
                 mask = torch.arange(max_t, device=device).unsqueeze(0) < turn_counts.unsqueeze(1)
                 logits_masked = logits.masked_fill(~mask, float('-inf'))
                 log_probs = F.log_softmax(logits_masked + 1e-8, dim=1).clamp(min=-30.0)
-                p_loss = -(target_policy * log_probs).sum(dim=1).mean()
+                adjusted_policy = target_policy.clone()
+                is_winner = (target_outcome > 0).unsqueeze(1)
+                unchosen_legal = mask & (target_policy == 0)
+                adjusted_policy[is_winner.expand_as(adjusted_policy) & unchosen_legal] = -0.01
+                p_loss_per_sample = -(adjusted_policy * log_probs).sum(dim=1)
+                policy_weight = torch.where(
+                    target_outcome > 0, torch.ones_like(target_outcome),
+                    torch.where(target_outcome < 0,
+                                -0.5 * torch.ones_like(target_outcome),
+                                torch.zeros_like(target_outcome)))
+                denom = policy_weight.abs().sum()
+                if denom > 0:
+                    p_loss = (p_loss_per_sample * policy_weight).sum() / denom
+                else:
+                    p_loss = p_loss_per_sample.mean()
 
                 loss = (1 - POLICY_LOSS_WEIGHT) * v_loss + POLICY_LOSS_WEIGHT * p_loss
                 val_loss += loss.item()

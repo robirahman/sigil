@@ -6,3 +6,13 @@
 node_modules
 metrics.txt
 db.sqlite
+
+# secrets
+firebase-service-account.json
+
+# local agent state and run artifacts
+.claude/
+arena_run.log
+
+# untracked AI candidate checkpoints (only the production ones are tracked)
+ai/models/candidate_*.pt
