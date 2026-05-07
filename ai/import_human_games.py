@@ -194,8 +194,17 @@ def convert_game(game_record):
     # Player-supplied per-turn annotations: { '<turnNumber>': 'good' | 'bad' }.
     # Firebase keys are strings; we coerce to int below for matching.
     raw_annotations = game_record.get('annotations') or {}
+    # Firebase silently converts dicts with sequential integer keys into
+    # arrays (with nulls for gaps). Handle both shapes — the import
+    # otherwise crashes on the first list-shaped annotations record.
+    if isinstance(raw_annotations, list):
+        ann_iter = enumerate(raw_annotations)
+    elif isinstance(raw_annotations, dict):
+        ann_iter = raw_annotations.items()
+    else:
+        ann_iter = []
     annotations = {}
-    for k, v in raw_annotations.items():
+    for k, v in ann_iter:
         if v not in ('good', 'bad'):
             continue
         try:
