@@ -300,6 +300,14 @@
 				<span>Allow spectators</span>
 			</label>
 
+			<label class="allow-spec">
+				<input type="checkbox" x-model="competitiveVariant" />
+				<span>Competitive variant</span>
+			</label>
+			<small style="display: block; opacity: 0.7; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
+				Empty board start; both players blink onto any node for their first move. Joiners inherit the creator's choice.
+			</small>
+
 			<button class="lobby-button" x-on:click="createRoom">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" />
@@ -328,6 +336,7 @@
 				<span class="share-link__url" x-text="shareUrl"></span>
 				<button class="share-link__btn" x-on:click="copyShareLink" x-text="shareCopied ? 'Copied!' : 'Copy link'"></button>
 			</div>
+			<p class="status-msg" x-show="competitiveVariant" style="margin-top: 8px;">Variant: <strong>Competitive</strong></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
 		</div>
 
@@ -511,6 +520,10 @@
 				// Allow spectators (for created games)
 				allowSpectators: true,
 
+				// Competitive variant flag (creator-side; joiners inherit
+				// it from the room metadata via FirebaseSync).
+				competitiveVariant: localStorage.getItem('sigilVariant') === 'competitive',
+
 				// Active correspondence games
 				activeGames: [],
 
@@ -567,6 +580,13 @@
 									const m = rematchTc.moveTimeout;
 									this.tcCorr = m >= 3*24*60*60*1000 ? '3d' : (m >= 24*60*60*1000 ? '24h' : '12h');
 								}
+							}
+							// Carry the previous game's variant into the rematch
+							// room, so "Play Again" reproduces it.
+							const rematchVariant = sessionStorage.getItem('sigil_rematch_variant');
+							sessionStorage.removeItem('sigil_rematch_variant');
+							if (rematchVariant === 'competitive') {
+								this.competitiveVariant = true;
 							}
 							rematchHandled = true;
 							this._waitForAuth().then(() => {
@@ -643,8 +663,9 @@
 								this.phase = 'waiting';
 								const spellNames = roomData.spellNames;
 								const timeControl = roomData.timeControl || { type: 'none' };
+								const variant = roomData.variant === 'competitive' ? 'competitive' : 'standard';
 								_firebaseSync.onOpponentJoin = () => {
-									this._startOnlineGame(spellNames, 'red', null, false, timeControl);
+									this._startOnlineGame(spellNames, 'red', null, false, timeControl, variant);
 								};
 								return;
 							}
@@ -682,6 +703,7 @@
 						reconnectSfn: null,
 						isSpectator: true,
 						timeControl: roomData.timeControl || { type: 'none' },
+						variant: roomData.variant === 'competitive' ? 'competitive' : 'standard',
 						redDisplayName: (roomData.red && roomData.red.displayName) || 'Red',
 						blueDisplayName: (roomData.blue && roomData.blue.displayName) || 'Blue',
 						redUid: (roomData.red && roomData.red.uid) || null,
@@ -731,7 +753,13 @@
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
-						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators);
+						const variant = this.competitiveVariant ? 'competitive' : 'standard';
+						// Persist the lobby choice across visits (mirrors the
+						// localStorage key used by the static index page).
+						try {
+							localStorage.setItem('sigilVariant', variant);
+						} catch (e) {}
+						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant);
 						this.shareUrl = this._buildShareUrl(this.roomCode);
 						this.phase = 'waiting';
 						// Reflect the room code in the URL bar so the creator can copy it.
@@ -740,7 +768,7 @@
 						} catch (e) {}
 
 						_firebaseSync.onOpponentJoin = () => {
-							this._startOnlineGame(spellNames, 'red', null, false, timeControl);
+							this._startOnlineGame(spellNames, 'red', null, false, timeControl, variant);
 						};
 					} catch (e) {
 						this.lobbyError = 'Failed to create room: ' + e.message;
@@ -755,9 +783,9 @@
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo);
 						if (result.isSpectator) {
-							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl);
+							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl, result.variant);
 						} else {
-							this._startOnlineGame(result.spellNames, result.myColor, result.sfn, false, result.timeControl);
+							this._startOnlineGame(result.spellNames, result.myColor, result.sfn, false, result.timeControl, result.variant);
 							// Track correspondence games
 							if (result.timeControl && result.timeControl.type === 'correspondence') {
 								this._trackCorrespondenceGame(this.joinCode.toUpperCase(), result.myColor);
@@ -773,12 +801,19 @@
 					await this.joinRoom();
 				},
 
-				_startOnlineGame(spellNames, myColor, reconnectSfn, isSpectator, timeControl) {
+				_startOnlineGame(spellNames, myColor, reconnectSfn, isSpectator, timeControl, variant) {
 					this.phase = 'playing';
 					this.isSpectator = isSpectator || false;
 					this.roomCode = _firebaseSync.roomCode || this.roomCode;
 					this.shareUrl = this._buildShareUrl(this.roomCode);
 					try { window.history.replaceState({}, '', '?id=' + this.roomCode); } catch (e) {}
+					// Resolve variant: prefer the explicit arg, then the
+					// FirebaseSync state (for paths that don't pass one
+					// explicitly, e.g. shared-link reconnect), default to
+					// 'standard'.
+					const resolvedVariant = (variant === 'competitive')
+						? 'competitive'
+						: ((_firebaseSync && _firebaseSync.variant) || 'standard');
 					window._multiplayerState = {
 						sync: _firebaseSync,
 						spellNames: spellNames,
@@ -786,6 +821,7 @@
 						reconnectSfn: reconnectSfn || null,
 						isSpectator: isSpectator || false,
 						timeControl: timeControl || { type: 'none' },
+						variant: resolvedVariant,
 						redDisplayName: _firebaseSync.redDisplayName || 'Guest',
 						blueDisplayName: _firebaseSync.blueDisplayName || 'Guest',
 						redUid: _firebaseSync.redUid || null,

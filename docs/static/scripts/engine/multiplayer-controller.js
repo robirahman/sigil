@@ -73,7 +73,8 @@ class MultiplayerController {
 			sync.allowSpectators,
 			{ uid: sync.redUid, displayName: sync.redDisplayName },
 			{ uid: sync.blueUid, displayName: sync.blueDisplayName },
-			!!sync.ranked
+			!!sync.ranked,
+			sync.variant || 'standard'
 		);
 		await sync.setRematchNewRoomCode(code);
 	}
@@ -256,7 +257,10 @@ class MultiplayerController {
 	}
 
 	async startGame(reconnectSfn) {
-		this.board = new SigilBoard(this.spellNames);
+		// Variant is replicated via Firebase room metadata; sync.variant
+		// is set during createRoom / joinRoom / reconnectAsCreator.
+		const variant = (this.sync && this.sync.variant) || 'standard';
+		this.board = new SigilBoard(this.spellNames, variant);
 		if (reconnectSfn) {
 			this.board.loadFromSfn(reconnectSfn);
 		} else {

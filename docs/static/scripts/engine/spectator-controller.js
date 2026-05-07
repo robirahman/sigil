@@ -26,7 +26,9 @@ class SpectatorController {
 	}
 
 	async startGame(reconnectSfn) {
-		this.board = new SigilBoard(this.spellNames);
+		// Variant comes from the room metadata via FirebaseSync.
+		const variant = (this.sync && this.sync.variant) || 'standard';
+		this.board = new SigilBoard(this.spellNames, variant);
 		if (reconnectSfn) {
 			this.board.loadFromSfn(reconnectSfn);
 		} else {

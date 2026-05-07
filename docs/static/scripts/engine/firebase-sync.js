@@ -39,6 +39,11 @@ class FirebaseSync {
 
 		// Time control config (set during createRoom/joinRoom)
 		this.timeControl = null;
+
+		// Game-rules variant ('standard' | 'competitive'), set during
+		// createRoom / joinRoom and replicated to the joining peer
+		// through the room metadata.
+		this.variant = 'standard';
 	}
 
 	/** Get the current server time estimate. */
@@ -52,8 +57,9 @@ class FirebaseSync {
 	 * @param {object} [userInfo] - { uid, displayName, elo, isAnonymous }
 	 * @param {object} [timeControl] - { type, initialTime, increment, moveTimeout }
 	 * @param {boolean} [allowSpectators] - whether spectators can watch (default true)
+	 * @param {string} [variant] - 'standard' (default) or 'competitive'
 	 */
-	async createRoom(spellNames, userInfo, timeControl, allowSpectators) {
+	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant) {
 		const code = _generateRoomCode();
 		this.roomCode = code;
 		this.myColor = 'red';
@@ -62,6 +68,7 @@ class FirebaseSync {
 		this.redDisplayName = userInfo?.displayName || 'Guest';
 		this.timeControl = timeControl || { type: 'none' };
 		this.allowSpectators = allowSpectators !== false;
+		this.variant = variant === 'competitive' ? 'competitive' : 'standard';
 
 		const roomData = {
 			spellNames: spellNames,
@@ -72,6 +79,7 @@ class FirebaseSync {
 			ranked: false,
 			timeControl: this.timeControl,
 			allowSpectators: this.allowSpectators,
+			variant: this.variant,
 		};
 
 		const roomRef = this.db.ref('rooms/' + code);
@@ -109,6 +117,10 @@ class FirebaseSync {
 
 		this.timeControl = data.timeControl || { type: 'none' };
 		this.allowSpectators = data.allowSpectators !== false;
+		// Variant is room-scoped: the joiner inherits whatever the
+		// creator picked. Default 'standard' for older rooms whose
+		// data was written before the field existed.
+		this.variant = data.variant === 'competitive' ? 'competitive' : 'standard';
 
 		// Store player info from room data
 		if (data.red) {
@@ -149,6 +161,7 @@ class FirebaseSync {
 				spellNames: data.spellNames,
 				myColor: 'blue',
 				timeControl: this.timeControl,
+				variant: this.variant,
 				redDisplayName: this.redDisplayName,
 				blueDisplayName: this.blueDisplayName,
 			};
@@ -204,6 +217,7 @@ class FirebaseSync {
 				myColor: this.myColor,
 				sfn: data.currentSfn || null,
 				timeControl: this.timeControl,
+				variant: this.variant,
 				redDisplayName: this.redDisplayName,
 				blueDisplayName: this.blueDisplayName,
 			};
@@ -240,6 +254,7 @@ class FirebaseSync {
 			isSpectator: true,
 			sfn: data.currentSfn || null,
 			timeControl: this.timeControl,
+			variant: this.variant,
 			redDisplayName: this.redDisplayName,
 			blueDisplayName: this.blueDisplayName,
 		};
@@ -463,6 +478,7 @@ class FirebaseSync {
 		this.redDisplayName = userInfo?.displayName || (roomData.red && roomData.red.displayName) || 'Guest';
 		this.timeControl = roomData.timeControl || { type: 'none' };
 		this.allowSpectators = roomData.allowSpectators !== false;
+		this.variant = roomData.variant === 'competitive' ? 'competitive' : 'standard';
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
@@ -631,7 +647,7 @@ class FirebaseSync {
 	 * Skips the lobby join step so both clients can navigate straight in.
 	 * Returns the new 6-char room code.
 	 */
-	async createRematchRoom(spellNames, timeControl, allowSpectators, redInfo, blueInfo, ranked) {
+	async createRematchRoom(spellNames, timeControl, allowSpectators, redInfo, blueInfo, ranked, variant) {
 		const code = _generateRoomCode();
 		const roomData = {
 			spellNames: spellNames,
@@ -642,6 +658,7 @@ class FirebaseSync {
 			ranked: !!ranked,
 			timeControl: timeControl || { type: 'none' },
 			allowSpectators: allowSpectators !== false,
+			variant: variant === 'competitive' ? 'competitive' : 'standard',
 		};
 		await this.db.ref('rooms/' + code).set(roomData);
 		return code;
