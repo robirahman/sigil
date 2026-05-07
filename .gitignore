@@ -16,3 +16,26 @@ arena_run.log
 
 # untracked AI candidate checkpoints (only the production ones are tracked)
 ai/models/candidate_*.pt
+
+# Big files committed split via `split` so they fit under GitHub's
+# 100 MB push cap. Tracked: <name>_part_aa, <name>_part_ab, …
+# Locally reassembled (via ai/model_assembly.py for .pt or by `cat` for
+# JSONL) but the reassembled file itself is never committed.
+ai/models/best_model_hard.pt
+ai/data/human_expert_*.jsonl
+!ai/data/human_expert_*_part_*
+
+# Local concatenations of split self-play files (parts already tracked).
+ai/data/gen1_all.jsonl
+ai/data/gen2_all.jsonl
+ai/data/hard/hard_selfplay_all.jsonl
+
+# Legacy checkpoints from the pre-2026-05-08 (450-feature) schema,
+# stashed here while the new (456-feature) schema settles. Not pushed.
+ai/models/_legacy_450dim/
+
+# Local orchestration scripts + their logs (workspace artifacts)
+_train_orchestrator.py
+_train_orchestrator.log
+_arena_tournament.py
+_arena_tournament.log
