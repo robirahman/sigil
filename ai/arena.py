@@ -69,7 +69,16 @@ def play_arena_game(model1, model2, sims_per_move=200,
             return 'red'
         elif board.totalstones['blue'] + 1 > board.totalstones['red']:
             return 'blue'
-        return None
+        # Score perfectly tied at MAX_TURNS (red_total == blue_total + 1,
+        # so red and blue+phantom are equal). Sigil has no draws under
+        # the canonical rules; the in-engine 6-spell-counter tiebreak
+        # awards the win to the side NOT to-move ("the player whose
+        # turn it would be next has failed to break the tie"). Apply
+        # the same rule here rather than returning None — `None` was
+        # previously interpreted as a draw by callers, which Sigil
+        # does not have.
+        next_to_move = 'red' if turn_num % 2 == 0 else 'blue'
+        return 'blue' if next_to_move == 'red' else 'red'
 
     return board.winner
 
