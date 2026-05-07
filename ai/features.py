@@ -156,6 +156,68 @@ def _net_stone_delta_if_cast(board, spell_name, color):
     return float((delta_us - delta_them) / NUM_NODES)
 
 
+def _bfs_distance(sources, target):
+    """Shortest hop count from any node in `sources` to `target` over the
+    board's adjacency graph. Returns 0 if `target` is in `sources`, the
+    number of hops if reachable, or None if unreachable. Used by the
+    mana-pressure features below — adjacency-graph distance is a cheap
+    proxy for "how many tempo moves to reach this node" that doesn't
+    require simulating actual moves."""
+    if not sources:
+        return None
+    if target in sources:
+        return 0
+    seen = set(sources)
+    frontier = list(sources)
+    dist = 0
+    while frontier:
+        dist += 1
+        next_frontier = []
+        for node in frontier:
+            for nb in ADJACENCY.get(node, ()):
+                if nb in seen:
+                    continue
+                if nb == target:
+                    return dist
+                seen.add(nb)
+                next_frontier.append(nb)
+        frontier = next_frontier
+    return None
+
+
+# Adjacency-graph diameter ceiling used to normalize distances. The
+# 39-node Sigil board has eccentricity well under this; values
+# above the diameter just clamp to 1.0 in the normalized feature.
+_DISTANCE_NORM = 8
+
+
+def _mana_pressure_features(board, side_to_move, enemy):
+    """6-dim block: own and enemy distance to each of the three mana
+    nodes (a1, b1, c1), normalized by the board's effective diameter.
+
+    For each mana node:
+      - own distance: min hops from any of side_to_move's stones to the
+        node. 0 if the node is already occupied by side_to_move.
+        Normalized to [0, 1]; a side with no stones contributes 1.0.
+      - enemy distance: same, mirrored for the opponent.
+
+    Smaller values are better for that side (closer to claiming the
+    mana). The pair together encodes the "race to mana" tempo that the
+    base feature block can only express implicitly through stone
+    placement and adjacency fractions.
+    """
+    own_stones = {n for n in NODE_ORDER if board.stones[n] == side_to_move}
+    enemy_stones = {n for n in NODE_ORDER if board.stones[n] == enemy}
+
+    feats = np.zeros(6, dtype=np.float32)
+    for i, mana_node in enumerate(MANA_NODES):
+        own_d = _bfs_distance(own_stones, mana_node)
+        enm_d = _bfs_distance(enemy_stones, mana_node)
+        feats[2 * i]     = 1.0 if own_d is None else min(own_d, _DISTANCE_NORM) / _DISTANCE_NORM
+        feats[2 * i + 1] = 1.0 if enm_d is None else min(enm_d, _DISTANCE_NORM) / _DISTANCE_NORM
+    return feats
+
+
 def _tempo_scalar_features(board, side_to_move, enemy,
                            own_escape, enemy_escape,
                            own_fill, enm_fill,
@@ -282,6 +344,11 @@ def board_to_tensor(board, side_to_move=None):
         board, side_to_move, enemy)
     features.extend(own_threat)        # 9
     features.extend(enm_threat)        # 9   (= 18 dims)
+
+    # Mana-pressure block (added 2026-05-07): own + enemy distance to
+    # each of the three mana nodes. Normalized BFS distance over the
+    # adjacency graph; 0 when the side already occupies the node.
+    features.extend(_mana_pressure_features(board, side_to_move, enemy))  # 6
 
     tempo = _tempo_scalar_features(
         board, side_to_move, enemy,

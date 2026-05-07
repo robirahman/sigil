@@ -30,6 +30,7 @@ from ai.config import (
 )
 from notation import sfn_to_dict, NODE_ORDER, POSITIONS
 from simboard import SimBoard, MANA_NODES
+from ai.data_filters import is_pre_cutoff_fireblast_record
 
 
 class SigilDataset(Dataset):
@@ -93,6 +94,7 @@ def load_training_data(data_paths, max_records=None):
     records = []
     for path in data_paths:
         bad_lines = 0
+        skipped_fireblast = 0
         with open(path) as f:
             for line in f:
                 if not line.strip():
@@ -101,6 +103,12 @@ def load_training_data(data_paths, max_records=None):
                     d = json.loads(line)
                 except json.JSONDecodeError:
                     bad_lines += 1
+                    continue
+
+                # Skip records that pre-date the Fireblast rule change
+                # and contain Fireblast (see ai/data_filters.py).
+                if is_pre_cutoff_fireblast_record(path, d.get('sfn')):
+                    skipped_fireblast += 1
                     continue
 
                 # Convert SFN to features if raw_features not cached
@@ -135,6 +143,9 @@ def load_training_data(data_paths, max_records=None):
                     break
         if bad_lines:
             print(f"  {path}: skipped {bad_lines} malformed line(s)")
+        if skipped_fireblast:
+            print(f"  {path}: skipped {skipped_fireblast} pre-2026-05-07 "
+                  f"Fireblast position(s)")
         if max_records and len(records) >= max_records:
             break
 

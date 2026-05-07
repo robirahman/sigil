@@ -25,11 +25,13 @@ SPELL_TO_ID = {
 SPELL_EMBED_DIM = 16        # Embedding dimension per spell
 # Raw feature breakdown (must match features.board_to_tensor):
 #   250 — base block (stones, neighborhood, charges, mana, counters, lock, ...)
+#         (note: includes the side-to-move stone differential at index 244)
 #   156 — per-stone life-status (own/enemy escape_distance and crushable_now)
 #    18 — spell-position fill (own/enemy stone counts in each of 9 spell positions)
 #    18 — threat-of-activation (own/enemy net stones if each spell is cast now)
+#     6 — mana-pressure (own + enemy adjacency-graph distance to a1/b1/c1)
 #     8 — tempo scalars (min castable, count castable, mana diff, escape sums, ...)
-RAW_FEATURE_DIM = 250 + 156 + 18 + 18 + 8  # 450
+RAW_FEATURE_DIM = 250 + 156 + 18 + 18 + 6 + 8  # 456
 TRUNK_DIM = 400             # ResNet trunk width
 NUM_RES_BLOCKS = 6          # Residual blocks in trunk
 POLICY_HIDDEN_DIM = 256     # Policy head hidden dimension

@@ -59,6 +59,7 @@ from ai.config import (
 from notation import sfn_to_dict
 from simboard import SimBoard
 from ai.features import board_to_tensor, encode_all_turns
+from ai.data_filters import is_pre_cutoff_fireblast_record
 
 
 def _materialize_features(d):
@@ -117,6 +118,7 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
     """
     records = []
     bad = 0
+    skipped_fireblast = 0
     with open(path) as f:
         for line in f:
             if not line.strip():
@@ -125,6 +127,12 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
                 d = json.loads(line)
             except json.JSONDecodeError:
                 bad += 1
+                continue
+
+            # Skip records that pre-date the Fireblast rule change
+            # and contain Fireblast (see ai/data_filters.py).
+            if is_pre_cutoff_fireblast_record(path, d.get('sfn')):
+                skipped_fireblast += 1
                 continue
 
             policy = d.get('policy', [])
@@ -179,6 +187,9 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
                     records.append(rec)
     if bad:
         print(f"  {path}: skipped {bad} malformed line(s)")
+    if skipped_fireblast:
+        print(f"  {path}: skipped {skipped_fireblast} pre-2026-05-07 "
+              f"Fireblast position(s)")
     print(f"  {path}: loaded {len(records)} records (source={source})")
     return records
 

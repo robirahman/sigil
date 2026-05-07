@@ -184,6 +184,44 @@ To use it, update `ai/mcts_ai_player.py` to load the NumPy model instead.
   random network, so the self-play games will be low quality. This is normal.
   Quality improves rapidly after the first training cycle.
 
+## Rule changes and training-data hygiene
+
+When game rules change, every training position recorded under the old rules
+becomes potentially poisoned: positions that the network learns to evaluate
+under the old rules will guide it toward moves that misvalue the new
+mechanics. To keep things clean, the loaders apply per-record date-aware
+filters that exclude affected positions automatically.
+
+### Fireblast nerf — cutoff 2026-05-07
+
+On 2026-05-07 the latest-edition rules nerfed Fireblast. The spell still
+destroys all enemy stones bordering yours, but the caster must now sacrifice
+one of their own stones afterward. Boards that contain Fireblast and were
+generated before this date encode the OLD value of the spell (no sacrifice
+cost), and training on them teaches the network the wrong cost-benefit for
+casting Fireblast.
+
+The training data loaders (`ai/train_sigil.py` and `ai/train_sigil_v2.py`)
+import `is_pre_cutoff_fireblast_record` from `ai/data_filters.py` and skip
+any record whose:
+
+  1. board's spell list contains `Fireblast`, AND
+  2. data file's effective date is strictly before `2026-05-07`.
+
+The "effective date" is parsed from the filename if it contains a
+`YYYY-MM-DD` token (e.g. `selfplay_v22b_2026-05-03.jsonl`), and falls back
+to the file's mtime otherwise. Boards that don't contain Fireblast are
+unaffected and are kept regardless of date.
+
+You'll see a count printed at load time, e.g.:
+
+```
+ai/data/selfplay_v22b_2026-05-03.jsonl: skipped 14823 pre-2026-05-07 Fireblast position(s)
+```
+
+If a future rule change invalidates more old positions, add another check
+to `ai/data_filters.py` and document the new cutoff alongside this one.
+
 ## Git Branch Strategy
 
 Training data and model weights are managed across two branches:
