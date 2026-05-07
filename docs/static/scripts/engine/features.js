@@ -441,6 +441,22 @@ function encodeTurn(turn, board, color) {
 	features[73] = Math.min(hardCount, 3) / 3.0;
 	features[74] = Math.min(Math.max(spellPosDelta, -3), 3) / 3.0;
 
+	// v28: tempo-waste flag for re-filling our own locked spell.
+	const ownLock = board.lock[color];
+	if (ownLock !== null && ownLock !== undefined && simAfter !== null) {
+		const lockIdx = board.spellNames.indexOf(ownLock);
+		const lockNodes = lockIdx >= 0 ? _SPELL_POSITION_NODES[lockIdx] : null;
+		if (lockNodes && lockNodes.length) {
+			let wasted = 0;
+			for (const n of lockNodes) {
+				if (simAfter.stones[n] === color && board.stones[n] !== color) {
+					wasted++;
+				}
+			}
+			features[79] = Math.min(wasted, 3) / 3.0;
+		}
+	}
+
 	return features;
 }
 

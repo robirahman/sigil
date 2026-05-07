@@ -404,7 +404,10 @@ def encode_turn(turn, board, color):
     #  [76]    — enemy threat-of-activation growth (max post-pre, [0,1])  [v27]
     #  [77]    — own threat-of-activation growth (max post-pre, [0,1])  [v27]
     #  [78]    — disrupts enemy mana-to-mana chain (count / 3)  [v27]
-    #  [79:84] — reserved
+    #  [79]    — stones added to MY locked-spell position(s) by this
+    #            turn / 3. Locked spells can't be cast even when fully
+    #            charged, so high values flag wasted-tempo turns.  [v28]
+    #  [80:84] — reserved
 
     crushable_own_before = _count_crushable(board, color, enemy)
     crushable_enm_before = _count_crushable(board, enemy, color)
@@ -529,6 +532,22 @@ def encode_turn(turn, board, color):
     features[72] = min(soft_count, 3) / 3.0
     features[73] = min(hard_count, 3) / 3.0
     features[74] = min(max(spell_pos_delta, -3), 3) / 3.0
+
+    # v28: tempo-waste flag for re-filling our own locked spell.
+    own_lock = board.lock[color]
+    if own_lock is not None and sim_after is not None:
+        try:
+            lock_idx = board.spell_names.index(own_lock)
+            lock_nodes = _SPELL_POSITION_NODES[lock_idx]
+        except (ValueError, IndexError):
+            lock_nodes = None
+        if lock_nodes:
+            wasted = 0
+            for n in lock_nodes:
+                if (sim_after.stones.get(n) == color
+                        and board.stones.get(n) != color):
+                    wasted += 1
+            features[79] = min(wasted, 3) / 3.0
 
     return torch.tensor(features, dtype=torch.float32)
 
