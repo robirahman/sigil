@@ -59,9 +59,11 @@ class SigilBoard {
 		// Immediate-loss (latest-edition rules): a player with zero
 		// stones on playable nodes loses right away. Blue's +1 phantom
 		// counter token doesn't count for survival. The competitive
-		// variant suspends this check during the empty-board opening
-		// (turnCounter < 2), since both players legitimately start at 0.
-		const openingPass = (this.variant === 'competitive' && this.turnCounter < 2);
+		// variant suspends this check until BOTH opening blinks have
+		// landed. The live game-controller increments turnCounter
+		// before each turn runs, so red's opening is turn 1 and
+		// blue's is turn 2 — checking `<= 2` covers both.
+		const openingPass = (this.variant === 'competitive' && this.turnCounter <= 2);
 		if (!this.gameover && !openingPass) {
 			if (redCount === 0 && blueCount === 0) {
 				this.gameover = true;

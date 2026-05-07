@@ -89,9 +89,13 @@ class SimBoard {
 
 		// Immediate-loss (latest-edition rules): zero stones on playable
 		// nodes loses immediately. Blue's +1 phantom counter doesn't count.
-		// Suspended during the competitive variant's empty-board opening
-		// (turnCounter < 2).
-		const openingPass = (this.variant === 'competitive' && this.turnCounter < 2);
+		// Suspended during the competitive variant's empty-board opening.
+		// The live game-controller increments turnCounter before each
+		// turn runs (red=1, blue=2), so `<= 2` covers both opening
+		// turns; it's also safe under the 0-indexed test convention
+		// because by the time turn 2 starts, both players already have
+		// at least one stone from their opening blinks.
+		const openingPass = (this.variant === 'competitive' && this.turnCounter <= 2);
 		if (!this.gameover && !openingPass) {
 			if (rc === 0 && bc === 0) {
 				this.gameover = true;
@@ -779,9 +783,12 @@ class SimBoard {
 	* getLegalTurns(color) {
 		this.update();
 
-		// Competitive variant opening: red turn-0 / blue turn-1 each get a
-		// free blink onto any empty node. No spells, no dash.
-		if (this.variant === 'competitive' && this.turnCounter < 2) {
+		// Competitive variant opening: red and blue each get a free
+		// blink onto any empty node on their first turn. No spells,
+		// no dash. The bound matches the openingPass gate in update():
+		// `<= 2` covers turns 1+2 under the 1-indexed live convention
+		// and turns 0+1+2 under the 0-indexed test convention.
+		if (this.variant === 'competitive' && this.turnCounter <= 2) {
 			for (const n of NODE_ORDER) {
 				if (this.stones[n] !== null) continue;
 				yield new SimTurn([
