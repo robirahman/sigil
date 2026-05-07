@@ -258,6 +258,16 @@ class GameController {
 				this.emit({ type: 'new_stone_animation', color, node: resp });
 				this.emit(board.getBoardStatePayload());
 			}
+			// Wait for an explicit end-turn so the player can hit Reset
+			// before committing. AI players send 'pass' immediately via
+			// _takeAITurn's competitive-opening path, so this awaits at
+			// most a single click for humans and is invisible for AI.
+			await this.getInput({
+				type: 'message',
+				message: 'Stone placed. End turn or reset.',
+				awaiting: 'action',
+				actionlist: ['pass'],
+			});
 			return;
 		}
 

@@ -162,6 +162,24 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	caps = caps || NARROW_ENUM_CAPS;
 	board.update();
 	const enemy = board._enemy(color);
+
+	// Competitive variant opening: blink to any empty node, no spells.
+	// Mirrors the guard in board.getLegalTurns() and ai/enumerator.py;
+	// without it, MinimaxAI's depth-1 enumeration sees zero moves
+	// (board has no own stones to move from) and falls back to pass,
+	// which causes hard/very_hard to forfeit their opening turn.
+	if (board.variant === 'competitive' && board.turnCounter <= 2) {
+		const out = [];
+		for (const n of NODE_ORDER) {
+			if (board.stones[n] !== null) continue;
+			out.push(new SimTurn([
+				new SimAction('blink', { node: n }),
+				new SimAction('pass'),
+			]));
+		}
+		return out;
+	}
+
 	const hasSeal = (board.chargedSpells[color] || []).includes('Seal_of_Wind');
 	let moveTargets;
 	if (hasSeal) moveTargets = board._blinkable(color);
