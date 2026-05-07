@@ -564,6 +564,11 @@ class FirebaseSync {
 		gameRecord.redUid = this.redUid || null;
 		gameRecord.blueUid = this.blueUid || null;
 		gameRecord.ranked = this.ranked || false;
+		// Backfill the variant if the caller didn't set it (older builds
+		// / edge paths). Treats the room metadata as the source of truth.
+		if (gameRecord.variant !== 'competitive' && gameRecord.variant !== 'standard') {
+			gameRecord.variant = this.variant === 'competitive' ? 'competitive' : 'standard';
+		}
 		// Merge any room-level annotations (written live by either player) into
 		// the game record before pushing.
 		try {

@@ -493,6 +493,12 @@ class MultiplayerController {
 			turns: this._gameLog,
 			roomCode: this.sync.roomCode,
 			timestamp: Date.now(),
+			// Variant the live board actually played under. Falls back
+			// to sync.variant (creator's choice persisted in the room
+			// metadata) when board.variant is missing for any reason.
+			variant: (this.board && this.board.variant === 'competitive')
+				? 'competitive'
+				: ((this.sync && this.sync.variant === 'competitive') ? 'competitive' : 'standard'),
 		};
 		this.sync.saveCompletedGame(record);
 		// Mark the room finished so the same `?id=CODE` URL serves review mode.

@@ -874,6 +874,11 @@ document.addEventListener('alpine:init', () => {
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
 						const humanName = aiLabel || _aiAuthManager.displayName || 'You';
 						const aiName = _aiNameFor(difficulty);
+						// Variant the engine actually played under (read from the
+						// live board so we don't drift from the URL query param
+						// in edge cases like rematch/reconnect).
+						const recordVariant = (_engineRef && _engineRef.board && _engineRef.board.variant === 'competitive')
+							? 'competitive' : 'standard';
 
 						// Create a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE. AI games don't
@@ -893,6 +898,7 @@ document.addEventListener('alpine:init', () => {
 								gameLog: gameTurns,
 								allowSpectators: true,
 								timeControl: { type: 'none' },
+								variant: recordVariant,
 							});
 						} catch (e) {
 							console.warn('Could not save AI replay room:', e.message);
@@ -907,6 +913,7 @@ document.addEventListener('alpine:init', () => {
 							redUid: _humanColor === 'red' ? humanUid : aiUid,
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
 							ranked: !_isExpansionGame,
+							variant: recordVariant,
 						};
 
 						// Attach any annotations the human made during the game.

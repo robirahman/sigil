@@ -222,6 +222,38 @@ ai/data/selfplay_v22b_2026-05-03.jsonl: skipped 14823 pre-2026-05-07 Fireblast p
 If a future rule change invalidates more old positions, add another check
 to `ai/data_filters.py` and document the new cutoff alongside this one.
 
+### Competitive variant opening-pass bug — cutoff 2026-05-08
+
+When the Competitive variant first shipped on 2026-05-07, the opening-pass
+check that suspends the immediate-loss rule during the empty-board opening
+had an off-by-one against the live game-controller's 1-indexed turn
+numbering. Blue's opening blink ran with `turnCounter == 2`, but the
+guard tested `< 2` instead of `<= 2`, so `update()` fired the
+zero-stones-loses rule against blue *during their own opening turn*.
+Effects:
+
+  - Single-player games against the easy AI ended after one move with red
+    declared the winner (the user, who'd just placed their first stone).
+  - Multiplayer competitive games and games against the medium AI hit the
+    same trip but produced different downstream symptoms (legal-turn list
+    collapsed to `[pass]`, MCTS hung).
+
+These short games are not real play and would teach the network to
+expect quick wins for the side that goes first under the Competitive
+variant. The fix landed the same day the variant shipped, so any
+Competitive-variant record dated strictly before 2026-05-08 is excluded
+via `is_pre_competitive_fix_record(path, sfn)` in `ai/data_filters.py`.
+The check looks at the SFN's trailing variant token (written by both
+the Python and JS engines) and the file's effective date; standard-
+variant records are never skipped by this filter regardless of date.
+
+You'll see the count printed at load time, alongside any Fireblast
+skips:
+
+```
+ai/data/selfplay_2026-05-07.jsonl: skipped 31 pre-2026-05-08 Competitive-variant position(s) (opening-pass bug)
+```
+
 ## Git Branch Strategy
 
 Training data and model weights are managed across two branches:
