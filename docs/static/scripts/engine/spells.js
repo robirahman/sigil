@@ -719,15 +719,29 @@ const SpellResolvers = {
  */
 async function doPushEnemy(board, nodeName, color, getInput, emit) {
 	const enemy = board.enemy(color);
-	board.stones[nodeName] = color;
 
-	emit({ type: 'new_stone_animation', color, node: nodeName });
+	// Resolve the push outcome BEFORE mutating the board, so the
+	// intermediate state — where the enemy stone has been overwritten
+	// but not yet pushed/crushed — never triggers update()'s
+	// zero-stones immediate-loss rule. Without this, hard-moving the
+	// enemy's only stone (e.g. on red's third turn of a competitive
+	// game while blue has just one opening stone) briefly drops the
+	// enemy count to 0 mid-animation; update() then ends the game
+	// with a false "red wins" before the push destination is applied.
+	// findPushOptions does not require fromNode to already be `color`
+	// — it just adds fromNode to the visited set. So we can compute
+	// the push outcome with the board still in its pre-move state.
+	const { options, crushed } = findPushOptions(board, nodeName, color);
+
+	// Atomic apply: do all stone mutations together, then a single
+	// update() at the end. The new_stone_animation / push_animation
+	// emits drive the UI's per-action visuals; getBoardStatePayload
+	// is what feeds reactive state, and we hold that until after the
+	// mutations are settled.
+	board.stones[nodeName] = color;
 	board.lastPlay = nodeName;
 	board.lastPlayer = color;
-	board.update();
-	emit(board.getBoardStatePayload());
-
-	const { options, crushed } = findPushOptions(board, nodeName, color);
+	emit({ type: 'new_stone_animation', color, node: nodeName });
 
 	if (crushed) {
 		emit({ type: 'crush_animation', crushed_color: enemy, node: nodeName });
@@ -746,7 +760,9 @@ async function doPushEnemy(board, nodeName, color, getInput, emit) {
 		return;
 	}
 
-	// Multiple options: player chooses
+	// Multiple options: player chooses. The enemy stone is currently
+	// "in transit" (overwritten at fromNode, not yet at dest), so we
+	// must defer update() until the choice lands.
 	while (true) {
 		const pushingPayload = { type: 'pushingoptions' };
 		for (const opt of options) {
