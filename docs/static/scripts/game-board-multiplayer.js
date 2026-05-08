@@ -166,6 +166,7 @@ document.addEventListener('alpine:init', () => {
 			annotationMode: false,
 			lastOpponentTurn: null, // { turnNumber, color } or null
 			annotations: {},        // { turnNumber: 'good' | 'bad' }
+			evalAnnotations: {},    // { turnNumber: 'red' | 'blue' | 'even' }
 			setAnnotation(value) {
 				if (!this.annotationMode || !this.lastOpponentTurn) return;
 				if (this.isSpectator) return;
@@ -183,6 +184,23 @@ document.addEventListener('alpine:init', () => {
 				if (next === 'good') this.messageHistory.push('You marked turn ' + tn + ' as a good move.');
 				else if (next === 'bad') this.messageHistory.push('You marked turn ' + tn + ' as a bad move.');
 				else this.messageHistory.push('Annotation cleared for turn ' + tn + '.');
+			},
+			setEvalAnnotation(value) {
+				if (!this.annotationMode || !this.lastOpponentTurn) return;
+				if (this.isSpectator) return;
+				const tn = this.lastOpponentTurn.turnNumber;
+				const current = this.evalAnnotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) {
+					delete this.evalAnnotations[tn];
+				} else {
+					this.evalAnnotations[tn] = next;
+				}
+				if (this._engine && typeof this._engine.setEvalAnnotation === 'function') {
+					this._engine.setEvalAnnotation(tn, next);
+				}
+				if (next) this.messageHistory.push('You marked the position after turn ' + tn + ' as ' + (next === 'even' ? 'even' : next + ' ahead') + '.');
+				else this.messageHistory.push('Position eval cleared for turn ' + tn + '.');
 			},
 
 			startReview() {

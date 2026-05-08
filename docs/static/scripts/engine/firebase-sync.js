@@ -581,6 +581,19 @@ class FirebaseSync {
 		} catch (e) {
 			console.error('Failed to read room annotations:', e);
 		}
+		// Mirror the merge for the position-evaluation annotations
+		// ('red' | 'blue' | 'even') so both signals end up on the
+		// completed_games record.
+		try {
+			const evalSnap = await this.roomRef.child('eval_annotations').once('value');
+			const roomEvalAnnotations = evalSnap.val();
+			if (roomEvalAnnotations) {
+				gameRecord.eval_annotations = Object.assign(
+					{}, gameRecord.eval_annotations || {}, roomEvalAnnotations);
+			}
+		} catch (e) {
+			console.error('Failed to read room eval_annotations:', e);
+		}
 		try {
 			const ref = await this.db.ref('completed_games').push(gameRecord);
 			// Process Elo client-side for ranked games
@@ -608,6 +621,25 @@ class FirebaseSync {
 			}
 		} catch (e) {
 			console.error('Failed to write annotation:', e);
+		}
+	}
+
+	/**
+	 * Write a single position-eval annotation ('red' | 'blue' | 'even') to
+	 * the shared room path, or clear it. Mirrors setAnnotation but for the
+	 * "who's winning" labels added in the eval-annotations feature.
+	 */
+	async setEvalAnnotation(turnNumber, value) {
+		if (!this.roomRef) return;
+		const ref = this.roomRef.child('eval_annotations').child(String(turnNumber));
+		try {
+			if (value === 'red' || value === 'blue' || value === 'even') {
+				await ref.set(value);
+			} else {
+				await ref.remove();
+			}
+		} catch (e) {
+			console.error('Failed to write eval annotation:', e);
 		}
 	}
 

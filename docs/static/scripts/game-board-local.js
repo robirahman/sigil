@@ -137,6 +137,7 @@ document.addEventListener('alpine:init', () => {
 			annotationMode: false,
 			lastOpponentTurn: null,
 			annotations: {},
+			evalAnnotations: {},
 			setAnnotation(value) {
 				if (!this.annotationMode || !this.lastOpponentTurn) return;
 				const tn = this.lastOpponentTurn.turnNumber;
@@ -150,6 +151,19 @@ document.addEventListener('alpine:init', () => {
 				if (next === 'good') this.messageHistory.push('You marked turn ' + tn + ' as a good move.');
 				else if (next === 'bad') this.messageHistory.push('You marked turn ' + tn + ' as a bad move.');
 				else this.messageHistory.push('Annotation cleared for turn ' + tn + '.');
+			},
+			setEvalAnnotation(value) {
+				if (!this.annotationMode || !this.lastOpponentTurn) return;
+				const tn = this.lastOpponentTurn.turnNumber;
+				const current = this.evalAnnotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) {
+					delete this.evalAnnotations[tn];
+				} else {
+					this.evalAnnotations[tn] = next;
+				}
+				if (next) this.messageHistory.push('You marked the position after turn ' + tn + ' as ' + (next === 'even' ? 'even' : next + ' ahead') + '.');
+				else this.messageHistory.push('Position eval cleared for turn ' + tn + '.');
 			},
 
 			formatTimer(timerSeconds) {
@@ -919,6 +933,9 @@ document.addEventListener('alpine:init', () => {
 						// Attach any annotations the human made during the game.
 						if (_this.annotations && Object.keys(_this.annotations).length > 0) {
 							gameRecord.annotations = Object.assign({}, _this.annotations);
+						}
+						if (_this.evalAnnotations && Object.keys(_this.evalAnnotations).length > 0) {
+							gameRecord.eval_annotations = Object.assign({}, _this.evalAnnotations);
 						}
 
 						const ref = await db.ref('completed_games').push(gameRecord);

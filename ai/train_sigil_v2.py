@@ -179,6 +179,13 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
                 bad += 1
                 continue
 
+            # Side-to-move from SFN. Used by collate_fn to convert red-POV
+            # eval annotations into side-to-move POV for the value-head loss.
+            try:
+                stm = sfn_to_dict(sfn)['turn']
+            except Exception:
+                stm = 'red'
+
             rec = {
                 'raw_features': d['raw_features'],
                 'spell_ids': d['spell_ids'],
@@ -190,6 +197,8 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
                 'weight': w,
                 'game_id': gid,
                 'annotation': d.get('annotation'),
+                'eval_annotation': d.get('eval_annotation'),
+                'side_to_move': stm,
             }
             records.append(rec)
             if rec['annotation'] == 'bad' and bad_oversample > 1:
@@ -241,6 +250,19 @@ def collate_fn(batch):
         {'good': 1.0, 'bad': -1.0}.get(b.get('annotation'), 0.0)
         for b in batch
     ], dtype=torch.float32)
+    # Encode position-evaluation annotation (always recorded RED-POV) and
+    # convert to side-to-move POV so the value-head loss compares like with
+    # like. NaN signals "no annotation" -> the loss masks that row out.
+    _EVAL_RED_POV = {'red': 1.0, 'blue': -1.0, 'even': 0.0}
+    eval_target = torch.tensor([
+        _EVAL_RED_POV.get(b.get('eval_annotation'), float('nan'))
+        for b in batch
+    ], dtype=torch.float32)
+    sign_for_stm = torch.tensor([
+        1.0 if b.get('side_to_move') == 'red' else -1.0
+        for b in batch
+    ], dtype=torch.float32)
+    eval_target = eval_target * sign_for_stm  # nan * x = nan, preserves mask
 
     max_turns = max(b['num_turns'] for b in batch)
     B = len(batch)
@@ -265,6 +287,7 @@ def collate_fn(batch):
         'weights': weights,
         'policy_eligible': policy_eligible,
         'annotation_code': annotation_code,
+        'eval_target': eval_target,
     }
 
 
@@ -288,7 +311,8 @@ def split_by_game(records, val_fraction=0.1, seed=0):
 def compute_losses(model, batch, device, label_smoothing=0.0,
                    annotation_good_weight=3.0, annotation_bad_weight=2.0,
                    blunder_weight=0.0, blunder_pos_weight=1.0,
-                   tactical_weight=0.0):
+                   tactical_weight=0.0,
+                   eval_annotation_weight=0.3):
     raw = batch['raw_features'].to(device)
     spell_ids = batch['spell_ids'].to(device)
     turn_enc = batch['turn_encodings'].to(device)
@@ -320,6 +344,21 @@ def compute_losses(model, batch, device, label_smoothing=0.0,
     # Value: weighted MSE over all samples.
     v_per = (value.squeeze(-1) - target_outcome) ** 2
     v_loss = (v_per * weights).sum() / weights.sum().clamp(min=1e-6)
+
+    # Auxiliary value-head MSE against human-supplied position eval
+    # ('red' / 'blue' / 'even' = +1 / -1 / 0 in side-to-move POV).
+    # Only computed for annotated rows; nan in eval_target masks the rest.
+    eval_target = batch.get('eval_target')
+    if eval_target is not None and eval_annotation_weight > 0:
+        eval_target = eval_target.to(device)
+        eval_mask = ~torch.isnan(eval_target)
+        n_annotated = eval_mask.sum().clamp(min=1)
+        if eval_mask.any():
+            v_pred = value.squeeze(-1)
+            ev_diff = torch.where(
+                eval_mask, v_pred - eval_target, torch.zeros_like(v_pred))
+            ev_loss = (ev_diff ** 2).sum() / n_annotated
+            v_loss = v_loss + eval_annotation_weight * ev_loss
 
     # Policy: weighted cross-entropy on policy-eligible samples only.
     max_t = logits.size(1)
@@ -505,7 +544,8 @@ def train(args):
                 annotation_bad_weight=args.annotation_bad_weight,
                 blunder_weight=args.blunder_weight,
                 blunder_pos_weight=args.blunder_pos_weight,
-                tactical_weight=args.tactical_weight)
+                tactical_weight=args.tactical_weight,
+                eval_annotation_weight=args.eval_annotation_weight)
             loss = (args.value_weight * v_loss
                     + args.policy_weight * p_loss
                     + args.blunder_weight * b_loss
@@ -539,7 +579,8 @@ def train(args):
                     annotation_bad_weight=args.annotation_bad_weight,
                     blunder_weight=args.blunder_weight,
                     blunder_pos_weight=args.blunder_pos_weight,
-                    tactical_weight=args.tactical_weight)
+                    tactical_weight=args.tactical_weight,
+                    eval_annotation_weight=args.eval_annotation_weight)
                 v_v_sum += v_loss.item()
                 v_p_sum += p_loss.item()
                 v_b_sum += b_loss.item()
@@ -613,6 +654,10 @@ if __name__ == '__main__':
                         help='Per-sample policy weight for human-marked "good" moves')
     parser.add_argument('--annotation-bad-weight', type=float, default=2.0,
                         help='Magnitude of negative policy weight for human-marked "bad" moves')
+    parser.add_argument('--eval-annotation-weight', type=float, default=0.3,
+                        help='Weight for the auxiliary value-head MSE term that '
+                             'pulls the predicted value toward the human-supplied '
+                             'eval_annotation (red/blue/even). 0 disables it.')
     parser.add_argument('--bad-oversample', type=int, default=1,
                         help='Replicate annotation=="bad" records this many times in the dataset')
     parser.add_argument('--blunder-weight', type=float, default=0.0,

@@ -215,6 +215,26 @@
 								title="Mark this opponent move as a bad move">
 								<span aria-hidden="true">&#x1F44E;</span> Bad
 							</button>
+							<span class="annotation-bar__divider" aria-hidden="true">|</span>
+							<span class="annotation-bar__label">Position eval:</span>
+							<button class="annotation-bar__btn annotation-bar__btn--red"
+								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[lastOpponentTurn?.turnNumber] === 'red' }"
+								x-on:click="setEvalAnnotation('red')"
+								title="Red is winning after this move">
+								Red ahead
+							</button>
+							<button class="annotation-bar__btn"
+								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[lastOpponentTurn?.turnNumber] === 'even' }"
+								x-on:click="setEvalAnnotation('even')"
+								title="The position is roughly balanced">
+								Even
+							</button>
+							<button class="annotation-bar__btn annotation-bar__btn--blue"
+								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[lastOpponentTurn?.turnNumber] === 'blue' }"
+								x-on:click="setEvalAnnotation('blue')"
+								title="Blue is winning after this move">
+								Blue ahead
+							</button>
 						</div>
 
 						<div class="dice">

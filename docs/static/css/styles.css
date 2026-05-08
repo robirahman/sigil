@@ -740,6 +740,23 @@ html[data-theme="volcanic"].webp {
 	color: #000;
 	font-weight: bold;
 }
+.annotation-bar__divider {
+	color: var(--color-text-dim, #666);
+	margin: 0 4px;
+	user-select: none;
+}
+.annotation-bar__btn--red { border-color: rgba(220, 80, 80, 0.6); }
+.annotation-bar__btn--red.annotation-bar__btn--active {
+	background: rgba(220, 80, 80, 0.85);
+	border-color: rgba(220, 80, 80, 0.85);
+	color: #fff;
+}
+.annotation-bar__btn--blue { border-color: rgba(80, 130, 220, 0.6); }
+.annotation-bar__btn--blue.annotation-bar__btn--active {
+	background: rgba(80, 130, 220, 0.85);
+	border-color: rgba(80, 130, 220, 0.85);
+	color: #fff;
+}
 
 .feed--chat {
 	margin-bottom: 10px;

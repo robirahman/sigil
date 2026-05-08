@@ -514,6 +514,16 @@ class MultiplayerController {
 		return this.sync.setAnnotation(turnNumber, value);
 	}
 
+	/**
+	 * Annotate the post-turn position evaluation ('red' | 'blue' | 'even').
+	 * Independent of setAnnotation — a turn can have neither, either, or
+	 * both kinds of annotation attached.
+	 */
+	setEvalAnnotation(turnNumber, value) {
+		if (!this.sync) return;
+		return this.sync.setEvalAnnotation(turnNumber, value);
+	}
+
 	// These methods are identical to GameController's — just reuse the logic
 	async _doMove(color, nodeName, standardMove) {
 		const board = this.board;

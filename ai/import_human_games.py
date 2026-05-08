@@ -212,6 +212,25 @@ def convert_game(game_record):
         except (TypeError, ValueError):
             continue
 
+    # Per-turn position-evaluation annotations: { turnNumber: 'red' | 'blue' | 'even' }.
+    # Independent of the move-quality annotations above (a turn can have neither,
+    # either, or both). Same list-or-dict shape handling.
+    raw_eval = game_record.get('eval_annotations') or {}
+    if isinstance(raw_eval, list):
+        eval_iter = enumerate(raw_eval)
+    elif isinstance(raw_eval, dict):
+        eval_iter = raw_eval.items()
+    else:
+        eval_iter = []
+    eval_annotations = {}
+    for k, v in eval_iter:
+        if v not in ('red', 'blue', 'even'):
+            continue
+        try:
+            eval_annotations[int(k)] = v
+        except (TypeError, ValueError):
+            continue
+
     if not spell_names or not turns or not winner:
         return []
 
@@ -275,6 +294,12 @@ def convert_game(game_record):
         # OPPOSITE-color player about the move whose turnNumber this is.
         if turn_number is not None and turn_number in annotations:
             position['annotation'] = annotations[turn_number]
+        # Position-evaluation annotation, if any. Always recorded from
+        # RED's POV ('red' = red is winning, 'blue' = blue is winning).
+        # Train_sigil_v2 converts to side-to-move POV when computing the
+        # value-head loss.
+        if turn_number is not None and turn_number in eval_annotations:
+            position['eval_annotation'] = eval_annotations[turn_number]
         positions.append(position)
 
     if unmatched > 0:
