@@ -166,6 +166,53 @@ document.addEventListener('alpine:init', () => {
 				else this.messageHistory.push('Position eval cleared for turn ' + tn + '.');
 			},
 
+			// Dev-only AI evaluation overlay (gated on auth-manager.isDeveloper).
+			// Lazy-loads SigilNet on first toggle so non-devs and devs-with-toggle
+			// -off pay nothing. The model is the same one used by Medium/Hard/
+			// VeryHard inference; we just call its value head and convert from
+			// side-to-move POV to red POV for a stable, non-flickering display.
+			isDeveloper: false,
+			devEvalEnabled: false,
+			devEvalValue: null,
+			devEvalLoading: false,
+			_devEvalModel: null,
+			async toggleDevEval() {
+				if (!this.isDeveloper) return;
+				this.devEvalEnabled = !this.devEvalEnabled;
+				if (this.devEvalEnabled) {
+					await this._recomputeDevEval();
+				} else {
+					this.devEvalValue = null;
+				}
+			},
+			async _recomputeDevEval() {
+				if (!this.devEvalEnabled || !this.isDeveloper) return;
+				if (!_engineRef || !_engineRef.board) return;
+				try {
+					if (!this._devEvalModel && !this.devEvalLoading) {
+						this.devEvalLoading = true;
+						try {
+							this._devEvalModel = await SigilNetJS.load(
+								'static/models/sigil_net.json',
+								'static/models/sigil_net.bin',
+							);
+						} finally {
+							this.devEvalLoading = false;
+						}
+					}
+					if (!this._devEvalModel) return;
+					const board = _engineRef.board;
+					const stm = board.whoseTurn || 'red';
+					const { raw, spellIds } = boardToTensor(board, stm);
+					const out = this._devEvalModel.forward(raw, spellIds, null, 0);
+					const v = out.value;
+					// Convert side-to-move POV to red POV.
+					this.devEvalValue = stm === 'red' ? v : -v;
+				} catch (e) {
+					console.warn('Dev eval failed:', e);
+				}
+			},
+
 			formatTimer(timerSeconds) {
 				const sec = timerSeconds % 60;
 				const min = (timerSeconds - sec) / 60;
@@ -435,6 +482,7 @@ document.addEventListener('alpine:init', () => {
 							try {
 								await _aiAuthManager.loadProfile(firebase.database());
 								_this.annotationMode = !!_aiAuthManager.annotationMode;
+								_this.isDeveloper = !!_aiAuthManager.isDeveloper;
 							} catch (e) {
 								// Non-fatal; just leave annotation mode off
 								console.warn('Could not load annotation preference:', e);
@@ -576,6 +624,9 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'boardstate') {
 						handleBoardStateEvent(rest);
+						if (_this.devEvalEnabled) {
+							_this._recomputeDevEval().catch(() => {});
+						}
 						return;
 					}
 

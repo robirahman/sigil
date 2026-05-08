@@ -197,6 +197,34 @@
 							</ul>
 						</template>
 
+						<div class="dev-eval-panel" x-show="isDeveloper" x-cloak>
+							<label class="dev-eval-panel__toggle">
+								<input type="checkbox"
+									x-bind:checked="devEvalEnabled"
+									x-on:change="toggleDevEval()" />
+								Show AI eval
+							</label>
+							<div class="dev-eval-panel__readout"
+								x-show="devEvalEnabled"
+								x-cloak>
+								<template x-if="devEvalLoading && devEvalValue === null">
+									<span>loading model…</span>
+								</template>
+								<template x-if="devEvalValue !== null">
+									<span>
+										<span class="dev-eval-panel__value"
+											x-bind:class="{
+												'dev-eval-panel__value--red': devEvalValue > 0.05,
+												'dev-eval-panel__value--blue': devEvalValue < -0.05,
+											}"
+											x-text="(devEvalValue >= 0 ? '+' : '') + devEvalValue.toFixed(2)"></span>
+										<span class="dev-eval-panel__label"
+											x-text="devEvalValue > 0.05 ? 'red ahead' : (devEvalValue < -0.05 ? 'blue ahead' : 'even')"></span>
+									</span>
+								</template>
+							</div>
+						</div>
+
 						<div class="annotation-bar"
 							x-show="annotationMode && lastOpponentTurn && whoseTurn === myColor"
 							x-cloak>

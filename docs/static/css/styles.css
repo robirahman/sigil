@@ -758,6 +758,43 @@ html[data-theme="volcanic"].webp {
 	color: #fff;
 }
 
+.dev-eval-panel {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	padding: 5px 10px;
+	margin: 4px 0;
+	background: rgba(200, 168, 255, 0.08);
+	border: 1px solid rgba(200, 168, 255, 0.35);
+	border-radius: 4px;
+	font-family: 'Source Code Pro', monospace;
+	font-size: 0.85em;
+	color: #c8a8ff;
+}
+.dev-eval-panel__toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	cursor: pointer;
+	user-select: none;
+}
+.dev-eval-panel__readout {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.dev-eval-panel__value {
+	font-family: 'Arvo', serif;
+	font-weight: bold;
+	color: var(--color-text-bright, #eee);
+}
+.dev-eval-panel__value--red { color: rgba(220, 80, 80, 1); }
+.dev-eval-panel__value--blue { color: rgba(80, 130, 220, 1); }
+.dev-eval-panel__label {
+	color: var(--color-text-dim, #aaa);
+	font-style: italic;
+}
+
 .feed--chat {
 	margin-bottom: 10px;
 }
