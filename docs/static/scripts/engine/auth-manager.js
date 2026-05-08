@@ -180,6 +180,13 @@ class AuthManager {
 		return this.userProfile ? this.userProfile.elo : null;
 	}
 
+	get isDeveloper() {
+		// Server-set boolean; client RTDB rules disallow writing `true`.
+		// See ai/set_developer.py for the service-account-authenticated
+		// promotion path. Used to gate the dev-only AI eval display.
+		return !!(this.userProfile && this.userProfile.isDeveloper);
+	}
+
 	get isAnonymous() {
 		return !this.currentUser || this.currentUser.isAnonymous;
 	}

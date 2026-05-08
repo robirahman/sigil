@@ -25,8 +25,12 @@ for (let i = 0; i < 9; i++) _SPELL_POSITION_NODES.push(POSITIONS[i + 1] || []);
 const NUM_NODES = 39;
 const NUM_SPELL_SLOTS = 9;
 const ESCAPE_MAX = 6;
-// Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat + 8 tempo = 450
-const RAW_FEATURE_DIM = 450;
+// Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat
+//                      + 6 mana_pressure + 8 tempo = 456
+const RAW_FEATURE_DIM = 456;
+// BFS-distance ceiling used to normalize the mana-pressure block; matches
+// _DISTANCE_NORM in ai/features.py.
+const MANA_DISTANCE_NORM = 8;
 // Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27) = 84
 const TURN_FEATURE_DIM = 84;
 
@@ -95,6 +99,55 @@ function _netStoneDeltaIfCast(board, spellName, color) {
 	const ownAfter = sim.totalStones[color];
 	const enmAfter = sim.totalStones[enemy];
 	return ((ownAfter - ownBefore) - (enmAfter - enmBefore)) / NUM_NODES;
+}
+
+function _bfsDistance(sources, target) {
+	// Shortest hop count from any node in `sources` to `target` over the
+	// adjacency graph. Returns 0 if target is in sources, the number of
+	// hops if reachable, or null if unreachable. Mirrors
+	// ai/features.py:_bfs_distance.
+	if (!sources || sources.size === 0) return null;
+	if (sources.has(target)) return 0;
+	const seen = new Set(sources);
+	let frontier = Array.from(sources);
+	let dist = 0;
+	while (frontier.length) {
+		dist++;
+		const next = [];
+		for (const node of frontier) {
+			for (const nb of (ADJACENCY[node] || [])) {
+				if (seen.has(nb)) continue;
+				if (nb === target) return dist;
+				seen.add(nb);
+				next.push(nb);
+			}
+		}
+		frontier = next;
+	}
+	return null;
+}
+
+function _manaPressureFeatures(board, sideToMove, enemy) {
+	// 6-dim block: own and enemy adjacency-graph distance to each of the
+	// three mana nodes (a1, b1, c1), normalized by MANA_DISTANCE_NORM.
+	// Mirrors ai/features.py:_mana_pressure_features. Side with no stones
+	// (or no path) contributes 1.0 (max pressure / impossible to claim).
+	const ownStones = new Set();
+	const enemyStones = new Set();
+	for (const n of NODE_ORDER) {
+		const s = board.stones[n];
+		if (s === sideToMove) ownStones.add(n);
+		else if (s === enemy) enemyStones.add(n);
+	}
+	const feats = new Float32Array(6);
+	for (let i = 0; i < MANA_NODES.length; i++) {
+		const mn = MANA_NODES[i];
+		const ownD = _bfsDistance(ownStones, mn);
+		const enmD = _bfsDistance(enemyStones, mn);
+		feats[2 * i]     = ownD === null ? 1.0 : Math.min(ownD, MANA_DISTANCE_NORM) / MANA_DISTANCE_NORM;
+		feats[2 * i + 1] = enmD === null ? 1.0 : Math.min(enmD, MANA_DISTANCE_NORM) / MANA_DISTANCE_NORM;
+	}
+	return feats;
 }
 
 function _threatOfActivationFeatures(board, sideToMove, enemy) {
@@ -235,6 +288,12 @@ function boardToTensor(board, sideToMove) {
 	const threat = _threatOfActivationFeatures(board, sideToMove, enemy);
 	for (let i = 0; i < NUM_SPELL_SLOTS; i++) features[fi++] = threat.own[i];
 	for (let i = 0; i < NUM_SPELL_SLOTS; i++) features[fi++] = threat.enm[i];
+
+	// Mana-pressure: 6 (own + enemy distance to each of 3 mana nodes).
+	// Layout matches ai/features.py:_mana_pressure_features so the
+	// exported PyTorch model's raw_proj column ordering applies cleanly.
+	const manaPressure = _manaPressureFeatures(board, sideToMove, enemy);
+	for (let i = 0; i < manaPressure.length; i++) features[fi++] = manaPressure[i];
 
 	// Tempo scalars: 8
 	const tempo = _tempoScalarFeatures(

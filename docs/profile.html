@@ -43,6 +43,14 @@
 		}
 		.profile__name { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.4em; }
 		.profile__name--ai { color: var(--color-accent); }
+		.profile__name--dev { color: #c8a8ff; }
+		.profile__name-dev-badge {
+			margin-left: 0.4em;
+			font-family: 'Source Code Pro', monospace;
+			font-size: 0.55em;
+			color: #c8a8ff;
+			vertical-align: middle;
+		}
 		.profile__stat-line { font-family: 'Overlock', sans-serif; color: var(--color-border-hover); font-size: 0.95em; }
 		.profile__elo { font-family: 'Arvo', serif; color: var(--color-text-bright); font-size: 1.6em; }
 		.profile__elo-label { font-family: 'Overlock', sans-serif; color: var(--color-text-dim); font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -84,6 +92,13 @@
 		.games-table tr.is-clickable:hover { background: var(--color-surface-hover); }
 		.games-table .name--ai { color: var(--color-accent); }
 		.opponents-table .name--ai { color: var(--color-accent); }
+		.opponents-table .name--dev { color: #c8a8ff; }
+		.opponents-table .name__dev-badge {
+			margin-left: 0.3em;
+			font-family: 'Source Code Pro', monospace;
+			font-size: 0.75em;
+			color: #c8a8ff;
+		}
 		.opponents-table a, .games-table a { color: var(--color-accent); text-decoration: none; }
 		.opponents-table a:hover, .games-table a:hover { text-decoration: underline; }
 		.loading-msg, .empty-msg {
@@ -133,7 +148,10 @@
 				<div>
 					<div class="profile__head">
 						<div>
-							<div class="profile__name" x-bind:class="{ 'profile__name--ai': user.isAI }" x-text="user.displayName"></div>
+							<div class="profile__name" x-bind:class="{ 'profile__name--ai': user.isAI, 'profile__name--dev': user.isDeveloper }">
+								<span x-text="user.displayName"></span>
+								<template x-if="user.isDeveloper"><span class="profile__name-dev-badge">[dev]</span></template>
+							</div>
 							<div class="profile__stat-line">
 								<span x-text="user.gamesPlayed + ' games'"></span> &middot;
 								<span x-text="user.wins + ' wins'"></span> &middot;
@@ -186,7 +204,7 @@
 									<tr>
 										<td>
 											<template x-if="opp.uid">
-												<a x-bind:href="'profile.html?uid=' + opp.uid" x-bind:class="{ 'name--ai': opp.isAI }" x-text="opp.displayName"></a>
+												<a x-bind:href="'profile.html?uid=' + opp.uid" x-bind:class="{ 'name--ai': opp.isAI, 'name--dev': opp.isDeveloper }" x-text="opp.displayName"></a><template x-if="opp.isDeveloper"><span class="name__dev-badge">[dev]</span></template>
 											</template>
 											<template x-if="!opp.uid">
 												<span x-text="opp.displayName"></span>
@@ -321,6 +339,7 @@
 							wins: userData.wins || 0,
 							losses: userData.losses || 0,
 							isAI: !!userData.isAI,
+							isDeveloper: !!userData.isDeveloper,
 						};
 						const games = [];
 						gamesSnap.forEach((c) => {

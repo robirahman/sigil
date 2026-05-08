@@ -166,6 +166,7 @@ document.addEventListener('alpine:init', () => {
 			annotationMode: false,
 			lastOpponentTurn: null, // { turnNumber, color } or null
 			annotations: {},        // { turnNumber: 'good' | 'bad' }
+			evalAnnotations: {},    // { turnNumber: 'red' | 'blue' | 'even' }
 			setAnnotation(value) {
 				if (!this.annotationMode || !this.lastOpponentTurn) return;
 				if (this.isSpectator) return;
@@ -183,6 +184,67 @@ document.addEventListener('alpine:init', () => {
 				if (next === 'good') this.messageHistory.push('You marked turn ' + tn + ' as a good move.');
 				else if (next === 'bad') this.messageHistory.push('You marked turn ' + tn + ' as a bad move.');
 				else this.messageHistory.push('Annotation cleared for turn ' + tn + '.');
+			},
+			setEvalAnnotation(value) {
+				if (!this.annotationMode || !this.lastOpponentTurn) return;
+				if (this.isSpectator) return;
+				const tn = this.lastOpponentTurn.turnNumber;
+				const current = this.evalAnnotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) {
+					delete this.evalAnnotations[tn];
+				} else {
+					this.evalAnnotations[tn] = next;
+				}
+				if (this._engine && typeof this._engine.setEvalAnnotation === 'function') {
+					this._engine.setEvalAnnotation(tn, next);
+				}
+				if (next) this.messageHistory.push('You marked the position after turn ' + tn + ' as ' + (next === 'even' ? 'even' : next + ' ahead') + '.');
+				else this.messageHistory.push('Position eval cleared for turn ' + tn + '.');
+			},
+
+			// Dev-only AI evaluation overlay (gated on isDeveloper flag passed
+			// in via window._multiplayerState). Same pattern as game-board-local;
+			// see that file for the design rationale.
+			isDeveloper: false,
+			devEvalEnabled: false,
+			devEvalValue: null,
+			devEvalLoading: false,
+			_devEvalModel: null,
+			async toggleDevEval() {
+				if (!this.isDeveloper) return;
+				this.devEvalEnabled = !this.devEvalEnabled;
+				if (this.devEvalEnabled) {
+					await this._recomputeDevEval();
+				} else {
+					this.devEvalValue = null;
+				}
+			},
+			async _recomputeDevEval() {
+				if (!this.devEvalEnabled || !this.isDeveloper) return;
+				if (!this._engine || !this._engine.board) return;
+				try {
+					if (!this._devEvalModel && !this.devEvalLoading) {
+						this.devEvalLoading = true;
+						try {
+							this._devEvalModel = await SigilNetJS.load(
+								'static/models/sigil_net.json',
+								'static/models/sigil_net.bin',
+							);
+						} finally {
+							this.devEvalLoading = false;
+						}
+					}
+					if (!this._devEvalModel) return;
+					const board = this._engine.board;
+					const stm = board.whoseTurn || 'red';
+					const { raw, spellIds } = boardToTensor(board, stm);
+					const out = this._devEvalModel.forward(raw, spellIds, null, 0);
+					const v = out.value;
+					this.devEvalValue = stm === 'red' ? v : -v;
+				} catch (e) {
+					console.warn('Dev eval failed:', e);
+				}
 			},
 
 			startReview() {
@@ -328,6 +390,7 @@ document.addEventListener('alpine:init', () => {
 					_this.isSpectator = isSpectator || false;
 					_this.myColor = myColor || '';
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
+					_this.isDeveloper = !!state.isDeveloper;
 					_this.shareUrl = shareUrl || '';
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
@@ -407,6 +470,9 @@ document.addEventListener('alpine:init', () => {
 						if (redspellcounter !== undefined) _this.redSpellCounter = redspellcounter;
 						if (score !== undefined) _this.score = score;
 						_this.previousBoardState = rest;
+						if (_this.devEvalEnabled) {
+							_this._recomputeDevEval().catch(() => {});
+						}
 					}
 					else if (type === 'whoseturndisplay') { _this.showReset = false; _this.messageHistory.push(rest.message); _this.whoseTurn = rest.color; if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart'); _turnCount++; }
 					else if (type === 'turn_complete') {
