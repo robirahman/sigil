@@ -21,6 +21,9 @@
         },
         "annotationMode": {
           ".validate": "newData.isBoolean()"
+        },
+        "isDeveloper": {
+          ".validate": "newData.isBoolean() && newData.val() === false"
         }
       }
     },
@@ -30,7 +33,10 @@
         ".write": "auth !== null",
         "elo": { ".validate": "newData.isNumber()" },
         "displayName": { ".validate": "newData.isString()" },
-        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" }
+        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "isDeveloper": {
+          ".validate": "newData.isBoolean() && newData.val() === false"
+        }
       },
       ".indexOn": ["elo"]
     },
@@ -48,6 +54,11 @@
         "annotations": {
           "$turnNumber": {
             ".validate": "newData.val() === 'good' || newData.val() === 'bad' || !newData.exists()"
+          }
+        },
+        "eval_annotations": {
+          "$turnNumber": {
+            ".validate": "newData.val() === 'red' || newData.val() === 'blue' || newData.val() === 'even' || !newData.exists()"
           }
         }
       }
