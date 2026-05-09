@@ -364,7 +364,10 @@
 						this.games = games.map((g) => Object.assign({}, g, { whenText: this._formatWhen(g.timestamp) }));
 
 						this._buildOpponentSummary();
-						this._buildRatingChart(games);
+						// Chart wants chronological order (oldest -> newest left to right);
+						// the games array was just sorted newest-first for the table, so
+						// pass a reversed copy here.
+						this._buildRatingChart(games.slice().reverse());
 					} catch (e) {
 						console.error('Failed to load profile:', e);
 					}
