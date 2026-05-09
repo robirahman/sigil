@@ -553,9 +553,19 @@ document.addEventListener('alpine:init', () => {
 							);
 							options.aiColor = _aiColor;
 							if (useMinimax) {
+								// very_hard: exhaustiveOpponent forces full enumeration of
+								// opponent replies at ply=1, which is the depth where most
+								// "found a winning move but it gets refuted" blunders show
+								// up — heuristic move-ordering would otherwise prune the
+								// refutation. maxDepth bumped to 5; iterative deepening
+								// only completes that depth when the position is small or
+								// the 30s budget allows, so the typical case still
+								// returns the best depth-4 move.
 								const minimaxOpts = aiMode === 'very_hard'
-									? { maxDepth: 4, timeLimit: 30.0, orderingAlpha: 1.0 }
-									: { maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0 };
+									? { maxDepth: 5, timeLimit: 30.0, orderingAlpha: 1.0,
+									    exhaustiveRoot: true, exhaustiveOpponent: true }
+									: { maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0,
+									    exhaustiveRoot: true };
 								options.ai = new MinimaxAI(model, minimaxOpts);
 							} else {
 								options.ai = new NeuralAI(model, 100, 1.0);
