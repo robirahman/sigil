@@ -129,6 +129,23 @@ class SimBoard {
 		}
 	}
 
+	/**
+	 * Build a string identifier for repetition detection. Mirrors
+	 * game-controller.js / board.js takeSnapshot loopKey: spell
+	 * counters, every node's stone, each player's lock. Two boards
+	 * with the same snapshot are treated as the "same position" by
+	 * the threefold-repetition rule (5x occurrences -> blue wins).
+	 */
+	loopingSnapshot() {
+		let key = '' + this.spellCounter.red + '|' + this.spellCounter.blue + '|';
+		for (const n of NODE_ORDER) {
+			const s = this.stones[n];
+			key += s === null ? '-' : s[0];
+		}
+		key += '|' + (this.lock.red || 'None') + '|' + (this.lock.blue || 'None');
+		return key;
+	}
+
 	checkGameOver(activeColor) {
 		// update() may already have flagged immediate-loss (zero stones).
 		if (this.gameover) return true;

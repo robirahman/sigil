@@ -251,7 +251,8 @@ function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps
 
 function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
                            orderingAlpha, exhaustiveRoot, exhaustiveOpponent,
-                           blunderLambda, isRoot, tt, killers, ply) {
+                           blunderLambda, isRoot, tt, killers, ply,
+                           positionHistory) {
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
 		return { score: _minimaxEvalLeaf(board, color, model), move: null };
@@ -306,24 +307,47 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 	const enemy = color === 'red' ? 'blue' : 'red';
 	for (const turn of ordered) {
 		const sim = _minimaxApplyTurn(board, turn, color);
-		if (sim.gameover && sim.winner === color) {
-			bestScore = MINIMAX_WIN;
-			bestMove = turn;
-			cutoff = true;
-			break;
+		// Threefold-repetition lookahead. If applying this turn would
+		// reach a board snapshot whose total occurrence count (game
+		// history + simulation path) hits 5, the position is a
+		// forced blue-win. Mutate `positionHistory` on the way down,
+		// restore on the way up so deeper subtrees see correct counts.
+		let repSnap = null;
+		if (positionHistory && !sim.gameover) {
+			repSnap = sim.loopingSnapshot();
+			const newCount = (positionHistory[repSnap] || 0) + 1;
+			positionHistory[repSnap] = newCount;
+			if (newCount >= 5) {
+				sim.gameover = true;
+				sim.winner = 'blue';
+			}
 		}
-		const sub = _minimaxAlphaBeta(sim, enemy, depth - 1, -beta, -alpha,
-		                              model, deadline, orderingAlpha,
-		                              exhaustiveRoot, exhaustiveOpponent,
-		                              blunderLambda,
-		                              false, tt, killers, ply + 1);
-		const score = -sub.score;
-		if (score > bestScore) { bestScore = score; bestMove = turn; }
-		if (bestScore > alpha) alpha = bestScore;
-		if (alpha >= beta) {
-			if (killers) killers.add(ply, turn);
-			cutoff = true;
-			break;
+		try {
+			if (sim.gameover && sim.winner === color) {
+				bestScore = MINIMAX_WIN;
+				bestMove = turn;
+				cutoff = true;
+				break;
+			}
+			const sub = _minimaxAlphaBeta(sim, enemy, depth - 1, -beta, -alpha,
+			                              model, deadline, orderingAlpha,
+			                              exhaustiveRoot, exhaustiveOpponent,
+			                              blunderLambda,
+			                              false, tt, killers, ply + 1,
+			                              positionHistory);
+			const score = -sub.score;
+			if (score > bestScore) { bestScore = score; bestMove = turn; }
+			if (bestScore > alpha) alpha = bestScore;
+			if (alpha >= beta) {
+				if (killers) killers.add(ply, turn);
+				cutoff = true;
+				break;
+			}
+		} finally {
+			if (repSnap !== null) {
+				positionHistory[repSnap] -= 1;
+				if (positionHistory[repSnap] <= 0) delete positionHistory[repSnap];
+			}
 		}
 	}
 
@@ -361,6 +385,10 @@ function minimaxSearch(board, color, model, opts) {
 	const aspirationDelta = opts.aspirationDelta !== undefined ? opts.aspirationDelta : 0.15;
 	const ttMaxSize = opts.ttMaxSize || _MINIMAX_TT_MAX_SIZE_DEFAULT;
 	const verbose = opts.verbose;
+	// Mutable working copy for the alpha-beta DFS so it can
+	// increment/decrement counts as it descends. Source is the live
+	// game's `allLoopingSnapshotCounts` (passed via opts.positionHistory).
+	const abHistory = opts.positionHistory ? Object.assign({}, opts.positionHistory) : null;
 
 	let legal;
 	if (exhaustiveRoot && typeof getLegalTurnsExhaustive === 'function') {
@@ -369,9 +397,18 @@ function minimaxSearch(board, color, model, opts) {
 		legal = [...board.getLegalTurns(color)];
 	}
 	if (legal.length === 0) return new SimTurn([new SimAction('pass')]);
-	// Mate-in-1
+	// Mate-in-1 (also catches a rep-mate: a move that puts the board
+	// into its 5th occurrence is an immediate win for blue / forced
+	// loss for red, so blue should pick it on sight).
 	for (const turn of legal) {
 		const sim = _minimaxApplyTurn(board, turn, color);
+		if (abHistory && !sim.gameover) {
+			const k = sim.loopingSnapshot();
+			if ((abHistory[k] || 0) + 1 >= 5) {
+				sim.gameover = true;
+				sim.winner = 'blue';
+			}
+		}
 		if (sim.gameover && sim.winner === color) return turn;
 	}
 
@@ -402,7 +439,8 @@ function minimaxSearch(board, color, model, opts) {
 				                     model, deadline, orderingAlpha,
 				                     exhaustiveRoot, exhaustiveOpponent,
 				                     blunderLambda,
-				                     true, tt, killers, 0);
+				                     true, tt, killers, 0,
+				                     abHistory);
 				if (r.score <= alpha && alpha > -MINIMAX_INF) {
 					alpha = -MINIMAX_INF;
 					continue;

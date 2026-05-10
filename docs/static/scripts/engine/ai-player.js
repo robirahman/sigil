@@ -306,9 +306,13 @@ class NeuralAI {
 
 	pickTurn(board, color) {
 		const simBoard = SimBoard.fromSigilBoard(board);
+		// Forward the live game's repetition history so MCTS can
+		// detect rep-forced wins/losses inside its lookahead.
+		const positionHistory = board.allLoopingSnapshotCounts || {};
 		const { turn } = mctsSearch(
 			simBoard, color, this.model, this.numSimulations,
 			this.strategicAlpha, this.blunderLambda,
+			positionHistory,
 		);
 		return turn;
 	}
@@ -355,7 +359,13 @@ class MinimaxAI {
 
 	pickTurn(board, color) {
 		const simBoard = SimBoard.fromSigilBoard(board);
-		return minimaxSearch(simBoard, color, this.model, this.options);
+		// Forward live-game repetition history so the alpha-beta DFS
+		// can detect rep-forced wins/losses inside its lookahead.
+		const opts = Object.assign(
+			{ positionHistory: board.allLoopingSnapshotCounts || {} },
+			this.options,
+		);
+		return minimaxSearch(simBoard, color, this.model, opts);
 	}
 }
 

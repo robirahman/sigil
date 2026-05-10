@@ -20,6 +20,12 @@ class MCTSNode {
 		this.isTerminal = false;
 		this.terminalValue = 0;
 		this.isExpanded = false;
+		// Repetition bookkeeping. `snap` is the looping snapshot of
+		// `board`. `pathCount` maps snap -> count along the simulation
+		// path from the search root (excluding root, whose snap is
+		// already accounted for in the caller's positionHistory).
+		this.snap = null;
+		this.pathCount = null;
 	}
 
 	get totalVisits() {
@@ -38,12 +44,15 @@ class MCTSNode {
  * @param {number} numSimulations
  * @returns {{ turn: SimTurn, policy: Float32Array, value: number }}
  */
-function mctsSearch(board, color, model, numSimulations, strategicAlpha, blunderLambda) {
+function mctsSearch(board, color, model, numSimulations, strategicAlpha, blunderLambda, positionHistory) {
 	numSimulations = numSimulations || MCTS_DEFAULT_SIMS;
 	strategicAlpha = strategicAlpha || 0;
 	blunderLambda = blunderLambda || 0;
+	positionHistory = positionHistory || {};
 
 	const root = new MCTSNode(board.copy(), color);
+	root.snap = root.board.loopingSnapshot();
+	root.pathCount = {};
 	_mctsExpand(root, model, strategicAlpha, blunderLambda);
 
 	if (root.isTerminal || !root.legalTurns || root.legalTurns.length === 0) {
@@ -83,8 +92,23 @@ function mctsSearch(board, color, model, numSimulations, strategicAlpha, blunder
 				const childColor = node.color === 'red' ? 'blue' : 'red';
 				if (!childBoard.gameover) childBoard.advanceTurn();
 
-				node.children[actionIdx] = new MCTSNode(childBoard, childColor, node, actionIdx);
-				node = node.children[actionIdx];
+				const child = new MCTSNode(childBoard, childColor, node, actionIdx);
+				// Repetition bookkeeping: total occurrence count =
+				// game-history (positionHistory, includes root state) +
+				// simulation-path count along this branch (pathCount).
+				// 5x occurrences -> blue wins (engine rule).
+				child.snap = childBoard.loopingSnapshot();
+				child.pathCount = Object.assign({}, node.pathCount);
+				child.pathCount[child.snap] = (child.pathCount[child.snap] || 0) + 1;
+				if (!childBoard.gameover) {
+					const total = (positionHistory[child.snap] || 0) + child.pathCount[child.snap];
+					if (total >= 5) {
+						childBoard.gameover = true;
+						childBoard.winner = 'blue';
+					}
+				}
+				node.children[actionIdx] = child;
+				node = child;
 				break;
 			}
 			node = node.children[actionIdx];
