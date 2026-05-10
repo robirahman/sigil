@@ -519,14 +519,24 @@ document.addEventListener('alpine:init', () => {
 					if (aiMode === 'easy') {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
-					} else if (aiMode === 'caveman') {
-						// Pure stone-count minimax — no model load, just
-						// 6-ply alpha-beta over the raw stone differential.
-						// Browser perf: leaf eval is trivial (no NN), so
-						// 6 plies typically completes well under 60s on
-						// the random-spell starting layouts.
+					} else if (aiMode === 'caveman' || /^caveman_[1-6]$/.test(aiMode || '')) {
+						// Pure stone-count minimax — no model load. The
+						// suffixed variants (caveman_1..6) each play with
+						// that many plies of lookahead and have their own
+						// Firebase user record (__ai_caveman_N__) so the
+						// leaderboard tracks each independently.
+						// Time budgets are per-move caps; iterative
+						// deepening returns the deepest completed depth.
+						const depth = aiMode === 'caveman'
+							? 6
+							: parseInt(aiMode.slice('caveman_'.length), 10);
+						const timeLimits = { 1: 2.0, 2: 2.0, 3: 5.0,
+						                     4: 10.0, 5: 30.0, 6: 60.0 };
 						options.aiColor = _aiColor;
-						options.ai = new CavemanAI({ maxDepth: 6, timeLimit: 60.0 });
+						options.ai = new CavemanAI({
+							maxDepth: depth,
+							timeLimit: timeLimits[depth] || 60.0,
+						});
 					} else if (
 						aiMode === 'medium' || aiMode === 'minimax' ||
 						aiMode === 'hard' || aiMode === 'very_hard'
@@ -1036,6 +1046,12 @@ document.addEventListener('alpine:init', () => {
 						very_hard: 'AI (Very Hard)',
 						minimax: 'AI (Minimax 3-ply)',
 						caveman: 'AI (Caveman)',
+						caveman_1: 'Caveman 1',
+						caveman_2: 'Caveman 2',
+						caveman_3: 'Caveman 3',
+						caveman_4: 'Caveman 4',
+						caveman_5: 'Caveman 5',
+						caveman_6: 'Caveman 6',
 					};
 					return labels[difficulty] || ('AI (' + difficulty + ')');
 				}
@@ -1058,6 +1074,12 @@ document.addEventListener('alpine:init', () => {
 							very_hard: 'AI (Very Hard)',
 							minimax: 'AI (Minimax 3-ply)',
 							caveman: 'AI (Caveman)',
+							caveman_1: 'Caveman 1',
+							caveman_2: 'Caveman 2',
+							caveman_3: 'Caveman 3',
+							caveman_4: 'Caveman 4',
+							caveman_5: 'Caveman 5',
+							caveman_6: 'Caveman 6',
 						};
 						const name = labels[difficulty] || `AI (${difficulty})`;
 						await ref.set({
