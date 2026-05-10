@@ -80,20 +80,81 @@ class AuthManager {
 		return !!(this.userProfile && this.userProfile.annotationMode);
 	}
 
-	/** Update the user's display name (Auth profile + RTDB). */
+	/**
+	 * Check whether a display name is available (not claimed by another user).
+	 * Returns true if unclaimed OR currently owned by the signed-in user.
+	 * Returns false if the name is claimed by someone else, or if the format
+	 * is invalid for the `usernames/` index key.
+	 */
+	async checkUsernameAvailable(name) {
+		const trimmed = (name || '').trim();
+		if (!AuthManager.isValidDisplayName(trimmed)) return false;
+		const key = trimmed.toLowerCase();
+		const snap = await firebase.database().ref('usernames/' + key).once('value');
+		if (!snap.exists()) return true;
+		return this.currentUser ? snap.val() === this.currentUser.uid : false;
+	}
+
+	static isValidDisplayName(name) {
+		return typeof name === 'string' && /^[A-Za-z0-9_-]{1,20}$/.test(name);
+	}
+
+	/**
+	 * Update the user's display name (Auth profile + RTDB) atomically.
+	 *
+	 * Uses the `usernames/{lowercaseName}` index for cross-user uniqueness:
+	 * the new key is claimed and the old key (if owned by this user) is
+	 * released in a single multi-path update. The leaderboard's
+	 * denormalized copy is updated too when present.
+	 */
 	async updateDisplayName(newName) {
 		if (!this.currentUser) throw new Error('Not signed in');
-		await this.currentUser.updateProfile({ displayName: newName });
+		const trimmed = (newName || '').trim();
+		if (!AuthManager.isValidDisplayName(trimmed)) {
+			throw new Error('Display name must be 1-20 characters: letters, digits, underscores, or hyphens.');
+		}
+		const uid = this.currentUser.uid;
+		const newKey = trimmed.toLowerCase();
 		const db = firebase.database();
-		await db.ref('users/' + this.currentUser.uid + '/displayName').set(newName);
-		// Also update leaderboard denormalized copy if it exists
-		const leaderSnap = await db.ref('leaderboard/' + this.currentUser.uid).once('value');
+
+		const newOwnerSnap = await db.ref('usernames/' + newKey).once('value');
+		if (newOwnerSnap.exists() && newOwnerSnap.val() !== uid) {
+			throw new Error('That name is already taken.');
+		}
+
+		const oldName = (this.userProfile && this.userProfile.displayName)
+			|| (this.currentUser && this.currentUser.displayName)
+			|| '';
+		const oldKey = AuthManager.isValidDisplayName(oldName) ? oldName.toLowerCase() : null;
+
+		const updates = {};
+		updates['usernames/' + newKey] = uid;
+		if (oldKey && oldKey !== newKey) {
+			const oldOwnerSnap = await db.ref('usernames/' + oldKey).once('value');
+			if (oldOwnerSnap.exists() && oldOwnerSnap.val() === uid) {
+				updates['usernames/' + oldKey] = null;
+			}
+		}
+		updates['users/' + uid + '/displayName'] = trimmed;
+		const leaderSnap = await db.ref('leaderboard/' + uid).once('value');
 		if (leaderSnap.exists()) {
-			await db.ref('leaderboard/' + this.currentUser.uid + '/displayName').set(newName);
+			updates['leaderboard/' + uid + '/displayName'] = trimmed;
 		}
+
+		await db.ref().update(updates);
+		await this.currentUser.updateProfile({ displayName: trimmed });
 		if (this.userProfile) {
-			this.userProfile.displayName = newName;
+			this.userProfile.displayName = trimmed;
 		}
+	}
+
+	/**
+	 * True when the stored display name is the literal placeholder 'Player'
+	 * — the symptom of the username-overwrite glitch. Account UIs should
+	 * surface a rename prompt when this is true.
+	 */
+	get needsRename() {
+		return !!(this.userProfile && this.userProfile.displayName === 'Player');
 	}
 
 	/**
