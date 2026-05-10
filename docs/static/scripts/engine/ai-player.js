@@ -382,16 +382,18 @@ async function applyAITurn(board, turn, color, emit) {
 		}
 
 		else if (action.type === 'hard_move' || (action.type === 'blink' && board.stones[action.node] === enemy)) {
-			// Push enemy
+			// Resolve the push outcome BEFORE mutating, so the intermediate
+			// state (enemy stone overwritten at fromNode but not yet placed
+			// at dest) never triggers update()'s zero-stones immediate-loss
+			// rule. Same fix as doPushEnemy in spells.js — applyAITurn had
+			// its own copy of the buggy push logic.
+			const pushResult = findPushOptions(board, action.node, color);
+
 			board.stones[action.node] = color;
-			emit({ type: 'new_stone_animation', color, node: action.node });
 			board.lastPlay = action.node;
 			board.lastPlayer = color;
-			board.update();
-			emit(board.getBoardStatePayload());
+			emit({ type: 'new_stone_animation', color, node: action.node });
 
-			// Find where enemy goes using BFS (same as engine)
-			const pushResult = findPushOptions(board, action.node, color);
 			if (pushResult.crushed) {
 				emit({ type: 'crush_animation', crushed_color: enemy, node: action.node });
 			} else if (pushResult.options.length > 0) {
