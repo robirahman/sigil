@@ -79,6 +79,13 @@
           ".write": "auth !== null"
         }
       }
+    },
+    "usernames": {
+      ".read": true,
+      "$nameKey": {
+        ".write": "auth !== null && (!data.exists() || data.val() === auth.uid) && $nameKey.matches(/^[a-z0-9_-]{1,20}$/)",
+        ".validate": "newData.isString() && newData.val() === auth.uid"
+      }
     }
   }
 }

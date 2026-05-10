@@ -259,6 +259,19 @@
 				</div>
 			</div>
 
+			<!-- Rename prompt: surfaces only when the stored displayName is the
+			     literal 'Player' placeholder (the username-overwrite glitch).
+			     Lets the user claim any unique display name. -->
+			<div class="settings-card" x-show="needsRename" x-cloak>
+				<div style="font-family: 'Arvo', serif; color: var(--color-text-warm); margin-bottom: 8px;">Choose your display name</div>
+				<div class="settings-card__hint" style="margin-bottom: 10px;">
+					Your account is currently using the placeholder name "Player". Pick a unique name to claim — letters, digits, <code>_</code> and <code>-</code>, up to 20 characters.
+				</div>
+				<input type="text" x-model="renameName" maxlength="20" placeholder="new display name" x-on:keydown.enter="renameUser"
+				       style="display:block;width:100%;padding:10px 12px;border-radius:6px;border:2px solid var(--color-border);background:var(--color-surface-raised);color:var(--color-text-warm);font-family:'Overlock',sans-serif;font-size:1em;box-sizing:border-box;margin-bottom:10px;" />
+				<button class="account-button" x-on:click="renameUser" x-bind:disabled="busy || !renameName.trim()">Save name</button>
+			</div>
+
 			<div class="settings-card">
 				<label class="settings-card__row">
 					<input type="checkbox" x-model="annotationMode" x-on:change="saveAnnotationMode" x-bind:disabled="busy" />
@@ -310,10 +323,15 @@
 				signupName: '',
 				signupEmail: '',
 				signupPassword: '',
+				renameName: '',
 				error: '',
 				successMsg: '',
 				busy: false,
 				annotationMode: false,
+
+				get needsRename() {
+					return this.profile && this.profile.displayName === 'Player';
+				},
 
 				init() {
 					this._authManager = new AuthManager();
@@ -329,6 +347,30 @@
 						}
 						this.loading = false;
 					});
+				},
+
+				async renameUser() {
+					this.error = '';
+					this.successMsg = '';
+					const name = (this.renameName || '').trim();
+					if (!name) { this.error = 'Display name is required.'; return; }
+					if (!/^[A-Za-z0-9_-]{1,20}$/.test(name)) {
+						this.error = 'Display name must be 1-20 characters: letters, digits, _, or -.';
+						return;
+					}
+					this.busy = true;
+					try {
+						const ok = await this._authManager.checkUsernameAvailable(name);
+						if (!ok) { this.error = 'That name is already taken.'; this.busy = false; return; }
+						await this._authManager.updateDisplayName(name);
+						await this._authManager.loadProfile(firebase.database());
+						this.profile = this._authManager.userProfile;
+						this.successMsg = 'Display name updated to "' + name + '".';
+						this.renameName = '';
+					} catch (e) {
+						this.error = _friendlyError(e);
+					}
+					this.busy = false;
 				},
 
 				async saveAnnotationMode() {
