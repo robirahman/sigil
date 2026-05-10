@@ -30,8 +30,18 @@ function _cavemanLeaf(board, color) {
 	return diff / 39.0;
 }
 
-function _cavemanOrderedTurns(board, color) {
-	const turns = [...board.getLegalTurns(color)];
+function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
+	// When `exhaustiveCaps` is set, expand every spell variant
+	// (Bewitch pair, Carnage target, Meteor/Comet blink target, dash
+	// sacrifice combo, …) via getLegalTurnsExhaustive. Without it,
+	// the engine's greedy enumerator collapses each spell to one
+	// variant and Caveman silently misses spells with better targets.
+	let turns;
+	if (exhaustiveCaps && typeof getLegalTurnsExhaustive === 'function') {
+		turns = [...getLegalTurnsExhaustive(board, color, exhaustiveCaps)];
+	} else {
+		turns = [...board.getLegalTurns(color)];
+	}
 	if (turns.length <= 1) return turns;
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const scored = [];
@@ -45,7 +55,8 @@ function _cavemanOrderedTurns(board, color) {
 }
 
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
-                           tt, killers, ply, positionHistory) {
+                           tt, killers, ply, positionHistory,
+                           exhaustiveRoot, exhaustiveOpponent, isRoot) {
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
 		return { score: _cavemanLeaf(board, color), move: null };
@@ -77,7 +88,13 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 		}
 	}
 
-	const turns = _cavemanOrderedTurns(board, color);
+	let caps = null;
+	if (exhaustiveRoot && isRoot) {
+		caps = (typeof NARROW_ENUM_CAPS !== 'undefined') ? NARROW_ENUM_CAPS : null;
+	} else if (exhaustiveOpponent && ply === 1) {
+		caps = (typeof OPPONENT_ENUM_CAPS !== 'undefined') ? OPPONENT_ENUM_CAPS : null;
+	}
+	const turns = _cavemanOrderedTurns(board, color, caps);
 	if (turns.length === 0) {
 		return { score: _cavemanLeaf(board, color), move: null };
 	}
@@ -111,7 +128,9 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			}
 			const sub = _cavemanAlphaBeta(sim, enemy, depth - 1, -beta, -alpha,
 			                              deadline, tt, killers, ply + 1,
-			                              positionHistory);
+			                              positionHistory,
+			                              exhaustiveRoot, exhaustiveOpponent,
+			                              false);
 			const score = -sub.score;
 			if (score > bestScore) { bestScore = score; bestMove = turn; }
 			if (bestScore > alpha) alpha = bestScore;
@@ -150,12 +169,22 @@ function cavemanSearch(board, color, opts) {
 	opts = opts || {};
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 60.0;
 	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 6;
+	// Default to exhaustive enumeration at root + ply 1. Without it,
+	// the engine's greedy enumerator silently collapses every spell
+	// (Bewitch pair, Carnage target, dash sacrifice, …) to a single
+	// variant and Caveman never sees the most damaging cast.
+	const exhaustiveRoot = opts.exhaustiveRoot !== undefined
+		? !!opts.exhaustiveRoot : true;
+	const exhaustiveOpponent = opts.exhaustiveOpponent !== undefined
+		? !!opts.exhaustiveOpponent : true;
 	const verbose = !!opts.verbose;
 	const abHistory = opts.positionHistory
 		? Object.assign({}, opts.positionHistory)
 		: null;
 
-	const legal = [...board.getLegalTurns(color)];
+	const legal = (exhaustiveRoot && typeof getLegalTurnsExhaustive === 'function')
+		? [...getLegalTurnsExhaustive(board, color, NARROW_ENUM_CAPS)]
+		: [...board.getLegalTurns(color)];
 	if (legal.length === 0) return new SimTurn([new SimAction('pass')]);
 
 	// Mate-in-1 short-circuit.
@@ -183,7 +212,8 @@ function cavemanSearch(board, color, opts) {
 		try {
 			const r = _cavemanAlphaBeta(board, color, depth,
 			                            -CAVEMAN_INF, CAVEMAN_INF, deadline,
-			                            tt, killers, 0, abHistory);
+			                            tt, killers, 0, abHistory,
+			                            exhaustiveRoot, exhaustiveOpponent, true);
 			if (r.move) {
 				bestMove = r.move;
 				completedDepth = depth;
