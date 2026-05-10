@@ -519,6 +519,14 @@ document.addEventListener('alpine:init', () => {
 					if (aiMode === 'easy') {
 						options.aiColor = _aiColor;
 						options.ai = new GreedyAI();
+					} else if (aiMode === 'caveman') {
+						// Pure stone-count minimax — no model load, just
+						// 6-ply alpha-beta over the raw stone differential.
+						// Browser perf: leaf eval is trivial (no NN), so
+						// 6 plies typically completes well under 60s on
+						// the random-spell starting layouts.
+						options.aiColor = _aiColor;
+						options.ai = new CavemanAI({ maxDepth: 6, timeLimit: 60.0 });
 					} else if (
 						aiMode === 'medium' || aiMode === 'minimax' ||
 						aiMode === 'hard' || aiMode === 'very_hard'
@@ -1027,6 +1035,7 @@ document.addEventListener('alpine:init', () => {
 						hard: 'AI (Hard)',
 						very_hard: 'AI (Very Hard)',
 						minimax: 'AI (Minimax 3-ply)',
+						caveman: 'AI (Caveman)',
 					};
 					return labels[difficulty] || ('AI (' + difficulty + ')');
 				}
@@ -1048,6 +1057,7 @@ document.addEventListener('alpine:init', () => {
 							hard: 'AI (Hard)',
 							very_hard: 'AI (Very Hard)',
 							minimax: 'AI (Minimax 3-ply)',
+							caveman: 'AI (Caveman)',
 						};
 						const name = labels[difficulty] || `AI (${difficulty})`;
 						await ref.set({
