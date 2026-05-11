@@ -55,51 +55,6 @@
 			opacity: 0.6;
 			cursor: wait;
 		}
-		.mode-accordion {
-			margin: 12px 0;
-		}
-		.mode-accordion > summary {
-			/* Same visual as .mode-button, but `summary` is the native
-			   accordion trigger so no JS is needed. */
-			list-style: none;
-			cursor: pointer;
-			display: block;
-			width: 100%;
-			padding: 16px 24px;
-			background: var(--color-surface-raised);
-			border: 2px solid var(--color-border);
-			border-radius: 8px;
-			color: var(--color-text-warm);
-			font-family: 'Arvo', serif;
-			font-size: 1.1em;
-			box-sizing: border-box;
-		}
-		.mode-accordion > summary::-webkit-details-marker { display: none; }
-		.mode-accordion > summary::after {
-			content: '\25BC';  /* down-pointing triangle */
-			float: right;
-			font-size: 0.8em;
-			color: var(--color-text-muted);
-			transition: transform 0.2s;
-		}
-		.mode-accordion[open] > summary::after { transform: rotate(180deg); }
-		.mode-accordion > summary:hover {
-			background: var(--color-surface-hover);
-			border-color: var(--color-border-hover);
-		}
-		.mode-accordion > summary small {
-			display: block;
-			font-family: 'Overlock', sans-serif;
-			font-size: 0.75em;
-			color: var(--color-text-muted);
-			margin-top: 4px;
-		}
-		.mode-accordion .mode-button-sub {
-			margin: 8px 0 8px 20px;
-			padding: 12px 20px;
-			font-size: 1em;
-			width: calc(100% - 20px);
-		}
 		.theme-select {
 			display: block;
 			width: 100%;
@@ -151,44 +106,20 @@
 			</a>
 			<a class="mode-button" href="game.html?ai=easy">
 				vs AI (Easy)
-				<small>Greedy heuristic opponent</small>
+				<small>Stone-count minimax, 0.1s per turn</small>
 			</a>
 			<a class="mode-button" id="medium-ai-btn" href="game.html?ai=medium">
 				vs AI (Medium)
-				<small>Neural network + MCTS (loads 8MB model)</small>
+				<small>Stone-count minimax, 1s per turn</small>
 			</a>
 			<a class="mode-button" href="game.html?ai=hard">
 				vs AI (Hard)
-				<small>Neural network + 3-ply lookahead (10s per turn)</small>
+				<small>Stone-count minimax, 5s per turn</small>
 			</a>
 			<a class="mode-button" href="game.html?ai=very_hard">
 				vs AI (Very Hard)
-				<small>Neural network + 4-ply lookahead (30s per turn)</small>
+				<small>Stone-count minimax, 60s per turn</small>
 			</a>
-			<details class="mode-accordion">
-				<summary>
-					vs AI (Caveman)
-					<small>Pure stone-count minimax &mdash; pick a difficulty</small>
-				</summary>
-				<a class="mode-button mode-button-sub" href="game.html?ai=caveman_1">
-					Caveman 1 <small>1-ply lookahead</small>
-				</a>
-				<a class="mode-button mode-button-sub" href="game.html?ai=caveman_2">
-					Caveman 2 <small>2-ply lookahead</small>
-				</a>
-				<a class="mode-button mode-button-sub" href="game.html?ai=caveman_3">
-					Caveman 3 <small>3-ply lookahead</small>
-				</a>
-				<a class="mode-button mode-button-sub" href="game.html?ai=caveman_4">
-					Caveman 4 <small>4-ply lookahead</small>
-				</a>
-				<a class="mode-button mode-button-sub" href="game.html?ai=caveman_5">
-					Caveman 5 <small>5-ply lookahead (up to 30s/turn)</small>
-				</a>
-				<a class="mode-button mode-button-sub" href="game.html?ai=caveman_6">
-					Caveman 6 <small>6-ply lookahead (up to 60s/turn)</small>
-				</a>
-			</details>
 <a class="mode-button" href="multiplayer.html">
 				Online Multiplayer
 				<small>Play with a friend over the internet</small>

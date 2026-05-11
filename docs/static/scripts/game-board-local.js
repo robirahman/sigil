@@ -516,9 +516,23 @@ document.addEventListener('alpine:init', () => {
 					if (_rematchSpells) options.spellNames = _rematchSpells;
 					options.variant = gameVariant;
 
-					if (aiMode === 'easy') {
+					// Easy / Medium / Hard / Very Hard are now all time-budgeted
+					// Caveman variants. The previous NN-based tiers were retired
+					// after a sweep showed Caveman <=2-ply beats every one of them
+					// 4/4. Same Firebase UIDs (__ai_easy__, etc.) for URL/bookmark
+					// stability — the AIs got replaced, the slots stayed.
+					const _CAVEMAN_TIER_BUDGETS = {
+						easy: 0.1,
+						medium: 1.0,
+						hard: 5.0,
+						very_hard: 60.0,
+					};
+					if (Object.prototype.hasOwnProperty.call(_CAVEMAN_TIER_BUDGETS, aiMode)) {
 						options.aiColor = _aiColor;
-						options.ai = new GreedyAI();
+						options.ai = new CavemanAI({
+							maxDepth: 10,
+							timeLimit: _CAVEMAN_TIER_BUDGETS[aiMode],
+						});
 					} else if (aiMode === 'caveman' || /^caveman_[1-6]$/.test(aiMode || '')) {
 						// Pure stone-count minimax — no model load. The
 						// suffixed variants (caveman_1..6) each play with
@@ -537,57 +551,21 @@ document.addEventListener('alpine:init', () => {
 							maxDepth: depth,
 							timeLimit: timeLimits[depth] || 60.0,
 						});
-					} else if (
-						aiMode === 'medium' || aiMode === 'minimax' ||
-						aiMode === 'hard' || aiMode === 'very_hard'
-					) {
-						// Each mode loads a different experimental model so I
-						// can A/B them against each other on rated games. The
-						// strategic-eval search-time guardrail is on by default
-						// for all neural variants — it costs nothing per move
-						// and consistently suppresses naked dashes / lets-the-
-						// enemy-Fireblast-grow turns regardless of model.
-						//
-						// 'hard' and 'minimax' both use iterative-deepening
-						// alpha-beta over the same v27 medium model + strategic
-						// eval. Slower per move (3-ply at ~5-12s budget) but
-						// plays ~75% over MCTS-200 in arena because it enumerates
-						// opponent responses instead of sampling them. Trying
-						// SigilNetHard (44M params) on the current feature set
-						// only ties Medium at MCTS-200 — capacity alone hasn't
-						// closed the gap on this data, so the production "Hard"
-						// tier is search-deep rather than network-bigger.
-						const variant = {
-							medium:    { name: 'sigil_net', loader: SigilNetJS },
-							minimax:   { name: 'sigil_net', loader: SigilNetJS },
-							hard:      { name: 'sigil_net', loader: SigilNetJS },
-							very_hard: { name: 'sigil_net', loader: SigilNetJS },
-						}[aiMode];
-						const useMinimax = (aiMode === 'minimax' || aiMode === 'hard' || aiMode === 'very_hard');
+					} else if (aiMode === 'minimax') {
+						// Power-user hidden option (not linked from index.html):
+						// runs the legacy NN-backed minimax at 3-ply. Retained
+						// so the orchestrator / arena scripts can A/B against
+						// any future Caveman variant by URL.
 						try {
-							const model = await variant.loader.load(
-								`static/models/${variant.name}.json`,
-								`static/models/${variant.name}.bin`,
+							const model = await SigilNetJS.load(
+								'static/models/sigil_net.json',
+								'static/models/sigil_net.bin',
 							);
 							options.aiColor = _aiColor;
-							if (useMinimax) {
-								// very_hard: exhaustiveOpponent forces full enumeration of
-								// opponent replies at ply=1, which is the depth where most
-								// "found a winning move but it gets refuted" blunders show
-								// up — heuristic move-ordering would otherwise prune the
-								// refutation. maxDepth bumped to 5; iterative deepening
-								// only completes that depth when the position is small or
-								// the 30s budget allows, so the typical case still
-								// returns the best depth-4 move.
-								const minimaxOpts = aiMode === 'very_hard'
-									? { maxDepth: 5, timeLimit: 30.0, orderingAlpha: 1.0,
-									    exhaustiveRoot: true, exhaustiveOpponent: true }
-									: { maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0,
-									    exhaustiveRoot: true };
-								options.ai = new MinimaxAI(model, minimaxOpts);
-							} else {
-								options.ai = new NeuralAI(model, 100, 1.0);
-							}
+							options.ai = new MinimaxAI(model, {
+								maxDepth: 3, timeLimit: 12.0, orderingAlpha: 1.0,
+								exhaustiveRoot: true,
+							});
 						} catch (e) {
 							console.error('Failed to load AI model, falling back to greedy:', e);
 							options.aiColor = _aiColor;
