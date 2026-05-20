@@ -491,6 +491,18 @@ document.addEventListener('alpine:init', () => {
 					});
 				}
 
+				// Sync any games that were completed offline on a previous visit.
+				// Triggers on page load, on the `online` event, and when auth resolves.
+				if (typeof OfflineGameQueue !== 'undefined') {
+					OfflineGameQueue.installAutoflush({
+						onFlush: (result) => {
+							if (result.uploaded > 0) {
+								_this.messageHistory.push('Synced ' + result.uploaded + ' offline game' + (result.uploaded === 1 ? '' : 's') + '.');
+							}
+						},
+					});
+				}
+
 				// Randomize which color the AI plays
 				const _aiColor = Math.random() < 0.5 ? 'red' : 'blue';
 				const _humanColor = _aiColor === 'red' ? 'blue' : 'red';
@@ -916,7 +928,7 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
-					if (typeof processEloClientSide !== 'function') {
+					if (typeof processEloClientSide !== 'function' || typeof OfflineGameQueue === 'undefined') {
 						_this.messageHistory.push('Rating update unavailable.');
 						return;
 					}
@@ -935,10 +947,11 @@ document.addEventListener('alpine:init', () => {
 						const aiUid = '__ai_' + difficulty + '__';
 						const humanUid = _aiAuthManager.uid;
 
-						// Ensure AI user exists
-						await _ensureAiUser(db, aiUid, difficulty);
-						// Ensure human profile is loaded
-						await _aiAuthManager.ensureUserProfile(db);
+						// Try to bootstrap the human's profile, but don't block on it —
+						// if we're offline, the queue will retry later.
+						if (navigator.onLine !== false) {
+							try { await _aiAuthManager.ensureUserProfile(db); } catch (e) { /* offline; flush later */ }
+						}
 
 						const spellNamesArr = _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'];
 						const gameTurns = _engineRef ? _engineRef._gameLog : [];
@@ -951,29 +964,23 @@ document.addEventListener('alpine:init', () => {
 						const recordVariant = (_engineRef && _engineRef.board && _engineRef.board.variant === 'competitive')
 							? 'competitive' : 'standard';
 
-						// Create a /rooms entry so the game is replayable from the
-						// profile page via multiplayer.html?id=CODE. AI games don't
-						// have a real room during play, but we synthesize one here
-						// purely as a replay record.
+						// Synthesize a /rooms entry so the game is replayable from the
+						// profile page via multiplayer.html?id=CODE.
 						const roomCode = _generateLocalRoomCode();
-						try {
-							await db.ref('rooms/' + roomCode).set({
-								spellNames: spellNamesArr,
-								status: 'finished',
-								created: Date.now(),
-								finishedAt: Date.now(),
-								red: { connected: false, uid: _humanColor === 'red' ? humanUid : aiUid, displayName: _humanColor === 'red' ? humanName : aiName },
-								blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
-								ranked: !_isExpansionGame,
-								winner: winner,
-								gameLog: gameTurns,
-								allowSpectators: true,
-								timeControl: { type: 'none' },
-								variant: recordVariant,
-							});
-						} catch (e) {
-							console.warn('Could not save AI replay room:', e.message);
-						}
+						const roomRecord = {
+							spellNames: spellNamesArr,
+							status: 'finished',
+							created: Date.now(),
+							finishedAt: Date.now(),
+							red: { connected: false, uid: _humanColor === 'red' ? humanUid : aiUid, displayName: _humanColor === 'red' ? humanName : aiName },
+							blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
+							ranked: !_isExpansionGame,
+							winner: winner,
+							gameLog: gameTurns,
+							allowSpectators: true,
+							timeControl: { type: 'none' },
+							variant: recordVariant,
+						};
 
 						const gameRecord = {
 							spellNames: spellNamesArr,
@@ -995,20 +1002,45 @@ document.addEventListener('alpine:init', () => {
 							gameRecord.eval_annotations = Object.assign({}, _this.evalAnnotations);
 						}
 
-						const ref = await db.ref('completed_games').push(gameRecord);
+						// Persist the game to localStorage first so a crash or close
+						// during upload never loses the result. The flush is then
+						// best-effort: if we're offline, it just stays queued.
+						const queuedId = OfflineGameQueue.enqueue({
+							roomCode: roomCode,
+							roomRecord: roomRecord,
+							gameRecord: gameRecord,
+							aiUid: aiUid,
+							aiName: aiName,
+							difficulty: difficulty,
+						});
 
 						if (_isExpansionGame) {
 							_this.messageHistory.push('Unrated: expansion-pack games do not affect rating.');
+						}
+
+						const flushResult = await OfflineGameQueue.flushAll(db, processEloClientSide);
+						const mine = flushResult.results.find((r) => r.id === queuedId);
+						const stillQueued = OfflineGameQueue.peek().some((it) => it.id === queuedId);
+						if (stillQueued) {
+							if (navigator.onLine === false) {
+								_this.messageHistory.push('Offline — game saved. Rating will sync when you reconnect.');
+							} else {
+								_this.messageHistory.push('Upload failed; will retry automatically.');
+							}
 							return;
 						}
 
-						const result = await processEloClientSide(db, ref.key, gameRecord);
-						if (result) {
+						if (!_isExpansionGame && mine && mine.eloResult) {
+							const result = mine.eloResult;
 							const youWon = winner === _humanColor;
 							const sign = youWon ? '+' : '-';
 							_this.messageHistory.push('Rating: ' + sign + result.points + ' (' + (youWon ? result.newWinnerElo : result.newLoserElo) + ')');
-						} else {
-							_this.messageHistory.push('Rating update failed.');
+						}
+
+						// If older offline games rode along on this flush, note that.
+						const olderUploaded = flushResult.results.filter((r) => r.id !== queuedId && r.ok).length;
+						if (olderUploaded > 0) {
+							_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '.');
 						}
 					} catch (e) {
 						console.error('Failed to process AI Elo:', e);
@@ -1041,43 +1073,6 @@ document.addEventListener('alpine:init', () => {
 					return code;
 				}
 
-				async function _ensureAiUser(db, aiUid, difficulty) {
-					const ref = db.ref('users/' + aiUid);
-					const snap = await ref.once('value');
-					if (!snap.exists()) {
-						const labels = {
-							easy: 'AI (Easy)',
-							medium: 'AI (Medium)',
-							hard: 'AI (Hard)',
-							very_hard: 'AI (Very Hard)',
-							minimax: 'AI (Minimax 3-ply)',
-							caveman: 'AI (Caveman)',
-							caveman_1: 'Caveman 1',
-							caveman_2: 'Caveman 2',
-							caveman_3: 'Caveman 3',
-							caveman_4: 'Caveman 4',
-							caveman_5: 'Caveman 5',
-							caveman_6: 'Caveman 6',
-						};
-						const name = labels[difficulty] || `AI (${difficulty})`;
-						await ref.set({
-							displayName: name,
-							elo: 1000,
-							gamesPlayed: 0,
-							wins: 0,
-							losses: 0,
-							created: Date.now(),
-							isAI: true,
-						});
-						// Also seed leaderboard entry
-						await db.ref('leaderboard/' + aiUid).set({
-							displayName: name,
-							elo: 1000,
-							gamesPlayed: 0,
-							isAI: true,
-						});
-					}
-				}
 			},
 		})
 	);
