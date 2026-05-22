@@ -227,7 +227,7 @@
 			</div>
 
 			<!-- Game board -->
-			<div x-data="gameBoard({ importSfn: new URLSearchParams(window.location.search).get('sfn') || '' })" x-on:keydown.window="handleReviewKey($event)">
+			<div x-data="gameBoard({ importSfn: new URLSearchParams(window.location.search).get('sfn') || '' })" x-on:keydown.window="handleReviewKey($event)" x-bind:class="{ 'review-with-ai-active': reviewMode }">
 				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: localStorage.getItem('sigil_muted') === 'true' }"></button>
 				<div class="container">
 					<div class="container__inner">
@@ -657,11 +657,30 @@
 						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
 					</div>
 					<div class="win-modal__actions">
-						<button class="win-modal__btn" x-on:click="playAgain()">Play Again</button>
-						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="_spellNamesForExport && _spellNamesForExport.length === 9">Play Again (Same Layout)</button>
-						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
-						<button class="win-modal__btn" x-on:click="startAiReview" x-show="reviewSfns.length > 0 && !aiReview" x-bind:disabled="aiReviewComputing" x-text="aiReviewComputing ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'AI Review'"></button>
-						<button class="win-modal__btn" x-on:click="aiReview && startReview()" x-show="aiReview && !reviewMode">Open AI Review</button>
+						<button class="win-modal__btn" x-on:click="playAgain()" x-show="rematchStage !== 'sameBoard'">New Board</button>
+						<button class="win-modal__btn"
+							x-on:click="openRematchMenu()"
+							x-show="rematchStage !== 'sameBoard' && _spellNamesForExport && _spellNamesForExport.length === 9">Same Board…</button>
+						<button class="win-modal__btn"
+							x-on:click="playAgainSameLayout()"
+							x-show="rematchStage === 'sameBoard'">Same Sides</button>
+						<button class="win-modal__btn"
+							x-on:click="playAgainSameLayoutSwap()"
+							x-show="rematchStage === 'sameBoard' && isAiGame">Swap Colors</button>
+						<button class="win-modal__btn"
+							x-on:click="rematchStage = 'idle'"
+							x-show="rematchStage === 'sameBoard'">&larr; Back</button>
+						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0 && rematchStage !== 'sameBoard'">Review Game</button>
+						<button class="win-modal__btn"
+							x-on:click="startAiReview('quick')"
+							x-show="reviewSfns.length > 0 && (!aiReview || aiReview.mode === 'quick')"
+							x-bind:disabled="aiReviewComputing"
+							x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'quick' ? 'Open Quick Review' : 'Quick Review (1s/ply)')"></button>
+						<button class="win-modal__btn"
+							x-on:click="startAiReview('deep')"
+							x-show="reviewSfns.length > 0"
+							x-bind:disabled="aiReviewComputing"
+							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : 'Deep Review (10 ply)')"></button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<a class="win-modal__btn" href="./">Main Menu</a>
 					</div>
@@ -676,14 +695,27 @@
 					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
 				</div>
 
+				<!-- AI Review trigger that appears in review mode when no review is
+				     loaded yet (e.g. someone opened the game from profile.html). -->
+				<div class="ai-review-trigger" x-show="reviewMode && !aiReview" x-cloak>
+					<button class="ai-review-trigger__btn"
+						x-on:click="startAiReview('quick')"
+						x-bind:disabled="aiReviewComputing"
+						x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'Quick AI Review (1s/ply)'"></button>
+					<button class="ai-review-trigger__btn"
+						x-on:click="startAiReview('deep')"
+						x-bind:disabled="aiReviewComputing"
+						x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'Deep AI Review (10 ply)'"></button>
+				</div>
+
 				<div class="ai-review-panel" x-show="reviewMode && aiReview" x-cloak>
-					<div class="ai-review-eval" x-text="aiReviewCurrentEvalText"></div>
+					<div class="ai-review-eval" x-text="aiReviewCurrentEvalText()"></div>
 					<svg class="ai-review-graph" viewBox="0 0 480 80" preserveAspectRatio="none">
 						<line x1="0" y1="40" x2="480" y2="40" class="ai-review-graph__zero" />
 						<rect x="0" y="0" width="480" height="40" class="ai-review-graph__bg-red" />
 						<rect x="0" y="40" width="480" height="40" class="ai-review-graph__bg-blue" />
-						<polyline class="ai-review-graph__line" x-bind:points="aiReviewGraphPoints" />
-						<template x-for="dot in aiReviewGraphDots" x-bind:key="dot.ply">
+						<polyline class="ai-review-graph__line" x-bind:points="aiReviewGraphPoints()" />
+						<template x-for="dot in aiReviewGraphDots()" x-bind:key="dot.ply">
 							<circle x-bind:cx="dot.x" x-bind:cy="dot.y" r="3.5"
 								x-bind:class="`ai-review-graph__dot ai-review-graph__dot--${dot.cls}`"
 								x-on:click="jumpToReviewPly(dot.ply + 1)" />
@@ -698,31 +730,31 @@
 					</div>
 
 					<div class="ai-review-annotate"
-						x-show="currentReviewTurnNumber !== null"
-						x-bind:class="{ 'ai-review-annotate--ambiguous': isCurrentReviewPlyAmbiguous }"
+						x-show="currentReviewTurnNumber() !== null"
+						x-bind:class="{ 'ai-review-annotate--ambiguous': isCurrentReviewPlyAmbiguous() }"
 						x-cloak>
-						<div class="ai-review-annotate__hint" x-show="isCurrentReviewPlyAmbiguous">
+						<div class="ai-review-annotate__hint" x-show="isCurrentReviewPlyAmbiguous()">
 							Engine is unsure here &mdash; your input would help train future AI:
 						</div>
 						<div class="ai-review-annotate__row">
 							<span class="ai-review-annotate__label">Move:</span>
 							<button class="annotation-bar__btn"
-								x-bind:class="{ 'annotation-bar__btn--active': annotations[currentReviewTurnNumber] === 'good' }"
+								x-bind:class="{ 'annotation-bar__btn--active': annotations[currentReviewTurnNumber()] === 'good' }"
 								x-on:click="setReviewAnnotation('good')">&#x1F44D; Good</button>
 							<button class="annotation-bar__btn"
-								x-bind:class="{ 'annotation-bar__btn--active': annotations[currentReviewTurnNumber] === 'bad' }"
+								x-bind:class="{ 'annotation-bar__btn--active': annotations[currentReviewTurnNumber()] === 'bad' }"
 								x-on:click="setReviewAnnotation('bad')">&#x1F44E; Bad</button>
 						</div>
 						<div class="ai-review-annotate__row">
 							<span class="ai-review-annotate__label">Position:</span>
 							<button class="annotation-bar__btn annotation-bar__btn--red"
-								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[currentReviewTurnNumber] === 'red' }"
+								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[currentReviewTurnNumber()] === 'red' }"
 								x-on:click="setReviewEvalAnnotation('red')">Red ahead</button>
 							<button class="annotation-bar__btn"
-								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[currentReviewTurnNumber] === 'even' }"
+								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[currentReviewTurnNumber()] === 'even' }"
 								x-on:click="setReviewEvalAnnotation('even')">Even</button>
 							<button class="annotation-bar__btn annotation-bar__btn--blue"
-								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[currentReviewTurnNumber] === 'blue' }"
+								x-bind:class="{ 'annotation-bar__btn--active': evalAnnotations[currentReviewTurnNumber()] === 'blue' }"
 								x-on:click="setReviewEvalAnnotation('blue')">Blue ahead</button>
 						</div>
 					</div>

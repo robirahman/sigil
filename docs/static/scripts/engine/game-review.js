@@ -12,6 +12,14 @@ const REVIEW_DEFAULTS = {
 	sigmoidK: 8.0,
 	forcedWinFloor: 50,  // |score| >= this is treated as a mate.
 	modelVersion: 'caveman-v1',
+	mode: 'quick',
+};
+
+// Mode presets: 'quick' uses a per-ply time cap with effectively unlimited
+// depth; 'deep' uses a hard depth cap with no time limit.
+const REVIEW_MODE_PRESETS = {
+	quick: { timeLimitPerPly: 1.0, maxDepth: 64 },
+	deep:  { timeLimitPerPly: Infinity, maxDepth: 10 },
 };
 
 /** Convert minimax score to win% from the mover's perspective. */
@@ -56,6 +64,11 @@ function sfnToSimBoard(sfnStr) {
  */
 async function reviewGame(gameLog, opts, onProgress) {
 	opts = Object.assign({}, REVIEW_DEFAULTS, opts || {});
+	// Apply mode preset for time/depth bounds, unless caller passed explicit
+	// overrides — explicit opts win over the preset.
+	const preset = REVIEW_MODE_PRESETS[opts.mode] || REVIEW_MODE_PRESETS.quick;
+	if (!opts._timeLimitPerPlyExplicit) opts.timeLimitPerPly = preset.timeLimitPerPly;
+	if (!opts._maxDepthExplicit)        opts.maxDepth        = preset.maxDepth;
 
 	const n = gameLog.length;
 	if (n === 0) {
@@ -138,9 +151,11 @@ async function reviewGame(gameLog, opts, onProgress) {
 
 	return {
 		modelVersion: opts.modelVersion,
+		mode: opts.mode,
 		sigmoidK: opts.sigmoidK,
 		forcedWinFloor: opts.forcedWinFloor,
-		timeLimitPerPly: opts.timeLimitPerPly,
+		timeLimitPerPly: Number.isFinite(opts.timeLimitPerPly) ? opts.timeLimitPerPly : null,
+		maxDepth: Number.isFinite(opts.maxDepth) ? opts.maxDepth : null,
 		sfnPerPly,
 		evalPerPly,
 		winPctPerPly,
@@ -161,9 +176,11 @@ async function reviewGame(gameLog, opts, onProgress) {
 function _emptyReview(opts) {
 	return {
 		modelVersion: opts.modelVersion,
+		mode: opts.mode,
 		sigmoidK: opts.sigmoidK,
 		forcedWinFloor: opts.forcedWinFloor,
-		timeLimitPerPly: opts.timeLimitPerPly,
+		timeLimitPerPly: Number.isFinite(opts.timeLimitPerPly) ? opts.timeLimitPerPly : null,
+		maxDepth: Number.isFinite(opts.maxDepth) ? opts.maxDepth : null,
 		sfnPerPly: [], evalPerPly: [], winPctPerPly: [],
 		bestTurnPerPly: [], moverPerPly: [], classificationPerPly: [],
 		dWpPerPly: [], playedTurnPerPly: [],
@@ -173,6 +190,205 @@ function _emptyReview(opts) {
 }
 
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/**
+ * Returns an object with AI-review state + methods that can be spread into an
+ * Alpine.data() factory's return value. Both `game-board-local.js` and
+ * `game-board-multiplayer.js` use this so the review behaviour stays in sync.
+ *
+ * Consumers should override `_aiReviewGetUid()` after spreading to return the
+ * current signed-in user's uid (or null). It's invoked from
+ * `_publishCommunityAnnotation` to attribute writes.
+ */
+function aiReviewMixin() {
+	return {
+		_aiReviewGetUid() { return null; },  // override per page
+		// State
+		aiReview: null,
+		aiReviewComputing: false,
+		aiReviewProgress: 0,
+		aiReviewActiveMode: null,
+		_roomCodeForReview: '',
+
+		async startAiReview(mode) {
+			if (this.aiReviewComputing) return;
+			if (typeof reviewGame !== 'function') return;
+			const gameLog = this._gameLogForExport;
+			if (!gameLog || gameLog.length === 0) return;
+			mode = (mode === 'deep') ? 'deep' : 'quick';
+
+			// In-memory hit: already loaded a review good enough for the
+			// requested mode → just open it, skip cache RTT and compute.
+			if (this.aiReview) {
+				const haveMode = this.aiReview.mode || 'quick';
+				if (haveMode === 'deep' || mode === 'quick') {
+					if (!this.reviewMode) this.startReview();
+					this.reviewFirst();
+					return;
+				}
+			}
+
+			// Cache rules:
+			//   - deep cached → always reuse, regardless of request
+			//   - quick requested + any cached → reuse
+			//   - deep requested + only quick cached (or none) → recompute deep,
+			//     overwriting the cached entry
+			const gameId = this._roomCodeForReview;
+			const db = (typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
+			if (db && gameId && typeof loadGameReview === 'function') {
+				try {
+					const cached = await loadGameReview(db, gameId);
+					if (cached) {
+						const cachedMode = cached.mode || 'quick';
+						if (cachedMode === 'deep' || mode === 'quick') {
+							this.aiReview = cached;
+							if (!this.reviewMode) this.startReview();
+							this.reviewFirst();
+							return;
+						}
+					}
+				} catch (e) { /* fall through to compute */ }
+			}
+
+			this.aiReviewComputing = true;
+			this.aiReviewActiveMode = mode;
+			this.aiReviewProgress = 0;
+			try {
+				const result = await reviewGame(gameLog, { mode }, (done, total) => {
+					this.aiReviewProgress = total ? done / total : 0;
+				});
+				this.aiReview = result;
+				if (db && gameId && typeof saveGameReview === 'function') {
+					saveGameReview(db, gameId, result).catch(e => console.warn('saveGameReview failed:', e));
+				}
+				if (!this.reviewMode) this.startReview();
+				this.reviewFirst();
+			} catch (e) {
+				console.error('AI review failed:', e);
+			} finally {
+				this.aiReviewComputing = false;
+				this.aiReviewActiveMode = null;
+				this.aiReviewProgress = 1;
+			}
+		},
+
+		_aiReviewRedWp(i) {
+			const wp = this.aiReview.winPctPerPly[i];
+			return this.aiReview.moverPerPly[i] === 'red' ? wp : 100 - wp;
+		},
+		_aiReviewRedScore(i) {
+			const s = this.aiReview.evalPerPly[i];
+			return this.aiReview.moverPerPly[i] === 'red' ? s : -s;
+		},
+
+		aiReviewCurrentEvalText() {
+			if (!this.aiReview || !this.aiReview.evalPerPly.length) return '';
+			const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
+			const redScore = this._aiReviewRedScore(idx);
+			const floor = this.aiReview.forcedWinFloor || 50;
+			if (redScore >= floor) return '+M';
+			if (redScore <= -floor) return '-M';
+			const stones = redScore * 39;
+			if (Math.abs(stones) < 0.05) return '0';
+			return (stones > 0 ? '+' : '') + stones.toFixed(1);
+		},
+
+		currentReviewTurnNumber() {
+			if (!this._gameLogForExport || this.reviewIndex <= 0) return null;
+			const entry = this._gameLogForExport[this.reviewIndex - 1];
+			return entry ? entry.turnNumber : null;
+		},
+
+		isCurrentReviewPlyAmbiguous() {
+			if (!this.aiReview || this.reviewIndex <= 0) return false;
+			const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
+			const floor = this.aiReview.forcedWinFloor || 50;
+			const redScore = this._aiReviewRedScore(idx);
+			if (Math.abs(redScore) >= floor) return false;
+			const redWp = this._aiReviewRedWp(idx);
+			return redWp > 30 && redWp < 70;
+		},
+
+		setReviewAnnotation(value) {
+			const tn = this.currentReviewTurnNumber();
+			if (tn === null) return;
+			const current = this.annotations[tn];
+			const next = current === value ? null : value;
+			if (next === null) delete this.annotations[tn];
+			else this.annotations[tn] = next;
+			this._publishCommunityAnnotation('move', tn, next);
+		},
+
+		setReviewEvalAnnotation(value) {
+			const tn = this.currentReviewTurnNumber();
+			if (tn === null) return;
+			const current = this.evalAnnotations[tn];
+			const next = current === value ? null : value;
+			if (next === null) delete this.evalAnnotations[tn];
+			else this.evalAnnotations[tn] = next;
+			this._publishCommunityAnnotation('eval', tn, next);
+		},
+
+		async _publishCommunityAnnotation(kind, turnNumber, value) {
+			const uid = this._aiReviewGetUid();
+			const gameId = this._roomCodeForReview;
+			if (!uid || !gameId || typeof firebase === 'undefined' || typeof saveCommunityAnnotation !== 'function') return;
+			try {
+				await saveCommunityAnnotation(firebase.database(), gameId, turnNumber, uid, kind, value);
+			} catch (e) { console.warn('community annotation save failed:', e); }
+		},
+
+		aiReviewGraphPoints() {
+			if (!this.aiReview || !this.aiReview.winPctPerPly.length) return '';
+			const n = this.aiReview.winPctPerPly.length;
+			const w = 480, h = 80;
+			if (n < 2) return '';
+			const pts = [];
+			for (let i = 0; i < n; i++) {
+				const x = (i / (n - 1)) * w;
+				const y = h - (this._aiReviewRedWp(i) / 100) * h;
+				pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+			}
+			return pts.join(' ');
+		},
+
+		aiReviewGraphDots() {
+			if (!this.aiReview) return [];
+			const n = this.aiReview.classificationPerPly.length;
+			const total = this.aiReview.winPctPerPly.length;
+			const w = 480, h = 80;
+			const dots = [];
+			for (let i = 0; i < n; i++) {
+				const cls = this.aiReview.classificationPerPly[i];
+				if (cls === 'ok') continue;
+				const x = ((i + 1) / (total - 1)) * w;
+				const y = h - (this._aiReviewRedWp(i + 1) / 100) * h;
+				dots.push({ x: x.toFixed(1), y: y.toFixed(1), cls, ply: i });
+			}
+			return dots;
+		},
+
+		jumpToReviewPly(plyIdx) {
+			if (!this.aiReview) return;
+			if (!this.reviewMode) this.startReview();
+			const target = Math.max(0, Math.min(this.reviewSfns.length - 1, plyIdx));
+			this.reviewIndex = target;
+			this._showReviewPosition();
+		},
+
+		handleReviewKey(event) {
+			if (!this.reviewMode) return;
+			const tag = event.target && event.target.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+			switch (event.key) {
+				case 'ArrowLeft':  event.preventDefault(); this.reviewPrev();  break;
+				case 'ArrowRight': event.preventDefault(); this.reviewNext();  break;
+				case 'ArrowUp':    event.preventDefault(); this.reviewFirst(); break;
+				case 'ArrowDown':  event.preventDefault(); this.reviewLast();  break;
+			}
+		},
+	};
+}
 
 /** Best-effort turn-to-notation. SimTurn doesn't carry a notation string. */
 function turnToNotation(turn) {

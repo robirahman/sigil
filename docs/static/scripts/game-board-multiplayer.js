@@ -57,6 +57,10 @@ document.addEventListener('alpine:init', () => {
 			reviewSfns: [],
 			reviewTurnLabels: [],
 
+			// Auth manager bridged from the lobby script so the AI-review mixin
+			// can fetch the current uid for community annotation writes.
+			_authManager: null,
+
 			// Share link
 			shareUrl: '',
 			linkCopied: false,
@@ -369,6 +373,13 @@ document.addEventListener('alpine:init', () => {
 				else if (this.awaiting === 'action' && this.actionList.includes('move')) this.sendEvent(node);
 			},
 
+			// Spread the shared AI-review behaviour (game-review.js), then
+			// override the uid hook to point at this page's auth manager.
+			...aiReviewMixin(),
+			_aiReviewGetUid() {
+				return this._authManager && this._authManager.uid;
+			},
+
 			init() {
 				const _this = this;
 				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
@@ -381,7 +392,7 @@ document.addEventListener('alpine:init', () => {
 					if (!window._multiplayerState) return;
 					clearInterval(waitForState);
 					const state = window._multiplayerState;
-					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, variant, redDisplayName, blueDisplayName, redUid, blueUid, annotationMode, reviewMode, gameLog, winner, shareUrl } = state;
+					const { sync, spellNames, myColor, reconnectSfn, isSpectator, timeControl, variant, redDisplayName, blueDisplayName, redUid, blueUid, annotationMode, reviewMode, gameLog, winner, shareUrl, roomCode, authManager } = state;
 
 					// Set player names and timer type
 					_this.redName = redDisplayName || '';
@@ -397,6 +408,11 @@ document.addEventListener('alpine:init', () => {
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
 					_this._rematchVariant = variant === 'competitive' ? 'competitive' : 'standard';
+					// AI-review wiring: roomCode is the gameId used for the shared
+					// Firebase review cache, and authManager exposes the uid for
+					// community-annotation writes.
+					_this._roomCodeForReview = roomCode || '';
+					_this._authManager = authManager || null;
 
 					if (reviewMode) {
 						// Skip engine entirely — render finished game in review mode

@@ -57,11 +57,10 @@ document.addEventListener('alpine:init', () => {
 			_blueNameForExport: 'Blue',
 			_gameLogForExport: null,
 
-			// AI review state (populated by startAiReview)
-			aiReview: null,
-			aiReviewComputing: false,
-			aiReviewProgress: 0,
-			_roomCodeForReview: '',
+			// AI review state + methods come from aiReviewMixin() (game-review.js),
+			// spread in below. We stash the auth manager on `this` during init so
+			// the mixin can read uid via the _aiReviewGetUid override.
+			_aiAuthManager: null,
 
 			importGame() {
 				const text = (this.importGameText || '').trim();
@@ -271,146 +270,6 @@ document.addEventListener('alpine:init', () => {
 				this._showReviewPosition();
 			},
 
-			async startAiReview() {
-				if (this.aiReviewComputing) return;
-				if (typeof reviewGame !== 'function') return;
-				const gameLog = this._gameLogForExport;
-				if (!gameLog || gameLog.length === 0) return;
-
-				this.aiReviewComputing = true;
-				this.aiReviewProgress = 0;
-				try {
-					const result = await reviewGame(gameLog, null, (done, total) => {
-						this.aiReviewProgress = total ? done / total : 0;
-					});
-					this.aiReview = result;
-					// Enter review mode + start at first ply so the user sees the
-					// graph context immediately.
-					if (!this.reviewMode) this.startReview();
-					this.reviewFirst();
-				} catch (e) {
-					console.error('AI review failed:', e);
-				} finally {
-					this.aiReviewComputing = false;
-					this.aiReviewProgress = 1;
-				}
-			},
-
-			_aiReviewRedWp(i) {
-				// Engine stores win% from the mover's perspective; the graph
-				// always wants red-perspective so + (top) = red winning, -
-				// (bottom) = blue winning regardless of whose turn it is.
-				const wp = this.aiReview.winPctPerPly[i];
-				return this.aiReview.moverPerPly[i] === 'red' ? wp : 100 - wp;
-			},
-
-			_aiReviewRedScore(i) {
-				const s = this.aiReview.evalPerPly[i];
-				return this.aiReview.moverPerPly[i] === 'red' ? s : -s;
-			},
-
-			get aiReviewCurrentEvalText() {
-				if (!this.aiReview || !this.aiReview.evalPerPly.length) return '';
-				const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
-				const redScore = this._aiReviewRedScore(idx);
-				const floor = this.aiReview.forcedWinFloor || 50;
-				if (redScore >= floor) return '+M';
-				if (redScore <= -floor) return '-M';
-				// Leaf eval is (myStones - enemyStones)/39, so the minimax
-				// score reads back to a stone-count delta by multiplying.
-				const stones = redScore * 39;
-				if (Math.abs(stones) < 0.05) return '0';
-				return (stones > 0 ? '+' : '') + stones.toFixed(1);
-			},
-
-			get currentReviewTurnNumber() {
-				if (!this._gameLogForExport || this.reviewIndex <= 0) return null;
-				const entry = this._gameLogForExport[this.reviewIndex - 1];
-				return entry ? entry.turnNumber : null;
-			},
-
-			get isCurrentReviewPlyAmbiguous() {
-				if (!this.aiReview || this.reviewIndex <= 0) return false;
-				const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
-				const floor = this.aiReview.forcedWinFloor || 50;
-				const redScore = this._aiReviewRedScore(idx);
-				if (Math.abs(redScore) >= floor) return false;  // forced win
-				const redWp = this._aiReviewRedWp(idx);
-				return redWp > 30 && redWp < 70;
-			},
-
-			setReviewAnnotation(value) {
-				const tn = this.currentReviewTurnNumber;
-				if (tn === null) return;
-				const current = this.annotations[tn];
-				const next = current === value ? null : value;
-				if (next === null) delete this.annotations[tn];
-				else this.annotations[tn] = next;
-				this._publishCommunityAnnotation('move', tn, next);
-			},
-
-			setReviewEvalAnnotation(value) {
-				const tn = this.currentReviewTurnNumber;
-				if (tn === null) return;
-				const current = this.evalAnnotations[tn];
-				const next = current === value ? null : value;
-				if (next === null) delete this.evalAnnotations[tn];
-				else this.evalAnnotations[tn] = next;
-				this._publishCommunityAnnotation('eval', tn, next);
-			},
-
-			async _publishCommunityAnnotation(kind, turnNumber, value) {
-				// Best-effort: write to /community_annotations so post-hoc
-				// reviewers don't clobber the game owner's live-game marks.
-				// Anonymous or signed-out users still get local state updates
-				// but skip the remote write.
-				const uid = _aiAuthManager && _aiAuthManager.uid;
-				const gameId = this._roomCodeForReview;
-				if (!uid || !gameId || typeof firebase === 'undefined' || typeof saveCommunityAnnotation !== 'function') return;
-				try {
-					await saveCommunityAnnotation(firebase.database(), gameId, turnNumber, uid, kind, value);
-				} catch (e) { console.warn('community annotation save failed:', e); }
-			},
-
-			get aiReviewGraphPoints() {
-				if (!this.aiReview || !this.aiReview.winPctPerPly.length) return '';
-				const n = this.aiReview.winPctPerPly.length;
-				const w = 480, h = 80;
-				if (n < 2) return '';
-				const pts = [];
-				for (let i = 0; i < n; i++) {
-					const x = (i / (n - 1)) * w;
-					const y = h - (this._aiReviewRedWp(i) / 100) * h;
-					pts.push(x.toFixed(1) + ',' + y.toFixed(1));
-				}
-				return pts.join(' ');
-			},
-
-			get aiReviewGraphDots() {
-				if (!this.aiReview) return [];
-				const n = this.aiReview.classificationPerPly.length;
-				const total = this.aiReview.winPctPerPly.length;
-				const w = 480, h = 80;
-				const dots = [];
-				for (let i = 0; i < n; i++) {
-					const cls = this.aiReview.classificationPerPly[i];
-					if (cls === 'ok') continue;
-					// Place the dot at position i+1 (the ply *after* the move).
-					const x = ((i + 1) / (total - 1)) * w;
-					const y = h - (this._aiReviewRedWp(i + 1) / 100) * h;
-					dots.push({ x: x.toFixed(1), y: y.toFixed(1), cls, ply: i });
-				}
-				return dots;
-			},
-
-			jumpToReviewPly(plyIdx) {
-				if (!this.aiReview) return;
-				if (!this.reviewMode) this.startReview();
-				const target = Math.max(0, Math.min(this.reviewSfns.length - 1, plyIdx));
-				this.reviewIndex = target;
-				this._showReviewPosition();
-			},
-
 			playAgain() {
 				warnBeforeUnload = false;
 				const params = new URLSearchParams(window.location.search);
@@ -428,6 +287,22 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* sessionStorage blocked */ }
 				}
 				this.playAgain();
+			},
+
+			playAgainSameLayoutSwap() {
+				// Same spell layout, but human swaps sides with the AI.
+				const swapped = this.myColor === 'red' ? 'blue' : 'red';
+				try {
+					sessionStorage.setItem('sigil_rematch_human_color', swapped);
+				} catch (e) { /* sessionStorage blocked */ }
+				this.playAgainSameLayout();
+			},
+
+			rematchStage: 'idle',  // 'idle' | 'sameBoard'
+			isAiGame: !!new URLSearchParams(window.location.search).get('ai'),
+
+			openRematchMenu() {
+				this.rematchStage = this.rematchStage === 'sameBoard' ? 'idle' : 'sameBoard';
 			},
 
 			reviewPrev() {
@@ -459,18 +334,6 @@ document.addEventListener('alpine:init', () => {
 				// Restore final board state
 				this.reviewIndex = this.reviewSfns.length - 1;
 				this._showReviewPosition();
-			},
-
-			handleReviewKey(event) {
-				if (!this.reviewMode) return;
-				const tag = event.target && event.target.tagName;
-				if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-				switch (event.key) {
-					case 'ArrowLeft':  event.preventDefault(); this.reviewPrev();  break;
-					case 'ArrowRight': event.preventDefault(); this.reviewNext();  break;
-					case 'ArrowUp':    event.preventDefault(); this.reviewFirst(); break;
-					case 'ArrowDown':  event.preventDefault(); this.reviewLast();  break;
-				}
 			},
 
 			_showReviewPosition() {
@@ -584,6 +447,13 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 
+			// Spread the AI-review behaviour shared with multiplayer.html,
+			// then override the uid hook to point at this page's auth manager.
+			...aiReviewMixin(),
+			_aiReviewGetUid() {
+				return this._aiAuthManager && this._aiAuthManager.uid;
+			},
+
 			init() {
 				const _this = this;
 
@@ -634,7 +504,7 @@ document.addEventListener('alpine:init', () => {
 				const gameVariant = gameVariantParam === 'competitive' ? 'competitive' : 'standard';
 				let _engineRef = null;
 
-				// Auth manager for rated AI games
+				// Auth manager for rated AI games + community annotations from AI review.
 				let _aiAuthManager = null;
 				if (aiMode && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
 					_aiAuthManager = new AuthManager();
@@ -651,6 +521,9 @@ document.addEventListener('alpine:init', () => {
 						}
 					});
 				}
+				// Bridge into Alpine state so the aiReviewMixin (game-review.js)
+				// can find the current uid for community annotations.
+				_this._aiAuthManager = _aiAuthManager;
 
 				// Sync any games that were completed offline on a previous visit.
 				// Triggers on page load, on the `online` event, and when auth resolves.
@@ -664,9 +537,19 @@ document.addEventListener('alpine:init', () => {
 					});
 				}
 
-				// Randomize which color the AI plays
-				const _aiColor = Math.random() < 0.5 ? 'red' : 'blue';
-				const _humanColor = _aiColor === 'red' ? 'blue' : 'red';
+				// Pick which color the human plays. Default random, but a
+				// rematch with "Swap Colors" pins the human to a specific
+				// side via sessionStorage.
+				let _forcedHumanColor = null;
+				try {
+					const raw = sessionStorage.getItem('sigil_rematch_human_color');
+					if (raw === 'red' || raw === 'blue') {
+						_forcedHumanColor = raw;
+						sessionStorage.removeItem('sigil_rematch_human_color');
+					}
+				} catch (e) { /* sessionStorage blocked */ }
+				const _humanColor = _forcedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red');
+				const _aiColor = _humanColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
 
 				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it

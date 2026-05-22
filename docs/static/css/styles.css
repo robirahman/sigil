@@ -1833,19 +1833,54 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	cursor: default;
 }
 
+.ai-review-trigger {
+	margin: 14px auto 80px;
+	max-width: min(540px, calc(100vw - 24px));
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	justify-content: center;
+	padding: 0 12px;
+}
+
+.ai-review-trigger__btn {
+	flex: 1 1 220px;
+	padding: 10px 14px;
+	border-radius: 8px;
+	border: 2px solid var(--color-border);
+	background: var(--color-surface-raised);
+	color: var(--color-text-warm);
+	font-family: 'Overlock', sans-serif;
+	font-size: 1em;
+	cursor: pointer;
+}
+
+.ai-review-trigger__btn:hover:not(:disabled) {
+	background: var(--color-surface-hover);
+	border-color: var(--color-border-hover);
+}
+
+.ai-review-trigger__btn:disabled {
+	opacity: 0.5;
+	cursor: wait;
+}
+
 .ai-review-panel {
-	position: fixed;
-	bottom: 60px;
-	left: 50%;
-	transform: translateX(-50%);
-	width: min(540px, calc(100vw - 24px));
+	margin: 14px auto 80px;
+	max-width: min(540px, calc(100vw - 24px));
 	padding: 10px 14px;
 	background: var(--color-review-bar-bg);
 	border: 2px solid var(--color-border);
 	border-radius: 10px;
 	box-shadow: 0 2px 8px #000;
-	z-index: 10;
 	color: var(--color-text-warm);
+}
+
+/* When the AI review panel is open, let the page grow tall enough that the
+ * panel sits below the board instead of overlapping it. */
+body:has(.review-with-ai-active) > .main {
+	height: auto;
+	min-height: calc(100% - 80px);
 }
 
 .ai-review-eval {
