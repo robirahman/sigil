@@ -10,7 +10,7 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
  */
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const PRECACHE_URLS = [
@@ -52,6 +52,7 @@ const PRECACHE_URLS = [
 	'./static/scripts/engine/mcts.js',
 	'./static/scripts/engine/minimax-ai.js',
 	'./static/scripts/engine/caveman-ai.js',
+	'./static/scripts/engine/ai-worker.js',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-controller.js',
 	'./static/scripts/engine/game-review.js',

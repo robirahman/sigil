@@ -242,6 +242,19 @@
 							</ul>
 						</template>
 
+						<!-- AI thinking indicator: pulses + spinner whenever the AI
+						     search is running off-thread, updates live as each
+						     iterative-deepening depth completes. -->
+						<div class="ai-thinking" x-show="aiThinking" x-cloak
+							x-bind:class="{ 'ai-thinking--red': aiThinkingColor === 'red', 'ai-thinking--blue': aiThinkingColor === 'blue' }">
+							<span class="ai-thinking__spinner" aria-hidden="true"></span>
+							<span class="ai-thinking__text">
+								<strong x-text="aiThinkingColor ? (aiThinkingColor[0].toUpperCase() + aiThinkingColor.slice(1) + ' AI thinking') : 'AI thinking'"></strong>
+								<span x-show="aiThinkingDepth > 0"
+									x-text="' — depth ' + aiThinkingDepth + ', ' + (aiThinkingTimeMs/1000).toFixed(1) + 's, ' + aiThinkingNodes.toLocaleString() + ' nodes'"></span>
+							</span>
+						</div>
+
 						<div class="dev-eval-panel" x-show="isDeveloper" x-cloak>
 							<label class="dev-eval-panel__toggle">
 								<input type="checkbox"

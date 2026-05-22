@@ -16,6 +16,14 @@ document.addEventListener('alpine:init', () => {
 			lastPlay: '',
 			message: '',
 			messageHistory: [],
+
+			// Spinner / live progress while the AI is searching off-thread.
+			aiThinking: false,
+			aiThinkingColor: '',
+			aiThinkingDepth: 0,
+			aiThinkingTimeMs: 0,
+			aiThinkingNodes: 0,
+
 			nodes: {
 				...['a', 'b', 'c'].reduce((acc, curr) => {
 					new Array(13).fill(true).forEach((node, index) => {
@@ -744,6 +752,29 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'ai_think_report') {
 						handleAiThinkReportEvent(rest);
+						return;
+					}
+
+					if (type === 'ai_thinking_start') {
+						_this.aiThinking = true;
+						_this.aiThinkingColor = rest.color || '';
+						_this.aiThinkingDepth = 0;
+						_this.aiThinkingTimeMs = 0;
+						_this.aiThinkingNodes = 0;
+						return;
+					}
+
+					if (type === 'ai_thinking_progress') {
+						_this.aiThinking = true;
+						if (rest.color) _this.aiThinkingColor = rest.color;
+						if (typeof rest.depth === 'number') _this.aiThinkingDepth = rest.depth;
+						if (typeof rest.timeMs === 'number') _this.aiThinkingTimeMs = rest.timeMs;
+						if (typeof rest.nodes === 'number') _this.aiThinkingNodes = rest.nodes;
+						return;
+					}
+
+					if (type === 'ai_thinking_end') {
+						_this.aiThinking = false;
 						return;
 					}
 				}

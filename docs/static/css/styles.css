@@ -1833,6 +1833,44 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	cursor: default;
 }
 
+.ai-thinking {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	margin: 6px auto;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.35);
+	color: var(--color-text-warm);
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.9em;
+	max-width: min(540px, calc(100vw - 24px));
+}
+
+.ai-thinking--red { box-shadow: 0 0 0 2px rgba(220, 60, 60, 0.5); }
+.ai-thinking--blue { box-shadow: 0 0 0 2px rgba(60, 120, 220, 0.5); }
+
+.ai-thinking__spinner {
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	border: 2px solid currentColor;
+	border-top-color: transparent;
+	display: inline-block;
+	animation: ai-thinking-spin 0.9s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes ai-thinking-spin {
+	to { transform: rotate(360deg); }
+}
+
+.ai-thinking__text {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .ai-review-trigger {
 	margin: 14px auto 80px;
 	max-width: min(540px, calc(100vw - 24px));

@@ -85,9 +85,18 @@ async function reviewGame(gameLog, opts, onProgress) {
 	sfnPerPly[0] = gameLog[0].sfnBefore;
 	for (let i = 0; i < n; i++) sfnPerPly[i + 1] = gameLog[i].sfnAfter;
 
-	const tt = new MinimaxTT(_CAVEMAN_TT_MAX);
-	tt.newSearch();
-	tt.nodes = 0;
+	// Route the per-ply searches through the shared AI Web Worker so a Deep
+	// review (10-ply, no time limit per ply) doesn't freeze the page. The
+	// worker owns the persistent TT, which it reuses across calls when we
+	// pass `useSharedTt: true` — so the reverse-walk priming still works.
+	const worker = (typeof getSharedAiWorker === 'function') ? getSharedAiWorker() : null;
+	const useWorker = !!(worker && typeof Worker !== 'undefined');
+	let mainThreadTt = null;
+	if (!useWorker) {
+		mainThreadTt = new MinimaxTT(_CAVEMAN_TT_MAX);
+		mainThreadTt.newSearch();
+		mainThreadTt.nodes = 0;
+	}
 
 	// Reverse walk so subtree results bubble up across ply boundaries
 	// via the shared transposition table.
@@ -105,16 +114,58 @@ async function reviewGame(gameLog, opts, onProgress) {
 			continue;
 		}
 
-		const result = cavemanSearch(sim, mover, {
-			timeLimit: opts.timeLimitPerPly,
-			maxDepth: opts.maxDepth,
-			tt,
-		});
-		evalPerPly[i] = result.score;
-		winPctPerPly[i] = scoreToWinPct(result.score, opts.sigmoidK, opts.forcedWinFloor);
-		bestTurnPerPly[i] = result.turn ? turnToNotation(result.turn) : null;
+		let score, turnNotation;
+		if (useWorker) {
+			const searchOpts = {
+				timeLimit: opts.timeLimitPerPly,
+				maxDepth: opts.maxDepth,
+				useSharedTt: true,
+				// Clear the worker's TT once at the start of the review so a
+				// stale priming from an earlier search doesn't bleed in.
+				resetSharedTt: (i === n),
+			};
+			let msg;
+			try {
+				msg = await worker.search(sfnPerPly[i], mover, searchOpts);
+			} catch (e) {
+				// Worker crash: fall back to a fresh main-thread search for
+				// the remaining plies. Re-seed a local TT so the rest of the
+				// review still benefits from reverse-walk priming.
+				console.warn('AI worker search failed during review; falling back:', e);
+				mainThreadTt = new MinimaxTT(_CAVEMAN_TT_MAX);
+				mainThreadTt.newSearch();
+				mainThreadTt.nodes = 0;
+				const result = cavemanSearch(sim, mover, {
+					timeLimit: opts.timeLimitPerPly,
+					maxDepth: opts.maxDepth,
+					tt: mainThreadTt,
+				});
+				score = result.score;
+				turnNotation = result.turn ? turnToNotation(result.turn) : null;
+				evalPerPly[i] = score;
+				winPctPerPly[i] = scoreToWinPct(score, opts.sigmoidK, opts.forcedWinFloor);
+				bestTurnPerPly[i] = turnNotation;
+				if (i % 2 === 0) await _sleep(0);
+				continue;
+			}
+			score = msg.score;
+			turnNotation = msg.turn ? turnToNotation(msg.turn) : null;
+		} else {
+			const result = cavemanSearch(sim, mover, {
+				timeLimit: opts.timeLimitPerPly,
+				maxDepth: opts.maxDepth,
+				tt: mainThreadTt,
+			});
+			score = result.score;
+			turnNotation = result.turn ? turnToNotation(result.turn) : null;
+		}
+		evalPerPly[i] = score;
+		winPctPerPly[i] = scoreToWinPct(score, opts.sigmoidK, opts.forcedWinFloor);
+		bestTurnPerPly[i] = turnNotation;
 
 		// Yield to the UI between plies so the progress callback animates.
+		// (Cheap when the worker is doing the heavy lifting, but keeps the
+		// progress bar smooth either way.)
 		if (i % 2 === 0) await _sleep(0);
 	}
 

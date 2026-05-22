@@ -1,11 +1,10 @@
 /**
  * Browser-side Caveman AI — pure stone-count minimax.
  *
- * Mirror of ai/caveman_ai.py. Iterative-deepening alpha-beta with
- * stone-differential at the leaves. No neural net, no policy, no
- * model file to load. Useful as a baseline opponent: any human who
- * struggles against this is losing on raw board geometry, not on
- * any strategic subtlety the network would surface.
+ * Iterative-deepening alpha-beta with stone-differential at the leaves.
+ * No neural net, no policy, no model file to load. Useful as a baseline
+ * opponent: any human who struggles against this is losing on raw board
+ * geometry, not on any strategic subtlety a network would surface.
  *
  * Shares MinimaxTimeout / MinimaxTT / MinimaxKillerTable / _orderWithHints
  * / _minimaxApplyTurn / _minimaxPosHash from minimax-ai.js — they're
@@ -90,10 +89,8 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 	}
 
 	let caps = null;
-	if (exhaustiveRoot && isRoot) {
-		caps = (typeof NARROW_ENUM_CAPS !== 'undefined') ? NARROW_ENUM_CAPS : null;
-	} else if (exhaustiveOpponent && ply === 1) {
-		caps = (typeof OPPONENT_ENUM_CAPS !== 'undefined') ? OPPONENT_ENUM_CAPS : null;
+	if ((exhaustiveRoot && isRoot) || (exhaustiveOpponent && ply === 1)) {
+		caps = (typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
 	}
 	const turns = _cavemanOrderedTurns(board, color, caps);
 	if (turns.length === 0) {
@@ -164,12 +161,16 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
  * @param {SimBoard} board
  * @param {string} color
  * @param {{timeLimit?: number, maxDepth?: number, verbose?: boolean,
- *          positionHistory?: object}} opts
+ *          positionHistory?: object,
+ *          onDepthComplete?: (info: {depth, score, timeMs, nodes, ttSize}) => void
+ *         }} opts
  */
 function cavemanSearch(board, color, opts) {
 	opts = opts || {};
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 60.0;
 	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 6;
+	const onDepthComplete = typeof opts.onDepthComplete === 'function'
+		? opts.onDepthComplete : null;
 	// Default to exhaustive enumeration at root + ply 1. Without it,
 	// the engine's greedy enumerator silently collapses every spell
 	// (Bewitch pair, Carnage target, dash sacrifice, …) to a single
@@ -186,7 +187,7 @@ function cavemanSearch(board, color, opts) {
 	const searchStart = Date.now();
 
 	const legal = (exhaustiveRoot && typeof getLegalTurnsExhaustive === 'function')
-		? [...getLegalTurnsExhaustive(board, color, NARROW_ENUM_CAPS)]
+		? [...getLegalTurnsExhaustive(board, color, ENUM_CAPS)]
 		: [...board.getLegalTurns(color)];
 	if (legal.length === 0) {
 		return {
@@ -243,6 +244,17 @@ function cavemanSearch(board, color, opts) {
 					            + `score=${r.score.toFixed(3)} `
 					            + `tt=${tt.size} cuts=${tt.cutoffs}`);
 				}
+				if (onDepthComplete) {
+					try {
+						onDepthComplete({
+							depth,
+							score: r.score,
+							timeMs: Date.now() - searchStart,
+							nodes: tt.nodes,
+							ttSize: tt.size,
+						});
+					} catch (e) { /* progress hook errors are non-fatal */ }
+				}
 			}
 			if (Math.abs(r.score) >= CAVEMAN_WIN - 1) break;
 		} catch (e) {
@@ -268,6 +280,100 @@ function cavemanSearch(board, color, opts) {
  * AI player wrapper. Doesn't need a model file — picks its move purely
  * from the simboard state.
  */
+/**
+ * Path to the Web Worker script. Resolved relative to whichever page is
+ * loading caveman-ai.js (game.html lives at the docs/ root; the worker sits
+ * under static/scripts/engine/). Overridable via `window.AI_WORKER_URL` for
+ * tests / alternate hosting.
+ */
+const AI_WORKER_URL =
+	(typeof window !== 'undefined' && window.AI_WORKER_URL) ||
+	'static/scripts/engine/ai-worker.js';
+
+/**
+ * Manages a persistent Web Worker and routes search requests through it.
+ * Each call gets a unique id so progress / result messages route back to
+ * the right caller. Fails gracefully (sync fallback) if Worker isn't
+ * available (e.g. file:// in some browsers).
+ */
+class AiSearchWorker {
+	constructor(url) {
+		this.url = url || AI_WORKER_URL;
+		this._worker = null;
+		this._nextId = 1;
+		this._pending = new Map();  // id -> {resolve, reject, onProgress}
+	}
+
+	_ensureWorker() {
+		if (this._worker) return this._worker;
+		if (typeof Worker === 'undefined') return null;
+		try {
+			this._worker = new Worker(this.url);
+			this._worker.onmessage = (e) => this._onMessage(e.data);
+			this._worker.onerror = (e) => this._onWorkerError(e);
+		} catch (err) {
+			console.warn('AI worker failed to start, falling back to main-thread search:', err);
+			this._worker = null;
+		}
+		return this._worker;
+	}
+
+	_onMessage(msg) {
+		if (!msg || !msg.id) return;
+		const entry = this._pending.get(msg.id);
+		if (!entry) return;
+		if (msg.type === 'progress') {
+			if (entry.onProgress) {
+				try { entry.onProgress(msg); } catch (e) { /* non-fatal */ }
+			}
+		} else if (msg.type === 'result') {
+			this._pending.delete(msg.id);
+			entry.resolve(msg);
+		} else if (msg.type === 'error') {
+			this._pending.delete(msg.id);
+			entry.reject(new Error(msg.message || 'AI worker error'));
+		}
+	}
+
+	_onWorkerError(err) {
+		// Reject all pending calls and tear down so the next call rebuilds
+		// the worker fresh.
+		for (const [, entry] of this._pending) {
+			entry.reject(new Error('AI worker crashed: ' + (err.message || err)));
+		}
+		this._pending.clear();
+		try { this._worker && this._worker.terminate(); } catch (_) {}
+		this._worker = null;
+	}
+
+	search(sfn, color, opts, onProgress) {
+		const w = this._ensureWorker();
+		if (!w) return null;  // signal sync fallback
+		const id = this._nextId++;
+		return new Promise((resolve, reject) => {
+			this._pending.set(id, { resolve, reject, onProgress });
+			w.postMessage({ type: 'search', id, sfn, color, opts });
+		});
+	}
+
+	terminate() {
+		if (this._worker) {
+			try { this._worker.terminate(); } catch (_) {}
+			this._worker = null;
+		}
+		this._pending.clear();
+	}
+}
+
+// Module-level singleton: one worker covers in-game AI moves AND game
+// review, so the review's reverse-walk reuses the same TT across plies
+// (via `useSharedTt: true`) without rebuilding.
+let _sharedAiWorker = null;
+function getSharedAiWorker() {
+	if (!_sharedAiWorker) _sharedAiWorker = new AiSearchWorker();
+	return _sharedAiWorker;
+}
+
 class CavemanAI {
 	constructor(options) {
 		this.options = Object.assign(
@@ -275,15 +381,50 @@ class CavemanAI {
 			options || {},
 		);
 	}
-	pickTurn(board, color) {
-		const simBoard = SimBoard.fromSigilBoard(board);
-		// Forward live-game repetition history so the alpha-beta DFS
-		// can detect rep-forced wins/losses inside its lookahead.
+
+	/**
+	 * Returns a Promise that resolves to the chosen SimTurn. Runs the
+	 * search in a Web Worker so the page stays responsive during multi-
+	 * second Very Hard searches. Falls back to a synchronous main-thread
+	 * search if Web Workers are unavailable.
+	 *
+	 * @param {object} board - live engine board
+	 * @param {string} color
+	 * @param {(info) => void} [onProgress] - per-depth progress hook
+	 */
+	async pickTurn(board, color, onProgress) {
+		const sfn = boardToSfn(board);
+		const positionHistory = board.allLoopingSnapshotCounts || {};
 		const opts = Object.assign(
-			{ positionHistory: board.allLoopingSnapshotCounts || {} },
+			{ positionHistory },
 			this.options,
 		);
-		const result = cavemanSearch(simBoard, color, opts);
+
+		const worker = getSharedAiWorker();
+		const promise = worker.search(sfn, color, opts, onProgress);
+		if (promise) {
+			try {
+				const msg = await promise;
+				this.lastMeta = {
+					timeMs: msg.timeMs,
+					depth: msg.depth,
+					nodes: msg.nodes,
+					score: msg.score,
+					ttSize: msg.ttSize,
+					cutoffs: msg.cutoffs,
+				};
+				return _reviveTurn(msg.turn);
+			} catch (e) {
+				console.warn('AI worker search failed, falling back to main thread:', e);
+				// fall through to sync path
+			}
+		}
+
+		// Sync fallback (worker unavailable or crashed).
+		const simBoard = SimBoard.fromSigilBoard(board);
+		const result = cavemanSearch(simBoard, color, Object.assign({}, opts, {
+			onDepthComplete: onProgress,
+		}));
 		this.lastMeta = {
 			timeMs: result.timeMs,
 			depth: result.depth,
@@ -294,4 +435,21 @@ class CavemanAI {
 		};
 		return result.turn;
 	}
+}
+
+/** Rebuild a SimTurn (class instance) from the worker's serialized payload. */
+function _reviveTurn(turnPayload) {
+	if (!turnPayload || !turnPayload.actions) return new SimTurn([new SimAction('pass')]);
+	const actions = turnPayload.actions.map((a) => {
+		const sa = new SimAction(a.type);
+		if (a.node !== undefined) sa.node = a.node;
+		if (a.pushed_to !== undefined) sa.pushed_to = a.pushed_to;
+		if (a.spell !== undefined) sa.spell = a.spell;
+		if (a.sacrificed !== undefined) sa.sacrificed = a.sacrificed;
+		if (a.kept !== undefined) sa.kept = a.kept;
+		if (a.node2 !== undefined) sa.node2 = a.node2;
+		if (a.destroyed !== undefined) sa.destroyed = a.destroyed;
+		return sa;
+	});
+	return new SimTurn(actions);
 }

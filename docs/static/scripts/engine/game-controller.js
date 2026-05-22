@@ -601,10 +601,17 @@ class GameController {
 
 	async _takeAITurn(color) {
 		const board = this.board;
+		this.emit({ type: 'ai_thinking_start', color });
 		this.emit({ type: 'message', message: 'AI is thinking...', awaiting: null });
 		await this._delay(300);
 
-		const turn = this.ai.pickTurn(board, color);
+		const onProgress = (info) => {
+			// info: { depth, score, timeMs, nodes, ttSize }
+			this.emit({ type: 'ai_thinking_progress', color, ...info });
+		};
+
+		const turn = await this.ai.pickTurn(board, color, onProgress);
+		this.emit({ type: 'ai_thinking_end', color });
 		if (this.ai.lastMeta) {
 			this.emit({ type: 'ai_think_report', color, ...this.ai.lastMeta });
 		}
