@@ -282,6 +282,16 @@
 				</div>
 			</div>
 
+			<div class="settings-card">
+				<label class="settings-card__row">
+					<input type="checkbox" x-model="showAiThinkReport" x-on:change="saveShowAiThinkReport" x-bind:disabled="busy" />
+					<span>Show AI think time and search depth</span>
+				</label>
+				<div class="settings-card__hint">
+					When on, after each AI move the game log shows how long the AI thought, the search depth it reached, and how many nodes it evaluated.
+				</div>
+			</div>
+
 			<p class="success-msg" x-text="successMsg"></p>
 			<p class="error-msg" x-text="error"></p>
 
@@ -328,6 +338,7 @@
 				successMsg: '',
 				busy: false,
 				annotationMode: false,
+				showAiThinkReport: false,
 
 				get needsRename() {
 					return this.profile && this.profile.displayName === 'Player';
@@ -341,9 +352,11 @@
 							await this._authManager.loadProfile(firebase.database());
 							this.profile = this._authManager.userProfile;
 							this.annotationMode = !!(this.profile && this.profile.annotationMode);
+							this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
 						} else {
 							this.profile = null;
 							this.annotationMode = false;
+							this.showAiThinkReport = false;
 						}
 						this.loading = false;
 					});
@@ -385,6 +398,22 @@
 					} catch (e) {
 						this.error = e.message || String(e);
 						this.annotationMode = !this.annotationMode; // revert toggle
+					}
+					this.busy = false;
+				},
+
+				async saveShowAiThinkReport() {
+					this.error = '';
+					this.successMsg = '';
+					this.busy = true;
+					try {
+						await this._authManager.updateShowAiThinkReport(this.showAiThinkReport);
+						this.successMsg = this.showAiThinkReport
+							? 'AI think report enabled.'
+							: 'AI think report disabled.';
+					} catch (e) {
+						this.error = e.message || String(e);
+						this.showAiThinkReport = !this.showAiThinkReport;
 					}
 					this.busy = false;
 				},

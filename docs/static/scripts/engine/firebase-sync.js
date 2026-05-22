@@ -716,3 +716,56 @@ function _generateRoomCode() {
 	}
 	return code;
 }
+
+/**
+ * Save an AI game-review to RTDB. The `aiTrainingExempt: true` flag must be
+ * present so any future training-data export filters these out.
+ */
+async function saveGameReview(db, gameId, review) {
+	if (!db || !gameId || !review) return;
+	if (!review.aiTrainingExempt) {
+		throw new Error('saveGameReview refuses to write a review without aiTrainingExempt: true');
+	}
+	await db.ref('game_reviews/' + gameId).set(review);
+}
+
+/** Load a previously-saved AI review by gameId. Returns null if not present. */
+async function loadGameReview(db, gameId) {
+	if (!db || !gameId) return null;
+	const snap = await db.ref('game_reviews/' + gameId).once('value');
+	return snap.exists() ? snap.val() : null;
+}
+
+/**
+ * Write a single community annotation under
+ * /community_annotations/{gameId}/{turnNumber}/{kind}/{uid}. This keeps the
+ * post-hoc contributions separate from the game-owner's live-game marks
+ * so they never overwrite each other.
+ *
+ * @param kind 'move' (good/bad) or 'eval' (red/even/blue/null)
+ * @param value annotation value or null to clear
+ */
+async function saveCommunityAnnotation(db, gameId, turnNumber, uid, kind, value) {
+	if (!db || !gameId || !uid || turnNumber === null) return;
+	const path = 'community_annotations/' + gameId + '/' + turnNumber + '/' + kind + '/' + uid;
+	if (value === null || value === undefined) {
+		await db.ref(path).remove();
+	} else {
+		await db.ref(path).set({ value: value, ts: Date.now() });
+	}
+}
+
+/** Sample a recent finished game for the puzzle page. Returns null on failure. */
+async function sampleRecentCompletedGame(db, limit) {
+	if (!db) return null;
+	const snap = await db.ref('completed_games')
+		.orderByChild('timestamp')
+		.limitToLast(limit || 50)
+		.once('value');
+	const games = snap.val();
+	if (!games) return null;
+	const ids = Object.keys(games);
+	if (ids.length === 0) return null;
+	const pickId = ids[Math.floor(Math.random() * ids.length)];
+	return { gameId: pickId, game: games[pickId] };
+}

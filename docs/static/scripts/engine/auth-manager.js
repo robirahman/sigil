@@ -80,6 +80,20 @@ class AuthManager {
 		return !!(this.userProfile && this.userProfile.annotationMode);
 	}
 
+	/** Update the user's showAiThinkReport preference. */
+	async updateShowAiThinkReport(enabled) {
+		if (!this.currentUser) throw new Error('Not signed in');
+		const db = firebase.database();
+		await db.ref('users/' + this.currentUser.uid + '/showAiThinkReport').set(!!enabled);
+		if (this.userProfile) {
+			this.userProfile.showAiThinkReport = !!enabled;
+		}
+	}
+
+	get showAiThinkReport() {
+		return !!(this.userProfile && this.userProfile.showAiThinkReport);
+	}
+
 	/**
 	 * Check whether a display name is available (not claimed by another user).
 	 * Returns true if unclaimed OR currently owned by the signed-in user.

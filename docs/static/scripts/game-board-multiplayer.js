@@ -36,6 +36,7 @@ document.addEventListener('alpine:init', () => {
 			spells: { images: {}, text: {} },
 			spellTooltip: {},
 			validMoves: {},
+			pushSourceNode: '',
 			whoseTurn: '',
 			currentSfn: '',
 			winner: '',
@@ -313,6 +314,7 @@ document.addEventListener('alpine:init', () => {
 				this.blueLock = state.blue_lock || '';
 				this.score = state.score || 'unset';
 				this.validMoves = {};
+				this.pushSourceNode = '';
 				this.lastPlay = '';
 			},
 
@@ -359,7 +361,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			handleSpellMouseOut() { if (!this.hasTouchScreen) { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); } },
 			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) this.showSpellTooltip(spell); },
-			handleReset() { if (this.isSpectator) return; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; },
+			handleReset() { if (this.isSpectator) return; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;
 				this.currentPlayer = this.whoseTurn;
@@ -484,6 +486,7 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
 					else if (type === 'push_animation') {
+						_this.pushSourceNode = '';
 						if (typeof soundManager !== 'undefined') soundManager.play('stonePushed');
 						const s = document.querySelector(`#stone-node--${rest.starting_node}`), e = document.querySelector(`#stone-node--${rest.ending_node}`);
 						if (s && e) { const sr = s.getBoundingClientRect(), er = e.getBoundingClientRect(); e.style.transition = 'transform 0s'; e.style.transform = `translate(${sr.x-er.x}px, ${sr.y-er.y}px)`; setTimeout(() => { e.style.transition = 'transform 750ms ease-in-out'; e.style.transform = ''; }, 50); }
@@ -491,7 +494,7 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'crush_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stoneCrushed'); const ne = document.querySelector(`#stone-node--${rest.node}`); if (ne) { const cs = document.createElement('button'); cs.setAttribute('class', `stone-node stone-node--crushed stone-node--${rest.node} stone-node--${rest.crushed_color}`); cs.addEventListener('animationend', () => cs.remove()); ne.parentNode.insertBefore(cs, ne); } }
 					else if (type === 'chooserefills') { const { playercolor, ...n } = rest; _this.nodesToRefill = n; _this.playerToRefill = playercolor; }
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
-					else if (type === 'pushingoptions') { _this.validMoves = rest; }
+					else if (type === 'pushingoptions') { const { sourceNode, ...targets } = rest; _this.pushSourceNode = sourceNode || ''; _this.validMoves = targets; }
 					else if (type === 'timer_tick') { _this.redTimer = rest.red; _this.blueTimer = rest.blue; }
 					else if (type === 'rematch_state_changed') {
 						const r = rest.rematch || {};

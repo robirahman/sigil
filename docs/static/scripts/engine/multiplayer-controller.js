@@ -606,16 +606,24 @@ class MultiplayerController {
 		if (!info.ischarm) {
 			let refills = board.mana[color];
 			if (refills > 0) {
-				while (refills > 0) {
-					const refillPayload = { type: 'chooserefills', playercolor: color };
-					for (const n of positionNodes) { if (board.stones[n] === null) refillPayload[n] = 'True'; }
-					this.emit(refillPayload);
-					const resp = await this.getInput({ type: 'message', message: 'Select a stone to keep:', awaiting: 'node', moveoptions: {} });
-					if (!positionNodes.includes(resp) || board.stones[resp] !== null) continue;
-					board.stones[resp] = color; refills--;
-					board.update(); this.emit(board.getBoardStatePayload());
+				const emptyNodes = positionNodes.filter(n => board.stones[n] === null);
+				if (refills >= emptyNodes.length) {
+					for (const n of emptyNodes) { board.stones[n] = color; }
+					board.update();
+					this.emit(board.getBoardStatePayload());
+					this.emit({ type: 'donerefilling', playercolor: color });
+				} else {
+					while (refills > 0) {
+						const refillPayload = { type: 'chooserefills', playercolor: color };
+						for (const n of positionNodes) { if (board.stones[n] === null) refillPayload[n] = 'True'; }
+						this.emit(refillPayload);
+						const resp = await this.getInput({ type: 'message', message: 'Select a stone to keep:', awaiting: 'node', moveoptions: {} });
+						if (!positionNodes.includes(resp) || board.stones[resp] !== null) continue;
+						board.stones[resp] = color; refills--;
+						board.update(); this.emit(board.getBoardStatePayload());
+					}
+					this.emit({ type: 'donerefilling', playercolor: color });
 				}
-				this.emit({ type: 'donerefilling', playercolor: color });
 			}
 		}
 		board.update(); this.emit(board.getBoardStatePayload());

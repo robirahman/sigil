@@ -764,7 +764,7 @@ async function doPushEnemy(board, nodeName, color, getInput, emit) {
 	// "in transit" (overwritten at fromNode, not yet at dest), so we
 	// must defer update() until the choice lands.
 	while (true) {
-		const pushingPayload = { type: 'pushingoptions' };
+		const pushingPayload = { type: 'pushingoptions', sourceNode: nodeName };
 		for (const opt of options) {
 			pushingPayload[opt] = enemy;
 		}

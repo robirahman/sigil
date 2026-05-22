@@ -57,6 +57,7 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
                            exhaustiveRoot, exhaustiveOpponent, isRoot) {
+	if (tt) tt.nodes += 1;
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
 		return { score: _cavemanLeaf(board, color), move: null };
@@ -182,10 +183,18 @@ function cavemanSearch(board, color, opts) {
 		? Object.assign({}, opts.positionHistory)
 		: null;
 
+	const searchStart = Date.now();
+
 	const legal = (exhaustiveRoot && typeof getLegalTurnsExhaustive === 'function')
 		? [...getLegalTurnsExhaustive(board, color, NARROW_ENUM_CAPS)]
 		: [...board.getLegalTurns(color)];
-	if (legal.length === 0) return new SimTurn([new SimAction('pass')]);
+	if (legal.length === 0) {
+		return {
+			turn: new SimTurn([new SimAction('pass')]),
+			score: 0, depth: 0, timeMs: Date.now() - searchStart,
+			nodes: 0, ttSize: 0, cutoffs: 0,
+		};
+	}
 
 	// Mate-in-1 short-circuit.
 	for (const turn of legal) {
@@ -197,15 +206,25 @@ function cavemanSearch(board, color, opts) {
 				sim.winner = 'blue';
 			}
 		}
-		if (sim.gameover && sim.winner === color) return turn;
+		if (sim.gameover && sim.winner === color) {
+			return {
+				turn, score: CAVEMAN_WIN, depth: 1,
+				timeMs: Date.now() - searchStart,
+				nodes: 0, ttSize: 0, cutoffs: 0,
+			};
+		}
 	}
 
-	const tt = new MinimaxTT(_CAVEMAN_TT_MAX);
+	// Reusing a shared TT across calls (e.g. game-review) lets later
+	// positions prime alpha-beta cutoffs at earlier ones.
+	const tt = opts.tt || new MinimaxTT(_CAVEMAN_TT_MAX);
 	tt.newSearch();
+	if (typeof tt.nodes !== 'number') tt.nodes = 0;
 	const killers = new MinimaxKillerTable(_CAVEMAN_MAX_PLY);
 
 	const deadline = Date.now() + timeLimit * 1000;
 	let bestMove = legal[0];
+	let bestScore = 0;
 	let completedDepth = 0;
 	for (let depth = 1; depth <= maxDepth; depth++) {
 		const t0 = Date.now();
@@ -216,6 +235,7 @@ function cavemanSearch(board, color, opts) {
 			                            exhaustiveRoot, exhaustiveOpponent, true);
 			if (r.move) {
 				bestMove = r.move;
+				bestScore = r.score;
 				completedDepth = depth;
 				if (verbose) {
 					console.log(`caveman: depth=${depth} done in `
@@ -233,7 +253,15 @@ function cavemanSearch(board, color, opts) {
 			throw e;
 		}
 	}
-	return bestMove;
+	return {
+		turn: bestMove,
+		score: bestScore,
+		depth: completedDepth,
+		timeMs: Date.now() - searchStart,
+		nodes: tt.nodes,
+		ttSize: tt.size,
+		cutoffs: tt.cutoffs,
+	};
 }
 
 /**
@@ -249,6 +277,21 @@ class CavemanAI {
 	}
 	pickTurn(board, color) {
 		const simBoard = SimBoard.fromSigilBoard(board);
-		return cavemanSearch(simBoard, color, this.options);
+		// Forward live-game repetition history so the alpha-beta DFS
+		// can detect rep-forced wins/losses inside its lookahead.
+		const opts = Object.assign(
+			{ positionHistory: board.allLoopingSnapshotCounts || {} },
+			this.options,
+		);
+		const result = cavemanSearch(simBoard, color, opts);
+		this.lastMeta = {
+			timeMs: result.timeMs,
+			depth: result.depth,
+			nodes: result.nodes,
+			score: result.score,
+			ttSize: result.ttSize,
+			cutoffs: result.cutoffs,
+		};
+		return result.turn;
 	}
 }

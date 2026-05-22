@@ -10,7 +10,7 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
  */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const PRECACHE_URLS = [
@@ -22,6 +22,7 @@ const PRECACHE_URLS = [
 	'./leaderboard.html',
 	'./active-games.html',
 	'./profile.html',
+	'./puzzles.html',
 	'./cataclysm.html',
 	'./cataclysm-game.html',
 	'./firebase-setup.html',
@@ -53,6 +54,7 @@ const PRECACHE_URLS = [
 	'./static/scripts/engine/caveman-ai.js',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-controller.js',
+	'./static/scripts/engine/game-review.js',
 	'./static/scripts/engine/auth-manager.js',
 	'./static/scripts/engine/elo.js',
 	'./static/images/game-board.webp',

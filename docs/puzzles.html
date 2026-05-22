@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<title>Annotate Positions - Sigil</title>
+	<style>
+		.puzzle-page { max-width: 720px; margin: 0 auto; padding: 20px; }
+		.puzzle-header { color: var(--color-text-warm); text-align: center; margin-bottom: 12px; }
+		.puzzle-header h1 { font-family: 'Arvo', serif; font-size: 1.4em; margin-bottom: 4px; }
+		.puzzle-header p { font-family: 'Overlock', sans-serif; color: var(--color-text-muted); font-size: 0.9em; }
+		.puzzle-board-wrap { position: relative; }
+		.puzzle-meta { color: var(--color-text-muted); text-align: center; font-size: 0.85em; margin-top: 8px; }
+		.puzzle-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+		.puzzle-actions .annotation-bar__btn { font-size: 1em; padding: 8px 14px; }
+		.puzzle-skip { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+		.puzzle-status { color: var(--color-text-warm); text-align: center; margin-top: 10px; min-height: 1.2em; font-size: 0.9em; }
+		.puzzle-prompt { color: var(--color-text-warm); text-align: center; margin: 8px 0 2px; }
+		body > .main { padding-top: 60px; }
+	</style>
+</head>
+<body class="height:100%">
+	<div class="main height:100%">
+		<header class="header">
+			<a href="./" style="display:inline-block;">
+				<img class="max-width:100%" alt="" src="static/images/sigil-online-logo.svg" height="36" width="287" />
+			</a>
+			<div id="auth-status"></div>
+		</header>
+
+		<div class="puzzle-page" x-data="puzzlePage()" x-init="init">
+			<div class="puzzle-header">
+				<h1>Help train Sigil's AI</h1>
+				<p>Look at the position. Whose side do you think is winning?</p>
+			</div>
+
+			<template x-if="loading">
+				<div class="puzzle-status">Loading next position…</div>
+			</template>
+
+			<template x-if="!loading && !current">
+				<div class="puzzle-status">No positions available yet. Play a few games or check back later.</div>
+			</template>
+
+			<template x-if="!loading && current">
+				<div>
+					<div class="puzzle-board-wrap">
+						<div class="container__inner game-board-container">
+							<div class="position:relative">
+								<picture>
+									<source type="image/webp" srcset="static/images/game-board.webp" />
+									<img class="game-board max-width:100%" src="static/images/game-board.jpg" alt="Sigil board" />
+								</picture>
+								<div class="stone-nodes">
+									<div class="stone-node stone-node--blue stone-node--score"
+										x-bind:class="{ [`stone-node--score-${current.score}`]: true }"></div>
+									<template x-bind:key="node" x-for="node in nodeOrder">
+										<div class="stone-node"
+											x-bind:class="{
+												[`stone-node--${node}`]: true,
+												[`stone-node--${current.stones[node]}`]: !!current.stones[node],
+											}"></div>
+									</template>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="puzzle-meta">
+						<span x-text="`Turn ${current.turnNumber}, ${current.whoseTurn} to move`"></span>
+					</div>
+
+					<div class="puzzle-prompt">Position evaluation:</div>
+					<div class="puzzle-actions">
+						<button class="annotation-bar__btn annotation-bar__btn--red"
+							x-bind:disabled="submitting"
+							x-on:click="submit('red')">Red ahead</button>
+						<button class="annotation-bar__btn"
+							x-bind:disabled="submitting"
+							x-on:click="submit('even')">Even</button>
+						<button class="annotation-bar__btn annotation-bar__btn--blue"
+							x-bind:disabled="submitting"
+							x-on:click="submit('blue')">Blue ahead</button>
+					</div>
+
+					<div class="puzzle-skip">
+						<button class="annotation-bar__btn"
+							x-bind:disabled="submitting"
+							x-on:click="loadNext()">Skip</button>
+					</div>
+
+					<div class="puzzle-status" x-text="status"></div>
+				</div>
+			</template>
+
+			<div style="text-align:center; margin-top:20px;">
+				<a class="back-link" href="./">&larr; Back to menu</a>
+			</div>
+		</div>
+	</div>
+
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/engine/notation.js"></script>
+	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="static/scripts/engine/firebase-sync.js"></script>
+	<script src="static/scripts/auth-status.js"></script>
+	<script>
+		function puzzlePage() {
+			return {
+				loading: true,
+				submitting: false,
+				current: null,    // { gameId, turnNumber, sfn, stones, score, whoseTurn }
+				status: '',
+				nodeOrder: typeof NODE_ORDER !== 'undefined' ? NODE_ORDER : [],
+				_authManager: null,
+				_recentTried: new Set(),
+
+				async init() {
+					this._authManager = new AuthManager();
+					this._authManager.onAuthChanged(() => { /* presence only */ });
+					await this.loadNext();
+				},
+
+				async loadNext() {
+					this.loading = true;
+					this.status = '';
+					this.current = null;
+					// Try up to 6 times to find a non-trivial mid-game ply.
+					for (let attempt = 0; attempt < 6; attempt++) {
+						const picked = await sampleRecentCompletedGame(firebase.database(), 50);
+						if (!picked) break;
+						const log = picked.game && picked.game.gameLog;
+						if (!Array.isArray(log) || log.length < 6) continue;
+						const lo = 2, hi = log.length - 2;
+						const i = Math.floor(Math.random() * (hi - lo)) + lo;
+						const entry = log[i];
+						if (!entry || !entry.sfnAfter) continue;
+						const key = picked.gameId + ':' + entry.turnNumber;
+						if (this._recentTried.has(key)) continue;
+						this._recentTried.add(key);
+						try {
+							const state = sfnToDict(entry.sfnAfter);
+							this.current = {
+								gameId: picked.gameId,
+								turnNumber: entry.turnNumber,
+								sfn: entry.sfnAfter,
+								stones: state.stones,
+								score: state.score || 'unset',
+								whoseTurn: state.turn === 'red' ? 'Red' : 'Blue',
+							};
+							break;
+						} catch (e) {
+							// Bad SFN; try another.
+						}
+					}
+					this.loading = false;
+					if (!this.current) this.status = 'No suitable positions found.';
+				},
+
+				async submit(value) {
+					if (!this.current) return;
+					if (!this._authManager || !this._authManager.isAuthenticated) {
+						this.status = 'Sign in to contribute annotations.';
+						return;
+					}
+					this.submitting = true;
+					this.status = '';
+					try {
+						await saveCommunityAnnotation(
+							firebase.database(),
+							this.current.gameId,
+							this.current.turnNumber,
+							this._authManager.uid,
+							'eval',
+							value
+						);
+						this.status = 'Thanks! Loading next…';
+					} catch (e) {
+						this.status = 'Save failed: ' + (e.message || e);
+					}
+					this.submitting = false;
+					if (this.status.startsWith('Thanks')) {
+						setTimeout(() => this.loadNext(), 350);
+					}
+				},
+			};
+		}
+	</script>
+	<script defer src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

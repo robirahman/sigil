@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const contentElem = document.querySelector('.help-menu-container .content');
 	const glossaryElem = document.querySelector('.help-menu-container .glossary');
 	const turnStructureElem = document.querySelector('.help-menu-container .turn-structure');
+	const whatsNewElem = document.querySelector('.help-menu-container .whats-new');
 
 	const showContent = () => {
 		submenuElem.classList.remove('show');
@@ -26,6 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
 		showContent();
 	});
 
+	const whatsNewBtn = document.querySelector('.help-menu-container .whats-new-btn');
+	if (whatsNewBtn && whatsNewElem) {
+		whatsNewBtn.addEventListener('click', () => {
+			whatsNewElem.classList.add('show');
+			showContent();
+		});
+	}
+
 	const labelElem = document.querySelector('.help-menu-container label');
 	const submenuContainerElem = document.querySelector('.help-menu-container .submenu-container');
 	const helpMenuCheckbox = document.querySelector('.help-menu-container #help-menu');
@@ -36,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			contentElem.classList.remove('show');
 			glossaryElem.classList.remove('show');
 			turnStructureElem.classList.remove('show');
+			if (whatsNewElem) whatsNewElem.classList.remove('show');
 			contentElem.classList.remove('after-open-transition');
 
 			containerElem.classList.add('open');

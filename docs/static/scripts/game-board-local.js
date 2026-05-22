@@ -38,6 +38,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			spellTooltip: {},
 			validMoves: {},
+			pushSourceNode: '',
 			whoseTurn: '',
 			currentSfn: '',
 			importSfn: initialImportSfn,
@@ -55,6 +56,12 @@ document.addEventListener('alpine:init', () => {
 			_redNameForExport: 'Red',
 			_blueNameForExport: 'Blue',
 			_gameLogForExport: null,
+
+			// AI review state (populated by startAiReview)
+			aiReview: null,
+			aiReviewComputing: false,
+			aiReviewProgress: 0,
+			_roomCodeForReview: '',
 
 			importGame() {
 				const text = (this.importGameText || '').trim();
@@ -264,6 +271,146 @@ document.addEventListener('alpine:init', () => {
 				this._showReviewPosition();
 			},
 
+			async startAiReview() {
+				if (this.aiReviewComputing) return;
+				if (typeof reviewGame !== 'function') return;
+				const gameLog = this._gameLogForExport;
+				if (!gameLog || gameLog.length === 0) return;
+
+				this.aiReviewComputing = true;
+				this.aiReviewProgress = 0;
+				try {
+					const result = await reviewGame(gameLog, null, (done, total) => {
+						this.aiReviewProgress = total ? done / total : 0;
+					});
+					this.aiReview = result;
+					// Enter review mode + start at first ply so the user sees the
+					// graph context immediately.
+					if (!this.reviewMode) this.startReview();
+					this.reviewFirst();
+				} catch (e) {
+					console.error('AI review failed:', e);
+				} finally {
+					this.aiReviewComputing = false;
+					this.aiReviewProgress = 1;
+				}
+			},
+
+			_aiReviewRedWp(i) {
+				// Engine stores win% from the mover's perspective; the graph
+				// always wants red-perspective so + (top) = red winning, -
+				// (bottom) = blue winning regardless of whose turn it is.
+				const wp = this.aiReview.winPctPerPly[i];
+				return this.aiReview.moverPerPly[i] === 'red' ? wp : 100 - wp;
+			},
+
+			_aiReviewRedScore(i) {
+				const s = this.aiReview.evalPerPly[i];
+				return this.aiReview.moverPerPly[i] === 'red' ? s : -s;
+			},
+
+			get aiReviewCurrentEvalText() {
+				if (!this.aiReview || !this.aiReview.evalPerPly.length) return '';
+				const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
+				const redScore = this._aiReviewRedScore(idx);
+				const floor = this.aiReview.forcedWinFloor || 50;
+				if (redScore >= floor) return '+M';
+				if (redScore <= -floor) return '-M';
+				// Leaf eval is (myStones - enemyStones)/39, so the minimax
+				// score reads back to a stone-count delta by multiplying.
+				const stones = redScore * 39;
+				if (Math.abs(stones) < 0.05) return '0';
+				return (stones > 0 ? '+' : '') + stones.toFixed(1);
+			},
+
+			get currentReviewTurnNumber() {
+				if (!this._gameLogForExport || this.reviewIndex <= 0) return null;
+				const entry = this._gameLogForExport[this.reviewIndex - 1];
+				return entry ? entry.turnNumber : null;
+			},
+
+			get isCurrentReviewPlyAmbiguous() {
+				if (!this.aiReview || this.reviewIndex <= 0) return false;
+				const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
+				const floor = this.aiReview.forcedWinFloor || 50;
+				const redScore = this._aiReviewRedScore(idx);
+				if (Math.abs(redScore) >= floor) return false;  // forced win
+				const redWp = this._aiReviewRedWp(idx);
+				return redWp > 30 && redWp < 70;
+			},
+
+			setReviewAnnotation(value) {
+				const tn = this.currentReviewTurnNumber;
+				if (tn === null) return;
+				const current = this.annotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) delete this.annotations[tn];
+				else this.annotations[tn] = next;
+				this._publishCommunityAnnotation('move', tn, next);
+			},
+
+			setReviewEvalAnnotation(value) {
+				const tn = this.currentReviewTurnNumber;
+				if (tn === null) return;
+				const current = this.evalAnnotations[tn];
+				const next = current === value ? null : value;
+				if (next === null) delete this.evalAnnotations[tn];
+				else this.evalAnnotations[tn] = next;
+				this._publishCommunityAnnotation('eval', tn, next);
+			},
+
+			async _publishCommunityAnnotation(kind, turnNumber, value) {
+				// Best-effort: write to /community_annotations so post-hoc
+				// reviewers don't clobber the game owner's live-game marks.
+				// Anonymous or signed-out users still get local state updates
+				// but skip the remote write.
+				const uid = _aiAuthManager && _aiAuthManager.uid;
+				const gameId = this._roomCodeForReview;
+				if (!uid || !gameId || typeof firebase === 'undefined' || typeof saveCommunityAnnotation !== 'function') return;
+				try {
+					await saveCommunityAnnotation(firebase.database(), gameId, turnNumber, uid, kind, value);
+				} catch (e) { console.warn('community annotation save failed:', e); }
+			},
+
+			get aiReviewGraphPoints() {
+				if (!this.aiReview || !this.aiReview.winPctPerPly.length) return '';
+				const n = this.aiReview.winPctPerPly.length;
+				const w = 480, h = 80;
+				if (n < 2) return '';
+				const pts = [];
+				for (let i = 0; i < n; i++) {
+					const x = (i / (n - 1)) * w;
+					const y = h - (this._aiReviewRedWp(i) / 100) * h;
+					pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+				}
+				return pts.join(' ');
+			},
+
+			get aiReviewGraphDots() {
+				if (!this.aiReview) return [];
+				const n = this.aiReview.classificationPerPly.length;
+				const total = this.aiReview.winPctPerPly.length;
+				const w = 480, h = 80;
+				const dots = [];
+				for (let i = 0; i < n; i++) {
+					const cls = this.aiReview.classificationPerPly[i];
+					if (cls === 'ok') continue;
+					// Place the dot at position i+1 (the ply *after* the move).
+					const x = ((i + 1) / (total - 1)) * w;
+					const y = h - (this._aiReviewRedWp(i + 1) / 100) * h;
+					dots.push({ x: x.toFixed(1), y: y.toFixed(1), cls, ply: i });
+				}
+				return dots;
+			},
+
+			jumpToReviewPly(plyIdx) {
+				if (!this.aiReview) return;
+				if (!this.reviewMode) this.startReview();
+				const target = Math.max(0, Math.min(this.reviewSfns.length - 1, plyIdx));
+				this.reviewIndex = target;
+				this._showReviewPosition();
+			},
+
 			playAgain() {
 				warnBeforeUnload = false;
 				const params = new URLSearchParams(window.location.search);
@@ -314,6 +461,18 @@ document.addEventListener('alpine:init', () => {
 				this._showReviewPosition();
 			},
 
+			handleReviewKey(event) {
+				if (!this.reviewMode) return;
+				const tag = event.target && event.target.tagName;
+				if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+				switch (event.key) {
+					case 'ArrowLeft':  event.preventDefault(); this.reviewPrev();  break;
+					case 'ArrowRight': event.preventDefault(); this.reviewNext();  break;
+					case 'ArrowUp':    event.preventDefault(); this.reviewFirst(); break;
+					case 'ArrowDown':  event.preventDefault(); this.reviewLast();  break;
+				}
+			},
+
 			_showReviewPosition() {
 				const sfn = this.reviewSfns[this.reviewIndex];
 				if (!sfn) return;
@@ -327,6 +486,7 @@ document.addEventListener('alpine:init', () => {
 				this.blueLock = state.blue_lock || '';
 				this.score = state.score || 'unset';
 				this.validMoves = {};
+				this.pushSourceNode = '';
 				this.lastPlay = '';
 			},
 
@@ -409,6 +569,7 @@ document.addEventListener('alpine:init', () => {
 				this.playerToRefill = '';
 				this.showReset = false;
 				this.validMoves = {};
+				this.pushSourceNode = '';
 			},
 
 			handleNodeClick(node) {
@@ -687,7 +848,9 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'pushingoptions') {
-						handleValidMovesEvent(rest);
+						const { sourceNode, ...targets } = rest;
+						_this.pushSourceNode = sourceNode || '';
+						handleValidMovesEvent(targets);
 						return;
 					}
 
@@ -695,6 +858,18 @@ document.addEventListener('alpine:init', () => {
 						handleGameOverEvent(rest);
 						return;
 					}
+
+					if (type === 'ai_think_report') {
+						handleAiThinkReportEvent(rest);
+						return;
+					}
+				}
+
+				function handleAiThinkReportEvent(payload) {
+					if (!_aiAuthManager || !_aiAuthManager.showAiThinkReport) return;
+					const c = payload.color ? payload.color[0].toUpperCase() + payload.color.slice(1) : 'AI';
+					const seconds = ((payload.timeMs || 0) / 1000).toFixed(1);
+					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes`);
 				}
 
 				function handleMessageEvent(payload) {
@@ -816,6 +991,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handlePushAnimation(payload) {
+					_this.pushSourceNode = '';
 					if (typeof soundManager !== 'undefined') soundManager.play('stonePushed');
 					const startNodeElem = document.querySelector(`#stone-node--${payload.starting_node}`);
 					const endNodeElem = document.querySelector(`#stone-node--${payload.ending_node}`);
@@ -967,6 +1143,7 @@ document.addEventListener('alpine:init', () => {
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
 						const roomCode = _generateLocalRoomCode();
+						_this._roomCodeForReview = roomCode;
 						const roomRecord = {
 							spellNames: spellNamesArr,
 							status: 'finished',

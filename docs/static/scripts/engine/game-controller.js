@@ -523,42 +523,51 @@ class GameController {
 		if (!info.ischarm) {
 			let refills = board.mana[color];
 			if (refills > 0) {
-				const msg = refills === 1
-					? 'You get to keep 1 stone in ' + spellName.replace(/_/g, ' ') + '.'
-					: 'You get to keep ' + refills + ' stones in ' + spellName.replace(/_/g, ' ') + '.';
-				this.emit({ type: 'message', message: msg, awaiting: null });
-
-				while (refills > 0) {
-					// Send chooserefills event
-					const refillPayload = { type: 'chooserefills', playercolor: color };
-					for (const n of positionNodes) {
-						if (board.stones[n] === null) {
-							refillPayload[n] = 'True';
-						}
-					}
-					this.emit(refillPayload);
-
-					const resp = await this.getInput({
-						type: 'message', message: 'Select a stone to keep:',
-						awaiting: 'node', moveoptions: {},
-					});
-
-					if (!positionNodes.includes(resp)) {
-						this.emit({ type: 'message', message: "That's not a node in your spell!", awaiting: null });
-						continue;
-					}
-					if (board.stones[resp] !== null) {
-						this.emit({ type: 'message', message: 'You already kept that stone!', awaiting: null });
-						continue;
-					}
-
-					board.stones[resp] = color;
-					refills--;
+				const emptyNodes = positionNodes.filter(n => board.stones[n] === null);
+				if (refills >= emptyNodes.length) {
+					// No degrees of freedom: fill every empty spell node and skip the prompt.
+					for (const n of emptyNodes) { board.stones[n] = color; }
 					board.update();
 					this.emit(board.getBoardStatePayload());
-				}
+					this.emit({ type: 'donerefilling', playercolor: color });
+				} else {
+					const msg = refills === 1
+						? 'You get to keep 1 stone in ' + spellName.replace(/_/g, ' ') + '.'
+						: 'You get to keep ' + refills + ' stones in ' + spellName.replace(/_/g, ' ') + '.';
+					this.emit({ type: 'message', message: msg, awaiting: null });
 
-				this.emit({ type: 'donerefilling', playercolor: color });
+					while (refills > 0) {
+						// Send chooserefills event
+						const refillPayload = { type: 'chooserefills', playercolor: color };
+						for (const n of positionNodes) {
+							if (board.stones[n] === null) {
+								refillPayload[n] = 'True';
+							}
+						}
+						this.emit(refillPayload);
+
+						const resp = await this.getInput({
+							type: 'message', message: 'Select a stone to keep:',
+							awaiting: 'node', moveoptions: {},
+						});
+
+						if (!positionNodes.includes(resp)) {
+							this.emit({ type: 'message', message: "That's not a node in your spell!", awaiting: null });
+							continue;
+						}
+						if (board.stones[resp] !== null) {
+							this.emit({ type: 'message', message: 'You already kept that stone!', awaiting: null });
+							continue;
+						}
+
+						board.stones[resp] = color;
+						refills--;
+						board.update();
+						this.emit(board.getBoardStatePayload());
+					}
+
+					this.emit({ type: 'donerefilling', playercolor: color });
+				}
 			}
 		}
 
@@ -596,6 +605,9 @@ class GameController {
 		await this._delay(300);
 
 		const turn = this.ai.pickTurn(board, color);
+		if (this.ai.lastMeta) {
+			this.emit({ type: 'ai_think_report', color, ...this.ai.lastMeta });
+		}
 		await applyAITurn(board, turn, color, this.emit);
 	}
 
