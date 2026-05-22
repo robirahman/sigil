@@ -336,11 +336,12 @@ class MinimaxAI {
 		// let iterative deepening reach a deeper iteration within the
 		// same time budget without changing what gets searched.
 		// `exhaustiveOpponent` defaults off: it expands the
-		// opponent-response branch with OPPONENT_ENUM_CAPS, which
-		// gives a more accurate evaluation but ~50% more depth-1
-		// nodes. With 50 ms-per-leaf in the browser that risks
-		// blowing the 12 s budget at depth 3, so we prefer the safer
-		// default and revisit once we've measured live latency.
+		// opponent-response branch with the same ENUM_CAPS used at
+		// root, which gives a more accurate evaluation but ~50%
+		// more depth-1 nodes. With 50 ms-per-leaf in the browser
+		// that risks blowing the 12 s budget at depth 3, so we
+		// prefer the safer default here and revisit once we've
+		// measured live latency.
 		this.options = Object.assign(
 			{
 				maxDepth: 3,

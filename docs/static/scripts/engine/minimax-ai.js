@@ -286,10 +286,8 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 	}
 
 	let caps = null;
-	if (exhaustiveRoot && isRoot) {
-		caps = (typeof NARROW_ENUM_CAPS !== 'undefined') ? NARROW_ENUM_CAPS : null;
-	} else if (exhaustiveOpponent && ply === 1) {
-		caps = (typeof OPPONENT_ENUM_CAPS !== 'undefined') ? OPPONENT_ENUM_CAPS : null;
+	if ((exhaustiveRoot && isRoot) || (exhaustiveOpponent && ply === 1)) {
+		caps = (typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
 	}
 	const turns = _minimaxOrderedTurns(board, color, model, orderingAlpha, caps, blunderLambda);
 	if (turns.length === 0) {
