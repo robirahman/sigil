@@ -41,6 +41,11 @@ def _live_board_to_simboard(board):
     sim.springlock['red'] = board.redplayer.springlock.name if board.redplayer.springlock else None
     sim.springlock['blue'] = board.blueplayer.springlock.name if board.blueplayer.springlock else None
 
+    # Mirror live repetition history so searches passed this sim can
+    # detect rep-forced wins/losses. SPBoard (single-player) doesn't
+    # track this field; getattr guard keeps the conversion safe.
+    sim.all_looping_snapshot_counts = dict(getattr(board, 'all_looping_snapshot_counts', {}))
+
     sim.update()
     return sim
 

@@ -81,7 +81,7 @@ class SimBoard:
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
                  'springlock', 'totalstones', 'mana', 'charged_spells',
-                 'variant')
+                 'variant', 'all_looping_snapshot_counts')
 
     def __init__(self, spell_names=None, variant='standard'):
         if variant not in self.VARIANTS:
@@ -102,6 +102,7 @@ class SimBoard:
         self.mana = {'red': 0, 'blue': 0}
         self.charged_spells = {'red': [], 'blue': []}
         self.variant = variant
+        self.all_looping_snapshot_counts = {}
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -120,7 +121,21 @@ class SimBoard:
         b.charged_spells = {'red': list(self.charged_spells['red']),
                             'blue': list(self.charged_spells['blue'])}
         b.variant = self.variant
+        b.all_looping_snapshot_counts = dict(self.all_looping_snapshot_counts)
         return b
+
+    def looping_snapshot(self):
+        """Repetition-detection key. Matches game.py:Board.take_snapshot
+        format so a dict carried over from a live Board produces matching
+        keys: red+blue spell counters, every node's stone in NODE_ORDER,
+        red lock name (or 'None'), blue lock name (or 'None').
+        """
+        key = str(self.spell_counter['red']) + str(self.spell_counter['blue'])
+        for nodename in NODE_ORDER:
+            key += str(self.stones[nodename])
+        key += self.lock['red'] if self.lock['red'] else 'None'
+        key += self.lock['blue'] if self.lock['blue'] else 'None'
+        return key
 
     def setup_initial(self):
         """Set up the starting board for this board's variant.

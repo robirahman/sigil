@@ -350,7 +350,8 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
                ordering_alpha=1.0, exhaustive_root=False,
                exhaustive_opponent=False, blunder_lambda=0.0,
                _is_root=True,
-               tt=None, killers=None, hasher=None, ply=0):
+               tt=None, killers=None, hasher=None, ply=0,
+               position_history=None):
     """Negamax alpha-beta. Returns (score from `color`'s perspective, best move).
 
     `exhaustive_root`: if True, the *root* call enumerates every dash and
@@ -420,31 +421,49 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
     cutoff = False
     for turn in turns:
         sim = _apply_turn(board, turn, color)
-        if sim.gameover and sim.winner == color:
-            best_score = _WIN
-            best_move = turn
-            cutoff = True
-            break
-        sub_score, _sub_move = _alphabeta(
-            sim, enemy, depth - 1, -beta, -alpha, model, deadline,
-            ordering_alpha=ordering_alpha,
-            exhaustive_root=exhaustive_root,
-            exhaustive_opponent=exhaustive_opponent,
-            blunder_lambda=blunder_lambda,
-            _is_root=False,
-            tt=tt, killers=killers, hasher=hasher, ply=ply + 1,
-        )
-        score = -sub_score
-        if score > best_score:
-            best_score = score
-            best_move = turn
-        if best_score > alpha:
-            alpha = best_score
-        if alpha >= beta:
-            if killers is not None:
-                killers.add(ply, turn)
-            cutoff = True
-            break
+        # Threefold-repetition rule: 5th occurrence of any position is
+        # a forced blue-win. Mutate `position_history` on the way down
+        # and undo on the way up so siblings see the original counts.
+        rep_snap = None
+        if position_history is not None and not sim.gameover:
+            rep_snap = sim.looping_snapshot()
+            new_count = position_history.get(rep_snap, 0) + 1
+            position_history[rep_snap] = new_count
+            if new_count >= 5:
+                sim.gameover = True
+                sim.winner = 'blue'
+        try:
+            if sim.gameover and sim.winner == color:
+                best_score = _WIN
+                best_move = turn
+                cutoff = True
+                break
+            sub_score, _sub_move = _alphabeta(
+                sim, enemy, depth - 1, -beta, -alpha, model, deadline,
+                ordering_alpha=ordering_alpha,
+                exhaustive_root=exhaustive_root,
+                exhaustive_opponent=exhaustive_opponent,
+                blunder_lambda=blunder_lambda,
+                _is_root=False,
+                tt=tt, killers=killers, hasher=hasher, ply=ply + 1,
+                position_history=position_history,
+            )
+            score = -sub_score
+            if score > best_score:
+                best_score = score
+                best_move = turn
+            if best_score > alpha:
+                alpha = best_score
+            if alpha >= beta:
+                if killers is not None:
+                    killers.add(ply, turn)
+                cutoff = True
+                break
+        finally:
+            if rep_snap is not None:
+                position_history[rep_snap] -= 1
+                if position_history[rep_snap] <= 0:
+                    del position_history[rep_snap]
 
     # ---- Transposition-table store ----
     if tt is not None and tt_key is not None:
@@ -465,7 +484,8 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
                    verbose=False,
                    enable_tt=True, enable_killers=True,
                    aspiration_delta=0.15,
-                   tt_max_size=200_000, max_ply=8, tt=None):
+                   tt_max_size=200_000, max_ply=8, tt=None,
+                   position_history=None):
     """Iterative-deepening alpha-beta search.
 
     Returns the best CompleteTurn found within `time_limit` seconds, up
@@ -501,10 +521,22 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
     if not legal:
         return CompleteTurn([Action('pass')])
 
+    # Working copy of the live game's repetition history. Mutated during
+    # alpha-beta descent (increment) and undone on backtrack so the
+    # caller's dict is never modified.
+    ab_history = dict(position_history) if position_history is not None else None
+
     # Mate-in-1: cheap special case. Iterate over the (possibly
     # exhaustive) root variants so we don't miss a winning Bewitch pair.
+    # Also catches a rep-mate where this turn drives the position to its
+    # 5th occurrence (forced blue-win).
     for turn in legal:
         sim = _apply_turn(board, turn, color)
+        if ab_history is not None and not sim.gameover:
+            k = sim.looping_snapshot()
+            if ab_history.get(k, 0) + 1 >= 5:
+                sim.gameover = True
+                sim.winner = 'blue'
         if sim.gameover and sim.winner == color:
             if verbose:
                 print(f'minimax: mate-in-1 found, returning immediately', flush=True)
@@ -546,6 +578,7 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
                     blunder_lambda=blunder_lambda,
                     _is_root=True,
                     tt=tt_obj, killers=killers, hasher=hasher, ply=0,
+                    position_history=ab_history,
                 )
                 if score <= alpha and alpha > -_INF:
                     alpha = -_INF
