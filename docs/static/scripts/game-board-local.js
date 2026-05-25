@@ -505,12 +505,52 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				// --- Local engine instead of WebSocket ---
-				const aiMode = new URLSearchParams(window.location.search).get('ai');
+				let aiMode = new URLSearchParams(window.location.search).get('ai');
 				// Game-rule variant (separate concept from `aiMode`'s "model
 				// variant" naming below): 'standard' or 'competitive'.
 				const gameVariantParam = new URLSearchParams(window.location.search).get('variant');
-				const gameVariant = gameVariantParam === 'competitive' ? 'competitive' : 'standard';
+				let gameVariant = gameVariantParam === 'competitive' ? 'competitive' : 'standard';
 				let _engineRef = null;
+
+				// Persistence: pin a game-id to the URL (mint one if missing)
+				// so a reload returns to the same game. If a save exists for
+				// the id, hydrate aiMode / variant / humanColor / SFN from it
+				// — these win over the URL so resume works even if the user
+				// lands on /game.html?id=X without other params.
+				if (typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
+				let _gameId = new URLSearchParams(window.location.search).get('id');
+				if (!_gameId && typeof LocalSaveStore !== 'undefined') {
+					_gameId = LocalSaveStore.mintId();
+					try {
+						const u = new URL(window.location.href);
+						u.searchParams.set('id', _gameId);
+						history.replaceState(null, '', u.toString());
+					} catch (e) { /* ignore */ }
+				}
+				let _saveLoadedSfn = null;
+				let _savedHumanColor = null;
+				if (_gameId && typeof LocalSaveStore !== 'undefined') {
+					const _save = LocalSaveStore.get(_gameId);
+					if (_save && _save.sfn) {
+						let _validSfn = false;
+						try {
+							const _parsed = sfnToDict(_save.sfn);
+							if (_parsed && _parsed.stones) _validSfn = true;
+						} catch (e) { /* corrupted SFN — drop the save below */ }
+						if (_validSfn) {
+							_saveLoadedSfn = _save.sfn;
+							if (_save.aiMode) aiMode = _save.aiMode;
+							if (_save.variant === 'competitive' || _save.variant === 'standard') {
+								gameVariant = _save.variant;
+							}
+							if (_save.humanColor === 'red' || _save.humanColor === 'blue') {
+								_savedHumanColor = _save.humanColor;
+							}
+						} else {
+							LocalSaveStore.remove(_gameId);
+						}
+					}
+				}
 
 				// Auth manager for rated AI games + community annotations from AI review.
 				let _aiAuthManager = null;
@@ -559,7 +599,7 @@ document.addEventListener('alpine:init', () => {
 						sessionStorage.removeItem('sigil_rematch_human_color');
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				const _humanColor = _forcedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red');
+				const _humanColor = _forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red');
 				const _aiColor = _humanColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
 
@@ -654,8 +694,24 @@ document.addEventListener('alpine:init', () => {
 						_this.awaiting = null;
 					};
 
-					const sfnToLoad = _this.importSfn || null;
+					const sfnToLoad = _saveLoadedSfn || _this.importSfn || null;
 					engine.startGame(sfnToLoad);
+				}
+
+				/**
+				 * Write the current game state to localStorage under _gameId
+				 * so a reload returns to this position. Called from the
+				 * sfn_update handler (after every turn boundary).
+				 */
+				function _persistCurrentGame(sfn) {
+					if (!_gameId || typeof LocalSaveStore === 'undefined' || !sfn) return;
+					LocalSaveStore.put(_gameId, {
+						mode: aiMode ? 'single_player' : 'local_1v1',
+						sfn: sfn,
+						aiMode: aiMode || null,
+						variant: gameVariant,
+						humanColor: aiMode ? _humanColor : null,
+					});
 				}
 
 				initEngine();
@@ -696,6 +752,7 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'sfn_update') {
 						_this.currentSfn = rest.sfn;
+						_persistCurrentGame(rest.sfn);
 						return;
 					}
 
@@ -753,6 +810,9 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'game_over') {
+						if (_gameId && typeof LocalSaveStore !== 'undefined') {
+							LocalSaveStore.remove(_gameId);
+						}
 						handleGameOverEvent(rest);
 						return;
 					}
