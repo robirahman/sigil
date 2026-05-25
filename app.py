@@ -5,6 +5,8 @@ import json
 import time
 import math
 
+import uuid
+
 from flask import Flask, render_template, redirect, url_for, request, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
@@ -80,14 +82,46 @@ singleplayercount = 0
 def singlePlayer():
 	global singleplayercount
 	singleplayercount += 1
-	difficulty = request.args.get('difficulty', 'easy')
+	# Legacy bookmark shim: /single-player?load=<id> -> /single-player/<id>
 	load_id = request.args.get('load', '')
+	if load_id:
+		return redirect(url_for('singlePlayerGame', save_id=load_id))
+	difficulty = request.args.get('difficulty', 'easy')
+	variant = request.args.get('variant', 'standard')
+	if variant not in ('standard', 'competitive'):
+		variant = 'standard'
+	save_id = uuid.uuid4().hex[:8]
+	return redirect(url_for('singlePlayerGame', save_id=save_id,
+							difficulty=difficulty, variant=variant))
+
+@app.route('/single-player/<save_id>')
+def singlePlayerGame(save_id):
+	global singleplayercount
+	# Canonical per-game URL. If a save exists, resume it; otherwise start fresh.
+	if _save_exists(save_id):
+		try:
+			save_data = _load_save(save_id)
+		except Exception:
+			save_data = None
+		if save_data and not save_data.get('finished') and save_data.get('mode', 'single_player') == 'single_player':
+			difficulty = save_data.get('difficulty', 'easy')
+			try:
+				variant = sfn_to_dict(save_data['sfn']).get('variant', 'standard')
+			except Exception:
+				variant = 'standard'
+			return render_template('single-player.html',
+								   current_user_name=getattr(current_user, 'name', ''),
+								   difficulty=difficulty, save_id=save_id,
+								   load_id=save_id, variant=variant)
+	# No save yet — fresh game using this id.
+	difficulty = request.args.get('difficulty', 'easy')
 	variant = request.args.get('variant', 'standard')
 	if variant not in ('standard', 'competitive'):
 		variant = 'standard'
 	return render_template('single-player.html',
 						   current_user_name=getattr(current_user, 'name', ''),
-						   difficulty=difficulty, load_id=load_id, variant=variant)
+						   difficulty=difficulty, save_id=save_id,
+						   load_id='', variant=variant)
 
 @app.route('/single-player-menu')
 def singlePlayerMenu():
@@ -100,13 +134,39 @@ def api_saves():
 
 @app.route('/local-1v1')
 def local1v1():
+	# Mint a canonical per-game URL. Imports are pre-saved server-side
+	# so the per-game URL hydrates them on first load.
 	import_sfn = request.args.get('sfn', '')
-	game_mode = 'local1v1_import' if import_sfn else 'local1v1'
 	variant = request.args.get('variant', 'standard')
 	if variant not in ('standard', 'competitive'):
 		variant = 'standard'
+	game_id = uuid.uuid4().hex[:8]
+	if import_sfn:
+		try:
+			imported_variant = sfn_to_dict(import_sfn).get('variant') or variant
+		except Exception:
+			imported_variant = variant
+		_save_local1v1_sfn(game_id, import_sfn, imported_variant)
+		return redirect(url_for('local1v1Game', game_id=game_id))
+	return redirect(url_for('local1v1Game', game_id=game_id, variant=variant))
+
+@app.route('/local-1v1/<game_id>')
+def local1v1Game(game_id):
+	variant = request.args.get('variant', 'standard')
+	if variant not in ('standard', 'competitive'):
+		variant = 'standard'
+	if _save_exists(game_id):
+		try:
+			save_data = _load_save(game_id)
+		except Exception:
+			save_data = None
+		if save_data and save_data.get('mode') == 'local_1v1' and not save_data.get('finished'):
+			try:
+				variant = sfn_to_dict(save_data['sfn']).get('variant', variant)
+			except Exception:
+				pass
 	return render_template('local-1v1.html', current_user_name=getattr(current_user, 'name', ''),
-						   game_mode=game_mode, import_sfn=import_sfn, variant=variant)
+						   game_mode='local1v1', game_id=game_id, import_sfn='', variant=variant)
 
 @app.route('/private-match')
 def privatematch():
@@ -959,12 +1019,13 @@ def _save_training_data(ai_player, winner):
 			f.write(json.dumps(record) + '\n')
 
 def _save_game_state(board, recorder, human_color, difficulty, save_id):
-	"""Auto-save the current game state so it can be resumed later."""
+	"""Auto-save the current single-player game state so it can be resumed later."""
 	from notation import board_to_sfn
 	saves_dir = os.path.join(_APP_DIR, 'saves')
 	os.makedirs(saves_dir, exist_ok=True)
 	filepath = os.path.join(saves_dir, f'{save_id}.json')
 	data = {
+		'mode': 'single_player',
 		'sfn': board_to_sfn(board),
 		'human_color': human_color,
 		'difficulty': difficulty,
@@ -974,12 +1035,45 @@ def _save_game_state(board, recorder, human_color, difficulty, save_id):
 	with open(filepath, 'w') as f:
 		json.dump(data, f)
 
+def _save_local1v1(board, game_id, variant):
+	"""Auto-save the current local-1v1 game state so a reload resumes it."""
+	from notation import board_to_sfn
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	os.makedirs(saves_dir, exist_ok=True)
+	filepath = os.path.join(saves_dir, f'{game_id}.json')
+	data = {
+		'mode': 'local_1v1',
+		'sfn': board_to_sfn(board),
+		'variant': variant,
+		'finished': board.gameover,
+	}
+	with open(filepath, 'w') as f:
+		json.dump(data, f)
+
+def _save_local1v1_sfn(game_id, sfn, variant):
+	"""Pre-seed a local-1v1 save from an imported SFN before the WS opens."""
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	os.makedirs(saves_dir, exist_ok=True)
+	filepath = os.path.join(saves_dir, f'{game_id}.json')
+	data = {
+		'mode': 'local_1v1',
+		'sfn': sfn,
+		'variant': variant,
+		'finished': False,
+	}
+	with open(filepath, 'w') as f:
+		json.dump(data, f)
+
 def _delete_save(save_id):
 	filepath = os.path.join(_APP_DIR, 'saves', f'{save_id}.json')
 	if os.path.exists(filepath):
 		os.remove(filepath)
 
+def _save_exists(save_id):
+	return os.path.exists(os.path.join(_APP_DIR, 'saves', f'{save_id}.json'))
+
 def _list_saves():
+	"""List single-player saves only (for the single-player menu)."""
 	saves_dir = os.path.join(_APP_DIR, 'saves')
 	if not os.path.isdir(saves_dir):
 		return []
@@ -991,6 +1085,8 @@ def _list_saves():
 			with open(os.path.join(saves_dir, fname)) as f:
 				data = json.load(f)
 			if data.get('finished'):
+				continue
+			if data.get('mode', 'single_player') != 'single_player':
 				continue
 			from notation import sfn_to_dict
 			state = sfn_to_dict(data['sfn'])
@@ -1031,22 +1127,32 @@ class _DedupWebSocket:
 		return self._ws.receive()
 
 
-@sock.route('/api/local1v1game')
-def play_local_1v1(ws):
+local1v1_live_set = set()
+
+@sock.route('/api/local1v1game/<game_id>')
+def play_local_1v1_with_id(ws, game_id):
+	# Reject a second concurrent connection to the same game id so two
+	# tabs can't race each other writing the same save file.
+	if game_id in local1v1_live_set:
+		ws.send(json.dumps({"type": "message", "message": "This game is already open in another tab."}))
+		return
+	load_sfn = None
 	variant = request.args.get('variant', 'standard')
-	_run_local_1v1_game(ws, variant=variant)
+	if _save_exists(game_id):
+		try:
+			save_data = _load_save(game_id)
+		except Exception:
+			save_data = None
+		if save_data and save_data.get('mode') == 'local_1v1' and not save_data.get('finished'):
+			load_sfn = save_data.get('sfn') or None
+			variant = save_data.get('variant', variant)
+	local1v1_live_set.add(game_id)
+	try:
+		_run_local_1v1_game(ws, load_sfn=load_sfn, variant=variant, game_id=game_id)
+	finally:
+		local1v1_live_set.discard(game_id)
 
-@sock.route('/api/local1v1game_import')
-def play_local_1v1_import(ws):
-	ingress = ws.receive()
-	sfn_str = json.loads(ingress).get('message', '')
-	# Import inherits the variant from the imported SFN if present.
-	from notation import sfn_to_dict as _sfn_to_dict
-	imported = _sfn_to_dict(sfn_str) if sfn_str else {}
-	variant = imported.get('variant') or request.args.get('variant', 'standard')
-	_run_local_1v1_game(ws, load_sfn=sfn_str, variant=variant)
-
-def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
+def _run_local_1v1_game(ws, load_sfn=None, variant='standard', game_id=None):
 	board = Board()
 	board.variant = variant if variant in ('standard', 'competitive') else 'standard'
 	red = Player(board, 'red')
@@ -1123,6 +1229,8 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 		red.ws.send(json.dumps({"type": "sfn_update", "sfn": sfn}))
 
 	send_sfn()
+	if game_id:
+		_save_local1v1(board, game_id, board.variant)
 
 	reset_this_turn = False
 
@@ -1162,6 +1270,8 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 					activeplayer.eot_triggers()
 					board.update(True)
 					send_sfn()
+					if game_id:
+						_save_local1v1(board, game_id, board.variant)
 					reset_this_turn = False
 					if board.gameover:
 						break
@@ -1194,6 +1304,8 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 
 					board.update(True)
 					send_sfn()
+					if game_id:
+						_save_local1v1(board, game_id, board.variant)
 					reset_this_turn = True
 					continue
 			except Exception:
@@ -1205,24 +1317,32 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 				time.sleep(1)
 			except Exception:
 				pass
+			if game_id:
+				_delete_save(game_id)
 
 
 @sock.route('/api/singleplayergame')
 def playsingleplayergame(ws):
 	variant = request.args.get('variant', 'standard')
-	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy', variant=variant)
+	save_id = request.args.get('save_id') or None
+	_run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
+						   variant=variant, save_id=save_id)
 
 @sock.route('/api/singleplayergame_medium')
 def playsingleplayergame_medium(ws):
 	variant = request.args.get('variant', 'standard')
+	save_id = request.args.get('save_id') or None
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='medium',
-						   ai_kwargs={'net_class': SigilNet}, variant=variant)
+						   ai_kwargs={'net_class': SigilNet},
+						   variant=variant, save_id=save_id)
 
 @sock.route('/api/singleplayergame_hard')
 def playsingleplayergame_hard(ws):
 	variant = request.args.get('variant', 'standard')
+	save_id = request.args.get('save_id') or None
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='hard',
-						   ai_kwargs={'net_class': SigilNetHard}, variant=variant)
+						   ai_kwargs={'net_class': SigilNetHard},
+						   variant=variant, save_id=save_id)
 
 @sock.route('/api/singleplayergame_load')
 def playsingleplayergame_load(ws):
