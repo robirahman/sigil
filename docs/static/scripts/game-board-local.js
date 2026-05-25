@@ -306,11 +306,11 @@ document.addEventListener('alpine:init', () => {
 				this.playAgainSameLayout();
 			},
 
-			rematchStage: 'idle',  // 'idle' | 'sameBoard'
+			rematchStage: 'idle',  // 'idle' | 'rematch'
 			isAiGame: !!new URLSearchParams(window.location.search).get('ai'),
 
 			openRematchMenu() {
-				this.rematchStage = this.rematchStage === 'sameBoard' ? 'idle' : 'sameBoard';
+				this.rematchStage = this.rematchStage === 'rematch' ? 'idle' : 'rematch';
 			},
 
 			reviewPrev() {

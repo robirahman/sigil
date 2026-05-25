@@ -670,32 +670,30 @@
 						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
 					</div>
 					<div class="win-modal__actions">
-						<button class="win-modal__btn" x-on:click="playAgain()" x-show="rematchStage !== 'sameBoard'">New Board</button>
-						<button class="win-modal__btn"
-							x-on:click="openRematchMenu()"
-							x-show="rematchStage !== 'sameBoard' && _spellNamesForExport && _spellNamesForExport.length === 9">Same Board…</button>
-						<button class="win-modal__btn"
-							x-on:click="playAgainSameLayout()"
-							x-show="rematchStage === 'sameBoard'">Same Sides</button>
-						<button class="win-modal__btn"
-							x-on:click="playAgainSameLayoutSwap()"
-							x-show="rematchStage === 'sameBoard' && isAiGame">Swap Colors</button>
-						<button class="win-modal__btn"
-							x-on:click="rematchStage = 'idle'"
-							x-show="rematchStage === 'sameBoard'">&larr; Back</button>
-						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0 && rematchStage !== 'sameBoard'">Review Game</button>
+						<button class="win-modal__btn" x-on:click="openRematchMenu()" x-show="rematchStage !== 'rematch'">Rematch</button>
+						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'">Review Game</button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('quick')"
-							x-show="reviewSfns.length > 0 && (!aiReview || aiReview.mode === 'quick')"
+							x-show="reviewSfns.length > 0 && rematchStage !== 'rematch' && (!aiReview || aiReview.mode === 'quick')"
 							x-bind:disabled="aiReviewComputing"
 							x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'quick' ? 'Open Quick Review' : 'Quick Review (1s/ply)')"></button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('deep')"
-							x-show="reviewSfns.length > 0"
+							x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'"
 							x-bind:disabled="aiReviewComputing"
-							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : 'Deep Review (10 ply)')"></button>
-						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
-						<a class="win-modal__btn" href="./">Main Menu</a>
+							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : 'Deep Review (8 ply)')"></button>
+						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
+						<a class="win-modal__btn" href="./" x-show="rematchStage !== 'rematch'">Main Menu</a>
+						<button class="win-modal__btn"
+							x-on:click="playAgainSameLayout()"
+							x-show="rematchStage === 'rematch' && _spellNamesForExport && _spellNamesForExport.length === 9">Same Sides</button>
+						<button class="win-modal__btn"
+							x-on:click="playAgainSameLayoutSwap()"
+							x-show="rematchStage === 'rematch' && _spellNamesForExport && _spellNamesForExport.length === 9 && isAiGame">Swap Colors</button>
+						<button class="win-modal__btn" x-on:click="playAgain()" x-show="rematchStage === 'rematch'">New Board</button>
+						<button class="win-modal__btn"
+							x-on:click="rematchStage = 'idle'"
+							x-show="rematchStage === 'rematch'">&larr; Back</button>
 					</div>
 				</div>
 				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
