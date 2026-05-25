@@ -18,21 +18,20 @@ const CAVEMAN_WIN = 100.0;
 const _CAVEMAN_TT_MAX = 200000;
 const _CAVEMAN_MAX_PLY = 12;
 
-// Per-prospective-kill bonus added to the leaf when the relevant spell
-// is charged but not yet cast. The 0.5 discount reflects that the cast
-// might not happen this turn (locked, opponent plays defense, own side
-// forced into a counter). Full kill = 1/39 ≈ 0.0256; the discount
-// keeps the bonus from competing with realised material.
-const CAVEMAN_FIREBLAST_PREP = 0.5 / 39.0;
-const CAVEMAN_HAILSTORM_PREP = 0.5 / 39.0;
+// Move-ordering tiebreaker weight per prospective spell kill. Tiny
+// compared to one stone (1.0), so prep deltas only change ordering
+// when two turns have identical 1-ply stone-diff. 4 prep kills tie
+// about half a stone — strictly sub-material.
+const _FIREBLAST_ORDER_TIEBREAK = 0.5 / 39.0;
+const _HAILSTORM_ORDER_TIEBREAK = 0.5 / 39.0;
 
 /**
- * Bonus for `side`'s Fireblast prep: count of enemy stones adjacent
- * to any own stone — the exact kill set Fireblast would destroy if
- * cast right now (spells.js doFireblast). Zero if Fireblast isn't
- * charged for `side`.
+ * Integer count of enemy stones adjacent to any own stone — the exact
+ * kill set Fireblast would destroy if cast right now (spells.js
+ * doFireblast). Zero unless Fireblast is charged for `side`. Used as
+ * a move-ordering tiebreaker; the leaf eval ignores it.
  */
-function _cavemanFireblastPrep(board, side, enemyOfSide) {
+function _fireblastPrepKills(board, side, enemyOfSide) {
 	if (!board.chargedSpells || !board.chargedSpells[side]) return 0;
 	if (!board.chargedSpells[side].includes('Fireblast')) return 0;
 	let kills = 0;
@@ -42,17 +41,17 @@ function _cavemanFireblastPrep(board, side, enemyOfSide) {
 			if (board.stones[nb] === side) { kills++; break; }
 		}
 	}
-	return kills * CAVEMAN_FIREBLAST_PREP;
+	return kills;
 }
 
 /**
- * Bonus for `side`'s Hail Storm prep: count of spell positions 1–6
- * (the 3-node and 5-node slots) that hold at least one enemy stone.
- * Each such slot is one prospective kill (the resolver in
- * spells.js doHailStorm destroys the first enemy it finds per slot).
- * Zero if Hail Storm isn't charged for `side`.
+ * Integer count of spell positions 1–6 (the 3-node and 5-node slots
+ * Hail Storm targets per spells.js doHailStorm) that hold at least
+ * one enemy stone. Each such slot yields one kill on cast. Zero
+ * unless Hail Storm is charged for `side`. Used as a move-ordering
+ * tiebreaker; the leaf eval ignores it.
  */
-function _cavemanHailStormPrep(board, side, enemyOfSide) {
+function _hailStormPrepKills(board, side, enemyOfSide) {
 	if (!board.chargedSpells || !board.chargedSpells[side]) return 0;
 	if (!board.chargedSpells[side].includes('Hail_Storm')) return 0;
 	let slots = 0;
@@ -63,7 +62,7 @@ function _cavemanHailStormPrep(board, side, enemyOfSide) {
 			if (board.stones[n] === enemyOfSide) { slots++; break; }
 		}
 	}
-	return slots * CAVEMAN_HAILSTORM_PREP;
+	return slots;
 }
 
 function _cavemanLeaf(board, color) {
@@ -74,16 +73,7 @@ function _cavemanLeaf(board, color) {
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const diff = board.totalStones[color] - board.totalStones[enemy];
-	// Symmetric spell-prep bonuses: own side's prep is good, enemy's
-	// is bad. Each helper short-circuits on a missing chargedSpells
-	// entry, so positions where neither side has the spell pay nearly
-	// nothing beyond two Array.includes checks.
-	const prep =
-		_cavemanFireblastPrep(board, color, enemy)
-		- _cavemanFireblastPrep(board, enemy, color)
-		+ _cavemanHailStormPrep(board, color, enemy)
-		- _cavemanHailStormPrep(board, enemy, color);
-	return diff / 39.0 + prep;
+	return diff / 39.0;
 }
 
 function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
@@ -100,11 +90,34 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 	}
 	if (turns.length <= 1) return turns;
 	const enemy = color === 'red' ? 'blue' : 'red';
+	// Pre-turn prep counts — used as a delta baseline so the ordering
+	// score reflects how much a turn *changes* prep, not the absolute
+	// level. Cost on positions without either spell charged: two
+	// Array.includes early-outs.
+	const preF =
+		_fireblastPrepKills(board, color, enemy)
+		- _fireblastPrepKills(board, enemy, color);
+	const preH =
+		_hailStormPrepKills(board, color, enemy)
+		- _hailStormPrepKills(board, enemy, color);
 	const scored = [];
 	for (let i = 0; i < turns.length; i++) {
 		const sim = _minimaxApplyTurn(board, turns[i], color);
 		const diff = sim.totalStones[color] - sim.totalStones[enemy];
-		scored.push([diff, i]);
+		// Sub-stone tiebreakers: prefer turns that increase our prep
+		// kill set or decrease the enemy's, breaking ties between
+		// otherwise-equivalent 1-ply stone-diffs. Leaf eval is
+		// untouched — this only reorders alpha-beta exploration.
+		const postF =
+			_fireblastPrepKills(sim, color, enemy)
+			- _fireblastPrepKills(sim, enemy, color);
+		const postH =
+			_hailStormPrepKills(sim, color, enemy)
+			- _hailStormPrepKills(sim, enemy, color);
+		const score = diff
+			+ _FIREBLAST_ORDER_TIEBREAK * (postF - preF)
+			+ _HAILSTORM_ORDER_TIEBREAK * (postH - preH);
+		scored.push([score, i]);
 	}
 	scored.sort((a, b) => b[0] - a[0]);
 	return scored.map(s => turns[s[1]]);
