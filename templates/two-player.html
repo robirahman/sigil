@@ -13,7 +13,7 @@
 {% block content %}
 {{ super() }}
 <div
-	x-data="gameBoard({ gameName: '{{privategamename}}', playerCount: 2, username: '{{current_user_name}}', check: '{{check}}', elo: '{{elo}}' })"
+	x-data="gameBoard({ gameName: '{{privategamename}}', gameId: '{{ game_id or '' }}', playerCount: 2, username: '{{current_user_name}}', check: '{{check}}', elo: '{{elo}}' })"
 >
 	<div
 		class="ladder-details"

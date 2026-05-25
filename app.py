@@ -13,7 +13,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user, UserMixin
 from flask_sock import Sock
 from random import randint, randrange
-from threading import Thread
+from threading import Thread, Event, Lock
 from simple_websocket import ConnectionClosed
 from datetime import datetime
 from pytz import timezone
@@ -186,6 +186,16 @@ def privategameboard(gamename):
 @login_required
 def laddergame():
 	return render_template('two-player.html', privategamename='', check=current_user.password[8:16], elo=current_user.elo, current_user_name=current_user.name)
+
+# Resumable per-game URL for ladder. The id is minted at match time; the
+# client lands here via history.replaceState after the WS sends `assigned_id`,
+# so reloading the tab brings the player back into the same game.
+@app.route('/ladder-game/<game_id>')
+@login_required
+def ladderGameById(game_id):
+	return render_template('two-player.html', privategamename='', game_id=game_id,
+						   check=current_user.password[8:16], elo=current_user.elo,
+						   current_user_name=current_user.name)
 
 @app.route('/profile')
 @login_required
@@ -428,59 +438,66 @@ def record_elo(winner, loser):
 
 
 def countdown_timer(red, blue):
+	"""Tick once per second for the active player's clock. With the
+	reconnect-aware game loop, this thread no longer ends the game on
+	WS errors — it just skips failed sends and keeps ticking. If the
+	disconnected player's clock runs out, end_game fires and the loop
+	exits normally."""
 	while True:
+		time.sleep(1)
+		if red.board.gameover:
+			break
 		try:
-			time.sleep(1)
 			if red.timer_running:
 				red.timer -= 1
 				if red.timer == 0:
 					red.board.gameover = True
 					red.board.winner = 'blue'
-					red.board.end_game()
+					try:
+						red.board.end_game()
+					except (redwinsException, bluewinsException):
+						pass
+					except Exception:
+						pass
+					try:
+						record_elo(blue, red)
+					except Exception:
+						pass
 					break
-				egress =  {"type": "red_timer", "seconds": red.timer}
-				red.ws.send(json.dumps(egress))
-				blue.ws.send(json.dumps(egress))
+				egress = {"type": "red_timer", "seconds": red.timer}
 			elif blue.timer_running:
 				blue.timer -= 1
 				if blue.timer == 0:
 					blue.board.gameover = True
 					blue.board.winner = 'red'
-					blue.board.end_game()
+					try:
+						blue.board.end_game()
+					except (redwinsException, bluewinsException):
+						pass
+					except Exception:
+						pass
+					try:
+						record_elo(red, blue)
+					except Exception:
+						pass
 					break
-				egress =  {"type": "blue_timer", "seconds": blue.timer}
-				red.ws.send(json.dumps(egress))
-				blue.ws.send(json.dumps(egress))
+				egress = {"type": "blue_timer", "seconds": blue.timer}
+			else:
+				continue
+			for player_ws in (red.ws, blue.ws):
+				try:
+					player_ws.send(json.dumps(egress))
+				except Exception:
+					pass
 		except redwinsException:
 			record_elo(red, blue)
 			break
 		except bluewinsException:
 			record_elo(blue, red)
 			break
-		except:
-			time.sleep(.1)
-			if red.board.elo_recorded:
-				break
-			else:
-				### determine which player disconnected
-				try:
-					red.jmessage("Opponent disconnected.")
-					egress = { "type": "game_over" }
-					egress["winner"] = 'red'
-					red.ws.send(json.dumps(egress))
-					record_elo(red, blue)
-					break
-				except:
-					try:
-						blue.jmessage("Opponent disconnected.")
-						egress = { "type": "game_over" }
-						egress["winner"] = 'blue'
-						blue.ws.send(json.dumps(egress))
-						record_elo(blue, red)
-						break
-					except:
-						### both are disconnected
-						break
+		except Exception:
+			# Unexpected error; back off briefly and keep ticking.
+			time.sleep(0.5)
 
 
 ### Websocket object for the waiting player, if there is one
@@ -517,141 +534,159 @@ def playgame(ws):
 	global laddergamesinprogress
 
 	cleanup_queue()
-	
+
 	if not waiting_player_ws:
-		egress =  {"type": "message", "message": "Searching for an opponent...", "awaiting": None, }
-		ws.send(json.dumps(egress))
+		ws.send(json.dumps({"type": "message", "message": "Searching for an opponent...", "awaiting": None}))
 		waiting_player_ws = ws
-		while True:
-			# make sure the player is still there. If not, an exception will be raised and the thread will terminate.
-			egress =  {"type": "ping"}
-			ws.send(json.dumps(egress))
-			time.sleep(1)
+		try:
+			while True:
+				ws.send(json.dumps({"type": "ping"}))
+				time.sleep(1)
+		except Exception:
+			if waiting_player_ws is ws:
+				waiting_player_ws = None
+		return
+
+	laddergamecount += 1
+	laddergamesinprogress += 1
+	opp_ws = waiting_player_ws
+	waiting_player_ws = None
+	_run_ladder_game(ws, opp_ws)
+
+
+@sock.route('/api/laddergame/<game_id>')
+@login_required
+def playladdergame_reconnect(ws, game_id):
+	"""Reconnect into a ladder game after a tab reload."""
+	session = multiplayer_sessions.get(game_id)
+	if not session or session.mode != 'ladder':
+		try:
+			ws.send(json.dumps({"type": "message", "message": "Ladder game not found or already ended."}))
+		except Exception:
+			pass
+		return
+	# Only allow the two original players to reclaim a slot.
+	requesting_name = current_user.name
+	if requesting_name == session.red.username:
+		role = 'red'
+	elif requesting_name == session.blue.username:
+		role = 'blue'
 	else:
-		laddergamecount += 1
-		laddergamesinprogress += 1
-		opp_ws = waiting_player_ws
-		waiting_player_ws = None
-		board = Board()
-		board.ladder_match = True
-		red = Player(board, 'red')
-		blue = Player(board, 'blue')
-		board.addplayers(red, blue)
-		red.opp = blue
-		blue.opp = red
-		whoisred = randint(1,2)
-		if whoisred == 1:
-			red.ws = ws
-			blue.ws = opp_ws
-		else:
-			red.ws = opp_ws
-			blue.ws = ws
-
-		red.jmessage("You are RED this game.")
-		blue.jmessage("You are BLUE this game.")
-
-		egress = { "type": "username_request" }
-
-		red.ws.send(json.dumps(egress))
-		ingress = red.ws.receive()
-		red_username = json.loads(ingress)['message']
-		red.username = red_username
-
-		blue.ws.send(json.dumps(egress))
-		ingress = blue.ws.receive()
-		blue_username = json.loads(ingress)['message']
-		blue.username = blue_username
-
-		egress = { "type": "check_request" }
-
-		red_user = User.query.filter_by(name=red_username).first()
-		blue_user = User.query.filter_by(name=blue_username).first()
-
-		red.ws.send(json.dumps(egress))
-		ingress = red.ws.receive()
-		red_check = json.loads(ingress)['message']
-		valid = (red_user.password[8:16] == red_check)
-		if not valid:
-			red.jmessage("Something went wrong - try again.")
-			blue.jmessage("Something went wrong - try again.")
-			raise invalidCheckException()
-
-		blue.ws.send(json.dumps(egress))
-		ingress = blue.ws.receive()
-		blue_check = json.loads(ingress)['message']
-		valid = (blue_user.password[8:16] == blue_check)
-		if not valid:
-			red.jmessage("Something went wrong - try again.")
-			blue.jmessage("Something went wrong - try again.")
-			raise invalidCheckException()
+		try:
+			ws.send(json.dumps({"type": "message", "message": "You are not a player in this game."}))
+		except Exception:
+			pass
+		return
+	# Confirm that the slot is actually waiting for a reconnect.
+	target = session.red if role == 'red' else session.blue
+	if _ws_alive(target.ws):
+		try:
+			ws.send(json.dumps({"type": "message", "message": "You are already connected in another tab."}))
+		except Exception:
+			pass
+		return
+	session.request_reconnect(role, ws)
+	_hold_reconnect_ws_open(session, ws)
 
 
+def _run_ladder_game(ws, opp_ws):
+	board = Board()
+	board.ladder_match = True
+	red = Player(board, 'red')
+	blue = Player(board, 'blue')
+	board.addplayers(red, blue)
+	red.opp = blue
+	blue.opp = red
+	whoisred = randint(1, 2)
+	if whoisred == 1:
+		red.ws = ws
+		blue.ws = opp_ws
+	else:
+		red.ws = opp_ws
+		blue.ws = ws
 
-		red.jmessage(red_username + " versus " + blue_username)
-		blue.jmessage(red_username + " versus " + blue_username)
+	red.jmessage("You are RED this game.")
+	blue.jmessage("You are BLUE this game.")
 
-		egress = { "type": "laddersetup" }
+	egress = {"type": "username_request"}
+	red.ws.send(json.dumps(egress))
+	red.username = json.loads(red.ws.receive())['message']
+	blue.ws.send(json.dumps(egress))
+	blue.username = json.loads(blue.ws.receive())['message']
 
-		egress["red_name"] = red_user.name
-		egress["blue_name"] = blue_user.name
-		egress["red_elo"] = red_user.elo
-		egress["blue_elo"] = blue_user.elo
-		egress["red_timer"] = red.timer
-		egress["blue_timer"] = blue.timer
+	red_user = User.query.filter_by(name=red.username).first()
+	blue_user = User.query.filter_by(name=blue.username).first()
 
-		red.ws.send(json.dumps(egress))
-		blue.ws.send(json.dumps(egress))
+	egress = {"type": "check_request"}
+	red.ws.send(json.dumps(egress))
+	red_check = json.loads(red.ws.receive())['message']
+	if red_user.password[8:16] != red_check:
+		red.jmessage("Something went wrong - try again.")
+		blue.jmessage("Something went wrong - try again.")
+		raise invalidCheckException()
+	blue.ws.send(json.dumps(egress))
+	blue_check = json.loads(blue.ws.receive())['message']
+	if blue_user.password[8:16] != blue_check:
+		red.jmessage("Something went wrong - try again.")
+		blue.jmessage("Something went wrong - try again.")
+		raise invalidCheckException()
 
+	game_id = uuid.uuid4().hex[:8]
+	session = MultiplayerSession(
+		game_id=game_id, board=board, red=red, blue=blue, mode='ladder',
+	)
+	multiplayer_sessions[game_id] = session
 
-		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-		### and values "Fireblast", "Flourish", etc.
-		egress = { "type": "spellsetup" }
+	# Tell both clients the canonical URL so a reload comes back to the same game.
+	for p in (red, blue):
+		try:
+			p.ws.send(json.dumps({"type": "assigned_id", "game_id": game_id, "mode": "ladder-game"}))
+		except Exception:
+			pass
 
-		egress["ritual1"] = board.spells[0].name
-		egress["ritual2"] = board.spells[1].name
-		egress["ritual3"] = board.spells[2].name
-		egress["sorcery1"] = board.spells[3].name
-		egress["sorcery2"] = board.spells[4].name
-		egress["sorcery3"] = board.spells[5].name
-		egress["charm1"] = board.spells[6].name
-		egress["charm2"] = board.spells[7].name
-		egress["charm3"] = board.spells[8].name
+	red.jmessage(red.username + " versus " + blue.username)
+	blue.jmessage(red.username + " versus " + blue.username)
 
-		red.ws.send(json.dumps(egress))
-		blue.ws.send(json.dumps(egress))
+	egress = {
+		"type": "laddersetup",
+		"red_name": red_user.name,
+		"blue_name": blue_user.name,
+		"red_elo": red_user.elo,
+		"blue_elo": blue_user.elo,
+		"red_timer": red.timer,
+		"blue_timer": blue.timer,
+	}
+	red.ws.send(json.dumps(egress))
+	blue.ws.send(json.dumps(egress))
 
-		egress = { "type": "spelltextsetup" }
+	egress = {"type": "spellsetup"}
+	for i, key in enumerate(['ritual1','ritual2','ritual3','sorcery1','sorcery2','sorcery3','charm1','charm2','charm3']):
+		egress[key] = board.spells[i].name
+	red.ws.send(json.dumps(egress))
+	blue.ws.send(json.dumps(egress))
 
-		egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
-		egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
-		egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
-		egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
-		egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
-		egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
-		egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
-		egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
-		egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
+	egress = {"type": "spelltextsetup"}
+	for i, key in enumerate(['ritual1','ritual2','ritual3','sorcery1','sorcery2','sorcery3','charm1','charm2','charm3']):
+		egress[key] = {"name": board.spells[i].name.replace("_", " "), "text": board.spells[i].text}
+	red.ws.send(json.dumps(egress))
+	blue.ws.send(json.dumps(egress))
 
-		red.ws.send(json.dumps(egress))
-		blue.ws.send(json.dumps(egress))
+	if board.variant != 'competitive':
+		board.nodes['a1'].stone = 'red'
+		board.nodes['b1'].stone = 'blue'
+	board.update()
+	_save_ladder(board, game_id, red, blue)
+	time.sleep(3)
 
+	countdown_timer_thread = Thread(target=countdown_timer, args=(red, blue))
+	countdown_timer_thread.start()
 
-		if board.variant != 'competitive':
-			board.nodes['a1'].stone = 'red'
-			board.nodes['b1'].stone = 'blue'
-		board.update()
-		time.sleep(3)
+	reset_this_turn = False
 
-		countdown_timer_thread = Thread(target=countdown_timer, args=(red, blue))
-		countdown_timer_thread.start()
-
-		reset_this_turn = False
-
+	try:
 		while True:
 			try:
 				if not reset_this_turn:
-					### First take a snapshot of the board,
-					### which we will revert to in case of a reset exception.
 					try:
 						board.take_snapshot()
 					except redwinsException:
@@ -670,14 +705,13 @@ def playgame(ws):
 					activeplayer = blue
 					board.whoseturn = 'blue'
 
-
 				try:
 					if board.whoseturn == 'red':
 						message = "Red Turn " + str((board.turncounter // 2) + 1)
 					elif board.whoseturn == 'blue':
 						message = "Blue Turn " + str(board.turncounter // 2)
 
-					egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+					egress = {"type": "whoseturndisplay", "color": board.whoseturn, "message": message}
 					red.ws.send(json.dumps(egress))
 					blue.ws.send(json.dumps(egress))
 
@@ -693,6 +727,7 @@ def playgame(ws):
 
 					activeplayer.eot_triggers()
 					board.update(True)
+					_save_ladder(board, game_id, red, blue)
 					reset_this_turn = False
 					if board.gameover:
 						board.end_game()
@@ -707,169 +742,435 @@ def playgame(ws):
 					break
 
 				except resetException:
-					### Reset all attributes of the game & board
-					### to the way they were in board.snapshot ,
-					### then we restart the turn loop.
 					red.jmessage("Resetting Turn")
 					blue.jmessage("Resetting Turn")
-
-					snapshot = board.snapshot
-
-					board.turncounter = snapshot["turncounter"]
-					board.gameover = snapshot["gameover"]
-					board.winner = snapshot["winner"]
-					board.score = snapshot["score"]
-
-
-					for nodename in board.nodes:
-						board.nodes[nodename].stone = snapshot[nodename]
-					if snapshot["redlock"]:
-						red.lock = board.spelldict[snapshot["redlock"]]
-					else:
-						red.lock = None
-
-					if snapshot["bluelock"]:
-						blue.lock = board.spelldict[snapshot["bluelock"]]
-					else:
-						blue.lock = None
-
-					red.spellcounter = snapshot["redspellcounter"]
-					blue.spellcounter = snapshot["bluespellcounter"]
-					board.last_play = snapshot["last_play"]
-					board.last_player = snapshot["last_player"]
-
+					_restore_snapshot(board, red, blue)
 					board.update(True)
+					_save_ladder(board, game_id, red, blue)
 					reset_this_turn = True
-
 					continue
 
-			except:
-				### determine which player disconnected
-				try:
-					red.jmessage("Opponent disconnected.")
-					egress = { "type": "game_over" }
-					egress["winner"] = 'red'
-					red.ws.send(json.dumps(egress))
-					record_elo(red, blue)
+			except Exception:
+				if board.gameover:
 					break
-				except:
+				if _handle_multiplayer_disconnect(session, board, red, blue, is_ladder=True,
+												  red_user=red_user, blue_user=blue_user):
+					_restore_snapshot(board, red, blue)
 					try:
-						blue.jmessage("Opponent disconnected.")
-						egress = { "type": "game_over" }
-						egress["winner"] = 'blue'
-						blue.ws.send(json.dumps(egress))
-						record_elo(blue, red)
-						break
-					except:
-						### both are disconnected
-						break
+						board.update(True)
+					except Exception:
+						pass
+					_save_ladder(board, game_id, red, blue)
+					reset_this_turn = True
+					continue
+				else:
+					# Grace expired (clock ran out or both stayed gone). Award
+					# the still-connected player the win + elo, or just close.
+					alive_role = 'red' if _ws_alive(red.ws) else ('blue' if _ws_alive(blue.ws) else None)
+					if alive_role:
+						winner = red if alive_role == 'red' else blue
+						loser = blue if alive_role == 'red' else red
+						try:
+							winner.jmessage("Opponent did not reconnect.")
+							winner.ws.send(json.dumps({"type": "game_over", "winner": alive_role}))
+						except Exception:
+							pass
+						try:
+							record_elo(winner, loser)
+						except Exception:
+							pass
+					board.gameover = True
+					break
+	finally:
+		# Note: record_elo already decrements laddergamesinprogress when the
+		# game ends through normal channels. Don't double-decrement here.
+		multiplayer_sessions.pop(game_id, None)
+		if board.gameover:
+			_delete_save(game_id)
+		else:
+			_save_ladder(board, game_id, red, blue)
 
 
 
-# Periodically ping both players in a private game so that if one disconnects, the other wins.
-def private_game_ping(red, blue):
+# Heartbeat thread for a private game. Probes both WSs; when one dies, tells
+# the survivor and records the disconnected role on the session so the game
+# loop can drive the grace-period / reconnect flow. Never ends the game on
+# its own — that decision belongs to the game loop after the grace period.
+def private_game_ping(red, blue, session):
+	notified_role = None
 	while True:
-		try:
-			time.sleep(3)
-			if red.board.gameover:
-				break
-			egress =  {"type": "ping"}
-			red.ws.send(json.dumps(egress))
-			blue.ws.send(json.dumps(egress))
-		except:
-			### determine which player disconnected
+		time.sleep(3)
+		if session.board.gameover:
+			break
+		red_alive = _ws_alive(red.ws)
+		blue_alive = _ws_alive(blue.ws)
+		if red_alive and blue_alive:
+			notified_role = None
+			continue
+		disc_role = 'red' if not red_alive else 'blue'
+		if notified_role != disc_role:
+			notified_role = disc_role
+			alive = blue if disc_role == 'red' else red
 			try:
-				red.jmessage("Opponent disconnected.")
-				egress = { "type": "game_over" }
-				egress["winner"] = 'red'
-				red.ws.send(json.dumps(egress))
-				break
-			except:
-				try:
-					blue.jmessage("Opponent disconnected.")
-					egress = { "type": "game_over" }
-					egress["winner"] = 'blue'
-					blue.ws.send(json.dumps(egress))
-					break
-				except:
-					### both are disconnected
-					break
+				alive.jmessage(f"Opponent disconnected. Waiting up to {PRIVATE_DISCONNECT_GRACE}s for them to return...")
+				alive.ws.send(json.dumps({
+					"type": "opponent_disconnected",
+					"grace_seconds": PRIVATE_DISCONNECT_GRACE,
+				}))
+			except Exception:
+				pass
 
 
 
 
 privategamedict = {}
 
+# Active multiplayer game sessions keyed by game_id. A session exists from the
+# moment both players are matched until the game ends. Lets a reloaded tab
+# reconnect into the game in progress.
+multiplayer_sessions = {}
+
+# Grace period (seconds) during which a disconnected un-timed game waits for
+# the player to come back. Ladder games use the disconnected player's remaining
+# clock instead.
+PRIVATE_DISCONNECT_GRACE = 30
+LADDER_DISCONNECT_MIN_GRACE = 30
+MULTIPLAYER_SAVE_TTL_SECONDS = 48 * 3600
+
+
+class MultiplayerSession:
+	"""In-memory handle for an active private or ladder game.
+
+	The game loop runs in one of the players' WebSocket handler threads and
+	talks to both clients via `red.ws` / `blue.ws`. When a WS dies, the loop
+	parks on `wait_for_reconnect`; a fresh WS connection finds the session
+	by game_id and hands itself over via `request_reconnect`.
+	"""
+
+	def __init__(self, game_id, board, red, blue, mode, gamename=None):
+		self.game_id = game_id
+		self.board = board
+		self.red = red
+		self.blue = blue
+		self.mode = mode  # 'private' or 'ladder'
+		self.gamename = gamename  # private only
+		self.disconnected_role = None  # 'red' or 'blue' while waiting
+		self._lock = Lock()
+		self._reconnect_event = Event()
+		self._pending = None  # (role, new_ws)
+		self._holding_threads = 0  # count of WS handler threads parked in hold_open
+
+	def request_reconnect(self, role, new_ws):
+		with self._lock:
+			self._pending = (role, new_ws)
+			self._reconnect_event.set()
+
+	def wait_for_reconnect(self, timeout):
+		"""Returns (role, new_ws) on success, None on timeout."""
+		ok = self._reconnect_event.wait(timeout=timeout)
+		if not ok:
+			return None
+		with self._lock:
+			result = self._pending
+			self._pending = None
+			self._reconnect_event.clear()
+		return result
+
+
+def _ws_alive(ws):
+	"""Check whether a WebSocket is still connected.
+
+	simple_websocket maintains a `connected` flag that flips to False once
+	its internal ping mechanism notices the peer has gone away — that's much
+	more reliable than `ws.send()` probing, which the TCP layer can queue
+	silently for several seconds on a graceful close. As a fallback for any
+	other ws-like object we attempt a single send."""
+	connected = getattr(ws, 'connected', None)
+	if connected is False:
+		return False
+	if connected is True:
+		return True
+	try:
+		ws.send(json.dumps({"type": "ping"}))
+		return True
+	except Exception:
+		return False
+
+
+def _send_state_replay(board, player, is_ladder, red_user=None, blue_user=None):
+	"""After a reconnect, replay the events a fresh client needs to rebuild
+	its UI: spell setup, board state, SFN, and whose turn it is."""
+	ws = player.ws
+	egress = {"type": "spellsetup"}
+	for i, key in enumerate(['ritual1','ritual2','ritual3','sorcery1','sorcery2','sorcery3','charm1','charm2','charm3']):
+		egress[key] = board.spells[i].name
+	try:
+		ws.send(json.dumps(egress))
+	except Exception:
+		return
+
+	egress = {"type": "spelltextsetup"}
+	for i, key in enumerate(['ritual1','ritual2','ritual3','sorcery1','sorcery2','sorcery3','charm1','charm2','charm3']):
+		egress[key] = {"name": board.spells[i].name.replace("_", " "), "text": board.spells[i].text}
+	try:
+		ws.send(json.dumps(egress))
+	except Exception:
+		return
+
+	if is_ladder:
+		egress = {
+			"type": "laddersetup",
+			"red_name": board.redplayer.username or '',
+			"blue_name": board.blueplayer.username or '',
+			"red_elo": getattr(red_user, 'elo', 0) if red_user else 0,
+			"blue_elo": getattr(blue_user, 'elo', 0) if blue_user else 0,
+			"red_timer": board.redplayer.timer,
+			"blue_timer": board.blueplayer.timer,
+		}
+		try:
+			ws.send(json.dumps(egress))
+		except Exception:
+			return
+
+	# board.update sends boardstate to both players (including this one).
+	try:
+		board.update(True)
+	except Exception:
+		pass
+
+	try:
+		ws.send(json.dumps({"type": "sfn_update", "sfn": board_to_sfn(board)}))
+	except Exception:
+		pass
+
+	if board.whoseturn == 'red':
+		msg = "Red Turn " + str((board.turncounter // 2) + 1)
+	else:
+		msg = "Blue Turn " + str(board.turncounter // 2)
+	try:
+		ws.send(json.dumps({"type": "whoseturndisplay", "color": board.whoseturn, "message": msg}))
+	except Exception:
+		pass
+
+
+def _purge_old_multiplayer_saves():
+	"""Best-effort cleanup of multiplayer save files older than the TTL."""
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	if not os.path.isdir(saves_dir):
+		return
+	cutoff = time.time() - MULTIPLAYER_SAVE_TTL_SECONDS
+	for fname in os.listdir(saves_dir):
+		if not fname.endswith('.json'):
+			continue
+		path = os.path.join(saves_dir, fname)
+		try:
+			with open(path) as f:
+				data = json.load(f)
+			if data.get('mode') in ('private', 'ladder') and data.get('last_activity', 0) < cutoff:
+				os.remove(path)
+		except Exception:
+			pass
+
+
+def _restore_snapshot(board, red, blue):
+	"""Rewind a Board to its last `take_snapshot()` state. Used both by the
+	standard resetException flow and after a disconnect/reconnect to
+	restart the turn cleanly."""
+	snapshot = board.snapshot
+	board.turncounter = snapshot["turncounter"]
+	board.gameover = snapshot["gameover"]
+	board.winner = snapshot["winner"]
+	board.score = snapshot["score"]
+	for nodename in board.nodes:
+		board.nodes[nodename].stone = snapshot[nodename]
+	red.lock = board.spelldict[snapshot["redlock"]] if snapshot["redlock"] else None
+	blue.lock = board.spelldict[snapshot["bluelock"]] if snapshot["bluelock"] else None
+	red.spellcounter = snapshot["redspellcounter"]
+	blue.spellcounter = snapshot["bluespellcounter"]
+	board.last_play = snapshot["last_play"]
+	board.last_player = snapshot["last_player"]
+
+
+def _handle_multiplayer_disconnect(session, board, red, blue, is_ladder,
+								   red_user=None, blue_user=None):
+	"""Called when the game loop detects a WS error. Identifies the
+	disconnected player, notifies the alive one, and waits up to a grace
+	period for the missing player to reconnect.
+
+	Returns True if reconnect succeeded (caller should restart the turn from
+	snapshot), False if no reconnect (caller should end the game).
+	"""
+	# Identify which side is disconnected by probing both sockets.
+	red_alive = _ws_alive(red.ws)
+	blue_alive = _ws_alive(blue.ws)
+	if red_alive and blue_alive:
+		# Either both came back already, or it was a transient error.
+		# Treat as no disconnect.
+		return False
+	if not red_alive and not blue_alive:
+		# Both dead — wait briefly for either to reconnect.
+		disc_role = 'both'
+		alive_player = None
+	else:
+		disc_role = 'red' if not red_alive else 'blue'
+		alive_player = blue if disc_role == 'red' else red
+
+	session.disconnected_role = disc_role if disc_role != 'both' else 'either'
+
+	# Grace period
+	if is_ladder and disc_role in ('red', 'blue'):
+		disc_player = red if disc_role == 'red' else blue
+		# Honour the disconnected player's remaining clock — if they
+		# don't come back before it runs out, the timer thread ends the game.
+		grace = max(LADDER_DISCONNECT_MIN_GRACE, int(disc_player.timer or 0))
+	else:
+		grace = PRIVATE_DISCONNECT_GRACE
+
+	# Tell the still-connected player what's happening.
+	if alive_player is not None:
+		try:
+			alive_player.jmessage(f"Opponent disconnected. Waiting up to {grace}s for them to return...")
+			alive_player.ws.send(json.dumps({"type": "opponent_disconnected", "grace_seconds": grace}))
+		except Exception:
+			pass
+
+	result = session.wait_for_reconnect(grace)
+	session.disconnected_role = None
+	if result is None:
+		return False
+
+	role, new_ws = result
+	if role == 'red':
+		red.ws = new_ws
+	else:
+		blue.ws = new_ws
+
+	# Notify the player who stayed.
+	other = blue if role == 'red' else red
+	try:
+		other.jmessage("Opponent reconnected.")
+		other.ws.send(json.dumps({"type": "opponent_reconnected"}))
+	except Exception:
+		pass
+
+	reconnected = red if role == 'red' else blue
+	_send_state_replay(board, reconnected, is_ladder, red_user=red_user, blue_user=blue_user)
+	return True
+
+
+def _hold_reconnect_ws_open(session, ws):
+	"""Keep a reconnect WebSocket alive in its handler thread until the
+	game session ends. The actual send/receive on this socket happens from
+	the game-loop thread via `red.ws` / `blue.ws`."""
+	try:
+		while not session.board.gameover:
+			time.sleep(2)
+	except Exception:
+		pass
+
+
+def _handle_private_reconnect(ws, gamename):
+	session = multiplayer_sessions.get(gamename)
+	if not session:
+		return False
+	# Probe to identify which slot is open. If both report alive, wait a
+	# couple of seconds for the game-loop thread to register the disconnect.
+	red_alive = _ws_alive(session.red.ws)
+	blue_alive = _ws_alive(session.blue.ws)
+	if red_alive and blue_alive:
+		for _ in range(10):
+			time.sleep(0.5)
+			if session.disconnected_role:
+				break
+		else:
+			try:
+				ws.send(json.dumps({"type": "message", "message": "Both players already connected."}))
+			except Exception:
+				pass
+			return True
+
+	role = session.disconnected_role
+	if role in (None, 'either'):
+		role = 'red' if not red_alive else 'blue'
+	session.request_reconnect(role, ws)
+	_hold_reconnect_ws_open(session, ws)
+	return True
+
+
 @sock.route('/api/privategame/<privategamename>')
 def playprivategame(ws, privategamename):
 	global privategamedict
+	# Reconnect into a game in progress?
+	if privategamename in multiplayer_sessions:
+		_handle_private_reconnect(ws, privategamename)
+		return
+	# First player waiting for an opponent: keep the WS alive with pings.
 	if privategamename not in privategamedict:
 		privategamedict[privategamename] = ws
-		while True:
-			# make sure the player is still there. If not, an exception will be raised and the thread will terminate.
-			egress =  {"type": "ping"}
-			ws.send(json.dumps(egress))
-			time.sleep(1)
-	else:
-		opp_ws = privategamedict[privategamename]
-		board = Board()
-		red = Player(board, 'red')
-		blue = Player(board, 'blue')
-		board.addplayers(red, blue)
-		red.opp = blue
-		blue.opp = red
-		whoisred = randint(1,2)
-		if whoisred == 1:
-			red.ws = ws
-			blue.ws = opp_ws
-		else:
-			red.ws = opp_ws
-			blue.ws = ws
+		try:
+			while True:
+				if privategamename in multiplayer_sessions:
+					# Game started in the second-player handler. The game
+					# loop is using this same ws via opp_ws; keep alive.
+					_hold_reconnect_ws_open(multiplayer_sessions[privategamename], ws)
+					return
+				ws.send(json.dumps({"type": "ping"}))
+				time.sleep(1)
+		except Exception:
+			privategamedict.pop(privategamename, None)
+		return
+	# Second player has arrived: pop the waiting slot and run the game.
+	opp_ws = privategamedict.pop(privategamename, None)
+	if opp_ws is None:
+		return
+	_run_private_game(ws, opp_ws, privategamename)
 
+
+def _run_private_game(ws, opp_ws, gamename):
+	board = Board()
+	red = Player(board, 'red')
+	blue = Player(board, 'blue')
+	board.addplayers(red, blue)
+	red.opp = blue
+	blue.opp = red
+	whoisred = randint(1, 2)
+	if whoisred == 1:
+		red.ws = ws
+		blue.ws = opp_ws
+	else:
+		red.ws = opp_ws
+		blue.ws = ws
+
+	session = MultiplayerSession(
+		game_id=gamename, board=board, red=red, blue=blue,
+		mode='private', gamename=gamename,
+	)
+	multiplayer_sessions[gamename] = session
+
+	try:
 		red.jmessage("You are RED this game.")
 		blue.jmessage("You are BLUE this game.")
 
-
-		### spellsetup is a JSON dictionary with keys "ritual2", "charm3", etc.,
-		### and values "Fireblast", "Flourish", etc.
-		egress = { "type": "spellsetup" }
-
-		egress["ritual1"] = board.spells[0].name
-		egress["ritual2"] = board.spells[1].name
-		egress["ritual3"] = board.spells[2].name
-		egress["sorcery1"] = board.spells[3].name
-		egress["sorcery2"] = board.spells[4].name
-		egress["sorcery3"] = board.spells[5].name
-		egress["charm1"] = board.spells[6].name
-		egress["charm2"] = board.spells[7].name
-		egress["charm3"] = board.spells[8].name
-
+		egress = {"type": "spellsetup"}
+		for i, key in enumerate(['ritual1','ritual2','ritual3','sorcery1','sorcery2','sorcery3','charm1','charm2','charm3']):
+			egress[key] = board.spells[i].name
 		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
 
-		egress = { "type": "spelltextsetup" }
-
-		egress["ritual1"] = { "name": board.spells[0].name.replace("_", " ") , "text": board.spells[0].text }
-		egress["ritual2"] = { "name": board.spells[1].name.replace("_", " ") , "text": board.spells[1].text }
-		egress["ritual3"] = { "name": board.spells[2].name.replace("_", " ") , "text": board.spells[2].text }
-		egress["sorcery1"] = { "name": board.spells[3].name.replace("_", " ") , "text": board.spells[3].text }
-		egress["sorcery2"] = { "name": board.spells[4].name.replace("_", " ") , "text": board.spells[4].text }
-		egress["sorcery3"] = { "name": board.spells[5].name.replace("_", " ") , "text": board.spells[5].text }
-		egress["charm1"] = { "name": board.spells[6].name.replace("_", " ") , "text": board.spells[6].text }
-		egress["charm2"] = { "name": board.spells[7].name.replace("_", " ") , "text": board.spells[7].text }
-		egress["charm3"] = { "name": board.spells[8].name.replace("_", " ") , "text": board.spells[8].text }
-
+		egress = {"type": "spelltextsetup"}
+		for i, key in enumerate(['ritual1','ritual2','ritual3','sorcery1','sorcery2','sorcery3','charm1','charm2','charm3']):
+			egress[key] = {"name": board.spells[i].name.replace("_", " "), "text": board.spells[i].text}
 		red.ws.send(json.dumps(egress))
 		blue.ws.send(json.dumps(egress))
-
 
 		if board.variant != 'competitive':
 			board.nodes['a1'].stone = 'red'
 			board.nodes['b1'].stone = 'blue'
 		board.update()
+		_save_private(board, gamename, gamename)
 		time.sleep(3)
 
-		private_game_ping_thread = Thread(target=private_game_ping, args=(red, blue))
+		private_game_ping_thread = Thread(target=private_game_ping, args=(red, blue, session))
 		private_game_ping_thread.start()
 
 		reset_this_turn = False
@@ -877,8 +1178,6 @@ def playprivategame(ws, privategamename):
 		while True:
 			try:
 				if not reset_this_turn:
-					### First take a snapshot of the board,
-					### which we will revert to in case of a reset exception.
 					board.take_snapshot()
 
 				board.turncounter += 1
@@ -890,14 +1189,13 @@ def playprivategame(ws, privategamename):
 					activeplayer = blue
 					board.whoseturn = 'blue'
 
-
 				try:
 					if board.whoseturn == 'red':
 						message = "Red Turn " + str((board.turncounter // 2) + 1)
 					elif board.whoseturn == 'blue':
 						message = "Blue Turn " + str(board.turncounter // 2)
 
-					egress = { "type": "whoseturndisplay", "color": board.whoseturn, "message": message }
+					egress = {"type": "whoseturndisplay", "color": board.whoseturn, "message": message}
 					red.ws.send(json.dumps(egress))
 					blue.ws.send(json.dumps(egress))
 
@@ -913,69 +1211,53 @@ def playprivategame(ws, privategamename):
 
 					activeplayer.eot_triggers()
 					board.update(True)
+					_save_private(board, gamename, gamename)
 					reset_this_turn = False
 					if board.gameover:
 						board.end_game()
 						break
 
 				except resetException:
-					### Reset all attributes of the game & board
-					### to the way they were in board.snapshot ,
-					### then we restart the turn loop.
 					red.jmessage("Resetting Turn")
 					blue.jmessage("Resetting Turn")
-
-					snapshot = board.snapshot
-
-					board.turncounter = snapshot["turncounter"]
-					board.gameover = snapshot["gameover"]
-					board.winner = snapshot["winner"]
-					board.score = snapshot["score"]
-
-
-					for nodename in board.nodes:
-						board.nodes[nodename].stone = snapshot[nodename]
-					if snapshot["redlock"]:
-						red.lock = board.spelldict[snapshot["redlock"]]
-					else:
-						red.lock = None
-
-					if snapshot["bluelock"]:
-						blue.lock = board.spelldict[snapshot["bluelock"]]
-					else:
-						blue.lock = None
-
-					red.spellcounter = snapshot["redspellcounter"]
-					blue.spellcounter = snapshot["bluespellcounter"]
-					board.last_play = snapshot["last_play"]
-					board.last_player = snapshot["last_player"]
-
+					_restore_snapshot(board, red, blue)
 					board.update(True)
+					_save_private(board, gamename, gamename)
 					reset_this_turn = True
-
 					continue
-			except:
+			except Exception:
 				if board.gameover:
 					break
-				### determine which player disconnected
-				try:
-					red.jmessage("Opponent disconnected.")
-					egress = { "type": "game_over" }
-					egress["winner"] = 'red'
-					red.ws.send(json.dumps(egress))
+				if _handle_multiplayer_disconnect(session, board, red, blue, is_ladder=False):
+					# Reconnect succeeded — rewind to start of turn.
+					_restore_snapshot(board, red, blue)
+					try:
+						board.update(True)
+					except Exception:
+						pass
+					_save_private(board, gamename, gamename)
+					reset_this_turn = True
+					continue
+				else:
+					# Grace expired or unrecoverable. Award opponent the win.
+					alive_role = 'red' if _ws_alive(red.ws) else ('blue' if _ws_alive(blue.ws) else None)
+					if alive_role:
+						winner_player = red if alive_role == 'red' else blue
+						try:
+							winner_player.jmessage("Opponent did not reconnect.")
+							winner_player.ws.send(json.dumps({"type": "game_over", "winner": alive_role}))
+						except Exception:
+							pass
 					board.gameover = True
 					break
-				except:
-					try:
-						blue.jmessage("Opponent disconnected.")
-						egress = { "type": "game_over" }
-						egress["winner"] = 'blue'
-						blue.ws.send(json.dumps(egress))
-						board.gameover = True
-						break
-					except:
-						### both are disconnected
-						break
+	finally:
+		multiplayer_sessions.pop(gamename, None)
+		if board.gameover:
+			_delete_save(gamename)
+		else:
+			# Game didn't finish cleanly (e.g. server shutdown); leave the
+			# save in place so a future reconnect can resume.
+			_save_private(board, gamename, gamename)
 
 
 
@@ -1060,6 +1342,41 @@ def _save_local1v1_sfn(game_id, sfn, variant):
 		'sfn': sfn,
 		'variant': variant,
 		'finished': False,
+	}
+	with open(filepath, 'w') as f:
+		json.dump(data, f)
+
+def _save_private(board, game_id, gamename):
+	"""Auto-save private-match state so a reload resumes it."""
+	from notation import board_to_sfn
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	os.makedirs(saves_dir, exist_ok=True)
+	filepath = os.path.join(saves_dir, f'{game_id}.json')
+	data = {
+		'mode': 'private',
+		'sfn': board_to_sfn(board),
+		'gamename': gamename,
+		'finished': board.gameover,
+		'last_activity': time.time(),
+	}
+	with open(filepath, 'w') as f:
+		json.dump(data, f)
+
+def _save_ladder(board, game_id, red, blue):
+	"""Auto-save ladder-match state so a reload resumes it."""
+	from notation import board_to_sfn
+	saves_dir = os.path.join(_APP_DIR, 'saves')
+	os.makedirs(saves_dir, exist_ok=True)
+	filepath = os.path.join(saves_dir, f'{game_id}.json')
+	data = {
+		'mode': 'ladder',
+		'sfn': board_to_sfn(board),
+		'red_username': getattr(red, 'username', None),
+		'blue_username': getattr(blue, 'username', None),
+		'red_timer': getattr(red, 'timer', 0),
+		'blue_timer': getattr(blue, 'timer', 0),
+		'finished': board.gameover,
+		'last_activity': time.time(),
 	}
 	with open(filepath, 'w') as f:
 		json.dump(data, f)

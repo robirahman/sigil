@@ -218,7 +218,8 @@ document.addEventListener('alpine:init', () => {
 						? `local1v1game/${gameId}`
 						: playerCount === 1
 							? (loadId ? 'singleplayergame_load' : (difficulty === 'hard' ? 'singleplayergame_hard' : (difficulty === 'medium' ? 'singleplayergame_medium' : 'singleplayergame')))
-							: gameName ? `privategame/${gameName}` : 'game';
+							: gameName ? `privategame/${gameName}`
+								: gameId ? `laddergame/${gameId}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 				// Forward the game variant (set by the menu page or URL
 				// query param) to the server so the WebSocket handler can
@@ -271,6 +272,30 @@ document.addEventListener('alpine:init', () => {
 					console.groupEnd(type);
 
 					if (type === 'ping') {
+						return;
+					}
+
+					if (type === 'assigned_id') {
+						// Server-assigned canonical URL for this game. Rewrite
+						// the address bar so a reload comes back into the
+						// same game instead of starting matchmaking again.
+						if (payload.mode && payload.game_id) {
+							try {
+								history.replaceState(null, '', `/${payload.mode}/${payload.game_id}`);
+							} catch (e) { /* ignore */ }
+						}
+						return;
+					}
+
+					if (type === 'opponent_disconnected') {
+						_this.message = `Opponent disconnected. Up to ${payload.grace_seconds}s to reconnect...`;
+						_this.messageHistory.push(_this.message);
+						return;
+					}
+
+					if (type === 'opponent_reconnected') {
+						_this.message = 'Opponent reconnected.';
+						_this.messageHistory.push(_this.message);
 						return;
 					}
 
