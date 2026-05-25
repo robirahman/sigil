@@ -834,7 +834,6 @@ multiplayer_sessions = {}
 # the player to come back. Ladder games use the disconnected player's remaining
 # clock instead.
 PRIVATE_DISCONNECT_GRACE = 30
-LADDER_DISCONNECT_MIN_GRACE = 30
 MULTIPLAYER_SAVE_TTL_SECONDS = 48 * 3600
 
 
@@ -1020,9 +1019,15 @@ def _handle_multiplayer_disconnect(session, board, red, blue, is_ladder,
 	# Grace period
 	if is_ladder and disc_role in ('red', 'blue'):
 		disc_player = red if disc_role == 'red' else blue
-		# Honour the disconnected player's remaining clock — if they
-		# don't come back before it runs out, the timer thread ends the game.
-		grace = max(LADDER_DISCONNECT_MIN_GRACE, int(disc_player.timer or 0))
+		if disc_player.timer_running:
+			# Their clock is ticking. Let it run out naturally; reconnect
+			# is allowed any time before it does. If they had 45s left and
+			# spent 60s away, the timer thread has already ended the game.
+			grace = max(1, int(disc_player.timer or 0))
+		else:
+			# Not the active player — their clock isn't running, so fall
+			# back to the standard un-timed grace window.
+			grace = PRIVATE_DISCONNECT_GRACE
 	else:
 		grace = PRIVATE_DISCONNECT_GRACE
 
