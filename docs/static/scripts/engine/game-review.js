@@ -135,7 +135,7 @@ async function reviewGame(gameLog, opts, onProgress) {
 				mainThreadTt = new MinimaxTT(_CAVEMAN_TT_MAX);
 				mainThreadTt.newSearch();
 				mainThreadTt.nodes = 0;
-				const result = cavemanSearch(sim, mover, {
+				const result = await cavemanSearch(sim, mover, {
 					timeLimit: opts.timeLimitPerPly,
 					maxDepth: opts.maxDepth,
 					tt: mainThreadTt,
@@ -151,7 +151,7 @@ async function reviewGame(gameLog, opts, onProgress) {
 			score = msg.score;
 			turnNotation = msg.turn ? turnToNotation(msg.turn) : null;
 		} else {
-			const result = cavemanSearch(sim, mover, {
+			const result = await cavemanSearch(sim, mover, {
 				timeLimit: opts.timeLimitPerPly,
 				maxDepth: opts.maxDepth,
 				tt: mainThreadTt,

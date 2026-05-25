@@ -5,13 +5,18 @@
  *
  * Message protocol:
  *   in:  { type: 'search', id, sfn, color, opts }
+ *        { type: 'cancel', id }  — abort the in-flight search with this id
  *   out: { type: 'progress', id, depth, score, timeMs, nodes, ttSize }
  *        { type: 'result',   id, turn, score, depth, timeMs, nodes, ttSize, cutoffs }
  *        { type: 'error',    id, message }
  *
  * `opts.useSharedTt: true` reuses the worker's persistent MinimaxTT across
- * calls (game-review primes the table once then walks plies in reverse).
+ * calls (game-review primes the table once then walks plies in reverse;
+ * pondering also accumulates entries that the AI's real search reuses).
  * `opts.resetSharedTt: true` clears it first.
+ *
+ * `opts.timeLimit: Infinity` and `opts.maxDepth: Infinity` together enable
+ * a ponder search — runs until a `cancel` message flips the abort flag.
  */
 
 // Engine modules — load order mirrors game.html's script tags. None of these
@@ -71,10 +76,39 @@ function _serializeTurn(turn) {
 	};
 }
 
+// Track in-flight searches so a `cancel` message can flip the right
+// abort flag. cavemanSearch yields between iterative-deepening depths;
+// the cancel handler runs in the gap and signals the search to break.
+const _activeSearches = new Map();  // id -> { abortFlag, isPonder }
+
+// Serialize search messages: when a new 'search' arrives while one is
+// already running, wait for the previous to complete (post-cancel or
+// otherwise) so the shared TT and worker don't run two cavemanSearch
+// flows concurrently.
+let _searchTail = Promise.resolve();
+
 self.onmessage = (e) => {
 	const msg = e.data || {};
+	if (msg.type === 'cancel') {
+		const entry = _activeSearches.get(msg.id);
+		if (entry) entry.abortFlag.aborted = true;
+		return;
+	}
 	if (msg.type !== 'search') return;
+	// Auto-cancel any in-flight ponder-style search so the new
+	// (real) search doesn't queue behind a never-ending one. Ponder
+	// uses timeLimit=Infinity; regular searches have a finite budget.
+	for (const entry of _activeSearches.values()) {
+		if (entry.isPonder) entry.abortFlag.aborted = true;
+	}
+	_searchTail = _searchTail.then(() => _runSearch(msg));
+};
+
+async function _runSearch(msg) {
 	const { id, sfn, color, opts = {} } = msg;
+	const abortFlag = { aborted: false };
+	const isPonder = opts.timeLimit === Infinity || opts.maxDepth === Infinity;
+	_activeSearches.set(id, { abortFlag, isPonder });
 
 	try {
 		if (opts.resetSharedTt) {
@@ -91,12 +125,13 @@ self.onmessage = (e) => {
 			exhaustiveOpponent: opts.exhaustiveOpponent,
 			positionHistory: opts.positionHistory || null,
 			tt,
+			abortFlag,
 			onDepthComplete: (info) => {
 				self.postMessage({ type: 'progress', id, ...info });
 			},
 		};
 
-		const result = cavemanSearch(sim, color, searchOpts);
+		const result = await cavemanSearch(sim, color, searchOpts);
 
 		self.postMessage({
 			type: 'result',
@@ -108,6 +143,7 @@ self.onmessage = (e) => {
 			nodes: result.nodes,
 			ttSize: result.ttSize,
 			cutoffs: result.cutoffs,
+			aborted: !!abortFlag.aborted,
 		});
 	} catch (err) {
 		self.postMessage({
@@ -115,5 +151,7 @@ self.onmessage = (e) => {
 			id,
 			message: err && err.message ? err.message : String(err),
 		});
+	} finally {
+		_activeSearches.delete(id);
 	}
-};
+}

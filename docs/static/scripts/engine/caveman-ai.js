@@ -158,17 +158,24 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 /**
  * Iterative-deepening pure stone-count minimax.
  *
+ * Async because pondering needs to yield between iterative-deepening
+ * depths so the Worker's message queue can deliver a cancel signal
+ * (see `opts.abortFlag`). The yield is a no-op cost on the main
+ * thread / non-ponder paths.
+ *
  * @param {SimBoard} board
  * @param {string} color
  * @param {{timeLimit?: number, maxDepth?: number, verbose?: boolean,
  *          positionHistory?: object,
+ *          abortFlag?: {aborted: boolean},
  *          onDepthComplete?: (info: {depth, score, timeMs, nodes, ttSize}) => void
  *         }} opts
  */
-function cavemanSearch(board, color, opts) {
+async function cavemanSearch(board, color, opts) {
 	opts = opts || {};
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 60.0;
 	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 6;
+	const abortFlag = opts.abortFlag || null;
 	const onDepthComplete = typeof opts.onDepthComplete === 'function'
 		? opts.onDepthComplete : null;
 	// Default to exhaustive enumeration at root + ply 1. Without it,
@@ -223,11 +230,28 @@ function cavemanSearch(board, color, opts) {
 	if (typeof tt.nodes !== 'number') tt.nodes = 0;
 	const killers = new MinimaxKillerTable(_CAVEMAN_MAX_PLY);
 
-	const deadline = Date.now() + timeLimit * 1000;
+	const deadline = timeLimit === Infinity
+		? Infinity
+		: Date.now() + timeLimit * 1000;
 	let bestMove = legal[0];
 	let bestScore = 0;
 	let completedDepth = 0;
 	for (let depth = 1; depth <= maxDepth; depth++) {
+		if (abortFlag && abortFlag.aborted) {
+			if (verbose) console.log(`caveman: aborted before depth=${depth}`);
+			break;
+		}
+		// Yield to the event loop between depths so the Worker's message
+		// queue (cancel signals) can be processed. Macrotask yield is
+		// required — microtasks aren't sufficient because postMessage
+		// dispatches are macrotasks.
+		if (depth > 1) {
+			await new Promise(r => setTimeout(r, 0));
+			if (abortFlag && abortFlag.aborted) {
+				if (verbose) console.log(`caveman: aborted before depth=${depth}`);
+				break;
+			}
+		}
 		const t0 = Date.now();
 		try {
 			const r = _cavemanAlphaBeta(board, color, depth,
@@ -350,10 +374,19 @@ class AiSearchWorker {
 		const w = this._ensureWorker();
 		if (!w) return null;  // signal sync fallback
 		const id = this._nextId++;
-		return new Promise((resolve, reject) => {
+		const promise = new Promise((resolve, reject) => {
 			this._pending.set(id, { resolve, reject, onProgress });
 			w.postMessage({ type: 'search', id, sfn, color, opts });
 		});
+		// Expose the id on the promise so callers can cancel it.
+		promise.searchId = id;
+		return promise;
+	}
+
+	cancel(searchId) {
+		if (!searchId || !this._worker) return;
+		try { this._worker.postMessage({ type: 'cancel', id: searchId }); }
+		catch (_) { /* worker gone — nothing to cancel */ }
 	}
 
 	terminate() {
@@ -380,6 +413,56 @@ class CavemanAI {
 			{ maxDepth: 6, timeLimit: 60.0 },
 			options || {},
 		);
+		// Set to false to disable pondering. Caller wires this from the
+		// user's `enablePondering` account setting.
+		this.pondering = true;
+		this._ponderSearchId = null;
+	}
+
+	/**
+	 * Generic TT-priming ponder. Runs an unbounded-depth search on the
+	 * current board (whose turn it currently is — typically the human)
+	 * via the shared Worker. The result itself is discarded; the value
+	 * is the TT entries it accumulates, which the AI's real search
+	 * reuses once the human has played. No move prediction.
+	 *
+	 * No-op when pondering is disabled or the worker is unavailable.
+	 */
+	startPonder(board) {
+		if (!this.pondering) return;
+		// Don't stack ponder calls; if one's running already, leave it.
+		if (this._ponderSearchId !== null) return;
+		const sfn = boardToSfn(board);
+		const color = board.whoseTurn;
+		const positionHistory = board.allLoopingSnapshotCounts || {};
+		const opts = {
+			positionHistory,
+			timeLimit: Infinity,
+			maxDepth: Infinity,
+			useSharedTt: true,
+			resetSharedTt: false,
+		};
+		const worker = getSharedAiWorker();
+		const promise = worker.search(sfn, color, opts, null);
+		if (!promise) return;  // worker unavailable; no-op
+		const id = promise.searchId;
+		this._ponderSearchId = id;
+		// Swallow result + errors — ponder's value is in the shared TT
+		// entries accumulated, not in the result payload. Only clear
+		// the id if it still matches; cancel + immediate restart could
+		// have replaced it with a newer ponder.
+		promise
+			.catch(() => { /* aborted / failed — ignore */ })
+			.then(() => {
+				if (this._ponderSearchId === id) this._ponderSearchId = null;
+			});
+	}
+
+	cancelPonder() {
+		if (this._ponderSearchId === null) return;
+		const id = this._ponderSearchId;
+		this._ponderSearchId = null;
+		getSharedAiWorker().cancel(id);
 	}
 
 	/**
@@ -422,7 +505,7 @@ class CavemanAI {
 
 		// Sync fallback (worker unavailable or crashed).
 		const simBoard = SimBoard.fromSigilBoard(board);
-		const result = cavemanSearch(simBoard, color, Object.assign({}, opts, {
+		const result = await cavemanSearch(simBoard, color, Object.assign({}, opts, {
 			onDepthComplete: onProgress,
 		}));
 		this.lastMeta = {

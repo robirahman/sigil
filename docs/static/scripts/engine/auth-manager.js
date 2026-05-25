@@ -94,6 +94,21 @@ class AuthManager {
 		return !!(this.userProfile && this.userProfile.showAiThinkReport);
 	}
 
+	/** Update the user's enablePondering preference. */
+	async updateEnablePondering(enabled) {
+		if (!this.currentUser) throw new Error('Not signed in');
+		const db = firebase.database();
+		await db.ref('users/' + this.currentUser.uid + '/enablePondering').set(!!enabled);
+		if (this.userProfile) {
+			this.userProfile.enablePondering = !!enabled;
+		}
+	}
+
+	get enablePondering() {
+		// Default ON: undefined or true → enabled; only explicit false disables.
+		return !(this.userProfile && this.userProfile.enablePondering === false);
+	}
+
 	/**
 	 * Check whether a display name is available (not claimed by another user).
 	 * Returns true if unclaimed OR currently owned by the signed-in user.

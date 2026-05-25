@@ -292,6 +292,16 @@
 				</div>
 			</div>
 
+			<div class="settings-card">
+				<label class="settings-card__row">
+					<input type="checkbox" x-model="enablePondering" x-on:change="saveEnablePondering" x-bind:disabled="busy" />
+					<span>Let the AI think during your turn</span>
+				</label>
+				<div class="settings-card__hint">
+					When on, the AI thinks ahead in the background while it's your turn, so its moves come back faster. Costs extra CPU — turn off on low-power devices.
+				</div>
+			</div>
+
 			<p class="success-msg" x-text="successMsg"></p>
 			<p class="error-msg" x-text="error"></p>
 
@@ -339,6 +349,7 @@
 				busy: false,
 				annotationMode: false,
 				showAiThinkReport: false,
+				enablePondering: true,
 
 				get needsRename() {
 					return this.profile && this.profile.displayName === 'Player';
@@ -353,10 +364,13 @@
 							this.profile = this._authManager.userProfile;
 							this.annotationMode = !!(this.profile && this.profile.annotationMode);
 							this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
+							// Default ON; only explicit false disables.
+							this.enablePondering = !(this.profile && this.profile.enablePondering === false);
 						} else {
 							this.profile = null;
 							this.annotationMode = false;
 							this.showAiThinkReport = false;
+							this.enablePondering = true;
 						}
 						this.loading = false;
 					});
@@ -414,6 +428,22 @@
 					} catch (e) {
 						this.error = e.message || String(e);
 						this.showAiThinkReport = !this.showAiThinkReport;
+					}
+					this.busy = false;
+				},
+
+				async saveEnablePondering() {
+					this.error = '';
+					this.successMsg = '';
+					this.busy = true;
+					try {
+						await this._authManager.updateEnablePondering(this.enablePondering);
+						this.successMsg = this.enablePondering
+							? 'AI pondering enabled.'
+							: 'AI pondering disabled.';
+					} catch (e) {
+						this.error = e.message || String(e);
+						this.enablePondering = !this.enablePondering;
 					}
 					this.busy = false;
 				},

@@ -24,14 +24,14 @@
 // _adjacentEmptyPairsRanked) rank candidates first, so the cap selects
 // the top-K *promising* variants, not the first-K in NODE_ORDER.
 const ENUM_CAPS = {
-	dash_sac: 4,
-	dash_move: 2,
-	bewitch: 6,
-	starfall: 3,
-	hard_moves: 3,
-	meteor: 2,
-	comet: 2,
-	fireblast: 2,
+	dash_sac: 8,
+	dash_move: 4,
+	bewitch: 8,
+	starfall: 6,
+	hard_moves: 6,
+	meteor: 4,
+	comet: 4,
+	fireblast: 4,
 };
 
 function _adjacentEnemyPairs(board, color) {
@@ -54,11 +54,12 @@ function _adjacentEnemyPairs(board, color) {
 }
 
 /**
- * Unique adjacent empty-empty pairs, ranked by enemy stones adjacent to
- * either endpoint (more enemies = better Starfall pair). Mirrors
- * ai/enumerator.py:_adjacent_empty_pairs_ranked.
+ * Unique adjacent empty-empty pairs, ranked by Starfall destruction
+ * count: the spell resolves by destroying every enemy stone in
+ * neighbors(a) ∪ neighbors(b), so that union's enemy count IS the kill
+ * count. Mirrors ai/enumerator.py:_adjacent_empty_pairs_ranked.
  */
-function _adjacentEmptyPairsRanked(board, color) {
+function _starfallPairsRanked(board, color) {
 	const enemy = board._enemy(color);
 	const seen = new Set();
 	const cand = [];
@@ -82,6 +83,18 @@ function _adjacentEmptyPairsRanked(board, color) {
 	}
 	cand.sort((u, v) => v[0] - u[0]);
 	return cand.map(c => c[1]);
+}
+
+/**
+ * Fireblast destruction is independent of sacrifice choice — it removes
+ * every enemy adjacent to ANY own stone before the sacrifice resolves.
+ * So the choice only affects WHICH own stone is lost. Rank candidates
+ * by escape-distance descending so dead/trapped stones sacrifice first.
+ */
+function _rankFireblastSacs(board, color, candidates) {
+	const scored = candidates.map(n => [board.escapeDistance(n, color, 6), n]);
+	scored.sort((a, b) => b[0] - a[0]);
+	return scored.map(s => s[1]);
 }
 
 /**
@@ -127,6 +140,29 @@ function _rankDashTargets(board, color, targets) {
 }
 
 /**
+ * Order Carnage / Slash hard-move targets by tactical value: crushable
+ * enemies first (immediate kill — escapeDistance ≥ 39 means no escape
+ * from the push), then by adjacent-enemy count (pushing a stone inside
+ * the enemy cluster cascades because adjacent enemies block its own
+ * escape and push-chains in turn). The user-observed pathology
+ * (Carnage pushing enemies in circles) is the symptom of picking
+ * peripheral enemies in NODE_ORDER instead of attacking the cluster.
+ */
+function _rankHardMoveTargets(board, color, targets) {
+	const enemy = board._enemy(color);
+	const scored = targets.map((n, i) => {
+		const crush = board.isCrushable(n, color) ? 1 : 0;
+		let adjEnemies = 0;
+		for (const nb of (ADJACENCY[n] || [])) {
+			if (board.stones[nb] === enemy) adjEnemies++;
+		}
+		return [crush, adjEnemies, i, n];
+	});
+	scored.sort((a, b) => (b[0] - a[0]) || (b[1] - a[1]) || (a[2] - b[2]));
+	return scored.map(s => s[3]);
+}
+
+/**
  * Return list of `targetOverrides` dicts to try for `spellName`.
  * Always includes `{}` (greedy) so we don't lose the engine's default.
  */
@@ -141,14 +177,14 @@ function _spellOverrides(board, color, spellName, caps) {
 			out.push({ bewitch_pair: pairs[i] });
 		}
 	} else if (rt === 'starfall') {
-		const pairs = _adjacentEmptyPairsRanked(board, color);
+		const pairs = _starfallPairsRanked(board, color);
 		for (let i = 0; i < pairs.length && i < caps.starfall; i++) {
 			out.push({ starfall_pair: pairs[i] });
 		}
 	} else if (rt === 'hard_moves') {
-		const targets = board._hardMoveable(color);
-		for (let i = 0; i < targets.length && i < caps.hard_moves; i++) {
-			out.push({ hard_move_targets: [targets[i]] });
+		const ranked = _rankHardMoveTargets(board, color, board._hardMoveable(color));
+		for (let i = 0; i < ranked.length && i < caps.hard_moves; i++) {
+			out.push({ hard_move_targets: [ranked[i]] });
 		}
 	} else if (rt === 'meteor') {
 		const targets = board._blinkable(color);
@@ -180,8 +216,9 @@ function _spellOverrides(board, color, spellName, caps) {
 		const own = NODE_ORDER.filter(
 			n => board.stones[n] === color && !spellPos.has(n),
 		);
-		for (let i = 0; i < own.length && i < caps.fireblast; i++) {
-			out.push({ fireblast_sacrifice: own[i] });
+		const ranked = _rankFireblastSacs(board, color, own);
+		for (let i = 0; i < ranked.length && i < caps.fireblast; i++) {
+			out.push({ fireblast_sacrifice: ranked[i] });
 		}
 	}
 	// soft_moves, hail_storm, surge_move: greedy is fine.
@@ -220,13 +257,18 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 	if (canDash && canSpell && board.totalStones[color] > 2
 	    && !(board.chargedSpells[enemy] || []).includes('Autumn')) {
 		const hasLightning = (board.chargedSpells[color] || []).includes('Seal_of_Lightning');
-		const sacCombos = _rankSacCombos(board, color, hasLightning, caps.dash_sac);
+		// With Lightning, dash sacrifices are single stones and destinations
+		// are at most ~6 per stone — total ~60 combos. Cheap enough to
+		// enumerate exhaustively; pruning here would discard real options.
+		const dashSacCap = hasLightning ? Infinity : caps.dash_sac;
+		const dashMoveCap = hasLightning ? Infinity : caps.dash_move;
+		const sacCombos = _rankSacCombos(board, color, hasLightning, dashSacCap);
 		for (const sacs of sacCombos) {
 			const bd0 = board.copy();
 			for (const s of sacs) bd0.stones[s] = null;
 			bd0.update();
 			const targets = _rankDashTargets(bd0, color, bd0._allMoveable(color));
-			for (let ti = 0; ti < targets.length && ti < caps.dash_move; ti++) {
+			for (let ti = 0; ti < targets.length && ti < dashMoveCap; ti++) {
 				const chosen = targets[ti];
 				const bd = bd0.copy();
 				const moveAct = bd._doMove(color, chosen, false);

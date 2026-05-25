@@ -171,16 +171,35 @@ class GameController {
 				}
 				this.emit({ type: 'whoseturndisplay', color, message: turnMsg });
 
+				// Pondering: while the human is on move and there's an AI
+				// opponent, fire a background search to prime the shared TT.
+				// No move prediction — the search runs as the side-to-move
+				// (the human) and accumulates TT entries the AI's real
+				// search will reuse when it later searches from the post-
+				// human-move SFN.
+				if (this.ai && color !== this.aiColor
+				    && typeof this.ai.startPonder === 'function') {
+					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
+				}
+
 				// BOT triggers (Inferno check)
 				if (board.chargedSpells[color].includes('Inferno')) {
 					this.emit({ type: 'message', message: 'DEATH BY INFERNO!', awaiting: null });
 					board.gameover = true;
 					board.winner = board.enemy(color);
+					if (this.ai && typeof this.ai.cancelPonder === 'function') {
+						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
+					}
 					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
 
 				if (board.gameover) {
+					// Stop any background ponder so it doesn't burn CPU
+					// after the game ends.
+					if (this.ai && typeof this.ai.cancelPonder === 'function') {
+						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
+					}
 					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
@@ -215,6 +234,11 @@ class GameController {
 				resetThisTurn = false;
 
 				if (board.gameover) {
+					// Stop any background ponder so it doesn't burn CPU
+					// after the game ends.
+					if (this.ai && typeof this.ai.cancelPonder === 'function') {
+						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
+					}
 					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
@@ -601,6 +625,12 @@ class GameController {
 
 	async _takeAITurn(color) {
 		const board = this.board;
+		// Free the worker for the real search. Ponder (if it was running)
+		// exits at its next iterative-deepening boundary; its TT entries
+		// remain in the shared MinimaxTT and are reused below.
+		if (typeof this.ai.cancelPonder === 'function') {
+			this.ai.cancelPonder();
+		}
 		this.emit({ type: 'ai_thinking_start', color });
 		this.emit({ type: 'message', message: 'AI is thinking...', awaiting: null });
 		await this._delay(300);

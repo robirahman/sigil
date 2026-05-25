@@ -522,6 +522,9 @@ document.addEventListener('alpine:init', () => {
 								await _aiAuthManager.loadProfile(firebase.database());
 								_this.annotationMode = !!_aiAuthManager.annotationMode;
 								_this.isDeveloper = !!_aiAuthManager.isDeveloper;
+								if (_engineRef && _engineRef.ai) {
+									_engineRef.ai.pondering = _aiAuthManager.enablePondering;
+								}
 							} catch (e) {
 								// Non-fatal; just leave annotation mode off
 								console.warn('Could not load annotation preference:', e);
@@ -597,6 +600,8 @@ document.addEventListener('alpine:init', () => {
 							maxDepth: 10,
 							timeLimit: _CAVEMAN_TIER_BUDGETS[aiMode],
 						});
+						options.ai.pondering = _aiAuthManager
+							? _aiAuthManager.enablePondering : true;
 					} else if (aiMode === 'caveman' || /^caveman_[1-6]$/.test(aiMode || '')) {
 						// Pure stone-count minimax — no model load. The
 						// suffixed variants (caveman_1..6) each play with
@@ -615,6 +620,8 @@ document.addEventListener('alpine:init', () => {
 							maxDepth: depth,
 							timeLimit: timeLimits[depth] || 60.0,
 						});
+						options.ai.pondering = _aiAuthManager
+							? _aiAuthManager.enablePondering : true;
 					} else if (aiMode === 'minimax') {
 						// Power-user hidden option (not linked from index.html):
 						// runs the legacy NN-backed minimax at 3-ply. Retained
