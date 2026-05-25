@@ -18,6 +18,54 @@ const CAVEMAN_WIN = 100.0;
 const _CAVEMAN_TT_MAX = 200000;
 const _CAVEMAN_MAX_PLY = 12;
 
+// Per-prospective-kill bonus added to the leaf when the relevant spell
+// is charged but not yet cast. The 0.5 discount reflects that the cast
+// might not happen this turn (locked, opponent plays defense, own side
+// forced into a counter). Full kill = 1/39 ≈ 0.0256; the discount
+// keeps the bonus from competing with realised material.
+const CAVEMAN_FIREBLAST_PREP = 0.5 / 39.0;
+const CAVEMAN_HAILSTORM_PREP = 0.5 / 39.0;
+
+/**
+ * Bonus for `side`'s Fireblast prep: count of enemy stones adjacent
+ * to any own stone — the exact kill set Fireblast would destroy if
+ * cast right now (spells.js doFireblast). Zero if Fireblast isn't
+ * charged for `side`.
+ */
+function _cavemanFireblastPrep(board, side, enemyOfSide) {
+	if (!board.chargedSpells || !board.chargedSpells[side]) return 0;
+	if (!board.chargedSpells[side].includes('Fireblast')) return 0;
+	let kills = 0;
+	for (const n of NODE_ORDER) {
+		if (board.stones[n] !== enemyOfSide) continue;
+		for (const nb of (ADJACENCY[n] || [])) {
+			if (board.stones[nb] === side) { kills++; break; }
+		}
+	}
+	return kills * CAVEMAN_FIREBLAST_PREP;
+}
+
+/**
+ * Bonus for `side`'s Hail Storm prep: count of spell positions 1–6
+ * (the 3-node and 5-node slots) that hold at least one enemy stone.
+ * Each such slot is one prospective kill (the resolver in
+ * spells.js doHailStorm destroys the first enemy it finds per slot).
+ * Zero if Hail Storm isn't charged for `side`.
+ */
+function _cavemanHailStormPrep(board, side, enemyOfSide) {
+	if (!board.chargedSpells || !board.chargedSpells[side]) return 0;
+	if (!board.chargedSpells[side].includes('Hail_Storm')) return 0;
+	let slots = 0;
+	for (let i = 1; i <= 6; i++) {
+		const nodes = POSITIONS[i];
+		if (!nodes) continue;
+		for (const n of nodes) {
+			if (board.stones[n] === enemyOfSide) { slots++; break; }
+		}
+	}
+	return slots * CAVEMAN_HAILSTORM_PREP;
+}
+
 function _cavemanLeaf(board, color) {
 	if (board.gameover) {
 		if (board.winner === color) return CAVEMAN_WIN;
@@ -26,7 +74,16 @@ function _cavemanLeaf(board, color) {
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const diff = board.totalStones[color] - board.totalStones[enemy];
-	return diff / 39.0;
+	// Symmetric spell-prep bonuses: own side's prep is good, enemy's
+	// is bad. Each helper short-circuits on a missing chargedSpells
+	// entry, so positions where neither side has the spell pay nearly
+	// nothing beyond two Array.includes checks.
+	const prep =
+		_cavemanFireblastPrep(board, color, enemy)
+		- _cavemanFireblastPrep(board, enemy, color)
+		+ _cavemanHailStormPrep(board, color, enemy)
+		- _cavemanHailStormPrep(board, enemy, color);
+	return diff / 39.0 + prep;
 }
 
 function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
