@@ -529,6 +529,7 @@ document.addEventListener('alpine:init', () => {
 				}
 				let _saveLoadedSfn = null;
 				let _savedHumanColor = null;
+				let _savedGameLog = null;
 				if (_gameId && typeof LocalSaveStore !== 'undefined') {
 					const _save = LocalSaveStore.get(_gameId);
 					if (_save && _save.sfn) {
@@ -545,6 +546,9 @@ document.addEventListener('alpine:init', () => {
 							}
 							if (_save.humanColor === 'red' || _save.humanColor === 'blue') {
 								_savedHumanColor = _save.humanColor;
+							}
+							if (Array.isArray(_save.gameLog)) {
+								_savedGameLog = _save.gameLog;
 							}
 						} else {
 							LocalSaveStore.remove(_gameId);
@@ -695,8 +699,19 @@ document.addEventListener('alpine:init', () => {
 					};
 
 					const sfnToLoad = _saveLoadedSfn || _this.importSfn || null;
-					engine.startGame(sfnToLoad);
+					await engine.startGame(sfnToLoad);
+					// Re-seed the engine's gameLog from the save so review /
+					// SGN export covers the whole match, not just post-resume.
+					if (_savedGameLog && Array.isArray(_savedGameLog)) {
+						engine._gameLog = _savedGameLog.slice();
+					}
 				}
+
+				// Mirrors engine._gameLog locally so we can include it in
+				// each persisted save. The engine's gameLog is appended to
+				// from inside its game loop; we listen for turn_complete to
+				// stay in sync.
+				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
 
 				/**
 				 * Write the current game state to localStorage under _gameId
@@ -711,6 +726,7 @@ document.addEventListener('alpine:init', () => {
 						aiMode: aiMode || null,
 						variant: gameVariant,
 						humanColor: aiMode ? _humanColor : null,
+						gameLog: _persistedGameLog,
 					});
 				}
 
@@ -774,6 +790,7 @@ document.addEventListener('alpine:init', () => {
 						if (t && t.color && t.color !== _this.myColor) {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
+						if (t) _persistedGameLog.push(t);
 						return;
 					}
 
