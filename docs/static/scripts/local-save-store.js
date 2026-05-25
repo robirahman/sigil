@@ -75,6 +75,31 @@
 	}
 
 	/**
+	 * Enumerate all in-progress saves. Returns an array of
+	 * `{ id, ...savedFields }`, newest first. Used by the menu to
+	 * render Resume buttons.
+	 */
+	function list() {
+		if (!_storageAvailable()) return [];
+		const out = [];
+		try {
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (!key || !key.startsWith(KEY_PREFIX)) continue;
+				try {
+					const data = JSON.parse(localStorage.getItem(key));
+					if (!data || data.v !== SCHEMA_VERSION) continue;
+					if (data.finished) continue;
+					if (typeof data.savedAt === 'number' && Date.now() - data.savedAt > TTL_MS) continue;
+					out.push(Object.assign({ id: key.slice(KEY_PREFIX.length) }, data));
+				} catch (e) { /* skip bad entry */ }
+			}
+		} catch (e) { /* ignore */ }
+		out.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+		return out;
+	}
+
+	/**
 	 * Best-effort cleanup of expired saves. Called once on page load.
 	 */
 	function purgeExpired() {
@@ -102,5 +127,5 @@
 		} catch (e) { /* ignore */ }
 	}
 
-	window.LocalSaveStore = { mintId, get, put, remove, purgeExpired };
+	window.LocalSaveStore = { mintId, get, put, remove, list, purgeExpired };
 })();
