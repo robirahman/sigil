@@ -112,9 +112,15 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
-                           exhaustiveRoot, exhaustiveOpponent, isRoot) {
+                           exhaustiveRoot, exhaustiveOpponent, isRoot,
+                           abortFlag) {
 	if (tt) tt.nodes += 1;
 	if (Date.now() > deadline) throw new MinimaxTimeout();
+	// Cooperative abort: lets a ponder search exit mid-iteration when
+	// the human plays, instead of running out the current depth (which
+	// at mobile speeds can take 10s+). Piggybacks on the existing
+	// MinimaxTimeout sentinel so the IDDFS loop catches it cleanly.
+	if (abortFlag && abortFlag.aborted) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
 		return { score: _cavemanLeaf(board, color), move: null };
 	}
@@ -185,7 +191,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			                              deadline, tt, killers, ply + 1,
 			                              positionHistory,
 			                              exhaustiveRoot, exhaustiveOpponent,
-			                              false);
+			                              false, abortFlag);
 			const score = -sub.score;
 			if (score > bestScore) { bestScore = score; bestMove = turn; }
 			if (bestScore > alpha) alpha = bestScore;
@@ -314,7 +320,8 @@ async function cavemanSearch(board, color, opts) {
 			const r = _cavemanAlphaBeta(board, color, depth,
 			                            -CAVEMAN_INF, CAVEMAN_INF, deadline,
 			                            tt, killers, 0, abHistory,
-			                            exhaustiveRoot, exhaustiveOpponent, true);
+			                            exhaustiveRoot, exhaustiveOpponent, true,
+			                            abortFlag);
 			if (r.move) {
 				bestMove = r.move;
 				bestScore = r.score;
@@ -495,7 +502,11 @@ class CavemanAI {
 		const opts = {
 			positionHistory,
 			timeLimit: Infinity,
-			maxDepth: Infinity,
+			// Soft cap: ponder past this depth contributes negligible
+			// extra priming but each iteration's TT growth + per-node
+			// abort-check cost balloons. Real searches max out around
+			// 8–10 on desktop, less on mobile.
+			maxDepth: 14,
 			useSharedTt: true,
 			resetSharedTt: false,
 		};

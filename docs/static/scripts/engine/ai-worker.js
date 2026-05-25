@@ -15,8 +15,8 @@
  * pondering also accumulates entries that the AI's real search reuses).
  * `opts.resetSharedTt: true` clears it first.
  *
- * `opts.timeLimit: Infinity` and `opts.maxDepth: Infinity` together enable
- * a ponder search — runs until a `cancel` message flips the abort flag.
+ * `opts.timeLimit: Infinity` marks a ponder search — runs until a
+ * `cancel` message flips the abort flag or the soft `maxDepth` cap is hit.
  */
 
 // Engine modules — load order mirrors game.html's script tags. None of these
@@ -107,7 +107,9 @@ self.onmessage = (e) => {
 async function _runSearch(msg) {
 	const { id, sfn, color, opts = {} } = msg;
 	const abortFlag = { aborted: false };
-	const isPonder = opts.timeLimit === Infinity || opts.maxDepth === Infinity;
+	// A ponder is any unbounded-time search — depth may be capped as a
+	// safety net but timeLimit=Infinity is the defining signal.
+	const isPonder = opts.timeLimit === Infinity;
 	_activeSearches.set(id, { abortFlag, isPonder });
 
 	try {
