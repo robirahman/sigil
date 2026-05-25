@@ -126,6 +126,32 @@ class SpectatorController {
 	async _takeTurn(color, canmove, candash, canspell, cansummer) {
 		const board = this.board;
 		board.update();
+
+		// Competitive opening replay: the active player's recorded turn is
+		// a free-blink (node) followed by a 'pass'. Consume both from the
+		// Firebase queue and apply the stone placement locally.
+		if (canmove && board.variant === 'competitive' && board.totalStones[color] === 0) {
+			const node = await this.getInput({
+				type: 'message', message: 'Waiting for opening blink...',
+				awaiting: 'node', actionlist: [], moveoptions: {},
+			});
+			if (node === '__game_finished__') throw new Error('__game_finished__');
+			if (board.stones[node] === null) {
+				board.stones[node] = color;
+				board.lastPlay = node;
+				board.lastPlayer = color;
+				board.update();
+				this.emit({ type: 'new_stone_animation', color, node });
+				this.emit(board.getBoardStatePayload());
+			}
+			const confirm = await this.getInput({
+				type: 'message', message: 'Waiting...',
+				awaiting: 'action', actionlist: [], moveoptions: {},
+			});
+			if (confirm === '__game_finished__') throw new Error('__game_finished__');
+			return;
+		}
+
 		const enemy = board.enemy(color);
 		const actions = [];
 		let spellList = [];

@@ -412,6 +412,44 @@ class MultiplayerController {
 		// This is identical to GameController._takeTurn
 		const board = this.board;
 		board.update();
+
+		// Competitive variant opening: this player has no stones yet —
+		// their entire turn is a single free blink onto any empty node.
+		// Without this, the normal move-gen returns an empty options set
+		// (you can only move from your own stones), `canmove` falls
+		// through to a silent pass, and the immediate-loss check ends
+		// the game once openingPass expires.
+		if (canmove && board.variant === 'competitive' && board.totalStones[color] === 0) {
+			const moveoptions = {};
+			for (const n of NODE_ORDER) {
+				if (board.stones[n] === null) moveoptions[n] = color;
+			}
+			const isMyTurn = color === this.myColor;
+			const resp = await this.getInput({
+				type: 'message',
+				message: isMyTurn
+					? 'Place your first stone (Competitive opening).'
+					: 'Opponent is placing their first stone...',
+				awaiting: 'node',
+				moveoptions: isMyTurn ? moveoptions : {},
+			});
+			if (moveoptions[resp]) {
+				board.stones[resp] = color;
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				this.emit({ type: 'new_stone_animation', color, node: resp });
+				this.emit(board.getBoardStatePayload());
+			}
+			await this.getInput({
+				type: 'message',
+				message: isMyTurn ? 'Stone placed. End turn or reset.' : 'Opponent placed their stone.',
+				awaiting: 'action',
+				actionlist: isMyTurn ? ['pass'] : [],
+			});
+			return;
+		}
+
 		const enemy = board.enemy(color);
 		const actions = [];
 		let spellList = [];
