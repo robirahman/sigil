@@ -7,6 +7,17 @@
  * Requires Firebase App, Auth, and Database SDKs to be loaded.
  */
 (function () {
+	// Register the offline service worker from any page that loads this
+	// script — this is most pages, so any direct visit (bookmark to
+	// leaderboard, profile, etc.) gets the SW installed for next time.
+	if ('serviceWorker' in navigator) {
+		window.addEventListener('load', function () {
+			navigator.serviceWorker.register('sw.js').catch(function (e) {
+				console.warn('SW registration failed:', e);
+			});
+		});
+	}
+
 	if (typeof firebase === 'undefined') return;
 
 	const el = document.getElementById('auth-status');
