@@ -19,7 +19,7 @@ const REVIEW_DEFAULTS = {
 // depth; 'deep' uses a hard depth cap with no time limit.
 const REVIEW_MODE_PRESETS = {
 	quick: { timeLimitPerPly: 1.0, maxDepth: 64 },
-	deep:  { timeLimitPerPly: Infinity, maxDepth: 10 },
+	deep:  { timeLimitPerPly: Infinity, maxDepth: 8 },
 };
 
 /** Convert minimax score to win% from the mover's perspective. */
@@ -86,7 +86,7 @@ async function reviewGame(gameLog, opts, onProgress) {
 	for (let i = 0; i < n; i++) sfnPerPly[i + 1] = gameLog[i].sfnAfter;
 
 	// Route the per-ply searches through the shared AI Web Worker so a Deep
-	// review (10-ply, no time limit per ply) doesn't freeze the page. The
+	// review (8-ply, no time limit per ply) doesn't freeze the page. The
 	// worker owns the persistent TT, which it reuses across calls when we
 	// pass `useSharedTt: true` — so the reverse-walk priming still works.
 	const worker = (typeof getSharedAiWorker === 'function') ? getSharedAiWorker() : null;
