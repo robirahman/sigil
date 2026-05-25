@@ -170,10 +170,38 @@ class FirebaseSync {
 		if (data.status === 'playing') {
 			// Reconnection — figure out if this user is one of the players (by uid)
 			const myUid = userInfo?.uid || null;
-			const isRedPlayer = myUid && data.red && data.red.uid === myUid;
-			const isBluePlayer = myUid && data.blue && data.blue.uid === myUid;
-			const blueDisconnected = data.blue && data.blue.connected === false;
-			const redDisconnected = data.red && data.red.connected === false;
+			const matchesRed = myUid && data.red && data.red.uid === myUid;
+			const matchesBlue = myUid && data.blue && data.blue.uid === myUid;
+			let blueDisconnected = data.blue && data.blue.connected === false;
+			let redDisconnected = data.red && data.red.connected === false;
+
+			let isRedPlayer = false;
+			let isBluePlayer = false;
+
+			if (matchesRed && matchesBlue) {
+				// Same uid registered on both sides. Firebase Anonymous Auth
+				// shares one uid across all tabs of a browser profile, so this
+				// is the normal state when one tester opens both players in
+				// the same browser. Uid alone can't tell us which slot to
+				// reclaim — disambiguate by which side is currently
+				// disconnected.
+				if (!redDisconnected && !blueDisconnected) {
+					// The closing tab's onDisconnect may not have propagated
+					// yet. Wait briefly and re-snapshot.
+					await new Promise((r) => setTimeout(r, 2500));
+					const snap2 = await roomRef.once('value');
+					const data2 = snap2.val() || {};
+					redDisconnected = !!(data2.red && data2.red.connected === false);
+					blueDisconnected = !!(data2.blue && data2.blue.connected === false);
+				}
+				if (redDisconnected && !blueDisconnected) isRedPlayer = true;
+				else if (blueDisconnected && !redDisconnected) isBluePlayer = true;
+				// else still ambiguous (both gone or both still here): fall
+				// through to spectator path.
+			} else {
+				isRedPlayer = matchesRed;
+				isBluePlayer = matchesBlue;
+			}
 
 			if (isRedPlayer) {
 				this.myColor = 'red';
