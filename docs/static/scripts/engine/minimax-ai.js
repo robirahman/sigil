@@ -174,9 +174,16 @@ function _orderWithHints(turns, ttMove, killers) {
  * Apply a turn on a copy of `board`. Mirrors applySimTurn in sim-board.js
  * but also runs check_game_over + advance_turn so the returned board is
  * ready for opponent's turn enumeration.
+ *
+ * A 'cast' action only performs the bookkeeping (clear position, refill
+ * from `action.kept`, advance the lock/counter). The resolver-emitted
+ * actions that follow it in the turn (hard_move, sacrifice, fireblast,
+ * etc.) carry the resolution outcome and are applied separately — calling
+ * sim._castSpell would re-run resolution and double-apply on top.
  */
 function _minimaxApplyTurn(board, turn, color) {
 	const sim = board.copy();
+	const enemy = sim._enemy(color);
 	for (const action of turn.actions) {
 		const t = action.type;
 		if (t === 'move') sim.stones[action.node] = color;
@@ -184,9 +191,47 @@ function _minimaxApplyTurn(board, turn, color) {
 		else if (t === 'blink') {
 			if (sim.stones[action.node] === sim._enemy(color)) sim._pushEnemy(action.node, color);
 			else sim.stones[action.node] = color;
-		} else if (t === 'cast') sim._castSpell(action.spell, color);
+		} else if (t === 'cast') {
+			const info = CORE_SPELLS[action.spell];
+			const spellIdx = sim.spellNames.indexOf(action.spell);
+			const posNodes = POSITIONS[spellIdx + 1] || [];
+			for (const n of posNodes) sim.stones[n] = null;
+			if (info && !info.ischarm && action.kept) {
+				for (const n of action.kept) sim.stones[n] = color;
+			}
+			if (info && !info.ischarm) {
+				if (sim.lock[color] === action.spell) sim.springlock[color] = action.spell;
+				else { sim.lock[color] = action.spell; sim.springlock[color] = null; }
+				sim.spellCounter[color]++;
+			}
+		}
 		else if (t === 'dash' || t === 'dash_lightning') {
 			if (action.sacrificed) for (const n of action.sacrificed) sim.stones[n] = null;
+		}
+		// Resolver-emitted outcomes — apply the recorded result directly,
+		// since the cast action above intentionally skipped resolution.
+		else if (t === 'sacrifice') {
+			if (action.node) sim.stones[action.node] = null;
+		}
+		else if (t === 'fireblast' || t === 'hail_storm'
+		         || t === 'storm_front' || t === 'hurricane') {
+			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
+		}
+		else if (t === 'bewitch') {
+			if (action.node) sim.stones[action.node] = color;
+			if (action.node2) sim.stones[action.node2] = color;
+		}
+		else if (t === 'starfall') {
+			if (action.node) sim.stones[action.node] = color;
+			if (action.node2) sim.stones[action.node2] = color;
+			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
+		}
+		else if (t === 'meteor_destroy') {
+			if (action.node) sim.stones[action.node] = null;
+		}
+		else if (t === 'thunder') {
+			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
+			if (action.kept) for (const n of action.kept) sim.stones[n] = enemy;
 		}
 		sim.update();
 	}

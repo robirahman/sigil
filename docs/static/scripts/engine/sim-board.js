@@ -983,26 +983,68 @@ class SimBoard {
 	}
 }
 
-/** Apply a SimTurn's actions to a SimBoard (mutating). */
+/** Apply a SimTurn's actions to a SimBoard (mutating).
+ *
+ * 'cast' here is bookkeeping only (sacrifice spell-position stones, refill
+ * from action.kept, advance lock/counter). The actions that follow it in
+ * the turn — emitted by the spell's resolver during enumeration — carry
+ * the resolution outcome. Calling _castSpell here would re-run resolution
+ * and double-apply on top of those recorded actions.
+ */
 function applySimTurn(board, turn, color) {
+	const enemy = board._enemy(color);
 	for (const action of turn.actions) {
 		if (action.type === 'move') {
 			board.stones[action.node] = color;
 		} else if (action.type === 'hard_move') {
 			board._pushEnemy(action.node, color);
 		} else if (action.type === 'blink') {
-			const enemy = board._enemy(color);
 			if (board.stones[action.node] === enemy) {
 				board._pushEnemy(action.node, color);
 			} else {
 				board.stones[action.node] = color;
 			}
 		} else if (action.type === 'cast') {
-			board._castSpell(action.spell, color);
+			const info = CORE_SPELLS[action.spell];
+			const spellIdx = board.spellNames.indexOf(action.spell);
+			const posNodes = POSITIONS[spellIdx + 1] || [];
+			for (const n of posNodes) board.stones[n] = null;
+			if (info && !info.ischarm && action.kept) {
+				for (const n of action.kept) board.stones[n] = color;
+			}
+			if (info && !info.ischarm) {
+				if (board.lock[color] === action.spell) board.springlock[color] = action.spell;
+				else { board.lock[color] = action.spell; board.springlock[color] = null; }
+				board.spellCounter[color]++;
+			}
 		} else if (action.type === 'dash' || action.type === 'dash_lightning') {
 			if (action.sacrificed) {
 				for (const sac of action.sacrificed) board.stones[sac] = null;
 			}
+		}
+		// Resolver-emitted outcomes — apply the recorded result directly.
+		else if (action.type === 'sacrifice') {
+			if (action.node) board.stones[action.node] = null;
+		}
+		else if (action.type === 'fireblast' || action.type === 'hail_storm'
+		         || action.type === 'storm_front' || action.type === 'hurricane') {
+			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
+		}
+		else if (action.type === 'bewitch') {
+			if (action.node) board.stones[action.node] = color;
+			if (action.node2) board.stones[action.node2] = color;
+		}
+		else if (action.type === 'starfall') {
+			if (action.node) board.stones[action.node] = color;
+			if (action.node2) board.stones[action.node2] = color;
+			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
+		}
+		else if (action.type === 'meteor_destroy') {
+			if (action.node) board.stones[action.node] = null;
+		}
+		else if (action.type === 'thunder') {
+			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
+			if (action.kept) for (const n of action.kept) board.stones[n] = enemy;
 		}
 		board.update();
 	}
