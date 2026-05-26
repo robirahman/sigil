@@ -126,7 +126,7 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
                            exhaustiveRoot, exhaustiveOpponent, isRoot,
-                           abortFlag) {
+                           abortFlag, usePruning) {
 	if (tt) tt.nodes += 1;
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	// Cooperative abort: lets a ponder search exit mid-iteration when
@@ -156,7 +156,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 				} else if (entry.bound === _BOUND_UPPER) {
 					if (entry.score < beta) beta = entry.score;
 				}
-				if (alpha >= beta) {
+				if (usePruning && alpha >= beta) {
 					tt.cutoffs += 1;
 					return { score: entry.score, move: entry.bestMove };
 				}
@@ -204,11 +204,11 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			                              deadline, tt, killers, ply + 1,
 			                              positionHistory,
 			                              exhaustiveRoot, exhaustiveOpponent,
-			                              false, abortFlag);
+			                              false, abortFlag, usePruning);
 			const score = -sub.score;
 			if (score > bestScore) { bestScore = score; bestMove = turn; }
 			if (bestScore > alpha) alpha = bestScore;
-			if (alpha >= beta) {
+			if (usePruning && alpha >= beta) {
 				if (killers) killers.add(ply, turn);
 				cutoff = true;
 				break;
@@ -262,6 +262,10 @@ async function cavemanSearch(board, color, opts) {
 		? !!opts.exhaustiveRoot : true;
 	const exhaustiveOpponent = opts.exhaustiveOpponent !== undefined
 		? !!opts.exhaustiveOpponent : true;
+	// Pruning on by default; pure-minimax variant sets this false to
+	// enumerate every state at each depth (no alpha-beta cutoffs).
+	const usePruning = opts.usePruning !== undefined
+		? !!opts.usePruning : true;
 	const verbose = !!opts.verbose;
 	const abHistory = opts.positionHistory
 		? Object.assign({}, opts.positionHistory)
@@ -334,7 +338,7 @@ async function cavemanSearch(board, color, opts) {
 			                            -CAVEMAN_INF, CAVEMAN_INF, deadline,
 			                            tt, killers, 0, abHistory,
 			                            exhaustiveRoot, exhaustiveOpponent, true,
-			                            abortFlag);
+			                            abortFlag, usePruning);
 			if (r.move) {
 				bestMove = r.move;
 				bestScore = r.score;
@@ -487,7 +491,7 @@ function getSharedAiWorker() {
 class CavemanAI {
 	constructor(options) {
 		this.options = Object.assign(
-			{ maxDepth: 6, timeLimit: 60.0 },
+			{ maxDepth: 6, timeLimit: 60.0, usePruning: true },
 			options || {},
 		);
 		// Set to false to disable pondering. Caller wires this from the

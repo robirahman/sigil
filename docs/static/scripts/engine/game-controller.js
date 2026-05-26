@@ -19,6 +19,9 @@ class GameController {
 		this._resetRequested = false;
 		this.aiColor = (options && options.aiColor) || null;
 		this.ai = (options && options.ai) || null;
+		// Arena mode: both sides AI. {red: aiInstance, blue: aiInstance}.
+		// When set, takes precedence over (aiColor, ai) for turn dispatch.
+		this.aiByColor = (options && options.aiByColor) || null;
 		this.spellNamesOverride = (options && Array.isArray(options.spellNames) && options.spellNames.length === 9)
 			? options.spellNames.slice()
 			: null;
@@ -111,6 +114,8 @@ class GameController {
 		if (importSfn) {
 			const nextTurn = this.board.turnCounter % 2 === 0 ? 'Red' : 'Blue';
 			this.emit({ type: 'message', message: "Imported position \u2014 " + nextTurn + "'s turn.", awaiting: null });
+		} else if (this.aiByColor) {
+			this.emit({ type: 'message', message: "Arena \u2014 AI vs AI. Red goes first.", awaiting: null });
 		} else if (this.aiColor) {
 			const humanColor = this.aiColor === 'red' ? 'Blue' : 'Red';
 			this.emit({ type: 'message', message: "vs AI \u2014 You are " + humanColor + ". Red goes first.", awaiting: null });
@@ -176,8 +181,8 @@ class GameController {
 				// No move prediction — the search runs as the side-to-move
 				// (the human) and accumulates TT entries the AI's real
 				// search will reuse when it later searches from the post-
-				// human-move SFN.
-				if (this.ai && color !== this.aiColor
+				// human-move SFN. Skipped in arena mode (no human window).
+				if (!this.aiByColor && this.ai && color !== this.aiColor
 				    && typeof this.ai.startPonder === 'function') {
 					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
 				}
@@ -208,8 +213,10 @@ class GameController {
 				this._resetRequested = false;
 				const turnSfn = boardToSfn(board);
 
-				if (this.ai && color === this.aiColor) {
-					await this._takeAITurn(color);
+				const aiForColor = (this.aiByColor && this.aiByColor[color])
+					|| ((this.ai && color === this.aiColor) ? this.ai : null);
+				if (aiForColor) {
+					await this._takeAITurn(color, aiForColor);
 				} else {
 					await this._takeTurn(color, true, true, true, true);
 				}
@@ -630,13 +637,14 @@ class GameController {
 		this.emit(board.getBoardStatePayload());
 	}
 
-	async _takeAITurn(color) {
+	async _takeAITurn(color, aiInstance) {
 		const board = this.board;
+		const ai = aiInstance || this.ai;
 		// Free the worker for the real search. Ponder (if it was running)
 		// exits at its next iterative-deepening boundary; its TT entries
 		// remain in the shared MinimaxTT and are reused below.
-		if (typeof this.ai.cancelPonder === 'function') {
-			this.ai.cancelPonder();
+		if (typeof ai.cancelPonder === 'function') {
+			ai.cancelPonder();
 		}
 		this.emit({ type: 'ai_thinking_start', color });
 		this.emit({ type: 'message', message: 'AI is thinking...', awaiting: null });
@@ -647,10 +655,10 @@ class GameController {
 			this.emit({ type: 'ai_thinking_progress', color, ...info });
 		};
 
-		const turn = await this.ai.pickTurn(board, color, onProgress);
+		const turn = await ai.pickTurn(board, color, onProgress);
 		this.emit({ type: 'ai_thinking_end', color });
-		if (this.ai.lastMeta) {
-			this.emit({ type: 'ai_think_report', color, ...this.ai.lastMeta });
+		if (ai.lastMeta) {
+			this.emit({ type: 'ai_think_report', color, ...ai.lastMeta });
 		}
 		await applyAITurn(board, turn, color, this.emit);
 	}

@@ -125,6 +125,7 @@ async function _runSearch(msg) {
 			maxDepth: opts.maxDepth,
 			exhaustiveRoot: opts.exhaustiveRoot,
 			exhaustiveOpponent: opts.exhaustiveOpponent,
+			usePruning: opts.usePruning,
 			positionHistory: opts.positionHistory || null,
 			tt,
 			abortFlag,

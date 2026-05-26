@@ -506,6 +506,15 @@ document.addEventListener('alpine:init', () => {
 
 				// --- Local engine instead of WebSocket ---
 				let aiMode = new URLSearchParams(window.location.search).get('ai');
+				// Arena mode: ?red=<aiMode>&blue=<aiMode> runs two AIs
+				// against each other in the browser. Triggered only when
+				// both params are present and `ai` isn't set (so single-AI
+				// play takes precedence). aiMode stays null in arena —
+				// that keeps the page out of the rated AI codepath
+				// (Firebase save, ELO update, AuthManager init).
+				const _redArenaMode = new URLSearchParams(window.location.search).get('red');
+				const _blueArenaMode = new URLSearchParams(window.location.search).get('blue');
+				const _arenaMode = !!(!aiMode && _redArenaMode && _blueArenaMode);
 				// Game-rule variant (separate concept from `aiMode`'s "model
 				// variant" naming below): 'standard' or 'competitive'.
 				const gameVariantParam = new URLSearchParams(window.location.search).get('variant');
@@ -603,8 +612,11 @@ document.addEventListener('alpine:init', () => {
 						sessionStorage.removeItem('sigil_rematch_human_color');
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				const _humanColor = _forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red');
-				const _aiColor = _humanColor === 'red' ? 'blue' : 'red';
+				const _humanColor = _arenaMode
+					? null
+					: (_forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red'));
+				const _aiColor = _humanColor === null ? null
+					: (_humanColor === 'red' ? 'blue' : 'red');
 				_this.myColor = _humanColor;
 
 				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it
@@ -622,10 +634,39 @@ document.addEventListener('alpine:init', () => {
 					}
 				} catch (e) { /* sessionStorage blocked or bad payload */ }
 
+				// Build a CavemanAI for one of the two arena-supported
+				// modes. Kept narrow on purpose: the arena page is for
+				// comparing the new pure_minimax vs pruned_minimax
+				// variants at 10s/move, no depth limit.
+				function _buildArenaAi(mode) {
+					if (mode === 'pure_minimax' || mode === 'pruned_minimax') {
+						const ai = new CavemanAI({
+							maxDepth: 99,
+							timeLimit: 10.0,
+							usePruning: mode === 'pruned_minimax',
+						});
+						ai.pondering = false;
+						return ai;
+					}
+					return null;
+				}
+
 				async function initEngine() {
 					let options = {};
 					if (_rematchSpells) options.spellNames = _rematchSpells;
 					options.variant = gameVariant;
+
+					if (_arenaMode) {
+						const redAi = _buildArenaAi(_redArenaMode);
+						const blueAi = _buildArenaAi(_blueArenaMode);
+						if (!redAi || !blueAi) {
+							console.error('Arena: unsupported mode(s).',
+								'red=', _redArenaMode, 'blue=', _blueArenaMode,
+								'— expected pure_minimax or pruned_minimax');
+						} else {
+							options.aiByColor = { red: redAi, blue: blueAi };
+						}
+					}
 
 					// Easy / Medium / Hard / Very Hard are now all time-budgeted
 					// Caveman variants. The previous NN-based tiers were retired
@@ -666,6 +707,23 @@ document.addEventListener('alpine:init', () => {
 						});
 						options.ai.pondering = _aiAuthManager
 							? _aiAuthManager.enablePondering : true;
+					} else if (aiMode === 'pure_minimax' || aiMode === 'pruned_minimax') {
+						// Two analysis variants for direct comparison: pure
+						// minimax (no alpha-beta cutoffs) vs pruned minimax
+						// (alpha-beta cutoffs on). Both share Caveman's pure
+						// stone-diff leaf, exhaustive enumeration, and TT —
+						// the only difference is whether `if (alpha >= beta)`
+						// fires inside _cavemanAlphaBeta. maxDepth: 99 means
+						// "no depth limit"; iterative deepening only stops
+						// when the 10s deadline expires. Pondering off to
+						// keep the matchup apples-to-apples.
+						options.aiColor = _aiColor;
+						options.ai = new CavemanAI({
+							maxDepth: 99,
+							timeLimit: 10.0,
+							usePruning: aiMode === 'pruned_minimax',
+						});
+						options.ai.pondering = false;
 					} else if (aiMode === 'minimax') {
 						// Power-user hidden option (not linked from index.html):
 						// runs the legacy NN-backed minimax at 3-ply. Retained
@@ -864,10 +922,18 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function handleAiThinkReportEvent(payload) {
-					if (!_aiAuthManager || !_aiAuthManager.showAiThinkReport) return;
+					// Always log per-move think stats in arena mode or when
+					// the user is explicitly comparing the pure/pruned
+					// variants — these are the modes for which depth/nodes
+					// is the whole point of looking at the page.
+					const _forceShow = _arenaMode
+						|| aiMode === 'pure_minimax'
+						|| aiMode === 'pruned_minimax';
+					if (!_forceShow && (!_aiAuthManager || !_aiAuthManager.showAiThinkReport)) return;
 					const c = payload.color ? payload.color[0].toUpperCase() + payload.color.slice(1) : 'AI';
 					const seconds = ((payload.timeMs || 0) / 1000).toFixed(1);
-					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes`);
+					const cutoffs = typeof payload.cutoffs === 'number' ? `, ${payload.cutoffs} cutoffs` : '';
+					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${cutoffs}`);
 				}
 
 				function handleMessageEvent(payload) {
