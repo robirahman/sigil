@@ -20,6 +20,21 @@ CELESTIAL_RITUALS = ['Syzygy']
 CELESTIAL_SORCERIES = ['Eclipse']
 CELESTIAL_CHARMS = ['Azimuth']
 
+# Fury expansion (single sorcery; rituals/charms drawn from core).
+FURY_RITUALS = []
+FURY_SORCERIES = ['Fury']
+FURY_CHARMS = []
+
+# Tempest expansion.
+TEMPEST_RITUALS = ['Hurricane']
+TEMPEST_SORCERIES = ['Storm_Front']
+TEMPEST_CHARMS = ['Thunder']
+
+# Tsunami expansion.
+TSUNAMI_RITUALS = ['Flood']
+TSUNAMI_SORCERIES = ['Torrent']
+TSUNAMI_CHARMS = ['Gush']
+
 
 SPELL_PACKS = {
 	'core': {
@@ -37,10 +52,28 @@ SPELL_PACKS = {
 		'sorceries': CORE_SORCERIES + CELESTIAL_SORCERIES,
 		'charms': CORE_CHARMS + CELESTIAL_CHARMS,
 	},
+	'fury': {
+		'rituals': CORE_RITUALS + FURY_RITUALS,
+		'sorceries': CORE_SORCERIES + FURY_SORCERIES,
+		'charms': CORE_CHARMS + FURY_CHARMS,
+	},
+	'tempest': {
+		'rituals': CORE_RITUALS + TEMPEST_RITUALS,
+		'sorceries': CORE_SORCERIES + TEMPEST_SORCERIES,
+		'charms': CORE_CHARMS + TEMPEST_CHARMS,
+	},
+	'tsunami': {
+		'rituals': CORE_RITUALS + TSUNAMI_RITUALS,
+		'sorceries': CORE_SORCERIES + TSUNAMI_SORCERIES,
+		'charms': CORE_CHARMS + TSUNAMI_CHARMS,
+	},
 	'all': {
-		'rituals': CORE_RITUALS + SPRINGTIME_RITUALS + CELESTIAL_RITUALS,
-		'sorceries': CORE_SORCERIES + SPRINGTIME_SORCERIES + CELESTIAL_SORCERIES,
-		'charms': CORE_CHARMS + SPRINGTIME_CHARMS + CELESTIAL_CHARMS,
+		'rituals': (CORE_RITUALS + SPRINGTIME_RITUALS + CELESTIAL_RITUALS
+		            + FURY_RITUALS + TEMPEST_RITUALS + TSUNAMI_RITUALS),
+		'sorceries': (CORE_SORCERIES + SPRINGTIME_SORCERIES + CELESTIAL_SORCERIES
+		              + FURY_SORCERIES + TEMPEST_SORCERIES + TSUNAMI_SORCERIES),
+		'charms': (CORE_CHARMS + SPRINGTIME_CHARMS + CELESTIAL_CHARMS
+		           + FURY_CHARMS + TEMPEST_CHARMS + TSUNAMI_CHARMS),
 	},
 }
 

@@ -11,7 +11,10 @@ DATA_DIR = os.path.join(AI_DIR, 'data')
 # ---- Board constants ----
 NUM_NODES = 39
 NUM_SPELL_SLOTS = 9
-NUM_POSSIBLE_SPELLS = 15
+# Bumped to 25 to cover the springtime, celestial, fury, tempest, and tsunami
+# expansions. Growing this invalidates existing model checkpoints because the
+# spell-embedding table resizes — retraining is required.
+NUM_POSSIBLE_SPELLS = 28
 NUM_SPELL_POSITIONS = 9
 
 # Spell name -> integer ID (fixed mapping for embedding layer)
@@ -20,6 +23,13 @@ SPELL_TO_ID = {
     'Seal_of_Lightning': 4, 'Grow': 5, 'Fireblast': 6, 'Hail_Storm': 7,
     'Meteor': 8, 'Seal_of_Wind': 9, 'Sprout': 10, 'Slash': 11,
     'Surge': 12, 'Comet': 13, 'Seal_of_Summer': 14,
+    # Springtime expansion
+    'Seal_of_Spring': 15, 'Scatter': 16, 'Blossom': 17,
+    # Celestial expansion
+    'Azimuth': 18, 'Eclipse': 19, 'Syzygy': 20,
+    # Fury / Tempest / Tsunami expansions
+    'Fury': 21, 'Thunder': 22, 'Storm_Front': 23,
+    'Hurricane': 24, 'Gush': 25, 'Torrent': 26, 'Flood': 27,
 }
 
 # ---- Network architecture (medium — 2.17M params) ----

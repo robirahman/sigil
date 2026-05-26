@@ -37,6 +37,18 @@ CORE_SPELLS = {
     'Azimuth': {'resolve': 'azimuth', 'static': False, 'ischarm': True},
     'Eclipse': {'resolve': 'eclipse', 'static': False, 'ischarm': False},
     'Syzygy': {'resolve': 'syzygy', 'static': False, 'ischarm': False},
+    # Fury expansion
+    'Fury': {'resolve': 'fury', 'static': False, 'ischarm': False},
+    # Tempest expansion
+    'Thunder': {'resolve': 'thunder', 'static': False, 'ischarm': True},
+    'Storm_Front': {'resolve': 'storm_front', 'static': False, 'ischarm': False},
+    'Hurricane': {'resolve': 'hurricane', 'static': False, 'ischarm': False},
+    # Tsunami expansion
+    'Gush': {'resolve': 'surge_move', 'static': False, 'ischarm': True},
+    'Torrent': {'resolve': 'soft_hard_chain', 'counts': (1, 1),
+                'static': False, 'ischarm': False},
+    'Flood': {'resolve': 'soft_hard_chain', 'counts': (2, 2),
+              'static': False, 'ischarm': False},
 }
 
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
@@ -780,6 +792,173 @@ class SimBoard:
                         actions.append(Action('blink', node=target))
                     self.update()
 
+        elif resolve_type == 'fury':
+            # Sacrifice 1 stone, then 3 hard moves.
+            sac_override = overrides.get('fury_sacrifice')
+            sacrificed = None
+            if sac_override is not None and self.stones[sac_override] == color:
+                self.stones[sac_override] = None
+                sacrificed = sac_override
+            else:
+                for name in reversed(NODE_ORDER):
+                    if self.stones[name] == color:
+                        self.stones[name] = None
+                        sacrificed = name
+                        break
+            if sacrificed:
+                actions.append(Action('sacrifice', node=sacrificed))
+            self.update()
+            if self.gameover:
+                return actions
+            override_targets = list(overrides.get('hard_move_targets') or [])
+            for _ in range(3):
+                targets = self._hard_moveable(color)
+                if not targets:
+                    break
+                chosen = None
+                while override_targets and chosen is None:
+                    candidate = override_targets.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    chosen = targets[0]
+                actions.append(self._do_hard_move(color, chosen))
+                self.update()
+
+        elif resolve_type == 'thunder':
+            # Pick up every enemy stone touching any surviving own stone,
+            # then place them on empty nodes. Thunder's own position has
+            # already been cleared by _cast_spell before resolve runs.
+            picked = []
+            for n in NODE_ORDER:
+                if self.stones[n] != enemy:
+                    continue
+                for nb in self._adjacent_nodes(n):
+                    if self.stones[nb] == color:
+                        picked.append(n)
+                        break
+            if not picked:
+                return actions
+            for n in picked:
+                self.stones[n] = None
+            self.update()
+            place_overrides = list(overrides.get('thunder_placements') or [])
+            placed = []
+            for i in range(len(picked)):
+                dest = None
+                if i < len(place_overrides):
+                    cand = place_overrides[i]
+                    if self.stones.get(cand) is None:
+                        dest = cand
+                if dest is None:
+                    for n in NODE_ORDER:
+                        if self.stones[n] is None:
+                            dest = n
+                            break
+                if dest is None:
+                    break
+                self.stones[dest] = enemy
+                placed.append(dest)
+                self.update()
+            actions.append(Action('thunder', destroyed=picked, kept=placed))
+
+        elif resolve_type == 'storm_front':
+            # Destroy any 2 enemy stones of caster's choice.
+            override = overrides.get('storm_front_pair')
+            destroyed = []
+            if (override is not None and len(override) == 2
+                    and override[0] != override[1]
+                    and self.stones[override[0]] == enemy
+                    and self.stones[override[1]] == enemy):
+                for n in override:
+                    self.stones[n] = None
+                    destroyed.append(n)
+            else:
+                for name in NODE_ORDER:
+                    if len(destroyed) >= 2:
+                        break
+                    if self.stones[name] == enemy:
+                        self.stones[name] = None
+                        destroyed.append(name)
+            if destroyed:
+                actions.append(Action('storm_front', destroyed=destroyed))
+            self.update()
+
+        elif resolve_type == 'hurricane':
+            # Destroy the smallest contiguous enemy group.
+            visited = set()
+            groups = []
+            for start in NODE_ORDER:
+                if start in visited or self.stones[start] != enemy:
+                    continue
+                group = []
+                queue = deque([start])
+                visited.add(start)
+                while queue:
+                    n = queue.popleft()
+                    group.append(n)
+                    for nb in self._adjacent_nodes(n):
+                        if nb in visited:
+                            continue
+                        if self.stones[nb] == enemy:
+                            visited.add(nb)
+                            queue.append(nb)
+                groups.append(group)
+            if groups:
+                min_size = min(len(g) for g in groups)
+                smallest = [g for g in groups if len(g) == min_size]
+                chosen = smallest[0]
+                override = overrides.get('hurricane_group')
+                if override is not None:
+                    override_set = set(override)
+                    match = next(
+                        (g for g in smallest
+                         if set(g) == override_set and len(g) == len(override)),
+                        None,
+                    )
+                    if match:
+                        chosen = match
+                for n in chosen:
+                    self.stones[n] = None
+                actions.append(Action('hurricane', destroyed=list(chosen)))
+                self.update()
+
+        elif resolve_type == 'soft_hard_chain':
+            soft_count, hard_count = info['counts']
+            soft_overrides = list(overrides.get('soft_move_targets') or [])
+            hard_overrides = list(overrides.get('hard_move_targets') or [])
+            for _ in range(soft_count):
+                targets = self._soft_moveable(color)
+                if not targets:
+                    break
+                chosen = None
+                while soft_overrides and chosen is None:
+                    candidate = soft_overrides.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    for t in targets:
+                        if t not in spell_position_nodes:
+                            chosen = t
+                            break
+                if chosen is None:
+                    chosen = targets[0]
+                actions.append(self._do_soft_move(color, chosen))
+                self.update()
+            for _ in range(hard_count):
+                targets = self._hard_moveable(color)
+                if not targets:
+                    break
+                chosen = None
+                while hard_overrides and chosen is None:
+                    candidate = hard_overrides.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    chosen = targets[0]
+                actions.append(self._do_hard_move(color, chosen))
+                self.update()
+
         return actions
 
     def _cast_spell(self, spell_name, color, target_overrides=None):
@@ -962,7 +1141,8 @@ class SimBoard:
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
 
         if can_spell or (not can_spell and has_seal_of_summer and can_summer):
-            castable = self._get_castable_spells(color, can_spell, can_summer)
+            castable = self._get_castable_spells(
+                color, can_spell, can_summer, post_dash=True)
             for spell_name in castable:
                 board_s = self.copy()
                 spell_actions = board_s._cast_spell(spell_name, color)
@@ -970,8 +1150,13 @@ class SimBoard:
                 # After spell, can only pass or cast summer spell
                 yield CompleteTurn(actions_so_far + spell_actions + [Action('pass')])
 
-    def _get_castable_spells(self, color, can_spell, can_summer):
-        """Return list of spell names that can be cast."""
+    def _get_castable_spells(self, color, can_spell, can_summer, post_dash=False):
+        """Return list of spell names that can be cast.
+
+        `post_dash=True` indicates the caster has already dashed this turn —
+        Gush requires NOT having dashed and is excluded in that case. Surge
+        is unconditionally excluded here (the AI does not enumerate Surge).
+        """
         enemy = self._enemy(color)
         has_winter = 'Winter' in self.charged_spells[enemy]
         has_spring = 'Seal_of_Spring' in self.charged_spells[color]
@@ -989,6 +1174,8 @@ class SimBoard:
                 if spell_name == 'Surge':
                     # Surge can only be cast if we dashed this turn
                     # (caller manages this via can_dash flag)
+                    continue
+                if spell_name == 'Gush' and post_dash:
                     continue
                 if not can_spell and has_seal_of_summer and can_summer:
                     castable.append(spell_name)

@@ -609,6 +609,10 @@ class Player():
 									if not candash:
 										actions.append(spell.name)
 										spelllist.append(spell.name)
+								elif spell.name == 'Gush':
+									if candash:
+										actions.append(spell.name)
+										spelllist.append(spell.name)
 								else:
 									actions.append(spell.name)
 									spelllist.append(spell.name)

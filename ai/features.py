@@ -159,6 +159,44 @@ def _estimate_spell_potency(board, spell_name, color):
         cost += 1
     elif resolve_type == 'surge_move':
         gain = 1.0
+    elif resolve_type == 'fury':
+        # 3 hard moves (no net stone gain) plus 1 forced sacrifice.
+        gain = 0.0
+        cost += 1
+    elif resolve_type == 'thunder':
+        # Relocates enemies; net stone delta is 0. Treat as neutral.
+        gain = 0.0
+    elif resolve_type == 'storm_front':
+        # Destroys 2 enemy stones.
+        gain = 2.0
+    elif resolve_type == 'hurricane':
+        # Destroys the smallest contiguous enemy group. Compute via
+        # BFS over enemy stones; minimum component size becomes the
+        # estimated gain.
+        visited = set()
+        min_size = 0
+        for start in NODE_ORDER:
+            if start in visited or board.stones[start] != enemy:
+                continue
+            size = 0
+            stack = [start]
+            visited.add(start)
+            while stack:
+                n = stack.pop()
+                size += 1
+                for nb in ADJACENCY.get(n, []):
+                    if nb in visited:
+                        continue
+                    if board.stones[nb] == enemy:
+                        visited.add(nb)
+                        stack.append(nb)
+            if min_size == 0 or size < min_size:
+                min_size = size
+        gain = float(min_size)
+    elif resolve_type == 'soft_hard_chain':
+        # Soft moves add stones; hard moves push without net change.
+        soft_count = info.get('counts', (0, 0))[0]
+        gain = float(soft_count)
 
     net = (gain - cost) / 10.0
     return max(-1.0, min(1.0, net))

@@ -1085,6 +1085,305 @@ class Syzygy(Spell):
 
 
 
+###############################################################################################
+#####  EXPANSION SPELLS: Fury + Tempest + Tsunami
+
+
+def _sacrifice_one_stone(player):
+	"""Prompt human or pick greedily for AI; sacrifice 1 own stone."""
+	own_exists = any(
+		player.board.nodes[n].stone == player.color
+		for n in player.board.nodes
+	)
+	if not own_exists:
+		return
+	if player.ishuman:
+		while True:
+			player.jmessage("Sacrifice a stone.", "node")
+			actualmessage = player.receivemessage()
+			if actualmessage in player.board.nodes:
+				node = player.board.nodes[actualmessage]
+				if node.stone != player.color:
+					continue
+				node.stone = None
+				if (player.board.last_play == node.name):
+					player.board.last_play = None
+					player.board.last_player = None
+				player.board.update()
+				return
+	else:
+		# Mirror Comet's AI heuristic: lowest priority (back of priority_order).
+		for name in reversed(player.priority_order):
+			node = player.board.nodes[name]
+			if node.stone == player.color:
+				node.stone = None
+				if (player.board.last_play == node.name):
+					player.board.last_play = None
+					player.board.last_player = None
+				player.board.update()
+				time.sleep(1)
+				return
+
+
+class Fury(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Sacrifice 1 stone, then make 3 hard moves."
+
+	def resolve(self, player):
+		_sacrifice_one_stone(player)
+		if player.board.gameover:
+			return
+		for _ in range(3):
+			if not player.allhardmoveablenodes():
+				if player.ishuman:
+					player.jmessage("No legal hard moves")
+				break
+			player.hardmove()
+
+
+class Thunder(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+
+		self.text = "Pick up every enemy stone touching one of your stones, then place them on any empty nodes."
+
+	def resolve(self, player):
+		# Thunder's own node was cleared by cast() (charm). "Touching you"
+		# is evaluated AFTER that clear, so an enemy stone whose only
+		# caster neighbor was the Thunder position is unaffected.
+		picked = []
+		for nodename in player.board.nodes:
+			node = player.board.nodes[nodename]
+			if node.stone != player.enemy:
+				continue
+			for neighbor in node.neighbors:
+				if neighbor.stone == player.color:
+					picked.append(node)
+					break
+		if not picked:
+			return
+		for node in picked:
+			node.stone = None
+			if (player.board.last_play == node.name):
+				player.board.last_play = None
+				player.board.last_player = None
+		player.board.update()
+
+		for i in range(len(picked)):
+			if player.board.gameover:
+				return
+			empties = [
+				player.board.nodes[n] for n in player.board.nodes
+				if player.board.nodes[n].stone is None
+			]
+			if not empties:
+				return
+			if player.ishuman:
+				options = {n.name: player.enemy for n in empties}
+				msg = "Place enemy stone {} of {} on any empty node.".format(i + 1, len(picked))
+				while True:
+					egress = {"type": "message", "message": msg,
+					          "awaiting": "node", "moveoptions": options}
+					player.ws.send(json.dumps(egress))
+					resp = player.receivemessage()
+					if resp not in options:
+						continue
+					node = player.board.nodes[resp]
+					if node.stone is not None:
+						continue
+					node.stone = player.enemy
+					anim = {"type": "new_stone_animation",
+					        "color": player.enemy, "node": node.name}
+					player.ws.send(json.dumps(anim))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(anim))
+					player.board.update()
+					break
+			else:
+				node = empties[0]
+				node.stone = player.enemy
+				anim = {"type": "new_stone_animation",
+				        "color": player.enemy, "node": node.name}
+				if player.opp.ishuman:
+					player.opp.ws.send(json.dumps(anim))
+				player.board.update()
+				time.sleep(0.5)
+
+
+class Storm_Front(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Destroy any 2 enemy stones of your choice."
+
+	def resolve(self, player):
+		for i in range(2):
+			enemies_remaining = any(
+				player.board.nodes[n].stone == player.enemy
+				for n in player.board.nodes
+			)
+			if not enemies_remaining:
+				return
+			if player.ishuman:
+				msg = "Choose an enemy stone to destroy ({} of 2).".format(i + 1)
+				while True:
+					player.jmessage(msg, "node")
+					actualmessage = player.receivemessage()
+					if actualmessage in player.board.nodes:
+						node = player.board.nodes[actualmessage]
+						if node.stone != player.enemy:
+							continue
+						node.stone = None
+						if (player.board.last_play == node.name):
+							player.board.last_play = None
+							player.board.last_player = None
+						player.board.update()
+						break
+			else:
+				for name in player.board.nodes:
+					node = player.board.nodes[name]
+					if node.stone == player.enemy:
+						node.stone = None
+						if (player.board.last_play == node.name):
+							player.board.last_play = None
+							player.board.last_player = None
+						player.board.update()
+						time.sleep(0.5)
+						break
+			if player.board.gameover:
+				return
+
+
+class Hurricane(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Destroy the smallest contiguous group of enemy stones. If tied, you choose which."
+
+	def resolve(self, player):
+		# BFS flood-fill enemy stones into groups.
+		visited = set()
+		groups = []
+		for nodename in player.board.nodes:
+			if nodename in visited:
+				continue
+			node = player.board.nodes[nodename]
+			if node.stone != player.enemy:
+				continue
+			group = []
+			queue = [node]
+			visited.add(nodename)
+			while queue:
+				current = queue.pop(0)
+				group.append(current)
+				for nb in current.neighbors:
+					if nb.name in visited:
+						continue
+					if nb.stone == player.enemy:
+						visited.add(nb.name)
+						queue.append(nb)
+			groups.append(group)
+		if not groups:
+			return
+		min_size = min(len(g) for g in groups)
+		smallest = [g for g in groups if len(g) == min_size]
+		if len(smallest) == 1:
+			chosen = smallest[0]
+		elif player.ishuman:
+			options = {}
+			for g in smallest:
+				for n in g:
+					options[n.name] = player.enemy
+			msg = ("Multiple smallest groups ({} stones each). "
+			       "Click a stone in the group to destroy.").format(min_size)
+			chosen = None
+			while chosen is None:
+				egress = {"type": "message", "message": msg,
+				          "awaiting": "node", "moveoptions": options}
+				player.ws.send(json.dumps(egress))
+				resp = player.receivemessage()
+				if resp not in options:
+					continue
+				for g in smallest:
+					if any(n.name == resp for n in g):
+						chosen = g
+						break
+		else:
+			chosen = smallest[0]
+		for node in chosen:
+			node.stone = None
+			if (player.board.last_play == node.name):
+				player.board.last_play = None
+				player.board.last_player = None
+		player.board.update()
+
+
+class Gush(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+
+		self.text = "If you did not dash this turn, make 1 move."
+
+	def resolve(self, player):
+		# Action-list gating (game.py / singleplayergame.py) enforces
+		# the "did not dash" condition; the resolver just makes 1 move.
+		player.move()
+
+
+class Torrent(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 1 soft move, then 1 hard move."
+
+	def resolve(self, player):
+		if player.allsoftmoveablenodes():
+			if player.ishuman:
+				player.softmove()
+			else:
+				player.softmove(self.position.copy())
+		elif player.ishuman:
+			player.jmessage("No legal soft moves")
+		if player.allhardmoveablenodes():
+			player.hardmove()
+		elif player.ishuman:
+			player.jmessage("No legal hard moves")
+
+
+class Flood(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 2 soft moves, then 2 hard moves."
+
+	def resolve(self, player):
+		for _ in range(2):
+			if player.allsoftmoveablenodes():
+				if player.ishuman:
+					player.softmove()
+				else:
+					player.softmove(self.position.copy())
+			else:
+				if player.ishuman:
+					player.jmessage("No legal soft moves")
+				break
+		for _ in range(2):
+			if player.allhardmoveablenodes():
+				player.hardmove()
+			else:
+				if player.ishuman:
+					player.jmessage("No legal hard moves")
+				break
+
+
+###############################################################################################
+#####  DEAD CODE BELOW — commented-out skeletons from earlier playtest iterations
+
+
 # class Winter(Spell):
 # 	def __init__(self, board, position, name):
 # 		super().__init__(board, position, name)
