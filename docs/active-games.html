@@ -130,13 +130,17 @@
 		<div class="active-games">
 			<h2>Your Active Games</h2>
 
-			<p class="loading-msg" x-show="loading" x-cloak>Loading games...</p>
+			<p class="loading-msg" x-show="loading && !isOffline" x-cloak>Loading games...</p>
 
-			<p class="signin-msg" x-show="!loading && !authUser" x-cloak>
+			<p class="signin-msg" x-show="isOffline" x-cloak>
+				Your online active games are unavailable while offline. Local in-progress games can be resumed from the <a href="./" style="color: inherit;">main menu</a>.
+			</p>
+
+			<p class="signin-msg" x-show="!isOffline && !loading && !authUser" x-cloak>
 				<a href="account.html">Sign in</a> to view your active games.
 			</p>
 
-			<p class="empty-msg" x-show="!loading && authUser && games.length === 0" x-cloak>
+			<p class="empty-msg" x-show="!isOffline && !loading && authUser && games.length === 0" x-cloak>
 				No ongoing games. <a class="back-link" href="multiplayer.html" style="margin: 0;">Start a new game &rarr;</a>
 			</p>
 
@@ -190,6 +194,7 @@
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('activeGamesPage', () => ({
 				loading: true,
+				isOffline: !navigator.onLine,
 				authUser: null,
 				games: [],
 				_serverTimeOffset: 0,
@@ -204,6 +209,15 @@
 				},
 
 				init() {
+					if (!this._netListenersAdded) {
+						this._netListenersAdded = true;
+						window.addEventListener('online', () => { this.isOffline = false; if (this.games.length === 0) this.init(); });
+						window.addEventListener('offline', () => { this.isOffline = true; this.loading = false; });
+					}
+					if (this.isOffline) {
+						this.loading = false;
+						return;
+					}
 					const db = firebase.database();
 					db.ref('.info/serverTimeOffset').on('value', (snap) => {
 						this._serverTimeOffset = snap.val() || 0;

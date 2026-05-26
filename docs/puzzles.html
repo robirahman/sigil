@@ -41,11 +41,15 @@
 				<p>Look at the position. Whose side do you think is winning?</p>
 			</div>
 
-			<template x-if="loading">
+			<template x-if="loading && !isOffline">
 				<div class="puzzle-status">Loading next position…</div>
 			</template>
 
-			<template x-if="!loading && !current">
+			<template x-if="isOffline">
+				<div class="puzzle-status">Annotation training requires a connection. <a href="./" style="color: inherit;">Back to menu</a>.</div>
+			</template>
+
+			<template x-if="!loading && !isOffline && !current">
 				<div class="puzzle-status">No positions available yet. Play a few games or check back later.</div>
 			</template>
 
@@ -129,6 +133,7 @@
 		function puzzlePage() {
 			return {
 				loading: true,
+				isOffline: !navigator.onLine,
 				submitting: false,
 				current: null,    // { gameId, turnNumber, sfn, stones, score, whoseTurn }
 				status: '',
@@ -137,6 +142,15 @@
 				_recentTried: new Set(),
 
 				async init() {
+					if (!this._netListenersAdded) {
+						this._netListenersAdded = true;
+						window.addEventListener('online', () => { this.isOffline = false; if (!this.current) this.init(); });
+						window.addEventListener('offline', () => { this.isOffline = true; this.loading = false; });
+					}
+					if (this.isOffline) {
+						this.loading = false;
+						return;
+					}
 					this._authManager = new AuthManager();
 					this._authManager.onAuthChanged(() => { /* presence only */ });
 					await this.loadNext();

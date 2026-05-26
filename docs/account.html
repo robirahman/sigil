@@ -197,6 +197,10 @@
 		<div class="account" x-show="!loading && !user" x-cloak>
 			<h2>Account</h2>
 
+			<p class="error-msg" x-show="isOffline" x-cloak style="margin-bottom: 16px;">
+				Sign-in and account creation require a connection. <a href="./" style="color: inherit;">Back to menu</a> to play offline.
+			</p>
+
 			<div class="tab-bar">
 				<button class="tab-bar__tab" x-bind:class="{ 'tab-bar__tab--active': tab === 'login' }" x-on:click="tab = 'login'">Sign In</button>
 				<button class="tab-bar__tab" x-bind:class="{ 'tab-bar__tab--active': tab === 'signup' }" x-on:click="tab = 'signup'">Sign Up</button>
@@ -206,28 +210,28 @@
 			<div x-show="tab === 'login'">
 				<div class="account-form">
 					<label for="login-email">Email</label>
-					<input id="login-email" type="email" x-model="loginEmail" x-on:keydown.enter="signIn" />
+					<input id="login-email" type="email" x-model="loginEmail" x-on:keydown.enter="signIn" x-bind:disabled="isOffline" />
 					<label for="login-password">Password</label>
-					<input id="login-password" type="password" x-model="loginPassword" x-on:keydown.enter="signIn" />
+					<input id="login-password" type="password" x-model="loginPassword" x-on:keydown.enter="signIn" x-bind:disabled="isOffline" />
 				</div>
-				<button class="account-button" x-on:click="signIn" x-bind:disabled="busy">Sign In</button>
+				<button class="account-button" x-on:click="signIn" x-bind:disabled="busy || isOffline">Sign In</button>
 			</div>
 
 			<!-- Sign Up Form -->
 			<div x-show="tab === 'signup'">
 				<div class="account-form">
 					<label for="signup-name">Display Name</label>
-					<input id="signup-name" type="text" x-model="signupName" maxlength="20" x-on:keydown.enter="signUp" />
+					<input id="signup-name" type="text" x-model="signupName" maxlength="20" x-on:keydown.enter="signUp" x-bind:disabled="isOffline" />
 					<label for="signup-email">Email</label>
-					<input id="signup-email" type="email" x-model="signupEmail" x-on:keydown.enter="signUp" />
+					<input id="signup-email" type="email" x-model="signupEmail" x-on:keydown.enter="signUp" x-bind:disabled="isOffline" />
 					<label for="signup-password">Password</label>
-					<input id="signup-password" type="password" x-model="signupPassword" x-on:keydown.enter="signUp" />
+					<input id="signup-password" type="password" x-model="signupPassword" x-on:keydown.enter="signUp" x-bind:disabled="isOffline" />
 				</div>
-				<button class="account-button" x-on:click="signUp" x-bind:disabled="busy">Create Account</button>
+				<button class="account-button" x-on:click="signUp" x-bind:disabled="busy || isOffline">Create Account</button>
 			</div>
 
 			<div class="divider">- or -</div>
-			<button class="account-button account-button--google" x-on:click="signInGoogle" x-bind:disabled="busy">Sign in with Google</button>
+			<button class="account-button account-button--google" x-on:click="signInGoogle" x-bind:disabled="busy || isOffline">Sign in with Google</button>
 
 			<p class="error-msg" x-text="error"></p>
 			<a class="back-link" href="./">&larr; Back to menu</a>
@@ -335,6 +339,7 @@
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('accountPage', () => ({
 				loading: true,
+				isOffline: !navigator.onLine,
 				user: null,
 				profile: null,
 				tab: 'login',
@@ -356,6 +361,14 @@
 				},
 
 				init() {
+					window.addEventListener('online', () => { this.isOffline = false; });
+					window.addEventListener('offline', () => { this.isOffline = true; });
+					if (this.isOffline) {
+						// Skip the Firebase auth round-trip entirely; the
+						// onAuthStateChanged callback still fires with the
+						// cached session, but we don't want the spinner.
+						this.loading = false;
+					}
 					this._authManager = new AuthManager();
 					this._authManager.onAuthChanged(async (user) => {
 						this.user = user && !user.isAnonymous ? user : null;

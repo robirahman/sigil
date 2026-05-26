@@ -308,11 +308,14 @@
 				Empty board start; both players blink onto any node for their first move. Joiners inherit the creator's choice.
 			</small>
 
-			<button class="lobby-button" x-on:click="createRoom">Create Game</button>
+			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
-			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" />
-			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="joinCode.length < 4">Join Game</button>
+			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" x-bind:disabled="isOffline" />
+			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="isOffline || joinCode.length < 4">Join Game</button>
 			<p class="error-msg" x-text="lobbyError"></p>
+			<p class="error-msg" x-show="isOffline" x-cloak style="margin-top: 12px;">
+				Online multiplayer requires a connection. <a href="game.html" style="color: inherit;">Local 1v1</a> or <a href="./" style="color: inherit;">vs AI</a> still work offline.
+			</p>
 
 			<!-- Resume correspondence games -->
 			<div class="resume-section" x-show="activeGames.length > 0">
@@ -623,6 +626,7 @@
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('multiplayerLobby', () => ({
 				phase: 'lobby',
+				isOffline: !navigator.onLine,
 				joinCode: '',
 				lobbyError: '',
 				roomCode: '',
@@ -653,6 +657,8 @@
 				activeGames: [],
 
 				init() {
+					window.addEventListener('online', () => { this.isOffline = false; });
+					window.addEventListener('offline', () => { this.isOffline = true; });
 					_firebaseSync = new FirebaseSync(firebase.database());
 					_authManager = new AuthManager();
 

@@ -141,8 +141,9 @@
 
 	<div class="main" x-data="profilePage()">
 		<div class="profile">
-			<p class="loading-msg" x-show="loading" x-cloak>Loading profile...</p>
-			<p class="empty-msg" x-show="!loading && !user" x-cloak>User not found.</p>
+			<p class="loading-msg" x-show="loading && !isOffline" x-cloak>Loading profile...</p>
+			<p class="empty-msg" x-show="isOffline" x-cloak>Profile data is unavailable while offline. <a href="./" style="color: inherit;">Back to menu</a>.</p>
+			<p class="empty-msg" x-show="!isOffline && !loading && !user" x-cloak>User not found.</p>
 
 			<template x-if="!loading && user">
 				<div>
@@ -295,6 +296,7 @@
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('profilePage', () => ({
 				loading: true,
+				isOffline: !navigator.onLine,
 				user: null,
 				games: [],
 				topOpponents: [],
@@ -321,6 +323,12 @@
 				nextPage() { if (this.page < this.totalPages - 1) this.page++; },
 
 				async init() {
+					if (!this._netListenersAdded) {
+						this._netListenersAdded = true;
+						window.addEventListener('online', () => { this.isOffline = false; if (!this.user) this.init(); });
+						window.addEventListener('offline', () => { this.isOffline = true; this.loading = false; });
+					}
+					if (this.isOffline) { this.loading = false; return; }
 					const uid = new URLSearchParams(window.location.search).get('uid');
 					if (!uid) { this.loading = false; return; }
 					const db = firebase.database();
