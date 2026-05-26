@@ -285,7 +285,9 @@ async function cavemanSearch(board, color, opts) {
 	}
 
 	// Mate-in-1 short-circuit.
+	let mateInspected = 0;
 	for (const turn of legal) {
+		mateInspected += 1;
 		const sim = _minimaxApplyTurn(board, turn, color);
 		if (abHistory && !sim.gameover) {
 			const k = sim.loopingSnapshot();
@@ -298,7 +300,7 @@ async function cavemanSearch(board, color, opts) {
 			return {
 				turn, score: CAVEMAN_WIN, depth: 1,
 				timeMs: Date.now() - searchStart,
-				nodes: 0, ttSize: 0, cutoffs: 0,
+				nodes: mateInspected, ttSize: 0, cutoffs: 0,
 			};
 		}
 	}
