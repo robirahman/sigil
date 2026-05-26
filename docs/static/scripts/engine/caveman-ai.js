@@ -515,11 +515,15 @@ class CavemanAI {
 		const opts = {
 			positionHistory,
 			timeLimit: Infinity,
-			// Soft cap: ponder past this depth contributes negligible
-			// extra priming but each iteration's TT growth + per-node
-			// abort-check cost balloons. Real searches max out around
-			// 8–10 on desktop, less on mobile.
-			maxDepth: 14,
+			// Bounded ponder depth so a single iteration can't grow
+			// past ~1s of work — cancel latency is bounded by current
+			// depth duration (cooperative abort can't fire mid-depth
+			// because the worker is single-threaded). Depth 8 is
+			// enough that the TT entries it produces still hit when
+			// the real search reaches the same sub-positions; deeper
+			// ponder iterations are rarely revisited and aren't worth
+			// the extra cancel latency.
+			maxDepth: 8,
 			useSharedTt: true,
 			resetSharedTt: false,
 		};
