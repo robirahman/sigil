@@ -339,6 +339,13 @@ class GameController {
 							}
 							continue;
 						}
+						if (spellName === 'Gush') {
+							if (candash) {
+								actions.push(spellName);
+								spellList.push(spellName);
+							}
+							continue;
+						}
 						if (canspell || (!canspell && summerActive)) {
 							actions.push(spellName);
 							spellList.push(spellName);

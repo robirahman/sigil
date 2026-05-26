@@ -37,6 +37,33 @@ const SYZYGY_OPPOSITE = {
 	3: { charm: 7, sorcery: 4 },
 };
 
+// BFS flood-fill: return contiguous groups of stones of `targetColor`.
+// Each group is an array of node names.
+function findStoneGroups(board, targetColor) {
+	const groups = [];
+	const visited = new Set();
+	for (const start of NODE_ORDER) {
+		if (visited.has(start)) continue;
+		if (board.stones[start] !== targetColor) continue;
+		const group = [];
+		const queue = [start];
+		visited.add(start);
+		while (queue.length > 0) {
+			const n = queue.shift();
+			group.push(n);
+			for (const nb of (ADJACENCY[n] || [])) {
+				if (visited.has(nb)) continue;
+				if (board.stones[nb] === targetColor) {
+					visited.add(nb);
+					queue.push(nb);
+				}
+			}
+		}
+		groups.push(group);
+	}
+	return groups;
+}
+
 const SpellResolvers = {
 
 	// --- Soft move spells ---
@@ -676,6 +703,217 @@ const SpellResolvers = {
 					board.update();
 					emit(board.getBoardStatePayload());
 				}
+				break;
+			}
+		}
+	},
+
+	// --- Fury (sacrifice 1 stone, then 3 hard moves) ---
+	async fury(board, color, spellName, getInput, emit) {
+		// Sacrifice 1 stone first.
+		const hasOwn = NODE_ORDER.some(n => board.stones[n] === color);
+		if (hasOwn) {
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Sacrifice a stone.',
+					awaiting: 'node', moveoptions: {},
+				});
+				if (board.stones[resp] === color) {
+					board.stones[resp] = null;
+					if (board.lastPlay === resp) {
+						board.lastPlay = null;
+						board.lastPlayer = null;
+					}
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
+			}
+		}
+		if (board.gameover) return;
+
+		// Then 3 hard moves.
+		for (let i = 0; i < 3; i++) {
+			const targets = getHardMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal hard moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Choose where to hard move.',
+					awaiting: 'node', moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				await doPushEnemy(board, resp, color, getInput, emit);
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Thunder (relocate enemy stones touching you) ---
+	async thunder(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		// Thunder's own position has already been cleared by _castSpell
+		// before resolve runs. Pick up every enemy stone that touches a
+		// surviving caster stone.
+		const picked = [];
+		for (const n of NODE_ORDER) {
+			if (board.stones[n] !== enemy) continue;
+			for (const nb of ADJACENCY[n]) {
+				if (board.stones[nb] === color) { picked.push(n); break; }
+			}
+		}
+		if (picked.length === 0) {
+			emit({ type: 'message', message: 'No enemy stones touch you; Thunder fizzles.', awaiting: null });
+			return;
+		}
+		for (const n of picked) {
+			board.stones[n] = null;
+			if (board.lastPlay === n) {
+				board.lastPlay = null;
+				board.lastPlayer = null;
+			}
+		}
+		board.update();
+		emit(board.getBoardStatePayload());
+
+		// Place them one at a time onto any empty node (including ones
+		// just vacated). Game might end mid-relocation if these were the
+		// enemy's last stones — guard before each prompt.
+		for (let i = 0; i < picked.length; i++) {
+			if (board.gameover) return;
+			const moveoptions = {};
+			for (const n of NODE_ORDER) {
+				if (board.stones[n] === null) moveoptions[n] = enemy;
+			}
+			if (Object.keys(moveoptions).length === 0) return;
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Place enemy stone ${i + 1} of ${picked.length} on an empty node.`,
+					awaiting: 'node',
+					moveoptions,
+				});
+				if (board.stones[resp] === null) {
+					board.stones[resp] = enemy;
+					emit({ type: 'new_stone_animation', color: enemy, node: resp });
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
+			}
+		}
+	},
+
+	// --- Storm Front (destroy any 2 enemy stones) ---
+	async storm_front(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		for (let i = 0; i < 2; i++) {
+			const remaining = NODE_ORDER.some(n => board.stones[n] === enemy);
+			if (!remaining) return;
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Choose an enemy stone to destroy (${i + 1} of 2).`,
+					awaiting: 'node', moveoptions: {},
+				});
+				if (board.stones[resp] === enemy) {
+					board.stones[resp] = null;
+					if (board.lastPlay === resp) {
+						board.lastPlay = null;
+						board.lastPlayer = null;
+					}
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
+			}
+			if (board.gameover) return;
+		}
+	},
+
+	// --- Hurricane (destroy smallest contiguous enemy group) ---
+	async hurricane(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const groups = findStoneGroups(board, enemy);
+		if (groups.length === 0) return;
+
+		const minSize = Math.min(...groups.map(g => g.length));
+		const smallest = groups.filter(g => g.length === minSize);
+
+		let chosen;
+		if (smallest.length === 1) {
+			chosen = smallest[0];
+		} else {
+			// Tie: caster picks any stone in one of the smallest groups.
+			const moveoptions = {};
+			for (const g of smallest) {
+				for (const n of g) moveoptions[n] = enemy;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Multiple smallest groups (${minSize} stones each). Click a stone in the group you want destroyed.`,
+					awaiting: 'node', moveoptions,
+				});
+				const found = smallest.find(g => g.includes(resp));
+				if (found) { chosen = found; break; }
+			}
+		}
+
+		for (const n of chosen) {
+			board.stones[n] = null;
+			if (board.lastPlay === n) {
+				board.lastPlay = null;
+				board.lastPlayer = null;
+			}
+		}
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Torrent / Flood (soft moves then hard moves) ---
+	async soft_hard_chain(board, color, spellName, getInput, emit) {
+		const info = CORE_SPELLS[spellName];
+		const [softCount, hardCount] = info.counts;
+		for (let i = 0; i < softCount; i++) {
+			const targets = getSoftMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Choose where to soft move.',
+					awaiting: 'node', moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp; board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+		for (let i = 0; i < hardCount; i++) {
+			const targets = getHardMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal hard moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Choose where to hard move.',
+					awaiting: 'node', moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				await doPushEnemy(board, resp, color, getInput, emit);
+				board.update();
+				emit(board.getBoardStatePayload());
 				break;
 			}
 		}

@@ -32,6 +32,15 @@ const ENUM_CAPS = {
 	meteor: 4,
 	comet: 4,
 	fireblast: 4,
+	// Expansion-pack caps. Brute-force (no heuristic ordering) per user
+	// direction; tune later.
+	fury_sac: 6,
+	fury_target: 4,
+	storm_front: 12,
+	hurricane: 4,
+	soft_hard_soft: 4,
+	soft_hard_hard: 4,
+	gush: 6,
 };
 
 function _adjacentEnemyPairs(board, color) {
@@ -220,8 +229,80 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < ranked.length && i < caps.fireblast; i++) {
 			out.push({ fireblast_sacrifice: ranked[i] });
 		}
+	} else if (rt === 'fury') {
+		// (sacrifice choice) × (first hard-move target). Subsequent two
+		// hard moves resolve greedily in the sim. No ranking — user
+		// explicitly deferred heuristics.
+		const own = NODE_ORDER.filter(n => board.stones[n] === color);
+		const targets = board._hardMoveable(color);
+		const sacCap = Math.min(own.length, caps.fury_sac);
+		const tgtCap = Math.min(targets.length, caps.fury_target);
+		for (let i = 0; i < sacCap; i++) {
+			for (let j = 0; j < tgtCap; j++) {
+				out.push({ fury_sacrifice: own[i], hard_move_targets: [targets[j]] });
+			}
+		}
+	} else if (rt === 'storm_front') {
+		const enemy = board._enemy(color);
+		const enemies = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		let added = 0;
+		outer: for (let i = 0; i < enemies.length; i++) {
+			for (let j = i + 1; j < enemies.length; j++) {
+				if (added >= caps.storm_front) break outer;
+				out.push({ storm_front_pair: [enemies[i], enemies[j]] });
+				added++;
+			}
+		}
+	} else if (rt === 'hurricane') {
+		const enemy = board._enemy(color);
+		const visited = new Set();
+		const groups = [];
+		for (const start of NODE_ORDER) {
+			if (visited.has(start) || board.stones[start] !== enemy) continue;
+			const group = [];
+			const queue = [start];
+			visited.add(start);
+			while (queue.length > 0) {
+				const n = queue.shift();
+				group.push(n);
+				for (const nb of (ADJACENCY[n] || [])) {
+					if (!visited.has(nb) && board.stones[nb] === enemy) {
+						visited.add(nb);
+						queue.push(nb);
+					}
+				}
+			}
+			groups.push(group);
+		}
+		if (groups.length) {
+			const minSize = Math.min(...groups.map(g => g.length));
+			const smallest = groups.filter(g => g.length === minSize);
+			for (let i = 0; i < smallest.length && i < caps.hurricane; i++) {
+				out.push({ hurricane_group: smallest[i].slice() });
+			}
+		}
+	} else if (rt === 'soft_hard_chain') {
+		const softTargets = board._softMoveable(color);
+		const hardTargets = board._hardMoveable(color);
+		const softCap = Math.min(softTargets.length, caps.soft_hard_soft);
+		const hardCap = Math.min(hardTargets.length, caps.soft_hard_hard);
+		for (let i = 0; i < softCap; i++) {
+			for (let j = 0; j < hardCap; j++) {
+				out.push({ soft_move_targets: [softTargets[i]], hard_move_targets: [hardTargets[j]] });
+			}
+		}
+	} else if (rt === 'surge_move' && spellName === 'Gush') {
+		// Gush enumerates each possible move destination. (Surge — the
+		// other surge_move user — only runs post-dash and is currently
+		// excluded by sim-board's _getCastableSpells, so this branch is
+		// Gush-specific.)
+		const targets = board._allMoveable(color);
+		for (let i = 0; i < targets.length && i < caps.gush; i++) {
+			out.push({ surge_target: targets[i] });
+		}
 	}
-	// soft_moves, hail_storm, surge_move: greedy is fine.
+	// soft_moves, hail_storm, thunder: greedy is fine. Thunder's pickup
+	// is forced and placement combinatorics blow up — defer to follow-up.
 	return out;
 }
 
@@ -283,7 +364,7 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 				// Cast after dash
 				let castable;
 				try {
-					castable = bd._getCastableSpells(color, false, canSummer);
+					castable = bd._getCastableSpells(color, false, canSummer, true);
 				} catch (e) { castable = []; }
 				for (const spellName of castable) {
 					const overrides = _spellOverrides(bd, color, spellName, caps);

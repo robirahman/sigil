@@ -64,6 +64,16 @@ const CORE_SPELLS = {
 	Azimuth:           { resolve: 'azimuth',    static: false, ischarm: true },
 	Eclipse:           { resolve: 'eclipse',    static: false, ischarm: false },
 	Syzygy:            { resolve: 'syzygy',     static: false, ischarm: false },
+	// Fury expansion
+	Fury:              { resolve: 'fury',       static: false, ischarm: false },
+	// Tempest expansion
+	Thunder:           { resolve: 'thunder',    static: false, ischarm: true },
+	Storm_Front:       { resolve: 'storm_front', static: false, ischarm: false },
+	Hurricane:         { resolve: 'hurricane',  static: false, ischarm: false },
+	// Tsunami expansion
+	Gush:              { resolve: 'surge_move', static: false, ischarm: true },
+	Torrent:           { resolve: 'soft_hard_chain', counts: [1, 1], static: false, ischarm: false },
+	Flood:             { resolve: 'soft_hard_chain', counts: [2, 2], static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -88,6 +98,13 @@ const SPELL_TEXTS = {
 	Azimuth:           'Make 1 move into a spell where you control all but 1 node.',
 	Eclipse:           'Make 2 moves into a spell where you control all but 2 nodes.',
 	Syzygy:            'Make 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell.',
+	Fury:              'Sacrifice 1 stone, then make 3 hard moves.',
+	Thunder:           'Pick up every enemy stone touching one of your stones, then place them on any empty nodes.',
+	Storm_Front:       'Destroy any 2 enemy stones of your choice.',
+	Hurricane:         'Destroy the smallest contiguous group of enemy stones. If tied, you choose which.',
+	Gush:              'If you did not dash this turn, make 1 move.',
+	Torrent:           'Make 1 soft move, then 1 hard move.',
+	Flood:             'Make 2 soft moves, then 2 hard moves.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -101,6 +118,18 @@ const SPRINGTIME_CHARMS = ['Seal_of_Spring'];
 const CELESTIAL_RITUALS = ['Syzygy'];
 const CELESTIAL_SORCERIES = ['Eclipse'];
 const CELESTIAL_CHARMS = ['Azimuth'];
+
+const FURY_RITUALS = [];
+const FURY_SORCERIES = ['Fury'];
+const FURY_CHARMS = [];
+
+const TEMPEST_RITUALS = ['Hurricane'];
+const TEMPEST_SORCERIES = ['Storm_Front'];
+const TEMPEST_CHARMS = ['Thunder'];
+
+const TSUNAMI_RITUALS = ['Flood'];
+const TSUNAMI_SORCERIES = ['Torrent'];
+const TSUNAMI_CHARMS = ['Gush'];
 
 const SPELL_PACKS = {
 	core: {
@@ -118,10 +147,28 @@ const SPELL_PACKS = {
 		sorceries: [...CORE_SORCERIES, ...CELESTIAL_SORCERIES],
 		charms: [...CORE_CHARMS, ...CELESTIAL_CHARMS],
 	},
+	fury: {
+		rituals: [...CORE_RITUALS, ...FURY_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...FURY_SORCERIES],
+		charms: [...CORE_CHARMS, ...FURY_CHARMS],
+	},
+	tempest: {
+		rituals: [...CORE_RITUALS, ...TEMPEST_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...TEMPEST_SORCERIES],
+		charms: [...CORE_CHARMS, ...TEMPEST_CHARMS],
+	},
+	tsunami: {
+		rituals: [...CORE_RITUALS, ...TSUNAMI_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...TSUNAMI_SORCERIES],
+		charms: [...CORE_CHARMS, ...TSUNAMI_CHARMS],
+	},
 	all: {
-		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS, ...CELESTIAL_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES, ...CELESTIAL_SORCERIES],
-		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS, ...CELESTIAL_CHARMS],
+		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS, ...CELESTIAL_RITUALS,
+		          ...FURY_RITUALS, ...TEMPEST_RITUALS, ...TSUNAMI_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES, ...CELESTIAL_SORCERIES,
+		            ...FURY_SORCERIES, ...TEMPEST_SORCERIES, ...TSUNAMI_SORCERIES],
+		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS, ...CELESTIAL_CHARMS,
+		         ...FURY_CHARMS, ...TEMPEST_CHARMS, ...TSUNAMI_CHARMS],
 	},
 };
 

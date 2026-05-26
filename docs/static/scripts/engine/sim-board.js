@@ -533,8 +533,155 @@ class SimBoard {
 			}
 		} else if (rt === 'surge_move') {
 			const targets = this._allMoveable(color);
-			if (targets.length) {
-				actions.push(this._doMove(color, targets[0], false));
+			let chosen = null;
+			const ovr = overrides.surge_target;
+			if (ovr && targets.includes(ovr)) chosen = ovr;
+			else if (targets.length) chosen = targets[0];
+			if (chosen) {
+				actions.push(this._doMove(color, chosen, false));
+				this.update();
+			}
+		} else if (rt === 'fury') {
+			// Sacrifice 1 stone, then 3 hard moves.
+			const sacOverride = overrides.fury_sacrifice;
+			let sacrificed = null;
+			if (sacOverride && this.stones[sacOverride] === color) {
+				this.stones[sacOverride] = null;
+				sacrificed = sacOverride;
+			} else {
+				for (const name of [...NODE_ORDER].reverse()) {
+					if (this.stones[name] === color) {
+						this.stones[name] = null;
+						sacrificed = name;
+						break;
+					}
+				}
+			}
+			if (sacrificed) actions.push(new SimAction('sacrifice', { node: sacrificed }));
+			this.update();
+			if (this.gameover) return actions;
+			const overrideTargets = (overrides.hard_move_targets || []).slice();
+			for (let i = 0; i < 3; i++) {
+				const targets = this._hardMoveable(color);
+				if (!targets.length) break;
+				let chosen = null;
+				while (overrideTargets.length && chosen === null) {
+					const cand = overrideTargets.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets[0];
+				actions.push(this._doHardMove(color, chosen));
+				this.update();
+			}
+		} else if (rt === 'thunder') {
+			// Pick up every enemy stone touching any of our remaining stones.
+			const picked = [];
+			for (const n of NODE_ORDER) {
+				if (this.stones[n] !== enemy) continue;
+				for (const nb of ADJACENCY[n]) {
+					if (this.stones[nb] === color) { picked.push(n); break; }
+				}
+			}
+			if (!picked.length) return actions;
+			for (const n of picked) this.stones[n] = null;
+			this.update();
+			// Place them. Override placements list (parallel to picked order),
+			// otherwise fill empty nodes in NODE_ORDER.
+			const placeOverrides = (overrides.thunder_placements || []).slice();
+			const placed = [];
+			for (let i = 0; i < picked.length; i++) {
+				let dest = null;
+				if (placeOverrides[i] && this.stones[placeOverrides[i]] === null) {
+					dest = placeOverrides[i];
+				} else {
+					for (const n of NODE_ORDER) {
+						if (this.stones[n] === null) { dest = n; break; }
+					}
+				}
+				if (!dest) break;
+				this.stones[dest] = enemy;
+				placed.push(dest);
+				this.update();
+			}
+			actions.push(new SimAction('thunder', { destroyed: picked, kept: placed }));
+		} else if (rt === 'storm_front') {
+			// Destroy 2 enemy stones of caster's choice.
+			const ovr = overrides.storm_front_pair;
+			const destroyed = [];
+			if (ovr && ovr.length === 2
+			    && this.stones[ovr[0]] === enemy && this.stones[ovr[1]] === enemy
+			    && ovr[0] !== ovr[1]) {
+				for (const n of ovr) { this.stones[n] = null; destroyed.push(n); }
+			} else {
+				for (const name of NODE_ORDER) {
+					if (destroyed.length >= 2) break;
+					if (this.stones[name] === enemy) {
+						this.stones[name] = null;
+						destroyed.push(name);
+					}
+				}
+			}
+			if (destroyed.length) actions.push(new SimAction('storm_front', { destroyed }));
+			this.update();
+		} else if (rt === 'hurricane') {
+			// Destroy the smallest contiguous enemy group.
+			const visited = new Set();
+			const groups = [];
+			for (const start of NODE_ORDER) {
+				if (visited.has(start) || this.stones[start] !== enemy) continue;
+				const group = [];
+				const queue = [start];
+				visited.add(start);
+				while (queue.length > 0) {
+					const n = queue.shift();
+					group.push(n);
+					for (const nb of (ADJACENCY[n] || [])) {
+						if (!visited.has(nb) && this.stones[nb] === enemy) {
+							visited.add(nb);
+							queue.push(nb);
+						}
+					}
+				}
+				groups.push(group);
+			}
+			if (!groups.length) return actions;
+			const minSize = Math.min(...groups.map(g => g.length));
+			const smallest = groups.filter(g => g.length === minSize);
+			let chosen = smallest[0];
+			const ovr = overrides.hurricane_group;
+			if (ovr) {
+				const match = smallest.find(g => ovr.every(n => g.includes(n)) && g.length === ovr.length);
+				if (match) chosen = match;
+			}
+			for (const n of chosen) this.stones[n] = null;
+			actions.push(new SimAction('hurricane', { destroyed: chosen.slice() }));
+			this.update();
+		} else if (rt === 'soft_hard_chain') {
+			const [softCount, hardCount] = info.counts;
+			const softOverrides = (overrides.soft_move_targets || []).slice();
+			const hardOverrides = (overrides.hard_move_targets || []).slice();
+			for (let i = 0; i < softCount; i++) {
+				const targets = this._softMoveable(color);
+				if (!targets.length) break;
+				let chosen = null;
+				while (softOverrides.length && chosen === null) {
+					const cand = softOverrides.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
+				actions.push(this._doSoftMove(color, chosen));
+				this.update();
+			}
+			for (let i = 0; i < hardCount; i++) {
+				const targets = this._hardMoveable(color);
+				if (!targets.length) break;
+				let chosen = null;
+				while (hardOverrides.length && chosen === null) {
+					const cand = hardOverrides.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets[0];
+				actions.push(this._doHardMove(color, chosen));
 				this.update();
 			}
 		} else if (rt === 'azimuth') {
@@ -685,7 +832,7 @@ class SimBoard {
 	}
 
 	// --- Legal turn enumeration ---
-	_getCastableSpells(color, canSpell, canSummer) {
+	_getCastableSpells(color, canSpell, canSummer, postDash) {
 		const enemy = this._enemy(color);
 		const hasWinter = this.chargedSpells[enemy].includes('Winter');
 		const hasSummer = this.chargedSpells[color].includes('Seal_of_Summer');
@@ -696,6 +843,7 @@ class SimBoard {
 			if (info.ischarm) {
 				if (hasWinter) continue;
 				if (spellName === 'Surge') continue;
+				if (spellName === 'Gush' && postDash) continue;
 				if (canSpell || (!canSpell && hasSummer && canSummer)) castable.push(spellName);
 			} else {
 				if (this.lock[color] === spellName) {
@@ -711,7 +859,7 @@ class SimBoard {
 
 	* _enumeratePostDash(color, actionsSoFar, canSpell, canSummer) {
 		yield new SimTurn([...actionsSoFar, new SimAction('pass')]);
-		const castable = this._getCastableSpells(color, canSpell, canSummer);
+		const castable = this._getCastableSpells(color, canSpell, canSummer, true);
 		for (const spellName of castable) {
 			const bs = this.copy();
 			const sa = bs._castSpell(spellName, color);
