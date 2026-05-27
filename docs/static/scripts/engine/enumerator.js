@@ -195,6 +195,21 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < ranked.length && i < caps.hard_moves; i++) {
 			out.push({ hard_move_targets: [ranked[i]] });
 		}
+		// Exhaustive refill (pure-minimax): emit one variant per refill subset
+		// so the search evaluates every kept-stone choice. Pushes for each are
+		// resolved by the planner. Bounded: C(circle, mana) <= 10.
+		if (caps && caps.__exhaustiveRefill && !info.ischarm) {
+			const idx = board.spellNames.indexOf(spellName);
+			const posNodes = POSITIONS[idx + 1] || [];
+			const refills = board.mana[color];
+			if (refills > 0 && refills < posNodes.length) {
+				const rec = (start, chosen) => {
+					if (chosen.length === refills) { out.push({ refill_kept: chosen.slice() }); return; }
+					for (let i2 = start; i2 < posNodes.length; i2++) { chosen.push(posNodes[i2]); rec(i2 + 1, chosen); chosen.pop(); }
+				};
+				rec(0, []);
+			}
+		}
 	} else if (rt === 'meteor') {
 		const targets = board._blinkable(color);
 		for (let i = 0; i < targets.length && i < caps.meteor; i++) {

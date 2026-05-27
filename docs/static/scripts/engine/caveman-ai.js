@@ -217,6 +217,11 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			|| _CAVEMAN_NARROW_CAPS
 			|| ((typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null);
 	}
+	// Exhaustive-refill (pure): tag the caps so the enumerator emits a turn
+	// variant per ritual-refill subset. Copy so we never mutate the shared caps.
+	if (caps && enumConfig && enumConfig.exhaustiveRefill) {
+		caps = Object.assign({}, caps, { __exhaustiveRefill: true });
+	}
 	const turns = _cavemanOrderedTurns(board, color, caps);
 	if (turns.length === 0) {
 		return { score: _cavemanLeaf(board, color), move: null };
@@ -324,6 +329,7 @@ async function cavemanSearch(board, color, opts) {
 		exhaustivePlies: opts.exhaustivePlies !== undefined ? opts.exhaustivePlies : null,
 		enumCaps: opts.enumCaps || null,
 		deepCap: opts.deepCap !== undefined ? opts.deepCap : null,
+		exhaustiveRefill: !!opts.exhaustiveRefill,
 	};
 	const verbose = !!opts.verbose;
 	const abHistory = opts.positionHistory
@@ -335,6 +341,14 @@ async function cavemanSearch(board, color, opts) {
 	// crushes — +58% (93-67/160g) vs the old greedy resolution. Set on the root
 	// board so it propagates to every copied search node via SimBoard.copy().
 	board._rankLaterPushes = (opts.rankLaterPushes !== undefined) ? !!opts.rankLaterPushes : true;
+	// Carnage refill: default to the cheap closest-to-enemy heuristic — it ties
+	// the crush-maximizing planner in strength (arena) at a fraction of the
+	// cost. 'crush' selects the planner; closest_enemy/farthest_enemy/
+	// closest_mana/farthest_mana are the positional options; null = off (fixed
+	// priority). Only used when pushes are planned. Propagates via copy().
+	board._refillHeuristic = (opts.refillHeuristic !== undefined)
+		? opts.refillHeuristic
+		: (board._rankLaterPushes ? 'closest_enemy' : null);
 
 	const searchStart = Date.now();
 

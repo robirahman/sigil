@@ -43,6 +43,9 @@ class SimBoard {
 		// When true, Carnage/Slash resolution plans the full push sequence to
 		// maximize stones destroyed (set per-search from opts.rankLaterPushes).
 		this._rankLaterPushes = false;
+		// Optional ritual-refill heuristic name (closest_enemy / farthest_enemy
+		// / closest_mana / farthest_mana). null = use the default refill path.
+		this._refillHeuristic = null;
 	}
 
 	static fromSigilBoard(board) {
@@ -60,6 +63,7 @@ class SimBoard {
 		sb.mana = { ...board.mana };
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
 		sb._rankLaterPushes = board._rankLaterPushes || false;
+		sb._refillHeuristic = board._refillHeuristic || null;
 		return sb;
 	}
 
@@ -78,6 +82,7 @@ class SimBoard {
 		b.mana = { ...this.mana };
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
 		b._rankLaterPushes = this._rankLaterPushes;
+		b._refillHeuristic = this._refillHeuristic;
 		return b;
 	}
 
@@ -284,6 +289,43 @@ class SimBoard {
 			}
 		}
 		return best;
+	}
+
+	/** Graph-distance (hops over ADJACENCY) from `from` to the nearest node
+	 *  satisfying `pred`; Infinity if none. Ignores occupancy (pure layout). */
+	_graphDistance(from, pred) {
+		const seen = new Set([from]);
+		let frontier = [from];
+		let dist = 0;
+		while (frontier.length) {
+			for (const n of frontier) if (pred(n)) return dist;
+			const next = [];
+			for (const n of frontier) for (const nb of (ADJACENCY[n] || [])) {
+				if (!seen.has(nb)) { seen.add(nb); next.push(nb); }
+			}
+			frontier = next; dist++;
+		}
+		return Infinity;
+	}
+
+	/**
+	 * Pick `refills` ritual nodes to keep by a cheap positional heuristic
+	 * (pruned-minimax's alternative to enumerating every refill). The kept
+	 * stones are the ones nearest/farthest (by graph distance) from the enemy
+	 * or from a mana node — the intuition being a kept stone near the enemy can
+	 * push/trap, while one near a mana node defends tempo.
+	 */
+	_refillByHeuristic(color, posNodes, refills, heuristic) {
+		if (refills <= 0) return [];
+		const enemy = this._enemy(color);
+		const enemyPred = (n) => this.stones[n] === enemy;
+		const manaPred = (n) => MANA_NODES.includes(n);
+		const farther = heuristic.startsWith('farthest');
+		const pred = heuristic.endsWith('mana') ? manaPred : enemyPred;
+		const scored = posNodes.map((n) => [this._graphDistance(n, pred), n]);
+		// closest -> ascending distance; farthest -> descending.
+		scored.sort((a, b) => farther ? (b[0] - a[0]) : (a[0] - b[0]));
+		return scored.slice(0, refills).map((x) => x[1]);
 	}
 
 	_planHardMoves(color, count, forcedFirst) {
@@ -951,23 +993,33 @@ class SimBoard {
 
 		const kept = [];
 		if (!info.ischarm) {
-			if (this._rankLaterPushes && info.resolve === 'hard_moves') {
-				// Jointly choose which stones to keep + the push sequence to
-				// maximize crushes (lets the AI keep a trap stone like B2).
+			const refills = this.mana[color];
+			// Refill strategy applies to hard-move rituals (Carnage), where the
+			// kept stone sets up pushes/traps. Other rituals keep the simple
+			// fixed-priority refill (untested for them, so unchanged).
+			const hm = (info.resolve === 'hard_moves');
+			let chosen;
+			if (targetOverrides && targetOverrides.refill_kept) {
+				// Explicit refill set from the enumerator's exhaustive-refill
+				// variants (pure-minimax: the search evaluates every refill).
+				chosen = targetOverrides.refill_kept.filter(n => posNodes.includes(n)).slice(0, refills);
+			} else if (hm && this._refillHeuristic === 'crush') {
+				// Crush-maximizing joint refill+push planner (alternative to the
+				// default heuristic; selectable via refill=crush).
 				const hmOverride = (targetOverrides && targetOverrides.hard_move_targets)
 					? targetOverrides.hard_move_targets[0] : null;
-				for (const n of this._bestCarnageRefill(color, posNodes, info.count, hmOverride)) {
-					this.stones[n] = color; kept.push(n);
-				}
+				chosen = this._bestCarnageRefill(color, posNodes, info.count, hmOverride);
+			} else if (hm && this._refillHeuristic) {
+				// Default: cheap positional heuristic (keep stones closest to the
+				// enemy). Ties the crush-planner in strength, far cheaper.
+				chosen = this._refillByHeuristic(color, posNodes, refills, this._refillHeuristic);
 			} else {
-				let refills = this.mana[color];
 				const priority = posNodes.length === 3
 					? [posNodes[2], posNodes[1], posNodes[0]]
 					: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
-				for (const node of priority) {
-					if (refills > 0) { this.stones[node] = color; kept.push(node); refills--; }
-				}
+				chosen = priority.slice(0, refills);
 			}
+			for (const n of chosen) { this.stones[n] = color; kept.push(n); }
 		}
 		this.update();
 		const resolveActions = this._resolveSpell(spellName, color, posNodes, targetOverrides);
