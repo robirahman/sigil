@@ -681,8 +681,10 @@ document.addEventListener('alpine:init', () => {
 					};
 					if (Object.prototype.hasOwnProperty.call(_CAVEMAN_TIER_BUDGETS, aiMode)) {
 						options.aiColor = _aiColor;
+						// Depth is unbounded; each tier is purely a thinking-time
+						// budget. Iterative deepening cuts off at the deadline and
+						// plays the best move from the last completed depth.
 						options.ai = new CavemanAI({
-							maxDepth: 10,
 							timeLimit: _CAVEMAN_TIER_BUDGETS[aiMode],
 						});
 						options.ai.pondering = _aiAuthManager
