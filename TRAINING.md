@@ -36,6 +36,40 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 
 No other dependencies are needed beyond NumPy (included with PyTorch).
 
+## Exhaustive turn enumeration (important)
+
+Self-play, arena, and live play enumerate **every** legal turn — including
+the keep-set chosen when refilling a spell (which stones to keep vs. spend),
+push destinations, and every spell effect-target. Previously the engine
+collapsed these into one greedy variant, so the network trained on a
+truncated action space and never learned moves like "keep the stone next to
+the opponent when casting Fireblast." This is controlled by
+`EXHAUSTIVE_ENUM` in `ai/config.py` (default `True`); set it `False` to fall
+back to the old greedy enumeration.
+
+Consequences for training:
+
+- **Branching explodes** from ~14 to a few hundred legal turns per position
+  (p99 ~10k at rich mid-game positions). `NUM_SIMS_TRAIN`/`NUM_SIMS_PLAY`
+  were raised (1200/2400) so MCTS still visits moves more than once — tune
+  these on your GPU. Too few sims relative to branching makes MCTS fall back
+  to the raw policy prior.
+- **Self-play is much slower** (enumeration + per-turn feature encoding is
+  CPU-bound Python, ~20–100× the old cost). Parallelize across CPU workers;
+  the GPU mainly speeds the NN evals, not the enumeration. Start with a small
+  `--games`/`--sims` run to gauge wall-time before committing to a full
+  generation.
+- **Old self-play data is on the truncated action space.** For the new
+  enumeration to pay off, regenerate self-play data with the current code
+  rather than training only on pre-existing JSONLs.
+
+Quick sanity check before a long run:
+
+```bash
+python -m ai.test_exhaustive_enum        # replay parity + keep-set/push tests
+python -m ai.selfplay_mcts --games 1 --sims 30 --output /tmp/smoke.jsonl
+```
+
 ## Quick Start
 
 Run these commands from the project root directory.
