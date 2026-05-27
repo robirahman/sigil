@@ -59,10 +59,20 @@ from ai.config import (
 from notation import sfn_to_dict
 from simboard import SimBoard
 from ai.features import board_to_tensor, encode_all_turns
+from ai.enumerator import get_legal_turns_exhaustive
+from ai.config import EXHAUSTIVE_ENUM
 from ai.data_filters import (
     is_pre_cutoff_fireblast_record,
     is_pre_competitive_fix_record,
 )
+
+
+def _legal_for_training(sb, side):
+    """Enumerate turns the same way self-play did, so re-materialized turn
+    encodings stay aligned (same count + order) with the stored policy."""
+    if EXHAUSTIVE_ENUM:
+        return list(get_legal_turns_exhaustive(sb, side, exhaustive=True))
+    return list(sb.get_legal_turns(side))
 
 
 def _materialize_features(d):
@@ -81,7 +91,7 @@ def _materialize_features(d):
         d['raw_features'] = raw.numpy().tolist()
         d['spell_ids'] = spell_ids.numpy().tolist()
         # Turn encodings are tied to feature schema too — recompute.
-        legal = list(sb.get_legal_turns(side))
+        legal = _legal_for_training(sb, side)
         if legal:
             tf = encode_all_turns(legal, sb, side)
             d['turn_encodings'] = tf.numpy().tolist()
@@ -92,7 +102,7 @@ def _materialize_features(d):
         if first_row is None or len(first_row) != TURN_FEATURE_DIM:
             sb = SimBoard.from_sfn(d['sfn'])
             side = sfn_to_dict(d['sfn'])['turn']
-            legal = list(sb.get_legal_turns(side))
+            legal = _legal_for_training(sb, side)
             if legal:
                 tf = encode_all_turns(legal, sb, side)
                 d['turn_encodings'] = tf.numpy().tolist()

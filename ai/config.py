@@ -46,10 +46,23 @@ HARD_SQUEEZE_DIM = 2048     # Squeeze before heads
 HARD_POLICY_DIM = 256       # Policy head projection
 HARD_VALUE_DIM = 256        # Value head hidden
 
+# ---- Enumeration ----
+# When True, MCTS + self-play enumerate every legal turn fully exhaustively
+# (every keep-set, push destination, multi-move target-set and effect target),
+# instead of the engine's greedy get_legal_turns. This makes the action space
+# the AI learns over honest, but pushes branching from ~14 to ~hundreds (p99
+# ~10k), so self-play is far slower and sims-per-move must rise to compensate.
+# Set False to fall back to the greedy enumerator (fast, but blind to the
+# keep-set/push/effect choices). See ai/enumerator.get_legal_turns_exhaustive.
+EXHAUSTIVE_ENUM = True
+
 # ---- MCTS ----
 C_PUCT = 2.0               # Exploration constant
-NUM_SIMS_TRAIN = 400        # Simulations per move during self-play
-NUM_SIMS_PLAY = 800         # Simulations per move in production
+# Sims raised for the exhaustive action space (branching ~hundreds): at the
+# old 400/800 most moves got <1 visit. Tune on GPU — higher is better play but
+# linearly slower self-play.
+NUM_SIMS_TRAIN = 1200       # Simulations per move during self-play
+NUM_SIMS_PLAY = 2400        # Simulations per move in production
 DIRICHLET_ALPHA = 0.5       # Noise parameter (higher = more uniform)
 DIRICHLET_EPSILON = 0.25    # Fraction of noise mixed into root prior
 TEMP_THRESHOLD = 30         # Turn after which temperature drops

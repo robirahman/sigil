@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ai.nn_ai_player import NNAIPlayer, _live_board_to_simboard
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
-from ai.mcts import mcts_search
+from ai.mcts import mcts_search, legal_turns
 from ai.features import encode_all_turns
 from ai.config import NUM_SIMS_PLAY, MODELS_DIR, SPELL_TO_ID, DATA_DIR
 from ai.model_assembly import ensure_assembled
@@ -110,8 +110,8 @@ class MCTSAIPlayer(NNAIPlayer):
         try:
             sfn = sim.to_sfn()
             spell_ids = [SPELL_TO_ID.get(sim.spell_names[i], 0) for i in range(9)]
-            legal_turns = list(sim.get_legal_turns(self.color))
-            turn_feats = encode_all_turns(legal_turns, sim, self.color)
+            turns = legal_turns(sim, self.color)
+            turn_feats = encode_all_turns(turns, sim, self.color)
             self.training_positions.append({
                 'sfn': sfn,
                 'spell_ids': spell_ids,

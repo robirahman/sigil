@@ -23,7 +23,7 @@ from ai.selfplay import random_core_spells
 
 from ai.sigil_net import SigilNet
 from ai.sigil_net_hard import SigilNetHard
-from ai.mcts import mcts_search
+from ai.mcts import mcts_search, legal_turns
 from ai.features import board_to_tensor, encode_all_turns
 from ai.config import (
     NUM_SIMS_TRAIN, TEMP_THRESHOLD, MAX_TURNS,
@@ -76,9 +76,10 @@ def play_selfplay_game(model, num_simulations=None, force_no_resign=False,
         # Pre-cache raw features so training skips SFN reconstruction
         raw, _ = board_to_tensor(board, color)
 
-        # Store legal turns and policy
-        legal_turns = list(board.get_legal_turns(color))
-        turn_feats = encode_all_turns(legal_turns, board, color)
+        # Store legal turns and policy (must match the enumeration MCTS used
+        # so the recorded policy lines up with the turn encodings).
+        turns = legal_turns(board, color)
+        turn_feats = encode_all_turns(turns, board, color)
 
         positions.append({
             'sfn': sfn,

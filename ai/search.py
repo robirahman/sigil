@@ -109,15 +109,16 @@ def _apply_turn(board, turn, color):
         if action.type == 'move':
             board.stones[action.node] = color
         elif action.type == 'hard_move':
-            board._push_enemy(action.node, color)
+            board._push_enemy(action.node, color, dest_override=action.pushed_to)
         elif action.type == 'blink':
             enemy = board._enemy(color)
             if board.stones[action.node] == enemy:
-                board._push_enemy(action.node, color)
+                board._push_enemy(action.node, color, dest_override=action.pushed_to)
             else:
                 board.stones[action.node] = color
         elif action.type == 'cast':
-            board._cast_spell(action.spell, color)
+            board._cast_spell(action.spell, color,
+                              target_overrides=action.overrides)
         elif action.type in ('dash', 'dash_lightning'):
             if action.sacrificed:
                 for sac in action.sacrificed:

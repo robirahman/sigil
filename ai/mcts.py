@@ -15,11 +15,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ai.search import _apply_turn
 from ai.features import board_to_tensor, encode_all_turns
+from ai.enumerator import get_legal_turns_exhaustive
 from ai.config import (
     C_PUCT, NUM_SIMS_PLAY, NUM_SIMS_TRAIN,
     DIRICHLET_ALPHA, DIRICHLET_EPSILON, TEMP_THRESHOLD, TEMP_PLAY,
-    MCTS_BATCH_SIZE,
+    MCTS_BATCH_SIZE, EXHAUSTIVE_ENUM,
 )
+
+
+def legal_turns(board, color):
+    """Legal-turn enumeration used by search + self-play. Fully exhaustive
+    when EXHAUSTIVE_ENUM is set (every keep-set, push destination and effect
+    choice); otherwise the engine's greedy enumeration."""
+    if EXHAUSTIVE_ENUM:
+        return list(get_legal_turns_exhaustive(board, color, exhaustive=True))
+    return list(board.get_legal_turns(color))
 
 
 class MCTSNode:
@@ -217,7 +227,7 @@ def _simulate_batch(root, model, batch_size, forbidden_moves=None,
                 node.terminal_value = 0.0
             continue
 
-        node.legal_turns = list(board.get_legal_turns(node.color))
+        node.legal_turns = legal_turns(board, node.color)
         if not node.legal_turns:
             node.is_terminal = True
             node.is_expanded = True
@@ -393,7 +403,7 @@ def _expand_node(node, model, forbidden_moves=None, blunder_lambda=0.0,
         return node.terminal_value
 
     # Enumerate legal turns
-    node.legal_turns = list(board.get_legal_turns(node.color))
+    node.legal_turns = legal_turns(board, node.color)
 
     if not node.legal_turns:
         node.is_terminal = True

@@ -602,14 +602,15 @@ def _simulate_turn(board, turn, color):
             if action.type == 'move':
                 sim.stones[action.node] = color
             elif action.type == 'hard_move':
-                sim._push_enemy(action.node, color)
+                sim._push_enemy(action.node, color, dest_override=action.pushed_to)
             elif action.type == 'blink':
                 if sim.stones[action.node] == sim._enemy(color):
-                    sim._push_enemy(action.node, color)
+                    sim._push_enemy(action.node, color, dest_override=action.pushed_to)
                 else:
                     sim.stones[action.node] = color
             elif action.type == 'cast':
-                sim._cast_spell(action.spell, color)
+                sim._cast_spell(action.spell, color,
+                                target_overrides=action.overrides)
             elif action.type in ('dash', 'dash_lightning'):
                 if action.sacrificed:
                     for sac in action.sacrificed:

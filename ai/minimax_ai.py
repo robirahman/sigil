@@ -261,14 +261,15 @@ def _apply_turn(board, turn, color):
         if t == 'move':
             sim.stones[action.node] = color
         elif t == 'hard_move':
-            sim._push_enemy(action.node, color)
+            sim._push_enemy(action.node, color, dest_override=action.pushed_to)
         elif t == 'blink':
             if sim.stones[action.node] == sim._enemy(color):
-                sim._push_enemy(action.node, color)
+                sim._push_enemy(action.node, color, dest_override=action.pushed_to)
             else:
                 sim.stones[action.node] = color
         elif t == 'cast':
-            sim._cast_spell(action.spell, color)
+            sim._cast_spell(action.spell, color,
+                            target_overrides=action.overrides)
         elif t in ('dash', 'dash_lightning'):
             if action.sacrificed:
                 for n in action.sacrificed:

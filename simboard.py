@@ -35,7 +35,7 @@ CORE_SPELLS = {
 class Action:
     """A single sub-action within a turn."""
     __slots__ = ('type', 'node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                 'node2', 'destroyed')
+                 'node2', 'destroyed', 'overrides')
 
     def __init__(self, type, **kwargs):
         self.type = type
@@ -46,11 +46,15 @@ class Action:
         self.kept = kwargs.get('kept')
         self.node2 = kwargs.get('node2')
         self.destroyed = kwargs.get('destroyed')
+        # For 'cast': the resolved target_overrides (keep-set + effect
+        # choice) so the turn replays deterministically rather than being
+        # re-resolved greedily. None means "use the engine's greedy path".
+        self.overrides = kwargs.get('overrides')
 
     def __repr__(self):
         parts = [f"Action({self.type!r}"]
         for attr in ('node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                     'node2', 'destroyed'):
+                     'node2', 'destroyed', 'overrides'):
             val = getattr(self, attr)
             if val is not None:
                 parts.append(f"{attr}={val!r}")
@@ -353,31 +357,28 @@ class SimBoard:
         # Use 39 as the unreachable sentinel — graph has 39 nodes total.
         return self.escape_distance(node_name, defender, max_dist=39) >= 39
 
-    def _push_enemy(self, node_name, color):
-        """Push enemy stone from node_name. Returns push destination or 'X' for crush.
+    def _push_destinations(self, node_name, color):
+        """All legal push destinations for an enemy stone at node_name.
 
-        Mutates self.stones: places color on node_name, moves enemy to destination.
+        Non-mutating. Returns the list of empty cells at the shortest
+        push distance through the enemy chain (the cells the defender
+        could be pushed to). Empty list means the stone would be crushed.
+        Mirrors the option-gathering in _push_enemy.
         """
         enemy = self._enemy(color)
-        self.stones[node_name] = color
-
         queue = deque()
         for nb in self._adjacent_nodes(node_name):
             queue.append((nb, 1))
-
         visited = {node_name}
         options = []
         shortest = None
-
         while queue:
             next_node, dist = queue.popleft()
             if next_node in visited:
                 continue
             visited.add(next_node)
-
             if shortest is not None and dist > shortest:
                 break
-
             stone = self.stones[next_node]
             if stone == color:
                 continue
@@ -388,27 +389,41 @@ class SimBoard:
             else:  # empty
                 options.append(next_node)
                 shortest = dist
+        return options
+
+    def _push_enemy(self, node_name, color, dest_override=None):
+        """Push enemy stone from node_name. Returns push destination or 'X' for crush.
+
+        Mutates self.stones: places color on node_name, moves enemy to destination.
+        `dest_override`, if given and a legal destination, selects which empty
+        cell the enemy is pushed to (the player's choice when 2+ exist).
+        """
+        enemy = self._enemy(color)
+        options = self._push_destinations(node_name, color)
+        self.stones[node_name] = color
 
         if not options:
             # Crush — stone is destroyed
             return 'X'
+        if dest_override is not None and dest_override in options:
+            dest = dest_override
         else:
             # Pick first option (greedy, same as AI)
             dest = options[0]
-            self.stones[dest] = enemy
-            return dest
+        self.stones[dest] = enemy
+        return dest
 
     def _do_soft_move(self, color, node_name):
         """Place color stone on empty node. Returns the Action."""
         self.stones[node_name] = color
         return Action('move', node=node_name)
 
-    def _do_hard_move(self, color, node_name):
+    def _do_hard_move(self, color, node_name, dest_override=None):
         """Push enemy at node_name. Returns the Action."""
-        dest = self._push_enemy(node_name, color)
+        dest = self._push_enemy(node_name, color, dest_override=dest_override)
         return Action('hard_move', node=node_name, pushed_to=dest)
 
-    def _do_move(self, color, node_name, is_blink=False):
+    def _do_move(self, color, node_name, is_blink=False, dest_override=None):
         """Execute a move to node_name. Returns an Action."""
         if self.stones[node_name] is None:
             if is_blink:
@@ -417,7 +432,7 @@ class SimBoard:
             else:
                 return self._do_soft_move(color, node_name)
         elif self.stones[node_name] == self._enemy(color):
-            act = self._do_hard_move(color, node_name)
+            act = self._do_hard_move(color, node_name, dest_override=dest_override)
             if is_blink:
                 act.type = 'blink'
             return act
@@ -756,6 +771,7 @@ class SimBoard:
         position_nodes = POSITIONS[pos_idx]
         spell_info = CORE_SPELLS[spell_name]
         is_charm = spell_info['ischarm']
+        overrides = target_overrides or {}
 
         actions = []
 
@@ -763,21 +779,37 @@ class SimBoard:
         for n in position_nodes:
             self.stones[n] = None
 
-        # Refill based on mana (non-charms only)
+        # Refill based on mana (non-charms only). The player chooses WHICH
+        # of the spell-position nodes to keep (refill) vs. spend; this
+        # choice changes adjacency-dependent effects (e.g. Fireblast).
         kept = []
         if not is_charm:
             refills = self.mana[color]
-            # AI refill priority: middle nodes first
-            if len(position_nodes) == 3:
-                refill_priority = [position_nodes[2], position_nodes[1], position_nodes[0]]
-            else:
-                refill_priority = [position_nodes[2], position_nodes[3], position_nodes[4],
-                                   position_nodes[0], position_nodes[1]]
-            for node in refill_priority:
-                if refills > 0:
-                    self.stones[node] = color
-                    kept.append(node)
-                    refills -= 1
+            kept_override = overrides.get('kept_nodes')
+            chosen = None
+            if kept_override is not None:
+                want = min(refills, len(position_nodes))
+                cand = [n for n in kept_override if n in position_nodes]
+                # Honor the override only if it's a well-formed keep-set
+                # (right size, no dupes); otherwise fall back to greedy.
+                if len(cand) == want and len(set(cand)) == want:
+                    chosen = cand
+            if chosen is None:
+                # AI refill priority: middle nodes first
+                if len(position_nodes) == 3:
+                    refill_priority = [position_nodes[2], position_nodes[1], position_nodes[0]]
+                else:
+                    refill_priority = [position_nodes[2], position_nodes[3], position_nodes[4],
+                                       position_nodes[0], position_nodes[1]]
+                chosen = []
+                r = refills
+                for node in refill_priority:
+                    if r > 0:
+                        chosen.append(node)
+                        r -= 1
+            for node in chosen:
+                self.stones[node] = color
+                kept.append(node)
 
         self.update()
 
@@ -797,7 +829,8 @@ class SimBoard:
                 self.springlock[color] = None
             self.spell_counter[color] += 1
 
-        cast_action = Action('cast', spell=spell_name, kept=kept)
+        cast_action = Action('cast', spell=spell_name, kept=kept,
+                             overrides=(dict(overrides) if overrides else None))
         return [cast_action] + actions
 
     # ---- Legal turn enumeration ----
