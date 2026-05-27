@@ -24,9 +24,14 @@ class Spell():
 		self.charged = None
 
 
-	def cast(self, player):
+	def cast(self, player, overrides=None):
 		### sacrifice all stones in it, and refill appropriate
-		### number based on mana
+		### number based on mana.
+		### `overrides` (dict, bot only): when it carries 'kept_nodes', the
+		### refill keeps exactly those spell-position nodes instead of the
+		### fixed greedy priority — this is the AI's chosen keep-set, which
+		### changes adjacency-dependent effects (e.g. Fireblast).
+		overrides = overrides or {}
 		pname = player.color[0].upper() + player.color[1:]
 		if player.ishuman:
 			player.jmessage(pname + " casts " + self.name)
@@ -88,16 +93,28 @@ class Spell():
 
 			else:
 
-				if len(self.position) == 3:
-					refill_priority = [self.position[2], self.position[1], self.position[0]]
+				kept_override = overrides.get('kept_nodes')
+				kept_nodes = None
+				if kept_override is not None:
+					want = min(refills, len(self.position))
+					pos_names = {n.name for n in self.position}
+					cand = [n for n in kept_override if n in pos_names]
+					if len(cand) == want and len(set(cand)) == want:
+						kept_nodes = cand
+				if kept_nodes is not None:
+					for name in kept_nodes:
+						self.board.nodes[name].stone = player.color
 				else:
-					refill_priority = [self.position[2], self.position[3], self.position[4], self.position[0], self.position[1]]
-				for node in refill_priority:
-					if refills > 0:
-						node.stone = player.color
-						refills -= 1
+					if len(self.position) == 3:
+						refill_priority = [self.position[2], self.position[1], self.position[0]]
 					else:
-						break
+						refill_priority = [self.position[2], self.position[3], self.position[4], self.position[0], self.position[1]]
+					for node in refill_priority:
+						if refills > 0:
+							node.stone = player.color
+							refills -= 1
+						else:
+							break
 				self.board.update()
 				time.sleep(1)
 						

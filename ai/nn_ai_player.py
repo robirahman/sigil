@@ -162,7 +162,10 @@ class NNAIPlayer:
             elif action.type == 'cast':
                 spell_name = action.spell
                 self.board.record('cast', spell=spell_name)
-                self.board.spelldict[spell_name].cast(self)
+                # Pass the AI's chosen keep-set so the live engine refills
+                # the same stones MCTS evaluated (e.g. keep the stone next
+                # to the opponent for Fireblast) instead of greedy priority.
+                self.board.spelldict[spell_name].cast(self, overrides=action.overrides)
 
             elif action.type == 'dash':
                 self._execute_dash(action.sacrificed or [])
