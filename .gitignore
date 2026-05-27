@@ -1,5 +1,6 @@
 # production
-/__pycache__
+__pycache__/
+*.pyc
 
 # misc
 .DS_Store
