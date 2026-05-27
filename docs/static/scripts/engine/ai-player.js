@@ -562,6 +562,47 @@ async function applyAITurn(board, turn, color, emit) {
 				await _aiDelay(400);
 			}
 		}
+
+		// Hurricane (smallest contiguous enemy group) and Storm Front (any 2
+		// enemy stones) both just clear a list of enemy nodes. These were
+		// missing from the AI replay, so the AI cast them, paid the sigil-stone
+		// cost, but never destroyed anything — and the resulting deficit could
+		// even trip the margin auto-win for the opponent. Mirrors the
+		// hurricane/storm_front resolvers in spells.js.
+		else if (action.type === 'hurricane' || action.type === 'storm_front') {
+			if (action.destroyed) {
+				for (const n of action.destroyed) {
+					board.stones[n] = null;
+					if (board.lastPlay === n) { board.lastPlay = null; board.lastPlayer = null; }
+				}
+				board.update();
+				emit(board.getBoardStatePayload());
+				await _aiDelay(400);
+			}
+		}
+
+		// Thunder: pick up enemy stones touching the caster (destroyed), then
+		// relocate them onto empty nodes (kept) — still enemy-owned.
+		else if (action.type === 'thunder') {
+			if (action.destroyed) {
+				for (const n of action.destroyed) {
+					board.stones[n] = null;
+					if (board.lastPlay === n) { board.lastPlay = null; board.lastPlayer = null; }
+				}
+				board.update();
+				emit(board.getBoardStatePayload());
+				await _aiDelay(400);
+			}
+			if (action.kept) {
+				for (const n of action.kept) {
+					board.stones[n] = enemy;
+					emit({ type: 'new_stone_animation', color: enemy, node: n });
+					board.update();
+					emit(board.getBoardStatePayload());
+					await _aiDelay(300);
+				}
+			}
+		}
 	}
 }
 
