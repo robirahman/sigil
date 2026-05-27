@@ -78,7 +78,7 @@ function parseModeSpec(str) {
 	if (mode !== 'pure_minimax' && mode !== 'pruned_minimax') {
 		throw new Error(`Unknown AI mode "${mode}" (expected pure_minimax | pruned_minimax)`);
 	}
-	const cfg = { label: str, mode, exhaustivePlies: null, capScale: null, capAbs: null, deepCap: null, lp: false };
+	const cfg = { label: str, mode, exhaustivePlies: null, capScale: null, capAbs: null, deepCap: null, lp: null, refill: null };
 	if (rest) {
 		for (const kv of rest.split(',')) {
 			const [k, v] = kv.split('=');
@@ -86,7 +86,8 @@ function parseModeSpec(str) {
 			else if (k === 'caps') cfg.capScale = parseFloat(v);
 			else if (k === 'capabs') cfg.capAbs = parseInt(v, 10);  // pin every cap to N
 			else if (k === 'deepcap') cfg.deepCap = parseInt(v, 10);  // full caps root+ply1, N deeper
-			else if (k === 'lp') cfg.lp = (v === undefined || v === '1' || v === 'true');  // plan Carnage pushes
+			else if (k === 'lp') cfg.lp = (v === undefined || v === '1' || v === 'true');  // Carnage push planner on/off
+			else if (k === 'refill') cfg.refill = v;  // exhaustive | closest_enemy | farthest_enemy | closest_mana | farthest_mana
 			else throw new Error(`Unknown spec key "${k}" in "${str}"`);
 		}
 	}
@@ -112,7 +113,12 @@ function specToOpts(cfg, { timeLimit, maxDepth }, baseCaps) {
 	};
 	if (cfg.exhaustivePlies != null) opts.exhaustivePlies = cfg.exhaustivePlies;
 	if (cfg.deepCap != null) opts.deepCap = cfg.deepCap;
-	if (cfg.lp) opts.rankLaterPushes = true;
+	if (cfg.lp !== null) opts.rankLaterPushes = cfg.lp;  // else engine default (on)
+	if (cfg.refill === 'exhaustive') {
+		opts.exhaustiveRefill = true;
+	} else if (cfg.refill) {
+		opts.refillHeuristic = cfg.refill;
+	}
 	if (cfg.capAbs != null && baseCaps) {
 		// Pin every choice-point cap to N: width-N *ranked* enumeration.
 		// capAbs=1 ≈ "smart greedy" — the engine's top-ranked variant of
