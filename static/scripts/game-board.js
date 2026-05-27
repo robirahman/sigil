@@ -219,7 +219,7 @@ document.addEventListener('alpine:init', () => {
 						: gameMode === 'local1v1_import'
 							? 'local1v1game_import'
 							: playerCount === 1
-								? (loadId ? 'singleplayergame_load' : (difficulty === 'hard' ? 'singleplayergame_hard' : 'singleplayergame'))
+								? (loadId ? 'singleplayergame_load' : (difficulty === 'hard' ? 'singleplayergame_hard' : difficulty === 'medium' ? 'singleplayergame_medium' : 'singleplayergame'))
 								: gameName ? `privategame/${gameName}` : 'game';
 				const apiProtocol = document.location.protocol === 'http:' ? 'ws:' : 'wss:';
 				// Forward the game variant (set by the menu page or URL

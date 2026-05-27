@@ -2,6 +2,22 @@
 __pycache__/
 *.pyc
 
+# local virtualenv (ROCm torch etc. — multi-GB, never commit)
+.venv/
+
+# local Firebase backups (contain private user game data)
+firebase_backup/
+
+# workstation run artifacts
+logs/
+saves/
+games/
+ai/data/selfplay_loop/
+
+# workstation-local eval/baseline model snapshots (model churn, not for repo)
+ai/models/eval_*.pt
+ai/models/best_model_preloop_*.pt
+
 # misc
 .DS_Store
 node_modules

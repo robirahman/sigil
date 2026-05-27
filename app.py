@@ -1214,9 +1214,31 @@ def playsingleplayergame(ws):
 
 @sock.route('/api/singleplayergame_medium')
 def playsingleplayergame_medium(ws):
+	# Self-play-trained MEDIUM SigilNet (the net the self-play loop improves).
+	# Configurable for strength calibration:
+	#   ?ckpt=snapshot|baseline|live  which checkpoint to play
+	#   ?sims=N                       MCTS sims per move (default 1600)
+	#   ?tlimit=S                     seconds per move cap   (default 60)
 	variant = request.args.get('variant', 'standard')
+	sims = request.args.get('sims', default=1600, type=int)
+	tlimit = request.args.get('tlimit', default=60.0, type=float)
+	ckpt = request.args.get('ckpt', default='snapshot')
+	_models = os.path.join(_APP_DIR, 'ai', 'models')
+	_ckpt_map = {
+		'snapshot': os.path.join(_models, 'eval_medium_current.pt'),
+		'baseline': os.path.join(_models, 'best_model_preloop_baseline_2026-05-27.pt'),
+		'live': os.path.join(_models, 'best_model.pt'),
+	}
+	model_path = _ckpt_map.get(ckpt, _ckpt_map['snapshot'])
+	# Portability: eval snapshots are workstation-local and not committed.
+	# On a fresh checkout (e.g. a playtest machine) fall back to the
+	# tracked best_model.pt so the medium net is always playable.
+	if not os.path.exists(model_path):
+		model_path = _ckpt_map['live']
 	_run_singleplayer_game(ws, ai_class=MCTSAIPlayer, difficulty='medium',
-						   ai_kwargs={'net_class': SigilNet}, variant=variant)
+						   ai_kwargs={'net_class': SigilNet, 'model_path': model_path,
+									  'num_simulations': sims, 'time_limit': tlimit},
+						   variant=variant)
 
 @sock.route('/api/singleplayergame_hard')
 def playsingleplayergame_hard(ws):
