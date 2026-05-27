@@ -1,0 +1,94 @@
+#!/bin/bash
+# Continuous AlphaZero self-play loop for the medium SigilNet.
+#
+# Tuned for this workstation: AMD Ryzen 7 9800X3D (8c/16t) + Radeon RX 9070 XT
+# (gfx1201, ROCm 7.0). Self-play runs on CPU across many workers (it is
+# CPU-bound on the exhaustive turn enumeration); the GPU is used only for the
+# gradient-descent training step. Each iteration:
+#
+#   1. self-play   NUM_WORKERS CPU workers x GAMES_PER_WORKER games @ SIMS sims
+#   2. train       one candidate on the rolling window of recent data (GPU)
+#   3. gate        candidate vs current best; accept at >= GATE_THRESHOLD (0.55)
+#
+# Usage:  ./train_selfplay_loop.sh [MAX_ITER]    (default 1000 iterations)
+set -u
+cd "$(dirname "$0")"
+
+PY=.venv/bin/python
+export HIP_VISIBLE_DEVICES=0          # pin the discrete RX 9070 XT (gfx1201)
+
+# ---- knobs (env-overridable for smoke tests) ----
+NUM_WORKERS=${NUM_WORKERS:-14}        # leave 2 threads for OS / GPU feeding
+GAMES_PER_WORKER=${GAMES_PER_WORKER:-40}   # ~560 games/iter (~50 min self-play)
+SIMS=${SIMS:-1200}                    # NUM_SIMS_TRAIN (honest, heavy)
+TRAIN_EPOCHS=${TRAIN_EPOCHS:-15}
+PATIENCE=${PATIENCE:-4}
+GATE_GAMES=${GATE_GAMES:-120}
+GATE_SIMS=${GATE_SIMS:-200}
+WINDOW_FILES=${WINDOW_FILES:-150}     # most-recent self-play files fed to train
+MAX_ITER=${1:-1000}
+
+DATA_DIR=ai/data/selfplay_loop
+MODEL=ai/models/best_model.pt
+LOG_DIR=logs
+mkdir -p "$DATA_DIR" "$LOG_DIR" ai/models
+
+echo "=================================================================="
+echo " Sigil self-play loop  | net=medium  workers=$NUM_WORKERS  sims=$SIMS"
+echo " best model: $MODEL"
+echo " started: $(date)"
+echo "=================================================================="
+
+for iter in $(seq 1 "$MAX_ITER"); do
+  STAMP=$(date +%Y-%m-%d_%H%M%S)
+  echo ""
+  echo "########## ITERATION $iter  ($(date '+%F %T')) ##########"
+
+  # ---- 1. self-play (parallel CPU workers) ----
+  echo "[$(date +%T)] self-play: $NUM_WORKERS x $GAMES_PER_WORKER games @ $SIMS sims ..."
+  rm -f "$DATA_DIR"/iter${iter}_w*.jsonl
+  for w in $(seq 1 "$NUM_WORKERS"); do
+    OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+      "$PY" -m ai.selfplay_mcts --net medium \
+        --games "$GAMES_PER_WORKER" --sims "$SIMS" --model "$MODEL" \
+        --output "$DATA_DIR/iter${iter}_w${w}_${STAMP}.jsonl" \
+        >"$LOG_DIR/selfplay_iter${iter}_w${w}.log" 2>&1 &
+  done
+  wait
+  NEW_POS=$(cat "$DATA_DIR"/iter${iter}_w*.jsonl 2>/dev/null | wc -l)
+  echo "[$(date +%T)] generated $NEW_POS new positions"
+
+  # ---- 2. train candidate on rolling window (GPU) ----
+  CAND="ai/models/candidate_loop_iter${iter}.pt"
+  TRAIN_FILES=$(ls -t "$DATA_DIR"/*.jsonl 2>/dev/null | head -"$WINDOW_FILES")
+  echo "[$(date +%T)] training candidate on GPU ..."
+  "$PY" -m ai.train_sigil_v2 --net medium \
+      --self-play $TRAIN_FILES \
+      --model "$MODEL" --output "$CAND" \
+      --epochs "$TRAIN_EPOCHS" --patience "$PATIENCE" \
+      --device cuda 2>&1 | tail -6
+
+  if [ ! -f "$CAND" ]; then
+    echo "[$(date +%T)] WARNING: no candidate produced, skipping gate"
+    continue
+  fi
+
+  # ---- 3. gate candidate vs current best ----
+  echo "[$(date +%T)] gating candidate vs best ($GATE_GAMES games @ $GATE_SIMS sims) ..."
+  "$PY" - "$CAND" "$MODEL" "$GATE_GAMES" "$GATE_SIMS" <<'PYEOF'
+import sys
+from ai.arena import gate_model
+cand, best, games, sims = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+ok = gate_model(cand, best, num_games=games, sims_per_move=sims)
+sys.exit(0 if ok else 1)
+PYEOF
+  if [ $? -eq 0 ]; then
+    cp "$CAND" "$MODEL"
+    echo "[$(date +%T)] ITER $iter: ACCEPTED -> $MODEL updated"
+  else
+    echo "[$(date +%T)] ITER $iter: rejected, keeping previous best"
+    rm -f "$CAND"
+  fi
+done
+
+echo "Loop finished after $MAX_ITER iterations ($(date))."

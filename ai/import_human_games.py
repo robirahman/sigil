@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -31,7 +32,9 @@ from notation import sfn_to_dict, NODE_ORDER, POSITIONS
 from simboard import SimBoard, CORE_SPELLS
 from ai.search import _apply_turn
 from ai.features import board_to_tensor, encode_all_turns
+from ai.enumerator import get_legal_turns_exhaustive
 from ai.config import SPELL_TO_ID, DATA_DIR
+from ai.data_filters import FIREBLAST_RULE_CHANGE_CUTOFF
 
 
 def download_games(db_url, service_account_path=None):
@@ -71,124 +74,95 @@ def download_games(db_url, service_account_path=None):
         print("No completed games found.")
         return []
 
-    games = list(data.values())
+    # Preserve the Firebase key on each record (handy for logging / dedup).
+    games = [dict(v, _gid=k) for k, v in data.items() if isinstance(v, dict)]
     print(f"Downloaded {len(games)} completed games")
     return games
 
 
 def find_matching_turn(board, color, sfn_after):
-    """Find the legal turn that best matches the human's actual play.
+    """Find the exhaustively-enumerated legal turn the human actually played.
 
-    First tries an exact full-board match (works for non-spell turns).
-    If that fails, falls back to matching on the initial move action,
-    since spell resolution is interactive in JS but greedy in Python —
-    the human's spell targets often differ from the Python heuristic.
+    Self-play, MCTS and training all enumerate turns exhaustively
+    (every keep-set, push destination and effect target) — so we
+    enumerate the same way here and replay each candidate to the board
+    it produces, comparing against the human's recorded after-state.
+    Because every distinct in-turn choice (which stones to keep when
+    refilling, where a pushed enemy lands, which target a spell hits)
+    replays to a distinct board, an exact match uniquely recovers the
+    human's choice and encodes it as the correct turn — no greedy
+    collapse. The stored policy is then a one-hot on a *real* variant.
+
+    Matching is exact on stones (the dominant, proven-distinguishing
+    signal), with lock / springlock as a tie-break for the rare case
+    of two variants with identical stones. Unmatched turns (e.g. the
+    JS engine resolved a spell in a way SimBoard doesn't reproduce)
+    return None so the caller can discard rather than guess — we never
+    fabricate a policy target.
 
     Returns (turn_index, legal_turns) or (None, legal_turns) if no match.
     """
-    legal_turns = list(board.get_legal_turns(color))
+    legal_turns = list(get_legal_turns_exhaustive(board, color, exhaustive=True))
     if not legal_turns:
         return None, legal_turns
 
-    target_state = sfn_to_dict(sfn_after)
+    target = sfn_to_dict(sfn_after)
+    tgt_stones = target['stones']
+    tgt_lock = (target.get('red_lock'), target.get('blue_lock'))
+    tgt_spring = (target.get('red_springlock'), target.get('blue_springlock'))
 
-    # Pass 1: exact full-board match (handles non-spell turns perfectly)
+    stone_matches = []
     for idx, turn in enumerate(legal_turns):
         test_board = board.copy()
         _apply_turn(test_board, turn, color)
         test_board.update()
+        if all(test_board.stones[n] == tgt_stones[n] for n in NODE_ORDER):
+            stone_matches.append((idx, test_board))
 
-        if all(test_board.stones[n] == target_state['stones'][n]
-               for n in NODE_ORDER):
+    if not stone_matches:
+        return None, legal_turns
+    if len(stone_matches) == 1:
+        return stone_matches[0][0], legal_turns
+
+    # Tie-break identical-stone variants by lock / springlock state.
+    for idx, tb in stone_matches:
+        if ((tb.lock['red'], tb.lock['blue']) == tgt_lock and
+                (tb.springlock['red'], tb.springlock['blue']) == tgt_spring):
             return idx, legal_turns
+    # Still tied: the variants reach the same stones+locks, so they are
+    # behaviorally identical for training — take the first.
+    return stone_matches[0][0], legal_turns
 
-    # Pass 2: match by move action + turn structure.
-    # The initial move (soft/hard/blink) is always player-chosen and
-    # deterministic; spell sub-actions diverge due to greedy vs interactive
-    # resolution.  We match the move node and whether a spell was cast.
-    before_stones = {n: board.stones[n] for n in NODE_ORDER}
-    after_stones = target_state['stones']
 
-    # Identify which nodes gained this color's stone
-    new_own = set(n for n in NODE_ORDER
-                  if after_stones[n] == color and before_stones[n] != color)
-    # Identify which nodes lost this color's stone (sacrificed/destroyed)
-    lost_own = set(n for n in NODE_ORDER
-                   if before_stones[n] == color and after_stones[n] != color)
-    # Did the opponent lose stones? (spell effects or hard moves)
-    enemy = 'blue' if color == 'red' else 'red'
-    enemy_lost = set(n for n in NODE_ORDER
-                     if before_stones[n] == enemy and after_stones[n] != enemy)
-
-    best_idx = None
-    best_score = -1
-
-    for idx, turn in enumerate(legal_turns):
-        actions = turn.actions
-        first = actions[0]
-
-        # Skip pass-only turns unless the board barely changed
-        if first.type == 'pass':
-            if not new_own and not lost_own and not enemy_lost:
-                return idx, legal_turns
-            continue
-
-        # Collect all action nodes in this turn (move, dash destination, etc.)
-        # The initial move node might have been sacrificed by a later dash,
-        # so it may not appear in new_own. Check all action nodes.
-        action_nodes = set()
-        for a in actions:
-            if a.node:
-                action_nodes.add(a.node)
-
-        # At least one action node should match a new stone in the diff
-        if not action_nodes & new_own:
-            continue
-        move_node = first.node
-
-        has_cast = any(a.type == 'cast' for a in actions)
-        has_dash = any(a.type in ('dash', 'dash_lightning') for a in actions)
-        cast_spell = next((a.spell for a in actions if a.type == 'cast'), None)
-
-        # Large diffs imply a spell was cast
-        total_diff = len(new_own) + len(lost_own) + len(enemy_lost)
-        spell_likely = total_diff > 2
-
-        score = 1  # base: move node matches
-
-        # Reward matching turn structure
-        if has_cast and spell_likely:
-            score += 2
-        if not has_cast and not spell_likely:
-            score += 2
-        if has_dash and lost_own:
-            score += 1
-
-        # Bonus: if a spell was cast, check if the spell position nodes
-        # were sacrificed (they should be absent in after_stones)
-        if cast_spell:
-            spell_idx = board.spell_names.index(cast_spell)
-            pos_nodes = POSITIONS[spell_idx + 1]
-            # If spell position nodes lost our stones, this cast is plausible
-            pos_sacrificed = sum(1 for n in pos_nodes if n in lost_own)
-            if pos_sacrificed > 0:
-                score += 2
-
-        if score > best_score:
-            best_score = score
-            best_idx = idx
-
-    return best_idx, legal_turns
+def game_played_date(game_record):
+    """Best-effort date the game was played, from the Firebase
+    `timestamp` (ms epoch). Returns a datetime.date or None."""
+    ts = game_record.get('timestamp')
+    if ts is None:
+        return None
+    try:
+        ts = float(ts)
+    except (TypeError, ValueError):
+        return None
+    if ts > 1e12:          # milliseconds → seconds
+        ts /= 1000.0
+    try:
+        return datetime.date.fromtimestamp(ts)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def convert_game(game_record):
     """Convert one game record to training positions.
 
-    Returns list of dicts matching selfplay_mcts.py format.
+    Returns (positions, matched, unmatched): a list of dicts matching
+    selfplay_mcts.py's record format, plus how many turns were matched
+    to an enumerated turn vs. discarded as unmatchable.
     """
     spell_names = game_record.get('spellNames', [])
     winner = game_record.get('winner')
     turns = game_record.get('turns', [])
+    played_date = game_played_date(game_record)
     red_elo = game_record.get('redEloBefore')
     blue_elo = game_record.get('blueEloBefore')
     # Player-supplied per-turn annotations: { '<turnNumber>': 'good' | 'bad' }.
@@ -204,9 +178,18 @@ def convert_game(game_record):
             continue
 
     if not spell_names or not turns or not winner:
-        return []
+        return [], 0, 0
+
+    # Skip games using spells outside the net's fixed vocabulary — the
+    # spell-embedding can't represent them, and silently mapping an
+    # unknown spell to id 0 (Flourish) would corrupt the input. (Newer
+    # spells like Syzygy / Eclipse / Seal_of_Spring appear in a handful
+    # of real games.)
+    if any(s not in SPELL_TO_ID for s in spell_names):
+        return [], 0, 0
 
     positions = []
+    matched = 0
     unmatched = 0
 
     for turn_data in turns:
@@ -266,51 +249,141 @@ def convert_game(game_record):
         # OPPOSITE-color player about the move whose turnNumber this is.
         if turn_number is not None and turn_number in annotations:
             position['annotation'] = annotations[turn_number]
+        if played_date is not None:
+            position['played_date'] = played_date.isoformat()
         positions.append(position)
+        matched += 1
 
-    if unmatched > 0:
-        print(f"  Warning: {unmatched} turns could not be matched to legal turns")
+    return positions, matched, unmatched
 
-    return positions
+
+def _convert_task(arg):
+    """Top-level worker for multiprocessing: (game_index, record) ->
+    (game_index, positions, matched, unmatched)."""
+    i, game = arg
+    positions, matched, unmatched = convert_game(game)
+    return i, positions, matched, unmatched
+
+
+def _has_fireblast(spell_names):
+    return any(s == 'Fireblast' for s in (spell_names or []))
 
 
 def main():
     parser = argparse.ArgumentParser(
         description='Import human games from Firebase for AI training')
-    parser.add_argument('--db-url', type=str, required=True,
+    parser.add_argument('--db-url', type=str,
+                        default='https://sigil-js-default-rtdb.firebaseio.com',
                         help='Firebase Realtime Database URL')
     parser.add_argument('--service-account', type=str, default=None,
                         help='Path to Firebase service account JSON key')
-    parser.add_argument('--output', type=str,
-                        default=os.path.join(DATA_DIR, 'human_games.jsonl'),
-                        help='Output JSONL path')
+    parser.add_argument('--output', type=str, default=None,
+                        help='Output JSONL path (default: '
+                             'ai/data/human/human_games_<today>.jsonl)')
+    parser.add_argument('--jobs', type=int, default=1,
+                        help='Parallel worker processes for conversion '
+                             '(exhaustive enumeration is CPU-bound)')
     args = parser.parse_args()
+
+    if args.output is None:
+        today = datetime.date.today().isoformat()
+        args.output = os.path.join(DATA_DIR, 'human',
+                                   f'human_games_{today}.jsonl')
 
     games = download_games(args.db_url, args.service_account)
     if not games:
         return
 
+    # Pre-filter: drop games that pre-date the Fireblast nerf AND used
+    # Fireblast (old, cost-free Fireblast mis-teaches the value head).
+    # Uses the authoritative Firebase timestamp, not file mtime. The
+    # glitched competitive opening-pass games were already removed from
+    # Firebase, so no competitive carve-out is needed here.
+    kept_games = []
+    skipped_fireblast = 0
+    skipped_oov = 0
+    for g in games:
+        sn = g.get('spellNames') or []
+        if any(s not in SPELL_TO_ID for s in sn):
+            skipped_oov += 1          # uses spells the net can't represent
+            continue
+        d = game_played_date(g)
+        if (d is not None and d < FIREBLAST_RULE_CHANGE_CUTOFF
+                and _has_fireblast(sn)):
+            skipped_fireblast += 1
+            continue
+        kept_games.append(g)
+
     os.makedirs(os.path.dirname(args.output) if os.path.dirname(args.output) else '.',
                 exist_ok=True)
 
     total_positions = 0
+    total_matched = 0
+    total_unmatched = 0
+    games_with_positions = 0
+    elos = []
+    dates = []
+    annotations = 0
     start_time = time.time()
 
-    with open(args.output, 'w') as f:
-        for i, game in enumerate(games):
-            positions = convert_game(game)
-            for pos in positions:
-                pos['game_index'] = i
-                f.write(json.dumps(pos) + '\n')
-                total_positions += 1
+    tasks = list(enumerate(kept_games))
 
-            if (i + 1) % 10 == 0 or i == 0:
-                winner = game.get('winner', '?')
-                print(f"Game {i+1}/{len(games)}: {len(positions)} positions, winner={winner}")
+    def _handle(i, game, positions, matched, unmatched, fh):
+        nonlocal total_positions, total_matched, total_unmatched
+        nonlocal games_with_positions, annotations
+        total_matched += matched
+        total_unmatched += unmatched
+        if positions:
+            games_with_positions += 1
+        for pos in positions:
+            pos['game_index'] = i
+            fh.write(json.dumps(pos) + '\n')
+            total_positions += 1
+            if pos.get('player_elo') is not None:
+                elos.append(pos['player_elo'])
+            if pos.get('played_date'):
+                dates.append(pos['played_date'])
+            if pos.get('annotation'):
+                annotations += 1
+
+    with open(args.output, 'w') as f:
+        if args.jobs and args.jobs > 1:
+            from multiprocessing import Pool
+            with Pool(args.jobs) as pool:
+                for n, (i, positions, matched, unmatched) in enumerate(
+                        pool.imap_unordered(_convert_task, tasks, chunksize=4)):
+                    _handle(i, kept_games[i], positions, matched, unmatched, f)
+                    if (n + 1) % 50 == 0:
+                        print(f"  processed {n+1}/{len(tasks)} games "
+                              f"({total_positions} positions)")
+        else:
+            for n, (i, game) in enumerate(tasks):
+                positions, matched, unmatched = convert_game(game)
+                _handle(i, game, positions, matched, unmatched, f)
+                if (n + 1) % 50 == 0:
+                    print(f"  processed {n+1}/{len(tasks)} games "
+                          f"({total_positions} positions)")
 
     elapsed = time.time() - start_time
-    print(f"\nConverted {total_positions} positions from {len(games)} games "
-          f"in {elapsed:.1f}s")
+    match_total = total_matched + total_unmatched
+    match_rate = (total_matched / match_total * 100) if match_total else 0.0
+    print(f"\nConverted {total_positions} positions from "
+          f"{games_with_positions}/{len(kept_games)} games in {elapsed:.1f}s")
+    print(f"  skipped (out-of-vocab spells): {skipped_oov} games")
+    print(f"  skipped (pre-nerf Fireblast): {skipped_fireblast} games")
+    print(f"  turn match rate: {total_matched}/{match_total} ({match_rate:.1f}%) "
+          f"— {total_unmatched} unmatched/discarded")
+    if elos:
+        import statistics
+        elos_sorted = sorted(elos)
+        print(f"  player_elo (positions w/ rating): n={len(elos)} "
+              f"min={elos_sorted[0]} median={int(statistics.median(elos_sorted))} "
+              f"max={elos_sorted[-1]}")
+        for lo in (0, 1050, 1200, 1400):
+            print(f"    >= {lo}: {sum(1 for e in elos if e >= lo)} positions")
+    if dates:
+        print(f"  played dates: {min(dates)} -> {max(dates)}")
+    print(f"  annotated positions: {annotations}")
     print(f"Output: {args.output}")
 
 
