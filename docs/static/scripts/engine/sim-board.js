@@ -40,6 +40,9 @@ class SimBoard {
 		this.mana = { red: 0, blue: 0 };
 		this.chargedSpells = { red: [], blue: [] };
 		this.variant = variant;
+		// When true, Carnage/Slash resolution plans the full push sequence to
+		// maximize stones destroyed (set per-search from opts.rankLaterPushes).
+		this._rankLaterPushes = false;
 	}
 
 	static fromSigilBoard(board) {
@@ -56,6 +59,7 @@ class SimBoard {
 		sb.totalStones = { ...board.totalStones };
 		sb.mana = { ...board.mana };
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
+		sb._rankLaterPushes = board._rankLaterPushes || false;
 		return sb;
 	}
 
@@ -73,6 +77,7 @@ class SimBoard {
 		b.totalStones = { ...this.totalStones };
 		b.mana = { ...this.mana };
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
+		b._rankLaterPushes = this._rankLaterPushes;
 		return b;
 	}
 
@@ -192,6 +197,129 @@ class SimBoard {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * Rank pushable enemy stones by how enclosed they are: escapeDistance
+	 * (39 = no escape => crush) first, then adjacent-enemy count (cluster).
+	 * The most-enclosed stones are the crush candidates and the ones whose
+	 * push most disrupts the enemy formation.
+	 */
+	_rankEnclosure(color, targets) {
+		const enemy = this._enemy(color);
+		return targets
+			.map((n) => {
+				let adj = 0;
+				for (const nb of (ADJACENCY[n] || [])) if (this.stones[nb] === enemy) adj++;
+				return [this.escapeDistance(n, enemy, 39), adj, n];
+			})
+			.sort((a, b) => (b[0] - a[0]) || (b[1] - a[1]))
+			.map((x) => x[2]);
+	}
+
+	/**
+	 * Plan up to `count` hard moves (Carnage/Slash) to maximize the number of
+	 * enemy stones destroyed over the WHOLE sequence — so the engine finds
+	 * "setup then crush" lines (push a stone against a wall now so a later
+	 * push crushes it) instead of greedily shoving the first stone in board
+	 * order around. Bounded lookahead: the top-K most-enclosed candidates per
+	 * push. `forcedFirst` (the enumerator's first-push override) pins push 1
+	 * when provided, so the outer search still chooses among first pushes while
+	 * the continuation is optimized.
+	 *
+	 * Returns the chosen ordered list of target nodes (length <= count).
+	 */
+	/**
+	 * Joint refill+push planner for hard-move rituals (Carnage). Casting a
+	 * ritual clears its circle and refills `mana` of the cleared nodes; WHICH
+	 * nodes you keep changes which stones are positioned to push/trap. The
+	 * default fixed priority can't keep a "trap" stone (e.g. keep B2 instead of
+	 * B4), so it misses crush setups. This tries every refill subset of size
+	 * `mana`, scores each by the crushes its best push sequence yields, and
+	 * returns the kept-set that destroys the most. Ties prefer the original
+	 * fixed-priority set, so behavior is unchanged when no refill crushes more.
+	 *
+	 * Called with the ritual circle already cleared on `this` (stones null).
+	 * Returns the chosen kept-node list (does not mutate `this`).
+	 */
+	_bestCarnageRefill(color, posNodes, count, forcedFirst) {
+		const refills = this.mana[color];
+		if (refills <= 0) return [];
+		const priority = posNodes.length === 3
+			? [posNodes[2], posNodes[1], posNodes[0]]
+			: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
+		const greedy = priority.slice(0, refills);
+		if (refills >= posNodes.length) return posNodes.slice();
+		const greedyKey = greedy.slice().sort().join();
+		const enemy = this._enemy(color);
+
+		const subsets = [];
+		const combo = (start, chosen) => {
+			if (chosen.length === refills) { subsets.push(chosen.slice()); return; }
+			for (let i = start; i < posNodes.length; i++) { chosen.push(posNodes[i]); combo(i + 1, chosen); chosen.pop(); }
+		};
+		combo(0, []);
+
+		let best = greedy, bestScore = [-1, -1];
+		for (const S of subsets) {
+			const b = this.copy();
+			for (const n of S) b.stones[n] = color;
+			b.update();
+			const startEnemies = b.totalStones[enemy];
+			const plan = b._planHardMoves(color, count, forcedFirst);
+			let bb = b;
+			for (const t of plan) {
+				const targets = bb._hardMoveable(color);
+				if (!targets.length) break;
+				const ch = targets.includes(t) ? t : bb._rankEnclosure(color, targets)[0];
+				bb = bb.copy(); bb._doHardMove(color, ch); bb.update();
+			}
+			const destroyed = startEnemies - bb.totalStones[enemy];
+			// Tiebreak toward the fixed-priority set so no-crush casts are
+			// identical to the old behavior.
+			const isGreedy = (S.slice().sort().join() === greedyKey) ? 1 : 0;
+			if (destroyed > bestScore[0] || (destroyed === bestScore[0] && isGreedy > bestScore[1])) {
+				bestScore = [destroyed, isGreedy];
+				best = S;
+			}
+		}
+		return best;
+	}
+
+	_planHardMoves(color, count, forcedFirst) {
+		const enemy = this._enemy(color);
+		const K = 4;
+		const manaEnemies = (b) => MANA_NODES.reduce((a, n) => a + (b.stones[n] === enemy ? 1 : 0), 0);
+		const startEnemies = this.totalStones[enemy];
+		const startMana = manaEnemies(this);
+		let bestSeq = [];
+		let bestScore = [-1, -1];
+		const rec = (board, depth, seq) => {
+			const targets = board._hardMoveable(color);
+			if (depth >= count || targets.length === 0) {
+				const killed = startEnemies - board.totalStones[enemy];
+				const score = [killed, startMana - manaEnemies(board)];
+				if (score[0] > bestScore[0] || (score[0] === bestScore[0] && score[1] > bestScore[1])) {
+					bestScore = score;
+					bestSeq = seq;
+				}
+				return;
+			}
+			let cands;
+			if (depth === 0 && forcedFirst != null && targets.includes(forcedFirst)) {
+				cands = [forcedFirst];
+			} else {
+				cands = board._rankEnclosure(color, targets).slice(0, K);
+			}
+			for (const t of cands) {
+				const b2 = board.copy();
+				b2._doHardMove(color, t);
+				b2.update();
+				rec(b2, depth + 1, seq.concat(t));
+			}
+		};
+		rec(this, 0, []);
+		return bestSeq;
 	}
 
 	_allMoveable(color) {
@@ -329,17 +457,30 @@ class SimBoard {
 			}
 		} else if (rt === 'hard_moves') {
 			const overrideTargets = (overrides.hard_move_targets || []).slice();
-			for (let i = 0; i < info.count; i++) {
-				const targets = this._hardMoveable(color);
-				if (!targets.length) break;
-				let chosen = null;
-				while (overrideTargets.length && chosen === null) {
-					const cand = overrideTargets.shift();
-					if (targets.includes(cand)) chosen = cand;
+			if (this._rankLaterPushes) {
+				// Plan the whole sequence to maximize stones destroyed, honoring
+				// the enumerator's first-push override as a forced prefix.
+				const plan = this._planHardMoves(color, info.count, overrideTargets[0]);
+				for (const t of plan) {
+					const targets = this._hardMoveable(color);
+					if (!targets.length) break;
+					const chosen = targets.includes(t) ? t : this._rankEnclosure(color, targets)[0];
+					actions.push(this._doHardMove(color, chosen));
+					this.update();
 				}
-				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen));
-				this.update();
+			} else {
+				for (let i = 0; i < info.count; i++) {
+					const targets = this._hardMoveable(color);
+					if (!targets.length) break;
+					let chosen = null;
+					while (overrideTargets.length && chosen === null) {
+						const cand = overrideTargets.shift();
+						if (targets.includes(cand)) chosen = cand;
+					}
+					if (chosen === null) chosen = targets[0];
+					actions.push(this._doHardMove(color, chosen));
+					this.update();
+				}
 			}
 		} else if (rt === 'fireblast') {
 			const destroyed = [];
@@ -810,12 +951,22 @@ class SimBoard {
 
 		const kept = [];
 		if (!info.ischarm) {
-			let refills = this.mana[color];
-			const priority = posNodes.length === 3
-				? [posNodes[2], posNodes[1], posNodes[0]]
-				: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
-			for (const node of priority) {
-				if (refills > 0) { this.stones[node] = color; kept.push(node); refills--; }
+			if (this._rankLaterPushes && info.resolve === 'hard_moves') {
+				// Jointly choose which stones to keep + the push sequence to
+				// maximize crushes (lets the AI keep a trap stone like B2).
+				const hmOverride = (targetOverrides && targetOverrides.hard_move_targets)
+					? targetOverrides.hard_move_targets[0] : null;
+				for (const n of this._bestCarnageRefill(color, posNodes, info.count, hmOverride)) {
+					this.stones[n] = color; kept.push(n);
+				}
+			} else {
+				let refills = this.mana[color];
+				const priority = posNodes.length === 3
+					? [posNodes[2], posNodes[1], posNodes[0]]
+					: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
+				for (const node of priority) {
+					if (refills > 0) { this.stones[node] = color; kept.push(node); refills--; }
+				}
 			}
 		}
 		this.update();
