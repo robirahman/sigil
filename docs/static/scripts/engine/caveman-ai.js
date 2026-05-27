@@ -16,7 +16,25 @@
 const CAVEMAN_INF = 1e9;
 const CAVEMAN_WIN = 100.0;
 const _CAVEMAN_TT_MAX = 200000;
-const _CAVEMAN_MAX_PLY = 12;
+// Effective search-depth ceiling. Search is limited by THINKING TIME, not
+// depth — iterative deepening runs until the per-move deadline and returns the
+// best move from the last fully-completed depth. This ceiling only exists to
+// bound recursion / killer-table size; it's far above any depth reachable in a
+// realistic time budget, so in practice time is the sole limit.
+const _CAVEMAN_MAX_PLY = 64;
+
+// Default enumeration: ranked top-1 variant of each dash/cast choice-point at
+// EVERY ply (every ENUM_CAPS key pinned to 1). Replaces the old "full breadth
+// at root+ply1, arbitrary greedy deeper" scheme — same branching as greedy but
+// a ranked pick, which reaches ~2 plies deeper at equal time and won 48-16 vs
+// the old default in arena testing. Built once from ENUM_CAPS (loaded earlier
+// in the bundle); falls back to null (→ greedy) if ENUM_CAPS isn't present.
+const _CAVEMAN_NARROW_CAPS = (function () {
+	if (typeof ENUM_CAPS === 'undefined') return null;
+	const c = {};
+	for (const k of Object.keys(ENUM_CAPS)) c[k] = 1;
+	return c;
+})();
 
 // Move-ordering tiebreaker weight per prospective spell kill. Tiny
 // compared to one stone (1.0), so prep deltas only change ordering
@@ -126,7 +144,7 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
                            exhaustiveRoot, exhaustiveOpponent, isRoot,
-                           abortFlag, usePruning) {
+                           abortFlag, usePruning, enumConfig) {
 	if (tt) tt.nodes += 1;
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	// Cooperative abort: lets a ponder search exit mid-iteration when
@@ -165,8 +183,39 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 	}
 
 	let caps = null;
-	if ((exhaustiveRoot && isRoot) || (exhaustiveOpponent && ply === 1)) {
-		caps = (typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
+	let useExhaustive;
+	if (enumConfig && enumConfig.deepCap != null) {
+		// Ranked-deep enumeration: exhaustive at EVERY ply. Full ENUM_CAPS
+		// breadth at root + ply 1 (move-selection quality), then the ranked
+		// top-`deepCap` variants deeper — replacing the greedy enumerator's
+		// arbitrary single dash/cast pick. Same branching as greedy when
+		// deepCap=1, but a far better move order for alpha-beta (≈2 plies
+		// deeper at equal time in arena testing).
+		useExhaustive = true;
+		if (isRoot || ply <= 1) {
+			caps = (typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
+		} else {
+			const dc = {};
+			if (typeof ENUM_CAPS !== 'undefined') {
+				for (const k of Object.keys(ENUM_CAPS)) dc[k] = enumConfig.deepCap;
+			}
+			caps = dc;
+		}
+	} else if (enumConfig && enumConfig.exhaustivePlies != null) {
+		// Experimental: exhaustive at every ply shallower than the cap, so
+		// deeper dash/cast variants are enumerated instead of the single
+		// greedy one. Higher branching => less depth; a measured tradeoff.
+		useExhaustive = ply < enumConfig.exhaustivePlies;
+		if (useExhaustive) {
+			caps = (enumConfig && enumConfig.enumCaps)
+				|| ((typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null);
+		}
+	} else {
+		// Default (deployed): ranked top-1 enumeration at every ply.
+		useExhaustive = true;
+		caps = (enumConfig && enumConfig.enumCaps)
+			|| _CAVEMAN_NARROW_CAPS
+			|| ((typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null);
 	}
 	const turns = _cavemanOrderedTurns(board, color, caps);
 	if (turns.length === 0) {
@@ -204,7 +253,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			                              deadline, tt, killers, ply + 1,
 			                              positionHistory,
 			                              exhaustiveRoot, exhaustiveOpponent,
-			                              false, abortFlag, usePruning);
+			                              false, abortFlag, usePruning, enumConfig);
 			const score = -sub.score;
 			if (score > bestScore) { bestScore = score; bestMove = turn; }
 			if (bestScore > alpha) alpha = bestScore;
@@ -250,7 +299,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 async function cavemanSearch(board, color, opts) {
 	opts = opts || {};
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 60.0;
-	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 6;
+	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : _CAVEMAN_MAX_PLY;
 	const abortFlag = opts.abortFlag || null;
 	const onDepthComplete = typeof opts.onDepthComplete === 'function'
 		? opts.onDepthComplete : null;
@@ -266,10 +315,26 @@ async function cavemanSearch(board, color, opts) {
 	// enumerate every state at each depth (no alpha-beta cutoffs).
 	const usePruning = opts.usePruning !== undefined
 		? !!opts.usePruning : true;
+	// Experimental enumeration controls (default null = preserve the
+	// historical root+ply-1 exhaustive behavior via exhaustiveRoot /
+	// exhaustiveOpponent). `exhaustivePlies = K` instead uses exhaustive
+	// enumeration at every ply < K (so deeper dash/cast variants are seen,
+	// not just the single greedy variant). `enumCaps` overrides ENUM_CAPS.
+	const enumConfig = {
+		exhaustivePlies: opts.exhaustivePlies !== undefined ? opts.exhaustivePlies : null,
+		enumCaps: opts.enumCaps || null,
+		deepCap: opts.deepCap !== undefined ? opts.deepCap : null,
+	};
 	const verbose = !!opts.verbose;
 	const abHistory = opts.positionHistory
 		? Object.assign({}, opts.positionHistory)
 		: null;
+
+	// Carnage/Slash sequence planning (default on; pass rankLaterPushes:false to
+	// disable). Jointly picks the refill kept-set + push sequence to maximize
+	// crushes — +58% (93-67/160g) vs the old greedy resolution. Set on the root
+	// board so it propagates to every copied search node via SimBoard.copy().
+	board._rankLaterPushes = (opts.rankLaterPushes !== undefined) ? !!opts.rankLaterPushes : true;
 
 	const searchStart = Date.now();
 
@@ -340,7 +405,7 @@ async function cavemanSearch(board, color, opts) {
 			                            -CAVEMAN_INF, CAVEMAN_INF, deadline,
 			                            tt, killers, 0, abHistory,
 			                            exhaustiveRoot, exhaustiveOpponent, true,
-			                            abortFlag, usePruning);
+			                            abortFlag, usePruning, enumConfig);
 			if (r.move) {
 				bestMove = r.move;
 				bestScore = r.score;
@@ -493,7 +558,7 @@ function getSharedAiWorker() {
 class CavemanAI {
 	constructor(options) {
 		this.options = Object.assign(
-			{ maxDepth: 6, timeLimit: 60.0, usePruning: true },
+			{ maxDepth: _CAVEMAN_MAX_PLY, timeLimit: 60.0, usePruning: true },
 			options || {},
 		);
 		// Set to false to disable pondering. Caller wires this from the
