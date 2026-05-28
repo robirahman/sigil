@@ -21,6 +21,9 @@
         },
         "annotationMode": {
           ".validate": "newData.isBoolean()"
+        },
+        "isDeveloper": {
+          ".validate": "newData.isBoolean() && newData.val() === false"
         }
       }
     },
@@ -30,7 +33,10 @@
         ".write": "auth !== null",
         "elo": { ".validate": "newData.isNumber()" },
         "displayName": { ".validate": "newData.isString()" },
-        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" }
+        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "isDeveloper": {
+          ".validate": "newData.isBoolean() && newData.val() === false"
+        }
       },
       ".indexOn": ["elo"]
     },
@@ -48,6 +54,11 @@
         "annotations": {
           "$turnNumber": {
             ".validate": "newData.val() === 'good' || newData.val() === 'bad' || !newData.exists()"
+          }
+        },
+        "eval_annotations": {
+          "$turnNumber": {
+            ".validate": "newData.val() === 'red' || newData.val() === 'blue' || newData.val() === 'even' || !newData.exists()"
           }
         }
       }
@@ -67,6 +78,13 @@
         "$roomCode": {
           ".write": "auth !== null"
         }
+      }
+    },
+    "usernames": {
+      ".read": true,
+      "$nameKey": {
+        ".write": "auth !== null && (!data.exists() || data.val() === auth.uid) && $nameKey.matches(/^[a-z0-9_-]{1,20}$/)",
+        ".validate": "newData.isString() && newData.val() === auth.uid"
       }
     }
   }

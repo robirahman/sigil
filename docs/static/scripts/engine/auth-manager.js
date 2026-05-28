@@ -178,12 +178,14 @@ class AuthManager {
 	}
 
 	/**
-	 * True when the stored display name is the literal placeholder 'Player'
-	 * — the symptom of the username-overwrite glitch. Account UIs should
-	 * surface a rename prompt when this is true.
+	 * True when the account has no real display name yet: either the literal
+	 * placeholder 'Player' (the username-overwrite glitch) or a missing/empty
+	 * displayName. Account UIs should surface a rename prompt when this is true.
 	 */
 	get needsRename() {
-		return !!(this.userProfile && this.userProfile.displayName === 'Player');
+		if (!this.userProfile) return false;
+		const name = this.userProfile.displayName;
+		return !name || name === 'Player';
 	}
 
 	/**

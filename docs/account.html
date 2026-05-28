@@ -269,7 +269,7 @@
 			<div class="settings-card" x-show="needsRename" x-cloak>
 				<div style="font-family: 'Arvo', serif; color: var(--color-text-warm); margin-bottom: 8px;">Choose your display name</div>
 				<div class="settings-card__hint" style="margin-bottom: 10px;">
-					Your account is currently using the placeholder name "Player". Pick a unique name to claim — letters, digits, <code>_</code> and <code>-</code>, up to 20 characters.
+					Your account doesn't have a display name yet. Pick a unique name to claim — letters, digits, <code>_</code> and <code>-</code>, up to 20 characters.
 				</div>
 				<input type="text" x-model="renameName" maxlength="20" placeholder="new display name" x-on:keydown.enter="renameUser"
 				       style="display:block;width:100%;padding:10px 12px;border-radius:6px;border:2px solid var(--color-border);background:var(--color-surface-raised);color:var(--color-text-warm);font-family:'Overlock',sans-serif;font-size:1em;box-sizing:border-box;margin-bottom:10px;" />
@@ -357,7 +357,9 @@
 				enablePondering: true,
 
 				get needsRename() {
-					return this.profile && this.profile.displayName === 'Player';
+					if (!this.profile) return false;
+					const name = this.profile.displayName;
+					return !name || name === 'Player';
 				},
 
 				init() {
