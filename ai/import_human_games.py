@@ -39,6 +39,91 @@ from ai.config import SPELL_TO_ID, DATA_DIR
 from ai.data_filters import FIREBLAST_RULE_CHANGE_CUTOFF
 
 
+# === Board-symmetry data augmentation ============================================
+#
+# Sigil's adjacency graph has a clean 3-fold rotational symmetry under the
+# zone relabeling a→b→c→a (verified: every inter-zone bridge maps to another
+# bridge with all suffixes preserved). Spell positions cycle consistently:
+# position 1 (zone a) → 2 (zone b) → 3 (zone c) → 1, and similarly for the
+# support block (4/5/6) and the charm block (7/8/9). So rotating both the
+# stones and the spell layout produces a strategically-equivalent game in a
+# different feature-space basis. The network's input features are
+# node-position-specific (no built-in rotational equivariance), so each
+# rotation gives the trainer genuinely new signal rather than redundancy.
+#
+# The cleanest place to apply this is at import: rotate the raw SFN strings
+# from Firebase and call convert_game on the rotated game. The matcher then
+# enumerates legal turns on the rotated board and recovers the rotated
+# version of the human's move, and board_to_tensor / encode_all_turns
+# regenerate features from the rotated state — so we never have to know the
+# internal feature semantics; the encoders handle it.
+
+def _rotate_stones_str(stones_str, rotation):
+    """Rotate the 39-char SFN stones string by N 3-fold rotations of a→b→c→a.
+    Zones occupy contiguous 13-char slices (a:0–12, b:13–25, c:26–38)."""
+    if rotation == 0:
+        return stones_str
+    a, b, c = stones_str[0:13], stones_str[13:26], stones_str[26:39]
+    # rotation=1 (a→b): new a-slot ← old c, new b-slot ← old a, new c-slot ← old b
+    # rotation=2 (a→c): new a-slot ← old b, new b-slot ← old c, new c-slot ← old a
+    return (c + a + b) if rotation == 1 else (b + c + a)
+
+
+def _rotate_spell_list(spells, rotation):
+    """Rotate the 9-slot spell layout by N 3-fold rotations.
+    Spell positions cycle within each block: {1,2,3} (mana), {4,5,6} (support),
+    {7,8,9} (charm). Under rotation=1, position p maps to p+1 within block;
+    under rotation=2, p maps to p-1."""
+    if rotation == 0:
+        return list(spells)
+    out = list(spells)
+    for blk in (0, 3, 6):
+        if len(spells) < blk + 3:
+            continue
+        a, b, c = spells[blk], spells[blk + 1], spells[blk + 2]
+        if rotation == 1:
+            out[blk + 0], out[blk + 1], out[blk + 2] = c, a, b
+        else:  # rotation == 2
+            out[blk + 0], out[blk + 1], out[blk + 2] = b, c, a
+    return out
+
+
+def _rotate_sfn(sfn_str, rotation):
+    """Apply rotation to a full SFN string (stones + spells; lock / counter /
+    score fields are rotation-invariant — locks are spell *names*, counters
+    are per-color scalars, score is a {'tied','r1','r2','r3','b1','b2','b3'}
+    enum, none of which depend on the node→zone embedding)."""
+    if rotation == 0:
+        return sfn_str
+    parts = sfn_str.split(' ')
+    stones_str, spells_str = parts[0].split('/')
+    new_stones = _rotate_stones_str(stones_str, rotation)
+    new_spells = ','.join(_rotate_spell_list(spells_str.split(','), rotation))
+    return f"{new_stones}/{new_spells} " + ' '.join(parts[1:])
+
+
+def _rotate_game_record(game, rotation):
+    """Return a rotated copy of a Firebase game dict. Rotates spellNames and
+    every turn's sfnBefore / sfnAfter; leaves color, winner, uids, timestamp,
+    Elos, and annotations untouched. The result is a strategically-equivalent
+    game from the same players' perspective, expressed in the rotated basis."""
+    if rotation == 0:
+        return game
+    new_game = dict(game)
+    new_game['spellNames'] = _rotate_spell_list(
+        game.get('spellNames', []), rotation)
+    new_turns = []
+    for t in game.get('turns', []):
+        new_t = dict(t)
+        if t.get('sfnBefore'):
+            new_t['sfnBefore'] = _rotate_sfn(t['sfnBefore'], rotation)
+        if t.get('sfnAfter'):
+            new_t['sfnAfter'] = _rotate_sfn(t['sfnAfter'], rotation)
+        new_turns.append(new_t)
+    new_game['turns'] = new_turns
+    return new_game
+
+
 def download_games(db_url, service_account_path=None):
     """Download completed games from Firebase Realtime Database.
 
@@ -438,6 +523,15 @@ def main():
                              'logged as TIMEOUT so a single explosive game '
                              'cannot stall the entire import. Set to 0 to '
                              'disable. Default: 300.')
+    parser.add_argument('--augment-rotations', type=int, default=1,
+                        choices=(1, 2, 3),
+                        help='Apply N 3-fold board rotations as data '
+                             'augmentation. 1 = no augmentation; 3 = identity '
+                             '+ 2 rotations (3x records). The Sigil board has '
+                             'clean 3-fold rotational symmetry under the '
+                             'a↔b↔c zone relabeling, so the resulting records '
+                             'are strategically-equivalent games in a '
+                             'different feature-space basis. Default: 1.')
     args = parser.parse_args()
 
     if args.resume:
@@ -478,11 +572,33 @@ def main():
     os.makedirs(os.path.dirname(args.output) if os.path.dirname(args.output) else '.',
                 exist_ok=True)
 
-    # Build the (index, game) task list. Index refers to position in
-    # kept_games, which is downstream of Firebase's dict-iteration order;
-    # we rely on that being stable across runs for the game_index-based
-    # resume fallback (records written by older versions don't carry _gid).
-    tasks = list(enumerate(kept_games))
+    # Build the (task_id, game) task list. Without augmentation, task_id
+    # equals the position in kept_games and matches Firebase's dict-
+    # iteration order (downstream of which we get the game_index-based
+    # resume fallback for records that predate _gid). With augmentation,
+    # task_id = game_idx * rotations + rotation_idx, so each (game,
+    # rotation) pair has its own unique id and the resume dedup can
+    # distinguish them. Rotated records get a ':rN' suffix appended to
+    # the source game's _gid for the same reason.
+    rotations = args.augment_rotations
+    if rotations > 1:
+        expanded = []
+        for game_idx, g in enumerate(kept_games):
+            orig_gid = g.get('_gid')
+            for r in range(rotations):
+                if r == 0:
+                    rg = g
+                else:
+                    rg = _rotate_game_record(g, r)
+                    if orig_gid is not None:
+                        rg = dict(rg)
+                        rg['_gid'] = f'{orig_gid}:r{r}'
+                expanded.append((game_idx * rotations + r, rg))
+        tasks = expanded
+        print(f"Augmentation: {len(kept_games)} game(s) x {rotations} "
+              f"rotation(s) = {len(tasks)} task(s)")
+    else:
+        tasks = list(enumerate(kept_games))
 
     # --resume: scan the existing partial JSONL and remove already-processed
     # games from the task list. Prefer _gid dedup (robust to download-order
@@ -569,7 +685,7 @@ def main():
     annotations = 0
     start_time = time.time()
 
-    def _handle(i, game, positions, matched, unmatched, fh):
+    def _handle(i, positions, matched, unmatched, fh):
         nonlocal total_positions, total_matched, total_unmatched
         nonlocal games_with_positions, annotations
         total_matched += matched
@@ -679,8 +795,7 @@ def main():
                         timed_out_hint = not file_ready
                         i, positions, matched, unmatched, t_o = _reap(
                             slot, timed_out_hint)
-                        _handle(i, kept_games[i], positions, matched,
-                                unmatched, f)
+                        _handle(i, positions, matched, unmatched, f)
                         f.flush()
                         if t_o:
                             timeouts += 1
@@ -697,7 +812,7 @@ def main():
                         i = slot['i']
                         _terminate(slot)
                         i_r, positions, matched, unmatched, _ = _reap(slot, True)
-                        _handle(i, kept_games[i], positions, matched, unmatched, f)
+                        _handle(i, positions, matched, unmatched, f)
                         f.flush()
                         timeouts += 1
                         completed += 1
