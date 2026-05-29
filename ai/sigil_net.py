@@ -25,28 +25,46 @@ BLUNDER_HIDDEN_DIM = 64
 
 
 class ResBlock(nn.Module):
-    """Pre-activation residual block with LayerNorm."""
+    """Pre-activation residual block with LayerNorm.
 
-    def __init__(self, dim):
+    Dropout is applied between the two linear layers (the "Wide ResNet"
+    pattern); when p=0 the Dropout module is a no-op so older checkpoints
+    behave identically and load without modification (Dropout has no
+    parameters to save/restore).
+    """
+
+    def __init__(self, dim, dropout=0.0):
         super().__init__()
         self.fc1 = nn.Linear(dim, dim)
         self.ln1 = nn.LayerNorm(dim)
         self.fc2 = nn.Linear(dim, dim)
         self.ln2 = nn.LayerNorm(dim)
+        self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x):
         residual = x
         out = self.ln1(self.fc1(x))
         out = F.relu(out)
+        out = self.dropout(out)
         out = self.ln2(self.fc2(out))
         return F.relu(out + residual)
 
 
 class SigilNet(nn.Module):
-    """Dual-head network: value (win probability) + policy (turn scoring)."""
+    """Dual-head network: value (win probability) + policy (turn scoring).
 
-    def __init__(self):
+    `dropout` controls the residual-trunk and head dropout rate (default
+    0.0 — no regularization, matches all checkpoints saved before dropout
+    was introduced). Setting dropout > 0 during training puts Dropout
+    modules in eval()-disabled state at inference, so a model trained
+    with dropout=0.3 serves identically to one trained without; the
+    architecture-level change is just the presence of zero-parameter
+    Dropout layers.
+    """
+
+    def __init__(self, dropout=0.0):
         super().__init__()
+        self._dropout_rate = dropout
 
         # Spell embedding: 15 possible spells → 16-dim each, 9 slots
         self.spell_embed = nn.Embedding(NUM_POSSIBLE_SPELLS, SPELL_EMBED_DIM)
@@ -56,7 +74,15 @@ class SigilNet(nn.Module):
         self.raw_proj = nn.Linear(RAW_FEATURE_DIM, TRUNK_DIM - spell_flat_dim)  # 256
 
         # Residual trunk
-        self.trunk = nn.Sequential(*[ResBlock(TRUNK_DIM) for _ in range(NUM_RES_BLOCKS)])
+        self.trunk = nn.Sequential(*[
+            ResBlock(TRUNK_DIM, dropout=dropout) for _ in range(NUM_RES_BLOCKS)
+        ])
+
+        # Head dropout: applied to the shared trunk output before it
+        # enters either the value or policy head. Decorrelates the two
+        # heads' overfit modes; without it both heads memorize the same
+        # training examples through the same trunk features.
+        self.head_dropout = nn.Dropout(p=dropout)
 
         # Value head: board → scalar in [-1, 1]
         self.value_fc1 = nn.Linear(TRUNK_DIM, VALUE_HIDDEN_DIM)
@@ -114,9 +140,10 @@ class SigilNet(nn.Module):
             blunder_logits: (B, max_turns) — only if return_blunder=True
         """
         x = self._trunk_forward(raw_features, spell_ids)
+        x_h = self.head_dropout(x)
 
         # Value head
-        v = F.relu(self.value_fc1(x))
+        v = F.relu(self.value_fc1(x_h))
         v = torch.tanh(self.value_fc2(v))  # (B, 1)
 
         # Policy head
@@ -129,8 +156,8 @@ class SigilNet(nn.Module):
             expected = self.turn_proj.in_features
             if turn_features.size(-1) > expected:
                 turn_features = turn_features[..., :expected]
-            board_proj = self.policy_proj(x)              # (B, 256)
-            turn_proj = self.turn_proj(turn_features)     # (B, max_turns, 256)
+            board_proj = self.policy_proj(x_h)             # (B, 256)
+            turn_proj = self.turn_proj(turn_features)      # (B, max_turns, 256)
             # Dot product: (B, max_turns, 256) @ (B, 256, 1) -> (B, max_turns)
             logits = torch.bmm(turn_proj, board_proj.unsqueeze(-1)).squeeze(-1)
 

@@ -468,8 +468,15 @@ def train(args):
         model = net_class.load(args.model, device=args.device)
         print(f'Loaded model from {args.model}')
     else:
-        model = net_class()
-        print(f'Created new {net_class.__name__}')
+        # Dropout is only honored for SigilNet (the medium net we're
+        # actively retraining). Hard/graph nets keep their default 0
+        # — no regularization change for those architectures.
+        if net_class is SigilNet and args.dropout > 0:
+            model = net_class(dropout=args.dropout)
+            print(f'Created new {net_class.__name__} (dropout={args.dropout})')
+        else:
+            model = net_class()
+            print(f'Created new {net_class.__name__}')
     model = model.to(args.device)
     print(f'Parameters: {sum(p.numel() for p in model.parameters()):,}')
 
@@ -643,6 +650,16 @@ if __name__ == '__main__':
                         help='Loss weight for the auxiliary tactical head '
                              '(predicts best_own_attack and current_own_threat). '
                              '0 disables it.')
+    parser.add_argument('--dropout', type=float, default=0.0,
+                        help='Dropout rate for SigilNet trunk + heads. '
+                             '0.0 = no dropout (matches all checkpoints '
+                             'saved before dropout was introduced). '
+                             'Typical regularization range: 0.1–0.3. '
+                             'Only applied when training a fresh SigilNet '
+                             '(--net medium without --model); when loading '
+                             'an existing checkpoint the architecture is '
+                             'restored unchanged. Honored only for --net '
+                             'medium.')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
 

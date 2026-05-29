@@ -41,6 +41,7 @@ echo "training on $FILE ($NREC positions)" >> "$LOG"
   --output "$CAND" \
   --epochs 25 --patience 5 \
   --min-elo 0 \
+  --dropout 0.2 \
   --device cuda \
   >> "$LOG" 2>&1
 RC=$?
