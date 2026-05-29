@@ -1218,10 +1218,10 @@ def playsingleplayergame_medium(ws):
 	# Configurable for strength calibration:
 	#   ?ckpt=snapshot|baseline|live  which checkpoint to play
 	#   ?sims=N                       MCTS sims per move (default 1600)
-	#   ?tlimit=S                     seconds per move cap   (default 60)
+	#   ?tlimit=S                     seconds per move cap   (default 15)
 	variant = request.args.get('variant', 'standard')
 	sims = request.args.get('sims', default=1600, type=int)
-	tlimit = request.args.get('tlimit', default=60.0, type=float)
+	tlimit = request.args.get('tlimit', default=15.0, type=float)
 	ckpt = request.args.get('ckpt', default='snapshot')
 	_models = os.path.join(_APP_DIR, 'ai', 'models')
 	_ckpt_map = {

@@ -92,7 +92,8 @@ class MCTSAIPlayer(NNAIPlayer):
         # Convert live board to SimBoard
         sim = _live_board_to_simboard(self.board)
 
-        # Run MCTS
+        # Run MCTS, collecting per-move diagnostics for live logging.
+        stats = {}
         best_turn, policy, value = mcts_search(
             sim, self.color, self.sigil_net,
             num_simulations=self.num_simulations,
@@ -101,7 +102,28 @@ class MCTSAIPlayer(NNAIPlayer):
             temperature=None,  # Greedy in production
             blunder_lambda=BLUNDER_LAMBDA,
             strategic_alpha=STRATEGIC_ALPHA,
+            stats=stats,
         )
+        # Print a single-line summary every move so the operator can
+        # watch the AI's think-time, search effort, and value estimate
+        # live during playtesting. Hits flask's stdout → systemd journal.
+        if stats:
+            # depth=min/max: min is the shallowest non-terminal leaf any
+            # sim reached (i.e. "every line went at least this deep"),
+            # max is the deepest single branch. Wide gap means uneven
+            # search; tight gap means MCTS is being indecisive.
+            print(
+                f'[MCTS {self.color}] '
+                f't={stats.get("elapsed", 0):5.2f}s  '
+                f'sims={stats.get("sims_done", 0):>5} '
+                f'(visits={stats.get("root_visits", 0):>5})  '
+                f'legal={stats.get("legal_turns", 0):>4}  '
+                f'depth={stats.get("min_depth", 0)}/{stats.get("max_depth", 0)}  '
+                f'value={value:+.3f}  '
+                f'budget=({self.num_simulations} sims, '
+                f'{self.time_limit}s)',
+                flush=True,
+            )
 
         if best_turn is None:
             return None

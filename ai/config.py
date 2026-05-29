@@ -69,6 +69,21 @@ TEMP_THRESHOLD = 30         # Turn after which temperature drops
 TEMP_PLAY = 0.01            # Temperature in production (near-greedy)
 MCTS_BATCH_SIZE = 8         # Leaf evaluations batched together per NN call
 
+# Progressive widening: cap the actions considered at each MCTS node to
+# top-K by prior, where K = max(MCTS_WIDENING_MIN_K, ceil(C * N^alpha))
+# and N is that node's total visits. With Sigil's exhaustive-enum
+# branching (up to ~10k legal turns at mid-game), the raw action space
+# is too large for MCTS to meaningfully sample — even 1600 sims / 4000
+# actions = a tenth of a visit per action, so selection collapses to
+# "trust the network prior, sample noise." Widening recovers actual
+# search: at N=1 only the top 4 actions are visible, at N=100 the top
+# 20, at N=1600 the top 80. Each top-K action accumulates real visits
+# before expansion considers more options. Set MCTS_WIDENING_C=0 to
+# disable widening entirely.
+MCTS_WIDENING_C = 2.0
+MCTS_WIDENING_ALPHA = 0.5
+MCTS_WIDENING_MIN_K = 4
+
 # ---- Training ----
 BATCH_SIZE = 512
 LR_INIT = 0.001
