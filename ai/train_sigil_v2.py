@@ -585,11 +585,15 @@ def train(args):
                 print(f'Early stop after {epoch+1} epochs (patience={args.patience}).')
                 break
 
-    # Save the best (lowest-val-loss) model
+    # Save the best (lowest-val-loss) model. Write to a tempfile in the
+    # same directory and atomic-rename so a kill mid-save can't leave a
+    # half-written .pt that downstream `torch.load` would accept silently.
     model.load_state_dict(best_state)
     model.eval()
     os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
-    model.save(args.output)
+    tmp_out = args.output + '.tmp'
+    model.save(tmp_out)
+    os.replace(tmp_out, args.output)
     print(f'Best val loss: {best_val:.4f}')
     print(f'Saved best model to {args.output}')
 
