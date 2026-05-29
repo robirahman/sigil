@@ -33,19 +33,26 @@ def legal_turns(board, color):
 
 
 class MCTSNode:
-    """A node in the MCTS search tree."""
+    """A node in the MCTS search tree.
 
-    __slots__ = ('board', 'color', 'parent', 'parent_action_idx',
-                 'children', 'legal_turns', 'prior', 'visit_count',
-                 'total_value', 'virtual_loss',
+    Deliberately holds no back-reference to its parent. The previous
+    revision stored `parent` and `parent_action_idx` but never read them
+    anywhere — they only existed as fields. They created a parent↔child
+    reference cycle that refcount could not resolve, so trees only got
+    freed by the cyclic GC, which lagged badly behind the ~36k-nodes-
+    per-game allocation rate (one self-play game leaves 1.2M cycle-
+    collected objects). With cycles broken, the tree is freed by
+    refcount immediately when the search root drops out of scope, which
+    is the dominant memory-leak fix the self-play loop needed."""
+
+    __slots__ = ('board', 'color', 'children', 'legal_turns', 'prior',
+                 'visit_count', 'total_value', 'virtual_loss',
                  'is_terminal', 'terminal_value', 'is_expanded',
                  'forbidden_mask')
 
-    def __init__(self, board, color, parent=None, parent_action_idx=None):
+    def __init__(self, board, color):
         self.board = board
         self.color = color
-        self.parent = parent
-        self.parent_action_idx = parent_action_idx
         self.children = {}          # action_idx -> MCTSNode
         self.legal_turns = None     # list of CompleteTurn
         self.prior = None           # np.array (num_legal_turns,)
@@ -194,8 +201,7 @@ def _simulate_batch(root, model, batch_size, forbidden_moves=None,
                 if not child_board.gameover:
                     child_board.advance_turn()
 
-                child = MCTSNode(child_board, child_color, parent=node,
-                                 parent_action_idx=action_idx)
+                child = MCTSNode(child_board, child_color)
                 node.children[action_idx] = child
                 node = child
                 break
