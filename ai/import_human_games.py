@@ -340,6 +340,20 @@ def convert_game(game_record):
         except (TypeError, ValueError):
             continue
 
+    # Per-turn POSITION evaluations: { '<turnNumber>': 'red' | 'blue' | 'even' }.
+    # Set by the opposite-color player about who's winning *after* the turn.
+    # 'red' / 'blue' are absolute (not relative to the annotator); the
+    # trainer reads them as a value-head supervision target.
+    raw_eval_annotations = game_record.get('eval_annotations') or {}
+    eval_annotations = {}
+    for k, v in raw_eval_annotations.items():
+        if v not in ('red', 'blue', 'even'):
+            continue
+        try:
+            eval_annotations[int(k)] = v
+        except (TypeError, ValueError):
+            continue
+
     if not spell_names or not turns or not winner:
         return [], 0, 0
 
@@ -441,6 +455,21 @@ def convert_game(game_record):
         # OPPOSITE-color player about the move whose turnNumber this is.
         if turn_number is not None and turn_number in annotations:
             position['annotation'] = annotations[turn_number]
+        # Human-supplied position evaluation ('red' / 'blue' / 'even') for
+        # this turn's after-state. We store both the raw label (for the
+        # investigation tool / human review) and the side-to-move-signed
+        # target value (+1 if current player is winning per the human,
+        # -1 if opponent, 0 if even) which is what the value head reads
+        # at training time.
+        if turn_number is not None and turn_number in eval_annotations:
+            ev = eval_annotations[turn_number]
+            position['position_eval'] = ev
+            if ev == 'even':
+                position['eval_outcome'] = 0.0
+            elif ev == color:
+                position['eval_outcome'] = 1.0
+            else:
+                position['eval_outcome'] = -1.0
         if played_date is not None:
             position['played_date'] = played_date.isoformat()
         positions.append(position)
@@ -683,11 +712,12 @@ def main():
     elos = []
     dates = []
     annotations = 0
+    eval_annotations_count = 0
     start_time = time.time()
 
     def _handle(i, positions, matched, unmatched, fh):
         nonlocal total_positions, total_matched, total_unmatched
-        nonlocal games_with_positions, annotations
+        nonlocal games_with_positions, annotations, eval_annotations_count
         total_matched += matched
         total_unmatched += unmatched
         if positions:
@@ -702,6 +732,8 @@ def main():
                 dates.append(pos['played_date'])
             if pos.get('annotation'):
                 annotations += 1
+            if pos.get('position_eval'):
+                eval_annotations_count += 1
 
     # Process-per-game parallelism. Each game runs in its own short-lived
     # child via ctx.Process; the parent enforces --game-timeout with
@@ -860,7 +892,9 @@ def main():
             print(f"    >= {lo}: {sum(1 for e in elos if e >= lo)} positions")
     if dates:
         print(f"  played dates: {min(dates)} -> {max(dates)}")
-    print(f"  annotated positions: {annotations}")
+    print(f"  annotated positions (move good/bad): {annotations}")
+    print(f"  annotated positions (eval red/blue/even): "
+          f"{eval_annotations_count}")
     print(f"Output: {args.output}")
 
 

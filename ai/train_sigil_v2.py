@@ -189,12 +189,20 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
                 bad += 1
                 continue
 
+            # Human position-eval supervision. When present, the value
+            # head trains against `eval_outcome` (signed by side-to-move
+            # at import time) instead of the game-outcome label — human
+            # judgment on intermediate positions is a higher-quality
+            # signal than aggregate game outcome, which is noisy for
+            # any non-terminal board.
+            eval_outcome = d.get('eval_outcome')
             rec = {
                 'raw_features': d['raw_features'],
                 'spell_ids': d['spell_ids'],
                 'turn_encodings': te,
                 'policy': policy,
                 'outcome': d['outcome'],
+                'eval_outcome': eval_outcome,
                 'num_turns': len(policy),
                 'source': source,
                 'weight': w,
@@ -238,6 +246,14 @@ def collate_fn(batch):
     ])
     outcomes = torch.tensor([b['outcome'] for b in batch], dtype=torch.float32)
     weights = torch.tensor([b['weight'] for b in batch], dtype=torch.float32)
+    # Per-position human eval supervision target. NaN where the record has
+    # no human evaluation; trainer reads it through a masked-replace so
+    # only labeled rows actually override the game-outcome target.
+    eval_outcomes = torch.tensor(
+        [(b.get('eval_outcome') if b.get('eval_outcome') is not None
+          else float('nan')) for b in batch],
+        dtype=torch.float32,
+    )
     # 'human' positions: only winners contribute to policy loss.
     # 'selfplay' positions: all contribute (targets are MCTS visits).
     policy_eligible = torch.tensor([
@@ -272,6 +288,7 @@ def collate_fn(batch):
         'policies': policies,
         'turn_counts': turn_counts,
         'outcomes': outcomes,
+        'eval_outcomes': eval_outcomes,
         'weights': weights,
         'policy_eligible': policy_eligible,
         'annotation_code': annotation_code,
@@ -298,7 +315,7 @@ def split_by_game(records, val_fraction=0.1, seed=0):
 def compute_losses(model, batch, device, label_smoothing=0.0,
                    annotation_good_weight=3.0, annotation_bad_weight=2.0,
                    blunder_weight=0.0, blunder_pos_weight=1.0,
-                   tactical_weight=0.0):
+                   tactical_weight=0.0, eval_annotation_weight=3.0):
     raw = batch['raw_features'].to(device)
     spell_ids = batch['spell_ids'].to(device)
     turn_enc = batch['turn_encodings'].to(device)
@@ -310,6 +327,30 @@ def compute_losses(model, batch, device, label_smoothing=0.0,
     ann_code = batch.get('annotation_code')
     if ann_code is not None:
         ann_code = ann_code.to(device)
+
+    # Human position-eval supervision: when a row has a non-NaN
+    # eval_outcome, override the game-outcome value target with the
+    # human evaluation, and boost its weight by eval_annotation_weight
+    # so the human-curated signal dominates over diffuse game-outcome
+    # samples. Position evaluations are higher quality on intermediate
+    # boards (the game-outcome target is noisy for any non-terminal
+    # state — a winning position can still be lost from a later mistake
+    # and vice versa). Game outcome remains the target for the >>99%
+    # of rows that lack a human eval.
+    eval_outcomes = batch.get('eval_outcomes')
+    if eval_outcomes is not None:
+        eval_outcomes = eval_outcomes.to(device)
+        eval_mask = ~torch.isnan(eval_outcomes)
+        if eval_mask.any():
+            # Use eval_outcome where labeled, game outcome elsewhere.
+            target_outcome = torch.where(
+                eval_mask, eval_outcomes, target_outcome)
+            # Boost weight of human-labeled rows.
+            weights = weights * torch.where(
+                eval_mask,
+                torch.full_like(weights, eval_annotation_weight),
+                torch.ones_like(weights),
+            )
 
     return_blunder = blunder_weight > 0
     return_tactical = tactical_weight > 0
@@ -522,7 +563,8 @@ def train(args):
                 annotation_bad_weight=args.annotation_bad_weight,
                 blunder_weight=args.blunder_weight,
                 blunder_pos_weight=args.blunder_pos_weight,
-                tactical_weight=args.tactical_weight)
+                tactical_weight=args.tactical_weight,
+                eval_annotation_weight=args.eval_annotation_weight)
             loss = (args.value_weight * v_loss
                     + args.policy_weight * p_loss
                     + args.blunder_weight * b_loss
@@ -632,6 +674,15 @@ if __name__ == '__main__':
                         help='Freeze policy head; only update value head + trunk')
     parser.add_argument('--annotation-good-weight', type=float, default=3.0,
                         help='Per-sample policy weight for human-marked "good" moves')
+    parser.add_argument('--eval-annotation-weight', type=float, default=3.0,
+                        help='Weight multiplier applied to the value-loss '
+                             'contribution of rows with a human position-eval '
+                             'annotation (`position_eval` red/blue/even). These '
+                             'rows also have their target switched from game-'
+                             'outcome to the human-supplied eval. Set to 1.0 '
+                             'to disable the weight boost while keeping the '
+                             'target override; set 0 if you want to ignore '
+                             'human evals entirely. Default: 3.0.')
     parser.add_argument('--annotation-bad-weight', type=float, default=2.0,
                         help='Magnitude of negative policy weight for human-marked "bad" moves')
     parser.add_argument('--bad-oversample', type=int, default=1,
