@@ -85,6 +85,8 @@ const CORE_SPELLS = {
 	Choke:             { resolve: 'choke',           static: false, ischarm: false },
 	Perfect_Heist:     { resolve: 'perfect_heist',   static: false, ischarm: false },
 	Moth_Plague:       { resolve: 'moth_plague', count: 3, static: false, ischarm: false },
+	Ripples:           { resolve: 'ripples',         static: false, ischarm: false },
+	Lifesap:           { resolve: null,              static: true,  ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -126,6 +128,8 @@ const SPELL_TEXTS = {
 	Choke:             'Choose an enemy stone; place your stones on all of its empty adjacent nodes.',
 	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all three.',
 	Moth_Plague:       'Make 3 hard blink moves (push any enemy stone, no adjacency required).',
+	Ripples:           'Choose two charged 1-node spells in play and apply each of their effects twice.',
+	Lifesap:           'STATIC: You refill 2 stones when you cast a 5-node spell (ritual).',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -152,7 +156,7 @@ const TSUNAMI_RITUALS = ['Flood'];
 const TSUNAMI_SORCERIES = ['Torrent'];
 const TSUNAMI_CHARMS = ['Gush'];
 
-const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague'];
+const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
 

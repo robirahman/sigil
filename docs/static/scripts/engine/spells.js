@@ -1220,6 +1220,48 @@ const SpellResolvers = {
 			if (board.gameover) return;
 		}
 	},
+
+	// --- Panda: Ripples (apply two charged 1-node spells' effects twice) ---
+	async ripples(board, color, spellName, getInput, emit) {
+		const candidates = [];
+		for (const pos of [7, 8, 9]) {
+			const sn = board.spellNames[pos - 1];
+			const info = CORE_SPELLS[sn];
+			if (!info || info.static || !info.resolve) continue;
+			if (board.stones[POSITIONS[pos][0]] !== color) continue;
+			candidates.push(sn);
+		}
+		if (candidates.length === 0) {
+			emit({ type: 'message', message: 'No charged 1-node spells to ripple.', awaiting: null });
+			return;
+		}
+		const chosen = [];
+		const pickCount = Math.min(2, candidates.length);
+		for (let k = 0; k < pickCount; k++) {
+			const remaining = candidates.filter(sn => !chosen.includes(sn));
+			if (remaining.length === 0) break;
+			if (remaining.length === 1) { chosen.push(remaining[0]); break; }
+			while (true) {
+				const moveoptions = {};
+				for (const sn of remaining) moveoptions[POSITIONS[board.spellNames.indexOf(sn) + 1][0]] = color;
+				const resp = await getInput({ type: 'message', message: `Choose 1-node spell ${k + 1} of ${pickCount} to apply twice.`, awaiting: 'node', moveoptions });
+				const pos = spellPositionOfNode(resp);
+				const sn = pos ? board.spellNames[pos - 1] : null;
+				if (sn && remaining.includes(sn)) { chosen.push(sn); break; }
+			}
+		}
+		for (const sn of chosen) {
+			const info = CORE_SPELLS[sn];
+			for (let rep = 0; rep < 2; rep++) {
+				if (SpellResolvers[info.resolve]) {
+					emit({ type: 'message', message: `Ripples: ${sn.replace(/_/g, ' ')} (${rep + 1} of 2).`, awaiting: null });
+					await SpellResolvers[info.resolve](board, color, sn, getInput, emit);
+					board.update();
+					emit(board.getBoardStatePayload());
+				}
+			}
+		}
+	},
 };
 
 /**

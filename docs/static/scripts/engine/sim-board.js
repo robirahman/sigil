@@ -938,6 +938,25 @@ class SimBoard {
 				actions.push(new SimAction('blink', { node: chosen, pushed_to: dest }));
 				this.update();
 			}
+		} else if (rt === 'ripples') {
+			// Apply the first (up to) two charged 1-node spells' effects twice
+			// each. Sub-resolvers emit standard actions, so replay needs nothing new.
+			const cands = [];
+			for (const pos of [7, 8, 9]) {
+				const sn = this.spellNames[pos - 1];
+				const sinfo = CORE_SPELLS[sn];
+				if (!sinfo || sinfo.static || !sinfo.resolve) continue;
+				if (this.stones[POSITIONS[pos][0]] !== color) continue;
+				cands.push(sn);
+			}
+			for (const sn of cands.slice(0, 2)) {
+				const subPos = POSITIONS[this.spellNames.indexOf(sn) + 1];
+				for (let rep = 0; rep < 2; rep++) {
+					const sub = this._resolveSpell(sn, color, subPos, {});
+					for (const a of sub) actions.push(a);
+					this.update();
+				}
+			}
 		}
 		return actions;
 	}
@@ -952,6 +971,10 @@ class SimBoard {
 		const kept = [];
 		if (!info.ischarm) {
 			let refills = this.mana[color];
+			// Lifesap (static): casting a 5-node spell grants a 2-stone refill.
+			if (posNodes.length === 5 && this.chargedSpells[color].includes('Lifesap')) {
+				refills = Math.max(refills, 2);
+			}
 			const priority = posNodes.length === 3
 				? [posNodes[2], posNodes[1], posNodes[0]]
 				: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];

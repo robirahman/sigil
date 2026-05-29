@@ -554,6 +554,10 @@ class GameController {
 		// Refill (non-charms only)
 		if (!info.ischarm) {
 			let refills = board.mana[color];
+			// Lifesap (static): casting a 5-node spell grants a 2-stone refill.
+			if (positionNodes.length === 5 && board.chargedSpells[color].includes('Lifesap')) {
+				refills = Math.max(refills, 2);
+			}
 			if (refills > 0) {
 				const emptyNodes = positionNodes.filter(n => board.stones[n] === null);
 				if (refills >= emptyNodes.length) {
