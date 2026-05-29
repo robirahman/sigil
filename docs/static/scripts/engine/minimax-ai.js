@@ -184,6 +184,7 @@ function _orderWithHints(turns, ttMove, killers) {
 function _minimaxApplyTurn(board, turn, color) {
 	const sim = board.copy();
 	const enemy = sim._enemy(color);
+	sim.crushedThisTurn = false;
 	for (const action of turn.actions) {
 		const t = action.type;
 		if (t === 'move') sim.stones[action.node] = color;
@@ -214,8 +215,19 @@ function _minimaxApplyTurn(board, turn, color) {
 			if (action.node) sim.stones[action.node] = null;
 		}
 		else if (t === 'fireblast' || t === 'hail_storm'
-		         || t === 'storm_front' || t === 'hurricane') {
+		         || t === 'storm_front' || t === 'hurricane'
+		         || t === 'bear_trap') {
 			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
+		}
+		else if (t === 'perfect_heist') {
+			if (action.placed) for (const n of action.placed) sim.stones[n] = color;
+		}
+		else if (t === 'shiver') {
+			if (action.node) sim.stones[action.node] = action.val;
+			if (action.node2) sim.stones[action.node2] = action.val2;
+		}
+		else if (t === 'lock_bump') {
+			if (action.target) sim.spellCounter[action.target] = Math.min(6, sim.spellCounter[action.target] + 1);
 		}
 		else if (t === 'bewitch') {
 			if (action.node) sim.stones[action.node] = color;

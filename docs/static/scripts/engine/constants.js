@@ -74,6 +74,17 @@ const CORE_SPELLS = {
 	Gush:              { resolve: 'surge_move', static: false, ischarm: true },
 	Torrent:           { resolve: 'soft_hard_chain', counts: [1, 1], static: false, ischarm: false },
 	Flood:             { resolve: 'soft_hard_chain', counts: [2, 2], static: false, ischarm: false },
+	// Panda expansion
+	Bear_Trap:         { resolve: 'bear_trap',       static: false, ischarm: true },
+	Shiver:            { resolve: 'shiver',          static: false, ischarm: true },
+	Blood_Saplings:    { resolve: 'blood_saplings', count: 2, static: false, ischarm: true },
+	Itch:              { resolve: 'itch',            static: false, ischarm: true },
+	Free_Spirit:       { resolve: 'free_spirit', count: 1, static: false, ischarm: true },
+	Residue_Mixture:   { resolve: 'residue_mixture', static: false, ischarm: true },
+	Stampede:          { resolve: 'stampede',        static: false, ischarm: false },
+	Choke:             { resolve: 'choke',           static: false, ischarm: false },
+	Perfect_Heist:     { resolve: 'perfect_heist',   static: false, ischarm: false },
+	Moth_Plague:       { resolve: 'moth_plague', count: 3, static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -105,6 +116,16 @@ const SPELL_TEXTS = {
 	Gush:              'If you did not dash this turn, make 1 move.',
 	Torrent:           'Make 1 soft move, then 1 hard move.',
 	Flood:             'Make 2 soft moves, then 2 hard moves.',
+	Bear_Trap:         'Destroy all enemy stones in 1-node spells.',
+	Shiver:            'Swap the positions of any two stones on the board.',
+	Blood_Saplings:    'If you crushed an enemy stone this turn, make 2 soft moves.',
+	Itch:              'Make 1 move, then advance the enemy lock by 1.',
+	Free_Spirit:       'If your lock is 0 or 1, make 1 soft move.',
+	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1.',
+	Stampede:          'Make hard moves equal to your lock value (0–5).',
+	Choke:             'Choose an enemy stone; place your stones on all of its empty adjacent nodes.',
+	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all three.',
+	Moth_Plague:       'Make 3 hard blink moves (push any enemy stone, no adjacency required).',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -130,6 +151,10 @@ const TEMPEST_CHARMS = ['Thunder'];
 const TSUNAMI_RITUALS = ['Flood'];
 const TSUNAMI_SORCERIES = ['Torrent'];
 const TSUNAMI_CHARMS = ['Gush'];
+
+const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague'];
+const PANDA_SORCERIES = ['Stampede', 'Choke'];
+const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
 
 const SPELL_PACKS = {
 	core: {
@@ -162,13 +187,18 @@ const SPELL_PACKS = {
 		sorceries: [...CORE_SORCERIES, ...TSUNAMI_SORCERIES],
 		charms: [...CORE_CHARMS, ...TSUNAMI_CHARMS],
 	},
+	panda: {
+		rituals: [...CORE_RITUALS, ...PANDA_RITUALS],
+		sorceries: [...CORE_SORCERIES, ...PANDA_SORCERIES],
+		charms: [...CORE_CHARMS, ...PANDA_CHARMS],
+	},
 	all: {
 		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS, ...CELESTIAL_RITUALS,
-		          ...FURY_RITUALS, ...TEMPEST_RITUALS, ...TSUNAMI_RITUALS],
+		          ...FURY_RITUALS, ...TEMPEST_RITUALS, ...TSUNAMI_RITUALS, ...PANDA_RITUALS],
 		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES, ...CELESTIAL_SORCERIES,
-		            ...FURY_SORCERIES, ...TEMPEST_SORCERIES, ...TSUNAMI_SORCERIES],
+		            ...FURY_SORCERIES, ...TEMPEST_SORCERIES, ...TSUNAMI_SORCERIES, ...PANDA_SORCERIES],
 		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS, ...CELESTIAL_CHARMS,
-		         ...FURY_CHARMS, ...TEMPEST_CHARMS, ...TSUNAMI_CHARMS],
+		         ...FURY_CHARMS, ...TEMPEST_CHARMS, ...TSUNAMI_CHARMS, ...PANDA_CHARMS],
 	},
 };
 

@@ -14,6 +14,11 @@ class SimAction {
 		this.kept = opts.kept || null;
 		this.node2 = opts.node2 || null;
 		this.destroyed = opts.destroyed || null;
+		// Panda expansion fields.
+		this.target = opts.target || null;   // lock_bump: which color's counter
+		this.val = opts.val || null;         // shiver: post-swap value at node
+		this.val2 = opts.val2 || null;       // shiver: post-swap value at node2
+		this.placed = opts.placed || null;   // perfect_heist: occupied nodes
 	}
 }
 
@@ -40,6 +45,9 @@ class SimBoard {
 		this.mana = { red: 0, blue: 0 };
 		this.chargedSpells = { red: [], blue: [] };
 		this.variant = variant;
+		// Turn-local: set true when a push crushes an enemy stone this turn.
+		// Read by Blood Saplings; reset at each turn's start by the enumerator.
+		this.crushedThisTurn = false;
 	}
 
 	static fromSigilBoard(board) {
@@ -56,6 +64,7 @@ class SimBoard {
 		sb.totalStones = { ...board.totalStones };
 		sb.mana = { ...board.mana };
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
+		sb.crushedThisTurn = !!board.crushedThisTurn;
 		return sb;
 	}
 
@@ -73,6 +82,7 @@ class SimBoard {
 		b.totalStones = { ...this.totalStones };
 		b.mana = { ...this.mana };
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
+		b.crushedThisTurn = this.crushedThisTurn;
 		return b;
 	}
 
@@ -276,7 +286,10 @@ class SimBoard {
 				shortest = dist;
 			}
 		}
-		if (!options.length) return 'X';
+		if (!options.length) {
+			this.crushedThisTurn = true;
+			return 'X';
+		}
 		const dest = options[0];
 		this.stones[dest] = enemy;
 		return dest;
@@ -798,6 +811,134 @@ class SimBoard {
 				}
 			}
 		}
+		// --- Panda expansion (greedy default; overrides for choice points) ---
+		if (rt === 'bear_trap') {
+			const destroyed = [];
+			for (const pos of [7, 8, 9]) {
+				for (const n of POSITIONS[pos]) {
+					if (this.stones[n] === enemy) { this.stones[n] = null; destroyed.push(n); }
+				}
+			}
+			if (destroyed.length) actions.push(new SimAction('bear_trap', { destroyed }));
+			this.update();
+		} else if (rt === 'shiver') {
+			// No useful default swap; rely on enumerated overrides.
+			const ovr = overrides.shiver_pair;
+			if (ovr && ovr.length === 2 && ovr[0] !== ovr[1]
+			    && this.stones[ovr[0]] !== null && this.stones[ovr[1]] !== null) {
+				const [a, b] = ovr;
+				const tmp = this.stones[a];
+				this.stones[a] = this.stones[b];
+				this.stones[b] = tmp;
+				actions.push(new SimAction('shiver', { node: a, node2: b, val: this.stones[a], val2: this.stones[b] }));
+				this.update();
+			}
+		} else if (rt === 'blood_saplings') {
+			if (this.crushedThisTurn) {
+				const overrideTargets = (overrides.soft_move_targets || []).slice();
+				for (let i = 0; i < 2; i++) {
+					const targets = this._softMoveable(color);
+					if (!targets.length) break;
+					let chosen = null;
+					while (overrideTargets.length && chosen === null) {
+						const cand = overrideTargets.shift();
+						if (targets.includes(cand)) chosen = cand;
+					}
+					if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
+					actions.push(this._doSoftMove(color, chosen));
+					this.update();
+				}
+			}
+		} else if (rt === 'itch') {
+			const targets = this._allMoveable(color);
+			let chosen = null;
+			const ovr = overrides.itch_target;
+			if (ovr && targets.includes(ovr)) chosen = ovr;
+			else if (targets.length) chosen = targets[0];
+			if (chosen !== null) {
+				actions.push(this._doMove(color, chosen, false));
+				this.update();
+			}
+			this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
+			actions.push(new SimAction('lock_bump', { target: enemy }));
+			this.update();
+		} else if (rt === 'free_spirit') {
+			if (this.spellCounter[color] <= 1) {
+				const targets = this._softMoveable(color);
+				if (targets.length) {
+					const ovr = overrides.free_spirit_target;
+					const chosen = (ovr && targets.includes(ovr))
+						? ovr : (targets.find(t => !posNodes.includes(t)) || targets[0]);
+					actions.push(this._doSoftMove(color, chosen));
+					this.update();
+				}
+			}
+		} else if (rt === 'residue_mixture') {
+			if (this.spellCounter[color] > this.spellCounter[enemy]) {
+				const ovr = overrides.residue_target;
+				let target = (ovr && this.stones[ovr] === enemy)
+					? ovr : (NODE_ORDER.find(n => this.stones[n] === enemy) || null);
+				if (target) {
+					this.stones[target] = color;
+					actions.push(new SimAction('bewitch', { node: target }));
+					this.update();
+				}
+				this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
+				actions.push(new SimAction('lock_bump', { target: enemy }));
+				this.update();
+			}
+		} else if (rt === 'stampede') {
+			const count = Math.min(5, this.spellCounter[color]);
+			const overrideTargets = (overrides.hard_move_targets || []).slice();
+			for (let i = 0; i < count; i++) {
+				const targets = this._hardMoveable(color);
+				if (!targets.length) break;
+				let chosen = null;
+				while (overrideTargets.length && chosen === null) {
+					const cand = overrideTargets.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets[0];
+				actions.push(this._doHardMove(color, chosen));
+				this.update();
+			}
+		} else if (rt === 'choke') {
+			const enemies = NODE_ORDER.filter(n => this.stones[n] === enemy);
+			if (enemies.length) {
+				const ovr = overrides.choke_target;
+				const chosen = (ovr && this.stones[ovr] === enemy) ? ovr : enemies[0];
+				for (const nb of ADJACENCY[chosen]) {
+					if (this.stones[nb] === null) {
+						this.stones[nb] = color;
+						actions.push(new SimAction('move', { node: nb }));
+					}
+				}
+				this.update();
+			}
+		} else if (rt === 'perfect_heist') {
+			const destroyed = [];
+			for (const n of MANA_NODES) {
+				if (this.stones[n] === enemy) destroyed.push(n);
+				this.stones[n] = color;
+			}
+			actions.push(new SimAction('perfect_heist', { destroyed, placed: MANA_NODES.slice() }));
+			this.update();
+		} else if (rt === 'moth_plague') {
+			const overrideTargets = (overrides.moth_targets || []).slice();
+			for (let i = 0; i < 3; i++) {
+				const enemies = NODE_ORDER.filter(n => this.stones[n] === enemy);
+				if (!enemies.length) break;
+				let chosen = null;
+				while (overrideTargets.length && chosen === null) {
+					const cand = overrideTargets.shift();
+					if (this.stones[cand] === enemy) chosen = cand;
+				}
+				if (chosen === null) chosen = enemies[0];
+				const dest = this._pushEnemy(chosen, color);
+				actions.push(new SimAction('blink', { node: chosen, pushed_to: dest }));
+				this.update();
+			}
+		}
 		return actions;
 	}
 
@@ -993,6 +1134,7 @@ class SimBoard {
  */
 function applySimTurn(board, turn, color) {
 	const enemy = board._enemy(color);
+	board.crushedThisTurn = false;
 	for (const action of turn.actions) {
 		if (action.type === 'move') {
 			board.stones[action.node] = color;
@@ -1027,8 +1169,19 @@ function applySimTurn(board, turn, color) {
 			if (action.node) board.stones[action.node] = null;
 		}
 		else if (action.type === 'fireblast' || action.type === 'hail_storm'
-		         || action.type === 'storm_front' || action.type === 'hurricane') {
+		         || action.type === 'storm_front' || action.type === 'hurricane'
+		         || action.type === 'bear_trap') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
+		}
+		else if (action.type === 'perfect_heist') {
+			if (action.placed) for (const n of action.placed) board.stones[n] = color;
+		}
+		else if (action.type === 'shiver') {
+			if (action.node) board.stones[action.node] = action.val;
+			if (action.node2) board.stones[action.node2] = action.val2;
+		}
+		else if (action.type === 'lock_bump') {
+			if (action.target) board.spellCounter[action.target] = Math.min(6, board.spellCounter[action.target] + 1);
 		}
 		else if (action.type === 'bewitch') {
 			if (action.node) board.stones[action.node] = color;

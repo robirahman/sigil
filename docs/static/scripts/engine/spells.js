@@ -949,6 +949,277 @@ const SpellResolvers = {
 			}
 		}
 	},
+
+	// --- Panda: Bear Trap (destroy enemy stones in the 1-node spells) ---
+	async bear_trap(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		let any = false;
+		for (const pos of [7, 8, 9]) {
+			for (const n of POSITIONS[pos]) {
+				if (board.stones[n] === enemy) {
+					board.stones[n] = null;
+					if (board.lastPlay === n) { board.lastPlay = null; board.lastPlayer = null; }
+					emit({ type: 'crush_animation', crushed_color: enemy, node: n });
+					any = true;
+				}
+			}
+		}
+		if (!any) emit({ type: 'message', message: 'No enemy stones in any 1-node spell.', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Panda: Shiver (swap the positions of any two stones) ---
+	async shiver(board, color, spellName, getInput, emit) {
+		const occupied = () => NODE_ORDER.filter(n => board.stones[n] !== null);
+		if (occupied().length < 2) {
+			emit({ type: 'message', message: 'Need at least two stones to swap.', awaiting: null });
+			return;
+		}
+		const pick = async (message, exclude) => {
+			while (true) {
+				const moveoptions = {};
+				for (const n of NODE_ORDER) {
+					if (board.stones[n] !== null && n !== exclude) moveoptions[n] = board.stones[n];
+				}
+				const resp = await getInput({ type: 'message', message, awaiting: 'node', moveoptions });
+				if (moveoptions[resp]) return resp;
+			}
+		};
+		const a = await pick('Choose the first stone to swap.', null);
+		const b = await pick('Choose the second stone to swap.', a);
+		const tmp = board.stones[a];
+		board.stones[a] = board.stones[b];
+		board.stones[b] = tmp;
+		board.lastPlay = null;
+		board.lastPlayer = null;
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Panda: Blood Saplings (2 soft moves if you crushed a stone this turn) ---
+	async blood_saplings(board, color, spellName, getInput, emit) {
+		if (!board.crushedThisTurn) {
+			emit({ type: 'message', message: 'You did not crush a stone this turn; Blood Saplings fizzles.', awaiting: null });
+			return;
+		}
+		for (let i = 0; i < 2; i++) {
+			const targets = getSoftMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Choose where to soft move.',
+					awaiting: 'node', moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Panda: Itch (1 move, then advance the enemy lock by 1) ---
+	async itch(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const moveoptions = getAllMoveTargets(board, color);
+		if (Object.keys(moveoptions).length > 0) {
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Choose where to move.',
+					awaiting: 'node', moveoptions,
+				});
+				if (!moveoptions[resp]) continue;
+				if (board.stones[resp] === enemy) {
+					await doPushEnemy(board, resp, color, getInput, emit);
+				} else {
+					board.stones[resp] = color;
+					emit({ type: 'new_stone_animation', color, node: resp });
+					board.lastPlay = resp;
+					board.lastPlayer = color;
+				}
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		} else {
+			emit({ type: 'message', message: 'No legal moves.', awaiting: null });
+		}
+		// Advance the enemy lock (spell counter). Safe to push to 6: the
+		// counter-based loss only fires via checkGameOver(enemy) on the
+		// enemy's own turn, never on the caster's.
+		board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
+		emit({ type: 'message', message: 'Enemy lock advanced by 1.', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Panda: Free Spirit (1 soft move if your lock is 0 or 1) ---
+	async free_spirit(board, color, spellName, getInput, emit) {
+		if (board.spellCounter[color] > 1) {
+			emit({ type: 'message', message: 'Your lock is too high; Free Spirit fizzles.', awaiting: null });
+			return;
+		}
+		const targets = getSoftMoveTargets(board, color);
+		if (Object.keys(targets).length === 0) {
+			emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
+			return;
+		}
+		while (true) {
+			const resp = await getInput({
+				type: 'message', message: 'Choose where to soft move.',
+				awaiting: 'node', moveoptions: targets,
+			});
+			if (!targets[resp]) continue;
+			board.stones[resp] = color;
+			emit({ type: 'new_stone_animation', color, node: resp });
+			board.lastPlay = resp;
+			board.lastPlayer = color;
+			board.update();
+			emit(board.getBoardStatePayload());
+			break;
+		}
+	},
+
+	// --- Panda: Residue Mixture (if your lock is higher, convert 1 enemy stone + advance enemy lock) ---
+	async residue_mixture(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		if (board.spellCounter[color] <= board.spellCounter[enemy]) {
+			emit({ type: 'message', message: 'Your lock is not higher than the enemy lock; Residue Mixture fizzles.', awaiting: null });
+			return;
+		}
+		const hasEnemy = NODE_ORDER.some(n => board.stones[n] === enemy);
+		if (hasEnemy) {
+			while (true) {
+				const moveoptions = {};
+				for (const n of NODE_ORDER) if (board.stones[n] === enemy) moveoptions[n] = enemy;
+				const resp = await getInput({
+					type: 'message', message: 'Choose an enemy stone to convert to your color.',
+					awaiting: 'node', moveoptions,
+				});
+				if (board.stones[resp] === enemy) {
+					board.stones[resp] = color;
+					emit({ type: 'new_stone_animation', color, node: resp });
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
+			}
+		} else {
+			emit({ type: 'message', message: 'No enemy stones to convert.', awaiting: null });
+		}
+		board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
+		emit({ type: 'message', message: 'Enemy lock advanced by 1.', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Panda: Stampede (hard moves equal to your lock value) ---
+	async stampede(board, color, spellName, getInput, emit) {
+		// Lock value = current spell counter (this sorcery's own increment
+		// happens after resolution, so this reads the pre-cast value 0–5).
+		const count = Math.min(5, board.spellCounter[color]);
+		if (count === 0) {
+			emit({ type: 'message', message: 'Your lock is 0; Stampede does nothing.', awaiting: null });
+			return;
+		}
+		for (let i = 0; i < count; i++) {
+			const targets = getHardMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal hard moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: `Choose where to hard move (${i + 1} of ${count}).`,
+					awaiting: 'node', moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				await doPushEnemy(board, resp, color, getInput, emit);
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+			if (board.gameover) return;
+		}
+	},
+
+	// --- Panda: Choke (occupy every empty node adjacent to a chosen enemy stone) ---
+	async choke(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		if (!NODE_ORDER.some(n => board.stones[n] === enemy)) {
+			emit({ type: 'message', message: 'No enemy stones to choke.', awaiting: null });
+			return;
+		}
+		let chosen = null;
+		while (chosen === null) {
+			const moveoptions = {};
+			for (const n of NODE_ORDER) if (board.stones[n] === enemy) moveoptions[n] = enemy;
+			const resp = await getInput({
+				type: 'message', message: 'Choose an enemy stone to choke.',
+				awaiting: 'node', moveoptions,
+			});
+			if (board.stones[resp] === enemy) chosen = resp;
+		}
+		for (const nb of ADJACENCY[chosen]) {
+			if (board.stones[nb] === null) {
+				board.stones[nb] = color;
+				emit({ type: 'new_stone_animation', color, node: nb });
+				board.lastPlay = nb;
+				board.lastPlayer = color;
+			}
+		}
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Panda: Perfect Heist (clear the mana nodes, then occupy all three) ---
+	async perfect_heist(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		for (const n of MANA_NODES) {
+			if (board.stones[n] === enemy) {
+				emit({ type: 'crush_animation', crushed_color: enemy, node: n });
+			}
+			board.stones[n] = color;
+			emit({ type: 'new_stone_animation', color, node: n });
+		}
+		board.lastPlay = null;
+		board.lastPlayer = null;
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Panda: Moth Plague (3 hard blink moves — push any enemy stone) ---
+	async moth_plague(board, color, spellName, getInput, emit) {
+		for (let i = 0; i < 3; i++) {
+			const enemy = board.enemy(color);
+			if (!NODE_ORDER.some(n => board.stones[n] === enemy)) {
+				emit({ type: 'message', message: 'No enemy stones remain.', awaiting: null });
+				break;
+			}
+			let chosen = null;
+			while (chosen === null) {
+				const moveoptions = {};
+				for (const n of NODE_ORDER) if (board.stones[n] === enemy) moveoptions[n] = enemy;
+				const resp = await getInput({
+					type: 'message', message: `Choose an enemy stone to push (${i + 1} of 3).`,
+					awaiting: 'node', moveoptions,
+				});
+				if (board.stones[resp] === enemy) chosen = resp;
+			}
+			await doPushEnemy(board, chosen, color, getInput, emit);
+			board.update();
+			emit(board.getBoardStatePayload());
+			if (board.gameover) return;
+		}
+	},
 };
 
 /**
@@ -982,6 +1253,7 @@ async function doPushEnemy(board, nodeName, color, getInput, emit) {
 	emit({ type: 'new_stone_animation', color, node: nodeName });
 
 	if (crushed) {
+		board.crushedThisTurn = true;
 		emit({ type: 'crush_animation', crushed_color: enemy, node: nodeName });
 		emit({ type: 'message', message: 'Enemy stone crushed!', awaiting: null });
 		board.update();

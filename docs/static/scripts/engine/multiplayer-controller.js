@@ -354,6 +354,7 @@ class MultiplayerController {
 				this._resetRequested = false;
 				this._turnBuffer = [];
 				this._currentTurnActions = [];
+				board.crushedThisTurn = false;
 
 				// Record position before the turn is taken
 				const turnSfn = boardToSfn(board);

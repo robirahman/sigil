@@ -28,6 +28,9 @@ class SigilBoard {
 		this.chargedSpells = { red: [], blue: [] };
 		this.lastPlay = null;
 		this.lastPlayer = null;
+		// Turn-local: set true when a push crushes an enemy stone this turn
+		// (read by Blood Saplings). Reset by the controller at each turn's start.
+		this.crushedThisTurn = false;
 		this.snapshot = null;
 		this.allLoopingSnapshotCounts = {};
 		this.variant = variant;

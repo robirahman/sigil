@@ -41,6 +41,13 @@ const ENUM_CAPS = {
 	soft_hard_soft: 4,
 	soft_hard_hard: 4,
 	gush: 6,
+	// Panda expansion caps.
+	shiver: 8,
+	choke: 6,
+	moth_plague: 6,
+	itch: 6,
+	residue_mixture: 6,
+	stampede: 6,
 };
 
 function _adjacentEnemyPairs(board, color) {
@@ -300,6 +307,47 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < targets.length && i < caps.gush; i++) {
 			out.push({ surge_target: targets[i] });
 		}
+	} else if (rt === 'shiver') {
+		// Enumerate own↔enemy swaps (the impactful ones).
+		const enemy = board._enemy(color);
+		const own = NODE_ORDER.filter(n => board.stones[n] === color);
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		let added = 0;
+		outer: for (const o of own) {
+			for (const f of foe) {
+				if (added >= caps.shiver) break outer;
+				out.push({ shiver_pair: [o, f] });
+				added++;
+			}
+		}
+	} else if (rt === 'choke') {
+		const enemy = board._enemy(color);
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		for (let i = 0; i < foe.length && i < caps.choke; i++) {
+			out.push({ choke_target: foe[i] });
+		}
+	} else if (rt === 'moth_plague') {
+		const enemy = board._enemy(color);
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		for (let i = 0; i < foe.length && i < caps.moth_plague; i++) {
+			out.push({ moth_targets: [foe[i]] });
+		}
+	} else if (rt === 'itch') {
+		const targets = board._allMoveable(color);
+		for (let i = 0; i < targets.length && i < caps.itch; i++) {
+			out.push({ itch_target: targets[i] });
+		}
+	} else if (rt === 'residue_mixture') {
+		const enemy = board._enemy(color);
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		for (let i = 0; i < foe.length && i < caps.residue_mixture; i++) {
+			out.push({ residue_target: foe[i] });
+		}
+	} else if (rt === 'stampede') {
+		const ranked = _rankHardMoveTargets(board, color, board._hardMoveable(color));
+		for (let i = 0; i < ranked.length && i < caps.stampede; i++) {
+			out.push({ hard_move_targets: [ranked[i]] });
+		}
 	}
 	// soft_moves, hail_storm, thunder: greedy is fine. Thunder's pickup
 	// is forced and placement combinatorics blow up — defer to follow-up.
@@ -394,6 +442,8 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 function getLegalTurnsExhaustive(board, color, caps) {
 	caps = caps || ENUM_CAPS;
 	board.update();
+	// Turn-local crush tracking (for Blood Saplings) starts fresh each turn.
+	board.crushedThisTurn = false;
 	const enemy = board._enemy(color);
 
 	// Competitive variant opening: blink to any empty node, no spells.

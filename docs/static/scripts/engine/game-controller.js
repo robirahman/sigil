@@ -206,6 +206,7 @@ class GameController {
 
 				// Take turn
 				this._resetRequested = false;
+				board.crushedThisTurn = false;
 				const turnSfn = boardToSfn(board);
 
 				if (this.ai && color === this.aiColor) {
