@@ -33,8 +33,15 @@ from ai.config import (
 
 
 def play_selfplay_game(model, num_simulations=None, force_no_resign=False,
-                       variant='standard'):
+                       variant='standard', move_time_limit=None):
     """Play a single self-play game using MCTS.
+
+    `move_time_limit` (seconds, optional) caps MCTS wall-clock per move.
+    On pathological positions (e.g. 10k+ legal turns at mid-game) MCTS
+    can otherwise spend tens of minutes on a single move, building a
+    multi-GB tree that the worker never gets to free; budgeting it
+    bounds per-game memory and turnaround. mcts_search exits as soon as
+    *either* num_simulations completes or the time budget is hit.
 
     Returns list of (sfn, spell_ids, turn_encodings, policy, side_to_move) tuples
     and the game winner.
@@ -65,6 +72,7 @@ def play_selfplay_game(model, num_simulations=None, force_no_resign=False,
         best_turn, policy, value = mcts_search(
             board, color, model,
             num_simulations=num_simulations,
+            time_limit=move_time_limit,
             add_noise=True,
             temperature=temp,
         )
@@ -124,7 +132,8 @@ def play_selfplay_game(model, num_simulations=None, force_no_resign=False,
 
 
 def generate_training_data(model, num_games, output_path, num_simulations=None,
-                           force_no_resign=False, competitive_fraction=0.0):
+                           force_no_resign=False, competitive_fraction=0.0,
+                           move_time_limit=None):
     """Generate training data from self-play games.
 
     Writes JSONL with fields: sfn, spell_ids, policy, turn_encodings, outcome.
@@ -153,7 +162,7 @@ def generate_training_data(model, num_games, output_path, num_simulations=None,
             game_start = time.time()
             positions, winner = play_selfplay_game(
                 model, num_simulations, force_no_resign=force_no_resign,
-                variant=variant)
+                variant=variant, move_time_limit=move_time_limit)
             game_time = time.time() - game_start
 
             for pos in positions:
@@ -207,6 +216,13 @@ if __name__ == '__main__':
     parser.add_argument('--competitive-fraction', type=float, default=0.0,
                         help='Fraction of games to play under the competitive '
                              'variant (0.0 = all standard, 1.0 = all competitive)')
+    parser.add_argument('--move-time-limit', type=float, default=None,
+                        help='Per-move MCTS wall-clock budget in seconds. '
+                             'mcts_search exits whichever comes first — sims '
+                             'or budget. Caps per-game memory on pathological '
+                             'positions (10k+ legal turns at mid-game can '
+                             'otherwise consume multi-GB trees per move and '
+                             'never return). Default: no limit.')
     args = parser.parse_args()
 
     # Select network class
@@ -225,5 +241,6 @@ if __name__ == '__main__':
 
     generate_training_data(model, args.games, args.output, args.sims,
                            force_no_resign=args.no_resign,
-                           competitive_fraction=args.competitive_fraction)
+                           competitive_fraction=args.competitive_fraction,
+                           move_time_limit=args.move_time_limit)
     print(f"Data saved to {args.output}")

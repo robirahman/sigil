@@ -21,6 +21,12 @@ export HIP_VISIBLE_DEVICES=0          # pin the discrete RX 9070 XT (gfx1201)
 NUM_WORKERS=${NUM_WORKERS:-14}        # leave 2 threads for OS / GPU feeding
 GAMES_PER_WORKER=${GAMES_PER_WORKER:-40}   # ~560 games/iter (~50 min self-play)
 SIMS=${SIMS:-1200}                    # NUM_SIMS_TRAIN (honest, heavy)
+MOVE_TIME=${MOVE_TIME:-60}            # per-move MCTS wall-clock cap. Without
+                                      # this, positions with 10k+ legal turns
+                                      # could build multi-GB trees per move
+                                      # and never return — leading workers
+                                      # to consume 4–5 GB each on a single
+                                      # in-flight game and OOM the scope.
 TRAIN_EPOCHS=${TRAIN_EPOCHS:-15}
 PATIENCE=${PATIENCE:-4}
 GATE_GAMES=${GATE_GAMES:-120}
@@ -51,6 +57,7 @@ for iter in $(seq 1 "$MAX_ITER"); do
     OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
       "$PY" -m ai.selfplay_mcts --net medium \
         --games "$GAMES_PER_WORKER" --sims "$SIMS" --model "$MODEL" \
+        --move-time-limit "$MOVE_TIME" \
         --output "$DATA_DIR/iter${iter}_w${w}_${STAMP}.jsonl" \
         >"$LOG_DIR/selfplay_iter${iter}_w${w}.log" 2>&1 &
   done
