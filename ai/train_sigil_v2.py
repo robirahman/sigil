@@ -117,8 +117,20 @@ def rating_weight(elo):
     return float(np.clip((elo - 800) / 400, 0.5, 2.0))
 
 
+# Cap on per-record legal-turn count during training. The trainer pads
+# each batch to the max num_turns in that batch, so one outlier with
+# tens of thousands of legal turns (possible on mid-game positions
+# with multiple charged spells under exhaustive enumeration) causes
+# the batch's turn_encodings tensor to blow GPU memory — we hit a
+# 29.25 GiB allocation request on a 16 GiB GPU when an iter-1 self-
+# play record had ~60K turns. Records exceeding this cap are dropped
+# at load time. They're 95th-percentile-plus outliers the network
+# can't meaningfully learn over anyway. Override via --max-turns.
+MAX_TURNS_PER_RECORD = 2000
+
+
 def load_jsonl(path, source, default_weight=1.0, min_elo=0,
-               bad_oversample=1):
+               bad_oversample=1, max_turns=None):
     """Load a JSONL into list of records, tagged with source / weight / game_id.
 
     source: 'human' or 'selfplay' — drives policy-loss eligibility.
@@ -128,9 +140,14 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
         With only a handful of bad annotations in 7K positions, replication is
         the simplest way to ensure the negative signal is seen often enough
         per epoch to drive the loss.
+    max_turns: drop records whose `policy` has more than this many entries.
+        Defaults to MAX_TURNS_PER_RECORD.
     """
+    if max_turns is None:
+        max_turns = MAX_TURNS_PER_RECORD
     records = []
     bad = 0
+    too_wide = 0
     skipped_fireblast = 0
     skipped_competitive = 0
     with open(path) as f:
@@ -188,6 +205,13 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
             if len(te) < len(policy):
                 bad += 1
                 continue
+            # Drop pathologically-wide records: the trainer pads each
+            # batch to max num_turns, so a single 60K-turn record can
+            # OOM a 16 GiB GPU. The cap lives in MAX_TURNS_PER_RECORD;
+            # see its docstring for the failure mode it prevents.
+            if len(policy) > max_turns:
+                too_wide += 1
+                continue
 
             # Human position-eval supervision. When present, the value
             # head trains against `eval_outcome` (signed by side-to-move
@@ -215,6 +239,9 @@ def load_jsonl(path, source, default_weight=1.0, min_elo=0,
                     records.append(rec)
     if bad:
         print(f"  {path}: skipped {bad} malformed line(s)")
+    if too_wide:
+        print(f"  {path}: skipped {too_wide} record(s) with "
+              f">{max_turns} legal turns (would blow GPU memory)")
     if skipped_fireblast:
         print(f"  {path}: skipped {skipped_fireblast} pre-2026-05-07 "
               f"Fireblast position(s)")
@@ -473,10 +500,12 @@ def train(args):
         records.extend(load_jsonl(path, 'human',
                                   default_weight=1.0,
                                   min_elo=args.min_elo,
-                                  bad_oversample=args.bad_oversample))
+                                  bad_oversample=args.bad_oversample,
+                                  max_turns=args.max_turns))
     for path in args.self_play or []:
         records.extend(load_jsonl(path, 'selfplay',
-                                  default_weight=args.self_play_weight))
+                                  default_weight=args.self_play_weight,
+                                  max_turns=args.max_turns))
 
     if not records:
         print('No data. Aborting.')
@@ -674,6 +703,12 @@ if __name__ == '__main__':
                         help='Freeze policy head; only update value head + trunk')
     parser.add_argument('--annotation-good-weight', type=float, default=3.0,
                         help='Per-sample policy weight for human-marked "good" moves')
+    parser.add_argument('--max-turns', type=int, default=MAX_TURNS_PER_RECORD,
+                        help='Drop training records whose legal-turn count '
+                             'exceeds this cap. The collate function pads '
+                             'each batch to the max num_turns in that batch, '
+                             'so a single 60K-turn outlier OOMs a 16 GiB GPU. '
+                             f'Default: {MAX_TURNS_PER_RECORD}.')
     parser.add_argument('--eval-annotation-weight', type=float, default=3.0,
                         help='Weight multiplier applied to the value-loss '
                              'contribution of rows with a human position-eval '
