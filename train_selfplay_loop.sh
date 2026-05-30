@@ -19,7 +19,11 @@ export HIP_VISIBLE_DEVICES=0          # pin the discrete RX 9070 XT (gfx1201)
 
 # ---- knobs (env-overridable for smoke tests) ----
 NUM_WORKERS=${NUM_WORKERS:-14}        # leave 2 threads for OS / GPU feeding
-GAMES_PER_WORKER=${GAMES_PER_WORKER:-40}   # ~560 games/iter (~50 min self-play)
+GAMES_PER_WORKER=${GAMES_PER_WORKER:-20}   # was 40; lowered so iter→train→gate
+                                      # cycle completes in ~12h instead of 24h
+                                      # under widening + 1200 sims + 60s/move,
+                                      # accelerating generational improvement.
+                                      # Position rate per worker is unchanged.
 SIMS=${SIMS:-1200}                    # NUM_SIMS_TRAIN (honest, heavy)
 MOVE_TIME=${MOVE_TIME:-60}            # per-move MCTS wall-clock cap. Without
                                       # this, positions with 10k+ legal turns
