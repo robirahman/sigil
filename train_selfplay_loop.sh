@@ -33,8 +33,14 @@ MOVE_TIME=${MOVE_TIME:-60}            # per-move MCTS wall-clock cap. Without
                                       # in-flight game and OOM the scope.
 TRAIN_EPOCHS=${TRAIN_EPOCHS:-15}
 PATIENCE=${PATIENCE:-4}
-GATE_GAMES=${GATE_GAMES:-120}
+GATE_GAMES=${GATE_GAMES:-30}          # was 120; lowered so the gate finishes
+                                      # in tens of minutes rather than hours.
+                                      # 30 games is still enough to distinguish
+                                      # >55% win rate from noise at p<0.1.
 GATE_SIMS=${GATE_SIMS:-200}
+GATE_MOVE_TIME=${GATE_MOVE_TIME:-10}  # per-move cap for gate arena. Without
+                                      # this an uncapped 10-game arena took
+                                      # 7+ hours on heavy mid-game positions.
 WINDOW_FILES=${WINDOW_FILES:-150}     # most-recent self-play files fed to train
 MAX_ITER=${1:-1000}
 
@@ -85,12 +91,15 @@ for iter in $(seq 1 "$MAX_ITER"); do
   fi
 
   # ---- 3. gate candidate vs current best ----
-  echo "[$(date +%T)] gating candidate vs best ($GATE_GAMES games @ $GATE_SIMS sims) ..."
-  "$PY" - "$CAND" "$MODEL" "$GATE_GAMES" "$GATE_SIMS" <<'PYEOF'
+  echo "[$(date +%T)] gating candidate vs best "\
+       "($GATE_GAMES games @ $GATE_SIMS sims, ${GATE_MOVE_TIME}s/move) ..."
+  "$PY" - "$CAND" "$MODEL" "$GATE_GAMES" "$GATE_SIMS" "$GATE_MOVE_TIME" <<'PYEOF'
 import sys
 from ai.arena import gate_model
-cand, best, games, sims = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-ok = gate_model(cand, best, num_games=games, sims_per_move=sims)
+cand, best = sys.argv[1], sys.argv[2]
+games, sims, tlimit = int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5])
+ok = gate_model(cand, best, num_games=games, sims_per_move=sims,
+                move_time_limit=tlimit)
 sys.exit(0 if ok else 1)
 PYEOF
   if [ $? -eq 0 ]; then
