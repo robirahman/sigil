@@ -41,6 +41,12 @@ GATE_SIMS=${GATE_SIMS:-200}
 GATE_MOVE_TIME=${GATE_MOVE_TIME:-10}  # per-move cap for gate arena. Without
                                       # this an uncapped 10-game arena took
                                       # 7+ hours on heavy mid-game positions.
+GATE_GAME_TIMEOUT=${GATE_GAME_TIMEOUT:-300}   # per-game hard ceiling. Each
+                                      # arena game now runs in a forked child;
+                                      # if it exceeds this it gets terminated
+                                      # and counted as a draw, so one
+                                      # pathological game can't wedge the
+                                      # whole gate.
 WINDOW_FILES=${WINDOW_FILES:-150}     # most-recent self-play files fed to train
 MAX_ITER=${1:-1000}
 
@@ -93,13 +99,14 @@ for iter in $(seq 1 "$MAX_ITER"); do
   # ---- 3. gate candidate vs current best ----
   echo "[$(date +%T)] gating candidate vs best "\
        "($GATE_GAMES games @ $GATE_SIMS sims, ${GATE_MOVE_TIME}s/move) ..."
-  "$PY" - "$CAND" "$MODEL" "$GATE_GAMES" "$GATE_SIMS" "$GATE_MOVE_TIME" <<'PYEOF'
+  "$PY" - "$CAND" "$MODEL" "$GATE_GAMES" "$GATE_SIMS" "$GATE_MOVE_TIME" "$GATE_GAME_TIMEOUT" <<'PYEOF'
 import sys
 from ai.arena import gate_model
 cand, best = sys.argv[1], sys.argv[2]
-games, sims, tlimit = int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5])
+games, sims = int(sys.argv[3]), int(sys.argv[4])
+tlimit, gtimeout = float(sys.argv[5]), float(sys.argv[6])
 ok = gate_model(cand, best, num_games=games, sims_per_move=sims,
-                move_time_limit=tlimit)
+                move_time_limit=tlimit, game_timeout=gtimeout)
 sys.exit(0 if ok else 1)
 PYEOF
   if [ $? -eq 0 ]; then
