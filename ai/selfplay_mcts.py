@@ -367,6 +367,12 @@ if __name__ == '__main__':
                              'positions (10k+ legal turns at mid-game can '
                              'otherwise consume multi-GB trees per move and '
                              'never return). Default: no limit.')
+    parser.add_argument('--game-timeout', type=float, default=1800,
+                        help='Per-game hard ceiling (seconds). The game runs '
+                             'in a forked child; if it exceeds this it gets '
+                             'SIGTERM/SIGKILLed and dropped. Default: 1800 '
+                             '(30 min) — prevents a worker from spending '
+                             'hours on a single pathological game.')
     args = parser.parse_args()
 
     # Select network class
@@ -386,5 +392,6 @@ if __name__ == '__main__':
     generate_training_data(model, args.games, args.output, args.sims,
                            force_no_resign=args.no_resign,
                            competitive_fraction=args.competitive_fraction,
-                           move_time_limit=args.move_time_limit)
+                           move_time_limit=args.move_time_limit,
+                           game_timeout=args.game_timeout)
     print(f"Data saved to {args.output}")

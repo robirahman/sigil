@@ -24,13 +24,27 @@ GAMES_PER_WORKER=${GAMES_PER_WORKER:-20}   # was 40; lowered so iter→train→g
                                       # under widening + 1200 sims + 60s/move,
                                       # accelerating generational improvement.
                                       # Position rate per worker is unchanged.
-SIMS=${SIMS:-1200}                    # NUM_SIMS_TRAIN (honest, heavy)
-MOVE_TIME=${MOVE_TIME:-60}            # per-move MCTS wall-clock cap. Without
-                                      # this, positions with 10k+ legal turns
-                                      # could build multi-GB trees per move
-                                      # and never return — leading workers
-                                      # to consume 4–5 GB each on a single
-                                      # in-flight game and OOM the scope.
+SIMS=${SIMS:-2400}                    # was 1200; doubled so MCTS visit
+                                      # distributions are richer per move and
+                                      # the policy target gives the trainer
+                                      # informative signal rather than near-
+                                      # network-prior noise. With widening at
+                                      # 2400 sims, K cap is ~98 → each top-K
+                                      # action gets ~24 visits, ample to
+                                      # distinguish good from mediocre moves.
+MOVE_TIME=${MOVE_TIME:-180}           # was 60; tripled so the larger sim
+                                      # budget can actually complete on heavy
+                                      # mid-game positions instead of being
+                                      # cut short by the wall-clock cap.
+                                      # Without this, doubling SIMS gives
+                                      # nothing — the per-move cap binds first.
+SELFPLAY_GAME_TIMEOUT=${SELFPLAY_GAME_TIMEOUT:-1200}  # per-game hard ceiling
+                                      # (20 min). With MOVE_TIME=180 and
+                                      # MAX_TURNS=200 the theoretical max is
+                                      # 60 min, but in practice most games
+                                      # finish well under 20. Stops one
+                                      # pathological game from wedging a
+                                      # worker for hours.
 TRAIN_EPOCHS=${TRAIN_EPOCHS:-15}
 PATIENCE=${PATIENCE:-4}
 GATE_GAMES=${GATE_GAMES:-30}          # was 120; lowered so the gate finishes
@@ -74,6 +88,7 @@ for iter in $(seq 1 "$MAX_ITER"); do
       "$PY" -m ai.selfplay_mcts --net medium \
         --games "$GAMES_PER_WORKER" --sims "$SIMS" --model "$MODEL" \
         --move-time-limit "$MOVE_TIME" \
+        --game-timeout "$SELFPLAY_GAME_TIMEOUT" \
         --output "$DATA_DIR/iter${iter}_w${w}_${STAMP}.jsonl" \
         >"$LOG_DIR/selfplay_iter${iter}_w${w}.log" 2>&1 &
   done
