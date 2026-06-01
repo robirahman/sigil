@@ -38,13 +38,18 @@ MOVE_TIME=${MOVE_TIME:-180}           # was 60; tripled so the larger sim
                                       # cut short by the wall-clock cap.
                                       # Without this, doubling SIMS gives
                                       # nothing — the per-move cap binds first.
-SELFPLAY_GAME_TIMEOUT=${SELFPLAY_GAME_TIMEOUT:-1200}  # per-game hard ceiling
-                                      # (20 min). With MOVE_TIME=180 and
-                                      # MAX_TURNS=200 the theoretical max is
-                                      # 60 min, but in practice most games
-                                      # finish well under 20. Stops one
-                                      # pathological game from wedging a
-                                      # worker for hours.
+SELFPLAY_GAME_TIMEOUT=${SELFPLAY_GAME_TIMEOUT:-3600}  # per-game hard ceiling
+                                      # (60 min). 1200s was wrong: 1200/180=6.7
+                                      # implied moves before timeout, which
+                                      # would have killed most games before
+                                      # any decisive endgame — and a timed-out
+                                      # child writes zero training data
+                                      # because the JSON dump happens after
+                                      # play_selfplay_game returns. With 3600
+                                      # most natural games (30–50 moves at
+                                      # 30–60s avg per move) complete
+                                      # comfortably; only true marathons get
+                                      # cut.
 TRAIN_EPOCHS=${TRAIN_EPOCHS:-15}
 PATIENCE=${PATIENCE:-4}
 GATE_GAMES=${GATE_GAMES:-30}          # was 120; lowered so the gate finishes
