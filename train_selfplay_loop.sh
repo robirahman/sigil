@@ -101,15 +101,33 @@ for iter in $(seq 1 "$MAX_ITER"); do
   NEW_POS=$(cat "$DATA_DIR"/iter${iter}_w*.jsonl 2>/dev/null | wc -l)
   echo "[$(date +%T)] generated $NEW_POS new positions"
 
-  # ---- 2. train candidate on rolling window (GPU) ----
+  # ---- 2. train candidate on (human anchor + self-play rolling window) ----
+  # Pure-self-play training kept producing candidates that gated below
+  # the 0.55 threshold (iter1 6.7%, iter2 11%). The candidates fit the
+  # MCTS visit-count targets well (val acc ~0.94) but the data was
+  # noisy — many immediate-loss games + many timeout-marathons —
+  # teaching the network its own failure modes. Mixing in the human
+  # bootstrap data anchors the policy to known-good moves while still
+  # letting self-play data update the network where MCTS adds real
+  # signal. Self-play weight halved from default 0.3 → still favors
+  # human as the cleaner source, but the self-play contribution is
+  # large enough to not be drowned out.
   CAND="ai/models/candidate_loop_iter${iter}.pt"
   TRAIN_FILES=$(ls -t "$DATA_DIR"/*.jsonl 2>/dev/null | head -"$WINDOW_FILES")
-  echo "[$(date +%T)] training candidate on GPU ..."
+  HUMAN_FILE=$(ls -t ai/data/human/human_games_*_aug*.jsonl 2>/dev/null | head -1)
+  echo "[$(date +%T)] training candidate on GPU"
+  echo "[$(date +%T)]   human anchor: $HUMAN_FILE"
+  echo "[$(date +%T)]   selfplay window: $(echo $TRAIN_FILES | wc -w) files"
   "$PY" -m ai.train_sigil_v2 --net medium \
+      --human "$HUMAN_FILE" \
       --self-play $TRAIN_FILES \
+      --self-play-weight 0.5 \
       --model "$MODEL" --output "$CAND" \
       --epochs "$TRAIN_EPOCHS" --patience "$PATIENCE" \
-      --device cuda 2>&1 | tail -6
+      --min-elo 0 \
+      --blunder-weight 0.5 --blunder-pos-weight 2.0 \
+      --eval-annotation-weight 3.0 \
+      --device cuda 2>&1 | tail -10
 
   if [ ! -f "$CAND" ]; then
     echo "[$(date +%T)] WARNING: no candidate produced, skipping gate"
