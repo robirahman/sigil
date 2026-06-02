@@ -287,8 +287,14 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
         print(f"  ({timed_out} timed-out, {error_games} worker-errored)",
               flush=True)
 
+    # Draws count as 0.5/0.5 (chess Elo convention). The old "draws = 0
+    # for candidate" formula was unduly conservative: a 7-1 result with
+    # 22 draws-by-timeout came out to 0.23 win rate (rejected at the
+    # 0.55 gate) when the decisive-game record was 87.5% for the
+    # candidate. Timed-out arena games are inconclusive, not losses, so
+    # half-credit is the honest treatment.
     total = m1_wins + m2_wins + draws
-    win_rate = m1_wins / total if total > 0 else 0.0
+    win_rate = (m1_wins + 0.5 * draws) / total if total > 0 else 0.0
     return m1_wins, m2_wins, draws, win_rate
 
 
