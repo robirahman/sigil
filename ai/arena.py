@@ -38,16 +38,83 @@ _ARENA_MODEL1 = None
 _ARENA_MODEL2 = None
 
 
+def _stone_count_winner(red_count, blue_count, last_color):
+    """Score a position by stone count using the turn-aware Sigil
+    convention. Used both when a game completes naturally at
+    MAX_TURNS and when an arena game is terminated by per-game
+    timeout (the parent reads the child's last-written state).
+
+    After red's turn the players have moved an equal number of times
+    plus one for red, so red is "expected" to be ahead by 1 — anything
+    less is poor play for red:
+        red >  blue   →  red wins
+        red == blue   →  draw
+        red <  blue   →  blue wins
+
+    After blue's turn both have moved an equal number of times, but
+    blue gets a phantom +1 because red still goes first next round:
+        red >= blue       →  red wins   (red has caught up or led)
+        red == blue - 1   →  draw       (blue +1 ahead is expected)
+        red <= blue - 2   →  blue wins  (blue +2 is decisive)
+
+    Returns 'red', 'blue', or None (draw).
+    """
+    diff = red_count - blue_count
+    if last_color == 'red':
+        if diff > 0:
+            return 'red'
+        if diff == 0:
+            return None
+        return 'blue'
+    # last_color == 'blue'
+    if diff >= 0:
+        return 'red'
+    if diff == -1:
+        return None
+    return 'blue'
+
+
+def _write_state(state_path, turn_num, last_color, red_count, blue_count):
+    """Atomic write of the in-flight game's stone state. The parent
+    reads this on per-game timeout to score the game by stone count
+    instead of throwing it away as a draw."""
+    tmp = state_path + '.tmp'
+    with open(tmp, 'w') as f:
+        json.dump({
+            'turn_num': turn_num,
+            'last_color': last_color,
+            'red_count': int(red_count),
+            'blue_count': int(blue_count),
+        }, f)
+    os.replace(tmp, state_path)
+
+
+def _read_state(state_path):
+    """Return (turn_num, last_color, red_count, blue_count) or None if
+    the file doesn't exist or is unreadable (e.g., game was killed
+    before writing the first turn)."""
+    try:
+        with open(state_path) as f:
+            d = json.load(f)
+        return (d['turn_num'], d['last_color'],
+                d['red_count'], d['blue_count'])
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        return None
+
+
 def play_arena_game(model1, model2, sims_per_move=200,
                     blunder_lambda1=0.0, blunder_lambda2=0.0,
                     strategic_alpha1=0.0, strategic_alpha2=0.0,
-                    move_time_limit=None):
+                    move_time_limit=None, state_path=None):
     """Play a single game: model1 as red, model2 as blue.
 
     `move_time_limit` (seconds, optional) caps per-move MCTS wall-clock.
-    Without it, mid-game positions with explosive exhaustive enumeration
-    can consume tens of minutes per move, making a 10-game gate take
-    7+ hours. mcts_search exits whichever comes first — sims or budget.
+
+    `state_path` (optional): after each completed turn, atomically
+    write the (turn_num, last_color, red_count, blue_count) snapshot
+    here. The parent process reads this file on per-game timeout so
+    even abandoned games are scored by stone count rather than thrown
+    away as draws.
 
     Returns: 'red', 'blue', or None (draw).
     """
@@ -56,6 +123,7 @@ def play_arena_game(model1, model2, sims_per_move=200,
     board.setup_initial()
 
     turn_num = 0
+    color = 'red'
     while not board.gameover and turn_num < MAX_TURNS:
         turn_num += 1
         board.turn_counter = turn_num
@@ -79,25 +147,18 @@ def play_arena_game(model1, model2, sims_per_move=200,
         board.update()
         board.check_game_over(color)
 
+        if state_path is not None:
+            _write_state(state_path, turn_num, color,
+                         board.totalstones['red'],
+                         board.totalstones['blue'])
+
         if not board.gameover:
             board.advance_turn()
 
     if turn_num >= MAX_TURNS and not board.gameover:
         board.update()
-        if board.totalstones['red'] > board.totalstones['blue'] + 1:
-            return 'red'
-        elif board.totalstones['blue'] + 1 > board.totalstones['red']:
-            return 'blue'
-        # Score perfectly tied at MAX_TURNS (red_total == blue_total + 1,
-        # so red and blue+phantom are equal). Sigil has no draws under
-        # the canonical rules; the in-engine 6-spell-counter tiebreak
-        # awards the win to the side NOT to-move ("the player whose
-        # turn it would be next has failed to break the tie"). Apply
-        # the same rule here rather than returning None — `None` was
-        # previously interpreted as a draw by callers, which Sigil
-        # does not have.
-        next_to_move = 'red' if turn_num % 2 == 0 else 'blue'
-        return 'blue' if next_to_move == 'red' else 'red'
+        return _stone_count_winner(
+            board.totalstones['red'], board.totalstones['blue'], color)
 
     return board.winner
 
@@ -142,7 +203,8 @@ def _run_one_arena_game_subprocess(arg):
             m_red, m_blue, arg['sims_per_move'],
             blunder_lambda1=bl_red, blunder_lambda2=bl_blue,
             strategic_alpha1=sa_red, strategic_alpha2=sa_blue,
-            move_time_limit=arg['move_time_limit'])
+            move_time_limit=arg['move_time_limit'],
+            state_path=arg.get('state_path'))
         result = {'winner': winner, 'error': None}
     except Exception as e:
         result = {'winner': None, 'error': repr(e)}
@@ -192,6 +254,7 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
             game_start = time.time()
             red_is_model1 = (game_idx % 2 == 0)
             out_path = os.path.join(ipc_dir, f'game_{game_idx}.json')
+            state_path = os.path.join(ipc_dir, f'game_{game_idx}_state.json')
             arg = {
                 'red_is_model1': red_is_model1,
                 'sims_per_move': sims_per_move,
@@ -201,6 +264,7 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
                 'strategic_alpha1': strategic_alpha1,
                 'strategic_alpha2': strategic_alpha2,
                 'out_path': out_path,
+                'state_path': state_path,
             }
 
             p = ctx.Process(
@@ -217,14 +281,44 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
                     p.kill()
                     p.join(timeout=5)
                 timed_out += 1
-                draws += 1
                 game_time = time.time() - game_start
                 elapsed = time.time() - start
+                # Read the last-written state and score by stone count
+                # using the turn-aware Sigil tiebreak. If the child died
+                # before writing its first turn, fall back to draw.
+                state = _read_state(state_path)
+                if state is None:
+                    winner_by_stones = None
+                    score_note = "no state written"
+                else:
+                    turn_num_st, last_color, red_c, blue_c = state
+                    winner_by_stones = _stone_count_winner(
+                        red_c, blue_c, last_color)
+                    score_note = (f"turn {turn_num_st} (last={last_color}) "
+                                  f"r={red_c} b={blue_c} → "
+                                  f"{winner_by_stones or 'draw'}")
+                if winner_by_stones == 'red':
+                    if red_is_model1:
+                        m1_wins += 1
+                    else:
+                        m2_wins += 1
+                elif winner_by_stones == 'blue':
+                    if red_is_model1:
+                        m2_wins += 1
+                    else:
+                        m1_wins += 1
+                else:
+                    draws += 1
+                total = m1_wins + m2_wins + draws
+                rate = (m1_wins + 0.5 * draws) / total if total > 0 else 0
                 print(f"  Game {game_idx+1}/{num_games}: TIMEOUT after "
-                      f"{game_timeout}s — terminated, counted as draw "
+                      f"{game_timeout}s — scored by stones ({score_note})  "
+                      f"M1={m1_wins} M2={m2_wins} D={draws} "
+                      f"(M1 rate={rate:.3f}) "
                       f"[{game_time:.0f}s, total {elapsed:.0f}s]",
                       flush=True)
-                for path in (out_path, out_path + '.tmp'):
+                for path in (out_path, out_path + '.tmp',
+                             state_path, state_path + '.tmp'):
                     try:
                         os.unlink(path)
                     except FileNotFoundError:
@@ -241,7 +335,8 @@ def evaluate_models(model1, model2, num_games=None, sims_per_move=200,
                 with open(out_path) as rf:
                     result = json.load(rf)
             finally:
-                for path in (out_path, out_path + '.tmp'):
+                for path in (out_path, out_path + '.tmp',
+                             state_path, state_path + '.tmp'):
                     try:
                         os.unlink(path)
                     except FileNotFoundError:
