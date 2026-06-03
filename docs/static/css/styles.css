@@ -2190,6 +2190,21 @@ html[data-theme="forest"] .game-board-container {
 	filter: hue-rotate(180deg) saturate(0.9) brightness(0.85);
 }
 
+/* The container's hue-rotate would otherwise invert the stone images (blue
+   reads as orange, red as teal) and their outlines. Counter-rotate on the
+   .stone-nodes wrapper so it nets to 0deg, restoring true blue/red while the
+   container's saturate/brightness still tint them to match the theme. The
+   rotation must live on the wrapper, not .stone-node, because the per-stone
+   stone-twinkle animation sets `filter` on the stones and would override it.
+   Adding `filter` makes .stone-nodes the containing block for the absolutely
+   positioned, percentage-sized stones, so it must be stretched to fill its
+   square parent or the stones collapse to zero height. */
+html[data-theme="forest"] .stone-nodes {
+	position: absolute;
+	inset: 0;
+	filter: hue-rotate(180deg);
+}
+
 /* --- Volcanic / Fire --- */
 html[data-theme="volcanic"] .game-board-container {
 	filter: hue-rotate(90deg) saturate(1.2) brightness(0.65);
