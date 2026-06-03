@@ -2142,6 +2142,18 @@ html[data-theme="frost"] .game-board-container {
 	filter: hue-rotate(-55deg) saturate(0.6) brightness(0.8);
 }
 
+/* The container's hue-rotate shifts blue stones toward green. Counter-rotate
+   on the .stone-nodes wrapper so it nets to 0deg, restoring true blue/red
+   while the container's saturate/brightness still give the frosty tint. See
+   the Forest theme below for why this lives on the wrapper (not .stone-node)
+   and needs position/inset to keep the percentage-sized stones from
+   collapsing. */
+html[data-theme="frost"] .stone-nodes {
+	position: absolute;
+	inset: 0;
+	filter: hue-rotate(55deg);
+}
+
 /* --- Parchment / Light --- */
 html[data-theme="parchment"] .game-board {
 	filter: invert(0.85) hue-rotate(-40deg) sepia(0.8) saturate(0.8) brightness(0.85);
