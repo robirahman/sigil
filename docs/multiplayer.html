@@ -881,8 +881,7 @@
 							? opts.spellNames.slice()
 							: null;
 						if (!spellNames) {
-							const packKey = localStorage.getItem('sigilSpellPack') || 'core';
-							spellNames = generateSpellList(packKey);
+							spellNames = generateSpellList(readStoredExpansions());
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();

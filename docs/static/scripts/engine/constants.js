@@ -160,51 +160,46 @@ const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
 
-const SPELL_PACKS = {
-	core: {
-		rituals: CORE_RITUALS,
-		sorceries: CORE_SORCERIES,
-		charms: CORE_CHARMS,
-	},
-	springtime: {
-		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES],
-		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS],
-	},
-	celestial: {
-		rituals: [...CORE_RITUALS, ...CELESTIAL_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...CELESTIAL_SORCERIES],
-		charms: [...CORE_CHARMS, ...CELESTIAL_CHARMS],
-	},
-	fury: {
-		rituals: [...CORE_RITUALS, ...FURY_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...FURY_SORCERIES],
-		charms: [...CORE_CHARMS, ...FURY_CHARMS],
-	},
-	tempest: {
-		rituals: [...CORE_RITUALS, ...TEMPEST_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...TEMPEST_SORCERIES],
-		charms: [...CORE_CHARMS, ...TEMPEST_CHARMS],
-	},
-	tsunami: {
-		rituals: [...CORE_RITUALS, ...TSUNAMI_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...TSUNAMI_SORCERIES],
-		charms: [...CORE_CHARMS, ...TSUNAMI_CHARMS],
-	},
-	panda: {
-		rituals: [...CORE_RITUALS, ...PANDA_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...PANDA_SORCERIES],
-		charms: [...CORE_CHARMS, ...PANDA_CHARMS],
-	},
-	all: {
-		rituals: [...CORE_RITUALS, ...SPRINGTIME_RITUALS, ...CELESTIAL_RITUALS,
-		          ...FURY_RITUALS, ...TEMPEST_RITUALS, ...TSUNAMI_RITUALS, ...PANDA_RITUALS],
-		sorceries: [...CORE_SORCERIES, ...SPRINGTIME_SORCERIES, ...CELESTIAL_SORCERIES,
-		            ...FURY_SORCERIES, ...TEMPEST_SORCERIES, ...TSUNAMI_SORCERIES, ...PANDA_SORCERIES],
-		charms: [...CORE_CHARMS, ...SPRINGTIME_CHARMS, ...CELESTIAL_CHARMS,
-		         ...FURY_CHARMS, ...TEMPEST_CHARMS, ...TSUNAMI_CHARMS, ...PANDA_CHARMS],
-	},
+// Each expansion lists only its OWN new spells (not the core ones). A game's
+// spell pool is core + every selected expansion. Multiple expansions can be
+// combined. EXPANSION_KEYS fixes the display/iteration order.
+const EXPANSIONS = {
+	springtime: { name: 'Springtime', rituals: SPRINGTIME_RITUALS, sorceries: SPRINGTIME_SORCERIES, charms: SPRINGTIME_CHARMS },
+	celestial:  { name: 'Celestial',  rituals: CELESTIAL_RITUALS,  sorceries: CELESTIAL_SORCERIES,  charms: CELESTIAL_CHARMS },
+	fury:       { name: 'Fury',       rituals: FURY_RITUALS,       sorceries: FURY_SORCERIES,       charms: FURY_CHARMS },
+	tempest:    { name: 'Tempest',    rituals: TEMPEST_RITUALS,    sorceries: TEMPEST_SORCERIES,    charms: TEMPEST_CHARMS },
+	tsunami:    { name: 'Tsunami',    rituals: TSUNAMI_RITUALS,    sorceries: TSUNAMI_SORCERIES,    charms: TSUNAMI_CHARMS },
+	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
 };
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'panda'];
+
+// Normalize a spell-pack selection into a clean list of valid expansion keys.
+// Accepts an array of keys (current format), or a legacy single-key string
+// ('core', 'all', or one expansion). Core is always implicit; an empty result
+// means a core-only game.
+function normalizeExpansionSelection(selection) {
+	if (Array.isArray(selection)) {
+		return selection.filter(k => EXPANSIONS[k]);
+	}
+	if (typeof selection === 'string') {
+		if (selection === 'all') return EXPANSION_KEYS.slice();
+		if (EXPANSIONS[selection]) return [selection];
+	}
+	return [];
+}
+
+// Read the player's chosen expansions from localStorage, supporting both the
+// current multi-select key (sigilSpellPacks, a JSON array) and the legacy
+// single-select key (sigilSpellPack, a string).
+function readStoredExpansions() {
+	if (typeof localStorage === 'undefined') return [];
+	const multi = localStorage.getItem('sigilSpellPacks');
+	if (multi !== null) {
+		try { return normalizeExpansionSelection(JSON.parse(multi)); }
+		catch (e) { return []; }
+	}
+	return normalizeExpansionSelection(localStorage.getItem('sigilSpellPack'));
+}
 
 function shuffleArray(arr) {
 	const a = arr.slice();
@@ -215,10 +210,50 @@ function shuffleArray(arr) {
 	return a;
 }
 
-function generateSpellList(packKey) {
-	const pack = SPELL_PACKS[packKey] || SPELL_PACKS.core;
-	const rituals = shuffleArray(pack.rituals).slice(0, 3);
-	const sorceries = shuffleArray(pack.sorceries).slice(0, 3);
-	const charms = shuffleArray(pack.charms).slice(0, 3);
-	return [...rituals, ...sorceries, ...charms];
+// Minimum number of expansion-specific spells guaranteed in a generated board
+// when at least one expansion is selected, so an expansion game never ends up
+// as an all-base-game board purely by chance.
+const MIN_EXPANSION_SPELLS = 1;
+
+function generateSpellList(selection) {
+	const expansionKeys = normalizeExpansionSelection(selection);
+	const coreByCat = [CORE_RITUALS, CORE_SORCERIES, CORE_CHARMS];
+
+	// Pool the selected expansions' own spells per category, then add core.
+	const expansionByCat = [[], [], []];
+	for (const key of expansionKeys) {
+		const exp = EXPANSIONS[key];
+		expansionByCat[0].push(...exp.rituals);
+		expansionByCat[1].push(...exp.sorceries);
+		expansionByCat[2].push(...exp.charms);
+	}
+	const packByCat = coreByCat.map((core, i) => [...core, ...expansionByCat[i]]);
+	const picks = packByCat.map(cat => shuffleArray(cat).slice(0, 3));
+
+	if (expansionKeys.length > 0) {
+		const isExpansion = (spell, catIdx) => expansionByCat[catIdx].includes(spell);
+		const expansionAvailable = expansionByCat.reduce((n, c) => n + c.length, 0);
+		const minExpansion = Math.min(MIN_EXPANSION_SPELLS, expansionAvailable);
+
+		const countExpansion = () => picks.reduce(
+			(n, sel, i) => n + sel.filter(s => isExpansion(s, i)).length, 0);
+
+		// Swap a randomly chosen core pick for an unselected expansion spell until
+		// at least minExpansion expansion spells are present in the final nine.
+		let guard = 0;
+		while (countExpansion() < minExpansion && guard++ < 100) {
+			const candidates = packByCat
+				.map((cat, i) => i)
+				.filter(i => expansionByCat[i].some(s => !picks[i].includes(s))
+				          && picks[i].some(s => !isExpansion(s, i)));
+			if (!candidates.length) break;
+			const i = candidates[Math.floor(Math.random() * candidates.length)];
+			const unselectedExp = expansionByCat[i].filter(s => !picks[i].includes(s));
+			const inSpell = unselectedExp[Math.floor(Math.random() * unselectedExp.length)];
+			const outPos = picks[i].findIndex(s => !isExpansion(s, i));
+			picks[i][outPos] = inSpell;
+		}
+	}
+
+	return [...picks[0], ...picks[1], ...picks[2]];
 }

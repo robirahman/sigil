@@ -254,26 +254,42 @@
 				Rulebook
 				<small>Official rules (PDF)</small>
 			</a>
+			<a class="mode-button" href="https://discord.gg/a6tr43CeP" target="_blank" rel="noopener">
+				Discord
+				<small>Join the community to chat and find opponents</small>
+			</a>
 			<div style="margin-top: 20px;">
-				<label class="theme-label">Spell pack <small style="opacity:0.7;">(expansion AI games are unrated)</small></label>
-				<select id="spell-pack-select" class="theme-select">
-					<option value="core">Core</option>
-					<option value="springtime">Springtime expansion</option>
-					<option value="celestial">Celestial expansion</option>
-					<option value="fury">Fury expansion</option>
-					<option value="tempest">Tempest expansion</option>
-					<option value="tsunami">Tsunami expansion</option>
-					<option value="panda">Panda expansion</option>
-					<option value="all">All packs combined</option>
-				</select>
+				<label class="theme-label">Expansion packs <small style="opacity:0.7;">(core is always included; expansion AI games are unrated)</small></label>
+				<div id="spell-pack-checkboxes" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Fury</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tsunami" /> <span>Tsunami</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="panda" /> <span>Panda</span></label>
+				</div>
 			</div>
 			<script>
 				(function() {
-					var sel = document.getElementById('spell-pack-select');
-					var stored = localStorage.getItem('sigilSpellPack') || 'core';
-					sel.value = stored;
-					sel.addEventListener('change', function() {
-						localStorage.setItem('sigilSpellPack', sel.value);
+					var KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'panda'];
+					var boxes = document.querySelectorAll('#spell-pack-checkboxes input[type=checkbox]');
+					// Load the saved selection, migrating from the legacy single-select key.
+					var selected = [];
+					var multi = localStorage.getItem('sigilSpellPacks');
+					if (multi !== null) {
+						try { selected = JSON.parse(multi) || []; } catch (e) { selected = []; }
+					} else {
+						var legacy = localStorage.getItem('sigilSpellPack');
+						if (legacy === 'all') selected = KEYS.slice();
+						else if (legacy && KEYS.indexOf(legacy) !== -1) selected = [legacy];
+					}
+					boxes.forEach(function(box) {
+						box.checked = selected.indexOf(box.value) !== -1;
+						box.addEventListener('change', function() {
+							var current = [];
+							boxes.forEach(function(b) { if (b.checked) current.push(b.value); });
+							localStorage.setItem('sigilSpellPacks', JSON.stringify(current));
+						});
 					});
 				})();
 			</script>

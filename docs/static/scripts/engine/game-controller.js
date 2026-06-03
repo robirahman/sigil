@@ -67,11 +67,7 @@ class GameController {
 			if (this.spellNamesOverride) {
 				spellNames = this.spellNamesOverride;
 			} else {
-				let packKey = 'core';
-				if (typeof localStorage !== 'undefined') {
-					packKey = localStorage.getItem('sigilSpellPack') || 'core';
-				}
-				spellNames = generateSpellList(packKey);
+				spellNames = generateSpellList(readStoredExpansions());
 			}
 		}
 		this.board = new SigilBoard(spellNames, this.variant);
