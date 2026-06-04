@@ -173,6 +173,33 @@ const EXPANSIONS = {
 };
 const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'panda'];
 
+// Flat set of every expansion spell name (across all packs), derived from the
+// EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
+const EXPANSION_SPELL_NAMES = new Set(
+	EXPANSION_KEYS.flatMap(k => [...EXPANSIONS[k].rituals, ...EXPANSIONS[k].sorceries, ...EXPANSIONS[k].charms])
+);
+function isExpansionSpell(name) {
+	return EXPANSION_SPELL_NAMES.has(name);
+}
+
+// Stone-spot positions (fractions of the square spell image), measured from the
+// core spell cards which bake white circles at these spots. Expansion spell art
+// is full-bleed with no spots, so the game overlays white circles here instead.
+// Keyed by spell type; the radii live in CSS (.spell-spot sizing per type).
+// Regular polygons centered on the spell (0.5, 0.5), vertex pointing down, to
+// match the core cards' node layout. They rotate with the slot via the shared
+// positioning class, so centering on (0.5, 0.5) keeps them aligned regardless
+// of slot rotation. Radii live in CSS (.spell-spot sizing per type).
+const SPELL_SPOT_TEMPLATES = {
+	ritual:  [[0.500, 0.803], [0.212, 0.594], [0.788, 0.594], [0.322, 0.255], [0.678, 0.255]],
+	sorcery: [[0.500, 0.755], [0.279, 0.373], [0.721, 0.373]],
+	charm:   [[0.500, 0.500]],
+};
+// type is 'charm' | 'ritual' | 'sorcery'; returns [] for anything unknown.
+function spellSpotTemplate(type) {
+	return SPELL_SPOT_TEMPLATES[type] || [];
+}
+
 // Normalize a spell-pack selection into a clean list of valid expansion keys.
 // Accepts an array of keys (current format), or a legacy single-key string
 // ('core', 'all', or one expansion). Core is always implicit; an empty result

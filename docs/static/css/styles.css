@@ -1225,6 +1225,42 @@ html[data-theme="volcanic"].webp {
 	transition-delay: 1.5s;
 }
 
+/* Stone-spot overlay for expansion spells. Their art is full-bleed with no
+   baked-in stone circles, so we draw translucent white circles at the same
+   spots the core spell cards use. The overlay shares the spell's positioning
+   classes (.{charm,ritual,sorcery}-spell + --N) so it sits in the same
+   rotated box as the image and the circles line up. */
+.spell-spots {
+	--size: calc(var(--raw-size) / 1480 * 100%);
+
+	height: var(--size);
+	pointer-events: none;
+	position: absolute;
+	width: var(--size);
+}
+
+.spell-spot {
+	background: rgba(255, 255, 255, 0.66);
+	border-radius: 50%;
+	position: absolute;
+	transform: translate(-50%, -50%);
+}
+
+.charm-spell.spell-spots .spell-spot {
+	height: 30%;
+	width: 30%;
+}
+
+.ritual-spell.spell-spots .spell-spot {
+	height: 20%;
+	width: 20%;
+}
+
+.sorcery-spell.spell-spots .spell-spot {
+	height: 24%;
+	width: 24%;
+}
+
 @keyframes spell-available-frames {
 	from {
 		box-shadow:
