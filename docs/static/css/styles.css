@@ -2222,6 +2222,18 @@ html[data-theme="volcanic"] .game-board-container {
 	filter: hue-rotate(90deg) saturate(1.2) brightness(0.65);
 }
 
+/* The container's hue-rotate turns blue stones red and red stones green.
+   Counter-rotate on the .stone-nodes wrapper so it nets to 0deg, restoring
+   true blue/red while the container's saturate/brightness still give the
+   volcanic tint. See the Forest theme below for why this lives on the wrapper
+   (not .stone-node) and needs position/inset to keep the percentage-sized
+   stones from collapsing. */
+html[data-theme="volcanic"] .stone-nodes {
+	position: absolute;
+	inset: 0;
+	filter: hue-rotate(-90deg);
+}
+
 /* --- Spell visual effects --- */
 
 .spell-fx-overlay {
