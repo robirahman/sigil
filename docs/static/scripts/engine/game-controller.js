@@ -338,7 +338,7 @@ class GameController {
 							}
 							continue;
 						}
-						if (spellName === 'Gush') {
+						if (spellName === 'Splash') {
 							if (candash) {
 								actions.push(spellName);
 								spellList.push(spellName);

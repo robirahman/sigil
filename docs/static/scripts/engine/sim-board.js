@@ -1110,7 +1110,7 @@ class SimBoard {
 			if (info.ischarm) {
 				if (hasWinter) continue;
 				if (spellName === 'Surge') continue;
-				if (spellName === 'Gush' && postDash) continue;
+				if (spellName === 'Splash' && postDash) continue;
 				if (canSpell || (!canSpell && hasSummer && canSummer)) castable.push(spellName);
 			} else {
 				if (this.lock[color] === spellName) {

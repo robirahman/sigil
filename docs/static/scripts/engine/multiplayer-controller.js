@@ -484,7 +484,7 @@ class MultiplayerController {
 					if (info.ischarm) {
 						if (board.chargedSpells[enemy].includes('Winter')) continue;
 						if (spellName === 'Surge') { if (!candash) { actions.push(spellName); spellList.push(spellName); } continue; }
-						if (spellName === 'Gush') { if (candash) { actions.push(spellName); spellList.push(spellName); } continue; }
+						if (spellName === 'Splash') { if (candash) { actions.push(spellName); spellList.push(spellName); } continue; }
 						if (canspell || (!canspell && summerActive)) { actions.push(spellName); spellList.push(spellName); }
 					} else {
 						if (board.lock[color] === spellName) {

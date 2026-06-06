@@ -49,7 +49,7 @@ const ENUM_CAPS = {
 	hurricane: 4,
 	soft_hard_soft: 4,
 	soft_hard_hard: 4,
-	gush: 6,
+	splash: 6,
 	// Panda expansion caps.
 	shiver: 8,
 	choke: 6,
@@ -352,13 +352,13 @@ function _spellOverrides(board, color, spellName, caps) {
 				}
 			}
 		}
-	} else if (rt === 'surge_move' && spellName === 'Gush') {
-		// Gush enumerates each possible move destination. (Surge — the
+	} else if (rt === 'surge_move' && spellName === 'Splash') {
+		// Splash enumerates each possible move destination. (Surge — the
 		// other surge_move user — only runs post-dash and is currently
 		// excluded by sim-board's _getCastableSpells, so this branch is
-		// Gush-specific.)
+		// Splash-specific.)
 		const targets = board._allMoveable(color);
-		for (let i = 0; i < targets.length && i < caps.gush; i++) {
+		for (let i = 0; i < targets.length && i < caps.splash; i++) {
 			out.push({ surge_target: targets[i] });
 		}
 	} else if (rt === 'shiver') {

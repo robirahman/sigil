@@ -31,7 +31,7 @@ const SPELL_FX = {
 	Storm_Front:      { type: 'pulse', color: '#6688aa', shake: true  },
 	Hurricane:        { type: 'burst', color: '#3366aa', shake: true  },
 	// Tsunami expansion (blues + teals)
-	Gush:             { type: 'pulse', color: '#22aaee', shake: false },
+	Splash:             { type: 'pulse', color: '#22aaee', shake: false },
 	Torrent:          { type: 'burst', color: '#22bbcc', shake: false },
 	Flood:            { type: 'flash', color: '#1188bb', shake: true  },
 };

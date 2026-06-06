@@ -73,7 +73,7 @@ const CORE_SPELLS = {
 	Storm_Front:       { resolve: 'storm_front', static: false, ischarm: false },
 	Hurricane:         { resolve: 'hurricane',  static: false, ischarm: false },
 	// Tsunami expansion
-	Gush:              { resolve: 'surge_move', static: false, ischarm: true },
+	Splash:              { resolve: 'surge_move', static: false, ischarm: true },
 	Torrent:           { resolve: 'soft_hard_chain', counts: [1, 1], static: false, ischarm: false },
 	Flood:             { resolve: 'soft_hard_chain', counts: [2, 2], static: false, ischarm: false },
 	// Panda expansion
@@ -119,7 +119,7 @@ const SPELL_TEXTS = {
 	Gust:              'Pick up every enemy stone touching one of your stones, then place them on any empty nodes.',
 	Storm_Front:       'Destroy any 2 enemy stones of your choice.',
 	Hurricane:         'Destroy the smallest contiguous group of enemy stones. If tied, you choose which.',
-	Gush:              'If you did not dash this turn, make 1 move.',
+	Splash:              'If you did not dash this turn, make 1 move.',
 	Torrent:           'Make 1 soft move, then 1 hard move.',
 	Flood:             'Make 2 soft moves, then 2 hard moves.',
 	Bear_Trap:         'Destroy all enemy stones in 1-node spells.',
@@ -158,7 +158,7 @@ const TEMPEST_CHARMS = ['Gust'];
 
 const TSUNAMI_RITUALS = ['Flood'];
 const TSUNAMI_SORCERIES = ['Torrent'];
-const TSUNAMI_CHARMS = ['Gush'];
+const TSUNAMI_CHARMS = ['Splash'];
 
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
