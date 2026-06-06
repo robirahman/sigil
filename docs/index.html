@@ -258,17 +258,17 @@
 				Discord
 				<small>Join the community to chat and find opponents</small>
 			</a>
-			<div style="margin-top: 20px;">
-				<label class="theme-label">Expansion packs <small style="opacity:0.7;">(core is always included; expansion AI games are unrated)</small></label>
-				<div id="spell-pack-checkboxes" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+			<details style="margin-top: 20px;">
+				<summary class="theme-label" style="cursor: pointer; color: var(--color-text-muted);">Expansion packs <small style="opacity:0.7;">(core is always included; Panda games are unrated)</small></summary>
+				<div id="spell-pack-checkboxes" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px; color: var(--color-text);">
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Fury</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tsunami" /> <span>Tsunami</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="panda" /> <span>Panda</span></label>
 				</div>
-			</div>
+			</details>
 			<script>
 				(function() {
 					var KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'panda'];
@@ -298,7 +298,7 @@
 					<input type="checkbox" id="variant-competitive" />
 					<span>Competitive variant</span>
 				</label>
-				<small style="display: block; opacity: 0.7; font-family: 'Overlock', sans-serif; margin-top: 4px;">
+				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
 					Empty board start; both players blink onto any node for their first move.
 				</small>
 			</div>

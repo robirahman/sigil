@@ -22,8 +22,10 @@ const SPELL_FX = {
 	Azimuth:          { type: 'pulse', color: '#7744cc', shake: false },
 	Eclipse:          { type: 'flash', color: '#2233aa', shake: true  },
 	Syzygy:           { type: 'burst', color: '#5544bb', shake: true  },
-	// Fury expansion (deep reds)
+	// Inferno expansion (deep reds + embers)
+	Charge:           { type: 'pulse', color: '#ff6622', shake: false },
 	Fury:             { type: 'flash', color: '#aa0000', shake: true  },
+	Erupt:            { type: 'flash', color: '#cc2200', shake: true  },
 	// Tempest expansion (yellows + steel blues)
 	Thunder:          { type: 'flash', color: '#ffdd22', shake: true  },
 	Storm_Front:      { type: 'pulse', color: '#6688aa', shake: true  },

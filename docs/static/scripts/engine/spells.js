@@ -753,6 +753,124 @@ const SpellResolvers = {
 		}
 	},
 
+	// --- Charge (inferno charm): 1 move into a 3- or 5-node spell ---
+	async charge(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		// Any normal move (soft or hard) that lands in a 3- or 5-node spell
+		// (positions 1..6). No "control all but N" constraint, unlike Azimuth.
+		const allMoves = getAllMoveTargets(board, color);
+		const targets = {};
+		for (const node of Object.keys(allMoves)) {
+			const idx = spellPositionOfNode(node);
+			if (idx !== null && idx <= 6) targets[node] = color;
+		}
+		if (Object.keys(targets).length === 0) {
+			emit({ type: 'message', message: 'No legal move into a 3- or 5-node spell.', awaiting: null });
+			return;
+		}
+		while (true) {
+			const resp = await getInput({
+				type: 'message',
+				message: 'Make 1 move into a 3- or 5-node spell.',
+				awaiting: 'node',
+				moveoptions: targets,
+			});
+			if (!targets[resp]) continue;
+			if (board.stones[resp] === enemy) {
+				await doPushEnemy(board, resp, color, getInput, emit);
+			} else {
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+			}
+			break;
+		}
+	},
+
+	// --- Erupt (inferno ritual): 2 moves into one spell, then 2 into another ---
+	async erupt(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+
+		// Resolve one move into `node` (push if enemy, else place).
+		const doMoveInto = async (node) => {
+			if (board.stones[node] === enemy) {
+				await doPushEnemy(board, node, color, getInput, emit);
+			} else {
+				board.stones[node] = color;
+				emit({ type: 'new_stone_animation', color, node });
+				board.lastPlay = node;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+			}
+		};
+
+		// Targets across spells not yet used by Erupt, optionally restricted to
+		// one spell index.
+		const targetsFor = (usedSpells, onlySpell) => {
+			const moves = getAllMoveTargets(board, color);
+			const out = {};
+			for (const node of Object.keys(moves)) {
+				const idx = spellPositionOfNode(node);
+				if (idx === null) continue;
+				if (onlySpell != null && idx !== onlySpell) continue;
+				if (onlySpell == null && usedSpells.has(idx)) continue;
+				out[node] = color;
+			}
+			return out;
+		};
+
+		const usedSpells = new Set();
+		for (let group = 0; group < 2; group++) {
+			// First move of the pair: any unused spell with a legal move fixes
+			// the spell for the second move.
+			const firstTargets = targetsFor(usedSpells, null);
+			if (Object.keys(firstTargets).length === 0) {
+				emit({ type: 'message', message: 'No legal move into a remaining spell; Erupt ends early.', awaiting: null });
+				return;
+			}
+			let chosenSpell = null;
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: group === 0
+						? 'Make 2 moves into one spell. Pick the first.'
+						: 'Make 2 moves into another spell. Pick the first.',
+					awaiting: 'node',
+					moveoptions: firstTargets,
+				});
+				if (!firstTargets[resp]) continue;
+				chosenSpell = spellPositionOfNode(resp);
+				usedSpells.add(chosenSpell);
+				await doMoveInto(resp);
+				break;
+			}
+			if (board.gameover) return;
+
+			// Second move of the pair: restricted to the chosen spell.
+			const secondTargets = targetsFor(usedSpells, chosenSpell);
+			if (Object.keys(secondTargets).length === 0) {
+				emit({ type: 'message', message: 'No legal second move into that spell.', awaiting: null });
+				continue;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: 'Make the second move into the same spell.',
+					awaiting: 'node',
+					moveoptions: secondTargets,
+				});
+				if (!secondTargets[resp]) continue;
+				await doMoveInto(resp);
+				break;
+			}
+			if (board.gameover) return;
+		}
+	},
+
 	// --- Thunder (relocate enemy stones touching you) ---
 	async thunder(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);

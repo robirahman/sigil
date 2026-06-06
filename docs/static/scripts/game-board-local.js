@@ -1107,14 +1107,10 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
-					// Expansion spells make the game unrated — the trained model has not
-					// seen them, so the rating signal would be biased.
-					const EXPANSION_SPELLS = new Set([
-						'Seal_of_Spring', 'Scatter', 'Blossom',
-						'Azimuth', 'Eclipse', 'Syzygy',
-					]);
+					// Only the unofficial Panda expansion is unrated; every other
+					// expansion (and core) is rated.
 					const _spellNames = _engineRef && _engineRef.board ? _engineRef.board.spellNames : [];
-					const _isExpansionGame = _spellNames.some(s => EXPANSION_SPELLS.has(s));
+					const _isPandaGame = _spellNames.some(s => isPandaSpell(s));
 
 					try {
 						const db = firebase.database();
@@ -1149,7 +1145,7 @@ document.addEventListener('alpine:init', () => {
 							finishedAt: Date.now(),
 							red: { connected: false, uid: _humanColor === 'red' ? humanUid : aiUid, displayName: _humanColor === 'red' ? humanName : aiName },
 							blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
-							ranked: !_isExpansionGame,
+							ranked: !_isPandaGame,
 							winner: winner,
 							gameLog: gameTurns,
 							allowSpectators: true,
@@ -1165,7 +1161,7 @@ document.addEventListener('alpine:init', () => {
 							roomCode: roomCode,
 							redUid: _humanColor === 'red' ? humanUid : aiUid,
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
-							ranked: !_isExpansionGame,
+							ranked: !_isPandaGame,
 							variant: recordVariant,
 						};
 
@@ -1189,8 +1185,8 @@ document.addEventListener('alpine:init', () => {
 							difficulty: difficulty,
 						});
 
-						if (_isExpansionGame) {
-							_this.messageHistory.push('Unrated: expansion-pack games do not affect rating.');
+						if (_isPandaGame) {
+							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 
 						const flushResult = await OfflineGameQueue.flushAll(db, processEloClientSide);
@@ -1205,7 +1201,7 @@ document.addEventListener('alpine:init', () => {
 							return;
 						}
 
-						if (!_isExpansionGame && mine && mine.eloResult) {
+						if (!_isPandaGame && mine && mine.eloResult) {
 							const result = mine.eloResult;
 							const youWon = winner === _humanColor;
 							const sign = youWon ? '+' : '-';

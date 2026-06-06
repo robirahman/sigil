@@ -36,6 +36,8 @@ const ENUM_CAPS = {
 	// direction; tune later.
 	fury_sac: 6,
 	fury_target: 4,
+	charge: 6,
+	erupt: 6,
 	storm_front: 12,
 	hurricane: 4,
 	soft_hard_soft: 4,
@@ -248,6 +250,24 @@ function _spellOverrides(board, color, spellName, caps) {
 			for (let j = 0; j < tgtCap; j++) {
 				out.push({ fury_sacrifice: own[i], hard_move_targets: [targets[j]] });
 			}
+		}
+	} else if (rt === 'charge') {
+		// Each all-moveable target that lands in a 3- or 5-node spell
+		// (positions 1..6). Greedy ordering — defer heuristics.
+		const inSmallSpell = (n) => {
+			for (let i = 1; i <= 6; i++) if (POSITIONS[i].includes(n)) return true;
+			return false;
+		};
+		const targets = board._allMoveable(color).filter(inSmallSpell);
+		for (let i = 0; i < targets.length && i < caps.charge; i++) {
+			out.push({ charge_target: targets[i] });
+		}
+	} else if (rt === 'erupt') {
+		// Vary which spell Erupt starts in; the sim greedily completes the
+		// 2+2 resolution from each first-move candidate.
+		const targets = board._allMoveable(color);
+		for (let i = 0; i < targets.length && i < caps.erupt; i++) {
+			out.push({ erupt_first_targets: [targets[i]] });
 		}
 	} else if (rt === 'storm_front') {
 		const enemy = board._enemy(color);

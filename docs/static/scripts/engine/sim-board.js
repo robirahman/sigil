@@ -745,6 +745,74 @@ class SimBoard {
 					}
 				}
 			}
+		} else if (rt === 'charge') {
+			// 1 move into any 3- or 5-node spell (positions 1..6). No
+			// "control all but N" constraint, unlike Azimuth. (spellPositionOfNode
+			// lives in spells.js, which the worker doesn't load, so inline the
+			// position lookups like the Eclipse/Azimuth branches do.)
+			const _posOf = (node) => {
+				for (let i = 1; i <= 9; i++) if (POSITIONS[i].includes(node)) return i;
+				return null;
+			};
+			const moves = this._allMoveable(color);
+			let chosen = null;
+			const ovr = overrides.charge_target;
+			if (ovr && moves.includes(ovr) && _posOf(ovr) !== null && _posOf(ovr) <= 6) {
+				chosen = ovr;
+			} else {
+				for (let i = 1; i <= 6; i++) {
+					for (const n of POSITIONS[i]) {
+						if (moves.includes(n)) { chosen = n; break; }
+					}
+					if (chosen) break;
+				}
+			}
+			if (chosen) {
+				actions.push(this._doMove(color, chosen, false));
+				this.update();
+			}
+		} else if (rt === 'erupt') {
+			// 2 moves into one spell, then 2 moves into another spell.
+			const _posOf = (node) => {
+				for (let i = 1; i <= 9; i++) if (POSITIONS[i].includes(node)) return i;
+				return null;
+			};
+			const used = new Set();
+			const firstHints = (overrides.erupt_first_targets || []).slice();
+			for (let group = 0; group < 2; group++) {
+				// First move of the pair fixes the spell.
+				const moves = this._allMoveable(color);
+				let firstNode = null;
+				while (firstHints.length && firstNode === null) {
+					const cand = firstHints.shift();
+					const idx = _posOf(cand);
+					if (moves.includes(cand) && idx !== null && !used.has(idx)) firstNode = cand;
+				}
+				if (firstNode === null) {
+					outer: for (let i = 1; i <= 9; i++) {
+						if (used.has(i)) continue;
+						for (const n of POSITIONS[i]) {
+							if (moves.includes(n)) { firstNode = n; break outer; }
+						}
+					}
+				}
+				if (firstNode === null) break;
+				const spellIdx = _posOf(firstNode);
+				used.add(spellIdx);
+				actions.push(this._doMove(color, firstNode, false));
+				this.update();
+				if (this.gameover) return actions;
+				// Second move restricted to the chosen spell.
+				const moves2 = this._allMoveable(color);
+				for (const n of POSITIONS[spellIdx]) {
+					if (moves2.includes(n)) {
+						actions.push(this._doMove(color, n, false));
+						this.update();
+						break;
+					}
+				}
+				if (this.gameover) return actions;
+			}
 		} else if (rt === 'scatter') {
 			// 1 soft blink into each of 2 different spells (any empty node).
 			const usedSpells = new Set();

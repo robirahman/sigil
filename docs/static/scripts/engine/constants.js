@@ -64,8 +64,10 @@ const CORE_SPELLS = {
 	Azimuth:           { resolve: 'azimuth',    static: false, ischarm: true },
 	Eclipse:           { resolve: 'eclipse',    static: false, ischarm: false },
 	Syzygy:            { resolve: 'syzygy',     static: false, ischarm: false },
-	// Fury expansion
+	// Inferno expansion
+	Charge:            { resolve: 'charge',     static: false, ischarm: true  },
 	Fury:              { resolve: 'fury',       static: false, ischarm: false },
+	Erupt:             { resolve: 'erupt',      static: false, ischarm: false },
 	// Tempest expansion
 	Thunder:           { resolve: 'thunder',    static: false, ischarm: true },
 	Storm_Front:       { resolve: 'storm_front', static: false, ischarm: false },
@@ -111,7 +113,9 @@ const SPELL_TEXTS = {
 	Azimuth:           'Make 1 move into a spell where you control all but 1 node.',
 	Eclipse:           'Make 2 moves into a spell where you control all but 2 nodes.',
 	Syzygy:            'Make 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell.',
+	Charge:            'Make 1 move into a 3- or 5-node spell.',
 	Fury:              'Sacrifice 1 stone, then make 3 hard moves.',
+	Erupt:             'Make 2 moves into one spell, then 2 moves into another spell.',
 	Thunder:           'Pick up every enemy stone touching one of your stones, then place them on any empty nodes.',
 	Storm_Front:       'Destroy any 2 enemy stones of your choice.',
 	Hurricane:         'Destroy the smallest contiguous group of enemy stones. If tied, you choose which.',
@@ -144,9 +148,9 @@ const CELESTIAL_RITUALS = ['Syzygy'];
 const CELESTIAL_SORCERIES = ['Eclipse'];
 const CELESTIAL_CHARMS = ['Azimuth'];
 
-const FURY_RITUALS = [];
+const FURY_RITUALS = ['Erupt'];
 const FURY_SORCERIES = ['Fury'];
-const FURY_CHARMS = [];
+const FURY_CHARMS = ['Charge'];
 
 const TEMPEST_RITUALS = ['Hurricane'];
 const TEMPEST_SORCERIES = ['Storm_Front'];
@@ -166,7 +170,7 @@ const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spi
 const EXPANSIONS = {
 	springtime: { name: 'Springtime', rituals: SPRINGTIME_RITUALS, sorceries: SPRINGTIME_SORCERIES, charms: SPRINGTIME_CHARMS },
 	celestial:  { name: 'Celestial',  rituals: CELESTIAL_RITUALS,  sorceries: CELESTIAL_SORCERIES,  charms: CELESTIAL_CHARMS },
-	fury:       { name: 'Fury',       rituals: FURY_RITUALS,       sorceries: FURY_SORCERIES,       charms: FURY_CHARMS },
+	fury:       { name: 'Inferno',    rituals: FURY_RITUALS,       sorceries: FURY_SORCERIES,       charms: FURY_CHARMS },
 	tempest:    { name: 'Tempest',    rituals: TEMPEST_RITUALS,    sorceries: TEMPEST_SORCERIES,    charms: TEMPEST_CHARMS },
 	tsunami:    { name: 'Tsunami',    rituals: TSUNAMI_RITUALS,    sorceries: TSUNAMI_SORCERIES,    charms: TSUNAMI_CHARMS },
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
@@ -180,6 +184,15 @@ const EXPANSION_SPELL_NAMES = new Set(
 );
 function isExpansionSpell(name) {
 	return EXPANSION_SPELL_NAMES.has(name);
+}
+
+// Panda is the unofficial expansion: its games stay unrated even though every
+// other expansion is rated. Derived from the EXPANSIONS map so it stays in sync.
+const PANDA_SPELL_NAMES = new Set(
+	[...EXPANSIONS.panda.rituals, ...EXPANSIONS.panda.sorceries, ...EXPANSIONS.panda.charms]
+);
+function isPandaSpell(name) {
+	return PANDA_SPELL_NAMES.has(name);
 }
 
 // Stone-spot positions (fractions of the square spell image), measured from the

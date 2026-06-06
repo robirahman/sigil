@@ -142,8 +142,10 @@ class FirebaseSync {
 			await roomRef.child('status').set('playing');
 			roomRef.child('blue/connected').onDisconnect().set(false);
 
-			// Determine if ranked (both players authenticated)
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous) {
+			// Determine if ranked: both players authenticated, and not a Panda
+			// game (the unofficial Panda expansion is always unrated).
+			const hasPanda = (data.spellNames || []).some(s => isPandaSpell(s));
+			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasPanda) {
 				this.ranked = true;
 				await roomRef.child('ranked').set(true);
 			}
