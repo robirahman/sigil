@@ -26,6 +26,14 @@
 const ENUM_CAPS = {
 	dash_sac: 8,
 	dash_move: 4,
+	// How many alternative push destinations to branch when a hard-move /
+	// dash-move / hard-move-spell pushes an enemy stone with several legal
+	// landing cells. Small: it multiplies the branching factor at every
+	// push site. The live engine lets the player choose this cell
+	// (spells.js doPushEnemy); without branching, the AI only ever sees
+	// the default nearest-empty cell and misses tactics like pushing a
+	// stone into a gap to merge two enemy groups (then Hurricane them).
+	push_dest: 3,
 	bewitch: 8,
 	starfall: 6,
 	hard_moves: 6,
@@ -180,6 +188,24 @@ function _rankHardMoveTargets(board, color, targets) {
 }
 
 /**
+ * Push-destination variants for a hard-move onto `target`. Returns a list
+ * of `push_dests` fragments to merge into a spell override: each fragment
+ * is a one-element array naming the cell the pushed stone lands on, capped
+ * at caps.push_dest. When the push has 0–1 legal destinations there's
+ * nothing to choose, so returns [null] — a single variant carrying no
+ * override (the resolver falls back to the default nearest-empty cell).
+ * Destinations are computed on the current board; the resolver re-validates
+ * each against the live options at push time, so an override invalidated by
+ * an intervening sacrifice/soft-move simply reverts to the default.
+ */
+function _pushDestFragments(board, color, target, caps) {
+	if (board.stones[target] !== board._enemy(color)) return [null];
+	const dests = board._pushDestinations(target, color);
+	if (dests.length <= 1) return [null];
+	return dests.slice(0, caps.push_dest).map(d => [d]);
+}
+
+/**
  * Return list of `targetOverrides` dicts to try for `spellName`.
  * Always includes `{}` (greedy) so we don't lose the engine's default.
  */
@@ -201,12 +227,20 @@ function _spellOverrides(board, color, spellName, caps) {
 	} else if (rt === 'hard_moves') {
 		const ranked = _rankHardMoveTargets(board, color, board._hardMoveable(color));
 		for (let i = 0; i < ranked.length && i < caps.hard_moves; i++) {
-			out.push({ hard_move_targets: [ranked[i]] });
+			for (const pd of _pushDestFragments(board, color, ranked[i], caps)) {
+				const ovr = { hard_move_targets: [ranked[i]] };
+				if (pd) ovr.push_dests = pd;
+				out.push(ovr);
+			}
 		}
 	} else if (rt === 'meteor') {
 		const targets = board._blinkable(color);
 		for (let i = 0; i < targets.length && i < caps.meteor; i++) {
-			out.push({ meteor_target: targets[i] });
+			for (const pd of _pushDestFragments(board, color, targets[i], caps)) {
+				const ovr = { meteor_target: targets[i] };
+				if (pd) ovr.push_dests = pd;
+				out.push(ovr);
+			}
 		}
 	} else if (rt === 'comet') {
 		const blinkable = board._blinkable(color);
@@ -247,7 +281,11 @@ function _spellOverrides(board, color, spellName, caps) {
 		const tgtCap = Math.min(targets.length, caps.fury_target);
 		for (let i = 0; i < sacCap; i++) {
 			for (let j = 0; j < tgtCap; j++) {
-				out.push({ fury_sacrifice: own[i], hard_move_targets: [targets[j]] });
+				for (const pd of _pushDestFragments(board, color, targets[j], caps)) {
+					const ovr = { fury_sacrifice: own[i], hard_move_targets: [targets[j]] };
+					if (pd) ovr.push_dests = pd;
+					out.push(ovr);
+				}
 			}
 		}
 	} else if (rt === 'charge') {
@@ -307,7 +345,11 @@ function _spellOverrides(board, color, spellName, caps) {
 		const hardCap = Math.min(hardTargets.length, caps.soft_hard_hard);
 		for (let i = 0; i < softCap; i++) {
 			for (let j = 0; j < hardCap; j++) {
-				out.push({ soft_move_targets: [softTargets[i]], hard_move_targets: [hardTargets[j]] });
+				for (const pd of _pushDestFragments(board, color, hardTargets[j], caps)) {
+					const ovr = { soft_move_targets: [softTargets[i]], hard_move_targets: [hardTargets[j]] };
+					if (pd) ovr.push_dests = pd;
+					out.push(ovr);
+				}
 			}
 		}
 	} else if (rt === 'surge_move' && spellName === 'Gush') {
@@ -358,7 +400,11 @@ function _spellOverrides(board, color, spellName, caps) {
 	} else if (rt === 'stampede') {
 		const ranked = _rankHardMoveTargets(board, color, board._hardMoveable(color));
 		for (let i = 0; i < ranked.length && i < caps.stampede; i++) {
-			out.push({ hard_move_targets: [ranked[i]] });
+			for (const pd of _pushDestFragments(board, color, ranked[i], caps)) {
+				const ovr = { hard_move_targets: [ranked[i]] };
+				if (pd) ovr.push_dests = pd;
+				out.push(ovr);
+			}
 		}
 	}
 	// soft_moves, hail_storm, gust, blossom, erupt: greedy is fine.
@@ -412,32 +458,41 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 			const targets = _rankDashTargets(bd0, color, bd0._allMoveable(color));
 			for (let ti = 0; ti < targets.length && ti < dashMoveCap; ti++) {
 				const chosen = targets[ti];
-				const bd = bd0.copy();
-				const moveAct = bd._doMove(color, chosen, false);
-				if (!moveAct) continue;
-				bd.update();
-				const dashType = hasLightning ? 'dash_lightning' : 'dash';
-				const dashActions = [
-					new SimAction(dashType, { sacrificed: sacs.slice(), node: chosen }),
-					moveAct,
-				];
-				out.push(new SimTurn(prefix.concat(dashActions, [new SimAction('pass')])));
-				// Cast after dash
-				let castable;
-				try {
-					castable = bd._getCastableSpells(color, false, canSummer, true);
-				} catch (e) { castable = []; }
-				for (const spellName of castable) {
-					const overrides = _spellOverrides(bd, color, spellName, caps);
-					for (const ovr of overrides) {
-						const bs = bd.copy();
-						let spellActions;
-						try { spellActions = bs._castSpell(spellName, color, ovr); }
-						catch (e) { continue; }
-						bs.update();
-						out.push(new SimTurn(
-							prefix.concat(dashActions, spellActions, [new SimAction('pass')])
-						));
+				// Branch the dash move's push destination when it lands on an
+				// enemy stone with several escape cells — the maneuver that
+				// pushes a stone into a gap to merge enemy groups lives here.
+				const pushVariants = (bd0.stones[chosen] === enemy)
+					? bd0._pushDestinations(chosen, color).slice(0, caps.push_dest)
+					: [undefined];
+				if (pushVariants.length === 0) pushVariants.push(undefined);
+				for (const pushDest of pushVariants) {
+					const bd = bd0.copy();
+					const moveAct = bd._doMove(color, chosen, false, pushDest);
+					if (!moveAct) continue;
+					bd.update();
+					const dashType = hasLightning ? 'dash_lightning' : 'dash';
+					const dashActions = [
+						new SimAction(dashType, { sacrificed: sacs.slice(), node: chosen }),
+						moveAct,
+					];
+					out.push(new SimTurn(prefix.concat(dashActions, [new SimAction('pass')])));
+					// Cast after dash
+					let castable;
+					try {
+						castable = bd._getCastableSpells(color, false, canSummer, true);
+					} catch (e) { castable = []; }
+					for (const spellName of castable) {
+						const overrides = _spellOverrides(bd, color, spellName, caps);
+						for (const ovr of overrides) {
+							const bs = bd.copy();
+							let spellActions;
+							try { spellActions = bs._castSpell(spellName, color, ovr); }
+							catch (e) { continue; }
+							bs.update();
+							out.push(new SimTurn(
+								prefix.concat(dashActions, spellActions, [new SimAction('pass')])
+							));
+						}
 					}
 				}
 			}
@@ -464,7 +519,7 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	// without it, MinimaxAI's depth-1 enumeration sees zero moves
 	// (board has no own stones to move from) and falls back to pass,
 	// which causes hard/very_hard to forfeit their opening turn.
-	if (board.variant === 'competitive' && board.turnCounter <= 2) {
+	if (variantHasCompetitive(board.variant) && board.turnCounter <= 2) {
 		const out = [];
 		for (const n of NODE_ORDER) {
 			if (board.stones[n] !== null) continue;
@@ -483,12 +538,20 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	if (!moveTargets.length) return [new SimTurn([new SimAction('pass')])];
 	const out = [];
 	for (const moveTarget of moveTargets) {
-		const ba = board.copy();
-		const isBlink = hasSeal && !ADJACENCY[moveTarget].some(nb => ba.stones[nb] === color);
-		const moveAct = ba._doMove(color, moveTarget, isBlink);
-		if (!moveAct) continue;
-		ba.update();
-		_enumeratePostMoveExhaustive(ba, color, [moveAct], caps, true, true, true, out);
+		// A move/blink onto an enemy stone pushes it; branch the landing
+		// cell when several are legal so the search can aim the push.
+		const pushVariants = (board.stones[moveTarget] === enemy)
+			? board._pushDestinations(moveTarget, color).slice(0, caps.push_dest)
+			: [undefined];
+		if (pushVariants.length === 0) pushVariants.push(undefined);
+		for (const pushDest of pushVariants) {
+			const ba = board.copy();
+			const isBlink = hasSeal && !ADJACENCY[moveTarget].some(nb => ba.stones[nb] === color);
+			const moveAct = ba._doMove(color, moveTarget, isBlink, pushDest);
+			if (!moveAct) continue;
+			ba.update();
+			_enumeratePostMoveExhaustive(ba, color, [moveAct], caps, true, true, true, out);
+		}
 	}
 	return out;
 }

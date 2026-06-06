@@ -38,6 +38,8 @@ document.addEventListener('alpine:init', () => {
 			redSpellCounter: 0,
 			redLock: '',
 			score: 'unset',
+			// Deathmatch removes spell counters; hides the dice in the UI.
+			isDeathmatch: false,
 			showReset: false,
 			spellDict: {},
 			spells: {
@@ -509,7 +511,7 @@ document.addEventListener('alpine:init', () => {
 				// Game-rule variant (separate concept from `aiMode`'s "model
 				// variant" naming below): 'standard' or 'competitive'.
 				const gameVariantParam = new URLSearchParams(window.location.search).get('variant');
-				let gameVariant = gameVariantParam === 'competitive' ? 'competitive' : 'standard';
+				let gameVariant = normalizeVariant(gameVariantParam);
 				let _engineRef = null;
 
 				// Persistence: pin a game-id to the URL (mint one if missing)
@@ -541,8 +543,8 @@ document.addEventListener('alpine:init', () => {
 						if (_validSfn) {
 							_saveLoadedSfn = _save.sfn;
 							if (_save.aiMode) aiMode = _save.aiMode;
-							if (_save.variant === 'competitive' || _save.variant === 'standard') {
-								gameVariant = _save.variant;
+							if (_save.variant) {
+								gameVariant = normalizeVariant(_save.variant);
 							}
 							if (_save.humanColor === 'red' || _save.humanColor === 'blue') {
 								_savedHumanColor = _save.humanColor;
@@ -626,6 +628,7 @@ document.addEventListener('alpine:init', () => {
 					let options = {};
 					if (_rematchSpells) options.spellNames = _rematchSpells;
 					options.variant = gameVariant;
+					_this.isDeathmatch = variantHasDeathmatch(gameVariant);
 
 					// Easy / Medium / Hard / Very Hard are now all time-budgeted
 					// Caveman variants. The previous NN-based tiers were retired
@@ -1141,8 +1144,9 @@ document.addEventListener('alpine:init', () => {
 						// Variant the engine actually played under (read from the
 						// live board so we don't drift from the URL query param
 						// in edge cases like rematch/reconnect).
-						const recordVariant = (_engineRef && _engineRef.board && _engineRef.board.variant === 'competitive')
-							? 'competitive' : 'standard';
+						const recordVariant = normalizeVariant(_engineRef && _engineRef.board && _engineRef.board.variant);
+						const _isDeathmatch = variantHasDeathmatch(recordVariant);
+						const _unrated = _isPandaGame || _isDeathmatch;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -1155,7 +1159,7 @@ document.addEventListener('alpine:init', () => {
 							finishedAt: Date.now(),
 							red: { connected: false, uid: _humanColor === 'red' ? humanUid : aiUid, displayName: _humanColor === 'red' ? humanName : aiName },
 							blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
-							ranked: !_isPandaGame,
+							ranked: !_unrated,
 							winner: winner,
 							gameLog: gameTurns,
 							allowSpectators: true,
@@ -1171,7 +1175,7 @@ document.addEventListener('alpine:init', () => {
 							roomCode: roomCode,
 							redUid: _humanColor === 'red' ? humanUid : aiUid,
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
-							ranked: !_isPandaGame,
+							ranked: !_unrated,
 							variant: recordVariant,
 						};
 
@@ -1195,7 +1199,9 @@ document.addEventListener('alpine:init', () => {
 							difficulty: difficulty,
 						});
 
-						if (_isPandaGame) {
+						if (_isDeathmatch) {
+							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
+						} else if (_isPandaGame) {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 
@@ -1211,7 +1217,7 @@ document.addEventListener('alpine:init', () => {
 							return;
 						}
 
-						if (!_isPandaGame && mine && mine.eloResult) {
+						if (!_unrated && mine && mine.eloResult) {
 							const result = mine.eloResult;
 							const youWon = winner === _humanColor;
 							const sign = youWon ? '+' : '-';

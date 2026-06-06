@@ -259,7 +259,7 @@ class MultiplayerController {
 	async startGame(reconnectSfn) {
 		// Variant is replicated via Firebase room metadata; sync.variant
 		// is set during createRoom / joinRoom / reconnectAsCreator.
-		const variant = (this.sync && this.sync.variant) || 'standard';
+		const variant = normalizeVariant(this.sync && this.sync.variant);
 		this.board = new SigilBoard(this.spellNames, variant);
 		if (reconnectSfn) {
 			this.board.loadFromSfn(reconnectSfn);
@@ -322,7 +322,13 @@ class MultiplayerController {
 			try {
 				if (!resetThisTurn) {
 					const loopCount = board.takeSnapshot();
-					if (loopCount >= 5) {
+					// Threefold repetition → Blue wins on the 3rd occurrence.
+					// Notify the log on the 2nd so players aren't caught unaware
+					// and can deviate to avoid handing Blue the win.
+					if (loopCount === 2) {
+						this.emit({ type: 'message', message: 'Repeated position: this board state has occurred twice. If it repeats once more, Blue wins by threefold repetition — play a different move to avoid it.', awaiting: null });
+					} else if (loopCount >= 3) {
+						this.emit({ type: 'message', message: 'Threefold repetition — Blue wins.', awaiting: null });
 						board.gameover = true;
 						board.winner = 'blue';
 						this.emit({ type: 'game_over', winner: 'blue', gameLog: this._gameLog });
@@ -420,7 +426,7 @@ class MultiplayerController {
 		// (you can only move from your own stones), `canmove` falls
 		// through to a silent pass, and the immediate-loss check ends
 		// the game once openingPass expires.
-		if (canmove && board.variant === 'competitive' && board.totalStones[color] === 0) {
+		if (canmove && variantHasCompetitive(board.variant) && board.totalStones[color] === 0) {
 			const moveoptions = {};
 			for (const n of NODE_ORDER) {
 				if (board.stones[n] === null) moveoptions[n] = color;
@@ -536,9 +542,7 @@ class MultiplayerController {
 			// Variant the live board actually played under. Falls back
 			// to sync.variant (creator's choice persisted in the room
 			// metadata) when board.variant is missing for any reason.
-			variant: (this.board && this.board.variant === 'competitive')
-				? 'competitive'
-				: ((this.sync && this.sync.variant === 'competitive') ? 'competitive' : 'standard'),
+			variant: normalizeVariant((this.board && this.board.variant) || (this.sync && this.sync.variant)),
 		};
 		this.sync.saveCompletedGame(record);
 		// Mark the room finished so the same `?id=CODE` URL serves review mode.
@@ -679,7 +683,7 @@ class MultiplayerController {
 		if (!info.ischarm) {
 			if (board.lock[color] === spellName) { board.springlock[color] = spellName; }
 			else { board.lock[color] = spellName; board.springlock[color] = null; }
-			board.spellCounter[color]++;
+			if (!variantHasDeathmatch(board.variant)) board.spellCounter[color]++; // Deathmatch removes the counter
 		}
 		board.update(); this.emit(board.getBoardStatePayload());
 	}

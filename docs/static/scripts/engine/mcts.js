@@ -96,13 +96,13 @@ function mctsSearch(board, color, model, numSimulations, strategicAlpha, blunder
 				// Repetition bookkeeping: total occurrence count =
 				// game-history (positionHistory, includes root state) +
 				// simulation-path count along this branch (pathCount).
-				// 5x occurrences -> blue wins (engine rule).
+				// 3x occurrences (threefold) -> blue wins (engine rule).
 				child.snap = childBoard.loopingSnapshot();
 				child.pathCount = Object.assign({}, node.pathCount);
 				child.pathCount[child.snap] = (child.pathCount[child.snap] || 0) + 1;
 				if (!childBoard.gameover) {
 					const total = (positionHistory[child.snap] || 0) + child.pathCount[child.snap];
-					if (total >= 5) {
+					if (total >= 3) {
 						childBoard.gameover = true;
 						childBoard.winner = 'blue';
 					}

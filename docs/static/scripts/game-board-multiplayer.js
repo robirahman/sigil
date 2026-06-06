@@ -31,6 +31,8 @@ document.addEventListener('alpine:init', () => {
 			redSpellCounter: 0,
 			redLock: '',
 			score: 'unset',
+			// Deathmatch removes spell counters; hides the dice in the UI.
+			isDeathmatch: false,
 			showReset: false,
 			spellDict: {},
 			spells: { images: {}, text: {} },
@@ -407,7 +409,8 @@ document.addEventListener('alpine:init', () => {
 					_this.shareUrl = shareUrl || '';
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
-					_this._rematchVariant = variant === 'competitive' ? 'competitive' : 'standard';
+					_this._rematchVariant = normalizeVariant(variant);
+				_this.isDeathmatch = variantHasDeathmatch(variant);
 					// AI-review wiring: roomCode is the gameId used for the shared
 					// Firebase review cache, and authManager exposes the uid for
 					// community-annotation writes.

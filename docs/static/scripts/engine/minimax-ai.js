@@ -188,9 +188,9 @@ function _minimaxApplyTurn(board, turn, color) {
 	for (const action of turn.actions) {
 		const t = action.type;
 		if (t === 'move') sim.stones[action.node] = color;
-		else if (t === 'hard_move') sim._pushEnemy(action.node, color);
+		else if (t === 'hard_move') sim._pushEnemy(action.node, color, action.pushed_to);
 		else if (t === 'blink') {
-			if (sim.stones[action.node] === sim._enemy(color)) sim._pushEnemy(action.node, color);
+			if (sim.stones[action.node] === sim._enemy(color)) sim._pushEnemy(action.node, color, action.pushed_to);
 			else sim.stones[action.node] = color;
 		} else if (t === 'cast') {
 			const info = CORE_SPELLS[action.spell];
@@ -203,7 +203,7 @@ function _minimaxApplyTurn(board, turn, color) {
 			if (info && !info.ischarm) {
 				if (sim.lock[color] === action.spell) sim.springlock[color] = action.spell;
 				else { sim.lock[color] = action.spell; sim.springlock[color] = null; }
-				sim.spellCounter[color]++;
+				if (!variantHasDeathmatch(sim.variant)) sim.spellCounter[color]++;
 			}
 		}
 		else if (t === 'dash' || t === 'dash_lightning') {
@@ -227,7 +227,7 @@ function _minimaxApplyTurn(board, turn, color) {
 			if (action.node2) sim.stones[action.node2] = action.val2;
 		}
 		else if (t === 'lock_bump') {
-			if (action.target) sim.spellCounter[action.target] = Math.min(6, sim.spellCounter[action.target] + 1);
+			if (action.target && !variantHasDeathmatch(sim.variant)) sim.spellCounter[action.target] = Math.min(6, sim.spellCounter[action.target] + 1);
 		}
 		else if (t === 'bewitch') {
 			if (action.node) sim.stones[action.node] = color;
@@ -373,7 +373,7 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 			repSnap = sim.loopingSnapshot();
 			const newCount = (positionHistory[repSnap] || 0) + 1;
 			positionHistory[repSnap] = newCount;
-			if (newCount >= 5) {
+			if (newCount >= 3) {
 				sim.gameover = true;
 				sim.winner = 'blue';
 			}
@@ -460,7 +460,7 @@ function minimaxSearch(board, color, model, opts) {
 		const sim = _minimaxApplyTurn(board, turn, color);
 		if (abHistory && !sim.gameover) {
 			const k = sim.loopingSnapshot();
-			if ((abHistory[k] || 0) + 1 >= 5) {
+			if ((abHistory[k] || 0) + 1 >= 3) {
 				sim.gameover = true;
 				sim.winner = 'blue';
 			}

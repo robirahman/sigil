@@ -22,7 +22,7 @@ class GameController {
 		this.spellNamesOverride = (options && Array.isArray(options.spellNames) && options.spellNames.length === 9)
 			? options.spellNames.slice()
 			: null;
-		this.variant = (options && options.variant === 'competitive') ? 'competitive' : 'standard';
+		this.variant = normalizeVariant(options && options.variant);
 		this._gameLog = [];
 	}
 
@@ -139,11 +139,13 @@ class GameController {
 			try {
 				if (!resetThisTurn) {
 					const loopCount = board.takeSnapshot();
-					if (loopCount === 3) {
-						this.emit({ type: 'message', message: 'The game is going in a loop. If this board state repeats 2 more times, Blue will automatically win.', awaiting: null });
-					} else if (loopCount === 4) {
-						this.emit({ type: 'message', message: 'The game is going in a loop. If this board state repeats 1 more time, Blue will automatically win.', awaiting: null });
-					} else if (loopCount >= 5) {
+					// Threefold repetition: Blue wins on the 3rd occurrence (per
+					// the rulebook). Same rule in every mode — the only mode
+					// difference lives inside takeSnapshot's position key.
+					if (loopCount === 2) {
+						this.emit({ type: 'message', message: 'Repeated position: this board state has occurred twice. If it repeats once more, Blue wins by threefold repetition — play a different move to avoid it.', awaiting: null });
+					} else if (loopCount >= 3) {
+						this.emit({ type: 'message', message: 'Threefold repetition — Blue wins.', awaiting: null });
 						board.gameover = true;
 						board.winner = 'blue';
 						this.emit({ type: 'game_over', winner: 'blue', gameLog: this._gameLog });
@@ -260,7 +262,7 @@ class GameController {
 
 		// Competitive variant opening: this player has no stones yet —
 		// their entire turn is a single free blink onto any empty node.
-		if (canmove && board.variant === 'competitive' && board.totalStones[color] === 0) {
+		if (canmove && variantHasCompetitive(board.variant) && board.totalStones[color] === 0) {
 			const moveoptions = {};
 			for (const n of NODE_ORDER) {
 				if (board.stones[n] === null) moveoptions[n] = color;
@@ -624,7 +626,7 @@ class GameController {
 				board.lock[color] = spellName;
 				board.springlock[color] = null;
 			}
-			board.spellCounter[color]++;
+			if (!variantHasDeathmatch(board.variant)) board.spellCounter[color]++; // Deathmatch removes the counter
 		}
 
 		board.update();

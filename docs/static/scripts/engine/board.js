@@ -1,15 +1,10 @@
-// Recognized game variants. See SimBoard (Python) for the full rule
-// description: 'standard' = the classic two-stone opening with red on
-// a1 and blue on b1; 'competitive' = empty board, red's turn-0 is a
-// free blink to any of the 39 nodes, blue's turn-1 is a free
-// soft-blink to any of the remaining 38 empty nodes.
-const SIGIL_VARIANTS = ['standard', 'competitive'];
+// Recognized game variants and the variant helpers (variantHasCompetitive /
+// variantHasDeathmatch / composeVariant / normalizeVariant) live in
+// constants.js so the AI worker — which loads constants.js but not board.js —
+// can use them too.
 
 class SigilBoard {
 	constructor(spellNames, variant = 'standard') {
-		if (!SIGIL_VARIANTS.includes(variant)) {
-			throw new Error(`Unknown variant: ${variant}`);
-		}
 		this.stones = {};
 		for (const n of NODE_ORDER) {
 			this.stones[n] = null;
@@ -33,13 +28,13 @@ class SigilBoard {
 		this.crushedThisTurn = false;
 		this.snapshot = null;
 		this.allLoopingSnapshotCounts = {};
-		this.variant = variant;
+		this.variant = normalizeVariant(variant);
 	}
 
 	setupInitial() {
 		// Standard: red on a1, blue on b1.
 		// Competitive: empty board; first two turns place stones via blink.
-		if (this.variant !== 'competitive') {
+		if (!variantHasCompetitive(this.variant)) {
 			this.stones.a1 = 'red';
 			this.stones.b1 = 'blue';
 		}
@@ -66,7 +61,7 @@ class SigilBoard {
 		// landed. The live game-controller increments turnCounter
 		// before each turn runs, so red's opening is turn 1 and
 		// blue's is turn 2 — checking `<= 2` covers both.
-		const openingPass = (this.variant === 'competitive' && this.turnCounter <= 2);
+		const openingPass = (variantHasCompetitive(this.variant) && this.turnCounter <= 2);
 		if (!this.gameover && !openingPass) {
 			if (redCount === 0 && blueCount === 0) {
 				this.gameover = true;
@@ -147,12 +142,22 @@ class SigilBoard {
 		}
 		this.snapshot = snap;
 
-		// Looping detection
-		let loopKey = '' + this.spellCounter.red + this.spellCounter.blue;
+		// Looping detection (threefold repetition → Blue wins on the 3rd
+		// occurrence, both modes). A position is "the same" when stones, side to
+		// move (turnCounter parity), and both players' lock AND springlock match
+		// — a different locked spell, or a Seal-of-Spring spell still reusable
+		// vs. already used twice, means different options are available (real
+		// progress), so it is NOT the same position. The ONLY mode difference:
+		// non-Deathmatch ALSO factors in the spell counts (Deathmatch has none).
+		let loopKey = 'p' + (this.turnCounter % 2);
 		for (const n of NODE_ORDER) {
 			loopKey += String(this.stones[n]);
 		}
-		loopKey += String(this.lock.red) + String(this.lock.blue);
+		loopKey += '|' + String(this.lock.red) + String(this.lock.blue)
+			+ '|' + String(this.springlock.red) + String(this.springlock.blue);
+		if (!variantHasDeathmatch(this.variant)) {
+			loopKey += '|' + this.spellCounter.red + ',' + this.spellCounter.blue;
+		}
 
 		if (this.allLoopingSnapshotCounts[loopKey]) {
 			this.allLoopingSnapshotCounts[loopKey]++;
@@ -184,6 +189,11 @@ class SigilBoard {
 	checkGameOver(activeColor) {
 		// update() may already have flagged immediate-loss (zero stones).
 		if (this.gameover) return true;
+
+		// Deathmatch: the only win is elimination (handled in update()). The
+		// +3-lead and 6th-spell terminal conditions below are disabled here;
+		// threefold repetition is enforced by the controllers.
+		if (variantHasDeathmatch(this.variant)) return false;
 
 		const redTotal = this.totalStones.red;
 		const blueTotal = this.totalStones.blue + 1; // phantom stone

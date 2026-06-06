@@ -308,6 +308,14 @@
 				Empty board start; both players blink onto any node for their first move. Joiners inherit the creator's choice.
 			</small>
 
+			<label class="allow-spec">
+				<input type="checkbox" x-model="deathmatchVariant" />
+				<span>Deathmatch variant</span>
+			</label>
+			<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
+				Win only by eliminating all of your opponent's stones. Unrated. Joiners inherit the creator's choice.
+			</small>
+
 			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" x-bind:disabled="isOffline" />
@@ -339,7 +347,7 @@
 				<span class="share-link__url" x-text="shareUrl"></span>
 				<button class="share-link__btn" x-on:click="copyShareLink" x-text="shareCopied ? 'Copied!' : 'Copy link'"></button>
 			</div>
-			<p class="status-msg" x-show="competitiveVariant" style="margin-top: 8px;">Variant: <strong>Competitive</strong></p>
+			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null].filter(Boolean).join(' + ')"></strong></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
 		</div>
 
@@ -469,7 +477,7 @@
 							Blue ahead
 						</button>
 					</div>
-					<div class="dice">
+					<div class="dice" x-show="!isDeathmatch">
 						<div class="die die--red" x-bind:data-die-face="redSpellCounter">
 								<div class="die__face die__face--1"><div class="die__pip die__pip--mm"></div></div>
 								<div class="die__face die__face--2"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--tl"></div></div>
@@ -649,9 +657,11 @@
 				// Allow spectators (for created games)
 				allowSpectators: true,
 
-				// Competitive variant flag (creator-side; joiners inherit
-				// it from the room metadata via FirebaseSync).
-				competitiveVariant: localStorage.getItem('sigilVariant') === 'competitive',
+				// Variant flags (creator-side; joiners inherit from the room
+				// metadata via FirebaseSync). Competitive (start) and Deathmatch
+				// (end) are orthogonal and combine.
+				competitiveVariant: (localStorage.getItem('sigilVariant') || '').indexOf('competitive') !== -1,
+				deathmatchVariant: (localStorage.getItem('sigilVariant') || '').indexOf('deathmatch') !== -1,
 
 				// Active correspondence games
 				activeGames: [],
@@ -714,10 +724,13 @@
 							}
 							// Carry the previous game's variant into the rematch
 							// room, so "Play Again" reproduces it.
-							const rematchVariant = sessionStorage.getItem('sigil_rematch_variant');
+							const rematchVariant = sessionStorage.getItem('sigil_rematch_variant') || '';
 							sessionStorage.removeItem('sigil_rematch_variant');
-							if (rematchVariant === 'competitive') {
+							if (rematchVariant.indexOf('competitive') !== -1) {
 								this.competitiveVariant = true;
+							}
+							if (rematchVariant.indexOf('deathmatch') !== -1) {
+								this.deathmatchVariant = true;
 							}
 							rematchHandled = true;
 							this._waitForAuth().then(() => {
@@ -794,7 +807,7 @@
 								this.phase = 'waiting';
 								const spellNames = roomData.spellNames;
 								const timeControl = roomData.timeControl || { type: 'none' };
-								const variant = roomData.variant === 'competitive' ? 'competitive' : 'standard';
+								const variant = normalizeVariant(roomData.variant);
 								_firebaseSync.onOpponentJoin = () => {
 									this._startOnlineGame(spellNames, 'red', null, false, timeControl, variant);
 								};
@@ -834,7 +847,7 @@
 						reconnectSfn: null,
 						isSpectator: true,
 						timeControl: roomData.timeControl || { type: 'none' },
-						variant: roomData.variant === 'competitive' ? 'competitive' : 'standard',
+						variant: normalizeVariant(roomData.variant),
 						redDisplayName: (roomData.red && roomData.red.displayName) || 'Red',
 						blueDisplayName: (roomData.blue && roomData.blue.displayName) || 'Blue',
 						redUid: (roomData.red && roomData.red.uid) || null,
@@ -885,7 +898,9 @@
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
-						const variant = this.competitiveVariant ? 'competitive' : 'standard';
+						const variant = this.competitiveVariant
+						? (this.deathmatchVariant ? 'competitive_deathmatch' : 'competitive')
+						: (this.deathmatchVariant ? 'deathmatch' : 'standard');
 						// Persist the lobby choice across visits (mirrors the
 						// localStorage key used by the static index page).
 						try {
@@ -943,8 +958,8 @@
 					// FirebaseSync state (for paths that don't pass one
 					// explicitly, e.g. shared-link reconnect), default to
 					// 'standard'.
-					const resolvedVariant = (variant === 'competitive')
-						? 'competitive'
+					const resolvedVariant = (variant && variant !== 'standard')
+						? variant
 						: ((_firebaseSync && _firebaseSync.variant) || 'standard');
 					window._multiplayerState = {
 						sync: _firebaseSync,

@@ -27,7 +27,7 @@ class SpectatorController {
 
 	async startGame(reconnectSfn) {
 		// Variant comes from the room metadata via FirebaseSync.
-		const variant = (this.sync && this.sync.variant) || 'standard';
+		const variant = normalizeVariant(this.sync && this.sync.variant);
 		this.board = new SigilBoard(this.spellNames, variant);
 		if (reconnectSfn) {
 			this.board.loadFromSfn(reconnectSfn);
@@ -75,7 +75,12 @@ class SpectatorController {
 		while (true) {
 			try {
 				const loopCount = board.takeSnapshot();
-				if (loopCount >= 5) {
+				// Threefold repetition → Blue wins on the 3rd occurrence; notice
+				// on the 2nd so spectators see it coming.
+				if (loopCount === 2) {
+					this.emit({ type: 'message', message: 'Repeated position: this board state has occurred twice. If it repeats once more, Blue wins by threefold repetition.', awaiting: null });
+				} else if (loopCount >= 3) {
+					this.emit({ type: 'message', message: 'Threefold repetition — Blue wins.', awaiting: null });
 					board.gameover = true;
 					board.winner = 'blue';
 					this.emit({ type: 'game_over', winner: 'blue' });
@@ -130,7 +135,7 @@ class SpectatorController {
 		// Competitive opening replay: the active player's recorded turn is
 		// a free-blink (node) followed by a 'pass'. Consume both from the
 		// Firebase queue and apply the stone placement locally.
-		if (canmove && board.variant === 'competitive' && board.totalStones[color] === 0) {
+		if (canmove && variantHasCompetitive(board.variant) && board.totalStones[color] === 0) {
 			const node = await this.getInput({
 				type: 'message', message: 'Waiting for opening blink...',
 				awaiting: 'node', actionlist: [], moveoptions: {},
@@ -323,7 +328,7 @@ class SpectatorController {
 		if (!info.ischarm) {
 			if (board.lock[color] === spellName) { board.springlock[color] = spellName; }
 			else { board.lock[color] = spellName; board.springlock[color] = null; }
-			board.spellCounter[color]++;
+			if (!variantHasDeathmatch(board.variant)) board.spellCounter[color]++; // Deathmatch removes the counter
 		}
 		board.update(); this.emit(board.getBoardStatePayload());
 	}

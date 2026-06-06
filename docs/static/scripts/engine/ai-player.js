@@ -408,7 +408,13 @@ async function applyAITurn(board, turn, color, emit) {
 			if (pushResult.crushed) {
 				emit({ type: 'crush_animation', crushed_color: enemy, node: action.node });
 			} else if (pushResult.options.length > 0) {
-				const dest = pushResult.options[0];
+				// Honor the destination the search chose (action.pushed_to);
+				// fall back to the default nearest-empty cell otherwise. The
+				// AI deliberately picks a push target (e.g. into a gap to
+				// merge enemy groups), so replaying options[0] would discard
+				// the very tactic the search found.
+				const dest = (action.pushed_to && pushResult.options.includes(action.pushed_to))
+					? action.pushed_to : pushResult.options[0];
 				board.stones[dest] = enemy;
 				emit({ type: 'push_animation', pushed_color: enemy, starting_node: action.node, ending_node: dest });
 			}
@@ -477,7 +483,7 @@ async function applyAITurn(board, turn, color, emit) {
 					board.lock[color] = spellName;
 					board.springlock[color] = null;
 				}
-				board.spellCounter[color]++;
+				if (!variantHasDeathmatch(board.variant)) board.spellCounter[color]++; // Deathmatch removes the counter
 			}
 			board.update();
 			emit(board.getBoardStatePayload());

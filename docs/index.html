@@ -182,7 +182,11 @@
 						var modeLabel = s.mode === 'local_1v1'
 							? 'Local 1v1'
 							: ('vs ' + (AI_LABELS[s.aiMode] || s.aiMode || 'AI'));
-						var variantTag = s.variant === 'competitive' ? ' · Competitive' : '';
+						var _vs = s.variant || 'standard';
+						var _vparts = [];
+						if (_vs.indexOf('competitive') !== -1) _vparts.push('Competitive');
+						if (_vs.indexOf('deathmatch') !== -1) _vparts.push('Deathmatch');
+						var variantTag = _vparts.length ? (' · ' + _vparts.join(' + ')) : '';
 						var card = document.createElement('div');
 						card.className = 'resume-card';
 						var a = document.createElement('a');
@@ -301,37 +305,56 @@
 				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
 					Empty board start; both players blink onto any node for their first move.
 				</small>
+				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
+					<input type="checkbox" id="variant-deathmatch" />
+					<span>Deathmatch variant</span>
+				</label>
+				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
+					Win only by eliminating all of your opponent's stones. Unrated.
+				</small>
 			</div>
 			<script>
 				(function() {
-					var cb = document.getElementById('variant-competitive');
-					var stored = localStorage.getItem('sigilVariant') === 'competitive';
-					cb.checked = stored;
-
+					var comp = document.getElementById('variant-competitive');
+					var dm = document.getElementById('variant-deathmatch');
+					// Competitive (start) and Deathmatch (end) are orthogonal and
+					// combine into one stored string: 'standard', 'competitive',
+					// 'deathmatch', or 'competitive_deathmatch'.
+					var stored = localStorage.getItem('sigilVariant') || 'standard';
+					comp.checked = stored.indexOf('competitive') !== -1;
+					dm.checked = stored.indexOf('deathmatch') !== -1;
+					function compose() {
+						var c = comp.checked, d = dm.checked;
+						if (c && d) return 'competitive_deathmatch';
+						if (c) return 'competitive';
+						if (d) return 'deathmatch';
+						return 'standard';
+					}
 					// Mode buttons whose href points at game.html (not multiplayer,
-					// account, etc.). Toggling the checkbox rewrites these hrefs
-					// to add or strip the variant query param.
-					function applyVariant(checked) {
+					// account, etc.). Toggling rewrites these hrefs to add or strip
+					// the variant query param.
+					function applyVariant(variant) {
 						var links = document.querySelectorAll('a.mode-button');
 						links.forEach(function(a) {
 							var href = a.getAttribute('href') || '';
-							// Only touch local-game links; leave multiplayer / account / pdf alone.
 							if (href.indexOf('game.html') !== 0) return;
-							// Strip any existing variant param first.
 							href = href.replace(/([?&])variant=[^&]*(&|$)/, function(_m, pre, post) {
 								return post === '&' ? pre : (pre === '?' ? '' : '');
 							});
-							if (checked) {
-								href += (href.indexOf('?') >= 0 ? '&' : '?') + 'variant=competitive';
+							if (variant !== 'standard') {
+								href += (href.indexOf('?') >= 0 ? '&' : '?') + 'variant=' + variant;
 							}
 							a.setAttribute('href', href);
 						});
 					}
-					applyVariant(cb.checked);
-					cb.addEventListener('change', function() {
-						localStorage.setItem('sigilVariant', cb.checked ? 'competitive' : 'standard');
-						applyVariant(cb.checked);
-					});
+					function onChange() {
+						var v = compose();
+						localStorage.setItem('sigilVariant', v);
+						applyVariant(v);
+					}
+					applyVariant(compose());
+					comp.addEventListener('change', onChange);
+					dm.addEventListener('change', onChange);
 				})();
 			</script>
 			<div style="margin-top: 20px;">

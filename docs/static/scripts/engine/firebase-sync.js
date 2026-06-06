@@ -68,7 +68,7 @@ class FirebaseSync {
 		this.redDisplayName = userInfo?.displayName || 'Guest';
 		this.timeControl = timeControl || { type: 'none' };
 		this.allowSpectators = allowSpectators !== false;
-		this.variant = variant === 'competitive' ? 'competitive' : 'standard';
+		this.variant = normalizeVariant(variant);
 
 		const roomData = {
 			spellNames: spellNames,
@@ -120,7 +120,7 @@ class FirebaseSync {
 		// Variant is room-scoped: the joiner inherits whatever the
 		// creator picked. Default 'standard' for older rooms whose
 		// data was written before the field existed.
-		this.variant = data.variant === 'competitive' ? 'competitive' : 'standard';
+		this.variant = normalizeVariant(data.variant);
 
 		// Store player info from room data
 		if (data.red) {
@@ -142,10 +142,12 @@ class FirebaseSync {
 			await roomRef.child('status').set('playing');
 			roomRef.child('blue/connected').onDisconnect().set(false);
 
-			// Determine if ranked: both players authenticated, and not a Panda
-			// game (the unofficial Panda expansion is always unrated).
+			// Determine if ranked: both players authenticated, not a Panda
+			// game (the unofficial Panda expansion is always unrated), and not
+			// a Deathmatch game (always unrated).
 			const hasPanda = (data.spellNames || []).some(s => isPandaSpell(s));
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasPanda) {
+			const isDeathmatch = variantHasDeathmatch(data.variant);
+			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasPanda && !isDeathmatch) {
 				this.ranked = true;
 				await roomRef.child('ranked').set(true);
 			}
@@ -508,7 +510,7 @@ class FirebaseSync {
 		this.redDisplayName = userInfo?.displayName || (roomData.red && roomData.red.displayName) || 'Guest';
 		this.timeControl = roomData.timeControl || { type: 'none' };
 		this.allowSpectators = roomData.allowSpectators !== false;
-		this.variant = roomData.variant === 'competitive' ? 'competitive' : 'standard';
+		this.variant = normalizeVariant(roomData.variant);
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
@@ -596,8 +598,8 @@ class FirebaseSync {
 		gameRecord.ranked = this.ranked || false;
 		// Backfill the variant if the caller didn't set it (older builds
 		// / edge paths). Treats the room metadata as the source of truth.
-		if (gameRecord.variant !== 'competitive' && gameRecord.variant !== 'standard') {
-			gameRecord.variant = this.variant === 'competitive' ? 'competitive' : 'standard';
+		if (!SIGIL_VARIANTS.includes(gameRecord.variant)) {
+			gameRecord.variant = normalizeVariant(this.variant);
 		}
 		// Merge any room-level annotations (written live by either player) into
 		// the game record before pushing.
@@ -725,7 +727,7 @@ class FirebaseSync {
 			ranked: !!ranked,
 			timeControl: timeControl || { type: 'none' },
 			allowSpectators: allowSpectators !== false,
-			variant: variant === 'competitive' ? 'competitive' : 'standard',
+			variant: normalizeVariant(variant),
 		};
 		await this.db.ref('rooms/' + code).set(roomData);
 		return code;

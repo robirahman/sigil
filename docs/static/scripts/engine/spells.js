@@ -1130,7 +1130,7 @@ const SpellResolvers = {
 		// Advance the enemy lock (spell counter). Safe to push to 6: the
 		// counter-based loss only fires via checkGameOver(enemy) on the
 		// enemy's own turn, never on the caster's.
-		board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
+		if (!variantHasDeathmatch(board.variant)) board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
 		emit({ type: 'message', message: 'Enemy lock advanced by 1.', awaiting: null });
 		board.update();
 		emit(board.getBoardStatePayload());
@@ -1190,7 +1190,7 @@ const SpellResolvers = {
 		} else {
 			emit({ type: 'message', message: 'No enemy stones to convert.', awaiting: null });
 		}
-		board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
+		if (!variantHasDeathmatch(board.variant)) board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
 		emit({ type: 'message', message: 'Enemy lock advanced by 1.', awaiting: null });
 		board.update();
 		emit(board.getBoardStatePayload());

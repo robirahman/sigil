@@ -44,7 +44,7 @@ class SimBoard {
 		this.totalStones = { red: 0, blue: 0 };
 		this.mana = { red: 0, blue: 0 };
 		this.chargedSpells = { red: [], blue: [] };
-		this.variant = variant;
+		this.variant = normalizeVariant(variant);
 		// Turn-local: set true when a push crushes an enemy stone this turn.
 		// Read by Blood Saplings; reset at each turn's start by the enumerator.
 		this.crushedThisTurn = false;
@@ -105,7 +105,7 @@ class SimBoard {
 		// turns; it's also safe under the 0-indexed test convention
 		// because by the time turn 2 starts, both players already have
 		// at least one stone from their opening blinks.
-		const openingPass = (this.variant === 'competitive' && this.turnCounter <= 2);
+		const openingPass = (variantHasCompetitive(this.variant) && this.turnCounter <= 2);
 		if (!this.gameover && !openingPass) {
 			if (rc === 0 && bc === 0) {
 				this.gameover = true;
@@ -147,18 +147,32 @@ class SimBoard {
 	 * the threefold-repetition rule (5x occurrences -> blue wins).
 	 */
 	loopingSnapshot() {
-		let key = '' + this.spellCounter.red + '|' + this.spellCounter.blue + '|';
+		// A position is "the same" when stones, side to move, and both players'
+		// lock AND springlock match (springlock distinguishes a Seal-of-Spring
+		// spell still reusable once more from one already used twice). The ONLY
+		// mode difference: non-Deathmatch ALSO factors in the spell counts.
+		// Mirrors board.js takeSnapshot; the rule ends the game on the 3rd
+		// occurrence in both modes.
+		let key = 'p' + (this.turnCounter % 2) + '|';
 		for (const n of NODE_ORDER) {
 			const s = this.stones[n];
 			key += s === null ? '-' : s[0];
 		}
-		key += '|' + (this.lock.red || 'None') + '|' + (this.lock.blue || 'None');
+		key += '|' + (this.lock.red || 'None') + '|' + (this.lock.blue || 'None')
+			+ '|' + (this.springlock.red || 'None') + '|' + (this.springlock.blue || 'None');
+		if (!variantHasDeathmatch(this.variant)) {
+			key += '|' + this.spellCounter.red + '|' + this.spellCounter.blue;
+		}
 		return key;
 	}
 
 	checkGameOver(activeColor) {
 		// update() may already have flagged immediate-loss (zero stones).
 		if (this.gameover) return true;
+
+		// Deathmatch: only elimination wins (handled in update()); the
+		// +3-lead and 6th-spell conditions below are disabled.
+		if (variantHasDeathmatch(this.variant)) return false;
 
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
 		if (rt > bt + 2) { this.gameover = true; this.winner = 'red'; return true; }
@@ -261,7 +275,48 @@ class SimBoard {
 		return this.escapeDistance(nodeName, defender, 39) >= 39;
 	}
 
-	_pushEnemy(nodeName, color) {
+	/**
+	 * Non-mutating: the candidate push destinations (nearest reachable
+	 * empty cells, tie-broken in BFS order) for a hard-move onto nodeName.
+	 * Same chain logic as _pushEnemy but writes nothing. Empty array means
+	 * the defender would be crushed. The caller (enumerator) uses this to
+	 * branch over *which* empty cell the pushed stone lands on — a choice
+	 * the live engine offers the player (spells.js doPushEnemy) but the AI
+	 * previously collapsed to options[0].
+	 */
+	_pushDestinations(nodeName, color) {
+		const enemy = this._enemy(color);
+		const queue = [];
+		for (const nb of ADJACENCY[nodeName]) queue.push([nb, 1]);
+		const visited = new Set([nodeName]);
+		const options = [];
+		let shortest = null;
+		while (queue.length > 0) {
+			const [nn, dist] = queue.shift();
+			if (visited.has(nn)) continue;
+			visited.add(nn);
+			if (shortest !== null && dist > shortest) break;
+			const s = this.stones[nn];
+			if (s === color) continue;
+			else if (s === enemy) {
+				for (const nb of ADJACENCY[nn]) {
+					if (!visited.has(nb)) queue.push([nb, dist + 1]);
+				}
+			} else {
+				options.push(nn);
+				shortest = dist;
+			}
+		}
+		return options;
+	}
+
+	/**
+	 * Push the enemy stone at nodeName. `destOverride`, when it names one of
+	 * the legal destinations, sends the stone there instead of the default
+	 * options[0] — letting the search model the player's push-destination
+	 * choice. Returns the chosen destination, or 'X' on crush.
+	 */
+	_pushEnemy(nodeName, color, destOverride) {
 		const enemy = this._enemy(color);
 		this.stones[nodeName] = color;
 		const queue = [];
@@ -290,7 +345,8 @@ class SimBoard {
 			this.crushedThisTurn = true;
 			return 'X';
 		}
-		const dest = options[0];
+		const dest = (destOverride != null && options.includes(destOverride))
+			? destOverride : options[0];
 		this.stones[dest] = enemy;
 		return dest;
 	}
@@ -300,17 +356,17 @@ class SimBoard {
 		return new SimAction('move', { node });
 	}
 
-	_doHardMove(color, node) {
-		const dest = this._pushEnemy(node, color);
+	_doHardMove(color, node, destOverride) {
+		const dest = this._pushEnemy(node, color, destOverride);
 		return new SimAction('hard_move', { node, pushed_to: dest });
 	}
 
-	_doMove(color, node, isBlink) {
+	_doMove(color, node, isBlink, destOverride) {
 		if (this.stones[node] === null) {
 			if (isBlink) { this.stones[node] = color; return new SimAction('blink', { node }); }
 			return this._doSoftMove(color, node);
 		} else if (this.stones[node] === this._enemy(color)) {
-			const act = this._doHardMove(color, node);
+			const act = this._doHardMove(color, node, destOverride);
 			if (isBlink) act.type = 'blink';
 			return act;
 		}
@@ -325,6 +381,12 @@ class SimBoard {
 		const enemy = this._enemy(color);
 		const rt = info.resolve;
 		const overrides = targetOverrides || {};
+		// Ordered queue of push destinations, consumed (in resolution order)
+		// one per push this spell performs. Empty entries fall back to the
+		// default nearest-empty cell. Lets the enumerator branch a spell's
+		// push onto a chosen cell (e.g. pushing into a gap to merge enemy
+		// groups), the same choice the live engine offers the player.
+		const pushDests = (overrides.push_dests || []).slice();
 
 		if (rt === 'soft_moves') {
 			const overrideTargets = (overrides.soft_move_targets || []).slice();
@@ -351,7 +413,7 @@ class SimBoard {
 					if (targets.includes(cand)) chosen = cand;
 				}
 				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen));
+				actions.push(this._doHardMove(color, chosen, pushDests.shift()));
 				this.update();
 			}
 		} else if (rt === 'fireblast') {
@@ -499,7 +561,7 @@ class SimBoard {
 			}
 			if (chosen) {
 				if (this.stones[chosen] === enemy) {
-					const dest = this._pushEnemy(chosen, color);
+					const dest = this._pushEnemy(chosen, color, pushDests.shift());
 					actions.push(new SimAction('blink', { node: chosen, pushed_to: dest }));
 				} else {
 					this.stones[chosen] = color;
@@ -528,7 +590,7 @@ class SimBoard {
 			if (!target && targets.length) target = targets[0];
 			if (target) {
 				if (this.stones[target] === enemy) {
-					const dest = this._pushEnemy(target, color);
+					const dest = this._pushEnemy(target, color, pushDests.shift());
 					actions.push(new SimAction('blink', { node: target, pushed_to: dest }));
 				} else {
 					this.stones[target] = color;
@@ -583,7 +645,7 @@ class SimBoard {
 					if (targets.includes(cand)) chosen = cand;
 				}
 				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen));
+				actions.push(this._doHardMove(color, chosen, pushDests.shift()));
 				this.update();
 			}
 		} else if (rt === 'gust') {
@@ -694,7 +756,7 @@ class SimBoard {
 					if (targets.includes(cand)) chosen = cand;
 				}
 				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen));
+				actions.push(this._doHardMove(color, chosen, pushDests.shift()));
 				this.update();
 			}
 		} else if (rt === 'azimuth') {
@@ -827,7 +889,7 @@ class SimBoard {
 				const charmNode = POSITIONS[opp.charm][0];
 				if (this.stones[charmNode] !== color) {
 					if (this.stones[charmNode] === enemy) {
-						const dest = this._pushEnemy(charmNode, color);
+						const dest = this._pushEnemy(charmNode, color, pushDests.shift());
 						actions.push(new SimAction('blink', { node: charmNode, pushed_to: dest }));
 					} else {
 						this.stones[charmNode] = color;
@@ -842,7 +904,7 @@ class SimBoard {
 					}
 					if (!target) break;
 					if (this.stones[target] === enemy) {
-						const dest = this._pushEnemy(target, color);
+						const dest = this._pushEnemy(target, color, pushDests.shift());
 						actions.push(new SimAction('blink', { node: target, pushed_to: dest }));
 					} else {
 						this.stones[target] = color;
@@ -900,7 +962,7 @@ class SimBoard {
 				actions.push(this._doMove(color, chosen, false));
 				this.update();
 			}
-			this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
+			if (!variantHasDeathmatch(this.variant)) this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
 			actions.push(new SimAction('lock_bump', { target: enemy }));
 			this.update();
 		} else if (rt === 'free_spirit') {
@@ -924,7 +986,7 @@ class SimBoard {
 					actions.push(new SimAction('bewitch', { node: target }));
 					this.update();
 				}
-				this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
+				if (!variantHasDeathmatch(this.variant)) this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
 				actions.push(new SimAction('lock_bump', { target: enemy }));
 				this.update();
 			}
@@ -940,7 +1002,7 @@ class SimBoard {
 					if (targets.includes(cand)) chosen = cand;
 				}
 				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen));
+				actions.push(this._doHardMove(color, chosen, pushDests.shift()));
 				this.update();
 			}
 		} else if (rt === 'choke') {
@@ -975,7 +1037,7 @@ class SimBoard {
 					if (this.stones[cand] === enemy) chosen = cand;
 				}
 				if (chosen === null) chosen = enemies[0];
-				const dest = this._pushEnemy(chosen, color);
+				const dest = this._pushEnemy(chosen, color, pushDests.shift());
 				actions.push(new SimAction('blink', { node: chosen, pushed_to: dest }));
 				this.update();
 			}
@@ -1030,7 +1092,7 @@ class SimBoard {
 		if (!info.ischarm) {
 			if (this.lock[color] === spellName) this.springlock[color] = spellName;
 			else { this.lock[color] = spellName; this.springlock[color] = null; }
-			this.spellCounter[color]++;
+			if (!variantHasDeathmatch(this.variant)) this.spellCounter[color]++;
 		}
 
 		return [new SimAction('cast', { spell: spellName, kept }), ...resolveActions];
@@ -1158,7 +1220,7 @@ class SimBoard {
 		// no dash. The bound matches the openingPass gate in update():
 		// `<= 2` covers turns 1+2 under the 1-indexed live convention
 		// and turns 0+1+2 under the 0-indexed test convention.
-		if (this.variant === 'competitive' && this.turnCounter <= 2) {
+		if (variantHasCompetitive(this.variant) && this.turnCounter <= 2) {
 			for (const n of NODE_ORDER) {
 				if (this.stones[n] !== null) continue;
 				yield new SimTurn([
@@ -1203,10 +1265,10 @@ function applySimTurn(board, turn, color) {
 		if (action.type === 'move') {
 			board.stones[action.node] = color;
 		} else if (action.type === 'hard_move') {
-			board._pushEnemy(action.node, color);
+			board._pushEnemy(action.node, color, action.pushed_to);
 		} else if (action.type === 'blink') {
 			if (board.stones[action.node] === enemy) {
-				board._pushEnemy(action.node, color);
+				board._pushEnemy(action.node, color, action.pushed_to);
 			} else {
 				board.stones[action.node] = color;
 			}
@@ -1221,7 +1283,7 @@ function applySimTurn(board, turn, color) {
 			if (info && !info.ischarm) {
 				if (board.lock[color] === action.spell) board.springlock[color] = action.spell;
 				else { board.lock[color] = action.spell; board.springlock[color] = null; }
-				board.spellCounter[color]++;
+				if (!variantHasDeathmatch(board.variant)) board.spellCounter[color]++;
 			}
 		} else if (action.type === 'dash' || action.type === 'dash_lightning') {
 			if (action.sacrificed) {
@@ -1245,7 +1307,7 @@ function applySimTurn(board, turn, color) {
 			if (action.node2) board.stones[action.node2] = action.val2;
 		}
 		else if (action.type === 'lock_bump') {
-			if (action.target) board.spellCounter[action.target] = Math.min(6, board.spellCounter[action.target] + 1);
+			if (action.target && !variantHasDeathmatch(board.variant)) board.spellCounter[action.target] = Math.min(6, board.spellCounter[action.target] + 1);
 		}
 		else if (action.type === 'bewitch') {
 			if (action.node) board.stones[action.node] = color;

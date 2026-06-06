@@ -188,7 +188,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			repSnap = sim.loopingSnapshot();
 			const newCount = (positionHistory[repSnap] || 0) + 1;
 			positionHistory[repSnap] = newCount;
-			if (newCount >= 5) {
+			if (newCount >= 3) {
 				sim.gameover = true;
 				sim.winner = 'blue';
 			}
@@ -285,7 +285,7 @@ async function cavemanSearch(board, color, opts) {
 		const sim = _minimaxApplyTurn(board, turn, color);
 		if (abHistory && !sim.gameover) {
 			const k = sim.loopingSnapshot();
-			if ((abHistory[k] || 0) + 1 >= 5) {
+			if ((abHistory[k] || 0) + 1 >= 3) {
 				sim.gameover = true;
 				sim.winner = 'blue';
 			}

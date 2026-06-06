@@ -195,6 +195,34 @@ function isPandaSpell(name) {
 	return PANDA_SPELL_NAMES.has(name);
 }
 
+// Game variants. Two orthogonal dimensions encoded in a single string:
+//   competitive — empty-board opening (both players blink onto any node for
+//                 their first move) instead of the classic a1/b1 stones.
+//   deathmatch  — win ONLY by eliminating all opponent stones; the +3-lead and
+//                 6th-spell terminal conditions are disabled (threefold board
+//                 repetition still ends the game as a Blue win, to guarantee
+//                 termination). Spell counters are removed in this mode.
+// They combine: 'competitive_deathmatch'. Kept as one string so it rides the
+// existing variant plumbing (SFN, Firebase, URL, localStorage) unchanged.
+const SIGIL_VARIANTS = ['standard', 'competitive', 'deathmatch', 'competitive_deathmatch'];
+function variantHasCompetitive(v) {
+	return typeof v === 'string' && v.indexOf('competitive') !== -1;
+}
+function variantHasDeathmatch(v) {
+	return typeof v === 'string' && v.indexOf('deathmatch') !== -1;
+}
+function composeVariant(competitive, deathmatch) {
+	if (competitive && deathmatch) return 'competitive_deathmatch';
+	if (competitive) return 'competitive';
+	if (deathmatch) return 'deathmatch';
+	return 'standard';
+}
+// Canonicalize any input (handles legacy strings, wrong order, junk) to one of
+// the four SIGIL_VARIANTS values.
+function normalizeVariant(v) {
+	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v));
+}
+
 // Stone-spot positions (fractions of the square spell image), measured from the
 // core spell cards which bake white circles at these spots. Expansion spell art
 // is full-bleed with no spots, so the game overlays white circles here instead.
