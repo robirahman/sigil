@@ -867,7 +867,17 @@ document.addEventListener('alpine:init', () => {
 					if (!_aiAuthManager || !_aiAuthManager.showAiThinkReport) return;
 					const c = payload.color ? payload.color[0].toUpperCase() + payload.color.slice(1) : 'AI';
 					const seconds = ((payload.timeMs || 0) / 1000).toFixed(1);
-					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes`);
+					// The search returns its evaluation from the moving AI's
+					// perspective (positive = the AI is favored). Large magnitudes
+					// (±100) are the forced win/loss sentinels.
+					let evalStr = '';
+					if (typeof payload.score === 'number' && isFinite(payload.score)) {
+						const s = payload.score;
+						const shown = Math.abs(s) >= 99 ? (s > 0 ? 'win' : 'loss') : s.toFixed(3);
+						const signed = (typeof shown === 'string' && shown !== 'win' && shown !== 'loss' && s >= 0) ? '+' + shown : shown;
+						evalStr = `, eval ${signed}`;
+					}
+					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${evalStr}`);
 				}
 
 				function handleMessageEvent(payload) {
