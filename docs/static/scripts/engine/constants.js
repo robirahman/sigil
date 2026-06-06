@@ -115,7 +115,7 @@ const SPELL_TEXTS = {
 	Syzygy:            'Make 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell.',
 	Charge:            'Make 1 move into a 3- or 5-node spell.',
 	Fury:              'Sacrifice 1 stone, then make 3 hard moves.',
-	Erupt:             'Make 2 moves into one spell, then 2 moves into another spell.',
+	Erupt:             'Make 1 move into each 3- and 5-node spell, including this one.',
 	Thunder:           'Pick up every enemy stone touching one of your stones, then place them on any empty nodes.',
 	Storm_Front:       'Destroy any 2 enemy stones of your choice.',
 	Hurricane:         'Destroy the smallest contiguous group of enemy stones. If tied, you choose which.',

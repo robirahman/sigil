@@ -790,81 +790,38 @@ const SpellResolvers = {
 		}
 	},
 
-	// --- Erupt (inferno ritual): 2 moves into one spell, then 2 into another ---
+	// --- Erupt (inferno ritual): 1 move into each 3- and 5-node spell ---
 	async erupt(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
-
-		// Resolve one move into `node` (push if enemy, else place).
-		const doMoveInto = async (node) => {
-			if (board.stones[node] === enemy) {
-				await doPushEnemy(board, node, color, getInput, emit);
-			} else {
-				board.stones[node] = color;
-				emit({ type: 'new_stone_animation', color, node });
-				board.lastPlay = node;
-				board.lastPlayer = color;
-				board.update();
-				emit(board.getBoardStatePayload());
-			}
-		};
-
-		// Targets across spells not yet used by Erupt, optionally restricted to
-		// one spell index.
-		const targetsFor = (usedSpells, onlySpell) => {
+		// One non-blink move (place on an adjacent empty node, or push an
+		// adjacent enemy) into each 3- and 5-node spell — positions 1..6,
+		// INCLUDING Erupt's own slot. A spell is eligible only if you're
+		// adjacent to one of its nodes that you don't already occupy.
+		for (let i = 1; i <= 6; i++) {
 			const moves = getAllMoveTargets(board, color);
-			const out = {};
-			for (const node of Object.keys(moves)) {
-				const idx = spellPositionOfNode(node);
-				if (idx === null) continue;
-				if (onlySpell != null && idx !== onlySpell) continue;
-				if (onlySpell == null && usedSpells.has(idx)) continue;
-				out[node] = color;
+			const targets = {};
+			for (const n of POSITIONS[i]) {
+				if (moves[n]) targets[n] = color;
 			}
-			return out;
-		};
-
-		const usedSpells = new Set();
-		for (let group = 0; group < 2; group++) {
-			// First move of the pair: any unused spell with a legal move fixes
-			// the spell for the second move.
-			const firstTargets = targetsFor(usedSpells, null);
-			if (Object.keys(firstTargets).length === 0) {
-				emit({ type: 'message', message: 'No legal move into a remaining spell; Erupt ends early.', awaiting: null });
-				return;
-			}
-			let chosenSpell = null;
+			if (Object.keys(targets).length === 0) continue; // can't reach this spell
 			while (true) {
 				const resp = await getInput({
 					type: 'message',
-					message: group === 0
-						? 'Make 2 moves into one spell. Pick the first.'
-						: 'Make 2 moves into another spell. Pick the first.',
+					message: `Make 1 move into this 3- or 5-node spell (${i}/6).`,
 					awaiting: 'node',
-					moveoptions: firstTargets,
+					moveoptions: targets,
 				});
-				if (!firstTargets[resp]) continue;
-				chosenSpell = spellPositionOfNode(resp);
-				usedSpells.add(chosenSpell);
-				await doMoveInto(resp);
-				break;
-			}
-			if (board.gameover) return;
-
-			// Second move of the pair: restricted to the chosen spell.
-			const secondTargets = targetsFor(usedSpells, chosenSpell);
-			if (Object.keys(secondTargets).length === 0) {
-				emit({ type: 'message', message: 'No legal second move into that spell.', awaiting: null });
-				continue;
-			}
-			while (true) {
-				const resp = await getInput({
-					type: 'message',
-					message: 'Make the second move into the same spell.',
-					awaiting: 'node',
-					moveoptions: secondTargets,
-				});
-				if (!secondTargets[resp]) continue;
-				await doMoveInto(resp);
+				if (!targets[resp]) continue;
+				if (board.stones[resp] === enemy) {
+					await doPushEnemy(board, resp, color, getInput, emit);
+				} else {
+					board.stones[resp] = color;
+					emit({ type: 'new_stone_animation', color, node: resp });
+					board.lastPlay = resp;
+					board.lastPlayer = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+				}
 				break;
 			}
 			if (board.gameover) return;

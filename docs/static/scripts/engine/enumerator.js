@@ -37,7 +37,6 @@ const ENUM_CAPS = {
 	fury_sac: 6,
 	fury_target: 4,
 	charge: 6,
-	erupt: 6,
 	storm_front: 12,
 	hurricane: 4,
 	soft_hard_soft: 4,
@@ -262,13 +261,6 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < targets.length && i < caps.charge; i++) {
 			out.push({ charge_target: targets[i] });
 		}
-	} else if (rt === 'erupt') {
-		// Vary which spell Erupt starts in; the sim greedily completes the
-		// 2+2 resolution from each first-move candidate.
-		const targets = board._allMoveable(color);
-		for (let i = 0; i < targets.length && i < caps.erupt; i++) {
-			out.push({ erupt_first_targets: [targets[i]] });
-		}
 	} else if (rt === 'storm_front') {
 		const enemy = board._enemy(color);
 		const enemies = NODE_ORDER.filter(n => board.stones[n] === enemy);
@@ -369,8 +361,9 @@ function _spellOverrides(board, color, spellName, caps) {
 			out.push({ hard_move_targets: [ranked[i]] });
 		}
 	}
-	// soft_moves, hail_storm, thunder: greedy is fine. Thunder's pickup
-	// is forced and placement combinatorics blow up — defer to follow-up.
+	// soft_moves, hail_storm, thunder, blossom, erupt: greedy is fine.
+	// Thunder's pickup is forced and placement combinatorics blow up — defer
+	// to follow-up.
 	return out;
 }
 
