@@ -413,7 +413,241 @@ function _spellOverrides(board, color, spellName, caps) {
 	return out;
 }
 
+// ---------------------------------------------------------------------------
+// Complete (caps.__full) cast enumeration.
+//
+// The capped path above emits one override DICT per choice point, branching
+// only the FIRST sub-action of multi-step spells. For Caveman we need EVERY
+// resolution. Two wrinkles make this non-trivial:
+//   1. Multi-step spells (Carnage's 3 pushes, Fury, soft+hard chains, …): each
+//      step's legal options depend on the prior steps, so we recurse on board
+//      copies, applying one sub-action at a time via the engine's own
+//      primitives (_doHardMove / _doSoftMove / _pushEnemy).
+//   2. Resolution runs on the POST-cast board (position cleared + refilled), so
+//      sequences must be enumerated on `_postCastBoard`, not the pre-cast board,
+//      or the recorded targets won't replay. The refill keep-subset is itself a
+//      real choice (the "keep-B2" Carnage trap), so we branch it too.
+// Each branch's recorded override is replayed by a real `_castSpell`, keeping
+// resolution in one place (sim-board.js) as the single source of truth.
+
+function _combosK(arr, k) {
+	const out = [];
+	const rec = (start, pick) => {
+		if (pick.length === k) { out.push(pick.slice()); return; }
+		for (let i = start; i < arr.length; i++) { pick.push(arr[i]); rec(i + 1, pick); pick.pop(); }
+	};
+	rec(0, []);
+	return out;
+}
+
+// Per-cast sequence budget for the FULL multi-step enumerators. A high-count
+// push spell (Carnage = 4 pushes) branched per-step over every target × push
+// destination is combinatorial (targets^count), and that cost multiplies
+// against the move/dash phases — uncapped it exhausts memory. This is the
+// documented "practical bound": each cast yields at most this many resolution
+// sequences, and because targets are visited in RANKED order (crushes /
+// cluster attacks first) the bound keeps the strongest lines. It only bites on
+// positions with many simultaneously-pushable enemies; ordinary positions stay
+// exhaustive. `_lastSeqBudgetHit` records when it triggered (surfaced by the
+// arena / tests).
+const _FULL_SEQ_BUDGET = 64;
+let _lastSeqBudgetHit = false;
+
+// Hard ceiling on turns generated for a single node. Complete enumeration is
+// exponential — a position with Carnage charged and many pushable enemies,
+// crossed with the move/dash phases, can exceed half a million turns, which
+// can't even be held in memory, let alone searched. This is the OOM/​hang
+// backstop (the move phase is generated first, so the kept turns are the
+// non-dash lines). It only triggers in spell-saturated positions; ordinary
+// positions stay fully exhaustive. `_lastTurnCeilingHit` is surfaced by the
+// arena / tests so a truncated node is never silently mistaken for complete.
+const _MAX_TURNS_PER_NODE = 20000;
+let _lastTurnCeilingHit = false;
+
+// All length-`count` hard-move sequences from `board`: each step branches every
+// target (ranked) × every push destination, bounded by `budget`. Returns
+// [{hard_move_targets, push_dests, board}].
+function _hardMoveSeqs(board, color, count, budget) {
+	if (count <= 0 || board._hardMoveable(color).length === 0) {
+		if (budget.left <= 0) { _lastSeqBudgetHit = true; return []; }
+		budget.left--;
+		return [{ hard_move_targets: [], push_dests: [], board }];
+	}
+	const targets = _rankHardMoveTargets(board, color, board._hardMoveable(color));
+	const out = [];
+	for (const t of targets) {
+		if (budget.left <= 0) { _lastSeqBudgetHit = true; break; }
+		const dests = board._pushDestinations(t, color);
+		const destChoices = dests.length > 1 ? dests : [null];
+		for (const d of destChoices) {
+			if (budget.left <= 0) { _lastSeqBudgetHit = true; break; }
+			const b2 = board.copy();
+			b2._doHardMove(color, t, d == null ? undefined : d);
+			b2.update();
+			for (const rest of _hardMoveSeqs(b2, color, count - 1, budget)) {
+				out.push({
+					hard_move_targets: [t, ...rest.hard_move_targets],
+					push_dests: [d, ...rest.push_dests],
+					board: rest.board,
+				});
+			}
+		}
+	}
+	return out;
+}
+
+// All length-`count` soft-move sequences (every empty target adjacent to own,
+// including position nodes), bounded by `budget`. Returns [{soft_move_targets, board}].
+function _softMoveSeqs(board, color, count, budget) {
+	if (count <= 0 || board._softMoveable(color).length === 0) {
+		if (budget.left <= 0) { _lastSeqBudgetHit = true; return []; }
+		budget.left--;
+		return [{ soft_move_targets: [], board }];
+	}
+	const targets = board._softMoveable(color);
+	const out = [];
+	for (const t of targets) {
+		if (budget.left <= 0) { _lastSeqBudgetHit = true; break; }
+		const b2 = board.copy();
+		b2._doSoftMove(color, t);
+		b2.update();
+		for (const rest of _softMoveSeqs(b2, color, count - 1, budget)) {
+			out.push({ soft_move_targets: [t, ...rest.soft_move_targets], board: rest.board });
+		}
+	}
+	return out;
+}
+
+// All length-`count` enemy-push sequences for Moth Plague: each step branches
+// every enemy stone × every push destination, bounded by `budget`.
+function _mothSeqs(board, color, count, budget) {
+	const enemy = board._enemy(color);
+	const foes0 = NODE_ORDER.filter(n => board.stones[n] === enemy);
+	if (count <= 0 || foes0.length === 0) {
+		if (budget.left <= 0) { _lastSeqBudgetHit = true; return []; }
+		budget.left--;
+		return [{ moth_targets: [], push_dests: [], board }];
+	}
+	const out = [];
+	for (const f of foes0) {
+		if (budget.left <= 0) { _lastSeqBudgetHit = true; break; }
+		const dests = board._pushDestinations(f, color);
+		const destChoices = dests.length > 1 ? dests : [null];
+		for (const d of destChoices) {
+			if (budget.left <= 0) { _lastSeqBudgetHit = true; break; }
+			const b2 = board.copy();
+			b2._pushEnemy(f, color, d == null ? undefined : d);
+			b2.update();
+			for (const rest of _mothSeqs(b2, color, count - 1, budget)) {
+				out.push({ moth_targets: [f, ...rest.moth_targets], push_dests: [d, ...rest.push_dests], board: rest.board });
+			}
+		}
+	}
+	return out;
+}
+
+// Refill keep-subset variants for a cast. Charm → [null] (no refill). Ritual →
+// every size-`r` subset of the position nodes (r = mana-driven refill count).
+function _refillKeepVariants(board, color, spellName) {
+	const info = CORE_SPELLS[spellName];
+	if (!info || info.ischarm) return [null];
+	const idx = board.spellNames.indexOf(spellName);
+	const posNodes = POSITIONS[idx + 1] || [];
+	const r = board._refillCount(spellName, color);
+	if (r <= 0) return [[]];
+	if (r >= posNodes.length) return [posNodes.slice()];
+	return _combosK(posNodes, r);
+}
+
+// Every resolve-only override for `spellName` on the post-cast board `bc`.
+// Multi-step move spells get full sub-action sequences; everything else uses
+// the (now-uncapped) single-step override list.
+function _enumerateResolveOverrides(bc, color, spellName, caps) {
+	const info = CORE_SPELLS[spellName];
+	const rt = info ? info.resolve : null;
+	if (rt === 'hard_moves') {
+		return _hardMoveSeqs(bc, color, info.count || 1, { left: _FULL_SEQ_BUDGET })
+			.map(s => ({ hard_move_targets: s.hard_move_targets, push_dests: s.push_dests }));
+	}
+	if (rt === 'stampede') {
+		return _hardMoveSeqs(bc, color, Math.min(5, bc.spellCounter[color]), { left: _FULL_SEQ_BUDGET })
+			.map(s => ({ hard_move_targets: s.hard_move_targets, push_dests: s.push_dests }));
+	}
+	if (rt === 'fury') {
+		const own = NODE_ORDER.filter(n => bc.stones[n] === color);
+		const budget = { left: _FULL_SEQ_BUDGET };
+		const out = [];
+		for (const sac of own) {
+			if (budget.left <= 0) break;
+			const b1 = bc.copy(); b1.stones[sac] = null; b1.update();
+			for (const s of _hardMoveSeqs(b1, color, 3, budget)) {
+				out.push({ fury_sacrifice: sac, hard_move_targets: s.hard_move_targets, push_dests: s.push_dests });
+			}
+		}
+		return out.length ? out : [{}];
+	}
+	if (rt === 'soft_moves') {
+		return _softMoveSeqs(bc, color, info.count || 1, { left: _FULL_SEQ_BUDGET })
+			.map(s => ({ soft_move_targets: s.soft_move_targets }));
+	}
+	if (rt === 'soft_hard_chain') {
+		const [softCount, hardCount] = info.counts;
+		const budget = { left: _FULL_SEQ_BUDGET };
+		const out = [];
+		for (const ss of _softMoveSeqs(bc, color, softCount, budget)) {
+			if (budget.left <= 0) break;
+			for (const hs of _hardMoveSeqs(ss.board, color, hardCount, budget)) {
+				out.push({
+					soft_move_targets: ss.soft_move_targets,
+					hard_move_targets: hs.hard_move_targets,
+					push_dests: hs.push_dests,
+				});
+			}
+		}
+		return out.length ? out : [{}];
+	}
+	if (rt === 'moth_plague') {
+		return _mothSeqs(bc, color, 3, { left: _FULL_SEQ_BUDGET })
+			.map(s => ({ moth_targets: s.moth_targets, push_dests: s.push_dests }));
+	}
+	// Single-step (and the deterministic/forced/rare spells that aren't yet
+	// sequence-enumerated — scatter, blossom, erupt, gust, syzygy, …): the
+	// uncapped override list on the post-cast board. These have one or zero
+	// real choices; gust's placement permutations are the documented bound.
+	return _spellOverrides(bc, color, spellName, caps);
+}
+
+// All complete (actions, resultingBoard) outcomes of casting `spellName`.
+// Capped mode keeps the cheap override path; full mode branches refill × resolve.
+function _enumerateCast(board, color, spellName, caps) {
+	const out = [];
+	if (!caps || !caps.__full) {
+		for (const ovr of _spellOverrides(board, color, spellName, caps)) {
+			const bs = board.copy();
+			let actions;
+			try { actions = bs._castSpell(spellName, color, ovr); } catch (e) { continue; }
+			bs.update();
+			out.push({ actions, board: bs });
+		}
+		return out;
+	}
+	for (const keep of _refillKeepVariants(board, color, spellName)) {
+		let bc;
+		try { bc = board._postCastBoard(spellName, color, keep); } catch (e) { continue; }
+		for (const rov of _enumerateResolveOverrides(bc, color, spellName, caps)) {
+			const bs = board.copy();
+			const ovr = (keep == null) ? rov : Object.assign({ refill_keep: keep }, rov);
+			let actions;
+			try { actions = bs._castSpell(spellName, color, ovr); } catch (e) { continue; }
+			bs.update();
+			out.push({ actions, board: bs });
+		}
+	}
+	return out;
+}
+
 function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSpell, canSummer, out) {
+	if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; return; }
 	const enemy = board._enemy(color);
 	out.push(new SimTurn(prefix.concat([new SimAction('pass')])));
 
@@ -423,18 +657,13 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 			castable = board._getCastableSpells(color, canSpell, canSummer);
 		} catch (e) { castable = []; }
 		for (const spellName of castable) {
-			const overrides = _spellOverrides(board, color, spellName, caps);
-			for (const ovr of overrides) {
-				const bs = board.copy();
-				let spellActions;
-				try {
-					spellActions = bs._castSpell(spellName, color, ovr);
-				} catch (e) { continue; }
-				bs.update();
+			if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
+			for (const { actions, board: bs } of _enumerateCast(board, color, spellName, caps)) {
 				_enumeratePostMoveExhaustive(
-					bs, color, prefix.concat(spellActions), caps,
+					bs, color, prefix.concat(actions), caps,
 					canDash, false, canSummer, out,
 				);
+				if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
 			}
 		}
 	}
@@ -452,6 +681,7 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 		const dashMoveCap = hasLightning ? Infinity : caps.dash_move;
 		const sacCombos = _rankSacCombos(board, color, hasLightning, dashSacCap);
 		for (const sacs of sacCombos) {
+			if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
 			const bd0 = board.copy();
 			for (const s of sacs) bd0.stones[s] = null;
 			bd0.update();
@@ -482,19 +712,16 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 						castable = bd._getCastableSpells(color, false, canSummer, true);
 					} catch (e) { castable = []; }
 					for (const spellName of castable) {
-						const overrides = _spellOverrides(bd, color, spellName, caps);
-						for (const ovr of overrides) {
-							const bs = bd.copy();
-							let spellActions;
-							try { spellActions = bs._castSpell(spellName, color, ovr); }
-							catch (e) { continue; }
-							bs.update();
+						if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
+						for (const { actions } of _enumerateCast(bd, color, spellName, caps)) {
 							out.push(new SimTurn(
-								prefix.concat(dashActions, spellActions, [new SimAction('pass')])
+								prefix.concat(dashActions, actions, [new SimAction('pass')])
 							));
 						}
 					}
+					if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
 				}
+				if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
 			}
 		}
 	}
@@ -537,7 +764,9 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	else moveTargets = board._allMoveable(color);
 	if (!moveTargets.length) return [new SimTurn([new SimAction('pass')])];
 	const out = [];
+	if (caps && caps.__full) _lastTurnCeilingHit = false;
 	for (const moveTarget of moveTargets) {
+		if (out.length >= _MAX_TURNS_PER_NODE) { _lastTurnCeilingHit = true; break; }
 		// A move/blink onto an enemy stone pushes it; branch the landing
 		// cell when several are legal so the search can aim the push.
 		const pushVariants = (board.stones[moveTarget] === enemy)

@@ -16,7 +16,36 @@
 const CAVEMAN_INF = 1e9;
 const CAVEMAN_WIN = 100.0;
 const _CAVEMAN_TT_MAX = 200000;
-const _CAVEMAN_MAX_PLY = 12;
+// Search is bounded by THINKING TIME, not depth — iterative deepening runs to
+// the per-move deadline and returns the best move from the last completed
+// depth. This ceiling only bounds recursion / killer-table size; it sits far
+// above any depth reachable in a realistic time budget.
+const _CAVEMAN_MAX_PLY = 64;
+
+// Two enumeration presets, both built from ENUM_CAPS (loaded earlier in the
+// bundle by enumerator.js):
+//   * Caveman (default) — every cap pinned to Infinity AND `__full` set, so the
+//     enumerator branches EVERY legal variant of every choice point, including
+//     all sub-actions of multi-step spells (Carnage's 3 pushes, etc.). This is
+//     the "search all possible moves" engine; no heuristic ever drops a move.
+//   * Prune — every cap pinned to 1, so the enumerator expands only the single
+//     top-RANKED variant of each choice point at every ply (heuristic pruning
+//     for depth). Reachable via ?ai=prune and the arena.
+// Alpha-beta cutoffs, the transposition table, killer moves, and move ordering
+// are SOUND (they never change the minimax value at infinite compute), so both
+// presets use them — they only make the search reach the same answer faster.
+const _CAVEMAN_FULL_CAPS = (function () {
+	if (typeof ENUM_CAPS === 'undefined') return null;
+	const c = { __full: true };
+	for (const k of Object.keys(ENUM_CAPS)) c[k] = Infinity;
+	return c;
+})();
+const _CAVEMAN_NARROW_CAPS = (function () {
+	if (typeof ENUM_CAPS === 'undefined') return null;
+	const c = {};
+	for (const k of Object.keys(ENUM_CAPS)) c[k] = 1;
+	return c;
+})();
 
 // Move-ordering tiebreaker weight per prospective spell kill. Tiny
 // compared to one stone (1.0), so prep deltas only change ordering
@@ -125,8 +154,7 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
-                           exhaustiveRoot, exhaustiveOpponent, isRoot,
-                           abortFlag) {
+                           isRoot, abortFlag, usePruning, enumConfig) {
 	if (tt) tt.nodes += 1;
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	// Cooperative abort: lets a ponder search exit mid-iteration when
@@ -156,7 +184,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 				} else if (entry.bound === _BOUND_UPPER) {
 					if (entry.score < beta) beta = entry.score;
 				}
-				if (alpha >= beta) {
+				if (usePruning && alpha >= beta) {
 					tt.cutoffs += 1;
 					return { score: entry.score, move: entry.bestMove };
 				}
@@ -164,10 +192,13 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 		}
 	}
 
-	let caps = null;
-	if ((exhaustiveRoot && isRoot) || (exhaustiveOpponent && ply === 1)) {
-		caps = (typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
-	}
+	// Exhaustive enumeration at EVERY ply (no greedy single-variant fallback).
+	// The caps object decides breadth: __full (Caveman) → every variant;
+	// narrow (Prune) → top-ranked only. enumConfig.enumCaps is resolved by
+	// cavemanSearch from the preset / arena overrides.
+	const caps = (enumConfig && enumConfig.enumCaps)
+		|| _CAVEMAN_FULL_CAPS
+		|| ((typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null);
 	const turns = _cavemanOrderedTurns(board, color, caps);
 	if (turns.length === 0) {
 		return { score: _cavemanLeaf(board, color), move: null };
@@ -203,12 +234,11 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			const sub = _cavemanAlphaBeta(sim, enemy, depth - 1, -beta, -alpha,
 			                              deadline, tt, killers, ply + 1,
 			                              positionHistory,
-			                              exhaustiveRoot, exhaustiveOpponent,
-			                              false, abortFlag);
+			                              false, abortFlag, usePruning, enumConfig);
 			const score = -sub.score;
 			if (score > bestScore) { bestScore = score; bestMove = turn; }
 			if (bestScore > alpha) alpha = bestScore;
-			if (alpha >= beta) {
+			if (usePruning && alpha >= beta) {
 				if (killers) killers.add(ply, turn);
 				cutoff = true;
 				break;
@@ -250,18 +280,29 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 async function cavemanSearch(board, color, opts) {
 	opts = opts || {};
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 60.0;
-	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 6;
+	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : _CAVEMAN_MAX_PLY;
 	const abortFlag = opts.abortFlag || null;
 	const onDepthComplete = typeof opts.onDepthComplete === 'function'
 		? opts.onDepthComplete : null;
-	// Default to exhaustive enumeration at root + ply 1. Without it,
-	// the engine's greedy enumerator silently collapses every spell
-	// (Bewitch pair, Carnage target, dash sacrifice, …) to a single
-	// variant and Caveman never sees the most damaging cast.
-	const exhaustiveRoot = opts.exhaustiveRoot !== undefined
-		? !!opts.exhaustiveRoot : true;
-	const exhaustiveOpponent = opts.exhaustiveOpponent !== undefined
-		? !!opts.exhaustiveOpponent : true;
+	// Engine preset: 'caveman' (default) enumerates every legal turn at every
+	// ply; 'prune' expands only the top-ranked variant of each choice point.
+	// The arena may pass an explicit enumCaps to override either.
+	const preset = opts.preset || 'caveman';
+	const enumCaps = opts.enumCaps
+		|| (preset === 'prune' ? _CAVEMAN_NARROW_CAPS : _CAVEMAN_FULL_CAPS)
+		|| ((typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null);
+	const enumConfig = { enumCaps };
+	// Alpha-beta cutoffs are sound; on by default for both presets. The arena's
+	// pure_minimax variant sets usePruning:false to disable cutoffs entirely.
+	const usePruning = opts.usePruning !== undefined ? !!opts.usePruning : true;
+	// Carnage refill/push planner — a Prune-only heuristic. Caveman explores
+	// those choices by full enumeration instead, so it leaves the planner off.
+	board._rankLaterPushes = (preset === 'prune')
+		? (opts.rankLaterPushes !== undefined ? !!opts.rankLaterPushes : true)
+		: false;
+	board._refillHeuristic = (preset === 'prune')
+		? (opts.refillHeuristic !== undefined ? opts.refillHeuristic : 'closest_enemy')
+		: null;
 	const verbose = !!opts.verbose;
 	const abHistory = opts.positionHistory
 		? Object.assign({}, opts.positionHistory)
@@ -269,8 +310,8 @@ async function cavemanSearch(board, color, opts) {
 
 	const searchStart = Date.now();
 
-	const legal = (exhaustiveRoot && typeof getLegalTurnsExhaustive === 'function')
-		? [...getLegalTurnsExhaustive(board, color, ENUM_CAPS)]
+	const legal = (typeof getLegalTurnsExhaustive === 'function')
+		? [...getLegalTurnsExhaustive(board, color, enumCaps)]
 		: [...board.getLegalTurns(color)];
 	if (legal.length === 0) {
 		return {
@@ -333,8 +374,7 @@ async function cavemanSearch(board, color, opts) {
 			const r = _cavemanAlphaBeta(board, color, depth,
 			                            -CAVEMAN_INF, CAVEMAN_INF, deadline,
 			                            tt, killers, 0, abHistory,
-			                            exhaustiveRoot, exhaustiveOpponent, true,
-			                            abortFlag);
+			                            true, abortFlag, usePruning, enumConfig);
 			if (r.move) {
 				bestMove = r.move;
 				bestScore = r.score;
@@ -487,7 +527,7 @@ function getSharedAiWorker() {
 class CavemanAI {
 	constructor(options) {
 		this.options = Object.assign(
-			{ maxDepth: 6, timeLimit: 60.0 },
+			{ maxDepth: _CAVEMAN_MAX_PLY, timeLimit: 60.0, preset: 'caveman' },
 			options || {},
 		);
 		// Set to false to disable pondering. Caller wires this from the
@@ -514,6 +554,9 @@ class CavemanAI {
 		const positionHistory = board.allLoopingSnapshotCounts || {};
 		const opts = {
 			positionHistory,
+			// Ponder with the same engine the real search will use, so the
+			// TT entries it primes are valid for that search.
+			preset: this.options.preset,
 			timeLimit: Infinity,
 			// Bounded ponder depth so a single iteration can't grow
 			// past ~1s of work — cancel latency is bounded by current

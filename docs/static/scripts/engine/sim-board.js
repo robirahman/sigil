@@ -581,13 +581,20 @@ class SimBoard {
 		} else if (rt === 'comet') {
 			const targets = this._blinkable(color);
 			let target = null;
-			for (const mn of [...MANA_NODES].reverse()) {
-				if (this.stones[mn] === color) continue;
-				const ae = ADJACENCY[mn].filter(nb => this.stones[nb] === enemy).length;
-				const touching = this.stones[mn] === color || ADJACENCY[mn].some(nb => this.stones[nb] === color);
-				if (!touching && ae < 2) { target = mn; break; }
+			// Honor an explicit blink target (the enumerator's choice); else the
+			// mana-pressure heuristic.
+			const tOvr = overrides.comet_target;
+			if (tOvr && targets.includes(tOvr)) {
+				target = tOvr;
+			} else {
+				for (const mn of [...MANA_NODES].reverse()) {
+					if (this.stones[mn] === color) continue;
+					const ae = ADJACENCY[mn].filter(nb => this.stones[nb] === enemy).length;
+					const touching = this.stones[mn] === color || ADJACENCY[mn].some(nb => this.stones[nb] === color);
+					if (!touching && ae < 2) { target = mn; break; }
+				}
+				if (!target && targets.length) target = targets[0];
 			}
-			if (!target && targets.length) target = targets[0];
 			if (target) {
 				if (this.stones[target] === enemy) {
 					const dest = this._pushEnemy(target, color, pushDests.shift());
@@ -597,11 +604,19 @@ class SimBoard {
 					actions.push(new SimAction('blink', { node: target }));
 				}
 				this.update();
-				for (const name of [...NODE_ORDER].reverse()) {
-					if (this.stones[name] === color && name !== target) {
-						this.stones[name] = null;
-						actions.push(new SimAction('sacrifice', { node: name }));
-						break;
+				// Sacrifice one own stone: honor an explicit choice, else the
+				// lowest-priority (reverse NODE_ORDER) stone.
+				const sOvr = overrides.comet_sacrifice;
+				if (sOvr && this.stones[sOvr] === color && sOvr !== target) {
+					this.stones[sOvr] = null;
+					actions.push(new SimAction('sacrifice', { node: sOvr }));
+				} else {
+					for (const name of [...NODE_ORDER].reverse()) {
+						if (this.stones[name] === color && name !== target) {
+							this.stones[name] = null;
+							actions.push(new SimAction('sacrifice', { node: name }));
+							break;
+						}
 					}
 				}
 				this.update();
@@ -1064,13 +1079,37 @@ class SimBoard {
 		return actions;
 	}
 
-	_castSpell(spellName, color, targetOverrides) {
+	/**
+	 * Number of refill ("kept") stones a non-charm cast of `spellName` places
+	 * back onto its own position nodes. Equals the caster's mana (Lifesap
+	 * bumps a 5-node cast to ≥2), capped by the slot count. 0 for charms.
+	 * Used by the complete enumerator to know how big a refill keep-subset is.
+	 */
+	_refillCount(spellName, color) {
+		const info = CORE_SPELLS[spellName];
+		if (!info || info.ischarm) return 0;
+		const idx = this.spellNames.indexOf(spellName);
+		const posNodes = POSITIONS[idx + 1] || [];
+		let refills = this.mana[color];
+		if (posNodes.length === 5 && this.chargedSpells[color].includes('Lifesap')) {
+			refills = Math.max(refills, 2);
+		}
+		return Math.min(refills, posNodes.length);
+	}
+
+	/**
+	 * Cast bookkeeping shared by `_castSpell` and the complete enumerator:
+	 * clear the spell's position nodes, then refill `kept` of them with the
+	 * caster's stones. `overrides.refill_keep` (a subset of posNodes) chooses
+	 * WHICH nodes to keep — the real player choice the Carnage "keep-B2" trap
+	 * exploits; without it the engine keeps a fixed priority order. Mutates
+	 * `this`, runs update(), returns the kept node list.
+	 */
+	_refillForCast(spellName, color, overrides) {
 		const idx = this.spellNames.indexOf(spellName);
 		const posNodes = POSITIONS[idx + 1];
 		const info = CORE_SPELLS[spellName];
-
 		for (const n of posNodes) this.stones[n] = null;
-
 		const kept = [];
 		if (!info.ischarm) {
 			let refills = this.mana[color];
@@ -1078,14 +1117,45 @@ class SimBoard {
 			if (posNodes.length === 5 && this.chargedSpells[color].includes('Lifesap')) {
 				refills = Math.max(refills, 2);
 			}
-			const priority = posNodes.length === 3
-				? [posNodes[2], posNodes[1], posNodes[0]]
-				: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
-			for (const node of priority) {
-				if (refills > 0) { this.stones[node] = color; kept.push(node); refills--; }
+			const keepOverride = overrides && overrides.refill_keep;
+			if (keepOverride && keepOverride.length) {
+				for (const node of keepOverride) {
+					if (refills > 0 && posNodes.includes(node) && this.stones[node] === null) {
+						this.stones[node] = color; kept.push(node); refills--;
+					}
+				}
+			} else {
+				const priority = posNodes.length === 3
+					? [posNodes[2], posNodes[1], posNodes[0]]
+					: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
+				for (const node of priority) {
+					if (refills > 0) { this.stones[node] = color; kept.push(node); refills--; }
+				}
 			}
 		}
 		this.update();
+		return kept;
+	}
+
+	/**
+	 * Non-mutating: the board the spell RESOLVER will see (position cleared +
+	 * refilled with `keepOverride`), without resolving the effect. The
+	 * complete enumerator runs multi-step resolution enumeration on this exact
+	 * board so the recorded action sequences replay identically under a real
+	 * `_castSpell`.
+	 */
+	_postCastBoard(spellName, color, keepOverride) {
+		const bc = this.copy();
+		bc._refillForCast(spellName, color, keepOverride ? { refill_keep: keepOverride } : null);
+		return bc;
+	}
+
+	_castSpell(spellName, color, targetOverrides) {
+		const idx = this.spellNames.indexOf(spellName);
+		const posNodes = POSITIONS[idx + 1];
+		const info = CORE_SPELLS[spellName];
+
+		const kept = this._refillForCast(spellName, color, targetOverrides);
 		const resolveActions = this._resolveSpell(spellName, color, posNodes, targetOverrides);
 		this.update();
 

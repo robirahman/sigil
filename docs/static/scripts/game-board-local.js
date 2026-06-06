@@ -643,9 +643,29 @@ document.addEventListener('alpine:init', () => {
 					};
 					if (Object.prototype.hasOwnProperty.call(_CAVEMAN_TIER_BUDGETS, aiMode)) {
 						options.aiColor = _aiColor;
+						// The difficulty tiers ARE Caveman (complete enumeration);
+						// they differ only in per-move time budget. Depth is bounded
+						// by time, not a ply cap.
 						options.ai = new CavemanAI({
-							maxDepth: 10,
+							preset: 'caveman',
 							timeLimit: _CAVEMAN_TIER_BUDGETS[aiMode],
+						});
+						options.ai.pondering = _aiAuthManager
+							? _aiAuthManager.enablePondering : true;
+					} else if (aiMode === 'prune' || /^prune_[1-6]$/.test(aiMode || '')) {
+						// Heuristic-pruning sibling of Caveman: ranked top-1
+						// enumeration + the Carnage planner, trading completeness
+						// for search depth. Same time tiers as caveman_N.
+						const depth = aiMode === 'prune'
+							? 6
+							: parseInt(aiMode.slice('prune_'.length), 10);
+						const timeLimits = { 1: 2.0, 2: 2.0, 3: 5.0,
+						                     4: 10.0, 5: 30.0, 6: 60.0 };
+						options.aiColor = _aiColor;
+						options.ai = new CavemanAI({
+							preset: 'prune',
+							maxDepth: depth,
+							timeLimit: timeLimits[depth] || 60.0,
 						});
 						options.ai.pondering = _aiAuthManager
 							? _aiAuthManager.enablePondering : true;
@@ -1257,6 +1277,9 @@ document.addEventListener('alpine:init', () => {
 						caveman_4: 'Caveman 4',
 						caveman_5: 'Caveman 5',
 						caveman_6: 'Caveman 6',
+						prune: 'AI (Prune)',
+						prune_1: 'Prune 1', prune_2: 'Prune 2', prune_3: 'Prune 3',
+						prune_4: 'Prune 4', prune_5: 'Prune 5', prune_6: 'Prune 6',
 					};
 					return labels[difficulty] || ('AI (' + difficulty + ')');
 				}

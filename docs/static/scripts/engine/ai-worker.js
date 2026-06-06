@@ -123,8 +123,12 @@ async function _runSearch(msg) {
 		const searchOpts = {
 			timeLimit: opts.timeLimit,
 			maxDepth: opts.maxDepth,
-			exhaustiveRoot: opts.exhaustiveRoot,
-			exhaustiveOpponent: opts.exhaustiveOpponent,
+			// Engine selection + arena experiment knobs.
+			preset: opts.preset,
+			usePruning: opts.usePruning,
+			enumCaps: opts.enumCaps,
+			rankLaterPushes: opts.rankLaterPushes,
+			refillHeuristic: opts.refillHeuristic,
 			positionHistory: opts.positionHistory || null,
 			tt,
 			abortFlag,
