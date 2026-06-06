@@ -872,13 +872,21 @@ document.addEventListener('alpine:init', () => {
 					const seconds = ((payload.timeMs || 0) / 1000).toFixed(1);
 					// The search returns its evaluation from the moving AI's
 					// perspective (positive = the AI is favored). Large magnitudes
-					// (±100) are the forced win/loss sentinels.
+					// (±100) are the forced win/loss sentinels. The leaf eval is
+					// (stone difference)/39, so multiplying by 39 recovers the raw
+					// stone-count lead: +1 = ahead by one stone, matching the
+					// game-review scale (…-2, -1, 0, +1, +2, win/loss).
 					let evalStr = '';
 					if (typeof payload.score === 'number' && isFinite(payload.score)) {
 						const s = payload.score;
-						const shown = Math.abs(s) >= 99 ? (s > 0 ? 'win' : 'loss') : s.toFixed(3);
-						const signed = (typeof shown === 'string' && shown !== 'win' && shown !== 'loss' && s >= 0) ? '+' + shown : shown;
-						evalStr = `, eval ${signed}`;
+						let shown;
+						if (Math.abs(s) >= 99) {
+							shown = s > 0 ? 'win' : 'loss';
+						} else {
+							const stones = Math.round(s * 39);
+							shown = (stones > 0 ? '+' : '') + stones;
+						}
+						evalStr = `, eval ${shown}`;
 					}
 					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${evalStr}`);
 				}
