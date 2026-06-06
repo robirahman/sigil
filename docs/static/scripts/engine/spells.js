@@ -828,10 +828,10 @@ const SpellResolvers = {
 		}
 	},
 
-	// --- Thunder (relocate enemy stones touching you) ---
-	async thunder(board, color, spellName, getInput, emit) {
+	// --- Gust (relocate enemy stones touching you) ---
+	async gust(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
-		// Thunder's own position has already been cleared by _castSpell
+		// Gust's own position has already been cleared by _castSpell
 		// before resolve runs. Pick up every enemy stone that touches a
 		// surviving caster stone.
 		const picked = [];
@@ -842,7 +842,7 @@ const SpellResolvers = {
 			}
 		}
 		if (picked.length === 0) {
-			emit({ type: 'message', message: 'No enemy stones touch you; Thunder fizzles.', awaiting: null });
+			emit({ type: 'message', message: 'No enemy stones touch you; Gust fizzles.', awaiting: null });
 			return;
 		}
 		for (const n of picked) {

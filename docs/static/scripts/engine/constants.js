@@ -69,7 +69,7 @@ const CORE_SPELLS = {
 	Fury:              { resolve: 'fury',       static: false, ischarm: false },
 	Erupt:             { resolve: 'erupt',      static: false, ischarm: false },
 	// Tempest expansion
-	Thunder:           { resolve: 'thunder',    static: false, ischarm: true },
+	Gust:              { resolve: 'gust',       static: false, ischarm: true },
 	Storm_Front:       { resolve: 'storm_front', static: false, ischarm: false },
 	Hurricane:         { resolve: 'hurricane',  static: false, ischarm: false },
 	// Tsunami expansion
@@ -116,7 +116,7 @@ const SPELL_TEXTS = {
 	Charge:            'Make 1 move into a 3- or 5-node spell.',
 	Fury:              'Sacrifice 1 stone, then make 3 hard moves.',
 	Erupt:             'Make 1 move into each 3- and 5-node spell, including this one.',
-	Thunder:           'Pick up every enemy stone touching one of your stones, then place them on any empty nodes.',
+	Gust:              'Pick up every enemy stone touching one of your stones, then place them on any empty nodes.',
 	Storm_Front:       'Destroy any 2 enemy stones of your choice.',
 	Hurricane:         'Destroy the smallest contiguous group of enemy stones. If tied, you choose which.',
 	Gush:              'If you did not dash this turn, make 1 move.',
@@ -154,7 +154,7 @@ const FURY_CHARMS = ['Charge'];
 
 const TEMPEST_RITUALS = ['Hurricane'];
 const TEMPEST_SORCERIES = ['Storm_Front'];
-const TEMPEST_CHARMS = ['Thunder'];
+const TEMPEST_CHARMS = ['Gust'];
 
 const TSUNAMI_RITUALS = ['Flood'];
 const TSUNAMI_SORCERIES = ['Torrent'];

@@ -586,7 +586,7 @@ class SimBoard {
 				actions.push(this._doHardMove(color, chosen));
 				this.update();
 			}
-		} else if (rt === 'thunder') {
+		} else if (rt === 'gust') {
 			// Pick up every enemy stone touching any of our remaining stones.
 			const picked = [];
 			for (const n of NODE_ORDER) {
@@ -600,7 +600,7 @@ class SimBoard {
 			this.update();
 			// Place them. Override placements list (parallel to picked order),
 			// otherwise fill empty nodes in NODE_ORDER.
-			const placeOverrides = (overrides.thunder_placements || []).slice();
+			const placeOverrides = (overrides.gust_placements || []).slice();
 			const placed = [];
 			for (let i = 0; i < picked.length; i++) {
 				let dest = null;
@@ -616,7 +616,7 @@ class SimBoard {
 				placed.push(dest);
 				this.update();
 			}
-			actions.push(new SimAction('thunder', { destroyed: picked, kept: placed }));
+			actions.push(new SimAction('gust', { destroyed: picked, kept: placed }));
 		} else if (rt === 'storm_front') {
 			// Destroy 2 enemy stones of caster's choice.
 			const ovr = overrides.storm_front_pair;
@@ -1259,7 +1259,9 @@ function applySimTurn(board, turn, color) {
 		else if (action.type === 'meteor_destroy') {
 			if (action.node) board.stones[action.node] = null;
 		}
-		else if (action.type === 'thunder') {
+		// 'thunder' is the legacy type for Gust (renamed); accept both so
+		// game logs recorded before the rename still replay.
+		else if (action.type === 'gust' || action.type === 'thunder') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
 			if (action.kept) for (const n of action.kept) board.stones[n] = enemy;
 		}

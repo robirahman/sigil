@@ -361,8 +361,8 @@ function _spellOverrides(board, color, spellName, caps) {
 			out.push({ hard_move_targets: [ranked[i]] });
 		}
 	}
-	// soft_moves, hail_storm, thunder, blossom, erupt: greedy is fine.
-	// Thunder's pickup is forced and placement combinatorics blow up — defer
+	// soft_moves, hail_storm, gust, blossom, erupt: greedy is fine.
+	// Gust's pickup is forced and placement combinatorics blow up — defer
 	// to follow-up.
 	return out;
 }

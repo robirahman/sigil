@@ -27,7 +27,7 @@ const SPELL_FX = {
 	Fury:             { type: 'flash', color: '#aa0000', shake: true  },
 	Erupt:            { type: 'flash', color: '#cc2200', shake: true  },
 	// Tempest expansion (yellows + steel blues)
-	Thunder:          { type: 'flash', color: '#ffdd22', shake: true  },
+	Gust:             { type: 'flash', color: '#ffdd22', shake: true  },
 	Storm_Front:      { type: 'pulse', color: '#6688aa', shake: true  },
 	Hurricane:        { type: 'burst', color: '#3366aa', shake: true  },
 	// Tsunami expansion (blues + teals)
