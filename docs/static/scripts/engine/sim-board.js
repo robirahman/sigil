@@ -48,6 +48,14 @@ class SimBoard {
 		// Turn-local: set true when a push crushes an enemy stone this turn.
 		// Read by Blood Saplings; reset at each turn's start by the enumerator.
 		this.crushedThisTurn = false;
+		// Prune-only Carnage heuristics (off for Caveman, which explores these
+		// choices by full enumeration). Set per-search by cavemanSearch and
+		// propagated through copy(). `_rankLaterPushes` plans the whole
+		// Carnage push sequence to maximize crushes; `_refillHeuristic` picks
+		// which circle stone to keep on refill ('crush' | 'closest_enemy' |
+		// 'farthest_enemy' | 'closest_mana' | 'farthest_mana' | null).
+		this._rankLaterPushes = false;
+		this._refillHeuristic = null;
 	}
 
 	static fromSigilBoard(board) {
@@ -65,6 +73,8 @@ class SimBoard {
 		sb.mana = { ...board.mana };
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
 		sb.crushedThisTurn = !!board.crushedThisTurn;
+		sb._rankLaterPushes = board._rankLaterPushes || false;
+		sb._refillHeuristic = board._refillHeuristic || null;
 		return sb;
 	}
 
@@ -83,6 +93,8 @@ class SimBoard {
 		b.mana = { ...this.mana };
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
 		b.crushedThisTurn = this.crushedThisTurn;
+		b._rankLaterPushes = this._rankLaterPushes;
+		b._refillHeuristic = this._refillHeuristic;
 		return b;
 	}
 
@@ -275,6 +287,152 @@ class SimBoard {
 		return this.escapeDistance(nodeName, defender, 39) >= 39;
 	}
 
+	// --- Prune-only Carnage refill/push planner (gated by _rankLaterPushes /
+	// _refillHeuristic). These pick a hard-move sequence and refill keep-set
+	// heuristically; Caveman ignores them and enumerates both choices fully. ---
+
+	/**
+	 * Rank hard-move targets so the most enclosed enemies come first: by escape
+	 * distance descending (a stone with no escape is crushed on the push), then
+	 * by adjacent-enemy count (pushing into the cluster cascades). The planner's
+	 * candidate ordering at each step.
+	 */
+	_rankEnclosure(color, targets) {
+		const enemy = this._enemy(color);
+		return targets
+			.map((n) => {
+				let adj = 0;
+				for (const nb of (ADJACENCY[n] || [])) if (this.stones[nb] === enemy) adj++;
+				return [this.escapeDistance(n, enemy, 39), adj, n];
+			})
+			.sort((a, b) => (b[0] - a[0]) || (b[1] - a[1]))
+			.map((x) => x[2]);
+	}
+
+	/** Graph-distance (hops over ADJACENCY) from `from` to the nearest node
+	 *  satisfying `pred`; Infinity if none. Ignores occupancy (pure layout). */
+	_graphDistance(from, pred) {
+		const seen = new Set([from]);
+		let frontier = [from];
+		let dist = 0;
+		while (frontier.length) {
+			for (const n of frontier) if (pred(n)) return dist;
+			const next = [];
+			for (const n of frontier) for (const nb of (ADJACENCY[n] || [])) {
+				if (!seen.has(nb)) { seen.add(nb); next.push(nb); }
+			}
+			frontier = next; dist++;
+		}
+		return Infinity;
+	}
+
+	/**
+	 * Beam-search a length-`count` hard-move sequence that maximizes enemy
+	 * stones destroyed (tiebreak: enemy mana stones removed), honoring
+	 * `forcedFirst` as the first push when provided. Non-mutating. Returns the
+	 * chosen target sequence (node names).
+	 */
+	_planHardMoves(color, count, forcedFirst) {
+		const enemy = this._enemy(color);
+		const K = 4;
+		const manaEnemies = (b) => MANA_NODES.reduce((a, n) => a + (b.stones[n] === enemy ? 1 : 0), 0);
+		const startEnemies = this.totalStones[enemy];
+		const startMana = manaEnemies(this);
+		let bestSeq = [];
+		let bestScore = [-1, -1];
+		const rec = (board, depth, seq) => {
+			const targets = board._hardMoveable(color);
+			if (depth >= count || targets.length === 0) {
+				const killed = startEnemies - board.totalStones[enemy];
+				const score = [killed, startMana - manaEnemies(board)];
+				if (score[0] > bestScore[0] || (score[0] === bestScore[0] && score[1] > bestScore[1])) {
+					bestScore = score;
+					bestSeq = seq;
+				}
+				return;
+			}
+			let cands;
+			if (depth === 0 && forcedFirst != null && targets.includes(forcedFirst)) {
+				cands = [forcedFirst];
+			} else {
+				cands = board._rankEnclosure(color, targets).slice(0, K);
+			}
+			for (const t of cands) {
+				const b2 = board.copy();
+				b2._doHardMove(color, t);
+				b2.update();
+				rec(b2, depth + 1, seq.concat(t));
+			}
+		};
+		rec(this, 0, []);
+		return bestSeq;
+	}
+
+	/**
+	 * Crush-maximizing joint refill+push planner: try every refill keep-subset
+	 * of size `mana`, score each by the crushes its best push sequence yields,
+	 * return the kept-set that destroys the most (ties prefer fixed priority).
+	 * Called with the ritual circle already cleared on `this`. Non-mutating.
+	 */
+	_bestCarnageRefill(color, posNodes, count, forcedFirst) {
+		const refills = this.mana[color];
+		if (refills <= 0) return [];
+		const priority = posNodes.length === 3
+			? [posNodes[2], posNodes[1], posNodes[0]]
+			: [posNodes[2], posNodes[3], posNodes[4], posNodes[0], posNodes[1]];
+		const greedy = priority.slice(0, refills);
+		if (refills >= posNodes.length) return posNodes.slice();
+		const greedyKey = greedy.slice().sort().join();
+		const enemy = this._enemy(color);
+
+		const subsets = [];
+		const combo = (start, chosen) => {
+			if (chosen.length === refills) { subsets.push(chosen.slice()); return; }
+			for (let i = start; i < posNodes.length; i++) { chosen.push(posNodes[i]); combo(i + 1, chosen); chosen.pop(); }
+		};
+		combo(0, []);
+
+		let best = greedy, bestScore = [-1, -1];
+		for (const S of subsets) {
+			const b = this.copy();
+			for (const n of S) b.stones[n] = color;
+			b.update();
+			const startEnemies = b.totalStones[enemy];
+			const plan = b._planHardMoves(color, count, forcedFirst);
+			let bb = b;
+			for (const t of plan) {
+				const targets = bb._hardMoveable(color);
+				if (!targets.length) break;
+				const ch = targets.includes(t) ? t : bb._rankEnclosure(color, targets)[0];
+				bb = bb.copy(); bb._doHardMove(color, ch); bb.update();
+			}
+			const destroyed = startEnemies - bb.totalStones[enemy];
+			const isGreedy = (S.slice().sort().join() === greedyKey) ? 1 : 0;
+			if (destroyed > bestScore[0] || (destroyed === bestScore[0] && isGreedy > bestScore[1])) {
+				bestScore = [destroyed, isGreedy];
+				best = S;
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * Cheap positional refill: keep the `refills` circle nodes nearest/farthest
+	 * (by graph distance) from the enemy or a mana node. The default Prune
+	 * refill — ties the crush planner in strength at a fraction of the cost.
+	 */
+	_refillByHeuristic(color, posNodes, refills, heuristic) {
+		if (refills <= 0) return [];
+		const enemy = this._enemy(color);
+		const enemyPred = (n) => this.stones[n] === enemy;
+		const manaPred = (n) => MANA_NODES.includes(n);
+		const farther = heuristic.startsWith('farthest');
+		const pred = heuristic.endsWith('mana') ? manaPred : enemyPred;
+		const scored = posNodes.map((n) => [this._graphDistance(n, pred), n]);
+		scored.sort((a, b) => farther ? (b[0] - a[0]) : (a[0] - b[0]));
+		return scored.slice(0, refills).map((x) => x[1]);
+	}
+
 	/**
 	 * Non-mutating: the candidate push destinations (nearest reachable
 	 * empty cells, tie-broken in BFS order) for a hard-move onto nodeName.
@@ -404,17 +562,31 @@ class SimBoard {
 			}
 		} else if (rt === 'hard_moves') {
 			const overrideTargets = (overrides.hard_move_targets || []).slice();
-			for (let i = 0; i < info.count; i++) {
-				const targets = this._hardMoveable(color);
-				if (!targets.length) break;
-				let chosen = null;
-				while (overrideTargets.length && chosen === null) {
-					const cand = overrideTargets.shift();
-					if (targets.includes(cand)) chosen = cand;
+			if (this._rankLaterPushes) {
+				// Prune: plan the whole push sequence to maximize crushes,
+				// honoring the enumerator's first-push override as a forced
+				// prefix. (Push destinations resolve to the default cell.)
+				const plan = this._planHardMoves(color, info.count, overrideTargets[0]);
+				for (const t of plan) {
+					const targets = this._hardMoveable(color);
+					if (!targets.length) break;
+					const chosen = targets.includes(t) ? t : this._rankEnclosure(color, targets)[0];
+					actions.push(this._doHardMove(color, chosen));
+					this.update();
 				}
-				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen, pushDests.shift()));
-				this.update();
+			} else {
+				for (let i = 0; i < info.count; i++) {
+					const targets = this._hardMoveable(color);
+					if (!targets.length) break;
+					let chosen = null;
+					while (overrideTargets.length && chosen === null) {
+						const cand = overrideTargets.shift();
+						if (targets.includes(cand)) chosen = cand;
+					}
+					if (chosen === null) chosen = targets[0];
+					actions.push(this._doHardMove(color, chosen, pushDests.shift()));
+					this.update();
+				}
 			}
 		} else if (rt === 'fireblast') {
 			const destroyed = [];
@@ -1118,11 +1290,25 @@ class SimBoard {
 				refills = Math.max(refills, 2);
 			}
 			const keepOverride = overrides && overrides.refill_keep;
+			const hm = info.resolve === 'hard_moves';
 			if (keepOverride && keepOverride.length) {
+				// Explicit keep-set (Caveman's exhaustive refill variants).
 				for (const node of keepOverride) {
 					if (refills > 0 && posNodes.includes(node) && this.stones[node] === null) {
 						this.stones[node] = color; kept.push(node); refills--;
 					}
+				}
+			} else if (hm && this._refillHeuristic === 'crush') {
+				// Prune: crush-maximizing joint refill+push planner.
+				const hmOverride = overrides && overrides.hard_move_targets
+					? overrides.hard_move_targets[0] : null;
+				for (const node of this._bestCarnageRefill(color, posNodes, info.count, hmOverride)) {
+					this.stones[node] = color; kept.push(node);
+				}
+			} else if (hm && this._refillHeuristic) {
+				// Prune default: cheap positional refill heuristic.
+				for (const node of this._refillByHeuristic(color, posNodes, refills, this._refillHeuristic)) {
+					this.stones[node] = color; kept.push(node);
 				}
 			} else {
 				const priority = posNodes.length === 3
