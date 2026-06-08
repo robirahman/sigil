@@ -89,6 +89,14 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 		turns = [...board.getLegalTurns(color)];
 	}
 	if (turns.length <= 1) return turns;
+	// Randomize before the (stable) score sort so that moves tying on the
+	// 1-ply stone-diff come out in random order rather than fixed NODE_ORDER.
+	// Without this, every tie — including the entire Competitive opening,
+	// where all 39 placements are stone-count-identical to any depth — resolves
+	// to the NODE_ORDER-earliest move (a1, the red corner), giving the engine a
+	// permanent zone-a / red-corner bias. The leaf eval is blind to geometry,
+	// so among equal-scoring moves a uniform random pick is the honest choice.
+	turns = shuffleArray(turns);
 	const enemy = color === 'red' ? 'blue' : 'red';
 	// Pre-turn prep counts — used as a delta baseline so the ordering
 	// score reflects how much a turn *changes* prep, not the absolute
