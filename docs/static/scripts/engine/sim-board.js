@@ -1064,7 +1064,16 @@ class SimBoard {
 		return actions;
 	}
 
-	_castSpell(spellName, color, targetOverrides) {
+	/**
+	 * The board mutation `_castSpell` performs *before* the spell resolves:
+	 * clear the spell's own position nodes, then (non-charms only) refill up
+	 * to `mana` of them by stone-priority. Returns { posNodes, kept }.
+	 * Extracted so the enumerator can reproduce the exact board the resolver
+	 * will see — push-target enumeration for Carnage/Fury must run on the
+	 * post-clear board, since clearing the caster's spell stones changes
+	 * which enemies are hard-moveable.
+	 */
+	_castClearAndRefill(spellName, color) {
 		const idx = this.spellNames.indexOf(spellName);
 		const posNodes = POSITIONS[idx + 1];
 		const info = CORE_SPELLS[spellName];
@@ -1086,6 +1095,12 @@ class SimBoard {
 			}
 		}
 		this.update();
+		return { posNodes, kept };
+	}
+
+	_castSpell(spellName, color, targetOverrides) {
+		const info = CORE_SPELLS[spellName];
+		const { posNodes, kept } = this._castClearAndRefill(spellName, color);
 		const resolveActions = this._resolveSpell(spellName, color, posNodes, targetOverrides);
 		this.update();
 

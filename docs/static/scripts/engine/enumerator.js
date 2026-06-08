@@ -205,6 +205,67 @@ function _pushDestFragments(board, color, target, caps) {
 	return dests.slice(0, caps.push_dest).map(d => [d]);
 }
 
+// How many distinct first-push candidates a Carnage/Fury variant branches
+// on. Each variant is a *priority list* — first push fixed, the rest follow
+// rank order — so this is the count of multi-push lines the search sees per
+// cast. Generous (covers every hard-moveable enemy in practice) because the
+// lists are built from a single ranking with no per-push simulation, so the
+// cost is independent of this number.
+const _HARD_MOVE_FIRST_N = 12;
+
+// How many sacrifice candidates Fury tries (deadest-first). Each adds a full
+// set of first-push variants, so this and _HARD_MOVE_FIRST_N together set
+// Fury's variant count; sacrificing a doomed stone is nearly always right.
+const _HARD_MOVE_FURY_SACS = 6;
+
+/**
+ * Enemy stones ordered by how many of `color`'s stones they touch
+ * (descending) — a cheap, BFS-free proxy for "most pressured / most likely
+ * to become hard-moveable". Used as a fallback tail so multi-push spells
+ * never hit the resolver's arbitrary targets[0] even on pushes that act on
+ * stones made hard-moveable by an earlier push.
+ */
+function _enemiesByAdjacency(board, color) {
+	const enemy = board._enemy(color);
+	const scored = [];
+	for (const n of NODE_ORDER) {
+		if (board.stones[n] !== enemy) continue;
+		let adj = 0;
+		for (const nb of (ADJACENCY[n] || [])) if (board.stones[nb] === color) adj++;
+		scored.push([adj, n]);
+	}
+	scored.sort((a, b) => b[0] - a[0]);
+	return scored.map(s => s[1]);
+}
+
+/**
+ * Build push-priority lists from one ranked target set — no per-push board
+ * simulation. Each list fixes a distinct first push (one of the top
+ * `firstN` ranked targets), follows rank order for the rest, then ends with
+ * `tail` (every other enemy, adjacency-ordered). The hard_moves / fury
+ * resolvers consume the list with `.shift()`, validating each entry against
+ * the live board after every push and skipping any an earlier push
+ * invalidated; because the list spans every enemy the resolver never
+ * exhausts it and so never falls back to its arbitrary `targets[0]` choice
+ * — the old single-target overrides left pushes 2..N to that fallback,
+ * which is the "push enemies in circles" pathology.
+ *
+ * For count-1 spells (Slash) only the first entry is used, so the variants
+ * reduce to "push each candidate", matching the old single-target behavior.
+ */
+function _pushPriorityLists(ranked, tail, firstN) {
+	if (!ranked.length) return [];
+	const out = [];
+	const lim = Math.min(firstN, ranked.length);
+	for (let i = 0; i < lim; i++) {
+		const list = [ranked[i]];
+		for (let j = 0; j < ranked.length; j++) if (j !== i) list.push(ranked[j]);
+		for (const t of tail) list.push(t);
+		out.push(list);
+	}
+	return out;
+}
+
 /**
  * Return list of `targetOverrides` dicts to try for `spellName`.
  * Always includes `{}` (greedy) so we don't lose the engine's default.
@@ -225,13 +286,18 @@ function _spellOverrides(board, color, spellName, caps) {
 			out.push({ starfall_pair: pairs[i] });
 		}
 	} else if (rt === 'hard_moves') {
-		const ranked = _rankHardMoveTargets(board, color, board._hardMoveable(color));
-		for (let i = 0; i < ranked.length && i < caps.hard_moves; i++) {
-			for (const pd of _pushDestFragments(board, color, ranked[i], caps)) {
-				const ovr = { hard_move_targets: [ranked[i]] };
-				if (pd) ovr.push_dests = pd;
-				out.push(ovr);
-			}
+		// Carnage (count 4) / Slash (count 1): branch the first push across
+		// every hard-moveable enemy, each followed by a full ranked priority
+		// list for pushes 2..count (so the resolver never falls back to its
+		// arbitrary targets[0]). Ranking is on the post-cast board (positions
+		// cleared + mana refill) so the targets match what the resolver sees.
+		const bc = board.copy();
+		bc._castClearAndRefill(spellName, color);
+		const ranked = _rankHardMoveTargets(bc, color, bc._hardMoveable(color));
+		const rankedSet = new Set(ranked);
+		const tail = _enemiesByAdjacency(bc, color).filter(n => !rankedSet.has(n));
+		for (const list of _pushPriorityLists(ranked, tail, _HARD_MOVE_FIRST_N)) {
+			out.push({ hard_move_targets: list });
 		}
 	} else if (rt === 'meteor') {
 		const targets = board._blinkable(color);
@@ -272,21 +338,28 @@ function _spellOverrides(board, color, spellName, caps) {
 			out.push({ fireblast_sacrifice: ranked[i] });
 		}
 	} else if (rt === 'fury') {
-		// (sacrifice choice) × (first hard-move target). Subsequent two
-		// hard moves resolve greedily in the sim. No ranking — user
-		// explicitly deferred heuristics.
-		const own = NODE_ORDER.filter(n => board.stones[n] === color);
-		const targets = board._hardMoveable(color);
-		const sacCap = Math.min(own.length, caps.fury_sac);
-		const tgtCap = Math.min(targets.length, caps.fury_target);
-		for (let i = 0; i < sacCap; i++) {
-			for (let j = 0; j < tgtCap; j++) {
-				for (const pd of _pushDestFragments(board, color, targets[j], caps)) {
-					const ovr = { fury_sacrifice: own[i], hard_move_targets: [targets[j]] };
-					if (pd) ovr.push_dests = pd;
-					out.push(ovr);
-				}
-			}
+		// Sacrifice 1 + 3 hard moves. Mirror the resolver order exactly: cast
+		// preamble (clear positions + mana refill), then remove the sacrifice
+		// (update()), then rank the 3-push targets off that post-sacrifice
+		// board. Branch sacrifice across the deadest-first candidates and, for
+		// each, the first push across every hard-moveable enemy with a full
+		// ranked priority list for the remaining pushes. No per-push board
+		// simulation — one ranking per sacrifice.
+		const bc = board.copy();
+		bc._castClearAndRefill(spellName, color);
+		const sacs = _rankFireblastSacs(bc, color, NODE_ORDER.filter(n => bc.stones[n] === color))
+			.slice(0, _HARD_MOVE_FURY_SACS);
+		for (const sac of sacs) {
+			const bs = bc.copy();
+			bs.stones[sac] = null;
+			bs.update();
+			if (bs.gameover) { out.push({ fury_sacrifice: sac }); continue; }
+			const ranked = _rankHardMoveTargets(bs, color, bs._hardMoveable(color));
+			const rankedSet = new Set(ranked);
+			const tail = _enemiesByAdjacency(bs, color).filter(n => !rankedSet.has(n));
+			const lists = _pushPriorityLists(ranked, tail, _HARD_MOVE_FIRST_N);
+			if (!lists.length) { out.push({ fury_sacrifice: sac }); continue; }
+			for (const list of lists) out.push({ fury_sacrifice: sac, hard_move_targets: list });
 		}
 	} else if (rt === 'charge') {
 		// Each all-moveable target that lands in a 3- or 5-node spell
