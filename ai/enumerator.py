@@ -22,6 +22,7 @@ remains feasible; 3-ply needs aggressive pruning.
 Used by ai/minimax_ai.py when ``exhaustive=True`` is set.
 """
 
+from collections import deque
 from itertools import combinations
 
 from notation import NODE_ORDER, POSITIONS
@@ -38,6 +39,14 @@ DEFAULT_HARD_MOVES_CAP = 4      # Carnage/Slash first-target variants
 DEFAULT_METEOR_CAP = 4          # Meteor blink target variants
 DEFAULT_COMET_CAP = 3           # Comet (target × sacrifice) cap
 DEFAULT_FIREBLAST_CAP = 3       # Fireblast sacrifice variants
+DEFAULT_CHARGE_CAP = 6          # Charge move-target variants
+DEFAULT_FURY_SAC_CAP = 4        # Fury sacrifice variants
+DEFAULT_FURY_TARGET_CAP = 3     # Fury first-hard-move-target variants (× sac)
+DEFAULT_STORM_FRONT_CAP = 12    # Storm Front enemy-pair variants
+DEFAULT_HURRICANE_CAP = 4       # Hurricane smallest-group variants
+DEFAULT_SOFT_HARD_SOFT_CAP = 4  # Torrent/Flood first-soft-target variants
+DEFAULT_SOFT_HARD_HARD_CAP = 4  # Torrent/Flood first-hard-target variants (× soft)
+DEFAULT_SPLASH_CAP = 6          # Splash move-target variants
 
 
 # Tighter "balanced" caps: keep total branching low enough that 3-ply
@@ -51,6 +60,14 @@ BALANCED_CAPS = {
     'meteor': 2,
     'comet': 2,
     'fireblast': 2,
+    'charge': 3,
+    'fury_sac': 2,
+    'fury_target': 2,
+    'storm_front': 6,
+    'hurricane': 2,
+    'soft_hard_soft': 2,
+    'soft_hard_hard': 2,
+    'splash': 3,
 }
 
 # Surgical caps: only expand the choice points that empirically matter
@@ -69,6 +86,14 @@ NARROW_CAPS = {
     'meteor': 1,
     'comet': 1,
     'fireblast': 2,
+    'charge': 2,
+    'fury_sac': 1,
+    'fury_target': 1,
+    'storm_front': 3,
+    'hurricane': 1,
+    'soft_hard_soft': 1,
+    'soft_hard_hard': 1,
+    'splash': 2,
 }
 
 
@@ -88,6 +113,14 @@ OPPONENT_CAPS = {
     'meteor': 2,
     'comet': 1,
     'fireblast': 2,
+    'charge': 2,
+    'fury_sac': 2,
+    'fury_target': 1,
+    'storm_front': 4,
+    'hurricane': 2,
+    'soft_hard_soft': 2,
+    'soft_hard_hard': 2,
+    'splash': 2,
 }
 
 
@@ -132,6 +165,28 @@ def _adjacent_empty_pairs_ranked(board, color):
     return [k for _, k in cand]
 
 
+def _enemy_groups(board, color):
+    """Contiguous groups of enemy stones (BFS over adjacency)."""
+    enemy = board._enemy(color)
+    visited = set()
+    groups = []
+    for start in NODE_ORDER:
+        if start in visited or board.stones[start] != enemy:
+            continue
+        group = []
+        queue = deque([start])
+        visited.add(start)
+        while queue:
+            n = queue.popleft()
+            group.append(n)
+            for nb in board._adjacent_nodes(n):
+                if nb not in visited and board.stones[nb] == enemy:
+                    visited.add(nb)
+                    queue.append(nb)
+        groups.append(group)
+    return groups
+
+
 def _spell_overrides(board, color, spell_name, caps):
     """Return a list of `target_overrides` dicts to try for `spell_name`.
 
@@ -142,6 +197,7 @@ def _spell_overrides(board, color, spell_name, caps):
     if info is None:
         return [{}]
     rt = info.get('resolve')
+    enemy = board._enemy(color)
     out = [{}]  # always keep the greedy variant
 
     if rt == 'bewitch':
@@ -185,7 +241,60 @@ def _spell_overrides(board, color, spell_name, caps):
                if board.stones[n] == color and n not in spell_pos]
         for sac in own[:caps['fireblast']]:
             out.append({'fireblast_sacrifice': sac})
-    # soft_moves, hail_storm, surge_move: greedy is fine.
+    elif rt == 'charge':
+        # 1 move into a 3- or 5-node spell (positions 1..6).
+        in_small = set()
+        for i in range(1, 7):
+            in_small.update(POSITIONS[i])
+        targets = [t for t in board._all_moveable(color) if t in in_small]
+        for t in targets[:caps['charge']]:
+            out.append({'charge_target': t})
+    elif rt == 'fury':
+        # (sacrifice) × (first hard-move target). Remaining hard moves resolve
+        # greedily. Sacrifices outside the spell's own position survive the
+        # cast (same caveat as fireblast).
+        try:
+            spell_idx = board.spell_names.index(spell_name)
+            spell_pos = set(POSITIONS[spell_idx + 1])
+        except (ValueError, KeyError):
+            spell_pos = set()
+        sacs = [n for n in NODE_ORDER
+                if board.stones[n] == color and n not in spell_pos][:caps['fury_sac']]
+        targets = board._hard_moveable(color)[:caps['fury_target']]
+        for sac in sacs:
+            out.append({'fury_sacrifice': sac})
+            for t in targets:
+                out.append({'fury_sacrifice': sac, 'hard_move_targets': [t]})
+    elif rt == 'storm_front':
+        enemies = [n for n in NODE_ORDER if board.stones[n] == enemy]
+        added = 0
+        for i in range(len(enemies)):
+            if added >= caps['storm_front']:
+                break
+            for j in range(i + 1, len(enemies)):
+                if added >= caps['storm_front']:
+                    break
+                out.append({'storm_front_pair': [enemies[i], enemies[j]]})
+                added += 1
+    elif rt == 'hurricane':
+        for group in _enemy_groups(board, color):
+            out.append({'hurricane_group': group})
+        # Keep only the smallest groups + greedy; cap the rest.
+        out = [out[0]] + sorted(out[1:], key=lambda o: len(o['hurricane_group']))[:caps['hurricane']]
+    elif rt == 'soft_hard_chain':
+        soft_targets = board._soft_moveable(color)[:caps['soft_hard_soft']]
+        hard_targets = board._hard_moveable(color)[:caps['soft_hard_hard']]
+        for s in soft_targets:
+            for h in hard_targets:
+                out.append({'soft_move_targets': [s], 'hard_move_targets': [h]})
+            if not hard_targets:
+                out.append({'soft_move_targets': [s]})
+    elif rt == 'surge_move' and spell_name == 'Splash':
+        # Splash: 1 move (only castable when not dashed — see castability).
+        # Plain Surge stays greedy (post-dash only, fewer options).
+        for t in board._all_moveable(color)[:caps['splash']]:
+            out.append({'surge_target': t})
+    # soft_moves, hail_storm, surge_move (Surge), erupt, gust: greedy is fine.
     # Deduplicate just in case.
     seen = set()
     deduped = []
@@ -258,6 +367,14 @@ def get_legal_turns_exhaustive(board, color, caps=None):
         'meteor': caps.get('meteor', DEFAULT_METEOR_CAP),
         'comet': caps.get('comet', DEFAULT_COMET_CAP),
         'fireblast': caps.get('fireblast', DEFAULT_FIREBLAST_CAP),
+        'charge': caps.get('charge', DEFAULT_CHARGE_CAP),
+        'fury_sac': caps.get('fury_sac', DEFAULT_FURY_SAC_CAP),
+        'fury_target': caps.get('fury_target', DEFAULT_FURY_TARGET_CAP),
+        'storm_front': caps.get('storm_front', DEFAULT_STORM_FRONT_CAP),
+        'hurricane': caps.get('hurricane', DEFAULT_HURRICANE_CAP),
+        'soft_hard_soft': caps.get('soft_hard_soft', DEFAULT_SOFT_HARD_SOFT_CAP),
+        'soft_hard_hard': caps.get('soft_hard_hard', DEFAULT_SOFT_HARD_HARD_CAP),
+        'splash': caps.get('splash', DEFAULT_SPLASH_CAP),
     }
 
     board.update()
@@ -339,7 +456,7 @@ def _exhaustive_post_move(board, color, prefix, caps,
             yield CompleteTurn(prefix + dash_actions + [Action('pass')])
             try:
                 castable = list(post_dash_board._get_castable_spells(
-                    color, can_spell=False, can_summer=can_summer))
+                    color, can_spell=False, can_summer=can_summer, post_dash=True))
             except Exception:
                 castable = []
             for spell_name in castable:

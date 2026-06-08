@@ -1,74 +1,140 @@
 
 ### Sigil Online spell generator file
-### To play Core, un-comment the last line at the bottom of file
 
 
+import os
 import random
 
-# Set exactly one of the following variables to True, to select which spells you'll play with
-starter_game = False
-core = True
-equinox = False
-apocalypse = False
-all_spells = False
+
+CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning']
+CORE_SORCERIES = ['Grow', 'Fireblast', 'Hail_Storm', 'Meteor', 'Seal_of_Wind']
+CORE_CHARMS = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer']
+
+# Each expansion lists only its OWN new spells (not the core ones). A game's
+# spell pool is core + every selected expansion. Multiple expansions can be
+# combined. Mirrors docs/static/scripts/engine/constants.js EXPANSIONS.
+# The unofficial Panda expansion is intentionally NOT included here.
+
+# Springtime expansion.
+SPRINGTIME_RITUALS = ['Blossom']
+SPRINGTIME_SORCERIES = ['Scatter']
+SPRINGTIME_CHARMS = ['Seal_of_Spring']
+
+# Celestial expansion.
+CELESTIAL_RITUALS = ['Syzygy']
+CELESTIAL_SORCERIES = ['Eclipse']
+CELESTIAL_CHARMS = ['Azimuth']
+
+# Inferno expansion (JS internal key 'fury', display name "Inferno").
+INFERNO_RITUALS = ['Erupt']
+INFERNO_SORCERIES = ['Fury']
+INFERNO_CHARMS = ['Charge']
+
+# Tempest expansion.
+TEMPEST_RITUALS = ['Hurricane']
+TEMPEST_SORCERIES = ['Storm_Front']
+TEMPEST_CHARMS = ['Gust']
+
+# Tsunami expansion.
+TSUNAMI_RITUALS = ['Flood']
+TSUNAMI_SORCERIES = ['Torrent']
+TSUNAMI_CHARMS = ['Splash']
 
 
-def generate_spell_list():
+# Own-only spell lists per expansion key. Keys match the JS EXPANSIONS map
+# (note Inferno's key is 'fury'). 'inferno' is accepted as an alias below.
+EXPANSIONS = {
+	'springtime': {'rituals': SPRINGTIME_RITUALS, 'sorceries': SPRINGTIME_SORCERIES, 'charms': SPRINGTIME_CHARMS},
+	'celestial':  {'rituals': CELESTIAL_RITUALS,  'sorceries': CELESTIAL_SORCERIES,  'charms': CELESTIAL_CHARMS},
+	'fury':       {'rituals': INFERNO_RITUALS,    'sorceries': INFERNO_SORCERIES,    'charms': INFERNO_CHARMS},
+	'tempest':    {'rituals': TEMPEST_RITUALS,    'sorceries': TEMPEST_SORCERIES,    'charms': TEMPEST_CHARMS},
+	'tsunami':    {'rituals': TSUNAMI_RITUALS,    'sorceries': TSUNAMI_SORCERIES,    'charms': TSUNAMI_CHARMS},
+}
+EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami']
+
+# Accepted aliases for expansion keys.
+_EXPANSION_ALIASES = {'inferno': 'fury'}
 
 
-	### These should be lists of strings, which will turn into the spell objects
-	### when we hit them with eval()
-
-	### MUST BE READY TO INSTANTIATE when we eval() them!
-
-	### To instantiate a spell, it needs the following parameters:
-
-	### (board, position, name)
-
-	### We will be instantiating these spell objects as a method
-	### inside the board object.  So the 'board' parameter
-	### should be written as 'self'.  The 'position' parameter
-	### should be written as 'self.positions[i]' for the i-th spell.
-	### Then 'name' can be a string.
-
-	core_rituals = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning']
-	equinox_rituals = ['Planetary_Alignment', 'Blossom', 'Harvest']
-	apocalypse_rituals = ['Tidal_Wave', 'Tempest', 'Consuming_Darkness']
-
-	core_sorceries = ['Grow', 'Fireblast', 'Hail_Storm', 'Meteor', 'Seal_of_Wind']
-	equinox_sorceries = ['Full_Moon', 'Scattered_Seeds', 'Fallen_Leaves']
-	apocalypse_sorceries = ['Rushing_Waters', 'Thunder', 'Blinding_Snow']
-
-	core_charms = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer']
-	equinox_charms = ['Eclipse', 'Spring', 'Autumn']
-	apocalypse_charms = ['Gush', 'Lightning', 'Winter']
+def normalize_expansion_selection(selection):
+	"""Normalize a selection (str, CSV string, or iterable) into a de-duped,
+	canonical list of expansion keys in EXPANSION_KEYS order. Unknown keys are
+	dropped. 'core' / '' contribute nothing; 'all' selects every expansion."""
+	if selection is None:
+		return []
+	if isinstance(selection, str):
+		parts = [p.strip() for p in selection.replace(',', ' ').split()]
+	else:
+		parts = [str(p).strip() for p in selection]
+	chosen = set()
+	for p in parts:
+		key = p.lower()
+		if not key or key == 'core':
+			continue
+		if key == 'all':
+			return list(EXPANSION_KEYS)
+		key = _EXPANSION_ALIASES.get(key, key)
+		if key in EXPANSIONS:
+			chosen.add(key)
+	return [k for k in EXPANSION_KEYS if k in chosen]
 
 
-	if starter_game:
-		rituals = core_rituals[:3]
-		sorceries = core_sorceries[:3]
-		charms = core_charms[:3]
+def spell_pool(expansions=None):
+	"""Return the (rituals, sorceries, charms) pools = core + selected
+	expansions. `expansions` is anything normalize_expansion_selection accepts."""
+	keys = normalize_expansion_selection(expansions)
+	rituals = list(CORE_RITUALS)
+	sorceries = list(CORE_SORCERIES)
+	charms = list(CORE_CHARMS)
+	for k in keys:
+		rituals += EXPANSIONS[k]['rituals']
+		sorceries += EXPANSIONS[k]['sorceries']
+		charms += EXPANSIONS[k]['charms']
+	return rituals, sorceries, charms
 
-	if core:
-		rituals = random.sample(core_rituals, 3)
-		sorceries = random.sample(core_sorceries, 3)
-		charms = random.sample(core_charms, 3)
 
-	if equinox:
-		rituals = random.sample(equinox_rituals, 3)
-		sorceries = random.sample(equinox_sorceries, 3)
-		charms = random.sample(equinox_charms, 3)
+# Backward-compatible single-pack table, regenerated from EXPANSIONS so callers
+# passing pack_key='core'/'springtime'/'celestial'/'fury'/'tempest'/'tsunami'/'all'
+# keep working.
+def _build_spell_packs():
+	packs = {'core': {'rituals': CORE_RITUALS, 'sorceries': CORE_SORCERIES, 'charms': CORE_CHARMS}}
+	for k in EXPANSION_KEYS:
+		r, s, c = spell_pool([k])
+		packs[k] = {'rituals': r, 'sorceries': s, 'charms': c}
+	r, s, c = spell_pool('all')
+	packs['all'] = {'rituals': r, 'sorceries': s, 'charms': c}
+	return packs
 
-	if apocalypse:
-		rituals = random.sample(apocalypse_rituals, 3)
-		sorceries = random.sample(apocalypse_sorceries, 3)
-		charms = random.sample(apocalypse_charms, 3)
 
-	if all_spells:
-		rituals = random.sample(core_rituals + equinox_rituals + apocalypse_rituals, 3)
-		sorceries = random.sample(core_sorceries + equinox_sorceries + apocalypse_sorceries, 3)
-		charms = random.sample(core_charms + equinox_charms + apocalypse_charms, 3)
+SPELL_PACKS = _build_spell_packs()
 
+
+def generate_spell_list(expansions=None, pack_key=None):
+	"""Generate the 9 spell instantiation strings for a new game.
+
+	Selection precedence:
+	  1. `expansions` — a list/set/CSV of expansion keys to combine with core
+	     (mirrors the deployed JS site, where multiple expansions stack).
+	  2. `pack_key` — legacy single-pack selector ('core', a single expansion
+	     key, or 'all').
+	  3. SIGIL_SPELL_PACKS env var (CSV/space list of expansion keys).
+	  4. SIGIL_SPELL_PACK env var (single legacy pack key).
+	  5. 'core'.
+	The unofficial Panda expansion is never included.
+	"""
+	if expansions is not None:
+		rituals_pool, sorceries_pool, charms_pool = spell_pool(expansions)
+	elif pack_key is not None:
+		rituals_pool, sorceries_pool, charms_pool = spell_pool(
+			list(EXPANSION_KEYS) if pack_key == 'all' else [pack_key])
+	elif os.environ.get('SIGIL_SPELL_PACKS'):
+		rituals_pool, sorceries_pool, charms_pool = spell_pool(os.environ['SIGIL_SPELL_PACKS'])
+	else:
+		rituals_pool, sorceries_pool, charms_pool = spell_pool(os.environ.get('SIGIL_SPELL_PACK', 'core'))
+
+	rituals = random.sample(rituals_pool, 3)
+	sorceries = random.sample(sorceries_pool, 3)
+	charms = random.sample(charms_pool, 3)
 
 	ritual1 = "spellfile." + rituals[0] + "(self, self.positions[1], '" + rituals[0] + "')"
 	ritual2 = "spellfile." + rituals[1] + "(self, self.positions[2], '" + rituals[1] + "')"
@@ -82,18 +148,4 @@ def generate_spell_list():
 	charm2 = "spellfile." + charms[1] + "(self, self.positions[8], '" + charms[1] + "')"
 	charm3 = "spellfile." + charms[2] + "(self, self.positions[9], '" + charms[2] + "')"
 
-	spell_list = [ritual1, ritual2, ritual3, sorcery1, sorcery2, sorcery3, charm1, charm2, charm3]
-
-	return spell_list
-
-
-
-
-
-
-
-
-
-
-
-
+	return [ritual1, ritual2, ritual3, sorcery1, sorcery2, sorcery3, charm1, charm2, charm3]

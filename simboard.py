@@ -29,7 +29,30 @@ CORE_SPELLS = {
     'Surge': {'resolve': 'surge_move', 'static': False, 'ischarm': True},
     'Comet': {'resolve': 'comet', 'static': False, 'ischarm': True},
     'Seal_of_Summer': {'resolve': None, 'static': True, 'ischarm': True},
+    # Springtime expansion
+    'Seal_of_Spring': {'resolve': None, 'static': True, 'ischarm': True},
+    'Scatter': {'resolve': 'scatter', 'static': False, 'ischarm': False},
+    'Blossom': {'resolve': 'blossom', 'static': False, 'ischarm': False},
+    # Celestial expansion
+    'Azimuth': {'resolve': 'azimuth', 'static': False, 'ischarm': True},
+    'Eclipse': {'resolve': 'eclipse', 'static': False, 'ischarm': False},
+    'Syzygy': {'resolve': 'syzygy', 'static': False, 'ischarm': False},
+    # Inferno expansion (JS internal pack key 'fury', display "Inferno")
+    'Charge': {'resolve': 'charge', 'static': False, 'ischarm': True},
+    'Fury': {'resolve': 'fury', 'static': False, 'ischarm': False},
+    'Erupt': {'resolve': 'erupt', 'static': False, 'ischarm': False},
+    # Tempest expansion
+    'Gust': {'resolve': 'gust', 'static': False, 'ischarm': True},
+    'Storm_Front': {'resolve': 'storm_front', 'static': False, 'ischarm': False},
+    'Hurricane': {'resolve': 'hurricane', 'static': False, 'ischarm': False},
+    # Tsunami expansion
+    'Splash': {'resolve': 'surge_move', 'static': False, 'ischarm': True},
+    'Torrent': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'static': False, 'ischarm': False},
+    'Flood': {'resolve': 'soft_hard_chain', 'counts': [2, 2], 'static': False, 'ischarm': False},
 }
+
+# Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
+SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
 
 
 class Action:
@@ -744,6 +767,316 @@ class SimBoard:
                 actions.append(self._do_move(color, chosen))
                 self.update()
 
+        elif resolve_type == 'azimuth':
+            # 1 move into a spell where this color controls all but 1 node.
+            qualifying = []
+            for i in range(1, 10):
+                unc = sum(1 for n in POSITIONS[i] if self.stones[n] != color)
+                if unc == 1:
+                    qualifying.append(i)
+            moves = self._all_moveable(color)
+            chosen = None
+            for idx in qualifying:
+                for n in POSITIONS[idx]:
+                    if n in moves:
+                        chosen = n
+                        break
+                if chosen:
+                    break
+            if chosen:
+                actions.append(self._do_move(color, chosen))
+                self.update()
+
+        elif resolve_type == 'eclipse':
+            # 2 moves into a spell where this color controls all but 2 nodes.
+            candidates = []
+            for i in range(1, 10):
+                unc = sum(1 for n in POSITIONS[i] if self.stones[n] != color)
+                if unc == 2:
+                    candidates.append(i)
+            chosen_spell = None
+            first_node = None
+            for idx in candidates:
+                moves = self._all_moveable(color)
+                for n in POSITIONS[idx]:
+                    if n in moves:
+                        chosen_spell = idx
+                        first_node = n
+                        break
+                if first_node:
+                    break
+            if first_node:
+                actions.append(self._do_move(color, first_node))
+                self.update()
+                moves2 = self._all_moveable(color)
+                for n in POSITIONS[chosen_spell]:
+                    if n in moves2:
+                        actions.append(self._do_move(color, n))
+                        self.update()
+                        break
+
+        elif resolve_type == 'scatter':
+            # 1 soft blink into each of 2 different spells (any empty node).
+            used_spells = set()
+            for _ in range(2):
+                placed = None
+                for i in range(1, 10):
+                    if i in used_spells:
+                        continue
+                    for n in POSITIONS[i]:
+                        if self.stones[n] is None:
+                            placed = (n, i)
+                            break
+                    if placed:
+                        break
+                if not placed:
+                    break
+                node_name, idx = placed
+                self.stones[node_name] = color
+                used_spells.add(idx)
+                actions.append(Action('blink', node=node_name))
+                self.update()
+
+        elif resolve_type == 'blossom':
+            # 1 soft blink into each other 3-node and 5-node spell.
+            self_idx = self.spell_names.index(spell_name) + 1
+            for i in range(1, 7):
+                if i == self_idx:
+                    continue
+                placed = None
+                for n in POSITIONS[i]:
+                    if self.stones[n] is None:
+                        placed = n
+                        break
+                if not placed:
+                    break  # ends early
+                self.stones[placed] = color
+                actions.append(Action('blink', node=placed))
+                self.update()
+
+        elif resolve_type == 'syzygy':
+            # 1 blink into the opposite 1-node spell, then up to 3 into the opposite 3-node spell.
+            spell_idx = self.spell_names.index(spell_name) + 1
+            opp = SYZYGY_OPPOSITE.get(spell_idx)
+            if opp is not None:
+                charm_idx, sorcery_idx = opp
+                charm_node = POSITIONS[charm_idx][0]
+                if self.stones[charm_node] != color:
+                    if self.stones[charm_node] == enemy:
+                        dest = self._push_enemy(charm_node, color)
+                        actions.append(Action('blink', node=charm_node, pushed_to=dest))
+                    else:
+                        self.stones[charm_node] = color
+                        actions.append(Action('blink', node=charm_node))
+                    self.update()
+                for _ in range(3):
+                    target = next((n for n in POSITIONS[sorcery_idx] if self.stones[n] != color), None)
+                    if target is None:
+                        break
+                    if self.stones[target] == enemy:
+                        dest = self._push_enemy(target, color)
+                        actions.append(Action('blink', node=target, pushed_to=dest))
+                    else:
+                        self.stones[target] = color
+                        actions.append(Action('blink', node=target))
+                    self.update()
+
+        elif resolve_type == 'charge':
+            # 1 move (soft or hard) into any 3- or 5-node spell (positions
+            # 1..6). No "control all but N" constraint, unlike Azimuth.
+            def _pos_of(node):
+                for i in range(1, 10):
+                    if node in POSITIONS[i]:
+                        return i
+                return None
+            moves = self._all_moveable(color)
+            override = overrides.get('charge_target')
+            chosen = None
+            if override is not None and override in moves:
+                p = _pos_of(override)
+                if p is not None and p <= 6:
+                    chosen = override
+            if chosen is None:
+                for i in range(1, 7):
+                    for n in POSITIONS[i]:
+                        if n in moves:
+                            chosen = n
+                            break
+                    if chosen:
+                        break
+            if chosen:
+                actions.append(self._do_move(color, chosen))
+                self.update()
+
+        elif resolve_type == 'fury':
+            # Sacrifice 1 stone, then 3 hard moves.
+            sac_override = overrides.get('fury_sacrifice')
+            sacrificed = None
+            if sac_override is not None and self.stones[sac_override] == color:
+                self.stones[sac_override] = None
+                sacrificed = sac_override
+            else:
+                for name in reversed(NODE_ORDER):
+                    if self.stones[name] == color:
+                        self.stones[name] = None
+                        sacrificed = name
+                        break
+            if sacrificed:
+                actions.append(Action('sacrifice', node=sacrificed))
+            self.update()
+            if self.gameover:
+                return actions
+            override_targets = list(overrides.get('hard_move_targets') or [])
+            for _ in range(3):
+                targets = self._hard_moveable(color)
+                if not targets:
+                    break
+                chosen = None
+                while override_targets and chosen is None:
+                    candidate = override_targets.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    chosen = targets[0]
+                actions.append(self._do_hard_move(color, chosen))
+                self.update()
+
+        elif resolve_type == 'erupt':
+            # 1 non-blink move into each 3- and 5-node spell (positions 1..6,
+            # including Erupt's own slot), where a legal target exists.
+            for i in range(1, 7):
+                moves = self._all_moveable(color)
+                for n in POSITIONS[i]:
+                    if n in moves:
+                        actions.append(self._do_move(color, n))
+                        self.update()
+                        break
+                if self.gameover:
+                    return actions
+
+        elif resolve_type == 'gust':
+            # Pick up every enemy stone touching one of our stones, then place
+            # them (one at a time) on any empty node.
+            picked = []
+            for n in NODE_ORDER:
+                if self.stones[n] != enemy:
+                    continue
+                for nb in self._adjacent_nodes(n):
+                    if self.stones[nb] == color:
+                        picked.append(n)
+                        break
+            if picked:
+                for n in picked:
+                    self.stones[n] = None
+                self.update()
+                place_overrides = list(overrides.get('gust_placements') or [])
+                placed = []
+                for i in range(len(picked)):
+                    dest = None
+                    if i < len(place_overrides) and self.stones.get(place_overrides[i]) is None:
+                        dest = place_overrides[i]
+                    else:
+                        for n in NODE_ORDER:
+                            if self.stones[n] is None:
+                                dest = n
+                                break
+                    if dest is None:
+                        break
+                    self.stones[dest] = enemy
+                    placed.append(dest)
+                    self.update()
+                actions.append(Action('gust', destroyed=picked, kept=placed))
+
+        elif resolve_type == 'storm_front':
+            # Destroy any 2 enemy stones of the caster's choice.
+            ovr = overrides.get('storm_front_pair')
+            destroyed = []
+            if (ovr and len(ovr) == 2 and ovr[0] != ovr[1]
+                    and self.stones[ovr[0]] == enemy and self.stones[ovr[1]] == enemy):
+                for n in ovr:
+                    self.stones[n] = None
+                    destroyed.append(n)
+            else:
+                for name in NODE_ORDER:
+                    if len(destroyed) >= 2:
+                        break
+                    if self.stones[name] == enemy:
+                        self.stones[name] = None
+                        destroyed.append(name)
+            if destroyed:
+                actions.append(Action('storm_front', destroyed=destroyed))
+            self.update()
+
+        elif resolve_type == 'hurricane':
+            # Destroy the smallest contiguous enemy group (ties: caster picks).
+            visited = set()
+            groups = []
+            for start in NODE_ORDER:
+                if start in visited or self.stones[start] != enemy:
+                    continue
+                group = []
+                queue = deque([start])
+                visited.add(start)
+                while queue:
+                    n = queue.popleft()
+                    group.append(n)
+                    for nb in self._adjacent_nodes(n):
+                        if nb not in visited and self.stones[nb] == enemy:
+                            visited.add(nb)
+                            queue.append(nb)
+                groups.append(group)
+            if groups:
+                min_size = min(len(g) for g in groups)
+                smallest = [g for g in groups if len(g) == min_size]
+                chosen = smallest[0]
+                ovr = overrides.get('hurricane_group')
+                if ovr:
+                    for g in smallest:
+                        if len(g) == len(ovr) and all(n in g for n in ovr):
+                            chosen = g
+                            break
+                for n in chosen:
+                    self.stones[n] = None
+                actions.append(Action('hurricane', destroyed=list(chosen)))
+                self.update()
+
+        elif resolve_type == 'soft_hard_chain':
+            # N soft moves, then M hard moves (Torrent [1,1], Flood [2,2]).
+            soft_count, hard_count = info['counts']
+            soft_overrides = list(overrides.get('soft_move_targets') or [])
+            hard_overrides = list(overrides.get('hard_move_targets') or [])
+            for _ in range(soft_count):
+                targets = self._soft_moveable(color)
+                if not targets:
+                    break
+                chosen = None
+                while soft_overrides and chosen is None:
+                    candidate = soft_overrides.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    for t in targets:
+                        if t not in spell_position_nodes:
+                            chosen = t
+                            break
+                if chosen is None:
+                    chosen = targets[0]
+                actions.append(self._do_soft_move(color, chosen))
+                self.update()
+            for _ in range(hard_count):
+                targets = self._hard_moveable(color)
+                if not targets:
+                    break
+                chosen = None
+                while hard_overrides and chosen is None:
+                    candidate = hard_overrides.pop(0)
+                    if candidate in targets:
+                        chosen = candidate
+                if chosen is None:
+                    chosen = targets[0]
+                actions.append(self._do_hard_move(color, chosen))
+                self.update()
+
         return actions
 
     def _cast_spell(self, spell_name, color, target_overrides=None):
@@ -940,7 +1273,7 @@ class SimBoard:
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
 
         if can_spell or (not can_spell and has_seal_of_summer and can_summer):
-            castable = self._get_castable_spells(color, can_spell, can_summer)
+            castable = self._get_castable_spells(color, can_spell, can_summer, post_dash=True)
             for spell_name in castable:
                 board_s = self.copy()
                 spell_actions = board_s._cast_spell(spell_name, color)
@@ -948,11 +1281,17 @@ class SimBoard:
                 # After spell, can only pass or cast summer spell
                 yield CompleteTurn(actions_so_far + spell_actions + [Action('pass')])
 
-    def _get_castable_spells(self, color, can_spell, can_summer):
-        """Return list of spell names that can be cast."""
+    def _get_castable_spells(self, color, can_spell, can_summer, post_dash=False):
+        """Return list of spell names that can be cast.
+
+        `post_dash` is True when called after a dash this turn. Surge and
+        Splash have opposite dash gates: Surge is only castable after a dash
+        (and is not modeled in the sim — see below), Splash only when the
+        caster has NOT dashed.
+        """
         enemy = self._enemy(color)
         has_winter = 'Winter' in self.charged_spells[enemy]
-        has_spring = 'Spring' in self.charged_spells[color]
+        has_spring = 'Seal_of_Spring' in self.charged_spells[color]
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
 
         castable = []
@@ -967,6 +1306,10 @@ class SimBoard:
                 if spell_name == 'Surge':
                     # Surge can only be cast if we dashed this turn
                     # (caller manages this via can_dash flag)
+                    continue
+                if spell_name == 'Splash' and post_dash:
+                    # Splash is the inverse of Surge: castable only if we
+                    # have NOT dashed this turn.
                     continue
                 if not can_spell and has_seal_of_summer and can_summer:
                     castable.append(spell_name)
