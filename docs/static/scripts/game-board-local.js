@@ -729,12 +729,20 @@ document.addEventListener('alpine:init', () => {
 				// stay in sync.
 				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
 
+				// Don't persist a game until the human has actually played a
+				// turn — otherwise merely opening a match (or letting the AI
+				// move first) would clutter the Resume list with games the
+				// player never engaged with. A resumed save already cleared
+				// this bar in its prior session.
+				let _humanHasMoved = !!_saveLoadedSfn;
+
 				/**
 				 * Write the current game state to localStorage under _gameId
 				 * so a reload returns to this position. Called from the
 				 * sfn_update handler (after every turn boundary).
 				 */
 				function _persistCurrentGame(sfn) {
+					if (!_humanHasMoved) return;
 					if (!_gameId || typeof LocalSaveStore === 'undefined' || !sfn) return;
 					LocalSaveStore.put(_gameId, {
 						mode: aiMode ? 'single_player' : 'local_1v1',
@@ -807,6 +815,14 @@ document.addEventListener('alpine:init', () => {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
 						if (t) _persistedGameLog.push(t);
+						// First human turn unlocks persistence. In local 1v1
+						// both colors are human; vs AI only the human's color
+						// counts. sfn_update fires before turn_complete, so the
+						// human's own move wasn't saved yet — persist it now.
+						if (t && !_humanHasMoved && (!aiMode || t.color === _this.myColor)) {
+							_humanHasMoved = true;
+							_persistCurrentGame(_this.currentSfn);
+						}
 						return;
 					}
 
