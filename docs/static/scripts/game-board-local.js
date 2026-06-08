@@ -183,15 +183,17 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			// Dev-only AI evaluation overlay (gated on auth-manager.isDeveloper).
-			// Lazy-loads SigilNet on first toggle so non-devs and devs-with-toggle
-			// -off pay nothing. The model is the same one used by Medium/Hard/
-			// VeryHard inference; we just call its value head and convert from
-			// side-to-move POV to red POV for a stable, non-flickering display.
+			// Runs the same Caveman search the live AI and game review use (via
+			// the shared Web Worker, ~1s/position) and shows its score from red's
+			// POV. Superseded searches are cancelled so rapid board changes don't
+			// pile up; the forced-win sentinel (±CAVEMAN_WIN) is clamped to the
+			// display band.
 			isDeveloper: false,
 			devEvalEnabled: false,
 			devEvalValue: null,
 			devEvalLoading: false,
-			_devEvalModel: null,
+			_devEvalSeq: 0,
+			_devEvalSearchId: null,
 			async toggleDevEval() {
 				if (!this.isDeveloper) return;
 				this.devEvalEnabled = !this.devEvalEnabled;
@@ -204,28 +206,39 @@ document.addEventListener('alpine:init', () => {
 			async _recomputeDevEval() {
 				if (!this.devEvalEnabled || !this.isDeveloper) return;
 				if (!_engineRef || !_engineRef.board) return;
+				if (typeof boardToSfn !== 'function') return;
+				const board = _engineRef.board;
+				const stm = board.whoseTurn || 'red';
+				const seq = ++this._devEvalSeq;
+				if (this.devEvalValue === null) this.devEvalLoading = true;
+				const opts = { timeLimit: 1.0, maxDepth: 64, useSharedTt: true, resetSharedTt: false };
 				try {
-					if (!this._devEvalModel && !this.devEvalLoading) {
-						this.devEvalLoading = true;
-						try {
-							this._devEvalModel = await SigilNetJS.load(
-								'static/models/sigil_net.json',
-								'static/models/sigil_net.bin',
-							);
-						} finally {
-							this.devEvalLoading = false;
-						}
+					let score;
+					const worker = (typeof getSharedAiWorker === 'function') ? getSharedAiWorker() : null;
+					if (worker && typeof Worker !== 'undefined') {
+						// Supersede any in-flight dev-eval search before starting a new one.
+						if (this._devEvalSearchId != null) { try { worker.cancel(this._devEvalSearchId); } catch (e) {} }
+						const promise = worker.search(boardToSfn(board), stm, opts, null);
+						if (!promise) { if (seq === this._devEvalSeq) this.devEvalLoading = false; return; }
+						this._devEvalSearchId = promise.searchId;
+						const msg = await promise;
+						if (seq !== this._devEvalSeq) return;  // a newer recompute superseded us
+						this._devEvalSearchId = null;
+						score = msg.score;
+					} else {
+						const result = await cavemanSearch(SimBoard.fromSigilBoard(board), stm, opts);
+						if (seq !== this._devEvalSeq) return;
+						score = result.score;
 					}
-					if (!this._devEvalModel) return;
-					const board = _engineRef.board;
-					const stm = board.whoseTurn || 'red';
-					const { raw, spellIds } = boardToTensor(board, stm);
-					const out = this._devEvalModel.forward(raw, spellIds, null, 0);
-					const v = out.value;
-					// Convert side-to-move POV to red POV.
-					this.devEvalValue = stm === 'red' ? v : -v;
+					this.devEvalLoading = false;
+					// Search score is from the mover's POV; convert to red POV and
+					// clamp the forced-win sentinel into the [-1, 1] display band.
+					let v = (stm === 'red') ? score : -score;
+					if (v > 1) v = 1; else if (v < -1) v = -1;
+					this.devEvalValue = v;
 				} catch (e) {
-					console.warn('Dev eval failed:', e);
+					if (seq === this._devEvalSeq) this.devEvalLoading = false;
+					// aborted (superseded) or failed — keep the previous value
 				}
 			},
 

@@ -217,7 +217,8 @@ document.addEventListener('alpine:init', () => {
 			devEvalEnabled: false,
 			devEvalValue: null,
 			devEvalLoading: false,
-			_devEvalModel: null,
+			_devEvalSeq: 0,
+			_devEvalSearchId: null,
 			async toggleDevEval() {
 				if (!this.isDeveloper) return;
 				this.devEvalEnabled = !this.devEvalEnabled;
@@ -230,27 +231,36 @@ document.addEventListener('alpine:init', () => {
 			async _recomputeDevEval() {
 				if (!this.devEvalEnabled || !this.isDeveloper) return;
 				if (!this._engine || !this._engine.board) return;
+				if (typeof boardToSfn !== 'function') return;
+				const board = this._engine.board;
+				const stm = board.whoseTurn || 'red';
+				const seq = ++this._devEvalSeq;
+				if (this.devEvalValue === null) this.devEvalLoading = true;
+				const opts = { timeLimit: 1.0, maxDepth: 64, useSharedTt: true, resetSharedTt: false };
 				try {
-					if (!this._devEvalModel && !this.devEvalLoading) {
-						this.devEvalLoading = true;
-						try {
-							this._devEvalModel = await SigilNetJS.load(
-								'static/models/sigil_net.json',
-								'static/models/sigil_net.bin',
-							);
-						} finally {
-							this.devEvalLoading = false;
-						}
+					let score;
+					const worker = (typeof getSharedAiWorker === 'function') ? getSharedAiWorker() : null;
+					if (worker && typeof Worker !== 'undefined') {
+						if (this._devEvalSearchId != null) { try { worker.cancel(this._devEvalSearchId); } catch (e) {} }
+						const promise = worker.search(boardToSfn(board), stm, opts, null);
+						if (!promise) { if (seq === this._devEvalSeq) this.devEvalLoading = false; return; }
+						this._devEvalSearchId = promise.searchId;
+						const msg = await promise;
+						if (seq !== this._devEvalSeq) return;  // superseded by a newer recompute
+						this._devEvalSearchId = null;
+						score = msg.score;
+					} else {
+						const result = await cavemanSearch(SimBoard.fromSigilBoard(board), stm, opts);
+						if (seq !== this._devEvalSeq) return;
+						score = result.score;
 					}
-					if (!this._devEvalModel) return;
-					const board = this._engine.board;
-					const stm = board.whoseTurn || 'red';
-					const { raw, spellIds } = boardToTensor(board, stm);
-					const out = this._devEvalModel.forward(raw, spellIds, null, 0);
-					const v = out.value;
-					this.devEvalValue = stm === 'red' ? v : -v;
+					this.devEvalLoading = false;
+					// Mover-POV score → red POV; clamp the forced-win sentinel.
+					let v = (stm === 'red') ? score : -score;
+					if (v > 1) v = 1; else if (v < -1) v = -1;
+					this.devEvalValue = v;
 				} catch (e) {
-					console.warn('Dev eval failed:', e);
+					if (seq === this._devEvalSeq) this.devEvalLoading = false;
 				}
 			},
 

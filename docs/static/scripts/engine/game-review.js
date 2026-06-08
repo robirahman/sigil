@@ -11,15 +11,19 @@ const REVIEW_DEFAULTS = {
 	maxDepth: 8,
 	sigmoidK: 8.0,
 	forcedWinFloor: 50,  // |score| >= this is treated as a mate.
-	modelVersion: 'caveman-v1',
+	// Bump when the search semantics change so cached reviews recompute
+	// instead of being served stale. v2: deep mode is now a 60s/ply time
+	// budget (was a depth-8 cap).
+	modelVersion: 'caveman-v2',
 	mode: 'quick',
 };
 
-// Mode presets: 'quick' uses a per-ply time cap with effectively unlimited
-// depth; 'deep' uses a hard depth cap with no time limit.
+// Mode presets: both run the Caveman search under a per-ply time cap with
+// effectively unlimited depth (iterative deepening stops when the clock
+// runs out). 'quick' spends 1s per position; 'deep' spends 60s.
 const REVIEW_MODE_PRESETS = {
 	quick: { timeLimitPerPly: 1.0, maxDepth: 64 },
-	deep:  { timeLimitPerPly: Infinity, maxDepth: 8 },
+	deep:  { timeLimitPerPly: 60.0, maxDepth: 64 },
 };
 
 /** Convert minimax score to win% from the mover's perspective. */
@@ -270,7 +274,8 @@ function aiReviewMixin() {
 
 			// In-memory hit: already loaded a review good enough for the
 			// requested mode → just open it, skip cache RTT and compute.
-			if (this.aiReview) {
+			// Stale-version reviews (different modelVersion) are never reused.
+			if (this.aiReview && this.aiReview.modelVersion === REVIEW_DEFAULTS.modelVersion) {
 				const haveMode = this.aiReview.mode || 'quick';
 				if (haveMode === 'deep' || mode === 'quick') {
 					if (!this.reviewMode) this.startReview();
@@ -289,7 +294,7 @@ function aiReviewMixin() {
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
 					const cached = await loadGameReview(db, gameId);
-					if (cached) {
+					if (cached && cached.modelVersion === REVIEW_DEFAULTS.modelVersion) {
 						const cachedMode = cached.mode || 'quick';
 						if (cachedMode === 'deep' || mode === 'quick') {
 							this.aiReview = cached;
