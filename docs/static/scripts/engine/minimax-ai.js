@@ -241,8 +241,7 @@ function _minimaxApplyTurn(board, turn, color) {
 		else if (t === 'meteor_destroy') {
 			if (action.node) sim.stones[action.node] = null;
 		}
-		// 'thunder' is the legacy type for Gust (renamed); accept both.
-		else if (t === 'gust' || t === 'thunder') {
+		else if (t === 'gust') {
 			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
 			if (action.kept) for (const n of action.kept) sim.stones[n] = enemy;
 		}

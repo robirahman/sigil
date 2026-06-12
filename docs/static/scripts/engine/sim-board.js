@@ -1336,9 +1336,7 @@ function applySimTurn(board, turn, color) {
 		else if (action.type === 'meteor_destroy') {
 			if (action.node) board.stones[action.node] = null;
 		}
-		// 'thunder' is the legacy type for Gust (renamed); accept both so
-		// game logs recorded before the rename still replay.
-		else if (action.type === 'gust' || action.type === 'thunder') {
+		else if (action.type === 'gust') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
 			if (action.kept) for (const n of action.kept) board.stones[n] = enemy;
 		}

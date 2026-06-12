@@ -588,9 +588,8 @@ async function applyAITurn(board, turn, color, emit) {
 		}
 
 		// Gust: pick up enemy stones touching the caster (destroyed), then
-		// relocate them onto empty nodes (kept) — still enemy-owned. ('thunder'
-		// is the legacy type from before the rename; accept both for replay.)
-		else if (action.type === 'gust' || action.type === 'thunder') {
+		// relocate them onto empty nodes (kept) — still enemy-owned.
+		else if (action.type === 'gust') {
 			if (action.destroyed) {
 				for (const n of action.destroyed) {
 					board.stones[n] = null;
