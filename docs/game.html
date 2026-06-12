@@ -532,7 +532,7 @@
 												x-on:mouseover="handleSpellMouseOver(`charm${i}`)"
 											/>
 										</picture>
-										<div class="spell-spots charm-spell" x-bind:class="`charm-spell--${i}`" x-show="spells.images[`charm${i}`] && isExpansionSpell(spellDict[`charm${i}`])"><template x-for="pos in spellSpotTemplate('charm')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
+										<div class="spell-spots charm-spell" x-bind:class="`charm-spell--${i}`" x-show="false"><template x-for="pos in spellSpotTemplate('charm')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
 									</div>
 								</template>
 
@@ -568,7 +568,7 @@
 												x-on:mouseover="handleSpellMouseOver(`ritual${i}`)"
 											/>
 										</picture>
-										<div class="spell-spots ritual-spell" x-bind:class="`ritual-spell--${i}`" x-show="spells.images[`ritual${i}`] && isExpansionSpell(spellDict[`ritual${i}`])"><template x-for="pos in spellSpotTemplate('ritual')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
+										<div class="spell-spots ritual-spell" x-bind:class="`ritual-spell--${i}`" x-show="false"><template x-for="pos in spellSpotTemplate('ritual')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
 									</div>
 								</template>
 
@@ -604,7 +604,7 @@
 												x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 											/>
 										</picture>
-										<div class="spell-spots sorcery-spell" x-bind:class="`sorcery-spell--${i}`" x-show="spells.images[`sorcery${i}`] && isExpansionSpell(spellDict[`sorcery${i}`])"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
+										<div class="spell-spots sorcery-spell" x-bind:class="`sorcery-spell--${i}`" x-show="false"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
 									</div>
 								</template>
 							</div>
