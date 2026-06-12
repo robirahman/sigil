@@ -37,3 +37,40 @@ original prototype below. The shipped definitions live in
 | Scatter | Make 1 soft blink move into each charm. | Revised: make 1 soft blink move into each of 2 spells (Springtime sorcery). |
 | Fury | Make 2 hard moves. | Revised: sacrifice 1 stone, then make 3 hard moves (Inferno sorcery). |
 | Syzygy | Make 3 blink moves into the Sorcery across the board from Syzygy, then 1 into the Charm. | Revised: 1 blink move into the 1-node spell opposite Syzygy, then 3 into the 3-node spell (Celestial ritual). |
+
+## Proposed expansion packs
+
+Two themed expansion line-ups sketched in the old Python spell generator
+(`spellgenerator.py`), each following the core 3-rituals / 3-sorceries /
+3-charms shape. Neither shipped. Several member spells only ever existed as
+names (no mechanics were written); those are marked *(name only)*. The
+expansions that actually shipped in the JS game are different sets entirely
+(Springtime, Celestial, Inferno, Tempest, Tsunami).
+
+### Equinox
+
+| Slot | Spell | Effect / status |
+|---|---|---|
+| Ritual | Planetary_Alignment | *(name only)* |
+| Ritual | Blossom | Make 1 soft blink move into each other Ritual and Sorcery. *(shipped, see above)* |
+| Ritual | Harvest | Make 5 moves into locked spells or into Harvest. |
+| Sorcery | Full_Moon | Make 2 moves that finish filling a spell with your stones. |
+| Sorcery | Scattered_Seeds | *(name only)* |
+| Sorcery | Fallen_Leaves | *(name only)* |
+| Charm | Eclipse | Make 1 move that finishes filling a spell. *(shipped with revised mechanics, see above)* |
+| Charm | Spring | You may cast your locked spells 1 additional time (then Spring-locked until your lock moves). |
+| Charm | Autumn | Your opponent cannot dash. |
+
+### Apocalypse
+
+| Slot | Spell | Effect / status |
+|---|---|---|
+| Ritual | Tidal_Wave | *(name only)* |
+| Ritual | Tempest | Destroy all connected groups of enemy stones that are not connected to mana. |
+| Ritual | Consuming_Darkness | *(name only)* |
+| Sorcery | Rushing_Waters | *(name only)* |
+| Sorcery | Thunder | Destroy 2 enemy stones that are touching each other. *(playtested, decided not to add)* |
+| Sorcery | Blinding_Snow | *(name only)* |
+| Charm | Gush | Relocate all enemy stones touching you into any empty nodes. *(shipped as Splash → Tsunami)* |
+| Charm | Lightning | *(name only)* |
+| Charm | Winter | Your opponent cannot cast charms. (Static charms still work.) |
