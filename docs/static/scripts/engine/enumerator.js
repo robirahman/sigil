@@ -130,7 +130,12 @@ function _rankFireblastSacs(board, color, candidates) {
  * dead-or-near-dead (6); exact distance doesn't matter.
  */
 function _rankSacCombos(board, color, hasLightning, cap) {
-	const own = NODE_ORDER.filter(n => board.stones[n] === color);
+	// Seal of Autumn (held by the enemy) bars sacrificing stones on a spell
+	// sigil; with too few eligible stones the returned combos come up empty
+	// and the dash branch is skipped entirely.
+	const enemy = board._enemy(color);
+	const restricted = (board.chargedSpells[enemy] || []).includes('Seal_of_Autumn');
+	const own = NODE_ORDER.filter(n => board.stones[n] === color && (!restricted || !isSpellNode(n)));
 	const dist = new Map();
 	for (const n of own) dist.set(n, board.escapeDistance(n, color, 6));
 	if (hasLightning) {

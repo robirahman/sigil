@@ -312,10 +312,12 @@ class GameController {
 			}
 		} else {
 			// Post-move options
-			if (candash && canspell && board.totalStones[color] > 2) {
-				if (!board.chargedSpells[enemy].includes('Autumn')) {
-					actions.push('dash');
-				}
+			// canDash() folds in Seal of Autumn: when the enemy holds it, only
+			// stones outside the spell sigils may be sacrificed, so a dash is
+			// offered only when enough eligible stones exist to pay for it.
+			if (candash && canspell && canDash(board, color)
+			    && !board.chargedSpells[enemy].includes('Autumn')) {
+				actions.push('dash');
 			}
 
 			let summerActive = false;
@@ -483,14 +485,27 @@ class GameController {
 
 		this.emit({ type: 'message', message: 'Opponent dashes!', awaiting: null });
 
-		if (lightning) {
-			// Sacrifice 1 stone
+		// Seal of Autumn (held by the enemy) bars sacrificing stones that sit
+		// on a spell sigil. Highlight only the eligible stones when restricted;
+		// otherwise keep the classic "click any of your stones" prompt.
+		const restricted = board.chargedSpells[enemy].includes('Seal_of_Autumn');
+		const eligible = new Set(dashSacrificeOptions(board, color));
+		const sacOptions = () => {
+			if (!restricted) return {};
+			const mo = {};
+			for (const n of eligible) if (board.stones[n] === color) mo[n] = color;
+			return mo;
+		};
+		const count = lightning ? 1 : 2;
+		const firstMsg = lightning ? 'Choose a stone to sacrifice.' : 'Sacrifice two stones.';
+
+		for (let i = 0; i < count; i++) {
 			while (true) {
 				const resp = await this.getInput({
-					type: 'message', message: 'Choose a stone to sacrifice.',
-					awaiting: 'node', moveoptions: {},
+					type: 'message', message: i === 0 ? firstMsg : '',
+					awaiting: 'node', moveoptions: sacOptions(),
 				});
-				if (board.stones[resp] === color) {
+				if (board.stones[resp] === color && eligible.has(resp)) {
 					board.stones[resp] = null;
 					if (board.lastPlay === resp) {
 						board.lastPlay = null;
@@ -499,27 +514,6 @@ class GameController {
 					board.update();
 					this.emit(board.getBoardStatePayload());
 					break;
-				}
-			}
-		} else {
-			// Sacrifice 2 stones
-			for (let i = 0; i < 2; i++) {
-				while (true) {
-					const msg = i === 0 ? 'Sacrifice two stones.' : '';
-					const resp = await this.getInput({
-						type: 'message', message: msg,
-						awaiting: 'node', moveoptions: {},
-					});
-					if (board.stones[resp] === color) {
-						board.stones[resp] = null;
-						if (board.lastPlay === resp) {
-							board.lastPlay = null;
-							board.lastPlayer = null;
-						}
-						board.update();
-						this.emit(board.getBoardStatePayload());
-						break;
-					}
 				}
 			}
 		}

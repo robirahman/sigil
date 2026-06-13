@@ -828,6 +828,54 @@ const SpellResolvers = {
 		}
 	},
 
+	// --- Gather / Harvest (autumn): N moves into your locked spell or this one ---
+	async locked_or_self_moves(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const count = CORE_SPELLS[spellName].count;
+		// Allowed landing zone: this spell's own nodes plus your locked
+		// (non-charm) spell's nodes, if any. The lock is assigned AFTER this
+		// resolver runs, so board.lock[color] still names the spell you were
+		// locked into before casting Gather/Harvest.
+		const selfIdx = board.spellNames.indexOf(spellName) + 1;
+		const lockName = board.lock[color];
+		const lockIdx = lockName ? board.spellNames.indexOf(lockName) + 1 : 0;
+		const allowed = new Set(POSITIONS[selfIdx]);
+		if (lockIdx >= 1) for (const n of POSITIONS[lockIdx]) allowed.add(n);
+		const label = spellName.replace(/_/g, ' ');
+		for (let i = 0; i < count; i++) {
+			const moves = getAllMoveTargets(board, color);
+			const targets = {};
+			for (const node of Object.keys(moves)) {
+				if (allowed.has(node)) targets[node] = color;
+			}
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: `No legal move into your locked spell or ${label}; ${label} ends early.`, awaiting: null });
+				return;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Make a move into your locked spell or ${label} (${i + 1}/${count}).`,
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				if (board.stones[resp] === enemy) {
+					await doPushEnemy(board, resp, color, getInput, emit);
+				} else {
+					board.stones[resp] = color;
+					emit({ type: 'new_stone_animation', color, node: resp });
+					board.lastPlay = resp;
+					board.lastPlayer = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+				}
+				break;
+			}
+			if (board.gameover) return;
+		}
+	},
+
 	// --- Gust (relocate enemy stones touching you) ---
 	async gust(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
