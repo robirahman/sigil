@@ -171,9 +171,7 @@ class SpectatorController {
 			}
 			if (Object.keys(moveoptions).length === 0) return;
 		} else {
-			if (candash && canspell && board.totalStones[color] > 2) {
-				if (!board.chargedSpells[enemy].includes('Autumn')) actions.push('dash');
-			}
+			if (candash && canspell && canDash(board, color)) actions.push('dash');
 			let summerActive = false;
 			if (board.chargedSpells[color].includes('Seal_of_Summer') && cansummer) summerActive = true;
 			if (canspell || (!canspell && summerActive)) {

@@ -130,7 +130,12 @@ function _rankFireblastSacs(board, color, candidates) {
  * dead-or-near-dead (6); exact distance doesn't matter.
  */
 function _rankSacCombos(board, color, hasLightning, cap) {
-	const own = NODE_ORDER.filter(n => board.stones[n] === color);
+	// Seal of Autumn (held by the enemy) bars sacrificing stones on a spell
+	// sigil; with too few eligible stones the returned combos come up empty
+	// and the dash branch is skipped entirely.
+	const enemy = board._enemy(color);
+	const restricted = (board.chargedSpells[enemy] || []).includes('Seal_of_Autumn');
+	const own = NODE_ORDER.filter(n => board.stones[n] === color && (!restricted || !isSpellNode(n)));
 	const dist = new Map();
 	for (const n of own) dist.set(n, board.escapeDistance(n, color, 6));
 	if (hasLightning) {
@@ -515,8 +520,7 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 	// Dash: enumerate sacrifice combos × top-K move targets, both
 	// smart-ordered. Sacrifices ranked by escape-distance (dead stones
 	// first); destinations ranked by enemy-adjacency (impact first).
-	if (canDash && canSpell && board.totalStones[color] > 2
-	    && !(board.chargedSpells[enemy] || []).includes('Autumn')) {
+	if (canDash && canSpell && board.totalStones[color] > 2) {
 		const hasLightning = (board.chargedSpells[color] || []).includes('Seal_of_Lightning');
 		// With Lightning, dash sacrifices are single stones and destinations
 		// are at most ~6 per stone — total ~60 combos. Cheap enough to

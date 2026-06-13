@@ -848,6 +848,22 @@ class SimBoard {
 				}
 				if (this.gameover) return actions;
 			}
+		} else if (rt === 'locked_or_self_moves') {
+			// Gather/Harvest: `count` moves into your locked spell or this
+			// spell's own slot. The lock is assigned after resolution, so
+			// this.lock[color] still names the previously locked spell.
+			const selfIdx = this.spellNames.indexOf(spellName) + 1;
+			const lockName = this.lock[color];
+			const lockIdx = lockName ? this.spellNames.indexOf(lockName) + 1 : 0;
+			const allowed = new Set(POSITIONS[selfIdx]);
+			if (lockIdx >= 1) for (const n of POSITIONS[lockIdx]) allowed.add(n);
+			for (let i = 0; i < info.count; i++) {
+				const moves = this._allMoveable(color).filter(n => allowed.has(n));
+				if (!moves.length) break;
+				actions.push(this._doMove(color, moves[0], false, pushDests.shift()));
+				this.update();
+				if (this.gameover) return actions;
+			}
 		} else if (rt === 'scatter') {
 			// 1 soft blink into each of 2 different spells (any empty node).
 			const usedSpells = new Set();
@@ -1154,12 +1170,14 @@ class SimBoard {
 		const enemy = this._enemy(color);
 		const hasLightning = this.chargedSpells[color].includes('Seal_of_Lightning');
 		const hasSummer = this.chargedSpells[color].includes('Seal_of_Summer');
-		const hasAutumn = this.chargedSpells[enemy].includes('Autumn');
+		// Seal of Autumn (held by the enemy) bars sacrificing in-sigil stones.
+		const hasAutumnSeal = this.chargedSpells[enemy].includes('Seal_of_Autumn');
+		const canSac = (b, name) => b.stones[name] === color && (!hasAutumnSeal || !isSpellNode(name));
 
 		yield new SimTurn([...actionsSoFar, new SimAction('pass')]);
 
 		// Dash
-		if (canDash && canSpell && this.totalStones[color] > 2 && !hasAutumn) {
+		if (canDash && canSpell && this.totalStones[color] > 2) {
 			const dashTargets = this._allMoveable(color);
 			if (dashTargets.length) {
 				const bd = this.copy();
@@ -1168,7 +1186,7 @@ class SimBoard {
 				if (hasLightning) {
 					let sac = null;
 					for (const name of [...NODE_ORDER].reverse()) {
-						if (bd.stones[name] === color) { sac = name; break; }
+						if (canSac(bd, name)) { sac = name; break; }
 					}
 					if (sac) {
 						bd.stones[sac] = null;
@@ -1188,7 +1206,7 @@ class SimBoard {
 				} else {
 					const sacs = [];
 					for (const name of [...NODE_ORDER].reverse()) {
-						if (bd.stones[name] === color && sacs.length < 2) {
+						if (canSac(bd, name) && sacs.length < 2) {
 							sacs.push(name);
 							bd.stones[name] = null;
 						}

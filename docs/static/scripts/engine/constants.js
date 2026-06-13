@@ -39,6 +39,16 @@ const ADJACENCY = {
 
 const MANA_NODES = ['a1', 'b1', 'c1'];
 
+// Nodes that sit on a spell sigil (positions 1..9). Seal of Autumn forbids the
+// opponent from sacrificing any of these to pay for a dash.
+const SPELL_NODES = new Set();
+for (let _spellPos = 1; _spellPos <= 9; _spellPos++) {
+	for (const _spellNode of POSITIONS[_spellPos]) SPELL_NODES.add(_spellNode);
+}
+function isSpellNode(name) {
+	return SPELL_NODES.has(name);
+}
+
 // Core spells metadata
 const CORE_SPELLS = {
 	Flourish:          { resolve: 'soft_moves', count: 4, static: false, ischarm: false },
@@ -89,6 +99,10 @@ const CORE_SPELLS = {
 	Moth_Plague:       { resolve: 'moth_plague', count: 3, static: false, ischarm: false },
 	Ripples:           { resolve: 'ripples',         static: false, ischarm: false },
 	Lifesap:           { resolve: null,              static: true,  ischarm: false },
+	// Autumn expansion
+	Seal_of_Autumn:    { resolve: null,              static: true,  ischarm: true },
+	Gather:            { resolve: 'locked_or_self_moves', count: 3, static: false, ischarm: false },
+	Harvest:           { resolve: 'locked_or_self_moves', count: 5, static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -134,6 +148,9 @@ const SPELL_TEXTS = {
 	Moth_Plague:       'Make 3 hard blink moves (push any enemy stone, no adjacency required).',
 	Ripples:           'Choose two charged 1-node spells in play and apply each of their effects twice.',
 	Lifesap:           'STATIC: You refill 2 stones when you cast a 5-node spell (ritual).',
+	Seal_of_Autumn:    'STATIC: Opponent cannot sacrifice stones in spells to dash.',
+	Gather:            'Make 3 moves into your locked spell or into Gather.',
+	Harvest:           'Make 5 moves into your locked spell or into Harvest.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -160,6 +177,10 @@ const TSUNAMI_RITUALS = ['Flood'];
 const TSUNAMI_SORCERIES = ['Torrent'];
 const TSUNAMI_CHARMS = ['Splash'];
 
+const AUTUMN_RITUALS = ['Harvest'];
+const AUTUMN_SORCERIES = ['Gather'];
+const AUTUMN_CHARMS = ['Seal_of_Autumn'];
+
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
@@ -173,9 +194,10 @@ const EXPANSIONS = {
 	fury:       { name: 'Inferno',    rituals: FURY_RITUALS,       sorceries: FURY_SORCERIES,       charms: FURY_CHARMS },
 	tempest:    { name: 'Tempest',    rituals: TEMPEST_RITUALS,    sorceries: TEMPEST_SORCERIES,    charms: TEMPEST_CHARMS },
 	tsunami:    { name: 'Tsunami',    rituals: TSUNAMI_RITUALS,    sorceries: TSUNAMI_SORCERIES,    charms: TSUNAMI_CHARMS },
+	autumn:     { name: 'Autumn',     rituals: AUTUMN_RITUALS,     sorceries: AUTUMN_SORCERIES,     charms: AUTUMN_CHARMS },
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'panda'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'panda'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
