@@ -335,11 +335,6 @@ function shuffleArray(arr) {
 	return a;
 }
 
-// Minimum number of expansion-specific spells guaranteed in a generated board
-// when at least one expansion is selected, so an expansion game never ends up
-// as an all-base-game board purely by chance.
-const MIN_EXPANSION_SPELLS = 1;
-
 function generateSpellList(selection) {
 	const expansionKeys = normalizeExpansionSelection(selection);
 	const coreByCat = [CORE_RITUALS, CORE_SORCERIES, CORE_CHARMS];
@@ -356,27 +351,51 @@ function generateSpellList(selection) {
 	const picks = packByCat.map(cat => shuffleArray(cat).slice(0, 3));
 
 	if (expansionKeys.length > 0) {
-		const isExpansion = (spell, catIdx) => expansionByCat[catIdx].includes(spell);
-		const expansionAvailable = expansionByCat.reduce((n, c) => n + c.length, 0);
-		const minExpansion = Math.min(MIN_EXPANSION_SPELLS, expansionAvailable);
+		// Enforce at least one spell from each selected expansion pack
+		for (const key of expansionKeys) {
+			const exp = EXPANSIONS[key];
+			const hasSpell = picks[0].some(s => exp.rituals.includes(s)) ||
+			                 picks[1].some(s => exp.sorceries.includes(s)) ||
+			                 picks[2].some(s => exp.charms.includes(s));
+			if (hasSpell) continue;
 
-		const countExpansion = () => picks.reduce(
-			(n, sel, i) => n + sel.filter(s => isExpansion(s, i)).length, 0);
+			const getExpCount = (k) => {
+				const e = EXPANSIONS[k];
+				return picks[0].filter(s => e.rituals.includes(s)).length +
+				       picks[1].filter(s => e.sorceries.includes(s)).length +
+				       picks[2].filter(s => e.charms.includes(s)).length;
+			};
 
-		// Swap a randomly chosen core pick for an unselected expansion spell until
-		// at least minExpansion expansion spells are present in the final nine.
-		let guard = 0;
-		while (countExpansion() < minExpansion && guard++ < 100) {
-			const candidates = packByCat
-				.map((cat, i) => i)
-				.filter(i => expansionByCat[i].some(s => !picks[i].includes(s))
-				          && picks[i].some(s => !isExpansion(s, i)));
-			if (!candidates.length) break;
-			const i = candidates[Math.floor(Math.random() * candidates.length)];
-			const unselectedExp = expansionByCat[i].filter(s => !picks[i].includes(s));
-			const inSpell = unselectedExp[Math.floor(Math.random() * unselectedExp.length)];
-			const outPos = picks[i].findIndex(s => !isExpansion(s, i));
-			picks[i][outPos] = inSpell;
+			let swapped = false;
+			for (let i = 0; i < 3; i++) {
+				const catSpells = i === 0 ? exp.rituals : (i === 1 ? exp.sorceries : exp.charms);
+				if (catSpells.length === 0) continue;
+
+				for (let slot = 0; slot < 3; slot++) {
+					const currentSpell = picks[i][slot];
+					let canSwapOut = false;
+					const currentSpellExp = expansionKeys.find(k => 
+						EXPANSIONS[k].rituals.includes(currentSpell) ||
+						EXPANSIONS[k].sorceries.includes(currentSpell) ||
+						EXPANSIONS[k].charms.includes(currentSpell)
+					);
+					if (!currentSpellExp) {
+						canSwapOut = true;
+					} else if (getExpCount(currentSpellExp) > 1) {
+						canSwapOut = true;
+					}
+
+					if (canSwapOut) {
+						const availableSpells = catSpells.filter(s => !picks[i].includes(s));
+						if (availableSpells.length > 0) {
+							picks[i][slot] = availableSpells[Math.floor(Math.random() * availableSpells.length)];
+							swapped = true;
+							break;
+						}
+					}
+				}
+				if (swapped) break;
+			}
 		}
 	}
 

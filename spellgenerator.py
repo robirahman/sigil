@@ -148,6 +148,65 @@ def generate_spell_list(expansions=None, pack_key=None):
 	sorceries = random.sample(sorceries_pool, 3)
 	charms = random.sample(charms_pool, 3)
 
+	picks = [rituals, sorceries, charms]
+	keys = normalize_expansion_selection(expansions)
+	if expansions is None:
+		if pack_key is not None:
+			keys = normalize_expansion_selection(list(EXPANSION_KEYS) if pack_key == 'all' else [pack_key])
+		elif os.environ.get('SIGIL_SPELL_PACKS'):
+			keys = normalize_expansion_selection(os.environ['SIGIL_SPELL_PACKS'])
+		else:
+			keys = normalize_expansion_selection(os.environ.get('SIGIL_SPELL_PACK', 'core'))
+
+	if keys:
+		for k in keys:
+			exp = EXPANSIONS[k]
+			has_spell = (any(s in exp['rituals'] for s in picks[0]) or
+			             any(s in exp['sorceries'] for s in picks[1]) or
+			             any(s in exp['charms'] for s in picks[2]))
+			if has_spell:
+				continue
+
+			def get_exp_count(key_name):
+				e = EXPANSIONS[key_name]
+				return (sum(1 for s in picks[0] if s in e['rituals']) +
+				        sum(1 for s in picks[1] if s in e['sorceries']) +
+				        sum(1 for s in picks[2] if s in e['charms']))
+
+			swapped = False
+			for i in range(3):
+				cat_spells = exp['rituals'] if i == 0 else (exp['sorceries'] if i == 1 else exp['charms'])
+				if not cat_spells:
+					continue
+
+				for slot in range(3):
+					current_spell = picks[i][slot]
+					can_swap_out = False
+					current_spell_exp = None
+					for ok in keys:
+						e = EXPANSIONS[ok]
+						if (current_spell in e['rituals'] or
+						    current_spell in e['sorceries'] or
+						    current_spell in e['charms']):
+							current_spell_exp = ok
+							break
+
+					if not current_spell_exp:
+						can_swap_out = True
+					elif get_exp_count(current_spell_exp) > 1:
+						can_swap_out = True
+
+					if can_swap_out:
+						available_spells = [s for s in cat_spells if s not in picks[i]]
+						if available_spells:
+							picks[i][slot] = random.choice(available_spells)
+							swapped = True
+							break
+				if swapped:
+					break
+
+	rituals, sorceries, charms = picks[0], picks[1], picks[2]
+
 	ritual1 = "spellfile." + rituals[0] + "(self, self.positions[1], '" + rituals[0] + "')"
 	ritual2 = "spellfile." + rituals[1] + "(self, self.positions[2], '" + rituals[1] + "')"
 	ritual3 = "spellfile." + rituals[2] + "(self, self.positions[3], '" + rituals[2] + "')"
