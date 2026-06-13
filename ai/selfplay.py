@@ -71,7 +71,7 @@ def play_game(red_policy, blue_policy, spell_names=None, variant='standard'):
         recorder.start_turn(color, display_num)
 
         # Check for Inferno bot trigger
-        if 'Inferno' in board.charged_spells[color]:
+        if 'Seal_of_the_Eschaton' in board.charged_spells[color]:
             enemy = 'blue' if color == 'red' else 'red'
             board.gameover = True
             board.winner = enemy

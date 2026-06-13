@@ -136,6 +136,22 @@ class CataclysmController {
 					message: colorName + ' — Round ' + roundNum,
 				});
 
+				// Beginning-of-turn trigger: holding the Seal of the Eschaton
+				// eliminates that player.
+				board.update();
+				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+					this.emit({ type: 'message', message: 'THE ESCHATON CLAIMS ' + colorName + '!', awaiting: null });
+					board.eliminated.add(color);
+					board.update();
+					board.checkGameOver(color);
+					if (board.gameover) {
+						this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
+						return;
+					}
+					resetThisTurn = false;
+					continue;
+				}
+
 				if (board.gameover) {
 					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
@@ -186,7 +202,14 @@ class CataclysmController {
 
 		if (canmove) {
 			actions.push('move');
-			if (board.chargedSpells[color].includes('Seal_of_Wind')) {
+			let stoneActiveMove = false;
+			for (const enemy of board.enemies(color)) {
+				if (board.chargedSpells[enemy].includes('Seal_of_Stone')) { stoneActiveMove = true; break; }
+			}
+			if (stoneActiveMove) {
+				// Seal of Stone (enemy-held): your opening move must be soft.
+				moveoptions = catGetSoftMoveTargets(board, color);
+			} else if (board.chargedSpells[color].includes('Seal_of_Wind')) {
 				moveoptions = catGetBlinkTargets(board, color);
 			} else {
 				moveoptions = catGetAllMoveTargets(board, color);
@@ -224,7 +247,7 @@ class CataclysmController {
 						// Check if any enemy has Winter
 						let winterBlocked = false;
 						for (const enemy of board.enemies(color)) {
-							if (board.chargedSpells[enemy].includes('Winter')) {
+							if (board.chargedSpells[enemy].includes('Seal_of_Winter')) {
 								winterBlocked = true;
 								break;
 							}
@@ -314,6 +337,17 @@ class CataclysmController {
 			return this._promptMove(color, standardMove);
 		}
 
+		// Seal of Stone (enemy-held): the opening move must be soft (empty + adjacent).
+		if (standardMove) {
+			let stoneActive = false;
+			for (const enemy of board.enemies(color)) {
+				if (board.chargedSpells[enemy].includes('Seal_of_Stone')) { stoneActive = true; break; }
+			}
+			if (stoneActive && (board.stones[nodeName] !== null || !adjacent)) {
+				return this._promptMove(color, standardMove);
+			}
+		}
+
 		if (!adjacent && !hasWind) {
 			return this._promptMove(color, standardMove);
 		}
@@ -333,7 +367,15 @@ class CataclysmController {
 	async _promptMove(color, standardMove) {
 		const board = this.board;
 		let moveoptions;
-		if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) {
+		let stoneActivePrompt = false;
+		if (standardMove) {
+			for (const enemy of board.enemies(color)) {
+				if (board.chargedSpells[enemy].includes('Seal_of_Stone')) { stoneActivePrompt = true; break; }
+			}
+		}
+		if (stoneActivePrompt) {
+			moveoptions = catGetSoftMoveTargets(board, color);
+		} else if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) {
 			moveoptions = catGetBlinkTargets(board, color);
 		} else {
 			moveoptions = catGetAllMoveTargets(board, color);
@@ -471,8 +513,8 @@ class CataclysmController {
 		const board = this.board;
 
 		// Inferno EOT effect
-		if (board.chargedSpells[color].includes('Inferno')) {
-			this.emit({ type: 'message', message: 'INFERNO TRIGGER!', awaiting: null });
+		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+			this.emit({ type: 'message', message: 'THE ESCHATON BURNS!', awaiting: null });
 			const adj = board.mapDef.adjacency;
 			for (const name of board.nodeOrder) {
 				if (board.isEnemy(board.stones[name], color)) {

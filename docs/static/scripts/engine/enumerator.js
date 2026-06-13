@@ -439,6 +439,12 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < targets.length && i < caps.splash; i++) {
 			out.push({ surge_target: targets[i] });
 		}
+	} else if (rt === 'restricted_move') {
+		// Lurk: each moveable node that is NOT part of a 3- or 5-node spell.
+		const targets = board._allMoveable(color).filter(n => !isBigSpellNode(n));
+		for (let i = 0; i < targets.length && i < caps.splash; i++) {
+			out.push({ restricted_target: targets[i] });
+		}
 	} else if (rt === 'shiver') {
 		// Enumerate own↔enemy swaps (the impactful ones).
 		const enemy = board._enemy(color);
@@ -609,8 +615,11 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	}
 
 	const hasSeal = (board.chargedSpells[color] || []).includes('Seal_of_Wind');
+	// Seal of Stone (enemy-held): this color's opening move must be soft.
+	const enemyHasStone = (board.chargedSpells[enemy] || []).includes('Seal_of_Stone');
 	let moveTargets;
-	if (hasSeal) moveTargets = board._blinkable(color);
+	if (enemyHasStone) moveTargets = board._softMoveable(color);
+	else if (hasSeal) moveTargets = board._blinkable(color);
 	else moveTargets = board._allMoveable(color);
 	if (!moveTargets.length) return [new SimTurn([new SimAction('pass')])];
 	const out = [];

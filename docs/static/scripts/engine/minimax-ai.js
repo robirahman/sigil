@@ -216,7 +216,7 @@ function _minimaxApplyTurn(board, turn, color) {
 		}
 		else if (t === 'fireblast' || t === 'hail_storm'
 		         || t === 'storm_front' || t === 'hurricane'
-		         || t === 'bear_trap') {
+		         || t === 'bear_trap' || t === 'decay') {
 			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
 		}
 		else if (t === 'perfect_heist') {
@@ -247,8 +247,14 @@ function _minimaxApplyTurn(board, turn, color) {
 		}
 		sim.update();
 	}
+	// Seal of the Eschaton — end of this player's turn: nuke enemies touching them.
+	eschatonEndOfTurn(sim, color);
 	sim.checkGameOver(color);
-	if (!sim.gameover) sim.advanceTurn();
+	if (!sim.gameover) {
+		sim.advanceTurn();
+		// Start of the next player's turn: still holding the seal loses immediately.
+		eschatonStartOfTurnLoss(sim, sim.whoseTurn);
+	}
 	return sim;
 }
 

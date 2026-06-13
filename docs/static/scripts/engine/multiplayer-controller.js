@@ -342,6 +342,14 @@ class MultiplayerController {
 				board.whoseTurn = board.turnCounter % 2 === 1 ? 'red' : 'blue';
 				const color = board.whoseTurn;
 
+				// Beginning-of-turn trigger: holding the Seal of the Eschaton loses.
+				board.update();
+				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+					this.emit({ type: 'message', message: 'THE ESCHATON CLAIMS YOU!', awaiting: null });
+					board.gameover = true;
+					board.winner = board.enemy(color);
+				}
+
 				let turnMsg;
 				if (color === 'red') {
 					turnMsg = 'Red Turn ' + (Math.floor(board.turnCounter / 2) + 1);
@@ -464,11 +472,7 @@ class MultiplayerController {
 
 		if (canmove) {
 			actions.push('move');
-			if (board.chargedSpells[color].includes('Seal_of_Wind')) {
-				moveoptions = getBlinkTargets(board, color);
-			} else {
-				moveoptions = getAllMoveTargets(board, color);
-			}
+			moveoptions = getStandardMoveTargets(board, color, true);
 			if (Object.keys(moveoptions).length === 0) return;
 		} else {
 			// canDash() folds in Seal of Autumn: when the enemy holds it, only
@@ -484,7 +488,7 @@ class MultiplayerController {
 					const info = CORE_SPELLS[spellName];
 					if (!info || info.static) continue;
 					if (info.ischarm) {
-						if (board.chargedSpells[enemy].includes('Winter')) continue;
+						if (board.chargedSpells[enemy].includes('Seal_of_Winter')) continue;
 						if (spellName === 'Surge') { if (!candash) { actions.push(spellName); spellList.push(spellName); } continue; }
 						if (spellName === 'Splash') { if (candash) { actions.push(spellName); spellList.push(spellName); } continue; }
 						if (canspell || (!canspell && summerActive)) { actions.push(spellName); spellList.push(spellName); }
@@ -578,6 +582,7 @@ class MultiplayerController {
 		let adjacent = false;
 		for (const nb of ADJACENCY[nodeName]) { if (board.stones[nb] === color) { adjacent = true; break; } }
 		if (board.stones[nodeName] === color) return this._promptMove(color, standardMove);
+		if (violatesSealOfStone(board, color, nodeName, standardMove)) return this._promptMove(color, standardMove);
 		if (!adjacent && !hasWind) return this._promptMove(color, standardMove);
 		if (!adjacent && hasWind) {
 			if (board.stones[nodeName] === null) {
@@ -604,8 +609,7 @@ class MultiplayerController {
 		const board = this.board;
 		const isMyTurn = color === this.myColor;
 		let moveoptions;
-		if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) moveoptions = getBlinkTargets(board, color);
-		else moveoptions = getAllMoveTargets(board, color);
+		moveoptions = getStandardMoveTargets(board, color, standardMove);
 		const resp = await this.getInput({
 			type: 'message', message: isMyTurn ? 'Choose where to move.' : '',
 			awaiting: 'node', moveoptions: isMyTurn ? moveoptions : {},
@@ -697,7 +701,8 @@ class MultiplayerController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
-		if (board.chargedSpells[color].includes('Inferno')) {
+		// Seal of the Eschaton end-of-turn effect.
+		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
 			for (const name of NODE_ORDER) {
 				if (board.stones[name] === enemy) {
 					for (const nb of ADJACENCY[name]) {

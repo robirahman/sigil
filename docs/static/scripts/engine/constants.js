@@ -49,6 +49,17 @@ function isSpellNode(name) {
 	return SPELL_NODES.has(name);
 }
 
+// Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
+// Lurk (Gloom charm) may move onto any node EXCEPT these; 1-node spells (charms)
+// and non-spell nodes remain valid targets.
+const BIG_SPELL_NODES = new Set();
+for (let _bigPos = 1; _bigPos <= 6; _bigPos++) {
+	for (const _bigNode of POSITIONS[_bigPos]) BIG_SPELL_NODES.add(_bigNode);
+}
+function isBigSpellNode(name) {
+	return BIG_SPELL_NODES.has(name);
+}
+
 // Core spells metadata
 const CORE_SPELLS = {
 	Flourish:          { resolve: 'soft_moves', count: 4, static: false, ischarm: false },
@@ -103,6 +114,14 @@ const CORE_SPELLS = {
 	Seal_of_Autumn:    { resolve: null,              static: true,  ischarm: true },
 	Gather:            { resolve: 'locked_or_self_moves', count: 3, static: false, ischarm: false },
 	Harvest:           { resolve: 'locked_or_self_moves', count: 5, static: false, ischarm: false },
+	// Gloom expansion
+	Lurk:              { resolve: 'restricted_move',         static: false, ischarm: true },
+	Decay:             { resolve: 'destroy_exposed',         static: false, ischarm: false },
+	Wither:            { resolve: 'destroy_exposed_then_soft', count: 2, static: false, ischarm: false },
+	// Covenant expansion (static seals)
+	Seal_of_Winter:    { resolve: null, static: true, ischarm: true },
+	Seal_of_Stone:     { resolve: null, static: true, ischarm: false },
+	Seal_of_the_Eschaton: { resolve: null, static: true, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -151,6 +170,12 @@ const SPELL_TEXTS = {
 	Seal_of_Autumn:    'STATIC: Opponent cannot sacrifice stones in spells to dash.',
 	Gather:            'Make 3 moves into your locked spell or into Gather.',
 	Harvest:           'Make 5 moves into your locked spell or into Harvest.',
+	Lurk:              'Make 1 move into a 1-node spell or a node outside of a spell.',
+	Decay:             'Destroy all enemy stones touching 2 or more empty nodes.',
+	Wither:            'Destroy all enemy stones touching 2 or more empty nodes, then make 2 soft moves.',
+	Seal_of_Winter:    'STATIC: Your opponent cannot cast 1-node spells (charms).',
+	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
+	Seal_of_the_Eschaton: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -181,6 +206,14 @@ const AUTUMN_RITUALS = ['Harvest'];
 const AUTUMN_SORCERIES = ['Gather'];
 const AUTUMN_CHARMS = ['Seal_of_Autumn'];
 
+const GLOOM_RITUALS = ['Wither'];
+const GLOOM_SORCERIES = ['Decay'];
+const GLOOM_CHARMS = ['Lurk'];
+
+const COVENANT_RITUALS = ['Seal_of_the_Eschaton'];
+const COVENANT_SORCERIES = ['Seal_of_Stone'];
+const COVENANT_CHARMS = ['Seal_of_Winter'];
+
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
@@ -195,9 +228,11 @@ const EXPANSIONS = {
 	tempest:    { name: 'Tempest',    rituals: TEMPEST_RITUALS,    sorceries: TEMPEST_SORCERIES,    charms: TEMPEST_CHARMS },
 	tsunami:    { name: 'Tsunami',    rituals: TSUNAMI_RITUALS,    sorceries: TSUNAMI_SORCERIES,    charms: TSUNAMI_CHARMS },
 	autumn:     { name: 'Autumn',     rituals: AUTUMN_RITUALS,     sorceries: AUTUMN_SORCERIES,     charms: AUTUMN_CHARMS },
+	gloom:      { name: 'Gloom',      rituals: GLOOM_RITUALS,      sorceries: GLOOM_SORCERIES,      charms: GLOOM_CHARMS },
+	covenant:   { name: 'Covenant',   rituals: COVENANT_RITUALS,   sorceries: COVENANT_SORCERIES,   charms: COVENANT_CHARMS },
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'panda'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.

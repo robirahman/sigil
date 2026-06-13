@@ -542,7 +542,7 @@ class AIPlayer():
 
 					if not spell.static:
 						if spell.ischarm:
-							if 'Winter' not in [s.name for s in self.opp.charged_spells]:
+							if 'Seal_of_Winter' not in [s.name for s in self.opp.charged_spells]:
 								if spell.name == 'Surge':
 									if not candash:
 										actions.append(spell.name)
@@ -635,8 +635,8 @@ class AIPlayer():
 		### like Inferno, which should set the global
 		### variables gameover = True and winner = self.enemy
 
-		if 'Inferno' in [spell.name for spell in self.charged_spells]:
-			self.board.humanplayer.jmessage("DEATH BY INFERNO!")
+		if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
+			self.board.humanplayer.jmessage("THE ESCHATON CLAIMS YOU!")
 			self.board.gameover = True
 			self.board.winner = self.enemy
 
@@ -654,8 +654,8 @@ class AIPlayer():
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
 
 
-		if 'Inferno' in [spell.name for spell in self.charged_spells]:
-			self.board.humanplayer.jmessage("INFERNO TRIGGER!")
+		if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
+			self.board.humanplayer.jmessage("THE ESCHATON BURNS!")
 			for name in board.nodes:
 				node = board.nodes[name]
 				if node.stone == self.enemy:

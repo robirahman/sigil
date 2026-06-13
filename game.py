@@ -653,7 +653,7 @@ class Player():
 				for spell in self.charged_spells:
 					if not spell.static:
 						if spell.ischarm:
-							if 'Winter' not in [s.name for s in self.opp.charged_spells]:
+							if 'Seal_of_Winter' not in [s.name for s in self.opp.charged_spells]:
 								if spell.name == 'Surge':
 									if not candash:
 										actions.append(spell.name)
@@ -733,10 +733,10 @@ class Player():
 		### like Inferno, which should set the global
 		### variables gameover = True and winner = self.enemy
 
-		if 'Inferno' in [spell.name for spell in self.charged_spells]:
-			self.jmessage("DEATH BY INFERNO!")
+		if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
+			self.jmessage("THE ESCHATON CLAIMS YOU!")
 			if self.opp.ishuman:
-				self.opp.jmessage("DEATH BY INFERNO!")
+				self.opp.jmessage("THE ESCHATON CLAIMS YOU!")
 			self.board.gameover = True
 			self.board.winner = self.enemy
 
@@ -754,10 +754,10 @@ class Player():
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
 
 
-		if 'Inferno' in [spell.name for spell in self.charged_spells]:
-			self.jmessage("INFERNO TRIGGER!")
+		if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
+			self.jmessage("THE ESCHATON BURNS!")
 			if self.opp.ishuman:
-				self.opp.jmessage("INFERNO TRIGGER!")
+				self.opp.jmessage("THE ESCHATON BURNS!")
 			for name in board.nodes:
 				node = board.nodes[name]
 				if node.stone == self.enemy:
@@ -854,8 +854,8 @@ class Player():
 					self.board.last_player = self.color
 					self.board.update()
 				else:
-					if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
-						self.jmessage("You can only make soft moves under Gravity.")
+					if (standardmove and ("Seal_of_Stone" in [spell.name for spell in self.opp.charged_spells])):
+						self.jmessage("You can only make soft moves under the Seal of Stone.")
 						self.move(standardmove=standardmove)
 						return None
 					self.board.record('hard_move', node=node.name, pushed_to='pending')
@@ -877,8 +877,8 @@ class Player():
 			self.board.update()
 
 		elif node.stone == self.enemy:
-			if (standardmove and ("Gravity" in [spell.name for spell in self.opp.charged_spells])):
-				self.jmessage("You can only make soft moves under Gravity.")
+			if (standardmove and ("Seal_of_Stone" in [spell.name for spell in self.opp.charged_spells])):
+				self.jmessage("You can only make soft moves under the Seal of Stone.")
 				self.move(standardmove=standardmove)
 				return None
 			self.board.record('hard_move', node=node.name, pushed_to='pending')

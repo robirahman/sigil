@@ -180,9 +180,9 @@ class GameController {
 					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
 				}
 
-				// BOT triggers (Inferno check)
-				if (board.chargedSpells[color].includes('Inferno')) {
-					this.emit({ type: 'message', message: 'DEATH BY INFERNO!', awaiting: null });
+				// Beginning-of-turn trigger: holding the Seal of the Eschaton loses.
+				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+					this.emit({ type: 'message', message: 'THE ESCHATON CLAIMS YOU!', awaiting: null });
 					board.gameover = true;
 					board.winner = board.enemy(color);
 					if (this.ai && typeof this.ai.cancelPonder === 'function') {
@@ -301,11 +301,7 @@ class GameController {
 
 		if (canmove) {
 			actions.push('move');
-			if (board.chargedSpells[color].includes('Seal_of_Wind')) {
-				moveoptions = getBlinkTargets(board, color);
-			} else {
-				moveoptions = getAllMoveTargets(board, color);
-			}
+			moveoptions = getStandardMoveTargets(board, color, true);
 			// If no moves available, must pass
 			if (Object.keys(moveoptions).length === 0) {
 				return;
@@ -331,7 +327,7 @@ class GameController {
 					if (!info || info.static) continue;
 
 					if (info.ischarm) {
-						if (board.chargedSpells[enemy].includes('Winter')) continue;
+						if (board.chargedSpells[enemy].includes('Seal_of_Winter')) continue;
 						if (spellName === 'Surge') {
 							if (!candash) {
 								actions.push(spellName);
@@ -431,6 +427,11 @@ class GameController {
 			return this._promptMove(color, standardMove);
 		}
 
+		// Seal of Stone (enemy-held): the opening move must be soft.
+		if (violatesSealOfStone(board, color, node, standardMove)) {
+			return this._promptMove(color, standardMove);
+		}
+
 		if (!adjacent && !hasWind) {
 			return this._promptMove(color, standardMove);
 		}
@@ -464,12 +465,7 @@ class GameController {
 
 	async _promptMove(color, standardMove) {
 		const board = this.board;
-		let moveoptions;
-		if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) {
-			moveoptions = getBlinkTargets(board, color);
-		} else {
-			moveoptions = getAllMoveTargets(board, color);
-		}
+		const moveoptions = getStandardMoveTargets(board, color, standardMove);
 
 		const resp = await this.getInput({
 			type: 'message', message: 'Choose where to move.',
@@ -655,9 +651,9 @@ class GameController {
 		const board = this.board;
 		const enemy = board.enemy(color);
 
-		// Inferno EOT effect
-		if (board.chargedSpells[color].includes('Inferno')) {
-			this.emit({ type: 'message', message: 'INFERNO TRIGGER!', awaiting: null });
+		// Seal of the Eschaton end-of-turn effect
+		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+			this.emit({ type: 'message', message: 'THE ESCHATON BURNS!', awaiting: null });
 			for (const name of NODE_ORDER) {
 				if (board.stones[name] === enemy) {
 					for (const nb of ADJACENCY[name]) {

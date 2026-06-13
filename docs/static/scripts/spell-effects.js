@@ -34,6 +34,14 @@ const SPELL_FX = {
 	Splash:             { type: 'pulse', color: '#22aaee', shake: false },
 	Torrent:          { type: 'burst', color: '#22bbcc', shake: false },
 	Flood:            { type: 'flash', color: '#1188bb', shake: true  },
+	// Gloom expansion (sickly greens + shadow purples)
+	Lurk:             { type: 'pulse', color: '#553377', shake: false },
+	Decay:            { type: 'flash', color: '#6b8e23', shake: false },
+	Wither:           { type: 'burst', color: '#3c5a1e', shake: true  },
+	// Covenant expansion (cold grays + doom)
+	Seal_of_Winter:        { type: 'pulse', color: '#bbddee', shake: false },
+	Seal_of_Stone:         { type: 'pulse', color: '#998877', shake: false },
+	Seal_of_the_Eschaton:  { type: 'flash', color: '#660022', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

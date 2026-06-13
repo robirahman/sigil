@@ -61,6 +61,35 @@ function getBlinkTargets(board, color) {
 	return result;
 }
 
+// Targets for a STANDARD (opening) move, accounting for the static seals that
+// modify it. Seal of Stone (enemy-held) forces soft moves; otherwise Seal of
+// Wind (own) grants blink; otherwise all moves. `standardMove` is false for
+// spell-granted moves, which ignore these seals.
+function getStandardMoveTargets(board, color, standardMove) {
+	const enemy = board.enemy(color);
+	if (standardMove && board.chargedSpells[enemy].includes('Seal_of_Stone')) {
+		return getSoftMoveTargets(board, color);
+	}
+	if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) {
+		return getBlinkTargets(board, color);
+	}
+	return getAllMoveTargets(board, color);
+}
+
+// True if `color`'s standard move onto `nodeName` is illegal because the enemy
+// holds Seal of Stone (which forces the opening move to be soft: an empty node
+// adjacent to one of `color`'s own stones — no push, no blink).
+function violatesSealOfStone(board, color, nodeName, standardMove) {
+	if (!standardMove) return false;
+	const enemy = board.enemy(color);
+	if (!board.chargedSpells[enemy].includes('Seal_of_Stone')) return false;
+	if (board.stones[nodeName] !== null) return true; // would push (hard move)
+	for (const nb of ADJACENCY[nodeName]) {
+		if (board.stones[nb] === color) return false; // soft move: empty + adjacent
+	}
+	return true; // empty but not adjacent → blink, not allowed
+}
+
 /**
  * Push enemy stone via BFS. Returns { options: [node_names], crushed: boolean }.
  * Does NOT mutate board - caller decides what to do.

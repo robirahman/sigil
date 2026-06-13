@@ -1445,3 +1445,123 @@ class Flood(Spell):
 
 	def resolve(self, player):
 		_soft_hard_chain(player, self, 2, 2)
+
+
+###############################################################################################
+#####  EXPANSION SPELLS: Gloom + Covenant
+
+
+# Helper: destroy every enemy stone touching 2+ empty nodes. Membership is
+# computed against the pre-destruction board, then applied simultaneously.
+def _destroy_exposed(player):
+	doomed = []
+	for name in player.board.nodes:
+		node = player.board.nodes[name]
+		if node.stone != player.enemy:
+			continue
+		empties = sum(1 for nb in node.neighbors if nb.stone is None)
+		if empties >= 2:
+			doomed.append(node)
+	for node in doomed:
+		node.stone = None
+		if player.board.last_play == node.name:
+			player.board.last_play = None
+			player.board.last_player = None
+	player.board.update()
+
+
+class Decay(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Destroy all enemy stones touching 2 or more empty nodes."
+
+	def resolve(self, player):
+		_destroy_exposed(player)
+
+
+class Wither(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Destroy all enemy stones touching 2 or more empty nodes, then make 2 soft moves."
+
+	def resolve(self, player):
+		_destroy_exposed(player)
+		if player.board.gameover:
+			return
+		if player.ishuman:
+			for i in range(2):
+				player.softmove()
+		else:
+			for i in range(2):
+				player.softmove(self.position.copy())
+
+
+class Lurk(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+
+		self.text = "Make 1 move into a 1-node spell or a node outside of a spell."
+
+	def resolve(self, player):
+		# Any soft-or-hard move onto a node that is NOT part of a 3- or 5-node
+		# spell (positions 1..6). 1-node spells and non-spell nodes are allowed.
+		big = set()
+		for i in range(1, 7):
+			for node in player.board.positions[i]:
+				big.add(node.name)
+		options = {}
+		for name in player.board.nodes:
+			if name in big:
+				continue
+			node = player.board.nodes[name]
+			if node.stone == player.color:
+				continue
+			if any(nb.stone == player.color for nb in node.neighbors):
+				options[name] = player.color
+		if not options:
+			if player.ishuman:
+				player.jmessage("No legal move outside 3- and 5-node spells.")
+			return
+		if player.ishuman:
+			egress = {"type": "message",
+			          "message": "Make 1 move (not into a 3- or 5-node spell).",
+			          "awaiting": "node", "moveoptions": options}
+			player.ws.send(json.dumps(egress))
+			while True:
+				resp = player.receivemessage()
+				if resp not in options:
+					continue
+				_place_into(player, player.board.nodes[resp])
+				break
+		else:
+			node_name = next(iter(options))
+			_place_into(player, player.board.nodes[node_name])
+
+
+class Seal_of_Winter(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.static = True
+
+		self.text = "STATIC: Your opponent cannot cast 1-node spells (charms)."
+
+
+class Seal_of_Stone(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.static = True
+
+		self.text = "STATIC: Your opponent's first move each turn must be soft."
+
+
+class Seal_of_the_Eschaton(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.static = True
+
+		self.text = ("STATIC: If filled at the end of your turn, destroy all enemy "
+		             "stones touching you. If filled at the start of your turn, you lose.")

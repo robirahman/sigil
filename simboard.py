@@ -49,7 +49,25 @@ CORE_SPELLS = {
     'Splash': {'resolve': 'surge_move', 'static': False, 'ischarm': True},
     'Torrent': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'static': False, 'ischarm': False},
     'Flood': {'resolve': 'soft_hard_chain', 'counts': [2, 2], 'static': False, 'ischarm': False},
+    # Gloom expansion
+    'Lurk': {'resolve': 'restricted_move', 'static': False, 'ischarm': True},
+    'Decay': {'resolve': 'destroy_exposed', 'static': False, 'ischarm': False},
+    'Wither': {'resolve': 'destroy_exposed_then_soft', 'count': 2, 'static': False, 'ischarm': False},
+    # Covenant expansion (static seals)
+    'Seal_of_Winter': {'resolve': None, 'static': True, 'ischarm': True},
+    'Seal_of_Stone': {'resolve': None, 'static': True, 'ischarm': False},
+    'Seal_of_the_Eschaton': {'resolve': None, 'static': True, 'ischarm': False},
 }
+
+# Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
+# Lurk (Gloom charm) may move onto any node EXCEPT these.
+BIG_SPELL_NODES = set()
+for _big_pos in (1, 2, 3, 4, 5, 6):
+    BIG_SPELL_NODES.update(POSITIONS[_big_pos])
+
+
+def is_big_spell_node(name):
+    return name in BIG_SPELL_NODES
 
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
 SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
@@ -1077,7 +1095,96 @@ class SimBoard:
                 actions.append(self._do_hard_move(color, chosen))
                 self.update()
 
+        elif resolve_type == 'destroy_exposed':
+            self._destroy_exposed(color, actions)
+
+        elif resolve_type == 'destroy_exposed_then_soft':
+            self._destroy_exposed(color, actions)
+            if not self.gameover:
+                count = info.get('count', 2)
+                soft_overrides = list(overrides.get('soft_move_targets') or [])
+                for _ in range(count):
+                    targets = self._soft_moveable(color)
+                    if not targets:
+                        break
+                    chosen = None
+                    while soft_overrides and chosen is None:
+                        candidate = soft_overrides.pop(0)
+                        if candidate in targets:
+                            chosen = candidate
+                    if chosen is None:
+                        for t in targets:
+                            if t not in spell_position_nodes:
+                                chosen = t
+                                break
+                    if chosen is None:
+                        chosen = targets[0]
+                    actions.append(self._do_soft_move(color, chosen))
+                    self.update()
+
+        elif resolve_type == 'restricted_move':
+            # Lurk: 1 move onto any moveable node not in a 3- or 5-node spell.
+            targets = [n for n in self._all_moveable(color) if not is_big_spell_node(n)]
+            chosen = None
+            ovr = overrides.get('restricted_target')
+            if ovr and ovr in targets:
+                chosen = ovr
+            elif targets:
+                chosen = targets[0]
+            if chosen is not None:
+                actions.append(self._do_move(color, chosen, is_blink=False))
+                self.update()
+
         return actions
+
+    def _destroy_exposed(self, color, actions):
+        """Gloom (Decay/Wither): destroy every enemy stone touching 2+ empty
+        nodes. Membership is computed against the pre-destruction board, then
+        applied simultaneously. Appends a 'decay' Action and updates."""
+        enemy = self._enemy(color)
+        doomed = []
+        for name in NODE_ORDER:
+            if self.stones[name] != enemy:
+                continue
+            empties = sum(1 for nb in self._adjacent_nodes(name)
+                          if self.stones[nb] is None)
+            if empties >= 2:
+                doomed.append(name)
+        for name in doomed:
+            self.stones[name] = None
+        actions.append(Action('decay', destroyed=doomed))
+        self.update()
+        return doomed
+
+    def _eschaton_end_of_turn(self, color):
+        """Seal of the Eschaton, END of `color`'s turn: if `color` controls the
+        seal, destroy every enemy stone touching one of `color`'s stones."""
+        if 'Seal_of_the_Eschaton' not in self.charged_spells[color]:
+            return []
+        enemy = self._enemy(color)
+        destroyed = []
+        for name in NODE_ORDER:
+            if self.stones[name] != enemy:
+                continue
+            for nb in self._adjacent_nodes(name):
+                if self.stones[nb] == color:
+                    self.stones[name] = None
+                    destroyed.append(name)
+                    break
+        if destroyed:
+            self.update()
+        return destroyed
+
+    def _eschaton_start_of_turn_loss(self, color):
+        """Seal of the Eschaton, START of `color`'s turn: if `color` still
+        controls the seal, they lose immediately."""
+        if self.gameover:
+            return True
+        if 'Seal_of_the_Eschaton' in self.charged_spells[color]:
+            self.gameover = True
+            self.winner = self._enemy(color)
+            return True
+        return False
 
     def _cast_spell(self, spell_name, color, target_overrides=None):
         """Cast a spell: sacrifice nodes, refill by mana, resolve effect.
@@ -1162,8 +1269,12 @@ class SimBoard:
         has_seal_of_lightning = 'Seal_of_Lightning' in self.charged_spells[color]
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
 
-        # Phase 1: Move options
-        if has_seal_of_wind:
+        # Phase 1: Move options. Seal of Stone (enemy-held) forces a soft
+        # opening move, taking precedence over Wind's blink privilege.
+        enemy_has_stone = 'Seal_of_Stone' in self.charged_spells[self._enemy(color)]
+        if enemy_has_stone:
+            move_targets = self._soft_moveable(color)
+        elif has_seal_of_wind:
             move_targets = self._blinkable(color)
         else:
             move_targets = self._all_moveable(color)
@@ -1290,7 +1401,7 @@ class SimBoard:
         caster has NOT dashed.
         """
         enemy = self._enemy(color)
-        has_winter = 'Winter' in self.charged_spells[enemy]
+        has_winter = 'Seal_of_Winter' in self.charged_spells[enemy]
         has_spring = 'Seal_of_Spring' in self.charged_spells[color]
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
 

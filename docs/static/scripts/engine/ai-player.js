@@ -499,6 +499,16 @@ async function applyAITurn(board, turn, color, emit) {
 			}
 		}
 
+		else if (action.type === 'decay') {
+			// Gloom Decay/Wither: destroy the exposed enemy stones.
+			if (action.destroyed) {
+				for (const n of action.destroyed) board.stones[n] = null;
+				board.update();
+				emit(board.getBoardStatePayload());
+				await _aiDelay(400);
+			}
+		}
+
 		else if (action.type === 'hail_storm') {
 			if (action.destroyed) {
 				for (const n of action.destroyed) {

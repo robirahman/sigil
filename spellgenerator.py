@@ -40,6 +40,16 @@ TSUNAMI_RITUALS = ['Flood']
 TSUNAMI_SORCERIES = ['Torrent']
 TSUNAMI_CHARMS = ['Splash']
 
+# Gloom expansion.
+GLOOM_RITUALS = ['Wither']
+GLOOM_SORCERIES = ['Decay']
+GLOOM_CHARMS = ['Lurk']
+
+# Covenant expansion (static seals).
+COVENANT_RITUALS = ['Seal_of_the_Eschaton']
+COVENANT_SORCERIES = ['Seal_of_Stone']
+COVENANT_CHARMS = ['Seal_of_Winter']
+
 
 # Own-only spell lists per expansion key. Keys match the JS EXPANSIONS map
 # (note Inferno's key is 'fury'). 'inferno' is accepted as an alias below.
@@ -49,8 +59,10 @@ EXPANSIONS = {
 	'fury':       {'rituals': INFERNO_RITUALS,    'sorceries': INFERNO_SORCERIES,    'charms': INFERNO_CHARMS},
 	'tempest':    {'rituals': TEMPEST_RITUALS,    'sorceries': TEMPEST_SORCERIES,    'charms': TEMPEST_CHARMS},
 	'tsunami':    {'rituals': TSUNAMI_RITUALS,    'sorceries': TSUNAMI_SORCERIES,    'charms': TSUNAMI_CHARMS},
+	'gloom':      {'rituals': GLOOM_RITUALS,      'sorceries': GLOOM_SORCERIES,      'charms': GLOOM_CHARMS},
+	'covenant':   {'rituals': COVENANT_RITUALS,   'sorceries': COVENANT_SORCERIES,   'charms': COVENANT_CHARMS},
 }
-EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami']
+EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'gloom', 'covenant']
 
 # Accepted aliases for expansion keys.
 _EXPANSION_ALIASES = {'inferno': 'fury'}

@@ -91,6 +91,13 @@ class SpectatorController {
 				board.whoseTurn = board.turnCounter % 2 === 1 ? 'red' : 'blue';
 				const color = board.whoseTurn;
 
+				// Beginning-of-turn trigger: holding the Seal of the Eschaton loses.
+				board.update();
+				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+					board.gameover = true;
+					board.winner = board.enemy(color);
+				}
+
 				let turnMsg;
 				if (color === 'red') {
 					turnMsg = 'Red Turn ' + (Math.floor(board.turnCounter / 2) + 1);
@@ -164,11 +171,7 @@ class SpectatorController {
 
 		if (canmove) {
 			actions.push('move');
-			if (board.chargedSpells[color].includes('Seal_of_Wind')) {
-				moveoptions = getBlinkTargets(board, color);
-			} else {
-				moveoptions = getAllMoveTargets(board, color);
-			}
+			moveoptions = getStandardMoveTargets(board, color, true);
 			if (Object.keys(moveoptions).length === 0) return;
 		} else {
 			if (candash && canspell && canDash(board, color)) actions.push('dash');
@@ -180,7 +183,7 @@ class SpectatorController {
 					const info = CORE_SPELLS[spellName];
 					if (!info || info.static) continue;
 					if (info.ischarm) {
-						if (board.chargedSpells[enemy].includes('Winter')) continue;
+						if (board.chargedSpells[enemy].includes('Seal_of_Winter')) continue;
 						if (spellName === 'Surge') { if (!candash) { actions.push(spellName); spellList.push(spellName); } continue; }
 						if (canspell || (!canspell && summerActive)) { actions.push(spellName); spellList.push(spellName); }
 					} else {
@@ -232,6 +235,7 @@ class SpectatorController {
 		let adjacent = false;
 		for (const nb of ADJACENCY[nodeName]) { if (board.stones[nb] === color) { adjacent = true; break; } }
 		if (board.stones[nodeName] === color) return this._promptMove(color, standardMove);
+		if (violatesSealOfStone(board, color, nodeName, standardMove)) return this._promptMove(color, standardMove);
 		if (!adjacent && !hasWind) return this._promptMove(color, standardMove);
 		if (!adjacent && hasWind) {
 			if (board.stones[nodeName] === null) {
@@ -334,7 +338,7 @@ class SpectatorController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
-		if (board.chargedSpells[color].includes('Inferno')) {
+		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
 			for (const name of NODE_ORDER) {
 				if (board.stones[name] === enemy) {
 					for (const nb of ADJACENCY[name]) {

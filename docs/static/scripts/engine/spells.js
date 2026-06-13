@@ -1073,6 +1073,87 @@ const SpellResolvers = {
 		}
 	},
 
+	// --- Gloom: Decay (destroy every enemy stone touching 2+ empty nodes) ---
+	async destroy_exposed(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const doomed = [];
+		for (const name of NODE_ORDER) {
+			if (board.stones[name] !== enemy) continue;
+			let empties = 0;
+			for (const nb of ADJACENCY[name]) if (board.stones[nb] === null) empties++;
+			if (empties >= 2) doomed.push(name);
+		}
+		for (const name of doomed) {
+			board.stones[name] = null;
+			if (board.lastPlay === name) { board.lastPlay = null; board.lastPlayer = null; }
+			emit({ type: 'crush_animation', crushed_color: enemy, node: name });
+		}
+		if (!doomed.length) emit({ type: 'message', message: 'No exposed enemy stones to destroy.', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Gloom: Wither (Decay, then make `count` soft moves) ---
+	async destroy_exposed_then_soft(board, color, spellName, getInput, emit) {
+		await SpellResolvers.destroy_exposed(board, color, spellName, getInput, emit);
+		if (board.gameover) return;
+		const count = CORE_SPELLS[spellName].count || 2;
+		for (let i = 0; i < count; i++) {
+			const targets = getSoftMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: `Choose where to soft move (${i + 1}/${count}).`,
+					awaiting: 'node', moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Gloom: Lurk (1 move onto any node not part of a 3- or 5-node spell) ---
+	async restricted_move(board, color, spellName, getInput, emit) {
+		const all = getAllMoveTargets(board, color);
+		const moveoptions = {};
+		for (const n of Object.keys(all)) if (!isBigSpellNode(n)) moveoptions[n] = all[n];
+		if (Object.keys(moveoptions).length === 0) {
+			emit({ type: 'message', message: 'No legal moves outside 3- and 5-node spells.', awaiting: null });
+			return;
+		}
+		while (true) {
+			const resp = await getInput({
+				type: 'message', message: 'Choose where to move (not into a 3- or 5-node spell).',
+				awaiting: 'node', moveoptions,
+			});
+			if (!moveoptions[resp]) continue;
+			const enemy = board.enemy(color);
+			if (board.stones[resp] === null) {
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			} else if (board.stones[resp] === enemy) {
+				await doPushEnemy(board, resp, color, getInput, emit);
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
 	// --- Panda: Bear Trap (destroy enemy stones in the 1-node spells) ---
 	async bear_trap(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);

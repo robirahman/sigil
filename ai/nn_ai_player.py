@@ -308,14 +308,14 @@ class NNAIPlayer:
         pass
 
     def bot_triggers(self):
-        if 'Inferno' in [spell.name for spell in self.charged_spells]:
-            self.board.humanplayer.jmessage("DEATH BY INFERNO!")
+        if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
+            self.board.humanplayer.jmessage("THE ESCHATON CLAIMS YOU!")
             self.board.gameover = True
             self.board.winner = self.enemy
 
     def eot_triggers(self):
-        if 'Inferno' in [spell.name for spell in self.charged_spells]:
-            self.board.humanplayer.jmessage("INFERNO TRIGGER!")
+        if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
+            self.board.humanplayer.jmessage("THE ESCHATON BURNS!")
             for name in self.board.nodes:
                 node = self.board.nodes[name]
                 if node.stone == self.enemy:

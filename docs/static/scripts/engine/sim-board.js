@@ -374,6 +374,26 @@ class SimBoard {
 	}
 
 	// --- Spell resolution: greedy by default, branching via overrides ---
+	// Gloom (Decay/Wither): destroy every enemy stone touching 2+ empty nodes.
+	// Membership is computed against the pre-destruction board so removals don't
+	// cascade, then applied simultaneously. Pushes a 'decay' SimAction and updates.
+	_destroyExposed(color, actions) {
+		const enemy = this._enemy(color);
+		const doomed = [];
+		for (const name of NODE_ORDER) {
+			if (this.stones[name] !== enemy) continue;
+			let empties = 0;
+			for (const nb of ADJACENCY[name]) {
+				if (this.stones[nb] === null) empties++;
+			}
+			if (empties >= 2) doomed.push(name);
+		}
+		for (const name of doomed) this.stones[name] = null;
+		actions.push(new SimAction('decay', { destroyed: doomed }));
+		this.update();
+		return doomed;
+	}
+
 	_resolveSpell(spellName, color, posNodes, targetOverrides) {
 		const info = CORE_SPELLS[spellName];
 		if (!info || info.resolve === null) return [];
@@ -929,6 +949,37 @@ class SimBoard {
 					this.update();
 				}
 			}
+		} else if (rt === 'destroy_exposed') {
+			this._destroyExposed(color, actions);
+		} else if (rt === 'destroy_exposed_then_soft') {
+			this._destroyExposed(color, actions);
+			if (this.gameover) return actions;
+			const count = info.count || 2;
+			const overrideTargets = (overrides.soft_move_targets || []).slice();
+			for (let i = 0; i < count; i++) {
+				const targets = this._softMoveable(color);
+				if (!targets.length) break;
+				let chosen = null;
+				while (overrideTargets.length && chosen === null) {
+					const cand = overrideTargets.shift();
+					if (targets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
+				actions.push(this._doSoftMove(color, chosen));
+				this.update();
+			}
+		} else if (rt === 'restricted_move') {
+			// Lurk: 1 move onto any moveable node that is NOT part of a 3- or
+			// 5-node spell (1-node spells and non-spell nodes are allowed).
+			const targets = this._allMoveable(color).filter(n => !isBigSpellNode(n));
+			let chosen = null;
+			const ovr = overrides.restricted_target;
+			if (ovr && targets.includes(ovr)) chosen = ovr;
+			else if (targets.length) chosen = targets[0];
+			if (chosen) {
+				actions.push(this._doMove(color, chosen, false));
+				this.update();
+			}
 		}
 		// --- Panda expansion (greedy default; overrides for choice points) ---
 		if (rt === 'bear_trap') {
@@ -1132,7 +1183,7 @@ class SimBoard {
 	// --- Legal turn enumeration ---
 	_getCastableSpells(color, canSpell, canSummer, postDash) {
 		const enemy = this._enemy(color);
-		const hasWinter = this.chargedSpells[enemy].includes('Winter');
+		const hasWinter = this.chargedSpells[enemy].includes('Seal_of_Winter');
 		const hasSummer = this.chargedSpells[color].includes('Seal_of_Summer');
 		const castable = [];
 		for (const spellName of this.chargedSpells[color]) {
@@ -1265,7 +1316,11 @@ class SimBoard {
 		}
 
 		const hasWind = this.chargedSpells[color].includes('Seal_of_Wind');
-		const moveTargets = hasWind ? this._blinkable(color) : this._allMoveable(color);
+		// Seal of Stone (held by the enemy): this color's opening move must be soft.
+		// Soft takes precedence over Wind's blink privilege.
+		const enemyHasStone = this.chargedSpells[this._enemy(color)].includes('Seal_of_Stone');
+		const moveTargets = enemyHasStone ? this._softMoveable(color)
+			: (hasWind ? this._blinkable(color) : this._allMoveable(color));
 
 		if (!moveTargets.length) {
 			yield new SimTurn([new SimAction('pass')]);
@@ -1281,6 +1336,39 @@ class SimBoard {
 			yield* bam._enumeratePostMove(color, [moveAction], true, true, true);
 		}
 	}
+}
+
+/**
+ * Seal of the Eschaton (Covenant ritual), END of `color`'s turn: if `color`
+ * controls the seal, destroy every enemy stone touching one of `color`'s stones
+ * (Fireblast-style). Mutates `board`, updates, and returns the destroyed nodes.
+ */
+function eschatonEndOfTurn(board, color) {
+	if (!board.chargedSpells[color].includes('Seal_of_the_Eschaton')) return [];
+	const enemy = board._enemy(color);
+	const destroyed = [];
+	for (const name of NODE_ORDER) {
+		if (board.stones[name] !== enemy) continue;
+		for (const nb of ADJACENCY[name]) {
+			if (board.stones[nb] === color) { board.stones[name] = null; destroyed.push(name); break; }
+		}
+	}
+	if (destroyed.length) board.update();
+	return destroyed;
+}
+
+/**
+ * Seal of the Eschaton, START of `color`'s turn: if `color` still controls the
+ * seal, they lose immediately. Sets gameover/winner; returns true if lost.
+ */
+function eschatonStartOfTurnLoss(board, color) {
+	if (board.gameover) return true;
+	if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+		board.gameover = true;
+		board.winner = board._enemy(color);
+		return true;
+	}
+	return false;
 }
 
 /** Apply a SimTurn's actions to a SimBoard (mutating).
@@ -1329,7 +1417,7 @@ function applySimTurn(board, turn, color) {
 		}
 		else if (action.type === 'fireblast' || action.type === 'hail_storm'
 		         || action.type === 'storm_front' || action.type === 'hurricane'
-		         || action.type === 'bear_trap') {
+		         || action.type === 'bear_trap' || action.type === 'decay') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
 		}
 		else if (action.type === 'perfect_heist') {
@@ -1360,4 +1448,7 @@ function applySimTurn(board, turn, color) {
 		}
 		board.update();
 	}
+	// Seal of the Eschaton end-of-turn trigger (the start-of-turn loss is applied
+	// by the turn driver, e.g. _minimaxApplyTurn / the live controllers).
+	eschatonEndOfTurn(board, color);
 }
