@@ -1170,7 +1170,6 @@ class SimBoard {
 		const enemy = this._enemy(color);
 		const hasLightning = this.chargedSpells[color].includes('Seal_of_Lightning');
 		const hasSummer = this.chargedSpells[color].includes('Seal_of_Summer');
-		const hasAutumn = this.chargedSpells[enemy].includes('Autumn');
 		// Seal of Autumn (held by the enemy) bars sacrificing in-sigil stones.
 		const hasAutumnSeal = this.chargedSpells[enemy].includes('Seal_of_Autumn');
 		const canSac = (b, name) => b.stones[name] === color && (!hasAutumnSeal || !isSpellNode(name));
@@ -1178,7 +1177,7 @@ class SimBoard {
 		yield new SimTurn([...actionsSoFar, new SimAction('pass')]);
 
 		// Dash
-		if (canDash && canSpell && this.totalStones[color] > 2 && !hasAutumn) {
+		if (canDash && canSpell && this.totalStones[color] > 2) {
 			const dashTargets = this._allMoveable(color);
 			if (dashTargets.length) {
 				const bd = this.copy();

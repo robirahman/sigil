@@ -520,8 +520,7 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 	// Dash: enumerate sacrifice combos × top-K move targets, both
 	// smart-ordered. Sacrifices ranked by escape-distance (dead stones
 	// first); destinations ranked by enemy-adjacency (impact first).
-	if (canDash && canSpell && board.totalStones[color] > 2
-	    && !(board.chargedSpells[enemy] || []).includes('Autumn')) {
+	if (canDash && canSpell && board.totalStones[color] > 2) {
 		const hasLightning = (board.chargedSpells[color] || []).includes('Seal_of_Lightning');
 		// With Lightning, dash sacrifices are single stones and destinations
 		// are at most ~6 per stone — total ~60 combos. Cheap enough to

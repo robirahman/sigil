@@ -473,8 +473,7 @@ class MultiplayerController {
 		} else {
 			// canDash() folds in Seal of Autumn: when the enemy holds it, only
 			// stones outside the spell sigils may be sacrificed for a dash.
-			if (candash && canspell && canDash(board, color)
-			    && !board.chargedSpells[enemy].includes('Autumn')) {
+			if (candash && canspell && canDash(board, color)) {
 				actions.push('dash');
 			}
 			let summerActive = false;
