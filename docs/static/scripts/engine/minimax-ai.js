@@ -247,13 +247,13 @@ function _minimaxApplyTurn(board, turn, color) {
 		}
 		sim.update();
 	}
-	// Seal of the Eschaton — end of this player's turn: nuke enemies touching them.
-	eschatonEndOfTurn(sim, color);
+	// Seal of Destruction — end of this player's turn: nuke enemies touching them.
+	destructionEndOfTurn(sim, color);
 	sim.checkGameOver(color);
 	if (!sim.gameover) {
 		sim.advanceTurn();
 		// Start of the next player's turn: still holding the seal loses immediately.
-		eschatonStartOfTurnLoss(sim, sim.whoseTurn);
+		destructionStartOfTurnLoss(sim, sim.whoseTurn);
 	}
 	return sim;
 }

@@ -274,13 +274,13 @@ def _apply_turn(board, turn, color):
                 for n in action.sacrificed:
                     sim.stones[n] = None
         sim.update()
-    # Seal of the Eschaton — end of this player's turn: nuke enemies touching them.
-    sim._eschaton_end_of_turn(color)
+    # Seal of Destruction — end of this player's turn: nuke enemies touching them.
+    sim._destruction_end_of_turn(color)
     sim.check_game_over(color)
     if not sim.gameover:
         sim.advance_turn()
         # Start of the next player's turn: still holding the seal loses.
-        sim._eschaton_start_of_turn_loss(sim.whose_turn)
+        sim._destruction_start_of_turn_loss(sim.whose_turn)
     return sim
 
 

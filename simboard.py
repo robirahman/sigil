@@ -56,7 +56,7 @@ CORE_SPELLS = {
     # Covenant expansion (static seals)
     'Seal_of_Winter': {'resolve': None, 'static': True, 'ischarm': True},
     'Seal_of_Stone': {'resolve': None, 'static': True, 'ischarm': False},
-    'Seal_of_the_Eschaton': {'resolve': None, 'static': True, 'ischarm': False},
+    'Seal_of_Destruction': {'resolve': None, 'static': True, 'ischarm': False},
 }
 
 # Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
@@ -1156,10 +1156,10 @@ class SimBoard:
         self.update()
         return doomed
 
-    def _eschaton_end_of_turn(self, color):
-        """Seal of the Eschaton, END of `color`'s turn: if `color` controls the
+    def _destruction_end_of_turn(self, color):
+        """Seal of Destruction, END of `color`'s turn: if `color` controls the
         seal, destroy every enemy stone touching one of `color`'s stones."""
-        if 'Seal_of_the_Eschaton' not in self.charged_spells[color]:
+        if 'Seal_of_Destruction' not in self.charged_spells[color]:
             return []
         enemy = self._enemy(color)
         destroyed = []
@@ -1175,12 +1175,12 @@ class SimBoard:
             self.update()
         return destroyed
 
-    def _eschaton_start_of_turn_loss(self, color):
-        """Seal of the Eschaton, START of `color`'s turn: if `color` still
+    def _destruction_start_of_turn_loss(self, color):
+        """Seal of Destruction, START of `color`'s turn: if `color` still
         controls the seal, they lose immediately."""
         if self.gameover:
             return True
-        if 'Seal_of_the_Eschaton' in self.charged_spells[color]:
+        if 'Seal_of_Destruction' in self.charged_spells[color]:
             self.gameover = True
             self.winner = self._enemy(color)
             return True

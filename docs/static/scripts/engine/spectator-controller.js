@@ -91,9 +91,9 @@ class SpectatorController {
 				board.whoseTurn = board.turnCounter % 2 === 1 ? 'red' : 'blue';
 				const color = board.whoseTurn;
 
-				// Beginning-of-turn trigger: holding the Seal of the Eschaton loses.
+				// Beginning-of-turn trigger: holding the Seal of Destruction loses.
 				board.update();
-				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+				if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 					board.gameover = true;
 					board.winner = board.enemy(color);
 				}
@@ -338,7 +338,7 @@ class SpectatorController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
-		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 			for (const name of NODE_ORDER) {
 				if (board.stones[name] === enemy) {
 					for (const nb of ADJACENCY[name]) {

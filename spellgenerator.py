@@ -46,7 +46,7 @@ GLOOM_SORCERIES = ['Decay']
 GLOOM_CHARMS = ['Lurk']
 
 # Covenant expansion (static seals).
-COVENANT_RITUALS = ['Seal_of_the_Eschaton']
+COVENANT_RITUALS = ['Seal_of_Destruction']
 COVENANT_SORCERIES = ['Seal_of_Stone']
 COVENANT_CHARMS = ['Seal_of_Winter']
 

@@ -308,14 +308,14 @@ class NNAIPlayer:
         pass
 
     def bot_triggers(self):
-        if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
-            self.board.humanplayer.jmessage("THE ESCHATON CLAIMS YOU!")
+        if 'Seal_of_Destruction' in [spell.name for spell in self.charged_spells]:
+            self.board.humanplayer.jmessage("DESTRUCTION CLAIMS YOU!")
             self.board.gameover = True
             self.board.winner = self.enemy
 
     def eot_triggers(self):
-        if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
-            self.board.humanplayer.jmessage("THE ESCHATON BURNS!")
+        if 'Seal_of_Destruction' in [spell.name for spell in self.charged_spells]:
+            self.board.humanplayer.jmessage("DESTRUCTION BURNS!")
             for name in self.board.nodes:
                 node = self.board.nodes[name]
                 if node.stone == self.enemy:

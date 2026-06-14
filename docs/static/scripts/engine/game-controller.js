@@ -180,9 +180,9 @@ class GameController {
 					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
 				}
 
-				// Beginning-of-turn trigger: holding the Seal of the Eschaton loses.
-				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
-					this.emit({ type: 'message', message: 'THE ESCHATON CLAIMS YOU!', awaiting: null });
+				// Beginning-of-turn trigger: holding the Seal of Destruction loses.
+				if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+					this.emit({ type: 'message', message: 'DESTRUCTION CLAIMS YOU!', awaiting: null });
 					board.gameover = true;
 					board.winner = board.enemy(color);
 					if (this.ai && typeof this.ai.cancelPonder === 'function') {
@@ -651,9 +651,9 @@ class GameController {
 		const board = this.board;
 		const enemy = board.enemy(color);
 
-		// Seal of the Eschaton end-of-turn effect
-		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
-			this.emit({ type: 'message', message: 'THE ESCHATON BURNS!', awaiting: null });
+		// Seal of Destruction end-of-turn effect
+		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+			this.emit({ type: 'message', message: 'DESTRUCTION BURNS!', awaiting: null });
 			for (const name of NODE_ORDER) {
 				if (board.stones[name] === enemy) {
 					for (const nb of ADJACENCY[name]) {

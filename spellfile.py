@@ -1558,7 +1558,7 @@ class Seal_of_Stone(Spell):
 		self.text = "STATIC: Your opponent's first move each turn must be soft."
 
 
-class Seal_of_the_Eschaton(Spell):
+class Seal_of_Destruction(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.static = True

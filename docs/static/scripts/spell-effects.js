@@ -41,7 +41,7 @@ const SPELL_FX = {
 	// Covenant expansion (cold grays + doom)
 	Seal_of_Winter:        { type: 'pulse', color: '#bbddee', shake: false },
 	Seal_of_Stone:         { type: 'pulse', color: '#998877', shake: false },
-	Seal_of_the_Eschaton:  { type: 'flash', color: '#660022', shake: true  },
+	Seal_of_Destruction:  { type: 'flash', color: '#660022', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

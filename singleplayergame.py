@@ -635,8 +635,8 @@ class AIPlayer():
 		### like Inferno, which should set the global
 		### variables gameover = True and winner = self.enemy
 
-		if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
-			self.board.humanplayer.jmessage("THE ESCHATON CLAIMS YOU!")
+		if 'Seal_of_Destruction' in [spell.name for spell in self.charged_spells]:
+			self.board.humanplayer.jmessage("DESTRUCTION CLAIMS YOU!")
 			self.board.gameover = True
 			self.board.winner = self.enemy
 
@@ -654,8 +654,8 @@ class AIPlayer():
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
 
 
-		if 'Seal_of_the_Eschaton' in [spell.name for spell in self.charged_spells]:
-			self.board.humanplayer.jmessage("THE ESCHATON BURNS!")
+		if 'Seal_of_Destruction' in [spell.name for spell in self.charged_spells]:
+			self.board.humanplayer.jmessage("DESTRUCTION BURNS!")
 			for name in board.nodes:
 				node = board.nodes[name]
 				if node.stone == self.enemy:

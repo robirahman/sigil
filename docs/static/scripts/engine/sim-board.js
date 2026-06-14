@@ -1339,12 +1339,12 @@ class SimBoard {
 }
 
 /**
- * Seal of the Eschaton (Covenant ritual), END of `color`'s turn: if `color`
+ * Seal of Destruction (Covenant ritual), END of `color`'s turn: if `color`
  * controls the seal, destroy every enemy stone touching one of `color`'s stones
  * (Fireblast-style). Mutates `board`, updates, and returns the destroyed nodes.
  */
-function eschatonEndOfTurn(board, color) {
-	if (!board.chargedSpells[color].includes('Seal_of_the_Eschaton')) return [];
+function destructionEndOfTurn(board, color) {
+	if (!board.chargedSpells[color].includes('Seal_of_Destruction')) return [];
 	const enemy = board._enemy(color);
 	const destroyed = [];
 	for (const name of NODE_ORDER) {
@@ -1358,12 +1358,12 @@ function eschatonEndOfTurn(board, color) {
 }
 
 /**
- * Seal of the Eschaton, START of `color`'s turn: if `color` still controls the
+ * Seal of Destruction, START of `color`'s turn: if `color` still controls the
  * seal, they lose immediately. Sets gameover/winner; returns true if lost.
  */
-function eschatonStartOfTurnLoss(board, color) {
+function destructionStartOfTurnLoss(board, color) {
 	if (board.gameover) return true;
-	if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
+	if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 		board.gameover = true;
 		board.winner = board._enemy(color);
 		return true;
@@ -1448,7 +1448,7 @@ function applySimTurn(board, turn, color) {
 		}
 		board.update();
 	}
-	// Seal of the Eschaton end-of-turn trigger (the start-of-turn loss is applied
+	// Seal of Destruction end-of-turn trigger (the start-of-turn loss is applied
 	// by the turn driver, e.g. _minimaxApplyTurn / the live controllers).
-	eschatonEndOfTurn(board, color);
+	destructionEndOfTurn(board, color);
 }

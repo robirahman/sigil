@@ -315,7 +315,23 @@
 				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
 					Win only by eliminating all of your opponent's stones. Unrated.
 				</small>
+				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
+					<input type="checkbox" id="setting-art-only" />
+					<span>Art-only spell circles</span>
+				</label>
+				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
+					Hide spell names and descriptions on the board circles (art only).
+				</small>
 			</div>
+			<script>
+				(function() {
+					var checkbox = document.getElementById('setting-art-only');
+					checkbox.checked = localStorage.getItem('sigilArtOnlySpellCircles') === 'true';
+					checkbox.addEventListener('change', function() {
+						localStorage.setItem('sigilArtOnlySpellCircles', checkbox.checked ? 'true' : 'false');
+					});
+				})();
+			</script>
 			<script>
 				(function() {
 					var comp = document.getElementById('variant-competitive');

@@ -121,7 +121,7 @@ const CORE_SPELLS = {
 	// Covenant expansion (static seals)
 	Seal_of_Winter:    { resolve: null, static: true, ischarm: true },
 	Seal_of_Stone:     { resolve: null, static: true, ischarm: false },
-	Seal_of_the_Eschaton: { resolve: null, static: true, ischarm: false },
+	Seal_of_Destruction: { resolve: null, static: true, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -175,7 +175,7 @@ const SPELL_TEXTS = {
 	Wither:            'Destroy all enemy stones touching 2 or more empty nodes, then make 2 soft moves.',
 	Seal_of_Winter:    'STATIC: Your opponent cannot cast 1-node spells (charms).',
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
-	Seal_of_the_Eschaton: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
+	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -210,7 +210,7 @@ const GLOOM_RITUALS = ['Wither'];
 const GLOOM_SORCERIES = ['Decay'];
 const GLOOM_CHARMS = ['Lurk'];
 
-const COVENANT_RITUALS = ['Seal_of_the_Eschaton'];
+const COVENANT_RITUALS = ['Seal_of_Destruction'];
 const COVENANT_SORCERIES = ['Seal_of_Stone'];
 const COVENANT_CHARMS = ['Seal_of_Winter'];
 

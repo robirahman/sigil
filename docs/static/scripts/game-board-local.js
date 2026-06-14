@@ -40,6 +40,7 @@ document.addEventListener('alpine:init', () => {
 			score: 'unset',
 			// Deathmatch removes spell counters; hides the dice in the UI.
 			isDeathmatch: false,
+			useArtOnlySpells: localStorage.getItem('sigilArtOnlySpellCircles') === 'true',
 			showReset: false,
 			spellDict: {},
 			spells: {
@@ -71,6 +72,20 @@ document.addEventListener('alpine:init', () => {
 			// spread in below. We stash the auth manager on `this` during init so
 			// the mixin can read uid via the _aiReviewGetUid override.
 			_aiAuthManager: null,
+
+			getSpellImg(key) {
+				const base = this.spells.images[key];
+				if (!base) return 'static/images/spacer.gif';
+				if (this.useArtOnlySpells) {
+					return base.replace('static/images/spells/', 'static/images/spells/art_only/');
+				}
+				return base;
+			},
+
+			getSpellImgWebp(key) {
+				const img = this.getSpellImg(key);
+				return img ? img.replace('.png', '.webp') : '';
+			},
 
 			importGame() {
 				const text = (this.importGameText || '').trim();

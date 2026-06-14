@@ -136,11 +136,11 @@ class CataclysmController {
 					message: colorName + ' — Round ' + roundNum,
 				});
 
-				// Beginning-of-turn trigger: holding the Seal of the Eschaton
+				// Beginning-of-turn trigger: holding the Seal of Destruction
 				// eliminates that player.
 				board.update();
-				if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
-					this.emit({ type: 'message', message: 'THE ESCHATON CLAIMS ' + colorName + '!', awaiting: null });
+				if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+					this.emit({ type: 'message', message: 'DESTRUCTION CLAIMS ' + colorName + '!', awaiting: null });
 					board.eliminated.add(color);
 					board.update();
 					board.checkGameOver(color);
@@ -513,8 +513,8 @@ class CataclysmController {
 		const board = this.board;
 
 		// Inferno EOT effect
-		if (board.chargedSpells[color].includes('Seal_of_the_Eschaton')) {
-			this.emit({ type: 'message', message: 'THE ESCHATON BURNS!', awaiting: null });
+		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+			this.emit({ type: 'message', message: 'DESTRUCTION BURNS!', awaiting: null });
 			const adj = board.mapDef.adjacency;
 			for (const name of board.nodeOrder) {
 				if (board.isEnemy(board.stones[name], color)) {

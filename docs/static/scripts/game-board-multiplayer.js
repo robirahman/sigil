@@ -33,6 +33,7 @@ document.addEventListener('alpine:init', () => {
 			score: 'unset',
 			// Deathmatch removes spell counters; hides the dice in the UI.
 			isDeathmatch: false,
+			useArtOnlySpells: localStorage.getItem('sigilArtOnlySpellCircles') === 'true',
 			showReset: false,
 			spellDict: {},
 			spells: { images: {}, text: {} },
@@ -66,6 +67,21 @@ document.addEventListener('alpine:init', () => {
 			// Share link
 			shareUrl: '',
 			linkCopied: false,
+
+			getSpellImg(key) {
+				const base = this.spells.images[key];
+				if (!base) return 'static/images/spacer.gif';
+				if (this.useArtOnlySpells) {
+					return base.replace('static/images/spells/', 'static/images/spells/art_only/');
+				}
+				return base;
+			},
+
+			getSpellImgWebp(key) {
+				const img = this.getSpellImg(key);
+				return img ? img.replace('.png', '.webp') : '';
+			},
+
 			copyGameLink() {
 				if (!this.shareUrl) return;
 				navigator.clipboard.writeText(this.shareUrl).then(() => {
