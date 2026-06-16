@@ -222,6 +222,7 @@ const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spi
 // spell pool is core + every selected expansion. Multiple expansions can be
 // combined. EXPANSION_KEYS fixes the display/iteration order.
 const EXPANSIONS = {
+	core:       { name: 'Core',       rituals: CORE_RITUALS,       sorceries: CORE_SORCERIES,       charms: CORE_CHARMS },
 	springtime: { name: 'Springtime', rituals: SPRINGTIME_RITUALS, sorceries: SPRINGTIME_SORCERIES, charms: SPRINGTIME_CHARMS },
 	celestial:  { name: 'Celestial',  rituals: CELESTIAL_RITUALS,  sorceries: CELESTIAL_SORCERIES,  charms: CELESTIAL_CHARMS },
 	fury:       { name: 'Inferno',    rituals: FURY_RITUALS,       sorceries: FURY_SORCERIES,       charms: FURY_CHARMS },
@@ -300,14 +301,13 @@ function spellSpotTemplate(type) {
 
 // Normalize a spell-pack selection into a clean list of valid expansion keys.
 // Accepts an array of keys (current format), or a legacy single-key string
-// ('core', 'all', or one expansion). Core is always implicit; an empty result
-// means a core-only game.
+// ('core', 'all', or one expansion).
 function normalizeExpansionSelection(selection) {
 	if (Array.isArray(selection)) {
 		return selection.filter(k => EXPANSIONS[k]);
 	}
 	if (typeof selection === 'string') {
-		if (selection === 'all') return EXPANSION_KEYS.slice();
+		if (selection === 'all') return ['core', ...EXPANSION_KEYS];
 		if (EXPANSIONS[selection]) return [selection];
 	}
 	return [];
@@ -317,13 +317,17 @@ function normalizeExpansionSelection(selection) {
 // current multi-select key (sigilSpellPacks, a JSON array) and the legacy
 // single-select key (sigilSpellPack, a string).
 function readStoredExpansions() {
-	if (typeof localStorage === 'undefined') return [];
+	if (typeof localStorage === 'undefined') return ['core'];
 	const multi = localStorage.getItem('sigilSpellPacks');
 	if (multi !== null) {
 		try { return normalizeExpansionSelection(JSON.parse(multi)); }
-		catch (e) { return []; }
+		catch (e) { return ['core']; }
 	}
-	return normalizeExpansionSelection(localStorage.getItem('sigilSpellPack'));
+	const legacy = localStorage.getItem('sigilSpellPack');
+	if (legacy) {
+		return normalizeExpansionSelection(legacy);
+	}
+	return ['core'];
 }
 
 function shuffleArray(arr) {
@@ -336,68 +340,30 @@ function shuffleArray(arr) {
 }
 
 function generateSpellList(selection) {
-	const expansionKeys = normalizeExpansionSelection(selection);
-	const coreByCat = [CORE_RITUALS, CORE_SORCERIES, CORE_CHARMS];
-
-	// Pool the selected expansions' own spells per category, then add core.
-	const expansionByCat = [[], [], []];
-	for (const key of expansionKeys) {
-		const exp = EXPANSIONS[key];
-		expansionByCat[0].push(...exp.rituals);
-		expansionByCat[1].push(...exp.sorceries);
-		expansionByCat[2].push(...exp.charms);
-	}
-	const packByCat = coreByCat.map((core, i) => [...core, ...expansionByCat[i]]);
-	const picks = packByCat.map(cat => shuffleArray(cat).slice(0, 3));
-
-	if (expansionKeys.length > 0) {
-		// Enforce at least one spell from each selected expansion pack
-		for (const key of expansionKeys) {
-			const exp = EXPANSIONS[key];
-			const hasSpell = picks[0].some(s => exp.rituals.includes(s)) ||
-			                 picks[1].some(s => exp.sorceries.includes(s)) ||
-			                 picks[2].some(s => exp.charms.includes(s));
-			if (hasSpell) continue;
-
-			const getExpCount = (k) => {
-				const e = EXPANSIONS[k];
-				return picks[0].filter(s => e.rituals.includes(s)).length +
-				       picks[1].filter(s => e.sorceries.includes(s)).length +
-				       picks[2].filter(s => e.charms.includes(s)).length;
-			};
-
-			let swapped = false;
-			for (let i = 0; i < 3; i++) {
-				const catSpells = i === 0 ? exp.rituals : (i === 1 ? exp.sorceries : exp.charms);
-				if (catSpells.length === 0) continue;
-
-				for (let slot = 0; slot < 3; slot++) {
-					const currentSpell = picks[i][slot];
-					let canSwapOut = false;
-					const currentSpellExp = expansionKeys.find(k => 
-						EXPANSIONS[k].rituals.includes(currentSpell) ||
-						EXPANSIONS[k].sorceries.includes(currentSpell) ||
-						EXPANSIONS[k].charms.includes(currentSpell)
-					);
-					if (!currentSpellExp) {
-						canSwapOut = true;
-					} else if (getExpCount(currentSpellExp) > 1) {
-						canSwapOut = true;
-					}
-
-					if (canSwapOut) {
-						const availableSpells = catSpells.filter(s => !picks[i].includes(s));
-						if (availableSpells.length > 0) {
-							picks[i][slot] = availableSpells[Math.floor(Math.random() * availableSpells.length)];
-							swapped = true;
-							break;
-						}
-					}
-				}
-				if (swapped) break;
-			}
+	let selectedKeys = normalizeExpansionSelection(selection);
+	if (selectedKeys.length === 0) {
+		if (typeof localStorage !== 'undefined') {
+			selectedKeys = readStoredExpansions();
+		}
+		if (selectedKeys.length === 0) {
+			selectedKeys = ['core'];
 		}
 	}
 
+	const poolByCat = [[], [], []];
+	for (const key of selectedKeys) {
+		const pack = EXPANSIONS[key];
+		if (pack) {
+			poolByCat[0].push(...pack.rituals);
+			poolByCat[1].push(...pack.sorceries);
+			poolByCat[2].push(...pack.charms);
+		}
+	}
+
+	if (poolByCat[0].length < 3 || poolByCat[1].length < 3 || poolByCat[2].length < 3) {
+		throw new Error("Not enough spells selected to fill the board. Please select more spell packs.");
+	}
+
+	const picks = poolByCat.map(cat => shuffleArray(cat).slice(0, 3));
 	return [...picks[0], ...picks[1], ...picks[2]];
 }

@@ -730,7 +730,13 @@ document.addEventListener('alpine:init', () => {
 					};
 
 					const sfnToLoad = _saveLoadedSfn || _this.importSfn || null;
-					await engine.startGame(sfnToLoad);
+					try {
+						await engine.startGame(sfnToLoad);
+					} catch (e) {
+						alert("Failed to start game: " + e.message);
+						window.location.href = './';
+						return;
+					}
 					// Re-seed the engine's gameLog from the save so review /
 					// SGN export covers the whole match, not just post-resume.
 					if (_savedGameLog && Array.isArray(_savedGameLog)) {

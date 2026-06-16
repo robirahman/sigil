@@ -263,8 +263,9 @@
 				<small>Join the community to chat and find opponents</small>
 			</a>
 			<details style="margin-top: 20px;">
-				<summary class="theme-label" style="cursor: pointer; color: var(--color-text-muted);">Expansion packs</summary>
+				<summary class="theme-label" style="cursor: pointer; color: var(--color-text-muted);">Spell packs</summary>
 				<div id="spell-pack-checkboxes" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px; color: var(--color-text);">
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="core" /> <span>Core</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
@@ -278,18 +279,58 @@
 			</details>
 			<script>
 				(function() {
-					var KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda'];
+					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda'];
+					var PACK_SPELL_COUNTS = {
+						core:      { rituals: 5, sorceries: 5, charms: 5 },
+						springtime:{ rituals: 1, sorceries: 1, charms: 1 },
+						celestial: { rituals: 1, sorceries: 1, charms: 1 },
+						fury:      { rituals: 1, sorceries: 1, charms: 1 },
+						tempest:   { rituals: 1, sorceries: 1, charms: 1 },
+						tsunami:   { rituals: 1, sorceries: 1, charms: 1 },
+						autumn:    { rituals: 1, sorceries: 1, charms: 1 },
+						gloom:     { rituals: 1, sorceries: 1, charms: 1 },
+						covenant:  { rituals: 1, sorceries: 1, charms: 1 },
+						panda:     { rituals: 4, sorceries: 2, charms: 6 }
+					};
+
+					function isValidSelection(keys) {
+						var rituals = 0;
+						var sorceries = 0;
+						var charms = 0;
+						keys.forEach(function(k) {
+							var counts = PACK_SPELL_COUNTS[k];
+							if (counts) {
+								rituals += counts.rituals;
+								sorceries += counts.sorceries;
+								charms += counts.charms;
+							}
+						});
+						return rituals >= 3 && sorceries >= 3 && charms >= 3;
+					}
+
 					var boxes = document.querySelectorAll('#spell-pack-checkboxes input[type=checkbox]');
-					// Load the saved selection, migrating from the legacy single-select key.
+					var migrated = localStorage.getItem('sigilSpellPacksVersion');
 					var selected = [];
 					var multi = localStorage.getItem('sigilSpellPacks');
 					if (multi !== null) {
 						try { selected = JSON.parse(multi) || []; } catch (e) { selected = []; }
+						if (migrated !== 'v2') {
+							// Migrate: legacy selections always included core implicitly.
+							if (selected.indexOf('core') === -1) {
+								selected.unshift('core');
+							}
+							localStorage.setItem('sigilSpellPacks', JSON.stringify(selected));
+							localStorage.setItem('sigilSpellPacksVersion', 'v2');
+						}
 					} else {
 						var legacy = localStorage.getItem('sigilSpellPack');
 						if (legacy === 'all') selected = KEYS.slice();
-						else if (legacy && KEYS.indexOf(legacy) !== -1) selected = [legacy];
+						else if (legacy && KEYS.indexOf(legacy) !== -1) selected = ['core', legacy];
+						else selected = ['core'];
+						localStorage.setItem('sigilSpellPacks', JSON.stringify(selected));
+						localStorage.setItem('sigilSpellPacksVersion', 'v2');
 					}
+
 					boxes.forEach(function(box) {
 						box.checked = selected.indexOf(box.value) !== -1;
 						box.addEventListener('change', function() {
@@ -297,6 +338,22 @@
 							boxes.forEach(function(b) { if (b.checked) current.push(b.value); });
 							localStorage.setItem('sigilSpellPacks', JSON.stringify(current));
 						});
+					});
+
+					// Validate when starting a local game from this page
+					var playLinks = document.querySelectorAll('a.mode-button');
+					playLinks.forEach(function(link) {
+						var href = link.getAttribute('href') || '';
+						if (href.indexOf('game.html') === 0) {
+							link.addEventListener('click', function(e) {
+								var current = [];
+								boxes.forEach(function(b) { if (b.checked) current.push(b.value); });
+								if (!isValidSelection(current)) {
+									e.preventDefault();
+									alert("Not enough spells selected to fill the board. Please select more spell packs.");
+								}
+							});
+						}
 					});
 				})();
 			</script>

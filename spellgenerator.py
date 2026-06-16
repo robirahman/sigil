@@ -125,87 +125,71 @@ def generate_spell_list(expansions=None, pack_key=None):
 	"""Generate the 9 spell instantiation strings for a new game.
 
 	Selection precedence:
-	  1. `expansions` — a list/set/CSV of expansion keys to combine with core
-	     (mirrors the deployed JS site, where multiple expansions stack).
-	  2. `pack_key` — legacy single-pack selector ('core', a single expansion
-	     key, or 'all').
-	  3. SIGIL_SPELL_PACKS env var (CSV/space list of expansion keys).
-	  4. SIGIL_SPELL_PACK env var (single legacy pack key).
-	  5. 'core'.
-	The unofficial Panda expansion is never included.
+	  1. `expansions` — a list/set/CSV of expansion keys to combine
+	  2. `pack_key` — legacy single-pack selector
+	  3. SIGIL_SPELL_PACKS env var
+	  4. SIGIL_SPELL_PACK env var
+	  5. default to 'core'
 	"""
+	keys = set()
 	if expansions is not None:
-		rituals_pool, sorceries_pool, charms_pool = spell_pool(expansions)
+		if isinstance(expansions, str):
+			parts = [p.strip().lower() for p in expansions.replace(',', ' ').split()]
+		else:
+			parts = [str(p).strip().lower() for p in expansions]
+		for p in parts:
+			if p:
+				keys.add(p)
 	elif pack_key is not None:
-		rituals_pool, sorceries_pool, charms_pool = spell_pool(
-			list(EXPANSION_KEYS) if pack_key == 'all' else [pack_key])
+		keys.add(str(pack_key).strip().lower())
 	elif os.environ.get('SIGIL_SPELL_PACKS'):
-		rituals_pool, sorceries_pool, charms_pool = spell_pool(os.environ['SIGIL_SPELL_PACKS'])
+		parts = [p.strip().lower() for p in os.environ['SIGIL_SPELL_PACKS'].replace(',', ' ').split()]
+		for p in parts:
+			if p:
+				keys.add(p)
 	else:
-		rituals_pool, sorceries_pool, charms_pool = spell_pool(os.environ.get('SIGIL_SPELL_PACK', 'core'))
+		legacy_env = os.environ.get('SIGIL_SPELL_PACK', 'core').strip().lower()
+		keys.add(legacy_env)
 
+	# If 'all' is in keys, select everything
+	if 'all' in keys:
+		keys = {'core'} | set(EXPANSIONS.keys())
+
+	# Map aliases
+	mapped_keys = set()
+	for k in keys:
+		mapped_k = _EXPANSION_ALIASES.get(k, k)
+		if mapped_k == 'core' or mapped_k in EXPANSIONS:
+			mapped_keys.add(mapped_k)
+
+	# If we parsed nothing, or it's empty, default to 'core'
+	if not mapped_keys:
+		mapped_keys = {'core'}
+
+	# Now, pool the spells
+	rituals_pool = []
+	sorceries_pool = []
+	charms_pool = []
+
+	if 'core' in mapped_keys:
+		rituals_pool.extend(CORE_RITUALS)
+		sorceries_pool.extend(CORE_SORCERIES)
+		charms_pool.extend(CORE_CHARMS)
+
+	for k in mapped_keys:
+		if k in EXPANSIONS:
+			rituals_pool.extend(EXPANSIONS[k]['rituals'])
+			sorceries_pool.extend(EXPANSIONS[k]['sorceries'])
+			charms_pool.extend(EXPANSIONS[k]['charms'])
+
+	# Ensure we have at least 3 of each category
+	if len(rituals_pool) < 3 or len(sorceries_pool) < 3 or len(charms_pool) < 3:
+		raise ValueError("Not enough spells selected to fill the board. Please select more spell packs.")
+
+	# Select 3 of each randomly
 	rituals = random.sample(rituals_pool, 3)
 	sorceries = random.sample(sorceries_pool, 3)
 	charms = random.sample(charms_pool, 3)
-
-	picks = [rituals, sorceries, charms]
-	keys = normalize_expansion_selection(expansions)
-	if expansions is None:
-		if pack_key is not None:
-			keys = normalize_expansion_selection(list(EXPANSION_KEYS) if pack_key == 'all' else [pack_key])
-		elif os.environ.get('SIGIL_SPELL_PACKS'):
-			keys = normalize_expansion_selection(os.environ['SIGIL_SPELL_PACKS'])
-		else:
-			keys = normalize_expansion_selection(os.environ.get('SIGIL_SPELL_PACK', 'core'))
-
-	if keys:
-		for k in keys:
-			exp = EXPANSIONS[k]
-			has_spell = (any(s in exp['rituals'] for s in picks[0]) or
-			             any(s in exp['sorceries'] for s in picks[1]) or
-			             any(s in exp['charms'] for s in picks[2]))
-			if has_spell:
-				continue
-
-			def get_exp_count(key_name):
-				e = EXPANSIONS[key_name]
-				return (sum(1 for s in picks[0] if s in e['rituals']) +
-				        sum(1 for s in picks[1] if s in e['sorceries']) +
-				        sum(1 for s in picks[2] if s in e['charms']))
-
-			swapped = False
-			for i in range(3):
-				cat_spells = exp['rituals'] if i == 0 else (exp['sorceries'] if i == 1 else exp['charms'])
-				if not cat_spells:
-					continue
-
-				for slot in range(3):
-					current_spell = picks[i][slot]
-					can_swap_out = False
-					current_spell_exp = None
-					for ok in keys:
-						e = EXPANSIONS[ok]
-						if (current_spell in e['rituals'] or
-						    current_spell in e['sorceries'] or
-						    current_spell in e['charms']):
-							current_spell_exp = ok
-							break
-
-					if not current_spell_exp:
-						can_swap_out = True
-					elif get_exp_count(current_spell_exp) > 1:
-						can_swap_out = True
-
-					if can_swap_out:
-						available_spells = [s for s in cat_spells if s not in picks[i]]
-						if available_spells:
-							picks[i][slot] = random.choice(available_spells)
-							swapped = True
-							break
-				if swapped:
-					break
-
-	rituals, sorceries, charms = picks[0], picks[1], picks[2]
 
 	ritual1 = "spellfile." + rituals[0] + "(self, self.positions[1], '" + rituals[0] + "')"
 	ritual2 = "spellfile." + rituals[1] + "(self, self.positions[2], '" + rituals[1] + "')"
