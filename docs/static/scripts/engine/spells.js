@@ -790,40 +790,56 @@ const SpellResolvers = {
 		}
 	},
 
-	// --- Erupt (inferno ritual): 1 move into each 3- and 5-node spell ---
+	// --- Erupt (inferno ritual): up to 2 moves into every spell you hold ---
 	async erupt(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
-		// One non-blink move (place on an adjacent empty node, or push an
-		// adjacent enemy) into each 3- and 5-node spell — positions 1..6,
-		// INCLUDING Erupt's own slot. A spell is eligible only if you're
-		// adjacent to one of its nodes that you don't already occupy.
+		// Up to 2 regular (hard or soft, never blink) moves into every 3- or
+		// 5-node spell (positions 1..6) in which you already have a stone,
+		// EXCEPT Erupt's own slot. A spell where you hold k of its N nodes
+		// allows min(2, N-k) moves, further limited by reachability. Moves
+		// may be made in any order.
+		const ownIdx = board.spellNames.indexOf(spellName) + 1;
+		const eligible = [];
 		for (let i = 1; i <= 6; i++) {
-			const moves = getAllMoveTargets(board, color);
+			if (i === ownIdx) continue;
+			if (POSITIONS[i].some(n => board.stones[n] === color)) eligible.push(i);
+		}
+		const movesLeft = {};
+		for (const i of eligible) movesLeft[i] = 2;
+		while (true) {
+			// Union of legal move targets across eligible spells that still
+			// have moves remaining, so the caster picks order freely.
+			const allMoves = getAllMoveTargets(board, color);
 			const targets = {};
-			for (const n of POSITIONS[i]) {
-				if (moves[n]) targets[n] = color;
+			const nodeToSpell = {};
+			for (const i of eligible) {
+				if (movesLeft[i] <= 0) continue;
+				for (const n of POSITIONS[i]) {
+					if (allMoves[n]) { targets[n] = color; nodeToSpell[n] = i; }
+				}
 			}
-			if (Object.keys(targets).length === 0) continue; // can't reach this spell
+			if (Object.keys(targets).length === 0) return;
+			let resp;
 			while (true) {
-				const resp = await getInput({
+				resp = await getInput({
 					type: 'message',
-					message: `Make 1 move into this 3- or 5-node spell (${i}/6).`,
+					message: 'Erupt: make a move into a 3- or 5-node spell where you have a stone.',
 					awaiting: 'node',
 					moveoptions: targets,
 				});
-				if (!targets[resp]) continue;
-				if (board.stones[resp] === enemy) {
-					await doPushEnemy(board, resp, color, getInput, emit);
-				} else {
-					board.stones[resp] = color;
-					emit({ type: 'new_stone_animation', color, node: resp });
-					board.lastPlay = resp;
-					board.lastPlayer = color;
-					board.update();
-					emit(board.getBoardStatePayload());
-				}
-				break;
+				if (targets[resp]) break;
 			}
+			if (board.stones[resp] === enemy) {
+				await doPushEnemy(board, resp, color, getInput, emit);
+			} else {
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+			}
+			movesLeft[nodeToSpell[resp]] -= 1;
 			if (board.gameover) return;
 		}
 	},
@@ -1093,31 +1109,31 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Gloom: Wither (Decay, then make `count` soft moves) ---
-	async destroy_exposed_then_soft(board, color, spellName, getInput, emit) {
+	// --- Gloom: Wither (Decay, then destroy `count` chosen enemy stones) ---
+	async destroy_exposed_then_destroy(board, color, spellName, getInput, emit) {
 		await SpellResolvers.destroy_exposed(board, color, spellName, getInput, emit);
 		if (board.gameover) return;
 		const count = CORE_SPELLS[spellName].count || 2;
+		const enemy = board.enemy(color);
 		for (let i = 0; i < count; i++) {
-			const targets = getSoftMoveTargets(board, color);
-			if (Object.keys(targets).length === 0) {
-				emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
-				break;
+			if (!NODE_ORDER.some(n => board.stones[n] === enemy)) {
+				emit({ type: 'message', message: 'No enemy stones left to destroy.', awaiting: null });
+				return;
 			}
 			while (true) {
 				const resp = await getInput({
-					type: 'message', message: `Choose where to soft move (${i + 1}/${count}).`,
-					awaiting: 'node', moveoptions: targets,
+					type: 'message', message: `Choose an enemy stone to destroy (${i + 1} of ${count}).`,
+					awaiting: 'node', moveoptions: {},
 				});
-				if (!targets[resp]) continue;
-				board.stones[resp] = color;
-				emit({ type: 'new_stone_animation', color, node: resp });
-				board.lastPlay = resp;
-				board.lastPlayer = color;
-				board.update();
-				emit(board.getBoardStatePayload());
-				break;
+				if (board.stones[resp] === enemy) {
+					board.stones[resp] = null;
+					if (board.lastPlay === resp) { board.lastPlay = null; board.lastPlayer = null; }
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
 			}
+			if (board.gameover) return;
 		}
 	},
 

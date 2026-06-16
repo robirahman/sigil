@@ -1218,29 +1218,48 @@ class Erupt(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Make 1 move into each 3-node and 5-node spell, including this one."
+		self.text = "Make 2 moves into every spell, except Erupt, in which you have a stone."
 
 	def resolve(self, player):
-		# Positions 1..6 INCLUDING Erupt's own slot. Skip a spell that has no
-		# legal target (per-spell, not a whole-spell abort).
+		# Up to 2 regular (hard or soft, never blink) moves into every 3- or
+		# 5-node spell (positions 1..6) in which the caster already has a
+		# stone, EXCEPT Erupt's own slot. Moves may be made in any order; a
+		# spell where you hold k of its N nodes allows min(2, N-k) moves,
+		# further limited by reachability.
+		own = set(n.name for n in self.position)
+		eligible = []
 		for i in range(1, 7):
-			options = _move_options_in_spells(player, [i])
+			nodes_i = player.board.positions[i]
+			if set(n.name for n in nodes_i) == own:
+				continue  # skip Erupt's own slot
+			if any(n.stone == player.color for n in nodes_i):
+				eligible.append(i)
+		moves_left = {i: 2 for i in eligible}
+		while True:
+			# Union of legal move targets across eligible spells that still
+			# have moves remaining, so the caster picks order freely.
+			options = {}
+			node_to_spell = {}
+			for i in eligible:
+				if moves_left[i] <= 0:
+					continue
+				for name in _move_options_in_spells(player, [i]):
+					options[name] = player.color
+					node_to_spell[name] = i
 			if not options:
-				continue
+				return
 			if player.ishuman:
 				egress = {"type": "message",
-				          "message": "Make 1 move into this 3-node or 5-node spell ({}/6).".format(i),
+				          "message": "Erupt: make a move into a 3- or 5-node spell where you have a stone.",
 				          "awaiting": "node", "moveoptions": options}
 				player.ws.send(json.dumps(egress))
-				while True:
+				resp = None
+				while resp not in options:
 					resp = player.receivemessage()
-					if resp not in options:
-						continue
-					_place_into(player, player.board.nodes[resp])
-					break
 			else:
-				node_name = next(iter(options))
-				_place_into(player, player.board.nodes[node_name])
+				resp = next(iter(options))
+			_place_into(player, player.board.nodes[resp])
+			moves_left[node_to_spell[resp]] -= 1
 			if player.board.gameover:
 				return
 
@@ -1310,31 +1329,7 @@ class Storm_Front(Spell):
 		self.text = "Destroy any 2 enemy stones."
 
 	def resolve(self, player):
-		for i in range(2):
-			enemies = [n for n in player.board.nodes
-			           if player.board.nodes[n].stone == player.enemy]
-			if not enemies:
-				return
-			if player.ishuman:
-				player.jmessage("Choose an enemy stone to destroy ({} of 2).".format(i + 1), "node")
-				node = None
-				while node is None:
-					resp = player.receivemessage()
-					if resp not in player.board.nodes:
-						continue
-					cand = player.board.nodes[resp]
-					if cand.stone == player.enemy:
-						node = cand
-			else:
-				time.sleep(1)
-				node = player.board.nodes[enemies[0]]
-			node.stone = None
-			if player.board.last_play == node.name:
-				player.board.last_play = None
-				player.board.last_player = None
-			player.board.update()
-			if player.board.gameover:
-				return
+		_destroy_chosen(player, 2)
 
 
 # BFS the enemy stones into contiguous groups (over node adjacency).
@@ -1470,6 +1465,36 @@ def _destroy_exposed(player):
 	player.board.update()
 
 
+# Helper: caster destroys `count` enemy stones of their choice (one at a time).
+# The AI fallback greedily destroys the first available enemy stone.
+def _destroy_chosen(player, count):
+	for i in range(count):
+		enemies = [n for n in player.board.nodes
+		           if player.board.nodes[n].stone == player.enemy]
+		if not enemies:
+			return
+		if player.ishuman:
+			player.jmessage("Choose an enemy stone to destroy ({} of {}).".format(i + 1, count), "node")
+			node = None
+			while node is None:
+				resp = player.receivemessage()
+				if resp not in player.board.nodes:
+					continue
+				cand = player.board.nodes[resp]
+				if cand.stone == player.enemy:
+					node = cand
+		else:
+			time.sleep(1)
+			node = player.board.nodes[enemies[0]]
+		node.stone = None
+		if player.board.last_play == node.name:
+			player.board.last_play = None
+			player.board.last_player = None
+		player.board.update()
+		if player.board.gameover:
+			return
+
+
 class Decay(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
@@ -1484,18 +1509,13 @@ class Wither(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Destroy all enemy stones touching 2 or more empty nodes, then make 2 soft moves."
+		self.text = "Destroy all enemy stones touching 2 or more empty nodes, then destroy 2 enemy stones of your choice."
 
 	def resolve(self, player):
 		_destroy_exposed(player)
 		if player.board.gameover:
 			return
-		if player.ishuman:
-			for i in range(2):
-				player.softmove()
-		else:
-			for i in range(2):
-				player.softmove(self.position.copy())
+		_destroy_chosen(player, 2)
 
 
 class Lurk(Spell):

@@ -52,7 +52,7 @@ CORE_SPELLS = {
     # Gloom expansion
     'Lurk': {'resolve': 'restricted_move', 'static': False, 'ischarm': True},
     'Decay': {'resolve': 'destroy_exposed', 'static': False, 'ischarm': False},
-    'Wither': {'resolve': 'destroy_exposed_then_soft', 'count': 2, 'static': False, 'ischarm': False},
+    'Wither': {'resolve': 'destroy_exposed_then_destroy', 'count': 2, 'static': False, 'ischarm': False},
     # Covenant expansion (static seals)
     'Seal_of_Winter': {'resolve': None, 'static': True, 'ischarm': True},
     'Seal_of_Stone': {'resolve': None, 'static': True, 'ischarm': False},
@@ -960,17 +960,30 @@ class SimBoard:
                 self.update()
 
         elif resolve_type == 'erupt':
-            # 1 non-blink move into each 3- and 5-node spell (positions 1..6,
-            # including Erupt's own slot), where a legal target exists.
+            # Up to 2 non-blink moves into every 3- or 5-node spell (positions
+            # 1..6) in which `color` already has a stone, EXCEPT Erupt's own
+            # slot. A spell where you hold k of N nodes allows min(2, N-k)
+            # moves, further limited by reachability.
+            own = set(spell_position_nodes)
             for i in range(1, 7):
-                moves = self._all_moveable(color)
-                for n in POSITIONS[i]:
-                    if n in moves:
-                        actions.append(self._do_move(color, n))
-                        self.update()
+                nodes_i = POSITIONS[i]
+                if set(nodes_i) == own:
+                    continue  # skip Erupt's own slot
+                if not any(self.stones[n] == color for n in nodes_i):
+                    continue  # need an existing stone in this spell
+                for _ in range(2):
+                    moves = self._all_moveable(color)
+                    chosen = None
+                    for n in nodes_i:
+                        if n in moves:
+                            chosen = n
+                            break
+                    if chosen is None:
                         break
-                if self.gameover:
-                    return actions
+                    actions.append(self._do_move(color, chosen))
+                    self.update()
+                    if self.gameover:
+                        return actions
 
         elif resolve_type == 'gust':
             # Pick up every enemy stone touching one of our stones, then place
@@ -1007,23 +1020,8 @@ class SimBoard:
 
         elif resolve_type == 'storm_front':
             # Destroy any 2 enemy stones of the caster's choice.
-            ovr = overrides.get('storm_front_pair')
-            destroyed = []
-            if (ovr and len(ovr) == 2 and ovr[0] != ovr[1]
-                    and self.stones[ovr[0]] == enemy and self.stones[ovr[1]] == enemy):
-                for n in ovr:
-                    self.stones[n] = None
-                    destroyed.append(n)
-            else:
-                for name in NODE_ORDER:
-                    if len(destroyed) >= 2:
-                        break
-                    if self.stones[name] == enemy:
-                        self.stones[name] = None
-                        destroyed.append(name)
-            if destroyed:
-                actions.append(Action('storm_front', destroyed=destroyed))
-            self.update()
+            self._destroy_chosen(color, actions, 2,
+                                 overrides.get('storm_front_pair'))
 
         elif resolve_type == 'hurricane':
             # Destroy the smallest contiguous enemy group (ties: caster picks).
@@ -1098,29 +1096,14 @@ class SimBoard:
         elif resolve_type == 'destroy_exposed':
             self._destroy_exposed(color, actions)
 
-        elif resolve_type == 'destroy_exposed_then_soft':
+        elif resolve_type == 'destroy_exposed_then_destroy':
+            # Gloom (Wither): destroy exposed enemy stones, then destroy
+            # `count` more enemy stones of the caster's choice.
             self._destroy_exposed(color, actions)
             if not self.gameover:
                 count = info.get('count', 2)
-                soft_overrides = list(overrides.get('soft_move_targets') or [])
-                for _ in range(count):
-                    targets = self._soft_moveable(color)
-                    if not targets:
-                        break
-                    chosen = None
-                    while soft_overrides and chosen is None:
-                        candidate = soft_overrides.pop(0)
-                        if candidate in targets:
-                            chosen = candidate
-                    if chosen is None:
-                        for t in targets:
-                            if t not in spell_position_nodes:
-                                chosen = t
-                                break
-                    if chosen is None:
-                        chosen = targets[0]
-                    actions.append(self._do_soft_move(color, chosen))
-                    self.update()
+                self._destroy_chosen(color, actions, count,
+                                     overrides.get('wither_destroy'))
 
         elif resolve_type == 'restricted_move':
             # Lurk: 1 move onto any moveable node not in a 3- or 5-node spell.
@@ -1155,6 +1138,37 @@ class SimBoard:
         actions.append(Action('decay', destroyed=doomed))
         self.update()
         return doomed
+
+    def _destroy_chosen(self, color, actions, count, chosen=None):
+        """Destroy up to `count` enemy stones of the caster's choice
+        (Storm_Front, and Wither's second step). `chosen` is an optional
+        ordered list of preferred enemy nodes; entries that aren't currently
+        enemy stones are skipped, falling back to the first enemy stone in
+        NODE_ORDER. Appends one Action describing what was destroyed."""
+        enemy = self._enemy(color)
+        chosen = list(chosen or [])
+        destroyed = []
+        for _ in range(count):
+            target = None
+            while chosen and target is None:
+                cand = chosen.pop(0)
+                if self.stones.get(cand) == enemy:
+                    target = cand
+            if target is None:
+                for name in NODE_ORDER:
+                    if self.stones[name] == enemy:
+                        target = name
+                        break
+            if target is None:
+                break
+            self.stones[target] = None
+            destroyed.append(target)
+            self.update()
+            if self.gameover:
+                break
+        if destroyed:
+            actions.append(Action('storm_front', destroyed=destroyed))
+        return destroyed
 
     def _destruction_end_of_turn(self, color):
         """Seal of Destruction, END of `color`'s turn: if `color` controls the

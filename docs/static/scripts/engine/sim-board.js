@@ -394,6 +394,35 @@ class SimBoard {
 		return doomed;
 	}
 
+	// Destroy up to `count` enemy stones of the caster's choice (Storm_Front,
+	// and Wither's second step). `chosen` is an optional ordered list of
+	// preferred enemy nodes; invalid entries are skipped, falling back to the
+	// first enemy stone in NODE_ORDER.
+	_destroyChosen(color, actions, count, chosen) {
+		const enemy = this._enemy(color);
+		const queue = (chosen || []).slice();
+		const destroyed = [];
+		for (let k = 0; k < count; k++) {
+			let target = null;
+			while (queue.length && target === null) {
+				const cand = queue.shift();
+				if (this.stones[cand] === enemy) target = cand;
+			}
+			if (target === null) {
+				for (const name of NODE_ORDER) {
+					if (this.stones[name] === enemy) { target = name; break; }
+				}
+			}
+			if (target === null) break;
+			this.stones[target] = null;
+			destroyed.push(target);
+			this.update();
+			if (this.gameover) break;
+		}
+		if (destroyed.length) actions.push(new SimAction('storm_front', { destroyed }));
+		return destroyed;
+	}
+
 	_resolveSpell(spellName, color, posNodes, targetOverrides) {
 		const info = CORE_SPELLS[spellName];
 		if (!info || info.resolve === null) return [];
@@ -701,22 +730,7 @@ class SimBoard {
 			actions.push(new SimAction('gust', { destroyed: picked, kept: placed }));
 		} else if (rt === 'storm_front') {
 			// Destroy 2 enemy stones of caster's choice.
-			const ovr = overrides.storm_front_pair;
-			const destroyed = [];
-			if (ovr && ovr.length === 2
-			    && this.stones[ovr[0]] === enemy && this.stones[ovr[1]] === enemy
-			    && ovr[0] !== ovr[1]) {
-				for (const n of ovr) { this.stones[n] = null; destroyed.push(n); }
-			} else {
-				for (const name of NODE_ORDER) {
-					if (destroyed.length >= 2) break;
-					if (this.stones[name] === enemy) {
-						this.stones[name] = null;
-						destroyed.push(name);
-					}
-				}
-			}
-			if (destroyed.length) actions.push(new SimAction('storm_front', { destroyed }));
+			this._destroyChosen(color, actions, 2, overrides.storm_front_pair);
 			this.update();
 		} else if (rt === 'hurricane') {
 			// Destroy the smallest contiguous enemy group.
@@ -854,19 +868,26 @@ class SimBoard {
 				this.update();
 			}
 		} else if (rt === 'erupt') {
-			// 1 non-blink move into each 3- and 5-node spell (positions 1..6,
-			// including Erupt's own slot), where a legal target exists. Greedy
-			// target choice, mirroring Blossom.
+			// Up to 2 non-blink moves into every 3- or 5-node spell (positions
+			// 1..6) in which `color` already has a stone, EXCEPT Erupt's own
+			// slot. A spell where you hold k of N nodes allows min(2, N-k)
+			// moves, further limited by reachability. Greedy target choice.
+			const own = new Set(posNodes);
 			for (let i = 1; i <= 6; i++) {
-				const moves = this._allMoveable(color);
-				for (const n of POSITIONS[i]) {
-					if (moves.includes(n)) {
-						actions.push(this._doMove(color, n, false));
-						this.update();
-						break;
+				const nodesI = POSITIONS[i];
+				if (nodesI.length === own.size && nodesI.every(n => own.has(n))) continue; // skip Erupt's own slot
+				if (!nodesI.some(n => this.stones[n] === color)) continue; // need an existing stone
+				for (let m = 0; m < 2; m++) {
+					const moves = this._allMoveable(color);
+					let chosen = null;
+					for (const n of nodesI) {
+						if (moves.includes(n)) { chosen = n; break; }
 					}
+					if (chosen === null) break;
+					actions.push(this._doMove(color, chosen, false));
+					this.update();
+					if (this.gameover) return actions;
 				}
-				if (this.gameover) return actions;
 			}
 		} else if (rt === 'locked_or_self_moves') {
 			// Gather/Harvest: `count` moves into your locked spell or this
@@ -951,23 +972,13 @@ class SimBoard {
 			}
 		} else if (rt === 'destroy_exposed') {
 			this._destroyExposed(color, actions);
-		} else if (rt === 'destroy_exposed_then_soft') {
+		} else if (rt === 'destroy_exposed_then_destroy') {
+			// Gloom (Wither): destroy exposed enemy stones, then destroy
+			// `count` more enemy stones of the caster's choice.
 			this._destroyExposed(color, actions);
 			if (this.gameover) return actions;
 			const count = info.count || 2;
-			const overrideTargets = (overrides.soft_move_targets || []).slice();
-			for (let i = 0; i < count; i++) {
-				const targets = this._softMoveable(color);
-				if (!targets.length) break;
-				let chosen = null;
-				while (overrideTargets.length && chosen === null) {
-					const cand = overrideTargets.shift();
-					if (targets.includes(cand)) chosen = cand;
-				}
-				if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
-				actions.push(this._doSoftMove(color, chosen));
-				this.update();
-			}
+			this._destroyChosen(color, actions, count, overrides.wither_destroy);
 		} else if (rt === 'restricted_move') {
 			// Lurk: 1 move onto any moveable node that is NOT part of a 3- or
 			// 5-node spell (1-node spells and non-spell nodes are allowed).
