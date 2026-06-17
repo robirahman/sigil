@@ -42,6 +42,10 @@ const SPELL_FX = {
 	Seal_of_Winter:        { type: 'pulse', color: '#bbddee', shake: false },
 	Seal_of_Stone:         { type: 'pulse', color: '#998877', shake: false },
 	Seal_of_Destruction:  { type: 'flash', color: '#660022', shake: true  },
+	// Tectonic expansion (earthy browns + shakiness)
+	Fissure:              { type: 'burst', color: '#8b5a2b', shake: true  },
+	Rock_Slide:           { type: 'flash', color: '#cd853f', shake: true  },
+	Bulwark:              { type: 'pulse', color: '#deb887', shake: false },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

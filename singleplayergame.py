@@ -701,9 +701,22 @@ class AIPlayer():
 
 		self.board.update()
 
+	def violates_bulwark(self, node_name):
+		node = self.board.nodes[node_name]
+		if node.stone != self.enemy:
+			return False
+		if 'Bulwark' not in [s.name for s in self.opp.charged_spells]:
+			return False
+		if not self.opp.lock:
+			return False
+		lock_nodes = [n.name for n in self.opp.lock.position]
+		return node_name in lock_nodes
+
 	def allmoveablenodes(self):
 		answer = []
 		for name in self.priority_order:
+			if self.violates_bulwark(name):
+				continue
 			node = self.board.nodes[name]
 			if node.stone != self.color:
 				adjacent = False
@@ -732,6 +745,8 @@ class AIPlayer():
 	def allhardmoveablenodes(self,hardmove_spell_nodes=[]):
 		answer = []
 		for name in self.priority_order:
+			if self.violates_bulwark(name):
+				continue
 			node = self.board.nodes[name]
 			if node.stone == self.enemy:
 				adjacent = False
@@ -747,6 +762,8 @@ class AIPlayer():
 	def allblinkablenodes(self):
 		answer = []
 		for name in self.priority_order:
+			if self.violates_bulwark(name):
+				continue
 			node = self.board.nodes[name]
 			if node.stone != self.color:
 				answer.append(node)

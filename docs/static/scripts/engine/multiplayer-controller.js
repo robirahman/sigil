@@ -583,6 +583,7 @@ class MultiplayerController {
 		for (const nb of ADJACENCY[nodeName]) { if (board.stones[nb] === color) { adjacent = true; break; } }
 		if (board.stones[nodeName] === color) return this._promptMove(color, standardMove);
 		if (violatesSealOfStone(board, color, nodeName, standardMove)) return this._promptMove(color, standardMove);
+		if (violatesBulwark(board, color, nodeName)) return this._promptMove(color, standardMove);
 		if (!adjacent && !hasWind) return this._promptMove(color, standardMove);
 		if (!adjacent && hasWind) {
 			if (board.stones[nodeName] === null) {

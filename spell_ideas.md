@@ -74,3 +74,38 @@ expansions that actually shipped in the JS game are different sets entirely
 | Charm | Gush | Relocate all enemy stones touching you into any empty nodes. *(shipped as Splash → Tsunami)* |
 | Charm | Lightning | *(name only)* |
 | Charm | Winter | Your opponent cannot cast charms. (Static charms still work.) |
+
+## 2026 Brainstormed Expansion Packs
+
+Refined spell concepts developed in design sessions based on gameplay balance and board geometry constraint analysis.
+
+### Tectonic
+
+*Focuses on physical board force, anchoring, and cascading destruction.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Ritual | Fissure | Choose a target node. Destroy all enemy stones on that node and all nodes adjacent to it. |
+| Sorcery | Rock Slide | Make 1 hard move. If the pushed enemy stone has one or more stone(s) adjacent to it at its new position, destroy the displaced stone and 1 of its adjacent neighbors. |
+| Charm | Bulwark | STATIC: Stones in your locked spell cannot be pushed by enemy hard moves. |
+
+### Cosmic
+
+*Symmetry, orbits, and cross-board movement.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Ritual | Nebula | Make 3 soft blink moves. |
+| Sorcery | Conjunction | Make 2 soft blink moves into the spell position directly opposite this one. |
+| Charm | Stardust | Make 1 soft blink move into the opposite ritual spell. |
+
+### Chrono
+
+*Time manipulation, spell reaction, and tempo-pacts.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Ritual | Time Warp | Re-cast the last spell you cast this game, without paying its sacrifice cost. |
+| Sorcery | Precognition | STATIC: At the start of your turn, if your opponent cast a spell on their last turn, you may make 1 soft move. |
+| Charm | Blood Pact | Sacrifice 1 stone, then make 2 soft moves. |
+

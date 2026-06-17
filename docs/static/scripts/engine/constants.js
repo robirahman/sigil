@@ -122,6 +122,10 @@ const CORE_SPELLS = {
 	Seal_of_Winter:    { resolve: null, static: true, ischarm: true },
 	Seal_of_Stone:     { resolve: null, static: true, ischarm: false },
 	Seal_of_Destruction: { resolve: null, static: true, ischarm: false },
+	// Tectonic expansion
+	Fissure:           { resolve: 'fissure',         static: false, ischarm: false },
+	Rock_Slide:        { resolve: 'rock_slide',      static: false, ischarm: false },
+	Bulwark:           { resolve: null,              static: true,  ischarm: true },
 };
 
 const SPELL_TEXTS = {
@@ -176,6 +180,9 @@ const SPELL_TEXTS = {
 	Seal_of_Winter:    'STATIC: Your opponent cannot cast 1-node spells (charms).',
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
+	Fissure:           'Choose a target node. Destroy all enemy stones on that node and all adjacent nodes.',
+	Rock_Slide:        'Push any enemy stones adjacent to you 1 space. (Order is chosen by the casting player.) If a stone is pushed to an occupied space, the stone previously occupying that space is crushed.',
+	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -214,6 +221,10 @@ const COVENANT_RITUALS = ['Seal_of_Destruction'];
 const COVENANT_SORCERIES = ['Seal_of_Stone'];
 const COVENANT_CHARMS = ['Seal_of_Winter'];
 
+const TECTONIC_RITUALS = ['Fissure'];
+const TECTONIC_SORCERIES = ['Rock_Slide'];
+const TECTONIC_CHARMS = ['Bulwark'];
+
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
@@ -232,8 +243,9 @@ const EXPANSIONS = {
 	gloom:      { name: 'Gloom',      rituals: GLOOM_RITUALS,      sorceries: GLOOM_SORCERIES,      charms: GLOOM_CHARMS },
 	covenant:   { name: 'Covenant',   rituals: COVENANT_RITUALS,   sorceries: COVENANT_SORCERIES,   charms: COVENANT_CHARMS },
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
+	tectonic:   { name: 'Tectonic',   rituals: TECTONIC_RITUALS,   sorceries: TECTONIC_SORCERIES,   charms: TECTONIC_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.

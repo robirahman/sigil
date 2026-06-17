@@ -17,12 +17,24 @@ function getSoftMoveTargets(board, color) {
 	return result;
 }
 
+function violatesBulwark(board, color, nodeName) {
+	const enemy = board.enemy(color);
+	if (board.stones[nodeName] !== enemy) return false;
+	if (!board.chargedSpells[enemy].includes('Bulwark')) return false;
+	const lockSpell = board.lock[enemy];
+	if (!lockSpell) return false;
+	const lockIdx = board.spellNames.indexOf(lockSpell);
+	if (lockIdx < 0) return false;
+	const lockNodes = POSITIONS[lockIdx + 1];
+	return lockNodes && lockNodes.includes(nodeName);
+}
+
 function getHardMoveTargets(board, color) {
 	// Returns dict of enemy nodes adjacent to color's stones => color
 	const enemy = board.enemy(color);
 	const result = {};
 	for (const name of NODE_ORDER) {
-		if (board.stones[name] === enemy) {
+		if (board.stones[name] === enemy && !violatesBulwark(board, color, name)) {
 			for (const nb of ADJACENCY[name]) {
 				if (board.stones[nb] === color) {
 					result[name] = color;
@@ -38,7 +50,7 @@ function getAllMoveTargets(board, color) {
 	// Returns dict of all nodes (empty or enemy) adjacent to color's stones => color
 	const result = {};
 	for (const name of NODE_ORDER) {
-		if (board.stones[name] !== color) {
+		if (board.stones[name] !== color && !violatesBulwark(board, color, name)) {
 			for (const nb of ADJACENCY[name]) {
 				if (board.stones[nb] === color) {
 					result[name] = color;
@@ -54,7 +66,7 @@ function getBlinkTargets(board, color) {
 	// Returns dict of all nodes not occupied by color => color
 	const result = {};
 	for (const name of NODE_ORDER) {
-		if (board.stones[name] !== color) {
+		if (board.stones[name] !== color && !violatesBulwark(board, color, name)) {
 			result[name] = color;
 		}
 	}

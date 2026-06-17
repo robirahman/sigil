@@ -57,6 +57,10 @@ CORE_SPELLS = {
     'Seal_of_Winter': {'resolve': None, 'static': True, 'ischarm': True},
     'Seal_of_Stone': {'resolve': None, 'static': True, 'ischarm': False},
     'Seal_of_Destruction': {'resolve': None, 'static': True, 'ischarm': False},
+    # Tectonic expansion
+    'Fissure': {'resolve': 'fissure', 'static': False, 'ischarm': False},
+    'Rock_Slide': {'resolve': 'rock_slide', 'static': False, 'ischarm': False},
+    'Bulwark': {'resolve': None, 'static': True, 'ischarm': True},
 }
 
 # Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
@@ -304,6 +308,22 @@ class SimBoard:
     def _adjacent_nodes(self, node_name):
         return ADJACENCY.get(node_name, [])
 
+    def _is_bulwark_protected(self, color, node_name):
+        """Return True if the stone at node_name belongs to color and is protected by Bulwark."""
+        if self.stones[node_name] != color:
+            return False
+        if 'Bulwark' not in self.charged_spells[color]:
+            return False
+        lock_spell = self.lock[color]
+        if not lock_spell:
+            return False
+        try:
+            lock_idx = self.spell_names.index(lock_spell)
+        except ValueError:
+            return False
+        lock_nodes = POSITIONS.get(lock_idx + 1, [])
+        return node_name in lock_nodes
+
     def _soft_moveable(self, color):
         """Return list of empty nodes adjacent to color's stones."""
         result = []
@@ -321,7 +341,7 @@ class SimBoard:
         exclude = set(exclude_nodes) if exclude_nodes else set()
         result = []
         for name in NODE_ORDER:
-            if self.stones[name] == enemy:
+            if self.stones[name] == enemy and not self._is_bulwark_protected(enemy, name):
                 for nb in self._adjacent_nodes(name):
                     if nb not in exclude and self.stones[nb] == color:
                         result.append(name)
@@ -330,9 +350,12 @@ class SimBoard:
 
     def _all_moveable(self, color):
         """Return list of nodes (empty or enemy) adjacent to color's stones."""
+        enemy = self._enemy(color)
         result = []
         for name in NODE_ORDER:
             if self.stones[name] != color:
+                if self.stones[name] == enemy and self._is_bulwark_protected(enemy, name):
+                    continue
                 for nb in self._adjacent_nodes(name):
                     if self.stones[nb] == color:
                         result.append(name)
@@ -341,7 +364,8 @@ class SimBoard:
 
     def _blinkable(self, color):
         """Return list of all nodes not occupied by color."""
-        return [n for n in NODE_ORDER if self.stones[n] != color]
+        enemy = self._enemy(color)
+        return [n for n in NODE_ORDER if self.stones[n] != color and not (self.stones[n] == enemy and self._is_bulwark_protected(enemy, n))]
 
     def escape_distance(self, node_name, defender_color, max_dist=6):
         """Minimum BFS distance from node_name through defender stones to
@@ -1117,6 +1141,99 @@ class SimBoard:
             if chosen is not None:
                 actions.append(self._do_move(color, chosen, is_blink=False))
                 self.update()
+
+        elif resolve_type == 'fissure':
+            target = overrides.get('fissure_target')
+            if not target or target not in NODE_ORDER:
+                max_destroyed = -1
+                best_target = NODE_ORDER[0]
+                for node in NODE_ORDER:
+                    affected = [node] + self._adjacent_nodes(node)
+                    count = 0
+                    for n in affected:
+                        if self.stones[n] == enemy:
+                            count += 1
+                    if count > max_destroyed:
+                        max_destroyed = count
+                        best_target = node
+                target = best_target
+            destroyed = []
+            affected = [target] + self._adjacent_nodes(target)
+            for n in affected:
+                if self.stones[n] == enemy:
+                    self.stones[n] = None
+                    destroyed.append(n)
+            actions.append(Action('fissure', node=target, destroyed=destroyed))
+            self.update()
+
+        elif resolve_type == 'rock_slide':
+            pushes = []
+            override_pushes = overrides.get('rock_slide_pushes') or []
+            safety = 0
+            while safety < 50:
+                safety += 1
+                adjacent_enemy_nodes = []
+                for name in NODE_ORDER:
+                    if self.stones[name] == enemy:
+                        has_caster_nb = any(self.stones[nb] == color for nb in self._adjacent_nodes(name))
+                        if has_caster_nb:
+                            adjacent_enemy_nodes.append(name)
+                
+                if len(adjacent_enemy_nodes) == 0:
+                    break
+                
+                from_node = None
+                to_node = None
+                
+                if len(pushes) < len(override_pushes):
+                    ovr = override_pushes[len(pushes)]
+                    if ovr.get('from') in adjacent_enemy_nodes and ovr.get('to') in self._adjacent_nodes(ovr.get('from')):
+                        from_node = ovr.get('from')
+                        to_node = ovr.get('to')
+                
+                if from_node is None:
+                    best_from = None
+                    best_to = None
+                    best_score = -9999
+                    for source in adjacent_enemy_nodes:
+                        stone_color = self.stones[source]
+                        for nb in self._adjacent_nodes(source):
+                            occ = self.stones[nb]
+                            score = 0
+                            if occ is None:
+                                score = 10
+                            elif occ == enemy:
+                                if stone_color == color:
+                                    score = 5
+                                else:
+                                    score = 20
+                            elif occ == color:
+                                if stone_color == color:
+                                    score = -50
+                                else:
+                                    score = -100
+                            
+                            if score > best_score:
+                                best_score = score
+                                best_from = source
+                                best_to = nb
+                    if best_from is not None:
+                        from_node = best_from
+                        to_node = best_to
+                    else:
+                        from_node = adjacent_enemy_nodes[0]
+                        to_node = self._adjacent_nodes(from_node)[0]
+                
+                stone_color = self.stones[from_node]
+                occupant = self.stones[to_node]
+                self.stones[from_node] = None
+                self.stones[to_node] = stone_color
+                pushes.append({'from': from_node, 'to': to_node, 'crushed': occupant})
+                self.update()
+                
+                if self.gameover:
+                    break
+            actions.append(Action('rock_slide', pushes=pushes))
 
         return actions
 

@@ -205,11 +205,22 @@ class SimBoard {
 		return result;
 	}
 
+	_isBulwarkProtected(color, nodeName) {
+		if (this.stones[nodeName] !== color) return false;
+		if (!this.chargedSpells[color].includes('Bulwark')) return false;
+		const lockSpell = this.lock[color];
+		if (!lockSpell) return false;
+		const lockIdx = this.spellNames.indexOf(lockSpell);
+		if (lockIdx < 0) return false;
+		const lockNodes = POSITIONS[lockIdx + 1];
+		return lockNodes && lockNodes.includes(nodeName);
+	}
+
 	_hardMoveable(color) {
 		const enemy = this._enemy(color);
 		const result = [];
 		for (const name of NODE_ORDER) {
-			if (this.stones[name] === enemy) {
+			if (this.stones[name] === enemy && !this._isBulwarkProtected(enemy, name)) {
 				for (const nb of ADJACENCY[name]) {
 					if (this.stones[nb] === color) { result.push(name); break; }
 				}
@@ -219,9 +230,13 @@ class SimBoard {
 	}
 
 	_allMoveable(color) {
+		const enemy = this._enemy(color);
 		const result = [];
 		for (const name of NODE_ORDER) {
 			if (this.stones[name] !== color) {
+				if (this.stones[name] === enemy && this._isBulwarkProtected(enemy, name)) {
+					continue;
+				}
 				for (const nb of ADJACENCY[name]) {
 					if (this.stones[nb] === color) { result.push(name); break; }
 				}
@@ -231,7 +246,12 @@ class SimBoard {
 	}
 
 	_blinkable(color) {
-		return NODE_ORDER.filter(n => this.stones[n] !== color);
+		const enemy = this._enemy(color);
+		return NODE_ORDER.filter(n => {
+			if (this.stones[n] === color) return false;
+			if (this.stones[n] === enemy && this._isBulwarkProtected(enemy, n)) return false;
+			return true;
+		});
 	}
 
 	/**
@@ -515,6 +535,118 @@ class SimBoard {
 				}
 			}
 			if (destroyed.length) actions.push(new SimAction('hail_storm', { destroyed }));
+		} else if (rt === 'fissure') {
+			let target = overrides.fissure_target;
+			if (!target || !NODE_ORDER.includes(target)) {
+				let maxDestroyed = -1;
+				let bestTarget = NODE_ORDER[0];
+				for (const node of NODE_ORDER) {
+					const affected = [node, ...ADJACENCY[node]];
+					let count = 0;
+					for (const n of affected) {
+						if (this.stones[n] === enemy) count++;
+					}
+					if (count > maxDestroyed) {
+						maxDestroyed = count;
+						bestTarget = node;
+					}
+				}
+				target = bestTarget;
+			}
+			const destroyed = [];
+			const affected = [target, ...ADJACENCY[target]];
+			for (const n of affected) {
+				if (this.stones[n] === enemy) {
+					this.stones[n] = null;
+					destroyed.push(n);
+				}
+			}
+			actions.push(new SimAction('fissure', { node: target, destroyed }));
+			this.update();
+		} else if (rt === 'rock_slide') {
+			const pushes = [];
+			const overridePushes = overrides.rock_slide_pushes || [];
+			let safety = 0;
+			while (safety < 50) {
+				safety++;
+				const adjacentEnemyNodes = [];
+				for (const name of NODE_ORDER) {
+					if (this.stones[name] === enemy) {
+						const hasCasterNb = ADJACENCY[name].some(nb => this.stones[nb] === color);
+						if (hasCasterNb) {
+							adjacentEnemyNodes.push(name);
+						}
+					}
+				}
+
+				if (adjacentEnemyNodes.length === 0) {
+					break;
+				}
+
+				let fromNode = null;
+				let toNode = null;
+
+				if (pushes.length < overridePushes.length) {
+					const ovr = overridePushes[pushes.length];
+					if (adjacentEnemyNodes.includes(ovr.from) && ADJACENCY[ovr.from].includes(ovr.to)) {
+						fromNode = ovr.from;
+						toNode = ovr.to;
+					}
+				}
+
+				if (fromNode === null) {
+					let bestFrom = null;
+					let bestTo = null;
+					let bestScore = -9999;
+					for (const source of adjacentEnemyNodes) {
+						const stoneColor = this.stones[source];
+						for (const nb of ADJACENCY[source]) {
+							const occ = this.stones[nb];
+							let score = 0;
+							if (occ === null) {
+								score = 10;
+							} else if (occ === enemy) {
+								if (stoneColor === color) {
+									score = 5;
+								} else {
+									score = 20;
+								}
+							} else if (occ === color) {
+								if (stoneColor === color) {
+									score = -50;
+								} else {
+									score = -100;
+								}
+							}
+							if (score > bestScore) {
+								bestScore = score;
+								bestFrom = source;
+								bestTo = nb;
+							}
+						}
+					}
+					if (bestFrom !== null) {
+						fromNode = bestFrom;
+						toNode = bestTo;
+					} else {
+						fromNode = adjacentEnemyNodes[0];
+						toNode = ADJACENCY[fromNode][0];
+					}
+				}
+
+				const stoneColor = this.stones[fromNode];
+				const occupant = this.stones[toNode];
+				this.stones[fromNode] = null;
+				if (occupant !== null) {
+					this.crushedThisTurn = true;
+				}
+				this.stones[toNode] = stoneColor;
+				pushes.push({ from: fromNode, to: toNode, crushed: occupant });
+				this.update();
+
+				if (this.gameover) break;
+			}
+			actions.push(new SimAction('rock_slide', { pushes }));
 		} else if (rt === 'bewitch') {
 			const ovr = overrides.bewitch_pair;
 			if (ovr) {

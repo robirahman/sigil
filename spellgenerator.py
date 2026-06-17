@@ -50,6 +50,11 @@ COVENANT_RITUALS = ['Seal_of_Destruction']
 COVENANT_SORCERIES = ['Seal_of_Stone']
 COVENANT_CHARMS = ['Seal_of_Winter']
 
+# Tectonic expansion.
+TECTONIC_RITUALS = ['Fissure']
+TECTONIC_SORCERIES = ['Rock_Slide']
+TECTONIC_CHARMS = ['Bulwark']
+
 
 # Own-only spell lists per expansion key. Keys match the JS EXPANSIONS map
 # (note Inferno's key is 'fury'). 'inferno' is accepted as an alias below.
@@ -61,8 +66,9 @@ EXPANSIONS = {
 	'tsunami':    {'rituals': TSUNAMI_RITUALS,    'sorceries': TSUNAMI_SORCERIES,    'charms': TSUNAMI_CHARMS},
 	'gloom':      {'rituals': GLOOM_RITUALS,      'sorceries': GLOOM_SORCERIES,      'charms': GLOOM_CHARMS},
 	'covenant':   {'rituals': COVENANT_RITUALS,   'sorceries': COVENANT_SORCERIES,   'charms': COVENANT_CHARMS},
+	'tectonic':   {'rituals': TECTONIC_RITUALS,   'sorceries': TECTONIC_SORCERIES,   'charms': TECTONIC_CHARMS},
 }
-EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'gloom', 'covenant']
+EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'gloom', 'covenant', 'tectonic']
 
 # Accepted aliases for expansion keys.
 _EXPANSION_ALIASES = {'inferno': 'fury'}

@@ -432,6 +432,10 @@ class GameController {
 			return this._promptMove(color, standardMove);
 		}
 
+		if (violatesBulwark(board, color, node)) {
+			return this._promptMove(color, standardMove);
+		}
+
 		if (!adjacent && !hasWind) {
 			return this._promptMove(color, standardMove);
 		}

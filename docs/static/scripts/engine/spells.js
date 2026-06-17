@@ -1482,6 +1482,107 @@ const SpellResolvers = {
 			}
 		}
 	},
+
+	// --- Tectonic: Fissure ---
+	async fissure(board, color, spellName, getInput, emit) {
+		const targetOptions = {};
+		for (const name of NODE_ORDER) {
+			targetOptions[name] = color;
+		}
+		let target = null;
+		while (true) {
+			const resp = await getInput({
+				type: 'message',
+				message: 'Choose a target node for Fissure.',
+				awaiting: 'node',
+				moveoptions: targetOptions,
+			});
+			if (targetOptions[resp]) {
+				target = resp;
+				break;
+			}
+		}
+
+		const enemy = board.enemy(color);
+		const affected = [target, ...ADJACENCY[target]];
+		for (const n of affected) {
+			if (board.stones[n] === enemy) {
+				board.stones[n] = null;
+				emit({ type: 'crush_animation', crushed_color: enemy, node: n });
+				if (board.lastPlay === n) {
+					board.lastPlay = null;
+					board.lastPlayer = null;
+				}
+			}
+		}
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Tectonic: Rock Slide ---
+	async rock_slide(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		let safetyCounter = 0;
+		while (safetyCounter < 50) {
+			safetyCounter++;
+			const adjacentEnemyNodes = [];
+			for (const name of NODE_ORDER) {
+				if (board.stones[name] === enemy) {
+					const hasCasterNb = ADJACENCY[name].some(nb => board.stones[nb] === color);
+					if (hasCasterNb) {
+						adjacentEnemyNodes.push(name);
+					}
+				}
+			}
+
+			if (adjacentEnemyNodes.length === 0) {
+				break;
+			}
+
+			const selectOptions = {};
+			for (const name of adjacentEnemyNodes) {
+				selectOptions[name] = board.stones[name];
+			}
+
+			const choice = await getInput({
+				type: 'message',
+				message: 'Choose an adjacent enemy stone to push.',
+				awaiting: 'node',
+				moveoptions: selectOptions,
+			});
+
+			if (!selectOptions[choice]) continue;
+
+			const destOptions = {};
+			for (const nb of ADJACENCY[choice]) {
+				destOptions[nb] = color;
+			}
+
+			const dest = await getInput({
+				type: 'message',
+				message: `Choose where to push the stone at ${choice}.`,
+				awaiting: 'node',
+				moveoptions: destOptions,
+			});
+
+			if (!ADJACENCY[choice].includes(dest)) continue;
+
+			const stoneColor = board.stones[choice];
+			const occupant = board.stones[dest];
+
+			board.stones[choice] = null;
+			if (occupant !== null) {
+				emit({ type: 'crush_animation', crushed_color: occupant, node: dest });
+			}
+			board.stones[dest] = stoneColor;
+			emit({ type: 'push_animation', pushed_color: stoneColor, starting_node: choice, ending_node: dest });
+
+			board.update();
+			emit(board.getBoardStatePayload());
+
+			if (board.gameover) break;
+		}
+	},
 };
 
 /**

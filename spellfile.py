@@ -1585,3 +1585,137 @@ class Seal_of_Destruction(Spell):
 
 		self.text = ("STATIC: If filled at the end of your turn, destroy all enemy "
 		             "stones touching you. If filled at the start of your turn, you lose.")
+
+
+class Fissure(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Choose a target node. Destroy all enemy stones on that node and all adjacent nodes."
+
+	def resolve(self, player):
+		if player.ishuman:
+			player.jmessage("Choose a target node for Fissure.", "node")
+			target_name = None
+			while target_name is None:
+				resp = player.receivemessage()
+				if resp in player.board.nodes:
+					target_name = resp
+		else:
+			time.sleep(1)
+			max_destroyed = -1
+			best_target = 'a1'
+			for node_name in player.board.nodes:
+				node = player.board.nodes[node_name]
+				affected = [node_name] + [nb.name for nb in node.neighbors]
+				count = sum(1 for name in affected if player.board.nodes[name].stone == player.enemy)
+				if count > max_destroyed:
+					max_destroyed = count
+					best_target = node_name
+			target_name = best_target
+
+		node = player.board.nodes[target_name]
+		affected = [target_name] + [nb.name for nb in node.neighbors]
+		for name in affected:
+			n = player.board.nodes[name]
+			if n.stone == player.enemy:
+				n.stone = None
+				if player.board.last_play == name:
+					player.board.last_play = None
+					player.board.last_player = None
+
+		player.board.update()
+
+
+class Rock_Slide(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Push any enemy stones adjacent to you 1 space. (Order is chosen by the casting player.) If a stone is pushed to an occupied space, the stone previously occupying that space is crushed."
+
+	def resolve(self, player):
+		safety = 0
+		while safety < 50:
+			safety += 1
+			adjacent_enemy_nodes = []
+			for node_name in player.board.nodes:
+				node = player.board.nodes[node_name]
+				if node.stone == player.enemy:
+					has_caster_nb = any(nb.stone == player.color for nb in node.neighbors)
+					if has_caster_nb:
+						adjacent_enemy_nodes.append(node_name)
+
+			if not adjacent_enemy_nodes:
+				break
+
+			if player.ishuman:
+				player.jmessage("Choose an adjacent enemy stone to push.", "node")
+				chosen_from = None
+				while chosen_from is None:
+					resp = player.receivemessage()
+					if resp in adjacent_enemy_nodes:
+						chosen_from = resp
+
+				player.jmessage(f"Choose where to push the stone at {chosen_from}.", "node")
+				target_to = None
+				node = player.board.nodes[chosen_from]
+				valid_neighbors = [nb.name for nb in node.neighbors]
+				while target_to is None:
+					resp = player.receivemessage()
+					if resp in valid_neighbors:
+						target_to = resp
+			else:
+				time.sleep(1)
+				best_from = None
+				best_to = None
+				best_score = -9999
+				for source in adjacent_enemy_nodes:
+					stone_color = player.board.nodes[source].stone
+					neighbors = [nb.name for nb in player.board.nodes[source].neighbors]
+					for nb_name in neighbors:
+						occ = player.board.nodes[nb_name].stone
+						score = 0
+						if occ is None:
+							score = 10
+						elif occ == player.enemy:
+							if stone_color == player.color:
+								score = 5
+							else:
+								score = 20
+						elif occ == player.color:
+							if stone_color == player.color:
+								score = -50
+							else:
+								score = -100
+						if score > best_score:
+							best_score = score
+							best_from = source
+							best_to = nb_name
+				if best_from is not None:
+					chosen_from = best_from
+					target_to = best_to
+				else:
+					chosen_from = adjacent_enemy_nodes[0]
+					target_to = player.board.nodes[chosen_from].neighbors[0].name
+
+			stone_color = player.board.nodes[chosen_from].stone
+			occupant = player.board.nodes[target_to].stone
+
+			player.board.nodes[chosen_from].stone = None
+			if occupant is not None:
+				if player.ishuman:
+					player.jmessage("Stone crushed!")
+				if player.opp.ishuman:
+					player.opp.jmessage("Stone crushed!")
+
+			player.board.nodes[target_to].stone = stone_color
+
+			player.board.update()
+			if player.board.gameover:
+				break
+
+
+class Bulwark(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.static = True
+		self.text = "STATIC: Stones in your locked spell cannot be targeted by enemy hard moves."

@@ -545,9 +545,22 @@ class Player():
 		return actualmessage
 
 
+	def violates_bulwark(self, node_name):
+		node = self.board.nodes[node_name]
+		if node.stone != self.enemy:
+			return False
+		if 'Bulwark' not in [s.name for s in self.opp.charged_spells]:
+			return False
+		if not self.opp.lock:
+			return False
+		lock_nodes = [n.name for n in self.opp.lock.position]
+		return node_name in lock_nodes
+
 	def allmoveablenodes(self):
 		answer = {}
 		for nodename in self.board.nodes:
+			if self.violates_bulwark(nodename):
+				continue
 			node = self.board.nodes[nodename]
 			if node.stone != self.color:
 				adjacent = False
@@ -574,6 +587,8 @@ class Player():
 	def allhardmoveablenodes(self):
 		answer = {}
 		for nodename in self.board.nodes:
+			if self.violates_bulwark(nodename):
+				continue
 			node = self.board.nodes[nodename]
 			if node.stone == self.enemy:
 				adjacent = False
@@ -588,6 +603,8 @@ class Player():
 	def allblinkablenodes(self):
 		answer = {}
 		for nodename in self.board.nodes:
+			if self.violates_bulwark(nodename):
+				continue
 			if self.board.nodes[nodename].stone != self.color:
 				answer[nodename] = self.color
 		return answer
@@ -832,6 +849,10 @@ class Player():
 				adjacent = True
 
 		if node.stone == self.color:
+			self.move(standardmove=standardmove)
+			return None
+
+		if self.violates_bulwark(nodename):
 			self.move(standardmove=standardmove)
 			return None
 
