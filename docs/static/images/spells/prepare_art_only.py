@@ -20,8 +20,8 @@ EXPANSION_SPELLS = [
 ]
 
 source_dir = "docs/static/images/spells"
-raw_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/0bd17edc-a270-4632-b418-a0a94c75b514"
-exp_raw_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/0bd17edc-a270-4632-b418-a0a94c75b514/scratch/raw_illustrations"
+raw_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/9bbd0e6c-052e-4718-8a9b-f8f914bd3d2f"
+exp_raw_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/9bbd0e6c-052e-4718-8a9b-f8f914bd3d2f/scratch/raw_illustrations"
 dest_dir = "docs/static/images/spells/art_only"
 
 os.makedirs(dest_dir, exist_ok=True)
