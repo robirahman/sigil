@@ -354,7 +354,7 @@
 				busy: false,
 				annotationMode: false,
 				showAiThinkReport: false,
-				enablePondering: true,
+				enablePondering: false,
 
 				get needsRename() {
 					if (!this.profile) return false;
@@ -379,13 +379,13 @@
 							this.profile = this._authManager.userProfile;
 							this.annotationMode = !!(this.profile && this.profile.annotationMode);
 							this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
-							// Default ON; only explicit false disables.
-							this.enablePondering = !(this.profile && this.profile.enablePondering === false);
+							// Default OFF; only explicit true enables.
+							this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
 						} else {
 							this.profile = null;
 							this.annotationMode = false;
 							this.showAiThinkReport = false;
-							this.enablePondering = true;
+							this.enablePondering = false;
 						}
 						this.loading = false;
 					});

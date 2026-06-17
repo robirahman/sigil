@@ -498,9 +498,9 @@ class CavemanAI {
 			{ maxDepth: 6, timeLimit: 60.0 },
 			options || {},
 		);
-		// Set to false to disable pondering. Caller wires this from the
+		// Set to true to enable pondering. Caller wires this from the
 		// user's `enablePondering` account setting.
-		this.pondering = true;
+		this.pondering = false;
 		this._ponderSearchId = null;
 	}
 

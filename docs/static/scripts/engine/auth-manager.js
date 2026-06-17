@@ -105,8 +105,8 @@ class AuthManager {
 	}
 
 	get enablePondering() {
-		// Default ON: undefined or true → enabled; only explicit false disables.
-		return !(this.userProfile && this.userProfile.enablePondering === false);
+		// Default OFF: undefined or false → disabled; only explicit true enables.
+		return !!(this.userProfile && this.userProfile.enablePondering === true);
 	}
 
 	/**

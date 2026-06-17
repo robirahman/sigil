@@ -676,7 +676,7 @@ document.addEventListener('alpine:init', () => {
 							timeLimit: _CAVEMAN_TIER_BUDGETS[aiMode],
 						});
 						options.ai.pondering = _aiAuthManager
-							? _aiAuthManager.enablePondering : true;
+							? _aiAuthManager.enablePondering : false;
 					} else if (aiMode === 'caveman' || /^caveman_[1-6]$/.test(aiMode || '')) {
 						// Pure stone-count minimax — no model load. The
 						// suffixed variants (caveman_1..6) each play with
@@ -696,7 +696,7 @@ document.addEventListener('alpine:init', () => {
 							timeLimit: timeLimits[depth] || 60.0,
 						});
 						options.ai.pondering = _aiAuthManager
-							? _aiAuthManager.enablePondering : true;
+							? _aiAuthManager.enablePondering : false;
 					} else if (aiMode === 'minimax') {
 						// Power-user hidden option (not linked from index.html):
 						// runs the legacy NN-backed minimax at 3-ply. Retained
