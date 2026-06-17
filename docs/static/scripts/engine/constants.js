@@ -117,7 +117,7 @@ const CORE_SPELLS = {
 	// Gloom expansion
 	Lurk:              { resolve: 'restricted_move',         static: false, ischarm: true },
 	Decay:             { resolve: 'destroy_exposed',         static: false, ischarm: false },
-	Wither:            { resolve: 'destroy_exposed_then_destroy', count: 2, static: false, ischarm: false },
+	Wither:            { resolve: 'wither',         static: false, ischarm: false },
 	// Covenant expansion (static seals)
 	Seal_of_Winter:    { resolve: null, static: true, ischarm: true },
 	Seal_of_Stone:     { resolve: null, static: true, ischarm: false },
@@ -176,7 +176,7 @@ const SPELL_TEXTS = {
 	Harvest:           'Make 5 moves into your locked spell or into Harvest.',
 	Lurk:              'Make 1 move into a 1-node spell or a node outside of a spell.',
 	Decay:             'Destroy all enemy stones touching 2 or more empty nodes.',
-	Wither:            'Destroy all enemy stones touching 2 or more empty nodes, then destroy 2 enemy stones of your choice.',
+	Wither:            'Destroy all enemy stones touching 2 or more empty nodes, then destroy all enemy stones touching 2 or more empty nodes again.',
 	Seal_of_Winter:    'STATIC: Your opponent cannot cast 1-node spells (charms).',
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',

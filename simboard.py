@@ -52,7 +52,7 @@ CORE_SPELLS = {
     # Gloom expansion
     'Lurk': {'resolve': 'restricted_move', 'static': False, 'ischarm': True},
     'Decay': {'resolve': 'destroy_exposed', 'static': False, 'ischarm': False},
-    'Wither': {'resolve': 'destroy_exposed_then_destroy', 'count': 2, 'static': False, 'ischarm': False},
+    'Wither': {'resolve': 'wither', 'static': False, 'ischarm': False},
     # Covenant expansion (static seals)
     'Seal_of_Winter': {'resolve': None, 'static': True, 'ischarm': True},
     'Seal_of_Stone': {'resolve': None, 'static': True, 'ischarm': False},
@@ -1120,14 +1120,10 @@ class SimBoard:
         elif resolve_type == 'destroy_exposed':
             self._destroy_exposed(color, actions)
 
-        elif resolve_type == 'destroy_exposed_then_destroy':
-            # Gloom (Wither): destroy exposed enemy stones, then destroy
-            # `count` more enemy stones of the caster's choice.
+        elif resolve_type == 'wither':
             self._destroy_exposed(color, actions)
             if not self.gameover:
-                count = info.get('count', 2)
-                self._destroy_chosen(color, actions, count,
-                                     overrides.get('wither_destroy'))
+                self._destroy_exposed(color, actions)
 
         elif resolve_type == 'restricted_move':
             # Lurk: 1 move onto any moveable node not in a 3- or 5-node spell.

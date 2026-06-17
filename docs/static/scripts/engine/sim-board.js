@@ -1104,13 +1104,10 @@ class SimBoard {
 			}
 		} else if (rt === 'destroy_exposed') {
 			this._destroyExposed(color, actions);
-		} else if (rt === 'destroy_exposed_then_destroy') {
-			// Gloom (Wither): destroy exposed enemy stones, then destroy
-			// `count` more enemy stones of the caster's choice.
+		} else if (rt === 'wither') {
 			this._destroyExposed(color, actions);
 			if (this.gameover) return actions;
-			const count = info.count || 2;
-			this._destroyChosen(color, actions, count, overrides.wither_destroy);
+			this._destroyExposed(color, actions);
 		} else if (rt === 'restricted_move') {
 			// Lurk: 1 move onto any moveable node that is NOT part of a 3- or
 			// 5-node spell (1-node spells and non-spell nodes are allowed).

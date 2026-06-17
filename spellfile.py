@@ -1509,13 +1509,13 @@ class Wither(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Destroy all enemy stones touching 2 or more empty nodes, then destroy 2 enemy stones of your choice."
+		self.text = "Destroy all enemy stones touching 2 or more empty nodes, then destroy all enemy stones touching 2 or more empty nodes again."
 
 	def resolve(self, player):
 		_destroy_exposed(player)
 		if player.board.gameover:
 			return
-		_destroy_chosen(player, 2)
+		_destroy_exposed(player)
 
 
 class Lurk(Spell):

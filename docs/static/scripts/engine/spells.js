@@ -1109,32 +1109,11 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Gloom: Wither (Decay, then destroy `count` chosen enemy stones) ---
-	async destroy_exposed_then_destroy(board, color, spellName, getInput, emit) {
+	// --- Gloom: Wither ---
+	async wither(board, color, spellName, getInput, emit) {
 		await SpellResolvers.destroy_exposed(board, color, spellName, getInput, emit);
 		if (board.gameover) return;
-		const count = CORE_SPELLS[spellName].count || 2;
-		const enemy = board.enemy(color);
-		for (let i = 0; i < count; i++) {
-			if (!NODE_ORDER.some(n => board.stones[n] === enemy)) {
-				emit({ type: 'message', message: 'No enemy stones left to destroy.', awaiting: null });
-				return;
-			}
-			while (true) {
-				const resp = await getInput({
-					type: 'message', message: `Choose an enemy stone to destroy (${i + 1} of ${count}).`,
-					awaiting: 'node', moveoptions: {},
-				});
-				if (board.stones[resp] === enemy) {
-					board.stones[resp] = null;
-					if (board.lastPlay === resp) { board.lastPlay = null; board.lastPlayer = null; }
-					board.update();
-					emit(board.getBoardStatePayload());
-					break;
-				}
-			}
-			if (board.gameover) return;
-		}
+		await SpellResolvers.destroy_exposed(board, color, spellName, getInput, emit);
 	},
 
 	// --- Gloom: Lurk (1 move onto any node not part of a 3- or 5-node spell) ---
