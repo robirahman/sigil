@@ -1,36 +1,124 @@
 import sys
-from simboard import SimBoard, Action
+from simboard import SimBoard, Action, DESTROYED
 from notation import NODE_ORDER, ADJACENCY, POSITIONS
 
 def test_fissure():
     print("Testing Fissure...")
-    # Fissure: Ritual. Destroy all enemy stones on that node and all adjacent nodes.
+    # Fissure (new mechanic): the TARGET node is permanently destroyed (a
+    # wall), regardless of occupant; ADJACENT enemy stones are destroyed.
     spell_names = ['Fissure'] + ['Grow'] * 8
     board = SimBoard(spell_names)
-    
+
     # Place Red stones to cast
     for n in POSITIONS[1]:
         board.stones[n] = 'red'
-    
+
     # Place Blue stones
     board.stones['a1'] = 'blue'
     board.stones['a11'] = 'blue'
-    board.stones['c10'] = 'blue' # c10 is neighbor of a11
-    
+    board.stones['c10'] = 'blue'  # c10 is neighbor of a11
+
     # Now Red casts Fissure targeting 'a11'.
     board.whose_turn = 'red'
     board.update()
     assert 'Fissure' in board.charged_spells['red']
-    
+
     # Resolve spell
-    actions = board._resolve_spell('Fissure', 'red', POSITIONS[1], target_overrides={'fissure_target': 'a11'})
-    
+    board._resolve_spell('Fissure', 'red', POSITIONS[1], target_overrides={'fissure_target': 'a11'})
+
     # Assertions
-    assert board.stones['a11'] is None, "Target node enemy stone should be destroyed"
-    assert board.stones['a1'] is None, "Adjacent node 'a1' enemy stone should be destroyed"
-    assert board.stones['c10'] is None, "Adjacent node 'c10' enemy stone should be destroyed"
+    assert board.stones['a11'] == DESTROYED, "Target node should become a permanent wall"
+    assert board.stones['a1'] is None, "Adjacent node 'a1' enemy stone should be destroyed (normal empty)"
+    assert board.stones['c10'] is None, "Adjacent node 'c10' enemy stone should be destroyed (normal empty)"
     assert board.stones['a6'] == 'red', "Caster stone on 'a6' should NOT be destroyed"
     print("Fissure test passed!")
+
+def test_fissure_target_regardless_of_occupant():
+    print("Testing Fissure destroys target regardless of occupant...")
+    board = SimBoard(['Fissure'] + ['Grow'] * 8)
+    board.stones['b5'] = 'red'   # caster's OWN stone on the target
+    board.update()
+    red_before = board.totalstones['red']
+    board._resolve_spell('Fissure', 'red', POSITIONS[1], target_overrides={'fissure_target': 'b5'})
+    assert board.stones['b5'] == DESTROYED, "Own-occupied target must still become a wall"
+    assert board.totalstones['red'] == red_before - 1, "Destroying our own stone is a real cost"
+
+    # Empty target also becomes a wall.
+    board2 = SimBoard(['Fissure'] + ['Grow'] * 8)
+    board2.update()
+    board2._resolve_spell('Fissure', 'red', POSITIONS[1], target_overrides={'fissure_target': 'c5'})
+    assert board2.stones['c5'] == DESTROYED, "Empty target must still become a wall"
+    print("Fissure occupant test passed!")
+
+def test_wall_blocks_movement():
+    print("Testing destroyed nodes block movement...")
+    board = SimBoard(['Fissure'] + ['Grow'] * 8)
+    board.stones = {n: None for n in NODE_ORDER}
+    board.stones['a2'] = 'blue'   # blue stone adjacent to a3
+    board.stones['a3'] = DESTROYED
+    board.update()
+    assert 'a3' not in board._soft_moveable('blue'), "wall not soft-moveable"
+    assert 'a3' not in board._all_moveable('blue'), "wall not all-moveable"
+    assert 'a3' not in board._blinkable('blue'), "wall not blinkable"
+    print("Wall movement-block test passed!")
+
+def test_wall_blocks_push_and_crush():
+    print("Testing destroyed nodes block push/retreat...")
+    board = SimBoard(['Fissure'] + ['Grow'] * 8)
+    board.stones = {n: None for n in NODE_ORDER}
+    # a2 (blue) hemmed in by a red attacker on a1 and walls on its other
+    # neighbours -> no escape route -> crushable.
+    board.stones['a1'] = 'red'
+    board.stones['a2'] = 'blue'
+    for nb in ADJACENCY['a2']:
+        if nb != 'a1':
+            board.stones[nb] = DESTROYED
+    board.update()
+    assert board.escape_distance('a2', 'blue', max_dist=39) >= 39, "wall must not be an escape cell"
+    assert board.is_crushable('a2', 'red'), "stone walled in with attacker neighbour is crushable"
+    print("Wall push-block test passed!")
+
+def test_wall_disables_spell():
+    print("Testing destroyed node disables overlapping spell...")
+    # Carnage occupies position 2 (b2..b6).
+    board = SimBoard(['Fissure', 'Carnage'] + ['Grow'] * 7)
+    for n in POSITIONS[2]:
+        board.stones[n] = 'blue'
+    board.update()
+    assert 'Carnage' in board.charged_spells['blue'], "Carnage should charge before the wall"
+    board.stones['b5'] = DESTROYED
+    board.update()
+    assert 'Carnage' not in board.charged_spells['blue'], "spell with a wall node can never charge"
+    print("Wall spell-disable test passed!")
+
+def test_wall_sfn_roundtrip():
+    print("Testing SFN round-trips destroyed nodes...")
+    board = SimBoard(['Fissure'] + ['Grow'] * 8)
+    board.stones['b5'] = 'blue'
+    board.update()
+    board._resolve_spell('Fissure', 'red', POSITIONS[1], target_overrides={'fissure_target': 'b5'})
+    board.update()
+    sfn = board.to_sfn()
+    assert 'x' in sfn.split('/')[0], "SFN stone field should encode the wall as 'x'"
+    restored = SimBoard.from_sfn(sfn)
+    assert restored.stones['b5'] == DESTROYED, "wall must survive an SFN round-trip"
+    print("Wall SFN round-trip test passed!")
+
+def test_fissure_enumeration():
+    print("Testing Fissure target enumeration for minimax...")
+    from ai.enumerator import _spell_overrides, NARROW_CAPS
+    board = SimBoard(['Fissure'] + ['Grow'] * 8)
+    board.stones = {n: None for n in NODE_ORDER}
+    board.stones['a3'] = 'red'
+    for n in ['b2', 'b3', 'b4']:
+        board.stones[n] = 'blue'  # cluster for red to blast
+    board.update()
+    overrides = _spell_overrides(board, 'red', 'Fissure', NARROW_CAPS)
+    assert {} in overrides, "greedy default must be kept"
+    targets = [o['fissure_target'] for o in overrides if 'fissure_target' in o]
+    assert targets, "enumerator must propose Fissure targets"
+    assert 'b3' in targets, "high-value cluster centre should be among the proposed targets"
+    print("Fissure enumeration test passed!")
 
 def test_rock_slide():
     print("Testing Rock Slide...")
@@ -97,6 +185,12 @@ def test_bulwark():
 def main():
     try:
         test_fissure()
+        test_fissure_target_regardless_of_occupant()
+        test_wall_blocks_movement()
+        test_wall_blocks_push_and_crush()
+        test_wall_disables_spell()
+        test_wall_sfn_roundtrip()
+        test_fissure_enumeration()
         test_rock_slide()
         test_bulwark()
         print("All tectonic tests passed successfully!")

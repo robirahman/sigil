@@ -1,3 +1,8 @@
+// Sentinel stored in board.stones[node] when a node has been permanently
+// destroyed by Fissure (a wall): not null, not 'red'/'blue'. Impassable to
+// moves and push chains; a spell whose position includes it can never charge.
+const DESTROYED = 'X';
+
 // Canonical node order for SFN strings (39 nodes)
 const NODE_ORDER = [];
 for (const zone of ['a', 'b', 'c']) {
@@ -117,7 +122,7 @@ const CORE_SPELLS = {
 	// Gloom expansion
 	Lurk:              { resolve: 'restricted_move',         static: false, ischarm: true },
 	Decay:             { resolve: 'destroy_exposed',         static: false, ischarm: false },
-	Wither:            { resolve: 'wither',         static: false, ischarm: false },
+	Corrupt:           { resolve: 'corrupt',        static: false, ischarm: false },
 	// Covenant expansion (static seals)
 	Seal_of_Winter:    { resolve: null, static: true, ischarm: true },
 	Seal_of_Stone:     { resolve: null, static: true, ischarm: false },
@@ -176,11 +181,11 @@ const SPELL_TEXTS = {
 	Harvest:           'Make 5 moves into your locked spell or into Harvest.',
 	Lurk:              'Make 1 move into a 1-node spell or a node outside of a spell.',
 	Decay:             'Destroy all enemy stones touching 2 or more empty nodes.',
-	Wither:            'Destroy all enemy stones touching 2 or more empty nodes, then destroy all enemy stones touching 2 or more empty nodes again.',
+	Corrupt:           'Choose up to 3 enemy stones touching your stones. Convert them to your color, then sacrifice a stone.',
 	Seal_of_Winter:    'STATIC: Your opponent cannot cast 1-node spells (charms).',
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
-	Fissure:           'Choose a target node. Destroy all enemy stones on that node and all adjacent nodes.',
+	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all enemy stones on adjacent nodes.',
 	Rock_Slide:        'Push any enemy stones adjacent to you 1 space. (Order is chosen by the casting player.) If a stone is pushed to an occupied space, the stone previously occupying that space is crushed.',
 	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves.',
 };
@@ -213,7 +218,7 @@ const AUTUMN_RITUALS = ['Harvest'];
 const AUTUMN_SORCERIES = ['Gather'];
 const AUTUMN_CHARMS = ['Seal_of_Autumn'];
 
-const GLOOM_RITUALS = ['Wither'];
+const GLOOM_RITUALS = ['Corrupt'];
 const GLOOM_SORCERIES = ['Decay'];
 const GLOOM_CHARMS = ['Lurk'];
 

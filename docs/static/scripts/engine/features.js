@@ -210,7 +210,10 @@ function boardToTensor(board, sideToMove) {
 		const s = board.stones[NODE_ORDER[i]];
 		if (s === sideToMove) stonesOwn[i] = 1;
 		else if (s === enemy) stonesEnemy[i] = 1;
-		else features[fi + NUM_NODES * 2 + i] = 1; // empty
+		else if (s === null) features[fi + NUM_NODES * 2 + i] = 1; // empty
+		// else: permanently destroyed node (wall) — left all-zero across the
+		// three channels, a signal distinct from a normal empty cell, keeping
+		// the feature dimension unchanged (mirrors ai/features.py).
 	}
 	features.set(stonesOwn, fi); fi += NUM_NODES;
 	features.set(stonesEnemy, fi); fi += NUM_NODES;

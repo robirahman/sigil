@@ -12,6 +12,13 @@ from notation import NODE_ORDER, ADJACENCY, POSITIONS
 # Mana nodes
 MANA_NODES = ['a1', 'b1', 'c1']
 
+# Sentinel stored in a node's `stones[...]` slot when the node has been
+# permanently destroyed by Fissure. It is a wall: not None (so it is never a
+# soft-move/retreat target), not 'red'/'blue' (so it counts for nobody and
+# never charges a spell), and impassable to push chains. See the wall-site
+# audits in the move/push helpers below.
+DESTROYED = 'X'
+
 # Core spells metadata: name -> {type, static, ischarm, nodes_count}
 CORE_SPELLS = {
     'Flourish': {'resolve': 'soft_moves', 'count': 4, 'static': False, 'ischarm': False},
@@ -52,7 +59,7 @@ CORE_SPELLS = {
     # Gloom expansion
     'Lurk': {'resolve': 'restricted_move', 'static': False, 'ischarm': True},
     'Decay': {'resolve': 'destroy_exposed', 'static': False, 'ischarm': False},
-    'Wither': {'resolve': 'wither', 'static': False, 'ischarm': False},
+    'Corrupt': {'resolve': 'corrupt', 'static': False, 'ischarm': False},
     # Covenant expansion (static seals)
     'Seal_of_Winter': {'resolve': None, 'static': True, 'ischarm': True},
     'Seal_of_Stone': {'resolve': None, 'static': True, 'ischarm': False},
@@ -80,7 +87,7 @@ SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
 class Action:
     """A single sub-action within a turn."""
     __slots__ = ('type', 'node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                 'node2', 'destroyed')
+                 'node2', 'destroyed', 'converted', 'wall')
 
     def __init__(self, type, **kwargs):
         self.type = type
@@ -91,11 +98,15 @@ class Action:
         self.kept = kwargs.get('kept')
         self.node2 = kwargs.get('node2')
         self.destroyed = kwargs.get('destroyed')
+        self.converted = kwargs.get('converted')
+        # Node permanently destroyed (turned into a wall) by this action,
+        # e.g. Fissure's target node. None for actions that create no wall.
+        self.wall = kwargs.get('wall')
 
     def __repr__(self):
         parts = [f"Action({self.type!r}"]
         for attr in ('node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                     'node2', 'destroyed'):
+                     'node2', 'destroyed', 'converted', 'wall'):
             val = getattr(self, attr)
             if val is not None:
                 parts.append(f"{attr}={val!r}")
@@ -258,6 +269,10 @@ class SimBoard:
             nodes = POSITIONS[pos_idx]
             if not nodes:
                 continue
+            # A spell whose position contains a permanently destroyed node
+            # can never be charged or cast again.
+            if any(self.stones[n] == DESTROYED for n in nodes):
+                continue
             first = self.stones[nodes[0]]
             if first is None:
                 continue
@@ -353,6 +368,8 @@ class SimBoard:
         enemy = self._enemy(color)
         result = []
         for name in NODE_ORDER:
+            if self.stones[name] == DESTROYED:
+                continue  # walls are impassable
             if self.stones[name] != color:
                 if self.stones[name] == enemy and self._is_bulwark_protected(enemy, name):
                     continue
@@ -363,9 +380,9 @@ class SimBoard:
         return result
 
     def _blinkable(self, color):
-        """Return list of all nodes not occupied by color."""
+        """Return list of all nodes not occupied by color (walls excluded)."""
         enemy = self._enemy(color)
-        return [n for n in NODE_ORDER if self.stones[n] != color and not (self.stones[n] == enemy and self._is_bulwark_protected(enemy, n))]
+        return [n for n in NODE_ORDER if self.stones[n] != color and self.stones[n] != DESTROYED and not (self.stones[n] == enemy and self._is_bulwark_protected(enemy, n))]
 
     def escape_distance(self, node_name, defender_color, max_dist=6):
         """Minimum BFS distance from node_name through defender stones to
@@ -396,6 +413,9 @@ class SimBoard:
             stone = self.stones[next_node]
             if stone == attacker:
                 # Attacker's own stones block the push chain.
+                continue
+            elif stone == DESTROYED:
+                # A wall blocks the push chain and is not an escape cell.
                 continue
             elif stone == defender_color:
                 for nb in self._adjacent_nodes(next_node):
@@ -445,6 +465,9 @@ class SimBoard:
 
             stone = self.stones[next_node]
             if stone == color:
+                continue
+            elif stone == DESTROYED:
+                # A wall blocks the retreat chain and is not a destination.
                 continue
             elif stone == enemy:
                 for nb in self._adjacent_nodes(next_node):
@@ -758,7 +781,7 @@ class SimBoard:
                     target = override
             if target is None:
                 for mn in reversed(MANA_NODES):
-                    if self.stones[mn] != color:
+                    if self.stones[mn] != color and self.stones[mn] != DESTROYED:
                         adj_enemy = sum(1 for nb in self._adjacent_nodes(mn) if self.stones[nb] == enemy)
                         already_touching = self.stones[mn] == color or any(
                             self.stones[nb] == color for nb in self._adjacent_nodes(mn))
@@ -903,7 +926,7 @@ class SimBoard:
             if opp is not None:
                 charm_idx, sorcery_idx = opp
                 charm_node = POSITIONS[charm_idx][0]
-                if self.stones[charm_node] != color:
+                if self.stones[charm_node] != color and self.stones[charm_node] != DESTROYED:
                     if self.stones[charm_node] == enemy:
                         dest = self._push_enemy(charm_node, color)
                         actions.append(Action('blink', node=charm_node, pushed_to=dest))
@@ -912,7 +935,8 @@ class SimBoard:
                         actions.append(Action('blink', node=charm_node))
                     self.update()
                 for _ in range(3):
-                    target = next((n for n in POSITIONS[sorcery_idx] if self.stones[n] != color), None)
+                    target = next((n for n in POSITIONS[sorcery_idx]
+                                   if self.stones[n] != color and self.stones[n] != DESTROYED), None)
                     if target is None:
                         break
                     if self.stones[target] == enemy:
@@ -1120,10 +1144,54 @@ class SimBoard:
         elif resolve_type == 'destroy_exposed':
             self._destroy_exposed(color, actions)
 
-        elif resolve_type == 'wither':
-            self._destroy_exposed(color, actions)
-            if not self.gameover:
-                self._destroy_exposed(color, actions)
+        elif resolve_type == 'corrupt':
+            # Convert up to 3 enemy stones touching the caster, then sacrifice
+            # one own stone. Eligibility is frozen against the pre-conversion
+            # board so conversions can't chain (a stone touching only a freshly
+            # converted stone is never eligible). Greedy converts the first 3
+            # eligible by NODE_ORDER; 'corrupt_targets' override picks specific
+            # ones, 'corrupt_sacrifice' picks the stone to give up.
+            eligible = []
+            for name in NODE_ORDER:
+                if self.stones[name] != enemy:
+                    continue
+                if any(self.stones[nb] == color
+                       for nb in self._adjacent_nodes(name)):
+                    eligible.append(name)
+            target_override = list(overrides.get('corrupt_targets') or [])
+            chosen_targets = []
+            for cand in target_override:
+                if cand in eligible and cand not in chosen_targets:
+                    chosen_targets.append(cand)
+            for cand in eligible:
+                if len(chosen_targets) >= 3:
+                    break
+                if cand not in chosen_targets:
+                    chosen_targets.append(cand)
+            converted = []
+            for name in chosen_targets[:3]:
+                if self.stones[name] == enemy:
+                    self.stones[name] = color
+                    converted.append(name)
+            if converted:
+                actions.append(Action('corrupt', converted=converted))
+            self.update()
+            # Converting the enemy's last stone ends the game — no sacrifice.
+            if self.gameover:
+                return actions
+            sac_override = overrides.get('corrupt_sacrifice')
+            sac_done = False
+            if sac_override is not None and self.stones.get(sac_override) == color:
+                self.stones[sac_override] = None
+                actions.append(Action('sacrifice', node=sac_override))
+                sac_done = True
+            if not sac_done:
+                for name in reversed(NODE_ORDER):
+                    if self.stones[name] == color:
+                        self.stones[name] = None
+                        actions.append(Action('sacrifice', node=name))
+                        break
+            self.update()
 
         elif resolve_type == 'restricted_move':
             # Lurk: 1 move onto any moveable node not in a 3- or 5-node spell.
@@ -1141,25 +1209,40 @@ class SimBoard:
         elif resolve_type == 'fissure':
             target = overrides.get('fissure_target')
             if not target or target not in NODE_ORDER:
-                max_destroyed = -1
+                # Greedy default: pick the target with the greatest net
+                # stone-count advantage. Target term: +1 enemy / 0 empty /
+                # -1 own (destroying our own stone). Blast term: +1 per
+                # adjacent enemy stone (these are destroyed too).
+                best_score = None
                 best_target = NODE_ORDER[0]
                 for node in NODE_ORDER:
-                    affected = [node] + self._adjacent_nodes(node)
-                    count = 0
-                    for n in affected:
+                    if self.stones[node] == enemy:
+                        score = 1
+                    elif self.stones[node] == color:
+                        score = -1
+                    else:
+                        score = 0
+                    for n in self._adjacent_nodes(node):
                         if self.stones[n] == enemy:
-                            count += 1
-                    if count > max_destroyed:
-                        max_destroyed = count
+                            score += 1
+                    if best_score is None or score > best_score:
+                        best_score = score
                         best_target = node
                 target = best_target
             destroyed = []
-            affected = [target] + self._adjacent_nodes(target)
-            for n in affected:
+            # Adjacent nodes: destroy enemy stones only (revert to normal empty).
+            for n in self._adjacent_nodes(target):
                 if self.stones[n] == enemy:
                     self.stones[n] = None
                     destroyed.append(n)
-            actions.append(Action('fissure', node=target, destroyed=destroyed))
+            # Target node: permanently destroyed (a wall), regardless of
+            # what occupied it. The occupant stone (enemy, own, or none)
+            # is removed and the node becomes impassable.
+            if self.stones[target] in (color, enemy):
+                destroyed.append(target)
+            self.stones[target] = DESTROYED
+            actions.append(Action('fissure', node=target, destroyed=destroyed,
+                                  wall=target))
             self.update()
 
         elif resolve_type == 'rock_slide':
@@ -1234,7 +1317,7 @@ class SimBoard:
         return actions
 
     def _destroy_exposed(self, color, actions):
-        """Gloom (Decay/Wither): destroy every enemy stone touching 2+ empty
+        """Gloom (Decay): destroy every enemy stone touching 2+ empty
         nodes. Membership is computed against the pre-destruction board, then
         applied simultaneously. Appends a 'decay' Action and updates."""
         enemy = self._enemy(color)
@@ -1254,7 +1337,7 @@ class SimBoard:
 
     def _destroy_chosen(self, color, actions, count, chosen=None):
         """Destroy up to `count` enemy stones of the caster's choice
-        (Storm_Front, and Wither's second step). `chosen` is an optional
+        (Storm_Front). `chosen` is an optional
         ordered list of preferred enemy nodes; entries that aren't currently
         enemy stones are skipped, falling back to the first enemy stone in
         NODE_ORDER. Appends one Action describing what was destroyed."""
@@ -1326,9 +1409,11 @@ class SimBoard:
 
         actions = []
 
-        # Sacrifice all stones in spell position
+        # Sacrifice all stones in spell position (never clobber a wall: a
+        # destroyed node stays destroyed even if it sits in this position).
         for n in position_nodes:
-            self.stones[n] = None
+            if self.stones[n] != DESTROYED:
+                self.stones[n] = None
 
         # Refill based on mana (non-charms only)
         kept = []
@@ -1341,7 +1426,7 @@ class SimBoard:
                 refill_priority = [position_nodes[2], position_nodes[3], position_nodes[4],
                                    position_nodes[0], position_nodes[1]]
             for node in refill_priority:
-                if refills > 0:
+                if refills > 0 and self.stones[node] != DESTROYED:
                     self.stones[node] = color
                     kept.append(node)
                     refills -= 1

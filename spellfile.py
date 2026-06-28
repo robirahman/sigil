@@ -36,6 +36,8 @@ class Spell():
 			time.sleep(1)
 		if self.ischarm:
 			for node in self.position:
+				if node.stone == 'X':
+					continue  # never clobber a wall
 				node.stone = None
 				if (player.board.last_play == node.name):
 					player.board.last_play = None
@@ -43,6 +45,8 @@ class Spell():
 
 		else:
 			for node in self.position:
+				if node.stone == 'X':
+					continue  # never clobber a wall
 				node.stone = None
 				if (player.board.last_play == node.name):
 					player.board.last_play = None
@@ -93,6 +97,8 @@ class Spell():
 				else:
 					refill_priority = [self.position[2], self.position[3], self.position[4], self.position[0], self.position[1]]
 				for node in refill_priority:
+					if node.stone == 'X':
+						continue  # never place on a wall
 					if refills > 0:
 						node.stone = player.color
 						refills -= 1
@@ -130,6 +136,12 @@ class Spell():
 		### Sets the 'charged' attribute to correctly reflect
 		### the current board state.  Must be called every time
 		### the board state changes.
+
+		### A spell whose position contains a permanently destroyed node
+		### (a wall) can never be charged or cast again.
+		if any(node.stone == 'X' for node in self.position):
+			self.charged = None
+			return None
 
 		firststone = self.position[0].stone
 		if len(self.position) == 1:
@@ -1505,17 +1517,116 @@ class Decay(Spell):
 		_destroy_exposed(player)
 
 
-class Wither(Spell):
+class Corrupt(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
-		self.text = "Destroy all enemy stones touching 2 or more empty nodes, then destroy all enemy stones touching 2 or more empty nodes again."
+		self.text = "Choose up to 3 enemy stones touching your stones. Convert them to your color, then sacrifice a stone."
 
 	def resolve(self, player):
-		_destroy_exposed(player)
+		### Eligible targets: enemy stones touching one of the caster's stones.
+		### Computed ONCE, against the board as it stands when Corrupt is cast,
+		### so conversions cannot chain — a stone that only touches a freshly
+		### converted stone (and no original caster stone) is never eligible.
+		eligible = []
+		for nodename in player.board.nodes:
+			node = player.board.nodes[nodename]
+			if node.stone == player.enemy and any(
+					nb.stone == player.color for nb in node.neighbors):
+				eligible.append(nodename)
+
+		converted = []
+
+		if player.ishuman:
+			while len(converted) < 3:
+				remaining = {n: player.color for n in eligible
+				             if n not in converted
+				             and player.board.nodes[n].stone == player.enemy}
+				if not remaining:
+					break
+				egress = {"type": "message",
+				          "message": "Choose up to 3 enemy stones to convert "
+				                     "({} of 3), or End Turn to finish.".format(len(converted) + 1),
+				          "awaiting": "node", "moveoptions": remaining,
+				          "actionlist": ["pass"]}
+				player.ws.send(json.dumps(egress))
+
+				actualmessage = player.receivemessage()
+				### "End Turn"/pass or any non-option finishes the selection.
+				if actualmessage not in remaining:
+					break
+				node = player.board.nodes[actualmessage]
+				node.stone = player.color
+				converted.append(actualmessage)
+
+				anim = {"type": "new_stone_animation", "color": player.color, "node": node.name}
+				player.ws.send(json.dumps(anim))
+				if player.opp.ishuman:
+					player.opp.ws.send(json.dumps(anim))
+
+				player.board.update()
+				if player.board.gameover:
+					return
+		else:
+			### Bot: greedily convert the first (up to 3) eligible stones.
+			for nodename in eligible:
+				if len(converted) >= 3:
+					break
+				node = player.board.nodes[nodename]
+				if node.stone != player.enemy:
+					continue
+				node.stone = player.color
+				converted.append(nodename)
+				anim = {"type": "new_stone_animation", "color": player.color, "node": node.name}
+				if player.opp.ishuman:
+					player.opp.ws.send(json.dumps(anim))
+				player.board.update()
+				time.sleep(1)
+				if player.board.gameover:
+					return
+
+		### Sacrifice cost. Mirrors Fireblast: paid regardless of how many
+		### stones were converted, but skipped if converting the enemy's last
+		### stone already ended the game, or the caster has no stones left.
+		player.board.update()
 		if player.board.gameover:
 			return
-		_destroy_exposed(player)
+		has_own_stone = any(
+			player.board.nodes[n].stone == player.color
+			for n in player.board.nodes
+		)
+		if not has_own_stone:
+			return
+
+		if player.ishuman:
+			while True:
+				player.jmessage("Sacrifice a stone.", "node")
+
+				actualmessage = player.receivemessage()
+
+				if actualmessage in player.board.nodes:
+					node = player.board.nodes[actualmessage]
+					if node.stone != player.color:
+						continue
+					node.stone = None
+					if (player.board.last_play == node.name):
+						player.board.last_play = None
+						player.board.last_player = None
+					player.board.update()
+					break
+		else:
+			### Bot: sacrifice the lowest-priority own stone.
+			time.sleep(1)
+			for name in reversed(player.priority_order):
+				node = player.board.nodes[name]
+				if node.stone == player.color:
+					node.stone = None
+					if (player.board.last_play == node.name):
+						player.board.last_play = None
+						player.board.last_player = None
+					player.board.update()
+					time.sleep(1)
+					break
 
 
 class Lurk(Spell):
@@ -1590,7 +1701,10 @@ class Seal_of_Destruction(Spell):
 class Fissure(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
-		self.text = "Choose a target node. Destroy all enemy stones on that node and all adjacent nodes."
+		self.text = ("Choose a target node. It is permanently destroyed: its stone is "
+			"removed and it becomes an impassable void that stones cannot move into, "
+			"retreat into, or be pushed through, disabling any spell that includes it. "
+			"Also destroy all enemy stones on adjacent nodes.")
 
 	def resolve(self, player):
 		if player.ishuman:
@@ -1598,30 +1712,47 @@ class Fissure(Spell):
 			target_name = None
 			while target_name is None:
 				resp = player.receivemessage()
-				if resp in player.board.nodes:
+				### A node already destroyed (a wall) is not a legal target.
+				if resp in player.board.nodes and player.board.nodes[resp].stone != 'X':
 					target_name = resp
 		else:
 			time.sleep(1)
-			max_destroyed = -1
+			### Greedy: pick the target with the greatest net stone-count
+			### advantage. Target term: +1 enemy / 0 empty / -1 own. Blast
+			### term: +1 per adjacent enemy stone (also destroyed).
+			best_score = None
 			best_target = 'a1'
 			for node_name in player.board.nodes:
 				node = player.board.nodes[node_name]
-				affected = [node_name] + [nb.name for nb in node.neighbors]
-				count = sum(1 for name in affected if player.board.nodes[name].stone == player.enemy)
-				if count > max_destroyed:
-					max_destroyed = count
+				if node.stone == 'X':
+					continue
+				if node.stone == player.enemy:
+					score = 1
+				elif node.stone == player.color:
+					score = -1
+				else:
+					score = 0
+				for nb in node.neighbors:
+					if nb.stone == player.enemy:
+						score += 1
+				if best_score is None or score > best_score:
+					best_score = score
 					best_target = node_name
 			target_name = best_target
 
 		node = player.board.nodes[target_name]
-		affected = [target_name] + [nb.name for nb in node.neighbors]
-		for name in affected:
-			n = player.board.nodes[name]
-			if n.stone == player.enemy:
-				n.stone = None
-				if player.board.last_play == name:
+		### Adjacent nodes: destroy enemy stones only (revert to normal empty).
+		for nb in node.neighbors:
+			if nb.stone == player.enemy:
+				nb.stone = None
+				if player.board.last_play == nb.name:
 					player.board.last_play = None
 					player.board.last_player = None
+		### Target node: permanently destroyed (a wall), regardless of occupant.
+		node.stone = 'X'
+		if player.board.last_play == target_name:
+			player.board.last_play = None
+			player.board.last_player = None
 
 		player.board.update()
 

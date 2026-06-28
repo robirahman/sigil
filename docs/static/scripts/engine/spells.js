@@ -650,7 +650,7 @@ const SpellResolvers = {
 
 		// Step 1: 1 blink move into the 1-node opposite spell
 		const charmNode = POSITIONS[opp.charm][0];
-		if (board.stones[charmNode] !== color) {
+		if (board.stones[charmNode] !== color && board.stones[charmNode] !== DESTROYED) {
 			const targets = { [charmNode]: color };
 			while (true) {
 				const resp = await getInput({
@@ -679,7 +679,7 @@ const SpellResolvers = {
 		for (let move = 0; move < 3; move++) {
 			const targets = {};
 			for (const n of sorceryNodes) {
-				if (board.stones[n] !== color) targets[n] = color;
+				if (board.stones[n] !== color && board.stones[n] !== DESTROYED) targets[n] = color;
 			}
 			if (Object.keys(targets).length === 0) {
 				emit({ type: 'message', message: 'Opposite 3-node spell fully yours; Syzygy ends.', awaiting: null });
@@ -1109,11 +1109,68 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Gloom: Wither ---
-	async wither(board, color, spellName, getInput, emit) {
-		await SpellResolvers.destroy_exposed(board, color, spellName, getInput, emit);
+	// --- Gloom: Corrupt ---
+	async corrupt(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+
+		// Eligible targets: enemy stones touching one of the caster's stones,
+		// computed ONCE against the board as Corrupt is cast. Freezing the set
+		// here means conversions can't chain — a stone that only touches a
+		// freshly converted stone (and no original caster stone) stays safe.
+		const eligible = [];
+		for (const name of NODE_ORDER) {
+			if (board.stones[name] !== enemy) continue;
+			if (ADJACENCY[name].some(nb => board.stones[nb] === color)) eligible.push(name);
+		}
+
+		const converted = [];
+		while (converted.length < 3) {
+			const remaining = eligible.filter(n => !converted.includes(n) && board.stones[n] === enemy);
+			if (remaining.length === 0) break;
+			const options = {};
+			for (const n of remaining) options[n] = color;
+			const resp = await getInput({
+				type: 'message',
+				message: `Choose up to 3 enemy stones to convert (${converted.length + 1} of 3), or End Turn to finish.`,
+				awaiting: 'node',
+				moveoptions: options,
+				actionlist: ['pass'],
+			});
+			// "End Turn"/pass or any non-option finishes the selection early.
+			if (!options[resp]) break;
+			board.stones[resp] = color;
+			converted.push(resp);
+			emit({ type: 'new_stone_animation', color, node: resp });
+			board.update();
+			emit(board.getBoardStatePayload());
+			if (board.gameover) return;
+		}
+
+		// Sacrifice cost. Paid regardless of how many stones were converted
+		// (mirrors Fireblast), but skipped if converting the enemy's last
+		// stone already ended the game or the caster has no stones left.
+		board.update();
+		emit(board.getBoardStatePayload());
 		if (board.gameover) return;
-		await SpellResolvers.destroy_exposed(board, color, spellName, getInput, emit);
+		const hasOwn = NODE_ORDER.some(n => board.stones[n] === color);
+		if (!hasOwn) return;
+
+		while (true) {
+			const resp = await getInput({
+				type: 'message', message: 'Sacrifice a stone.',
+				awaiting: 'node', moveoptions: {},
+			});
+			if (board.stones[resp] === color) {
+				board.stones[resp] = null;
+				if (board.lastPlay === resp) {
+					board.lastPlay = null;
+					board.lastPlayer = null;
+				}
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
 	},
 
 	// --- Gloom: Lurk (1 move onto any node not part of a 3- or 5-node spell) ---
@@ -1383,6 +1440,7 @@ const SpellResolvers = {
 	async perfect_heist(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
 		for (const n of MANA_NODES) {
+			if (board.stones[n] === DESTROYED) continue; // walls are permanent
 			if (board.stones[n] === enemy) {
 				emit({ type: 'crush_animation', crushed_color: enemy, node: n });
 			}
@@ -1464,9 +1522,10 @@ const SpellResolvers = {
 
 	// --- Tectonic: Fissure ---
 	async fissure(board, color, spellName, getInput, emit) {
+		// Any node that isn't already a destroyed wall is a legal target.
 		const targetOptions = {};
 		for (const name of NODE_ORDER) {
-			targetOptions[name] = color;
+			if (board.stones[name] !== DESTROYED) targetOptions[name] = color;
 		}
 		let target = null;
 		while (true) {
@@ -1483,8 +1542,8 @@ const SpellResolvers = {
 		}
 
 		const enemy = board.enemy(color);
-		const affected = [target, ...ADJACENCY[target]];
-		for (const n of affected) {
+		// Adjacent nodes: destroy enemy stones only (revert to normal empty).
+		for (const n of ADJACENCY[target]) {
 			if (board.stones[n] === enemy) {
 				board.stones[n] = null;
 				emit({ type: 'crush_animation', crushed_color: enemy, node: n });
@@ -1494,6 +1553,17 @@ const SpellResolvers = {
 				}
 			}
 		}
+		// Target node: permanently destroyed (a wall), regardless of occupant.
+		const occupant = board.stones[target];
+		if (occupant === 'red' || occupant === 'blue') {
+			emit({ type: 'crush_animation', crushed_color: occupant, node: target });
+		}
+		board.stones[target] = DESTROYED;
+		if (board.lastPlay === target) {
+			board.lastPlay = null;
+			board.lastPlayer = null;
+		}
+		emit({ type: 'fissure_wall', node: target });
 		board.update();
 		emit(board.getBoardStatePayload());
 	},

@@ -562,6 +562,8 @@ class Player():
 			if self.violates_bulwark(nodename):
 				continue
 			node = self.board.nodes[nodename]
+			if node.stone == 'X':
+				continue  # permanently destroyed node (wall) — impassable
 			if node.stone != self.color:
 				adjacent = False
 				for neighbor in node.neighbors:
@@ -605,6 +607,8 @@ class Player():
 		for nodename in self.board.nodes:
 			if self.violates_bulwark(nodename):
 				continue
+			if self.board.nodes[nodename].stone == 'X':
+				continue  # permanently destroyed node (wall) — impassable
 			if self.board.nodes[nodename].stone != self.color:
 				answer[nodename] = self.color
 		return answer
@@ -848,6 +852,11 @@ class Player():
 			if neighbor.stone == self.color:
 				adjacent = True
 
+		if node.stone == 'X':
+			### permanently destroyed node (wall): not a legal move target.
+			self.move(standardmove=standardmove)
+			return None
+
 		if node.stone == self.color:
 			self.move(standardmove=standardmove)
 			return None
@@ -1074,6 +1083,10 @@ class Player():
 			nextnode, distance = nextpair
 			alreadyvisited.append(nextnode)
 			if nextnode.stone == self.color:
+				continue
+			elif nextnode.stone == 'X':
+				### permanently destroyed node (wall): blocks the retreat
+				### chain and is not a valid push destination.
 				continue
 			elif nextnode.stone == self.enemy:
 				for neighbor in nextnode.neighbors:

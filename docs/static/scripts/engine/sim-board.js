@@ -19,6 +19,8 @@ class SimAction {
 		this.val = opts.val || null;         // shiver: post-swap value at node
 		this.val2 = opts.val2 || null;       // shiver: post-swap value at node2
 		this.placed = opts.placed || null;   // perfect_heist: occupied nodes
+		this.converted = opts.converted || null; // corrupt: enemy stones turned to caster's color
+		this.wall = opts.wall || null;       // fissure: node permanently destroyed
 	}
 }
 
@@ -132,6 +134,9 @@ class SimBoard {
 		for (let i = 0; i < this.spellNames.length; i++) {
 			const nodes = POSITIONS[i + 1];
 			if (!nodes || !nodes.length) continue;
+			// A spell whose position contains a permanently destroyed node
+			// can never be charged or cast again.
+			if (nodes.some(n => this.stones[n] === DESTROYED)) continue;
 			const first = this.stones[nodes[0]];
 			if (first === null) continue;
 			if (nodes.every(n => this.stones[n] === first))
@@ -233,6 +238,7 @@ class SimBoard {
 		const enemy = this._enemy(color);
 		const result = [];
 		for (const name of NODE_ORDER) {
+			if (this.stones[name] === DESTROYED) continue; // walls are impassable
 			if (this.stones[name] !== color) {
 				if (this.stones[name] === enemy && this._isBulwarkProtected(enemy, name)) {
 					continue;
@@ -249,6 +255,7 @@ class SimBoard {
 		const enemy = this._enemy(color);
 		return NODE_ORDER.filter(n => {
 			if (this.stones[n] === color) return false;
+			if (this.stones[n] === DESTROYED) return false; // walls are impassable
 			if (this.stones[n] === enemy && this._isBulwarkProtected(enemy, n)) return false;
 			return true;
 		});
@@ -273,6 +280,7 @@ class SimBoard {
 			if (dist > maxDist) break;
 			const s = this.stones[nn];
 			if (s === attacker) continue;
+			else if (s === DESTROYED) continue; // walls block the chain, not an escape cell
 			else if (s === defenderColor) {
 				for (const nb of (ADJACENCY[nn] || [])) {
 					if (!visited.has(nb)) queue.push([nb, dist + 1]);
@@ -318,6 +326,7 @@ class SimBoard {
 			if (shortest !== null && dist > shortest) break;
 			const s = this.stones[nn];
 			if (s === color) continue;
+			else if (s === DESTROYED) continue; // walls block the chain, not a destination
 			else if (s === enemy) {
 				for (const nb of ADJACENCY[nn]) {
 					if (!visited.has(nb)) queue.push([nb, dist + 1]);
@@ -352,6 +361,7 @@ class SimBoard {
 			if (shortest !== null && dist > shortest) break;
 			const s = this.stones[nn];
 			if (s === color) continue;
+			else if (s === DESTROYED) continue; // walls block the chain, not a destination
 			else if (s === enemy) {
 				for (const nb of ADJACENCY[nn]) {
 					if (!visited.has(nb)) queue.push([nb, dist + 1]);
@@ -394,7 +404,7 @@ class SimBoard {
 	}
 
 	// --- Spell resolution: greedy by default, branching via overrides ---
-	// Gloom (Decay/Wither): destroy every enemy stone touching 2+ empty nodes.
+	// Gloom (Decay): destroy every enemy stone touching 2+ empty nodes.
 	// Membership is computed against the pre-destruction board so removals don't
 	// cascade, then applied simultaneously. Pushes a 'decay' SimAction and updates.
 	_destroyExposed(color, actions) {
@@ -414,8 +424,8 @@ class SimBoard {
 		return doomed;
 	}
 
-	// Destroy up to `count` enemy stones of the caster's choice (Storm_Front,
-	// and Wither's second step). `chosen` is an optional ordered list of
+	// Destroy up to `count` enemy stones of the caster's choice (Storm_Front).
+	// `chosen` is an optional ordered list of
 	// preferred enemy nodes; invalid entries are skipped, falling back to the
 	// first enemy stone in NODE_ORDER.
 	_destroyChosen(color, actions, count, chosen) {
@@ -538,30 +548,38 @@ class SimBoard {
 		} else if (rt === 'fissure') {
 			let target = overrides.fissure_target;
 			if (!target || !NODE_ORDER.includes(target)) {
-				let maxDestroyed = -1;
+				// Greedy default: pick the target with the greatest net
+				// stone-count advantage. Target term: +1 enemy / 0 empty /
+				// -1 own. Blast term: +1 per adjacent enemy stone.
+				let bestScore = null;
 				let bestTarget = NODE_ORDER[0];
 				for (const node of NODE_ORDER) {
-					const affected = [node, ...ADJACENCY[node]];
-					let count = 0;
-					for (const n of affected) {
-						if (this.stones[n] === enemy) count++;
+					let score = this.stones[node] === enemy ? 1
+						: (this.stones[node] === color ? -1 : 0);
+					for (const nb of ADJACENCY[node]) {
+						if (this.stones[nb] === enemy) score++;
 					}
-					if (count > maxDestroyed) {
-						maxDestroyed = count;
+					if (bestScore === null || score > bestScore) {
+						bestScore = score;
 						bestTarget = node;
 					}
 				}
 				target = bestTarget;
 			}
 			const destroyed = [];
-			const affected = [target, ...ADJACENCY[target]];
-			for (const n of affected) {
+			// Adjacent nodes: destroy enemy stones only (revert to normal empty).
+			for (const n of ADJACENCY[target]) {
 				if (this.stones[n] === enemy) {
 					this.stones[n] = null;
 					destroyed.push(n);
 				}
 			}
-			actions.push(new SimAction('fissure', { node: target, destroyed }));
+			// Target node: permanently destroyed (a wall), regardless of occupant.
+			if (this.stones[target] === color || this.stones[target] === enemy) {
+				destroyed.push(target);
+			}
+			this.stones[target] = DESTROYED;
+			actions.push(new SimAction('fissure', { node: target, destroyed, wall: target }));
 			this.update();
 		} else if (rt === 'rock_slide') {
 			const pushes = [];
@@ -763,7 +781,7 @@ class SimBoard {
 			const targets = this._blinkable(color);
 			let target = null;
 			for (const mn of [...MANA_NODES].reverse()) {
-				if (this.stones[mn] === color) continue;
+				if (this.stones[mn] === color || this.stones[mn] === DESTROYED) continue;
 				const ae = ADJACENCY[mn].filter(nb => this.stones[nb] === enemy).length;
 				const touching = this.stones[mn] === color || ADJACENCY[mn].some(nb => this.stones[nb] === color);
 				if (!touching && ae < 2) { target = mn; break; }
@@ -1076,7 +1094,7 @@ class SimBoard {
 			const opp = SYZ_OPP[spellIdx];
 			if (opp) {
 				const charmNode = POSITIONS[opp.charm][0];
-				if (this.stones[charmNode] !== color) {
+				if (this.stones[charmNode] !== color && this.stones[charmNode] !== DESTROYED) {
 					if (this.stones[charmNode] === enemy) {
 						const dest = this._pushEnemy(charmNode, color, pushDests.shift());
 						actions.push(new SimAction('blink', { node: charmNode, pushed_to: dest }));
@@ -1089,7 +1107,7 @@ class SimBoard {
 				for (let move = 0; move < 3; move++) {
 					let target = null;
 					for (const n of POSITIONS[opp.sorcery]) {
-						if (this.stones[n] !== color) { target = n; break; }
+						if (this.stones[n] !== color && this.stones[n] !== DESTROYED) { target = n; break; }
 					}
 					if (!target) break;
 					if (this.stones[target] === enemy) {
@@ -1104,10 +1122,50 @@ class SimBoard {
 			}
 		} else if (rt === 'destroy_exposed') {
 			this._destroyExposed(color, actions);
-		} else if (rt === 'wither') {
-			this._destroyExposed(color, actions);
+		} else if (rt === 'corrupt') {
+			// Convert up to 3 enemy stones touching the caster, then sacrifice
+			// one own stone. Eligibility is frozen against the pre-conversion
+			// board so conversions can't chain. Greedy converts the first 3
+			// eligible by NODE_ORDER; 'corrupt_targets' override picks specific
+			// ones, 'corrupt_sacrifice' picks the stone to give up.
+			const eligible = [];
+			for (const name of NODE_ORDER) {
+				if (this.stones[name] !== enemy) continue;
+				if (ADJACENCY[name].some(nb => this.stones[nb] === color)) eligible.push(name);
+			}
+			const chosenTargets = [];
+			for (const cand of (overrides.corrupt_targets || [])) {
+				if (eligible.includes(cand) && !chosenTargets.includes(cand)) chosenTargets.push(cand);
+			}
+			for (const cand of eligible) {
+				if (chosenTargets.length >= 3) break;
+				if (!chosenTargets.includes(cand)) chosenTargets.push(cand);
+			}
+			const converted = [];
+			for (const name of chosenTargets.slice(0, 3)) {
+				if (this.stones[name] === enemy) { this.stones[name] = color; converted.push(name); }
+			}
+			if (converted.length) actions.push(new SimAction('corrupt', { converted }));
+			this.update();
+			// Converting the enemy's last stone ends the game — no sacrifice.
 			if (this.gameover) return actions;
-			this._destroyExposed(color, actions);
+			const sacOverride = overrides.corrupt_sacrifice;
+			let sacDone = false;
+			if (sacOverride && this.stones[sacOverride] === color) {
+				this.stones[sacOverride] = null;
+				actions.push(new SimAction('sacrifice', { node: sacOverride }));
+				sacDone = true;
+			}
+			if (!sacDone) {
+				for (const name of [...NODE_ORDER].reverse()) {
+					if (this.stones[name] === color) {
+						this.stones[name] = null;
+						actions.push(new SimAction('sacrifice', { node: name }));
+						break;
+					}
+				}
+			}
+			this.update();
 		} else if (rt === 'restricted_move') {
 			// Lurk: 1 move onto any moveable node that is NOT part of a 3- or
 			// 5-node spell (1-node spells and non-spell nodes are allowed).
@@ -1227,11 +1285,14 @@ class SimBoard {
 			}
 		} else if (rt === 'perfect_heist') {
 			const destroyed = [];
+			const placed = [];
 			for (const n of MANA_NODES) {
+				if (this.stones[n] === DESTROYED) continue; // walls are permanent
 				if (this.stones[n] === enemy) destroyed.push(n);
 				this.stones[n] = color;
+				placed.push(n);
 			}
-			actions.push(new SimAction('perfect_heist', { destroyed, placed: MANA_NODES.slice() }));
+			actions.push(new SimAction('perfect_heist', { destroyed, placed }));
 			this.update();
 		} else if (rt === 'moth_plague') {
 			const overrideTargets = (overrides.moth_targets || []).slice();

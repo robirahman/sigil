@@ -533,8 +533,10 @@ class GameController {
 		const pname = color[0].toUpperCase() + color.slice(1);
 		this.emit({ type: 'message', message: pname + ' casts ' + spellName.replace(/_/g, ' '), awaiting: null });
 
-		// Sacrifice all stones in spell position
+		// Sacrifice all stones in spell position (never clobber a wall: a
+		// destroyed node stays destroyed even if it sits in this position).
 		for (const n of positionNodes) {
+			if (board.stones[n] === DESTROYED) continue;
 			board.stones[n] = null;
 			if (board.lastPlay === n) {
 				board.lastPlay = null;

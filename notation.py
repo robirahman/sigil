@@ -49,6 +49,10 @@ def _stone_char(stone):
         return 'r'
     elif stone == 'blue':
         return 'b'
+    elif stone == 'X':
+        # Node permanently destroyed by Fissure (a wall). Backward
+        # compatible: 'x' never appears in pre-Fissure SFN strings.
+        return 'x'
     return '.'
 
 
@@ -57,6 +61,8 @@ def _char_to_stone(ch):
         return 'red'
     elif ch == 'b':
         return 'blue'
+    elif ch == 'x':
+        return 'X'  # permanently destroyed node (wall)
     return None
 
 

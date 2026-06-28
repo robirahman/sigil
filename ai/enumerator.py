@@ -39,6 +39,7 @@ DEFAULT_HARD_MOVES_CAP = 4      # Carnage/Slash first-target variants
 DEFAULT_METEOR_CAP = 4          # Meteor blink target variants
 DEFAULT_COMET_CAP = 3           # Comet (target × sacrifice) cap
 DEFAULT_FIREBLAST_CAP = 3       # Fireblast sacrifice variants
+DEFAULT_CORRUPT_CAP = 3         # Corrupt sacrifice variants
 DEFAULT_CHARGE_CAP = 6          # Charge move-target variants
 DEFAULT_FURY_SAC_CAP = 4        # Fury sacrifice variants
 DEFAULT_FURY_TARGET_CAP = 3     # Fury first-hard-move-target variants (× sac)
@@ -60,6 +61,7 @@ BALANCED_CAPS = {
     'meteor': 2,
     'comet': 2,
     'fireblast': 2,
+    'corrupt': 2,
     'charge': 3,
     'fury_sac': 2,
     'fury_target': 2,
@@ -86,6 +88,7 @@ NARROW_CAPS = {
     'meteor': 1,
     'comet': 1,
     'fireblast': 2,
+    'corrupt': 2,
     'charge': 2,
     'fury_sac': 1,
     'fury_target': 1,
@@ -94,6 +97,7 @@ NARROW_CAPS = {
     'soft_hard_soft': 1,
     'soft_hard_hard': 1,
     'splash': 2,
+    'fissure': 2,
 }
 
 
@@ -113,6 +117,7 @@ OPPONENT_CAPS = {
     'meteor': 2,
     'comet': 1,
     'fireblast': 2,
+    'corrupt': 2,
     'charge': 2,
     'fury_sac': 2,
     'fury_target': 1,
@@ -121,6 +126,7 @@ OPPONENT_CAPS = {
     'soft_hard_soft': 2,
     'soft_hard_hard': 2,
     'splash': 2,
+    'fissure': 3,
 }
 
 
@@ -241,6 +247,20 @@ def _spell_overrides(board, color, spell_name, caps):
                if board.stones[n] == color and n not in spell_pos]
         for sac in own[:caps['fireblast']]:
             out.append({'fireblast_sacrifice': sac})
+    elif rt == 'corrupt':
+        # Branch over which own stone is sacrificed (same spell-position caveat
+        # as fireblast — prefer stones outside the casting spell, which survive
+        # the cast). Conversion stays greedy: converting more enemy stones is
+        # ~always good, so the greedy first-3 covers it.
+        try:
+            spell_idx = board.spell_names.index(spell_name)
+            spell_pos = set(POSITIONS[spell_idx + 1])
+        except (ValueError, KeyError):
+            spell_pos = set()
+        own = [n for n in NODE_ORDER
+               if board.stones[n] == color and n not in spell_pos]
+        for sac in own[:caps['corrupt']]:
+            out.append({'corrupt_sacrifice': sac})
     elif rt == 'charge':
         # 1 move into a 3- or 5-node spell (positions 1..6).
         in_small = set()
@@ -289,6 +309,28 @@ def _spell_overrides(board, color, spell_name, caps):
                 out.append({'soft_move_targets': [s], 'hard_move_targets': [h]})
             if not hard_targets:
                 out.append({'soft_move_targets': [s]})
+    elif rt == 'fissure':
+        # Branch over which node to permanently destroy. Each candidate is
+        # scored by its net stone-count advantage so the search explores the
+        # most damaging walls first (and models the opponent's best Fissure):
+        #   target term: +1 if it holds an enemy stone, 0 if empty,
+        #                 -1 if it holds our own stone (self-inflicted loss)
+        #   blast term:  +1 per adjacent enemy stone (also destroyed)
+        scored = []
+        for node in NODE_ORDER:
+            if board.stones[node] == enemy:
+                score = 1
+            elif board.stones[node] == color:
+                score = -1
+            else:
+                score = 0
+            for nb in board._adjacent_nodes(node):
+                if board.stones[nb] == enemy:
+                    score += 1
+            scored.append((score, node))
+        scored.sort(key=lambda s: -s[0])
+        for _, t in scored[:caps['fissure']]:
+            out.append({'fissure_target': t})
     elif rt == 'surge_move' and spell_name == 'Splash':
         # Splash: 1 move (only castable when not dashed — see castability).
         # Plain Surge stays greedy (post-dash only, fewer options).
@@ -367,6 +409,7 @@ def get_legal_turns_exhaustive(board, color, caps=None):
         'meteor': caps.get('meteor', DEFAULT_METEOR_CAP),
         'comet': caps.get('comet', DEFAULT_COMET_CAP),
         'fireblast': caps.get('fireblast', DEFAULT_FIREBLAST_CAP),
+        'corrupt': caps.get('corrupt', DEFAULT_CORRUPT_CAP),
         'charge': caps.get('charge', DEFAULT_CHARGE_CAP),
         'fury_sac': caps.get('fury_sac', DEFAULT_FURY_SAC_CAP),
         'fury_target': caps.get('fury_target', DEFAULT_FURY_TARGET_CAP),

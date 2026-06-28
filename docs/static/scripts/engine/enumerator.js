@@ -40,6 +40,7 @@ const ENUM_CAPS = {
 	meteor: 4,
 	comet: 4,
 	fireblast: 4,
+	corrupt: 4,
 	// Expansion-pack caps. Brute-force (no heuristic ordering) per user
 	// direction; tune later.
 	fury_sac: 6,
@@ -50,6 +51,8 @@ const ENUM_CAPS = {
 	soft_hard_soft: 4,
 	soft_hard_hard: 4,
 	splash: 6,
+	// Tectonic expansion caps.
+	fissure: 6,
 	// Panda expansion caps.
 	shiver: 8,
 	choke: 6,
@@ -342,6 +345,21 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < ranked.length && i < caps.fireblast; i++) {
 			out.push({ fireblast_sacrifice: ranked[i] });
 		}
+	} else if (rt === 'corrupt') {
+		// Branch over which own stone is sacrificed (same spell-position caveat
+		// as fireblast). Conversion stays greedy — converting more enemy stones
+		// is ~always good, so the greedy first-3 covers it.
+		let spellPos = new Set();
+		const idx = board.spellNames ? board.spellNames.indexOf(spellName) : -1;
+		if (idx >= 0 && POSITIONS[idx + 1]) {
+			spellPos = new Set(POSITIONS[idx + 1]);
+		}
+		const own = NODE_ORDER.filter(
+			n => board.stones[n] === color && !spellPos.has(n),
+		);
+		for (let i = 0; i < own.length && i < caps.corrupt; i++) {
+			out.push({ corrupt_sacrifice: own[i] });
+		}
 	} else if (rt === 'fury') {
 		// Sacrifice 1 + 3 hard moves. Mirror the resolver order exactly: cast
 		// preamble (clear positions + mana refill), then remove the sacrifice
@@ -429,6 +447,25 @@ function _spellOverrides(board, color, spellName, caps) {
 					out.push(ovr);
 				}
 			}
+		}
+	} else if (rt === 'fissure') {
+		// Branch over which node to permanently destroy, scored by net
+		// stone-count advantage so the strongest walls are explored first:
+		//   target term: +1 enemy / 0 empty / -1 own
+		//   blast term:  +1 per adjacent enemy stone (also destroyed)
+		const enemy = board._enemy(color);
+		const scored = [];
+		for (const node of NODE_ORDER) {
+			let score = board.stones[node] === enemy ? 1
+				: (board.stones[node] === color ? -1 : 0);
+			for (const nb of (ADJACENCY[node] || [])) {
+				if (board.stones[nb] === enemy) score++;
+			}
+			scored.push([score, node]);
+		}
+		scored.sort((a, b) => b[0] - a[0]);
+		for (let i = 0; i < scored.length && i < caps.fissure; i++) {
+			out.push({ fissure_target: scored[i][1] });
 		}
 	} else if (rt === 'surge_move' && spellName === 'Splash') {
 		// Splash enumerates each possible move destination. (Surge — the

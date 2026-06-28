@@ -631,6 +631,7 @@
 												'stone-node--push-source': pushSourceNode === node,
 												'stone-node--last-play': lastPlay === node && !validMoves[node],
 												'stone-node--refill': nodesToRefill[node],
+												'stone-node--destroyed': nodes[node] === 'X',
 											}"
 										x-bind:id="`stone-node--${node}`"
 										x-on:click="handleNodeClick(node)"

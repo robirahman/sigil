@@ -50,6 +50,7 @@ function getAllMoveTargets(board, color) {
 	// Returns dict of all nodes (empty or enemy) adjacent to color's stones => color
 	const result = {};
 	for (const name of NODE_ORDER) {
+		if (board.stones[name] === DESTROYED) continue; // walls are impassable
 		if (board.stones[name] !== color && !violatesBulwark(board, color, name)) {
 			for (const nb of ADJACENCY[name]) {
 				if (board.stones[nb] === color) {
@@ -66,6 +67,7 @@ function getBlinkTargets(board, color) {
 	// Returns dict of all nodes not occupied by color => color
 	const result = {};
 	for (const name of NODE_ORDER) {
+		if (board.stones[name] === DESTROYED) continue; // walls are impassable
 		if (board.stones[name] !== color && !violatesBulwark(board, color, name)) {
 			result[name] = color;
 		}
@@ -127,6 +129,9 @@ function findPushOptions(board, fromNode, color) {
 
 		const stone = board.stones[nextNode];
 		if (stone === color) {
+			continue;
+		} else if (stone === DESTROYED) {
+			// A wall blocks the retreat chain and is not a destination.
 			continue;
 		} else if (stone === enemy) {
 			for (const nb of ADJACENCY[nextNode]) {

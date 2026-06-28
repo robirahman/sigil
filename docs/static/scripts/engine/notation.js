@@ -1,12 +1,16 @@
 function stoneChar(stone) {
 	if (stone === 'red') return 'r';
 	if (stone === 'blue') return 'b';
+	// Node permanently destroyed by Fissure (a wall). Backward compatible:
+	// 'x' never appears in pre-Fissure SFN strings.
+	if (stone === 'X') return 'x';
 	return '.';
 }
 
 function charToStone(ch) {
 	if (ch === 'r') return 'red';
 	if (ch === 'b') return 'blue';
+	if (ch === 'x') return 'X';  // permanently destroyed node (wall)
 	return null;
 }
 

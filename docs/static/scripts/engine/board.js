@@ -99,6 +99,9 @@ class SigilBoard {
 			const posIdx = i + 1;
 			const nodes = POSITIONS[posIdx];
 			if (!nodes || nodes.length === 0) continue;
+			// A spell whose position contains a permanently destroyed node
+			// can never be charged or cast again.
+			if (nodes.some(n => this.stones[n] === DESTROYED)) continue;
 			const first = this.stones[nodes[0]];
 			if (first === null) continue;
 			const allSame = nodes.every(n => this.stones[n] === first);

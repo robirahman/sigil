@@ -267,8 +267,12 @@ def board_to_tensor(board, side_to_move=None):
             stones_own[i] = 1.0
         elif s == enemy:
             stones_enemy[i] = 1.0
-        else:
+        elif s is None:
             stones_empty[i] = 1.0
+        # else: permanently destroyed node (wall) — left all-zero across the
+        # three channels, a signal distinct from a normal empty cell (which
+        # is 0/0/1). This keeps RAW_FEATURE_DIM unchanged (no retrain needed)
+        # while letting the network tell walls apart from open empties.
 
     features.extend(stones_own)
     features.extend(stones_enemy)
