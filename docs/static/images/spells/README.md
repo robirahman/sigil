@@ -33,13 +33,13 @@ Use the following template prompt for generation:
 | **Tempest** | rich teal / sea green | **Hurricane**: giant vortex of wind and clouds<br>**Storm Front**: dark storm clouds with sharp lightning strikes<br>**Gust**: wavy wind ribbons and swirls |
 | **Tsunami** | rich sapphire blue | **Flood**: crashing ocean waves with whitecaps<br>**Torrent**: cascading waterfall splitting into splashes<br>**Splash**: liquid crown splash with droplets rising up |
 | **Autumn** | rich amber and bronze | **Harvest**: curved scythe blade and wheat bundle<br>**Gather**: converging golden energy chevrons and central orb<br>**Seal of Autumn**: abstract five-lobed maple leaf |
-| **Gloom** | rich dark violet and plum | **Wither**: drooping tree branch with falling withered leaves<br>**Decay**: broken stone ring crumbling to dust<br>**Lurk**: glowing eye framed by a crescent moon |
+| **Gloom** | rich dark violet and plum | **Corrupt**: a captured stone overtaken by spreading corruption, tendrils ensnaring the stones around it<br>**Decay**: broken stone ring crumbling to dust<br>**Lurk**: glowing eye framed by a crescent moon |
 | **Covenant** | rich burnished gold and brown | **Seal of Destruction**: arcane triangle with diagonal X-slash<br>**Seal of Stone**: standing stone obelisk surrounded by orbiting runes<br>**Seal of Winter**: six-pointed snowflake with sharp crystal branches |
 | **Tectonic** | rich earthy slate-brown | **Fissure**: jagged tectonic crack splitting the ground<br>**Rock Slide**: cluster of tumbling, jagged stone boulders<br>**Bulwark**: medieval heater shield with protective runes |
 
 ### Image Specs:
 - **Aspect Ratio**: `1:1`
-- **Output File Prefix**: `[lowercase_spell_name]_rune_raw` (e.g. `wither_rune_raw`)
+- **Output File Prefix**: `[lowercase_spell_name]_rune_raw` (e.g. `corrupt_rune_raw`)
 
 ---
 

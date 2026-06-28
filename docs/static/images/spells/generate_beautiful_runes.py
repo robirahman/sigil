@@ -8,7 +8,7 @@ spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/spells"
 static_spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/static/images/spells"
 parchment_path = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/themes/tiled-background-parchment.jpg"
 
-RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Wither", "Seal_of_Destruction", "Fissure"]
+RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure"]
 SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide"]
 CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark"]
 
@@ -98,7 +98,7 @@ PACK_MAPPING = {
     "Hurricane": "tempest", "Storm_Front": "tempest", "Gust": "tempest",
     "Flood": "tsunami", "Torrent": "tsunami", "Splash": "tsunami",
     "Harvest": "autumn", "Gather": "autumn", "Seal_of_Autumn": "autumn",
-    "Wither": "gloom", "Decay": "gloom", "Lurk": "gloom",
+    "Corrupt": "gloom", "Decay": "gloom", "Lurk": "gloom",
     "Seal_of_Destruction": "covenant", "Seal_of_Stone": "covenant", "Seal_of_Winter": "covenant",
     "Fissure": "tectonic", "Rock_Slide": "tectonic", "Bulwark": "tectonic"
 }
@@ -583,23 +583,28 @@ def render_artistic_rune(name, draw, pal):
         # Woody stem
         draw.line([(cx, cy+75), (cx, cy+130)], fill=pal["dark"], width=5)
         
-    elif name == "Wither":
-        # Detailed dark gnarled branch
-        draw.line([(100, 390), (220, 220)], fill=pal["dark"], width=12)
-        draw.line([(220, 220), (370, 240)], fill=pal["dark"], width=8)
-        draw.line([(220, 220), (290, 140)], fill=pal["dark"], width=8)
-        draw.line([(290, 140), (360, 150)], fill=pal["dark"], width=5)
-        draw.line([(290, 140), (320, 80)], fill=pal["dark"], width=4)
-        # Drooping dead leaves
-        draw_leaf(draw, 340, 255, length=30, width=12, angle=math.radians(80), color=pal["primary"])
-        draw_leaf(draw, 350, 165, length=25, width=10, angle=math.radians(90), color=pal["primary"])
-        draw_leaf(draw, 315, 95, length=20, width=8, angle=math.radians(70), color=pal["secondary"])
-        # Falling decay particles
-        for _ in range(8):
-            px = random.randint(250, 380)
-            py = random.randint(180, 320)
-            draw.ellipse((px-3, py-3, px+3, py+3), fill=pal["secondary"])
-            
+    elif name == "Corrupt":
+        # A captured stone overtaken by spreading corruption, its tendrils
+        # ensnaring and converting the enemy stones around it.
+        # Central converted stone
+        draw.ellipse((cx-55, cy-55, cx+55, cy+55), fill=pal["primary"], outline=pal["dark"], width=5)
+        draw.ellipse((cx-30, cy-30, cx+30, cy+30), fill=pal["secondary"])
+        # Corrupting tendrils radiating outward to nearby stones
+        for i in range(6):
+            ang = math.radians(i * 60)
+            ex = cx + int(150 * math.cos(ang))
+            ey = cy + int(150 * math.sin(ang))
+            mx = cx + int(85 * math.cos(ang + 0.45))
+            my = cy + int(85 * math.sin(ang + 0.45))
+            draw.line([(cx, cy), (mx, my), (ex, ey)], fill=pal["dark"], width=5, joint="round")
+            # A smaller stone being converted at each tendril tip
+            draw.ellipse((ex-18, ey-18, ex+18, ey+18), fill=pal["secondary"], outline=pal["dark"], width=3)
+        # Corruption motes
+        for _ in range(10):
+            px = random.randint(cx-120, cx+120)
+            py = random.randint(cy-120, cy+120)
+            draw.ellipse((px-3, py-3, px+3, py+3), fill=pal["light"])
+
     elif name == "Decay":
         # Thick cracked stone ring
         draw.ellipse((cx-110, cy-110, cx+110, cy+110), outline=pal["primary"], width=24)

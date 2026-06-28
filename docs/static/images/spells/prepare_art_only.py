@@ -15,7 +15,7 @@ EXPANSION_SPELLS = [
     "Gust", "Storm_Front", "Hurricane",
     "Splash", "Torrent", "Flood",
     "Seal_of_Autumn", "Gather", "Harvest",
-    "Lurk", "Decay", "Wither",
+    "Lurk", "Decay", "Corrupt",
     "Seal_of_Winter", "Seal_of_Stone", "Seal_of_Destruction"
 ]
 
