@@ -35,8 +35,8 @@ from collections import namedtuple
 import numpy as np
 import torch
 
-from simboard import SimBoard, CompleteTurn, Action
-from notation import NODE_ORDER
+from simboard import SimBoard, CompleteTurn, Action, MANA_NODES
+from notation import NODE_ORDER, POSITIONS
 from ai.features import board_to_tensor, encode_all_turns
 from ai.strategic_eval import strategic_scores
 from ai.enumerator import get_legal_turns_exhaustive, NARROW_CAPS, OPPONENT_CAPS
@@ -44,6 +44,27 @@ from ai.enumerator import get_legal_turns_exhaustive, NARROW_CAPS, OPPONENT_CAPS
 
 _INF = 1e9
 _WIN = 100.0   # large but finite (so we still prefer faster wins / slower losses)
+
+# Positional leaf-eval terms for stones sitting on non-spell nodes.
+# "Void" nodes belong to no spell position and are not mana nodes (a11/a12/a13,
+# b11/b12/b13, c11/c12/c13) — a stone parked there is doing nothing useful, so
+# we reward the enemy being stranded there and penalize our own. Mana nodes
+# (a1/b1/c1) are the opposite: holding them is good, ceding them is bad.
+_MANA_NODE_SET = frozenset(MANA_NODES)
+_SPELL_NODE_SET = frozenset(n for nodes in POSITIONS.values() for n in nodes)
+_VOID_NODES = tuple(n for n in NODE_ORDER
+                    if n not in _SPELL_NODE_SET and n not in _MANA_NODE_SET)
+_VOID_STONE_WEIGHT = 0.2   # +own-perspective per enemy stone, − per own stone
+_MANA_STONE_WEIGHT = 0.3   # +own-perspective per own stone, − per enemy stone
+
+# Hard ceiling for a NON-terminal leaf score. Only the genuine forced game
+# endings (handled via board.gameover: +3 stone advantage, all enemy stones
+# cleared, spell counter reaching 6 with an advantage, or a full Seal of
+# Destruction at the opponent's start-of-turn) may reach the ±_WIN band that
+# the search treats as a mate (abs(score) >= _WIN - 1). No accumulation of NN
+# value + positional top-up may masquerade as a win/loss, so we clamp strictly
+# below that threshold.
+_NONTERMINAL_CAP = _WIN - 2.0
 
 # Transposition-table bound classifications.
 _BOUND_EXACT = 0   # true score equals stored score
@@ -288,11 +309,11 @@ def _eval_leaf(board, color, model):
     """Static evaluation in [-1, +1] from `color`'s perspective.
 
     Game-over short-circuits: +WIN if we win, -WIN if we lose, 0 draw.
-    Otherwise: NN value head, with a small strategic top-up so positions
-    with obvious tactical wins/losses get scored even if the value head
-    is uncertain. The strategic score uses the side-to-move's per-turn
-    feature deltas — we read them off the *current* board's pre-state
-    (no per-turn lookahead at leaves).
+    Otherwise: NN value head, plus a positional top-up for stones on
+    non-spell nodes — penalize our own stones stranded on void nodes and
+    off mana nodes, reward the enemy being so positioned. The strategic
+    score uses the side-to-move's per-turn feature deltas, read off the
+    *current* board's pre-state (no per-turn lookahead at leaves).
     """
     if board.gameover:
         if board.winner == color:
@@ -303,7 +324,29 @@ def _eval_leaf(board, color, model):
     raw, spell_ids = board_to_tensor(board, color)
     with torch.no_grad():
         v, _ = model(raw.unsqueeze(0), spell_ids.unsqueeze(0))
-    return float(v.item())
+
+    # Positional top-up (from `color`'s perspective). Void nodes: enemy
+    # stones there are wasted (+), our own stranded there are wasted (−).
+    # Mana nodes: our control is good (+), enemy control is bad (−).
+    enemy = 'blue' if color == 'red' else 'red'
+    stones = board.stones
+    adj = 0.0
+    for n in _VOID_NODES:
+        s = stones[n]
+        if s == enemy:
+            adj += _VOID_STONE_WEIGHT
+        elif s == color:
+            adj -= _VOID_STONE_WEIGHT
+    for n in _MANA_NODE_SET:
+        s = stones[n]
+        if s == color:
+            adj += _MANA_STONE_WEIGHT
+        elif s == enemy:
+            adj -= _MANA_STONE_WEIGHT
+    # A non-terminal position never counts as a forced win/loss, no matter how
+    # large its material/positional edge — only board.gameover (above) does.
+    result = float(v.item()) + adj
+    return max(-_NONTERMINAL_CAP, min(_NONTERMINAL_CAP, result))
 
 
 def _ordered_turns(board, color, model, ordering_alpha=1.0,
