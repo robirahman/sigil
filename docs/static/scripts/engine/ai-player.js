@@ -499,8 +499,22 @@ async function applyAITurn(board, turn, color, emit) {
 			}
 		}
 
+		else if (action.type === 'corrupt') {
+			// Gloom Corrupt: convert enemy stones touching the caster to the
+			// caster's color (the trailing sacrifice is a separate action).
+			if (action.converted) {
+				for (const n of action.converted) {
+					board.stones[n] = color;
+					emit({ type: 'new_stone_animation', color, node: n });
+					board.update();
+					emit(board.getBoardStatePayload());
+					await _aiDelay(400);
+				}
+			}
+		}
+
 		else if (action.type === 'decay') {
-			// Gloom Decay/Wither: destroy the exposed enemy stones.
+			// Gloom Decay: destroy the exposed enemy stones.
 			if (action.destroyed) {
 				for (const n of action.destroyed) board.stones[n] = null;
 				board.update();

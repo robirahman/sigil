@@ -37,7 +37,7 @@ const SPELL_FX = {
 	// Gloom expansion (sickly greens + shadow purples)
 	Lurk:             { type: 'pulse', color: '#553377', shake: false },
 	Decay:            { type: 'flash', color: '#6b8e23', shake: false },
-	Wither:           { type: 'burst', color: '#3c5a1e', shake: true  },
+	Corrupt:          { type: 'pulse', color: '#7a2f9e', shake: true  },
 	// Covenant expansion (cold grays + doom)
 	Seal_of_Winter:        { type: 'pulse', color: '#bbddee', shake: false },
 	Seal_of_Stone:         { type: 'pulse', color: '#998877', shake: false },

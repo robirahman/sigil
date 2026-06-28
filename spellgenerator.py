@@ -41,7 +41,7 @@ TSUNAMI_SORCERIES = ['Torrent']
 TSUNAMI_CHARMS = ['Splash']
 
 # Gloom expansion.
-GLOOM_RITUALS = ['Wither']
+GLOOM_RITUALS = ['Corrupt']
 GLOOM_SORCERIES = ['Decay']
 GLOOM_CHARMS = ['Lurk']
 
