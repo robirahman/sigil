@@ -672,7 +672,11 @@ document.addEventListener('alpine:init', () => {
 					if (Object.prototype.hasOwnProperty.call(_CAVEMAN_TIER_BUDGETS, aiMode)) {
 						options.aiColor = _aiColor;
 						options.ai = new CavemanAI({
-							maxDepth: 10,
+							// No depth cap — these tiers are bounded only by their
+							// per-move time budget. 64 is the codebase's "time-limited
+							// only" sentinel (iterative deepening never reaches it at
+							// real branching factors).
+							maxDepth: 64,
 							timeLimit: _CAVEMAN_TIER_BUDGETS[aiMode],
 						});
 						options.ai.pondering = _aiAuthManager
