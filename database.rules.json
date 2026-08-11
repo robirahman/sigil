@@ -22,6 +22,12 @@
         "annotationMode": {
           ".validate": "newData.isBoolean()"
         },
+        "showAiEval": {
+          ".validate": "newData.isBoolean()"
+        },
+        "showMapControl": {
+          ".validate": "newData.isBoolean()"
+        },
         "isDeveloper": {
           ".validate": "newData.isBoolean() && newData.val() === false"
         }

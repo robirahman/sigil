@@ -226,17 +226,21 @@ document.addEventListener('alpine:init', () => {
 				else this.messageHistory.push('Position eval cleared for turn ' + tn + '.');
 			},
 
-			// Dev-only AI evaluation overlay (gated on isDeveloper flag passed
-			// in via window._multiplayerState). Same pattern as game-board-local;
-			// see that file for the design rationale.
+			// AI evaluation overlay (gated on the isDeveloper/showAiEval flags
+			// passed in via window._multiplayerState). Same pattern as
+			// game-board-local; see that file for the design rationale.
 			isDeveloper: false,
+			showAiEval: false,
+			get canSeeAiEval() {
+				return this.isDeveloper || this.showAiEval;
+			},
 			devEvalEnabled: false,
 			devEvalValue: null,
 			devEvalLoading: false,
 			_devEvalSeq: 0,
 			_devEvalSearchId: null,
 			async toggleDevEval() {
-				if (!this.isDeveloper) return;
+				if (!this.canSeeAiEval) return;
 				this.devEvalEnabled = !this.devEvalEnabled;
 				if (this.devEvalEnabled) {
 					await this._recomputeDevEval();
@@ -245,7 +249,7 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 			async _recomputeDevEval() {
-				if (!this.devEvalEnabled || !this.isDeveloper) return;
+				if (!this.devEvalEnabled || !this.canSeeAiEval) return;
 				if (!this._engine || !this._engine.board) return;
 				if (typeof boardToSfn !== 'function') return;
 				const board = this._engine.board;
@@ -278,6 +282,26 @@ document.addEventListener('alpine:init', () => {
 				} catch (e) {
 					if (seq === this._devEvalSeq) this.devEvalLoading = false;
 				}
+			},
+
+			// Map-control readout: how many nodes each side's stones are
+			// strictly closer to (multi-source BFS; Fissure walls impassable
+			// and excluded — see features.js mapControl). Same pattern as
+			// game-board-local; cheap and synchronous, no toggle or worker.
+			showMapControl: false,
+			get canSeeMapControl() {
+				return this.isDeveloper || this.showMapControl;
+			},
+			mapControl: null,
+			_recomputeMapControl(stonesOverride) {
+				if (!this.canSeeMapControl) { this.mapControl = null; return; }
+				if (typeof mapControl !== 'function') return;
+				let stones = stonesOverride;
+				if (!stones) {
+					if (!this._engine || !this._engine.board) return;
+					stones = this._engine.board.stones;
+				}
+				this.mapControl = mapControl(stones);
 			},
 
 			startReview() {
@@ -348,6 +372,9 @@ document.addEventListener('alpine:init', () => {
 				this.validMoves = {};
 				this.pushSourceNode = '';
 				this.lastPlay = '';
+				// Review navigation bypasses boardstate events, so refresh the
+				// map-control readout from the displayed position directly.
+				this._recomputeMapControl(state.stones);
 			},
 
 			formatTimer(ms) {
@@ -432,6 +459,8 @@ document.addEventListener('alpine:init', () => {
 					_this.myColor = myColor || '';
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
 					_this.isDeveloper = !!state.isDeveloper;
+					_this.showAiEval = !!state.showAiEval;
+					_this.showMapControl = !!state.showMapControl;
 					_this.shareUrl = shareUrl || '';
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
@@ -517,6 +546,7 @@ document.addEventListener('alpine:init', () => {
 						if (redspellcounter !== undefined) _this.redSpellCounter = redspellcounter;
 						if (score !== undefined) _this.score = score;
 						_this.previousBoardState = rest;
+						_this._recomputeMapControl();
 						if (_this.devEvalEnabled) {
 							_this._recomputeDevEval().catch(() => {});
 						}

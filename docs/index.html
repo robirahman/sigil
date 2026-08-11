@@ -55,6 +55,24 @@
 			opacity: 0.6;
 			cursor: wait;
 		}
+		/* Difficulty picker revealed when the "vs AI" button is clicked:
+		   four equal-width buttons in the space of one. */
+		.ai-difficulty-row {
+			display: none;
+			gap: 8px;
+			margin: 12px 0;
+		}
+		.ai-difficulty-row.is-open {
+			display: flex;
+		}
+		.ai-difficulty-row .mode-button {
+			flex: 1 1 0;
+			min-width: 0;
+			margin: 0;
+			padding: 12px 6px;
+			font-size: 0.95em;
+			text-align: center;
+		}
 		.resume-section {
 			margin-bottom: 24px;
 		}
@@ -165,7 +183,8 @@
 					var list = document.getElementById('resume-list');
 					var AI_LABELS = {
 						easy: 'AI (Easy)', medium: 'AI (Medium)', hard: 'AI (Hard)',
-						very_hard: 'AI (Very Hard)', caveman: 'Caveman',
+						very_hard: 'AI (Very Hard)', positional: 'AI (Positional)',
+						caveman: 'Caveman',
 						caveman_1: 'Caveman 1', caveman_2: 'Caveman 2',
 						caveman_3: 'Caveman 3', caveman_4: 'Caveman 4',
 						caveman_5: 'Caveman 5', caveman_6: 'Caveman 6',
@@ -218,22 +237,41 @@
 				Local 1v1
 				<small>Play on the same screen with a friend</small>
 			</a>
-			<a class="mode-button" href="game.html?ai=easy">
-				vs AI (Easy)
-				<small>Stone-count minimax, 0.1s per turn</small>
+			<a class="mode-button" id="vs-ai-btn" href="#">
+				vs AI
+				<small>Play against the computer</small>
 			</a>
-			<a class="mode-button" id="medium-ai-btn" href="game.html?ai=medium">
-				vs AI (Medium)
-				<small>Stone-count minimax, 1s per turn</small>
-			</a>
-			<a class="mode-button" href="game.html?ai=hard">
-				vs AI (Hard)
-				<small>Stone-count minimax, 5s per turn</small>
-			</a>
-			<a class="mode-button" href="game.html?ai=very_hard">
-				vs AI (Very Hard)
-				<small>Stone-count minimax, 60s per turn</small>
-			</a>
+			<div class="ai-difficulty-row" id="ai-difficulty-row">
+				<a class="mode-button" href="game.html?ai=easy">
+					Easy
+					<small>0.1s per turn</small>
+				</a>
+				<a class="mode-button" href="game.html?ai=medium">
+					Medium
+					<small>1s per turn</small>
+				</a>
+				<a class="mode-button" href="game.html?ai=hard">
+					Hard
+					<small>5s per turn</small>
+				</a>
+				<a class="mode-button" href="game.html?ai=very_hard">
+					Very Hard
+					<small>60s per turn</small>
+				</a>
+			</div>
+			<script>
+				(function() {
+					var btn = document.getElementById('vs-ai-btn');
+					btn.addEventListener('click', function(e) {
+						// href="#" keeps this button invisible to the variant
+						// href-rewriter and the spell-pack validator, which
+						// both target a.mode-button[href^="game.html"].
+						e.preventDefault();
+						btn.style.display = 'none';
+						document.getElementById('ai-difficulty-row').classList.add('is-open');
+					});
+				})();
+			</script>
 <a class="mode-button" href="multiplayer.html">
 				Online Multiplayer
 				<small>Play with a friend over the internet</small>

@@ -197,20 +197,29 @@ document.addEventListener('alpine:init', () => {
 				else this.messageHistory.push('Position eval cleared for turn ' + tn + '.');
 			},
 
-			// Dev-only AI evaluation overlay (gated on auth-manager.isDeveloper).
-			// Runs the same Caveman search the live AI and game review use (via
-			// the shared Web Worker, ~1s/position) and shows its score from red's
-			// POV. Superseded searches are cancelled so rapid board changes don't
+			// AI evaluation overlay (available to developers and to anyone who
+			// enables the showAiEval account setting). Runs the same Caveman
+			// search the live AI and game review use (via the shared Web
+			// Worker, ~1s/position) and shows its score from red's POV.
+			// Superseded searches are cancelled so rapid board changes don't
 			// pile up; the forced-win sentinel (±CAVEMAN_WIN) is clamped to the
 			// display band.
+			// Engine handle for the debug readouts below. Assigned in
+			// initEngine() alongside the init()-local _engineRef, which object
+			// methods cannot see (it lives in init()'s scope).
+			_engine: null,
 			isDeveloper: false,
+			showAiEval: false,
+			get canSeeAiEval() {
+				return this.isDeveloper || this.showAiEval;
+			},
 			devEvalEnabled: false,
 			devEvalValue: null,
 			devEvalLoading: false,
 			_devEvalSeq: 0,
 			_devEvalSearchId: null,
 			async toggleDevEval() {
-				if (!this.isDeveloper) return;
+				if (!this.canSeeAiEval) return;
 				this.devEvalEnabled = !this.devEvalEnabled;
 				if (this.devEvalEnabled) {
 					await this._recomputeDevEval();
@@ -219,10 +228,10 @@ document.addEventListener('alpine:init', () => {
 				}
 			},
 			async _recomputeDevEval() {
-				if (!this.devEvalEnabled || !this.isDeveloper) return;
-				if (!_engineRef || !_engineRef.board) return;
+				if (!this.devEvalEnabled || !this.canSeeAiEval) return;
+				if (!this._engine || !this._engine.board) return;
 				if (typeof boardToSfn !== 'function') return;
-				const board = _engineRef.board;
+				const board = this._engine.board;
 				const stm = board.whoseTurn || 'red';
 				const seq = ++this._devEvalSeq;
 				if (this.devEvalValue === null) this.devEvalLoading = true;
@@ -255,6 +264,29 @@ document.addEventListener('alpine:init', () => {
 					if (seq === this._devEvalSeq) this.devEvalLoading = false;
 					// aborted (superseded) or failed — keep the previous value
 				}
+			},
+
+			// Map-control readout: how many nodes each side's stones are
+			// strictly closer to (multi-source BFS; Fissure walls impassable
+			// and excluded — see features.js mapControl). Cheap and
+			// synchronous, so it recomputes on every board change and on
+			// review navigation, with no toggle or worker. Available to
+			// developers and to anyone with the showMapControl account
+			// setting.
+			showMapControl: false,
+			get canSeeMapControl() {
+				return this.isDeveloper || this.showMapControl;
+			},
+			mapControl: null,
+			_recomputeMapControl(stonesOverride) {
+				if (!this.canSeeMapControl) { this.mapControl = null; return; }
+				if (typeof mapControl !== 'function') return;
+				let stones = stonesOverride;
+				if (!stones) {
+					if (!this._engine || !this._engine.board) return;
+					stones = this._engine.board.stones;
+				}
+				this.mapControl = mapControl(stones);
 			},
 
 			formatTimer(timerSeconds) {
@@ -389,6 +421,9 @@ document.addEventListener('alpine:init', () => {
 				this.validMoves = {};
 				this.pushSourceNode = '';
 				this.lastPlay = '';
+				// Review navigation bypasses boardstate events, so refresh the
+				// map-control readout from the displayed position directly.
+				this._recomputeMapControl(state.stones);
 			},
 
 			handleCastSpell(spell) {
@@ -596,6 +631,11 @@ document.addEventListener('alpine:init', () => {
 								await _aiAuthManager.loadProfile(firebase.database());
 								_this.annotationMode = !!_aiAuthManager.annotationMode;
 								_this.isDeveloper = !!_aiAuthManager.isDeveloper;
+								_this.showAiEval = !!_aiAuthManager.showAiEval;
+								_this.showMapControl = !!_aiAuthManager.showMapControl;
+								// Boardstate may have fired before auth resolved;
+								// populate the readout now that gating is known.
+								_this._recomputeMapControl();
 								if (_engineRef && _engineRef.ai) {
 									_engineRef.ai.pondering = _aiAuthManager.enablePondering;
 								}
@@ -681,6 +721,22 @@ document.addEventListener('alpine:init', () => {
 						});
 						options.ai.pondering = _aiAuthManager
 							? _aiAuthManager.enablePondering : false;
+					} else if (aiMode === 'positional') {
+						// Unlisted experimental tier (?ai=positional): Hard-class
+						// time budget plus the capped map-control tiebreaker from
+						// the 2026-08 arena campaign (ai/ARENA_POSITIONAL_WEIGHTS.md;
+						// sub-material influence, worst case 0.96 stones). Fielded
+						// live to gather human-game data the arena can't provide.
+						options.aiColor = _aiColor;
+						options.ai = new CavemanAI({
+							maxDepth: 64,
+							timeLimit: 10.0,
+							evalWeights: { mana: 0.0, voidPenalty: 0.0, mapControl: 0.0246 },
+						});
+						// Pondering stays off for this tier: ponder primes the
+						// shared TT with default-weight entries (see ai-worker.js
+						// caveat), which this tier's weighted searches never read.
+						options.ai.pondering = false;
 					} else if (aiMode === 'caveman' || /^caveman_[1-6]$/.test(aiMode || '')) {
 						// Pure stone-count minimax — no model load. The
 						// suffixed variants (caveman_1..6) each play with
@@ -727,6 +783,7 @@ document.addEventListener('alpine:init', () => {
 						handleIncomingEvent(eventObj);
 					}, options);
 					_engineRef = engine;
+					_this._engine = engine;
 
 					_this.sendEvent = function sendEvent(message) {
 						engine.handlePlayerAction(message);
@@ -823,6 +880,7 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'boardstate') {
 						handleBoardStateEvent(rest);
+						_this._recomputeMapControl();
 						if (_this.devEvalEnabled) {
 							_this._recomputeDevEval().catch(() => {});
 						}
@@ -927,9 +985,10 @@ document.addEventListener('alpine:init', () => {
 					// The search returns its evaluation from the moving AI's
 					// perspective (positive = the AI is favored). Large magnitudes
 					// (±100) are the forced win/loss sentinels. The leaf eval is
-					// (stone difference)/39, so multiplying by 39 recovers the raw
-					// stone-count lead: +1 = ahead by one stone, matching the
-					// game-review scale (…-2, -1, 0, +1, +2, win/loss).
+					// (stone difference + sub-stone positional terms)/39, so
+					// multiplying by 39 recovers the lead in stone equivalents
+					// (fractional part = mana/void/map-control terms), matching
+					// the game-review scale.
 					let evalStr = '';
 					if (typeof payload.score === 'number' && isFinite(payload.score)) {
 						const s = payload.score;
@@ -937,8 +996,11 @@ document.addEventListener('alpine:init', () => {
 						if (Math.abs(s) >= 99) {
 							shown = s > 0 ? 'win' : 'loss';
 						} else {
-							const stones = Math.round(s * 39);
-							shown = (stones > 0 ? '+' : '') + stones;
+							// One decimal: with positional leaf terms the eval
+							// is no longer an integer stone count (matches the
+							// game-review display scale).
+							const stones = s * 39;
+							shown = (stones > 0 ? '+' : '') + stones.toFixed(1);
 						}
 						evalStr = `, eval ${shown}`;
 					}
@@ -1304,6 +1366,7 @@ document.addEventListener('alpine:init', () => {
 						hard: 'AI (Hard)',
 						very_hard: 'AI (Very Hard)',
 						minimax: 'AI (Minimax 3-ply)',
+						positional: 'AI (Positional)',
 						caveman: 'AI (Caveman)',
 						caveman_1: 'Caveman 1',
 						caveman_2: 'Caveman 2',

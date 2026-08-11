@@ -25,6 +25,66 @@ const _CAVEMAN_MAX_PLY = 12;
 const _FIREBLAST_ORDER_TIEBREAK = 0.5 / 39.0;
 const _HAILSTORM_ORDER_TIEBREAK = 0.5 / 39.0;
 
+// Positional leaf weights in STONE units, applied as
+//   score = (stoneDiff + mana*manaDiff - voidPenalty*voidDiff
+//            + mapControl*mcDiff) / 39
+// from the mover's POV. Worst-case positional total is
+// 3*mana + 9*voidPenalty + 39*mapControl stones; keep it < 1.0 so
+// position only ever breaks material ties, never outbids a stone
+// (see cavemanCapWeights). Candidate values come from
+// ai/fit_positional_weights.py (logistic regression of game outcomes
+// on positional differentials) and are adopted only after an arena
+// A/B (tools/arena) beats the pure-stone baseline. All zeros =
+// legacy pure stone-count behavior.
+//
+// 2026-08-02 campaign (ai/ARENA_POSITIONAL_WEIGHTS.md): three arms
+// tested at 10s/move x 200 games each — capped mc tiebreaker (47.0%,
+// p=.40), prior-informed full scale (37.0%, p=.0002), mana+void only
+// (44.5%, p=.12). None beat baseline; weights stay zero. If you're
+// tempted to hand-set these, read that file first.
+const CAVEMAN_EVAL_WEIGHTS = Object.freeze({
+	mana: 0.0,
+	voidPenalty: 0.0,
+	mapControl: 0.0,
+});
+
+/** Scale weights uniformly so 3*mana + 9*voidPenalty + 39*mapControl
+ *  stays <= budget stones (default 0.96 — strictly sub-material). */
+function cavemanCapWeights(w, budget) {
+	const b = budget === undefined ? 0.96 : budget;
+	const worst = 3 * w.mana + 9 * w.voidPenalty + 39 * w.mapControl;
+	if (worst <= b) return Object.freeze(Object.assign({}, w));
+	const k = b / worst;
+	return Object.freeze({
+		mana: w.mana * k,
+		voidPenalty: w.voidPenalty * k,
+		mapControl: w.mapControl * k,
+	});
+}
+
+function _cavemanResolveWeights(w) {
+	if (!w) return CAVEMAN_EVAL_WEIGHTS;
+	return Object.freeze({
+		mana: Number.isFinite(w.mana) ? w.mana : CAVEMAN_EVAL_WEIGHTS.mana,
+		voidPenalty: Number.isFinite(w.voidPenalty)
+			? w.voidPenalty : CAVEMAN_EVAL_WEIGHTS.voidPenalty,
+		mapControl: Number.isFinite(w.mapControl)
+			? w.mapControl : CAVEMAN_EVAL_WEIGHTS.mapControl,
+	});
+}
+
+/** Own-minus-enemy stones on the nine void nodes (constants.js
+ *  VOID_NODES). */
+function _cavemanVoidDiff(board, color, enemy) {
+	let v = 0;
+	for (let i = 0; i < VOID_NODES.length; i++) {
+		const s = board.stones[VOID_NODES[i]];
+		if (s === color) v++;
+		else if (s === enemy) v--;
+	}
+	return v;
+}
+
 /**
  * Integer count of enemy stones adjacent to any own stone — the exact
  * kill set Fireblast would destroy if cast right now (spells.js
@@ -65,18 +125,29 @@ function _hailStormPrepKills(board, side, enemyOfSide) {
 	return slots;
 }
 
-function _cavemanLeaf(board, color) {
+function _cavemanLeaf(board, color, w) {
 	if (board.gameover) {
 		if (board.winner === color) return CAVEMAN_WIN;
 		if (board.winner === null) return 0.0;
 		return -CAVEMAN_WIN;
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
-	const diff = board.totalStones[color] - board.totalStones[enemy];
-	return diff / 39.0;
+	let score = board.totalStones[color] - board.totalStones[enemy];
+	if (w.mana !== 0) {
+		// board.mana is maintained by SimBoard.update() — free to read.
+		score += w.mana * (board.mana[color] - board.mana[enemy]);
+	}
+	if (w.voidPenalty !== 0) {
+		score -= w.voidPenalty * _cavemanVoidDiff(board, color, enemy);
+	}
+	if (w.mapControl !== 0) {
+		const d = mapControlDiff(board.stones);
+		score += w.mapControl * (color === 'red' ? d : -d);
+	}
+	return score / 39.0;
 }
 
-function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
+function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
 	// When `exhaustiveCaps` is set, expand every spell variant
 	// (Bewitch pair, Carnage target, Meteor/Comet blink target, dash
 	// sacrifice combo, …) via getLegalTurnsExhaustive. Without it,
@@ -111,7 +182,26 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 	const scored = [];
 	for (let i = 0; i < turns.length; i++) {
 		const sim = _minimaxApplyTurn(board, turns[i], color);
-		const diff = sim.totalStones[color] - sim.totalStones[enemy];
+		let diff = sim.totalStones[color] - sim.totalStones[enemy];
+		// Positional terms mirror the leaf eval so ordering agrees with
+		// what the search maximizes (mis-ordering costs time, never
+		// correctness). Post-move absolute values sort identically to
+		// deltas because the pre-move board is constant across siblings.
+		// mapControl in ordering is gated separately (orderMc): it
+		// roughly doubles the BFS calls per node, so the arena decides
+		// whether the better ordering pays for itself.
+		if (w) {
+			if (w.mana !== 0) {
+				diff += w.mana * (sim.mana[color] - sim.mana[enemy]);
+			}
+			if (w.voidPenalty !== 0) {
+				diff -= w.voidPenalty * _cavemanVoidDiff(sim, color, enemy);
+			}
+			if (orderMc && w.mapControl !== 0) {
+				const d = mapControlDiff(sim.stones);
+				diff += w.mapControl * (color === 'red' ? d : -d);
+			}
+		}
 		// Sub-stone tiebreakers: prefer turns that increase our prep
 		// kill set or decrease the enemy's, breaking ties between
 		// otherwise-equivalent 1-ply stone-diffs. Leaf eval is
@@ -134,7 +224,7 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps) {
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
                            exhaustiveRoot, exhaustiveOpponent, isRoot,
-                           abortFlag) {
+                           abortFlag, weights, orderMc) {
 	if (tt) tt.nodes += 1;
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	// Cooperative abort: lets a ponder search exit mid-iteration when
@@ -143,7 +233,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 	// MinimaxTimeout sentinel so the IDDFS loop catches it cleanly.
 	if (abortFlag && abortFlag.aborted) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
-		return { score: _cavemanLeaf(board, color), move: null };
+		return { score: _cavemanLeaf(board, color, weights), move: null };
 	}
 
 	const alphaOrig = alpha;
@@ -176,9 +266,9 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 	if ((exhaustiveRoot && isRoot) || (exhaustiveOpponent && ply === 1)) {
 		caps = (typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
 	}
-	const turns = _cavemanOrderedTurns(board, color, caps);
+	const turns = _cavemanOrderedTurns(board, color, caps, weights, orderMc);
 	if (turns.length === 0) {
-		return { score: _cavemanLeaf(board, color), move: null };
+		return { score: _cavemanLeaf(board, color, weights), move: null };
 	}
 	const killerMoves = killers ? killers.get(ply) : [];
 	const ordered = (ttMove !== null || killerMoves.length > 0)
@@ -212,7 +302,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 			                              deadline, tt, killers, ply + 1,
 			                              positionHistory,
 			                              exhaustiveRoot, exhaustiveOpponent,
-			                              false, abortFlag);
+			                              false, abortFlag, weights, orderMc);
 			const score = -sub.score;
 			if (score > bestScore) { bestScore = score; bestMove = turn; }
 			if (bestScore > alpha) alpha = bestScore;
@@ -252,12 +342,21 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
  * @param {{timeLimit?: number, maxDepth?: number, verbose?: boolean,
  *          positionHistory?: object,
  *          abortFlag?: {aborted: boolean},
+ *          evalWeights?: {mana?: number, voidPenalty?: number, mapControl?: number},
+ *          orderMapControl?: boolean,
  *          onDepthComplete?: (info: {depth, score, timeMs, nodes, ttSize}) => void
  *         }} opts
  */
 async function cavemanSearch(board, color, opts) {
 	opts = opts || {};
 	const timeLimit = opts.timeLimit !== undefined ? opts.timeLimit : 60.0;
+	// Positional leaf weights (stone units; see CAVEMAN_EVAL_WEIGHTS).
+	// NOTE: eval scores depend on these, so callers reusing a shared TT
+	// across searches (useSharedTt in ai-worker.js) must reset it when
+	// changing weights — mixed-weight TT entries are silently wrong.
+	const evalW = _cavemanResolveWeights(opts.evalWeights);
+	const orderMc = opts.orderMapControl !== undefined
+		? !!opts.orderMapControl : true;
 	const maxDepth = opts.maxDepth !== undefined ? opts.maxDepth : 6;
 	const abortFlag = opts.abortFlag || null;
 	const onDepthComplete = typeof opts.onDepthComplete === 'function'
@@ -342,7 +441,7 @@ async function cavemanSearch(board, color, opts) {
 			                            -CAVEMAN_INF, CAVEMAN_INF, deadline,
 			                            tt, killers, 0, abHistory,
 			                            exhaustiveRoot, exhaustiveOpponent, true,
-			                            abortFlag);
+			                            abortFlag, evalW, orderMc);
 			if (r.move) {
 				bestMove = r.move;
 				bestScore = r.score;

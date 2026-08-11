@@ -94,6 +94,34 @@ class AuthManager {
 		return !!(this.userProfile && this.userProfile.showAiThinkReport);
 	}
 
+	/** Update the user's showAiEval preference. */
+	async updateShowAiEval(enabled) {
+		if (!this.currentUser) throw new Error('Not signed in');
+		const db = firebase.database();
+		await db.ref('users/' + this.currentUser.uid + '/showAiEval').set(!!enabled);
+		if (this.userProfile) {
+			this.userProfile.showAiEval = !!enabled;
+		}
+	}
+
+	get showAiEval() {
+		return !!(this.userProfile && this.userProfile.showAiEval);
+	}
+
+	/** Update the user's showMapControl preference. */
+	async updateShowMapControl(enabled) {
+		if (!this.currentUser) throw new Error('Not signed in');
+		const db = firebase.database();
+		await db.ref('users/' + this.currentUser.uid + '/showMapControl').set(!!enabled);
+		if (this.userProfile) {
+			this.userProfile.showMapControl = !!enabled;
+		}
+	}
+
+	get showMapControl() {
+		return !!(this.userProfile && this.userProfile.showMapControl);
+	}
+
 	/** Update the user's enablePondering preference. */
 	async updateEnablePondering(enabled) {
 		if (!this.currentUser) throw new Error('Not signed in');

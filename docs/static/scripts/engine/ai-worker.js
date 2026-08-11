@@ -126,6 +126,13 @@ async function _runSearch(msg) {
 			exhaustiveRoot: opts.exhaustiveRoot,
 			exhaustiveOpponent: opts.exhaustiveOpponent,
 			positionHistory: opts.positionHistory || null,
+			// Positional eval weights (caveman-ai.js CAVEMAN_EVAL_WEIGHTS
+			// defaults when undefined). CAUTION: TT entries embed eval
+			// scores — any caller passing evalWeights together with
+			// useSharedTt must also pass resetSharedTt when the weights
+			// change, or the shared TT serves mixed-weight scores.
+			evalWeights: opts.evalWeights,
+			orderMapControl: opts.orderMapControl,
 			tt,
 			abortFlag,
 			onDepthComplete: (info) => {

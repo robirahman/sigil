@@ -127,6 +127,104 @@ function _bfsDistance(sources, target) {
 	return null;
 }
 
+function _mapControlDistances(stones, color) {
+	// Multi-source BFS hop distances from all of `color`'s stones over the
+	// adjacency graph. DESTROYED nodes are impassable (never enqueued);
+	// stones of either color are passable. Returns {node: hops}; nodes
+	// absent from the result are unreachable. Mirrors
+	// ai/features.py:_map_control_distances.
+	const dist = {};
+	let frontier = [];
+	for (const n of NODE_ORDER) {
+		if (stones[n] === color) {
+			dist[n] = 0;
+			frontier.push(n);
+		}
+	}
+	let d = 0;
+	while (frontier.length) {
+		d++;
+		const next = [];
+		for (const node of frontier) {
+			for (const nb of ADJACENCY[node]) {
+				if (nb in dist || stones[nb] === DESTROYED) continue;
+				dist[nb] = d;
+				next.push(nb);
+			}
+		}
+		frontier = next;
+	}
+	return dist;
+}
+
+function mapControl(stones) {
+	// Map control: how many nodes each side's stones are strictly closer
+	// to. `stones` is any node -> 'red'|'blue'|null|DESTROYED map
+	// (SigilBoard.stones, SimBoard.stones, or sfnToDict(...).stones —
+	// values other than 'red'/'blue'/DESTROYED are treated as empty).
+	// Destroyed nodes are impassable AND excluded from the tally, so
+	// red + blue + contested = 39 - #destroyed. Equal distance — including
+	// both-unreachable — counts as contested. diff = red - blue (red POV);
+	// side-relative is (color === 'red' ? diff : -diff) at the call site.
+	// The standard opening (red a1, blue b1) is 17/18/4, diff -1: the
+	// board has rotational but not mirror symmetry, so the -1 is a real
+	// property of the map, not a bug. Mirrors ai/features.py:map_control.
+	const dr = _mapControlDistances(stones, 'red');
+	const db = _mapControlDistances(stones, 'blue');
+	let red = 0, blue = 0, contested = 0;
+	for (const n of NODE_ORDER) {
+		if (stones[n] === DESTROYED) continue;
+		const a = (n in dr) ? dr[n] : Infinity;
+		const b = (n in db) ? db[n] : Infinity;
+		if (a < b) red++;
+		else if (b < a) blue++;
+		else contested++;
+	}
+	return { red, blue, contested, diff: red - blue };
+}
+
+// --- Fast map-control diff for the AI leaf eval -------------------------
+// Exact-equal to mapControl(stones).diff, but int-indexed with
+// module-level preallocated scratch (no per-call allocation). Safe
+// because each JS realm (page, worker, arena worker_thread) is
+// single-threaded and the leaf eval is not reentrant. Max hop distance
+// on the 39-node board is 10, so Int8 with a 127 sentinel is ample.
+const _MC_N = NODE_ORDER.length;
+const _MC_ADJ = NODE_ORDER.map(n => ADJACENCY[n].map(m => NODE_ORDER.indexOf(m)));
+const _MC_UNREACHED = 127;
+const _MC_DR = new Int8Array(_MC_N);
+const _MC_DB = new Int8Array(_MC_N);
+const _MC_QUEUE = new Int8Array(_MC_N);
+
+function _mcBfsFast(stones, color, dist) {
+	dist.fill(_MC_UNREACHED);
+	let head = 0, tail = 0;
+	for (let i = 0; i < _MC_N; i++) {
+		if (stones[NODE_ORDER[i]] === color) { dist[i] = 0; _MC_QUEUE[tail++] = i; }
+	}
+	while (head < tail) {
+		const u = _MC_QUEUE[head++], du = dist[u] + 1, adj = _MC_ADJ[u];
+		for (let a = 0; a < adj.length; a++) {
+			const v = adj[a];
+			if (dist[v] !== _MC_UNREACHED) continue;
+			if (stones[NODE_ORDER[v]] === DESTROYED) continue;
+			dist[v] = du; _MC_QUEUE[tail++] = v;
+		}
+	}
+}
+
+function mapControlDiff(stones) {
+	_mcBfsFast(stones, 'red', _MC_DR);
+	_mcBfsFast(stones, 'blue', _MC_DB);
+	let diff = 0;
+	for (let i = 0; i < _MC_N; i++) {
+		if (stones[NODE_ORDER[i]] === DESTROYED) continue;
+		const a = _MC_DR[i], b = _MC_DB[i];
+		if (a < b) diff++; else if (b < a) diff--;
+	}
+	return diff;
+}
+
 function _manaPressureFeatures(board, sideToMove, enemy) {
 	// 6-dim block: own and enemy adjacency-graph distance to each of the
 	// three mana nodes (a1, b1, c1), normalized by MANA_DISTANCE_NORM.

@@ -298,6 +298,26 @@
 
 			<div class="settings-card">
 				<label class="settings-card__row">
+					<input type="checkbox" x-model="showAiEval" x-on:change="saveShowAiEval" x-bind:disabled="busy" />
+					<span>Show live AI evaluation</span>
+				</label>
+				<div class="settings-card__hint">
+					When on, the game screen offers an "AI eval" readout that continuously shows the AI's evaluation of the current position (positive favors red). Costs some CPU while enabled.
+				</div>
+			</div>
+
+			<div class="settings-card">
+				<label class="settings-card__row">
+					<input type="checkbox" x-model="showMapControl" x-on:change="saveShowMapControl" x-bind:disabled="busy" />
+					<span>Show map control</span>
+				</label>
+				<div class="settings-card__hint">
+					When on, the game screen shows how many board nodes each side's stones are closer to (red / blue / contested, and the difference). Useful for judging who controls more of the map.
+				</div>
+			</div>
+
+			<div class="settings-card">
+				<label class="settings-card__row">
 					<input type="checkbox" x-model="enablePondering" x-on:change="saveEnablePondering" x-bind:disabled="busy" />
 					<span>Let the AI think during your turn</span>
 				</label>
@@ -354,6 +374,8 @@
 				busy: false,
 				annotationMode: false,
 				showAiThinkReport: false,
+				showAiEval: false,
+				showMapControl: false,
 				enablePondering: false,
 
 				get needsRename() {
@@ -379,12 +401,16 @@
 							this.profile = this._authManager.userProfile;
 							this.annotationMode = !!(this.profile && this.profile.annotationMode);
 							this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
+							this.showAiEval = !!(this.profile && this.profile.showAiEval);
+							this.showMapControl = !!(this.profile && this.profile.showMapControl);
 							// Default OFF; only explicit true enables.
 							this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
 						} else {
 							this.profile = null;
 							this.annotationMode = false;
 							this.showAiThinkReport = false;
+							this.showAiEval = false;
+							this.showMapControl = false;
 							this.enablePondering = false;
 						}
 						this.loading = false;
@@ -443,6 +469,38 @@
 					} catch (e) {
 						this.error = e.message || String(e);
 						this.showAiThinkReport = !this.showAiThinkReport;
+					}
+					this.busy = false;
+				},
+
+				async saveShowAiEval() {
+					this.error = '';
+					this.successMsg = '';
+					this.busy = true;
+					try {
+						await this._authManager.updateShowAiEval(this.showAiEval);
+						this.successMsg = this.showAiEval
+							? 'Live AI evaluation enabled.'
+							: 'Live AI evaluation disabled.';
+					} catch (e) {
+						this.error = e.message || String(e);
+						this.showAiEval = !this.showAiEval;
+					}
+					this.busy = false;
+				},
+
+				async saveShowMapControl() {
+					this.error = '';
+					this.successMsg = '';
+					this.busy = true;
+					try {
+						await this._authManager.updateShowMapControl(this.showMapControl);
+						this.successMsg = this.showMapControl
+							? 'Map control display enabled.'
+							: 'Map control display disabled.';
+					} catch (e) {
+						this.error = e.message || String(e);
+						this.showMapControl = !this.showMapControl;
 					}
 					this.busy = false;
 				},

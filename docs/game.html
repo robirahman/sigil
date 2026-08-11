@@ -255,7 +255,7 @@
 							</span>
 						</div>
 
-						<div class="dev-eval-panel" x-show="isDeveloper" x-cloak>
+						<div class="dev-eval-panel" x-show="canSeeAiEval" x-cloak>
 							<label class="dev-eval-panel__toggle">
 								<input type="checkbox"
 									x-bind:checked="devEvalEnabled"
@@ -281,6 +281,25 @@
 									</span>
 								</template>
 							</div>
+						</div>
+
+						<div class="dev-eval-panel" x-show="canSeeMapControl && mapControl !== null" x-cloak>
+							<span class="dev-eval-panel__label">map control:</span>
+							<span class="dev-eval-panel__value dev-eval-panel__value--red"
+								x-text="mapControl?.red"></span>
+							<span class="dev-eval-panel__label">red,</span>
+							<span class="dev-eval-panel__value dev-eval-panel__value--blue"
+								x-text="mapControl?.blue"></span>
+							<span class="dev-eval-panel__label">blue,</span>
+							<span class="dev-eval-panel__value"
+								x-text="mapControl?.contested"></span>
+							<span class="dev-eval-panel__label">contested;</span>
+							<span class="dev-eval-panel__value"
+								x-bind:class="{
+									'dev-eval-panel__value--red': mapControl?.diff > 0,
+									'dev-eval-panel__value--blue': mapControl?.diff < 0,
+								}"
+								x-text="(mapControl?.diff >= 0 ? '+' : '') + mapControl?.diff"></span>
 						</div>
 
 						<div class="annotation-bar"

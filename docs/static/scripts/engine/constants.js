@@ -54,6 +54,12 @@ function isSpellNode(name) {
 	return SPELL_NODES.has(name);
 }
 
+// Nodes on no spell sigil and not mana nodes: a11-13, b11-13, c11-13.
+// A stone parked here charges nothing and holds no mana ("void" nodes).
+// Mirrors ai/minimax_ai.py _VOID_NODES.
+const VOID_NODES = NODE_ORDER.filter(
+	n => !SPELL_NODES.has(n) && !MANA_NODES.includes(n));
+
 // Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
 // Lurk (Gloom charm) may move onto any node EXCEPT these; 1-node spells (charms)
 // and non-spell nodes remain valid targets.

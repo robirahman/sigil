@@ -419,7 +419,7 @@
 							<template x-for="message in messageHistory"><li x-text="message"></li></template>
 						</ul>
 					</template>
-					<div class="dev-eval-panel" x-show="isDeveloper" x-cloak>
+					<div class="dev-eval-panel" x-show="canSeeAiEval" x-cloak>
 						<label class="dev-eval-panel__toggle">
 							<input type="checkbox"
 								x-bind:checked="devEvalEnabled"
@@ -445,6 +445,24 @@
 								</span>
 							</template>
 						</div>
+					</div>
+					<div class="dev-eval-panel" x-show="canSeeMapControl && mapControl !== null" x-cloak>
+						<span class="dev-eval-panel__label">map control:</span>
+						<span class="dev-eval-panel__value dev-eval-panel__value--red"
+							x-text="mapControl?.red"></span>
+						<span class="dev-eval-panel__label">red,</span>
+						<span class="dev-eval-panel__value dev-eval-panel__value--blue"
+							x-text="mapControl?.blue"></span>
+						<span class="dev-eval-panel__label">blue,</span>
+						<span class="dev-eval-panel__value"
+							x-text="mapControl?.contested"></span>
+						<span class="dev-eval-panel__label">contested;</span>
+						<span class="dev-eval-panel__value"
+							x-bind:class="{
+								'dev-eval-panel__value--red': mapControl?.diff > 0,
+								'dev-eval-panel__value--blue': mapControl?.diff < 0,
+							}"
+							x-text="(mapControl?.diff >= 0 ? '+' : '') + mapControl?.diff"></span>
 					</div>
 					<div class="annotation-bar"
 						x-show="annotationMode && lastOpponentTurn && whoseTurn === myColor"
@@ -983,6 +1001,8 @@
 						blueUid: _firebaseSync.blueUid || null,
 						annotationMode: !!(_authManager && _authManager.annotationMode),
 						isDeveloper: !!(_authManager && _authManager.isDeveloper),
+						showAiEval: !!(_authManager && _authManager.showAiEval),
+						showMapControl: !!(_authManager && _authManager.showMapControl),
 						reviewMode: false,
 						gameLog: null,
 						winner: null,
