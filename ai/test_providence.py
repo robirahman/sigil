@@ -226,7 +226,7 @@ def test_three_ply_decrement():
 
 def test_asymmetric_win_semantics():
     print("Testing asymmetric phantom win semantics...")
-    # (c) Phantom-inflated lead is NOT a win.
+    # (c) Phantom-inflated lead is NOT a ±3-lead win.
     b = _board()
     b.stones.update({n: None for n in NODE_ORDER})
     for n in ('a1', 'a2', 'a3'):
@@ -235,7 +235,8 @@ def test_asymmetric_win_semantics():
     b.stones['b2'] = 'blue'
     b.pending_moves['red'] = [1, 1, 1, 1]
     b.update()
-    assert not b.check_game_over('red'), "phantoms never power a win claim"
+    assert not b.check_game_over('red'), \
+        "phantoms never power a ±3-lead win claim"
 
     # Defensive: pending stones cover a would-be ±3 loss.
     b2 = _board()
@@ -257,7 +258,9 @@ def test_asymmetric_win_semantics():
     assert b2b.check_game_over('red'), \
         "mover's own extras-this-turn are not part of the terminal math"
 
-    # 6th-spell tiebreak: claims are real-vs-effective.
+    # 6th-spell count: Providence phantoms count SYMMETRICALLY (2026-08
+    # playtest ruling) — invested stones count for the player who cast
+    # them, on both sides of the comparison.
     b3 = _board()
     b3.stones.update({n: None for n in NODE_ORDER})
     for n in ('a1', 'a2', 'a3', 'a4', 'a5'):
@@ -269,10 +272,25 @@ def test_asymmetric_win_semantics():
     with_pend = b3.copy()
     with_pend.pending_moves['blue'] = [2]
     assert with_pend.check_game_over('red') and with_pend.winner == 'blue', \
-        "5 real vs 4+2 effective: red's claim fails, tie goes against caster"
+        "5 vs 4+2 effective: blue's invested stones win the count outright"
     b3.pending_moves['blue'] = []
     assert b3.check_game_over('red') and b3.winner == 'red', \
         "without pending, 5 vs 4 is a red tiebreak win"
+
+    # The caster's OWN pending stones power their sixth-spell count (the
+    # discriminating case vs the old defense-only rule, where this was a
+    # tie going to the non-active player, i.e. blue).
+    b3b = _board()
+    b3b.stones.update({n: None for n in NODE_ORDER})
+    for n in ('a1', 'a2', 'a3', 'a4', 'a5'):
+        b3b.stones[n] = 'red'
+    for n in ('b1', 'b2', 'b3', 'b4', 'b5'):
+        b3b.stones[n] = 'blue'
+    b3b.update()
+    b3b.spell_counter['red'] = 6
+    b3b.pending_moves['red'] = [1, 1]
+    assert b3b.check_game_over('red') and b3b.winner == 'red', \
+        "5+2 vs 5(+1): red's invested stones win the sixth-spell count"
 
     # Elimination stays real-only.
     b4 = _board()

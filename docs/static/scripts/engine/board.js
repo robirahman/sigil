@@ -283,20 +283,25 @@ class SigilBoard {
 		// threefold repetition is enforced by the controllers.
 		if (variantHasDeathmatch(this.variant)) return false;
 
-		// Providence phantoms and Ambush snares count ASYMMETRICALLY
-		// (defense only): a player's win claim uses their real placed
-		// stones, checked against the opponent's real+pending+snare total.
+		// ±3-lead check: Providence phantoms and Ambush snares count
+		// ASYMMETRICALLY (defense only) — a player's win claim uses their
+		// real placed stones, checked against the opponent's
+		// real+pending+snare total. Sixth-spell count: Providence phantoms
+		// count SYMMETRICALLY (2026-08 playtest ruling) — invested stones
+		// count for their caster; snares stay defense-only there too.
 		// Controllers zero the turn-scoped counters at EOT before calling
 		// this, so only the schedules and snares matter here.
 		const redTotal = this.totalStones.red;
 		const blueTotal = this.totalStones.blue + 1; // phantom stone
-		let redPend = 0, bluePend = 0;
-		for (const v of this.pendingMoves.red) redPend += v;
-		for (const v of this.pendingMoves.blue) bluePend += v;
+		let redProv = 0, blueProv = 0, redSnares = 0, blueSnares = 0;
+		for (const v of this.pendingMoves.red) redProv += v;
+		for (const v of this.pendingMoves.blue) blueProv += v;
 		for (const n in this.snares) {
-			if (this.snares[n] === 'red') redPend++;
-			else bluePend++;
+			if (this.snares[n] === 'red') redSnares++;
+			else blueSnares++;
 		}
+		const redPend = redProv + redSnares;
+		const bluePend = blueProv + blueSnares;
 
 		if (redTotal > blueTotal + bluePend + 2) {
 			this.gameover = true;
@@ -311,8 +316,8 @@ class SigilBoard {
 
 		if (this.spellCounter[activeColor] >= 6) {
 			this.gameover = true;
-			if (redTotal > blueTotal + bluePend) this.winner = 'red';
-			else if (blueTotal > redTotal + redPend) this.winner = 'blue';
+			if (redTotal + redProv > blueTotal + blueProv + blueSnares) this.winner = 'red';
+			else if (blueTotal + blueProv > redTotal + redProv + redSnares) this.winner = 'blue';
 			else this.winner = this.enemy(activeColor);
 			return true;
 		}

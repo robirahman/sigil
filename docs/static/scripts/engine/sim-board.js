@@ -292,20 +292,25 @@ class SimBoard {
 		// +3-lead and 6th-spell conditions below are disabled.
 		if (variantHasDeathmatch(this.variant)) return false;
 
-		// Providence phantoms count ASYMMETRICALLY (defense only): a player's
-		// win claim uses their real placed stones, checked against the
-		// opponent's real+pending total. The mover's extras-this-turn are NOT
-		// counted anywhere here: placed ones are already real, unused ones
-		// forfeit at end of turn.
+		// ±3-lead check: Providence phantoms and Ambush snares count
+		// ASYMMETRICALLY (defense only) — a player's win claim uses their
+		// real placed stones, checked against the opponent's real+pending
+		// total. Sixth-spell count: Providence phantoms count SYMMETRICALLY
+		// (2026-08 playtest ruling) — invested stones count for their
+		// caster; snares stay defense-only there too. The mover's
+		// extras-this-turn are NOT counted anywhere here: placed ones are
+		// already real, unused ones forfeit at end of turn.
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
-		const rp = this.pendingSum('red') + this.snareCount('red');
-		const bp = this.pendingSum('blue') + this.snareCount('blue');
+		const rProv = this.pendingSum('red'), bProv = this.pendingSum('blue');
+		const rSnares = this.snareCount('red'), bSnares = this.snareCount('blue');
+		const rp = rProv + rSnares;
+		const bp = bProv + bSnares;
 		if (rt > bt + bp + 2) { this.gameover = true; this.winner = 'red'; return true; }
 		if (bt > rt + rp + 2) { this.gameover = true; this.winner = 'blue'; return true; }
 		if (this.spellCounter[activeColor] >= 6) {
 			this.gameover = true;
-			if (rt > bt + bp) this.winner = 'red';
-			else if (bt > rt + rp) this.winner = 'blue';
+			if (rt + rProv > bt + bProv + bSnares) this.winner = 'red';
+			else if (bt + bProv > rt + rProv + rSnares) this.winner = 'blue';
 			else this.winner = this._enemy(activeColor);
 			return true;
 		}

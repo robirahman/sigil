@@ -795,16 +795,24 @@ class AIPlayer():
 			elif color == 'blue':
 				bluetotal += 1
 
-		### Providence phantoms and Ambush snares count ASYMMETRICALLY
-		### (defense only): each win claim uses real placed stones, checked
-		### against the opponent's real+pending+snare total.
-		redpend = sum(self.board.pending_moves['red'])
-		bluepend = sum(self.board.pending_moves['blue'])
+		### ±3-lead check: Providence phantoms and Ambush snares count
+		### ASYMMETRICALLY (defense only) — each win claim uses real placed
+		### stones, checked against the opponent's real+pending+snare total.
+		### Sixth-spell count: Providence phantoms count SYMMETRICALLY
+		### (2026-08 playtest ruling) — stones yet to be placed from
+		### Dividend/Annuity/Endowment count for the player who cast them;
+		### snares stay defense-only there too.
+		redprov = sum(self.board.pending_moves['red'])
+		blueprov = sum(self.board.pending_moves['blue'])
+		redsnares = 0
+		bluesnares = 0
 		for owner in self.board.snares.values():
 			if owner == 'red':
-				redpend += 1
+				redsnares += 1
 			else:
-				bluepend += 1
+				bluesnares += 1
+		redpend = redprov + redsnares
+		bluepend = blueprov + bluesnares
 
 		if redtotal > bluetotal + bluepend + 2:
 			self.board.gameover = True
@@ -817,9 +825,9 @@ class AIPlayer():
 		else:
 			if self.spellcounter >= 6:
 				self.board.gameover = True
-				if redtotal > bluetotal + bluepend:
+				if redtotal + redprov > bluetotal + blueprov + bluesnares:
 					self.board.winner = 'red'
-				elif bluetotal > redtotal + redpend:
+				elif bluetotal + blueprov > redtotal + redprov + redsnares:
 					self.board.winner = 'blue'
 				else:
 					a = ['red', 'blue']

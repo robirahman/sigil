@@ -93,7 +93,9 @@ Refined spell concepts developed in design sessions based on gameplay balance an
 
 *Deferred payouts: invest mana now, receive extra moves on future turns.
 Pending stones shield you from losing (the opponent's win checks count them
-against your total) but never power your own win until actually placed.*
+against your total) but never power your own ±3-lead win until actually
+placed. At the sixth-spell count, invested stones DO count for the player
+who cast them (2026-08 playtest ruling).*
 
 | Slot | Spell | Effect |
 |---|---|---|

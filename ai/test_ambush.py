@@ -216,6 +216,22 @@ def test_defensive_counting():
     b3.update()
     assert not b3.check_game_over('red')
 
+    # ...and not in the sixth-spell count either: the 2026-08 ruling made
+    # Providence phantoms symmetric there, but snares stay defense-only.
+    # Red 4 real + 3 snares vs blue 4 real (+1 token): neither claim
+    # clears, tie goes against the active player.
+    b3s = SimBoard(AMBUSH_SPELLS)
+    for n in ('a1', 'a2', 'a3', 'a4'):
+        b3s.stones[n] = 'red'
+    for n in ('b2', 'b3', 'b4', 'b5'):
+        b3s.stones[n] = 'blue'
+    for n in ('c8', 'c9', 'c10'):
+        b3s.snares[n] = 'red'
+    b3s.update()
+    b3s.spell_counter['red'] = 6
+    assert b3s.check_game_over('red') and b3s.winner == 'blue', \
+        "snares must not power red's sixth-spell count (tie -> blue)"
+
     # Elimination stays real-only.
     b4 = SimBoard(AMBUSH_SPELLS)
     b4.stones['b1'] = 'blue'

@@ -410,10 +410,17 @@ class SimBoard:
     def check_game_over(self, active_color):
         """Check win conditions after a turn. Returns True if game is over.
 
-        Providence phantoms count ASYMMETRICALLY (defense only): a player's
-        win claim uses their real placed stones, but is checked against the
-        opponent's real+pending total — you can't win off stones you haven't
-        placed, and you can't lose while scheduled stones cover the deficit.
+        In the ±3-lead check, Providence phantoms and Ambush snares count
+        ASYMMETRICALLY (defense only): a player's win claim uses their real
+        placed stones, but is checked against the opponent's real+pending
+        total — you can't win off stones you haven't placed, and you can't
+        lose while scheduled stones cover the deficit.
+
+        In the sixth-spell count, Providence phantoms count SYMMETRICALLY
+        (2026-08 playtest ruling): stones yet to be placed from Dividend/
+        Annuity/Endowment count for the player who cast them. Snares stay
+        defense-only there too.
+
         The mover's own extras-this-turn are NOT counted anywhere here:
         placed ones are already real, unused ones forfeit at end of turn.
         """
@@ -423,8 +430,12 @@ class SimBoard:
 
         red_real = self.totalstones['red']
         blue_real = self.totalstones['blue'] + 1  # phantom counter token
-        red_pend = self.pending_sum('red') + self.snare_count('red')
-        blue_pend = self.pending_sum('blue') + self.snare_count('blue')
+        red_prov = self.pending_sum('red')
+        blue_prov = self.pending_sum('blue')
+        red_snares = self.snare_count('red')
+        blue_snares = self.snare_count('blue')
+        red_pend = red_prov + red_snares
+        blue_pend = blue_prov + blue_snares
 
         if red_real > blue_real + blue_pend + 2:
             self.gameover = True
@@ -437,9 +448,9 @@ class SimBoard:
 
         if self.spell_counter[active_color] >= 6:
             self.gameover = True
-            if red_real > blue_real + blue_pend:
+            if red_real + red_prov > blue_real + blue_prov + blue_snares:
                 self.winner = 'red'
-            elif blue_real > red_real + red_pend:
+            elif blue_real + blue_prov > red_real + red_prov + red_snares:
                 self.winner = 'blue'
             else:
                 self.winner = 'blue' if active_color == 'red' else 'red'

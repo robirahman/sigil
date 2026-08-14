@@ -1865,8 +1865,9 @@ class Bulwark(Spell):
 class _ScheduleMovesSpell(Spell):
 	### Providence base: schedule 1 extra move at the beginning of each of
 	### the caster's next TURNS turns. Pending stones count toward the
-	### caster's stone count asymmetrically (defense only) — see
-	### Board.pending_stones / eot_triggers.
+	### caster's stone count asymmetrically (defense only) in the ±3-lead
+	### check, but SYMMETRICALLY in the sixth-spell count (2026-08 playtest
+	### ruling) — see Board.pending_stones / eot_triggers.
 	TURNS = 1
 
 	def resolve(self, player):
