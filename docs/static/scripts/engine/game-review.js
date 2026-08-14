@@ -482,6 +482,35 @@ function turnToNotation(turn) {
  * @throws on transcript/engine mismatch — callers fall back to a
  *   final-position-only view using the [FinalSfn] header.
  */
+
+/**
+ * Hydrate a stored game record's turn list into fat entries with
+ * per-turn SFNs. The single dual-format reader for every at-rest record
+ * (rooms gameLog, completed_games turns, localStorage saves): legacy fat
+ * entries (sfnBefore/sfnAfter present) pass through untouched; slim
+ * transcript entries are rebuilt by replaying through
+ * reconstructGameLog. When `finalSfn` is provided, the replayed final
+ * position must match it byte-for-byte.
+ *
+ * @throws on replay failure or integrity mismatch — callers degrade to a
+ *   final-position-only view (finalSfn), never a broken scrub.
+ */
+async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
+	const gameLog = turns || [];
+	if (!gameLog.length) return gameLog;
+	// Fully-fat records pass through untouched. Anything else — slim
+	// transcripts, or hybrid records whose snapshot turns carry only an
+	// sfnAfter — rebuilds by replay.
+	if (!gameLog.some(t => !(t.sfnAfter && t.sfnBefore))) return gameLog;
+	const rebuilt = await reconstructGameLog(
+		spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
+	const last = rebuilt.length ? rebuilt[rebuilt.length - 1].sfnAfter : null;
+	if (finalSfn && last !== finalSfn) {
+		throw new Error('replayed final position does not match record');
+	}
+	return rebuilt;
+}
+
 async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 	const noop = () => {};
 	const gc = new GameController(noop, { variant });
@@ -525,6 +554,29 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 			board.crushedThisTurn = false;
 			gc._currentTurnActions = [];
 			const sfnBefore = boardToSfn(board);
+
+			// Snapshot turn (hybrid fat/slim records from the migration):
+			// the move sequence for this turn is unknown — adopt the stored
+			// after-state wholesale and continue replaying from it. The SFN
+			// carries the complete position (stones, locks, counters,
+			// schedules, snares), and it was captured pre-advance, so the
+			// next iteration's turnNumber-derived preamble lines up.
+			if (t.kind === 'snapshot') {
+				if (!t.sfnAfter) throw new Error(
+					'snapshot turn without sfnAfter at turn ' + board.turnCounter);
+				board.loadFromSfn(t.sfnAfter);
+				board.update();
+				rebuilt.push({
+					color: t.color,
+					turnNumber: t.turnNumber,
+					kind: 'snapshot',
+					actions: [],
+					sfnBefore,
+					sfnAfter: t.sfnAfter,
+				});
+				if (board.gameover) break;
+				continue;
+			}
 
 			// Providence shift (mirrors _runGameLoop).
 			const extraMoves = board.pendingMoves[t.color].length

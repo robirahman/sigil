@@ -126,6 +126,15 @@
 	</script>
 	<script src="static/scripts/engine/constants.js"></script>
 	<script src="static/scripts/engine/notation.js"></script>
+	<!-- Replay stack: slim completed_games records carry action
+	     transcripts only, so sampling a mid-game position requires
+	     rebuilding per-turn SFNs via hydrateGameLog/reconstructGameLog. -->
+	<script src="static/scripts/engine/board.js"></script>
+	<script src="static/scripts/engine/moves.js"></script>
+	<script src="static/scripts/engine/spells.js"></script>
+	<script src="static/scripts/engine/ai-player.js"></script>
+	<script src="static/scripts/engine/game-controller.js"></script>
+	<script src="static/scripts/engine/game-review.js"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/firebase-sync.js"></script>
 	<script src="static/scripts/auth-status.js"></script>
@@ -164,8 +173,23 @@
 					for (let attempt = 0; attempt < 6; attempt++) {
 						const picked = await sampleRecentCompletedGame(firebase.database(), 50);
 						if (!picked) break;
-						const log = picked.game && picked.game.gameLog;
+						const g = picked.game || {};
+						// completed_games records store `turns` (the old
+						// `gameLog` read here never matched anything).
+						let log = g.turns || g.gameLog;
 						if (!Array.isArray(log) || log.length < 6) continue;
+						// Slim records carry action transcripts only —
+						// rebuild per-turn SFNs by replay; fat legacy
+						// records pass through unchanged.
+						if (log.some(t => !t.sfnAfter)) {
+							try {
+								log = await hydrateGameLog(
+									g.spellNames, g.variant, g.setupSfn, g.finalSfn, log);
+							} catch (e) {
+								continue; // unreplayable record; sample another
+							}
+							if (!Array.isArray(log) || log.length < 6) continue;
+						}
 						const lo = 2, hi = log.length - 2;
 						const i = Math.floor(Math.random() * (hi - lo)) + lo;
 						const entry = log[i];

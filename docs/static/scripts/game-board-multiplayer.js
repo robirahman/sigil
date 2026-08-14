@@ -349,27 +349,21 @@ document.addEventListener('alpine:init', () => {
 					this.messageHistory.push('No game log available for review.');
 					return;
 				}
-				// Slim (post-refactor) room records carry action transcripts
-				// only — rebuild the per-ply positions by replay. Legacy rooms
-				// with fat per-turn SFNs skip this and load directly.
-				if (gameLog.some(t => !t.sfnAfter)) {
-					try {
-						gameLog = await reconstructGameLog(
-							spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
-						const last = gameLog.length ? gameLog[gameLog.length - 1].sfnAfter : null;
-						if (finalSfn && last !== finalSfn) {
-							throw new Error('replayed final position does not match record');
-						}
-					} catch (e) {
-						console.warn('Room transcript replay failed:', e);
-						if (finalSfn) {
-							gameLog = [];
-							this._initReviewFinalOnly(spellNames, finalSfn, winner);
-						} else {
-							this.messageHistory.push('Could not rebuild this game for review.');
-						}
-						return;
+				// Slim (post-refactor) records carry action transcripts only —
+				// hydrateGameLog rebuilds the per-ply positions by replay;
+				// legacy fat records pass through it untouched.
+				try {
+					gameLog = await hydrateGameLog(
+						spellNames, variant, setupSfn, finalSfn, gameLog);
+				} catch (e) {
+					console.warn('Room transcript replay failed:', e);
+					if (finalSfn) {
+						gameLog = [];
+						this._initReviewFinalOnly(spellNames, finalSfn, winner);
+					} else {
+						this.messageHistory.push('Could not rebuild this game for review.');
 					}
+					return;
 				}
 				this._applyReviewSpellSetup(spellNames);
 

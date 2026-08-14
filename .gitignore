@@ -28,6 +28,10 @@ ai/models/best_model_hard.pt
 ai/data/human_expert_*.jsonl
 # Raw Firebase dump for the positional-weight fit (contains UIDs; unbounded)
 ai/data/completed_games_raw*.json
+# Pre-migration completed_games backups (ai/slim_completed_games.py)
+ai/data/completed_games_backup_*.json
+# Generated dev harnesses (tools/gen_unmatched_review.py embeds game data)
+docs/dev/
 !ai/data/human_expert_*_part_*
 
 # Local concatenations of split self-play files (parts already tracked).

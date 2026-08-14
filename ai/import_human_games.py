@@ -290,6 +290,15 @@ def main():
     if not games:
         return
 
+    # Slim records (post-2026-08 refactor) store the SGN-T transcript
+    # instead of per-turn SFNs — replay them through the canonical JS
+    # engine to recover sfnBefore/sfnAfter, then the pipeline below runs
+    # unchanged. Fat legacy records skip the bridge entirely. Records
+    # that fail replay keep transcript-only turns and are dropped by
+    # convert_game's existing missing-SFN check.
+    from ai.replay_bridge import hydrate_games_in_place
+    hydrate_games_in_place(games)
+
     os.makedirs(os.path.dirname(args.output) if os.path.dirname(args.output) else '.',
                 exist_ok=True)
 

@@ -1017,12 +1017,7 @@ document.addEventListener('alpine:init', () => {
 							}
 							// Persist the SLIM shape — SFNs are reconstructed by
 							// replay when the log is loaded again.
-							_persistedGameLog.push({
-								color: t.color,
-								turnNumber: t.turnNumber,
-								kind: t.kind || 'input',
-								actions: t.actions || [],
-							});
+							_persistedGameLog.push(slimGameLog([t])[0]);
 						}
 						// First human turn unlocks persistence. In local 1v1
 						// both colors are human; vs AI only the human's color
@@ -1356,14 +1351,15 @@ document.addEventListener('alpine:init', () => {
 								_this._blueNameForExport = 'Blue';
 							}
 						};
-						const needsHydration = payload.gameLog.some(t => !t.sfnAfter);
-						if (!needsHydration) {
-							finishReview(payload.gameLog);
-						} else if (typeof reconstructGameLog === 'function' && _engineRef && _engineRef.board) {
-							reconstructGameLog(
+						if (typeof hydrateGameLog === 'function' && _engineRef && _engineRef.board) {
+							// Fat entries pass through untouched; slim ones are
+							// rebuilt by replay. No finalSfn check here — a
+							// resumed game's history has no stored anchor.
+							hydrateGameLog(
 								_engineRef.board.spellNames.slice(),
-								normalizeVariant(_engineRef.board.variant),
+								_engineRef.board.variant,
 								_setupSfn,
+								null,
 								payload.gameLog,
 							).then(finishReview).catch((e) => {
 								console.warn('Could not rebuild resumed-game history for review:', e);
@@ -1371,6 +1367,8 @@ document.addEventListener('alpine:init', () => {
 								const fat = payload.gameLog.filter(t => t.sfnBefore && t.sfnAfter);
 								finishReview(fat);
 							});
+						} else if (!payload.gameLog.some(t => !t.sfnAfter)) {
+							finishReview(payload.gameLog);
 						}
 					}
 
@@ -1417,16 +1415,12 @@ document.addEventListener('alpine:init', () => {
 
 						const spellNamesArr = _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'];
 						const gameTurns = _engineRef ? _engineRef._gameLog : [];
-						// Rooms records store the SLIM transcript (actions only)
-						// + finalSfn/setupSfn; the review page rebuilds positions
-						// by replay. completed_games keeps fat turns for the
-						// Python training importer (ai/import_human_games.py).
-						const slimTurns = gameTurns.map(t => ({
-							color: t.color,
-							turnNumber: t.turnNumber,
-							kind: t.kind || 'input',
-							actions: t.actions || [],
-						}));
+						// ALL stored records — rooms AND completed_games — carry
+						// the SLIM transcript (marginal moves) + finalSfn/setupSfn
+						// anchors; readers rebuild positions by replay
+						// (reconstructGameLog), and the Python training importer
+						// hydrates through tools/replay-transcripts.js.
+						const slimTurns = slimGameLog(gameTurns);
 						const finalSfnForRecord = (_engineRef && _engineRef.board)
 							? boardToSfn(_engineRef.board) : null;
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
@@ -1463,7 +1457,9 @@ document.addEventListener('alpine:init', () => {
 						const gameRecord = {
 							spellNames: spellNamesArr,
 							winner: winner,
-							turns: gameTurns,
+							turns: slimTurns,
+							setupSfn: _setupSfn || (gameTurns.length ? gameTurns[0].sfnBefore : null),
+							finalSfn: finalSfnForRecord,
 							timestamp: Date.now(),
 							roomCode: roomCode,
 							redUid: _humanColor === 'red' ? humanUid : aiUid,

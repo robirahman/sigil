@@ -194,7 +194,12 @@ class MultiplayerController {
 				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
 				this.sync.writeTimeout(winner);
 				if (this.myColor === 'red') {
-					this.sync.writeRoomFinalState(winner, this._gameLog);
+					this.sync.writeRoomFinalState(
+						winner,
+						this._gameLog,
+						this.board ? boardToSfn(this.board) : null,
+						this._gameLog.length ? this._gameLog[0].sfnBefore : null,
+					);
 				}
 				this._stopTimer();
 			}
@@ -214,7 +219,12 @@ class MultiplayerController {
 				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
 				this.sync.writeTimeout(winner);
 				if (this.myColor === 'red') {
-					this.sync.writeRoomFinalState(winner, this._gameLog);
+					this.sync.writeRoomFinalState(
+						winner,
+						this._gameLog,
+						this.board ? boardToSfn(this.board) : null,
+						this._gameLog.length ? this._gameLog[0].sfnBefore : null,
+					);
 				}
 				this._stopTimer();
 			}
@@ -588,10 +598,15 @@ class MultiplayerController {
 
 	_saveGameRecord(winner) {
 		if (!this.sync) return;
+		// Stored records carry the SLIM transcript (marginal moves) plus
+		// the setup/final SFN anchors; positions are rebuilt by replaying
+		// through reconstructGameLog. Never store per-turn board states.
 		const record = {
 			spellNames: this.board.spellNames,
 			winner: winner,
-			turns: this._gameLog,
+			turns: slimGameLog(this._gameLog),
+			setupSfn: this._gameLog.length ? this._gameLog[0].sfnBefore : null,
+			finalSfn: this.board ? boardToSfn(this.board) : null,
 			roomCode: this.sync.roomCode,
 			timestamp: Date.now(),
 			// Variant the live board actually played under. Falls back

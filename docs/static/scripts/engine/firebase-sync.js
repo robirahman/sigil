@@ -544,12 +544,7 @@ class FirebaseSync {
 	 */
 	async writeRoomFinalState(winner, gameLog, finalSfn, setupSfn) {
 		if (!this.roomRef) return;
-		const slim = (gameLog || []).map(t => ({
-			color: t.color,
-			turnNumber: t.turnNumber,
-			kind: t.kind || 'input',
-			actions: t.actions || [],
-		}));
+		const slim = slimGameLog(gameLog);
 		try {
 			await this.roomRef.update({
 				status: 'finished',

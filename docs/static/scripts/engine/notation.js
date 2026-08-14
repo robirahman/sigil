@@ -148,6 +148,19 @@ function sfnToDict(sfnStr) {
  *       the multiplayer wire protocol replays), space-free by construction.
  *   B3* {"actions":[{"type":"move","node":"b9"},...]}
  *       AI turn: compact-JSON SimActions, replayed via applyAITurn.
+ *   R5= <sfn>
+ *       Snapshot turn (hybrid records migrated from fat storage): the
+ *       move sequence is unknown; the replayer adopts the after-state
+ *       verbatim and continues from it.
+ *
+ * The same slim turn entries ({color, turnNumber, kind, actions} via
+ * slimGameLog below) are the canonical AT-REST shape for every stored
+ * record: rooms gameLog, completed_games turns (since 2026-08, with
+ * setupSfn/finalSfn anchors), and localStorage saves. SFN snapshots are
+ * for positions (imports, reconnect anchors), never per-turn storage —
+ * readers rebuild positions by replay (hydrateGameLog/reconstructGameLog
+ * in game-review.js; Python consumers bridge through
+ * tools/replay-transcripts.js via ai/replay_bridge.py).
  * ------------------------------------------------------------------ */
 
 function _sgnAnnotationsToHeader(ann) {
@@ -180,6 +193,39 @@ function _sgnStripAction(a) {
 }
 
 /**
+ * Project fat in-memory gameLog entries down to the canonical AT-REST
+ * shape: { color, turnNumber, kind, actions } — the marginal moves only,
+ * no board states. This is the single slim projection used by every
+ * stored record (rooms gameLog, completed_games turns, localStorage
+ * saves); readers rebuild positions by replaying through
+ * reconstructGameLog. Sim actions are stripped of null/undefined fields
+ * (Firebase rejects undefined, and empty fields are dead weight).
+ */
+function slimGameLog(gameLog) {
+	return (gameLog || []).map(t => {
+		// Hybrid records (migrated fat games with a few undeduced turns)
+		// keep the after-state for exactly those turns — the replayer
+		// jumps the board there and continues.
+		if (t.kind === 'snapshot') {
+			return {
+				color: t.color,
+				turnNumber: t.turnNumber,
+				kind: 'snapshot',
+				sfnAfter: t.sfnAfter,
+			};
+		}
+		return {
+			color: t.color,
+			turnNumber: t.turnNumber,
+			kind: t.kind || 'input',
+			actions: (t.kind === 'sim')
+				? (t.actions || []).map(_sgnStripAction)
+				: (t.actions || []),
+		};
+	});
+}
+
+/**
  * Serialize a finished game to SGN-T text.
  * @param {Object} header - { red, blue, result, spellNames, variant,
  *   setupSfn, finalSfn, annotations, evalAnnotations, date }
@@ -206,7 +252,10 @@ function gameToSgn(header, turns) {
 	lines.push('');
 	for (const t of (turns || [])) {
 		const prefix = (t.color === 'red' ? 'R' : 'B') + t.turnNumber;
-		if (t.kind === 'sim') {
+		if (t.kind === 'snapshot') {
+			// Hybrid turn: moves unknown, after-state recorded verbatim.
+			lines.push(prefix + '= ' + (t.sfnAfter || ''));
+		} else if (t.kind === 'sim') {
 			const actions = (t.actions || []).map(_sgnStripAction);
 			lines.push(prefix + '* ' + JSON.stringify({ actions }));
 		} else {
@@ -246,11 +295,14 @@ function parseSgn(text) {
 			}
 			continue;
 		}
-		const m = line.match(/^([RB])(\d+)([.*])\s*(.*)$/);
+		const m = line.match(/^([RB])(\d+)([.*=])\s*(.*)$/);
 		if (!m) continue;
 		const color = m[1] === 'R' ? 'red' : 'blue';
 		const turnNumber = parseInt(m[2], 10);
-		if (m[3] === '*') {
+		if (m[3] === '=') {
+			// Hybrid snapshot turn: moves unknown, after-state verbatim.
+			turns.push({ color, turnNumber, kind: 'snapshot', sfnAfter: m[4] });
+		} else if (m[3] === '*') {
 			let actions = [];
 			try { actions = (JSON.parse(m[4]) || {}).actions || []; } catch (e) { /* malformed */ }
 			turns.push({ color, turnNumber, kind: 'sim', actions });

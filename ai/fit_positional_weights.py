@@ -564,6 +564,14 @@ def main():
     if not args.selfplay_only:
         games = download_completed_games(args.service_account, args.db_url,
                                          args.cache, args.refresh)
+        # Slim records (post-2026-08 refactor) store SGN-T transcripts
+        # instead of per-turn SFNs — replay them through the canonical
+        # JS engine so the SFN-based filters and position extraction
+        # below work unchanged. Replay failures keep transcript-only
+        # turns and fall out at drop_missing_sfn.
+        from ai.replay_bridge import hydrate_games_in_place
+        hydrate_games_in_place(
+            [g for g in games.values() if isinstance(g, dict)])
         kept, funnel = filter_games(games)
         print('\nFilter funnel:')
         for reason, count in sorted(funnel.items()):
