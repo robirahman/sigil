@@ -1108,25 +1108,35 @@ to spam server (requests a new image every time a stone animation/transition beg
 	cursor: not-allowed;
 }
 
-/* Ambush snare marker: an owner-colored dashed ring. Visible to both
-   players; coexists with a stone standing on the node; disappears when
-   consumed (payload-driven). */
-.stone-node--snare-red,
-.stone-node--snare-blue {
-	position: relative;
-}
+/* Ambush snare marker: an owner-colored dashed ring with a soft glow.
+   Visible to both players; coexists with a stone standing on the node;
+   disappears when consumed (payload-driven). The ::before rides the
+   node button, which is ALREADY position:absolute on the board — never
+   reposition the button itself (a position override here once yanked
+   snared nodes out of the board layout entirely). Snared nodes stay
+   fully clickable: the marker is pointer-events: none. */
 .stone-node--snare-red::before,
 .stone-node--snare-blue::before {
 	content: '';
 	position: absolute;
-	inset: 8%;
-	border: 0.14em dashed rgba(205, 55, 55, 0.9);
+	inset: 6%;
+	border: 0.16em dashed rgba(225, 60, 60, 0.95);
 	border-radius: 50%;
+	background: radial-gradient(circle,
+		rgba(225, 60, 60, 0.16) 0%,
+		rgba(225, 60, 60, 0.05) 60%,
+		transparent 100%);
+	box-shadow: 0 0 0.35em 0.08em rgba(225, 60, 60, 0.55);
 	pointer-events: none;
 	z-index: 1;
 }
 .stone-node--snare-blue::before {
-	border-color: rgba(65, 105, 225, 0.9);
+	border-color: rgba(80, 130, 235, 0.95);
+	background: radial-gradient(circle,
+		rgba(80, 130, 235, 0.18) 0%,
+		rgba(80, 130, 235, 0.06) 60%,
+		transparent 100%);
+	box-shadow: 0 0 0.35em 0.08em rgba(80, 130, 235, 0.6);
 }
 
 .stone-node--blue.stone-node--last-play::after {
