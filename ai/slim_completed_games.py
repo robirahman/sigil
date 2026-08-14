@@ -44,13 +44,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from itertools import combinations, product
 
 from notation import NODE_ORDER, POSITIONS, sfn_to_dict
-from simboard import SimBoard, Action, CompleteTurn, apply_sim_turn
+from simboard import (SimBoard, Action, CompleteTurn, apply_sim_turn,
+                      CORE_SPELLS, DESTROYED)
 from ai.enumerator import get_legal_turns_exhaustive, DEFAULT_CAPS, _spell_overrides
 from ai.replay_bridge import hydrate_records, is_slim_record, _normalize_turns
 
 DB_URL = 'https://sigil-js-default-rtdb.firebaseio.com'
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 REPORT_PATH = os.path.join(DATA_DIR, 'slim_migration_report.json')
+# Verified conversions from the previous run. Deduction is per-turn
+# independent, so subsequent runs only re-deduce turns that were
+# snapshots (or have new human solutions) and splice the cached slim
+# entries for everything else — a labeling round costs minutes, not a
+# full-database sweep.
+CACHE_PATH = os.path.join(DATA_DIR, 'slim_conversions_cache.json')
 
 # Escalating enumeration budgets: greedy first (cheap, covers plain
 # move/dash/pass turns), then exhaustive at DEFAULT caps (spell target
@@ -214,13 +221,139 @@ def _focused_candidates(base, color, spell_name):
             yield CompleteTurn(prefix + cast_actions + [Action('pass')])
 
 
-def _candidates(board, color, cast_spell=None):
+def _dash_charm_candidates(base, color, sfn_after):
+    """Focused composer for placement -> dash -> charm-cast turns
+    (Robi's Surge/Slash class, netting +2 stones). Charm casts never
+    touch the lock or spell counter, so _cast_spell_name can't name
+    them, and these deep chains sit past the generic enumeration
+    budget. Compose candidates directly from the stored diff: standard
+    move, dash (sacrifices from the vacated pool, landing on a changed
+    node), then optionally each castable charm; resolver targets, kept
+    stones and push destinations are swept by _choice_variants like any
+    other candidate."""
+    enemy = 'blue' if color == 'red' else 'red'
+    try:
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return
+    before = base.stones
+    placed = [n for n in NODE_ORDER
+              if after.get(n) == color and before[n] is None]
+    conv_in = [n for n in NODE_ORDER
+               if after.get(n) == color and before[n] == enemy]
+    vacated = [n for n in NODE_ORDER
+               if before[n] == color and after.get(n) is None]
+    move_opts = placed + conv_in
+    if len(move_opts) < 2 or not vacated:
+        return
+    has_lightning = 'Seal_of_Lightning' in base.charged_spells[color]
+    k = 1 if has_lightning else 2
+    if len(vacated) < k:
+        return
+
+    for m1 in move_opts + [None]:
+        b1 = base.copy()
+        prefix = []
+        if m1 is not None:
+            mv1 = b1._do_move(color, m1)
+            if mv1 is None:
+                continue
+            b1.update()
+            prefix = [mv1]
+        for m2 in move_opts:
+            if m2 == m1:
+                continue
+            for sacs in combinations(vacated, k):
+                b2 = b1.copy()
+                if any(b2.stones[s] != color for s in sacs):
+                    continue
+                for s in sacs:
+                    b2.stones[s] = None
+                b2.update()
+                mv2 = b2._do_move(color, m2)
+                if mv2 is None:
+                    continue
+                b2.update()
+                dash_act = Action(
+                    'dash_lightning' if has_lightning else 'dash',
+                    sacrificed=list(sacs), node=m2)
+                yield CompleteTurn(prefix + [dash_act, mv2, Action('pass')])
+                try:
+                    castable = b2._get_castable_spells(color, True, True,
+                                                       post_dash=True)
+                except Exception:
+                    continue
+                # Surge's gate is "only after a dash" — exactly where we
+                # are — but the sim refuses it unconditionally ("not
+                # modeled in the sim"), so no enumerated candidate can
+                # ever contain it. Add it when charged; its cast is
+                # composed manually below.
+                if 'Surge' in b2.charged_spells[color] \
+                        and 'Surge' not in castable \
+                        and 'Surge' in b2.spell_names:
+                    castable.append('Surge')
+                for spell in castable:
+                    if not CORE_SPELLS.get(spell, {}).get('ischarm'):
+                        continue
+                    if spell == 'Surge':
+                        # Manual composition (no sim resolver): the cast
+                        # spends the charm node, then grants 1 move —
+                        # soft or hard, anywhere legal; replayers apply
+                        # the recorded cast + move actions generically.
+                        idx = b2.spell_names.index('Surge')
+                        pos = POSITIONS.get(idx + 1, [])
+                        b3 = b2.copy()
+                        if any(b3.stones[n] != color for n in pos
+                               if b3.stones[n] != DESTROYED):
+                            continue
+                        for n in pos:
+                            if b3.stones[n] != DESTROYED:
+                                b3.stones[n] = None
+                        b3.update()
+                        cast_act = Action('cast', spell='Surge')
+                        for m3 in move_opts:
+                            if b3.stones[m3] == color:
+                                continue
+                            b4 = b3.copy()
+                            mv3 = b4._do_move(color, m3)
+                            if mv3 is None:
+                                continue
+                            yield CompleteTurn(
+                                prefix + [dash_act, mv2, cast_act, mv3,
+                                          Action('pass')])
+                        continue
+                    # Sweep the charm's target overrides — hard-move
+                    # resolvers (Surge/Slash) aim anywhere the human
+                    # chose, not just the greedy pick.
+                    overrides = [None]
+                    try:
+                        overrides += (_spell_overrides(b2, color, spell,
+                                                       MEGA_CAPS) or [])
+                    except Exception:
+                        pass
+                    for ov in overrides[:60]:
+                        b3 = b2.copy()
+                        try:
+                            cast_actions = b3._cast_spell(spell, color, ov)
+                            b3.update()
+                        except Exception:
+                            continue
+                        yield CompleteTurn(prefix + [dash_act, mv2]
+                                           + cast_actions + [Action('pass')])
+
+
+def _candidates(board, color, cast_spell=None, sfn_after=None):
     """Yield candidate turns in escalating-cost order."""
     yield from board.get_legal_turns(color)
     yield from get_legal_turns_exhaustive(board, color, DEFAULT_CAPS)
     yield from _cast_first_candidates(board, color)
     if cast_spell:
         yield from _focused_candidates(board, color, cast_spell)
+    elif sfn_after:
+        # No lock/counter change: either no cast, or a CHARM cast (which
+        # leaves both untouched) — the dash+charm composer covers the
+        # multi-placement shapes the generic tiers miss.
+        yield from _dash_charm_candidates(board, color, sfn_after)
     yield from get_legal_turns_exhaustive(board, color, BOOSTED_CAPS)
 
 
@@ -372,7 +505,7 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
             return False
         return b.to_sfn() == sfn_after
 
-    for cand in _candidates(base, color, cast_spell):
+    for cand in _candidates(base, color, cast_spell, sfn_after):
         if len(tried) > max_applies:
             return None
         if matches(cand):
@@ -385,7 +518,7 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
     return None
 
 
-def convert_record(key, rec):
+def convert_record(key, rec, cached_slim=None):
     """Deduce a slim transcript for one fat record.
 
     Turns whose move sequence can't be reproduced become 'snapshot'
@@ -393,7 +526,9 @@ def convert_record(key, rec):
     verbatim and the replayer jumps the board there — so a game with one
     exotic turn still slims every other turn. Deduction is per-turn
     independent (each starts from its own stored sfnBefore), which makes
-    the fallback sound.
+    the fallback sound — and lets `cached_slim` (the previous run's
+    verified conversion) short-circuit every turn that already deduced:
+    only its snapshot turns are re-attempted.
 
     Returns (slim_turns, snapshot_turn_indices, None) on success or
     (None, [], reason) on failure (malformed records only).
@@ -401,8 +536,14 @@ def convert_record(key, rec):
     turns = _normalize_turns(rec.get('turns'))
     if not turns:
         return None, 0, 'no-turns'
+    if cached_slim is not None and len(cached_slim) != len(turns):
+        cached_slim = None
     slim, snapshots = [], []
     for i, t in enumerate(turns):
+        if cached_slim is not None \
+                and cached_slim[i].get('kind') != 'snapshot':
+            slim.append(cached_slim[i])
+            continue
         color = t.get('color')
         sfn_before = t.get('sfnBefore')
         sfn_after = t.get('sfnAfter')
@@ -443,9 +584,9 @@ def convert_record(key, rec):
 
 def _convert_worker(item):
     """Multiprocessing worker: deduce one record's transcript."""
-    key, rec = item
+    key, rec, cached_slim = item
     try:
-        slim, snapshots, reason = convert_record(key, rec)
+        slim, snapshots, reason = convert_record(key, rec, cached_slim)
     except Exception as e:
         slim, snapshots, reason = None, [], f'worker-error: {e}'
     return key, slim, snapshots, reason
@@ -492,6 +633,9 @@ def main():
     ap.add_argument('--solutions', default=None,
                     help='solved_turns.json from the reconstruction '
                          'harness (docs/dev/unmatched-review.html)')
+    ap.add_argument('--no-cache', action='store_true',
+                    help='ignore the previous run\'s verified conversions '
+                         'and re-deduce everything from scratch')
     args = ap.parse_args()
 
     if args.solutions:
@@ -520,6 +664,18 @@ def main():
     print(f"Records: {len(games)} total | {len(fat)} fat to convert | "
           + ' | '.join(f'{k} {v}' for k, v in skipped.items()))
 
+    cache = {}
+    if not args.no_cache and os.path.exists(CACHE_PATH):
+        with open(CACHE_PATH) as f:
+            cache = json.load(f)
+        n_cached_turns = sum(
+            1 for key, _rec in fat for e in cache.get(key, [])
+            if e.get('kind') != 'snapshot')
+        print(f'Cache: {len(cache)} verified conversions loaded — '
+              f'{n_cached_turns} turns reused, only previous snapshot '
+              f'turns re-deduced (--no-cache to redo everything)')
+
+    work = [(key, rec, cache.get(key)) for key, rec in fat]
     t0 = time.time()
     converted, failures = [], []
     snap_by_key = {}
@@ -528,7 +684,7 @@ def main():
     if workers > 1 and len(fat) > 1:
         import multiprocessing
         with multiprocessing.Pool(workers) as pool:
-            results = pool.imap_unordered(_convert_worker, fat, chunksize=4)
+            results = pool.imap_unordered(_convert_worker, work, chunksize=4)
             for n, (key, slim, snapshots, reason) in enumerate(results, 1):
                 if slim is None:
                     failures.append({'key': key, 'stage': 'deduce',
@@ -543,8 +699,8 @@ def main():
         converted.sort(key=lambda kv: kv[0])
         failures.sort(key=lambda f_: f_['key'])
     else:
-        for n, (key, rec) in enumerate(fat, 1):
-            slim, snapshots, reason = convert_record(key, rec)
+        for n, (key, rec, cached_slim) in enumerate(work, 1):
+            slim, snapshots, reason = convert_record(key, rec, cached_slim)
             if slim is None:
                 failures.append({'key': key, 'stage': 'deduce',
                                  'reason': reason})
@@ -627,6 +783,10 @@ def main():
             'old_turns_bytes': old_bytes, 'new_turns_bytes': new_bytes,
         }, f, indent=1)
     print(f'Report: {REPORT_PATH}')
+
+    with open(CACHE_PATH, 'w') as f:
+        json.dump({k: slim for k, _rec, slim, _t in verified}, f)
+    print(f'Cache: {len(verified)} verified conversions -> {CACHE_PATH}')
 
     if not args.apply:
         print('\nDry run — no writes. Re-run with --apply to rewrite '

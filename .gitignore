@@ -30,6 +30,8 @@ ai/data/human_expert_*.jsonl
 ai/data/completed_games_raw*.json
 # Pre-migration completed_games backups (ai/slim_completed_games.py)
 ai/data/completed_games_backup_*.json
+# Derived conversion cache from the last migration run (regenerated)
+ai/data/slim_conversions_cache.json
 # Generated dev harnesses (tools/gen_unmatched_review.py embeds game data)
 docs/dev/
 !ai/data/human_expert_*_part_*

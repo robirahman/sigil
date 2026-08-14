@@ -1,26 +1,23 @@
 {
- "-OpR-gvrqxMM5tFognqh:t31": {
-  "key": "-OpR-gvrqxMM5tFognqh",
-  "turnNumber": 31,
-  "color": "red",
-  "actions": ["a4", "dash", "c7", "a3", "Carnage", "a4", "a3", "a7", "b12", "b5", "b11", "pass"]
- },
- "-OueQNu_Se47Qx9g8M-W:t1": {
-  "key": "-OueQNu_Se47Qx9g8M-W",
-  "turnNumber": 1,
-  "color": "red",
-  "actions": ["c1", "pass"]
- },
- "-OueQNu_Se47Qx9g8M-W:t2": {
-  "key": "-OueQNu_Se47Qx9g8M-W",
-  "turnNumber": 2,
-  "color": "blue",
-  "actions": ["c10", "pass"]
- },
- "-OueQNu_Se47Qx9g8M-W:t3": {
-  "key": "-OueQNu_Se47Qx9g8M-W",
-  "turnNumber": 3,
-  "color": "red",
-  "actions": ["c11", "pass"]
- }
+ "-OpR-gvrqxMM5tFognqh:t31": {"key": "-OpR-gvrqxMM5tFognqh", "turnNumber": 31, "color": "red",
+  "actions": ["a4", "dash", "c7", "a3", "Carnage", "a4", "a3", "a7", "b12", "b5", "b11", "pass"]},
+ "-OueQNu_Se47Qx9g8M-W:t1": {"key": "-OueQNu_Se47Qx9g8M-W", "turnNumber": 1, "color": "red", "actions": ["c1", "pass"]},
+ "-OueQNu_Se47Qx9g8M-W:t2": {"key": "-OueQNu_Se47Qx9g8M-W", "turnNumber": 2, "color": "blue", "actions": ["c10", "pass"]},
+ "-OueQNu_Se47Qx9g8M-W:t3": {"key": "-OueQNu_Se47Qx9g8M-W", "turnNumber": 3, "color": "red", "actions": ["c11", "pass"]},
+ "-Os2UGxw5M7W0HR0mKTZ:t16": {"key": "-Os2UGxw5M7W0HR0mKTZ", "turnNumber": 16, "color": "blue", "multiTurn": true},
+ "-Os2V0MlfW-D5HvQW-RE:t31": {"key": "-Os2V0MlfW-D5HvQW-RE", "turnNumber": 31, "color": "red", "multiTurn": true},
+ "-Os2V0MlfW-D5HvQW-RE:t33": {"key": "-Os2V0MlfW-D5HvQW-RE", "turnNumber": 33, "color": "red", "multiTurn": true},
+ "-Os2qItybwAM8q7OPi5U:t13": {"key": "-Os2qItybwAM8q7OPi5U", "turnNumber": 13, "color": "red", "multiTurn": true},
+ "-OrlzPs0KrCTLu2CCm5I:t39": {"key": "-OrlzPs0KrCTLu2CCm5I", "turnNumber": 39, "color": "red",
+  "actions": ["a13", "dash", "a4", "a3", "a9", "Surge", "b10", "pass"]},
+ "-Orno4EXYeAN1DvFDJ9H:t33": {"key": "-Orno4EXYeAN1DvFDJ9H", "turnNumber": 33, "color": "red",
+  "actions": ["b5", "dash", "b4", "b3", "b12", "Surge", "b6", "pass"]},
+ "-OrnvV2CvMfDlR3MFp0D:t27": {"key": "-OrnvV2CvMfDlR3MFp0D", "turnNumber": 27, "color": "red",
+  "actions": ["b4", "dash", "b8", "b10", "b3", "Surge", "b6", "pass"]},
+ "-OrocfeNEQguh6atA4Cr:t20": {"key": "-OrocfeNEQguh6atA4Cr", "turnNumber": 20, "color": "blue",
+  "actions": ["b11", "a8", "dash", "b12", "b13", "b2", "Surge", "b1", "pass"]},
+ "-OrowA_5YA3R1OQnNnXx:t23": {"key": "-OrowA_5YA3R1OQnNnXx", "turnNumber": 23, "color": "red",
+  "actions": ["a6", "dash", "b8", "b9", "a11", "Slash", "a1", "pass"]},
+ "-OrpDPs_6guHakgGYilK:t22": {"key": "-OrpDPs_6guHakgGYilK", "turnNumber": 22, "color": "blue",
+  "actions": ["b11", "a8", "dash", "b12", "c11", "b1", "Surge", "b2", "pass"]}
 }
