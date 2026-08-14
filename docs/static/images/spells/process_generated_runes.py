@@ -3,13 +3,13 @@ import glob
 from PIL import Image, ImageDraw, ImageFilter, ImageChops
 
 # Paths
-artifacts_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/8329cbca-5b02-42da-a449-9091923cd0ee"
+artifacts_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/73f7fe8f-0d73-421e-8dda-dc8bddbecc32"
 spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/spells"
 static_spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/static/images/spells"
 
-RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure"]
-SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide"]
-CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark"]
+RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure", "Endowment"]
+SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide", "Annuity"]
+CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark", "Dividend"]
 
 SPELL_CONFIGS = {}
 for name in RITUALS:
@@ -47,7 +47,10 @@ RAW_MAPPING = {
     "Seal_of_Winter": "seal_of_winter_rune_raw",
     "Fissure": "fissure_rune_raw",
     "Rock_Slide": "rock_slide_rune_raw",
-    "Bulwark": "bulwark_rune_raw"
+    "Bulwark": "bulwark_rune_raw",
+    "Endowment": "endowment_rune_raw",
+    "Annuity": "annuity_rune_raw",
+    "Dividend": "dividend_rune_raw"
 }
 
 def find_latest_raw(prefix):

@@ -8,9 +8,9 @@ spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/spells"
 static_spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/static/images/spells"
 parchment_path = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/themes/tiled-background-parchment.jpg"
 
-RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure"]
-SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide"]
-CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark"]
+RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure", "Endowment"]
+SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide", "Annuity"]
+CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark", "Dividend"]
 
 SPELL_CONFIGS = {}
 for name in RITUALS:
@@ -31,6 +31,7 @@ TINT_COLORS = {
     "gloom": (225, 210, 235, 255),         # Muted light purple/lavender
     "covenant": (240, 230, 195, 255),      # Muted light gold
     "tectonic": (220, 215, 205, 255),      # Muted light earth grey-brown
+    "providence": (235, 215, 245, 255),    # Muted royal purple/gold
 }
 
 # Rich palettes for drawing the artistic symbols
@@ -88,6 +89,12 @@ PALETTES = {
         "secondary": (160, 130, 110),
         "light": (215, 200, 185),
         "dark": (50, 40, 30)
+    },
+    "providence": {
+        "primary": (106, 27, 154),
+        "secondary": (212, 175, 55),
+        "light": (255, 223, 118),
+        "dark": (48, 10, 72)
     }
 }
 
@@ -100,7 +107,8 @@ PACK_MAPPING = {
     "Harvest": "autumn", "Gather": "autumn", "Seal_of_Autumn": "autumn",
     "Corrupt": "gloom", "Decay": "gloom", "Lurk": "gloom",
     "Seal_of_Destruction": "covenant", "Seal_of_Stone": "covenant", "Seal_of_Winter": "covenant",
-    "Fissure": "tectonic", "Rock_Slide": "tectonic", "Bulwark": "tectonic"
+    "Fissure": "tectonic", "Rock_Slide": "tectonic", "Bulwark": "tectonic",
+    "Endowment": "providence", "Annuity": "providence", "Dividend": "providence"
 }
 
 # --- Detailed Drawing Helpers ---

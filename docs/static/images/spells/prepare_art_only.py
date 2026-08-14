@@ -16,26 +16,18 @@ EXPANSION_SPELLS = [
     "Splash", "Torrent", "Flood",
     "Seal_of_Autumn", "Gather", "Harvest",
     "Lurk", "Decay", "Corrupt",
-    "Seal_of_Winter", "Seal_of_Stone", "Seal_of_Destruction"
+    "Seal_of_Winter", "Seal_of_Stone", "Seal_of_Destruction",
+    "Fissure", "Rock_Slide", "Bulwark",
+    "Endowment", "Annuity", "Dividend"
 ]
 
 source_dir = "docs/static/images/spells"
-raw_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/9bbd0e6c-052e-4718-8a9b-f8f914bd3d2f"
-exp_raw_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/9bbd0e6c-052e-4718-8a9b-f8f914bd3d2f/scratch/raw_illustrations"
+static_source_dir = "static/images/spells"
 dest_dir = "docs/static/images/spells/art_only"
+static_dest_dir = "static/images/spells/art_only"
 
 os.makedirs(dest_dir, exist_ok=True)
-
-# Mapping to locate the newly generated *_raw_*.png files
-def find_generated_raw(name):
-    # E.g., for Flourish, find flourish_raw_*.png in the brain folder
-    pattern = os.path.join(raw_dir, f"{name.lower()}_raw_*.png")
-    matches = glob.glob(pattern)
-    if matches:
-        # Sort to find the latest
-        matches.sort()
-        return matches[-1]
-    return None
+os.makedirs(static_dest_dir, exist_ok=True)
 
 def apply_circular_mask(im):
     width, height = im.size
@@ -47,100 +39,37 @@ def apply_circular_mask(im):
     new_alpha = ImageChops.darker(a, mask)
     return Image.merge("RGBA", (r, g, b, new_alpha))
 
-def process_base_spell_new(name, target_size):
-    raw_path = find_generated_raw(name)
-    if not raw_path:
-        print(f"No generated raw found for {name}, trying fallback processing...")
-        process_fallback(name, target_size)
-        return
-        
-    print(f"Processing {name} using generated raw art: {os.path.basename(raw_path)}")
-    im = Image.open(raw_path).convert("RGBA")
-    
-    # Crop to a circle filling the image (in case it is square)
-    w, h = im.size
-    min_dim = min(w, h)
-    left = (w - min_dim) // 2
-    top = (h - min_dim) // 2
-    im_square = im.crop((left, top, left + min_dim, top + min_dim))
-    
-    # Resize using Lanczos to target_size
-    resized = im_square.resize((target_size, target_size), Image.Resampling.LANCZOS)
-    
-    # Apply circular mask
-    masked = apply_circular_mask(resized)
-    
-    # Save as PNG and WebP
-    masked.save(os.path.join(dest_dir, f"{name}.png"), "PNG")
-    masked.save(os.path.join(dest_dir, f"{name}.webp"), "WEBP")
-    print(f"Successfully processed {name} (size {target_size})")
-
-def process_fallback(name, target_size):
+def process_spell_art_only(name):
     src_path = os.path.join(source_dir, f"{name}.png")
     if not os.path.exists(src_path):
-        print(f"Error: Fallback source not found: {src_path}")
+        print(f"Error: Source not found {src_path}")
         return
         
     im = Image.open(src_path).convert("RGBA")
     w, h = im.size
+    cx, cy = w // 2, h // 2
     
-    # Sample background color from the outer dark ring
-    bg_color = im.getpixel((74, 15))
-    print(f"  Sampled background color for {name}: {bg_color}")
+    # Target radii based on card size
+    if w == 322:
+        r = 86
+    elif w == 260:
+        r = 56
+    else:
+        r = 23
+        
+    cropped = im.crop((cx - r, cy - r, cx + r, cy + r))
+    masked = apply_circular_mask(cropped)
     
-    # Create solid background of the sampled color
-    bg = Image.new("RGBA", (w, h), bg_color)
+    # Save to docs art_only
+    masked.save(os.path.join(dest_dir, f"{name}.png"), "PNG")
+    masked.save(os.path.join(dest_dir, f"{name}.webp"), "WEBP")
     
-    # Extract the center 52x52 region
-    cx, cy, r = w // 2, h // 2, 26
-    region = im.crop((cx - r, cy - r, cx + r, cy + r)).convert("RGBA")
-    
-    # Remove the white background from the region
-    data = region.getdata()
-    new_data = []
-    for item in data:
-        # Check if pixel is white or near-white (sum of RGB > 600 or R,G,B > 200)
-        if item[0] > 190 and item[1] > 190 and item[2] > 190:
-            new_data.append((0, 0, 0, 0)) # transparent
-        else:
-            new_data.append(item)
-    region.putdata(new_data)
-    
-    # Paste the transparent-keyed region onto our solid bg in the center
-    bg.paste(region, (cx - r, cy - r), mask=region)
-    
-    # Apply circular mask to the entire card
-    masked = apply_circular_mask(bg)
-    
-    # Resize using Lanczos to target_size
-    resized = masked.resize((target_size, target_size), Image.Resampling.LANCZOS)
-    
-    # Save
-    resized.save(os.path.join(dest_dir, f"{name}.png"), "PNG")
-    resized.save(os.path.join(dest_dir, f"{name}.webp"), "WEBP")
-    print(f"Successfully processed fallback for {name} (size {target_size})")
+    # Save to static art_only
+    masked.save(os.path.join(static_dest_dir, f"{name}.png"), "PNG")
+    masked.save(os.path.join(static_dest_dir, f"{name}.webp"), "WEBP")
+    print(f"Processed art_only for {name}")
 
-# Process Base Game Spells
-for name in RITUALS:
-    process_base_spell_new(name, 322)
+for name in RITUALS + SORCERIES + CHARMS + EXPANSION_SPELLS:
+    process_spell_art_only(name)
 
-for name in SORCERIES:
-    process_base_spell_new(name, 260)
-
-for name in CHARMS:
-    process_base_spell_new(name, 148)
-
-# Process Expansion Spells
-for name in EXPANSION_SPELLS:
-    raw_path = os.path.join(exp_raw_dir, f"{name}.png")
-    if not os.path.exists(raw_path):
-        print(f"Error: raw illustration not found {raw_path}")
-        continue
-    
-    im = Image.open(raw_path).convert("RGBA")
-    # Save directly to destination as PNG and WebP
-    im.save(os.path.join(dest_dir, f"{name}.png"), "PNG")
-    im.save(os.path.join(dest_dir, f"{name}.webp"), "WEBP")
-    print(f"Processed expansion spell: {name}")
-
-print("All base game and expansion spell art assets re-generated successfully!")
+print("All spell art_only assets processed successfully!")
