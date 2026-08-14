@@ -599,13 +599,26 @@ class SimBoard:
         return self.escape_distance(node_name, defender, max_dist=39) >= 39
 
     def _push_enemy(self, node_name, color, dest_override=None):
-        """Push enemy stone from node_name. Returns push destination or 'X' for crush.
+        """Push enemy stone from node_name. Returns the push destination,
+        'X' for crush, or 'S' when a snare intercepts the incoming stone.
 
         Mutates self.stones: places color on node_name, moves enemy to destination.
         `dest_override`: replay a recorded push destination (mirrors the JS
         _pushEnemy destOverride); ignored unless it is a legal option.
         """
         enemy = self._enemy(color)
+
+        # Ambush: a snare beneath the occupant intercepts the incoming
+        # stone FIRST (2026-08 playtest ruling): the arriving `color` stone
+        # is consumed together with the snare before any push resolves —
+        # the occupant is neither displaced nor crushed. Only after the
+        # snare is spent can later moves push/crush the occupant. (The only
+        # reachable snared+occupied state is a stone standing on its own
+        # snare, so an arriving pusher is always the snare owner's enemy.)
+        if self.snares.get(node_name) == enemy:
+            del self.snares[node_name]
+            return 'S'
+
         self.stones[node_name] = color
 
         queue = deque()

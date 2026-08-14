@@ -482,6 +482,17 @@ class SimBoard {
 	 */
 	_pushEnemy(nodeName, color, destOverride) {
 		const enemy = this._enemy(color);
+		// Ambush: a snare beneath the occupant intercepts the incoming
+		// stone FIRST (2026-08 playtest ruling): the arriving `color`
+		// stone is consumed together with the snare before any push
+		// resolves — the occupant is neither displaced nor crushed. Only
+		// after the snare is spent can later moves push/crush it. (The
+		// only reachable snared+occupied state is a stone standing on its
+		// own snare, so an arriving pusher is always the owner's enemy.)
+		if (this.snares[nodeName] === enemy) {
+			delete this.snares[nodeName];
+			return 'S';
+		}
 		this.stones[nodeName] = color;
 		const queue = [];
 		for (const nb of ADJACENCY[nodeName]) queue.push([nb, 1]);

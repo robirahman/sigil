@@ -122,8 +122,11 @@ lost). Burns ignore Bulwark and count toward no score or win condition.*
 things: an enemy stone coming to rest on it (that stone is destroyed and
 the snare consumed) or Fissure's blast (which destroys enemy-of-caster
 snares on the target and adjacent nodes). Your own stones coexist with
-your snares. Snares count toward your stone count defensively — like
-Providence's pending stones — but never power your own win claims.*
+your snares, and attacking a stone that stands on its own snare triggers
+the snare first: the incoming stone is consumed with the snare and no
+push resolves — only later moves can push or crush the occupant. Snares
+count toward your stone count defensively — like Providence's pending
+stones — but never power your own win claims.*
 
 | Slot | Spell | Effect |
 |---|---|---|

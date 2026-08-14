@@ -1229,6 +1229,24 @@ class Player():
 			self.board.update()
 
 	def pushenemy(self, node):
+		### Ambush: a snare beneath the occupant intercepts the incoming
+		### stone FIRST (2026-08 playtest ruling): the arriving stone is
+		### consumed together with the snare before any push resolves —
+		### the occupant is neither displaced nor crushed. Only later
+		### moves, with the snare spent, can push/crush it.
+		if self.board.snares.get(node.name) == self.enemy:
+			del self.board.snares[node.name]
+			for egress in ({"type": "new_stone_animation", "color": self.color, "node": node.name},
+			               {"type": "crush_animation", "crushed_color": self.color, "node": node.name}):
+				self.ws.send(json.dumps(egress))
+				if self.opp.ishuman:
+					self.opp.ws.send(json.dumps(egress))
+			self.jmessage("Your stone is destroyed by a snare!")
+			if self.opp.ishuman:
+				self.opp.jmessage("An enemy stone is destroyed by your snare!")
+			self.board.update()
+			return None
+
 		node.stone = self.color
 
 		egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}

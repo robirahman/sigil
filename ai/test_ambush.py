@@ -120,21 +120,46 @@ def test_push_scenarios():
     assert b.stones[dest] is None and dest not in b.snares, \
         "pushed enemy stone must die on the snare"
 
-    # Robi's scenario: enemy hard-moves onto a snared node occupied by the
-    # owner's stone — the owner's stone is displaced, the arriving enemy
-    # stone is destroyed by the snare.
+    # Snare interception (2026-08 playtest ruling): enemy hard-moves onto
+    # a snared node occupied by the owner's stone — the snare triggers
+    # FIRST, consuming itself and the incoming stone; the occupant is
+    # neither displaced nor crushed. Only later moves, with the snare
+    # spent, can push/crush it.
     b2 = SimBoard(AMBUSH_SPELLS)
     b2.stones['a2'] = 'red'       # red stone ON red snare
     b2.snares['a2'] = 'red'
     b2.stones['a3'] = 'blue'      # blue attacker adjacent
     b2.stones['a13'] = 'blue'     # gives blue a stone adjacent for the move
     b2.update()
-    act2 = b2._do_hard_move('blue', 'a2')   # blue pushes red off a2
+    blue_before = b2.totalstones['blue']
+    act2 = b2._do_hard_move('blue', 'a2')   # blue walks into the snare
     b2.update()
-    assert b2.stones['a2'] is None and 'a2' not in b2.snares, \
-        "arriving blue stone must be destroyed by the snare"
-    assert act2.pushed_to != 'X' and b2.stones[act2.pushed_to] == 'red', \
-        "displaced red stone survives at the push destination"
+    assert act2.pushed_to == 'S', "interception must record the 'S' outcome"
+    assert b2.stones['a2'] == 'red', \
+        "occupant stays put — the snare fires before any push"
+    assert 'a2' not in b2.snares, "the snare is consumed"
+    assert b2.totalstones['blue'] == blue_before, \
+        "incoming blue stone never lands (spent on the snare)"
+
+    # With the snare spent, the SAME move now resolves as a normal push:
+    # red's stone at a2 is displaced (or crushed if boxed in).
+    act3 = b2._do_hard_move('blue', 'a2')
+    b2.update()
+    assert b2.stones['a2'] == 'blue', "second attempt pushes normally"
+    assert act3.pushed_to != 'S' and (
+        act3.pushed_to == 'X' or b2.stones[act3.pushed_to] == 'red'), \
+        "occupant is pushed or crushed once the snare is gone"
+
+    # Replay equivalence: the recorded 'S' hard_move re-applies exactly.
+    b4 = SimBoard(AMBUSH_SPELLS)
+    b4.stones['a2'] = 'red'
+    b4.snares['a2'] = 'red'
+    b4.stones['a3'] = 'blue'
+    b4.stones['a13'] = 'blue'
+    b4.update()
+    apply_sim_turn(b4, CompleteTurn([act2]), 'blue')
+    b4.update()
+    assert b4.stones['a2'] == 'red' and 'a2' not in b4.snares
     print("  PASS")
 
 
@@ -441,6 +466,20 @@ const st = sfnToDict(s);
 if (st.snares.c8 !== 'red') throw new Error('sn parse');
 // Hash suffix.
 if (!_minimaxPosHash(d, 'red').includes('|S')) throw new Error('hash |S');
+// Snare interception on hard move (2026-08 ruling): snare fires first,
+// consuming itself and the incoming stone; the occupant stays put.
+const ic = new SimBoard(SP);
+ic.stones.a2='red'; ic.snares.a2='red'; ic.stones.a3='blue'; ic.stones.a13='blue';
+ic.update();
+const icBlue = ic.totalStones.blue;
+const icAct = ic._doMove('blue', 'a2');
+ic.update();
+if (icAct.pushed_to !== 'S') throw new Error('interception outcome: ' + icAct.pushed_to);
+if (ic.stones.a2 !== 'red' || ic.snares.a2) throw new Error('interception state');
+if (ic.totalStones.blue !== icBlue) throw new Error('incoming stone must be spent');
+const icAct2 = ic._doMove('blue', 'a2');
+ic.update();
+if (ic.stones.a2 !== 'blue' || icAct2.pushed_to === 'S') throw new Error('post-snare push');
 // Exhaustive set variants.
 const e = new SimBoard(SP); e.stones.a1='red'; e.stones.b3='blue'; e.stones.b5='blue'; e.update();
 const ov = _spellOverrides(e, 'red', 'Deadfall', ENUM_CAPS);

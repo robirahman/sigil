@@ -1754,6 +1754,23 @@ async function resolveBurnsAtTurnStart(board, color, count, getInput, emit) {
 async function doPushEnemy(board, nodeName, color, getInput, emit) {
 	const enemy = board.enemy(color);
 
+	// Ambush: a snare beneath the occupant intercepts the incoming stone
+	// FIRST (2026-08 playtest ruling): the arriving stone is consumed
+	// together with the snare before any push resolves — the occupant is
+	// neither displaced nor crushed. Only later moves, with the snare
+	// spent, can push/crush it. Mirrors SimBoard._pushEnemy's 'S' outcome.
+	if (board.snares[nodeName] === enemy) {
+		delete board.snares[nodeName];
+		emit({ type: 'new_stone_animation', color, node: nodeName });
+		emit({ type: 'crush_animation', crushed_color: color, node: nodeName });
+		emit({ type: 'message',
+			message: (color === 'red' ? "Red's" : "Blue's")
+				+ ' stone is destroyed by a snare!', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+		return;
+	}
+
 	// Resolve the push outcome BEFORE mutating the board, so the
 	// intermediate state — where the enemy stone has been overwritten
 	// but not yet pushed/crushed — never triggers update()'s

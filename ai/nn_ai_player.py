@@ -241,6 +241,23 @@ class NNAIPlayer:
     def _execute_push(self, node_name):
         """Push an enemy stone at node_name."""
         node = self.board.nodes[node_name]
+
+        # Ambush: a snare beneath the occupant intercepts the incoming
+        # stone FIRST (2026-08 playtest ruling): the arriving stone is
+        # consumed together with the snare before any push resolves —
+        # the occupant is neither displaced nor crushed. Mirrors
+        # SimBoard._push_enemy's 'S' outcome, so the search's model of
+        # this move matches what the live board does here.
+        if self.board.snares.get(node_name) == self.enemy:
+            del self.board.snares[node_name]
+            for egress in ({"type": "new_stone_animation", "color": self.color,
+                            "node": node_name},
+                           {"type": "crush_animation", "crushed_color": self.color,
+                            "node": node_name}):
+                self.opp.ws.send(json.dumps(egress))
+            self.board.update()
+            return
+
         node.stone = self.color
 
         egress = {"type": "new_stone_animation", "color": self.color,
