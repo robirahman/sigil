@@ -87,6 +87,7 @@ def main():
             pairs.append((fail['key'], int(m.group(1))))
 
     clusters = defaultdict(list)
+    n_gaps = 0
     for key, i in pairs:
         g = games.get(key)
         turns = g.get('turns') if isinstance(g, dict) else None
@@ -102,6 +103,24 @@ def main():
             before = sfn_to_dict(t['sfnBefore'])
             after = sfn_to_dict(t['sfnAfter'])
         except Exception:
+            continue
+        # Recording-gap turns are NOT one side's single turn and cannot
+        # be solved in the harness (Robi spotted these): the record's
+        # own chain is broken before this turn, or the "turn" grows the
+        # ENEMY's stone count (impossible in one turn of `color` — the
+        # mover's actions never add enemy stones).
+        if i > 0 and turns[i - 1].get('sfnAfter') and \
+                t['sfnBefore'].split(' ', 1)[0] \
+                != turns[i - 1]['sfnAfter'].split(' ', 1)[0]:
+            n_gaps += 1
+            continue
+        enemy = 'blue' if t['color'] == 'red' else 'red'
+        n_enemy_before = sum(1 for v in before['stones'].values()
+                             if v == enemy)
+        n_enemy_after = sum(1 for v in after['stones'].values()
+                            if v == enemy)
+        if n_enemy_after > n_enemy_before:
+            n_gaps += 1
             continue
         cast = _cast_spell_name(t['sfnBefore'], t['sfnAfter'], t['color'])
         sig = signature(before, after, t['color'], cast)
@@ -137,7 +156,8 @@ def main():
     with open(args.out, 'w', encoding='utf-8') as f:
         f.write(html)
     print(f'{len(cases)} cases ({len(ranked)} patterns, '
-          f'{payload["totalUnmatched"]} unmatched turns) -> {args.out}')
+          f'{payload["totalUnmatched"]} unmatched turns, '
+          f'{n_gaps} recording-gap turns excluded) -> {args.out}')
 
 
 _PAGE = r'''<!DOCTYPE html>

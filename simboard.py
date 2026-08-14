@@ -12,6 +12,18 @@ from notation import NODE_ORDER, ADJACENCY, POSITIONS
 # Mana nodes
 MANA_NODES = ['a1', 'b1', 'c1']
 
+
+def variant_has_competitive(v):
+    """Mirror of JS variantHasCompetitive: the two variant dimensions
+    compose into one string ('competitive_deathmatch'), so exact string
+    compares silently mishandle the composed variants."""
+    return isinstance(v, str) and 'competitive' in v
+
+
+def variant_has_deathmatch(v):
+    """Mirror of JS variantHasDeathmatch."""
+    return isinstance(v, str) and 'deathmatch' in v
+
 # Sentinel stored in a node's `stones[...]` slot when the node has been
 # permanently destroyed by Fissure. It is a wall: not None (so it is never a
 # soft-move/retreat target), not 'red'/'blue' (so it counts for nobody and
@@ -165,7 +177,8 @@ class SimBoard:
     # nodes neutral); red's turn-0 is a free blink to any of the 39 nodes;
     # blue's turn-1 is a free soft-blink to any of the remaining 38 empty
     # nodes; play proceeds normally from turn 2.
-    VARIANTS = ('standard', 'competitive')
+    VARIANTS = ('standard', 'competitive', 'deathmatch',
+                'competitive_deathmatch')
 
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
@@ -286,7 +299,7 @@ class SimBoard:
         Competitive: empty board (mana nodes neutral); both players will
         place their first stone via the special opening moves.
         """
-        if self.variant == 'competitive':
+        if variant_has_competitive(self.variant):
             # Empty board; first two turns will use the competitive opening.
             pass
         else:
@@ -347,7 +360,8 @@ class SimBoard:
         # covered. Also safe under the 0-indexed advance_turn convention
         # (turn_counter==2 there is red's first regular turn, where both
         # players already have a stone, so the check is inert).
-        opening_pass = (self.variant == 'competitive' and self.turn_counter <= 2)
+        opening_pass = (variant_has_competitive(self.variant)
+                        and self.turn_counter <= 2)
         if not self.gameover and not opening_pass:
             if red_count == 0 and blue_count == 0:
                 # Should not occur via any legal action, but guard:
@@ -427,6 +441,12 @@ class SimBoard:
         # update() may already have flagged immediate-loss (zero stones).
         if self.gameover:
             return True
+
+        # Deathmatch: only elimination wins (handled in update()); the
+        # ±3-lead and sixth-spell conditions are disabled. Mirrors JS
+        # sim-board checkGameOver.
+        if variant_has_deathmatch(self.variant):
+            return False
 
         red_real = self.totalstones['red']
         blue_real = self.totalstones['blue'] + 1  # phantom counter token
@@ -1760,7 +1780,7 @@ class SimBoard:
         # blink onto any empty node on their first turn. No dash, no
         # cast. Bound matches the openingPass gate in update() — see
         # the comment there for the convention reasoning.
-        if self.variant == 'competitive' and self.turn_counter <= 2:
+        if variant_has_competitive(self.variant) and self.turn_counter <= 2:
             for n in NODE_ORDER:
                 if self.stones[n] is not None:
                     continue
