@@ -132,7 +132,13 @@ function _cavemanLeaf(board, color, w) {
 		return -CAVEMAN_WIN;
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
-	let score = board.totalStones[color] - board.totalStones[enemy];
+	// Material includes Providence phantoms (effectiveStones): a scheduled
+	// extra move is credited as a full stone at the leaf where the cast
+	// happens, so a shallow search still values Annuity/Endowment whose
+	// stones land beyond its horizon. This is rules-adjacent material
+	// (pending converts to real 1:1 as it places); the exact asymmetric
+	// win semantics live in checkGameOver, which the search hits directly.
+	let score = board.effectiveStones(color) - board.effectiveStones(enemy);
 	if (w.mana !== 0) {
 		// board.mana is maintained by SimBoard.update() — free to read.
 		score += w.mana * (board.mana[color] - board.mana[enemy]);
@@ -182,7 +188,10 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
 	const scored = [];
 	for (let i = 0; i < turns.length; i++) {
 		const sim = _minimaxApplyTurn(board, turns[i], color);
-		let diff = sim.totalStones[color] - sim.totalStones[enemy];
+		// Effective stones mirror the leaf (Providence phantoms included);
+		// `sim` is post-advanceTurn, so the opponent's freshly popped
+		// extras are correctly credited to them.
+		let diff = sim.effectiveStones(color) - sim.effectiveStones(enemy);
 		// Positional terms mirror the leaf eval so ordering agrees with
 		// what the search maximizes (mis-ordering costs time, never
 		// correctness). Post-move absolute values sort identically to
@@ -621,6 +630,10 @@ class CavemanAI {
 		const positionHistory = board.allLoopingSnapshotCounts || {};
 		const opts = {
 			positionHistory,
+			// Providence: the SFN carries only the future schedule (the
+			// live loop already popped this turn's head into the move
+			// counters), so pass the current turn's extras separately.
+			extraMoves: Math.max(0, (board.movesLeftThisTurn || 1) - 1),
 			timeLimit: Infinity,
 			// Bounded ponder depth so a single iteration can't grow
 			// past ~1s of work — cancel latency is bounded by current
@@ -671,7 +684,13 @@ class CavemanAI {
 		const sfn = boardToSfn(board);
 		const positionHistory = board.allLoopingSnapshotCounts || {};
 		const opts = Object.assign(
-			{ positionHistory },
+			{
+				positionHistory,
+				// Providence: the SFN carries only the future schedule (the
+				// live loop already popped this turn's head into the move
+				// counters), so pass the current turn's extras separately.
+				extraMoves: Math.max(0, (board.movesLeftThisTurn || 1) - 1),
+			},
 			this.options,
 		);
 
@@ -724,6 +743,14 @@ function _reviveTurn(turnPayload) {
 		if (a.kept !== undefined) sa.kept = a.kept;
 		if (a.node2 !== undefined) sa.node2 = a.node2;
 		if (a.destroyed !== undefined) sa.destroyed = a.destroyed;
+		if (a.converted !== undefined) sa.converted = a.converted;
+		if (a.wall !== undefined) sa.wall = a.wall;
+		if (a.pushes !== undefined) sa.pushes = a.pushes;
+		if (a.turns !== undefined) sa.turns = a.turns;
+		if (a.target !== undefined) sa.target = a.target;
+		if (a.val !== undefined) sa.val = a.val;
+		if (a.val2 !== undefined) sa.val2 = a.val2;
+		if (a.placed !== undefined) sa.placed = a.placed;
 		return sa;
 	});
 	return new SimTurn(actions);

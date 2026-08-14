@@ -32,6 +32,30 @@ def random_core_spells():
     return rituals + sorceries + charms
 
 
+def random_spell_set(expansions=None):
+    """Random 9-spell set (3 rituals, 3 sorceries, 3 charms) drawn from
+    core + the selected expansions.
+
+    `expansions` accepts anything spellgenerator.spell_pool understands:
+      - None / 'core'           -> core spells only (== random_core_spells)
+      - 'all'                   -> core + every official expansion
+      - 'tectonic' / a list     -> core + those expansion(s)
+
+    Note: spellgenerator (and thus this draw) intentionally excludes the
+    unofficial Panda expansion, and excludes Autumn (which the Python
+    simulator does not implement). So every spell this can produce is one
+    the SimBoard engine can actually play — exactly what training needs.
+    """
+    if expansions is None or (isinstance(expansions, str) and expansions.lower() == 'core'):
+        return random_core_spells()
+    from spellgenerator import spell_pool
+    rituals_pool, sorceries_pool, charms_pool = spell_pool(expansions)
+    rituals = random.sample(rituals_pool, 3)
+    sorceries = random.sample(sorceries_pool, 3)
+    charms = random.sample(charms_pool, 3)
+    return rituals + sorceries + charms
+
+
 def play_game(red_policy, blue_policy, spell_names=None, variant='standard'):
     """Play one self-play game. Returns (positions, winner, sgn_string).
 
@@ -64,8 +88,14 @@ def play_game(red_policy, blue_policy, spell_names=None, variant='standard'):
 
         board.whose_turn = color
 
-        # Record position before the turn
+        # Record position before the turn (pre-shift, like the live loops).
         positions.append((board.to_sfn(), color))
+
+        # Providence start-of-turn shift. This loop assigns whose_turn
+        # directly instead of calling advance_turn(), so it must pop the
+        # schedule head itself (advance_turn covers every other driver).
+        sched = board.pending_moves[color]
+        board.extra_moves_this_turn = sched.pop(0) if sched else 0
 
         # Record turn start
         recorder.start_turn(color, display_num)
@@ -124,33 +154,14 @@ def play_game(red_policy, blue_policy, spell_names=None, variant='standard'):
 
 
 def _apply_turn_to_board(board, turn, color):
-    """Replay a CompleteTurn's top-level effects on the board."""
-    from simboard import CORE_SPELLS, POSITIONS
+    """Replay a CompleteTurn's top-level effects on the board.
 
-    for action in turn.actions:
-        if action.type == 'move':
-            board.stones[action.node] = color
-        elif action.type == 'hard_move':
-            board._push_enemy(action.node, color)
-        elif action.type == 'blink':
-            enemy = board._enemy(color)
-            if board.stones[action.node] == enemy:
-                board._push_enemy(action.node, color)
-            else:
-                board.stones[action.node] = color
-        elif action.type == 'cast':
-            board._cast_spell(action.spell, color)
-        elif action.type == 'dash':
-            if action.sacrificed:
-                for sac in action.sacrificed:
-                    board.stones[sac] = None
-        elif action.type == 'dash_lightning':
-            if action.sacrificed:
-                for sac in action.sacrificed:
-                    board.stones[sac] = None
-        elif action.type == 'pass':
-            pass
-        board.update()
+    Uses the canonical simboard.apply_sim_turn replayer (mirrors JS
+    applySimTurn): recorded resolver outcomes apply directly, casts are
+    bookkeeping only, recorded push destinations are honored.
+    """
+    from simboard import apply_sim_turn
+    apply_sim_turn(board, turn, color)
 
 
 def generate_training_data(positions, winner):

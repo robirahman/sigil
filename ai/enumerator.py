@@ -48,6 +48,34 @@ DEFAULT_HURRICANE_CAP = 4       # Hurricane smallest-group variants
 DEFAULT_SOFT_HARD_SOFT_CAP = 4  # Torrent/Flood first-soft-target variants
 DEFAULT_SOFT_HARD_HARD_CAP = 4  # Torrent/Flood first-hard-target variants (× soft)
 DEFAULT_SPLASH_CAP = 6          # Splash move-target variants
+DEFAULT_FISSURE_CAP = 4         # Fissure wall-target variants
+DEFAULT_EXTRA_MOVE_CAP = 3      # Providence extra-move targets per step
+
+# Every cap key with its package default. get_legal_turns_exhaustive merges
+# caller overrides on top of this dict, so a key only needs to be added here
+# (plus any profile dicts that want a non-default value) to be safe to
+# dereference — profile dicts may omit keys freely.
+DEFAULT_CAPS = {
+    'dash_sac': DEFAULT_DASH_SAC_CAP,
+    'dash_move': DEFAULT_DASH_MOVE_CAP,
+    'bewitch': DEFAULT_BEWITCH_CAP,
+    'starfall': DEFAULT_STARFALL_CAP,
+    'hard_moves': DEFAULT_HARD_MOVES_CAP,
+    'meteor': DEFAULT_METEOR_CAP,
+    'comet': DEFAULT_COMET_CAP,
+    'fireblast': DEFAULT_FIREBLAST_CAP,
+    'corrupt': DEFAULT_CORRUPT_CAP,
+    'charge': DEFAULT_CHARGE_CAP,
+    'fury_sac': DEFAULT_FURY_SAC_CAP,
+    'fury_target': DEFAULT_FURY_TARGET_CAP,
+    'storm_front': DEFAULT_STORM_FRONT_CAP,
+    'hurricane': DEFAULT_HURRICANE_CAP,
+    'soft_hard_soft': DEFAULT_SOFT_HARD_SOFT_CAP,
+    'soft_hard_hard': DEFAULT_SOFT_HARD_HARD_CAP,
+    'splash': DEFAULT_SPLASH_CAP,
+    'fissure': DEFAULT_FISSURE_CAP,
+    'extra_move': DEFAULT_EXTRA_MOVE_CAP,
+}
 
 
 # Tighter "balanced" caps: keep total branching low enough that 3-ply
@@ -70,6 +98,7 @@ BALANCED_CAPS = {
     'soft_hard_soft': 2,
     'soft_hard_hard': 2,
     'splash': 3,
+    'extra_move': 2,
 }
 
 # Surgical caps: only expand the choice points that empirically matter
@@ -98,6 +127,7 @@ NARROW_CAPS = {
     'soft_hard_hard': 1,
     'splash': 2,
     'fissure': 2,
+    'extra_move': 1,
 }
 
 
@@ -127,6 +157,7 @@ OPPONENT_CAPS = {
     'soft_hard_hard': 2,
     'splash': 2,
     'fissure': 3,
+    'extra_move': 1,
 }
 
 
@@ -398,27 +429,7 @@ def get_legal_turns_exhaustive(board, color, caps=None):
     `caps`: dict overriding the DEFAULT_* per-spell caps. Pass an empty
     dict for the package defaults.
     """
-    if caps is None:
-        caps = {}
-    caps = {
-        'dash_sac': caps.get('dash_sac', DEFAULT_DASH_SAC_CAP),
-        'dash_move': caps.get('dash_move', DEFAULT_DASH_MOVE_CAP),
-        'bewitch': caps.get('bewitch', DEFAULT_BEWITCH_CAP),
-        'starfall': caps.get('starfall', DEFAULT_STARFALL_CAP),
-        'hard_moves': caps.get('hard_moves', DEFAULT_HARD_MOVES_CAP),
-        'meteor': caps.get('meteor', DEFAULT_METEOR_CAP),
-        'comet': caps.get('comet', DEFAULT_COMET_CAP),
-        'fireblast': caps.get('fireblast', DEFAULT_FIREBLAST_CAP),
-        'corrupt': caps.get('corrupt', DEFAULT_CORRUPT_CAP),
-        'charge': caps.get('charge', DEFAULT_CHARGE_CAP),
-        'fury_sac': caps.get('fury_sac', DEFAULT_FURY_SAC_CAP),
-        'fury_target': caps.get('fury_target', DEFAULT_FURY_TARGET_CAP),
-        'storm_front': caps.get('storm_front', DEFAULT_STORM_FRONT_CAP),
-        'hurricane': caps.get('hurricane', DEFAULT_HURRICANE_CAP),
-        'soft_hard_soft': caps.get('soft_hard_soft', DEFAULT_SOFT_HARD_SOFT_CAP),
-        'soft_hard_hard': caps.get('soft_hard_hard', DEFAULT_SOFT_HARD_HARD_CAP),
-        'splash': caps.get('splash', DEFAULT_SPLASH_CAP),
-    }
+    caps = {**DEFAULT_CAPS, **(caps or {})}
 
     board.update()
     enemy = board._enemy(color)
@@ -444,6 +455,12 @@ def get_legal_turns_exhaustive(board, color, caps=None):
         yield CompleteTurn([Action('pass')])
         return
 
+    # Cross-branch dedup for Providence multi-move prefixes: two orders of
+    # the same base-move placements produce the same stones, so their
+    # continuations are identical. Safe because every base move adds exactly
+    # one own stone (pushes are deterministic given the stone map).
+    seen_move_prefixes = set()
+
     for move_target in move_targets:
         board_after = board.copy()
         is_blink = has_seal_of_wind and not any(
@@ -455,10 +472,37 @@ def get_legal_turns_exhaustive(board, color, caps=None):
             continue
         board_after.update()
 
-        yield from _exhaustive_post_move(
+        yield from _exhaustive_move_phase(
             board_after, color, [move_action], caps,
-            can_dash=True, can_spell=True, can_summer=True,
+            board.extra_moves_this_turn, seen_move_prefixes,
         )
+
+
+def _exhaustive_move_phase(board, color, prefix, caps, extras_left, seen):
+    """Providence move phase for the exhaustive enumerator: at each step,
+    either stop taking base moves (remaining extras forfeit at end of turn)
+    or take one more, branching over the top-`extra_move`-cap targets with
+    stone-map dedup across orderings. With extras_left == 0 this is exactly
+    the pre-Providence flow."""
+    yield from _exhaustive_post_move(
+        board, color, prefix, caps,
+        can_dash=True, can_spell=True, can_summer=True,
+    )
+    if extras_left <= 0 or board.gameover:
+        return
+    targets = board._all_moveable(color)
+    for t in targets[:caps['extra_move']]:
+        b = board.copy()
+        act = b._do_move(color, t)
+        if act is None:
+            continue
+        b.update()
+        key = tuple(b.stones[n] for n in NODE_ORDER)
+        if key in seen:
+            continue
+        seen.add(key)
+        yield from _exhaustive_move_phase(b, color, prefix + [act], caps,
+                                          extras_left - 1, seen)
 
 
 def _exhaustive_post_move(board, color, prefix, caps,

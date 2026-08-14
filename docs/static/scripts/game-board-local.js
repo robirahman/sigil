@@ -90,14 +90,12 @@ document.addEventListener('alpine:init', () => {
 			importGame() {
 				const text = (this.importGameText || '').trim();
 				if (!text) return;
-				let payload;
-				try {
-					payload = JSON.parse(text);
-				} catch (e) {
-					alert('Could not parse game data: ' + e.message);
-					return;
-				}
-				if (!payload || payload.type !== 'sigil-game' || !Array.isArray(payload.sfns)) {
+				// Legacy v1 JSON export (SFN-per-turn blob).
+				let payload = null;
+				try { payload = JSON.parse(text); } catch (e) { payload = null; }
+				const isLegacy = payload && payload.type === 'sigil-game' && Array.isArray(payload.sfns);
+				const isSgn = !isLegacy && typeof isSgnText === 'function' && isSgnText(text);
+				if (!isLegacy && !isSgn) {
 					alert('Not a Sigil game export.');
 					return;
 				}
@@ -106,8 +104,70 @@ document.addEventListener('alpine:init', () => {
 					window.location.href = window.location.pathname + '?review=session';
 				} catch (e) {
 					// sessionStorage unavailable — load in-place as fallback
-					this._loadReviewFromPayload(payload);
+					if (isLegacy) this._loadReviewFromPayload(payload);
+					else this._loadSgnForReview(text);
 				}
+			},
+
+			/**
+			 * Import an SGN-T transcript: replay it through the engine to
+			 * rebuild per-ply positions, then hand the same payload shape to
+			 * _loadReviewFromPayload. Providence schedules and every other
+			 * derived state fall out of the replay — nothing is stored.
+			 * Falls back to a final-position-only view when the transcript
+			 * can't be replayed by the current engine version.
+			 */
+			async _loadSgnForReview(text) {
+				const parsed = parseSgn(text);
+				const h = parsed.headers || {};
+				if (h.Format !== 'transcript-v1') {
+					alert('This SGN file is not a replayable transcript export.');
+					return;
+				}
+				const spellNames = (h.Spells || '').split(',');
+				const variant = normalizeVariant(h.Variant || 'standard');
+				let fatLog = null;
+				try {
+					fatLog = await reconstructGameLog(spellNames, variant, h.Setup || null, parsed.turns);
+					const last = fatLog.length ? fatLog[fatLog.length - 1].sfnAfter : (h.Setup || null);
+					if (h.FinalSfn && last !== h.FinalSfn) {
+						throw new Error('replayed final position does not match FinalSfn');
+					}
+				} catch (e) {
+					console.warn('Transcript replay failed:', e);
+					if (h.FinalSfn) {
+						this._loadReviewFromPayload({
+							spellNames,
+							winner: h.Result && h.Result !== '*' ? h.Result : '',
+							redName: h.Red || 'Red', blueName: h.Blue || 'Blue',
+							sfns: [h.FinalSfn], turnLabels: ['Final position'],
+							annotations: _sgnHeaderToAnnotations(h.Annotations),
+						});
+						this.messageHistory.push("Couldn't replay this game with the current engine version — showing the final position only.");
+					} else {
+						alert('Could not replay this game export.');
+					}
+					return;
+				}
+				const sfns = [fatLog.length ? fatLog[0].sfnBefore : (h.Setup || '')];
+				const labels = ['Start'];
+				for (const turn of fatLog) {
+					sfns.push(turn.sfnAfter);
+					const colorName = turn.color[0].toUpperCase() + turn.color.slice(1);
+					const turnNum = turn.color === 'red'
+						? Math.floor(turn.turnNumber / 2) + 1
+						: Math.floor(turn.turnNumber / 2);
+					labels.push(colorName + ' ' + turnNum);
+				}
+				this._gameLogForExport = fatLog;
+				this.evalAnnotations = _sgnHeaderToAnnotations(h.Evals);
+				this._loadReviewFromPayload({
+					spellNames,
+					winner: h.Result && h.Result !== '*' ? h.Result : '',
+					redName: h.Red || 'Red', blueName: h.Blue || 'Blue',
+					sfns, turnLabels: labels,
+					annotations: _sgnHeaderToAnnotations(h.Annotations),
+				});
 			},
 
 			_loadReviewFromPayload(payload) {
@@ -143,20 +203,55 @@ document.addEventListener('alpine:init', () => {
 
 			exportGame() {
 				if (this.reviewSfns.length === 0) return;
-				const payload = {
-					v: 1,
-					type: 'sigil-game',
-					spellNames: this._spellNamesForExport,
-					winner: this.winner,
-					redName: this._redNameForExport,
-					blueName: this._blueNameForExport,
-					timestamp: Date.now(),
-					sfns: this.reviewSfns.slice(),
-					turnLabels: this.reviewTurnLabels.slice(),
-					annotations: Object.assign({}, this.annotations || {}),
-					gameLog: this._gameLogForExport || null,
-				};
-				const text = JSON.stringify(payload);
+				const log = this._gameLogForExport || [];
+				// SGN-T needs a replayable transcript: every turn carries its
+				// action list. Games imported from legacy v1 blobs (no
+				// actions) re-export in the legacy JSON format instead.
+				const replayable = log.length > 0
+					&& log.every(t => Array.isArray(t.actions));
+				let text;
+				if (replayable) {
+					const spellNames = this._spellNamesForExport || [];
+					const finalSfn = log[log.length - 1].sfnAfter;
+					let variant = 'standard';
+					try { variant = sfnToDict(finalSfn).variant || 'standard'; } catch (e) { /* default */ }
+					// Emit [Setup] only when the game did NOT start from the
+					// standard initial position (i.e. an imported-SFN game).
+					let setupSfn = null;
+					try {
+						const fresh = new SigilBoard(spellNames.slice(), variant);
+						fresh.setupInitial();
+						if (log[0].sfnBefore && log[0].sfnBefore !== boardToSfn(fresh)) {
+							setupSfn = log[0].sfnBefore;
+						}
+					} catch (e) { setupSfn = log[0].sfnBefore || null; }
+					text = gameToSgn({
+						red: this._redNameForExport,
+						blue: this._blueNameForExport,
+						result: this.winner || '*',
+						spellNames,
+						variant,
+						setupSfn,
+						finalSfn,
+						annotations: this.annotations || {},
+						evalAnnotations: this.evalAnnotations || {},
+					}, log);
+				} else {
+					// Legacy fallback (v1 JSON blob).
+					text = JSON.stringify({
+						v: 1,
+						type: 'sigil-game',
+						spellNames: this._spellNamesForExport,
+						winner: this.winner,
+						redName: this._redNameForExport,
+						blueName: this._blueNameForExport,
+						timestamp: Date.now(),
+						sfns: this.reviewSfns.slice(),
+						turnLabels: this.reviewTurnLabels.slice(),
+						annotations: Object.assign({}, this.annotations || {}),
+						gameLog: this._gameLogForExport || null,
+					});
+				}
 				navigator.clipboard.writeText(text).then(() => {
 					this.gameExportCopied = true;
 					setTimeout(() => { this.gameExportCopied = false; }, 2000);
@@ -563,9 +658,14 @@ document.addEventListener('alpine:init', () => {
 								_this.sendEvent = function() {};
 								return;
 							}
-						} catch (e) {
-							console.error('Bad review payload:', e);
+						} catch (e) { /* not JSON — try SGN-T below */ }
+						if (typeof isSgnText === 'function' && isSgnText(raw)) {
+							warnBeforeUnload = false;
+							_this._loadSgnForReview(raw);
+							_this.sendEvent = function() {};
+							return;
 						}
+						console.error('Bad review payload (neither v1 JSON nor SGN).');
 					}
 				}
 
@@ -595,6 +695,9 @@ document.addEventListener('alpine:init', () => {
 				let _saveLoadedSfn = null;
 				let _savedHumanColor = null;
 				let _savedGameLog = null;
+				// First turn's pre-turn SFN — persisted so slim saved logs of
+				// games that began from an imported position can be replayed.
+				let _savedSetupSfn = null;
 				if (_gameId && typeof LocalSaveStore !== 'undefined') {
 					const _save = LocalSaveStore.get(_gameId);
 					if (_save && _save.sfn) {
@@ -614,6 +717,9 @@ document.addEventListener('alpine:init', () => {
 							}
 							if (Array.isArray(_save.gameLog)) {
 								_savedGameLog = _save.gameLog;
+							}
+							if (_save.setupSfn) {
+								_savedSetupSfn = _save.setupSfn;
 							}
 						} else {
 							LocalSaveStore.remove(_gameId);
@@ -805,11 +911,13 @@ document.addEventListener('alpine:init', () => {
 					}
 				}
 
-				// Mirrors engine._gameLog locally so we can include it in
-				// each persisted save. The engine's gameLog is appended to
-				// from inside its game loop; we listen for turn_complete to
-				// stay in sync.
+				// Mirrors engine._gameLog locally (SLIM entries: color,
+				// turnNumber, kind, actions — no per-turn SFNs) so each
+				// persisted save stays small. The engine's gameLog is appended
+				// to from inside its game loop; we listen for turn_complete to
+				// stay in sync. Legacy fat saved entries pass through as-is.
 				let _persistedGameLog = _savedGameLog ? _savedGameLog.slice() : [];
+				let _setupSfn = _savedSetupSfn;
 
 				// Don't persist a game until the human has actually played a
 				// turn — otherwise merely opening a match (or letting the AI
@@ -833,6 +941,7 @@ document.addEventListener('alpine:init', () => {
 						variant: gameVariant,
 						humanColor: aiMode ? _humanColor : null,
 						gameLog: _persistedGameLog,
+						setupSfn: _setupSfn,
 					});
 				}
 
@@ -897,7 +1006,21 @@ document.addEventListener('alpine:init', () => {
 						if (t && t.color && t.color !== _this.myColor) {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
-						if (t) _persistedGameLog.push(t);
+						if (t) {
+							// Capture the game's starting position once (needed
+							// to replay slim logs of imported-position games).
+							if (_setupSfn === null && _persistedGameLog.length === 0 && t.sfnBefore) {
+								_setupSfn = t.sfnBefore;
+							}
+							// Persist the SLIM shape — SFNs are reconstructed by
+							// replay when the log is loaded again.
+							_persistedGameLog.push({
+								color: t.color,
+								turnNumber: t.turnNumber,
+								kind: t.kind || 'input',
+								actions: t.actions || [],
+							});
+						}
 						// First human turn unlocks persistence. In local 1v1
 						// both colors are human; vs AI only the human's color
 						// counts. sfn_update fires before turn_complete, so the
@@ -1192,30 +1315,52 @@ document.addEventListener('alpine:init', () => {
 						_this._spellNamesForExport = _engineRef.board.spellNames.slice();
 					}
 
-					// Build review data from game log
+					// Build review data from game log. Entries recorded this
+					// session are fat (sfnBefore/sfnAfter); entries re-seeded
+					// from a slim persisted save lack SFNs and are rebuilt by
+					// replaying their action transcripts through the engine.
 					if (payload.gameLog && payload.gameLog.length > 0) {
-						const sfns = [payload.gameLog[0].sfnBefore];
-						const labels = ['Start'];
-						for (const turn of payload.gameLog) {
-							sfns.push(turn.sfnAfter);
-							const colorName = turn.color[0].toUpperCase() + turn.color.slice(1);
-							const turnNum = turn.color === 'red'
-								? Math.floor(turn.turnNumber / 2) + 1
-								: Math.floor(turn.turnNumber / 2);
-							labels.push(colorName + ' ' + turnNum);
-						}
-						_this.reviewSfns = sfns;
-						_this.reviewTurnLabels = labels;
-						_this._gameLogForExport = payload.gameLog;
-						if (_engineRef && _engineRef.board && _engineRef.board.spellNames) {
-							_this._spellNamesForExport = _engineRef.board.spellNames.slice();
-						}
-						if (aiMode) {
-							_this._redNameForExport = _aiColor === 'red' ? ('AI (' + aiMode + ')') : 'You';
-							_this._blueNameForExport = _aiColor === 'blue' ? ('AI (' + aiMode + ')') : 'You';
-						} else {
-							_this._redNameForExport = 'Red';
-							_this._blueNameForExport = 'Blue';
+						const finishReview = (fatLog) => {
+							if (!fatLog || !fatLog.length || !fatLog[0].sfnBefore) return;
+							const sfns = [fatLog[0].sfnBefore];
+							const labels = ['Start'];
+							for (const turn of fatLog) {
+								sfns.push(turn.sfnAfter);
+								const colorName = turn.color[0].toUpperCase() + turn.color.slice(1);
+								const turnNum = turn.color === 'red'
+									? Math.floor(turn.turnNumber / 2) + 1
+									: Math.floor(turn.turnNumber / 2);
+								labels.push(colorName + ' ' + turnNum);
+							}
+							_this.reviewSfns = sfns;
+							_this.reviewTurnLabels = labels;
+							_this._gameLogForExport = fatLog;
+							if (_engineRef && _engineRef.board && _engineRef.board.spellNames) {
+								_this._spellNamesForExport = _engineRef.board.spellNames.slice();
+							}
+							if (aiMode) {
+								_this._redNameForExport = _aiColor === 'red' ? ('AI (' + aiMode + ')') : 'You';
+								_this._blueNameForExport = _aiColor === 'blue' ? ('AI (' + aiMode + ')') : 'You';
+							} else {
+								_this._redNameForExport = 'Red';
+								_this._blueNameForExport = 'Blue';
+							}
+						};
+						const needsHydration = payload.gameLog.some(t => !t.sfnAfter);
+						if (!needsHydration) {
+							finishReview(payload.gameLog);
+						} else if (typeof reconstructGameLog === 'function' && _engineRef && _engineRef.board) {
+							reconstructGameLog(
+								_engineRef.board.spellNames.slice(),
+								normalizeVariant(_engineRef.board.variant),
+								_setupSfn,
+								payload.gameLog,
+							).then(finishReview).catch((e) => {
+								console.warn('Could not rebuild resumed-game history for review:', e);
+								// Degrade to whatever fat entries exist (post-resume turns).
+								const fat = payload.gameLog.filter(t => t.sfnBefore && t.sfnAfter);
+								finishReview(fat);
+							});
 						}
 					}
 
@@ -1244,10 +1389,10 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
-					// Only the unofficial Panda expansion is unrated; every other
-					// expansion (and core) is rated.
+					// Unrated spell sets: the unofficial Panda expansion and the
+					// in-playtest Providence expansion; everything else is rated.
 					const _spellNames = _engineRef && _engineRef.board ? _engineRef.board.spellNames : [];
-					const _isPandaGame = _spellNames.some(s => isPandaSpell(s));
+					const _isUnratedPack = _spellNames.some(s => isUnratedSpell(s));
 
 					try {
 						const db = firebase.database();
@@ -1262,6 +1407,18 @@ document.addEventListener('alpine:init', () => {
 
 						const spellNamesArr = _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'];
 						const gameTurns = _engineRef ? _engineRef._gameLog : [];
+						// Rooms records store the SLIM transcript (actions only)
+						// + finalSfn/setupSfn; the review page rebuilds positions
+						// by replay. completed_games keeps fat turns for the
+						// Python training importer (ai/import_human_games.py).
+						const slimTurns = gameTurns.map(t => ({
+							color: t.color,
+							turnNumber: t.turnNumber,
+							kind: t.kind || 'input',
+							actions: t.actions || [],
+						}));
+						const finalSfnForRecord = (_engineRef && _engineRef.board)
+							? boardToSfn(_engineRef.board) : null;
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
 						const humanName = aiLabel || _aiAuthManager.displayName || 'You';
 						const aiName = _aiNameFor(difficulty);
@@ -1270,7 +1427,7 @@ document.addEventListener('alpine:init', () => {
 						// in edge cases like rematch/reconnect).
 						const recordVariant = normalizeVariant(_engineRef && _engineRef.board && _engineRef.board.variant);
 						const _isDeathmatch = variantHasDeathmatch(recordVariant);
-						const _unrated = _isPandaGame || _isDeathmatch;
+						const _unrated = _isUnratedPack || _isDeathmatch;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -1285,7 +1442,9 @@ document.addEventListener('alpine:init', () => {
 							blue: { connected: false, uid: _humanColor === 'blue' ? humanUid : aiUid, displayName: _humanColor === 'blue' ? humanName : aiName },
 							ranked: !_unrated,
 							winner: winner,
-							gameLog: gameTurns,
+							gameLog: slimTurns,
+							finalSfn: finalSfnForRecord,
+							setupSfn: _setupSfn,
 							allowSpectators: true,
 							timeControl: { type: 'none' },
 							variant: recordVariant,
@@ -1325,7 +1484,7 @@ document.addEventListener('alpine:init', () => {
 
 						if (_isDeathmatch) {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
-						} else if (_isPandaGame) {
+						} else if (_isUnratedPack) {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 

@@ -457,3 +457,97 @@ function turnToNotation(turn) {
 		return a.kind || '?';
 	}).join(' ');
 }
+
+/**
+ * Rebuild fat gameLog entries ({color, turnNumber, kind, actions,
+ * sfnBefore, sfnAfter}) by REPLAYING a slim transcript through the real
+ * game engine. This is how SGN-T imports, slim local saves, and slim
+ * rooms/gameLog records recover per-ply positions — nothing derived
+ * (including Providence pending-move schedules) is ever stored at rest.
+ *
+ * Human turns replay their input-token transcript through a headless
+ * GameController whose getInput() shifts tokens off the queue (an empty
+ * queue throws — the malformed-transcript guard). Sim turns replay their
+ * recorded SimActions via applyAITurn with animation pacing disabled.
+ *
+ * The start-of-turn preamble MUST mirror GameController._runGameLoop
+ * (snapshot → turn counter → Destruction check → Providence shift).
+ *
+ * @returns {Promise<Array>} rebuilt fat entries (ends early on game over)
+ * @throws on transcript/engine mismatch — callers fall back to a
+ *   final-position-only view using the [FinalSfn] header.
+ */
+async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
+	const noop = () => {};
+	const gc = new GameController(noop, { variant });
+	const board = new SigilBoard(spellNames, variant || 'standard');
+	if (setupSfn) {
+		board.loadFromSfn(setupSfn);
+		try {
+			const imported = sfnToDict(setupSfn);
+			if (imported && imported.variant) board.variant = imported.variant;
+		} catch (e) { /* tolerate */ }
+	} else {
+		board.setupInitial();
+	}
+	gc.board = board;
+
+	const rebuilt = [];
+	const wasInstant = AI_REPLAY_INSTANT;
+	AI_REPLAY_INSTANT = true;
+	try {
+		for (const t of turns) {
+			board.takeSnapshot();
+			board.turnCounter++;
+			board.whoseTurn = board.turnCounter % 2 === 1 ? 'red' : 'blue';
+			board.update();
+			if (board.whoseTurn !== t.color) {
+				throw new Error('transcript color mismatch at turn ' + board.turnCounter);
+			}
+			// Beginning-of-turn trigger: holding the Seal of Destruction loses.
+			if (board.chargedSpells[board.whoseTurn].includes('Seal_of_Destruction')) {
+				board.gameover = true;
+				board.winner = board.enemy(board.whoseTurn);
+				break;
+			}
+			if (board.gameover) break;
+
+			gc._resetRequested = false;
+			board.crushedThisTurn = false;
+			gc._currentTurnActions = [];
+			const sfnBefore = boardToSfn(board);
+
+			// Providence shift (mirrors _runGameLoop).
+			const extraMoves = board.pendingMoves[t.color].length
+				? board.pendingMoves[t.color].shift() : 0;
+			board.movesLeftThisTurn = 1 + extraMoves;
+			board.movesGrantedThisTurn = 1 + extraMoves;
+
+			if (t.kind === 'sim') {
+				await applyAITurn(board, { actions: t.actions || [] }, t.color, noop);
+			} else {
+				const queue = (t.tokens || t.actions || []).slice();
+				gc.getInput = async () => {
+					if (!queue.length) throw new Error('transcript exhausted at turn ' + board.turnCounter);
+					return queue.shift();
+				};
+				await gc._takeTurn(t.color, true, true, true, true);
+			}
+
+			gc._eotTriggers(t.color);
+			board.update();
+			rebuilt.push({
+				color: t.color,
+				turnNumber: board.turnCounter,
+				kind: t.kind || 'input',
+				actions: t.kind === 'sim' ? (t.actions || []) : (t.tokens || t.actions || []),
+				sfnBefore,
+				sfnAfter: boardToSfn(board),
+			});
+			if (board.gameover) break;
+		}
+	} finally {
+		AI_REPLAY_INSTANT = wasInstant;
+	}
+	return rebuilt;
+}

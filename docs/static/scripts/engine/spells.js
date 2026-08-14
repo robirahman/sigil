@@ -1632,6 +1632,21 @@ const SpellResolvers = {
 			if (board.gameover) break;
 		}
 	},
+
+	// --- Providence: Dividend / Annuity / Endowment (scheduled extra moves) ---
+	async schedule_moves(board, color, spellName, getInput, emit) {
+		const turns = (CORE_SPELLS[spellName] && CORE_SPELLS[spellName].turns) || 1;
+		const sched = board.pendingMoves[color];
+		while (sched.length < turns) sched.push(0);
+		for (let i = 0; i < turns; i++) sched[i] += 1;
+		const pname = color === 'red' ? 'Red' : 'Blue';
+		const when = turns === 1
+			? 'at the beginning of their next turn'
+			: 'at the beginning of each of their next ' + turns + ' turns';
+		emit({ type: 'message', message: pname + ' will make 1 extra move ' + when + '.', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
 };
 
 /**

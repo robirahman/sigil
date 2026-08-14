@@ -26,11 +26,21 @@ function boardToSfn(board) {
 	const rspring = board.springlock.red || '-';
 	const bspring = board.springlock.blue || '-';
 	const score = board.score || 'b1';
-	const base = `${stonesStr}/${spellsStr} ${turn} ${tc} ${rsc}:${bsc} ${rlock}:${block} ${rspring}:${bspring} ${score}`;
+	let out = `${stonesStr}/${spellsStr} ${turn} ${tc} ${rsc}:${bsc} ${rlock}:${block} ${rspring}:${bspring} ${score}`;
 	// Optional trailing variant token; omitted for 'standard' to keep
 	// existing SFN strings byte-identical with the Python writer.
 	const variant = board.variant || 'standard';
-	return variant !== 'standard' ? `${base} ${variant}` : base;
+	if (variant !== 'standard') out += ` ${variant}`;
+	// Providence pending-move schedules. Self-tagged optional token, emitted
+	// only while a schedule is in flight, so every pre-Providence SFN — and
+	// every Providence SFN with no active effect — stays byte-identical.
+	// Readers recognize trailing tokens by prefix ('pm:'), not position.
+	const pr = (board.pendingMoves && board.pendingMoves.red) || [];
+	const pb = (board.pendingMoves && board.pendingMoves.blue) || [];
+	if (pr.length || pb.length) {
+		out += ` pm:${pr.length ? pr.join(',') : '-'}:${pb.length ? pb.join(',') : '-'}`;
+	}
+	return out;
 }
 
 function sfnToDict(sfnStr) {
@@ -60,8 +70,21 @@ function sfnToDict(sfnStr) {
 
 	const score = parts[6];
 
-	// Optional trailing variant token; default 'standard' for legacy SFN.
-	const variant = parts.length > 7 ? parts[7] : 'standard';
+	// Optional trailing tokens, recognized by prefix so they can appear in
+	// any combination: 'pm:<red>:<blue>' carries Providence pending-move
+	// schedules; any other token is the variant. Both default for legacy SFN.
+	let variant = 'standard';
+	let redPending = [];
+	let bluePending = [];
+	for (const token of parts.slice(7)) {
+		if (token.startsWith('pm:')) {
+			const [, prStr, pbStr] = token.split(':');
+			redPending = prStr === '-' ? [] : prStr.split(',').map(Number);
+			bluePending = pbStr === '-' ? [] : pbStr.split(',').map(Number);
+		} else if (token) {
+			variant = token;
+		}
+	}
 
 	return {
 		stones, spell_names: spellNames, turn, turncounter,
@@ -69,5 +92,142 @@ function sfnToDict(sfnStr) {
 		red_lock: redLock, blue_lock: blueLock,
 		red_springlock: redSpring, blue_springlock: blueSpring,
 		score, variant,
+		red_pending: redPending, blue_pending: bluePending,
 	};
+}
+
+/* ------------------------------------------------------------------ *
+ * SGN-T — transcript-based game notation ("Sigil Game Notation,
+ * transcript variant"). Replaces the old JSON-blob game export, which
+ * stored ~3 full SFN board snapshots per turn (>5KB per game).
+ *
+ * Framing matches Python notation.py's SGN (bracket headers, R<n>./B<n>.
+ * turn lines) plus:
+ *   [Format "transcript-v1"]  — discriminator; absent => classic SGN
+ *                               (display-grade, not JS-replayable).
+ *   [Setup "<sfn>"]           — only for games begun from an imported SFN.
+ *   [FinalSfn "<sfn>"]        — replay integrity check.
+ *   [Annotations "12:good"]   — move annotations, keyed by turnNumber.
+ *   [Evals "12:red"]          — eval annotations, keyed by turnNumber.
+ *
+ * Turn lines:
+ *   R2. a11 dash a1 a2 c10 Bewitch b6 b2 pass
+ *       Human turn: raw input tokens in prompt order (the same encoding
+ *       the multiplayer wire protocol replays), space-free by construction.
+ *   B3* {"actions":[{"type":"move","node":"b9"},...]}
+ *       AI turn: compact-JSON SimActions, replayed via applyAITurn.
+ * ------------------------------------------------------------------ */
+
+function _sgnAnnotationsToHeader(ann) {
+	if (!ann) return '';
+	const parts = [];
+	for (const key of Object.keys(ann)) {
+		if (ann[key] === null || ann[key] === undefined) continue;
+		parts.push(key + ':' + ann[key]);
+	}
+	return parts.join(',');
+}
+
+function _sgnHeaderToAnnotations(str) {
+	const out = {};
+	if (!str) return out;
+	for (const part of str.split(',')) {
+		const idx = part.indexOf(':');
+		if (idx <= 0) continue;
+		out[part.slice(0, idx)] = part.slice(idx + 1);
+	}
+	return out;
+}
+
+function _sgnStripAction(a) {
+	const out = {};
+	for (const k of Object.keys(a)) {
+		if (a[k] !== null && a[k] !== undefined) out[k] = a[k];
+	}
+	return out;
+}
+
+/**
+ * Serialize a finished game to SGN-T text.
+ * @param {Object} header - { red, blue, result, spellNames, variant,
+ *   setupSfn, finalSfn, annotations, evalAnnotations, date }
+ * @param {Array} turns - gameLog entries: { color, turnNumber, kind,
+ *   actions } (fat in-memory entries are fine; SFN fields are ignored).
+ */
+function gameToSgn(header, turns) {
+	const esc = (s) => String(s == null ? '' : s).replace(/"/g, "'");
+	const lines = [];
+	lines.push('[Date "' + (header.date || new Date().toISOString().slice(0, 10)) + '"]');
+	lines.push('[Red "' + esc(header.red || 'Red') + '"]');
+	lines.push('[Blue "' + esc(header.blue || 'Blue') + '"]');
+	lines.push('[Result "' + esc(header.result || '*') + '"]');
+	lines.push('[Spells "' + (header.spellNames || []).join(',') + '"]');
+	const variant = header.variant || 'standard';
+	if (variant !== 'standard') lines.push('[Variant "' + variant + '"]');
+	lines.push('[Format "transcript-v1"]');
+	if (header.setupSfn) lines.push('[Setup "' + header.setupSfn + '"]');
+	if (header.finalSfn) lines.push('[FinalSfn "' + header.finalSfn + '"]');
+	const ann = _sgnAnnotationsToHeader(header.annotations);
+	if (ann) lines.push('[Annotations "' + ann + '"]');
+	const evals = _sgnAnnotationsToHeader(header.evalAnnotations);
+	if (evals) lines.push('[Evals "' + evals + '"]');
+	lines.push('');
+	for (const t of (turns || [])) {
+		const prefix = (t.color === 'red' ? 'R' : 'B') + t.turnNumber;
+		if (t.kind === 'sim') {
+			const actions = (t.actions || []).map(_sgnStripAction);
+			lines.push(prefix + '* ' + JSON.stringify({ actions }));
+		} else {
+			lines.push(prefix + '. ' + (t.actions || []).join(' '));
+		}
+	}
+	lines.push('');
+	return lines.join('\n');
+}
+
+/** Quick sniff: is this text an SGN transcript (classic or -T)? */
+function isSgnText(text) {
+	if (typeof text !== 'string') return false;
+	const t = text.trim();
+	return t.startsWith('[') && t.includes('[Spells ');
+}
+
+/**
+ * Parse SGN / SGN-T text.
+ * @returns {{ headers: Object, turns: Array<{color, turnNumber, kind,
+ *   tokens?, actions?}> }} — kind 'input' carries `tokens` (string list),
+ *   kind 'sim' carries `actions` (plain objects). headers.Format tells
+ *   callers whether the transcript is replayable ('transcript-v1').
+ */
+function parseSgn(text) {
+	const headers = {};
+	const turns = [];
+	for (let line of text.split('\n')) {
+		line = line.trim();
+		if (!line) continue;
+		if (line.startsWith('[')) {
+			const sp = line.indexOf(' ');
+			const q1 = line.indexOf('"');
+			const q2 = line.lastIndexOf('"');
+			if (sp > 1 && q1 > sp && q2 > q1) {
+				headers[line.slice(1, sp)] = line.slice(q1 + 1, q2);
+			}
+			continue;
+		}
+		const m = line.match(/^([RB])(\d+)([.*])\s*(.*)$/);
+		if (!m) continue;
+		const color = m[1] === 'R' ? 'red' : 'blue';
+		const turnNumber = parseInt(m[2], 10);
+		if (m[3] === '*') {
+			let actions = [];
+			try { actions = (JSON.parse(m[4]) || {}).actions || []; } catch (e) { /* malformed */ }
+			turns.push({ color, turnNumber, kind: 'sim', actions });
+		} else {
+			// Classic-SGN terminator tokens ('P') are tolerated but the
+			// transcript-v1 writer never emits them ('pass' is an input token).
+			const tokens = m[4] ? m[4].split(' ') : [];
+			turns.push({ color, turnNumber, kind: 'input', tokens });
+		}
+	}
+	return { headers, turns };
 }

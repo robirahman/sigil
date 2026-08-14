@@ -111,6 +111,18 @@ class SpectatorController {
 					return;
 				}
 
+				// Providence: shift the schedule head into the turn-scoped
+				// move counters (deterministic — replays the players' state).
+				const extraMoves = board.pendingMoves[color].length
+					? board.pendingMoves[color].shift() : 0;
+				board.movesLeftThisTurn = 1 + extraMoves;
+				board.movesGrantedThisTurn = 1 + extraMoves;
+				board.crushedThisTurn = false;
+				if (extraMoves > 0) {
+					const pname = color === 'red' ? 'Red' : 'Blue';
+					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
+				}
+
 				await this._takeTurn(color, true, true, true, true);
 
 				this._gameLog.push({
@@ -168,10 +180,12 @@ class SpectatorController {
 		const actions = [];
 		let spellList = [];
 		let moveoptions = {};
+		// Providence: Seal of Wind / Seal of Stone key off the turn's FIRST move.
+		const isFirstMove = board.movesLeftThisTurn === board.movesGrantedThisTurn;
 
 		if (canmove) {
 			actions.push('move');
-			moveoptions = getStandardMoveTargets(board, color, true);
+			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
 			if (Object.keys(moveoptions).length === 0) return;
 		} else {
 			if (candash && canspell && canDash(board, color)) actions.push('dash');
@@ -209,8 +223,9 @@ class SpectatorController {
 
 		const nodeNames = Object.keys(board.stones);
 		if (actions.includes('move') && nodeNames.includes(action)) {
-			await this._doMove(color, action, true);
-			await this._takeTurn(color, false, candash, canspell, cansummer);
+			await this._doMove(color, action, isFirstMove);
+			board.movesLeftThisTurn = Math.max(0, board.movesLeftThisTurn - 1);
+			await this._takeTurn(color, board.movesLeftThisTurn > 0, candash, canspell, cansummer);
 			return;
 		}
 		if (action === 'pass') return;
@@ -339,6 +354,9 @@ class SpectatorController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
+		// Providence: unused granted moves forfeit before the win checks.
+		board.movesLeftThisTurn = 0;
+		board.movesGrantedThisTurn = 0;
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 			for (const name of NODE_ORDER) {
 				if (board.stones[name] === enemy) {

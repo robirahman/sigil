@@ -55,6 +55,13 @@ TECTONIC_RITUALS = ['Fissure']
 TECTONIC_SORCERIES = ['Rock_Slide']
 TECTONIC_CHARMS = ['Bulwark']
 
+# Providence expansion (scheduled extra moves).
+PROVIDENCE_RITUALS = ['Endowment']
+PROVIDENCE_SORCERIES = ['Annuity']
+PROVIDENCE_CHARMS = ['Dividend']
+
+PROVIDENCE_SPELLS = set(PROVIDENCE_RITUALS + PROVIDENCE_SORCERIES + PROVIDENCE_CHARMS)
+
 
 # Own-only spell lists per expansion key. Keys match the JS EXPANSIONS map
 # (note Inferno's key is 'fury'). 'inferno' is accepted as an alias below.
@@ -67,8 +74,9 @@ EXPANSIONS = {
 	'gloom':      {'rituals': GLOOM_RITUALS,      'sorceries': GLOOM_SORCERIES,      'charms': GLOOM_CHARMS},
 	'covenant':   {'rituals': COVENANT_RITUALS,   'sorceries': COVENANT_SORCERIES,   'charms': COVENANT_CHARMS},
 	'tectonic':   {'rituals': TECTONIC_RITUALS,   'sorceries': TECTONIC_SORCERIES,   'charms': TECTONIC_CHARMS},
+	'providence': {'rituals': PROVIDENCE_RITUALS, 'sorceries': PROVIDENCE_SORCERIES, 'charms': PROVIDENCE_CHARMS},
 }
-EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'gloom', 'covenant', 'tectonic']
+EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'gloom', 'covenant', 'tectonic', 'providence']
 
 # Accepted aliases for expansion keys.
 _EXPANSION_ALIASES = {'inferno': 'fury'}

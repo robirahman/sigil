@@ -370,8 +370,21 @@ class MultiplayerController {
 				this._currentTurnActions = [];
 				board.crushedThisTurn = false;
 
-				// Record position before the turn is taken
+				// Record position before the turn is taken (pre-Providence-shift
+				// so sfnBefore carries the un-shifted schedule).
 				const turnSfn = boardToSfn(board);
+
+				// Providence: shift the schedule head into the turn-scoped
+				// move counters. Both clients run this deterministically, so
+				// nothing extra goes over the wire.
+				const extraMoves = board.pendingMoves[color].length
+					? board.pendingMoves[color].shift() : 0;
+				board.movesLeftThisTurn = 1 + extraMoves;
+				board.movesGrantedThisTurn = 1 + extraMoves;
+				if (extraMoves > 0) {
+					const pname = color === 'red' ? 'Red' : 'Blue';
+					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
+				}
 
 				await this._takeTurn(color, true, true, true, true);
 
@@ -469,10 +482,14 @@ class MultiplayerController {
 		const actions = [];
 		let spellList = [];
 		let moveoptions = {};
+		// Providence: Seal of Wind / Seal of Stone key off the turn's FIRST
+		// move; extra granted moves are ordinary moves.
+		const isFirstMove = board.movesLeftThisTurn === board.movesGrantedThisTurn;
 
 		if (canmove) {
 			actions.push('move');
-			moveoptions = getStandardMoveTargets(board, color, true);
+			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
+			// No legal moves: remaining granted moves forfeit at EOT.
 			if (Object.keys(moveoptions).length === 0) return;
 		} else {
 			// canDash() folds in Seal of Autumn: when the enemy holds it, only
@@ -503,7 +520,12 @@ class MultiplayerController {
 		}
 
 		const isMyTurn = color === this.myColor;
-		const msg = canmove ? (isMyTurn ? 'Choose where to move.' : 'Opponent is choosing...') : String(actions);
+		let movePrompt = 'Choose where to move.';
+		if (canmove && board.movesGrantedThisTurn > 1) {
+			const moveNum = board.movesGrantedThisTurn - board.movesLeftThisTurn + 1;
+			movePrompt = 'Move ' + moveNum + ' of ' + board.movesGrantedThisTurn + ': choose where to move.';
+		}
+		const msg = canmove ? (isMyTurn ? movePrompt : 'Opponent is choosing...') : String(actions);
 
 		const action = await this.getInput({
 			type: 'message', message: msg,
@@ -514,8 +536,9 @@ class MultiplayerController {
 
 		const nodeNames = Object.keys(board.stones);
 		if (actions.includes('move') && nodeNames.includes(action)) {
-			await this._doMove(color, action, true);
-			await this._takeTurn(color, false, candash, canspell, cansummer);
+			await this._doMove(color, action, isFirstMove);
+			board.movesLeftThisTurn = Math.max(0, board.movesLeftThisTurn - 1);
+			await this._takeTurn(color, board.movesLeftThisTurn > 0, candash, canspell, cansummer);
 			return;
 		}
 		if (!actions.includes(action) && !nodeNames.includes(action)) {
@@ -554,7 +577,12 @@ class MultiplayerController {
 		// Mark the room finished so the same `?id=CODE` URL serves review mode.
 		// Either player calls this — it's an idempotent update.
 		if (this.myColor === 'red') {
-			this.sync.writeRoomFinalState(winner, this._gameLog);
+			this.sync.writeRoomFinalState(
+				winner,
+				this._gameLog,
+				this.board ? boardToSfn(this.board) : null,
+				this._gameLog.length ? this._gameLog[0].sfnBefore : null,
+			);
 		}
 	}
 
@@ -702,6 +730,10 @@ class MultiplayerController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
+		// Providence: unused granted moves are forfeited. Zero the counters
+		// BEFORE the win checks so leftover phantoms don't enter the math.
+		board.movesLeftThisTurn = 0;
+		board.movesGrantedThisTurn = 0;
 		// Seal of Destruction end-of-turn effect.
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 			for (const name of NODE_ORDER) {

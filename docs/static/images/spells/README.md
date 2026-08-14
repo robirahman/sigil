@@ -36,6 +36,7 @@ Use the following template prompt for generation:
 | **Gloom** | rich dark violet and plum | **Corrupt**: a captured stone overtaken by spreading corruption, tendrils ensnaring the stones around it<br>**Decay**: broken stone ring crumbling to dust<br>**Lurk**: glowing eye framed by a crescent moon |
 | **Covenant** | rich burnished gold and brown | **Seal of Destruction**: arcane triangle with diagonal X-slash<br>**Seal of Stone**: standing stone obelisk surrounded by orbiting runes<br>**Seal of Winter**: six-pointed snowflake with sharp crystal branches |
 | **Tectonic** | rich earthy slate-brown | **Fissure**: jagged tectonic crack splitting the ground<br>**Rock Slide**: cluster of tumbling, jagged stone boulders<br>**Bulwark**: medieval heater shield with protective runes |
+| **Providence** | rich royal purple and gold | **Endowment**: overflowing treasure chest radiating four orbiting coins<br>**Annuity**: twin hourglasses joined by a flowing ribbon of coins<br>**Dividend**: a single gold coin splitting in two above an open palm |
 
 ### Image Specs:
 - **Aspect Ratio**: `1:1`

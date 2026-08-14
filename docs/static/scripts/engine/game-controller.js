@@ -24,6 +24,11 @@ class GameController {
 			: null;
 		this.variant = normalizeVariant(options && options.variant);
 		this._gameLog = [];
+		// Per-turn input transcript (SGN-T): every resolved getInput token
+		// for the current turn, in prompt order. Reset in the turn preamble.
+		this._currentTurnActions = [];
+		this._lastTurnKind = 'input';
+		this._lastSimActions = null;
 	}
 
 	/** Called by UI when the player clicks a node, spell, dash, pass, or reset. */
@@ -58,6 +63,13 @@ class GameController {
 		if (this._resetRequested) {
 			throw new ResetError();
 		}
+		// Record the resolved token for the turn transcript. Every choice a
+		// human makes flows through here (moves, dash sacrifices, casts,
+		// refill keeps, resolver targets, push destinations), so the token
+		// list deterministically replays the turn — same encoding the
+		// multiplayer wire protocol already uses. The ResetError throw above
+		// keeps aborted inputs out (the preamble clears the buffer anyway).
+		this._currentTurnActions.push(resp);
 		return resp;
 	}
 
@@ -169,17 +181,6 @@ class GameController {
 				}
 				this.emit({ type: 'whoseturndisplay', color, message: turnMsg });
 
-				// Pondering: while the human is on move and there's an AI
-				// opponent, fire a background search to prime the shared TT.
-				// No move prediction — the search runs as the side-to-move
-				// (the human) and accumulates TT entries the AI's real
-				// search will reuse when it later searches from the post-
-				// human-move SFN.
-				if (this.ai && color !== this.aiColor
-				    && typeof this.ai.startPonder === 'function') {
-					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
-				}
-
 				// Beginning-of-turn trigger: holding the Seal of Destruction loses.
 				if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 					this.emit({ type: 'message', message: 'DESTRUCTION CLAIMS YOU!', awaiting: null });
@@ -205,7 +206,36 @@ class GameController {
 				// Take turn
 				this._resetRequested = false;
 				board.crushedThisTurn = false;
+				this._currentTurnActions = [];
+				this._lastTurnKind = 'input';
+				this._lastSimActions = null;
+				// Captured BEFORE the Providence shift so sfnBefore carries the
+				// un-shifted schedule (review replay re-derives the shift).
 				const turnSfn = boardToSfn(board);
+
+				// Providence: shift the schedule head into the turn-scoped
+				// move counters. Destruction death above never reaches this,
+				// so a player killed at SOT never consumes their extras.
+				const extraMoves = board.pendingMoves[color].length
+					? board.pendingMoves[color].shift() : 0;
+				board.movesLeftThisTurn = 1 + extraMoves;
+				board.movesGrantedThisTurn = 1 + extraMoves;
+				if (extraMoves > 0) {
+					const pname = color === 'red' ? 'Red' : 'Blue';
+					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
+				}
+
+				// Pondering: while the human is on move and there's an AI
+				// opponent, fire a background search to prime the shared TT.
+				// No move prediction — the search runs as the side-to-move
+				// (the human) and accumulates TT entries the AI's real
+				// search will reuse when it later searches from the post-
+				// human-move SFN. Runs after the Providence shift so the
+				// ponder sees any extra moves granted this turn.
+				if (this.ai && color !== this.aiColor
+				    && typeof this.ai.startPonder === 'function') {
+					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
+				}
 
 				if (this.ai && color === this.aiColor) {
 					await this._takeAITurn(color);
@@ -220,12 +250,19 @@ class GameController {
 				this.emit(board.getBoardStatePayload());
 				this._emitSfn();
 
-				// Record turn for game review
+				// Record turn for game review. In-memory entries stay "fat"
+				// (sfnBefore/sfnAfter for scrubbing); at-rest formats (SGN-T
+				// export, local saves, rooms gameLog) keep only kind+actions
+				// and reconstruct the SFNs by replay on load.
 				const turnEntry = {
 					color: color,
 					turnNumber: board.turnCounter,
 					sfnBefore: turnSfn,
 					sfnAfter: boardToSfn(board),
+					kind: this._lastTurnKind,
+					actions: this._lastTurnKind === 'sim'
+						? this._lastSimActions
+						: this._currentTurnActions.slice(),
 				};
 				this._gameLog.push(turnEntry);
 				this.emit({ type: 'turn_complete', turn: turnEntry });
@@ -298,11 +335,15 @@ class GameController {
 		const actions = [];
 		let spellList = [];
 		let moveoptions = {};
+		// Providence: Seal of Wind / Seal of Stone key off the turn's FIRST
+		// move; extra granted moves are ordinary moves.
+		const isFirstMove = board.movesLeftThisTurn === board.movesGrantedThisTurn;
 
 		if (canmove) {
 			actions.push('move');
-			moveoptions = getStandardMoveTargets(board, color, true);
-			// If no moves available, must pass
+			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
+			// If no moves available, must pass (any remaining granted moves
+			// are forfeited — the EOT triggers zero the counters).
 			if (Object.keys(moveoptions).length === 0) {
 				return;
 			}
@@ -364,9 +405,14 @@ class GameController {
 		}
 
 		// Send action prompt
+		let movePrompt = 'Choose where to move.';
+		if (canmove && board.movesGrantedThisTurn > 1) {
+			const moveNum = board.movesGrantedThisTurn - board.movesLeftThisTurn + 1;
+			movePrompt = 'Move ' + moveNum + ' of ' + board.movesGrantedThisTurn + ': choose where to move.';
+		}
 		const action = await this.getInput({
 			type: 'message',
-			message: canmove ? 'Choose where to move.' : String(actions),
+			message: canmove ? movePrompt : String(actions),
 			awaiting: 'action',
 			actionlist: actions,
 			moveoptions,
@@ -377,8 +423,9 @@ class GameController {
 
 		if (actions.includes('move') && nodeNames.includes(action)) {
 			// Player clicked a node while 'move' was available (shortcut)
-			await this._doMove(color, action, true);
-			await this._takeTurn(color, false, candash, canspell, cansummer);
+			await this._doMove(color, action, isFirstMove);
+			board.movesLeftThisTurn = Math.max(0, board.movesLeftThisTurn - 1);
+			await this._takeTurn(color, board.movesLeftThisTurn > 0, candash, canspell, cansummer);
 			return;
 		}
 
@@ -650,12 +697,22 @@ class GameController {
 		if (this.ai.lastMeta) {
 			this.emit({ type: 'ai_think_report', color, ...this.ai.lastMeta });
 		}
+		// AI turns record their SimActions (replayed via applyAITurn on
+		// import) instead of an input-token transcript.
+		this._lastTurnKind = 'sim';
+		this._lastSimActions = (turn && turn.actions) ? turn.actions : [];
 		await applyAITurn(board, turn, color, this.emit);
 	}
 
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
+
+		// Providence: unused granted moves are forfeited. Zero the counters
+		// BEFORE the win checks so a player who ran out of legal moves does
+		// not carry this turn's phantoms into the ±3-lead / tiebreak math.
+		board.movesLeftThisTurn = 0;
+		board.movesGrantedThisTurn = 0;
 
 		// Seal of Destruction end-of-turn effect
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {

@@ -120,7 +120,7 @@ main();
 
 def main():
     sample = collect_positions(
-        os.path.join(REPO, 'ai', 'data', 'selfplay_v15_2026-05-02.jsonl'),
+        os.path.join(REPO, 'ai', 'data', 'selfplay_v22b_2026-05-03.jsonl'),
         n=15,
     )
     manifest_path = os.path.join(MODELS, 'sigil_net_graph.json')

@@ -137,6 +137,10 @@ const CORE_SPELLS = {
 	Fissure:           { resolve: 'fissure',         static: false, ischarm: false },
 	Rock_Slide:        { resolve: 'rock_slide',      static: false, ischarm: false },
 	Bulwark:           { resolve: null,              static: true,  ischarm: true },
+	// Providence expansion (scheduled extra moves)
+	Dividend:          { resolve: 'schedule_moves', turns: 1, static: false, ischarm: true },
+	Annuity:           { resolve: 'schedule_moves', turns: 2, static: false, ischarm: false },
+	Endowment:         { resolve: 'schedule_moves', turns: 4, static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -194,6 +198,9 @@ const SPELL_TEXTS = {
 	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all enemy stones on adjacent nodes.',
 	Rock_Slide:        'Push any enemy stones adjacent to you 1 space. (Order is chosen by the casting player.) If a stone is pushed to an occupied space, the stone previously occupying that space is crushed.',
 	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves.',
+	Dividend:          'Make 1 extra move at the beginning of your next turn.',
+	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
+	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -236,6 +243,10 @@ const TECTONIC_RITUALS = ['Fissure'];
 const TECTONIC_SORCERIES = ['Rock_Slide'];
 const TECTONIC_CHARMS = ['Bulwark'];
 
+const PROVIDENCE_RITUALS = ['Endowment'];
+const PROVIDENCE_SORCERIES = ['Annuity'];
+const PROVIDENCE_CHARMS = ['Dividend'];
+
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
@@ -255,8 +266,9 @@ const EXPANSIONS = {
 	covenant:   { name: 'Covenant',   rituals: COVENANT_RITUALS,   sorceries: COVENANT_SORCERIES,   charms: COVENANT_CHARMS },
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
 	tectonic:   { name: 'Tectonic',   rituals: TECTONIC_RITUALS,   sorceries: TECTONIC_SORCERIES,   charms: TECTONIC_CHARMS },
+	providence: { name: 'Providence', rituals: PROVIDENCE_RITUALS, sorceries: PROVIDENCE_SORCERIES, charms: PROVIDENCE_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
@@ -274,6 +286,22 @@ const PANDA_SPELL_NAMES = new Set(
 );
 function isPandaSpell(name) {
 	return PANDA_SPELL_NAMES.has(name);
+}
+
+// Derived from the EXPANSIONS map so it stays in sync. (Providence
+// graduated from its unrated playtest 2026-08 and is rated like every
+// other official expansion.)
+const PROVIDENCE_SPELL_NAMES = new Set(
+	[...EXPANSIONS.providence.rituals, ...EXPANSIONS.providence.sorceries, ...EXPANSIONS.providence.charms]
+);
+function isProvidenceSpell(name) {
+	return PROVIDENCE_SPELL_NAMES.has(name);
+}
+// One switch for every "does this spell set stay unrated?" consumer.
+// Currently only the unofficial Panda expansion is unrated; add packs here
+// while they playtest.
+function isUnratedSpell(name) {
+	return isPandaSpell(name);
 }
 
 // Game variants. Two orthogonal dimensions encoded in a single string:

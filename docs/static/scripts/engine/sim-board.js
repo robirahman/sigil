@@ -21,6 +21,8 @@ class SimAction {
 		this.placed = opts.placed || null;   // perfect_heist: occupied nodes
 		this.converted = opts.converted || null; // corrupt: enemy stones turned to caster's color
 		this.wall = opts.wall || null;       // fissure: node permanently destroyed
+		this.pushes = opts.pushes || null;   // rock_slide: [{from, to, crushed}]
+		this.turns = opts.turns || null;     // schedule_moves: extra-move turns scheduled
 	}
 }
 
@@ -50,6 +52,11 @@ class SimBoard {
 		// Turn-local: set true when a push crushes an enemy stone this turn.
 		// Read by Blood Saplings; reset at each turn's start by the enumerator.
 		this.crushedThisTurn = false;
+		// Providence: pendingMoves[color][i] = extra moves granted at the
+		// start of that player's i-th upcoming turn. extraMovesThisTurn =
+		// extras popped for the current side-to-move by advanceTurn().
+		this.pendingMoves = { red: [], blue: [] };
+		this.extraMovesThisTurn = 0;
 	}
 
 	static fromSigilBoard(board) {
@@ -67,6 +74,15 @@ class SimBoard {
 		sb.mana = { ...board.mana };
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
 		sb.crushedThisTurn = !!board.crushedThisTurn;
+		sb.pendingMoves = {
+			red: [...((board.pendingMoves && board.pendingMoves.red) || [])],
+			blue: [...((board.pendingMoves && board.pendingMoves.blue) || [])],
+		};
+		// The live board tracks a granted-move countdown (movesLeftThisTurn =
+		// 1 + extras at turn start); the sim tracks just the extras. The AI
+		// picks its whole turn at turn start, when no moves are spent yet,
+		// so remaining extras = movesLeft - 1.
+		sb.extraMovesThisTurn = Math.max(0, (board.movesLeftThisTurn || 1) - 1);
 		return sb;
 	}
 
@@ -85,10 +101,29 @@ class SimBoard {
 		b.mana = { ...this.mana };
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
 		b.crushedThisTurn = this.crushedThisTurn;
+		b.pendingMoves = { red: [...this.pendingMoves.red], blue: [...this.pendingMoves.blue] };
+		b.extraMovesThisTurn = this.extraMovesThisTurn;
 		return b;
 	}
 
 	_enemy(color) { return color === 'red' ? 'blue' : 'red'; }
+
+	// Providence helpers.
+	pendingSum(color) {
+		let s = 0;
+		for (const v of this.pendingMoves[color]) s += v;
+		return s;
+	}
+	pendingStones(color) {
+		// Scheduled extras plus, for the side to move, extras granted this
+		// turn but not yet placed.
+		return this.pendingSum(color)
+			+ (this.whoseTurn === color ? this.extraMovesThisTurn : 0);
+	}
+	effectiveStones(color) {
+		// Real stones plus Providence phantoms (no blue +1 token).
+		return this.totalStones[color] + this.pendingStones(color);
+	}
 
 	update() {
 		let rc = 0, bc = 0;
@@ -121,7 +156,11 @@ class SimBoard {
 			}
 		}
 
-		const rs = rc, bs = bc + 1;
+		// Providence pending stones display in the score for both sides; the
+		// side to move also shows extras granted this turn (correct at turn
+		// boundaries, which is when score is read — mid-replay transient).
+		const rs = rc + this.pendingStones('red');
+		const bs = bc + 1 + this.pendingStones('blue');
 		if (rs === bs) this.score = 'tied';
 		else if (rs > bs) this.score = 'r' + Math.min(3, rs - bs);
 		else this.score = 'b' + Math.min(3, bs - rs);
@@ -168,6 +207,20 @@ class SimBoard {
 		if (!variantHasDeathmatch(this.variant)) {
 			key += '|' + this.spellCounter.red + '|' + this.spellCounter.blue;
 		}
+		// Providence: positions with different pending schedules are NOT the
+		// same position. Suffix only when non-empty so legacy keys stay
+		// byte-identical. Canonical form is the PRE-SHIFT schedule (matching
+		// board.js takeSnapshot, which runs before the controller's shift):
+		// re-prepend the popped extras counter to the mover's list.
+		const schedRed = [...this.pendingMoves.red];
+		const schedBlue = [...this.pendingMoves.blue];
+		if (this.extraMovesThisTurn) {
+			(this.whoseTurn === 'red' ? schedRed : schedBlue)
+				.unshift(this.extraMovesThisTurn);
+		}
+		if (schedRed.length || schedBlue.length) {
+			key += '|P' + schedRed.join(',') + '/' + schedBlue.join(',');
+		}
 		return key;
 	}
 
@@ -179,13 +232,19 @@ class SimBoard {
 		// +3-lead and 6th-spell conditions below are disabled.
 		if (variantHasDeathmatch(this.variant)) return false;
 
+		// Providence phantoms count ASYMMETRICALLY (defense only): a player's
+		// win claim uses their real placed stones, checked against the
+		// opponent's real+pending total. The mover's extras-this-turn are NOT
+		// counted anywhere here: placed ones are already real, unused ones
+		// forfeit at end of turn.
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
-		if (rt > bt + 2) { this.gameover = true; this.winner = 'red'; return true; }
-		if (bt > rt + 2) { this.gameover = true; this.winner = 'blue'; return true; }
+		const rp = this.pendingSum('red'), bp = this.pendingSum('blue');
+		if (rt > bt + bp + 2) { this.gameover = true; this.winner = 'red'; return true; }
+		if (bt > rt + rp + 2) { this.gameover = true; this.winner = 'blue'; return true; }
 		if (this.spellCounter[activeColor] >= 6) {
 			this.gameover = true;
-			if (rt > bt) this.winner = 'red';
-			else if (bt > rt) this.winner = 'blue';
+			if (rt > bt + bp) this.winner = 'red';
+			else if (bt > rt + rp) this.winner = 'blue';
 			else this.winner = this._enemy(activeColor);
 			return true;
 		}
@@ -193,8 +252,14 @@ class SimBoard {
 	}
 
 	advanceTurn() {
+		// The Providence shift lives here so every turn driver (search,
+		// arena, replay) is correct without per-driver edits, and end-of-turn
+		// forfeit is implicit: the pop overwrites whatever the previous mover
+		// left unused.
 		this.turnCounter++;
 		this.whoseTurn = this.whoseTurn === 'red' ? 'blue' : 'red';
+		const sched = this.pendingMoves[this.whoseTurn];
+		this.extraMovesThisTurn = sched.length ? sched.shift() : 0;
 	}
 
 	// --- Move helpers ---
@@ -665,6 +730,15 @@ class SimBoard {
 				if (this.gameover) break;
 			}
 			actions.push(new SimAction('rock_slide', { pushes }));
+		} else if (rt === 'schedule_moves') {
+			// Providence: schedule 1 extra move at the start of each of the
+			// caster's next `turns` turns (additive stacking).
+			const turns = info.turns || 1;
+			const sched = this.pendingMoves[color];
+			while (sched.length < turns) sched.push(0);
+			for (let i = 0; i < turns; i++) sched[i] += 1;
+			actions.push(new SimAction('schedule_moves', { spell: spellName, turns }));
+			this.update();
 		} else if (rt === 'bewitch') {
 			const ovr = overrides.bewitch_pair;
 			if (ovr) {
@@ -1534,8 +1608,30 @@ class SimBoard {
 			const moveAction = bam._doMove(color, target, isBlink);
 			if (!moveAction) continue;
 			bam.update();
-			yield* bam._enumeratePostMove(color, [moveAction], true, true, true);
+			yield* bam._enumerateMovePhase(color, [moveAction], this.extraMovesThisTurn);
 		}
+	}
+
+	/**
+	 * Providence move phase: at each step, either stop taking base moves
+	 * (proceed to dash/cast/pass — remaining extras forfeit at end of turn)
+	 * or take one more. Greedy engine: a single target per extra step
+	 * (matching the greedy dash convention); the exhaustive enumerator
+	 * branches over top-K targets instead. With extrasLeft === 0 this is
+	 * exactly the pre-Providence flow. Wind's blink privilege and Stone's
+	 * soft-move restriction apply only to the turn's FIRST move, so extra
+	 * steps use _allMoveable.
+	 */
+	* _enumerateMovePhase(color, actionsSoFar, extrasLeft) {
+		yield* this._enumeratePostMove(color, actionsSoFar, true, true, true);
+		if (extrasLeft <= 0 || this.gameover) return;
+		const targets = this._allMoveable(color);
+		if (!targets.length) return;
+		const b = this.copy();
+		const act = b._doMove(color, targets[0], false);
+		if (!act) return;
+		b.update();
+		yield* b._enumerateMovePhase(color, actionsSoFar.concat([act]), extrasLeft - 1);
 	}
 }
 
@@ -1646,6 +1742,29 @@ function applySimTurn(board, turn, color) {
 		else if (action.type === 'gust') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
 			if (action.kept) for (const n of action.kept) board.stones[n] = enemy;
+		}
+		else if (action.type === 'corrupt') {
+			if (action.converted) for (const n of action.converted) board.stones[n] = color;
+		}
+		else if (action.type === 'fissure') {
+			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
+			if (action.wall) board.stones[action.wall] = DESTROYED;
+		}
+		else if (action.type === 'rock_slide') {
+			if (action.pushes) {
+				for (const p of action.pushes) {
+					const moved = board.stones[p.from];
+					board.stones[p.from] = null;
+					if (board.stones[p.to] !== null) board.crushedThisTurn = true;
+					board.stones[p.to] = moved;
+				}
+			}
+		}
+		else if (action.type === 'schedule_moves') {
+			const sched = board.pendingMoves[color];
+			const n = action.turns || 0;
+			while (sched.length < n) sched.push(0);
+			for (let i = 0; i < n; i++) sched[i] += 1;
 		}
 		board.update();
 	}

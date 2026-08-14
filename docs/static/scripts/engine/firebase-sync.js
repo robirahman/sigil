@@ -142,12 +142,12 @@ class FirebaseSync {
 			await roomRef.child('status').set('playing');
 			roomRef.child('blue/connected').onDisconnect().set(false);
 
-			// Determine if ranked: both players authenticated, not a Panda
-			// game (the unofficial Panda expansion is always unrated), and not
-			// a Deathmatch game (always unrated).
-			const hasPanda = (data.spellNames || []).some(s => isPandaSpell(s));
+			// Determine if ranked: both players authenticated, no unrated
+			// spells (Panda is unofficial; Providence is in playtest), and
+			// not a Deathmatch game (always unrated).
+			const hasUnrated = (data.spellNames || []).some(s => isUnratedSpell(s));
 			const isDeathmatch = variantHasDeathmatch(data.variant);
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasPanda && !isDeathmatch) {
+			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch) {
 				this.ranked = true;
 				await roomRef.child('ranked').set(true);
 			}
@@ -532,16 +532,31 @@ class FirebaseSync {
 	/**
 	 * Mark the room as finished and persist the gameLog so future visitors can
 	 * load review mode. Called by either player when the game ends.
+	 *
+	 * The stored gameLog is SLIM (color/turnNumber/kind/actions per turn plus
+	 * one finalSfn and optional setupSfn on the room) — the review page
+	 * rebuilds per-ply positions by replaying the transcript. Pre-refactor
+	 * rooms with fat per-turn SFNs still load via the legacy review branch.
 	 * @param {string} winner - 'red' or 'blue'
-	 * @param {Array} gameLog - turn-by-turn SFNs
+	 * @param {Array} gameLog - in-memory (fat) turn entries
+	 * @param {string} [finalSfn] - final board SFN (integrity check)
+	 * @param {string} [setupSfn] - starting SFN for imported-position games
 	 */
-	async writeRoomFinalState(winner, gameLog) {
+	async writeRoomFinalState(winner, gameLog, finalSfn, setupSfn) {
 		if (!this.roomRef) return;
+		const slim = (gameLog || []).map(t => ({
+			color: t.color,
+			turnNumber: t.turnNumber,
+			kind: t.kind || 'input',
+			actions: t.actions || [],
+		}));
 		try {
 			await this.roomRef.update({
 				status: 'finished',
 				winner: winner,
-				gameLog: gameLog,
+				gameLog: slim,
+				finalSfn: finalSfn || null,
+				setupSfn: setupSfn || null,
 				finishedAt: Date.now(),
 			});
 		} catch (e) {

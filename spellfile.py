@@ -1850,3 +1850,57 @@ class Bulwark(Spell):
 		self.ischarm = True
 		self.static = True
 		self.text = "STATIC: Stones in your locked spell cannot be targeted by enemy hard moves."
+
+
+class _ScheduleMovesSpell(Spell):
+	### Providence base: schedule 1 extra move at the beginning of each of
+	### the caster's next TURNS turns. Pending stones count toward the
+	### caster's stone count asymmetrically (defense only) — see
+	### Board.pending_stones / eot_triggers.
+	TURNS = 1
+
+	def resolve(self, player):
+		sched = self.board.pending_moves[player.color]
+		while len(sched) < self.TURNS:
+			sched.append(0)
+		for i in range(self.TURNS):
+			sched[i] += 1
+		if self.TURNS == 1:
+			effect = "1 extra move at the beginning of your next turn"
+			opp_effect = "1 extra move at the beginning of their next turn"
+		else:
+			effect = ("1 extra move at the beginning of each of your next {} turns"
+			          .format(self.TURNS))
+			opp_effect = ("1 extra move at the beginning of each of their next {} turns"
+			              .format(self.TURNS))
+		if player.ishuman:
+			player.jmessage("You will make " + effect + ".")
+		if player.opp.ishuman:
+			pname = player.color[0].upper() + player.color[1:]
+			player.opp.jmessage(pname + " will make " + opp_effect + ".")
+		self.board.update()
+
+
+class Dividend(_ScheduleMovesSpell):
+	TURNS = 1
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.text = "Make 1 extra move at the beginning of your next turn."
+
+
+class Annuity(_ScheduleMovesSpell):
+	TURNS = 2
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Make 1 extra move at the beginning of each of your next 2 turns."
+
+
+class Endowment(_ScheduleMovesSpell):
+	TURNS = 4
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Make 1 extra move at the beginning of each of your next 4 turns."

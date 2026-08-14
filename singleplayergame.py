@@ -88,7 +88,26 @@ class SPBoard():
 		self.last_play = None
 		self.last_player = None
 
+		### Providence: pending_moves[color][i] = extra moves granted at the
+		### start of that player's i-th upcoming turn; the two counters are
+		### turn-scoped (shifted at turn start, zeroed by eot_triggers).
+		self.pending_moves = {'red': [], 'blue': []}
+		self.moves_left_this_turn = 0
+		self.moves_granted_this_turn = 0
+
 		self.recorder = None
+
+	def pending_stones(self, color):
+		### Providence phantom stones for `color`: scheduled extras plus,
+		### for the side to move, extras granted this turn but not yet
+		### placed. Before any move this turn, one remaining move is the
+		### ordinary turn move (never a phantom); after that, every
+		### remaining move is an extra — hence min(left, granted - 1).
+		p = sum(self.pending_moves[color])
+		if self.whoseturn == color:
+			p += max(0, min(self.moves_left_this_turn,
+			                self.moves_granted_this_turn - 1))
+		return p
 
 	def record(self, action_type, **kwargs):
 		if self.recorder is not None:
@@ -130,6 +149,9 @@ class SPBoard():
 
 		snapshot["last_play"] = self.last_play
 		snapshot["last_player"] = self.last_player
+
+		snapshot["red_pending"] = list(self.pending_moves['red'])
+		snapshot["blue_pending"] = list(self.pending_moves['blue'])
 
 		self.snapshot = snapshot
 
@@ -173,8 +195,9 @@ class SPBoard():
 				self.gameover = True
 				self.winner = 'red'
 
-		redscore = redtotalstones
-		bluescore = bluetotalstones + 1
+		### Providence pending stones display in the score for both sides.
+		redscore = redtotalstones + self.pending_stones('red')
+		bluescore = bluetotalstones + 1 + self.pending_stones('blue')
 
 
 		if update_score:
@@ -502,6 +525,25 @@ class AIPlayer():
 		### One second delay between actions, for more realistic-feeling AI
 		time.sleep(1)
 
+		### Providence: at the turn-initial call, shift the schedule head
+		### into the turn-scoped move counters and turn `canmove` into an
+		### integer countdown. Recursions pass ints, so `canmove is True`
+		### fires exactly once per turn. (This easy bot never CASTS the
+		### Providence spells — its action-priority chain above predates
+		### them — but it must still receive/grant extra moves correctly.)
+		if canmove is True:
+			extra = 0
+			sched = self.board.pending_moves[self.color]
+			if sched:
+				extra = sched.pop(0)
+			self.board.moves_left_this_turn = 1 + extra
+			self.board.moves_granted_this_turn = 1 + extra
+			canmove = 1 + extra
+			if extra > 0 and self.opp.ishuman:
+				plural = '' if extra == 1 else 's'
+				self.opp.jmessage("{} gets {} extra move{} this turn (Providence).".format(
+					self.color.capitalize(), extra, plural))
+
 		### Competitive variant opening (red: turncounter==1, blue: turncounter==2):
 		### the bot plays a free blink onto its preferred mana node, mirroring
 		### the standard game's opening positions for sane heuristic play.
@@ -602,8 +644,10 @@ class AIPlayer():
 
 
 		if action == 'move':
-			self.move(standardmove=True)
-			self.taketurn(False, candash, canspell, cansummer)
+			first_move = (self.board.moves_left_this_turn == self.board.moves_granted_this_turn)
+			self.move(standardmove=first_move)
+			self.board.moves_left_this_turn = max(0, self.board.moves_left_this_turn - 1)
+			self.taketurn(self.board.moves_left_this_turn, candash, canspell, cansummer)
 			return None
 
 		elif action == 'dash':
@@ -650,6 +694,11 @@ class AIPlayer():
 
 		### Check whether the spellcounter >= 6.
 
+		### Providence: unused granted moves are forfeited. Zero the
+		### counters BEFORE the win checks so leftover this-turn phantoms
+		### never enter the lead/tiebreak math.
+		self.board.moves_left_this_turn = 0
+		self.board.moves_granted_this_turn = 0
 
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
 
@@ -679,20 +728,26 @@ class AIPlayer():
 			elif color == 'blue':
 				bluetotal += 1
 
-		if redtotal > bluetotal + 2:
+		### Providence phantoms count ASYMMETRICALLY (defense only): each
+		### win claim uses real placed stones, checked against the
+		### opponent's real+pending total.
+		redpend = sum(self.board.pending_moves['red'])
+		bluepend = sum(self.board.pending_moves['blue'])
+
+		if redtotal > bluetotal + bluepend + 2:
 			self.board.gameover = True
 			self.board.winner = 'red'
 
-		elif bluetotal > redtotal + 2:
+		elif bluetotal > redtotal + redpend + 2:
 			self.board.gameover = True
 			self.board.winner = 'blue'
 
 		else:
 			if self.spellcounter >= 6:
 				self.board.gameover = True
-				if redtotal > bluetotal:
+				if redtotal > bluetotal + bluepend:
 					self.board.winner = 'red'
-				elif bluetotal > redtotal:
+				elif bluetotal > redtotal + redpend:
 					self.board.winner = 'blue'
 				else:
 					a = ['red', 'blue']

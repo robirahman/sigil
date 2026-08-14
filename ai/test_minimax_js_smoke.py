@@ -130,7 +130,7 @@ def main():
     # Pull a handful of varied SFNs from human_games.jsonl. Pick from
     # different positions in the file so we hit a variety of game stages.
     sfns = []
-    with open(os.path.join(REPO, 'ai', 'data', 'human_games.jsonl')) as f:
+    with open(os.path.join(REPO, 'ai', 'data', 'selfplay_v22b_2026-05-03.jsonl')) as f:
         all_lines = f.readlines()
     stride = max(1, len(all_lines) // 10)
     for i in range(0, len(all_lines), stride):

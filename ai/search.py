@@ -6,7 +6,7 @@ and iterative deepening with time limits.
 """
 
 import time
-from simboard import SimBoard, CompleteTurn, Action
+from simboard import SimBoard, CompleteTurn, Action, apply_sim_turn
 
 
 def alpha_beta(board, depth, alpha, beta, maximizing_color, model,
@@ -104,30 +104,13 @@ def alpha_beta(board, depth, alpha, beta, maximizing_color, model,
 
 
 def _apply_turn(board, turn, color):
-    """Apply a turn's actions to a board (mutating)."""
-    for action in turn.actions:
-        if action.type == 'move':
-            board.stones[action.node] = color
-        elif action.type == 'hard_move':
-            board._push_enemy(action.node, color)
-        elif action.type == 'blink':
-            enemy = board._enemy(color)
-            if board.stones[action.node] == enemy:
-                board._push_enemy(action.node, color)
-            else:
-                board.stones[action.node] = color
-        elif action.type == 'cast':
-            board._cast_spell(action.spell, color)
-        elif action.type in ('dash', 'dash_lightning'):
-            if action.sacrificed:
-                for sac in action.sacrificed:
-                    board.stones[sac] = None
-        board.update()
-        # Immediate-loss can fire mid-turn (e.g. dash sacrifice empties
-        # the active player; Fireblast destruction empties the opponent).
-        # Stop applying queued actions once the game ends.
-        if board.gameover:
-            return
+    """Apply a turn's actions to a board (mutating).
+
+    Uses the canonical simboard.apply_sim_turn replayer (mirrors JS
+    applySimTurn): recorded resolver outcomes apply directly, casts are
+    bookkeeping only, recorded push destinations are honored.
+    """
+    apply_sim_turn(board, turn, color)
 
 
 def iterative_deepening_search(board, color, model, max_depth=2,

@@ -314,11 +314,12 @@
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="covenant" /> <span>Covenant</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="panda" /> <span>Panda (unrated)</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tectonic" /> <span>Tectonic</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="providence" /> <span>Providence</span></label>
 				</div>
 			</details>
 			<script>
 				(function() {
-					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic'];
+					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence'];
 					var PACK_SPELL_COUNTS = {
 						core:      { rituals: 5, sorceries: 5, charms: 5 },
 						springtime:{ rituals: 1, sorceries: 1, charms: 1 },
@@ -330,7 +331,8 @@
 						gloom:     { rituals: 1, sorceries: 1, charms: 1 },
 						covenant:  { rituals: 1, sorceries: 1, charms: 1 },
 						panda:     { rituals: 4, sorceries: 2, charms: 6 },
-						tectonic:  { rituals: 1, sorceries: 1, charms: 1 }
+						tectonic:  { rituals: 1, sorceries: 1, charms: 1 },
+						providence:{ rituals: 1, sorceries: 1, charms: 1 }
 					};
 
 					function isValidSelection(keys) {

@@ -89,6 +89,18 @@ Refined spell concepts developed in design sessions based on gameplay balance an
 | Sorcery | Rock Slide | Make 1 hard move. If the pushed enemy stone has one or more stone(s) adjacent to it at its new position, destroy the displaced stone and 1 of its adjacent neighbors. |
 | Charm | Bulwark | STATIC: Stones in your locked spell cannot be pushed by enemy hard moves. |
 
+### Providence (shipped, rated)
+
+*Deferred payouts: invest mana now, receive extra moves on future turns.
+Pending stones shield you from losing (the opponent's win checks count them
+against your total) but never power your own win until actually placed.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Ritual | Endowment | Make 1 extra move at the beginning of each of your next 4 turns. |
+| Sorcery | Annuity | Make 1 extra move at the beginning of each of your next 2 turns. |
+| Charm | Dividend | Make 1 extra move at the beginning of your next turn. |
+
 ### Cosmic
 
 *Symmetry, orbits, and cross-board movement.*

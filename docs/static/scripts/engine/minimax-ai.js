@@ -105,11 +105,22 @@ function _minimaxPosHash(board, color) {
 	let s = color + '|';
 	for (const n of NODE_ORDER) {
 		const st = board.stones[n];
-		s += (st === 'red' ? 'R' : st === 'blue' ? 'B' : '.');
+		// 'X' = Fissure wall; must hash distinctly from empty or the TT
+		// conflates wall/no-wall positions once a Fissure lands in-tree.
+		s += (st === 'red' ? 'R' : st === 'blue' ? 'B' : st === 'X' ? 'X' : '.');
 	}
 	s += '|' + board.spellCounter.red + ',' + board.spellCounter.blue;
 	s += '|' + (board.lock.red || '-') + ',' + (board.lock.blue || '-');
 	s += '|' + (board.springlock.red || '-') + ',' + (board.springlock.blue || '-');
+	// Providence: pending schedules and the popped extras counter change
+	// legal moves and evaluation — hash them. Suffix only when non-empty so
+	// legacy positions keep their exact keys.
+	if (board.pendingMoves.red.length || board.pendingMoves.blue.length
+			|| board.extraMovesThisTurn) {
+		s += '|P' + board.pendingMoves.red.join(',')
+			+ '/' + board.pendingMoves.blue.join(',')
+			+ '/' + board.extraMovesThisTurn;
+	}
 	return s;
 }
 
@@ -244,6 +255,29 @@ function _minimaxApplyTurn(board, turn, color) {
 		else if (t === 'gust') {
 			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
 			if (action.kept) for (const n of action.kept) sim.stones[n] = enemy;
+		}
+		else if (t === 'corrupt') {
+			if (action.converted) for (const n of action.converted) sim.stones[n] = color;
+		}
+		else if (t === 'fissure') {
+			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
+			if (action.wall) sim.stones[action.wall] = DESTROYED;
+		}
+		else if (t === 'rock_slide') {
+			if (action.pushes) {
+				for (const p of action.pushes) {
+					const moved = sim.stones[p.from];
+					sim.stones[p.from] = null;
+					if (sim.stones[p.to] !== null) sim.crushedThisTurn = true;
+					sim.stones[p.to] = moved;
+				}
+			}
+		}
+		else if (t === 'schedule_moves') {
+			const sched = sim.pendingMoves[color];
+			const n = action.turns || 0;
+			while (sched.length < n) sched.push(0);
+			for (let i = 0; i < n; i++) sched[i] += 1;
 		}
 		sim.update();
 	}

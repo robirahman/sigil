@@ -69,11 +69,15 @@ def _char_to_stone(ch):
 def board_to_sfn(board):
     """Serialize a Board or SPBoard to an SFN string.
 
-    Format: <stones>/<spells> <turn> <turncount> <rsc>:<bsc> <rlock>:<block> <rspring>:<bspring> <score> [<variant>]
+    Format: <stones>/<spells> <turn> <turncount> <rsc>:<bsc> <rlock>:<block> <rspring>:<bspring> <score> [<variant>] [pm:<red>:<blue>]
 
     The trailing variant token is omitted when the variant is 'standard'
     so old SFN strings remain valid; readers default to 'standard' when
-    the token is absent.
+    the token is absent. The pm: token (Providence pending-move schedules,
+    comma-joined slot counts per color, '-' for an empty side) is likewise
+    omitted whenever both schedules are empty; readers identify trailing
+    tokens by prefix. Note pre-Providence parsers would misread a pm: token
+    as a variant — acceptable, since they cannot play Providence games.
     """
     stones = ''.join(_stone_char(board.nodes[n].stone) for n in NODE_ORDER)
 
@@ -98,7 +102,19 @@ def board_to_sfn(board):
             f"{rlock}:{block} {rspring}:{bspring} {score}")
     variant = getattr(board, 'variant', 'standard') or 'standard'
     if variant != 'standard':
-        return f"{base} {variant}"
+        base = f"{base} {variant}"
+    # Providence pending-move schedules. Self-tagged optional token, emitted
+    # only while a schedule is in flight, so every pre-Providence SFN — and
+    # every Providence SFN with no active effect — stays byte-identical.
+    # Readers recognize trailing tokens by prefix ('pm:'), not position.
+    pending = getattr(board, 'pending_moves', None)
+    if pending:
+        pr = pending.get('red') or []
+        pb = pending.get('blue') or []
+        if pr or pb:
+            pr_str = ','.join(map(str, pr)) if pr else '-'
+            pb_str = ','.join(map(str, pb)) if pb else '-'
+            base = f"{base} pm:{pr_str}:{pb_str}"
     return base
 
 
@@ -135,9 +151,22 @@ def sfn_to_dict(sfn_str):
 
     score = parts[6]
 
-    # Optional variant token; default 'standard' for back-compat with
-    # SFN strings written before the variant field existed.
-    variant = parts[7] if len(parts) > 7 else 'standard'
+    # Optional trailing tokens, recognized by prefix so they can appear in
+    # any combination: 'pm:<red>:<blue>' carries Providence pending-move
+    # schedules; any other token is the variant. Both default for
+    # back-compat with SFN strings written before the fields existed.
+    variant = 'standard'
+    red_pending = []
+    blue_pending = []
+    for token in parts[7:]:
+        if token.startswith('pm:'):
+            _, pr_str, pb_str = token.split(':')
+            red_pending = ([] if pr_str == '-'
+                           else [int(x) for x in pr_str.split(',')])
+            blue_pending = ([] if pb_str == '-'
+                            else [int(x) for x in pb_str.split(',')])
+        elif token:
+            variant = token
 
     return {
         'stones': stones,
@@ -152,6 +181,8 @@ def sfn_to_dict(sfn_str):
         'blue_springlock': blue_spring,
         'score': score,
         'variant': variant,
+        'red_pending': red_pending,
+        'blue_pending': blue_pending,
     }
 
 

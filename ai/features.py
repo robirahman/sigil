@@ -26,7 +26,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from notation import NODE_ORDER, ADJACENCY, POSITIONS
-from simboard import CORE_SPELLS, MANA_NODES
+from simboard import CORE_SPELLS, MANA_NODES, DESTROYED, apply_sim_turn
 
 from ai.config import (
     NUM_NODES, NUM_SPELL_SLOTS, SPELL_TO_ID,
@@ -218,6 +218,60 @@ def _mana_pressure_features(board, side_to_move, enemy):
     return feats
 
 
+def _map_control_distances(stones, color):
+    """Multi-source BFS hop distances from all of `color`'s stones over the
+    adjacency graph. DESTROYED nodes are impassable (never enqueued); stones
+    of either color are passable. Returns {node: hops}; nodes absent from
+    the result are unreachable. Mirrors
+    docs/static/scripts/engine/features.js:_mapControlDistances."""
+    dist = {}
+    frontier = [n for n in NODE_ORDER if stones[n] == color]
+    for n in frontier:
+        dist[n] = 0
+    d = 0
+    while frontier:
+        d += 1
+        next_frontier = []
+        for node in frontier:
+            for nb in ADJACENCY[node]:
+                if nb in dist or stones[nb] == DESTROYED:
+                    continue
+                dist[nb] = d
+                next_frontier.append(nb)
+        frontier = next_frontier
+    return dist
+
+
+def map_control(stones):
+    """Map control: how many nodes each side's stones are strictly closer
+    to. `stones` is any node -> 'red'|'blue'|None|DESTROYED mapping (values
+    other than 'red'/'blue'/DESTROYED are treated as empty). Destroyed
+    nodes are impassable AND excluded from the tally, so
+    red + blue + contested = 39 - #destroyed. Equal distance — including
+    both-unreachable — counts as contested. diff = red - blue (red POV);
+    side-relative is (diff if color == 'red' else -diff) at the call site.
+    The standard opening (red a1, blue b1) is 17/18/4, diff -1: the board
+    has rotational but not mirror symmetry, so the -1 is a real property
+    of the map, not a bug. Mirrors
+    docs/static/scripts/engine/features.js:mapControl."""
+    dr = _map_control_distances(stones, 'red')
+    db = _map_control_distances(stones, 'blue')
+    inf = float('inf')
+    red = blue = contested = 0
+    for n in NODE_ORDER:
+        if stones[n] == DESTROYED:
+            continue
+        a = dr.get(n, inf)
+        b = db.get(n, inf)
+        if a < b:
+            red += 1
+        elif b < a:
+            blue += 1
+        else:
+            contested += 1
+    return {'red': red, 'blue': blue, 'contested': contested, 'diff': red - blue}
+
+
 def _tempo_scalar_features(board, side_to_move, enemy,
                            own_escape, enemy_escape,
                            own_fill, enm_fill,
@@ -257,9 +311,13 @@ def board_to_tensor(board, side_to_move=None):
     features = []
 
     # --- Stone placement: 39 × 3 one-hot (own, enemy, empty) = 117 ---
+    # A 4th "destroyed" channel is computed here but APPENDED at the very end
+    # of the feature vector (see below) so the legacy 456-dim column layout is
+    # preserved for warm-start migration.
     stones_own = np.zeros(NUM_NODES, dtype=np.float32)
     stones_enemy = np.zeros(NUM_NODES, dtype=np.float32)
     stones_empty = np.zeros(NUM_NODES, dtype=np.float32)
+    stones_destroyed = np.zeros(NUM_NODES, dtype=np.float32)
 
     for i, name in enumerate(NODE_ORDER):
         s = board.stones[name]
@@ -269,10 +327,11 @@ def board_to_tensor(board, side_to_move=None):
             stones_enemy[i] = 1.0
         elif s is None:
             stones_empty[i] = 1.0
-        # else: permanently destroyed node (wall) — left all-zero across the
-        # three channels, a signal distinct from a normal empty cell (which
-        # is 0/0/1). This keeps RAW_FEATURE_DIM unchanged (no retrain needed)
-        # while letting the network tell walls apart from open empties.
+        else:
+            # Permanently destroyed node (wall). Flagged in its own channel
+            # (appended last); also left 0 across own/enemy/empty so it is
+            # unambiguously distinct from a normal empty cell (0/0/1).
+            stones_destroyed[i] = 1.0
 
     features.extend(stones_own)
     features.extend(stones_enemy)
@@ -360,6 +419,23 @@ def board_to_tensor(board, side_to_move=None):
     )
     features.extend(tempo)             # 8
 
+    # Destroyed-node channel (APPENDED LAST — keeps the legacy column layout
+    # intact for warm-start migration). 1.0 for each node Fissure has turned
+    # into a permanent wall.
+    features.extend(stones_destroyed)  # 39
+
+    # Providence pending-move block (appended last, same migration
+    # convention): own/enemy schedule slots 0-3 (min(x,3)/3), then
+    # own/enemy extras granted this turn but not yet used.
+    for side in (side_to_move, enemy):
+        sched = board.pending_moves[side]
+        for i in range(4):
+            v = sched[i] if i < len(sched) else 0
+            features.append(min(v, 3) / 3.0)
+    extra = min(board.extra_moves_this_turn, 3) / 3.0
+    features.append(extra if board.whose_turn == side_to_move else 0.0)
+    features.append(extra if board.whose_turn == enemy else 0.0)  # 10 dims
+
     raw = torch.tensor(features, dtype=torch.float32)
     assert raw.numel() == RAW_FEATURE_DIM, (
         f'Feature dim mismatch: got {raw.numel()}, expected {RAW_FEATURE_DIM}')
@@ -376,7 +452,7 @@ def board_to_tensor(board, side_to_move=None):
 def encode_turn(turn, board, color):
     """Encode a CompleteTurn as a fixed-size feature vector.
 
-    Returns: Tensor of shape (TURN_FEATURE_DIM,)  [84 features]
+    Returns: Tensor of shape (TURN_FEATURE_DIM,)  [116 features]
     """
     enemy = 'blue' if color == 'red' else 'red'
     features = np.zeros(TURN_FEATURE_DIM, dtype=np.float32)
@@ -387,7 +463,7 @@ def encode_turn(turn, board, color):
     #  [40]    — has blink
     #  [41]    — has dash
     #  [42]    — has cast
-    #  [43:58] — spell cast ID (one-hot over 15 spells)
+    #  [43:58] — spell cast ID one-hot, core spells (IDs 0-14)
     #  [58]    — number of actions (normalized by 5)
     #  [59]    — naive estimated stone gain
     #  [60]    — is pass-only turn
@@ -408,7 +484,11 @@ def encode_turn(turn, board, color):
     #  [76]    — enemy threat-of-activation growth (max post-pre, [0,1])  [v27]
     #  [77]    — own threat-of-activation growth (max post-pre, [0,1])  [v27]
     #  [78]    — disrupts enemy mana-to-mana chain (count / 3)  [v27]
-    #  [79:84] — reserved
+    #  [79]    — tempo-waste: re-fills own locked spell (stones / 3)  [v28]
+    #  [80:84] — reserved
+    #  [84:114]— spell cast ID one-hot, expansion spells (IDs 15-44)  [v29]
+    #  [114]   — Providence extra base moves used this turn (/3)  [v29]
+    #  [115]   — Providence turns scheduled by this turn's cast (/4)  [v29]
 
     crushable_own_before = _count_crushable(board, color, enemy)
     crushable_enm_before = _count_crushable(board, enemy, color)
@@ -471,11 +551,30 @@ def encode_turn(turn, board, color):
         elif action.type == 'cast':
             features[42] = 1.0
             spell_id = SPELL_TO_ID.get(action.spell, 0)
-            features[43 + spell_id] = 1.0
+            # Core spells one-hot at [43:58]; expansion spells (IDs 15-44)
+            # at [84:114] — the legacy region only had 15 slots, and writing
+            # 43 + id for larger IDs overflowed into the tactical columns.
+            if spell_id < 15:
+                features[43 + spell_id] = 1.0
+            else:
+                features[84 + (spell_id - 15)] = 1.0
+
+        elif action.type == 'schedule_moves':
+            features[115] = min(action.turns or 0, 4) / 4.0
 
     features[58] = len(turn.actions) / 5.0
     if len(turn.actions) == 1 and turn.actions[0].type == 'pass':
         features[60] = 1.0
+
+    # Providence: extra base moves used this turn (leading move-phase
+    # actions beyond the ordinary first move).
+    base_moves = 0
+    for action in turn.actions:
+        if action.type in ('move', 'hard_move', 'blink'):
+            base_moves += 1
+        else:
+            break
+    features[114] = min(max(base_moves - 1, 0), 3) / 3.0
 
     # Tactical extension: read from sim_after
     if sim_after is not None:
@@ -533,6 +632,21 @@ def encode_turn(turn, board, color):
     features[72] = min(soft_count, 3) / 3.0
     features[73] = min(hard_count, 3) / 3.0
     features[74] = min(max(spell_pos_delta, -3), 3) / 3.0
+
+    # v28: tempo-waste flag for re-filling our own locked spell.
+    own_lock = board.lock[color]
+    if own_lock is not None and sim_after is not None:
+        try:
+            lock_idx = board.spell_names.index(own_lock)
+        except ValueError:
+            lock_idx = -1
+        lock_nodes = _SPELL_POSITION_NODES[lock_idx] if lock_idx >= 0 else None
+        if lock_nodes:
+            wasted = 0
+            for n in lock_nodes:
+                if sim_after.stones[n] == color and board.stones[n] != color:
+                    wasted += 1
+            features[79] = min(wasted, 3) / 3.0
 
     return torch.tensor(features, dtype=torch.float32)
 
@@ -602,23 +716,7 @@ def _simulate_turn(board, turn, color):
     """
     try:
         sim = board.copy()
-        for action in turn.actions:
-            if action.type == 'move':
-                sim.stones[action.node] = color
-            elif action.type == 'hard_move':
-                sim._push_enemy(action.node, color)
-            elif action.type == 'blink':
-                if sim.stones[action.node] == sim._enemy(color):
-                    sim._push_enemy(action.node, color)
-                else:
-                    sim.stones[action.node] = color
-            elif action.type == 'cast':
-                sim._cast_spell(action.spell, color)
-            elif action.type in ('dash', 'dash_lightning'):
-                if action.sacrificed:
-                    for sac in action.sacrificed:
-                        sim.stones[sac] = None
-            sim.update()
+        apply_sim_turn(sim, turn, color)
         return sim
     except Exception:
         return None

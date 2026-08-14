@@ -65,7 +65,7 @@ def main():
     model.eval()
 
     sfns = []
-    with open('ai/data/human_games.jsonl', 'r') as f:
+    with open('ai/data/selfplay_v22b_2026-05-03.jsonl', 'r') as f:
         for line in f:
             rec = json.loads(line)
             sfn = rec.get('sfn')

@@ -60,13 +60,13 @@ def main():
     model.eval()
 
     sfns = []
-    with open('ai/data/human_games.jsonl', 'r') as f:
+    with open('ai/data/selfplay_v22b_2026-05-03.jsonl', 'r') as f:
         for line in f:
             rec = json.loads(line)
             sfn = rec.get('sfn')
             if sfn:
                 sfns.append(sfn)
-    print(f'  loaded {len(sfns)} candidate positions from human_games.jsonl')
+    print(f'  loaded {len(sfns)} candidate positions from selfplay_v22b_2026-05-03.jsonl')
 
     rng = random.Random(20260504)
     rng.shuffle(sfns)

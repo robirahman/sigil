@@ -46,6 +46,10 @@ const SPELL_FX = {
 	Fissure:              { type: 'burst', color: '#8b5a2b', shake: true  },
 	Rock_Slide:           { type: 'flash', color: '#cd853f', shake: true  },
 	Bulwark:              { type: 'pulse', color: '#deb887', shake: false },
+	// Providence expansion (royal purple + gold)
+	Dividend:             { type: 'pulse', color: '#d4af37', shake: false },
+	Annuity:              { type: 'burst', color: '#b8912f', shake: false },
+	Endowment:            { type: 'burst', color: '#6a0dad', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

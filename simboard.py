@@ -68,6 +68,10 @@ CORE_SPELLS = {
     'Fissure': {'resolve': 'fissure', 'static': False, 'ischarm': False},
     'Rock_Slide': {'resolve': 'rock_slide', 'static': False, 'ischarm': False},
     'Bulwark': {'resolve': None, 'static': True, 'ischarm': True},
+    # Providence expansion (scheduled extra moves)
+    'Dividend': {'resolve': 'schedule_moves', 'turns': 1, 'static': False, 'ischarm': True},
+    'Annuity': {'resolve': 'schedule_moves', 'turns': 2, 'static': False, 'ischarm': False},
+    'Endowment': {'resolve': 'schedule_moves', 'turns': 4, 'static': False, 'ischarm': False},
 }
 
 # Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
@@ -87,7 +91,7 @@ SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
 class Action:
     """A single sub-action within a turn."""
     __slots__ = ('type', 'node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                 'node2', 'destroyed', 'converted', 'wall')
+                 'node2', 'destroyed', 'converted', 'wall', 'pushes', 'turns')
 
     def __init__(self, type, **kwargs):
         self.type = type
@@ -102,11 +106,16 @@ class Action:
         # Node permanently destroyed (turned into a wall) by this action,
         # e.g. Fissure's target node. None for actions that create no wall.
         self.wall = kwargs.get('wall')
+        # Rock Slide push sequence: list of {'from', 'to', 'crushed'} dicts.
+        self.pushes = kwargs.get('pushes')
+        # Providence schedule_moves: extra-move turns scheduled by this cast.
+        self.turns = kwargs.get('turns')
 
     def __repr__(self):
         parts = [f"Action({self.type!r}"]
         for attr in ('node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                     'node2', 'destroyed', 'converted', 'wall'):
+                     'node2', 'destroyed', 'converted', 'wall', 'pushes',
+                     'turns'):
             val = getattr(self, attr)
             if val is not None:
                 parts.append(f"{attr}={val!r}")
@@ -137,7 +146,8 @@ class SimBoard:
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
                  'springlock', 'totalstones', 'mana', 'charged_spells',
-                 'variant', 'all_looping_snapshot_counts')
+                 'variant', 'all_looping_snapshot_counts',
+                 'pending_moves', 'extra_moves_this_turn')
 
     def __init__(self, spell_names=None, variant='standard'):
         if variant not in self.VARIANTS:
@@ -159,6 +169,11 @@ class SimBoard:
         self.charged_spells = {'red': [], 'blue': []}
         self.variant = variant
         self.all_looping_snapshot_counts = {}
+        # Providence: pending_moves[color][i] = extra moves granted at the
+        # start of that player's i-th upcoming turn. extra_moves_this_turn =
+        # extras popped for the current side-to-move by advance_turn.
+        self.pending_moves = {'red': [], 'blue': []}
+        self.extra_moves_this_turn = 0
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -178,6 +193,9 @@ class SimBoard:
                             'blue': list(self.charged_spells['blue'])}
         b.variant = self.variant
         b.all_looping_snapshot_counts = dict(self.all_looping_snapshot_counts)
+        b.pending_moves = {'red': list(self.pending_moves['red']),
+                           'blue': list(self.pending_moves['blue'])}
+        b.extra_moves_this_turn = self.extra_moves_this_turn
         return b
 
     def looping_snapshot(self):
@@ -191,6 +209,20 @@ class SimBoard:
             key += str(self.stones[nodename])
         key += self.lock['red'] if self.lock['red'] else 'None'
         key += self.lock['blue'] if self.lock['blue'] else 'None'
+        # Providence: positions with different pending schedules are NOT the
+        # same position. Suffix only when non-empty so legacy keys (and dicts
+        # carried over from live Boards) stay byte-identical. Canonical form
+        # is the PRE-SHIFT schedule: live boards snapshot before shifting, so
+        # re-prepend the popped extras counter to the mover's list — at a
+        # turn boundary [extras] + remaining == the pre-shift schedule.
+        sched = {'red': list(self.pending_moves['red']),
+                 'blue': list(self.pending_moves['blue'])}
+        if self.extra_moves_this_turn:
+            sched[self.whose_turn] = ([self.extra_moves_this_turn]
+                                      + sched[self.whose_turn])
+        if sched['red'] or sched['blue']:
+            key += ('|P' + ','.join(map(str, sched['red']))
+                    + '/' + ','.join(map(str, sched['blue'])))
         return key
 
     def setup_initial(self):
@@ -221,9 +253,12 @@ class SimBoard:
         self.totalstones['blue'] = blue_count
 
         # Score: blue gets +1 phantom stone (a counter token off the
-        # playable board — counts toward score only).
-        redscore = red_count
-        bluescore = blue_count + 1
+        # playable board — counts toward score only). Providence pending
+        # stones display in the score for both sides; the side to move also
+        # shows extras granted this turn (correct at turn boundaries, which
+        # is when score is read — mid-replay values are transient).
+        redscore = red_count + self.pending_stones('red')
+        bluescore = blue_count + 1 + self.pending_stones('blue')
         if redscore == bluescore:
             self.score = 'tied'
         elif redscore > bluescore:
@@ -280,29 +315,55 @@ class SimBoard:
             if all_same:
                 self.charged_spells[first].append(spell_name)
 
+    def pending_sum(self, color):
+        """Total extra stones still scheduled for color's future turns."""
+        return sum(self.pending_moves[color])
+
+    def pending_stones(self, color):
+        """Providence phantom stones for `color`: scheduled extras plus, for
+        the side to move, extras granted this turn but not yet placed."""
+        p = self.pending_sum(color)
+        if self.whose_turn == color:
+            p += self.extra_moves_this_turn
+        return p
+
+    def effective_stones(self, color):
+        """Real stones plus Providence phantoms (no blue +1 token)."""
+        return self.totalstones[color] + self.pending_stones(color)
+
     def check_game_over(self, active_color):
-        """Check win conditions after a turn. Returns True if game is over."""
+        """Check win conditions after a turn. Returns True if game is over.
+
+        Providence phantoms count ASYMMETRICALLY (defense only): a player's
+        win claim uses their real placed stones, but is checked against the
+        opponent's real+pending total — you can't win off stones you haven't
+        placed, and you can't lose while scheduled stones cover the deficit.
+        The mover's own extras-this-turn are NOT counted anywhere here:
+        placed ones are already real, unused ones forfeit at end of turn.
+        """
         # update() may already have flagged immediate-loss (zero stones).
         if self.gameover:
             return True
 
-        red_total = self.totalstones['red']
-        blue_total = self.totalstones['blue'] + 1  # phantom stone
+        red_real = self.totalstones['red']
+        blue_real = self.totalstones['blue'] + 1  # phantom counter token
+        red_pend = self.pending_sum('red')
+        blue_pend = self.pending_sum('blue')
 
-        if red_total > blue_total + 2:
+        if red_real > blue_real + blue_pend + 2:
             self.gameover = True
             self.winner = 'red'
             return True
-        if blue_total > red_total + 2:
+        if blue_real > red_real + red_pend + 2:
             self.gameover = True
             self.winner = 'blue'
             return True
 
         if self.spell_counter[active_color] >= 6:
             self.gameover = True
-            if red_total > blue_total:
+            if red_real > blue_real + blue_pend:
                 self.winner = 'red'
-            elif blue_total > red_total:
+            elif blue_real > red_real + red_pend:
                 self.winner = 'blue'
             else:
                 self.winner = 'blue' if active_color == 'red' else 'red'
@@ -311,9 +372,17 @@ class SimBoard:
         return False
 
     def advance_turn(self):
-        """Switch to the next player's turn."""
+        """Switch to the next player's turn and pop their scheduled extras.
+
+        Putting the Providence shift here makes every turn driver (search,
+        arena, self-play, MCTS...) correct without per-driver edits, and
+        makes end-of-turn forfeit implicit: the pop overwrites whatever the
+        previous mover left unused.
+        """
         self.turn_counter += 1
         self.whose_turn = 'blue' if self.whose_turn == 'red' else 'red'
+        sched = self.pending_moves[self.whose_turn]
+        self.extra_moves_this_turn = sched.pop(0) if sched else 0
 
     # ---- Move helpers ----
 
@@ -438,10 +507,12 @@ class SimBoard:
         # Use 39 as the unreachable sentinel — graph has 39 nodes total.
         return self.escape_distance(node_name, defender, max_dist=39) >= 39
 
-    def _push_enemy(self, node_name, color):
+    def _push_enemy(self, node_name, color, dest_override=None):
         """Push enemy stone from node_name. Returns push destination or 'X' for crush.
 
         Mutates self.stones: places color on node_name, moves enemy to destination.
+        `dest_override`: replay a recorded push destination (mirrors the JS
+        _pushEnemy destOverride); ignored unless it is a legal option.
         """
         enemy = self._enemy(color)
         self.stones[node_name] = color
@@ -481,8 +552,11 @@ class SimBoard:
             # Crush — stone is destroyed
             return 'X'
         else:
-            # Pick first option (greedy, same as AI)
-            dest = options[0]
+            if dest_override is not None and dest_override in options:
+                dest = dest_override
+            else:
+                # Pick first option (greedy, same as AI)
+                dest = options[0]
             self.stones[dest] = enemy
             return dest
 
@@ -1314,6 +1388,18 @@ class SimBoard:
                     break
             actions.append(Action('rock_slide', pushes=pushes))
 
+        elif resolve_type == 'schedule_moves':
+            # Providence: schedule 1 extra move at the start of each of the
+            # caster's next `turns` turns (additive stacking).
+            turns = info.get('turns', 1)
+            sched = self.pending_moves[color]
+            while len(sched) < turns:
+                sched.append(0)
+            for i in range(turns):
+                sched[i] += 1
+            actions.append(Action('schedule_moves', spell=spell_name, turns=turns))
+            self.update()
+
         return actions
 
     def _destroy_exposed(self, color, actions):
@@ -1507,9 +1593,35 @@ class SimBoard:
                 continue
             board_after_move.update()
 
-            # Phase 2: After move — can dash, cast spells, or pass
-            yield from board_after_move._enumerate_post_move(
-                color, [move_action], can_dash=True, can_spell=True, can_summer=True)
+            # Phase 2: remaining Providence base moves, then dash/cast/pass.
+            yield from board_after_move._enumerate_move_phase(
+                color, [move_action], self.extra_moves_this_turn)
+
+    def _enumerate_move_phase(self, color, actions_so_far, extras_left):
+        """Providence move phase: at each step, either stop taking base
+        moves (proceed to dash/cast/pass — remaining extras forfeit at end
+        of turn) or take one more. Greedy engine: a single target per extra
+        step (matching the greedy dash convention); the exhaustive
+        enumerator branches over top-K targets instead. With extras_left ==
+        0 this is exactly the pre-Providence flow.
+
+        Wind's blink privilege and Stone's soft-move restriction apply only
+        to the turn's FIRST move, so extra steps use _all_moveable.
+        """
+        yield from self._enumerate_post_move(
+            color, actions_so_far, can_dash=True, can_spell=True, can_summer=True)
+        if extras_left <= 0 or self.gameover:
+            return
+        targets = self._all_moveable(color)
+        if not targets:
+            return
+        b = self.copy()
+        act = b._do_move(color, targets[0])
+        if act is None:
+            return
+        b.update()
+        yield from b._enumerate_move_phase(color, actions_so_far + [act],
+                                           extras_left - 1)
 
     def _enumerate_post_move(self, color, actions_so_far, can_dash, can_spell, can_summer):
         """Enumerate post-move options: dash, spell, or pass."""
@@ -1696,6 +1808,8 @@ class SimBoard:
             board.redplayer.springlock.name = self.springlock['red']
         if board.blueplayer.springlock:
             board.blueplayer.springlock.name = self.springlock['blue']
+        board.pending_moves = {'red': list(self.pending_moves['red']),
+                               'blue': list(self.pending_moves['blue'])}
         return _to_sfn_func(board)
 
     @classmethod
@@ -1710,5 +1824,120 @@ class SimBoard:
         b.lock = {'red': d['red_lock'], 'blue': d['blue_lock']}
         b.springlock = {'red': d['red_springlock'], 'blue': d['blue_springlock']}
         b.score = d['score']
+        # Providence schedules ride the optional pm: token; the turn-scoped
+        # extras counter is NOT in SFN — callers that rebuild a board mid-way
+        # through a granted turn (e.g. the AI worker) must set it themselves.
+        b.pending_moves = {'red': list(d.get('red_pending') or []),
+                           'blue': list(d.get('blue_pending') or [])}
         b.update()
         return b
+
+
+def apply_sim_turn(board, turn, color):
+    """Replay a recorded CompleteTurn's actions onto `board` (mutating).
+
+    Exact Python mirror of sim-board.js:applySimTurn — the canonical way to
+    re-apply a recorded turn. Casts replay as BOOKKEEPING only (sacrifice the
+    sigil, place the recorded kept stones, advance lock/counter): the
+    resolver's effects are already present as separate recorded actions, and
+    re-running _cast_spell here would both double-apply them (e.g. Slash's
+    recorded hard_moves would push twice) and silently discard the
+    enumerator's target choices by re-resolving greedily. Recorded push
+    destinations are honored. Ends with the Seal of Destruction end-of-turn
+    trigger; the start-of-turn half stays with the turn driver.
+    """
+    enemy = board._enemy(color)
+    for action in turn.actions:
+        t = action.type
+        if t == 'move':
+            board.stones[action.node] = color
+        elif t == 'hard_move':
+            board._push_enemy(action.node, color, action.pushed_to)
+        elif t == 'blink':
+            if board.stones[action.node] == enemy:
+                board._push_enemy(action.node, color, action.pushed_to)
+            else:
+                board.stones[action.node] = color
+        elif t == 'cast':
+            info = CORE_SPELLS.get(action.spell)
+            try:
+                spell_idx = board.spell_names.index(action.spell)
+            except ValueError:
+                spell_idx = -1
+            pos_nodes = POSITIONS.get(spell_idx + 1, []) if spell_idx >= 0 else []
+            for n in pos_nodes:
+                if board.stones[n] != DESTROYED:
+                    board.stones[n] = None
+            if info and not info.get('ischarm'):
+                if action.kept:
+                    for n in action.kept:
+                        board.stones[n] = color
+                if board.lock[color] == action.spell:
+                    board.springlock[color] = action.spell
+                else:
+                    board.lock[color] = action.spell
+                    board.springlock[color] = None
+                board.spell_counter[color] += 1
+        elif t in ('dash', 'dash_lightning'):
+            if action.sacrificed:
+                for sac in action.sacrificed:
+                    board.stones[sac] = None
+        # Resolver-emitted outcomes — apply the recorded result directly.
+        elif t == 'sacrifice':
+            if action.node:
+                board.stones[action.node] = None
+        elif t in ('fireblast', 'hail_storm', 'storm_front', 'hurricane',
+                   'decay'):
+            if action.destroyed:
+                for n in action.destroyed:
+                    board.stones[n] = None
+        elif t == 'bewitch':
+            if action.node:
+                board.stones[action.node] = color
+            if action.node2:
+                board.stones[action.node2] = color
+        elif t == 'starfall':
+            if action.node:
+                board.stones[action.node] = color
+            if action.node2:
+                board.stones[action.node2] = color
+            if action.destroyed:
+                for n in action.destroyed:
+                    board.stones[n] = None
+        elif t == 'meteor_destroy':
+            if action.node:
+                board.stones[action.node] = None
+        elif t == 'gust':
+            if action.destroyed:
+                for n in action.destroyed:
+                    board.stones[n] = None
+            if action.kept:
+                for n in action.kept:
+                    board.stones[n] = enemy
+        elif t == 'corrupt':
+            if action.converted:
+                for n in action.converted:
+                    board.stones[n] = color
+        elif t == 'fissure':
+            if action.destroyed:
+                for n in action.destroyed:
+                    board.stones[n] = None
+            if action.wall:
+                board.stones[action.wall] = DESTROYED
+        elif t == 'rock_slide':
+            if action.pushes:
+                for p in action.pushes:
+                    moved = board.stones[p['from']]
+                    board.stones[p['from']] = None
+                    board.stones[p['to']] = moved
+        elif t == 'schedule_moves':
+            sched = board.pending_moves[color]
+            n = action.turns or 0
+            while len(sched) < n:
+                sched.append(0)
+            for i in range(n):
+                sched[i] += 1
+        board.update()
+    # Seal of Destruction end-of-turn trigger (the start-of-turn loss is
+    # applied by the turn driver, e.g. minimax _apply_turn / live loops).
+    board._destruction_end_of_turn(color)

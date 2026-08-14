@@ -53,6 +53,10 @@ const ENUM_CAPS = {
 	splash: 6,
 	// Tectonic expansion caps.
 	fissure: 6,
+	// Providence expansion caps: extra-move targets branched per granted
+	// move (the chain also always offers "stop here", so branching per
+	// extra is extra_move + 1).
+	extra_move: 2,
 	// Panda expansion caps.
 	shiver: 8,
 	choke: 6,
@@ -660,6 +664,10 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	else moveTargets = board._allMoveable(color);
 	if (!moveTargets.length) return [new SimTurn([new SimAction('pass')])];
 	const out = [];
+	// Cross-branch dedup for Providence multi-move prefixes: two orders of
+	// the same base-move placements produce the same stones, so their
+	// continuations are identical.
+	const seenMovePrefixes = new Set();
 	for (const moveTarget of moveTargets) {
 		// A move/blink onto an enemy stone pushes it; branch the landing
 		// cell when several are legal so the search can aim the push.
@@ -673,8 +681,38 @@ function getLegalTurnsExhaustive(board, color, caps) {
 			const moveAct = ba._doMove(color, moveTarget, isBlink, pushDest);
 			if (!moveAct) continue;
 			ba.update();
-			_enumeratePostMoveExhaustive(ba, color, [moveAct], caps, true, true, true, out);
+			_enumerateMovePhaseExhaustive(ba, color, [moveAct], caps,
+				board.extraMovesThisTurn, seenMovePrefixes, out);
 		}
 	}
 	return out;
+}
+
+/**
+ * Providence move phase for the exhaustive enumerator: at each step, either
+ * stop taking base moves (remaining extras forfeit at end of turn) or take
+ * one more, branching over the top-`caps.extra_move` ranked targets with
+ * stone-map dedup across orderings. With extrasLeft === 0 this is exactly
+ * the pre-Providence flow. Wind/Stone gating applies only to the turn's
+ * first move, so extra steps draw from _allMoveable.
+ */
+function _enumerateMovePhaseExhaustive(board, color, prefix, caps, extrasLeft, seen, out) {
+	_enumeratePostMoveExhaustive(board, color, prefix, caps, true, true, true, out);
+	if (extrasLeft <= 0 || board.gameover) return;
+	const targets = _rankDashTargets(board, color, board._allMoveable(color));
+	for (const t of targets.slice(0, caps.extra_move)) {
+		const b = board.copy();
+		const act = b._doMove(color, t, false);
+		if (!act) continue;
+		b.update();
+		let key = '';
+		for (const n of NODE_ORDER) {
+			const s = b.stones[n];
+			key += s === null ? '-' : s[0] === 'r' ? 'r' : s[0] === 'b' ? 'b' : 'X';
+		}
+		if (seen.has(key)) continue;
+		seen.add(key);
+		_enumerateMovePhaseExhaustive(b, color, prefix.concat([act]), caps,
+			extrasLeft - 1, seen, out);
+	}
 }

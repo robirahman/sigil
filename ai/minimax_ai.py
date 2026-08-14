@@ -35,7 +35,7 @@ from collections import namedtuple
 import numpy as np
 import torch
 
-from simboard import SimBoard, CompleteTurn, Action, MANA_NODES
+from simboard import SimBoard, CompleteTurn, Action, MANA_NODES, apply_sim_turn
 from notation import NODE_ORDER, POSITIONS
 from ai.features import board_to_tensor, encode_all_turns
 from ai.strategic_eval import strategic_scores
@@ -56,6 +56,14 @@ _VOID_NODES = tuple(n for n in NODE_ORDER
                     if n not in _SPELL_NODE_SET and n not in _MANA_NODE_SET)
 _VOID_STONE_WEIGHT = 0.2   # +own-perspective per enemy stone, − per own stone
 _MANA_STONE_WEIGHT = 0.3   # +own-perspective per own stone, − per enemy stone
+# NOTE: these two are hand-set magnitudes on the NN value head's [-1, 1]
+# scale and were never arena-validated. The live JS opponent's equivalents
+# live in docs/static/scripts/engine/caveman-ai.js CAVEMAN_EVAL_WEIGHTS —
+# fitted empirically (ai/fit_positional_weights.py, see
+# ai/data/positional_weights_fit.json) in STONE units and arena-gated
+# (tools/arena). Porting those numbers here directly would be a category
+# error (different scale, and the NN value head already encodes positional
+# structure); aligning this engine is a separate, NN-gated project.
 
 # Hard ceiling for a NON-terminal leaf score. Only the genuine forced game
 # endings (handled via board.gameover: +3 stone advantage, all enemy stones
@@ -76,6 +84,11 @@ _TTEntry = namedtuple('_TTEntry', ['depth', 'score', 'bound', 'best_move', 'age'
 # Cap on `spell_counter`; the engine resets at 6 (simboard.py:174) so any
 # value past 7 collapses to the same Zobrist bucket harmlessly.
 _HASH_MAX_SPELL_COUNTER = 8
+# Providence pending-move hashing bounds: 4 slots (Endowment horizon) and a
+# per-slot count cap (stacked casts saturate at the cap — positions beyond
+# it hash together, which only costs TT precision in absurd stacking cases).
+_HASH_PENDING_SLOTS = 4
+_HASH_MAX_PENDING = 8
 
 # Zobrist tables are deterministic across runs: the hash for the same
 # game state must collide between processes so that TT entries from
@@ -104,7 +117,10 @@ class _PositionHasher:
         rng = random.Random(seed)
         rnd = lambda: rng.getrandbits(_HASH_BITS)
 
-        self._stone = {(n, c): rnd() for n in NODE_ORDER for c in ('red', 'blue')}
+        # 'X' = node destroyed by Fissure. Walls change legality, so they
+        # must hash distinctly from empty rather than raise KeyError.
+        self._stone = {(n, c): rnd() for n in NODE_ORDER
+                       for c in ('red', 'blue', 'X')}
         self._spell_counter = {(c, k): rnd()
                                for c in ('red', 'blue')
                                for k in range(_HASH_MAX_SPELL_COUNTER)}
@@ -115,6 +131,15 @@ class _PositionHasher:
         self._springlock = {(c, s): rnd()
                             for c in ('red', 'blue') for s in lock_states}
         self._side = {'red': rnd(), 'blue': rnd()}
+        # Providence: pending schedules and the popped extras counter change
+        # legal moves and evaluation, so they must hash — otherwise the TT
+        # returns scores across positions that differ only in scheduled
+        # moves. Empty schedules XOR nothing, keeping legacy hashes stable.
+        self._pending = {(c, i, k): rnd() for c in ('red', 'blue')
+                         for i in range(_HASH_PENDING_SLOTS)
+                         for k in range(1, _HASH_MAX_PENDING)}
+        self._extra_now = {(c, k): rnd() for c in ('red', 'blue')
+                           for k in range(1, _HASH_MAX_PENDING)}
 
     def hash(self, board, side_to_move):
         h = self._side[side_to_move]
@@ -129,6 +154,15 @@ class _PositionHasher:
             h ^= self._spell_counter[(color, sc)]
             h ^= self._lock[(color, board.lock[color])]
             h ^= self._springlock[(color, board.springlock[color])]
+            for i, k in enumerate(board.pending_moves[color]):
+                if k:
+                    h ^= self._pending[(color,
+                                        min(i, _HASH_PENDING_SLOTS - 1),
+                                        min(k, _HASH_MAX_PENDING - 1))]
+        e = board.extra_moves_this_turn
+        if e:
+            h ^= self._extra_now[(board.whose_turn,
+                                  min(e, _HASH_MAX_PENDING - 1))]
         return h
 
 
@@ -277,26 +311,12 @@ def _apply_turn(board, turn, color):
     is a no-op, so we step through actions explicitly.
     """
     sim = board.copy()
-    for action in turn.actions:
-        t = action.type
-        if t == 'move':
-            sim.stones[action.node] = color
-        elif t == 'hard_move':
-            sim._push_enemy(action.node, color)
-        elif t == 'blink':
-            if sim.stones[action.node] == sim._enemy(color):
-                sim._push_enemy(action.node, color)
-            else:
-                sim.stones[action.node] = color
-        elif t == 'cast':
-            sim._cast_spell(action.spell, color)
-        elif t in ('dash', 'dash_lightning'):
-            if action.sacrificed:
-                for n in action.sacrificed:
-                    sim.stones[n] = None
-        sim.update()
-    # Seal of Destruction — end of this player's turn: nuke enemies touching them.
-    sim._destruction_end_of_turn(color)
+    # Canonical replay (mirrors JS applySimTurn): honors recorded push
+    # destinations and resolver outcomes, replays casts as bookkeeping —
+    # never re-resolves (re-casting would double-apply recorded effects and
+    # discard the enumerator's target choices). Includes the Seal of
+    # Destruction end-of-turn trigger.
+    apply_sim_turn(sim, turn, color)
     sim.check_game_over(color)
     if not sim.gameover:
         sim.advance_turn()

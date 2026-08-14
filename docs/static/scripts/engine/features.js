@@ -5,11 +5,34 @@
  * ai/test_feature_parity.py validates this on every commit.
  */
 
+// Must mirror ai/config.py:SPELL_TO_ID exactly (every non-Panda spell).
+// IDs 0-14 are fixed for backward-compatible checkpoint warm-starts.
 const SPELL_TO_ID = {
+	// Core
 	Flourish: 0, Carnage: 1, Bewitch: 2, Starfall: 3,
 	Seal_of_Lightning: 4, Grow: 5, Fireblast: 6, Hail_Storm: 7,
 	Meteor: 8, Seal_of_Wind: 9, Sprout: 10, Slash: 11,
 	Surge: 12, Comet: 13, Seal_of_Summer: 14,
+	// Springtime
+	Blossom: 15, Scatter: 16, Seal_of_Spring: 17,
+	// Celestial
+	Syzygy: 18, Eclipse: 19, Azimuth: 20,
+	// Inferno
+	Erupt: 21, Fury: 22, Charge: 23,
+	// Tempest
+	Hurricane: 24, Storm_Front: 25, Gust: 26,
+	// Tsunami
+	Flood: 27, Torrent: 28, Splash: 29,
+	// Autumn
+	Harvest: 30, Gather: 31, Seal_of_Autumn: 32,
+	// Gloom
+	Corrupt: 33, Decay: 34, Lurk: 35,
+	// Covenant
+	Seal_of_Destruction: 36, Seal_of_Stone: 37, Seal_of_Winter: 38,
+	// Tectonic
+	Fissure: 39, Rock_Slide: 40, Bulwark: 41,
+	// Providence
+	Dividend: 42, Annuity: 43, Endowment: 44,
 };
 
 const _NODE_TO_IDX = {};
@@ -27,12 +50,21 @@ const NUM_SPELL_SLOTS = 9;
 const ESCAPE_MAX = 6;
 // Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat
 //                      + 6 mana_pressure + 8 tempo = 456
-const RAW_FEATURE_DIM = 456;
+// 456 legacy features + 39 destroyed-node channel + 10 Providence pending
+// dims (each block appended last in turn). Must equal
+// ai/config.py:RAW_FEATURE_DIM.
+const RAW_FEATURE_DIM = 505;
+// Fixed offsets of the appended blocks — NOT relative to RAW_FEATURE_DIM,
+// which keeps growing.
+const _DESTROYED_CHANNEL_OFFSET = 456;
+const _PENDING_BLOCK_OFFSET = 495;
 // BFS-distance ceiling used to normalize the mana-pressure block; matches
 // _DISTANCE_NORM in ai/features.py.
 const MANA_DISTANCE_NORM = 8;
-// Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27) = 84
-const TURN_FEATURE_DIM = 84;
+// Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27)
+// + 30 expansion-spell one-hot at [84:114] + 2 Providence scalars = 116.
+// Must mirror ai/config.py:TURN_FEATURE_DIM.
+const TURN_FEATURE_DIM = 116;
 
 /**
  * Per-stone life-status block: 4 channels × 39 = 156 dims.
@@ -301,21 +333,39 @@ function boardToTensor(board, sideToMove) {
 	const features = new Float32Array(RAW_FEATURE_DIM);
 	let fi = 0;
 
-	// Stone placement: 39 x 3 one-hot = 117
+	// Stone placement: 39 x 3 one-hot = 117. A 4th "destroyed" channel is
+	// computed here but written into the LAST 39 slots (appended) so the
+	// legacy column layout is preserved for warm-start migration.
 	const stonesOwn = new Float32Array(NUM_NODES);
 	const stonesEnemy = new Float32Array(NUM_NODES);
+	const stonesDestroyed = new Float32Array(NUM_NODES);
 	for (let i = 0; i < NUM_NODES; i++) {
 		const s = board.stones[NODE_ORDER[i]];
 		if (s === sideToMove) stonesOwn[i] = 1;
 		else if (s === enemy) stonesEnemy[i] = 1;
 		else if (s === null) features[fi + NUM_NODES * 2 + i] = 1; // empty
-		// else: permanently destroyed node (wall) — left all-zero across the
-		// three channels, a signal distinct from a normal empty cell, keeping
-		// the feature dimension unchanged (mirrors ai/features.py).
+		else stonesDestroyed[i] = 1; // permanently destroyed node (wall)
 	}
+	features.set(stonesDestroyed, _DESTROYED_CHANNEL_OFFSET); // appended block
 	features.set(stonesOwn, fi); fi += NUM_NODES;
 	features.set(stonesEnemy, fi); fi += NUM_NODES;
 	fi += NUM_NODES; // empty already set
+
+	// Providence pending-move block (appended, mirrors ai/features.py):
+	// own/enemy schedule slots 0-3 (min(x,3)/3), then own/enemy extras
+	// granted this turn but not yet used.
+	{
+		let pi = _PENDING_BLOCK_OFFSET;
+		for (const side of [sideToMove, enemy]) {
+			const sched = (board.pendingMoves && board.pendingMoves[side]) || [];
+			for (let i = 0; i < 4; i++) {
+				features[pi++] = Math.min(i < sched.length ? sched[i] : 0, 3) / 3.0;
+			}
+		}
+		const extra = Math.min(board.extraMovesThisTurn || 0, 3) / 3.0;
+		features[pi++] = board.whoseTurn === sideToMove ? extra : 0.0;
+		features[pi++] = board.whoseTurn === enemy ? extra : 0.0;
+	}
 
 	// Neighborhood features: 39 x 2 = 78
 	for (let i = 0; i < NUM_NODES; i++) {
@@ -554,12 +604,26 @@ function encodeTurn(turn, board, color) {
 		} else if (action.type === 'cast') {
 			features[42] = 1;
 			const spellId = SPELL_TO_ID[action.spell] || 0;
-			features[43 + spellId] = 1;
+			// Core spells one-hot at [43:58]; expansion spells (IDs 15-44)
+			// at [84:114] — mirrors ai/features.py:encode_turn.
+			if (spellId < 15) features[43 + spellId] = 1;
+			else features[84 + (spellId - 15)] = 1;
+		} else if (action.type === 'schedule_moves') {
+			features[115] = Math.min(action.turns || 0, 4) / 4.0;
 		}
 	}
 
 	features[58] = turn.actions.length / 5.0;
 	if (turn.actions.length === 1 && turn.actions[0].type === 'pass') features[60] = 1;
+
+	// Providence: extra base moves used this turn (leading move-phase
+	// actions beyond the ordinary first move).
+	let baseMoves = 0;
+	for (const action of turn.actions) {
+		if (action.type === 'move' || action.type === 'hard_move' || action.type === 'blink') baseMoves++;
+		else break;
+	}
+	features[114] = Math.min(Math.max(baseMoves - 1, 0), 3) / 3.0;
 
 	if (simAfter !== null) {
 		const ownBefore = board.totalStones[color];

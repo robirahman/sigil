@@ -310,12 +310,8 @@ document.addEventListener('alpine:init', () => {
 				this.reviewIndex = this.reviewSfns.length - 1;
 				this._showReviewPosition();
 			},
-			_initReviewMode(spellNames, gameLog, winner) {
-				if (!gameLog || gameLog.length === 0) {
-					this.messageHistory.push('No game log available for review.');
-					return;
-				}
-				// Populate spell setup from spellNames (same mapping as engine)
+			// Populate spell setup from spellNames (same mapping as engine).
+			_applyReviewSpellSetup(spellNames) {
 				const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
 				const dict = {};
 				const images = {};
@@ -332,6 +328,48 @@ document.addEventListener('alpine:init', () => {
 				this.spellDict = dict;
 				this.spells.images = images;
 				this.spells.text = text;
+			},
+			// Degraded review for records whose transcript can't be replayed
+			// by the current engine version: show the final position only.
+			_initReviewFinalOnly(spellNames, finalSfn, winner) {
+				this._applyReviewSpellSetup(spellNames);
+				this.reviewSfns = [finalSfn];
+				this.reviewTurnLabels = ['Final position'];
+				this.winner = winner || '';
+				this._spellNamesForExport = (spellNames || []).slice();
+				this.messageHistory.push("Couldn't replay this game with the current engine version — showing the final position only.");
+				this.reviewMode = true;
+				this.reviewIndex = 0;
+				this._showReviewPosition();
+			},
+			async _initReviewMode(spellNames, gameLog, winner, variant, finalSfn, setupSfn) {
+				if (!gameLog || gameLog.length === 0) {
+					this.messageHistory.push('No game log available for review.');
+					return;
+				}
+				// Slim (post-refactor) room records carry action transcripts
+				// only — rebuild the per-ply positions by replay. Legacy rooms
+				// with fat per-turn SFNs skip this and load directly.
+				if (gameLog.some(t => !t.sfnAfter)) {
+					try {
+						gameLog = await reconstructGameLog(
+							spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
+						const last = gameLog.length ? gameLog[gameLog.length - 1].sfnAfter : null;
+						if (finalSfn && last !== finalSfn) {
+							throw new Error('replayed final position does not match record');
+						}
+					} catch (e) {
+						console.warn('Room transcript replay failed:', e);
+						if (finalSfn) {
+							gameLog = [];
+							this._initReviewFinalOnly(spellNames, finalSfn, winner);
+						} else {
+							this.messageHistory.push('Could not rebuild this game for review.');
+						}
+						return;
+					}
+				}
+				this._applyReviewSpellSetup(spellNames);
 
 				// Build reviewSfns/reviewTurnLabels from gameLog (same shape as live mode)
 				const sfns = [gameLog[0].sfnBefore];
@@ -475,7 +513,8 @@ document.addEventListener('alpine:init', () => {
 					if (reviewMode) {
 						// Skip engine entirely — render finished game in review mode
 						_this.sendEvent = function() {};
-						_this._initReviewMode(spellNames || [], gameLog || [], winner || null);
+						_this._initReviewMode(spellNames || [], gameLog || [], winner || null,
+							normalizeVariant(variant), state.finalSfn || null, state.setupSfn || null);
 						return;
 					}
 

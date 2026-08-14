@@ -382,6 +382,14 @@ async function applyAITurn(board, turn, color, emit) {
 			continue;
 		}
 
+		// Providence: count down the live board's granted moves as the AI's
+		// base moves replay, so the mid-turn score display (phantom stones)
+		// stays exact. Base moves come first in enumerated turns; later
+		// spell-driven move actions clamp harmlessly at 0.
+		if (action.type === 'move' || action.type === 'hard_move' || action.type === 'blink') {
+			if (board.movesLeftThisTurn > 0) board.movesLeftThisTurn--;
+		}
+
 		if (action.type === 'move') {
 			board.stones[action.node] = color;
 			emit({ type: 'new_stone_animation', color, node: action.node });
@@ -633,9 +641,29 @@ async function applyAITurn(board, turn, color, emit) {
 				}
 			}
 		}
+
+		else if (action.type === 'schedule_moves') {
+			// Providence: replay the scheduled extra moves onto the live board.
+			const sched = board.pendingMoves[color];
+			const n = action.turns || 0;
+			while (sched.length < n) sched.push(0);
+			for (let i = 0; i < n; i++) sched[i] += 1;
+			const pname = color === 'red' ? 'Red' : 'Blue';
+			const when = n === 1
+				? 'at the beginning of their next turn'
+				: 'at the beginning of each of their next ' + n + ' turns';
+			emit({ type: 'message', message: pname + ' will make 1 extra move ' + when + '.', awaiting: null });
+			board.update();
+			emit(board.getBoardStatePayload());
+		}
 	}
 }
 
+// When true, applyAITurn's animation pacing is skipped entirely — used by
+// reconstructGameLog to replay recorded sim turns instantly during import.
+let AI_REPLAY_INSTANT = false;
+
 function _aiDelay(ms) {
+	if (AI_REPLAY_INSTANT) return Promise.resolve();
 	return new Promise(r => setTimeout(r, ms));
 }
