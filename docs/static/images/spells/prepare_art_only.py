@@ -18,7 +18,9 @@ EXPANSION_SPELLS = [
     "Lurk", "Decay", "Corrupt",
     "Seal_of_Winter", "Seal_of_Stone", "Seal_of_Destruction",
     "Fissure", "Rock_Slide", "Bulwark",
-    "Endowment", "Annuity", "Dividend"
+    "Endowment", "Annuity", "Dividend",
+    "Conflagration", "Smolder", "Ember",
+    "Minefield", "Deadfall", "Tripwire"
 ]
 
 source_dir = "docs/static/images/spells"

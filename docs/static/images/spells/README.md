@@ -37,6 +37,8 @@ Use the following template prompt for generation:
 | **Covenant** | rich burnished gold and brown | **Seal of Destruction**: arcane triangle with diagonal X-slash<br>**Seal of Stone**: standing stone obelisk surrounded by orbiting runes<br>**Seal of Winter**: six-pointed snowflake with sharp crystal branches |
 | **Tectonic** | rich earthy slate-brown | **Fissure**: jagged tectonic crack splitting the ground<br>**Rock Slide**: cluster of tumbling, jagged stone boulders<br>**Bulwark**: medieval heater shield with protective runes |
 | **Providence** | rich royal purple and gold | **Endowment**: overflowing treasure chest radiating four orbiting coins<br>**Annuity**: twin hourglasses joined by a flowing ribbon of coins<br>**Dividend**: a single gold coin splitting in two above an open palm |
+| **Aftershock** | rich smoldering orange-red over charred black | **Conflagration**: a wall of flame rolling across cracked, glowing ground<br>**Smolder**: twin coals venting smoke that coils into an hourglass shape<br>**Ember**: a single glowing coal shedding one bright spark |
+| **Ambush** | rich camouflage green over dark loam | **Minefield**: four half-buried spiked orbs arranged in a diamond<br>**Deadfall**: a propped slab of stone over scattered leaves and a tripstick<br>**Tripwire**: a taut cord strung between two stakes, glinting at its midpoint |
 
 ### Image Specs:
 - **Aspect Ratio**: `1:1`
