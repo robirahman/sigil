@@ -68,12 +68,19 @@ def main():
     ap.add_argument('--dump', default='ai/data/completed_games_raw.json')
     ap.add_argument('--out', default='docs/dev/unmatched-review.html')
     ap.add_argument('--max-cases', type=int, default=4000)
+    ap.add_argument('--solutions', default='ai/data/solved_turns.json',
+                    help='solved/flagged turns file; those cases are '
+                         'excluded from the page')
     args = ap.parse_args()
 
     with open(args.report) as f:
         report = json.load(f)
     with open(args.dump) as f:
         games = json.load(f)
+    handled = {}
+    if args.solutions and os.path.exists(args.solutions):
+        with open(args.solutions) as f:
+            handled = json.load(f)
 
     # Unmatched turns: snapshot turns of hybrid conversions (new report
     # shape) plus first-failure turns from any old-style failures.
@@ -99,6 +106,8 @@ def main():
         t = turns[i]
         if not (t.get('sfnBefore') and t.get('sfnAfter')):
             continue
+        if f"{key}:t{t.get('turnNumber')}" in handled:
+            continue  # already solved or flagged multi-turn by Robi
         try:
             before = sfn_to_dict(t['sfnBefore'])
             after = sfn_to_dict(t['sfnAfter'])
@@ -211,6 +220,7 @@ _PAGE = r'''<!DOCTYPE html>
   <button onclick="nextCase()" class="secondary">Skip &rarr;</button>
   <button onclick="nextUnsolved()" class="secondary">Next unsolved pattern</button>
   <button onclick="resetTurn()">Reset turn</button>
+  <button onclick="flagMultiTurn()" style="background:#a2543a">Flag: multiple turns</button>
 </div>
 <div class="layout">
   <div class="col-board">
@@ -229,6 +239,7 @@ _PAGE = r'''<!DOCTYPE html>
     <div class="spell-list" id="spells"></div>
     <div class="solutions">
       <b>Solved: <span id="n-solved">0</span></b>
+      <b style="margin-left:12px;color:#e8a06a">Flagged multi-turn: <span id="n-flagged">0</span></b>
       <button onclick="downloadSolutions()">Download solutions JSON</button>
       <button onclick="clearSolutions()" class="secondary">Clear</button>
       <div class="lbl">Save the file as <code>ai/data/solved_turns.json</code> and tell Claude —
@@ -464,10 +475,12 @@ function finishAttempt(c) {
 function loadCase(i) {
   idx = Math.max(0, Math.min(DATA.cases.length - 1, i));
   const c = DATA.cases[idx];
+  const st = solutions[caseId(c)];
   document.getElementById('case-title').textContent =
     'Case ' + (idx + 1) + '/' + DATA.cases.length + ' — pattern #' + c.cluster +
     ' (' + c.clusterSize + ' turns), game ' + c.key + ', turn ' + c.turnNumber +
-    ', ' + c.color + ' to move' + (solutions[caseId(c)] ? ' — SOLVED' : '');
+    ', ' + c.color + ' to move' +
+    (st ? (st.multiTurn ? ' — FLAGGED MULTI-TURN' : ' — SOLVED') : '');
   document.getElementById('case-sig').textContent = c.signature +
     (c.cast ? ' | deduced cast: ' + c.cast : '');
   document.getElementById('case-meta').textContent =
@@ -498,9 +511,24 @@ function nextUnsolved() {
 }
 
 function updateSolvedCount() {
-  const n = Object.keys(solutions).length;
-  document.getElementById('n-solved').textContent = n;
-  document.getElementById('solved-count').textContent = n + ' solved';
+  const all = Object.values(solutions);
+  const nSolved = all.filter(s => s.actions).length;
+  const nFlagged = all.filter(s => s.multiTurn).length;
+  document.getElementById('n-solved').textContent = nSolved;
+  document.getElementById('n-flagged').textContent = nFlagged;
+  document.getElementById('solved-count').textContent =
+    nSolved + ' solved / ' + nFlagged + ' flagged';
+}
+
+function flagMultiTurn() {
+  const c = DATA.cases[idx];
+  solutions[caseId(c)] = {
+    key: c.key, turnNumber: c.turnNumber, color: c.color, multiTurn: true,
+  };
+  localStorage.setItem(LS_KEY, JSON.stringify(solutions));
+  updateSolvedCount();
+  setMsg('Flagged as multiple turns — this stays a snapshot in the record. Advancing…');
+  setTimeout(nextUnsolvedCase, 700);
 }
 
 function downloadSolutions() {
