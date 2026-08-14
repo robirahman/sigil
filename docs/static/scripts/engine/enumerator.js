@@ -726,10 +726,14 @@ function _enumerateBurnPhaseExhaustive(board, color, prefix, caps, burnsLeft, se
 function _enumerateMoveRootExhaustive(board, color, prefix, caps, out) {
 	const enemy = board._enemy(color);
 	const hasSeal = (board.chargedSpells[color] || []).includes('Seal_of_Wind');
-	// Seal of Stone (enemy-held): this color's opening move must be soft.
+	// Seal of Stone (enemy-held): this color's opening move must be SOFT —
+	// no pushes. Wind's blink privilege survives it on EMPTY nodes (a soft
+	// blink is a soft move); only hard blinks onto occupied nodes are
+	// barred (2026-08 clarification).
 	const enemyHasStone = (board.chargedSpells[enemy] || []).includes('Seal_of_Stone');
 	let moveTargets;
-	if (enemyHasStone) moveTargets = board._softMoveable(color);
+	if (enemyHasStone && hasSeal) moveTargets = board._softBlinkable(color);
+	else if (enemyHasStone) moveTargets = board._softMoveable(color);
 	else if (hasSeal) moveTargets = board._blinkable(color);
 	else moveTargets = board._allMoveable(color);
 	if (!moveTargets.length) {

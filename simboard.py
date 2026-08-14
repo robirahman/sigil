@@ -544,6 +544,13 @@ class SimBoard:
         enemy = self._enemy(color)
         return [n for n in NODE_ORDER if self.stones[n] != color and self.stones[n] != DESTROYED and not (self.stones[n] == enemy and self._is_bulwark_protected(enemy, n))]
 
+    def _soft_blinkable(self, color):
+        """All EMPTY nodes (walls excluded): Wind's blink targets while the
+        enemy holds Seal of Stone. A blink onto an empty node is still a
+        soft move — Stone only forbids pushes (hard moves / hard blinks),
+        per the 2026-08 clarification."""
+        return [n for n in NODE_ORDER if self.stones[n] is None]
+
     def escape_distance(self, node_name, defender_color, max_dist=6):
         """Minimum BFS distance from node_name through defender stones to
         the nearest empty cell, mirroring the push-chain logic in
@@ -1788,10 +1795,14 @@ class SimBoard:
         has_seal_of_lightning = 'Seal_of_Lightning' in base.charged_spells[color]
         has_seal_of_summer = 'Seal_of_Summer' in base.charged_spells[color]
 
-        # Phase 1: Move options. Seal of Stone (enemy-held) forces a soft
-        # opening move, taking precedence over Wind's blink privilege.
+        # Phase 1: Move options. Seal of Stone (enemy-held) forces a SOFT
+        # opening move — no pushes. Wind's blink privilege survives it on
+        # EMPTY nodes (a soft blink is a soft move); only hard blinks onto
+        # occupied nodes are barred (2026-08 clarification).
         enemy_has_stone = 'Seal_of_Stone' in base.charged_spells[self._enemy(color)]
-        if enemy_has_stone:
+        if enemy_has_stone and has_seal_of_wind:
+            move_targets = base._soft_blinkable(color)
+        elif enemy_has_stone:
             move_targets = base._soft_moveable(color)
         elif has_seal_of_wind:
             move_targets = base._blinkable(color)

@@ -510,7 +510,18 @@ def _exhaustive_move_root(board, color, prefix, caps):
     """The pre-Aftershock move root: enumerate first-move targets, then the
     Providence move-phase chain and everything downstream."""
     has_seal_of_wind = 'Seal_of_Wind' in board.charged_spells.get(color, [])
-    if has_seal_of_wind:
+    # Seal of Stone (enemy-held) forces a SOFT opening move — no pushes.
+    # Wind's blink privilege survives it on EMPTY nodes (a soft blink is a
+    # soft move); only hard blinks onto occupied nodes are barred. (This
+    # root previously skipped the Stone check entirely — the exhaustive
+    # engine could open with an illegal hard move under Stone.)
+    enemy_has_stone = ('Seal_of_Stone'
+                       in board.charged_spells.get(board._enemy(color), []))
+    if enemy_has_stone and has_seal_of_wind:
+        move_targets = board._soft_blinkable(color)
+    elif enemy_has_stone:
+        move_targets = board._soft_moveable(color)
+    elif has_seal_of_wind:
         move_targets = board._blinkable(color)
     else:
         move_targets = board._all_moveable(color)

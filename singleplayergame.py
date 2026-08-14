@@ -965,9 +965,19 @@ class AIPlayer():
 
 		time.sleep(1)
 
+		### Seal of Stone (enemy-held) forces the opening move to be SOFT —
+		### no pushes. A Wind holder keeps blinks to EMPTY nodes only (a
+		### soft blink is a soft move; 2026-08 clarification). The easy bot
+		### previously ignored Stone entirely and could open with an
+		### illegal hard move.
+		stone_bound = standardmove and (
+			'Seal_of_Stone' in [s.name for s in self.opp.charged_spells])
+
 		if standardmove and 'Seal_of_Wind' in [s.name for s in self.charged_spells]:
 			legalmoves = self.allblinkablenodes()
 			for node in legalmoves:
+				if stone_bound and node.stone is not None:
+					continue
 				adjacent_nonenemy_count = 0
 				if node.stone == None:
 					adjacent_nonenemy_count += 1
@@ -990,7 +1000,14 @@ class AIPlayer():
 
 
 		else:
-			legalmoves = self.allmoveablenodes()
+			if stone_bound:
+				legalmoves = self.allsoftmoveablenodes()
+				if len(legalmoves) == 0:
+					### No legal soft move under Seal of Stone: forfeit the
+					### move rather than push illegally.
+					return
+			else:
+				legalmoves = self.allmoveablenodes()
 
 			### node is the chosen place to move. Try to choose a non-locked node if one exists.
 			if self.lock:

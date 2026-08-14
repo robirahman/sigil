@@ -396,6 +396,14 @@ class SimBoard {
 		});
 	}
 
+	// All EMPTY nodes (walls excluded): Wind's blink targets while the
+	// enemy holds Seal of Stone. A blink onto an empty node is still a
+	// soft move — Stone only forbids pushes (hard moves / hard blinks),
+	// per the 2026-08 clarification.
+	_softBlinkable(color) {
+		return NODE_ORDER.filter(n => this.stones[n] === null);
+	}
+
 	/**
 	 * Minimum BFS distance from nodeName through defenderColor stones to
 	 * the nearest empty cell. Mirrors the push-chain logic of _pushEnemy
@@ -1793,10 +1801,13 @@ class SimBoard {
 		}
 
 		const hasWind = base.chargedSpells[color].includes('Seal_of_Wind');
-		// Seal of Stone (held by the enemy): this color's opening move must be soft.
-		// Soft takes precedence over Wind's blink privilege.
+		// Seal of Stone (held by the enemy): this color's opening move must
+		// be SOFT — no pushes. Wind's blink privilege survives it on EMPTY
+		// nodes (a soft blink is a soft move); only hard blinks onto
+		// occupied nodes are barred (2026-08 clarification).
 		const enemyHasStone = base.chargedSpells[base._enemy(color)].includes('Seal_of_Stone');
-		const moveTargets = enemyHasStone ? base._softMoveable(color)
+		const moveTargets = enemyHasStone
+			? (hasWind ? base._softBlinkable(color) : base._softMoveable(color))
 			: (hasWind ? base._blinkable(color) : base._allMoveable(color));
 
 		if (!moveTargets.length) {

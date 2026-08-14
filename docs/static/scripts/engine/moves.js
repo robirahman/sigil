@@ -75,13 +75,29 @@ function getBlinkTargets(board, color) {
 	return result;
 }
 
+// All EMPTY nodes: Wind's blink targets while the enemy holds Seal of
+// Stone. A blink onto an empty node is still a soft move — Stone only
+// forbids pushes (hard moves / hard blinks), per the 2026-08
+// clarification.
+function getSoftBlinkTargets(board, color) {
+	const result = {};
+	for (const name of NODE_ORDER) {
+		if (board.stones[name] === null) result[name] = color;
+	}
+	return result;
+}
+
 // Targets for a STANDARD (opening) move, accounting for the static seals that
-// modify it. Seal of Stone (enemy-held) forces soft moves; otherwise Seal of
-// Wind (own) grants blink; otherwise all moves. `standardMove` is false for
-// spell-granted moves, which ignore these seals.
+// modify it. Seal of Stone (enemy-held) forces soft moves (Wind holders keep
+// soft blinks to empty nodes); otherwise Seal of Wind (own) grants blink;
+// otherwise all moves. `standardMove` is false for spell-granted moves, which
+// ignore these seals.
 function getStandardMoveTargets(board, color, standardMove) {
 	const enemy = board.enemy(color);
 	if (standardMove && board.chargedSpells[enemy].includes('Seal_of_Stone')) {
+		if (board.chargedSpells[color].includes('Seal_of_Wind')) {
+			return getSoftBlinkTargets(board, color);
+		}
 		return getSoftMoveTargets(board, color);
 	}
 	if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) {
@@ -91,17 +107,19 @@ function getStandardMoveTargets(board, color, standardMove) {
 }
 
 // True if `color`'s standard move onto `nodeName` is illegal because the enemy
-// holds Seal of Stone (which forces the opening move to be soft: an empty node
-// adjacent to one of `color`'s own stones — no push, no blink).
+// holds Seal of Stone (which forces the opening move to be SOFT — no pushes).
+// A Wind holder may still soft-blink to any EMPTY node; without Wind, the
+// target must be empty AND adjacent to one of `color`'s own stones.
 function violatesSealOfStone(board, color, nodeName, standardMove) {
 	if (!standardMove) return false;
 	const enemy = board.enemy(color);
 	if (!board.chargedSpells[enemy].includes('Seal_of_Stone')) return false;
 	if (board.stones[nodeName] !== null) return true; // would push (hard move)
+	if (board.chargedSpells[color].includes('Seal_of_Wind')) return false; // soft blink
 	for (const nb of ADJACENCY[nodeName]) {
 		if (board.stones[nb] === color) return false; // soft move: empty + adjacent
 	}
-	return true; // empty but not adjacent → blink, not allowed
+	return true; // empty but not adjacent → blink without Wind, not allowed
 }
 
 /**
