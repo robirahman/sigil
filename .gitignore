@@ -1,5 +1,6 @@
 # production
 /__pycache__
+__pycache__/
 
 # misc
 .DS_Store
@@ -16,6 +17,8 @@ arena_run.log
 
 # untracked AI candidate checkpoints (only the production ones are tracked)
 ai/models/candidate_*.pt
+# Local pre-migration backups of best_model.pt (originals live in git history)
+ai/models/best_model_pre_*.pt
 
 # Big files committed split via `split` so they fit under GitHub's
 # 100 MB push cap. Tracked: <name>_part_aa, <name>_part_ab, …
@@ -23,6 +26,8 @@ ai/models/candidate_*.pt
 # JSONL) but the reassembled file itself is never committed.
 ai/models/best_model_hard.pt
 ai/data/human_expert_*.jsonl
+# Raw Firebase dump for the positional-weight fit (contains UIDs; unbounded)
+ai/data/completed_games_raw*.json
 !ai/data/human_expert_*_part_*
 
 # Local concatenations of split self-play files (parts already tracked).

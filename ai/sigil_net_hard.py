@@ -3,8 +3,8 @@
 Architecture inspired by Stockfish NNUE SFNNv10: wide input transformation
 with few hidden layers instead of deep residual blocks.
 
-  Spell IDs (9) → Embedding(15, 32) → flatten(288)
-  Raw features (250) → Linear(250, 3808) → ClippedReLU
+  Spell IDs (9) → Embedding(NUM_POSSIBLE_SPELLS, 32) → flatten(288)
+  Raw features (RAW_FEATURE_DIM) → Linear(.., 3808) → ClippedReLU
   Concat [288 + 3808] = 4096 →
     Linear(4096, 4096) → LN → ClippedReLU →
     Linear(4096, 4096) → LN → ClippedReLU →

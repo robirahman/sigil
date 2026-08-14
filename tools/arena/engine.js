@@ -53,6 +53,7 @@ function loadEngine() {
 	cavemanSearch, _minimaxApplyTurn,
 	generateSpellList, getLegalTurnsExhaustive, ENUM_CAPS,
 	NODE_ORDER, boardToSfn,
+	CAVEMAN_EVAL_WEIGHTS, cavemanCapWeights,
 };`);
 	vm.runInThisContext(parts.join('\n;\n'), { filename: 'sigil-engine-bundle.js' });
 	_engine = globalThis.__sigilEngine;
@@ -75,14 +76,30 @@ function loadEngine() {
  *   refill=...   exhaustive | closest_enemy | farthest_enemy | closest_mana
  *                | farthest_mana  (Carnage refill choice).
  *
- * Examples: "caveman", "prune", "caveman:capabs=2", "prune:lp=0".
+ * Positional eval-weight keys (stone units; see caveman-ai.js
+ * CAVEMAN_EVAL_WEIGHTS — these feed cavemanSearch opts.evalWeights):
+ *   mana=F       weight per mana-node differential
+ *   voidp=F      penalty per own-minus-enemy void-node stone
+ *   mc=F         weight per map-control node differential
+ *   cap=B        scale the three weights so 3*mana+9*voidp+39*mc <= B stones
+ *                (tiebreaker mode; mirrors cavemanCapWeights)
+ *   omc=0|1      include mapControl in move ordering (default 1)
+ *
+ * Examples: "caveman", "caveman:mana=0.1,voidp=0.03,mc=0.0246",
+ *           "caveman:mc=0.128,cap=0.96", "caveman:mc=0.0246,omc=0".
+ *
+ * NOTE: the legacy keys (pure / capabs / caps / lp / refill) build opts
+ * that the committed cavemanSearch does not currently read — they are
+ * inert until the receiving side lands. The eval-weight keys and the
+ * enumeration caps (enumCaps) ARE consumed.
  */
 function parseModeSpec(str) {
 	const [mode, rest] = String(str).split(':');
 	if (mode !== 'caveman' && mode !== 'prune') {
 		throw new Error(`Unknown AI mode "${mode}" (expected caveman | prune)`);
 	}
-	const cfg = { label: str, preset: mode, pure: false, capScale: null, capAbs: null, lp: null, refill: null };
+	const cfg = { label: str, preset: mode, pure: false, capScale: null, capAbs: null, lp: null, refill: null,
+	              evalWeights: null, capBudget: null, orderMc: null };
 	if (rest) {
 		for (const kv of rest.split(',')) {
 			const [k, v] = kv.split('=');
@@ -91,6 +108,13 @@ function parseModeSpec(str) {
 			else if (k === 'capabs') cfg.capAbs = parseInt(v, 10);
 			else if (k === 'lp') cfg.lp = (v === undefined || v === '1' || v === 'true');
 			else if (k === 'refill') cfg.refill = v;
+			else if (k === 'mana' || k === 'voidp' || k === 'mc') {
+				cfg.evalWeights = cfg.evalWeights || {};
+				const key = k === 'mana' ? 'mana' : (k === 'voidp' ? 'voidPenalty' : 'mapControl');
+				cfg.evalWeights[key] = parseFloat(v);
+			}
+			else if (k === 'cap') cfg.capBudget = parseFloat(v);
+			else if (k === 'omc') cfg.orderMc = (v === undefined || v === '1' || v === 'true');
 			else throw new Error(`Unknown spec key "${k}" in "${str}"`);
 		}
 	}
@@ -124,6 +148,25 @@ function specToOpts(cfg, { timeLimit, maxDepth }, baseCaps) {
 		const sc = scaledCaps(baseCaps, cfg.capScale);
 		if (sc) opts.enumCaps = sc;
 	}
+	if (cfg.evalWeights) {
+		let w = {
+			mana: cfg.evalWeights.mana || 0,
+			voidPenalty: cfg.evalWeights.voidPenalty || 0,
+			mapControl: cfg.evalWeights.mapControl || 0,
+		};
+		if (cfg.capBudget != null) {
+			// Mirrors caveman-ai.js cavemanCapWeights: scale uniformly so the
+			// worst-case positional total stays <= capBudget stones.
+			const worst = 3 * w.mana + 9 * w.voidPenalty + 39 * w.mapControl;
+			if (worst > cfg.capBudget && worst > 0) {
+				const k = cfg.capBudget / worst;
+				w = { mana: w.mana * k, voidPenalty: w.voidPenalty * k,
+				      mapControl: w.mapControl * k };
+			}
+		}
+		opts.evalWeights = w;
+	}
+	if (cfg.orderMc !== null) opts.orderMapControl = cfg.orderMc;
 	return opts;
 }
 

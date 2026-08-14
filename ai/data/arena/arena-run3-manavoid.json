@@ -1,0 +1,8419 @@
+{
+  "args": {
+    "games": 200,
+    "time": 10,
+    "red": "caveman",
+    "blue": "caveman:mana=0.15,voidp=0.05",
+    "swap": true,
+    "pack": "core",
+    "seed": 1003,
+    "maxDepth": 64,
+    "maxTurns": 300,
+    "threads": 5,
+    "json": "/tmp/claude-1000/-mnt-chromeos-MyFiles-Documents-sigil/69b854f2-6186-4dda-b41b-6be00df6027e/scratchpad/arena-run3-manavoid.json",
+    "requireSpell": null
+  },
+  "seed": 1003,
+  "games": [
+    {
+      "gameId": 1,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 170326,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 350096,
+          "cutoffs": 36231,
+          "depthSum": 43,
+          "maxDepth": 12,
+          "timeMs": 90249
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 357907,
+          "cutoffs": 30549,
+          "depthSum": 37,
+          "maxDepth": 10,
+          "timeMs": 80077
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Meteor",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 3,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 19,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 5
+      },
+      "durationMs": 171944,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 380234,
+          "cutoffs": 86689,
+          "depthSum": 59,
+          "maxDepth": 13,
+          "timeMs": 89992
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 365149,
+          "cutoffs": 79617,
+          "depthSum": 52,
+          "maxDepth": 12,
+          "timeMs": 81950
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Slash",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 4,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 22,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 210437,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 664329,
+          "cutoffs": 109115,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 110198
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 576403,
+          "cutoffs": 102950,
+          "depthSum": 55,
+          "maxDepth": 10,
+          "timeMs": 100233
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Meteor",
+        "Surge",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 0,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 250486,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 588689,
+          "cutoffs": 140949,
+          "depthSum": 77,
+          "maxDepth": 14,
+          "timeMs": 130231
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 534054,
+          "cutoffs": 129583,
+          "depthSum": 72,
+          "maxDepth": 12,
+          "timeMs": 120253
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Grow",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Surge",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 2,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 28,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 263322,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 626298,
+          "cutoffs": 140866,
+          "depthSum": 83,
+          "maxDepth": 13,
+          "timeMs": 133163
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 535876,
+          "cutoffs": 124302,
+          "depthSum": 75,
+          "maxDepth": 12,
+          "timeMs": 130154
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Fireblast",
+        "Grow",
+        "Seal_of_Summer",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 8,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 22,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 210281,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 607510,
+          "cutoffs": 111609,
+          "depthSum": 67,
+          "maxDepth": 13,
+          "timeMs": 110106
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 471745,
+          "cutoffs": 111365,
+          "depthSum": 59,
+          "maxDepth": 11,
+          "timeMs": 100174
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Grow",
+        "Seal_of_Wind",
+        "Surge",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 6,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 234921,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 521187,
+          "cutoffs": 79666,
+          "depthSum": 56,
+          "maxDepth": 12,
+          "timeMs": 119365
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 494316,
+          "cutoffs": 54045,
+          "depthSum": 48,
+          "maxDepth": 10,
+          "timeMs": 115554
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Seal_of_Wind",
+        "Grow",
+        "Meteor",
+        "Seal_of_Summer",
+        "Comet",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 9,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 240477,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 468213,
+          "cutoffs": 90618,
+          "depthSum": 63,
+          "maxDepth": 12,
+          "timeMs": 120255
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 455250,
+          "cutoffs": 88246,
+          "depthSum": 62,
+          "maxDepth": 12,
+          "timeMs": 120220
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Carnage",
+        "Meteor",
+        "Seal_of_Wind",
+        "Grow",
+        "Slash",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 5,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 250475,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 363526,
+          "cutoffs": 67304,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 130276
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 371994,
+          "cutoffs": 76632,
+          "depthSum": 62,
+          "maxDepth": 12,
+          "timeMs": 120196
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Bewitch",
+        "Meteor",
+        "Seal_of_Wind",
+        "Grow",
+        "Seal_of_Summer",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 7,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 260708,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 479873,
+          "cutoffs": 108048,
+          "depthSum": 63,
+          "maxDepth": 12,
+          "timeMs": 130344
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 562115,
+          "cutoffs": 105888,
+          "depthSum": 62,
+          "maxDepth": 11,
+          "timeMs": 130363
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Carnage",
+        "Seal_of_Wind",
+        "Grow",
+        "Fireblast",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 11,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 6
+      },
+      "durationMs": 285999,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 430985,
+          "cutoffs": 88148,
+          "depthSum": 71,
+          "maxDepth": 13,
+          "timeMs": 143351
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 585525,
+          "cutoffs": 110115,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 142645
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Grow",
+        "Fireblast",
+        "Comet",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 12,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 23,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 220522,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 579419,
+          "cutoffs": 140869,
+          "depthSum": 67,
+          "maxDepth": 13,
+          "timeMs": 110287
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 542093,
+          "cutoffs": 127942,
+          "depthSum": 58,
+          "maxDepth": 12,
+          "timeMs": 110233
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Meteor",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 10,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 290490,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 647895,
+          "cutoffs": 143564,
+          "depthSum": 77,
+          "maxDepth": 13,
+          "timeMs": 150265
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 531224,
+          "cutoffs": 97750,
+          "depthSum": 72,
+          "maxDepth": 11,
+          "timeMs": 140225
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Grow",
+        "Slash",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 13,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 46,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 451629,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 481367,
+          "cutoffs": 89546,
+          "depthSum": 83,
+          "maxDepth": 13,
+          "timeMs": 230833
+        },
+        "blue": {
+          "moves": 23,
+          "nodes": 633218,
+          "cutoffs": 124168,
+          "depthSum": 83,
+          "maxDepth": 12,
+          "timeMs": 220792
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 14,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 41,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 18,
+        "blue": 14
+      },
+      "durationMs": 401377,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 769958,
+          "cutoffs": 121964,
+          "depthSum": 82,
+          "maxDepth": 12,
+          "timeMs": 200719
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 557778,
+          "cutoffs": 105432,
+          "depthSum": 73,
+          "maxDepth": 11,
+          "timeMs": 200655
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Starfall",
+        "Seal_of_Wind",
+        "Meteor",
+        "Fireblast",
+        "Sprout",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 15,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 230317,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 437645,
+          "cutoffs": 98773,
+          "depthSum": 63,
+          "maxDepth": 13,
+          "timeMs": 120159
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 528345,
+          "cutoffs": 126445,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 110156
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Grow",
+        "Sprout",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 17,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 38,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 371281,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 505626,
+          "cutoffs": 82386,
+          "depthSum": 65,
+          "maxDepth": 11,
+          "timeMs": 190754
+        },
+        "blue": {
+          "moves": 19,
+          "nodes": 591290,
+          "cutoffs": 79323,
+          "depthSum": 58,
+          "maxDepth": 10,
+          "timeMs": 180525
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Carnage",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Meteor",
+        "Comet",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 16,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 48,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 15
+      },
+      "durationMs": 459943,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 708132,
+          "cutoffs": 131630,
+          "depthSum": 102,
+          "maxDepth": 13,
+          "timeMs": 234692
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 606050,
+          "cutoffs": 89011,
+          "depthSum": 91,
+          "maxDepth": 12,
+          "timeMs": 225247
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Hail_Storm",
+        "Meteor",
+        "Grow",
+        "Comet",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 18,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 8
+      },
+      "durationMs": 324348,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 603490,
+          "cutoffs": 135476,
+          "depthSum": 84,
+          "maxDepth": 13,
+          "timeMs": 166662
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 585314,
+          "cutoffs": 134695,
+          "depthSum": 78,
+          "maxDepth": 12,
+          "timeMs": 157684
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Hail_Storm",
+        "Meteor",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 19,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 37,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 357456,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 506845,
+          "cutoffs": 105340,
+          "depthSum": 82,
+          "maxDepth": 13,
+          "timeMs": 180331
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 505565,
+          "cutoffs": 114889,
+          "depthSum": 77,
+          "maxDepth": 13,
+          "timeMs": 177120
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Grow",
+        "Comet",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 21,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 162083,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 432489,
+          "cutoffs": 91707,
+          "depthSum": 58,
+          "maxDepth": 13,
+          "timeMs": 84890
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 388632,
+          "cutoffs": 92569,
+          "depthSum": 54,
+          "maxDepth": 12,
+          "timeMs": 77192
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Starfall",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Sprout",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 23,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 17,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 4
+      },
+      "durationMs": 160274,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 302008,
+          "cutoffs": 68587,
+          "depthSum": 54,
+          "maxDepth": 13,
+          "timeMs": 80181
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 291365,
+          "cutoffs": 72168,
+          "depthSum": 46,
+          "maxDepth": 12,
+          "timeMs": 80093
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Carnage",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Grow",
+        "Slash",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 22,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 240446,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 556564,
+          "cutoffs": 122007,
+          "depthSum": 68,
+          "maxDepth": 13,
+          "timeMs": 120173
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 458816,
+          "cutoffs": 104061,
+          "depthSum": 56,
+          "maxDepth": 12,
+          "timeMs": 120273
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Grow",
+        "Meteor",
+        "Fireblast",
+        "Sprout",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 20,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 49,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 478189,
+      "stats": {
+        "red": {
+          "moves": 25,
+          "nodes": 684287,
+          "cutoffs": 137745,
+          "depthSum": 91,
+          "maxDepth": 13,
+          "timeMs": 240864
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 560102,
+          "cutoffs": 111438,
+          "depthSum": 90,
+          "maxDepth": 12,
+          "timeMs": 237321
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Starfall",
+        "Fireblast",
+        "Hail_Storm",
+        "Grow",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 24,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 32,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 306406,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 515845,
+          "cutoffs": 119825,
+          "depthSum": 77,
+          "maxDepth": 14,
+          "timeMs": 157067
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 481814,
+          "cutoffs": 90552,
+          "depthSum": 68,
+          "maxDepth": 11,
+          "timeMs": 149338
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Carnage",
+        "Meteor",
+        "Seal_of_Wind",
+        "Grow",
+        "Surge",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 26,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 230322,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 626780,
+          "cutoffs": 100821,
+          "depthSum": 67,
+          "maxDepth": 12,
+          "timeMs": 120202
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 469524,
+          "cutoffs": 102401,
+          "depthSum": 65,
+          "maxDepth": 10,
+          "timeMs": 110120
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Surge",
+        "Sprout",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 28,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 226527,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 530871,
+          "cutoffs": 105403,
+          "depthSum": 65,
+          "maxDepth": 13,
+          "timeMs": 118291
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 393878,
+          "cutoffs": 73708,
+          "depthSum": 59,
+          "maxDepth": 11,
+          "timeMs": 108236
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Starfall",
+        "Grow",
+        "Hail_Storm",
+        "Meteor",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 27,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 293530,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 649479,
+          "cutoffs": 139458,
+          "depthSum": 78,
+          "maxDepth": 13,
+          "timeMs": 147231
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 540373,
+          "cutoffs": 141597,
+          "depthSum": 73,
+          "maxDepth": 12,
+          "timeMs": 146296
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Bewitch",
+        "Meteor",
+        "Fireblast",
+        "Grow",
+        "Surge",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 25,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 5
+      },
+      "durationMs": 192320,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 457909,
+          "cutoffs": 98637,
+          "depthSum": 63,
+          "maxDepth": 12,
+          "timeMs": 99560
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 441158,
+          "cutoffs": 85443,
+          "depthSum": 55,
+          "maxDepth": 11,
+          "timeMs": 92758
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Carnage",
+        "Meteor",
+        "Grow",
+        "Hail_Storm",
+        "Slash",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 29,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 23,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 216017,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 575983,
+          "cutoffs": 96561,
+          "depthSum": 59,
+          "maxDepth": 11,
+          "timeMs": 110206
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 486224,
+          "cutoffs": 81646,
+          "depthSum": 50,
+          "maxDepth": 11,
+          "timeMs": 105808
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Grow",
+        "Comet",
+        "Sprout",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 31,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 22,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 210873,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 490898,
+          "cutoffs": 44669,
+          "depthSum": 46,
+          "maxDepth": 12,
+          "timeMs": 110388
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 404531,
+          "cutoffs": 51299,
+          "depthSum": 42,
+          "maxDepth": 10,
+          "timeMs": 100483
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Slash",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 32,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 10
+      },
+      "durationMs": 290020,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 539703,
+          "cutoffs": 138353,
+          "depthSum": 74,
+          "maxDepth": 14,
+          "timeMs": 145260
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 541418,
+          "cutoffs": 120514,
+          "depthSum": 70,
+          "maxDepth": 12,
+          "timeMs": 144757
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Meteor",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 30,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 269074,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 717807,
+          "cutoffs": 187818,
+          "depthSum": 80,
+          "maxDepth": 14,
+          "timeMs": 137178
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 540400,
+          "cutoffs": 129069,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 131896
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Meteor",
+        "Fireblast",
+        "Surge",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 33,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 49,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 481115,
+      "stats": {
+        "red": {
+          "moves": 25,
+          "nodes": 572624,
+          "cutoffs": 87554,
+          "depthSum": 91,
+          "maxDepth": 12,
+          "timeMs": 240623
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 524541,
+          "cutoffs": 82134,
+          "depthSum": 85,
+          "maxDepth": 12,
+          "timeMs": 240491
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Comet",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 36,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 277290,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 664476,
+          "cutoffs": 109733,
+          "depthSum": 79,
+          "maxDepth": 12,
+          "timeMs": 144005
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 602994,
+          "cutoffs": 95654,
+          "depthSum": 73,
+          "maxDepth": 10,
+          "timeMs": 133283
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Meteor",
+        "Seal_of_Wind",
+        "Comet",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 37,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 190459,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 353771,
+          "cutoffs": 38771,
+          "depthSum": 43,
+          "maxDepth": 11,
+          "timeMs": 100279
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 308488,
+          "cutoffs": 31922,
+          "depthSum": 39,
+          "maxDepth": 10,
+          "timeMs": 90177
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Starfall",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Comet",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 34,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 43,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 15,
+        "blue": 11
+      },
+      "durationMs": 420864,
+      "stats": {
+        "red": {
+          "moves": 22,
+          "nodes": 721997,
+          "cutoffs": 147999,
+          "depthSum": 95,
+          "maxDepth": 13,
+          "timeMs": 210417
+        },
+        "blue": {
+          "moves": 21,
+          "nodes": 558065,
+          "cutoffs": 107831,
+          "depthSum": 78,
+          "maxDepth": 12,
+          "timeMs": 210444
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Grow",
+        "Fireblast",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 41,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150262,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 422709,
+          "cutoffs": 36829,
+          "depthSum": 41,
+          "maxDepth": 12,
+          "timeMs": 80183
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 343910,
+          "cutoffs": 28097,
+          "depthSum": 36,
+          "maxDepth": 9,
+          "timeMs": 70078
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Meteor",
+        "Grow",
+        "Seal_of_Wind",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 35,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 35,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 5
+      },
+      "durationMs": 334836,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 588509,
+          "cutoffs": 94089,
+          "depthSum": 81,
+          "maxDepth": 13,
+          "timeMs": 170071
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 610924,
+          "cutoffs": 113530,
+          "depthSum": 80,
+          "maxDepth": 13,
+          "timeMs": 164764
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Meteor",
+        "Seal_of_Summer",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 38,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 32,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 299839,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 578779,
+          "cutoffs": 121643,
+          "depthSum": 85,
+          "maxDepth": 13,
+          "timeMs": 151900
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 667041,
+          "cutoffs": 157657,
+          "depthSum": 76,
+          "maxDepth": 12,
+          "timeMs": 147939
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Bewitch",
+        "Grow",
+        "Meteor",
+        "Hail_Storm",
+        "Sprout",
+        "Comet",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 42,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 290702,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 488167,
+          "cutoffs": 62864,
+          "depthSum": 66,
+          "maxDepth": 12,
+          "timeMs": 150410
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 445012,
+          "cutoffs": 72957,
+          "depthSum": 63,
+          "maxDepth": 10,
+          "timeMs": 140289
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Seal_of_Summer",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 46,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 38,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 15,
+        "blue": 17
+      },
+      "durationMs": 370800,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 583204,
+          "cutoffs": 98966,
+          "depthSum": 84,
+          "maxDepth": 13,
+          "timeMs": 190343
+        },
+        "blue": {
+          "moves": 19,
+          "nodes": 596969,
+          "cutoffs": 91593,
+          "depthSum": 76,
+          "maxDepth": 11,
+          "timeMs": 180457
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Meteor",
+        "Fireblast",
+        "Grow",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 40,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 10
+      },
+      "durationMs": 260289,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 531946,
+          "cutoffs": 69397,
+          "depthSum": 59,
+          "maxDepth": 11,
+          "timeMs": 130201
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 398226,
+          "cutoffs": 49945,
+          "depthSum": 52,
+          "maxDepth": 10,
+          "timeMs": 130086
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Grow",
+        "Meteor",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 39,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 46,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 8
+      },
+      "durationMs": 451301,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 545922,
+          "cutoffs": 106848,
+          "depthSum": 85,
+          "maxDepth": 13,
+          "timeMs": 230566
+        },
+        "blue": {
+          "moves": 23,
+          "nodes": 597077,
+          "cutoffs": 135548,
+          "depthSum": 79,
+          "maxDepth": 12,
+          "timeMs": 220728
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Starfall",
+        "Meteor",
+        "Hail_Storm",
+        "Grow",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 43,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 33,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 16,
+        "blue": 12
+      },
+      "durationMs": 320623,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 551571,
+          "cutoffs": 124355,
+          "depthSum": 79,
+          "maxDepth": 14,
+          "timeMs": 160298
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 629084,
+          "cutoffs": 139267,
+          "depthSum": 74,
+          "maxDepth": 12,
+          "timeMs": 160321
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Starfall",
+        "Hail_Storm",
+        "Meteor",
+        "Fireblast",
+        "Sprout",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 47,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 301043,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 586564,
+          "cutoffs": 143426,
+          "depthSum": 73,
+          "maxDepth": 12,
+          "timeMs": 150380
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 601054,
+          "cutoffs": 136384,
+          "depthSum": 66,
+          "maxDepth": 11,
+          "timeMs": 150662
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Bewitch",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Grow",
+        "Seal_of_Summer",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 51,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 190465,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 423577,
+          "cutoffs": 70793,
+          "depthSum": 54,
+          "maxDepth": 12,
+          "timeMs": 100256
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 563312,
+          "cutoffs": 65640,
+          "depthSum": 49,
+          "maxDepth": 10,
+          "timeMs": 90208
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 45,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 5
+      },
+      "durationMs": 196509,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 364047,
+          "cutoffs": 80945,
+          "depthSum": 60,
+          "maxDepth": 13,
+          "timeMs": 100158
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 427175,
+          "cutoffs": 83773,
+          "depthSum": 55,
+          "maxDepth": 12,
+          "timeMs": 96350
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Hail_Storm",
+        "Fireblast",
+        "Comet",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 48,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 240481,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 550685,
+          "cutoffs": 131416,
+          "depthSum": 71,
+          "maxDepth": 14,
+          "timeMs": 120208
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 480019,
+          "cutoffs": 133623,
+          "depthSum": 60,
+          "maxDepth": 12,
+          "timeMs": 120272
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Bewitch",
+        "Fireblast",
+        "Meteor",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 52,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 5
+      },
+      "durationMs": 240647,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 580673,
+          "cutoffs": 144943,
+          "depthSum": 74,
+          "maxDepth": 14,
+          "timeMs": 120340
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 385247,
+          "cutoffs": 100987,
+          "depthSum": 55,
+          "maxDepth": 11,
+          "timeMs": 120305
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Meteor",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Sprout",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 50,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 38,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 12
+      },
+      "durationMs": 370853,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 632739,
+          "cutoffs": 153300,
+          "depthSum": 85,
+          "maxDepth": 13,
+          "timeMs": 190415
+        },
+        "blue": {
+          "moves": 19,
+          "nodes": 567479,
+          "cutoffs": 128076,
+          "depthSum": 75,
+          "maxDepth": 12,
+          "timeMs": 180436
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Bewitch",
+        "Grow",
+        "Meteor",
+        "Hail_Storm",
+        "Sprout",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 44,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 55,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 16,
+        "blue": 12
+      },
+      "durationMs": 541832,
+      "stats": {
+        "red": {
+          "moves": 28,
+          "nodes": 812032,
+          "cutoffs": 178799,
+          "depthSum": 110,
+          "maxDepth": 14,
+          "timeMs": 270891
+        },
+        "blue": {
+          "moves": 27,
+          "nodes": 749145,
+          "cutoffs": 160969,
+          "depthSum": 104,
+          "maxDepth": 13,
+          "timeMs": 270935
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Fireblast",
+        "Grow",
+        "Hail_Storm",
+        "Surge",
+        "Comet",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 56,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 51,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 18,
+        "blue": 14
+      },
+      "durationMs": 501637,
+      "stats": {
+        "red": {
+          "moves": 26,
+          "nodes": 585215,
+          "cutoffs": 110324,
+          "depthSum": 84,
+          "maxDepth": 12,
+          "timeMs": 250845
+        },
+        "blue": {
+          "moves": 25,
+          "nodes": 520770,
+          "cutoffs": 85186,
+          "depthSum": 74,
+          "maxDepth": 10,
+          "timeMs": 250787
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Carnage",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Fireblast",
+        "Surge",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 55,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 5,
+        "blue": 7
+      },
+      "durationMs": 230408,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 439713,
+          "cutoffs": 77108,
+          "depthSum": 62,
+          "maxDepth": 12,
+          "timeMs": 120212
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 521376,
+          "cutoffs": 112516,
+          "depthSum": 64,
+          "maxDepth": 12,
+          "timeMs": 110193
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Slash",
+        "Sprout",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 49,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 260746,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 699929,
+          "cutoffs": 172183,
+          "depthSum": 82,
+          "maxDepth": 13,
+          "timeMs": 130429
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 580535,
+          "cutoffs": 145358,
+          "depthSum": 70,
+          "maxDepth": 13,
+          "timeMs": 130315
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Grow",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Surge",
+        "Sprout",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 61,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 170461,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 333800,
+          "cutoffs": 34633,
+          "depthSum": 41,
+          "maxDepth": 12,
+          "timeMs": 90307
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 336511,
+          "cutoffs": 29023,
+          "depthSum": 36,
+          "maxDepth": 10,
+          "timeMs": 80152
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Flourish",
+        "Hail_Storm",
+        "Grow",
+        "Seal_of_Wind",
+        "Surge",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 53,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 56,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 551378,
+      "stats": {
+        "red": {
+          "moves": 28,
+          "nodes": 541921,
+          "cutoffs": 101130,
+          "depthSum": 100,
+          "maxDepth": 13,
+          "timeMs": 280802
+        },
+        "blue": {
+          "moves": 28,
+          "nodes": 538350,
+          "cutoffs": 92186,
+          "depthSum": 94,
+          "maxDepth": 13,
+          "timeMs": 270569
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Summer",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 57,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 52,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 508215,
+      "stats": {
+        "red": {
+          "moves": 26,
+          "nodes": 556446,
+          "cutoffs": 101221,
+          "depthSum": 96,
+          "maxDepth": 12,
+          "timeMs": 257465
+        },
+        "blue": {
+          "moves": 26,
+          "nodes": 679682,
+          "cutoffs": 121264,
+          "depthSum": 96,
+          "maxDepth": 12,
+          "timeMs": 250744
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Carnage",
+        "Meteor",
+        "Fireblast",
+        "Grow",
+        "Slash",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 60,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 197420,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 493619,
+          "cutoffs": 100843,
+          "depthSum": 63,
+          "maxDepth": 12,
+          "timeMs": 97214
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 443431,
+          "cutoffs": 101482,
+          "depthSum": 51,
+          "maxDepth": 10,
+          "timeMs": 100205
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Seal_of_Wind",
+        "Meteor",
+        "Fireblast",
+        "Sprout",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 66,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 200619,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 398639,
+          "cutoffs": 94069,
+          "depthSum": 55,
+          "maxDepth": 13,
+          "timeMs": 100288
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 323291,
+          "cutoffs": 64111,
+          "depthSum": 47,
+          "maxDepth": 12,
+          "timeMs": 100331
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Starfall",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Meteor",
+        "Slash",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 58,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 190216,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 458847,
+          "cutoffs": 118450,
+          "depthSum": 65,
+          "maxDepth": 13,
+          "timeMs": 95717
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 405520,
+          "cutoffs": 100823,
+          "depthSum": 57,
+          "maxDepth": 12,
+          "timeMs": 94497
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Meteor",
+        "Grow",
+        "Surge",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 54,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 240411,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 583278,
+          "cutoffs": 54569,
+          "depthSum": 55,
+          "maxDepth": 12,
+          "timeMs": 120193
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 419551,
+          "cutoffs": 38586,
+          "depthSum": 46,
+          "maxDepth": 10,
+          "timeMs": 120216
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Carnage",
+        "Fireblast",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Sprout",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 65,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 280644,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 356584,
+          "cutoffs": 87559,
+          "depthSum": 69,
+          "maxDepth": 14,
+          "timeMs": 140288
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 421283,
+          "cutoffs": 99247,
+          "depthSum": 64,
+          "maxDepth": 12,
+          "timeMs": 140352
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Grow",
+        "Surge",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 63,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 28,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 270415,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 500787,
+          "cutoffs": 111592,
+          "depthSum": 66,
+          "maxDepth": 12,
+          "timeMs": 140211
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 560475,
+          "cutoffs": 91089,
+          "depthSum": 64,
+          "maxDepth": 11,
+          "timeMs": 130201
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Meteor",
+        "Grow",
+        "Surge",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 62,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 48,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 6
+      },
+      "durationMs": 463218,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 663766,
+          "cutoffs": 141996,
+          "depthSum": 99,
+          "maxDepth": 13,
+          "timeMs": 232328
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 670257,
+          "cutoffs": 132908,
+          "depthSum": 86,
+          "maxDepth": 11,
+          "timeMs": 230881
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Summer",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 59,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 37,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 360888,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 581200,
+          "cutoffs": 115085,
+          "depthSum": 77,
+          "maxDepth": 13,
+          "timeMs": 180444
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 573084,
+          "cutoffs": 133322,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 180442
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Starfall",
+        "Fireblast",
+        "Meteor",
+        "Hail_Storm",
+        "Sprout",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 71,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 41,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 11
+      },
+      "durationMs": 401281,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 403464,
+          "cutoffs": 83406,
+          "depthSum": 76,
+          "maxDepth": 12,
+          "timeMs": 200618
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 487726,
+          "cutoffs": 89882,
+          "depthSum": 76,
+          "maxDepth": 12,
+          "timeMs": 200660
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Meteor",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Comet",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 64,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 228848,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 665081,
+          "cutoffs": 79419,
+          "depthSum": 57,
+          "maxDepth": 11,
+          "timeMs": 114851
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 422616,
+          "cutoffs": 50597,
+          "depthSum": 44,
+          "maxDepth": 10,
+          "timeMs": 113996
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Starfall",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Meteor",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 76,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 230624,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 509344,
+          "cutoffs": 45329,
+          "depthSum": 49,
+          "maxDepth": 12,
+          "timeMs": 120310
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 394672,
+          "cutoffs": 53372,
+          "depthSum": 47,
+          "maxDepth": 10,
+          "timeMs": 110312
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Slash",
+        "Comet",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 68,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 40,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 390871,
+      "stats": {
+        "red": {
+          "moves": 20,
+          "nodes": 683722,
+          "cutoffs": 165083,
+          "depthSum": 87,
+          "maxDepth": 13,
+          "timeMs": 200396
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 626072,
+          "cutoffs": 142274,
+          "depthSum": 79,
+          "maxDepth": 12,
+          "timeMs": 190472
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Starfall",
+        "Fireblast",
+        "Grow",
+        "Hail_Storm",
+        "Sprout",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 70,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 48,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 9
+      },
+      "durationMs": 471132,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 775191,
+          "cutoffs": 125927,
+          "depthSum": 95,
+          "maxDepth": 12,
+          "timeMs": 240506
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 665193,
+          "cutoffs": 117966,
+          "depthSum": 83,
+          "maxDepth": 11,
+          "timeMs": 230619
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Meteor",
+        "Seal_of_Wind",
+        "Sprout",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 67,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 42,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 15
+      },
+      "durationMs": 411567,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 472874,
+          "cutoffs": 81537,
+          "depthSum": 78,
+          "maxDepth": 12,
+          "timeMs": 211007
+        },
+        "blue": {
+          "moves": 21,
+          "nodes": 522636,
+          "cutoffs": 79761,
+          "depthSum": 74,
+          "maxDepth": 11,
+          "timeMs": 200555
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Meteor",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Sprout",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 69,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 287304,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 537627,
+          "cutoffs": 87848,
+          "depthSum": 73,
+          "maxDepth": 11,
+          "timeMs": 147105
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 453129,
+          "cutoffs": 96877,
+          "depthSum": 64,
+          "maxDepth": 11,
+          "timeMs": 140198
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Grow",
+        "Fireblast",
+        "Meteor",
+        "Slash",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 72,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 19,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 180445,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 495421,
+          "cutoffs": 62081,
+          "depthSum": 46,
+          "maxDepth": 12,
+          "timeMs": 90150
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 352344,
+          "cutoffs": 51600,
+          "depthSum": 37,
+          "maxDepth": 10,
+          "timeMs": 90295
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Starfall",
+        "Seal_of_Wind",
+        "Meteor",
+        "Fireblast",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 73,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 28,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 270730,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 342588,
+          "cutoffs": 29798,
+          "depthSum": 49,
+          "maxDepth": 12,
+          "timeMs": 140446
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 366687,
+          "cutoffs": 25413,
+          "depthSum": 44,
+          "maxDepth": 10,
+          "timeMs": 130283
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Carnage",
+        "Hail_Storm",
+        "Grow",
+        "Seal_of_Wind",
+        "Slash",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 81,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 36,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 350682,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 573236,
+          "cutoffs": 116511,
+          "depthSum": 80,
+          "maxDepth": 13,
+          "timeMs": 180354
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 440063,
+          "cutoffs": 96684,
+          "depthSum": 74,
+          "maxDepth": 12,
+          "timeMs": 170325
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Summer",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 86,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 190390,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 458578,
+          "cutoffs": 84995,
+          "depthSum": 55,
+          "maxDepth": 12,
+          "timeMs": 100204
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 366546,
+          "cutoffs": 70240,
+          "depthSum": 47,
+          "maxDepth": 11,
+          "timeMs": 90184
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Grow",
+        "Seal_of_Wind",
+        "Slash",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 74,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 280890,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 393134,
+          "cutoffs": 68777,
+          "depthSum": 56,
+          "maxDepth": 12,
+          "timeMs": 140487
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 266000,
+          "cutoffs": 51758,
+          "depthSum": 48,
+          "maxDepth": 11,
+          "timeMs": 140403
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 78,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 15
+      },
+      "durationMs": 278750,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 614270,
+          "cutoffs": 80198,
+          "depthSum": 68,
+          "maxDepth": 12,
+          "timeMs": 141944
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 547529,
+          "cutoffs": 75316,
+          "depthSum": 60,
+          "maxDepth": 10,
+          "timeMs": 136802
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Grow",
+        "Meteor",
+        "Surge",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 77,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 36,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 349544,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 535318,
+          "cutoffs": 95355,
+          "depthSum": 76,
+          "maxDepth": 13,
+          "timeMs": 180010
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 619908,
+          "cutoffs": 111251,
+          "depthSum": 77,
+          "maxDepth": 12,
+          "timeMs": 169532
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Bewitch",
+        "Meteor",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 75,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 59,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 15,
+        "blue": 11
+      },
+      "durationMs": 580064,
+      "stats": {
+        "red": {
+          "moves": 30,
+          "nodes": 627079,
+          "cutoffs": 89866,
+          "depthSum": 106,
+          "maxDepth": 12,
+          "timeMs": 290681
+        },
+        "blue": {
+          "moves": 29,
+          "nodes": 611797,
+          "cutoffs": 100421,
+          "depthSum": 100,
+          "maxDepth": 12,
+          "timeMs": 289382
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Comet",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 91,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 190565,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 399187,
+          "cutoffs": 38449,
+          "depthSum": 44,
+          "maxDepth": 12,
+          "timeMs": 100392
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 379118,
+          "cutoffs": 31515,
+          "depthSum": 41,
+          "maxDepth": 10,
+          "timeMs": 90173
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Wind",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 79,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 255587,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 572044,
+          "cutoffs": 122065,
+          "depthSum": 76,
+          "maxDepth": 13,
+          "timeMs": 126287
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 554700,
+          "cutoffs": 124374,
+          "depthSum": 71,
+          "maxDepth": 13,
+          "timeMs": 129298
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Grow",
+        "Meteor",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 83,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 250252,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 491060,
+          "cutoffs": 108295,
+          "depthSum": 71,
+          "maxDepth": 13,
+          "timeMs": 130158
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 540874,
+          "cutoffs": 92351,
+          "depthSum": 67,
+          "maxDepth": 12,
+          "timeMs": 120093
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Meteor",
+        "Grow",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 82,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 253803,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 548972,
+          "cutoffs": 125742,
+          "depthSum": 74,
+          "maxDepth": 13,
+          "timeMs": 130166
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 465124,
+          "cutoffs": 89323,
+          "depthSum": 64,
+          "maxDepth": 11,
+          "timeMs": 123636
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Grow",
+        "Hail_Storm",
+        "Meteor",
+        "Surge",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 80,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 35,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 335272,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 833578,
+          "cutoffs": 171676,
+          "depthSum": 97,
+          "maxDepth": 14,
+          "timeMs": 169124
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 719167,
+          "cutoffs": 141434,
+          "depthSum": 83,
+          "maxDepth": 11,
+          "timeMs": 166145
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Flourish",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Meteor",
+        "Sprout",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 96,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 37,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 15,
+        "blue": 11
+      },
+      "durationMs": 351147,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 578723,
+          "cutoffs": 108788,
+          "depthSum": 81,
+          "maxDepth": 13,
+          "timeMs": 177080
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 473023,
+          "cutoffs": 80916,
+          "depthSum": 70,
+          "maxDepth": 11,
+          "timeMs": 174066
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Sprout",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 85,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150373,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 428668,
+          "cutoffs": 35489,
+          "depthSum": 38,
+          "maxDepth": 12,
+          "timeMs": 80245
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 357634,
+          "cutoffs": 36607,
+          "depthSum": 37,
+          "maxDepth": 10,
+          "timeMs": 70128
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Carnage",
+        "Meteor",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 87,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 28,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 3,
+        "blue": 5
+      },
+      "durationMs": 263998,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 381495,
+          "cutoffs": 90320,
+          "depthSum": 70,
+          "maxDepth": 13,
+          "timeMs": 138370
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 428842,
+          "cutoffs": 91269,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 125628
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 88,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 42,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 410955,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 738802,
+          "cutoffs": 124449,
+          "depthSum": 92,
+          "maxDepth": 12,
+          "timeMs": 210500
+        },
+        "blue": {
+          "moves": 21,
+          "nodes": 653908,
+          "cutoffs": 118675,
+          "depthSum": 77,
+          "maxDepth": 10,
+          "timeMs": 200450
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Fireblast",
+        "Slash",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 84,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 45,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 7
+      },
+      "durationMs": 440893,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 754386,
+          "cutoffs": 166385,
+          "depthSum": 97,
+          "maxDepth": 14,
+          "timeMs": 220447
+        },
+        "blue": {
+          "moves": 22,
+          "nodes": 602714,
+          "cutoffs": 122174,
+          "depthSum": 86,
+          "maxDepth": 12,
+          "timeMs": 220443
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Bewitch",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Surge",
+        "Sprout",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 90,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 230499,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 563998,
+          "cutoffs": 115156,
+          "depthSum": 70,
+          "maxDepth": 14,
+          "timeMs": 120171
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 447880,
+          "cutoffs": 84791,
+          "depthSum": 59,
+          "maxDepth": 12,
+          "timeMs": 110328
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Meteor",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 101,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 5
+      },
+      "durationMs": 300844,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 513090,
+          "cutoffs": 109424,
+          "depthSum": 71,
+          "maxDepth": 13,
+          "timeMs": 150518
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 427779,
+          "cutoffs": 91192,
+          "depthSum": 63,
+          "maxDepth": 12,
+          "timeMs": 150325
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Bewitch",
+        "Grow",
+        "Hail_Storm",
+        "Fireblast",
+        "Sprout",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 93,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150572,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 344637,
+          "cutoffs": 39190,
+          "depthSum": 39,
+          "maxDepth": 12,
+          "timeMs": 80369
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 362874,
+          "cutoffs": 34407,
+          "depthSum": 35,
+          "maxDepth": 10,
+          "timeMs": 70203
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Sprout",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 89,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150425,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 372266,
+          "cutoffs": 32307,
+          "depthSum": 38,
+          "maxDepth": 12,
+          "timeMs": 80336
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 353782,
+          "cutoffs": 27129,
+          "depthSum": 36,
+          "maxDepth": 10,
+          "timeMs": 70087
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Bewitch",
+        "Hail_Storm",
+        "Meteor",
+        "Seal_of_Wind",
+        "Comet",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 92,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 32,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 302019,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 576856,
+          "cutoffs": 114548,
+          "depthSum": 84,
+          "maxDepth": 13,
+          "timeMs": 151735
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 397197,
+          "cutoffs": 90505,
+          "depthSum": 66,
+          "maxDepth": 12,
+          "timeMs": 150284
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Hail_Storm",
+        "Fireblast",
+        "Grow",
+        "Comet",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 95,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150423,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 282134,
+          "cutoffs": 30698,
+          "depthSum": 38,
+          "maxDepth": 12,
+          "timeMs": 80256
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 316600,
+          "cutoffs": 27603,
+          "depthSum": 34,
+          "maxDepth": 10,
+          "timeMs": 70166
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Sprout",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 106,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 17,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 160412,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 406243,
+          "cutoffs": 42103,
+          "depthSum": 45,
+          "maxDepth": 11,
+          "timeMs": 80131
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 305711,
+          "cutoffs": 42562,
+          "depthSum": 34,
+          "maxDepth": 10,
+          "timeMs": 80280
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Flourish",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Summer",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 94,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 228265,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 414810,
+          "cutoffs": 105396,
+          "depthSum": 70,
+          "maxDepth": 13,
+          "timeMs": 118083
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 366991,
+          "cutoffs": 86369,
+          "depthSum": 62,
+          "maxDepth": 11,
+          "timeMs": 110182
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Meteor",
+        "Surge",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 97,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 280939,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 444792,
+          "cutoffs": 105997,
+          "depthSum": 72,
+          "maxDepth": 13,
+          "timeMs": 140376
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 461218,
+          "cutoffs": 110049,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 140559
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Flourish",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Grow",
+        "Surge",
+        "Sprout",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 111,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 190316,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 377613,
+          "cutoffs": 70220,
+          "depthSum": 58,
+          "maxDepth": 12,
+          "timeMs": 100206
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 317867,
+          "cutoffs": 73922,
+          "depthSum": 53,
+          "maxDepth": 12,
+          "timeMs": 90109
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Summer",
+        "Sprout",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 98,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 41,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 15,
+        "blue": 11
+      },
+      "durationMs": 401601,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 583085,
+          "cutoffs": 69753,
+          "depthSum": 73,
+          "maxDepth": 11,
+          "timeMs": 200659
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 509150,
+          "cutoffs": 77299,
+          "depthSum": 67,
+          "maxDepth": 11,
+          "timeMs": 200937
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Flourish",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Grow",
+        "Sprout",
+        "Comet",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 99,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 190528,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 302131,
+          "cutoffs": 26634,
+          "depthSum": 42,
+          "maxDepth": 12,
+          "timeMs": 100363
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 340168,
+          "cutoffs": 25091,
+          "depthSum": 38,
+          "maxDepth": 10,
+          "timeMs": 90165
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Comet",
+        "Sprout",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 100,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 35,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 6
+      },
+      "durationMs": 340657,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 385932,
+          "cutoffs": 62595,
+          "depthSum": 72,
+          "maxDepth": 13,
+          "timeMs": 170289
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 456265,
+          "cutoffs": 57096,
+          "depthSum": 67,
+          "maxDepth": 11,
+          "timeMs": 170366
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Fireblast",
+        "Hail_Storm",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 102,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 2815867,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 418341,
+          "cutoffs": 103495,
+          "depthSum": 67,
+          "maxDepth": 13,
+          "timeMs": 2695953
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 356434,
+          "cutoffs": 82424,
+          "depthSum": 56,
+          "maxDepth": 12,
+          "timeMs": 119913
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Fireblast",
+        "Hail_Storm",
+        "Grow",
+        "Surge",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 116,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 2820643,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 484559,
+          "cutoffs": 78665,
+          "depthSum": 62,
+          "maxDepth": 12,
+          "timeMs": 130777
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 398522,
+          "cutoffs": 77466,
+          "depthSum": 55,
+          "maxDepth": 10,
+          "timeMs": 2689864
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Fireblast",
+        "Grow",
+        "Seal_of_Wind",
+        "Sprout",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 104,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 2826339,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 500349,
+          "cutoffs": 48295,
+          "depthSum": 58,
+          "maxDepth": 12,
+          "timeMs": 2697573
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 359113,
+          "cutoffs": 36187,
+          "depthSum": 53,
+          "maxDepth": 10,
+          "timeMs": 128764
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Starfall",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Surge",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 105,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 27,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 2831844,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 339391,
+          "cutoffs": 44366,
+          "depthSum": 50,
+          "maxDepth": 11,
+          "timeMs": 2701974
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 374242,
+          "cutoffs": 43225,
+          "depthSum": 47,
+          "maxDepth": 10,
+          "timeMs": 129866
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Bewitch",
+        "Seal_of_Wind",
+        "Grow",
+        "Meteor",
+        "Sprout",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 103,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 45,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 7
+      },
+      "durationMs": 3010234,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 487759,
+          "cutoffs": 98731,
+          "depthSum": 89,
+          "maxDepth": 13,
+          "timeMs": 2789813
+        },
+        "blue": {
+          "moves": 22,
+          "nodes": 588984,
+          "cutoffs": 116120,
+          "depthSum": 97,
+          "maxDepth": 13,
+          "timeMs": 220418
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Flourish",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Grow",
+        "Seal_of_Summer",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 107,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 291057,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 461368,
+          "cutoffs": 92361,
+          "depthSum": 65,
+          "maxDepth": 11,
+          "timeMs": 150430
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 449723,
+          "cutoffs": 74321,
+          "depthSum": 57,
+          "maxDepth": 10,
+          "timeMs": 140624
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Meteor",
+        "Comet",
+        "Sprout",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 109,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 240583,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 307639,
+          "cutoffs": 56329,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 120341
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 239574,
+          "cutoffs": 48936,
+          "depthSum": 49,
+          "maxDepth": 11,
+          "timeMs": 120235
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Grow",
+        "Meteor",
+        "Fireblast",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 121,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 36,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 16
+      },
+      "durationMs": 352652,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 516304,
+          "cutoffs": 105409,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 181247
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 563838,
+          "cutoffs": 89022,
+          "depthSum": 67,
+          "maxDepth": 11,
+          "timeMs": 171400
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Seal_of_Wind",
+        "Meteor",
+        "Grow",
+        "Surge",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 108,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 200360,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 272801,
+          "cutoffs": 62609,
+          "depthSum": 55,
+          "maxDepth": 13,
+          "timeMs": 100159
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 229784,
+          "cutoffs": 41897,
+          "depthSum": 48,
+          "maxDepth": 11,
+          "timeMs": 100200
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Bewitch",
+        "Meteor",
+        "Fireblast",
+        "Grow",
+        "Surge",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 110,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 44,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 430980,
+      "stats": {
+        "red": {
+          "moves": 22,
+          "nodes": 480674,
+          "cutoffs": 96947,
+          "depthSum": 89,
+          "maxDepth": 13,
+          "timeMs": 220454
+        },
+        "blue": {
+          "moves": 22,
+          "nodes": 463693,
+          "cutoffs": 91107,
+          "depthSum": 82,
+          "maxDepth": 12,
+          "timeMs": 210521
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Hail_Storm",
+        "Grow",
+        "Seal_of_Summer",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 112,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 327817,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 355175,
+          "cutoffs": 83327,
+          "depthSum": 75,
+          "maxDepth": 13,
+          "timeMs": 167439
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 295203,
+          "cutoffs": 59979,
+          "depthSum": 63,
+          "maxDepth": 11,
+          "timeMs": 160375
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Starfall",
+        "Fireblast",
+        "Hail_Storm",
+        "Meteor",
+        "Seal_of_Summer",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 114,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 37,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 360952,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 380873,
+          "cutoffs": 86815,
+          "depthSum": 76,
+          "maxDepth": 12,
+          "timeMs": 180521
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 353880,
+          "cutoffs": 68558,
+          "depthSum": 68,
+          "maxDepth": 11,
+          "timeMs": 180430
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Bewitch",
+        "Grow",
+        "Meteor",
+        "Hail_Storm",
+        "Sprout",
+        "Comet",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 115,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 170461,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 336796,
+          "cutoffs": 31353,
+          "depthSum": 40,
+          "maxDepth": 12,
+          "timeMs": 90325
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 272749,
+          "cutoffs": 27293,
+          "depthSum": 36,
+          "maxDepth": 10,
+          "timeMs": 80133
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Slash",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 117,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150387,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 207930,
+          "cutoffs": 27303,
+          "depthSum": 36,
+          "maxDepth": 11,
+          "timeMs": 80309
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 248977,
+          "cutoffs": 21890,
+          "depthSum": 33,
+          "maxDepth": 10,
+          "timeMs": 70076
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Grow",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 113,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 331159,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 329843,
+          "cutoffs": 50632,
+          "depthSum": 64,
+          "maxDepth": 11,
+          "timeMs": 170656
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 403196,
+          "cutoffs": 60850,
+          "depthSum": 59,
+          "maxDepth": 10,
+          "timeMs": 160500
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Meteor",
+        "Fireblast",
+        "Comet",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 126,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 58,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 15
+      },
+      "durationMs": 575969,
+      "stats": {
+        "red": {
+          "moves": 29,
+          "nodes": 505064,
+          "cutoffs": 67611,
+          "depthSum": 81,
+          "maxDepth": 12,
+          "timeMs": 293135
+        },
+        "blue": {
+          "moves": 29,
+          "nodes": 492606,
+          "cutoffs": 62843,
+          "depthSum": 74,
+          "maxDepth": 9,
+          "timeMs": 282829
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Wind",
+        "Slash",
+        "Comet",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 118,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 19,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 171324,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 330471,
+          "cutoffs": 76573,
+          "depthSum": 60,
+          "maxDepth": 13,
+          "timeMs": 86540
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 308635,
+          "cutoffs": 63273,
+          "depthSum": 50,
+          "maxDepth": 11,
+          "timeMs": 84783
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Meteor",
+        "Fireblast",
+        "Grow",
+        "Surge",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 119,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 28,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 271111,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 491497,
+          "cutoffs": 96344,
+          "depthSum": 65,
+          "maxDepth": 12,
+          "timeMs": 140615
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 483977,
+          "cutoffs": 82865,
+          "depthSum": 56,
+          "maxDepth": 10,
+          "timeMs": 130495
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Starfall",
+        "Seal_of_Wind",
+        "Meteor",
+        "Grow",
+        "Surge",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 120,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 278536,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 318565,
+          "cutoffs": 67030,
+          "depthSum": 61,
+          "maxDepth": 13,
+          "timeMs": 140352
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 273544,
+          "cutoffs": 48232,
+          "depthSum": 52,
+          "maxDepth": 11,
+          "timeMs": 138183
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Flourish",
+        "Bewitch",
+        "Meteor",
+        "Hail_Storm",
+        "Fireblast",
+        "Comet",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 122,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 330652,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 500061,
+          "cutoffs": 106981,
+          "depthSum": 84,
+          "maxDepth": 13,
+          "timeMs": 170273
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 440357,
+          "cutoffs": 82406,
+          "depthSum": 76,
+          "maxDepth": 11,
+          "timeMs": 160376
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Meteor",
+        "Comet",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 125,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 14,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 6,
+        "blue": 8
+      },
+      "durationMs": 130235,
+      "stats": {
+        "red": {
+          "moves": 7,
+          "nodes": 282039,
+          "cutoffs": 28897,
+          "depthSum": 36,
+          "maxDepth": 12,
+          "timeMs": 70155
+        },
+        "blue": {
+          "moves": 7,
+          "nodes": 307585,
+          "cutoffs": 27312,
+          "depthSum": 32,
+          "maxDepth": 10,
+          "timeMs": 60078
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Flourish",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Wind",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 131,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 23,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 216242,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 292936,
+          "cutoffs": 64371,
+          "depthSum": 64,
+          "maxDepth": 13,
+          "timeMs": 110148
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 290237,
+          "cutoffs": 64423,
+          "depthSum": 55,
+          "maxDepth": 12,
+          "timeMs": 106094
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Bewitch",
+        "Hail_Storm",
+        "Fireblast",
+        "Grow",
+        "Seal_of_Summer",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 130,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 17,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 160501,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 378544,
+          "cutoffs": 46254,
+          "depthSum": 44,
+          "maxDepth": 12,
+          "timeMs": 80212
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 267220,
+          "cutoffs": 42112,
+          "depthSum": 34,
+          "maxDepth": 10,
+          "timeMs": 80287
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Meteor",
+        "Grow",
+        "Slash",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 124,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 38,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 369697,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 481577,
+          "cutoffs": 100070,
+          "depthSum": 81,
+          "maxDepth": 13,
+          "timeMs": 190360
+        },
+        "blue": {
+          "moves": 19,
+          "nodes": 541338,
+          "cutoffs": 105615,
+          "depthSum": 81,
+          "maxDepth": 11,
+          "timeMs": 179334
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Sprout",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 127,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 250569,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 244959,
+          "cutoffs": 57571,
+          "depthSum": 59,
+          "maxDepth": 13,
+          "timeMs": 130287
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 327535,
+          "cutoffs": 75723,
+          "depthSum": 60,
+          "maxDepth": 12,
+          "timeMs": 120281
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Bewitch",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Comet",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 123,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 41,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 7
+      },
+      "durationMs": 401154,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 414897,
+          "cutoffs": 78029,
+          "depthSum": 79,
+          "maxDepth": 12,
+          "timeMs": 200799
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 420937,
+          "cutoffs": 84158,
+          "depthSum": 77,
+          "maxDepth": 11,
+          "timeMs": 200350
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Meteor",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Sprout",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 128,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 17,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 6
+      },
+      "durationMs": 160438,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 382175,
+          "cutoffs": 38260,
+          "depthSum": 43,
+          "maxDepth": 11,
+          "timeMs": 80138
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 247707,
+          "cutoffs": 38513,
+          "depthSum": 34,
+          "maxDepth": 10,
+          "timeMs": 80299
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Meteor",
+        "Grow",
+        "Slash",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 135,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 287501,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 434171,
+          "cutoffs": 75176,
+          "depthSum": 69,
+          "maxDepth": 11,
+          "timeMs": 147271
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 485803,
+          "cutoffs": 80243,
+          "depthSum": 68,
+          "maxDepth": 10,
+          "timeMs": 140225
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Flourish",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Meteor",
+        "Slash",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 132,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 331101,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 495939,
+          "cutoffs": 59278,
+          "depthSum": 62,
+          "maxDepth": 12,
+          "timeMs": 170642
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 407638,
+          "cutoffs": 67363,
+          "depthSum": 55,
+          "maxDepth": 10,
+          "timeMs": 160454
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Wind",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 136,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 62,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 11
+      },
+      "durationMs": 609878,
+      "stats": {
+        "red": {
+          "moves": 31,
+          "nodes": 629348,
+          "cutoffs": 132201,
+          "depthSum": 107,
+          "maxDepth": 13,
+          "timeMs": 308454
+        },
+        "blue": {
+          "moves": 31,
+          "nodes": 382763,
+          "cutoffs": 89510,
+          "depthSum": 84,
+          "maxDepth": 12,
+          "timeMs": 301419
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Grow",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 140,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 32,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 307525,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 500670,
+          "cutoffs": 119442,
+          "depthSum": 83,
+          "maxDepth": 14,
+          "timeMs": 160372
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 451137,
+          "cutoffs": 94487,
+          "depthSum": 79,
+          "maxDepth": 12,
+          "timeMs": 147150
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Summer",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 129,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 58,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 1061740,
+      "stats": {
+        "red": {
+          "moves": 29,
+          "nodes": 449238,
+          "cutoffs": 75109,
+          "depthSum": 88,
+          "maxDepth": 12,
+          "timeMs": 291084
+        },
+        "blue": {
+          "moves": 29,
+          "nodes": 491577,
+          "cutoffs": 82616,
+          "depthSum": 95,
+          "maxDepth": 12,
+          "timeMs": 770654
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Starfall",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Slash",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 133,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 42,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 894026,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 417177,
+          "cutoffs": 79470,
+          "depthSum": 87,
+          "maxDepth": 13,
+          "timeMs": 210634
+        },
+        "blue": {
+          "moves": 21,
+          "nodes": 442001,
+          "cutoffs": 89626,
+          "depthSum": 82,
+          "maxDepth": 12,
+          "timeMs": 683384
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Meteor",
+        "Hail_Storm",
+        "Surge",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 145,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 653501,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 476345,
+          "cutoffs": 58712,
+          "depthSum": 47,
+          "maxDepth": 11,
+          "timeMs": 90257
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 373102,
+          "cutoffs": 54796,
+          "depthSum": 41,
+          "maxDepth": 9,
+          "timeMs": 563244
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Wind",
+        "Grow",
+        "Meteor",
+        "Surge",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 134,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 200632,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 344970,
+          "cutoffs": 75976,
+          "depthSum": 60,
+          "maxDepth": 14,
+          "timeMs": 100286
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 267789,
+          "cutoffs": 56388,
+          "depthSum": 46,
+          "maxDepth": 12,
+          "timeMs": 100345
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Meteor",
+        "Hail_Storm",
+        "Fireblast",
+        "Surge",
+        "Sprout",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 138,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 22,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 4,
+        "blue": 6
+      },
+      "durationMs": 210470,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 430607,
+          "cutoffs": 87324,
+          "depthSum": 59,
+          "maxDepth": 12,
+          "timeMs": 110141
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 297374,
+          "cutoffs": 62237,
+          "depthSum": 51,
+          "maxDepth": 11,
+          "timeMs": 100328
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Meteor",
+        "Seal_of_Wind",
+        "Slash",
+        "Sprout",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 141,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 47,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 16,
+        "blue": 12
+      },
+      "durationMs": 946299,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 515954,
+          "cutoffs": 100410,
+          "depthSum": 91,
+          "maxDepth": 13,
+          "timeMs": 714898
+        },
+        "blue": {
+          "moves": 23,
+          "nodes": 548960,
+          "cutoffs": 100395,
+          "depthSum": 88,
+          "maxDepth": 12,
+          "timeMs": 231394
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Grow",
+        "Meteor",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Comet",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 139,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 170490,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 329531,
+          "cutoffs": 32140,
+          "depthSum": 40,
+          "maxDepth": 12,
+          "timeMs": 90378
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 320076,
+          "cutoffs": 32649,
+          "depthSum": 37,
+          "maxDepth": 9,
+          "timeMs": 80108
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Grow",
+        "Meteor",
+        "Seal_of_Wind",
+        "Slash",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 137,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 62,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 16
+      },
+      "durationMs": 1098929,
+      "stats": {
+        "red": {
+          "moves": 31,
+          "nodes": 536435,
+          "cutoffs": 80932,
+          "depthSum": 100,
+          "maxDepth": 13,
+          "timeMs": 798095
+        },
+        "blue": {
+          "moves": 31,
+          "nodes": 569245,
+          "cutoffs": 105760,
+          "depthSum": 105,
+          "maxDepth": 12,
+          "timeMs": 300823
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Meteor",
+        "Grow",
+        "Comet",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 143,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 16,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 150309,
+      "stats": {
+        "red": {
+          "moves": 8,
+          "nodes": 246622,
+          "cutoffs": 38152,
+          "depthSum": 42,
+          "maxDepth": 12,
+          "timeMs": 80156
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 219088,
+          "cutoffs": 42557,
+          "depthSum": 40,
+          "maxDepth": 11,
+          "timeMs": 70151
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Grow",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 150,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 330541,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 473768,
+          "cutoffs": 101322,
+          "depthSum": 74,
+          "maxDepth": 13,
+          "timeMs": 169795
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 376824,
+          "cutoffs": 79550,
+          "depthSum": 57,
+          "maxDepth": 11,
+          "timeMs": 160744
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Meteor",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 146,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 28,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 11
+      },
+      "durationMs": 270902,
+      "stats": {
+        "red": {
+          "moves": 14,
+          "nodes": 485607,
+          "cutoffs": 101095,
+          "depthSum": 65,
+          "maxDepth": 11,
+          "timeMs": 140565
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 409837,
+          "cutoffs": 68368,
+          "depthSum": 57,
+          "maxDepth": 11,
+          "timeMs": 130332
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Grow",
+        "Fireblast",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 142,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 288569,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 608498,
+          "cutoffs": 66199,
+          "depthSum": 70,
+          "maxDepth": 12,
+          "timeMs": 148317
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 427006,
+          "cutoffs": 61313,
+          "depthSum": 62,
+          "maxDepth": 10,
+          "timeMs": 140249
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Bewitch",
+        "Grow",
+        "Meteor",
+        "Seal_of_Wind",
+        "Seal_of_Summer",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 148,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 281193,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 411488,
+          "cutoffs": 103454,
+          "depthSum": 65,
+          "maxDepth": 12,
+          "timeMs": 140632
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 390920,
+          "cutoffs": 95519,
+          "depthSum": 58,
+          "maxDepth": 11,
+          "timeMs": 140560
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Sprout",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 144,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 296497,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 524990,
+          "cutoffs": 96274,
+          "depthSum": 69,
+          "maxDepth": 11,
+          "timeMs": 150358
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 389461,
+          "cutoffs": 85522,
+          "depthSum": 62,
+          "maxDepth": 10,
+          "timeMs": 146134
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Meteor",
+        "Grow",
+        "Sprout",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 155,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 230391,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 335445,
+          "cutoffs": 67428,
+          "depthSum": 60,
+          "maxDepth": 12,
+          "timeMs": 120203
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 438358,
+          "cutoffs": 89853,
+          "depthSum": 63,
+          "maxDepth": 12,
+          "timeMs": 110186
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Flourish",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Meteor",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 151,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 188096,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 335069,
+          "cutoffs": 73021,
+          "depthSum": 57,
+          "maxDepth": 12,
+          "timeMs": 99789
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 377986,
+          "cutoffs": 80663,
+          "depthSum": 53,
+          "maxDepth": 12,
+          "timeMs": 88306
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Sprout",
+        "Surge",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 149,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 170461,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 300344,
+          "cutoffs": 34576,
+          "depthSum": 39,
+          "maxDepth": 11,
+          "timeMs": 90294
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 280934,
+          "cutoffs": 17756,
+          "depthSum": 34,
+          "maxDepth": 9,
+          "timeMs": 80167
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Flourish",
+        "Meteor",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Surge",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 147,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 183829,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 360090,
+          "cutoffs": 59915,
+          "depthSum": 60,
+          "maxDepth": 12,
+          "timeMs": 91107
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 325061,
+          "cutoffs": 57757,
+          "depthSum": 54,
+          "maxDepth": 12,
+          "timeMs": 92720
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Bewitch",
+        "Meteor",
+        "Grow",
+        "Hail_Storm",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 160,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 190664,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 344980,
+          "cutoffs": 79276,
+          "depthSum": 55,
+          "maxDepth": 13,
+          "timeMs": 100408
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 309800,
+          "cutoffs": 64199,
+          "depthSum": 49,
+          "maxDepth": 11,
+          "timeMs": 90256
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Carnage",
+        "Meteor",
+        "Fireblast",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 153,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 24,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 230310,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 389290,
+          "cutoffs": 79584,
+          "depthSum": 62,
+          "maxDepth": 12,
+          "timeMs": 120194
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 438304,
+          "cutoffs": 85180,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 110116
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Starfall",
+        "Grow",
+        "Seal_of_Wind",
+        "Meteor",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 152,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 191239,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 468146,
+          "cutoffs": 63555,
+          "depthSum": 58,
+          "maxDepth": 12,
+          "timeMs": 96133
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 320793,
+          "cutoffs": 61512,
+          "depthSum": 49,
+          "maxDepth": 10,
+          "timeMs": 95105
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Grow",
+        "Meteor",
+        "Seal_of_Wind",
+        "Sprout",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 154,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 23,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 220389,
+      "stats": {
+        "red": {
+          "moves": 12,
+          "nodes": 498010,
+          "cutoffs": 95240,
+          "depthSum": 64,
+          "maxDepth": 12,
+          "timeMs": 110128
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 331254,
+          "cutoffs": 80269,
+          "depthSum": 55,
+          "maxDepth": 11,
+          "timeMs": 110260
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Starfall",
+        "Bewitch",
+        "Fireblast",
+        "Grow",
+        "Seal_of_Wind",
+        "Sprout",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 156,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 48,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 468026,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 474249,
+          "cutoffs": 82360,
+          "depthSum": 97,
+          "maxDepth": 12,
+          "timeMs": 237570
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 483608,
+          "cutoffs": 82073,
+          "depthSum": 86,
+          "maxDepth": 11,
+          "timeMs": 230451
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Slash",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 165,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 35,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 341117,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 306940,
+          "cutoffs": 69960,
+          "depthSum": 69,
+          "maxDepth": 12,
+          "timeMs": 170531
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 381380,
+          "cutoffs": 84233,
+          "depthSum": 70,
+          "maxDepth": 12,
+          "timeMs": 170584
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Fireblast",
+        "Meteor",
+        "Hail_Storm",
+        "Comet",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 158,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 41,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 10
+      },
+      "durationMs": 400959,
+      "stats": {
+        "red": {
+          "moves": 21,
+          "nodes": 399106,
+          "cutoffs": 90335,
+          "depthSum": 75,
+          "maxDepth": 13,
+          "timeMs": 200474
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 359821,
+          "cutoffs": 62761,
+          "depthSum": 68,
+          "maxDepth": 11,
+          "timeMs": 200480
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Bewitch",
+        "Grow",
+        "Fireblast",
+        "Hail_Storm",
+        "Comet",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 157,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 276722,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 393710,
+          "cutoffs": 94628,
+          "depthSum": 64,
+          "maxDepth": 12,
+          "timeMs": 140368
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 455570,
+          "cutoffs": 105194,
+          "depthSum": 69,
+          "maxDepth": 12,
+          "timeMs": 136352
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Hail_Storm",
+        "Grow",
+        "Meteor",
+        "Seal_of_Summer",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 159,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 36,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 15
+      },
+      "durationMs": 350844,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 350097,
+          "cutoffs": 66860,
+          "depthSum": 72,
+          "maxDepth": 12,
+          "timeMs": 180465
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 351592,
+          "cutoffs": 67171,
+          "depthSum": 66,
+          "maxDepth": 11,
+          "timeMs": 170378
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Hail_Storm",
+        "Meteor",
+        "Fireblast",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 162,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 6
+      },
+      "durationMs": 240451,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 463795,
+          "cutoffs": 71647,
+          "depthSum": 65,
+          "maxDepth": 12,
+          "timeMs": 120180
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 398099,
+          "cutoffs": 56295,
+          "depthSum": 56,
+          "maxDepth": 11,
+          "timeMs": 120268
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Bewitch",
+        "Starfall",
+        "Grow",
+        "Meteor",
+        "Seal_of_Wind",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 161,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 43,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 16,
+        "blue": 12
+      },
+      "durationMs": 422000,
+      "stats": {
+        "red": {
+          "moves": 22,
+          "nodes": 379229,
+          "cutoffs": 66895,
+          "depthSum": 72,
+          "maxDepth": 12,
+          "timeMs": 210967
+        },
+        "blue": {
+          "moves": 21,
+          "nodes": 388873,
+          "cutoffs": 76759,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 211030
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Carnage",
+        "Grow",
+        "Hail_Storm",
+        "Meteor",
+        "Comet",
+        "Sprout",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 163,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 37,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 10
+      },
+      "durationMs": 361654,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 361055,
+          "cutoffs": 69246,
+          "depthSum": 68,
+          "maxDepth": 12,
+          "timeMs": 180860
+        },
+        "blue": {
+          "moves": 18,
+          "nodes": 340874,
+          "cutoffs": 71297,
+          "depthSum": 66,
+          "maxDepth": 12,
+          "timeMs": 180792
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Grow",
+        "Fireblast",
+        "Meteor",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 164,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 276352,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 512375,
+          "cutoffs": 102194,
+          "depthSum": 75,
+          "maxDepth": 11,
+          "timeMs": 140229
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 431502,
+          "cutoffs": 80745,
+          "depthSum": 61,
+          "maxDepth": 10,
+          "timeMs": 136121
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Carnage",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Hail_Storm",
+        "Comet",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 170,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 47,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 10
+      },
+      "durationMs": 461516,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 503517,
+          "cutoffs": 94112,
+          "depthSum": 92,
+          "maxDepth": 13,
+          "timeMs": 230918
+        },
+        "blue": {
+          "moves": 23,
+          "nodes": 423213,
+          "cutoffs": 78672,
+          "depthSum": 78,
+          "maxDepth": 11,
+          "timeMs": 230594
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Starfall",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Surge",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 168,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 632858,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 511598,
+          "cutoffs": 48935,
+          "depthSum": 57,
+          "maxDepth": 11,
+          "timeMs": 120219
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 353804,
+          "cutoffs": 47603,
+          "depthSum": 45,
+          "maxDepth": 10,
+          "timeMs": 512638
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Seal_of_Wind",
+        "Grow",
+        "Hail_Storm",
+        "Sprout",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 167,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 38,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 766528,
+      "stats": {
+        "red": {
+          "moves": 19,
+          "nodes": 350462,
+          "cutoffs": 73943,
+          "depthSum": 73,
+          "maxDepth": 13,
+          "timeMs": 190719
+        },
+        "blue": {
+          "moves": 19,
+          "nodes": 418298,
+          "cutoffs": 82158,
+          "depthSum": 74,
+          "maxDepth": 11,
+          "timeMs": 575804
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Bewitch",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Grow",
+        "Slash",
+        "Seal_of_Summer",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 169,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 32,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 703459,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 557442,
+          "cutoffs": 110963,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 552538
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 565603,
+          "cutoffs": 87255,
+          "depthSum": 63,
+          "maxDepth": 11,
+          "timeMs": 150918
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Starfall",
+        "Seal_of_Wind",
+        "Meteor",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Surge",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 175,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 35,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 10
+      },
+      "durationMs": 734086,
+      "stats": {
+        "red": {
+          "moves": 18,
+          "nodes": 403772,
+          "cutoffs": 83207,
+          "depthSum": 73,
+          "maxDepth": 13,
+          "timeMs": 170847
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 374115,
+          "cutoffs": 81631,
+          "depthSum": 65,
+          "maxDepth": 12,
+          "timeMs": 563237
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Carnage",
+        "Grow",
+        "Meteor",
+        "Fireblast",
+        "Surge",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 166,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 44,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 5,
+        "blue": 11
+      },
+      "durationMs": 827835,
+      "stats": {
+        "red": {
+          "moves": 22,
+          "nodes": 469859,
+          "cutoffs": 96523,
+          "depthSum": 87,
+          "maxDepth": 13,
+          "timeMs": 221143
+        },
+        "blue": {
+          "moves": 22,
+          "nodes": 401719,
+          "cutoffs": 85426,
+          "depthSum": 69,
+          "maxDepth": 12,
+          "timeMs": 606686
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Starfall",
+        "Grow",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 173,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 26,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 250692,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 325435,
+          "cutoffs": 61776,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 130451
+        },
+        "blue": {
+          "moves": 13,
+          "nodes": 349239,
+          "cutoffs": 71987,
+          "depthSum": 62,
+          "maxDepth": 11,
+          "timeMs": 120237
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Bewitch",
+        "Meteor",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 172,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 33,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 8
+      },
+      "durationMs": 320951,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 423371,
+          "cutoffs": 105931,
+          "depthSum": 71,
+          "maxDepth": 14,
+          "timeMs": 160486
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 362246,
+          "cutoffs": 84646,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 160462
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Hail_Storm",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 171,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 4,
+        "blue": 6
+      },
+      "durationMs": 190325,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 311852,
+          "cutoffs": 73944,
+          "depthSum": 52,
+          "maxDepth": 12,
+          "timeMs": 100170
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 312856,
+          "cutoffs": 65402,
+          "depthSum": 49,
+          "maxDepth": 12,
+          "timeMs": 90151
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Fireblast",
+        "Hail_Storm",
+        "Meteor",
+        "Sprout",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 180,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 31,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 15,
+        "blue": 11
+      },
+      "durationMs": 301160,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 508762,
+          "cutoffs": 85945,
+          "depthSum": 65,
+          "maxDepth": 12,
+          "timeMs": 150624
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 371467,
+          "cutoffs": 67338,
+          "depthSum": 57,
+          "maxDepth": 9,
+          "timeMs": 150531
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Seal_of_Lightning",
+        "Grow",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Slash",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 178,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 21,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 196159,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 380497,
+          "cutoffs": 52257,
+          "depthSum": 56,
+          "maxDepth": 12,
+          "timeMs": 99476
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 299405,
+          "cutoffs": 42985,
+          "depthSum": 47,
+          "maxDepth": 9,
+          "timeMs": 96681
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Seal_of_Lightning",
+        "Flourish",
+        "Meteor",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Sprout",
+        "Seal_of_Summer",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 174,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 48,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 472005,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 452229,
+          "cutoffs": 74918,
+          "depthSum": 85,
+          "maxDepth": 12,
+          "timeMs": 241057
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 328968,
+          "cutoffs": 54048,
+          "depthSum": 71,
+          "maxDepth": 11,
+          "timeMs": 230941
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Bewitch",
+        "Meteor",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Seal_of_Summer",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 177,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 25,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 14,
+        "blue": 10
+      },
+      "durationMs": 240588,
+      "stats": {
+        "red": {
+          "moves": 13,
+          "nodes": 362354,
+          "cutoffs": 70620,
+          "depthSum": 66,
+          "maxDepth": 12,
+          "timeMs": 120432
+        },
+        "blue": {
+          "moves": 12,
+          "nodes": 352403,
+          "cutoffs": 71413,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 120155
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Bewitch",
+        "Meteor",
+        "Seal_of_Wind",
+        "Grow",
+        "Surge",
+        "Seal_of_Summer",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 183,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 22,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 210484,
+      "stats": {
+        "red": {
+          "moves": 11,
+          "nodes": 259352,
+          "cutoffs": 58642,
+          "depthSum": 54,
+          "maxDepth": 12,
+          "timeMs": 110227
+        },
+        "blue": {
+          "moves": 11,
+          "nodes": 323180,
+          "cutoffs": 71047,
+          "depthSum": 55,
+          "maxDepth": 12,
+          "timeMs": 100255
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Fireblast",
+        "Hail_Storm",
+        "Surge",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 176,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 30,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 7,
+        "blue": 9
+      },
+      "durationMs": 290843,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 482424,
+          "cutoffs": 110883,
+          "depthSum": 74,
+          "maxDepth": 13,
+          "timeMs": 150325
+        },
+        "blue": {
+          "moves": 15,
+          "nodes": 403257,
+          "cutoffs": 93424,
+          "depthSum": 65,
+          "maxDepth": 12,
+          "timeMs": 140515
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Carnage",
+        "Hail_Storm",
+        "Fireblast",
+        "Grow",
+        "Sprout",
+        "Comet",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 185,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 49,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 1926830,
+      "stats": {
+        "red": {
+          "moves": 25,
+          "nodes": 466582,
+          "cutoffs": 72238,
+          "depthSum": 83,
+          "maxDepth": 11,
+          "timeMs": 241432
+        },
+        "blue": {
+          "moves": 24,
+          "nodes": 577083,
+          "cutoffs": 66324,
+          "depthSum": 79,
+          "maxDepth": 10,
+          "timeMs": 1685396
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Bewitch",
+        "Seal_of_Wind",
+        "Grow",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Slash",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 188,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 32,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 1752768,
+      "stats": {
+        "red": {
+          "moves": 16,
+          "nodes": 447047,
+          "cutoffs": 108486,
+          "depthSum": 67,
+          "maxDepth": 13,
+          "timeMs": 1601628
+        },
+        "blue": {
+          "moves": 16,
+          "nodes": 425433,
+          "cutoffs": 104955,
+          "depthSum": 61,
+          "maxDepth": 12,
+          "timeMs": 151137
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Grow",
+        "Fireblast",
+        "Meteor",
+        "Surge",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 181,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 1775869,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 322477,
+          "cutoffs": 67272,
+          "depthSum": 70,
+          "maxDepth": 12,
+          "timeMs": 1615421
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 402710,
+          "cutoffs": 81104,
+          "depthSum": 75,
+          "maxDepth": 12,
+          "timeMs": 160445
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Bewitch",
+        "Meteor",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 179,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 47,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 9
+      },
+      "durationMs": 1900795,
+      "stats": {
+        "red": {
+          "moves": 24,
+          "nodes": 432679,
+          "cutoffs": 72158,
+          "depthSum": 81,
+          "maxDepth": 13,
+          "timeMs": 1674848
+        },
+        "blue": {
+          "moves": 23,
+          "nodes": 533275,
+          "cutoffs": 75725,
+          "depthSum": 85,
+          "maxDepth": 11,
+          "timeMs": 225932
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Seal_of_Wind",
+        "Grow",
+        "Slash",
+        "Sprout",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 182,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 50,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 10,
+        "blue": 12
+      },
+      "durationMs": 1937060,
+      "stats": {
+        "red": {
+          "moves": 25,
+          "nodes": 468264,
+          "cutoffs": 98023,
+          "depthSum": 91,
+          "maxDepth": 13,
+          "timeMs": 1696125
+        },
+        "blue": {
+          "moves": 25,
+          "nodes": 480093,
+          "cutoffs": 89968,
+          "depthSum": 83,
+          "maxDepth": 12,
+          "timeMs": 240932
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Carnage",
+        "Flourish",
+        "Hail_Storm",
+        "Fireblast",
+        "Grow",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 193,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 9,
+        "blue": 11
+      },
+      "durationMs": 190682,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 307948,
+          "cutoffs": 30197,
+          "depthSum": 41,
+          "maxDepth": 12,
+          "timeMs": 100456
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 322206,
+          "cutoffs": 22720,
+          "depthSum": 38,
+          "maxDepth": 10,
+          "timeMs": 90223
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Carnage",
+        "Starfall",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Comet",
+        "Slash",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 187,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 29,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 275695,
+      "stats": {
+        "red": {
+          "moves": 15,
+          "nodes": 506334,
+          "cutoffs": 111715,
+          "depthSum": 76,
+          "maxDepth": 13,
+          "timeMs": 137785
+        },
+        "blue": {
+          "moves": 14,
+          "nodes": 502009,
+          "cutoffs": 118425,
+          "depthSum": 71,
+          "maxDepth": 12,
+          "timeMs": 137909
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Carnage",
+        "Hail_Storm",
+        "Meteor",
+        "Fireblast",
+        "Comet",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 190,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 45,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 6
+      },
+      "durationMs": 441503,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 516269,
+          "cutoffs": 97523,
+          "depthSum": 87,
+          "maxDepth": 13,
+          "timeMs": 220790
+        },
+        "blue": {
+          "moves": 22,
+          "nodes": 401955,
+          "cutoffs": 88542,
+          "depthSum": 77,
+          "maxDepth": 12,
+          "timeMs": 220707
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Meteor",
+        "Fireblast",
+        "Grow",
+        "Sprout",
+        "Slash",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 184,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 46,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 451728,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 505807,
+          "cutoffs": 92317,
+          "depthSum": 92,
+          "maxDepth": 12,
+          "timeMs": 230735
+        },
+        "blue": {
+          "moves": 23,
+          "nodes": 465353,
+          "cutoffs": 78336,
+          "depthSum": 82,
+          "maxDepth": 11,
+          "timeMs": 220990
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 198,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 34,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 330838,
+      "stats": {
+        "red": {
+          "moves": 17,
+          "nodes": 439369,
+          "cutoffs": 87097,
+          "depthSum": 74,
+          "maxDepth": 13,
+          "timeMs": 170402
+        },
+        "blue": {
+          "moves": 17,
+          "nodes": 418739,
+          "cutoffs": 78894,
+          "depthSum": 67,
+          "maxDepth": 11,
+          "timeMs": 160431
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Hail_Storm",
+        "Fireblast",
+        "Meteor",
+        "Comet",
+        "Sprout",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 192,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 17,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 4
+      },
+      "durationMs": 160338,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 293071,
+          "cutoffs": 70249,
+          "depthSum": 52,
+          "maxDepth": 13,
+          "timeMs": 80160
+        },
+        "blue": {
+          "moves": 8,
+          "nodes": 222679,
+          "cutoffs": 54239,
+          "depthSum": 43,
+          "maxDepth": 11,
+          "timeMs": 80175
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Bewitch",
+        "Grow",
+        "Seal_of_Wind",
+        "Meteor",
+        "Surge",
+        "Seal_of_Summer",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 186,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 58,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 12,
+        "blue": 14
+      },
+      "durationMs": 574733,
+      "stats": {
+        "red": {
+          "moves": 29,
+          "nodes": 449194,
+          "cutoffs": 82914,
+          "depthSum": 77,
+          "maxDepth": 11,
+          "timeMs": 292052
+        },
+        "blue": {
+          "moves": 29,
+          "nodes": 479064,
+          "cutoffs": 86360,
+          "depthSum": 79,
+          "maxDepth": 11,
+          "timeMs": 282667
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Starfall",
+        "Carnage",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Fireblast",
+        "Seal_of_Summer",
+        "Comet",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 191,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 20,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 5,
+        "blue": 7
+      },
+      "durationMs": 190368,
+      "stats": {
+        "red": {
+          "moves": 10,
+          "nodes": 356375,
+          "cutoffs": 75787,
+          "depthSum": 58,
+          "maxDepth": 12,
+          "timeMs": 100183
+        },
+        "blue": {
+          "moves": 10,
+          "nodes": 374515,
+          "cutoffs": 68699,
+          "depthSum": 54,
+          "maxDepth": 11,
+          "timeMs": 90184
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Seal_of_Wind",
+        "Fireblast",
+        "Hail_Storm",
+        "Surge",
+        "Slash",
+        "Comet"
+      ]
+    },
+    {
+      "gameId": 195,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 50,
+      "endReason": "repetition",
+      "finalStones": {
+        "red": 13,
+        "blue": 14
+      },
+      "durationMs": 492411,
+      "stats": {
+        "red": {
+          "moves": 25,
+          "nodes": 570064,
+          "cutoffs": 119331,
+          "depthSum": 98,
+          "maxDepth": 12,
+          "timeMs": 251152
+        },
+        "blue": {
+          "moves": 25,
+          "nodes": 650315,
+          "cutoffs": 125611,
+          "depthSum": 103,
+          "maxDepth": 12,
+          "timeMs": 241251
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Seal_of_Lightning",
+        "Starfall",
+        "Fireblast",
+        "Grow",
+        "Meteor",
+        "Seal_of_Summer",
+        "Comet",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 189,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "red",
+      "plies": 43,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 7
+      },
+      "durationMs": 421009,
+      "stats": {
+        "red": {
+          "moves": 22,
+          "nodes": 657761,
+          "cutoffs": 137850,
+          "depthSum": 95,
+          "maxDepth": 13,
+          "timeMs": 210569
+        },
+        "blue": {
+          "moves": 21,
+          "nodes": 669836,
+          "cutoffs": 154804,
+          "depthSum": 93,
+          "maxDepth": 12,
+          "timeMs": 210435
+        }
+      },
+      "spellNames": [
+        "Seal_of_Lightning",
+        "Bewitch",
+        "Starfall",
+        "Fireblast",
+        "Meteor",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Surge",
+        "Sprout"
+      ]
+    },
+    {
+      "gameId": 197,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 52,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 15
+      },
+      "durationMs": 511612,
+      "stats": {
+        "red": {
+          "moves": 26,
+          "nodes": 389353,
+          "cutoffs": 57520,
+          "depthSum": 83,
+          "maxDepth": 13,
+          "timeMs": 260871
+        },
+        "blue": {
+          "moves": 26,
+          "nodes": 371587,
+          "cutoffs": 68067,
+          "depthSum": 76,
+          "maxDepth": 12,
+          "timeMs": 250737
+        }
+      },
+      "spellNames": [
+        "Carnage",
+        "Flourish",
+        "Seal_of_Lightning",
+        "Grow",
+        "Seal_of_Wind",
+        "Meteor",
+        "Surge",
+        "Comet",
+        "Seal_of_Summer"
+      ]
+    },
+    {
+      "gameId": 196,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "red",
+      "plies": 45,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 13,
+        "blue": 9
+      },
+      "durationMs": 433317,
+      "stats": {
+        "red": {
+          "moves": 23,
+          "nodes": 672141,
+          "cutoffs": 139644,
+          "depthSum": 100,
+          "maxDepth": 14,
+          "timeMs": 220378
+        },
+        "blue": {
+          "moves": 22,
+          "nodes": 597153,
+          "cutoffs": 124500,
+          "depthSum": 95,
+          "maxDepth": 12,
+          "timeMs": 212937
+        }
+      },
+      "spellNames": [
+        "Flourish",
+        "Carnage",
+        "Starfall",
+        "Fireblast",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Seal_of_Summer",
+        "Surge",
+        "Slash"
+      ]
+    },
+    {
+      "gameId": 194,
+      "redMode": "caveman",
+      "blueMode": "caveman:mana=0.15,voidp=0.05",
+      "winner": "blue",
+      "plies": 40,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 11,
+        "blue": 13
+      },
+      "durationMs": 380983,
+      "stats": {
+        "red": {
+          "moves": 20,
+          "nodes": 830240,
+          "cutoffs": 163772,
+          "depthSum": 99,
+          "maxDepth": 14,
+          "timeMs": 192526
+        },
+        "blue": {
+          "moves": 20,
+          "nodes": 739123,
+          "cutoffs": 145652,
+          "depthSum": 88,
+          "maxDepth": 12,
+          "timeMs": 188457
+        }
+      },
+      "spellNames": [
+        "Bewitch",
+        "Starfall",
+        "Seal_of_Lightning",
+        "Grow",
+        "Seal_of_Wind",
+        "Hail_Storm",
+        "Sprout",
+        "Comet",
+        "Surge"
+      ]
+    },
+    {
+      "gameId": 199,
+      "redMode": "caveman:mana=0.15,voidp=0.05",
+      "blueMode": "caveman",
+      "winner": "blue",
+      "plies": 18,
+      "endReason": "normal",
+      "finalStones": {
+        "red": 8,
+        "blue": 10
+      },
+      "durationMs": 170223,
+      "stats": {
+        "red": {
+          "moves": 9,
+          "nodes": 533700,
+          "cutoffs": 56346,
+          "depthSum": 44,
+          "maxDepth": 13,
+          "timeMs": 90165
+        },
+        "blue": {
+          "moves": 9,
+          "nodes": 600825,
+          "cutoffs": 57045,
+          "depthSum": 43,
+          "maxDepth": 10,
+          "timeMs": 80058
+        }
+      },
+      "spellNames": [
+        "Starfall",
+        "Flourish",
+        "Bewitch",
+        "Fireblast",
+        "Grow",
+        "Seal_of_Wind",
+        "Slash",
+        "Sprout",
+        "Surge"
+      ]
+    }
+  ]
+}

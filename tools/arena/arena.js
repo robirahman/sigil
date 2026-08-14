@@ -124,6 +124,35 @@ function shardSpecs(specs, nShards) {
 
 function fmt(n) { return n.toLocaleString('en-US'); }
 
+// Abramowitz-Stegun 7.1.26 erf approximation (|error| <= 1.5e-7) — Node has
+// no built-in erf and the arena stays dependency-free.
+function erf(x) {
+	const sign = x < 0 ? -1 : 1;
+	const ax = Math.abs(x);
+	const t = 1 / (1 + 0.3275911 * ax);
+	const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+		- 0.284496736) * t + 0.254829592) * t * Math.exp(-ax * ax);
+	return sign * y;
+}
+
+function normCdf(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
+
+/**
+ * Win-rate stats for A over n decisive games: Wilson 95% CI and a
+ * two-sided binomial p-value (normal approximation) against p=0.5.
+ */
+function winStats(winsA, n) {
+	if (n === 0) return null;
+	const p = winsA / n;
+	const z = 1.96;
+	const denom = 1 + z * z / n;
+	const center = (p + z * z / (2 * n)) / denom;
+	const half = (z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / denom;
+	const zStat = (2 * winsA - n) / Math.sqrt(n);
+	const pValue = 2 * (1 - normCdf(Math.abs(zStat)));
+	return { p, lo: center - half, hi: center + half, pValue };
+}
+
 function summarize(args, seed, results) {
 	const A = args.red, B = args.blue;
 	const tally = { A: 0, B: 0, draw: 0, error: 0 };
@@ -161,6 +190,17 @@ function summarize(args, seed, results) {
 	console.log(`  ${A.padEnd(16)} wins: ${tally.A}`);
 	console.log(`  ${B.padEnd(16)} wins: ${tally.B}`);
 	console.log(`  draws: ${tally.draw}   errors: ${tally.error}`);
+	// Significance on decisive games only (draws here are turn-cap
+	// non-results; threefold repetition already scores as a blue win).
+	// Only meaningful when the two arms have distinct spec labels —
+	// identical labels collapse into tally.A.
+	const ws = winStats(tally.A, tally.A + tally.B);
+	if (ws && A !== B) {
+		const sig = ws.pValue < 0.05 ? '  (p<0.05)' : '';
+		console.log(`  ${A} win rate: ${(ws.p * 100).toFixed(1)}%  `
+			+ `Wilson 95% CI [${(ws.lo * 100).toFixed(1)}%, ${(ws.hi * 100).toFixed(1)}%]  `
+			+ `p=${ws.pValue.toFixed(4)}${sig}`);
+	}
 	console.log(`  end reasons: ${JSON.stringify(reasons)}`);
 	console.log(`  avg plies/game: ${(totalPlies / Math.max(1, args.games - tally.error)).toFixed(1)}`);
 	console.log(line);

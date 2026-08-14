@@ -1,7 +1,7 @@
 """SigilNet — dual-head (policy + value) neural network for Sigil.
 
 Architecture:
-  Spell IDs (9) → Embedding(15, 16) → flatten(144)
+  Spell IDs (9) → Embedding(NUM_POSSIBLE_SPELLS, 16) → flatten(144)
   Raw features (250) → Linear(250, 256) → ReLU
   Concat [144 + 256] = 400 → 6× ResBlock(400) →
     Value head:  Linear(400,128) → ReLU → Linear(128,1) → Tanh

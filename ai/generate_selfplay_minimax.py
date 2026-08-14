@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from simboard import SimBoard
 from ai.search import _apply_turn
-from ai.selfplay import random_core_spells
+from ai.selfplay import random_core_spells, random_spell_set
 
 from ai.sigil_net import SigilNet
 from ai.minimax_ai import minimax_search
@@ -52,9 +52,14 @@ def make_position(board, color, turn_idx, legal_turns, outcome):
     }
 
 
-def play_game(model, time_limit, max_depth, blunder_lambda):
-    """Play one minimax-vs-minimax game. Returns (winner, positions)."""
-    spells = random_core_spells()
+def play_game(model, time_limit, max_depth, blunder_lambda, expansions=None):
+    """Play one minimax-vs-minimax game. Returns (winner, positions).
+
+    `expansions` selects the spell pool (see ai.selfplay.random_spell_set):
+    None/'core' for core only, 'all' for every official expansion, or a
+    specific key like 'tectonic' to guarantee those spells are in the pool.
+    """
+    spells = random_spell_set(expansions)
     board = SimBoard(spells)
     board.setup_initial()
 
@@ -133,6 +138,11 @@ def main():
     parser.add_argument('--max-depth', type=int, default=4)
     parser.add_argument('--blunder-lambda', type=float, default=1.0)
     parser.add_argument('--output', type=str, default=None)
+    parser.add_argument('--expansions', type=str, default='all',
+                        help="Spell pool: 'core', 'all' (every official "
+                             "expansion, incl. Tectonic/Fissure), or a "
+                             "comma/space list of keys e.g. 'tectonic' or "
+                             "'tectonic gloom'. Default 'all'.")
     args = parser.parse_args()
 
     if args.output is None:
@@ -148,6 +158,7 @@ def main():
     print(f'Wall-clock budget: {args.hours:.1f} h', flush=True)
     print(f'Per-move budget:   {args.time_per_move}s, max_depth={args.max_depth}', flush=True)
     print(f'Blunder lambda:    {args.blunder_lambda}', flush=True)
+    print(f'Spell pool:        {args.expansions}', flush=True)
     print(f'Output:            {args.output}', flush=True)
     print(flush=True)
 
@@ -163,7 +174,8 @@ def main():
         while time.time() < deadline:
             game_t0 = time.time()
             winner, positions = play_game(
-                model, args.time_per_move, args.max_depth, args.blunder_lambda)
+                model, args.time_per_move, args.max_depth, args.blunder_lambda,
+                expansions=args.expansions)
             game_dt = time.time() - game_t0
             for pos in positions:
                 f.write(json.dumps(pos) + '\n')
