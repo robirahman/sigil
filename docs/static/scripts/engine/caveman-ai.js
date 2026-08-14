@@ -125,6 +125,32 @@ function _hailStormPrepKills(board, side, enemyOfSide) {
 	return slots;
 }
 
+/**
+ * Aftershock burn credit for `side`: total scheduled burns (all future
+ * slots, plus the popped this-turn counter when `side` is on move),
+ * capped by engagement — the count of enemyOfSide stones currently
+ * adjacent to side's stones. Eval-only heuristic (burns are NOT
+ * score/win material; checkGameOver stays real): without it a shallow
+ * search never credits Conflagration, whose kills land past the
+ * horizon. Deterministic, one adjacency scan, exactly 0 when the
+ * schedules are empty — legacy leaf values are untouched. The
+ * engagement cap keeps the credit realizable-now and decays it
+ * naturally when the opponent disengages (fizzled burns are lost).
+ */
+function _cavemanBurnCredit(board, side, enemyOfSide) {
+	let scheduled = (board.whoseTurn === side ? (board.burnsThisTurn || 0) : 0);
+	for (const v of board.pendingBurns[side]) scheduled += v;
+	if (!scheduled) return 0;
+	let engaged = 0;
+	for (const n of NODE_ORDER) {
+		if (board.stones[n] !== enemyOfSide) continue;
+		for (const nb of (ADJACENCY[n] || [])) {
+			if (board.stones[nb] === side) { engaged++; break; }
+		}
+	}
+	return Math.min(scheduled, engaged);
+}
+
 function _cavemanLeaf(board, color, w) {
 	if (board.gameover) {
 		if (board.winner === color) return CAVEMAN_WIN;
@@ -139,6 +165,8 @@ function _cavemanLeaf(board, color, w) {
 	// (pending converts to real 1:1 as it places); the exact asymmetric
 	// win semantics live in checkGameOver, which the search hits directly.
 	let score = board.effectiveStones(color) - board.effectiveStones(enemy);
+	score += _cavemanBurnCredit(board, color, enemy)
+	       - _cavemanBurnCredit(board, enemy, color);
 	if (w.mana !== 0) {
 		// board.mana is maintained by SimBoard.update() — free to read.
 		score += w.mana * (board.mana[color] - board.mana[enemy]);
@@ -190,8 +218,10 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
 		const sim = _minimaxApplyTurn(board, turns[i], color);
 		// Effective stones mirror the leaf (Providence phantoms included);
 		// `sim` is post-advanceTurn, so the opponent's freshly popped
-		// extras are correctly credited to them.
+		// extras are correctly credited to them. Burn credit likewise.
 		let diff = sim.effectiveStones(color) - sim.effectiveStones(enemy);
+		diff += _cavemanBurnCredit(sim, color, enemy)
+		      - _cavemanBurnCredit(sim, enemy, color);
 		// Positional terms mirror the leaf eval so ordering agrees with
 		// what the search maximizes (mis-ordering costs time, never
 		// correctness). Post-move absolute values sort identically to
@@ -634,6 +664,9 @@ class CavemanAI {
 			// live loop already popped this turn's head into the move
 			// counters), so pass the current turn's extras separately.
 			extraMoves: Math.max(0, (board.movesLeftThisTurn || 1) - 1),
+			// Aftershock: same for the popped burn counter (0 on human
+			// turns — the controller resolves their burns before pondering).
+			burnsNow: board.burnsThisTurn || 0,
 			timeLimit: Infinity,
 			// Bounded ponder depth so a single iteration can't grow
 			// past ~1s of work — cancel latency is bounded by current
@@ -690,6 +723,8 @@ class CavemanAI {
 				// live loop already popped this turn's head into the move
 				// counters), so pass the current turn's extras separately.
 				extraMoves: Math.max(0, (board.movesLeftThisTurn || 1) - 1),
+				// Aftershock: same for the popped burn counter.
+				burnsNow: board.burnsThisTurn || 0,
 			},
 			this.options,
 		);
@@ -747,6 +782,7 @@ function _reviveTurn(turnPayload) {
 		if (a.wall !== undefined) sa.wall = a.wall;
 		if (a.pushes !== undefined) sa.pushes = a.pushes;
 		if (a.turns !== undefined) sa.turns = a.turns;
+		if (a.nodes !== undefined) sa.nodes = a.nodes;
 		if (a.target !== undefined) sa.target = a.target;
 		if (a.val !== undefined) sa.val = a.val;
 		if (a.val2 !== undefined) sa.val2 = a.val2;

@@ -69,15 +69,16 @@ def _char_to_stone(ch):
 def board_to_sfn(board):
     """Serialize a Board or SPBoard to an SFN string.
 
-    Format: <stones>/<spells> <turn> <turncount> <rsc>:<bsc> <rlock>:<block> <rspring>:<bspring> <score> [<variant>] [pm:<red>:<blue>]
+    Format: <stones>/<spells> <turn> <turncount> <rsc>:<bsc> <rlock>:<block> <rspring>:<bspring> <score> [<variant>] [pm:<red>:<blue>] [ab:<red>:<blue>]
 
     The trailing variant token is omitted when the variant is 'standard'
     so old SFN strings remain valid; readers default to 'standard' when
-    the token is absent. The pm: token (Providence pending-move schedules,
-    comma-joined slot counts per color, '-' for an empty side) is likewise
-    omitted whenever both schedules are empty; readers identify trailing
-    tokens by prefix. Note pre-Providence parsers would misread a pm: token
-    as a variant — acceptable, since they cannot play Providence games.
+    the token is absent. The pm: token (Providence pending-move schedules)
+    and ab: token (Aftershock burn schedules) — comma-joined slot counts
+    per color, '-' for an empty side — are likewise omitted whenever both
+    sides are empty; readers identify trailing tokens by prefix. Note
+    older parsers would misread an unknown token as a variant —
+    acceptable, since they cannot play games with these packs.
     """
     stones = ''.join(_stone_char(board.nodes[n].stone) for n in NODE_ORDER)
 
@@ -115,6 +116,24 @@ def board_to_sfn(board):
             pr_str = ','.join(map(str, pr)) if pr else '-'
             pb_str = ','.join(map(str, pb)) if pb else '-'
             base = f"{base} pm:{pr_str}:{pb_str}"
+    # Aftershock burn schedules — same optional self-tagged pattern.
+    # Canonical emission order: variant, pm:, ab:.
+    burns = getattr(board, 'pending_burns', None)
+    if burns:
+        br = burns.get('red') or []
+        bb = burns.get('blue') or []
+        if br or bb:
+            br_str = ','.join(map(str, br)) if br else '-'
+            bb_str = ','.join(map(str, bb)) if bb else '-'
+            base = f"{base} ab:{br_str}:{bb_str}"
+    # Ambush snares — NODE_ORDER-canonical, '=' separator (never colliding
+    # with pm:/ab: colon splitting). Emission order: variant, pm:, ab:, sn:.
+    snares = getattr(board, 'snares', None)
+    if snares:
+        sn = ','.join(f"{n}={'r' if snares[n] == 'red' else 'b'}"
+                      for n in NODE_ORDER if n in snares)
+        if sn:
+            base = f"{base} sn:{sn}"
     return base
 
 
@@ -158,6 +177,9 @@ def sfn_to_dict(sfn_str):
     variant = 'standard'
     red_pending = []
     blue_pending = []
+    red_burns = []
+    blue_burns = []
+    snares = {}
     for token in parts[7:]:
         if token.startswith('pm:'):
             _, pr_str, pb_str = token.split(':')
@@ -165,6 +187,17 @@ def sfn_to_dict(sfn_str):
                            else [int(x) for x in pr_str.split(',')])
             blue_pending = ([] if pb_str == '-'
                             else [int(x) for x in pb_str.split(',')])
+        elif token.startswith('ab:'):
+            _, br_str, bb_str = token.split(':')
+            red_burns = ([] if br_str == '-'
+                         else [int(x) for x in br_str.split(',')])
+            blue_burns = ([] if bb_str == '-'
+                          else [int(x) for x in bb_str.split(',')])
+        elif token.startswith('sn:'):
+            for entry in token[3:].split(','):
+                if '=' in entry:
+                    n, ch = entry.split('=', 1)
+                    snares[n] = 'red' if ch == 'r' else 'blue'
         elif token:
             variant = token
 
@@ -183,6 +216,9 @@ def sfn_to_dict(sfn_str):
         'variant': variant,
         'red_pending': red_pending,
         'blue_pending': blue_pending,
+        'red_burns': red_burns,
+        'blue_burns': blue_burns,
+        'snares': snares,
     }
 
 
@@ -255,6 +291,13 @@ class GameRecorder:
                 self._current_turn.append(f"C:{spell}[{kept_str}]")
             else:
                 self._current_turn.append(f"C:{spell}")
+        elif action_type == 'burn':
+            # Aftershock start-of-turn burn (archival; classic SGN is
+            # display-grade, not the replayable transcript format).
+            self._current_turn.append(f"BURN:{kwargs['node']}")
+        elif action_type == 'snare':
+            # Ambush snare placement (archival, same caveat as BURN).
+            self._current_turn.append(f"SNARE:{kwargs['node']}")
 
     def end_game(self, winner):
         """Call when the game ends."""

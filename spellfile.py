@@ -2,6 +2,8 @@
 import json
 import time
 
+from notation import NODE_ORDER, POSITIONS
+
 
 class Spell():
 	def __init__(self, board, position, name):
@@ -1754,6 +1756,14 @@ class Fissure(Spell):
 			player.board.last_play = None
 			player.board.last_player = None
 
+		### Ambush: the blast also destroys enemy-of-caster snares on the
+		### target and adjacent nodes, just as it destroys enemy stones
+		### there. The caster's own snares in the radius survive (a wall
+		### over your own snare leaves it intact-but-inert).
+		for sn in [target_name] + [nb.name for nb in node.neighbors]:
+			if player.board.snares.get(sn) == player.enemy:
+				del player.board.snares[sn]
+
 		player.board.update()
 
 
@@ -1904,3 +1914,170 @@ class Endowment(_ScheduleMovesSpell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.text = "Make 1 extra move at the beginning of each of your next 4 turns."
+
+
+class _ScheduleBurnsSpell(Spell):
+	### Aftershock base: schedule 1 burn (destroy 1 enemy stone touching
+	### you, your choice) at the beginning of each of the caster's next
+	### TURNS turns. The CAST only schedules — the burn PROMPT runs at
+	### start of turn in Player.taketurn. Burns are not score/win
+	### material; fizzled burns are lost. Burns ignore Bulwark
+	### (destruction convention, like Fireblast).
+	TURNS = 1
+
+	def resolve(self, player):
+		sched = self.board.pending_burns[player.color]
+		while len(sched) < self.TURNS:
+			sched.append(0)
+		for i in range(self.TURNS):
+			sched[i] += 1
+		if self.TURNS == 1:
+			effect = "destroy 1 enemy stone touching you at the beginning of your next turn"
+			opp_effect = "destroy 1 of your stones touching them at the beginning of their next turn"
+		else:
+			effect = ("destroy 1 enemy stone touching you at the beginning of each of "
+			          "your next {} turns".format(self.TURNS))
+			opp_effect = ("destroy 1 of your stones touching them at the beginning of each of "
+			              "their next {} turns".format(self.TURNS))
+		if player.ishuman:
+			player.jmessage("You will " + effect + ".")
+		if player.opp.ishuman:
+			pname = player.color[0].upper() + player.color[1:]
+			player.opp.jmessage(pname + " will " + opp_effect + ".")
+		self.board.update()
+
+
+class Ember(_ScheduleBurnsSpell):
+	TURNS = 1
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.text = "Destroy 1 enemy stone touching your stones at the beginning of your next turn."
+
+
+class Smolder(_ScheduleBurnsSpell):
+	TURNS = 2
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns."
+
+
+class Conflagration(_ScheduleBurnsSpell):
+	TURNS = 4
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns."
+
+
+### Ambush placement ranking — mirror of SimBoard._snare_candidates on
+### Node-object boards: empty, snare-free, non-wall nodes ranked by
+### likelihood an enemy stone comes to rest there (2 per adjacent enemy
+### stone, +2 inside a sigil the enemy is charging, +1 on a mana node).
+### Descending score, NODE_ORDER tiebreak via stable sort.
+_POSITION_OF_NODE = {}
+for _pos, _pnodes in POSITIONS.items():
+	for _n in _pnodes:
+		_POSITION_OF_NODE[_n] = _pos
+
+
+def _rank_snare_nodes(board, color, enemy):
+	out = []
+	for name in NODE_ORDER:
+		node = board.nodes[name]
+		if node.stone is not None or name in board.snares:
+			continue
+		score = 2 * sum(1 for nb in node.neighbors if nb.stone == enemy)
+		if name in ('a1', 'b1', 'c1'):
+			score += 1
+		pos = _POSITION_OF_NODE.get(name)
+		if pos is not None:
+			pnodes = [board.nodes[x] for x in POSITIONS[pos]]
+			if (any(x.stone == enemy for x in pnodes)
+					and not any(x.stone == color for x in pnodes)):
+				score += 2
+		out.append((score, name))
+	out.sort(key=lambda t: -t[0])   # stable => NODE_ORDER tiebreak
+	return out
+
+
+class _PlaceSnaresSpell(Spell):
+	### Ambush base: place snares on up to COUNT empty, snare-free,
+	### non-wall nodes. A snare destroys the first enemy-of-owner stone
+	### that comes to rest on it (stone destroyed, snare consumed — the
+	### consumption itself lives in board.update()); the owner's own
+	### stones coexist with it, and nothing else removes it except
+	### Fissure's blast. Snares count toward the owner's stone count
+	### defensively (like Providence phantoms), never toward the owner's
+	### own win claims.
+	COUNT = 1
+
+	def resolve(self, player):
+		placed = 0
+		if player.ishuman:
+			while placed < self.COUNT:
+				eligible = {n: player.color for n in NODE_ORDER
+				            if player.board.nodes[n].stone is None
+				            and n not in player.board.snares}
+				if not eligible:
+					break
+				egress = {"type": "message",
+				          "message": "Place a snare on an empty node "
+				                     "({} of {}), or End Turn to stop.".format(placed + 1, self.COUNT),
+				          "awaiting": "node", "moveoptions": eligible,
+				          "actionlist": ["pass"]}
+				player.ws.send(json.dumps(egress))
+
+				actualmessage = player.receivemessage()
+				### "End Turn"/pass or any non-option stops placement early
+				### ("up to N" — remaining snares are declined, not owed).
+				if actualmessage not in eligible:
+					break
+				player.board.snares[actualmessage] = player.color
+				player.board.record('snare', node=actualmessage)
+				placed += 1
+				player.board.update()
+		else:
+			### Bot: greedy top-N by the shared ranking, stopping at zero
+			### score (don't waste snares on dead corners).
+			time.sleep(1)
+			for score, nodename in _rank_snare_nodes(player.board, player.color, player.enemy):
+				if placed >= self.COUNT or score <= 0:
+					break
+				player.board.snares[nodename] = player.color
+				player.board.record('snare', node=nodename)
+				placed += 1
+			player.board.update()
+
+
+class Tripwire(_PlaceSnaresSpell):
+	COUNT = 1
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.text = ("Place a snare on an empty node. The next enemy stone that comes to rest "
+			"there is destroyed. Your own stones may stand on your snares. Snares count toward "
+			"your stone count while they remain, but cannot win you the game.")
+
+
+class Deadfall(_PlaceSnaresSpell):
+	COUNT = 2
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = ("Place snares on up to 2 empty nodes. The next enemy stone that comes to rest "
+			"on a snare is destroyed. Your own stones may stand on your snares. Snares count toward "
+			"your stone count while they remain, but cannot win you the game.")
+
+
+class Minefield(_PlaceSnaresSpell):
+	COUNT = 4
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = ("Place snares on up to 4 empty nodes. The next enemy stone that comes to rest "
+			"on a snare is destroyed. Your own stones may stand on your snares. Snares count toward "
+			"your stone count while they remain, but cannot win you the game.")

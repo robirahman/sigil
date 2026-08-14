@@ -531,6 +531,51 @@ async function applyAITurn(board, turn, color, emit) {
 			}
 		}
 
+		else if (action.type === 'fissure') {
+			// Tectonic Fissure: destroy adjacent enemy stones, then turn the
+			// target node into a permanent wall. (This branch was missing —
+			// an AI Fissure cast desynced the live board from the sim.)
+			if (action.destroyed) {
+				for (const n of action.destroyed) {
+					board.stones[n] = null;
+					if (board.lastPlay === n) { board.lastPlay = null; board.lastPlayer = null; }
+					emit({ type: 'crush_animation', crushed_color: enemy, node: n });
+				}
+			}
+			if (action.wall) {
+				board.stones[action.wall] = DESTROYED;
+				if (board.lastPlay === action.wall) { board.lastPlay = null; board.lastPlayer = null; }
+			}
+			// Ambush: the blast also cleared these enemy snares.
+			if (action.nodes) {
+				for (const n of action.nodes) delete board.snares[n];
+			}
+			board.update();
+			emit(board.getBoardStatePayload());
+			await _aiDelay(500);
+		}
+
+		else if (action.type === 'rock_slide') {
+			// Tectonic Rock Slide: replay the recorded push sequence. (This
+			// branch was missing — an AI Rock Slide cast desynced the live
+			// board from the sim.)
+			if (action.pushes) {
+				for (const p of action.pushes) {
+					const moved = board.stones[p.from];
+					board.stones[p.from] = null;
+					if (board.stones[p.to] !== null) {
+						emit({ type: 'crush_animation', crushed_color: board.stones[p.to], node: p.to });
+						if (board.lastPlay === p.to) { board.lastPlay = null; board.lastPlayer = null; }
+					}
+					board.stones[p.to] = moved;
+					emit({ type: 'push_animation', pushed_color: moved, starting_node: p.from, ending_node: p.to });
+					board.update();
+					emit(board.getBoardStatePayload());
+					await _aiDelay(400);
+				}
+			}
+		}
+
 		else if (action.type === 'hail_storm') {
 			if (action.destroyed) {
 				for (const n of action.destroyed) {
@@ -655,6 +700,50 @@ async function applyAITurn(board, turn, color, emit) {
 			emit({ type: 'message', message: pname + ' will make 1 extra move ' + when + '.', awaiting: null });
 			board.update();
 			emit(board.getBoardStatePayload());
+		}
+
+		else if (action.type === 'burn') {
+			// Aftershock: the AI's start-of-turn burn (target chosen by the
+			// search, recorded as a leading action of its turn).
+			if (action.node) {
+				emit({ type: 'crush_animation', crushed_color: enemy, node: action.node });
+				board.stones[action.node] = null;
+				if (board.lastPlay === action.node) { board.lastPlay = null; board.lastPlayer = null; }
+				if (board.burnsThisTurn > 0) board.burnsThisTurn--;
+				board.update();
+				emit(board.getBoardStatePayload());
+				await _aiDelay(400);
+			}
+		}
+
+		else if (action.type === 'schedule_burns') {
+			// Aftershock: replay the scheduled burns onto the live board.
+			const sched = board.pendingBurns[color];
+			const n = action.turns || 0;
+			while (sched.length < n) sched.push(0);
+			for (let i = 0; i < n; i++) sched[i] += 1;
+			const pname = color === 'red' ? 'Red' : 'Blue';
+			const when = n === 1
+				? 'at the beginning of their next turn'
+				: 'at the beginning of each of their next ' + n + ' turns';
+			emit({ type: 'message', message: pname + ' will destroy 1 enemy stone touching their stones ' + when + '.', awaiting: null });
+			board.update();
+			emit(board.getBoardStatePayload());
+		}
+
+		else if (action.type === 'place_snares') {
+			// Ambush: replay the AI's snare placements onto the live board.
+			if (action.nodes && action.nodes.length) {
+				const pname = color === 'red' ? 'Red' : 'Blue';
+				emit({ type: 'message', message: pname + ' sets ' + action.nodes.length
+					+ ' snare' + (action.nodes.length === 1 ? '' : 's') + '.', awaiting: null });
+				for (const n of action.nodes) {
+					board.snares[n] = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+					await _aiDelay(300);
+				}
+			}
 		}
 	}
 }

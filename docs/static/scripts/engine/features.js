@@ -33,6 +33,10 @@ const SPELL_TO_ID = {
 	Fissure: 39, Rock_Slide: 40, Bulwark: 41,
 	// Providence
 	Dividend: 42, Annuity: 43, Endowment: 44,
+	// Aftershock
+	Ember: 45, Smolder: 46, Conflagration: 47,
+	// Ambush
+	Tripwire: 48, Deadfall: 49, Minefield: 50,
 };
 
 const _NODE_TO_IDX = {};
@@ -51,20 +55,24 @@ const ESCAPE_MAX = 6;
 // Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat
 //                      + 6 mana_pressure + 8 tempo = 456
 // 456 legacy features + 39 destroyed-node channel + 10 Providence pending
-// dims (each block appended last in turn). Must equal
-// ai/config.py:RAW_FEATURE_DIM.
-const RAW_FEATURE_DIM = 505;
+// dims + 10 Aftershock pending-burn dims + 78 Ambush snare channels (each
+// block appended last in turn). Must equal ai/config.py:RAW_FEATURE_DIM.
+const RAW_FEATURE_DIM = 593;
 // Fixed offsets of the appended blocks — NOT relative to RAW_FEATURE_DIM,
 // which keeps growing.
 const _DESTROYED_CHANNEL_OFFSET = 456;
 const _PENDING_BLOCK_OFFSET = 495;
+const _BURN_BLOCK_OFFSET = 505;
+const _SNARE_BLOCK_OFFSET = 515;
 // BFS-distance ceiling used to normalize the mana-pressure block; matches
 // _DISTANCE_NORM in ai/features.py.
 const MANA_DISTANCE_NORM = 8;
 // Per-turn encoding: 64 base + 16 tactical (v22) + 4 lookahead (v27)
-// + 30 expansion-spell one-hot at [84:114] + 2 Providence scalars = 116.
+// + 30 expansion-spell one-hot at [84:114] + 2 Providence scalars
+// + 6 Aftershock/Ambush one-hot at [116:122] (IDs 45-50) + 2 pack scalars
+// ([122] burns resolved /4, [123] snares placed /4) = 124.
 // Must mirror ai/config.py:TURN_FEATURE_DIM.
-const TURN_FEATURE_DIM = 116;
+const TURN_FEATURE_DIM = 124;
 
 /**
  * Per-stone life-status block: 4 channels × 39 = 156 dims.
@@ -367,6 +375,34 @@ function boardToTensor(board, sideToMove) {
 		features[pi++] = board.whoseTurn === enemy ? extra : 0.0;
 	}
 
+	// Aftershock pending-burn block (appended, mirrors ai/features.py):
+	// own/enemy burn-schedule slots 0-3 (min(x,3)/3), then own/enemy burns
+	// granted this turn but not yet resolved.
+	{
+		let bi = _BURN_BLOCK_OFFSET;
+		for (const side of [sideToMove, enemy]) {
+			const sched = (board.pendingBurns && board.pendingBurns[side]) || [];
+			for (let i = 0; i < 4; i++) {
+				features[bi++] = Math.min(i < sched.length ? sched[i] : 0, 3) / 3.0;
+			}
+		}
+		const bnow = Math.min(board.burnsThisTurn || 0, 3) / 3.0;
+		features[bi++] = board.whoseTurn === sideToMove ? bnow : 0.0;
+		features[bi++] = board.whoseTurn === enemy ? bnow : 0.0;
+	}
+
+	// Ambush snare channels (appended, mirrors ai/features.py): own snares
+	// then enemy snares, 1.0 per snared node from the side to move's view.
+	{
+		let si = _SNARE_BLOCK_OFFSET;
+		const snares = board.snares || {};
+		for (const side of [sideToMove, enemy]) {
+			for (let i = 0; i < NUM_NODES; i++) {
+				features[si++] = snares[NODE_ORDER[i]] === side ? 1.0 : 0.0;
+			}
+		}
+	}
+
 	// Neighborhood features: 39 x 2 = 78
 	for (let i = 0; i < NUM_NODES; i++) {
 		const nbs = _NEIGHBOR_INDICES[i];
@@ -605,15 +641,22 @@ function encodeTurn(turn, board, color) {
 			features[42] = 1;
 			const spellId = SPELL_TO_ID[action.spell] || 0;
 			// Core spells one-hot at [43:58]; expansion spells (IDs 15-44)
-			// at [84:114] — mirrors ai/features.py:encode_turn.
+			// at [84:114]; Aftershock/Ambush (IDs 45-50) at [116:122] —
+			// mirrors ai/features.py:encode_turn.
 			if (spellId < 15) features[43 + spellId] = 1;
-			else features[84 + (spellId - 15)] = 1;
+			else if (spellId < 45) features[84 + (spellId - 15)] = 1;
+			else features[116 + (spellId - 45)] = 1;
 		} else if (action.type === 'schedule_moves') {
 			features[115] = Math.min(action.turns || 0, 4) / 4.0;
+		} else if (action.type === 'burn') {
+			features[122] += 0.25;
+		} else if (action.type === 'place_snares') {
+			features[123] = Math.min((action.nodes || []).length, 4) / 4.0;
 		}
 	}
 
 	features[58] = turn.actions.length / 5.0;
+	features[122] = Math.min(features[122], 1.0);
 	if (turn.actions.length === 1 && turn.actions[0].type === 'pass') features[60] = 1;
 
 	// Providence: extra base moves used this turn (leading move-phase

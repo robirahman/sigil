@@ -34,6 +34,8 @@ document.addEventListener('alpine:init', () => {
 			},
 			nodesToRefill: {},
 			playerToRefill: '',
+			// Ambush snare markers {node: owner}, rendered as a ring overlay.
+			snares: {},
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
@@ -513,6 +515,7 @@ document.addEventListener('alpine:init', () => {
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
 				this.score = state.score || 'unset';
+				this.snares = state.snares || {};
 				this.validMoves = {};
 				this.pushSourceNode = '';
 				this.lastPlay = '';
@@ -1195,8 +1198,15 @@ document.addEventListener('alpine:init', () => {
 						redlock,
 						redspellcounter,
 						score,
+						// Non-node payload fields must be destructured OUT
+						// here or the ...nodes rest treats them as node names.
+						redpending,
+						bluepending,
+						snares,
 						...nodes
 					} = changedBoardState;
+
+					if (snares !== undefined) _this.snares = snares || {};
 
 					const isValidStateKey = (key) => key !== undefined;
 

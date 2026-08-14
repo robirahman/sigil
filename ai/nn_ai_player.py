@@ -46,6 +46,17 @@ def _live_board_to_simboard(board):
     # track this field; getattr guard keeps the conversion safe.
     sim.all_looping_snapshot_counts = dict(getattr(board, 'all_looping_snapshot_counts', {}))
 
+    # Providence/Aftershock schedules (and any future cross-turn scheduled
+    # state) must reach the sim or the search neither values nor grants them.
+    pending = getattr(board, 'pending_moves', None) or {'red': [], 'blue': []}
+    sim.pending_moves = {'red': list(pending['red']), 'blue': list(pending['blue'])}
+    burns = getattr(board, 'pending_burns', None) or {'red': [], 'blue': []}
+    sim.pending_burns = {'red': list(burns['red']), 'blue': list(burns['blue'])}
+
+    # Ambush snares are position state (defensive stone count + kill
+    # threats) — the search is blind to them unless they reach the sim.
+    sim.snares = dict(getattr(board, 'snares', None) or {})
+
     sim.update()
     return sim
 
@@ -95,8 +106,19 @@ class NNAIPlayer:
         self.board.update()
         time.sleep(1)  # Realistic delay
 
+        # Providence: pop this turn's extra-move grant from the LIVE
+        # schedule (this player replaces AIPlayer.taketurn, which is where
+        # the pop normally lives) and hand it to the sim so the search can
+        # both use and value the extra moves.
+        sched = getattr(self.board, 'pending_moves', {}).get(self.color)
+        extra_moves = sched.pop(0) if sched else 0
+        bsched = getattr(self.board, 'pending_burns', {}).get(self.color)
+        burns_now = bsched.pop(0) if bsched else 0
+
         # Convert live board to SimBoard
         sim = _live_board_to_simboard(self.board)
+        sim.extra_moves_this_turn = extra_moves
+        sim.burns_this_turn = burns_now
 
         best_turn = None
 
@@ -158,6 +180,21 @@ class NNAIPlayer:
                     self._execute_push(action.node)
                 else:
                     self._execute_blink_soft(action.node)
+
+            elif action.type == 'burn':
+                # Aftershock: the search chose the burn target.
+                self.board.nodes[action.node].stone = None
+                if self.board.last_play == action.node:
+                    self.board.last_play = None
+                    self.board.last_player = None
+                self.board.record('burn', node=action.node)
+                if self.opp is not None and getattr(self.opp, 'ishuman', False):
+                    self.opp.ws.send(json.dumps(
+                        {"type": "crush_animation",
+                         "crushed_color": self.enemy, "node": action.node}))
+                self.board.update()
+                if self.board.gameover:
+                    return
 
             elif action.type == 'cast':
                 spell_name = action.spell

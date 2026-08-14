@@ -1336,6 +1336,27 @@ to spam server (requests a new image every time a stone animation/transition beg
 	cursor: not-allowed;
 }
 
+/* Ambush snare marker: an owner-colored dashed ring. Visible to both
+   players; coexists with a stone standing on the node; disappears when
+   consumed (payload-driven). */
+.stone-node--snare-red,
+.stone-node--snare-blue {
+	position: relative;
+}
+.stone-node--snare-red::before,
+.stone-node--snare-blue::before {
+	content: '';
+	position: absolute;
+	inset: 8%;
+	border: 0.14em dashed rgba(205, 55, 55, 0.9);
+	border-radius: 50%;
+	pointer-events: none;
+	z-index: 1;
+}
+.stone-node--snare-blue::before {
+	border-color: rgba(65, 105, 225, 0.9);
+}
+
 .stone-node--blue.stone-node--last-play::after {
 	background-image: url("../images/stones/blue.png");
 }

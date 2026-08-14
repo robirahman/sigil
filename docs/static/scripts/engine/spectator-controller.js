@@ -123,6 +123,25 @@ class SpectatorController {
 					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
 				}
 
+				// Aftershock: pop and replay the mover's burn clicks from the
+				// input queue. The sentinel wrapper converts the game-finished
+				// marker into the thrown error the outer loop already handles
+				// (otherwise the resolver's retry loop would spin on it).
+				const burnsNow = board.pendingBurns[color].length
+					? board.pendingBurns[color].shift() : 0;
+				if (burnsNow > 0) {
+					const specInput = async (payload) => {
+						const resp = await this.getInput(payload);
+						if (resp === '__game_finished__') throw new Error('__game_finished__');
+						return resp;
+					};
+					await resolveBurnsAtTurnStart(board, color, burnsNow, specInput, this.emit);
+					if (board.gameover) {
+						this.emit({ type: 'game_over', winner: board.winner });
+						return;
+					}
+				}
+
 				await this._takeTurn(color, true, true, true, true);
 
 				this._gameLog.push({

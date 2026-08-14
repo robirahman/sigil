@@ -363,6 +363,7 @@
 									[`stone-node--${node}`]: true,
 									[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
 									[`stone-node--${nodes[node]}`]: true,
+									[`stone-node--snare-${snares[node]}`]: snares[node],
 									[`stone-node--valid-move-${validMoves[node]}`]: validMoves[node],
 									'stone-node--last-play': lastPlay === node && !validMoves[node],
 									'stone-node--refill': nodesToRefill[node],

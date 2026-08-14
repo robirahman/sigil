@@ -101,6 +101,34 @@ against your total) but never power your own win until actually placed.*
 | Sorcery | Annuity | Make 1 extra move at the beginning of each of your next 2 turns. |
 | Charm | Dividend | Make 1 extra move at the beginning of your next turn. |
 
+### Aftershock (shipped, unrated playtest)
+
+*Providence's aggressive twin: scheduled destruction instead of scheduled
+growth. At the start of each affected turn, destroy 1 enemy stone touching
+your stones (your choice; fizzles if none are adjacent — fizzled burns are
+lost). Burns ignore Bulwark and count toward no score or win condition.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Ritual | Conflagration | Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns. |
+| Sorcery | Smolder | Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns. |
+| Charm | Ember | Destroy 1 enemy stone touching your stones at the beginning of your next turn. |
+
+### Ambush (shipped, unrated playtest)
+
+*Visible snare markers on empty nodes. A snare is removed by exactly two
+things: an enemy stone coming to rest on it (that stone is destroyed and
+the snare consumed) or Fissure's blast (which destroys enemy-of-caster
+snares on the target and adjacent nodes). Your own stones coexist with
+your snares. Snares count toward your stone count defensively — like
+Providence's pending stones — but never power your own win claims.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Ritual | Minefield | Place snares on up to 4 empty nodes. |
+| Sorcery | Deadfall | Place snares on up to 2 empty nodes. |
+| Charm | Tripwire | Place a snare on an empty node. |
+
 ### Cosmic
 
 *Symmetry, orbits, and cross-board movement.*

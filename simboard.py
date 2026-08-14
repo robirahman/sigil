@@ -72,6 +72,14 @@ CORE_SPELLS = {
     'Dividend': {'resolve': 'schedule_moves', 'turns': 1, 'static': False, 'ischarm': True},
     'Annuity': {'resolve': 'schedule_moves', 'turns': 2, 'static': False, 'ischarm': False},
     'Endowment': {'resolve': 'schedule_moves', 'turns': 4, 'static': False, 'ischarm': False},
+    # Aftershock expansion (scheduled burns)
+    'Ember': {'resolve': 'schedule_burns', 'turns': 1, 'static': False, 'ischarm': True},
+    'Smolder': {'resolve': 'schedule_burns', 'turns': 2, 'static': False, 'ischarm': False},
+    'Conflagration': {'resolve': 'schedule_burns', 'turns': 4, 'static': False, 'ischarm': False},
+    # Ambush expansion (snare markers)
+    'Tripwire': {'resolve': 'place_snares', 'count': 1, 'static': False, 'ischarm': True},
+    'Deadfall': {'resolve': 'place_snares', 'count': 2, 'static': False, 'ischarm': False},
+    'Minefield': {'resolve': 'place_snares', 'count': 4, 'static': False, 'ischarm': False},
 }
 
 # Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
@@ -79,6 +87,18 @@ CORE_SPELLS = {
 BIG_SPELL_NODES = set()
 for _big_pos in (1, 2, 3, 4, 5, 6):
     BIG_SPELL_NODES.update(POSITIONS[_big_pos])
+
+# Every node belonging to any spell position (1-9). Used by the Aftershock
+# burn-target ranking (stones in sigils are the juicier kills).
+SPELL_POSITION_NODES = set()
+for _any_pos in range(1, 10):
+    SPELL_POSITION_NODES.update(POSITIONS[_any_pos])
+
+# node -> its spell position index (1-9), for the Ambush placement heuristic.
+POSITION_OF_NODE = {}
+for _any_pos in range(1, 10):
+    for _pos_node in POSITIONS[_any_pos]:
+        POSITION_OF_NODE[_pos_node] = _any_pos
 
 
 def is_big_spell_node(name):
@@ -91,7 +111,8 @@ SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
 class Action:
     """A single sub-action within a turn."""
     __slots__ = ('type', 'node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                 'node2', 'destroyed', 'converted', 'wall', 'pushes', 'turns')
+                 'node2', 'destroyed', 'converted', 'wall', 'pushes', 'turns',
+                 'nodes')
 
     def __init__(self, type, **kwargs):
         self.type = type
@@ -110,12 +131,15 @@ class Action:
         self.pushes = kwargs.get('pushes')
         # Providence schedule_moves: extra-move turns scheduled by this cast.
         self.turns = kwargs.get('turns')
+        # Ambush place_snares: snare nodes placed by this cast. Also carries
+        # the enemy snares cleared by a Fissure blast.
+        self.nodes = kwargs.get('nodes')
 
     def __repr__(self):
         parts = [f"Action({self.type!r}"]
         for attr in ('node', 'pushed_to', 'spell', 'sacrificed', 'kept',
                      'node2', 'destroyed', 'converted', 'wall', 'pushes',
-                     'turns'):
+                     'turns', 'nodes'):
             val = getattr(self, attr)
             if val is not None:
                 parts.append(f"{attr}={val!r}")
@@ -147,7 +171,8 @@ class SimBoard:
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
                  'springlock', 'totalstones', 'mana', 'charged_spells',
                  'variant', 'all_looping_snapshot_counts',
-                 'pending_moves', 'extra_moves_this_turn')
+                 'pending_moves', 'extra_moves_this_turn',
+                 'pending_burns', 'burns_this_turn', 'snares')
 
     def __init__(self, spell_names=None, variant='standard'):
         if variant not in self.VARIANTS:
@@ -174,6 +199,15 @@ class SimBoard:
         # extras popped for the current side-to-move by advance_turn.
         self.pending_moves = {'red': [], 'blue': []}
         self.extra_moves_this_turn = 0
+        # Aftershock: same shape for scheduled burns (destroy 1 adjacent
+        # enemy stone at the start of each affected turn, caster's choice).
+        self.pending_burns = {'red': [], 'blue': []}
+        self.burns_this_turn = 0
+        # Ambush: snare markers, {node: owner_color}. Consumed ONLY when an
+        # enemy-of-owner stone comes to rest on the node (resolved in
+        # update()) or cleared by a Fissure blast. Count defensively toward
+        # the owner's stone total, like Providence phantoms.
+        self.snares = {}
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -196,6 +230,10 @@ class SimBoard:
         b.pending_moves = {'red': list(self.pending_moves['red']),
                            'blue': list(self.pending_moves['blue'])}
         b.extra_moves_this_turn = self.extra_moves_this_turn
+        b.pending_burns = {'red': list(self.pending_burns['red']),
+                           'blue': list(self.pending_burns['blue'])}
+        b.burns_this_turn = self.burns_this_turn
+        b.snares = dict(self.snares)
         return b
 
     def looping_snapshot(self):
@@ -223,6 +261,22 @@ class SimBoard:
         if sched['red'] or sched['blue']:
             key += ('|P' + ','.join(map(str, sched['red']))
                     + '/' + ','.join(map(str, sched['blue'])))
+        # Aftershock: same canonical pre-shift convention for burn schedules.
+        bsched = {'red': list(self.pending_burns['red']),
+                  'blue': list(self.pending_burns['blue'])}
+        if self.burns_this_turn:
+            bsched[self.whose_turn] = ([self.burns_this_turn]
+                                       + bsched[self.whose_turn])
+        if bsched['red'] or bsched['blue']:
+            key += ('|B' + ','.join(map(str, bsched['red']))
+                    + '/' + ','.join(map(str, bsched['blue'])))
+        # Ambush: snares are position state. NODE_ORDER-canonical, only
+        # when non-empty. No pre/post-shift reconciliation needed (snares
+        # have no turn-scoped counter).
+        if self.snares:
+            key += '|S' + ','.join(
+                f"{n}:{self.snares[n][0]}" for n in NODE_ORDER
+                if n in self.snares)
         return key
 
     def setup_initial(self):
@@ -242,6 +296,21 @@ class SimBoard:
 
     def update(self):
         """Recalculate derived state: totalstones, mana, charged_spells, score."""
+        # Ambush: resolve snares FIRST so the totals/elimination/score/charge
+        # math below sees the post-consumption board. A snare fires ONLY when
+        # an enemy-of-owner stone rests on its node (stone destroyed, snare
+        # consumed). The owner's own stones coexist on top; walls coexist
+        # underneath; nothing else removes a snare (except Fissure's blast,
+        # handled in its resolver). Order-independent and idempotent, so
+        # every replayer that calls update() reproduces it exactly.
+        if self.snares:
+            for n in list(self.snares):
+                s = self.stones[n]
+                if s is None or s == DESTROYED:
+                    continue
+                if s != self.snares[n]:
+                    self.stones[n] = None
+                    del self.snares[n]
         red_count = 0
         blue_count = 0
         for stone in self.stones.values():
@@ -319,10 +388,17 @@ class SimBoard:
         """Total extra stones still scheduled for color's future turns."""
         return sum(self.pending_moves[color])
 
+    def snare_count(self, color):
+        """Live snares owned by `color` — count defensively toward their
+        stone total, like Providence phantoms (Aftershock burns count
+        toward nothing)."""
+        return sum(1 for owner in self.snares.values() if owner == color)
+
     def pending_stones(self, color):
-        """Providence phantom stones for `color`: scheduled extras plus, for
-        the side to move, extras granted this turn but not yet placed."""
-        p = self.pending_sum(color)
+        """Defensive phantom stones for `color`: Providence scheduled extras
+        (plus, for the side to move, extras granted this turn but not yet
+        placed) and Ambush snares."""
+        p = self.pending_sum(color) + self.snare_count(color)
         if self.whose_turn == color:
             p += self.extra_moves_this_turn
         return p
@@ -347,8 +423,8 @@ class SimBoard:
 
         red_real = self.totalstones['red']
         blue_real = self.totalstones['blue'] + 1  # phantom counter token
-        red_pend = self.pending_sum('red')
-        blue_pend = self.pending_sum('blue')
+        red_pend = self.pending_sum('red') + self.snare_count('red')
+        blue_pend = self.pending_sum('blue') + self.snare_count('blue')
 
         if red_real > blue_real + blue_pend + 2:
             self.gameover = True
@@ -383,6 +459,10 @@ class SimBoard:
         self.whose_turn = 'blue' if self.whose_turn == 'red' else 'red'
         sched = self.pending_moves[self.whose_turn]
         self.extra_moves_this_turn = sched.pop(0) if sched else 0
+        # Aftershock: second pop. Forfeit of unresolved burns is implicit,
+        # exactly like unused extras — the pop overwrites the leftover.
+        bsched = self.pending_burns[self.whose_turn]
+        self.burns_this_turn = bsched.pop(0) if bsched else 0
 
     # ---- Move helpers ----
 
@@ -559,6 +639,52 @@ class SimBoard:
                 dest = options[0]
             self.stones[dest] = enemy
             return dest
+
+    def _burn_targets(self, color):
+        """Ranked eligible Aftershock burn targets: enemy stones adjacent
+        to `color`'s stones. Bulwark does NOT protect (destruction
+        convention, like Fireblast/Storm Front). Spell-position nodes
+        rank first, NODE_ORDER within each class — shared by the greedy
+        engine and the exhaustive enumerator so greedy == top-1."""
+        enemy = self._enemy(color)
+        in_spell, outside = [], []
+        for name in NODE_ORDER:
+            if self.stones[name] != enemy:
+                continue
+            if any(self.stones[nb] == color
+                   for nb in self._adjacent_nodes(name)):
+                (in_spell if name in SPELL_POSITION_NODES
+                 else outside).append(name)
+        return in_spell + outside
+
+    def _snare_candidates(self, color):
+        """Empty, snare-free, non-wall nodes ranked by likelihood an ENEMY
+        stone comes to rest there: 2 per adjacent enemy stone (soft-move /
+        push landing pressure), +2 if inside a sigil the enemy is charging
+        (their stones present, none of ours — they must enter its empty
+        nodes to finish), +1 on a mana node. Descending score, NODE_ORDER
+        tiebreak (stable sort). Zero-score nodes included; callers cut off.
+        Scores read only stones, so one ranking pass serves multi-placement
+        exactly (placing a snare moves no stones)."""
+        enemy = self._enemy(color)
+        out = []
+        for n in NODE_ORDER:
+            if self.stones[n] is not None or n in self.snares:
+                continue
+            score = 2 * sum(1 for nb in self._adjacent_nodes(n)
+                            if self.stones[nb] == enemy)
+            if n in MANA_NODES:
+                score += 1
+            pos = POSITION_OF_NODE.get(n)
+            if pos is not None:
+                pnodes = POSITIONS[pos]
+                if (any(self.stones[x] == enemy for x in pnodes)
+                        and not any(self.stones[x] == color
+                                    for x in pnodes)):
+                    score += 2
+            out.append((score, n))
+        out.sort(key=lambda t: -t[0])   # stable => NODE_ORDER tiebreak
+        return out
 
     def _do_soft_move(self, color, node_name):
         """Place color stone on empty node. Returns the Action."""
@@ -1315,8 +1441,19 @@ class SimBoard:
             if self.stones[target] in (color, enemy):
                 destroyed.append(target)
             self.stones[target] = DESTROYED
+            # Ambush interaction: the blast also destroys enemy-of-caster
+            # SNARES on the target + adjacent nodes (the caster's own
+            # snares survive). Recorded on the action's `nodes` field so
+            # the canonical replayers reproduce it (this removal does not
+            # flow through update()).
+            snares_cleared = []
+            for n in [target] + list(self._adjacent_nodes(target)):
+                if self.snares.get(n) == enemy:
+                    del self.snares[n]
+                    snares_cleared.append(n)
             actions.append(Action('fissure', node=target, destroyed=destroyed,
-                                  wall=target))
+                                  wall=target,
+                                  nodes=snares_cleared or None))
             self.update()
 
         elif resolve_type == 'rock_slide':
@@ -1398,6 +1535,45 @@ class SimBoard:
             for i in range(turns):
                 sched[i] += 1
             actions.append(Action('schedule_moves', spell=spell_name, turns=turns))
+            self.update()
+
+        elif resolve_type == 'place_snares':
+            # Ambush: place up to `count` snares on empty, snare-free,
+            # non-wall nodes.
+            count = info.get('count', 1)
+            placed = []
+            if 'snare_targets' in overrides:
+                # The exhaustive enumerator supplies the whole SET; use
+                # exactly it (skipping now-illegal entries) — the set IS
+                # the variant, no greedy fill.
+                for cand in list(overrides['snare_targets'])[:count]:
+                    if (self.stones.get(cand) is None
+                            and cand not in self.snares):
+                        self.snares[cand] = color
+                        placed.append(cand)
+            else:
+                # Greedy: top-scored candidates; stop early at zero score
+                # ("up to N" — don't waste snares in dead space).
+                for score, n in self._snare_candidates(color):
+                    if len(placed) >= count or score <= 0:
+                        break
+                    self.snares[n] = color
+                    placed.append(n)
+            actions.append(Action('place_snares', spell=spell_name,
+                                  nodes=placed))
+            self.update()
+
+        elif resolve_type == 'schedule_burns':
+            # Aftershock: schedule 1 burn at the start of each of the
+            # caster's next `turns` turns (additive stacking). The burn
+            # itself resolves at start of turn, not here.
+            turns = info.get('turns', 1)
+            sched = self.pending_burns[color]
+            while len(sched) < turns:
+                sched.append(0)
+            for i in range(turns):
+                sched[i] += 1
+            actions.append(Action('schedule_burns', spell=spell_name, turns=turns))
             self.update()
 
         return actions
@@ -1563,27 +1739,48 @@ class SimBoard:
                 ])
             return
 
-        has_seal_of_wind = 'Seal_of_Wind' in self.charged_spells[color]
-        has_seal_of_lightning = 'Seal_of_Lightning' in self.charged_spells[color]
-        has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
+        # Aftershock burn phase (mandatory, before the move phase). Greedy
+        # engine: one ranked target per burn; the exhaustive enumerator
+        # branches over top-K instead. After the first fizzle the rest
+        # fizzle too (burning only shrinks the eligible set).
+        burn_actions = []
+        base = self
+        if self.burns_this_turn:
+            base = self.copy()
+            for _ in range(self.burns_this_turn):
+                targets = base._burn_targets(color)
+                if not targets:
+                    break
+                t = targets[0]
+                base.stones[t] = None
+                burn_actions.append(Action('burn', node=t))
+                base.update()
+                if base.gameover:
+                    # Burned the enemy's last stone.
+                    yield CompleteTurn(burn_actions + [Action('pass')])
+                    return
+
+        has_seal_of_wind = 'Seal_of_Wind' in base.charged_spells[color]
+        has_seal_of_lightning = 'Seal_of_Lightning' in base.charged_spells[color]
+        has_seal_of_summer = 'Seal_of_Summer' in base.charged_spells[color]
 
         # Phase 1: Move options. Seal of Stone (enemy-held) forces a soft
         # opening move, taking precedence over Wind's blink privilege.
-        enemy_has_stone = 'Seal_of_Stone' in self.charged_spells[self._enemy(color)]
+        enemy_has_stone = 'Seal_of_Stone' in base.charged_spells[self._enemy(color)]
         if enemy_has_stone:
-            move_targets = self._soft_moveable(color)
+            move_targets = base._soft_moveable(color)
         elif has_seal_of_wind:
-            move_targets = self._blinkable(color)
+            move_targets = base._blinkable(color)
         else:
-            move_targets = self._all_moveable(color)
+            move_targets = base._all_moveable(color)
 
         if not move_targets:
             # Must pass if no moves available
-            yield CompleteTurn([Action('pass')])
+            yield CompleteTurn(burn_actions + [Action('pass')])
             return
 
         for move_target in move_targets:
-            board_after_move = self.copy()
+            board_after_move = base.copy()
             is_blink = has_seal_of_wind and not any(
                 board_after_move.stones[nb] == color
                 for nb in board_after_move._adjacent_nodes(move_target)
@@ -1595,7 +1792,7 @@ class SimBoard:
 
             # Phase 2: remaining Providence base moves, then dash/cast/pass.
             yield from board_after_move._enumerate_move_phase(
-                color, [move_action], self.extra_moves_this_turn)
+                color, burn_actions + [move_action], self.extra_moves_this_turn)
 
     def _enumerate_move_phase(self, color, actions_so_far, extras_left):
         """Providence move phase: at each step, either stop taking base
@@ -1810,6 +2007,9 @@ class SimBoard:
             board.blueplayer.springlock.name = self.springlock['blue']
         board.pending_moves = {'red': list(self.pending_moves['red']),
                                'blue': list(self.pending_moves['blue'])}
+        board.pending_burns = {'red': list(self.pending_burns['red']),
+                               'blue': list(self.pending_burns['blue'])}
+        board.snares = dict(self.snares)
         return _to_sfn_func(board)
 
     @classmethod
@@ -1824,11 +2024,15 @@ class SimBoard:
         b.lock = {'red': d['red_lock'], 'blue': d['blue_lock']}
         b.springlock = {'red': d['red_springlock'], 'blue': d['blue_springlock']}
         b.score = d['score']
-        # Providence schedules ride the optional pm: token; the turn-scoped
-        # extras counter is NOT in SFN — callers that rebuild a board mid-way
-        # through a granted turn (e.g. the AI worker) must set it themselves.
+        # Providence/Aftershock schedules ride the optional pm:/ab: tokens;
+        # the turn-scoped counters are NOT in SFN — callers that rebuild a
+        # board mid-way through a granted turn (e.g. the AI worker) must
+        # set them themselves.
         b.pending_moves = {'red': list(d.get('red_pending') or []),
                            'blue': list(d.get('blue_pending') or [])}
+        b.pending_burns = {'red': list(d.get('red_burns') or []),
+                           'blue': list(d.get('blue_burns') or [])}
+        b.snares = dict(d.get('snares') or {})
         b.update()
         return b
 
@@ -1924,6 +2128,10 @@ def apply_sim_turn(board, turn, color):
                     board.stones[n] = None
             if action.wall:
                 board.stones[action.wall] = DESTROYED
+            # Ambush: the blast also cleared these enemy snares.
+            if action.nodes:
+                for n in action.nodes:
+                    board.snares.pop(n, None)
         elif t == 'rock_slide':
             if action.pushes:
                 for p in action.pushes:
@@ -1937,6 +2145,20 @@ def apply_sim_turn(board, turn, color):
                 sched.append(0)
             for i in range(n):
                 sched[i] += 1
+        elif t == 'burn':
+            if action.node:
+                board.stones[action.node] = None
+        elif t == 'schedule_burns':
+            sched = board.pending_burns[color]
+            n = action.turns or 0
+            while len(sched) < n:
+                sched.append(0)
+            for i in range(n):
+                sched[i] += 1
+        elif t == 'place_snares':
+            if action.nodes:
+                for n in action.nodes:
+                    board.snares[n] = color
         board.update()
     # Seal of Destruction end-of-turn trigger (the start-of-turn loss is
     # applied by the turn driver, e.g. minimax _apply_turn / live loops).

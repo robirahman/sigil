@@ -40,6 +40,22 @@ function boardToSfn(board) {
 	if (pr.length || pb.length) {
 		out += ` pm:${pr.length ? pr.join(',') : '-'}:${pb.length ? pb.join(',') : '-'}`;
 	}
+	// Aftershock burn schedules — same optional self-tagged pattern.
+	// Canonical emission order: variant, pm:, ab:.
+	const br = (board.pendingBurns && board.pendingBurns.red) || [];
+	const bb = (board.pendingBurns && board.pendingBurns.blue) || [];
+	if (br.length || bb.length) {
+		out += ` ab:${br.length ? br.join(',') : '-'}:${bb.length ? bb.join(',') : '-'}`;
+	}
+	// Ambush snares — NODE_ORDER-canonical, '=' separator (never colliding
+	// with pm:/ab: colon splitting). Emission order: variant, pm:, ab:, sn:.
+	if (board.snares && Object.keys(board.snares).length) {
+		const parts = [];
+		for (const n of NODE_ORDER) {
+			if (board.snares[n]) parts.push(n + '=' + (board.snares[n] === 'red' ? 'r' : 'b'));
+		}
+		if (parts.length) out += ' sn:' + parts.join(',');
+	}
 	return out;
 }
 
@@ -76,11 +92,25 @@ function sfnToDict(sfnStr) {
 	let variant = 'standard';
 	let redPending = [];
 	let bluePending = [];
+	let redBurns = [];
+	let blueBurns = [];
+	const snares = {};
 	for (const token of parts.slice(7)) {
 		if (token.startsWith('pm:')) {
 			const [, prStr, pbStr] = token.split(':');
 			redPending = prStr === '-' ? [] : prStr.split(',').map(Number);
 			bluePending = pbStr === '-' ? [] : pbStr.split(',').map(Number);
+		} else if (token.startsWith('ab:')) {
+			const [, brStr, bbStr] = token.split(':');
+			redBurns = brStr === '-' ? [] : brStr.split(',').map(Number);
+			blueBurns = bbStr === '-' ? [] : bbStr.split(',').map(Number);
+		} else if (token.startsWith('sn:')) {
+			for (const entry of token.slice(3).split(',')) {
+				const eq = entry.indexOf('=');
+				if (eq > 0) {
+					snares[entry.slice(0, eq)] = entry.slice(eq + 1) === 'r' ? 'red' : 'blue';
+				}
+			}
 		} else if (token) {
 			variant = token;
 		}
@@ -93,6 +123,8 @@ function sfnToDict(sfnStr) {
 		red_springlock: redSpring, blue_springlock: blueSpring,
 		score, variant,
 		red_pending: redPending, blue_pending: bluePending,
+		red_burns: redBurns, blue_burns: blueBurns,
+		snares,
 	};
 }
 

@@ -22,7 +22,8 @@ class SimAction {
 		this.converted = opts.converted || null; // corrupt: enemy stones turned to caster's color
 		this.wall = opts.wall || null;       // fissure: node permanently destroyed
 		this.pushes = opts.pushes || null;   // rock_slide: [{from, to, crushed}]
-		this.turns = opts.turns || null;     // schedule_moves: extra-move turns scheduled
+		this.turns = opts.turns || null;     // schedule_moves/schedule_burns: turns scheduled
+		this.nodes = opts.nodes || null;     // place_snares: nodes placed; fissure: snares cleared
 	}
 }
 
@@ -57,6 +58,14 @@ class SimBoard {
 		// extras popped for the current side-to-move by advanceTurn().
 		this.pendingMoves = { red: [], blue: [] };
 		this.extraMovesThisTurn = 0;
+		// Aftershock: same shape for scheduled burns (destroy 1 adjacent
+		// enemy stone at the start of each affected turn, caster's choice).
+		this.pendingBurns = { red: [], blue: [] };
+		this.burnsThisTurn = 0;
+		// Ambush: snare markers, {node: ownerColor}. Consumed ONLY when an
+		// enemy-of-owner stone rests on the node (resolved in update()) or
+		// cleared by a Fissure blast. Count defensively like phantoms.
+		this.snares = {};
 	}
 
 	static fromSigilBoard(board) {
@@ -83,6 +92,13 @@ class SimBoard {
 		// picks its whole turn at turn start, when no moves are spent yet,
 		// so remaining extras = movesLeft - 1.
 		sb.extraMovesThisTurn = Math.max(0, (board.movesLeftThisTurn || 1) - 1);
+		sb.pendingBurns = {
+			red: [...((board.pendingBurns && board.pendingBurns.red) || [])],
+			blue: [...((board.pendingBurns && board.pendingBurns.blue) || [])],
+		};
+		// Live burn counter maps 1:1 (no +1 baseline, unlike movesLeft).
+		sb.burnsThisTurn = board.burnsThisTurn || 0;
+		sb.snares = { ...(board.snares || {}) };
 		return sb;
 	}
 
@@ -103,21 +119,31 @@ class SimBoard {
 		b.crushedThisTurn = this.crushedThisTurn;
 		b.pendingMoves = { red: [...this.pendingMoves.red], blue: [...this.pendingMoves.blue] };
 		b.extraMovesThisTurn = this.extraMovesThisTurn;
+		b.pendingBurns = { red: [...this.pendingBurns.red], blue: [...this.pendingBurns.blue] };
+		b.burnsThisTurn = this.burnsThisTurn;
+		b.snares = { ...this.snares };
 		return b;
 	}
 
 	_enemy(color) { return color === 'red' ? 'blue' : 'red'; }
 
-	// Providence helpers.
+	// Providence/Ambush helpers.
 	pendingSum(color) {
 		let s = 0;
 		for (const v of this.pendingMoves[color]) s += v;
 		return s;
 	}
+	snareCount(color) {
+		// Live snares owned by color — count defensively toward their
+		// stone total, like Providence phantoms.
+		let s = 0;
+		for (const n in this.snares) if (this.snares[n] === color) s++;
+		return s;
+	}
 	pendingStones(color) {
-		// Scheduled extras plus, for the side to move, extras granted this
-		// turn but not yet placed.
-		return this.pendingSum(color)
+		// Providence scheduled extras (plus, for the side to move, extras
+		// granted this turn but not yet placed) and Ambush snares.
+		return this.pendingSum(color) + this.snareCount(color)
 			+ (this.whoseTurn === color ? this.extraMovesThisTurn : 0);
 	}
 	effectiveStones(color) {
@@ -126,6 +152,21 @@ class SimBoard {
 	}
 
 	update() {
+		// Ambush: resolve snares FIRST so the totals/elimination/score/
+		// charge math below sees the post-consumption board. A snare fires
+		// ONLY when an enemy-of-owner stone rests on its node (stone
+		// destroyed, snare consumed). Owner's stones coexist on top; walls
+		// coexist underneath; nothing else removes a snare (except
+		// Fissure's blast, handled in its resolver). Idempotent, so every
+		// replayer that calls update() reproduces it exactly.
+		for (const n of Object.keys(this.snares)) {
+			const s = this.stones[n];
+			if (s === null || s === undefined || s === DESTROYED) continue;
+			if (s !== this.snares[n]) {
+				this.stones[n] = null;
+				delete this.snares[n];
+			}
+		}
 		let rc = 0, bc = 0;
 		for (const n of NODE_ORDER) {
 			if (this.stones[n] === 'red') rc++;
@@ -221,6 +262,25 @@ class SimBoard {
 		if (schedRed.length || schedBlue.length) {
 			key += '|P' + schedRed.join(',') + '/' + schedBlue.join(',');
 		}
+		// Aftershock: same canonical pre-shift convention for burn schedules.
+		const burnRed = [...this.pendingBurns.red];
+		const burnBlue = [...this.pendingBurns.blue];
+		if (this.burnsThisTurn) {
+			(this.whoseTurn === 'red' ? burnRed : burnBlue)
+				.unshift(this.burnsThisTurn);
+		}
+		if (burnRed.length || burnBlue.length) {
+			key += '|B' + burnRed.join(',') + '/' + burnBlue.join(',');
+		}
+		// Ambush: snares are position state. NODE_ORDER-canonical, only
+		// when non-empty. No pre/post-shift reconciliation needed.
+		const snareKeys = Object.keys(this.snares);
+		if (snareKeys.length) {
+			key += '|S';
+			for (const n of NODE_ORDER) {
+				if (this.snares[n]) key += n + ':' + this.snares[n][0] + ',';
+			}
+		}
 		return key;
 	}
 
@@ -238,7 +298,8 @@ class SimBoard {
 		// counted anywhere here: placed ones are already real, unused ones
 		// forfeit at end of turn.
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
-		const rp = this.pendingSum('red'), bp = this.pendingSum('blue');
+		const rp = this.pendingSum('red') + this.snareCount('red');
+		const bp = this.pendingSum('blue') + this.snareCount('blue');
 		if (rt > bt + bp + 2) { this.gameover = true; this.winner = 'red'; return true; }
 		if (bt > rt + rp + 2) { this.gameover = true; this.winner = 'blue'; return true; }
 		if (this.spellCounter[activeColor] >= 6) {
@@ -260,6 +321,10 @@ class SimBoard {
 		this.whoseTurn = this.whoseTurn === 'red' ? 'blue' : 'red';
 		const sched = this.pendingMoves[this.whoseTurn];
 		this.extraMovesThisTurn = sched.length ? sched.shift() : 0;
+		// Aftershock: second pop. Forfeit of unresolved burns is implicit,
+		// exactly like unused extras — the pop overwrites the leftover.
+		const bsched = this.pendingBurns[this.whoseTurn];
+		this.burnsThisTurn = bsched.length ? bsched.shift() : 0;
 	}
 
 	// --- Move helpers ---
@@ -444,6 +509,58 @@ class SimBoard {
 			? destOverride : options[0];
 		this.stones[dest] = enemy;
 		return dest;
+	}
+
+	/**
+	 * Ranked eligible Aftershock burn targets: enemy stones adjacent to
+	 * `color`'s stones. Bulwark does NOT protect (destruction convention,
+	 * like Fireblast/Storm Front). Spell-position nodes rank first,
+	 * NODE_ORDER within each class — shared by the greedy engine and the
+	 * exhaustive enumerator so greedy == top-1.
+	 */
+	_burnTargets(color) {
+		const enemy = this._enemy(color);
+		const inSpell = [];
+		const outside = [];
+		for (const name of NODE_ORDER) {
+			if (this.stones[name] !== enemy) continue;
+			if ((ADJACENCY[name] || []).some(nb => this.stones[nb] === color)) {
+				(SPELL_POSITION_NODES.has(name) ? inSpell : outside).push(name);
+			}
+		}
+		return inSpell.concat(outside);
+	}
+
+	/**
+	 * Ambush placement heuristic: empty, snare-free, non-wall nodes ranked
+	 * by likelihood an ENEMY stone comes to rest there — 2 per adjacent
+	 * enemy stone, +2 inside a sigil the enemy is charging (their stones
+	 * present, none of ours), +1 on a mana node. Descending score,
+	 * NODE_ORDER tiebreak (stable sort). Scores read only stones, so one
+	 * ranking pass serves multi-placement exactly.
+	 */
+	_snareCandidates(color) {
+		const enemy = this._enemy(color);
+		const out = [];
+		for (const n of NODE_ORDER) {
+			if (this.stones[n] !== null || this.snares[n]) continue;
+			let score = 0;
+			for (const nb of (ADJACENCY[n] || [])) {
+				if (this.stones[nb] === enemy) score += 2;
+			}
+			if (MANA_NODES.includes(n)) score += 1;
+			const pos = POSITION_OF_NODE[n];
+			if (pos !== undefined) {
+				const pnodes = POSITIONS[pos];
+				if (pnodes.some(x => this.stones[x] === enemy)
+						&& !pnodes.some(x => this.stones[x] === color)) {
+					score += 2;
+				}
+			}
+			out.push([score, n]);
+		}
+		out.sort((a, b) => b[0] - a[0]);   // stable => NODE_ORDER tiebreak
+		return out;
 	}
 
 	_doSoftMove(color, node) {
@@ -644,7 +761,19 @@ class SimBoard {
 				destroyed.push(target);
 			}
 			this.stones[target] = DESTROYED;
-			actions.push(new SimAction('fissure', { node: target, destroyed, wall: target }));
+			// Ambush interaction: the blast also destroys enemy-of-caster
+			// SNARES on the target + adjacent nodes (the caster's own
+			// snares survive). Recorded on `nodes` so replayers reproduce
+			// it (this removal does not flow through update()).
+			const snaresCleared = [];
+			for (const n of [target].concat(ADJACENCY[target] || [])) {
+				if (this.snares[n] === enemy) {
+					delete this.snares[n];
+					snaresCleared.push(n);
+				}
+			}
+			actions.push(new SimAction('fissure', { node: target, destroyed, wall: target,
+				nodes: snaresCleared.length ? snaresCleared : null }));
 			this.update();
 		} else if (rt === 'rock_slide') {
 			const pushes = [];
@@ -738,6 +867,40 @@ class SimBoard {
 			while (sched.length < turns) sched.push(0);
 			for (let i = 0; i < turns; i++) sched[i] += 1;
 			actions.push(new SimAction('schedule_moves', { spell: spellName, turns }));
+			this.update();
+		} else if (rt === 'place_snares') {
+			// Ambush: place up to `count` snares on empty, snare-free,
+			// non-wall nodes.
+			const count = info.count || 1;
+			const placed = [];
+			if (overrides.snare_targets) {
+				// The exhaustive enumerator supplies the whole SET; use
+				// exactly it (skipping now-illegal entries).
+				for (const cand of overrides.snare_targets.slice(0, count)) {
+					if (this.stones[cand] === null && !this.snares[cand]) {
+						this.snares[cand] = color;
+						placed.push(cand);
+					}
+				}
+			} else {
+				// Greedy: top-scored candidates; stop early at zero score.
+				for (const [score, n] of this._snareCandidates(color)) {
+					if (placed.length >= count || score <= 0) break;
+					this.snares[n] = color;
+					placed.push(n);
+				}
+			}
+			actions.push(new SimAction('place_snares', { spell: spellName, nodes: placed }));
+			this.update();
+		} else if (rt === 'schedule_burns') {
+			// Aftershock: schedule 1 burn at the start of each of the
+			// caster's next `turns` turns (additive stacking). The burn
+			// itself resolves at start of turn, not here.
+			const turns = info.turns || 1;
+			const sched = this.pendingBurns[color];
+			while (sched.length < turns) sched.push(0);
+			for (let i = 0; i < turns; i++) sched[i] += 1;
+			actions.push(new SimAction('schedule_burns', { spell: spellName, turns }));
 			this.update();
 		} else if (rt === 'bewitch') {
 			const ovr = overrides.bewitch_pair;
@@ -1590,25 +1753,48 @@ class SimBoard {
 			return;
 		}
 
-		const hasWind = this.chargedSpells[color].includes('Seal_of_Wind');
+		// Aftershock burn phase (mandatory, before the move phase). Greedy
+		// engine: one ranked target per burn; the exhaustive enumerator
+		// branches over top-K instead. After the first fizzle the rest
+		// fizzle too (burning only shrinks the eligible set).
+		const burnActions = [];
+		let base = this;
+		if (this.burnsThisTurn) {
+			base = this.copy();
+			for (let i = 0; i < this.burnsThisTurn; i++) {
+				const targets = base._burnTargets(color);
+				if (!targets.length) break;
+				const t = targets[0];
+				base.stones[t] = null;
+				burnActions.push(new SimAction('burn', { node: t }));
+				base.update();
+				if (base.gameover) {
+					// Burned the enemy's last stone.
+					yield new SimTurn(burnActions.concat([new SimAction('pass')]));
+					return;
+				}
+			}
+		}
+
+		const hasWind = base.chargedSpells[color].includes('Seal_of_Wind');
 		// Seal of Stone (held by the enemy): this color's opening move must be soft.
 		// Soft takes precedence over Wind's blink privilege.
-		const enemyHasStone = this.chargedSpells[this._enemy(color)].includes('Seal_of_Stone');
-		const moveTargets = enemyHasStone ? this._softMoveable(color)
-			: (hasWind ? this._blinkable(color) : this._allMoveable(color));
+		const enemyHasStone = base.chargedSpells[base._enemy(color)].includes('Seal_of_Stone');
+		const moveTargets = enemyHasStone ? base._softMoveable(color)
+			: (hasWind ? base._blinkable(color) : base._allMoveable(color));
 
 		if (!moveTargets.length) {
-			yield new SimTurn([new SimAction('pass')]);
+			yield new SimTurn(burnActions.concat([new SimAction('pass')]));
 			return;
 		}
 
 		for (const target of moveTargets) {
-			const bam = this.copy();
+			const bam = base.copy();
 			const isBlink = hasWind && !ADJACENCY[target].some(nb => bam.stones[nb] === color);
 			const moveAction = bam._doMove(color, target, isBlink);
 			if (!moveAction) continue;
 			bam.update();
-			yield* bam._enumerateMovePhase(color, [moveAction], this.extraMovesThisTurn);
+			yield* bam._enumerateMovePhase(color, burnActions.concat([moveAction]), this.extraMovesThisTurn);
 		}
 	}
 
@@ -1749,6 +1935,8 @@ function applySimTurn(board, turn, color) {
 		else if (action.type === 'fissure') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
 			if (action.wall) board.stones[action.wall] = DESTROYED;
+			// Ambush: the blast also cleared these enemy snares.
+			if (action.nodes) for (const n of action.nodes) delete board.snares[n];
 		}
 		else if (action.type === 'rock_slide') {
 			if (action.pushes) {
@@ -1765,6 +1953,18 @@ function applySimTurn(board, turn, color) {
 			const n = action.turns || 0;
 			while (sched.length < n) sched.push(0);
 			for (let i = 0; i < n; i++) sched[i] += 1;
+		}
+		else if (action.type === 'burn') {
+			if (action.node) board.stones[action.node] = null;
+		}
+		else if (action.type === 'schedule_burns') {
+			const sched = board.pendingBurns[color];
+			const n = action.turns || 0;
+			while (sched.length < n) sched.push(0);
+			for (let i = 0; i < n; i++) sched[i] += 1;
+		}
+		else if (action.type === 'place_snares') {
+			if (action.nodes) for (const n of action.nodes) board.snares[n] = color;
 		}
 		board.update();
 	}

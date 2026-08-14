@@ -7,6 +7,11 @@ their indices):
   - Providence: NUM_POSSIBLE_SPELLS  42 -> 45, RAW_FEATURE_DIM 495 -> 505
                 (10-dim pending-move block), TURN_FEATURE_DIM 84 -> 116
                 (30-dim expansion-cast one-hot + 2 Providence scalars)
+  - Aftershock+Ambush: NUM_POSSIBLE_SPELLS 45 -> 51,
+                RAW_FEATURE_DIM 505 -> 593 (10-dim pending-burn block +
+                78-dim own/enemy snare channels), TURN_FEATURE_DIM
+                116 -> 124 (6-dim playtest-pack cast one-hot at [116:122]
+                + burns-resolved and snares-placed scalars)
 
 A checkpoint trained under the old constants can't be loaded straight into
 the new network (shape mismatch on spell_embed.weight and raw_proj.weight).

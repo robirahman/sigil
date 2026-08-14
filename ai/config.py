@@ -14,8 +14,9 @@ NUM_SPELL_SLOTS = 9
 # Embedding vocabulary: every spell EXCEPT the unofficial Panda expansion.
 # IDs 0-14 are the original core spells and MUST keep these values so older
 # checkpoints' first 15 embedding rows stay aligned when the table is grown
-# (see ai/migrate_checkpoint.py). IDs 15-44 are the official expansion spells.
-NUM_POSSIBLE_SPELLS = 45
+# (see ai/migrate_checkpoint.py). IDs 15-44 are the official expansion
+# spells; IDs 45-50 are the Aftershock + Ambush playtest packs.
+NUM_POSSIBLE_SPELLS = 51
 
 # Spell name -> integer ID (fixed mapping for embedding layer).
 SPELL_TO_ID = {
@@ -45,6 +46,10 @@ SPELL_TO_ID = {
     'Fissure': 39, 'Rock_Slide': 40, 'Bulwark': 41,
     # --- Providence ---
     'Dividend': 42, 'Annuity': 43, 'Endowment': 44,
+    # --- Aftershock ---
+    'Ember': 45, 'Smolder': 46, 'Conflagration': 47,
+    # --- Ambush ---
+    'Tripwire': 48, 'Deadfall': 49, 'Minefield': 50,
 }
 
 # ---- Network architecture (medium) ----
@@ -63,7 +68,12 @@ SPELL_EMBED_DIM = 16        # Embedding dimension per spell
 #    10 — Providence pending-move block (own/enemy schedule slots 0-3, each
 #         min(x,3)/3, plus own/enemy extras-granted-this-turn). Appended last,
 #         same migration convention as the destroyed-node channel.
-RAW_FEATURE_DIM = 250 + 156 + 18 + 18 + 6 + 8 + 39 + 10  # 505
+#    10 — Aftershock pending-burn block [505:515] (own/enemy burn schedule
+#         slots 0-3, each min(x,3)/3, plus own/enemy burns-this-turn).
+#    78 — Ambush snare channels: own snares [515:554], enemy snares
+#         [554:593] (1.0 per snared node, from the side to move's view).
+#         All append-only, same migration convention.
+RAW_FEATURE_DIM = 250 + 156 + 18 + 18 + 6 + 8 + 39 + 10 + 10 + 78  # 593
 TRUNK_DIM = 400             # ResNet trunk width
 NUM_RES_BLOCKS = 6          # Residual blocks in trunk
 POLICY_HIDDEN_DIM = 256     # Policy head hidden dimension
@@ -73,8 +83,13 @@ VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
 #     legacy [43:58] one-hot only covers core IDs 0-14; expansion casts
 #     previously overflowed into the tactical columns)
 #   + 2 Providence scalars ([114] extra base moves used, [115] turns
-#     scheduled by this turn's cast) = 116
-TURN_FEATURE_DIM = 116
+#     scheduled by this turn's cast)
+#   + 6 spell-ID one-hot extension for IDs 45-50 at [116:122] (Aftershock
+#     + Ambush; the cast write is three-range: id<15 -> 43+id,
+#     id<45 -> 84+(id-15), else -> 116+(id-45))
+#   + 2 pack scalars ([122] burns resolved this turn /4, [123] snares
+#     placed this turn /4) = 124
+TURN_FEATURE_DIM = 124
 
 # ---- Network architecture (hard — ~44M params, NNUE-style shallow+wide) ----
 HARD_SPELL_EMBED_DIM = 32   # Wider spell embedding

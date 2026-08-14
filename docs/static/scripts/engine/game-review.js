@@ -56,6 +56,11 @@ function sfnToSimBoard(sfnStr) {
 	sb.lock = { red: state.red_lock, blue: state.blue_lock };
 	sb.springlock = { red: state.red_springlock, blue: state.blue_springlock };
 	sb.score = state.score;
+	// Cross-turn scheduled state must survive into review evals, or the
+	// search misjudges positions with schedules in flight.
+	sb.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
+	sb.pendingBurns = { red: state.red_burns || [], blue: state.blue_burns || [] };
+	sb.snares = { ...(state.snares || {}) };
 	sb.update();
 	return sb;
 }
@@ -498,7 +503,11 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 	try {
 		for (const t of turns) {
 			board.takeSnapshot();
-			board.turnCounter++;
+			// Derive the counter from the transcript (not a blind ++): games
+			// exported after starting from an imported position begin at an
+			// arbitrary turn number, and sfnBefore-style setup SFNs already
+			// carry the first turn's post-increment counter.
+			board.turnCounter = t.turnNumber;
 			board.whoseTurn = board.turnCounter % 2 === 1 ? 'red' : 'blue';
 			board.update();
 			if (board.whoseTurn !== t.color) {
@@ -523,6 +532,16 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 			board.movesLeftThisTurn = 1 + extraMoves;
 			board.movesGrantedThisTurn = 1 + extraMoves;
 
+			// Aftershock pop (mirrors _runGameLoop). Unconditional so the
+			// schedule stays in sync for BOTH turn kinds; resolution
+			// differs: input turns replay burn clicks through the shared
+			// resolver, sim turns carry recorded 'burn' actions replayed by
+			// applyAITurn.
+			const burnsNow = board.pendingBurns[t.color].length
+				? board.pendingBurns[t.color].shift() : 0;
+			board.burnsThisTurn = burnsNow;
+
+			let sotBurnEnd = false;
 			if (t.kind === 'sim') {
 				await applyAITurn(board, { actions: t.actions || [] }, t.color, noop);
 			} else {
@@ -531,10 +550,19 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 					if (!queue.length) throw new Error('transcript exhausted at turn ' + board.turnCounter);
 					return queue.shift();
 				};
-				await gc._takeTurn(t.color, true, true, true, true);
+				if (burnsNow > 0) {
+					await resolveBurnsAtTurnStart(board, t.color, burnsNow, gc.getInput, noop);
+					board.burnsThisTurn = 0;
+					// A live partial turn (burn-elimination) recorded only
+					// its burn clicks and skipped the move phase.
+					sotBurnEnd = board.gameover;
+				}
+				if (!sotBurnEnd) {
+					await gc._takeTurn(t.color, true, true, true, true);
+				}
 			}
 
-			gc._eotTriggers(t.color);
+			if (!sotBurnEnd) gc._eotTriggers(t.color);
 			board.update();
 			rebuilt.push({
 				color: t.color,

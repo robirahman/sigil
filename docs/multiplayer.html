@@ -540,7 +540,7 @@
 						<div class="stone-nodes" x-cloak>
 							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }"></div>
 							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
-								<button class="stone-node" x-bind:aria-label="node" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-on:click="handleNodeClick(node)"></button>
+								<button class="stone-node" x-bind:aria-label="node" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--snare-${snares[node]}`]: snares[node], [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-on:click="handleNodeClick(node)"></button>
 							</template>
 						</div>
 					</div>

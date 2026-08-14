@@ -121,6 +121,18 @@ function _minimaxPosHash(board, color) {
 			+ '/' + board.pendingMoves.blue.join(',')
 			+ '/' + board.extraMovesThisTurn;
 	}
+	if (board.pendingBurns.red.length || board.pendingBurns.blue.length
+			|| board.burnsThisTurn) {
+		s += '|B' + board.pendingBurns.red.join(',')
+			+ '/' + board.pendingBurns.blue.join(',')
+			+ '/' + board.burnsThisTurn;
+	}
+	if (board.snares && Object.keys(board.snares).length) {
+		s += '|S';
+		for (const n of NODE_ORDER) {
+			if (board.snares[n]) s += n + ':' + board.snares[n][0] + ',';
+		}
+	}
 	return s;
 }
 
@@ -135,9 +147,16 @@ function _turnSig(turn) {
 		const sac = a.sacrificed ? a.sacrificed.join('+') : '';
 		const kept = a.kept ? a.kept.join('+') : '';
 		const dest = a.destroyed ? a.destroyed.join('+') : '';
+		// Cover EVERY variant-distinguishing field, or different variants
+		// collide on the same TT/killer hint (e.g. Rock Slide push orders,
+		// Fissure walls, Corrupt conversions).
+		const conv = a.converted ? a.converted.join('+') : '';
+		const pushes = a.pushes ? a.pushes.map(p => p.from + '>' + p.to).join('+') : '';
+		const nds = a.nodes ? a.nodes.join('+') : '';
 		parts.push([
 			a.type, a.node || '', a.pushed_to || '', a.spell || '',
 			sac, kept, a.node2 || '', dest,
+			conv, a.wall || '', pushes, a.turns || '', nds,
 		].join(':'));
 	}
 	return parts.join(';');
@@ -262,6 +281,8 @@ function _minimaxApplyTurn(board, turn, color) {
 		else if (t === 'fissure') {
 			if (action.destroyed) for (const n of action.destroyed) sim.stones[n] = null;
 			if (action.wall) sim.stones[action.wall] = DESTROYED;
+			// Ambush: the blast also cleared these enemy snares.
+			if (action.nodes) for (const n of action.nodes) delete sim.snares[n];
 		}
 		else if (t === 'rock_slide') {
 			if (action.pushes) {
@@ -278,6 +299,18 @@ function _minimaxApplyTurn(board, turn, color) {
 			const n = action.turns || 0;
 			while (sched.length < n) sched.push(0);
 			for (let i = 0; i < n; i++) sched[i] += 1;
+		}
+		else if (t === 'burn') {
+			if (action.node) sim.stones[action.node] = null;
+		}
+		else if (t === 'schedule_burns') {
+			const sched = sim.pendingBurns[color];
+			const n = action.turns || 0;
+			while (sched.length < n) sched.push(0);
+			for (let i = 0; i < n; i++) sched[i] += 1;
+		}
+		else if (t === 'place_snares') {
+			if (action.nodes) for (const n of action.nodes) sim.snares[n] = color;
 		}
 		sim.update();
 	}

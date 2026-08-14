@@ -225,6 +225,38 @@ class GameController {
 					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
 				}
 
+				// Aftershock: pop the burn-schedule head (SOT order:
+				// Destruction check → Providence shift → burns → moves; the
+				// shift and burns commute on state, this order keeps the
+				// Providence block untouched). Humans resolve immediately
+				// via prompts; an AI mover picks targets inside its searched
+				// turn, so the count rides board.burnsThisTurn into pickTurn.
+				const burnsNow = board.pendingBurns[color].length
+					? board.pendingBurns[color].shift() : 0;
+				board.burnsThisTurn = burnsNow;
+				if (burnsNow > 0 && !(this.ai && color === this.aiColor)) {
+					await resolveBurnsAtTurnStart(board, color, burnsNow,
+						this.getInput.bind(this), this.emit);
+					board.burnsThisTurn = 0;
+					if (board.gameover) {
+						// A burn destroyed the enemy's last stone. Record the
+						// partial turn (its burn clicks) so transcript replay
+						// reaches this exact state, then end the game.
+						const partial = {
+							color, turnNumber: board.turnCounter,
+							sfnBefore: turnSfn, sfnAfter: boardToSfn(board),
+							kind: 'input', actions: this._currentTurnActions.slice(),
+						};
+						this._gameLog.push(partial);
+						this.emit({ type: 'turn_complete', turn: partial });
+						if (this.ai && typeof this.ai.cancelPonder === 'function') {
+							try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
+						}
+						this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
+						return;
+					}
+				}
+
 				// Pondering: while the human is on move and there's an AI
 				// opponent, fire a background search to prime the shared TT.
 				// No move prediction — the search runs as the side-to-move
@@ -713,6 +745,9 @@ class GameController {
 		// not carry this turn's phantoms into the ±3-lead / tiebreak math.
 		board.movesLeftThisTurn = 0;
 		board.movesGrantedThisTurn = 0;
+		// Aftershock: clear the AI path's burn counter (humans already
+		// zeroed it after resolving prompts; unresolved AI burns forfeit).
+		board.burnsThisTurn = 0;
 
 		// Seal of Destruction end-of-turn effect
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {

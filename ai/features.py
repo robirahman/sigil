@@ -436,6 +436,24 @@ def board_to_tensor(board, side_to_move=None):
     features.append(extra if board.whose_turn == side_to_move else 0.0)
     features.append(extra if board.whose_turn == enemy else 0.0)  # 10 dims
 
+    # Aftershock pending-burn block [505:515] (append-only, same migration
+    # convention): own/enemy burn-schedule slots 0-3 (min(x,3)/3), then
+    # own/enemy burns granted this turn but not yet resolved.
+    for side in (side_to_move, enemy):
+        sched = board.pending_burns[side]
+        for i in range(4):
+            v = sched[i] if i < len(sched) else 0
+            features.append(min(v, 3) / 3.0)
+    bnow = min(board.burns_this_turn, 3) / 3.0
+    features.append(bnow if board.whose_turn == side_to_move else 0.0)
+    features.append(bnow if board.whose_turn == enemy else 0.0)  # 10 dims
+
+    # Ambush snare channels: own snares [515:554], enemy snares [554:593]
+    # (1.0 per snared node, viewed from the side to move).
+    for side in (side_to_move, enemy):
+        for n in NODE_ORDER:
+            features.append(1.0 if board.snares.get(n) == side else 0.0)
+
     raw = torch.tensor(features, dtype=torch.float32)
     assert raw.numel() == RAW_FEATURE_DIM, (
         f'Feature dim mismatch: got {raw.numel()}, expected {RAW_FEATURE_DIM}')
@@ -452,7 +470,7 @@ def board_to_tensor(board, side_to_move=None):
 def encode_turn(turn, board, color):
     """Encode a CompleteTurn as a fixed-size feature vector.
 
-    Returns: Tensor of shape (TURN_FEATURE_DIM,)  [116 features]
+    Returns: Tensor of shape (TURN_FEATURE_DIM,)  [124 features]
     """
     enemy = 'blue' if color == 'red' else 'red'
     features = np.zeros(TURN_FEATURE_DIM, dtype=np.float32)
@@ -489,6 +507,9 @@ def encode_turn(turn, board, color):
     #  [84:114]— spell cast ID one-hot, expansion spells (IDs 15-44)  [v29]
     #  [114]   — Providence extra base moves used this turn (/3)  [v29]
     #  [115]   — Providence turns scheduled by this turn's cast (/4)  [v29]
+    #  [116:122]— spell cast ID one-hot, Aftershock/Ambush (IDs 45-50) [v30]
+    #  [122]   — Aftershock burns resolved this turn (/4)  [v30]
+    #  [123]   — Ambush snares placed this turn (/4)  [v30]
 
     crushable_own_before = _count_crushable(board, color, enemy)
     crushable_enm_before = _count_crushable(board, enemy, color)
@@ -554,15 +575,25 @@ def encode_turn(turn, board, color):
             # Core spells one-hot at [43:58]; expansion spells (IDs 15-44)
             # at [84:114] — the legacy region only had 15 slots, and writing
             # 43 + id for larger IDs overflowed into the tactical columns.
+            # Aftershock/Ambush (IDs 45-50) get [116:122], same convention.
             if spell_id < 15:
                 features[43 + spell_id] = 1.0
-            else:
+            elif spell_id < 45:
                 features[84 + (spell_id - 15)] = 1.0
+            else:
+                features[116 + (spell_id - 45)] = 1.0
 
         elif action.type == 'schedule_moves':
             features[115] = min(action.turns or 0, 4) / 4.0
 
+        elif action.type == 'burn':
+            features[122] += 0.25
+
+        elif action.type == 'place_snares':
+            features[123] = min(len(action.nodes or []), 4) / 4.0
+
     features[58] = len(turn.actions) / 5.0
+    features[122] = min(features[122], 1.0)
     if len(turn.actions) == 1 and turn.actions[0].type == 'pass':
         features[60] = 1.0
 

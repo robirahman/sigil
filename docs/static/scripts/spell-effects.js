@@ -50,6 +50,14 @@ const SPELL_FX = {
 	Dividend:             { type: 'pulse', color: '#d4af37', shake: false },
 	Annuity:              { type: 'burst', color: '#b8912f', shake: false },
 	Endowment:            { type: 'burst', color: '#6a0dad', shake: true  },
+	// Aftershock expansion (smoldering fire, darkening with size)
+	Ember:                { type: 'pulse', color: '#ff6b35', shake: false },
+	Smolder:              { type: 'burst', color: '#d64518', shake: false },
+	Conflagration:        { type: 'burst', color: '#8f1d0e', shake: true  },
+	// Ambush expansion (camouflage greens, darkening with size)
+	Tripwire:             { type: 'pulse', color: '#556b2f', shake: false },
+	Deadfall:             { type: 'flash', color: '#6e7f5a', shake: false },
+	Minefield:            { type: 'burst', color: '#3f5d2a', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

@@ -140,6 +140,20 @@ class _PositionHasher:
                          for k in range(1, _HASH_MAX_PENDING)}
         self._extra_now = {(c, k): rnd() for c in ('red', 'blue')
                            for k in range(1, _HASH_MAX_PENDING)}
+        # Aftershock burn schedules — same shape. IMPORTANT: these tables
+        # are appended AFTER the Providence ones; the seeded rnd() stream
+        # draws sequentially, so append-order preserves every pre-existing
+        # table value and therefore every legacy hash (pinned by a literal
+        # hash constant in ai/test_aftershock.py).
+        self._pending_burn = {(c, i, k): rnd() for c in ('red', 'blue')
+                              for i in range(_HASH_PENDING_SLOTS)
+                              for k in range(1, _HASH_MAX_PENDING)}
+        self._burn_now = {(c, k): rnd() for c in ('red', 'blue')
+                          for k in range(1, _HASH_MAX_PENDING)}
+        # Ambush snares — appended after the Aftershock tables (same
+        # append-order rule as above).
+        self._snare = {(n, c): rnd() for n in NODE_ORDER
+                       for c in ('red', 'blue')}
 
     def hash(self, board, side_to_move):
         h = self._side[side_to_move]
@@ -159,10 +173,21 @@ class _PositionHasher:
                     h ^= self._pending[(color,
                                         min(i, _HASH_PENDING_SLOTS - 1),
                                         min(k, _HASH_MAX_PENDING - 1))]
+            for i, k in enumerate(board.pending_burns[color]):
+                if k:
+                    h ^= self._pending_burn[(color,
+                                             min(i, _HASH_PENDING_SLOTS - 1),
+                                             min(k, _HASH_MAX_PENDING - 1))]
         e = board.extra_moves_this_turn
         if e:
             h ^= self._extra_now[(board.whose_turn,
                                   min(e, _HASH_MAX_PENDING - 1))]
+        bn = board.burns_this_turn
+        if bn:
+            h ^= self._burn_now[(board.whose_turn,
+                                 min(bn, _HASH_MAX_PENDING - 1))]
+        for n, owner in board.snares.items():
+            h ^= self._snare[(n, owner)]
         return h
 
 
@@ -251,14 +276,24 @@ class _KillerTable:
 
 
 def _turn_signature(turn):
-    """Hashable structural identity for a CompleteTurn — used to match TT/killer hints."""
+    """Hashable structural identity for a CompleteTurn — used to match TT/killer hints.
+
+    Must cover EVERY field that distinguishes turn variants, or two
+    different variants collide on the same hint (e.g. Rock Slide push
+    orders, Fissure walls, Corrupt conversions).
+    """
     parts = []
     for a in turn.actions:
         sac = tuple(a.sacrificed) if a.sacrificed else ()
         kept = tuple(a.kept) if a.kept else ()
         dest = tuple(a.destroyed) if a.destroyed else ()
+        conv = tuple(a.converted) if a.converted else ()
+        pushes = (tuple((p['from'], p['to']) for p in a.pushes)
+                  if a.pushes else ())
+        nds = tuple(a.nodes) if a.nodes else ()
         parts.append((a.type, a.node, a.pushed_to, a.spell,
-                      sac, kept, a.node2, dest))
+                      sac, kept, a.node2, dest, conv, a.wall, pushes,
+                      a.turns, nds))
     return tuple(parts)
 
 

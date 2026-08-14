@@ -71,6 +71,19 @@ function isBigSpellNode(name) {
 	return BIG_SPELL_NODES.has(name);
 }
 
+// Every node belonging to any spell position (1-9). Used by the Aftershock
+// burn-target ranking (stones in sigils are the juicier kills).
+const SPELL_POSITION_NODES = new Set();
+for (let _anyPos = 1; _anyPos <= 9; _anyPos++) {
+	for (const _posNode of POSITIONS[_anyPos]) SPELL_POSITION_NODES.add(_posNode);
+}
+
+// node -> its spell position index (1-9), for the Ambush placement heuristic.
+const POSITION_OF_NODE = {};
+for (let _anyPos2 = 1; _anyPos2 <= 9; _anyPos2++) {
+	for (const _posNode2 of POSITIONS[_anyPos2]) POSITION_OF_NODE[_posNode2] = _anyPos2;
+}
+
 // Core spells metadata
 const CORE_SPELLS = {
 	Flourish:          { resolve: 'soft_moves', count: 4, static: false, ischarm: false },
@@ -141,6 +154,14 @@ const CORE_SPELLS = {
 	Dividend:          { resolve: 'schedule_moves', turns: 1, static: false, ischarm: true },
 	Annuity:           { resolve: 'schedule_moves', turns: 2, static: false, ischarm: false },
 	Endowment:         { resolve: 'schedule_moves', turns: 4, static: false, ischarm: false },
+	// Aftershock expansion (scheduled burns)
+	Ember:             { resolve: 'schedule_burns', turns: 1, static: false, ischarm: true },
+	Smolder:           { resolve: 'schedule_burns', turns: 2, static: false, ischarm: false },
+	Conflagration:     { resolve: 'schedule_burns', turns: 4, static: false, ischarm: false },
+	// Ambush expansion (snare markers)
+	Tripwire:          { resolve: 'place_snares', count: 1, static: false, ischarm: true },
+	Deadfall:          { resolve: 'place_snares', count: 2, static: false, ischarm: false },
+	Minefield:         { resolve: 'place_snares', count: 4, static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -201,6 +222,12 @@ const SPELL_TEXTS = {
 	Dividend:          'Make 1 extra move at the beginning of your next turn.',
 	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
 	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
+	Ember:             'Destroy 1 enemy stone touching your stones at the beginning of your next turn.',
+	Smolder:           'Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns.',
+	Conflagration:     'Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns.',
+	Tripwire:          'Place a snare on 1 empty node. The first enemy stone that stops there is destroyed. Snares count toward your stone total for defense, and only enemy stones (or an enemy Fissure) remove them.',
+	Deadfall:          'Place snares on up to 2 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total for defense, and only enemy stones (or an enemy Fissure) remove them.',
+	Minefield:         'Place snares on up to 4 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total for defense, and only enemy stones (or an enemy Fissure) remove them.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
@@ -247,6 +274,14 @@ const PROVIDENCE_RITUALS = ['Endowment'];
 const PROVIDENCE_SORCERIES = ['Annuity'];
 const PROVIDENCE_CHARMS = ['Dividend'];
 
+const AFTERSHOCK_RITUALS = ['Conflagration'];
+const AFTERSHOCK_SORCERIES = ['Smolder'];
+const AFTERSHOCK_CHARMS = ['Ember'];
+
+const AMBUSH_RITUALS = ['Minefield'];
+const AMBUSH_SORCERIES = ['Deadfall'];
+const AMBUSH_CHARMS = ['Tripwire'];
+
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
@@ -267,8 +302,10 @@ const EXPANSIONS = {
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
 	tectonic:   { name: 'Tectonic',   rituals: TECTONIC_RITUALS,   sorceries: TECTONIC_SORCERIES,   charms: TECTONIC_CHARMS },
 	providence: { name: 'Providence', rituals: PROVIDENCE_RITUALS, sorceries: PROVIDENCE_SORCERIES, charms: PROVIDENCE_CHARMS },
+	aftershock: { name: 'Aftershock', rituals: AFTERSHOCK_RITUALS, sorceries: AFTERSHOCK_SORCERIES, charms: AFTERSHOCK_CHARMS },
+	ambush:     { name: 'Ambush',     rituals: AMBUSH_RITUALS,     sorceries: AMBUSH_SORCERIES,     charms: AMBUSH_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
@@ -297,11 +334,27 @@ const PROVIDENCE_SPELL_NAMES = new Set(
 function isProvidenceSpell(name) {
 	return PROVIDENCE_SPELL_NAMES.has(name);
 }
+
+// Aftershock + Ambush are in their unrated playtest window (launched
+// 2026-08, Providence precedent). Derived from the EXPANSIONS map.
+const AFTERSHOCK_SPELL_NAMES = new Set(
+	[...EXPANSIONS.aftershock.rituals, ...EXPANSIONS.aftershock.sorceries, ...EXPANSIONS.aftershock.charms]
+);
+function isAftershockSpell(name) {
+	return AFTERSHOCK_SPELL_NAMES.has(name);
+}
+const AMBUSH_SPELL_NAMES = new Set(
+	[...EXPANSIONS.ambush.rituals, ...EXPANSIONS.ambush.sorceries, ...EXPANSIONS.ambush.charms]
+);
+function isAmbushSpell(name) {
+	return AMBUSH_SPELL_NAMES.has(name);
+}
+
 // One switch for every "does this spell set stay unrated?" consumer.
-// Currently only the unofficial Panda expansion is unrated; add packs here
-// while they playtest.
+// Panda is permanently unrated (unofficial); Aftershock and Ambush stay
+// here while they playtest.
 function isUnratedSpell(name) {
-	return isPandaSpell(name);
+	return isPandaSpell(name) || isAftershockSpell(name) || isAmbushSpell(name);
 }
 
 // Game variants. Two orthogonal dimensions encoded in a single string:

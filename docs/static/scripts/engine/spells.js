@@ -1563,6 +1563,11 @@ const SpellResolvers = {
 			board.lastPlay = null;
 			board.lastPlayer = null;
 		}
+		// Ambush interaction: the blast also destroys enemy-of-caster
+		// snares on the target + adjacent nodes (own snares survive).
+		for (const n of [target].concat(ADJACENCY[target] || [])) {
+			if (board.snares[n] === enemy) delete board.snares[n];
+		}
 		emit({ type: 'fissure_wall', node: target });
 		board.update();
 		emit(board.getBoardStatePayload());
@@ -1647,7 +1652,100 @@ const SpellResolvers = {
 		board.update();
 		emit(board.getBoardStatePayload());
 	},
+
+	// --- Ambush: Tripwire / Deadfall / Minefield (place snares) ---
+	async place_snares(board, color, spellName, getInput, emit) {
+		const count = (CORE_SPELLS[spellName] && CORE_SPELLS[spellName].count) || 1;
+		let placed = 0;
+		while (placed < count) {
+			const options = {};
+			for (const n of NODE_ORDER) {
+				if (board.stones[n] === null && !board.snares[n]) options[n] = color;
+			}
+			if (!Object.keys(options).length) {
+				emit({ type: 'message', message: 'No legal nodes for a snare.', awaiting: null });
+				break;
+			}
+			const resp = await getInput({
+				type: 'message',
+				message: 'Choose an empty node for a snare ('
+					+ (placed + 1) + ' of ' + count + '), or End Turn to finish.',
+				awaiting: 'node',
+				moveoptions: options,
+				actionlist: ['pass'],
+			});
+			// 'pass' (or any non-option token) ends placement early — "up to N".
+			if (!options[resp]) break;
+			board.snares[resp] = color;
+			placed++;
+			board.update();
+			emit(board.getBoardStatePayload());
+		}
+	},
+
+	// --- Aftershock: Ember / Smolder / Conflagration (scheduled burns) ---
+	async schedule_burns(board, color, spellName, getInput, emit) {
+		const turns = (CORE_SPELLS[spellName] && CORE_SPELLS[spellName].turns) || 1;
+		const sched = board.pendingBurns[color];
+		while (sched.length < turns) sched.push(0);
+		for (let i = 0; i < turns; i++) sched[i] += 1;
+		const pname = color === 'red' ? 'Red' : 'Blue';
+		const when = turns === 1
+			? 'at the beginning of their next turn'
+			: 'at the beginning of each of their next ' + turns + ' turns';
+		emit({ type: 'message', message: pname + ' will destroy 1 enemy stone touching their stones ' + when + '.', awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
 };
+
+/**
+ * Aftershock: resolve `count` burns for `color` at the start of their turn.
+ * Human choice flows through getInput (awaiting 'node'), so it records into
+ * the turn transcript and replicates through the multiplayer input queue
+ * for free; the SGN-T replayer (reconstructGameLog) runs this same function
+ * off the token queue, so live and replay cannot drift. Fizzled burns are
+ * lost, and after the first fizzle the rest fizzle too (burning only
+ * shrinks the eligible set). Burns ignore Bulwark (destruction convention,
+ * like Fireblast). Caller checks board.gameover afterward — a burn can
+ * eliminate the enemy's last stone.
+ */
+async function resolveBurnsAtTurnStart(board, color, count, getInput, emit) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+	for (let i = 0; i < count; i++) {
+		const targets = {};
+		for (const n of NODE_ORDER) {
+			if (board.stones[n] !== enemy) continue;
+			if ((ADJACENCY[n] || []).some(nb => board.stones[nb] === color)) {
+				targets[n] = enemy;
+			}
+		}
+		if (!Object.keys(targets).length) {
+			const left = count - i;
+			emit({ type: 'message', message: (left === 1 ? 'Your burn fizzles' : 'Your remaining burns fizzle') + ': no enemy stone touches your stones (Aftershock).', awaiting: null });
+			return;
+		}
+		const label = count > 1 ? 'Burn ' + (i + 1) + ' of ' + count + ': ' : '';
+		let node = null;
+		while (node === null) {
+			const resp = await getInput({
+				type: 'message',
+				message: label + 'Choose an enemy stone touching your stones to destroy (Aftershock).',
+				awaiting: 'node',
+				moveoptions: targets,
+			});
+			// Invalid clicks retry; they are recorded into the transcript
+			// and re-skipped identically on replay.
+			if (targets[resp]) node = resp;
+		}
+		board.stones[node] = null;
+		if (board.lastPlay === node) { board.lastPlay = null; board.lastPlayer = null; }
+		emit({ type: 'crush_animation', crushed_color: enemy, node });
+		board.update();
+		emit(board.getBoardStatePayload());
+		if (board.gameover) return;
+	}
+}
 
 /**
  * Execute a push-enemy interaction. Claims the node for color,

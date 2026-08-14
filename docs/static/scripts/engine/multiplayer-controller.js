@@ -386,6 +386,32 @@ class MultiplayerController {
 					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
 				}
 
+				// Aftershock: pop and resolve burns before the move phase.
+				// The mover's clicks replicate through the existing input
+				// queue, so both clients replay identically.
+				const burnsNow = board.pendingBurns[color].length
+					? board.pendingBurns[color].shift() : 0;
+				if (burnsNow > 0) {
+					await resolveBurnsAtTurnStart(board, color, burnsNow,
+						this.getInput.bind(this), this.emit);
+					if (board.gameover) {
+						const partial = {
+							color, turnNumber: board.turnCounter,
+							sfnBefore: turnSfn, sfnAfter: boardToSfn(board),
+							kind: 'input', actions: this._currentTurnActions.slice(),
+						};
+						this._gameLog.push(partial);
+						this.emit({ type: 'turn_complete', turn: partial });
+						if (color === this.myColor) {
+							await this._flushTurnBuffer();
+						}
+						this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
+						this._saveGameRecord(board.winner);
+						this._stopTimer();
+						return;
+					}
+				}
+
 				await this._takeTurn(color, true, true, true, true);
 
 				// Turn completed successfully — send buffered actions to opponent

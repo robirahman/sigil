@@ -95,18 +95,28 @@ class SPBoard():
 		self.moves_left_this_turn = 0
 		self.moves_granted_this_turn = 0
 
+		### Aftershock: scheduled burns; resolved inline at turn start.
+		self.pending_burns = {'red': [], 'blue': []}
+
+		### Ambush: snare markers {node: owner}. Consumed ONLY by an
+		### enemy-of-owner stone resting on the node (resolved in update())
+		### or a Fissure blast; count defensively like Providence phantoms.
+		self.snares = {}
+
 		self.recorder = None
 
 	def pending_stones(self, color):
-		### Providence phantom stones for `color`: scheduled extras plus,
-		### for the side to move, extras granted this turn but not yet
-		### placed. Before any move this turn, one remaining move is the
-		### ordinary turn move (never a phantom); after that, every
-		### remaining move is an extra — hence min(left, granted - 1).
+		### Defensive phantom stones for `color`: Providence scheduled
+		### extras plus, for the side to move, extras granted this turn but
+		### not yet placed (before any move this turn, one remaining move is
+		### the ordinary turn move — never a phantom; after that, every
+		### remaining move is an extra — hence min(left, granted - 1)),
+		### plus Ambush snares owned by `color`.
 		p = sum(self.pending_moves[color])
 		if self.whoseturn == color:
 			p += max(0, min(self.moves_left_this_turn,
 			                self.moves_granted_this_turn - 1))
+		p += sum(1 for owner in self.snares.values() if owner == color)
 		return p
 
 	def record(self, action_type, **kwargs):
@@ -152,6 +162,9 @@ class SPBoard():
 
 		snapshot["red_pending"] = list(self.pending_moves['red'])
 		snapshot["blue_pending"] = list(self.pending_moves['blue'])
+		snapshot["red_burns"] = list(self.pending_burns['red'])
+		snapshot["blue_burns"] = list(self.pending_burns['blue'])
+		snapshot["snares"] = dict(self.snares)
 
 		self.snapshot = snapshot
 
@@ -170,6 +183,24 @@ class SPBoard():
 
 		### board.update() MUST BE CALLED WHENEVER
 		### ANY STONE CHANGES POSITION!
+
+		### Ambush: a snare consumes exactly the enemy-of-owner stone that
+		### comes to rest on it (stone destroyed, snare spent). The owner's
+		### own stones — and walls — coexist with the snare; nothing else
+		### ever removes it. Resolved here, the universal choke point,
+		### BEFORE the stone totals so elimination sees the kill.
+		if self.snares:
+			for name in list(self.snares):
+				stone = self.nodes[name].stone
+				if stone is None or stone == 'X':
+					continue
+				if stone != self.snares[name]:
+					self.nodes[name].stone = None
+					del self.snares[name]
+					if self.last_play == name:
+						self.last_play = None
+						self.last_player = None
+
 		redtotalstones = 0
 		bluetotalstones = 0
 		for name in self.nodes:
@@ -264,6 +295,8 @@ class SPBoard():
 
 		jboard["last_player"] = self.last_player
 		jboard["last_play"] = self.last_play
+
+		jboard["snares"] = dict(self.snares)
 
 		self.humanplayer.ws.send(json.dumps(jboard))
 
@@ -544,6 +577,40 @@ class AIPlayer():
 				self.opp.jmessage("{} gets {} extra move{} this turn (Providence).".format(
 					self.color.capitalize(), extra, plural))
 
+			### Aftershock: resolve scheduled burns greedily via the bot's
+			### priority_order (mana nodes first, matching its move
+			### heuristics). The easy bot never CASTS Aftershock spells
+			### (its priority chain predates them) but must still resolve
+			### burns, e.g. from imported/resumed positions.
+			burns = 0
+			bsched = self.board.pending_burns[self.color]
+			if bsched:
+				burns = bsched.pop(0)
+			for _ in range(burns):
+				target = None
+				for name in self.priority_order:
+					node = self.board.nodes[name]
+					if node.stone == self.enemy and any(
+							nb.stone == self.color for nb in node.neighbors):
+						target = name
+						break
+				if target is None:
+					break
+				self.board.nodes[target].stone = None
+				if self.board.last_play == target:
+					self.board.last_play = None
+					self.board.last_player = None
+				self.board.record('burn', node=target)
+				if self.opp.ishuman:
+					self.opp.ws.send(json.dumps({"type": "crush_animation",
+					                             "crushed_color": self.enemy,
+					                             "node": target}))
+					self.opp.jmessage("{}'s burn destroys your stone at {} (Aftershock).".format(
+						self.color.capitalize(), target))
+				self.board.update()
+				if self.board.gameover:
+					return None
+
 		### Competitive variant opening (red: turncounter==1, blue: turncounter==2):
 		### the bot plays a free blink onto its preferred mana node, mirroring
 		### the standard game's opening positions for sane heuristic play.
@@ -728,11 +795,16 @@ class AIPlayer():
 			elif color == 'blue':
 				bluetotal += 1
 
-		### Providence phantoms count ASYMMETRICALLY (defense only): each
-		### win claim uses real placed stones, checked against the
-		### opponent's real+pending total.
+		### Providence phantoms and Ambush snares count ASYMMETRICALLY
+		### (defense only): each win claim uses real placed stones, checked
+		### against the opponent's real+pending+snare total.
 		redpend = sum(self.board.pending_moves['red'])
 		bluepend = sum(self.board.pending_moves['blue'])
+		for owner in self.board.snares.values():
+			if owner == 'red':
+				redpend += 1
+			else:
+				bluepend += 1
 
 		if redtotal > bluetotal + bluepend + 2:
 			self.board.gameover = True
