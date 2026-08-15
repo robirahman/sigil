@@ -1335,7 +1335,11 @@ class SimBoard {
 				this.update();
 			}
 		} else if (rt === 'blossom') {
-			// 1 soft blink into each other 3-node and 5-node spell.
+			// 1 soft blink into each other 3-node and 5-node spell. A FULL
+			// spell is SKIPPED, not a stop condition — the live resolver
+			// only ends early when no eligible spell has an empty node
+			// (the old `break` made the whole spread fizzle whenever the
+			// first other sigil happened to be full).
 			const selfIdx = this.spellNames.indexOf(spellName) + 1;
 			for (let i = 1; i <= 6; i++) {
 				if (i === selfIdx) continue;
@@ -1343,7 +1347,7 @@ class SimBoard {
 				for (const n of POSITIONS[i]) {
 					if (this.stones[n] === null) { placed = n; break; }
 				}
-				if (!placed) break; // ends early
+				if (!placed) continue; // this spell is full — skip it
 				this.stones[placed] = color;
 				actions.push(new SimAction('blink', { node: placed }));
 				this.update();

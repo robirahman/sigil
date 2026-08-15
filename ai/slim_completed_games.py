@@ -184,21 +184,48 @@ def _cast_spell_name(sfn_before, sfn_after, color):
     return a[f'{color}_lock']
 
 
-def _focused_candidates(base, color, spell_name):
-    """Uncapped sweep for a KNOWN cast spell: every standard-move prefix
-    (and none) x every target override, move-then-cast order. The
-    cast-first order is covered by _cast_first_candidates."""
+def _focused_candidates(base, color, spell_name, sfn_after=None):
+    """Uncapped sweep for a KNOWN cast spell: every pre-cast prefix
+    (nothing / move / dash / move+dash, diff-constrained) x every target
+    override, move-then-cast order. The cast-first order is covered by
+    _cast_first_candidates."""
     prefixes = [([], base)]
-    targets, has_wind = _move_targets(base, color)
-    for target in targets:
-        b1 = base.copy()
-        is_blink = has_wind and not any(
-            b1.stones[nb] == color for nb in b1._adjacent_nodes(target))
-        mv = b1._do_move(color, target, is_blink=is_blink)
-        if mv is None:
-            continue
-        b1.update()
-        prefixes.append(([mv], b1))
+    if sfn_after:
+        try:
+            after = sfn_to_dict(sfn_after)['stones']
+        except Exception:
+            after = None
+        if after is not None:
+            move_opts = [n for n in NODE_ORDER
+                         if after.get(n) == color
+                         and base.stones[n] != color]
+            vacated = [n for n in NODE_ORDER
+                       if base.stones[n] == color
+                       and after.get(n) is None]
+            try:
+                idx = base.spell_names.index(spell_name)
+                pos = POSITIONS.get(idx + 1, [])
+            except ValueError:
+                pos = []
+            # A stone may fill the sigil and then be spent by the cast,
+            # leaving no net diff — include the sigil's unfilled nodes.
+            move_pool = list(dict.fromkeys(
+                move_opts + [n for n in pos if base.stones[n] != color
+                             and base.stones[n] != DESTROYED]))
+            prefixes = _turn_prefixes(base, color, move_pool, vacated)
+    else:
+        targets, has_wind = _move_targets(base, color)
+        pre = [([], base)]
+        for target in targets:
+            b1 = base.copy()
+            is_blink = has_wind and not any(
+                b1.stones[nb] == color for nb in b1._adjacent_nodes(target))
+            mv = b1._do_move(color, target, is_blink=is_blink)
+            if mv is None:
+                continue
+            b1.update()
+            pre.append(([mv], b1))
+        prefixes = pre
     for prefix, b1 in prefixes:
         try:
             if spell_name not in b1._get_castable_spells(color, True, True):
@@ -342,13 +369,142 @@ def _dash_charm_candidates(base, color, sfn_after):
                                            + cast_actions + [Action('pass')])
 
 
+# Live-only spells with no sim resolver: name -> granted move count.
+# ("Make N moves into your locked spell or into <self>" — Autumn pack.)
+_UNMODELED_CASTS = {'Gather': 3, 'Harvest': 5}
+
+
+def _turn_prefixes(base, color, move_pool, vacated):
+    """Yield (actions, board) for every pre-cast phase shape: nothing, a
+    single standard move, a dash, or move + dash. Pools are
+    diff-constrained by the caller (changed nodes plus the cast sigil's
+    unfilled nodes — a stone may be placed to fill the sigil and then
+    spent by the cast, leaving no net diff)."""
+    yield [], base
+    has_lightning = 'Seal_of_Lightning' in base.charged_spells[color]
+    k = 1 if has_lightning else 2
+
+    def dash_steps(b0, pre):
+        if len(vacated) < k:
+            return
+        for sacs in combinations(vacated, k):
+            b1 = b0.copy()
+            if any(b1.stones[s] != color for s in sacs):
+                continue
+            for s in sacs:
+                b1.stones[s] = None
+            b1.update()
+            for d in move_pool:
+                if b1.stones[d] == color:
+                    continue
+                b2 = b1.copy()
+                mv = b2._do_move(color, d)
+                if mv is None:
+                    continue
+                b2.update()
+                dash_act = Action(
+                    'dash_lightning' if has_lightning else 'dash',
+                    sacrificed=list(sacs), node=d)
+                yield pre + [dash_act, mv], b2
+
+    yield from dash_steps(base, [])
+    for m1 in move_pool:
+        if base.stones[m1] == color:
+            continue
+        b1 = base.copy()
+        mv1 = b1._do_move(color, m1)
+        if mv1 is None:
+            continue
+        b1.update()
+        yield [mv1], b1
+        yield from dash_steps(b1, [mv1])
+
+
+def _unmodeled_cast_candidates(base, color, spell, sfn_after):
+    """Composer for casts the sims can't resolve at all (Autumn's
+    Gather/Harvest — like Surge, but named by the lock/counter diff).
+    Applies the cast BOOKKEEPING exactly as apply_sim_turn's 'cast' arm
+    does (position spent, kept placed, lock/springlock/counter), then
+    sweeps the granted moves over the stored diff's changed nodes.
+    Byte-compare + bridge verification arbitrate correctness."""
+    n_moves = _UNMODELED_CASTS.get(spell)
+    if not n_moves or spell not in base.spell_names:
+        return
+    enemy = 'blue' if color == 'red' else 'red'
+    try:
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return
+    idx = base.spell_names.index(spell)
+    pos = POSITIONS.get(idx + 1, [])
+    move_opts = [n for n in NODE_ORDER
+                 if after.get(n) == color and base.stones[n] != color]
+    vacated = [n for n in NODE_ORDER
+               if base.stones[n] == color and after.get(n) is None]
+    # The sigil may be filled during the turn and then spent by the
+    # cast, leaving no net diff — include its unfilled nodes.
+    move_pool = list(dict.fromkeys(
+        move_opts + [n for n in pos if base.stones[n] != color
+                     and base.stones[n] != DESTROYED]))
+
+    for prefix, b1 in _turn_prefixes(base, color, move_pool, vacated):
+        # Cast bookkeeping (mirror of apply_sim_turn's non-charm arm).
+        if any(b1.stones[n] != color for n in pos
+               if b1.stones[n] != DESTROYED):
+            continue  # sigil not filled by the caster at cast time
+        for kept_k in range(0, len(pos)):
+            for kept in combinations(pos, kept_k):
+                b2 = b1.copy()
+                for n in pos:
+                    if b2.stones[n] != DESTROYED:
+                        b2.stones[n] = None
+                for n in kept:
+                    b2.stones[n] = color
+                if b2.lock[color] == spell:
+                    b2.springlock[color] = spell
+                else:
+                    b2.lock[color] = spell
+                    b2.springlock[color] = None
+                b2.spell_counter[color] += 1
+                b2.update()
+                cast_act = Action('cast', spell=spell,
+                                  kept=list(kept) or None)
+                # The granted moves may REFILL the just-spent sigil
+                # (net-zero diff on those nodes), so the post-cast pool
+                # includes the position's now-empty nodes; and the
+                # standard move can come after the cast too, hence the
+                # +1 on the move budget.
+                rest = [n for n in dict.fromkeys(list(move_opts) + list(pos))
+                        if b2.stones[n] != color
+                        and b2.stones[n] != DESTROYED]
+                for k_used in range(min(n_moves + 1, len(rest)), -1, -1):
+                    for combo in combinations(rest, k_used):
+                        b3 = b2.copy()
+                        acts = []
+                        ok = True
+                        for n in combo:
+                            mv = b3._do_move(color, n)
+                            if mv is None:
+                                ok = False
+                                break
+                            acts.append(mv)
+                            b3.update()
+                        if not ok:
+                            continue
+                        yield CompleteTurn(prefix + [cast_act] + acts
+                                           + [Action('pass')])
+
+
 def _candidates(board, color, cast_spell=None, sfn_after=None):
     """Yield candidate turns in escalating-cost order."""
     yield from board.get_legal_turns(color)
     yield from get_legal_turns_exhaustive(board, color, DEFAULT_CAPS)
     yield from _cast_first_candidates(board, color)
-    if cast_spell:
-        yield from _focused_candidates(board, color, cast_spell)
+    if cast_spell and cast_spell in _UNMODELED_CASTS and sfn_after:
+        yield from _unmodeled_cast_candidates(board, color, cast_spell,
+                                              sfn_after)
+    elif cast_spell:
+        yield from _focused_candidates(board, color, cast_spell, sfn_after)
     elif sfn_after:
         # No lock/counter change: either no cast, or a CHARM cast (which
         # leaves both untouched) — the dash+charm composer covers the
@@ -431,11 +587,13 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
                     and placed_own:
                 axes.append([{(i, 'node'): d, (i + 1, 'node'): d}
                              for d in placed_own])
-        elif a.type == 'move' and a.node and cast_seen and placed_own:
-            # Resolver-granted soft move (Sprout/Flourish/Grow ...): the
-            # human aimed it anywhere; the enumerator picked one target.
-            # Collected into ONE combination axis below — targets are
-            # order-insensitive, so C(pool, k) beats pool^k.
+        elif a.type in ('move', 'blink') and a.node and cast_seen \
+                and a.pushed_to is None and placed_own:
+            # Resolver-granted soft placement (Flourish/Grow moves,
+            # Scatter/Blossom blinks ...): the human aimed it anywhere;
+            # the greedy resolver picked one target. Collected into ONE
+            # combination axis below — targets are order-insensitive,
+            # so C(pool, k) beats pool^k.
             resolver_move_idxs.append(i)
         elif a.type.endswith('_destroy') and a.node and vacated_enemy:
             # Single-target resolver kill (Meteor et al.).
@@ -446,14 +604,15 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
             if conv:
                 axes.append([{(i, 'node'): n} for n in conv])
         elif a.destroyed and a.type != 'fissure':
-            # Resolver kill sets without exhaustive override support
-            # (Hail Storm et al.).
-            k = len(a.destroyed)
-            if 0 < k <= 4 and len(vacated_enemy) >= k:
-                combos = list(combinations(vacated_enemy, k))
-                if 0 < len(combos) <= 200:
-                    axes.append([{(i, 'destroyed'): list(c)}
-                                 for c in combos])
+            # Resolver kill sets (Fireblast target+adjacents, Hail Storm
+            # picks ...). The SIZE varies with the chosen target — a
+            # Fireblast aimed at a clustered stone kills more — so sweep
+            # every plausible size, not just the greedy pick's.
+            vals = []
+            for k in range(1, min(5, len(vacated_enemy) + 1)):
+                vals.extend(list(c) for c in combinations(vacated_enemy, k))
+            if 0 < len(vals) <= 300:
+                axes.append([{(i, 'destroyed'): v} for v in vals])
 
     if resolver_move_idxs and placed_own \
             and len(resolver_move_idxs) <= len(placed_own):

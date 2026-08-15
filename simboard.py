@@ -1154,7 +1154,11 @@ class SimBoard:
                 self.update()
 
         elif resolve_type == 'blossom':
-            # 1 soft blink into each other 3-node and 5-node spell.
+            # 1 soft blink into each other 3-node and 5-node spell. A FULL
+            # spell is SKIPPED, not a stop condition — the live resolver
+            # only ends early when no eligible spell has an empty node
+            # (the old `break` made the whole spread fizzle whenever the
+            # first other sigil happened to be full).
             self_idx = self.spell_names.index(spell_name) + 1
             for i in range(1, 7):
                 if i == self_idx:
@@ -1165,7 +1169,7 @@ class SimBoard:
                         placed = n
                         break
                 if not placed:
-                    break  # ends early
+                    continue  # this spell is full — skip it
                 self.stones[placed] = color
                 actions.append(Action('blink', node=placed))
                 self.update()
@@ -2127,7 +2131,12 @@ def apply_sim_turn(board, turn, color):
             for n in pos_nodes:
                 if board.stones[n] != DESTROYED:
                     board.stones[n] = None
-            if info and not info.get('ischarm'):
+            # Spells absent from the Python CORE_SPELLS (Autumn's
+            # Gather/Harvest — live-only) still lock and count on replay:
+            # the JS replayers know them as non-charms, and silently
+            # skipping the bookkeeping here desyncs the two engines.
+            # (Seal_of_Autumn is a static and never appears as a cast.)
+            if info is None or not info.get('ischarm'):
                 if action.kept:
                     for n in action.kept:
                         board.stones[n] = color
