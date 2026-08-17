@@ -184,6 +184,82 @@ def _cast_spell_name(sfn_before, sfn_after, color):
     return a[f'{color}_lock']
 
 
+def _branch_prefix_dests(base, prefix, color, dest_pool):
+    """Re-play a prefix, branching each hard move's push destination
+    over the diff pools. The prefix generators apply the GREEDY push
+    destination, but a pushed stone that is later converted or covered
+    leaves its landing node caster-colored — Robi's Bewitch labels
+    showed a push chained onto c12 and the stone bewitched THERE — so
+    greedy-only prefixes hand the cast a diverged board. Yields
+    (actions, board) per distinct outcome (the greedy one repeats and
+    is deduped downstream)."""
+    hard_idxs = {i for i, a in enumerate(prefix)
+                 if a.type in ('hard_move', 'blink')
+                 and a.pushed_to not in (None, 'X', 'S')}
+    if not hard_idxs or not dest_pool:
+        return
+
+    def rec(b, i, acts):
+        if i == len(prefix):
+            yield list(acts), b
+            return
+        a = prefix[i]
+        if i in hard_idxs:
+            outs = set()
+            for ov in [None] + list(dest_pool):
+                bb = b.copy()
+                try:
+                    got = bb._push_enemy(a.node, color, ov)
+                except Exception:
+                    continue
+                if got in outs:
+                    continue
+                outs.add(got)
+                bb.update()
+                yield from rec(bb, i + 1,
+                               acts + [_copy_action(a, pushed_to=got)])
+        else:
+            bb = b.copy()
+            if a.type in ('move', 'blink'):
+                bb.stones[a.node] = color
+            elif a.type in ('dash', 'dash_lightning'):
+                for s in (a.sacrificed or []):
+                    bb.stones[s] = None
+            bb.update()
+            yield from rec(bb, i + 1, acts + [a])
+
+    yield from rec(base, 0, [])
+
+
+def _order_overrides(overrides, base, sfn_after):
+    """Diff-consistency ordering (Robi's rule generalized): overrides
+    whose target nodes all lie on CHANGED nodes come first — the
+    bewitch pair matching the two converted stones, the meteor target
+    matching the placed stone, the fireblast sacrifice matching the
+    vacated one. The blind remainder still follows, only later."""
+    if not sfn_after:
+        return overrides
+    try:
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return overrides
+    changed = {n for n in NODE_ORDER if base.stones[n] != after.get(n)}
+
+    def score(ov):
+        nodes = []
+        for v in (ov or {}).values():
+            if isinstance(v, str):
+                nodes.append(v)
+            elif isinstance(v, (list, tuple)):
+                nodes.extend(x for x in v if isinstance(x, str))
+        if not nodes:
+            return (1, 0)
+        hits = sum(1 for n in nodes if n in changed)
+        return (0 if hits == len(nodes) else 1, -hits)
+
+    return sorted(overrides, key=score)
+
+
 def _focused_candidates(base, color, spell_name, sfn_after=None):
     """Uncapped sweep for a KNOWN cast spell: every pre-cast prefix
     (nothing / move / dash / move+dash, diff-constrained) x every target
@@ -212,7 +288,19 @@ def _focused_candidates(base, color, spell_name, sfn_after=None):
             move_pool = list(dict.fromkeys(
                 move_opts + [n for n in pos if base.stones[n] != color
                              and base.stones[n] != DESTROYED]))
-            prefixes = _turn_prefixes(base, color, move_pool, vacated)
+            enemy = 'blue' if color == 'red' else 'red'
+            arrived_enemy = [n for n in NODE_ORDER
+                             if after.get(n) == enemy
+                             and base.stones[n] != enemy]
+            dest_pool = list(dict.fromkeys(arrived_enemy + move_opts))
+
+            def expanded():
+                for prefix, b1 in _turn_prefixes(base, color, move_pool,
+                                                 vacated):
+                    yield prefix, b1
+                    yield from _branch_prefix_dests(base, prefix, color,
+                                                    dest_pool)
+            prefixes = expanded()
     else:
         targets, has_wind = _move_targets(base, color)
         pre = [([], base)]
@@ -238,6 +326,7 @@ def _focused_candidates(base, color, spell_name, sfn_after=None):
                                            MEGA_CAPS) or [])
         except Exception:
             pass
+        overrides = _order_overrides(overrides, base, sfn_after)
         for ov in overrides:
             b2 = b1.copy()
             try:
@@ -705,22 +794,29 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
 
 def _candidates(board, color, cast_spell=None, sfn_after=None):
     """Yield candidate turns in escalating-cost order."""
-    # The hard_moves composer only emits candidates whose search board
-    # already byte-matches the after-state, so for a named Carnage cast
-    # it goes FIRST: on busy boards the generic tiers below exhaust the
-    # applies budget on variant sweeps before ever reaching it (a miss
-    # here costs bounded CPU and no budget).
-    if cast_spell and sfn_after \
-            and CORE_SPELLS.get(cast_spell, {}).get('resolve') == 'hard_moves':
-        yield from _hard_moves_candidates(board, color, cast_spell,
-                                          sfn_after)
+    # When the SFN diff NAMES the cast and we hold the after-state, the
+    # diff-constrained cast tiers go FIRST: the generic tiers below drag
+    # a full variant sweep per candidate and exhaust the applies budget
+    # on busy boards before ever reaching them. With kept-from-after and
+    # diff-ordered overrides (Robi's rule) the hit comes within the
+    # first few candidates when the named cast is right; when it is
+    # misnamed the same space would have been burned anyway.
+    focused_done = False
+    if cast_spell and sfn_after:
+        if CORE_SPELLS.get(cast_spell, {}).get('resolve') == 'hard_moves':
+            yield from _hard_moves_candidates(board, color, cast_spell,
+                                              sfn_after)
+        if cast_spell in _UNMODELED_CASTS:
+            yield from _unmodeled_cast_candidates(board, color, cast_spell,
+                                                  sfn_after)
+        else:
+            yield from _focused_candidates(board, color, cast_spell,
+                                           sfn_after)
+        focused_done = True
     yield from board.get_legal_turns(color)
     yield from get_legal_turns_exhaustive(board, color, DEFAULT_CAPS)
     yield from _cast_first_candidates(board, color)
-    if cast_spell and cast_spell in _UNMODELED_CASTS and sfn_after:
-        yield from _unmodeled_cast_candidates(board, color, cast_spell,
-                                              sfn_after)
-    elif cast_spell:
+    if cast_spell and not focused_done:
         yield from _focused_candidates(board, color, cast_spell, sfn_after)
     elif sfn_after:
         # No lock/counter change: either no cast, or a CHARM cast (which
@@ -785,15 +881,32 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
                 pos_nodes = POSITIONS.get(idx + 1, [])
                 keeps = [list(c)
                          for c in combinations(pos_nodes, len(a.kept))]
+                # Robi's rule: the caster's stones still sitting in the
+                # spell's position in the AFTER state are almost always
+                # exactly the kept stones — try that set first and fall
+                # back to the blind sweep only after it.
+                kept_after = [n for n in pos_nodes if after.get(n) == color]
+                if kept_after in keeps:
+                    keeps.remove(kept_after)
+                keeps.insert(0, kept_after)
                 if len(keeps) > 1:
                     axes.append([{(i, 'kept'): k} for k in keeps])
         elif a.type == 'sacrifice' and a.node:
-            if vacated_own:
-                axes.append([{(i, 'node'): n} for n in vacated_own])
+            # A sacrifice may consume a stone PLACED earlier this turn
+            # (no diff trace) — include the candidate's own prior
+            # placements in the pool (the Fireblast gap).
+            pool = list(dict.fromkeys(
+                vacated_own + [p.node for p in cand.actions[:i]
+                               if p.type in ('move', 'blink') and p.node]))
+            if pool:
+                axes.append([{(i, 'node'): n} for n in pool])
         elif a.type in ('dash', 'dash_lightning'):
             k = len(a.sacrificed or [])
-            if 0 < k <= 2 and len(vacated_own) >= k:
-                sacs = [list(c) for c in combinations(vacated_own, k)]
+            sac_pool = list(dict.fromkeys(
+                vacated_own + [p.node for p in cand.actions[:i]
+                               if p.type in ('move', 'blink') and p.node]))
+            if 0 < k <= 2 and len(sac_pool) >= k:
+                sacs = [list(c) for c in combinations(sac_pool, k)]
                 if sacs:
                     axes.append([{(i, 'sacrificed'): s} for s in sacs])
             # The dash's landing cell is the FOLLOWING move action (soft
@@ -894,17 +1007,60 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
     return None
 
 
-def _decompose_two_turns(sfn_before, color, turn_number, sfn_after,
-                         cand_cap=40, max_applies=1500):
+def _mid_boards(board, color, after, cap):
+    """Apply each of `color`'s greedy candidate turns to a copy of
+    `board`; return the results best-first by stone mismatch against
+    the target `after` state."""
+    mids = []
+    try:
+        cands = list(board.get_legal_turns(color))
+    except Exception:
+        return []
+    for cand in cands:
+        b1 = board.copy()
+        try:
+            apply_sim_turn(b1, cand, color)
+            b1.update()
+        except Exception:
+            continue
+        if b1.gameover:
+            continue
+        mismatch = sum(1 for n in NODE_ORDER
+                       if b1.stones[n] != after.get(n))
+        mids.append((mismatch, len(mids), b1))
+    mids.sort(key=lambda m: m[:2])
+    return [b for _mm, _i, b in mids[:cap]]
+
+
+def _final_leg_matches(b, color, turn_number, sfn_after, max_applies):
+    """Can one legal turn of `color` take board `b` to sfn_after?
+    Re-anchors the counter tokens so to_sfn compares byte-for-byte."""
+    bc = b.copy()
+    bc.turn_counter = turn_number
+    bc.whose_turn = color
+    try:
+        return deduce_turn(bc.to_sfn(), color, turn_number, sfn_after,
+                           max_applies=max_applies) is not None
+    except Exception:
+        return False
+
+
+def _decompose_merged(sfn_before, color, turn_number, sfn_after):
     """Detect MERGED fat pairs (old-recorder bug, Robi's diagnosis):
-    when the opponent's intervening turn changed nothing (the old
-    timeout auto-pass), the fat recorder collapsed two of the mover's
-    turns into one before/after pair. The chain stays byte-intact, so
-    only the diff shape betrays it — e.g. two cost-free hard moves.
-    Returns True if the pair splits into two legal single turns of
-    `color` with a silent opponent turn between. Such pairs can never
-    be one slim turn and stay snapshot entries permanently (splitting
-    them would renumber every later turn)."""
+    around the old timeout auto-pass, the fat recorder collapsed
+    several real turns into one before/after pair. The chain stays
+    byte-intact, so only decomposition betrays it. Two arms:
+
+    - two mover turns with a silent opponent turn between (opponent's
+      turn changed nothing);
+    - mover turn, ACTIVE opponent turn, mover turn — attempted only
+      when the pair GROWS the opponent's stone count, which no single
+      mover turn can do, so this arm can never misclassify an
+      exotic-but-legal turn as merged.
+
+    Proven pairs can never be one slim turn and stay snapshot entries
+    permanently (splitting them would renumber every later turn)."""
+    enemy = 'blue' if color == 'red' else 'red'
     try:
         base = SimBoard.from_sfn(sfn_before)
         after = sfn_to_dict(sfn_after)['stones']
@@ -918,35 +1074,21 @@ def _decompose_two_turns(sfn_before, color, turn_number, sfn_after,
     if gains < 2:
         return False
     _prepare_turn_start(base, color, turn_number)
-    mids = []
-    try:
-        cands = list(base.get_legal_turns(color))
-    except Exception:
+
+    lvl1 = _mid_boards(base, color, after, 40)
+    for b1 in lvl1:
+        if _final_leg_matches(b1, color, turn_number, sfn_after, 1500):
+            return True
+
+    n_enemy_before = sum(1 for n in NODE_ORDER
+                         if base.stones[n] == enemy)
+    n_enemy_after = sum(1 for v in after.values() if v == enemy)
+    if n_enemy_after <= n_enemy_before:
         return False
-    for cand in cands:
-        b1 = base.copy()
-        try:
-            apply_sim_turn(b1, cand, color)
-            b1.update()
-        except Exception:
-            continue
-        if b1.gameover:
-            continue
-        mismatch = sum(1 for n in NODE_ORDER
-                       if b1.stones[n] != after.get(n))
-        mids.append((mismatch, len(mids), b1))
-    mids.sort(key=lambda m: m[:2])
-    for _mm, _i, b1 in mids[:cand_cap]:
-        # Re-anchor to the pair's recorded counter so to_sfn tokens
-        # match the stored strings byte-for-byte.
-        b1.turn_counter = turn_number
-        b1.whose_turn = color
-        try:
-            if deduce_turn(b1.to_sfn(), color, turn_number, sfn_after,
-                           max_applies=max_applies) is not None:
+    for b1 in lvl1[:12]:
+        for b2 in _mid_boards(b1, enemy, after, 12):
+            if _final_leg_matches(b2, color, turn_number, sfn_after, 800):
                 return True
-        except Exception:
-            continue
     return False
 
 
@@ -961,7 +1103,7 @@ def convert_record(key, rec, cached_slim=None):
     the fallback sound — and lets `cached_slim` (the previous run's
     verified conversion) short-circuit every turn that already deduced:
     only its snapshot turns are re-attempted. Snapshot turns proven to
-    be MERGED pairs (see _decompose_two_turns) carry 'merged': True and
+    be MERGED pairs (see _decompose_merged) carry 'merged': True and
     are never re-deduced.
 
     Returns (slim_turns, snapshot_turn_indices, merged_turn_indices,
@@ -1014,13 +1156,19 @@ def convert_record(key, rec, cached_slim=None):
                 'kind': 'snapshot',
                 'sfnAfter': sfn_after,
             }
-            try:
-                if _decompose_two_turns(sfn_before, color, turn_number,
-                                        sfn_after):
-                    merged.append(i)
-                    entry['merged'] = True
-            except Exception:
-                pass
+            if solved and solved.get('multiTurn'):
+                # Robi flagged it in the harness — human ground truth,
+                # no decomposition probe needed.
+                merged.append(i)
+                entry['merged'] = True
+            else:
+                try:
+                    if _decompose_merged(sfn_before, color, turn_number,
+                                         sfn_after):
+                        merged.append(i)
+                        entry['merged'] = True
+                except Exception:
+                    pass
             slim.append(entry)
         else:
             slim.append({
