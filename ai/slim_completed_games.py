@@ -894,6 +894,62 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
     return None
 
 
+def _decompose_two_turns(sfn_before, color, turn_number, sfn_after,
+                         cand_cap=40, max_applies=1500):
+    """Detect MERGED fat pairs (old-recorder bug, Robi's diagnosis):
+    when the opponent's intervening turn changed nothing (the old
+    timeout auto-pass), the fat recorder collapsed two of the mover's
+    turns into one before/after pair. The chain stays byte-intact, so
+    only the diff shape betrays it — e.g. two cost-free hard moves.
+    Returns True if the pair splits into two legal single turns of
+    `color` with a silent opponent turn between. Such pairs can never
+    be one slim turn and stay snapshot entries permanently (splitting
+    them would renumber every later turn)."""
+    try:
+        base = SimBoard.from_sfn(sfn_before)
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return False
+    # Cheap gate: every merged cluster gains >= 2 mover stones (two
+    # turns' worth of moves); pairs below that stay with the normal
+    # labeling flow rather than paying the decomposition search.
+    gains = sum(1 for n in NODE_ORDER
+                if after.get(n) == color and base.stones[n] != color)
+    if gains < 2:
+        return False
+    _prepare_turn_start(base, color, turn_number)
+    mids = []
+    try:
+        cands = list(base.get_legal_turns(color))
+    except Exception:
+        return False
+    for cand in cands:
+        b1 = base.copy()
+        try:
+            apply_sim_turn(b1, cand, color)
+            b1.update()
+        except Exception:
+            continue
+        if b1.gameover:
+            continue
+        mismatch = sum(1 for n in NODE_ORDER
+                       if b1.stones[n] != after.get(n))
+        mids.append((mismatch, len(mids), b1))
+    mids.sort(key=lambda m: m[:2])
+    for _mm, _i, b1 in mids[:cand_cap]:
+        # Re-anchor to the pair's recorded counter so to_sfn tokens
+        # match the stored strings byte-for-byte.
+        b1.turn_counter = turn_number
+        b1.whose_turn = color
+        try:
+            if deduce_turn(b1.to_sfn(), color, turn_number, sfn_after,
+                           max_applies=max_applies) is not None:
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def convert_record(key, rec, cached_slim=None):
     """Deduce a slim transcript for one fat record.
 
@@ -904,20 +960,30 @@ def convert_record(key, rec, cached_slim=None):
     independent (each starts from its own stored sfnBefore), which makes
     the fallback sound — and lets `cached_slim` (the previous run's
     verified conversion) short-circuit every turn that already deduced:
-    only its snapshot turns are re-attempted.
+    only its snapshot turns are re-attempted. Snapshot turns proven to
+    be MERGED pairs (see _decompose_two_turns) carry 'merged': True and
+    are never re-deduced.
 
-    Returns (slim_turns, snapshot_turn_indices, None) on success or
-    (None, [], reason) on failure (malformed records only).
+    Returns (slim_turns, snapshot_turn_indices, merged_turn_indices,
+    None) on success or (None, [], [], reason) on failure (malformed
+    records only).
     """
     turns = _normalize_turns(rec.get('turns'))
     if not turns:
-        return None, 0, 'no-turns'
+        return None, [], [], 'no-turns'
     if cached_slim is not None and len(cached_slim) != len(turns):
         cached_slim = None
-    slim, snapshots = [], []
+    slim, snapshots, merged = [], [], []
     for i, t in enumerate(turns):
         if cached_slim is not None \
                 and cached_slim[i].get('kind') != 'snapshot':
+            slim.append(cached_slim[i])
+            continue
+        if cached_slim is not None and cached_slim[i].get('merged'):
+            # Proven merged pair — no single turn can ever produce it;
+            # skip re-deduction and re-decomposition alike.
+            snapshots.append(i)
+            merged.append(i)
             slim.append(cached_slim[i])
             continue
         color = t.get('color')
@@ -926,7 +992,7 @@ def convert_record(key, rec, cached_slim=None):
         turn_number = t.get('turnNumber')
         if color not in ('red', 'blue') or not sfn_before or not sfn_after \
                 or not isinstance(turn_number, int):
-            return None, 0, f'malformed-turn-{i}'
+            return None, [], [], f'malformed-turn-{i}'
         try:
             cand = deduce_turn(sfn_before, color, turn_number, sfn_after)
         except Exception:
@@ -942,12 +1008,20 @@ def convert_record(key, rec, cached_slim=None):
                 })
                 continue
             snapshots.append(i)
-            slim.append({
+            entry = {
                 'color': color,
                 'turnNumber': turn_number,
                 'kind': 'snapshot',
                 'sfnAfter': sfn_after,
-            })
+            }
+            try:
+                if _decompose_two_turns(sfn_before, color, turn_number,
+                                        sfn_after):
+                    merged.append(i)
+                    entry['merged'] = True
+            except Exception:
+                pass
+            slim.append(entry)
         else:
             slim.append({
                 'color': color,
@@ -955,17 +1029,18 @@ def convert_record(key, rec, cached_slim=None):
                 'kind': 'sim',
                 'actions': [_action_to_dict(a) for a in cand.actions],
             })
-    return slim, snapshots, None
+    return slim, snapshots, merged, None
 
 
 def _convert_worker(item):
     """Multiprocessing worker: deduce one record's transcript."""
     key, rec, cached_slim = item
     try:
-        slim, snapshots, reason = convert_record(key, rec, cached_slim)
+        slim, snapshots, merged, reason = convert_record(key, rec,
+                                                         cached_slim)
     except Exception as e:
-        slim, snapshots, reason = None, [], f'worker-error: {e}'
-    return key, slim, snapshots, reason
+        slim, snapshots, merged, reason = None, [], [], f'worker-error: {e}'
+    return key, slim, snapshots, merged, reason
 
 
 def load_games(args):
@@ -1054,20 +1129,22 @@ def main():
     work = [(key, rec, cache.get(key)) for key, rec in fat]
     t0 = time.time()
     converted, failures = [], []
-    snap_by_key = {}
+    snap_by_key, merged_by_key = {}, {}
     rec_by_key = dict(fat)
     workers = args.workers or max(1, (os.cpu_count() or 4) - 2)
     if workers > 1 and len(fat) > 1:
         import multiprocessing
         with multiprocessing.Pool(workers) as pool:
             results = pool.imap_unordered(_convert_worker, work, chunksize=4)
-            for n, (key, slim, snapshots, reason) in enumerate(results, 1):
+            for n, (key, slim, snapshots, merged, reason) \
+                    in enumerate(results, 1):
                 if slim is None:
                     failures.append({'key': key, 'stage': 'deduce',
                                      'reason': reason})
                 else:
                     converted.append((key, rec_by_key[key], slim))
                     snap_by_key[key] = snapshots
+                    merged_by_key[key] = merged
                 if n % 50 == 0 or n == len(fat):
                     print(f'  deduced {n}/{len(fat)} '
                           f'({len(converted)} ok, {len(failures)} failed, '
@@ -1076,13 +1153,15 @@ def main():
         failures.sort(key=lambda f_: f_['key'])
     else:
         for n, (key, rec, cached_slim) in enumerate(work, 1):
-            slim, snapshots, reason = convert_record(key, rec, cached_slim)
+            slim, snapshots, merged, reason = convert_record(key, rec,
+                                                             cached_slim)
             if slim is None:
                 failures.append({'key': key, 'stage': 'deduce',
                                  'reason': reason})
             else:
                 converted.append((key, rec, slim))
                 snap_by_key[key] = snapshots
+                merged_by_key[key] = merged
             if n % 50 == 0 or n == len(fat):
                 print(f'  deduced {n}/{len(fat)} '
                       f'({len(converted)} ok, {len(failures)} failed, '
@@ -1134,11 +1213,13 @@ def main():
     fully_slim = [k for k, *_ in verified if not snap_by_key.get(k)]
     hybrid = [k for k, *_ in verified if snap_by_key.get(k)]
     snap_turns = sum(len(snap_by_key.get(k, [])) for k, *_ in verified)
+    merged_turns = sum(len(merged_by_key.get(k, [])) for k, *_ in verified)
     total_turns = sum(len(t) for _, _, _, t in verified)
     print(f'\nConversion: {len(verified)} verified / {len(fat)} fat '
           f'({len(failures)} failures)')
     print(f'  fully slim: {len(fully_slim)} | hybrid: {len(hybrid)} '
-          f'({snap_turns} snapshot turns of {total_turns})')
+          f'({snap_turns} snapshot turns of {total_turns}, '
+          f'{merged_turns} of them proven merged pairs)')
     if verified:
         print(f'turns payload: {old_bytes / 1e6:.1f} MB -> '
               f'{new_bytes / 1e6:.1f} MB '
@@ -1155,6 +1236,8 @@ def main():
             'verified': [k for k, *_ in verified],
             'snapshot_turns': {k: snap_by_key[k] for k, *_ in verified
                                if snap_by_key.get(k)},
+            'merged_turns': {k: merged_by_key[k] for k, *_ in verified
+                             if merged_by_key.get(k)},
             'failures': failures, 'skipped': skipped,
             'old_turns_bytes': old_bytes, 'new_turns_bytes': new_bytes,
         }, f, indent=1)
@@ -1179,7 +1262,11 @@ def main():
     for i in range(0, len(verified), BATCH):
         updates = {}
         for key, rec, slim, turns in verified[i:i + BATCH]:
-            updates[f'completed_games/{key}/turns'] = slim
+            # The 'merged' marker is pipeline bookkeeping (cache/report
+            # only) — the at-rest record keeps the clean snapshot shape.
+            updates[f'completed_games/{key}/turns'] = [
+                {k2: v for k2, v in t.items() if k2 != 'merged'}
+                for t in slim]
             updates[f'completed_games/{key}/setupSfn'] = turns[0]['sfnBefore']
             updates[f'completed_games/{key}/finalSfn'] = turns[-1]['sfnAfter']
         r = requests.patch(DB_URL + '/.json', params={'access_token': tok},

@@ -84,10 +84,17 @@ def main():
 
     # Unmatched turns: snapshot turns of hybrid conversions (new report
     # shape) plus first-failure turns from any old-style failures.
+    # Proven merged pairs (old-recorder timeout bug: two mover turns
+    # collapsed into one before/after pair) can never be solved as one
+    # turn — keep them off the page entirely.
+    merged = {(key, i)
+              for key, idxs in (report.get('merged_turns') or {}).items()
+              for i in idxs}
     pairs = []
     for key, idxs in (report.get('snapshot_turns') or {}).items():
         for i in idxs:
-            pairs.append((key, i))
+            if (key, i) not in merged:
+                pairs.append((key, i))
     for fail in report['failures']:
         m = re.match(r'no-matching-turn-(\d+)', fail.get('reason', ''))
         if m:
@@ -166,7 +173,8 @@ def main():
         f.write(html)
     print(f'{len(cases)} cases ({len(ranked)} patterns, '
           f'{payload["totalUnmatched"]} unmatched turns, '
-          f'{n_gaps} recording-gap turns excluded) -> {args.out}')
+          f'{n_gaps} recording-gap + {len(merged)} merged-pair turns '
+          f'excluded) -> {args.out}')
 
 
 _PAGE = r'''<!DOCTYPE html>
