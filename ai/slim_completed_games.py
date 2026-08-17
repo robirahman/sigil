@@ -495,8 +495,225 @@ def _unmodeled_cast_candidates(base, color, spell, sfn_after):
                                            + [Action('pass')])
 
 
+def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
+    """Diff-constrained composer for hard_moves rituals (Carnage).
+
+    Robi's labeled solutions showed the shape: every granted hard move
+    lands the caster's stone on the target node, so ALL targets end the
+    turn caster-owned — including targets that only become enemy-occupied
+    mid-resolution, when an earlier push parks an enemy stone beside the
+    caster. The generic override sweep can never reach those: it draws
+    targets from the pre-cast board and branches only the first pick.
+    Likewise the kept stones are simply the caster's stones sitting in
+    the spell's position in the AFTER state.
+
+    So: enumerate pre-cast prefixes as usual (re-branching the push
+    destination of any prefix hard move — the sigil is often completed
+    by pushing an enemy off it), fix kept from the after-state, and
+    depth-first search the granted moves with targets restricted to
+    after-state caster nodes, branching push destinations over the diff
+    pools. Yields only candidates whose search board already reproduces
+    sfn_after byte-identically — every choice point is branched in the
+    search, so the post-hoc variant sweeps have nothing to add."""
+    info = CORE_SPELLS.get(spell)
+    if not info or info.get('resolve') != 'hard_moves' \
+            or info.get('ischarm') or spell not in base.spell_names:
+        return
+    count = info['count']
+    enemy = 'blue' if color == 'red' else 'red'
+    try:
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return
+    idx = base.spell_names.index(spell)
+    pos = POSITIONS.get(idx + 1, [])
+    kept = [n for n in pos if after.get(n) == color]
+    own_after = {n for n in NODE_ORDER if after.get(n) == color}
+
+    placed_own = [n for n in NODE_ORDER
+                  if after.get(n) == color and base.stones[n] != color]
+    vacated = [n for n in NODE_ORDER
+               if base.stones[n] == color and after.get(n) is None]
+    arrived_enemy = [n for n in NODE_ORDER
+                     if after.get(n) == enemy and base.stones[n] != enemy]
+    move_pool = list(dict.fromkeys(
+        placed_own + [n for n in pos if base.stones[n] != color
+                      and base.stones[n] != DESTROYED]))
+    # A pushed enemy either stays where it lands (arrived_enemy) or is
+    # itself hard-moved later, leaving the landing node caster-owned.
+    dest_pool = list(dict.fromkeys(arrived_enemy + placed_own))
+    budget = [max_applies]
+
+    def push_branches(b, target):
+        """(action, board) per DISTINCT outcome of hard-moving onto
+        `target`: greedy first, then each diff-pool destination override
+        (_push_enemy ignores illegal overrides, which dedupes to the
+        greedy outcome)."""
+        seen = set()
+        for ov in [None] + dest_pool:
+            if budget[0] <= 0:
+                return
+            budget[0] -= 1
+            bb = b.copy()
+            try:
+                got = bb._push_enemy(target, color, ov)
+            except Exception:
+                continue
+            if got in seen:
+                continue
+            seen.add(got)
+            bb.update()
+            yield Action('hard_move', node=target, pushed_to=got), bb
+
+    def reapply(b, acts):
+        """Re-play a prefix, branching each hard move's push destination
+        (the prefix generator applied the greedy one). Yields
+        (actions, board)."""
+        if not acts:
+            yield [], b
+            return
+        a, rest = acts[0], acts[1:]
+        if a.type == 'hard_move' or (a.type == 'blink'
+                                     and b.stones[a.node] == enemy):
+            for act2, b2 in push_branches(b, a.node):
+                if a.type == 'blink':
+                    act2 = _copy_action(act2)
+                    act2.type = 'blink'
+                for racts, rb in reapply(b2, rest):
+                    yield [act2] + racts, rb
+        else:
+            b2 = b.copy()
+            if a.type in ('move', 'blink'):
+                b2.stones[a.node] = color
+            elif a.type in ('dash', 'dash_lightning'):
+                for s in (a.sacrificed or []):
+                    b2.stones[s] = None
+            b2.update()
+            for racts, rb in reapply(b2, rest):
+                yield [a] + racts, rb
+
+    def used_move_dash(acts):
+        """(standard_move_used, dash_used) — a move directly after a
+        dash is the dash's landing, not the standard move."""
+        used_m = used_d = False
+        prev_dash = False
+        for a in acts:
+            if a.type in ('dash', 'dash_lightning'):
+                used_d = True
+                prev_dash = True
+            elif a.type in ('move', 'hard_move', 'blink'):
+                if prev_dash:
+                    prev_dash = False
+                else:
+                    used_m = True
+            else:
+                prev_dash = False
+        return used_m, used_d
+
+    def suffixes(b, used_move, used_dash):
+        """Post-cast standard move / dash (the labeling rounds showed
+        both orders occur). Pools re-derived from the leaf board so a
+        resolver landing later consumed by the dash is covered."""
+        yield [], b
+        if used_move and used_dash:
+            return
+        pool2 = [n for n in NODE_ORDER
+                 if after.get(n) == color and b.stones[n] != color]
+        vac2 = [n for n in NODE_ORDER
+                if b.stones[n] == color and after.get(n) is None]
+        for sacts, sb in _turn_prefixes(b, color, pool2, vac2):
+            if not sacts or budget[0] <= 0:
+                continue
+            s_move, s_dash = used_move_dash(sacts)
+            if (s_move and used_move) or (s_dash and used_dash):
+                continue
+            budget[0] -= len(sacts)
+            yield sacts, sb
+
+    # kept = after-state position stones is the common case, but the
+    # resolver can invisibly REFILL spent sigil nodes (a hard move onto
+    # an enemy pushed there earlier lands the caster back on its own
+    # sigil), and a post-cast dash can SACRIFICE a kept stone — so sweep
+    # subsets of (after-kept + spent-position) nodes, exact match first.
+    kept_pool = list(dict.fromkeys(
+        kept + [n for n in pos if base.stones[n] == color
+                and after.get(n) is None]))
+    kept_options = [list(kept)]
+    for k in range(len(kept_pool), -1, -1):
+        for combo in combinations(kept_pool, k):
+            opt = list(combo)
+            if set(opt) != set(kept):
+                kept_options.append(opt)
+    kept_options.sort(key=lambda o: (o != kept,
+                                     abs(len(o) - len(kept))))
+    del kept_options[64:]
+
+    emitted = set()
+    for kept_opt in kept_options:
+        for prefix0, _b_greedy in _turn_prefixes(base, color, move_pool,
+                                                 vacated):
+            for prefix, b1 in reapply(base, prefix0):
+                if budget[0] <= 0:
+                    return
+                # Sigil must be caster-filled at cast time.
+                if any(b1.stones[n] != color for n in pos
+                       if b1.stones[n] != DESTROYED):
+                    continue
+                b2 = b1.copy()
+                # Cast bookkeeping (mirror of apply_sim_turn's
+                # non-charm arm).
+                for n in pos:
+                    if b2.stones[n] != DESTROYED:
+                        b2.stones[n] = None
+                for n in kept_opt:
+                    b2.stones[n] = color
+                if b2.lock[color] == spell:
+                    b2.springlock[color] = spell
+                else:
+                    b2.lock[color] = spell
+                    b2.springlock[color] = None
+                b2.spell_counter[color] += 1
+                b2.update()
+                cast_act = Action('cast', spell=spell,
+                                  kept=list(kept_opt) or None)
+                used_move, used_dash = used_move_dash(prefix)
+
+                stack = [(b2, [], count)]
+                while stack:
+                    if budget[0] <= 0:
+                        return
+                    b, acts, left = stack.pop()
+                    all_targets = b._hard_moveable(color)
+                    # The live resolver loops `count` times and only
+                    # stops early when NO legal target exists — the
+                    # player can't skip a granted move.
+                    if left == 0 or not all_targets:
+                        for sacts, sb in suffixes(b, used_move, used_dash):
+                            sfn = sb.to_sfn()
+                            if sfn == sfn_after and sfn not in emitted:
+                                emitted.add(sfn)
+                                yield CompleteTurn(
+                                    prefix + [cast_act] + acts + sacts
+                                    + [Action('pass')])
+                        continue
+                    for t in all_targets:
+                        if t not in own_after:
+                            continue  # attacker lands there; must end ours
+                        for act2, b3 in push_branches(b, t):
+                            stack.append((b3, acts + [act2], left - 1))
+
+
 def _candidates(board, color, cast_spell=None, sfn_after=None):
     """Yield candidate turns in escalating-cost order."""
+    # The hard_moves composer only emits candidates whose search board
+    # already byte-matches the after-state, so for a named Carnage cast
+    # it goes FIRST: on busy boards the generic tiers below exhaust the
+    # applies budget on variant sweeps before ever reaching it (a miss
+    # here costs bounded CPU and no budget).
+    if cast_spell and sfn_after \
+            and CORE_SPELLS.get(cast_spell, {}).get('resolve') == 'hard_moves':
+        yield from _hard_moves_candidates(board, color, cast_spell,
+                                          sfn_after)
     yield from board.get_legal_turns(color)
     yield from get_legal_turns_exhaustive(board, color, DEFAULT_CAPS)
     yield from _cast_first_candidates(board, color)
