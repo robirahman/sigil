@@ -158,6 +158,15 @@ def main():
                                      or g.get('autoArena') else '?')
             return f'{name} ({round(elo)})' if elo else name
 
+        def state_line(d):
+            def lk(side):
+                lock = d.get(f'{side}_lock') or '-'
+                spring = d.get(f'{side}_springlock')
+                return f'{lock} (sprung {spring})' if spring else lock
+            return (f"counters R{d.get('red_spellcounter', 0)}"
+                    f":B{d.get('blue_spellcounter', 0)} | locks "
+                    f"R:{lk('red')} B:{lk('blue')}")
+
         clusters[sig].append({
             'key': key,
             'turnNumber': t.get('turnNumber'),
@@ -169,6 +178,8 @@ def main():
             'cast': cast,
             'redPlayer': player('red'),
             'bluePlayer': player('blue'),
+            'stateBefore': state_line(before),
+            'stateAfter': state_line(after),
         })
 
     ranked = sorted(clusters.items(), key=lambda kv: -len(kv[1]))
@@ -244,6 +255,7 @@ _PAGE = r'''<!DOCTYPE html>
   <div><b id="case-title"></b> <span id="solved-count" style="float:right;color:#7fdc8a"></span></div>
   <div class="sig" id="case-sig"></div>
   <div class="meta" id="case-meta"></div>
+  <div class="meta" id="case-state"></div>
   <button onclick="prevCase()" class="secondary">&larr; Prev</button>
   <button onclick="nextCase()" class="secondary">Skip &rarr;</button>
   <button onclick="nextUnsolved()" class="secondary">Next unsolved pattern</button>
@@ -516,6 +528,11 @@ function loadCase(i) {
     '▶ to move: ' + (mover || '?') +
     ' | red ' + (c.redPlayer || '?') + ' vs blue ' + (c.bluePlayer || '?') +
     ' | ' + c.variant + ' | spells: ' + c.spellNames.join(', ');
+  document.getElementById('case-state').textContent =
+    c.stateBefore === c.stateAfter
+      ? 'start & target: ' + (c.stateBefore || '')
+      : 'start:  ' + (c.stateBefore || '') +
+        '  →  target: ' + (c.stateAfter || '');
   renderTarget(c);
   renderSpells(c);
   playCase(c);
