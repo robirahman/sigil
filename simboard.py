@@ -1764,7 +1764,9 @@ class SimBoard:
             else:
                 self.lock[color] = spell_name
                 self.springlock[color] = None
-            self.spell_counter[color] += 1
+            # Deathmatch removes the counter (mirrors sim-board.js).
+            if not variant_has_deathmatch(self.variant):
+                self.spell_counter[color] += 1
 
         cast_action = Action('cast', spell=spell_name, kept=kept)
         return [cast_action] + actions
@@ -2145,7 +2147,9 @@ def apply_sim_turn(board, turn, color):
                 else:
                     board.lock[color] = action.spell
                     board.springlock[color] = None
-                board.spell_counter[color] += 1
+                # Deathmatch removes the counter (mirrors sim-board.js).
+                if not variant_has_deathmatch(board.variant):
+                    board.spell_counter[color] += 1
         elif t in ('dash', 'dash_lightning'):
             if action.sacrificed:
                 for sac in action.sacrificed:

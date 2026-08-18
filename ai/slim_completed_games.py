@@ -45,7 +45,7 @@ from itertools import combinations, product
 
 from notation import NODE_ORDER, POSITIONS, sfn_to_dict
 from simboard import (SimBoard, Action, CompleteTurn, apply_sim_turn,
-                      CORE_SPELLS, DESTROYED)
+                      CORE_SPELLS, DESTROYED, variant_has_deathmatch)
 from ai.enumerator import get_legal_turns_exhaustive, DEFAULT_CAPS, _spell_overrides
 from ai.replay_bridge import hydrate_records, is_slim_record, _normalize_turns
 
@@ -170,17 +170,23 @@ def _move_targets(b, color):
 
 def _cast_spell_name(sfn_before, sfn_after, color):
     """Deduce which spell (if any) `color` cast this turn from the SFN
-    lock / springlock / spell-counter diff."""
+    lock / springlock / spell-counter diff. Deathmatch variants never
+    advance the counter ("Deathmatch removes the counter"), so there
+    the lock/springlock diff alone names the cast."""
     try:
         b, a = sfn_to_dict(sfn_before), sfn_to_dict(sfn_after)
     except Exception:
         return None
-    if a[f'{color}_spellcounter'] == b[f'{color}_spellcounter']:
+    deathmatch = 'deathmatch' in (a.get('variant') or '')
+    if not deathmatch \
+            and a[f'{color}_spellcounter'] == b[f'{color}_spellcounter']:
         return None
     if a[f'{color}_lock'] != b[f'{color}_lock']:
         return a[f'{color}_lock']
     if a[f'{color}_springlock'] != b[f'{color}_springlock']:
         return a[f'{color}_springlock']
+    if deathmatch:
+        return None  # no lock movement either — nothing cast
     return a[f'{color}_lock']
 
 
@@ -295,8 +301,9 @@ def _focused_candidates(base, color, spell_name, sfn_after=None):
             dest_pool = list(dict.fromkeys(arrived_enemy + move_opts))
 
             def expanded():
-                for prefix, b1 in _turn_prefixes(base, color, move_pool,
-                                                 vacated):
+                for prefix, b1 in _turn_prefixes(
+                        base, color, move_pool,
+                        _sac_pool(base, color, move_pool, vacated)):
                     yield prefix, b1
                     yield from _branch_prefix_dests(base, prefix, color,
                                                     dest_pool)
@@ -463,6 +470,18 @@ def _dash_charm_candidates(base, color, sfn_after):
 _UNMODELED_CASTS = {'Gather': 3, 'Harvest': 5}
 
 
+def _sac_pool(base, color, move_pool, vacated):
+    """Dash sacrifices may hit a stone that a LATER move refills
+    (net-zero diff, invisible — Robi's Gather labels sacrifice c6 for
+    the dash and refill it with a granted move): extend the visible
+    vacated pool with own stones adjacent to a move-pool node."""
+    pool_set = set(move_pool)
+    extra = [n for n in NODE_ORDER
+             if base.stones[n] == color
+             and any(nb in pool_set for nb in base._adjacent_nodes(n))]
+    return list(dict.fromkeys(list(vacated) + extra))
+
+
 def _turn_prefixes(base, color, move_pool, vacated):
     """Yield (actions, board) for every pre-cast phase shape: nothing, a
     single standard move, a dash, or move + dash. Pools are
@@ -536,12 +555,17 @@ def _unmodeled_cast_candidates(base, color, spell, sfn_after):
         move_opts + [n for n in pos if base.stones[n] != color
                      and base.stones[n] != DESTROYED]))
 
-    for prefix, b1 in _turn_prefixes(base, color, move_pool, vacated):
+    for prefix, b1 in _turn_prefixes(base, color, move_pool,
+                                     _sac_pool(base, color, move_pool,
+                                               vacated)):
         # Cast bookkeeping (mirror of apply_sim_turn's non-charm arm).
         if any(b1.stones[n] != color for n in pos
                if b1.stones[n] != DESTROYED):
             continue  # sigil not filled by the caster at cast time
-        for kept_k in range(0, len(pos)):
+        # kept_k up to len(pos) INCLUSIVE — Robi's Gather labels keep the
+        # whole sigil (net-zero on the position), which range(0, len)
+        # never tried. Larger keeps first: they match the refill shape.
+        for kept_k in range(len(pos), -1, -1):
             for kept in combinations(pos, kept_k):
                 b2 = b1.copy()
                 for n in pos:
@@ -554,16 +578,21 @@ def _unmodeled_cast_candidates(base, color, spell, sfn_after):
                 else:
                     b2.lock[color] = spell
                     b2.springlock[color] = None
-                b2.spell_counter[color] += 1
+                if not variant_has_deathmatch(b2.variant):
+                    b2.spell_counter[color] += 1
                 b2.update()
                 cast_act = Action('cast', spell=spell,
                                   kept=list(kept) or None)
-                # The granted moves may REFILL the just-spent sigil
-                # (net-zero diff on those nodes), so the post-cast pool
-                # includes the position's now-empty nodes; and the
-                # standard move can come after the cast too, hence the
-                # +1 on the move budget.
-                rest = [n for n in dict.fromkeys(list(move_opts) + list(pos))
+                # The granted moves may REFILL the just-spent sigil OR a
+                # node the prefix's dash sacrificed (net-zero diff on
+                # those nodes, Robi's Gather labels), so the post-cast
+                # pool includes both; and the standard move can come
+                # after the cast too, hence the +1 on the move budget.
+                sacd = [s for a in prefix
+                        if a.type in ('dash', 'dash_lightning')
+                        for s in (a.sacrificed or [])]
+                rest = [n for n in dict.fromkeys(list(move_opts)
+                                                 + list(pos) + sacd)
                         if b2.stones[n] != color
                         and b2.stones[n] != DESTROYED]
                 for k_used in range(min(n_moves + 1, len(rest)), -1, -1):
@@ -710,7 +739,9 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
                  if after.get(n) == color and b.stones[n] != color]
         vac2 = [n for n in NODE_ORDER
                 if b.stones[n] == color and after.get(n) is None]
-        for sacts, sb in _turn_prefixes(b, color, pool2, vac2):
+        for sacts, sb in _turn_prefixes(b, color, pool2,
+                                        _sac_pool(b, color, pool2,
+                                                  vac2)):
             if not sacts or budget[0] <= 0:
                 continue
             s_move, s_dash = used_move_dash(sacts)
@@ -739,8 +770,9 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
 
     emitted = set()
     for kept_opt in kept_options:
-        for prefix0, _b_greedy in _turn_prefixes(base, color, move_pool,
-                                                 vacated):
+        for prefix0, _b_greedy in _turn_prefixes(
+                base, color, move_pool,
+                _sac_pool(base, color, move_pool, vacated)):
             for prefix, b1 in reapply(base, prefix0):
                 if budget[0] <= 0:
                     return
@@ -761,7 +793,8 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
                 else:
                     b2.lock[color] = spell
                     b2.springlock[color] = None
-                b2.spell_counter[color] += 1
+                if not variant_has_deathmatch(b2.variant):
+                    b2.spell_counter[color] += 1
                 b2.update()
                 cast_act = Action('cast', spell=spell,
                                   kept=list(kept_opt) or None)
@@ -866,6 +899,11 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
     axes = []
     cast_seen = False
     resolver_move_idxs = []
+    # Nodes spent earlier in the turn and possibly REFILLED by resolver
+    # moves (net-zero diff, invisible to the pools above): the cast
+    # spell's own position and anything dash-/cost-sacrificed. Robi's
+    # Flourish/Gather labels all refill these.
+    refill_pool = []
     for i, a in enumerate(cand.actions):
         if a.type in ('hard_move', 'blink') \
                 and a.pushed_to not in (None, 'X', 'S'):
@@ -873,6 +911,11 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
                 axes.append([{(i, 'pushed_to'): n} for n in arrived_enemy])
         elif a.type == 'cast':
             cast_seen = True
+            try:
+                refill_pool.extend(
+                    POSITIONS.get(base.spell_names.index(a.spell) + 1, []))
+            except ValueError:
+                pass
             if a.kept:
                 try:
                     idx = base.spell_names.index(a.spell)
@@ -900,7 +943,9 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
                                if p.type in ('move', 'blink') and p.node]))
             if pool:
                 axes.append([{(i, 'node'): n} for n in pool])
+            refill_pool.append(a.node)
         elif a.type in ('dash', 'dash_lightning'):
+            refill_pool.extend(a.sacrificed or [])
             k = len(a.sacrificed or [])
             sac_pool = list(dict.fromkeys(
                 vacated_own + [p.node for p in cand.actions[:i]
@@ -937,21 +982,36 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
             # Resolver kill sets (Fireblast target+adjacents, Hail Storm
             # picks ...). The SIZE varies with the chosen target — a
             # Fireblast aimed at a clustered stone kills more — so sweep
-            # every plausible size, not just the greedy pick's.
+            # every plausible size, not just the greedy pick's. A killed
+            # node REFILLED later in the turn ends caster-colored
+            # (Robi's Fireblast pair: kill a8, standard move onto a8),
+            # so converted-in nodes belong in the pool too.
+            kill_pool = list(dict.fromkeys(vacated_enemy + [
+                n for n in NODE_ORDER
+                if before[n] == enemy and after.get(n) == color]))
             vals = []
-            for k in range(1, min(5, len(vacated_enemy) + 1)):
-                vals.extend(list(c) for c in combinations(vacated_enemy, k))
+            for k in range(1, min(6, len(kill_pool) + 1)):
+                vals.extend(list(c) for c in combinations(kill_pool, k))
             if 0 < len(vals) <= 300:
                 axes.append([{(i, 'destroyed'): v} for v in vals])
 
-    if resolver_move_idxs and placed_own \
-            and len(resolver_move_idxs) <= len(placed_own):
-        vals = [
-            {(j, 'node'): n for j, n in zip(resolver_move_idxs, combo)}
-            for combo in combinations(placed_own, len(resolver_move_idxs))
-        ]
-        if 0 < len(vals) <= 400:
-            axes.append(vals)
+    if resolver_move_idxs:
+        # placed_own first (most likely real targets), then the
+        # invisible refill candidates.
+        move_pool = list(dict.fromkeys(
+            placed_own + [n for n in refill_pool
+                          if base.stones[n] == color]))
+        if len(resolver_move_idxs) <= len(move_pool):
+            vals = [
+                {(j, 'node'): n for j, n in zip(resolver_move_idxs, combo)}
+                for combo in combinations(move_pool,
+                                          len(resolver_move_idxs))
+            ]
+            # The kept-from-after axis sits earlier in `axes`, so its
+            # first value dominates the early product order and a large
+            # axis here still gets its best combos tried within cap.
+            if 0 < len(vals) <= 1500:
+                axes.append(vals)
 
     if not axes or len(axes) > 6:
         return
@@ -1075,9 +1135,9 @@ def _decompose_merged(sfn_before, color, turn_number, sfn_after):
         return False
     _prepare_turn_start(base, color, turn_number)
 
-    lvl1 = _mid_boards(base, color, after, 40)
+    lvl1 = _mid_boards(base, color, after, 60)
     for b1 in lvl1:
-        if _final_leg_matches(b1, color, turn_number, sfn_after, 1500):
+        if _final_leg_matches(b1, color, turn_number, sfn_after, 3000):
             return True
 
     n_enemy_before = sum(1 for n in NODE_ORDER
