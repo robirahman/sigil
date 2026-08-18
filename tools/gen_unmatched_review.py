@@ -82,6 +82,13 @@ def main():
         with open(args.solutions) as f:
             handled = json.load(f)
 
+    global USERS
+    USERS = {}
+    users_path = 'ai/data/users_cache.json'
+    if os.path.exists(users_path):
+        with open(users_path) as f:
+            USERS = json.load(f)
+
     # Unmatched turns: snapshot turns of hybrid conversions (new report
     # shape) plus first-failure turns from any old-style failures.
     # Proven merged pairs (old-recorder timeout bug: two mover turns
@@ -140,6 +147,17 @@ def main():
             continue
         cast = _cast_spell_name(t['sfnBefore'], t['sfnAfter'], t['color'])
         sig = signature(before, after, t['color'], cast)
+
+        def player(side):
+            # Name from the users cache; rating AT GAME TIME (EloBefore)
+            # so Robi knows whether to hunt for an expert move, falling
+            # back to the user's current elo.
+            u = USERS.get(g.get(f'{side}Uid') or '') or {}
+            elo = g.get(f'{side}EloBefore') or u.get('elo')
+            name = u.get('name') or ('AI' if g.get('isAiArena')
+                                     or g.get('autoArena') else '?')
+            return f'{name} ({round(elo)})' if elo else name
+
         clusters[sig].append({
             'key': key,
             'turnNumber': t.get('turnNumber'),
@@ -149,6 +167,8 @@ def main():
             'spellNames': g.get('spellNames') or [],
             'variant': g.get('variant') or 'standard',
             'cast': cast,
+            'redPlayer': player('red'),
+            'bluePlayer': player('blue'),
         })
 
     ranked = sorted(clusters.items(), key=lambda kv: -len(kv[1]))
@@ -491,8 +511,11 @@ function loadCase(i) {
     (st ? (st.multiTurn ? ' — FLAGGED MULTI-TURN' : ' — SOLVED') : '');
   document.getElementById('case-sig').textContent = c.signature +
     (c.cast ? ' | deduced cast: ' + c.cast : '');
+  const mover = c.color === 'red' ? c.redPlayer : c.bluePlayer;
   document.getElementById('case-meta').textContent =
-    c.variant + ' | spells: ' + c.spellNames.join(', ');
+    '▶ to move: ' + (mover || '?') +
+    ' | red ' + (c.redPlayer || '?') + ' vs blue ' + (c.bluePlayer || '?') +
+    ' | ' + c.variant + ' | spells: ' + c.spellNames.join(', ');
   renderTarget(c);
   renderSpells(c);
   playCase(c);
