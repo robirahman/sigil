@@ -922,5 +922,149 @@
    "c10",
    "pass"
   ]
+ },
+ "-OpTT479FL7ykYwHEmzu:t12": {
+  "key": "-OpTT479FL7ykYwHEmzu",
+  "turnNumber": 12,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OpZFQlx1zBkgn7XWzgo:t22": {
+  "key": "-OpZFQlx1zBkgn7XWzgo",
+  "turnNumber": 22,
+  "color": "blue",
+  "actions": [
+   "b1",
+   "b9",
+   "Hail_Storm",
+   "b9",
+   "a9",
+   "b2",
+   "b9",
+   "a3",
+   "pass"
+  ]
+ },
+ "-OsPHiVszqSoAa-2Y2kI:t24": {
+  "key": "-OsPHiVszqSoAa-2Y2kI",
+  "turnNumber": 24,
+  "color": "blue",
+  "actions": [
+   "a9",
+   "c10",
+   "dash",
+   "b13",
+   "b3",
+   "a10",
+   "Hail_Storm",
+   "a8",
+   "a9",
+   "c10",
+   "a6",
+   "pass"
+  ]
+ },
+ "-OpR4ilx3Ci6wuHT0TDF:t31": {
+  "key": "-OpR4ilx3Ci6wuHT0TDF",
+  "turnNumber": 31,
+  "color": "red",
+  "actions": [
+   "b8",
+   "dash",
+   "a12",
+   "c9",
+   "b7",
+   "Surge",
+   "c12",
+   "pass"
+  ]
+ },
+ "-Oumb_s9oHEYX3sT2Caj:t27": {
+  "key": "-Oumb_s9oHEYX3sT2Caj",
+  "turnNumber": 27,
+  "color": "red",
+  "actions": [
+   "b4",
+   "dash",
+   "a12",
+   "a13",
+   "b3",
+   "Slash",
+   "b13",
+   "pass"
+  ]
+ },
+ "-OpZAqTbgtx9IpBRzJfv:t22": {
+  "key": "-OpZAqTbgtx9IpBRzJfv",
+  "turnNumber": 22,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OpZlA1A5Fpn7WEP5NDV:t21": {
+  "key": "-OpZlA1A5Fpn7WEP5NDV",
+  "turnNumber": 21,
+  "color": "red",
+  "multiTurn": true
+ },
+ "-OpZ_U0k8MNBTeOCH0Hw:t18": {
+  "key": "-OpZ_U0k8MNBTeOCH0Hw",
+  "turnNumber": 18,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OrpBjxavzVE0ZTRpPKf:t18": {
+  "key": "-OrpBjxavzVE0ZTRpPKf",
+  "turnNumber": 18,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-Orsohr6ikyw0Dj9HK4I:t44": {
+  "key": "-Orsohr6ikyw0Dj9HK4I",
+  "turnNumber": 44,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OrjkzD-WZYbBYJrIVU5:t24": {
+  "key": "-OrjkzD-WZYbBYJrIVU5",
+  "turnNumber": 24,
+  "color": "blue",
+  "actions": [
+   "c3",
+   "dash",
+   "c11",
+   "c12",
+   "c2",
+   "Bewitch",
+   "c3",
+   "c4",
+   "b11",
+   "a10",
+   "pass"
+  ]
+ },
+ "-OsXs2Is-78AkPLpc4nU:t19": {
+  "key": "-OsXs2Is-78AkPLpc4nU",
+  "turnNumber": 19,
+  "color": "red",
+  "actions": [
+   "b4",
+   "c12",
+   "dash",
+   "a13",
+   "a9",
+   "b3",
+   "Bewitch",
+   "b4",
+   "b5",
+   "a11",
+   "a1",
+   "pass"
+  ]
+ },
+ "-Orsdz_zz4pJn0tRT6tR:t29": {
+  "key": "-Orsdz_zz4pJn0tRT6tR",
+  "turnNumber": 29,
+  "color": "red",
+  "multiTurn": true
  }
 }

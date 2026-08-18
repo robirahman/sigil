@@ -199,9 +199,13 @@ def _branch_prefix_dests(base, prefix, color, dest_pool):
     greedy-only prefixes hand the cast a diverged board. Yields
     (actions, board) per distinct outcome (the greedy one repeats and
     is deduped downstream)."""
+    # Every hard move re-pushes in whatever world the earlier branches
+    # created — a crush ('X') in the greedy world may become a push
+    # here and vice versa, and skipping it would silently drop the
+    # enemy displacement altogether.
     hard_idxs = {i for i, a in enumerate(prefix)
                  if a.type in ('hard_move', 'blink')
-                 and a.pushed_to not in (None, 'X', 'S')}
+                 and a.pushed_to is not None}
     if not hard_idxs or not dest_pool:
         return
 
@@ -369,6 +373,9 @@ def _dash_charm_candidates(base, color, sfn_after):
     move_opts = placed + conv_in
     if len(move_opts) < 2 or not vacated:
         return
+    # Same invisible-sacrifice extension as the prefix generators: a
+    # dashed-away stone may be refilled later in the turn.
+    vacated = _sac_pool(base, color, move_opts, vacated)
     has_lightning = 'Seal_of_Lightning' in base.charged_spells[color]
     k = 1 if has_lightning else 2
     if len(vacated) < k:
@@ -401,36 +408,29 @@ def _dash_charm_candidates(base, color, sfn_after):
                     'dash_lightning' if has_lightning else 'dash',
                     sacrificed=list(sacs), node=m2)
                 yield CompleteTurn(prefix + [dash_act, mv2, Action('pass')])
-                try:
-                    castable = b2._get_castable_spells(color, True, True,
-                                                       post_dash=True)
-                except Exception:
-                    continue
-                # Surge's gate is "only after a dash" — exactly where we
-                # are — but the sim refuses it unconditionally ("not
-                # modeled in the sim"), so no enumerated candidate can
-                # ever contain it. Add it when charged; its cast is
-                # composed manually below.
-                if 'Surge' in b2.charged_spells[color] \
-                        and 'Surge' not in castable \
-                        and 'Surge' in b2.spell_names:
-                    castable.append('Surge')
-                for spell in castable:
+                # Charm CHARGE is game HISTORY (charged when its sigil
+                # was filled at some earlier point, castable until
+                # spent), but the sim derives charge from the CURRENT
+                # position — so a charm whose sigil has since emptied
+                # looks uncastable here even though the live game
+                # allowed it (Robi's Surge/Slash labels cast with the
+                # sigil empty, spending nothing). Don't gate on charge
+                # at all: try every charm in the game; the cast clears
+                # whatever own stones still sit on the sigil and the
+                # byte compare arbitrates.
+                for spell in b2.spell_names:
                     if not CORE_SPELLS.get(spell, {}).get('ischarm'):
                         continue
                     if spell == 'Surge':
-                        # Manual composition (no sim resolver): the cast
-                        # spends the charm node, then grants 1 move —
-                        # soft or hard, anywhere legal; replayers apply
-                        # the recorded cast + move actions generically.
+                        # Manual composition (no sim resolver): spend
+                        # any own stones still on the charm node, then
+                        # 1 granted move — soft or hard; replayers
+                        # apply the recorded actions generically.
                         idx = b2.spell_names.index('Surge')
                         pos = POSITIONS.get(idx + 1, [])
                         b3 = b2.copy()
-                        if any(b3.stones[n] != color for n in pos
-                               if b3.stones[n] != DESTROYED):
-                            continue
                         for n in pos:
-                            if b3.stones[n] != DESTROYED:
+                            if b3.stones[n] == color:
                                 b3.stones[n] = None
                         b3.update()
                         cast_act = Action('cast', spell='Surge')
@@ -846,16 +846,17 @@ def _candidates(board, color, cast_spell=None, sfn_after=None):
             yield from _focused_candidates(board, color, cast_spell,
                                            sfn_after)
         focused_done = True
+    elif sfn_after:
+        # No lock/counter change: either no cast, or a CHARM cast (which
+        # leaves both untouched). The dash+charm composer goes FIRST for
+        # the same budget reason as the focused tiers — Robi's
+        # Surge/Slash labels were starving behind the generic sweeps.
+        yield from _dash_charm_candidates(board, color, sfn_after)
     yield from board.get_legal_turns(color)
     yield from get_legal_turns_exhaustive(board, color, DEFAULT_CAPS)
     yield from _cast_first_candidates(board, color)
     if cast_spell and not focused_done:
         yield from _focused_candidates(board, color, cast_spell, sfn_after)
-    elif sfn_after:
-        # No lock/counter change: either no cast, or a CHARM cast (which
-        # leaves both untouched) — the dash+charm composer covers the
-        # multi-placement shapes the generic tiers miss.
-        yield from _dash_charm_candidates(board, color, sfn_after)
     yield from get_legal_turns_exhaustive(board, color, BOOSTED_CAPS)
 
 
@@ -905,10 +906,24 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
     # Flourish/Gather labels all refill these.
     refill_pool = []
     for i, a in enumerate(cand.actions):
-        if a.type in ('hard_move', 'blink') \
-                and a.pushed_to not in (None, 'X', 'S'):
-            if arrived_enemy:
+        if a.type in ('hard_move', 'blink'):
+            if a.pushed_to not in (None, 'X', 'S') and arrived_enemy:
                 axes.append([{(i, 'pushed_to'): n} for n in arrived_enemy])
+            if cast_seen and a.type == 'hard_move':
+                # Resolver-granted hard move (Slash, Fury ...): the
+                # greedy resolver fixed its TARGET; the human aimed it.
+                # Constrain to nodes that were (or transiently became)
+                # enemy and end the turn dead or taken.
+                trans = [p.pushed_to for p in cand.actions[:i]
+                         if p.type in ('hard_move', 'blink')
+                         and p.pushed_to not in (None, 'X', 'S')]
+                tpool = [n for n in dict.fromkeys(
+                    vacated_enemy
+                    + [m for m in NODE_ORDER
+                       if before[m] == enemy and after.get(m) == color]
+                    + trans) if n != a.node]
+                if tpool:
+                    axes.append([{(i, 'node'): n} for n in tpool])
         elif a.type == 'cast':
             cast_seen = True
             try:
@@ -985,10 +1000,17 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
             # every plausible size, not just the greedy pick's. A killed
             # node REFILLED later in the turn ends caster-colored
             # (Robi's Fireblast pair: kill a8, standard move onto a8),
-            # so converted-in nodes belong in the pool too.
-            kill_pool = list(dict.fromkeys(vacated_enemy + [
-                n for n in NODE_ORDER
-                if before[n] == enemy and after.get(n) == color]))
+            # so converted-in nodes belong in the pool too — and an
+            # enemy PUSHED somewhere earlier this turn can be killed at
+            # its landing node, which reads empty-before/empty-after
+            # (Robi's Hail labels), so earlier push destinations do too.
+            kill_pool = list(dict.fromkeys(
+                vacated_enemy
+                + [n for n in NODE_ORDER
+                   if before[n] == enemy and after.get(n) == color]
+                + [p.pushed_to for p in cand.actions[:i]
+                   if p.type in ('hard_move', 'blink')
+                   and p.pushed_to not in (None, 'X', 'S')]))
             vals = []
             for k in range(1, min(6, len(kill_pool) + 1)):
                 vals.extend(list(c) for c in combinations(kill_pool, k))
@@ -1015,6 +1037,12 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
 
     if not axes or len(axes) > 6:
         return
+    # Every axis keeps an IDENTITY patch: the candidate's original value
+    # may be absent from a diff pool (e.g. the dash-landing axis rebinds
+    # the landing node to placed_own values only — Robi's Bewitch label
+    # had the CORRECT landing from the prefix and every variant broke
+    # it). Without identity, one bad axis poisons the whole product.
+    axes = [[{}] + ax for ax in axes]
     count = 0
     for patches in product(*axes):
         count += 1
@@ -1039,6 +1067,10 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
     base = SimBoard.from_sfn(sfn_before)
     _prepare_turn_start(base, color, turn_number)
     cast_spell = _cast_spell_name(sfn_before, sfn_after, color)
+    if cast_spell:
+        # The named-cast tiers run first and are diff-constrained, so a
+        # deeper budget is cheap and mostly spent on the right shapes.
+        max_applies = max(max_applies, 60000)
     tried = set()
 
     def matches(turn):

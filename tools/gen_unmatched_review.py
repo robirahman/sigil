@@ -91,6 +91,15 @@ def main():
 
     # Unmatched turns: snapshot turns of hybrid conversions (new report
     # shape) plus first-failure turns from any old-style failures.
+    # Unofficial Panda-pack games are not worth Robi's labeling time —
+    # fat/hybrid records are fine for those (his call, 2026-08-18).
+    PANDA = {'Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap',
+             'Stampede', 'Choke', 'Bear_Trap', 'Shiver', 'Blood_Saplings',
+             'Itch', 'Free_Spirit', 'Residue_Mixture'}
+    panda_games = {k for k, g in games.items()
+                   if isinstance(g, dict)
+                   and PANDA & set(g.get('spellNames') or [])}
+
     # Proven merged pairs (old-recorder timeout bug: two mover turns
     # collapsed into one before/after pair) can never be solved as one
     # turn — keep them off the page entirely.
@@ -98,9 +107,12 @@ def main():
               for key, idxs in (report.get('merged_turns') or {}).items()
               for i in idxs}
     pairs = []
+    n_panda = 0
     for key, idxs in (report.get('snapshot_turns') or {}).items():
         for i in idxs:
-            if (key, i) not in merged:
+            if key in panda_games:
+                n_panda += 1
+            elif (key, i) not in merged:
                 pairs.append((key, i))
     for fail in report['failures']:
         m = re.match(r'no-matching-turn-(\d+)', fail.get('reason', ''))
@@ -204,8 +216,8 @@ def main():
         f.write(html)
     print(f'{len(cases)} cases ({len(ranked)} patterns, '
           f'{payload["totalUnmatched"]} unmatched turns, '
-          f'{n_gaps} recording-gap + {len(merged)} merged-pair turns '
-          f'excluded) -> {args.out}')
+          f'{n_gaps} recording-gap + {len(merged)} merged-pair '
+          f'+ {n_panda} panda turns excluded) -> {args.out}')
 
 
 _PAGE = r'''<!DOCTYPE html>
