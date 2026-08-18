@@ -32,6 +32,7 @@ ai/data/completed_games_raw*.json
 ai/data/completed_games_backup_*.json
 # Derived conversion cache from the last migration run (regenerated)
 ai/data/slim_conversions_cache.json
+ai/data/slim_conversions_cache.json.partial
 # Local users-table snapshot (uid -> name/elo) for the review harness
 ai/data/users_cache.json
 # Generated dev harnesses (tools/gen_unmatched_review.py embeds game data)

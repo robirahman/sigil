@@ -1365,12 +1365,34 @@ def main():
         print(f'Cache: {len(cache)} verified conversions loaded — '
               f'{n_cached_turns} turns reused, only previous snapshot '
               f'turns re-deduced (--no-cache to redo everything)')
+    # Deduction results from an INTERRUPTED run (written incrementally
+    # below so a reboot mid-round costs nothing). Safe to reuse without
+    # verification: every converted game goes through the bridge check
+    # at the end of whichever round completes.
+    checkpoint_path = CACHE_PATH + '.partial'
+    if not args.no_cache and os.path.exists(checkpoint_path):
+        try:
+            with open(checkpoint_path) as f:
+                partial = json.load(f)
+            cache.update(partial)
+            print(f'Resume: {len(partial)} checkpointed conversions '
+                  f'merged from an interrupted run')
+        except Exception as e:
+            print(f'(ignoring unreadable checkpoint: {e})')
 
     work = [(key, rec, cache.get(key)) for key, rec in fat]
     t0 = time.time()
     converted, failures = [], []
     snap_by_key, merged_by_key = {}, {}
     rec_by_key = dict(fat)
+    done_slim = {}
+
+    def write_checkpoint():
+        # Atomic write so a reboot mid-dump can't corrupt the file.
+        tmp = checkpoint_path + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(done_slim, f)
+        os.replace(tmp, checkpoint_path)
     workers = args.workers or max(1, (os.cpu_count() or 4) - 2)
     if workers > 1 and len(fat) > 1:
         import multiprocessing
@@ -1385,7 +1407,9 @@ def main():
                     converted.append((key, rec_by_key[key], slim))
                     snap_by_key[key] = snapshots
                     merged_by_key[key] = merged
+                    done_slim[key] = slim
                 if n % 50 == 0 or n == len(fat):
+                    write_checkpoint()
                     print(f'  deduced {n}/{len(fat)} '
                           f'({len(converted)} ok, {len(failures)} failed, '
                           f'{time.time() - t0:.0f}s)', flush=True)
@@ -1402,7 +1426,9 @@ def main():
                 converted.append((key, rec, slim))
                 snap_by_key[key] = snapshots
                 merged_by_key[key] = merged
+                done_slim[key] = slim
             if n % 50 == 0 or n == len(fat):
+                write_checkpoint()
                 print(f'  deduced {n}/{len(fat)} '
                       f'({len(converted)} ok, {len(failures)} failed, '
                       f'{time.time() - t0:.0f}s)', flush=True)
@@ -1486,6 +1512,11 @@ def main():
     with open(CACHE_PATH, 'w') as f:
         json.dump({k: slim for k, _rec, slim, _t in verified}, f)
     print(f'Cache: {len(verified)} verified conversions -> {CACHE_PATH}')
+    # The verified cache supersedes the in-flight checkpoint.
+    try:
+        os.unlink(checkpoint_path)
+    except OSError:
+        pass
 
     if not args.apply:
         print('\nDry run — no writes. Re-run with --apply to rewrite '
