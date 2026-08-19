@@ -76,6 +76,28 @@ MEGA_CAPS = {k: 99 for k in DEFAULT_CAPS}
 SOLUTIONS = {}
 
 
+def _code_fingerprint():
+    """Deduction-behavior fingerprint. A turn that failed at full budget
+    is stamped with this and skipped on later runs UNLESS one of these
+    files changed (or a human solution/flag arrived) — re-probing an
+    unchanged failure at 60k applies every round is what made round 15
+    take five hours."""
+    import hashlib
+    h = hashlib.md5()
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for p in ('ai/slim_completed_games.py', 'simboard.py',
+              'ai/enumerator.py', 'notation.py'):
+        try:
+            with open(os.path.join(root, p), 'rb') as f:
+                h.update(f.read())
+        except OSError:
+            pass
+    return h.hexdigest()[:12]
+
+
+CODE_FP = _code_fingerprint()
+
+
 def _action_to_dict(a):
     """Serialize an Action to the JSON shape JS applyAITurn consumes
     (field names are snake_case-identical across the two engines);
@@ -1220,6 +1242,17 @@ def convert_record(key, rec, cached_slim=None):
             merged.append(i)
             slim.append(cached_slim[i])
             continue
+        if cached_slim is not None \
+                and cached_slim[i].get('triedAt') == CODE_FP:
+            # Already failed at full budget under IDENTICAL deducer
+            # code — only a new human solution/flag changes the outcome.
+            solved = SOLUTIONS.get(
+                f"{key}:t{t.get('turnNumber')}")
+            if not (solved and (solved.get('actions')
+                                or solved.get('multiTurn'))):
+                snapshots.append(i)
+                slim.append(cached_slim[i])
+                continue
         color = t.get('color')
         sfn_before = t.get('sfnBefore')
         sfn_after = t.get('sfnAfter')
@@ -1261,6 +1294,8 @@ def convert_record(key, rec, cached_slim=None):
                         entry['merged'] = True
                 except Exception:
                     pass
+            if not entry.get('merged'):
+                entry['triedAt'] = CODE_FP
             slim.append(entry)
         else:
             slim.append({
@@ -1533,10 +1568,11 @@ def main():
     for i in range(0, len(verified), BATCH):
         updates = {}
         for key, rec, slim, turns in verified[i:i + BATCH]:
-            # The 'merged' marker is pipeline bookkeeping (cache/report
+            # 'merged'/'triedAt' are pipeline bookkeeping (cache/report
             # only) — the at-rest record keeps the clean snapshot shape.
             updates[f'completed_games/{key}/turns'] = [
-                {k2: v for k2, v in t.items() if k2 != 'merged'}
+                {k2: v for k2, v in t.items()
+                 if k2 not in ('merged', 'triedAt')}
                 for t in slim]
             updates[f'completed_games/{key}/setupSfn'] = turns[0]['sfnBefore']
             updates[f'completed_games/{key}/finalSfn'] = turns[-1]['sfnAfter']
