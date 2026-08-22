@@ -1351,6 +1351,11 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
     except Exception:
         pass
     tried = set()
+    # Wall-clock ceiling: the apply budget bounds byte-compares, but
+    # composer GENERATION cost between candidates is unbounded — a
+    # big-diff double-cast turn wedged two round-16 workers for 10+
+    # CPU-hours each. 90s comfortably covers every turn ever solved.
+    deadline = time.time() + 90
 
     def matches(turn):
         sig = repr(turn.actions)
@@ -1367,7 +1372,7 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
 
     for cand in _candidates(base, color, cast_spell, sfn_after,
                             double_cast=double_cast):
-        if len(tried) > max_applies:
+        if len(tried) > max_applies or time.time() > deadline:
             return None
         if matches(cand):
             return cand
@@ -1376,6 +1381,8 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
                 return variant
             if len(tried) > max_applies:
                 return None
+        if time.time() > deadline:
+            return None
     return None
 
 
