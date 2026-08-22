@@ -368,6 +368,33 @@ def _focused_candidates(base, color, spell_name, sfn_after=None):
             except Exception:
                 continue
             yield CompleteTurn(prefix + cast_actions + [Action('pass')])
+            # A CHARM may follow the ritual in the same turn (charms
+            # skip the lock/counter, so the diff still names only the
+            # ritual — Robi's Starfall+Slash label). Charge is history,
+            # not board state, so don't gate on it.
+            if b2.gameover:
+                continue
+            for charm in b2.spell_names:
+                cinfo = CORE_SPELLS.get(charm)
+                if not cinfo or not cinfo.get('ischarm') \
+                        or cinfo.get('static'):
+                    continue
+                covs = [None]
+                try:
+                    covs += (_spell_overrides(b2, color, charm,
+                                              DEFAULT_CAPS) or [])
+                except Exception:
+                    pass
+                covs = _order_overrides(covs, base, sfn_after)
+                for cov in covs[:20]:
+                    b3 = b2.copy()
+                    try:
+                        charm_actions = b3._cast_spell(charm, color, cov)
+                        b3.update()
+                    except Exception:
+                        continue
+                    yield CompleteTurn(prefix + cast_actions
+                                       + charm_actions + [Action('pass')])
 
 
 def _dash_charm_candidates(base, color, sfn_after):
@@ -635,7 +662,7 @@ def _unmodeled_cast_candidates(base, color, spell, sfn_after):
                                            + [Action('pass')])
 
 
-def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
+def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=400000):
     """Diff-constrained composer for hard_moves rituals (Carnage).
 
     Robi's labeled solutions showed the shape: every granted hard move
@@ -656,10 +683,13 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
     sfn_after byte-identically — every choice point is branched in the
     search, so the post-hoc variant sweeps have nothing to add."""
     info = CORE_SPELLS.get(spell)
-    if not info or info.get('resolve') != 'hard_moves' \
+    if not info or info.get('resolve') not in ('hard_moves', 'fury') \
             or info.get('ischarm') or spell not in base.spell_names:
         return
-    count = info['count']
+    # Fury = sacrifice 1 stone, then 3 hard moves — the hard-move DFS
+    # is identical, with a swept sacrifice inserted after the cast.
+    is_fury = info.get('resolve') == 'fury'
+    count = 3 if is_fury else info['count']
     enemy = 'blue' if color == 'red' else 'red'
     try:
         after = sfn_to_dict(sfn_after)['stones']
@@ -822,10 +852,40 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
                                   kept=list(kept_opt) or None)
                 used_move, used_dash = used_move_dash(prefix)
 
-                stack = [(b2, [], count)]
+                if is_fury:
+                    # Fury's sacrifice: diff-constrained to stones that
+                    # end vacated, prior same-turn placements
+                    # (invisible), and the kept set (kept-then-
+                    # sacrificed leaves no trace either).
+                    sac_opts = [
+                        n for n in dict.fromkeys(
+                            vacated
+                            + [p.node for p in prefix
+                               if p.type in ('move', 'blink') and p.node]
+                            + list(kept_opt))
+                        if b2.stones[n] == color]
+                    starts = []
+                    for sac in sac_opts:
+                        b3 = b2.copy()
+                        b3.stones[sac] = None
+                        b3.update()
+                        if b3.gameover:
+                            continue
+                        starts.append(
+                            (b3, [Action('sacrifice', node=sac)], count))
+                else:
+                    starts = [(b2, [], count)]
+
+                # Per-start cap (see _rock_slide_candidates): one wrong
+                # (kept, prefix) start must not starve the right one.
+                local = [min(6000, max_applies // 40)]
+                stack = list(starts)
                 while stack:
                     if budget[0] <= 0:
                         return
+                    if local[0] <= 0:
+                        break
+                    local[0] -= 1
                     b, acts, left = stack.pop()
                     all_targets = b._hard_moveable(color)
                     # The live resolver loops `count` times and only
@@ -840,15 +900,200 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=60000):
                                     prefix + [cast_act] + acts + sacts
                                     + [Action('pass')])
                         continue
-                    for t in all_targets:
-                        if t not in own_after:
-                            continue  # attacker lands there; must end ours
-                        for act2, b3 in push_branches(b, t):
-                            stack.append((b3, acts + [act2], left - 1))
+                    # Reverse for the LIFO stack: NODE_ORDER-first pops
+                    # first (greedy-most branch explored before exotic
+                    # push destinations).
+                    steps = [(t, act2, b3) for t in all_targets
+                             if t in own_after
+                             for act2, b3 in push_branches(b, t)]
+                    for t, act2, b3 in reversed(steps):
+                        stack.append((b3, acts + [act2], left - 1))
 
 
-def _candidates(board, color, cast_spell=None, sfn_after=None):
+def _rock_slide_candidates(base, color, sfn_after, max_applies=300000):
+    """Diff-constrained composer for Rock Slide's cascade: while any
+    enemy stone borders the caster, the player slides one to an
+    adjacent node (crushing any occupant). The enumerator's override
+    sweep can't reach deep cascades, and every (from, to) pick is
+    human-aimed. DFS over the cascade with branches ordered by
+    agreement with the after-state; the recorded Action('rock_slide',
+    pushes=[...]) replays verbatim in both engines."""
+    spell = 'Rock_Slide'
+    if spell not in base.spell_names:
+        return
+    enemy = 'blue' if color == 'red' else 'red'
+    try:
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return
+    idx = base.spell_names.index(spell)
+    pos = POSITIONS.get(idx + 1, [])
+    kept = [n for n in pos if after.get(n) == color]
+    move_opts = [n for n in NODE_ORDER
+                 if after.get(n) == color and base.stones[n] != color]
+    vacated = [n for n in NODE_ORDER
+               if base.stones[n] == color and after.get(n) is None]
+    move_pool = list(dict.fromkeys(
+        move_opts + [n for n in pos if base.stones[n] != color
+                     and base.stones[n] != DESTROYED]))
+    budget = [max_applies]
+    emitted = set()
+
+    def slide_options(b):
+        opts = []
+        for src in NODE_ORDER:
+            if b.stones[src] != enemy:
+                continue
+            if not any(b.stones[nb] == color
+                       for nb in b._adjacent_nodes(src)):
+                continue
+            for to in b._adjacent_nodes(src):
+                if b.stones[to] == DESTROYED:
+                    continue
+                # Order by after-state agreement: destination ends
+                # enemy > ends empty > disagreements last.
+                a = after.get(to)
+                rank = 0 if a == enemy else (1 if a is None else 2)
+                opts.append((rank, src, to))
+        opts.sort(key=lambda o: o[0])
+        return [(s, t) for _r, s, t in opts[:8]]
+
+    for kept_k in range(len(kept), -1, -1):
+        kept_opts = ([list(kept)] if kept_k == len(kept)
+                     else [list(c) for c in combinations(pos, kept_k)])
+        for kept_opt in kept_opts:
+            for prefix, b1 in _turn_prefixes(
+                    base, color, move_pool,
+                    _sac_pool(base, color, move_pool, vacated)):
+                if budget[0] <= 0:
+                    return
+                if any(b1.stones[n] != color for n in pos
+                       if b1.stones[n] != DESTROYED):
+                    continue
+                b2 = b1.copy()
+                for n in pos:
+                    if b2.stones[n] != DESTROYED:
+                        b2.stones[n] = None
+                for n in kept_opt:
+                    b2.stones[n] = color
+                if b2.lock[color] == spell:
+                    b2.springlock[color] = spell
+                else:
+                    b2.lock[color] = spell
+                    b2.springlock[color] = None
+                if not variant_has_deathmatch(b2.variant):
+                    b2.spell_counter[color] += 1
+                b2.update()
+                cast_act = Action('cast', spell=spell,
+                                  kept=list(kept_opt) or None)
+                # Per-start cap: one wrong (kept, prefix) start must not
+                # devour the whole budget before the right one runs —
+                # the sigil is often full BEFORE the standard move, so
+                # the empty prefix casts first into a diverged world.
+                local = [min(6000, max_applies // 20)]
+                stack = [(b2, [])]
+                while stack:
+                    if budget[0] <= 0:
+                        return
+                    if local[0] <= 0:
+                        break
+                    budget[0] -= 1
+                    local[0] -= 1
+                    b, pushes = stack.pop()
+                    opts = [] if b.gameover or len(pushes) >= 50 \
+                        else slide_options(b)
+                    if not opts:
+                        sfn = b.to_sfn()
+                        if sfn == sfn_after and sfn not in emitted:
+                            emitted.add(sfn)
+                            yield CompleteTurn(
+                                prefix + [cast_act]
+                                + [Action('rock_slide',
+                                          pushes=list(pushes))]
+                                + [Action('pass')])
+                        continue
+                    # LIFO stack: push in REVERSE so the best-ranked
+                    # option pops first (the budget dies in junk
+                    # branches otherwise).
+                    for src, to in reversed(opts):
+                        b3 = b.copy()
+                        occ = b3.stones[to]
+                        b3.stones[to] = b3.stones[src]
+                        b3.stones[src] = None
+                        b3.update()
+                        stack.append((b3, pushes + [
+                            {'from': src, 'to': to, 'crushed': occ}]))
+
+
+def _summer_double_cast_candidates(base, color, final_spell, sfn_after):
+    """Seal of Summer allows TWO casts per turn (counter jumps +2, the
+    first cast's lock is overwritten by the second — Robi's
+    Flourish+Grow / Bewitch+Grow labels). Compose: every castable
+    non-charm FIRST spell x its overrides, then hand the resulting
+    board to _focused_candidates for the named FINAL cast. The final
+    tier already sweeps its own prefixes, so the standard move/dash may
+    land between the two casts."""
+    if 'Seal_of_Summer' not in base.spell_names:
+        return
+    try:
+        after = sfn_to_dict(sfn_after)['stones']
+    except Exception:
+        return
+    move_opts = [n for n in NODE_ORDER
+                 if after.get(n) == color and base.stones[n] != color]
+    vacated = [n for n in NODE_ORDER
+               if base.stones[n] == color and after.get(n) is None]
+    # The move/dash may precede the FIRST cast (Robi's labels dash to
+    # fill the first sigil), so both casts need the prefix sweep; the
+    # sigil-refill pool covers every non-charm spell's position.
+    pool = list(dict.fromkeys(move_opts + [
+        n for sp in base.spell_names
+        if not CORE_SPELLS.get(sp, {}).get('ischarm')
+        for n in POSITIONS.get(base.spell_names.index(sp) + 1, [])
+        if base.stones[n] != color and base.stones[n] != DESTROYED]))
+    for prefix, b0 in _turn_prefixes(base, color, pool,
+                                     _sac_pool(base, color, pool, vacated)):
+        for first in b0.spell_names:
+            info = CORE_SPELLS.get(first)
+            if not info or info.get('ischarm') or info.get('static'):
+                continue
+            if first == final_spell and base.lock[color] != final_spell:
+                # Same spell twice only springlocks; the lock diff
+                # would have shown it — skip the redundant branch.
+                continue
+            overrides = [None]
+            try:
+                overrides += (_spell_overrides(b0, color, first,
+                                               DEFAULT_CAPS) or [])
+            except Exception:
+                pass
+            overrides = _order_overrides(overrides, base, sfn_after)
+            for ov in overrides[:20]:
+                b1 = b0.copy()
+                try:
+                    if first not in b1._get_castable_spells(color, True,
+                                                            True):
+                        continue
+                    cast1 = b1._cast_spell(first, color, ov)
+                    b1.update()
+                except Exception:
+                    continue
+                if b1.gameover:
+                    continue
+                for cand in _focused_candidates(b1, color, final_spell,
+                                                sfn_after):
+                    yield CompleteTurn(list(prefix) + cast1
+                                       + list(cand.actions))
+
+
+def _candidates(board, color, cast_spell=None, sfn_after=None,
+                double_cast=False):
     """Yield candidate turns in escalating-cost order."""
+    if double_cast and cast_spell and sfn_after:
+        # Seal of Summer two-cast turns (counter +2): the named cast is
+        # the SECOND one; sweep the overwritten first cast around it.
+        yield from _summer_double_cast_candidates(board, color,
+                                                  cast_spell, sfn_after)
     # When the SFN diff NAMES the cast and we hold the after-state, the
     # diff-constrained cast tiers go FIRST: the generic tiers below drag
     # a full variant sweep per candidate and exhaust the applies budget
@@ -858,9 +1103,12 @@ def _candidates(board, color, cast_spell=None, sfn_after=None):
     # misnamed the same space would have been burned anyway.
     focused_done = False
     if cast_spell and sfn_after:
-        if CORE_SPELLS.get(cast_spell, {}).get('resolve') == 'hard_moves':
+        if CORE_SPELLS.get(cast_spell, {}).get('resolve') in ('hard_moves',
+                                                              'fury'):
             yield from _hard_moves_candidates(board, color, cast_spell,
                                               sfn_after)
+        if cast_spell == 'Rock_Slide':
+            yield from _rock_slide_candidates(board, color, sfn_after)
         if cast_spell in _UNMODELED_CASTS:
             yield from _unmodeled_cast_candidates(board, color, cast_spell,
                                                   sfn_after)
@@ -1093,6 +1341,15 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
         # The named-cast tiers run first and are diff-constrained, so a
         # deeper budget is cheap and mostly spent on the right shapes.
         max_applies = max(max_applies, 60000)
+    # Seal of Summer double casts: the counter jumps +2 and only the
+    # SECOND cast survives in the lock diff.
+    double_cast = False
+    try:
+        bd, ad = sfn_to_dict(sfn_before), sfn_to_dict(sfn_after)
+        double_cast = (ad[f'{color}_spellcounter']
+                       - bd[f'{color}_spellcounter']) >= 2
+    except Exception:
+        pass
     tried = set()
 
     def matches(turn):
@@ -1108,7 +1365,8 @@ def deduce_turn(sfn_before, color, turn_number, sfn_after, max_applies=25000):
             return False
         return b.to_sfn() == sfn_after
 
-    for cand in _candidates(base, color, cast_spell, sfn_after):
+    for cand in _candidates(base, color, cast_spell, sfn_after,
+                            double_cast=double_cast):
         if len(tried) > max_applies:
             return None
         if matches(cand):

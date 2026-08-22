@@ -1066,5 +1066,344 @@
   "turnNumber": 29,
   "color": "red",
   "multiTurn": true
+ },
+ "-OsPC7LJGE0ARuI8zITR:t32": {
+  "key": "-OsPC7LJGE0ARuI8zITR",
+  "turnNumber": 32,
+  "color": "blue",
+  "actions": [
+   "a8",
+   "dash",
+   "a6",
+   "a4",
+   "a9",
+   "Hail_Storm",
+   "a8",
+   "b5",
+   "a5",
+   "pass"
+  ]
+ },
+ "-OsS1zFStav0I_f_WAgT:t29": {
+  "key": "-OsS1zFStav0I_f_WAgT",
+  "turnNumber": 29,
+  "color": "red",
+  "actions": [
+   "a13",
+   "b6",
+   "dash",
+   "a12",
+   "c9",
+   "Hail_Storm",
+   "c3",
+   "a9",
+   "b6",
+   "pass"
+  ]
+ },
+ "-OuT3If0ZTq4kwOmnDPa:t22": {
+  "key": "-OuT3If0ZTq4kwOmnDPa",
+  "turnNumber": 22,
+  "color": "blue",
+  "actions": [
+   "b1",
+   "Fury",
+   "c8",
+   "c10",
+   "c2",
+   "b11",
+   "b4",
+   "b7",
+   "c12",
+   "pass"
+  ]
+ },
+ "-OyZr-zAlUE9u9k6egCX:t21": {
+  "key": "-OyZr-zAlUE9u9k6egCX",
+  "turnNumber": 21,
+  "color": "red",
+  "actions": [
+   "a11",
+   "Fury",
+   "b10",
+   "b8",
+   "b8",
+   "c10",
+   "c8",
+   "c4",
+   "c9",
+   "a12",
+   "pass"
+  ]
+ },
+ "-Ouds2tKSTI11k84Tkpp:t17": {
+  "key": "-Ouds2tKSTI11k84Tkpp",
+  "turnNumber": 17,
+  "color": "red",
+  "actions": [
+   "b9",
+   "dash",
+   "c11",
+   "a4",
+   "b8",
+   "Fury",
+   "b9",
+   "b8",
+   "a10",
+   "b4",
+   "b3",
+   "b13",
+   "pass"
+  ]
+ },
+ "-OuoZMGzNNS0_vR2nYzq:t27": {
+  "key": "-OuoZMGzNNS0_vR2nYzq",
+  "turnNumber": 27,
+  "color": "red",
+  "actions": [
+   "a9",
+   "dash",
+   "c2",
+   "b3",
+   "a8",
+   "Fury",
+   "b8",
+   "b9",
+   "b9",
+   "a7",
+   "b12",
+   "b6",
+   "b12",
+   "b5",
+   "pass"
+  ]
+ },
+ "-Ow-GjTEKwvw64IkxnrT:t15": {
+  "key": "-Ow-GjTEKwvw64IkxnrT",
+  "turnNumber": 15,
+  "color": "red",
+  "actions": [
+   "c5",
+   "Fury",
+   "b10",
+   "a1",
+   "b7",
+   "b4",
+   "b13",
+   "b5",
+   "pass"
+  ]
+ },
+ "-Ouk5W-f4w87ZG6ACoVH:t23": {
+  "key": "-Ouk5W-f4w87ZG6ACoVH",
+  "turnNumber": 23,
+  "color": "red",
+  "actions": [
+   "b2",
+   "dash",
+   "b8",
+   "c2",
+   "c7",
+   "Fury",
+   "c10",
+   "c8",
+   "c8",
+   "b5",
+   "b6",
+   "b11",
+   "pass"
+  ]
+ },
+ "-OyWzIUfNsB4JDFhBJlH:t25": {
+  "key": "-OyWzIUfNsB4JDFhBJlH",
+  "turnNumber": 25,
+  "color": "red",
+  "actions": [
+   "b6",
+   "dash",
+   "c13",
+   "c4",
+   "b5",
+   "Fury",
+   "c10",
+   "c8",
+   "c8",
+   "a10",
+   "a9",
+   "a8",
+   "pass"
+  ]
+ },
+ "-OwFJqfuHW7UgbZnhfdn:t36": {
+  "key": "-OwFJqfuHW7UgbZnhfdn",
+  "turnNumber": 36,
+  "color": "blue",
+  "actions": [
+   "b7",
+   "Rock_Slide",
+   "b9",
+   "b13",
+   "b3",
+   "b4",
+   "b5",
+   "c3",
+   "c4",
+   "c4",
+   "c7",
+   "pass"
+  ]
+ },
+ "-Oyi0V1hL-fe_me5acoE:t21": {
+  "key": "-Oyi0V1hL-fe_me5acoE",
+  "turnNumber": 21,
+  "color": "red",
+  "actions": [
+   "c7",
+   "Rock_Slide",
+   "c9",
+   "c13",
+   "c3",
+   "c4",
+   "c3",
+   "c12",
+   "c5",
+   "b10",
+   "c11",
+   "pass"
+  ]
+ },
+ "-OpZWcM5OMg5QZsXRnsk:t16": {
+  "key": "-OpZWcM5OMg5QZsXRnsk",
+  "turnNumber": 16,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OpZZc2bTjs6LGefiAfX:t26": {
+  "key": "-OpZZc2bTjs6LGefiAfX",
+  "turnNumber": 26,
+  "color": "blue",
+  "actions": [
+   "b8",
+   "dash",
+   "a8",
+   "b9",
+   "Hail_Storm",
+   "b8",
+   "b10",
+   "b4",
+   "a6",
+   "pass"
+  ]
+ },
+ "-OpZf9sfT_j-wzJSR3an:t26": {
+  "key": "-OpZf9sfT_j-wzJSR3an",
+  "turnNumber": 26,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-Oq3osM1xVHG1Lh0qJTJ:t30": {
+  "key": "-Oq3osM1xVHG1Lh0qJTJ",
+  "turnNumber": 30,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OqOg9png8TQckJrA_Y1:t21": {
+  "key": "-OqOg9png8TQckJrA_Y1",
+  "turnNumber": 21,
+  "color": "red",
+  "multiTurn": true
+ },
+ "-OrQDEl3GkwLV1fYr_Qm:t38": {
+  "key": "-OrQDEl3GkwLV1fYr_Qm",
+  "turnNumber": 38,
+  "color": "blue",
+  "actions": [
+   "b9",
+   "Starfall",
+   "b4",
+   "a3",
+   "a13",
+   "Slash",
+   "a8",
+   "pass"
+  ]
+ },
+ "-OrdRAJN-IdOxXzIGzta:t36": {
+  "key": "-OrdRAJN-IdOxXzIGzta",
+  "turnNumber": 36,
+  "color": "blue",
+  "actions": [
+   "c4",
+   "dash",
+   "b10",
+   "c12",
+   "c3",
+   "Flourish",
+   "c3",
+   "c4",
+   "c12",
+   "b8",
+   "b9",
+   "b10",
+   "Grow",
+   "b8",
+   "b9",
+   "b6",
+   "b2",
+   "pass"
+  ]
+ },
+ "-OrdRAJN-IdOxXzIGzta:t38": {
+  "key": "-OrdRAJN-IdOxXzIGzta",
+  "turnNumber": 38,
+  "color": "blue",
+  "actions": [
+   "b3",
+   "dash",
+   "c12",
+   "c11",
+   "b10",
+   "Bewitch",
+   "b5",
+   "b6",
+   "a1",
+   "a11",
+   "Grow",
+   "b4",
+   "b2",
+   "pass"
+  ]
+ },
+ "-OrlQ_1QMAyHYmlNPKDQ:t32": {
+  "key": "-OrlQ_1QMAyHYmlNPKDQ",
+  "turnNumber": 32,
+  "color": "blue",
+  "actions": [
+   "b5",
+   "dash",
+   "a3",
+   "a13",
+   "b6",
+   "Carnage",
+   "b5",
+   "b6",
+   "b12",
+   "a7",
+   "a4",
+   "a8",
+   "pass"
+  ]
+ },
+ "-OrnyTV-Uthi4N_5h0BK:t30": {
+  "key": "-OrnyTV-Uthi4N_5h0BK",
+  "turnNumber": 30,
+  "color": "blue",
+  "multiTurn": true
+ },
+ "-OroDjBRgZcipVo-zGmV:t31": {
+  "key": "-OroDjBRgZcipVo-zGmV",
+  "turnNumber": 31,
+  "color": "red",
+  "multiTurn": true
  }
 }
