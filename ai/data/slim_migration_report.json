@@ -1,6 +1,6 @@
 {
- "total": 2205,
- "fat": 2195,
+ "total": 2257,
+ "fat": 2224,
  "verified": [
   "-OpQilhWdLYXFfTL2JyR",
   "-OpQwy9dj_4ePv22hgfP",
@@ -2141,7 +2141,34 @@
   "-OyyZQBE0v7Y7gcN0bEl",
   "-Oyy_INAqT9iMPcNirf1",
   "-Oyy_iyLegi63bhn6izZ",
-  "-Oyyae29etGJWBm1Seq1"
+  "-Oyyae29etGJWBm1Seq1",
+  "-OyyeHcRkdaRhwIPHerT",
+  "-OyyojobwojCStB0j8n0",
+  "-Oz6w8CFOnIw9CUBzSV-",
+  "-OzmDCCOCSxUzublM88S",
+  "-OzmEH9Frx_dE-tQkFiH",
+  "-OzmFaT6nB4xkRF_anOV",
+  "-OzmI2LsWGoZvncVENhe",
+  "-OzmJbk_5QkfQ5YiJ2Qp",
+  "-OzmKB0x5EzSFraMTyI3",
+  "-OzmMSdo19YqrY826OJA",
+  "-OzomRVbKuVFqJJ8srmR",
+  "-Ozoo5xTn0jUN_otqnUk",
+  "-Ozoq5bwJUa5XkUriynT",
+  "-Ozor3mi9Oi3UH7ewAMa",
+  "-OzoshFMp4zBORyyznK1",
+  "-OzovAryUnztV9ZTv8en",
+  "-OzyYFyRh6M37eTdGQeB",
+  "-OzyZq3IQODfS_oUjWL4",
+  "-OzyqljWjfA-1B857L_X",
+  "-P--ufKRqXhNU0WNjoLk",
+  "-P--x8Mk1mof3kqBAxsM",
+  "-P--xsrQHbYS_Fs2fn82",
+  "-P--yfULujlxQYVAMCAg",
+  "-P-00Bpi7QISrb0ld0d_",
+  "-P-01KczXRkAUFTFFr1q",
+  "-P-06x6bxLY9UHhTqCbb",
+  "-P-07S7nDUF3zX5EtX_c"
  ],
  "snapshot_turns": {
   "-OpR45OATIf2zq_kL0LD": [
@@ -3978,6 +4005,101 @@
   ],
   "-Oyyae29etGJWBm1Seq1": [
    20
+  ],
+  "-OyyeHcRkdaRhwIPHerT": [
+   9,
+   21
+  ],
+  "-OyyojobwojCStB0j8n0": [
+   12
+  ],
+  "-OzmDCCOCSxUzublM88S": [
+   11
+  ],
+  "-OzmI2LsWGoZvncVENhe": [
+   15,
+   28
+  ],
+  "-Ozoo5xTn0jUN_otqnUk": [
+   15,
+   19,
+   24
+  ],
+  "-OzovAryUnztV9ZTv8en": [
+   26,
+   28
+  ],
+  "-OzyYFyRh6M37eTdGQeB": [
+   9,
+   19,
+   21
+  ],
+  "-OzyZq3IQODfS_oUjWL4": [
+   9,
+   23,
+   25
+  ],
+  "-OzyqljWjfA-1B857L_X": [
+   9,
+   12,
+   22,
+   33,
+   37
+  ],
+  "-P--ufKRqXhNU0WNjoLk": [
+   8,
+   9,
+   11,
+   16,
+   18,
+   19,
+   21,
+   24,
+   26,
+   28
+  ],
+  "-P--x8Mk1mof3kqBAxsM": [
+   7,
+   11,
+   18,
+   20,
+   21,
+   22,
+   23,
+   24,
+   27,
+   29,
+   30
+  ],
+  "-P--xsrQHbYS_Fs2fn82": [
+   8,
+   11,
+   15,
+   18,
+   20
+  ],
+  "-P--yfULujlxQYVAMCAg": [
+   9,
+   17,
+   21
+  ],
+  "-P-00Bpi7QISrb0ld0d_": [
+   8,
+   16,
+   18
+  ],
+  "-P-01KczXRkAUFTFFr1q": [
+   8,
+   18,
+   20,
+   32
+  ],
+  "-P-06x6bxLY9UHhTqCbb": [
+   9,
+   13,
+   18,
+   20,
+   30
   ]
  },
  "merged_turns": {
@@ -5529,6 +5651,55 @@
   ],
   "-Oyyae29etGJWBm1Seq1": [
    20
+  ],
+  "-OyyeHcRkdaRhwIPHerT": [
+   9
+  ],
+  "-OzmDCCOCSxUzublM88S": [
+   11
+  ],
+  "-OzmI2LsWGoZvncVENhe": [
+   15,
+   28
+  ],
+  "-OzyYFyRh6M37eTdGQeB": [
+   9
+  ],
+  "-OzyZq3IQODfS_oUjWL4": [
+   25
+  ],
+  "-OzyqljWjfA-1B857L_X": [
+   12,
+   22
+  ],
+  "-P--ufKRqXhNU0WNjoLk": [
+   8,
+   9,
+   11,
+   18,
+   21
+  ],
+  "-P--x8Mk1mof3kqBAxsM": [
+   7,
+   11,
+   23,
+   29
+  ],
+  "-P--xsrQHbYS_Fs2fn82": [
+   8,
+   11,
+   15,
+   20
+  ],
+  "-P--yfULujlxQYVAMCAg": [
+   9
+  ],
+  "-P-01KczXRkAUFTFFr1q": [
+   8
+  ],
+  "-P-06x6bxLY9UHhTqCbb": [
+   9,
+   13
   ]
  },
  "failures": [
@@ -5806,13 +5977,23 @@
    "key": "-OyyKEMFnDw7Q8bAAiCF",
    "stage": "verify",
    "reason": "sfn mismatch at turn 20"
+  },
+  {
+   "key": "-Oz1hxMFejEmaTbWO4Bc",
+   "stage": "replay",
+   "reason": "replayed final position does not match record"
+  },
+  {
+   "key": "-OztA2ShG8ftxAbWmhUz",
+   "stage": "replay",
+   "reason": "replayed final position does not match record"
   }
  ],
  "skipped": {
-  "already-slim": 10,
+  "already-slim": 33,
   "no-turns": 0,
   "malformed": 0
  },
- "old_turns_bytes": 20581094,
- "new_turns_bytes": 8752175
+ "old_turns_bytes": 20909250,
+ "new_turns_bytes": 8888309
 }
