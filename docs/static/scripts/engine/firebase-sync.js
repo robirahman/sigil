@@ -162,7 +162,7 @@ class FirebaseSync {
 
 			this._listenForTurns();
 			return {
-				spellNames: data.spellNames,
+				spellNames: normalizeSpellNames(data.spellNames),
 				myColor: 'blue',
 				timeControl: this.timeControl,
 				variant: this.variant,
@@ -245,7 +245,7 @@ class FirebaseSync {
 			this._isReconnect = true;
 			await this._listenForTurns();
 			return {
-				spellNames: data.spellNames,
+				spellNames: normalizeSpellNames(data.spellNames),
 				myColor: this.myColor,
 				sfn: data.currentSfn || null,
 				timeControl: this.timeControl,
@@ -281,7 +281,7 @@ class FirebaseSync {
 		this._listenForAllTurns(data);
 
 		return {
-			spellNames: data.spellNames,
+			spellNames: normalizeSpellNames(data.spellNames),
 			myColor: null,
 			isSpectator: true,
 			sfn: data.currentSfn || null,
@@ -313,7 +313,8 @@ class FirebaseSync {
 			}
 
 			const data = snap.val();
-			const actions = data.actions || [];
+			// A stale-cached opponent may still send pre-rename spell tokens.
+			const actions = (data.actions || []).map(normalizeSpellName);
 			for (const action of actions) {
 				if (this._waitingResolver) {
 					const resolve = this._waitingResolver;
@@ -478,8 +479,9 @@ class FirebaseSync {
 			console.log('[Sync] Turn received:', data.color, data.actions, 'myColor:', this.myColor);
 			if (data.color === this.myColor) return; // ignore own turns
 
-			// Enqueue each action from the opponent's turn
-			const actions = data.actions || [];
+			// Enqueue each action from the opponent's turn. A stale-cached
+			// opponent may still send pre-rename spell tokens.
+			const actions = (data.actions || []).map(normalizeSpellName);
 			console.log('[Sync] Processing', actions.length, 'actions, waitingResolver:', !!this._waitingResolver);
 			for (const action of actions) {
 				if (this._waitingResolver) {

@@ -126,13 +126,13 @@ document.addEventListener('alpine:init', () => {
 					alert('This SGN file is not a replayable transcript export.');
 					return;
 				}
-				const spellNames = (h.Spells || '').split(',');
+				const spellNames = normalizeSpellNames((h.Spells || '').split(','));
 				const variant = normalizeVariant(h.Variant || 'standard');
 				let fatLog = null;
 				try {
 					fatLog = await reconstructGameLog(spellNames, variant, h.Setup || null, parsed.turns);
 					const last = fatLog.length ? fatLog[fatLog.length - 1].sfnAfter : (h.Setup || null);
-					if (h.FinalSfn && last !== h.FinalSfn) {
+					if (h.FinalSfn && last !== normalizeSfnString(h.FinalSfn)) {
 						throw new Error('replayed final position does not match FinalSfn');
 					}
 				} catch (e) {
@@ -719,7 +719,16 @@ document.addEventListener('alpine:init', () => {
 								_savedHumanColor = _save.humanColor;
 							}
 							if (Array.isArray(_save.gameLog)) {
-								_savedGameLog = _save.gameLog;
+								// Saves may predate spell renames; normalize
+								// tokens so the finished record is written
+								// with current names.
+								_savedGameLog = _save.gameLog.map(t => Object.assign({}, t, {
+									actions: Array.isArray(t.actions)
+										? t.actions.map(a => (a && a.spell)
+											? Object.assign({}, a, { spell: normalizeSpellName(a.spell) })
+											: (typeof a === 'string' ? normalizeSpellName(a) : a))
+										: t.actions,
+								}));
 							}
 							if (_save.setupSfn) {
 								_savedSetupSfn = _save.setupSfn;

@@ -35,10 +35,10 @@ TEMPEST_RITUALS = ['Hurricane']
 TEMPEST_SORCERIES = ['Storm_Front']
 TEMPEST_CHARMS = ['Gust']
 
-# Tsunami expansion.
-TSUNAMI_RITUALS = ['Flood']
-TSUNAMI_SORCERIES = ['Torrent']
-TSUNAMI_CHARMS = ['Splash']
+# Flood expansion.
+FLOOD_RITUALS = ['Tsunami']
+FLOOD_SORCERIES = ['Torrent']
+FLOOD_CHARMS = ['Splash']
 
 # Gloom expansion.
 GLOOM_RITUALS = ['Corrupt']
@@ -87,7 +87,7 @@ EXPANSIONS = {
 	'celestial':  {'rituals': CELESTIAL_RITUALS,  'sorceries': CELESTIAL_SORCERIES,  'charms': CELESTIAL_CHARMS},
 	'fury':       {'rituals': INFERNO_RITUALS,    'sorceries': INFERNO_SORCERIES,    'charms': INFERNO_CHARMS},
 	'tempest':    {'rituals': TEMPEST_RITUALS,    'sorceries': TEMPEST_SORCERIES,    'charms': TEMPEST_CHARMS},
-	'tsunami':    {'rituals': TSUNAMI_RITUALS,    'sorceries': TSUNAMI_SORCERIES,    'charms': TSUNAMI_CHARMS},
+	'flood':      {'rituals': FLOOD_RITUALS,      'sorceries': FLOOD_SORCERIES,      'charms': FLOOD_CHARMS},
 	'gloom':      {'rituals': GLOOM_RITUALS,      'sorceries': GLOOM_SORCERIES,      'charms': GLOOM_CHARMS},
 	'covenant':   {'rituals': COVENANT_RITUALS,   'sorceries': COVENANT_SORCERIES,   'charms': COVENANT_CHARMS},
 	'tectonic':   {'rituals': TECTONIC_RITUALS,   'sorceries': TECTONIC_SORCERIES,   'charms': TECTONIC_CHARMS},
@@ -95,10 +95,11 @@ EXPANSIONS = {
 	'aftershock': {'rituals': AFTERSHOCK_RITUALS, 'sorceries': AFTERSHOCK_SORCERIES, 'charms': AFTERSHOCK_CHARMS},
 	'ambush':     {'rituals': AMBUSH_RITUALS,     'sorceries': AMBUSH_SORCERIES,     'charms': AMBUSH_CHARMS},
 }
-EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'gloom', 'covenant', 'tectonic', 'providence', 'aftershock', 'ambush']
+EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'gloom', 'covenant', 'tectonic', 'providence', 'aftershock', 'ambush']
 
-# Accepted aliases for expansion keys.
-_EXPANSION_ALIASES = {'inferno': 'fury'}
+# Accepted aliases for expansion keys. 'tsunami' was the Flood pack's key
+# until the 2026-08 name swap (pack Tsunami -> Flood, spell Flood -> Tsunami).
+_EXPANSION_ALIASES = {'inferno': 'fury', 'tsunami': 'flood'}
 
 
 def normalize_expansion_selection(selection):
@@ -139,7 +140,7 @@ def spell_pool(expansions=None):
 
 
 # Backward-compatible single-pack table, regenerated from EXPANSIONS so callers
-# passing pack_key='core'/'springtime'/'celestial'/'fury'/'tempest'/'tsunami'/'all'
+# passing pack_key='core'/'springtime'/'celestial'/'fury'/'tempest'/'flood'/'all'
 # keep working.
 def _build_spell_packs():
 	packs = {'core': {'rituals': CORE_RITUALS, 'sorceries': CORE_SORCERIES, 'charms': CORE_CHARMS}}

@@ -8,7 +8,7 @@ spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/spells"
 static_spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/static/images/spells"
 parchment_path = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/themes/tiled-background-parchment.jpg"
 
-RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure", "Endowment"]
+RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Tsunami", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure", "Endowment"]
 SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide", "Annuity"]
 CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark", "Dividend"]
 
@@ -26,7 +26,7 @@ TINT_COLORS = {
     "celestial": (205, 215, 235, 255),     # Muted light steel blue
     "fury": (240, 210, 200, 255),          # Muted warm orange-red
     "tempest": (200, 230, 230, 255),       # Muted light teal
-    "tsunami": (200, 220, 240, 255),       # Muted light sky blue
+    "flood": (200, 220, 240, 255),         # Muted light sky blue
     "autumn": (235, 215, 195, 255),        # Muted light bronze/amber
     "gloom": (225, 210, 235, 255),         # Muted light purple/lavender
     "covenant": (240, 230, 195, 255),      # Muted light gold
@@ -60,7 +60,7 @@ PALETTES = {
         "light": (178, 235, 242),
         "dark": (10, 35, 45)
     },
-    "tsunami": {
+    "flood": {
         "primary": (25, 75, 140),
         "secondary": (33, 150, 243),
         "light": (187, 222, 251),
@@ -103,7 +103,7 @@ PACK_MAPPING = {
     "Syzygy": "celestial", "Eclipse": "celestial", "Azimuth": "celestial",
     "Erupt": "fury", "Fury": "fury", "Charge": "fury",
     "Hurricane": "tempest", "Storm_Front": "tempest", "Gust": "tempest",
-    "Flood": "tsunami", "Torrent": "tsunami", "Splash": "tsunami",
+    "Tsunami": "flood", "Torrent": "flood", "Splash": "flood",
     "Harvest": "autumn", "Gather": "autumn", "Seal_of_Autumn": "autumn",
     "Corrupt": "gloom", "Decay": "gloom", "Lurk": "gloom",
     "Seal_of_Destruction": "covenant", "Seal_of_Stone": "covenant", "Seal_of_Winter": "covenant",
@@ -474,7 +474,7 @@ def render_artistic_rune(name, draw, pal):
         draw.arc((360, cy-80, 410, cy-30), start=0, end=270, fill=pal["secondary"], width=4)
         draw.arc((90, cy+30, 140, cy+80), start=180, end=90, fill=pal["secondary"], width=4)
         
-    elif name == "Flood":
+    elif name == "Tsunami":
         # Three layers of deep blue waves
         wave_layers = [
             {"cy": cy + 40, "color": pal["dark"], "amp": 20},

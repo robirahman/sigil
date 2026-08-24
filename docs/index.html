@@ -308,7 +308,7 @@
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tsunami" /> <span>Tsunami</span></label>
+					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="flood" /> <span>Flood</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="autumn" /> <span>Autumn</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="gloom" /> <span>Gloom</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="covenant" /> <span>Covenant</span></label>
@@ -321,14 +321,14 @@
 			</details>
 			<script>
 				(function() {
-					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush'];
+					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush'];
 					var PACK_SPELL_COUNTS = {
 						core:      { rituals: 5, sorceries: 5, charms: 5 },
 						springtime:{ rituals: 1, sorceries: 1, charms: 1 },
 						celestial: { rituals: 1, sorceries: 1, charms: 1 },
 						fury:      { rituals: 1, sorceries: 1, charms: 1 },
 						tempest:   { rituals: 1, sorceries: 1, charms: 1 },
-						tsunami:   { rituals: 1, sorceries: 1, charms: 1 },
+						flood:     { rituals: 1, sorceries: 1, charms: 1 },
 						autumn:    { rituals: 1, sorceries: 1, charms: 1 },
 						gloom:     { rituals: 1, sorceries: 1, charms: 1 },
 						covenant:  { rituals: 1, sorceries: 1, charms: 1 },
@@ -360,21 +360,26 @@
 					var multi = localStorage.getItem('sigilSpellPacks');
 					if (multi !== null) {
 						try { selected = JSON.parse(multi) || []; } catch (e) { selected = []; }
-						if (migrated !== 'v2') {
-							// Migrate: legacy selections always included core implicitly.
-							if (selected.indexOf('core') === -1) {
-								selected.unshift('core');
+						if (migrated !== 'v3') {
+							if (migrated !== 'v2') {
+								// v1 -> v2: legacy selections always included core implicitly.
+								if (selected.indexOf('core') === -1) {
+									selected.unshift('core');
+								}
 							}
+							// v2 -> v3: pack key 'tsunami' renamed to 'flood' (2026-08 name swap).
+							selected = selected.map(function(k) { return k === 'tsunami' ? 'flood' : k; });
 							localStorage.setItem('sigilSpellPacks', JSON.stringify(selected));
-							localStorage.setItem('sigilSpellPacksVersion', 'v2');
+							localStorage.setItem('sigilSpellPacksVersion', 'v3');
 						}
 					} else {
 						var legacy = localStorage.getItem('sigilSpellPack');
+						if (legacy === 'tsunami') legacy = 'flood';
 						if (legacy === 'all') selected = KEYS.slice();
 						else if (legacy && KEYS.indexOf(legacy) !== -1) selected = ['core', legacy];
 						else selected = ['core'];
 						localStorage.setItem('sigilSpellPacks', JSON.stringify(selected));
-						localStorage.setItem('sigilSpellPacksVersion', 'v2');
+						localStorage.setItem('sigilSpellPacksVersion', 'v3');
 					}
 
 					boxes.forEach(function(box) {

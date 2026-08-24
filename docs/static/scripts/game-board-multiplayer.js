@@ -334,6 +334,7 @@ document.addEventListener('alpine:init', () => {
 			// Degraded review for records whose transcript can't be replayed
 			// by the current engine version: show the final position only.
 			_initReviewFinalOnly(spellNames, finalSfn, winner) {
+				spellNames = normalizeSpellNames(spellNames);
 				this._applyReviewSpellSetup(spellNames);
 				this.reviewSfns = [finalSfn];
 				this.reviewTurnLabels = ['Final position'];
@@ -345,6 +346,7 @@ document.addEventListener('alpine:init', () => {
 				this._showReviewPosition();
 			},
 			async _initReviewMode(spellNames, gameLog, winner, variant, finalSfn, setupSfn) {
+				spellNames = normalizeSpellNames(spellNames);
 				if (!gameLog || gameLog.length === 0) {
 					this.messageHistory.push('No game log available for review.');
 					return;

@@ -21,8 +21,9 @@ const SPELL_TO_ID = {
 	Erupt: 21, Fury: 22, Charge: 23,
 	// Tempest
 	Hurricane: 24, Storm_Front: 25, Gust: 26,
-	// Tsunami
-	Flood: 27, Torrent: 28, Splash: 29,
+	// Flood pack (Tsunami keeps id 27 from its pre-swap name "Flood" —
+	// the id is an embedding index baked into every trained checkpoint)
+	Tsunami: 27, Torrent: 28, Splash: 29,
 	// Autumn
 	Harvest: 30, Gather: 31, Seal_of_Autumn: 32,
 	// Gloom

@@ -1014,7 +1014,7 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Torrent / Flood (soft moves then hard moves) ---
+	// --- Torrent / Tsunami (soft moves then hard moves) ---
 	async soft_hard_chain(board, color, spellName, getInput, emit) {
 		const info = CORE_SPELLS[spellName];
 		const [softCount, hardCount] = info.counts;

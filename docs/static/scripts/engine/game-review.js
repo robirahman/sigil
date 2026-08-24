@@ -505,7 +505,7 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
 	const rebuilt = await reconstructGameLog(
 		spellNames, normalizeVariant(variant), setupSfn || null, gameLog);
 	const last = rebuilt.length ? rebuilt[rebuilt.length - 1].sfnAfter : null;
-	if (finalSfn && last !== finalSfn) {
+	if (finalSfn && last !== normalizeSfnString(finalSfn)) {
 		throw new Error('replayed final position does not match record');
 	}
 	return rebuilt;
@@ -513,6 +513,12 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
 
 async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 	const noop = () => {};
+	// Stored records may predate spell renames: normalize the spell list,
+	// raw cast tokens (input turns), and sim cast actions before replay.
+	spellNames = normalizeSpellNames(spellNames);
+	const normToken = tok => typeof tok === 'string' ? normalizeSpellName(tok) : tok;
+	const normAction = a => (a && a.spell)
+		? Object.assign({}, a, { spell: normalizeSpellName(a.spell) }) : a;
 	const gc = new GameController(noop, { variant });
 	const board = new SigilBoard(spellNames, variant || 'standard');
 	if (setupSfn) {
@@ -572,7 +578,9 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 					kind: 'snapshot',
 					actions: [],
 					sfnBefore,
-					sfnAfter: t.sfnAfter,
+					// Stored snapshots may predate spell renames; emit
+					// current names so the rebuilt log is uniform.
+					sfnAfter: normalizeSfnString(t.sfnAfter),
 				});
 				if (board.gameover) break;
 				continue;
@@ -594,10 +602,14 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 			board.burnsThisTurn = burnsNow;
 
 			let sotBurnEnd = false;
+			const simActions = t.kind === 'sim'
+				? (t.actions || []).map(normAction) : null;
+			const inputTokens = t.kind === 'sim'
+				? null : (t.tokens || t.actions || []).map(normToken);
 			if (t.kind === 'sim') {
-				await applyAITurn(board, { actions: t.actions || [] }, t.color, noop);
+				await applyAITurn(board, { actions: simActions }, t.color, noop);
 			} else {
-				const queue = (t.tokens || t.actions || []).slice();
+				const queue = inputTokens.slice();
 				gc.getInput = async () => {
 					if (!queue.length) throw new Error('transcript exhausted at turn ' + board.turnCounter);
 					return queue.shift();
@@ -620,7 +632,7 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 				color: t.color,
 				turnNumber: board.turnCounter,
 				kind: t.kind || 'input',
-				actions: t.kind === 'sim' ? (t.actions || []) : (t.tokens || t.actions || []),
+				actions: t.kind === 'sim' ? simActions : inputTokens,
 				sfnBefore,
 				sfnAfter: boardToSfn(board),
 			});

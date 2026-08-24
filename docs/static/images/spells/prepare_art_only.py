@@ -13,7 +13,7 @@ EXPANSION_SPELLS = [
     "Azimuth", "Eclipse", "Syzygy",
     "Charge", "Fury", "Erupt",
     "Gust", "Storm_Front", "Hurricane",
-    "Splash", "Torrent", "Flood",
+    "Splash", "Torrent", "Tsunami",
     "Seal_of_Autumn", "Gather", "Harvest",
     "Lurk", "Decay", "Corrupt",
     "Seal_of_Winter", "Seal_of_Stone", "Seal_of_Destruction",

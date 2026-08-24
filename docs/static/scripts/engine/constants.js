@@ -117,10 +117,10 @@ const CORE_SPELLS = {
 	Gust:              { resolve: 'gust',       static: false, ischarm: true },
 	Storm_Front:       { resolve: 'storm_front', static: false, ischarm: false },
 	Hurricane:         { resolve: 'hurricane',  static: false, ischarm: false },
-	// Tsunami expansion
+	// Flood expansion
 	Splash:              { resolve: 'surge_move', static: false, ischarm: true },
 	Torrent:           { resolve: 'soft_hard_chain', counts: [1, 1], static: false, ischarm: false },
-	Flood:             { resolve: 'soft_hard_chain', counts: [2, 2], static: false, ischarm: false },
+	Tsunami:           { resolve: 'soft_hard_chain', counts: [2, 2], static: false, ischarm: false },
 	// Panda expansion
 	Bear_Trap:         { resolve: 'bear_trap',       static: false, ischarm: true },
 	Shiver:            { resolve: 'shiver',          static: false, ischarm: true },
@@ -194,7 +194,7 @@ const SPELL_TEXTS = {
 	Hurricane:         'Destroy the smallest contiguous group of enemy stones. If tied, you choose which.',
 	Splash:              'If you did not dash this turn, make 1 move.',
 	Torrent:           'Make 1 soft move, then 1 hard move.',
-	Flood:             'Make 2 soft moves, then 2 hard moves.',
+	Tsunami:           'Make 2 soft moves, then 2 hard moves.',
 	Bear_Trap:         'Destroy all enemy stones in 1-node spells.',
 	Shiver:            'Swap the positions of any two stones on the board.',
 	Blood_Saplings:    'If you crushed an enemy stone this turn, make 2 soft moves.',
@@ -250,9 +250,9 @@ const TEMPEST_RITUALS = ['Hurricane'];
 const TEMPEST_SORCERIES = ['Storm_Front'];
 const TEMPEST_CHARMS = ['Gust'];
 
-const TSUNAMI_RITUALS = ['Flood'];
-const TSUNAMI_SORCERIES = ['Torrent'];
-const TSUNAMI_CHARMS = ['Splash'];
+const FLOOD_RITUALS = ['Tsunami'];
+const FLOOD_SORCERIES = ['Torrent'];
+const FLOOD_CHARMS = ['Splash'];
 
 const AUTUMN_RITUALS = ['Harvest'];
 const AUTUMN_SORCERIES = ['Gather'];
@@ -295,7 +295,7 @@ const EXPANSIONS = {
 	celestial:  { name: 'Celestial',  rituals: CELESTIAL_RITUALS,  sorceries: CELESTIAL_SORCERIES,  charms: CELESTIAL_CHARMS },
 	fury:       { name: 'Inferno',    rituals: FURY_RITUALS,       sorceries: FURY_SORCERIES,       charms: FURY_CHARMS },
 	tempest:    { name: 'Tempest',    rituals: TEMPEST_RITUALS,    sorceries: TEMPEST_SORCERIES,    charms: TEMPEST_CHARMS },
-	tsunami:    { name: 'Tsunami',    rituals: TSUNAMI_RITUALS,    sorceries: TSUNAMI_SORCERIES,    charms: TSUNAMI_CHARMS },
+	flood:      { name: 'Flood',      rituals: FLOOD_RITUALS,      sorceries: FLOOD_SORCERIES,      charms: FLOOD_CHARMS },
 	autumn:     { name: 'Autumn',     rituals: AUTUMN_RITUALS,     sorceries: AUTUMN_SORCERIES,     charms: AUTUMN_CHARMS },
 	gloom:      { name: 'Gloom',      rituals: GLOOM_RITUALS,      sorceries: GLOOM_SORCERIES,      charms: GLOOM_CHARMS },
 	covenant:   { name: 'Covenant',   rituals: COVENANT_RITUALS,   sorceries: COVENANT_SORCERIES,   charms: COVENANT_CHARMS },
@@ -305,7 +305,7 @@ const EXPANSIONS = {
 	aftershock: { name: 'Aftershock', rituals: AFTERSHOCK_RITUALS, sorceries: AFTERSHOCK_SORCERIES, charms: AFTERSHOCK_CHARMS },
 	ambush:     { name: 'Ambush',     rituals: AMBUSH_RITUALS,     sorceries: AMBUSH_SORCERIES,     charms: AMBUSH_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'tsunami', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
@@ -406,13 +406,55 @@ function spellSpotTemplate(type) {
 // Normalize a spell-pack selection into a clean list of valid expansion keys.
 // Accepts an array of keys (current format), or a legacy single-key string
 // ('core', 'all', or one expansion).
+// Spell names renamed over the project's history. Old names survive in
+// stored data (Firebase records, SFN strings, localStorage saves, cast
+// tokens from stale-cached clients), so every data-ingress point runs
+// names through these; writes always use the current name.
+// 2026-08-24: spell Flood -> Tsunami (pack Tsunami -> Flood in the same swap).
+const LEGACY_SPELL_RENAMES = { Flood: 'Tsunami' };
+
+function normalizeSpellName(name) {
+	return LEGACY_SPELL_RENAMES[name] || name;
+}
+
+function normalizeSpellNames(names) {
+	return (names || []).map(normalizeSpellName);
+}
+
+// Rewrite every spell name embedded in an SFN string to current names —
+// the spell-list segment plus the lock/springlock fields (parts 4-5, which
+// hold spell names too) — leaving all other fields byte-identical. For
+// comparing freshly serialized SFNs (always current names) against stored
+// ones that may predate a rename.
+function normalizeSfnString(sfn) {
+	if (!sfn) return sfn;
+	const parts = sfn.split(' ');
+	const slash = parts[0].indexOf('/');
+	if (slash !== -1) {
+		const spells = parts[0].slice(slash + 1).split(',').map(normalizeSpellName);
+		parts[0] = parts[0].slice(0, slash + 1) + spells.join(',');
+	}
+	for (const i of [4, 5]) {
+		if (parts[i] && parts[i].includes(':')) {
+			parts[i] = parts[i].split(':')
+				.map(v => v === '-' ? v : normalizeSpellName(v)).join(':');
+		}
+	}
+	return parts.join(' ');
+}
+
+// Pack keys renamed over the project's history; stored selections
+// (localStorage, env vars) may still carry the old key.
+const LEGACY_PACK_KEYS = { tsunami: 'flood' };
+
 function normalizeExpansionSelection(selection) {
 	if (Array.isArray(selection)) {
-		return selection.filter(k => EXPANSIONS[k]);
+		return selection.map(k => LEGACY_PACK_KEYS[k] || k).filter(k => EXPANSIONS[k]);
 	}
 	if (typeof selection === 'string') {
 		if (selection === 'all') return ['core', ...EXPANSION_KEYS];
-		if (EXPANSIONS[selection]) return [selection];
+		const key = LEGACY_PACK_KEYS[selection] || selection;
+		if (EXPANSIONS[key]) return [key];
 	}
 	return [];
 }

@@ -45,7 +45,7 @@ Two themed expansion line-ups sketched in the old Python spell generator
 3-charms shape. Neither shipped. Several member spells only ever existed as
 names (no mechanics were written); those are marked *(name only)*. The
 expansions that actually shipped in the JS game are different sets entirely
-(Springtime, Celestial, Inferno, Tempest, Tsunami).
+(Springtime, Celestial, Inferno, Tempest, Flood).
 
 ### Equinox
 
@@ -71,7 +71,7 @@ expansions that actually shipped in the JS game are different sets entirely
 | Sorcery | Rushing_Waters | *(name only)* |
 | Sorcery | Thunder | Destroy 2 enemy stones that are touching each other. *(playtested, decided not to add)* |
 | Sorcery | Blinding_Snow | *(name only)* |
-| Charm | Gush | Relocate all enemy stones touching you into any empty nodes. *(shipped as Splash → Tsunami)* |
+| Charm | Gush | Relocate all enemy stones touching you into any empty nodes. *(shipped as Splash → Flood pack)* |
 | Charm | Lightning | *(name only)* |
 | Charm | Winter | Your opponent cannot cast charms. (Static charms still work.) |
 

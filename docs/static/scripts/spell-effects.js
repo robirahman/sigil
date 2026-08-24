@@ -30,10 +30,10 @@ const SPELL_FX = {
 	Gust:             { type: 'flash', color: '#ffdd22', shake: true  },
 	Storm_Front:      { type: 'pulse', color: '#6688aa', shake: true  },
 	Hurricane:        { type: 'burst', color: '#3366aa', shake: true  },
-	// Tsunami expansion (blues + teals)
+	// Flood expansion (blues + teals)
 	Splash:             { type: 'pulse', color: '#22aaee', shake: false },
 	Torrent:          { type: 'burst', color: '#22bbcc', shake: false },
-	Flood:            { type: 'flash', color: '#1188bb', shake: true  },
+	Tsunami:          { type: 'flash', color: '#1188bb', shake: true  },
 	// Gloom expansion (sickly greens + shadow purples)
 	Lurk:             { type: 'pulse', color: '#553377', shake: false },
 	Decay:            { type: 'flash', color: '#6b8e23', shake: false },

@@ -7,7 +7,7 @@ artifacts_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/8329cbca-5b02-
 spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/docs/static/images/spells"
 static_spells_dir = "/mnt/chromeos/MyFiles/Documents/sigil/static/images/spells"
 
-RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Flood", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure", "Endowment", "Conflagration", "Minefield"]
+RITUALS = ["Blossom", "Syzygy", "Erupt", "Hurricane", "Tsunami", "Harvest", "Corrupt", "Seal_of_Destruction", "Fissure", "Endowment", "Conflagration", "Minefield"]
 SORCERIES = ["Scatter", "Eclipse", "Fury", "Storm_Front", "Torrent", "Gather", "Decay", "Seal_of_Stone", "Rock_Slide", "Annuity", "Smolder", "Deadfall"]
 CHARMS = ["Seal_of_Spring", "Azimuth", "Charge", "Gust", "Splash", "Seal_of_Autumn", "Lurk", "Seal_of_Winter", "Bulwark", "Dividend", "Ember", "Tripwire"]
 
@@ -33,7 +33,7 @@ RAW_MAPPING = {
     "Hurricane": "hurricane_rune_raw",
     "Storm_Front": "storm_front_rune_raw",
     "Gust": "gust_rune_raw",
-    "Flood": "flood_rune_raw",
+    "Tsunami": "flood_rune_raw",
     "Torrent": "torrent_rune_raw",
     "Splash": "splash_rune_raw",
     "Harvest": "harvest_rune_raw",

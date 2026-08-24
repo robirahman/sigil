@@ -9,6 +9,43 @@ Usage:
 
 from datetime import date
 
+# Spell names renamed over the project's history. Old names survive in
+# stored data (Firebase records, SFN strings, saved games), so every
+# data-ingress point runs names through these; writes always use the
+# current name. JS mirror: LEGACY_SPELL_RENAMES in engine/constants.js.
+# 2026-08-24: spell Flood -> Tsunami (pack Tsunami -> Flood in the same swap).
+LEGACY_SPELL_RENAMES = {'Flood': 'Tsunami'}
+
+
+def normalize_spell_name(name):
+    return LEGACY_SPELL_RENAMES.get(name, name)
+
+
+def normalize_spell_names(names):
+    return [normalize_spell_name(n) for n in (names or [])]
+
+
+def normalize_sfn(sfn):
+    """Rewrite every spell name embedded in an SFN string to current names —
+    the spell-list segment plus the lock/springlock fields (parts 4-5, which
+    hold spell names too) — leaving all other fields byte-identical. For
+    comparing freshly serialized SFNs (always current names) against stored
+    ones that may predate a rename."""
+    if not sfn:
+        return sfn
+    parts = sfn.split(' ')
+    slash = parts[0].find('/')
+    if slash != -1:
+        spells = [normalize_spell_name(n)
+                  for n in parts[0][slash + 1:].split(',')]
+        parts[0] = parts[0][:slash + 1] + ','.join(spells)
+    for i in (4, 5):
+        if i < len(parts) and ':' in parts[i]:
+            parts[i] = ':'.join(v if v == '-' else normalize_spell_name(v)
+                                for v in parts[i].split(':'))
+    return ' '.join(parts)
+
+
 # Canonical node order for SFN strings (39 nodes)
 NODE_ORDER = [f"{zone}{num}" for zone in "abc" for num in range(1, 14)]
 
@@ -152,7 +189,7 @@ def sfn_to_dict(sfn_str):
     for i, node_name in enumerate(NODE_ORDER):
         stones[node_name] = _char_to_stone(stones_str[i])
 
-    spell_names = spells_str.split(',')
+    spell_names = normalize_spell_names(spells_str.split(','))
     turn = 'red' if parts[1] == 'r' else 'blue'
     turncounter = int(parts[2])
 
@@ -160,13 +197,14 @@ def sfn_to_dict(sfn_str):
     red_sc = int(sc_parts[0])
     blue_sc = int(sc_parts[1])
 
+    # Lock fields hold spell names — normalize legacy renames here too.
     lock_parts = parts[4].split(':')
-    red_lock = None if lock_parts[0] == '-' else lock_parts[0]
-    blue_lock = None if lock_parts[1] == '-' else lock_parts[1]
+    red_lock = None if lock_parts[0] == '-' else normalize_spell_name(lock_parts[0])
+    blue_lock = None if lock_parts[1] == '-' else normalize_spell_name(lock_parts[1])
 
     spring_parts = parts[5].split(':')
-    red_spring = None if spring_parts[0] == '-' else spring_parts[0]
-    blue_spring = None if spring_parts[1] == '-' else spring_parts[1]
+    red_spring = None if spring_parts[0] == '-' else normalize_spell_name(spring_parts[0])
+    blue_spring = None if spring_parts[1] == '-' else normalize_spell_name(spring_parts[1])
 
     score = parts[6]
 
@@ -331,6 +369,16 @@ class GameRecorder:
         return '\n'.join(lines)
 
 
+def _normalize_cast_token(action):
+    """Map legacy spell names inside SGN cast tokens (C:<name> or C:<name>[...])."""
+    if not action.startswith('C:'):
+        return action
+    body = action[2:]
+    bracket = body.find('[')
+    name, rest = (body, '') if bracket == -1 else (body[:bracket], body[bracket:])
+    return 'C:' + normalize_spell_name(name) + rest
+
+
 def parse_sgn(sgn_str):
     """Parse an SGN string into structured data.
 
@@ -353,10 +401,11 @@ def parse_sgn(sgn_str):
             prefix = line[:dot_idx]
             color = 'red' if prefix[0] == 'R' else 'blue'
             num = int(prefix[1:])
-            actions = line[dot_idx + 2:].split(' ')
+            actions = [_normalize_cast_token(a)
+                       for a in line[dot_idx + 2:].split(' ')]
             turns.append((color, num, actions))
 
-    spell_names = headers.get('Spells', '').split(',')
+    spell_names = normalize_spell_names(headers.get('Spells', '').split(','))
 
     return {
         'date': headers.get('Date'),

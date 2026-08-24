@@ -831,7 +831,7 @@
 								this.roomCode = code;
 								this.shareUrl = this._buildShareUrl(code);
 								this.phase = 'waiting';
-								const spellNames = roomData.spellNames;
+								const spellNames = normalizeSpellNames(roomData.spellNames);
 								const timeControl = roomData.timeControl || { type: 'none' };
 								const variant = normalizeVariant(roomData.variant);
 								_firebaseSync.onOpponentJoin = () => {
@@ -868,7 +868,7 @@
 					this.phase = 'playing';
 					window._multiplayerState = {
 						sync: null,
-						spellNames: roomData.spellNames || [],
+						spellNames: normalizeSpellNames(roomData.spellNames),
 						myColor: null,
 						reconnectSfn: null,
 						isSpectator: true,

@@ -64,10 +64,10 @@ CORE_SPELLS = {
     'Gust': {'resolve': 'gust', 'static': False, 'ischarm': True},
     'Storm_Front': {'resolve': 'storm_front', 'static': False, 'ischarm': False},
     'Hurricane': {'resolve': 'hurricane', 'static': False, 'ischarm': False},
-    # Tsunami expansion
+    # Flood expansion
     'Splash': {'resolve': 'surge_move', 'static': False, 'ischarm': True},
     'Torrent': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'static': False, 'ischarm': False},
-    'Flood': {'resolve': 'soft_hard_chain', 'counts': [2, 2], 'static': False, 'ischarm': False},
+    'Tsunami': {'resolve': 'soft_hard_chain', 'counts': [2, 2], 'static': False, 'ischarm': False},
     # Gloom expansion
     'Lurk': {'resolve': 'restricted_move', 'static': False, 'ischarm': True},
     'Decay': {'resolve': 'destroy_exposed', 'static': False, 'ischarm': False},
@@ -1383,7 +1383,7 @@ class SimBoard:
                 self.update()
 
         elif resolve_type == 'soft_hard_chain':
-            # N soft moves, then M hard moves (Torrent [1,1], Flood [2,2]).
+            # N soft moves, then M hard moves (Torrent [1,1], Tsunami [2,2]).
             soft_count, hard_count = info['counts']
             soft_overrides = list(overrides.get('soft_move_targets') or [])
             hard_overrides = list(overrides.get('hard_move_targets') or [])

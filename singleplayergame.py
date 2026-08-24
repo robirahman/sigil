@@ -1,5 +1,6 @@
 import spellgenerator
 import spellfile
+import notation
 import json
 import time
 
@@ -462,6 +463,8 @@ class SPBoard():
 		"""
 		spells = []
 		for i, name in enumerate(spell_names):
+			# Saved games may carry pre-rename spell names (e.g. Flood -> Tsunami).
+			name = notation.normalize_spell_name(name)
 			pos_idx = i + 1
 			spell_obj = eval("spellfile." + name + "(self, self.positions[" + str(pos_idx) + "], '" + name + "')")
 			spells.append(spell_obj)

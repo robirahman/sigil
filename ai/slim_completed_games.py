@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from itertools import combinations, product
 
-from notation import NODE_ORDER, POSITIONS, sfn_to_dict
+from notation import NODE_ORDER, POSITIONS, sfn_to_dict, normalize_sfn
 from simboard import (SimBoard, Action, CompleteTurn, apply_sim_turn,
                       CORE_SPELLS, DESTROYED, variant_has_deathmatch)
 from ai.enumerator import get_legal_turns_exhaustive, DEFAULT_CAPS, _spell_overrides
@@ -1519,8 +1519,10 @@ def convert_record(key, rec, cached_slim=None):
                 slim.append(cached_slim[i])
                 continue
         color = t.get('color')
-        sfn_before = t.get('sfnBefore')
-        sfn_after = t.get('sfnAfter')
+        # Stored SFNs may predate spell renames; deduction re-serializes
+        # with current names, so compare (and emit) normalized forms.
+        sfn_before = normalize_sfn(t.get('sfnBefore'))
+        sfn_after = normalize_sfn(t.get('sfnAfter'))
         turn_number = t.get('turnNumber')
         if color not in ('red', 'blue') or not sfn_before or not sfn_after \
                 or not isinstance(turn_number, int):
@@ -1762,8 +1764,10 @@ def main():
                 mismatch = f'length {len(hyd)} != {len(turns)}'
             else:
                 for i, (h, t) in enumerate(zip(hyd, turns)):
-                    if h['sfnBefore'] != t['sfnBefore'] \
-                            or h['sfnAfter'] != t['sfnAfter']:
+                    # Replay emits current spell names; stored SFNs may
+                    # predate a rename.
+                    if h['sfnBefore'] != normalize_sfn(t['sfnBefore']) \
+                            or h['sfnAfter'] != normalize_sfn(t['sfnAfter']):
                         mismatch = f'sfn mismatch at turn {i}'
                         break
             if mismatch:

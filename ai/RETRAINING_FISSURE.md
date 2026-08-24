@@ -10,7 +10,7 @@ procedure to run on a training machine (ideally with a GPU).
 
 - `ai/config.py`
   - `SPELL_TO_ID`: now 42 spells = core + every official expansion
-    (springtime, celestial, inferno, tempest, tsunami, autumn, gloom,
+    (springtime, celestial, inferno, tempest, flood, autumn, gloom,
     covenant, tectonic). IDs 0–14 unchanged. **Panda is excluded.**
   - `NUM_POSSIBLE_SPELLS = 42`, `RAW_FEATURE_DIM = 495`.
 - `ai/features.py` / `docs/static/scripts/engine/features.js`: a 39-dim

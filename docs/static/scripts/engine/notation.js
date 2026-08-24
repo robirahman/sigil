@@ -68,7 +68,7 @@ function sfnToDict(sfnStr) {
 		stones[NODE_ORDER[i]] = charToStone(stonesStr[i]);
 	}
 
-	const spellNames = spellsStr.split(',');
+	const spellNames = normalizeSpellNames(spellsStr.split(','));
 	const turn = parts[1] === 'r' ? 'red' : 'blue';
 	const turncounter = parseInt(parts[2]);
 
@@ -76,13 +76,14 @@ function sfnToDict(sfnStr) {
 	const redSc = parseInt(scParts[0]);
 	const blueSc = parseInt(scParts[1]);
 
+	// Lock fields hold spell names — normalize legacy renames here too.
 	const lockParts = parts[4].split(':');
-	const redLock = lockParts[0] === '-' ? null : lockParts[0];
-	const blueLock = lockParts[1] === '-' ? null : lockParts[1];
+	const redLock = lockParts[0] === '-' ? null : normalizeSpellName(lockParts[0]);
+	const blueLock = lockParts[1] === '-' ? null : normalizeSpellName(lockParts[1]);
 
 	const springParts = parts[5].split(':');
-	const redSpring = springParts[0] === '-' ? null : springParts[0];
-	const blueSpring = springParts[1] === '-' ? null : springParts[1];
+	const redSpring = springParts[0] === '-' ? null : normalizeSpellName(springParts[0]);
+	const blueSpring = springParts[1] === '-' ? null : normalizeSpellName(springParts[1]);
 
 	const score = parts[6];
 

@@ -1144,7 +1144,7 @@ class Syzygy(Spell):
 
 
 ###############################################################################################
-#####  EXPANSION SPELLS: Inferno + Tempest + Tsunami
+#####  EXPANSION SPELLS: Inferno + Tempest + Flood
 
 
 class Charge(Spell):
@@ -1415,7 +1415,7 @@ class Splash(Spell):
 
 
 # Make `soft_count` soft moves, then `hard_count` hard moves (Torrent [1,1],
-# Flood [2,2]). Soft-then-hard order is mandatory.
+# Tsunami [2,2]). Soft-then-hard order is mandatory.
 def _soft_hard_chain(player, spell, soft_count, hard_count):
 	for _ in range(soft_count):
 		if not player.allsoftmoveablenodes():
@@ -1446,7 +1446,7 @@ class Torrent(Spell):
 		_soft_hard_chain(player, self, 1, 1)
 
 
-class Flood(Spell):
+class Tsunami(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 
