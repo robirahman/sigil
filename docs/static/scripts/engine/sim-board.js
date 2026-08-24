@@ -134,16 +134,30 @@ class SimBoard {
 		return s;
 	}
 	snareCount(color) {
-		// Live snares owned by color — count defensively toward their
-		// stone total, like Providence phantoms.
+		// Live snares owned by color — count FULLY toward their stone
+		// total (2026-08 buff; previously defense-only like Providence
+		// phantoms).
 		let s = 0;
 		for (const n in this.snares) if (this.snares[n] === color) s++;
 		return s;
 	}
+	burnCount(color) {
+		// Pending Aftershock burns owed to color: the schedule plus, for
+		// the side to move, burns matured this turn but not yet fired.
+		// Count FULLY toward the owner's stone total (2026-08 buff;
+		// previously counted toward nothing). Never lost: out-of-contact
+		// burns bank in advanceTurn.
+		let b = 0;
+		for (const v of this.pendingBurns[color]) b += v;
+		if (this.whoseTurn === color) b += this.burnsThisTurn;
+		return b;
+	}
 	pendingStones(color) {
 		// Providence scheduled extras (plus, for the side to move, extras
-		// granted this turn but not yet placed) and Ambush snares.
+		// granted this turn but not yet placed), Ambush snares, and
+		// pending Aftershock burns.
 		return this.pendingSum(color) + this.snareCount(color)
+			+ this.burnCount(color)
 			+ (this.whoseTurn === color ? this.extraMovesThisTurn : 0);
 	}
 	effectiveStones(color) {
@@ -292,25 +306,26 @@ class SimBoard {
 		// +3-lead and 6th-spell conditions below are disabled.
 		if (variantHasDeathmatch(this.variant)) return false;
 
-		// ±3-lead check: Providence phantoms and Ambush snares count
-		// ASYMMETRICALLY (defense only) — a player's win claim uses their
-		// real placed stones, checked against the opponent's real+pending
-		// total. Sixth-spell count: Providence phantoms count SYMMETRICALLY
-		// (2026-08 playtest ruling) — invested stones count for their
-		// caster; snares stay defense-only there too. The mover's
-		// extras-this-turn are NOT counted anywhere here: placed ones are
-		// already real, unused ones forfeit at end of turn.
+		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
+		// only) — a player's win claim uses their real placed stones,
+		// checked against the opponent's real+pending total. Ambush snares
+		// and pending Aftershock burns count SYMMETRICALLY everywhere
+		// (2026-08 buff): they add to the owner's total in both the
+		// ±3-lead claim and the sixth-spell count (where Providence
+		// phantoms are symmetric too, 2026-08 playtest ruling). The
+		// mover's extras-this-turn are NOT counted here (placed ones are
+		// already real, unused ones forfeit at end of turn), but their
+		// unfired burns ARE — those bank, not forfeit.
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
 		const rProv = this.pendingSum('red'), bProv = this.pendingSum('blue');
-		const rSnares = this.snareCount('red'), bSnares = this.snareCount('blue');
-		const rp = rProv + rSnares;
-		const bp = bProv + bSnares;
-		if (rt > bt + bp + 2) { this.gameover = true; this.winner = 'red'; return true; }
-		if (bt > rt + rp + 2) { this.gameover = true; this.winner = 'blue'; return true; }
+		const rAmb = this.snareCount('red') + this.burnCount('red');
+		const bAmb = this.snareCount('blue') + this.burnCount('blue');
+		if (rt + rAmb > bt + bProv + bAmb + 2) { this.gameover = true; this.winner = 'red'; return true; }
+		if (bt + bAmb > rt + rProv + rAmb + 2) { this.gameover = true; this.winner = 'blue'; return true; }
 		if (this.spellCounter[activeColor] >= 6) {
 			this.gameover = true;
-			if (rt + rProv > bt + bProv + bSnares) this.winner = 'red';
-			else if (bt + bProv > rt + rProv + rSnares) this.winner = 'blue';
+			if (rt + rProv + rAmb > bt + bProv + bAmb) this.winner = 'red';
+			else if (bt + bProv + bAmb > rt + rProv + rAmb) this.winner = 'blue';
 			else this.winner = this._enemy(activeColor);
 			return true;
 		}
@@ -322,12 +337,21 @@ class SimBoard {
 		// arena, replay) is correct without per-driver edits, and end-of-turn
 		// forfeit is implicit: the pop overwrites whatever the previous mover
 		// left unused.
+		// Aftershock: unfired burns BANK instead of forfeiting (2026-08
+		// buff — an out-of-contact burn is saved for later). Fold the
+		// departing mover's leftover into the head of their schedule so
+		// it matures again on their next turn.
+		if (this.burnsThisTurn) {
+			const leftover = this.pendingBurns[this.whoseTurn];
+			if (leftover.length) leftover[0] += this.burnsThisTurn;
+			else leftover.push(this.burnsThisTurn);
+			this.burnsThisTurn = 0;
+		}
 		this.turnCounter++;
 		this.whoseTurn = this.whoseTurn === 'red' ? 'blue' : 'red';
 		const sched = this.pendingMoves[this.whoseTurn];
 		this.extraMovesThisTurn = sched.length ? sched.shift() : 0;
-		// Aftershock: second pop. Forfeit of unresolved burns is implicit,
-		// exactly like unused extras — the pop overwrites the leftover.
+		// Aftershock: second pop (the new mover's matured burns).
 		const bsched = this.pendingBurns[this.whoseTurn];
 		this.burnsThisTurn = bsched.length ? bsched.shift() : 0;
 	}
@@ -1783,8 +1807,10 @@ class SimBoard {
 
 		// Aftershock burn phase (mandatory, before the move phase). Greedy
 		// engine: one ranked target per burn; the exhaustive enumerator
-		// branches over top-K instead. After the first fizzle the rest
-		// fizzle too (burning only shrinks the eligible set).
+		// branches over top-K instead. Once the eligible set runs dry the
+		// remaining burns stay unfired (burning only shrinks the set) —
+		// they BANK back into the schedule at advanceTurn (2026-08 buff),
+		// not forfeit.
 		const burnActions = [];
 		let base = this;
 		if (this.burnsThisTurn) {
@@ -1987,6 +2013,9 @@ function applySimTurn(board, turn, color) {
 		}
 		else if (action.type === 'burn') {
 			if (action.node) board.stones[action.node] = null;
+			// Consume a matured burn so advanceTurn banks only the
+			// genuinely unfired leftover (2026-08 banking buff).
+			if (board.burnsThisTurn > 0) board.burnsThisTurn--;
 		}
 		else if (action.type === 'schedule_burns') {
 			const sched = board.pendingBurns[color];

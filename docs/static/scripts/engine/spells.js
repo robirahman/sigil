@@ -1704,11 +1704,14 @@ const SpellResolvers = {
  * Human choice flows through getInput (awaiting 'node'), so it records into
  * the turn transcript and replicates through the multiplayer input queue
  * for free; the SGN-T replayer (reconstructGameLog) runs this same function
- * off the token queue, so live and replay cannot drift. Fizzled burns are
- * lost, and after the first fizzle the rest fizzle too (burning only
- * shrinks the eligible set). Burns ignore Bulwark (destruction convention,
- * like Fireblast). Caller checks board.gameover afterward — a burn can
- * eliminate the enemy's last stone.
+ * off the token queue, so live and replay cannot drift. Out-of-contact
+ * burns are SAVED, not lost (2026-08 buff): when no enemy stone touches the
+ * owner's stones, the remaining burns bank back into the head of the
+ * schedule and mature again next turn (deterministic — derived from board
+ * state — so replay stays in lockstep). Once the eligible set runs dry it
+ * stays dry within the turn (burning only shrinks it). Burns ignore Bulwark
+ * (destruction convention, like Fireblast). Caller checks board.gameover
+ * afterward — a burn can eliminate the enemy's last stone.
  */
 async function resolveBurnsAtTurnStart(board, color, count, getInput, emit) {
 	const enemy = color === 'red' ? 'blue' : 'red';
@@ -1722,7 +1725,13 @@ async function resolveBurnsAtTurnStart(board, color, count, getInput, emit) {
 		}
 		if (!Object.keys(targets).length) {
 			const left = count - i;
-			emit({ type: 'message', message: (left === 1 ? 'Your burn fizzles' : 'Your remaining burns fizzle') + ': no enemy stone touches your stones (Aftershock).', awaiting: null });
+			const sched = board.pendingBurns[color];
+			if (sched.length) sched[0] += left;
+			else sched.push(left);
+			board.burnsThisTurn = 0;
+			emit({ type: 'message', message: (left === 1 ? 'Your burn is saved for later' : 'Your ' + left + ' remaining burns are saved for later') + ': no enemy stone touches your stones (Aftershock).', awaiting: null });
+			board.update();
+			emit(board.getBoardStatePayload());
 			return;
 		}
 		const label = count > 1 ? 'Burn ' + (i + 1) + ' of ' + count + ': ' : '';
@@ -1740,6 +1749,9 @@ async function resolveBurnsAtTurnStart(board, color, count, getInput, emit) {
 		}
 		board.stones[node] = null;
 		if (board.lastPlay === node) { board.lastPlay = null; board.lastPlayer = null; }
+		// Consume the matured burn as it fires so the pending-burn stone
+		// count (board.pendingStones) never double-counts mid-resolution.
+		if (board.burnsThisTurn > 0) board.burnsThisTurn--;
 		emit({ type: 'crush_animation', crushed_color: enemy, node });
 		board.update();
 		emit(board.getBoardStatePayload());

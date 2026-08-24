@@ -136,3 +136,13 @@ class MCTSAIPlayer(NNAIPlayer):
         # Execute the chosen turn on the live board
         # (inherited from NNAIPlayer)
         self._execute_turn(best_turn)
+
+        # Aftershock: unfired burns BANK instead of forfeiting (2026-08
+        # buff) — return the leftover to the head of the live schedule.
+        fired = sum(1 for a in best_turn.actions if a.type == 'burn')
+        leftover = burns_now - fired
+        if leftover > 0 and not self.board.gameover:
+            if bsched:
+                bsched[0] += leftover
+            else:
+                bsched.append(leftover)

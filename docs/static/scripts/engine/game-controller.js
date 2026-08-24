@@ -745,8 +745,15 @@ class GameController {
 		// not carry this turn's phantoms into the ±3-lead / tiebreak math.
 		board.movesLeftThisTurn = 0;
 		board.movesGrantedThisTurn = 0;
-		// Aftershock: clear the AI path's burn counter (humans already
-		// zeroed it after resolving prompts; unresolved AI burns forfeit).
+		// Aftershock: bank the AI path's unfired burns back into the head
+		// of the schedule (2026-08 buff — out-of-contact burns are saved,
+		// not forfeited). Humans' leftovers were already banked inside
+		// resolveBurnsAtTurnStart; theirs is 0 here.
+		if (board.burnsThisTurn > 0) {
+			const bsched = board.pendingBurns[color];
+			if (bsched.length) bsched[0] += board.burnsThisTurn;
+			else bsched.push(board.burnsThisTurn);
+		}
 		board.burnsThisTurn = 0;
 
 		// Seal of Destruction end-of-turn effect

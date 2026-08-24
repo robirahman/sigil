@@ -222,12 +222,12 @@ const SPELL_TEXTS = {
 	Dividend:          'Make 1 extra move at the beginning of your next turn.',
 	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
 	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
-	Ember:             'Destroy 1 enemy stone touching your stones at the beginning of your next turn.',
-	Smolder:           'Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns.',
-	Conflagration:     'Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns.',
-	Tripwire:          'Place a snare on 1 empty node. The first enemy stone that stops there is destroyed. Snares count toward your stone total for defense, and only enemy stones (or an enemy Fissure) remove them.',
-	Deadfall:          'Place snares on up to 2 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total for defense, and only enemy stones (or an enemy Fissure) remove them.',
-	Minefield:         'Place snares on up to 4 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total for defense, and only enemy stones (or an enemy Fissure) remove them.',
+	Ember:             'Destroy 1 enemy stone touching your stones at the beginning of your next turn. If no enemy stone touches yours, the burn is saved until one does. Pending burns count toward your stone total.',
+	Smolder:           'Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns. If no enemy stone touches yours, the burn is saved until one does. Pending burns count toward your stone total.',
+	Conflagration:     'Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns. If no enemy stone touches yours, the burn is saved until one does. Pending burns count toward your stone total.',
+	Tripwire:          'Place a snare on 1 empty node. The first enemy stone that stops there is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
+	Deadfall:          'Place snares on up to 2 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
+	Minefield:         'Place snares on up to 4 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
 };
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];

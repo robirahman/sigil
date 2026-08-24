@@ -682,8 +682,10 @@ function getLegalTurnsExhaustive(board, color, caps) {
 /**
  * Aftershock burn phase: burns are mandatory (the choice is which stone),
  * so there is no "stop here" variant — branch over the top-`caps.burn`
- * ranked targets per burn with stone-map dedup across orderings. After a
- * fizzle the rest fizzle too (burning only shrinks the eligible set).
+ * ranked targets per burn with stone-map dedup across orderings. Once the
+ * eligible set runs dry it stays dry within the turn (burning only shrinks
+ * the set); the unfired leftover BANKS at advanceTurn (2026-08 buff), so
+ * the enumerator just proceeds to the move root.
  */
 function _enumerateBurnPhaseExhaustive(board, color, prefix, caps, burnsLeft, seen, out) {
 	if (burnsLeft <= 0 || board.gameover) {
@@ -692,7 +694,7 @@ function _enumerateBurnPhaseExhaustive(board, color, prefix, caps, burnsLeft, se
 	}
 	const targets = board._burnTargets(color);
 	if (!targets.length) {
-		// Fizzle — remaining burns are lost.
+		// Out of contact — remaining burns stay unfired (banked later).
 		_enumerateMoveRootExhaustive(board, color, prefix, caps, out);
 		return;
 	}

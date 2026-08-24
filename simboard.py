@@ -403,16 +403,28 @@ class SimBoard:
         return sum(self.pending_moves[color])
 
     def snare_count(self, color):
-        """Live snares owned by `color` — count defensively toward their
-        stone total, like Providence phantoms (Aftershock burns count
-        toward nothing)."""
+        """Live snares owned by `color` — count FULLY toward their stone
+        total (2026-08 buff; previously defense-only like Providence
+        phantoms)."""
         return sum(1 for owner in self.snares.values() if owner == color)
 
+    def burn_count(self, color):
+        """Pending Aftershock burns owed to `color`: the schedule plus, for
+        the side to move, burns matured this turn but not yet fired. Count
+        FULLY toward the owner's stone total (2026-08 buff; previously
+        counted toward nothing). Never lost: out-of-contact burns bank in
+        advance_turn."""
+        b = sum(self.pending_burns[color])
+        if self.whose_turn == color:
+            b += self.burns_this_turn
+        return b
+
     def pending_stones(self, color):
-        """Defensive phantom stones for `color`: Providence scheduled extras
-        (plus, for the side to move, extras granted this turn but not yet
-        placed) and Ambush snares."""
-        p = self.pending_sum(color) + self.snare_count(color)
+        """Phantom stones for `color`: Providence scheduled extras (plus,
+        for the side to move, extras granted this turn but not yet placed),
+        Ambush snares, and pending Aftershock burns."""
+        p = self.pending_sum(color) + self.snare_count(color) \
+            + self.burn_count(color)
         if self.whose_turn == color:
             p += self.extra_moves_this_turn
         return p
@@ -424,19 +436,22 @@ class SimBoard:
     def check_game_over(self, active_color):
         """Check win conditions after a turn. Returns True if game is over.
 
-        In the ±3-lead check, Providence phantoms and Ambush snares count
-        ASYMMETRICALLY (defense only): a player's win claim uses their real
-        placed stones, but is checked against the opponent's real+pending
-        total — you can't win off stones you haven't placed, and you can't
-        lose while scheduled stones cover the deficit.
+        In the ±3-lead check, Providence phantoms count ASYMMETRICALLY
+        (defense only): a player's win claim uses their real placed stones,
+        but is checked against the opponent's real+pending total — you
+        can't win off stones you haven't placed, and you can't lose while
+        scheduled stones cover the deficit.
 
-        In the sixth-spell count, Providence phantoms count SYMMETRICALLY
-        (2026-08 playtest ruling): stones yet to be placed from Dividend/
-        Annuity/Endowment count for the player who cast them. Snares stay
-        defense-only there too.
+        Ambush snares and pending Aftershock burns count SYMMETRICALLY
+        everywhere (2026-08 buff): they add to the owner's total in both
+        the ±3-lead claim and the sixth-spell count. In the sixth-spell
+        count, Providence phantoms count symmetrically too (2026-08
+        playtest ruling).
 
-        The mover's own extras-this-turn are NOT counted anywhere here:
-        placed ones are already real, unused ones forfeit at end of turn.
+        The mover's own extras-this-turn are NOT counted anywhere here
+        (placed ones are already real, unused ones forfeit at end of
+        turn), but their unfired burns ARE — those bank, not forfeit.
+        Elimination stays real-stones-only (handled in update()).
         """
         # update() may already have flagged immediate-loss (zero stones).
         if self.gameover:
@@ -452,25 +467,23 @@ class SimBoard:
         blue_real = self.totalstones['blue'] + 1  # phantom counter token
         red_prov = self.pending_sum('red')
         blue_prov = self.pending_sum('blue')
-        red_snares = self.snare_count('red')
-        blue_snares = self.snare_count('blue')
-        red_pend = red_prov + red_snares
-        blue_pend = blue_prov + blue_snares
+        red_amb = self.snare_count('red') + self.burn_count('red')
+        blue_amb = self.snare_count('blue') + self.burn_count('blue')
 
-        if red_real > blue_real + blue_pend + 2:
+        if red_real + red_amb > blue_real + blue_prov + blue_amb + 2:
             self.gameover = True
             self.winner = 'red'
             return True
-        if blue_real > red_real + red_pend + 2:
+        if blue_real + blue_amb > red_real + red_prov + red_amb + 2:
             self.gameover = True
             self.winner = 'blue'
             return True
 
         if self.spell_counter[active_color] >= 6:
             self.gameover = True
-            if red_real + red_prov > blue_real + blue_prov + blue_snares:
+            if red_real + red_prov + red_amb > blue_real + blue_prov + blue_amb:
                 self.winner = 'red'
-            elif blue_real + blue_prov > red_real + red_prov + red_snares:
+            elif blue_real + blue_prov + blue_amb > red_real + red_prov + red_amb:
                 self.winner = 'blue'
             else:
                 self.winner = 'blue' if active_color == 'red' else 'red'
@@ -486,12 +499,22 @@ class SimBoard:
         makes end-of-turn forfeit implicit: the pop overwrites whatever the
         previous mover left unused.
         """
+        # Aftershock: unfired burns BANK instead of forfeiting (2026-08
+        # buff — an out-of-contact burn is saved for later). Fold the
+        # departing mover's leftover into the head of their schedule so it
+        # matures again on their next turn.
+        if self.burns_this_turn:
+            leftover = self.pending_burns[self.whose_turn]
+            if leftover:
+                leftover[0] += self.burns_this_turn
+            else:
+                leftover.append(self.burns_this_turn)
+            self.burns_this_turn = 0
         self.turn_counter += 1
         self.whose_turn = 'blue' if self.whose_turn == 'red' else 'red'
         sched = self.pending_moves[self.whose_turn]
         self.extra_moves_this_turn = sched.pop(0) if sched else 0
-        # Aftershock: second pop. Forfeit of unresolved burns is implicit,
-        # exactly like unused extras — the pop overwrites the leftover.
+        # Aftershock: second pop (the new mover's matured burns).
         bsched = self.pending_burns[self.whose_turn]
         self.burns_this_turn = bsched.pop(0) if bsched else 0
 
@@ -1798,8 +1821,10 @@ class SimBoard:
 
         # Aftershock burn phase (mandatory, before the move phase). Greedy
         # engine: one ranked target per burn; the exhaustive enumerator
-        # branches over top-K instead. After the first fizzle the rest
-        # fizzle too (burning only shrinks the eligible set).
+        # branches over top-K instead. Once the eligible set runs dry the
+        # remaining burns stay unfired (burning only shrinks the set) —
+        # they BANK back into the schedule at advance_turn (2026-08 buff),
+        # not forfeit.
         burn_actions = []
         base = self
         if self.burns_this_turn:
@@ -2216,6 +2241,10 @@ def apply_sim_turn(board, turn, color):
         elif t == 'burn':
             if action.node:
                 board.stones[action.node] = None
+            # Consume a matured burn so advance_turn banks only the
+            # genuinely unfired leftover (2026-08 banking buff).
+            if board.burns_this_turn > 0:
+                board.burns_this_turn -= 1
         elif t == 'schedule_burns':
             sched = board.pending_burns[color]
             n = action.turns or 0

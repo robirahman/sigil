@@ -119,29 +119,19 @@ def caveman_leaf_ref(fix, color, w):
         return d
 
     def effective(side):
+        # Mirrors SimBoard.effectiveStones: real stones + Providence
+        # phantoms + snares + pending burns (full material since the
+        # 2026-08 buff — the old engagement-capped burn credit is gone).
         e = sum(1 for n in NODE_ORDER if stones[n] == side)
         e += sum(pending.get(side) or [])
         e += sum(1 for owner in snares.values() if owner == side)
+        e += sum(burns.get(side) or [])
         if whose == side:
             e += extra
+            e += burns_now
         return e
 
-    def burn_credit(side, enemy_of_side):
-        sched = sum(burns.get(side) or [])
-        if whose == side:
-            sched += burns_now
-        if not sched:
-            return 0
-        engaged = 0
-        for n in NODE_ORDER:
-            if stones[n] != enemy_of_side:
-                continue
-            if any(stones[nb] == side for nb in ADJACENCY[n]):
-                engaged += 1
-        return min(sched, engaged)
-
     score = float(effective(color) - effective(enemy))
-    score += burn_credit(color, enemy) - burn_credit(enemy, color)
     score += w['mana'] * diff(MANA_NODES)
     score -= w['voidPenalty'] * diff(VOID_NODES)
     mc = map_control(stones)['diff']

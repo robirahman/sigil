@@ -1921,8 +1921,10 @@ class _ScheduleBurnsSpell(Spell):
 	### Aftershock base: schedule 1 burn (destroy 1 enemy stone touching
 	### you, your choice) at the beginning of each of the caster's next
 	### TURNS turns. The CAST only schedules — the burn PROMPT runs at
-	### start of turn in Player.taketurn. Burns are not score/win
-	### material; fizzled burns are lost. Burns ignore Bulwark
+	### start of turn in Player.taketurn. 2026-08 buff: a burn triggers
+	### only while in contact — out-of-contact burns are SAVED (banked
+	### back into the schedule head), never lost — and pending burns
+	### count fully toward the owner's stone total. Burns ignore Bulwark
 	### (destruction convention, like Fireblast).
 	TURNS = 1
 
@@ -1954,7 +1956,9 @@ class Ember(_ScheduleBurnsSpell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.ischarm = True
-		self.text = "Destroy 1 enemy stone touching your stones at the beginning of your next turn."
+		self.text = ("Destroy 1 enemy stone touching your stones at the beginning of your next turn. "
+			"If no enemy stone touches yours, the burn is saved until one does. "
+			"Pending burns count toward your stone count.")
 
 
 class Smolder(_ScheduleBurnsSpell):
@@ -1962,7 +1966,9 @@ class Smolder(_ScheduleBurnsSpell):
 
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
-		self.text = "Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns."
+		self.text = ("Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns. "
+			"If no enemy stone touches yours, the burn is saved until one does. "
+			"Pending burns count toward your stone count.")
 
 
 class Conflagration(_ScheduleBurnsSpell):
@@ -1970,7 +1976,9 @@ class Conflagration(_ScheduleBurnsSpell):
 
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
-		self.text = "Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns."
+		self.text = ("Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns. "
+			"If no enemy stone touches yours, the burn is saved until one does. "
+			"Pending burns count toward your stone count.")
 
 
 ### Ambush placement ranking — mirror of SimBoard._snare_candidates on
@@ -2010,9 +2018,9 @@ class _PlaceSnaresSpell(Spell):
 	### that comes to rest on it (stone destroyed, snare consumed — the
 	### consumption itself lives in board.update()); the owner's own
 	### stones coexist with it, and nothing else removes it except
-	### Fissure's blast. Snares count toward the owner's stone count
-	### defensively (like Providence phantoms), never toward the owner's
-	### own win claims.
+	### Fissure's blast. Snares count fully toward the owner's stone
+	### count (2026-08 buff; previously defense-only like Providence
+	### phantoms).
 	COUNT = 1
 
 	def resolve(self, player):
@@ -2061,7 +2069,7 @@ class Tripwire(_PlaceSnaresSpell):
 		self.ischarm = True
 		self.text = ("Place a snare on an empty node. The next enemy stone that comes to rest "
 			"there is destroyed. Your own stones may stand on your snares. Snares count toward "
-			"your stone count while they remain, but cannot win you the game.")
+			"your stone count while they remain.")
 
 
 class Deadfall(_PlaceSnaresSpell):
@@ -2071,7 +2079,7 @@ class Deadfall(_PlaceSnaresSpell):
 		super().__init__(board, position, name)
 		self.text = ("Place snares on up to 2 empty nodes. The next enemy stone that comes to rest "
 			"on a snare is destroyed. Your own stones may stand on your snares. Snares count toward "
-			"your stone count while they remain, but cannot win you the game.")
+			"your stone count while they remain.")
 
 
 class Minefield(_PlaceSnaresSpell):
@@ -2081,4 +2089,4 @@ class Minefield(_PlaceSnaresSpell):
 		super().__init__(board, position, name)
 		self.text = ("Place snares on up to 4 empty nodes. The next enemy stone that comes to rest "
 			"on a snare is destroyed. Your own stones may stand on your snares. Snares count toward "
-			"your stone count while they remain, but cannot win you the game.")
+			"your stone count while they remain.")

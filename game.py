@@ -120,23 +120,27 @@ class Board():
 
 		### Ambush: snare markers {node: owner}. Consumed ONLY by an
 		### enemy-of-owner stone resting on the node (resolved in update())
-		### or a Fissure blast; count defensively like Providence phantoms.
+		### or a Fissure blast; count fully toward the owner's stone total
+		### (2026-08 buff).
 		self.snares = {}
 
 		self.recorder = None
 
 	def pending_stones(self, color):
-		### Defensive phantom stones for `color`: Providence scheduled
-		### extras plus, for the side to move, extras granted this turn but
-		### not yet placed (before any move this turn, one remaining move is
-		### the ordinary turn move — never a phantom; after that, every
+		### Phantom stones for `color`: Providence scheduled extras plus,
+		### for the side to move, extras granted this turn but not yet
+		### placed (before any move this turn, one remaining move is the
+		### ordinary turn move — never a phantom; after that, every
 		### remaining move is an extra — hence min(left, granted - 1)),
-		### plus Ambush snares owned by `color`.
+		### plus Ambush snares and pending Aftershock burns owned by
+		### `color` (both count fully toward the owner's stone total,
+		### 2026-08 buff).
 		p = sum(self.pending_moves[color])
 		if self.whoseturn == color:
 			p += max(0, min(self.moves_left_this_turn,
 			                self.moves_granted_this_turn - 1))
 		p += sum(1 for owner in self.snares.values() if owner == color)
+		p += sum(self.pending_burns[color])
 		return p
 
 	def record(self, action_type, **kwargs):
@@ -721,8 +725,11 @@ class Player():
 
 			### Aftershock: resolve scheduled burns before the move phase
 			### (SOT order: Destruction [bot_triggers] -> Providence shift
-			### -> burns -> moves). Fizzled burns are lost; after the first
-			### fizzle the rest fizzle too. Burns ignore Bulwark.
+			### -> burns -> moves). Out-of-contact burns are SAVED, not
+			### lost (2026-08 buff): the leftover banks back into the head
+			### of the schedule and matures again next turn. Once the
+			### eligible set runs dry it stays dry within the turn. Burns
+			### ignore Bulwark.
 			burns = 0
 			bsched = self.board.pending_burns[self.color]
 			if bsched:
@@ -736,9 +743,14 @@ class Player():
 						moveoptions[nodename] = self.enemy
 				if not moveoptions:
 					left = burns - i
-					self.jmessage(("Your burn fizzles" if left == 1
-					               else "Your remaining burns fizzle")
+					if bsched:
+						bsched[0] += left
+					else:
+						bsched.append(left)
+					self.jmessage(("Your burn is saved for later" if left == 1
+					               else "Your {} remaining burns are saved for later".format(left))
 					              + ": no enemy stone touches your stones (Aftershock).")
+					self.board.update()
 					break
 				label = "Burn {} of {}: ".format(i + 1, burns) if burns > 1 else ""
 				egress = {"type": "message",
@@ -960,39 +972,38 @@ class Player():
 			elif color == 'blue':
 				bluetotal += 1
 
-		### ±3-lead check: Providence phantoms and Ambush snares count
-		### ASYMMETRICALLY (defense only) — each win claim uses real placed
-		### stones, checked against the opponent's real+pending+snare total.
-		### Sixth-spell count: Providence phantoms count SYMMETRICALLY
-		### (2026-08 playtest ruling) — stones yet to be placed from
-		### Dividend/Annuity/Endowment count for the player who cast them;
-		### snares stay defense-only there too.
+		### ±3-lead check: Providence phantoms count ASYMMETRICALLY
+		### (defense only) — each win claim uses real placed stones,
+		### checked against the opponent's real+pending total. Ambush
+		### snares and pending Aftershock burns count SYMMETRICALLY
+		### everywhere (2026-08 buff): they add to the owner's total in
+		### both the ±3-lead claim and the sixth-spell count (where
+		### Providence phantoms are symmetric too, 2026-08 playtest
+		### ruling).
 		redprov = sum(self.board.pending_moves['red'])
 		blueprov = sum(self.board.pending_moves['blue'])
-		redsnares = 0
-		bluesnares = 0
+		redamb = sum(self.board.pending_burns['red'])
+		blueamb = sum(self.board.pending_burns['blue'])
 		for owner in self.board.snares.values():
 			if owner == 'red':
-				redsnares += 1
+				redamb += 1
 			else:
-				bluesnares += 1
-		redpend = redprov + redsnares
-		bluepend = blueprov + bluesnares
+				blueamb += 1
 
-		if redtotal > bluetotal + bluepend + 2:
+		if redtotal + redamb > bluetotal + blueprov + blueamb + 2:
 			self.board.gameover = True
 			self.board.winner = 'red'
 
-		elif bluetotal > redtotal + redpend + 2:
+		elif bluetotal + blueamb > redtotal + redprov + redamb + 2:
 			self.board.gameover = True
 			self.board.winner = 'blue'
 
 		else:
 			if self.spellcounter >= 6:
 				self.board.gameover = True
-				if redtotal + redprov > bluetotal + blueprov + bluesnares:
+				if redtotal + redprov + redamb > bluetotal + blueprov + blueamb:
 					self.board.winner = 'red'
-				elif bluetotal + blueprov > redtotal + redprov + redsnares:
+				elif bluetotal + blueprov + blueamb > redtotal + redprov + redamb:
 					self.board.winner = 'blue'
 				else:
 					a = ['red', 'blue']

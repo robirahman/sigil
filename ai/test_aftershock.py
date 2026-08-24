@@ -1,5 +1,7 @@
 """Aftershock pack tests: scheduled burns, target ranking, enumeration,
-hashing, replay, notation, and the horizon-credit eval term.
+hashing, replay, notation, and the pending-burn material rules
+(2026-08 buff: out-of-contact burns bank; pending burns count fully
+toward the owner's stone total).
 
 Run: python -m ai.test_aftershock
 """
@@ -84,18 +86,30 @@ def test_additive_stacking():
     print("  PASS")
 
 
-def test_double_pop_and_forfeit():
-    print("Testing advance_turn double pop + implicit forfeit...")
+def test_double_pop_and_banking():
+    print("Testing advance_turn double pop + leftover banking...")
     b = _board()
     b.pending_moves['blue'] = [1]
     b.pending_burns['blue'] = [2, 1]
     b.advance_turn()
     assert b.extra_moves_this_turn == 1 and b.burns_this_turn == 2
     assert b.pending_moves['blue'] == [] and b.pending_burns['blue'] == [1]
+    # 2026-08 buff: blue's 2 unfired burns BANK into the schedule head
+    # (merging with the 1 already there) instead of forfeiting.
     b.advance_turn()
-    assert b.burns_this_turn == 0, "unresolved burns forfeit on the next pop"
+    assert b.burns_this_turn == 0
+    assert b.pending_burns['blue'] == [3], \
+        "unfired burns must bank into the schedule head"
     b.advance_turn()
-    assert b.burns_this_turn == 1 and b.pending_burns['blue'] == []
+    assert b.burns_this_turn == 3 and b.pending_burns['blue'] == []
+    # Banking into an EMPTY schedule creates the head slot.
+    c = _board()
+    c.pending_burns['red'] = [1]
+    c.whose_turn = 'blue'
+    c.advance_turn()          # red pops 1, fires nothing
+    assert c.burns_this_turn == 1 and c.pending_burns['red'] == []
+    c.advance_turn()          # red's leftover banks into []
+    assert c.pending_burns['red'] == [1]
     print("  PASS")
 
 
@@ -288,20 +302,43 @@ def test_three_ply_decrement():
     print("  PASS")
 
 
-def test_burns_not_win_material():
-    print("Testing burns count toward NOTHING in win checks...")
-    # Unlike Providence phantoms, a burn schedule does not defend the ±3
-    # lead: red 5 real vs blue 1 real (+1 token) is a red win even if blue
-    # has a huge burn schedule.
+def test_burns_are_win_material():
+    print("Testing burns count FULLY in win checks (2026-08 buff)...")
+    # Pending burns count symmetrically: red 5 real vs blue 1 real
+    # (+1 token) is NO LONGER a red win when blue's burn schedule covers
+    # the deficit — and a big enough schedule powers blue's own claim.
     b = SimBoard(AFTERSHOCK_SPELLS)
     for n in ('a1', 'a2', 'a3', 'a4', 'a5'):
         b.stones[n] = 'red'
     b.stones['b1'] = 'blue'
-    b.pending_burns['blue'] = [3, 3, 3, 3]
+    b.pending_burns['blue'] = [1, 1]
     b.update()
-    assert b.check_game_over('red') and b.winner == 'red'
-    # Elimination via burn: replaying a burn that removes the last enemy
-    # stone flags gameover inside update().
+    assert not b.check_game_over('red'), \
+        "blue's 2 pending burns must defend the ±3 deficit (5 vs 2+2)"
+    b.pending_burns['blue'] = [3, 3, 3, 3]
+    b.gameover = False
+    b.winner = None
+    assert b.check_game_over('red') and b.winner == 'blue', \
+        "12 pending burns power blue's own ±3 claim (14 vs 5)"
+    # Sixth-spell count: burns break the tie for their owner.
+    b3 = SimBoard(AFTERSHOCK_SPELLS)
+    b3.stones['a1'] = 'red'
+    b3.stones['a2'] = 'red'
+    b3.stones['b1'] = 'blue'    # +1 token -> tied 2v2 on real stones
+    b3.pending_burns['red'] = [1]
+    b3.spell_counter['red'] = 6
+    b3.update()
+    assert b3.check_game_over('red') and b3.winner == 'red', \
+        "pending burn must tip the sixth-spell count"
+    # Elimination stays REAL-stones-only: a burn schedule does not keep a
+    # player alive at zero stones...
+    b4 = SimBoard(AFTERSHOCK_SPELLS)
+    b4.stones['a1'] = 'red'
+    b4.pending_burns['blue'] = [3, 3]
+    b4.update()
+    assert b4.gameover and b4.winner == 'red'
+    # ...and replaying a burn that removes the last enemy stone flags
+    # gameover inside update().
     b2 = SimBoard(AFTERSHOCK_SPELLS)
     b2.stones['a1'] = 'red'
     b2.stones['a2'] = 'blue'
@@ -375,41 +412,38 @@ def test_sfn_roundtrip():
     print("  PASS")
 
 
-def test_leaf_credit_reference():
-    print("Testing engagement-capped burn credit (Python reference)...")
-    # Reference formula mirrored from caveman-ai.js _cavemanBurnCredit.
-    def burn_credit(board, side, enemy_of_side):
-        scheduled = board.burns_this_turn if board.whose_turn == side else 0
-        scheduled += sum(board.pending_burns[side])
-        if not scheduled:
-            return 0
-        engaged = 0
-        for n in NODE_ORDER:
-            if board.stones[n] != enemy_of_side:
-                continue
-            if any(board.stones[nb] == side
-                   for nb in board._adjacent_nodes(n)):
-                engaged += 1
-        return min(scheduled, engaged)
-
+def test_burn_count_material():
+    print("Testing burn_count feeds pending/effective stones (2026-08)...")
+    # Since the 2026-08 buff, pending burns ARE material: burn_count is
+    # the schedule sum plus, for the side to move, the matured-but-unfired
+    # counter — no engagement cap (banked burns never decay). The old
+    # engagement-capped caveman credit is gone (subsumed by
+    # effective_stones).
     b = _board()
     b.stones['a2'] = 'red'
     b.stones['a3'] = 'blue'
     b.stones['c9'] = 'blue'
     b.update()
-    assert burn_credit(b, 'red', 'blue') == 0, "no schedule -> no credit"
+    assert b.burn_count('red') == 0
+    base = b.effective_stones('red')
     b.pending_burns['red'] = [1, 1, 1, 1]
-    assert burn_credit(b, 'red', 'blue') == 1, "capped at engaged count"
-    b.stones['a6'] = 'blue'
-    b.update()
-    assert burn_credit(b, 'red', 'blue') == 2
+    assert b.burn_count('red') == 4, "no engagement cap since the buff"
+    assert b.effective_stones('red') == base + 4
     # burns_this_turn counts only for the side to move.
     b.pending_burns['red'] = []
     b.burns_this_turn = 2
     b.whose_turn = 'red'
-    assert burn_credit(b, 'red', 'blue') == 2
+    assert b.burn_count('red') == 2
     b.whose_turn = 'blue'
-    assert burn_credit(b, 'red', 'blue') == 0
+    assert b.burn_count('red') == 0
+    # The score display includes pending burns via pending_stones.
+    s = _board()
+    s.stones['a2'] = 'red'   # red 2 real (a1+a2) vs blue 1 real +1 token
+    s.update()
+    assert s.score == 'tied'
+    s.pending_burns['blue'] = [2]
+    s.update()
+    assert s.score == 'b2', s.score
     print("  PASS")
 
 
@@ -424,19 +458,18 @@ def test_js_parity_smoke():
             js.append(f.read())
     js.append(r"""
 const SP = ['Conflagration','Carnage','Bewitch','Smolder','Fireblast','Hail_Storm','Ember','Slash','Surge'];
-// Leaf credit parity with the Python reference: 4 scheduled, 1 engaged.
+// Leaf material parity with the Python reference: 4 scheduled burns are
+// 4 full effective stones since the 2026-08 buff (no engagement cap).
 const b = new SimBoard(SP);
 b.stones.a1='red'; b.stones.a2='red'; b.stones.a3='blue'; b.stones.c9='blue'; b.update();
 const w = { mana: 0, voidPenalty: 0, mapControl: 0 };
 const l0 = _cavemanLeaf(b, 'red', w);
 b.pendingBurns.red = [1,1,1,1];
 const l1 = _cavemanLeaf(b, 'red', w);
-if (Math.abs((l1 - l0) * 39 - 1) > 1e-9) throw new Error('leaf credit: ' + ((l1 - l0) * 39));
+if (Math.abs((l1 - l0) * 39 - 4) > 1e-9) throw new Error('leaf credit: ' + ((l1 - l0) * 39));
 
 // Depth-2 caveman search casts Conflagration in a heavily engaged
-// position with full mana (cast: -2 real, +4 engagement-capped credit).
-// The engaged blue stones touch red's MANA stones, which survive the
-// cast, so the credit stays realizable after the sigil is spent.
+// position with full mana (cast: -2 real, +4 pending-burn material).
 const d = new SimBoard(SP);
 for (const n of ['a2','a3','a4','a5','a6','a1','b1','c1']) d.stones[n]='red';
 for (const n of ['b2','c2','b11','a11']) d.stones[n]='blue';  // adjacent to mana reds
@@ -461,7 +494,7 @@ def main():
     test_metadata()
     test_cast_semantics()
     test_additive_stacking()
-    test_double_pop_and_forfeit()
+    test_double_pop_and_banking()
     test_copy_isolation()
     test_burn_targets_and_bulwark()
     test_greedy_enumeration()
@@ -469,10 +502,10 @@ def main():
     test_spell_overrides_noop()
     test_replay_equivalence()
     test_three_ply_decrement()
-    test_burns_not_win_material()
+    test_burns_are_win_material()
     test_hashing_and_repetition_keys()
     test_sfn_roundtrip()
-    test_leaf_credit_reference()
+    test_burn_count_material()
     test_js_parity_smoke()
     print("All Aftershock tests passed.")
 

@@ -107,8 +107,11 @@ who cast them (2026-08 playtest ruling).*
 
 *Providence's aggressive twin: scheduled destruction instead of scheduled
 growth. At the start of each affected turn, destroy 1 enemy stone touching
-your stones (your choice; fizzles if none are adjacent — fizzled burns are
-lost). Burns ignore Bulwark and count toward no score or win condition.*
+your stones (your choice). A burn triggers only while you are in contact:
+if no enemy stone touches yours, the burn is saved — banked back into the
+schedule — until one does (2026-08 buff; originally fizzled burns were
+lost). Pending burns count fully toward your stone total in the score,
+±3-lead, and sixth-spell counts. Burns ignore Bulwark.*
 
 | Slot | Spell | Effect |
 |---|---|---|
@@ -125,8 +128,8 @@ snares on the target and adjacent nodes). Your own stones coexist with
 your snares, and attacking a stone that stands on its own snare triggers
 the snare first: the incoming stone is consumed with the snare and no
 push resolves — only later moves can push or crush the occupant. Snares
-count toward your stone count defensively — like Providence's pending
-stones — but never power your own win claims.*
+count fully toward your stone count in the score, ±3-lead, and
+sixth-spell counts (2026-08 buff; originally defense-only).*
 
 | Slot | Spell | Effect |
 |---|---|---|

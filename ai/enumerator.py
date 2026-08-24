@@ -479,14 +479,15 @@ def _exhaustive_burn_phase(board, color, prefix, caps, burns_left, seen):
     stone), so there is no "stop here" variant — branch over the
     top-`burn`-cap ranked targets per burn with stone-map dedup across
     orderings (burning {x, y} in either order yields one continuation).
-    After a fizzle the rest fizzle too (burning only shrinks the eligible
-    set)."""
+    Once the eligible set runs dry it stays dry within the turn (burning
+    only shrinks the set); the unfired leftover BANKS at advance_turn
+    (2026-08 buff), so the enumerator just proceeds to the move root."""
     if burns_left <= 0 or board.gameover:
         yield from _exhaustive_move_root(board, color, prefix, caps)
         return
     targets = board._burn_targets(color)
     if not targets:
-        # Fizzle — remaining burns are lost.
+        # Out of contact — remaining burns stay unfired (banked later).
         yield from _exhaustive_move_root(board, color, prefix, caps)
         return
     for t in targets[:caps['burn']]:

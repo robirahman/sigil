@@ -1,5 +1,6 @@
-"""Ambush pack tests: snare placement, persistence rules, defensive
-counting, Fissure interaction, enumeration, hashing, replay, notation.
+"""Ambush pack tests: snare placement, persistence rules, full snare
+counting (2026-08 buff), Fissure interaction, enumeration, hashing,
+replay, notation.
 
 Run: python -m ai.test_ambush
 """
@@ -213,8 +214,9 @@ def test_elimination_via_snare():
     print("  PASS")
 
 
-def test_defensive_counting():
-    print("Testing defensive counting (Robi's 6 vs 3+3 example)...")
+def test_snare_counting():
+    print("Testing full snare counting (2026-08 buff)...")
+    # Defense still works: opponent 6 vs your 3 stones + 3 snares.
     b = SimBoard(AMBUSH_SPELLS)
     for n in ('b2', 'b3', 'b4', 'b5', 'b6', 'b7'):
         b.stones[n] = 'blue'
@@ -230,7 +232,8 @@ def test_defensive_counting():
     b2.update()
     assert b2.check_game_over('blue') and b2.winner == 'blue'
 
-    # Snares never power your own win claim.
+    # Since the 2026-08 buff snares ALSO power the owner's win claim:
+    # red 5 real + 3 snares (8) vs blue 3 real (+1 token) + 2 clears ±3.
     b3 = SimBoard(AMBUSH_SPELLS)
     for n in ('a1', 'a2', 'a3', 'a4', 'a5'):
         b3.stones[n] = 'red'
@@ -239,12 +242,11 @@ def test_defensive_counting():
     for n in ('c8', 'c9', 'c10'):
         b3.snares[n] = 'red'
     b3.update()
-    assert not b3.check_game_over('red')
+    assert b3.check_game_over('red') and b3.winner == 'red', \
+        "snares now power the owner's ±3 claim (8 vs 4+2)"
 
-    # ...and not in the sixth-spell count either: the 2026-08 ruling made
-    # Providence phantoms symmetric there, but snares stay defense-only.
-    # Red 4 real + 3 snares vs blue 4 real (+1 token): neither claim
-    # clears, tie goes against the active player.
+    # ...and the sixth-spell count: red 4 real + 3 snares beats blue
+    # 4 real (+1 token).
     b3s = SimBoard(AMBUSH_SPELLS)
     for n in ('a1', 'a2', 'a3', 'a4'):
         b3s.stones[n] = 'red'
@@ -254,8 +256,8 @@ def test_defensive_counting():
         b3s.snares[n] = 'red'
     b3s.update()
     b3s.spell_counter['red'] = 6
-    assert b3s.check_game_over('red') and b3s.winner == 'blue', \
-        "snares must not power red's sixth-spell count (tie -> blue)"
+    assert b3s.check_game_over('red') and b3s.winner == 'red', \
+        "snares must power red's sixth-spell count (7 vs 5)"
 
     # Elimination stays real-only.
     b4 = SimBoard(AMBUSH_SPELLS)
@@ -450,7 +452,8 @@ if (b.snares.a5 !== 'red') throw new Error('survives removal');
 b.stones.a5 = 'blue'; b.update();
 if (b.stones.a5 !== null || b.snares.a5) throw new Error('enemy entry');
 if (b.crushedThisTurn) throw new Error('snare kill must not count as crush');
-// Defensive counting parity: 6 blue vs 3 red + 3 red snares.
+// Counting parity: 6 blue vs 3 red + 3 red snares — snares defend
+// the deficit (and count in effectiveStones as full material).
 const d = new SimBoard(SP);
 for (const n of ['b2','b3','b4','b5','b6','b7']) d.stones[n]='blue';
 for (const n of ['a1','a2','a3']) d.stones[n]='red';
@@ -511,7 +514,7 @@ def main():
     test_no_crush_credit()
     test_snares_and_charging()
     test_elimination_via_snare()
-    test_defensive_counting()
+    test_snare_counting()
     test_fissure_interaction()
     test_copy_isolation()
     test_hashing_and_repetition_keys()

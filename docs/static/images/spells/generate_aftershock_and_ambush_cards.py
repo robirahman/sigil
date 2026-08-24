@@ -365,7 +365,7 @@ def main():
                     "spacing": 0.86
                 },
                 {
-                    "text": "Snares count toward defense.",
+                    "text": "Snares count as stones.",
                     "radius": 112,
                     "center_deg": 54,
                     "font_size": 5.6,
@@ -401,7 +401,7 @@ def main():
                     "spacing": 0.86
                 },
                 {
-                    "text": "stone that stops on a snare is destroyed. Snares count for defense.",
+                    "text": "stone that stops on a snare is destroyed. Snares count as stones.",
                     "radius": 90,
                     "center_deg": 45,
                     "font_size": 5.4,

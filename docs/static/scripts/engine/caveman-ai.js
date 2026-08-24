@@ -125,32 +125,6 @@ function _hailStormPrepKills(board, side, enemyOfSide) {
 	return slots;
 }
 
-/**
- * Aftershock burn credit for `side`: total scheduled burns (all future
- * slots, plus the popped this-turn counter when `side` is on move),
- * capped by engagement — the count of enemyOfSide stones currently
- * adjacent to side's stones. Eval-only heuristic (burns are NOT
- * score/win material; checkGameOver stays real): without it a shallow
- * search never credits Conflagration, whose kills land past the
- * horizon. Deterministic, one adjacency scan, exactly 0 when the
- * schedules are empty — legacy leaf values are untouched. The
- * engagement cap keeps the credit realizable-now and decays it
- * naturally when the opponent disengages (fizzled burns are lost).
- */
-function _cavemanBurnCredit(board, side, enemyOfSide) {
-	let scheduled = (board.whoseTurn === side ? (board.burnsThisTurn || 0) : 0);
-	for (const v of board.pendingBurns[side]) scheduled += v;
-	if (!scheduled) return 0;
-	let engaged = 0;
-	for (const n of NODE_ORDER) {
-		if (board.stones[n] !== enemyOfSide) continue;
-		for (const nb of (ADJACENCY[n] || [])) {
-			if (board.stones[nb] === side) { engaged++; break; }
-		}
-	}
-	return Math.min(scheduled, engaged);
-}
-
 function _cavemanLeaf(board, color, w) {
 	if (board.gameover) {
 		if (board.winner === color) return CAVEMAN_WIN;
@@ -158,15 +132,16 @@ function _cavemanLeaf(board, color, w) {
 		return -CAVEMAN_WIN;
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
-	// Material includes Providence phantoms (effectiveStones): a scheduled
-	// extra move is credited as a full stone at the leaf where the cast
-	// happens, so a shallow search still values Annuity/Endowment whose
-	// stones land beyond its horizon. This is rules-adjacent material
-	// (pending converts to real 1:1 as it places); the exact asymmetric
-	// win semantics live in checkGameOver, which the search hits directly.
+	// Material includes Providence phantoms, Ambush snares, and pending
+	// Aftershock burns (effectiveStones): a scheduled extra move or burn
+	// is credited as a full stone at the leaf where the cast happens, so
+	// a shallow search still values Annuity/Endowment/Conflagration whose
+	// payoffs land beyond its horizon. This is rules material outright
+	// since the 2026-08 buff (snares and burns count toward the owner's
+	// stone total; burns bank instead of fizzling, so no engagement decay
+	// term is needed); the exact win semantics live in checkGameOver,
+	// which the search hits directly.
 	let score = board.effectiveStones(color) - board.effectiveStones(enemy);
-	score += _cavemanBurnCredit(board, color, enemy)
-	       - _cavemanBurnCredit(board, enemy, color);
 	if (w.mana !== 0) {
 		// board.mana is maintained by SimBoard.update() — free to read.
 		score += w.mana * (board.mana[color] - board.mana[enemy]);
@@ -216,12 +191,10 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
 	const scored = [];
 	for (let i = 0; i < turns.length; i++) {
 		const sim = _minimaxApplyTurn(board, turns[i], color);
-		// Effective stones mirror the leaf (Providence phantoms included);
-		// `sim` is post-advanceTurn, so the opponent's freshly popped
-		// extras are correctly credited to them. Burn credit likewise.
+		// Effective stones mirror the leaf (Providence phantoms, snares,
+		// and pending burns included); `sim` is post-advanceTurn, so the
+		// opponent's freshly popped extras are correctly credited to them.
 		let diff = sim.effectiveStones(color) - sim.effectiveStones(enemy);
-		diff += _cavemanBurnCredit(sim, color, enemy)
-		      - _cavemanBurnCredit(sim, enemy, color);
 		// Positional terms mirror the leaf eval so ordering agrees with
 		// what the search maximizes (mis-ordering costs time, never
 		// correctness). Post-move absolute values sort identically to

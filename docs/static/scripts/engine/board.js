@@ -49,19 +49,22 @@ class SigilBoard {
 		this.variant = normalizeVariant(variant);
 	}
 
-	// Defensive phantom stones for `color`: Providence scheduled extras
-	// plus, for the side to move, extras granted this turn but not yet
-	// placed (before any move this turn, one of the remaining moves is the
+	// Phantom stones for `color`: Providence scheduled extras plus, for
+	// the side to move, extras granted this turn but not yet placed
+	// (before any move this turn, one of the remaining moves is the
 	// ordinary turn move — never a phantom; once a move has been made,
 	// every remaining move is an extra — hence min(left, granted - 1)),
-	// plus Ambush snares owned by `color`.
+	// plus Ambush snares and pending Aftershock burns owned by `color`
+	// (both count fully toward the owner's stone total, 2026-08 buff).
 	pendingStones(color) {
 		let p = 0;
 		for (const v of this.pendingMoves[color]) p += v;
 		if (this.whoseTurn === color) {
 			p += Math.max(0, Math.min(this.movesLeftThisTurn, this.movesGrantedThisTurn - 1));
+			p += this.burnsThisTurn || 0;
 		}
 		for (const n in this.snares) if (this.snares[n] === color) p++;
+		for (const v of this.pendingBurns[color]) p += v;
 		return p;
 	}
 
@@ -283,32 +286,34 @@ class SigilBoard {
 		// threefold repetition is enforced by the controllers.
 		if (variantHasDeathmatch(this.variant)) return false;
 
-		// ±3-lead check: Providence phantoms and Ambush snares count
-		// ASYMMETRICALLY (defense only) — a player's win claim uses their
-		// real placed stones, checked against the opponent's
-		// real+pending+snare total. Sixth-spell count: Providence phantoms
-		// count SYMMETRICALLY (2026-08 playtest ruling) — invested stones
-		// count for their caster; snares stay defense-only there too.
-		// Controllers zero the turn-scoped counters at EOT before calling
-		// this, so only the schedules and snares matter here.
+		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
+		// only) — a player's win claim uses their real placed stones,
+		// checked against the opponent's real+pending total. Ambush snares
+		// and pending Aftershock burns count SYMMETRICALLY everywhere
+		// (2026-08 buff): they add to the owner's total in both the
+		// ±3-lead claim and the sixth-spell count (where Providence
+		// phantoms are symmetric too, 2026-08 playtest ruling).
+		// Controllers bank unfired burns and zero the turn-scoped counters
+		// at EOT before calling this, so only the schedules and snares
+		// matter here.
 		const redTotal = this.totalStones.red;
 		const blueTotal = this.totalStones.blue + 1; // phantom stone
-		let redProv = 0, blueProv = 0, redSnares = 0, blueSnares = 0;
+		let redProv = 0, blueProv = 0, redAmb = 0, blueAmb = 0;
 		for (const v of this.pendingMoves.red) redProv += v;
 		for (const v of this.pendingMoves.blue) blueProv += v;
 		for (const n in this.snares) {
-			if (this.snares[n] === 'red') redSnares++;
-			else blueSnares++;
+			if (this.snares[n] === 'red') redAmb++;
+			else blueAmb++;
 		}
-		const redPend = redProv + redSnares;
-		const bluePend = blueProv + blueSnares;
+		for (const v of this.pendingBurns.red) redAmb += v;
+		for (const v of this.pendingBurns.blue) blueAmb += v;
 
-		if (redTotal > blueTotal + bluePend + 2) {
+		if (redTotal + redAmb > blueTotal + blueProv + blueAmb + 2) {
 			this.gameover = true;
 			this.winner = 'red';
 			return true;
 		}
-		if (blueTotal > redTotal + redPend + 2) {
+		if (blueTotal + blueAmb > redTotal + redProv + redAmb + 2) {
 			this.gameover = true;
 			this.winner = 'blue';
 			return true;
@@ -316,8 +321,8 @@ class SigilBoard {
 
 		if (this.spellCounter[activeColor] >= 6) {
 			this.gameover = true;
-			if (redTotal + redProv > blueTotal + blueProv + blueSnares) this.winner = 'red';
-			else if (blueTotal + blueProv > redTotal + redProv + redSnares) this.winner = 'blue';
+			if (redTotal + redProv + redAmb > blueTotal + blueProv + blueAmb) this.winner = 'red';
+			else if (blueTotal + blueProv + blueAmb > redTotal + redProv + redAmb) this.winner = 'blue';
 			else this.winner = this.enemy(activeColor);
 			return true;
 		}
