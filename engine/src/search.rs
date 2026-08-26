@@ -359,3 +359,66 @@ impl Search {
         match self.deadline { Some(d) => now_ms() >= d, None => false }
     }
 }
+
+impl Search {
+    /// Choose among candidate SUCCESSOR positions supplied by the caller.
+    ///
+    /// This exists so the engine can drive the real web UI without any
+    /// turn-representation translation. The browser enumerates its own legal
+    /// turns, applies each with its own rules, and sends the resulting positions;
+    /// we search from each and return the index of the best. The move that comes
+    /// back is therefore guaranteed to be one the UI can apply and animate, and
+    /// `applyAITurn` records it in the game history exactly as for any other AI.
+    ///
+    /// The honest trade: the engine can only pick from what the browser's
+    /// enumerator offered. That enumerator is capped, so this is a weaker engine
+    /// than the standalone one, which generates ~4,000x more turns. The
+    /// `candidates` count is returned so a caller can surface that.
+    ///
+    /// `positions` are AFTER our move, so the side to move in each is the
+    /// opponent and the score must be negated.
+    pub fn pick_successor(&mut self, positions: &[Board], us: Color,
+                          max_depth: i32, time_ms: u64)
+        -> (usize, i32, SearchStats)
+    {
+        self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
+        self.stats = SearchStats::default();
+        self.path.clear();
+        if positions.is_empty() { return (0, 0, self.stats); }
+
+        let mut best_idx = 0usize;
+        let mut best_score = -WIN * 2;
+        let mut order: Vec<usize> = (0..positions.len()).collect();
+
+        for depth in 1..=max_depth {
+            let mut alpha = -WIN;
+            let mut iter_best = best_idx;
+            let mut iter_score = -WIN * 2;
+            let mut completed = true;
+            for &i in &order {
+                if self.out_of_time() { self.stats.timed_out = true; completed = false; break; }
+                let child = positions[i];
+                let key = crate::zobrist::ZOBRIST.key_js(&child);
+                // Terminal positions are scored directly; otherwise search.
+                let v = if child.outcome != Outcome::Ongoing {
+                    Self::terminal_score(&child, us, 1)
+                } else if self.rep_count(key) + 1 >= 3 {
+                    // Threefold is a blue win, from `us`'s point of view.
+                    if us == Color::Blue { WIN - 1 } else { -(WIN - 1) }
+                } else {
+                    -self.negamax(&child, us.other(), depth - 1, -WIN, -alpha, 1, key)
+                };
+                if v > iter_score { iter_score = v; iter_best = i; }
+                if v > alpha { alpha = v; }
+            }
+            if !completed { break; }
+            best_idx = iter_best;
+            best_score = iter_score;
+            self.stats.depth_completed = depth;
+            // Search the previous best first next time.
+            order.sort_by_key(|&i| if i == best_idx { 0 } else { 1 });
+            if best_score.abs() >= WIN - MAX_PLY as i32 { break; }
+        }
+        (best_idx, best_score, self.stats)
+    }
+}

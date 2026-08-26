@@ -839,6 +839,24 @@ document.addEventListener('alpine:init', () => {
 						});
 						options.ai.pondering = _aiAuthManager
 							? _aiAuthManager.enablePondering : false;
+					} else if (aiMode === 'rust') {
+						// Unlisted local tier (?ai=rust): the native Rust engine, reached
+						// through a localhost helper (engine/server/serve.py). Not usable
+						// on the deployed site - GitHub Pages is static and there is no
+						// server, so this only works when the page is served by that helper.
+						//
+						// The engine implements the 39 OFFICIAL spells only, so the draw is
+						// restricted to those packs; it rejects Tectonic / Providence /
+						// Aftershock / Ambush / Panda outright rather than mis-resolving them.
+						options.aiColor = _aiColor;
+						if (!_rematchSpells && typeof generateSpellList === 'function') {
+							options.spellNames = generateSpellList([
+								'core', 'springtime', 'celestial', 'fury', 'tempest',
+								'flood', 'autumn', 'gloom', 'covenant',
+							]);
+						}
+						options.ai = new RustAI({ timeLimit: 60 });
+						options.ai.pondering = false;
 					} else if (aiMode === 'positional') {
 						// Unlisted experimental tier (?ai=positional): Hard-class
 						// time budget plus the capped map-control tiebreaker from
@@ -1553,6 +1571,7 @@ document.addEventListener('alpine:init', () => {
 						medium: 'AI (Medium)',
 						hard: 'AI (Hard)',
 						very_hard: 'AI (Very Hard)',
+						rust: 'AI (Rust)',
 						minimax: 'AI (Minimax 3-ply)',
 						positional: 'AI (Positional)',
 						caveman: 'AI (Caveman)',

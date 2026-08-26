@@ -429,10 +429,39 @@ fn bench_primitives(iters: u64, seed: u64) -> (u64, f64) {
     (acc, t.elapsed().as_secs_f64())
 }
 
+/// Pick among successor positions supplied as SFN strings. Returns
+/// (index, score_centistones, depth, nodes, seconds, n_parsed).
+#[pyfunction]
+#[pyo3(signature = (sfns, us, time_ms=60000, max_depth=64, tt_bits=21,
+                    width_scale=1, history=vec![]))]
+fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
+                  tt_bits: u32, width_scale: usize, history: Vec<u64>)
+    -> PyResult<(usize, i32, i32, u64, f64, usize)>
+{
+    use std::time::Instant;
+    let col = match us { "red" => Color::Red, "blue" => Color::Blue,
+        _ => return Err(pyo3::exceptions::PyValueError::new_err("us must be red|blue")) };
+    let mut boards = Vec::with_capacity(sfns.len());
+    for s in &sfns {
+        match crate::board::Board::from_sfn(s) {
+            Ok(b) => boards.push(b),
+            Err(e) => return Err(pyo3::exceptions::PyValueError::new_err(
+                format!("bad candidate SFN: {e}"))),
+        }
+    }
+    let mut se = crate::search::Search::new(tt_bits);
+    se.set_width_scale(width_scale);
+    for k in history { se.add_history(k); }
+    let t = Instant::now();
+    let (idx, score, st) = se.pick_successor(&boards, col, max_depth, time_ms);
+    Ok((idx, score, st.depth_completed, st.nodes, t.elapsed().as_secs_f64(), boards.len()))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_successor, m)?)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     Ok(())
 }

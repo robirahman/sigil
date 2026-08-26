@@ -127,3 +127,43 @@ be a wasm module), and the search's clock is `cfg`'d because
 Note for anyone finishing the browser path: expect the wasm build to be weaker
 than the native measurements above — wasm is typically 1.5–3× slower on this kind
 of integer search, so 60 s in a tab is worth roughly 20–40 s of native thinking.
+
+## Playing it in the real web UI (localhost)
+
+```sh
+# 1. build the Python module once
+python3 -m venv .venv && .venv/bin/pip install maturin
+cd engine && VIRTUAL_ENV=../.venv ../.venv/bin/maturin develop --release && cd ..
+
+# 2. serve the real game UI with the engine behind it
+python engine/server/serve.py --docs docs --time 60
+
+# 3. open the printed URL
+#    http://localhost:8000/game.html?ai=rust
+```
+
+The board, animations, move entry, spell prompts and game history are the real
+ones — only the opponent changes.
+
+**How it avoids a translation layer.** The engine's turn representation cannot be
+applied by the JS (a `Cast` carries an outcome index into the engine's own
+enumeration), so the flow is inverted: the browser enumerates its *own* legal
+turns via `getLegalTurnsExhaustive`, applies each with its *own* rules, and POSTs
+the resulting positions as SFN. The server searches from each candidate and returns
+the best index; the browser plays that turn through the normal `applyAITurn` path.
+Nothing engine-internal crosses the wire.
+
+**Two honest limitations.**
+
+* The engine can only pick among the turns the browser offered, and the browser's
+  enumerator is capped by `ENUM_CAPS`, whereas the standalone engine generates
+  ~4,000× more turns per position. So expect this to be **weaker than the arena
+  numbers above**. The server logs the candidate count per move so you can see how
+  wide the choice actually was.
+* Only the 39 official spells are supported, so `?ai=rust` restricts the draw to
+  those nine packs. A position containing Tectonic / Providence / Aftershock /
+  Ambush / Panda is rejected with a clear error rather than mis-resolved.
+
+This cannot work on the deployed site: GitHub Pages is static, so there is no
+server to answer `/api/pick`. It only works when the page is served by
+`serve.py`.
