@@ -1,0 +1,352 @@
+//! Thin PyO3 surface for differential testing against simboard.py and for perf
+//! probes. Node arguments are indices 0..38 in NODE_ORDER.
+
+use pyo3::prelude::*;
+use crate::board::*;
+use crate::zobrist::ZOBRIST;
+
+#[pyclass(name = "Board")]
+#[derive(Clone)]
+pub struct PyBoard { pub b: Board }
+
+fn color(s: &str) -> PyResult<Color> {
+    match s {
+        "red" => Ok(Color::Red),
+        "blue" => Ok(Color::Blue),
+        _ => Err(pyo3::exceptions::PyValueError::new_err("color must be 'red' or 'blue'")),
+    }
+}
+
+fn mask_to_vec(mut m: u64) -> Vec<u8> {
+    let mut v = Vec::with_capacity(m.count_ones() as usize);
+    while m != 0 { v.push(m.trailing_zeros() as u8); m &= m - 1; }
+    v
+}
+
+#[pymethods]
+impl PyBoard {
+    #[new]
+    #[pyo3(signature = (spells, variant = "standard"))]
+    fn new(spells: [u8; 9], variant: &str) -> PyResult<Self> {
+        let v = match variant {
+            "standard" => Variant::Standard,
+            "competitive" => Variant::Competitive,
+            "deathmatch" => Variant::Deathmatch,
+            "competitive_deathmatch" => Variant::CompetitiveDeathmatch,
+            _ => return Err(pyo3::exceptions::PyValueError::new_err("unknown variant")),
+        };
+        Ok(PyBoard { b: Board::new(spells, v) })
+    }
+
+    fn setup_initial(&mut self) { self.b.setup_initial(); }
+
+    fn set_stones(&mut self, red: Vec<u8>, blue: Vec<u8>) {
+        self.b.stones = [0, 0];
+        for i in red { self.b.stones[0] |= 1u64 << i; }
+        for i in blue { self.b.stones[1] |= 1u64 << i; }
+        self.b.update();
+    }
+
+    #[getter] fn red(&self) -> Vec<u8> { mask_to_vec(self.b.stones[0]) }
+    #[getter] fn blue(&self) -> Vec<u8> { mask_to_vec(self.b.stones[1]) }
+    #[getter] fn total(&self) -> (u32, u32) { (self.b.total[0], self.b.total[1]) }
+    #[getter] fn mana(&self) -> (u32, u32) { (self.b.mana[0], self.b.mana[1]) }
+    #[getter] fn turn_counter(&self) -> u32 { self.b.turn_counter }
+    #[setter] fn set_turn_counter(&mut self, t: u32) { self.b.turn_counter = t; }
+    #[setter] fn set_spell_counter(&mut self, sc: (u8, u8)) { self.b.spell_counter = [sc.0, sc.1]; }
+    #[setter] fn set_to_move(&mut self, c: &str) -> PyResult<()> { self.b.to_move = color(c)?; Ok(()) }
+    #[setter] fn set_lock(&mut self, l: (u8, u8)) { self.b.lock = [l.0, l.1]; }
+
+    fn charged(&self, c: &str) -> PyResult<Vec<u8>> {
+        let c = color(c)?;
+        Ok((0..9u8).filter(|p| self.b.charged[c.idx()] & (1 << p) != 0).map(|p| p + 1).collect())
+    }
+    fn soft_moveable(&self, c: &str) -> PyResult<Vec<u8>> { Ok(mask_to_vec(self.b.soft_moveable(color(c)?))) }
+    fn hard_moveable(&self, c: &str) -> PyResult<Vec<u8>> { Ok(mask_to_vec(self.b.hard_moveable(color(c)?))) }
+    fn all_moveable(&self, c: &str) -> PyResult<Vec<u8>> { Ok(mask_to_vec(self.b.all_moveable(color(c)?))) }
+    fn push_options(&self, node: u8, c: &str) -> PyResult<Vec<u8>> {
+        let (o, k) = self.b.push_options(node, color(c)?);
+        Ok(o[..k].to_vec())
+    }
+    fn push_enemy(&mut self, node: u8, c: &str) -> PyResult<Option<u8>> {
+        Ok(match self.b.push_enemy(node, color(c)?) { Push::To(d) => Some(d), Push::Crush => None })
+    }
+    fn escape_distance(&self, node: u8, defender: &str, max_dist: u32) -> PyResult<u32> {
+        Ok(self.b.escape_distance(node, color(defender)?, max_dist))
+    }
+    fn is_crushable(&self, node: u8, attacker: &str) -> PyResult<bool> {
+        Ok(self.b.is_crushable(node, color(attacker)?))
+    }
+    fn dash_sacrificeable(&self, c: &str) -> PyResult<Vec<u8>> {
+        Ok(mask_to_vec(self.b.dash_sacrificeable(color(c)?)))
+    }
+    fn dash_cost(&self, c: &str) -> PyResult<u32> { Ok(self.b.dash_cost(color(c)?)) }
+    fn castable(&self, c: &str, can_spell: bool, can_summer: bool, post_dash: bool) -> PyResult<Vec<u8>> {
+        Ok(self.b.castable(color(c)?, can_spell, can_summer, post_dash))
+    }
+    fn cast_clear_and_refill(&mut self, pos: usize, c: &str) -> PyResult<()> {
+        self.b.cast_clear_and_refill(pos, color(c)?); Ok(())
+    }
+    fn resolve_autumn_moves(&mut self, pos: usize, c: &str, count: u8) -> PyResult<u8> {
+        Ok(self.b.resolve_autumn_moves(pos, color(c)?, count))
+    }
+    fn update(&mut self) { self.b.update(); }
+    fn check_game_over(&mut self, active: &str) -> PyResult<bool> {
+        Ok(self.b.check_game_over(color(active)?))
+    }
+    #[getter] fn winner(&self) -> Option<&'static str> {
+        match self.b.outcome {
+            Outcome::Ongoing => None, Outcome::RedWins => Some("red"), Outcome::BlueWins => Some("blue"),
+        }
+    }
+    #[getter] fn gameover(&self) -> bool { self.b.outcome != Outcome::Ongoing }
+    #[getter] fn key_js(&self) -> u64 { ZOBRIST.key_js(&self.b) }
+    #[getter] fn key_py(&self) -> u64 { ZOBRIST.key_py(&self.b) }
+    fn has_deferred_spell(&self) -> bool { self.b.has_deferred_spell() }
+    fn resolve_spell(&mut self, id: u8, c: &str) -> PyResult<bool> {
+        Ok(self.b.resolve_spell(id, color(c)?))
+    }
+    fn resolve_spell_at(&mut self, pos: usize, c: &str) -> PyResult<bool> {
+        Ok(self.b.resolve_spell_at(pos, color(c)?))
+    }
+    fn resolver_ready(&self, id: u8) -> bool { self.b.resolver_ready(id) }
+    fn finish_cast(&mut self, id: u8, c: &str) -> PyResult<()> {
+        self.b.finish_cast(id, color(c)?); Ok(())
+    }
+    #[getter] fn lock(&self) -> (u8, u8) { (self.b.lock[0], self.b.lock[1]) }
+    #[getter] fn springlock(&self) -> (u8, u8) { (self.b.springlock[0], self.b.springlock[1]) }
+    #[getter] fn spell_counter(&self) -> (u8, u8) { (self.b.spell_counter[0], self.b.spell_counter[1]) }
+    fn lurk_targets(&self, c: &str) -> PyResult<Vec<u8>> {
+        Ok(mask_to_vec(self.b.lurk_targets(color(c)?)))
+    }
+    fn resolve_destroy_exposed(&mut self, c: &str) -> PyResult<u32> {
+        Ok(self.b.resolve_destroy_exposed(color(c)?))
+    }
+    fn clone_board(&self) -> PyBoard { self.clone() }
+    fn draw_is_legal(&self) -> bool { self.b.draw_is_legal() }
+    fn to_sfn(&self) -> String { self.b.to_sfn() }
+
+    /// Every legal FIRST-move variant as (kind, node, push_to), with Wind blink and
+    /// enemy Seal-of-Stone rules applied. Separate from `enumerate_turns` because
+    /// that one is capped: with a spell charged, a single first move can spawn
+    /// enough continuations to exhaust the cap, which would make a coverage check
+    /// look like the generator was hiding moves when it was only truncated.
+    fn first_move_variants(&self) -> Vec<(String, i32, i32)> {
+        let c = self.b.to_move;
+        let (targets, _wind) = self.b.first_move_targets(c);
+        self.b.move_variants_pub(targets, c).into_iter().map(|(n, p)| {
+            let kind = if self.b.is_blink_pub(n, c) { "blink" } else { "move" };
+            (kind.to_string(), n as i32, p.map_or(-1, |x| x as i32))
+        }).collect()
+    }
+    #[staticmethod]
+    fn from_sfn(s: &str) -> PyResult<PyBoard> {
+        crate::board::Board::from_sfn(s)
+            .map(|b| PyBoard { b })
+            .map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    #[pyo3(signature = (c, eval_name="default"))]
+    fn evaluate(&self, c: &str, eval_name: &str) -> PyResult<i32> {
+        let w = match eval_name {
+            "material" => crate::eval::MATERIAL_ONLY,
+            "classic" => crate::eval::CLASSIC,
+            "mana" => crate::eval::MANA_ONLY,
+            "mc" => crate::eval::CAPPED_MC,
+            "manavoid" => crate::eval::CAPPED_MANAVOID,
+            "mix" => crate::eval::CAPPED_MIX,
+            "control" => crate::eval::CONTROL_ONLY,
+            _ => crate::eval::Weights::default(),
+        };
+        Ok(self.b.evaluate(color(c)?, &w))
+    }
+    fn control_diff(&self, c: &str) -> PyResult<i32> { Ok(self.b.control_diff(color(c)?)) }
+
+    /// Search, play the best turn, advance the turn. Returns
+    /// (depth_completed, nodes, seconds, gameover, winner, score, widened).
+    /// `history` is the list of prior position keys, for repetition counting.
+    #[pyo3(signature = (time_ms=1000, max_depth=64, tt_bits=20, window=16,
+                        width_scale=1, history=vec![], eval_name="default"))]
+    fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
+                 width_scale: usize, history: Vec<u64>, eval_name: &str)
+        -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
+    {
+        use std::time::Instant;
+        let c = self.b.to_move;
+        let mut s = crate::search::Search::new(tt_bits);
+        s.set_window(window);
+        s.set_width_scale(width_scale);
+        s.weights = match eval_name {
+            "material" => crate::eval::MATERIAL_ONLY,
+            "classic" => crate::eval::CLASSIC,
+            "mana" => crate::eval::MANA_ONLY,
+            "mc" => crate::eval::CAPPED_MC,
+            "manavoid" => crate::eval::CAPPED_MANAVOID,
+            "mix" => crate::eval::CAPPED_MIX,
+            "control" => crate::eval::CONTROL_ONLY,
+            _ => crate::eval::Weights::default(),
+        };
+        for k in history { s.add_history(k); }
+        let t = Instant::now();
+        let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);
+        let dt = t.elapsed().as_secs_f64();
+        if let Some(turn) = best {
+            self.b.apply_turn(&turn, c);
+        }
+        self.b.turn_counter += 1;
+        self.b.to_move = c.other();
+        self.b.update();
+        let over = self.b.outcome != Outcome::Ongoing;
+        let w = self.winner();
+        Ok((st.depth_completed, st.nodes, dt, over, w, score, st.widened))
+    }
+
+    /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
+    /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
+    ///  windowed, seconds, best_first_kind, best_first_node)
+    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=1))]
+    fn search(&self, max_depth: i32, time_ms: u64, tt_bits: u32, window: usize,
+              width_scale: usize)
+        -> PyResult<(i32, i32, u64, u64, u64, i32, bool, bool, f64, String, i32, u64)>
+    {
+        use std::time::Instant;
+        let mut s = crate::search::Search::new(tt_bits);
+        s.set_window(window);
+        s.set_width_scale(width_scale);
+        let t = Instant::now();
+        let (best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
+        let dt = t.elapsed().as_secs_f64();
+        let (kind, node) = match best.map(|b| b.slice()[0]) {
+            Some(crate::turn::Action::Move { node, .. }) => ("move".to_string(), node as i32),
+            Some(crate::turn::Action::Blink { node, .. }) => ("blink".to_string(), node as i32),
+            Some(crate::turn::Action::Dash { node, .. }) => ("dash".to_string(), node as i32),
+            Some(crate::turn::Action::Cast { pos, .. }) => ("cast".to_string(), pos as i32),
+            Some(crate::turn::Action::Pass) | None => ("pass".to_string(), -1),
+        };
+        Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs,
+            st.max_ply_seen, st.timed_out, st.windowed, dt, kind, node, st.expanded))
+    }
+
+    /// Time-to-first-N lazily, plus the goal in force. Returns
+    /// (n_yielded, seconds, goal_name).
+    fn bench_lazy(&self, take: usize) -> (usize, f64, String) {
+        use std::time::Instant;
+        let c = self.b.to_move;
+        let t = Instant::now();
+        let mut k = 0usize;
+        for _t in self.b.turns_ordered(c).take(take) { k += 1; }
+        let g = format!("{:?}", self.b.placement_goal(c));
+        (k, t.elapsed().as_secs_f64(), g)
+    }
+
+    /// Full enumeration cost, for comparison.
+    fn bench_full(&self) -> (usize, f64) {
+        use std::time::Instant;
+        let c = self.b.to_move;
+        let t = Instant::now();
+        let (v, _st) = self.b.enumerate_turns(c);
+        (v.len(), t.elapsed().as_secs_f64())
+    }
+    #[staticmethod]
+    fn legal_draw(seed: u64) -> Vec<u8> { crate::board::Board::legal_draw(seed).to_vec() }
+
+    /// Enumerated turns as tuples for inspection from Python:
+    /// (kind, node, push_to, sacs, pos) per action.
+    fn enumerate_turns(&self) -> PyResult<Vec<Vec<(String, i32, i32, Vec<u8>, i32)>>> {
+        let c = self.b.to_move;
+        let (turns, _st) = self.b.enumerate_turns(c);
+        Ok(turns.iter().map(|t| t.slice().iter().map(|a| match *a {
+            crate::turn::Action::Blink { node, push_to } =>
+                ("blink".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+            crate::turn::Action::Move { node, push_to } =>
+                ("move".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+            crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
+                 sacs[..n_sacs as usize].to_vec(), -1),
+            crate::turn::Action::Cast { pos, outcome } =>
+                ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+            crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+        }).collect()).collect())
+    }
+
+    fn enum_stats(&self) -> PyResult<(usize, usize, bool, bool)> {
+        let (_t, st) = self.b.enumerate_turns(self.b.to_move);
+        Ok((st.turns, st.turns_with_greedy_cast, st.truncated, st.resolver_truncated))
+    }
+
+    /// Distinct resulting positions after casting the spell at `pos`, as
+    /// (red_mask, blue_mask) pairs. Post clear-and-refill, pre finish_cast.
+    fn cast_outcomes(&self, pos: usize, c: &str) -> PyResult<Vec<(u64, u64)>> {
+        let col = color(c)?;
+        let mut b = self.b;
+        b.cast_clear_and_refill(pos, col);
+        let (outs, _t) = b.resolve_outcomes(pos, col, crate::turn::OUTCOME_CAP);
+        Ok(outs.iter().map(|x| (x.stones[0], x.stones[1])).collect())
+    }
+
+    /// Apply a turn given as (kind, node, push_to, sacs, pos) tuples.
+    fn apply_turn_tuples(&mut self, acts: Vec<(String, i32, i32, Vec<u8>, i32)>, c: &str)
+        -> PyResult<()>
+    {
+        use crate::turn::{Action, Turn};
+        let col = color(c)?;
+        let mut t = Turn { actions: [Action::Pass; crate::turn::MAX_ACTIONS], len: 0, greedy_casts: 0 };
+        for (kind, node, push, sacs, pos) in acts {
+            let pt = if push < 0 { None } else { Some(push as u8) };
+            let a = match kind.as_str() {
+                "blink" => Action::Blink { node: node as u8, push_to: pt },
+                "move"  => Action::Move { node: node as u8, push_to: pt },
+                "dash"  => {
+                    let mut s = [0u8; 2];
+                    for (i, v) in sacs.iter().enumerate().take(2) { s[i] = *v; }
+                    Action::Dash { sacs: s, n_sacs: sacs.len().min(2) as u8,
+                                   node: node as u8, push_to: pt }
+                }
+                "cast"  => Action::Cast { pos: pos as u8, outcome: node.max(0) as u16 },
+                _ => Action::Pass,
+            };
+            if (t.len as usize) < crate::turn::MAX_ACTIONS {
+                t.actions[t.len as usize] = a; t.len += 1;
+            }
+        }
+        self.b.apply_turn(&t, col);
+        Ok(())
+    }
+}
+
+/// Perf probe over the primitive path. NOT a full search node — no spell casting
+/// and no turn enumeration — so treat the rate as an upper bound on node rate.
+#[pyfunction]
+fn bench_primitives(iters: u64, seed: u64) -> (u64, f64) {
+    use std::time::Instant;
+    let mut b = Board::new([0; 9], Variant::Standard);
+    let mut s = seed | 1;
+    let t = Instant::now();
+    let mut acc = 0u64;
+    for _ in 0..iters {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        let r = s & crate::topology::ALL;
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        let bl = (s & crate::topology::ALL) & !r;
+        b.stones = [r, bl];
+        b.update();
+        acc = acc.wrapping_add(b.total[0] as u64 + b.charged[0] as u64);
+        let hm = b.hard_moveable(Color::Red);
+        if hm != 0 {
+            let node = hm.trailing_zeros() as u8;
+            let (_, k) = b.push_options(node, Color::Red);
+            acc = acc.wrapping_add(k as u64);
+            acc = acc.wrapping_add(b.escape_distance(node, Color::Blue, 39) as u64);
+        }
+        acc = acc.wrapping_add(ZOBRIST.key_js(&b));
+    }
+    (acc, t.elapsed().as_secs_f64())
+}
+
+#[pymodule]
+fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyBoard>()?;
+    m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
+    m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
+    Ok(())
+}
