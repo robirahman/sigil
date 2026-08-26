@@ -115,6 +115,26 @@ pub struct Search {
     window: usize,
     width_scale: usize,
     pub weights: crate::eval::Weights,
+    /// A/B switch: true reproduces the pre-fix stage ordering.
+    legacy_order: bool,
+    /// Merge move classes only when the width budget is at least this.
+    ///
+    /// DEFAULT `usize::MAX`, i.e. OFF, because the merge is a MEASURED REGRESSION.
+    /// It is kept reachable because the diagnosis behind it is sound and a better
+    /// scoring function may yet redeem it. Two variants were tried, both
+    /// colour-swapped over 80 games at 200 ms against the stage ordering:
+    ///
+    ///   merge at every node, whole-turn simulation scoring  ->  21.2% (-228 Elo)
+    ///                                 88-93% node-rate cost, depth 5.62 -> 4.31
+    ///   merge near the root only, simulation-free scoring   ->  16.2% (-285 Elo)
+    ///                                 no depth cost (5.64 vs 5.81)
+    ///
+    /// The second run isolates the cause: with depth held equal it still lost, so
+    /// the problem is the ORDERING, not its cost. Reserving budget for dashes
+    /// displaces better moves, and the cheap dash scoring (tempo credit, sigil
+    /// completion) evidently over-rates them. Fixing the real blindness needs a
+    /// better dash valuation, not a quota.
+    merge_min_width: usize,
 }
 
 impl Search {
@@ -132,10 +152,14 @@ impl Search {
             window: DEFAULT_WINDOW,
             width_scale: 1,
             weights: crate::eval::Weights::default(),
+            legacy_order: false,
+            merge_min_width: usize::MAX,
         }
     }
 
     pub fn set_window(&mut self, w: usize) { self.window = w; }
+    pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
+    pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
     /// Multiply every widening bound. 1 is the tuned default; raising it trades
     /// depth for breadth and, taken far enough, reaches full enumeration.
     pub fn set_width_scale(&mut self, s: usize) { self.width_scale = s.max(1); }
@@ -335,10 +359,27 @@ impl Search {
         // here was what capped the search at depth ~1: generation, not evaluation,
         // dominated. The iterator is best-first, so this is a beam over a ranked
         // stream rather than a blind truncation.
-        let mut it = b.turns_ordered_window(c, self.window);
-        let mut v: Vec<Turn> = it.by_ref().take(width).collect();
-        if it.next().is_some() { self.stats.widened = true; }
-        if it.windowed { self.stats.windowed = true; }
+        // Best-first across move / cast / dash classes with a per-class quota, so
+        // progressive widening can never starve a whole class. Stage ordering used
+        // to hide dashes from the search in 118/120 positions at width 10.
+        // Generating dash/cast turns is inherently expensive (a dash needs
+        // simulating, a cast needs resolving), and the old stage ordering was fast
+        // precisely BECAUSE laziness never reached those stages. Measured:
+        // class-merging at every node costs 88-93% of node rate and scored 21.2%
+        // over 80 games. So merge only near the ROOT, where nodes are few and the
+        // budget is wide; deeper nodes keep the cheap ordering.
+        let mut v: Vec<Turn>;
+        if self.legacy_order || width < self.merge_min_width {
+            let mut it = b.turns_ordered_window(c, self.window);
+            v = it.by_ref().take(width).collect();
+            if it.next().is_some() { self.stats.widened = true; }
+            if it.windowed { self.stats.windowed = true; }
+        } else {
+            let mut it = b.turns_best_first(c, self.window, width);
+            v = it.by_ref().take(width).collect();
+            if it.next().is_some() { self.stats.widened = true; }
+            if it.windowed { self.stats.windowed = true; }
+        }
         self.stats.expanded += v.len() as u64;
         // Promote the TT move, then the two killers, by matching first action.
         let p = ply.min(MAX_PLY - 1);

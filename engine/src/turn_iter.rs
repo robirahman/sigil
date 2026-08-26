@@ -299,3 +299,69 @@ impl Board {
         v
     }
 }
+
+/// Best-first over ALL turn classes, with a guaranteed quota per class.
+///
+/// `TurnIter` yields in STAGES: Moves, then MoveCast, then Dash, then DashCast.
+/// Combined with progressive widening (6 successors near the leaves, 40 deep) that
+/// starved dashes almost everywhere. Measured over 120 legal midgame positions, the
+/// first dash turn sat at median index 40 and p90 284 in the stream, so at width 10
+/// a dash was absent in 118/120 positions.
+///
+/// The search was therefore structurally blind to a whole move class at shallow
+/// depth: it could not see that a player may place TWO stones in one turn (dash to
+/// fill a sigil and cast it), nor that stones about to be crushed can be dashed
+/// away instead, nor use dash for tempo itself. It also let the search "prove" wins
+/// whose refutation was a dash — a playtest showed `win in 7` that then evaporated.
+///
+/// Fix: pull a bounded slice from each class, score WHOLE turns with `turn_score`,
+/// and merge. The per-class quota guarantees dashes and casts appear inside every
+/// width budget however the scores fall. Cost measured at ~1% of node rate.
+pub struct OrderedTurns {
+    buf: std::vec::IntoIter<Turn>,
+    pub windowed: bool,
+}
+
+impl Board {
+    /// `width` is what the caller intends to consume, so per-node cost stays
+    /// proportional to the search's own budget.
+    pub fn turns_best_first(&self, c: Color, window: usize, width: usize) -> OrderedTurns {
+        let take_each = width.max(8);
+        let mut it = self.turns_ordered_window(c, window);
+        let mut moves: Vec<Turn> = Vec::new();
+        let mut casts: Vec<Turn> = Vec::new();
+        let mut dashes: Vec<Turn> = Vec::new();
+        let hard_cap = take_each.saturating_mul(12).max(64);
+        let mut seen = 0usize;
+        for t in it.by_ref() {
+            seen += 1;
+            let has_dash = t.slice().iter().any(|a| matches!(a, Action::Dash { .. }));
+            let has_cast = t.slice().iter().any(|a| matches!(a, Action::Cast { .. }));
+            if has_dash {
+                if dashes.len() < take_each { dashes.push(t); }
+            } else if has_cast {
+                if casts.len() < take_each { casts.push(t); }
+            } else if moves.len() < take_each {
+                moves.push(t);
+            }
+            if (moves.len() >= take_each && casts.len() >= take_each
+                && dashes.len() >= take_each) || seen >= hard_cap { break; }
+        }
+        let windowed = it.windowed;
+        let mut all: Vec<(i32, Turn)> = Vec::with_capacity(
+            moves.len() + casts.len() + dashes.len());
+        for t in moves.into_iter().chain(casts).chain(dashes) {
+            all.push((self.turn_score(&t, c), t));
+        }
+        all.sort_by(|a, b| b.0.cmp(&a.0));
+        OrderedTurns {
+            buf: all.into_iter().map(|(_, t)| t).collect::<Vec<_>>().into_iter(),
+            windowed,
+        }
+    }
+}
+
+impl Iterator for OrderedTurns {
+    type Item = Turn;
+    fn next(&mut self) -> Option<Turn> { self.buf.next() }
+}

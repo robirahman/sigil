@@ -312,3 +312,47 @@ Caveat worth keeping in view: at these time controls the deployed engine only
 reaches depth 1.7-2.7, well short of the 3.65 the committed 10 s/move arena runs
 measured. A matched 10 s/move gate is the honest confirmation, and at ~36
 core-hours it is the first thing actually worth renting CPU for.
+
+## The search is blind to dashes at shallow depth — diagnosis confirmed, fix failed
+
+Robi's playtest (~1400, engine lost) reported that the engine does not see a player
+dashing to place TWO stones in one turn — to fill a sigil and cast it, or to spend
+stones that were about to be crushed. Confirmed as a code fault, not a horizon effect.
+
+`TurnIter` yields turns in STAGES: Moves, MoveCast, Dash, DashCast. Progressive
+widening then takes the first K (6 near the leaves, 40 deep). Over 120 legal
+midgame positions the first dash turn sat at **median index 40, p90 284**, so:
+
+| depth remaining | width | positions where the first dash was outside the budget |
+|---|---|---|
+| 6+ | 40 | 61/120 |
+| 4 | 24 | 78/120 |
+| 2 | 10 | **118/120** |
+| 1 | 6 | **119/120** |
+
+At shallow depth — most nodes in the tree — the search never generated a dash for
+either side. That also explains the playtest's `win in 7` that evaporated: the
+refutation was a dash the widening never produced.
+
+### Two attempted fixes, both measured regressions
+
+Best-first merge across move/cast/dash classes with a per-class quota, colour-swapped
+over 80 games at 200 ms against the stage ordering:
+
+| variant | score | Elo | depth |
+|---|---|---|---|
+| merge everywhere, whole-turn simulation scoring | **21.2%** | −228 | 4.31 vs 5.62 |
+| merge near the root only, simulation-free scoring | **16.2%** | −285 | 5.64 vs 5.81 |
+
+The first lost partly on cost: scoring resolved cast outcomes per candidate and cost
+**88–93% of node rate**. The second removed that (depth is level), and still lost —
+which isolates the cause: **the ordering itself is worse**. Reserving budget for
+dashes displaces stronger moves, and the cheap dash valuation (tempo credit, sigil
+completion) over-rates them.
+
+An incidental discovery: generating dash and cast turns is *inherently* expensive,
+and the old ordering was fast precisely BECAUSE laziness never reached those stages.
+Any real fix has to make dash generation cheap, not merely fair.
+
+Kept behind `Search::set_merge_min_width` (default `usize::MAX`, off) so the next
+attempt has a harness. The blindness is real and still unfixed.

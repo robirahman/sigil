@@ -126,6 +126,23 @@ impl PyBoard {
     fn draw_is_legal(&self) -> bool { self.b.draw_is_legal() }
     fn to_sfn(&self) -> String { self.b.to_sfn() }
 
+    /// The ordered stream the search actually consumes, as action kinds per turn.
+    /// Used to verify no move class is starved by the widening budget.
+    #[pyo3(signature = (take, width=0))]
+    fn ordered_turn_kinds(&self, take: usize, width: usize) -> Vec<String> {
+        let c = self.b.to_move;
+        let w = if width == 0 { take } else { width };
+        self.b.turns_best_first(c, 16, w).take(take).map(|t| {
+            t.slice().iter().map(|a| match a {
+                crate::turn::Action::Move { .. } => "move",
+                crate::turn::Action::Blink { .. } => "blink",
+                crate::turn::Action::Dash { .. } => "dash",
+                crate::turn::Action::Cast { .. } => "cast",
+                crate::turn::Action::Pass => "pass",
+            }).collect::<Vec<_>>().join("+")
+        }).collect()
+    }
+
     // ---- surfaces for the interactive local player ----
 
     /// Continuations available after a chosen first move, as
@@ -279,9 +296,11 @@ impl PyBoard {
     /// (depth_completed, nodes, seconds, gameover, winner, score, widened).
     /// `history` is the list of prior position keys, for repetition counting.
     #[pyo3(signature = (time_ms=1000, max_depth=64, tt_bits=20, window=16,
-                        width_scale=1, history=vec![], eval_name="default"))]
+                        width_scale=1, history=vec![], eval_name="default",
+                        legacy_order=false, merge_min_width=32))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
-                 width_scale: usize, history: Vec<u64>, eval_name: &str)
+                 width_scale: usize, history: Vec<u64>, eval_name: &str,
+                 legacy_order: bool, merge_min_width: usize)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -289,6 +308,8 @@ impl PyBoard {
         let mut s = crate::search::Search::new(tt_bits);
         s.set_window(window);
         s.set_width_scale(width_scale);
+        s.set_legacy_order(legacy_order);
+        s.set_merge_min_width(merge_min_width);
         s.weights = match eval_name {
             "material" => crate::eval::MATERIAL_ONLY,
             "classic" => crate::eval::CLASSIC,

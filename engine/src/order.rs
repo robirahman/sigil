@@ -274,3 +274,51 @@ impl Board {
         cands.into_iter().map(|(_, b)| b).collect()
     }
 }
+
+impl Board {
+    /// Score a whole turn for ordering, WITHOUT simulating it.
+    ///
+    /// The first version walked the turn and resolved cast outcomes per candidate.
+    /// That is called for every candidate at every node, and it cost **86-94% of
+    /// node rate** (7-15x slowdown) — a measured 21.2% score over 80 games against
+    /// the ordering it replaced, with depth falling 5.62 -> 4.31. Ordering must be
+    /// near-free, so this version touches no board state:
+    ///
+    ///   * moves      `move_score` on the current board
+    ///   * dash       the sacrifice cost, offset by a tempo credit, because a dash
+    ///                buys a second placement in one turn — filling a sigil to cast
+    ///                it, or clearing stones that were about to be crushed
+    ///   * cast       a flat credit plus mana (refill scales with mana), rather
+    ///                than resolving the spell
+    pub fn turn_score(&self, t: &crate::turn::Turn, c: Color) -> i32 {
+        use crate::turn::Action;
+        let mut v = 0i32;
+        for a in t.slice() {
+            match *a {
+                Action::Move { node, push_to } | Action::Blink { node, push_to } => {
+                    v += self.move_score(node, push_to, c);
+                }
+                Action::Dash { sacs, n_sacs, node, .. } => {
+                    for i in 0..n_sacs as usize {
+                        v -= self.sacrifice_cost(sacs[i], c);
+                        // A stone with no escape was going to be lost anyway, so
+                        // spending it costs far less than its nominal value. Missing
+                        // this is why the search over-valued surrounding a group.
+                        if self.escape_distance(sacs[i], c, 3) >= 3 { v += 60; }
+                    }
+                    // Credit for the extra placement the dash buys.
+                    v += 70;
+                    for p in 0..9 {
+                        if crate::topology::SIGIL[p] & (1u64 << node) == 0 { continue; }
+                        // Landing the last stone of a sigil is the tempo play the
+                        // search could not see: dash, fill, cast, all in one turn.
+                        match self.uncontrolled_count(p, c) { 1 => v += 120, 2 => v += 40, _ => {} }
+                    }
+                }
+                Action::Cast { .. } => { v += 150 + 30 * self.mana[c.idx()] as i32; }
+                Action::Pass => {}
+            }
+        }
+        v
+    }
+}
