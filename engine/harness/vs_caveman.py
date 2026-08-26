@@ -16,8 +16,18 @@ from ai.config import SPELL_TO_ID
 import sigil_engine as se
 
 ID2S = {i: s for s, i in SPELL_TO_ID.items()}
-ENGINE_DIR = os.path.join(os.environ['SCRATCH'], 'ref', 'docs', 'static', 'scripts', 'engine')
-SERVER = os.path.join(os.environ['SCRATCH'], 'bridge', 'caveman_server.js')
+# Resolve the bridge RELATIVE TO THIS FILE (engine/harness/ -> engine/bridge/).
+# Deriving it from $SCRATCH broke on a remote runner where the repo sat at
+# $SCRATCH/engine, so the path became $SCRATCH/bridge and every worker died
+# ten minutes in with "caveman server died".
+_HERE = os.path.dirname(os.path.abspath(__file__))
+SERVER = os.path.join(os.path.dirname(_HERE), 'bridge', 'caveman_server.js')
+# The JS engine sources are reference material, so they stay under $SCRATCH/ref.
+ENGINE_DIR = os.path.join(os.environ.get('SCRATCH', os.path.dirname(os.path.dirname(_HERE))),
+                          'ref', 'docs', 'static', 'scripts', 'engine')
+for _p, _what in ((SERVER, 'bridge script'), (ENGINE_DIR, 'JS engine dir')):
+    if not os.path.exists(_p):
+        sys.exit(f"FATAL: {_what} not found at {_p}")
 
 class Caveman:
     def __init__(self):
@@ -109,6 +119,11 @@ if __name__ == "__main__":
             for rust_color in ('red', 'blue'):
                 w, n, rd, cd = game(9000+off+i, rust_color, ms, cav, eval_name=ev, opp=opp)
                 plies.append(n); rdepth += rd; cdepth += cd
+                # One flushed line per finished game, so a preempted run still
+                # yields every game it actually completed.
+                print(f"GAME opp={opp} seed={9000+off+i} rust={rust_color} winner={w} "
+                      f"plies={n} rdepth={statistics.mean(rd) if rd else 0:.2f} "
+                      f"cdepth={statistics.mean(cd) if cd else 0:.2f}", flush=True)
                 if w is None: unfinished += 1
                 elif w == rust_color: wins['rust'] += 1
                 else: wins['caveman'] += 1

@@ -14,7 +14,11 @@ pub mod turn_iter;
 pub mod sfn;
 pub mod eval;
 pub mod search;
+#[cfg(feature = "python")]
 pub mod py;
+
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 #[cfg(test)]
 mod tests;

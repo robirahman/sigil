@@ -126,6 +126,92 @@ impl PyBoard {
     fn draw_is_legal(&self) -> bool { self.b.draw_is_legal() }
     fn to_sfn(&self) -> String { self.b.to_sfn() }
 
+    // ---- surfaces for the interactive local player ----
+
+    /// Continuations available after a chosen first move, as
+    /// (label, kind, a, b, c) rows the caller can present as a menu:
+    ///   ("pass", "pass", -1, -1, -1)
+    ///   ("dash", "dash", sac0, sac1, dest_node)      push dest folded into `c`
+    ///   ("cast <spell> variant k", "cast", pos, k, -1)
+    fn continuations(&self, node: u8, push_to: i32, c: &str)
+        -> PyResult<Vec<(String, String, i32, i32, i32)>>
+    {
+        let col = color(c)?;
+        let mut b = self.b;
+        b.do_move_with_pub(node, if push_to < 0 { None } else { Some(push_to as u8) }, col);
+        let mut out = vec![("pass".to_string(), "pass".to_string(), -1, -1, -1)];
+        // dashes
+        for (t, _bd) in b.ordered_dash_branches(col, 8) {
+            if let crate::turn::Action::Dash { sacs, n_sacs, node: dn, push_to: dp } = t.slice()[0] {
+                let s1 = if n_sacs > 1 { sacs[1] as i32 } else { -1 };
+                out.push((format!("dash (give up {} {}) then move {}",
+                                  crate::topology::NAMES[sacs[0] as usize],
+                                  if n_sacs > 1 { crate::topology::NAMES[sacs[1] as usize] } else { "" },
+                                  crate::topology::NAMES[dn as usize]),
+                          "dash".to_string(), sacs[0] as i32, s1,
+                          (dn as i32) | ((dp.map_or(63u8, |x| x) as i32) << 8)));
+            }
+        }
+        // casts, with each distinct outcome offered separately
+        for id in b.castable(col, true, true, false) {
+            let Some(pos) = b.position_of(id) else { continue };
+            let mut cl = b;
+            cl.cast_clear_and_refill(pos, col);
+            let (outs, _t) = cl.resolve_outcomes_ordered(pos, col, 12);
+            for (k, ob) in outs.iter().enumerate() {
+                let gained = (ob.stones[col.idx()] & !b.stones[col.idx()]).count_ones();
+                let killed = (b.stones[col.other().idx()] & !ob.stones[col.other().idx()]).count_ones();
+                out.push((format!("cast {} [{}]  (+{} own, -{} enemy)",
+                                  crate::spells_meta::SPELLS[id as usize].name, k, gained, killed),
+                          "cast".to_string(), pos as i32, k as i32, -1));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Apply a (first move, continuation) pair chosen from the menus above.
+    fn apply_choice(&mut self, node: u8, push_to: i32, kind: &str,
+                    a: i32, b_: i32, cc: i32, c: &str) -> PyResult<()> {
+        use crate::turn::{Action, Turn, MAX_ACTIONS};
+        let col = color(c)?;
+        let mut t = Turn { actions: [Action::Pass; MAX_ACTIONS], len: 0, greedy_casts: 0 };
+        let blink = self.b.is_blink_pub(node, col);
+        let pt = if push_to < 0 { None } else { Some(push_to as u8) };
+        t = t.push_pub(if blink { Action::Blink { node, push_to: pt } }
+                       else { Action::Move { node, push_to: pt } });
+        match kind {
+            "dash" => {
+                let dn = (cc & 0xff) as u8;
+                let dpv = ((cc >> 8) & 0xff) as u8;
+                let dp = if dpv == 63 { None } else { Some(dpv) };
+                let n_sacs = if b_ < 0 { 1u8 } else { 2 };
+                let sacs = [a as u8, if b_ < 0 { 0 } else { b_ as u8 }];
+                t = t.push_pub(Action::Dash { sacs, n_sacs, node: dn, push_to: dp });
+            }
+            "cast" => { t = t.push_pub(Action::Cast { pos: a as u8, outcome: b_ as u16 }); }
+            _ => {}
+        }
+        t = t.push_pub(Action::Pass);
+        self.b.apply_turn(&t, col);
+        self.b.turn_counter += 1;
+        self.b.to_move = col.other();
+        self.b.update();
+        Ok(())
+    }
+
+    /// Charged spell names for a colour, for the status line.
+    fn charged_names(&self, c: &str) -> PyResult<Vec<String>> {
+        let col = color(c)?;
+        Ok((0..9usize).filter(|&p| self.b.charged[col.idx()] & (1 << p) != 0)
+            .map(|p| {
+                let id = self.b.spells[p] as usize;
+                format!("{}({})", crate::spells_meta::SPELLS[id].name, p + 1)
+            }).collect())
+    }
+    #[getter] fn spell_names(&self) -> Vec<String> {
+        self.b.spells.iter().map(|&i| crate::spells_meta::SPELLS[i as usize].name.to_string()).collect()
+    }
+
     /// Every legal FIRST-move variant as (kind, node, push_to), with Wind blink and
     /// enemy Seal-of-Stone rules applied. Separate from `enumerate_turns` because
     /// that one is capped: with a spell charged, a single first move can spawn

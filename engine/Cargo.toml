@@ -7,8 +7,18 @@ edition = "2021"
 name = "sigil_engine"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["python"]
+# Native CPython extension module (maturin / PyO3) - the harnesses use this.
+python = ["pyo3"]
+# Browser build: wasm32-unknown-unknown via wasm-bindgen. Mutually exclusive with
+# `python`, since a CPython extension module cannot be a wasm module.
+wasm = ["wasm-bindgen", "js-sys"]
+
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"] }
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"], optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
 
 [profile.release]
 opt-level = 3

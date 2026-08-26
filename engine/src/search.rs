@@ -18,7 +18,22 @@
 //! path. We handle that the safe way — nodes whose subtree saw a repetition are
 //! NOT stored in the TT. That costs some table hits and keeps the search sound.
 
-use std::time::Instant;
+/// Monotonic milliseconds. `std::time::Instant` panics on
+/// wasm32-unknown-unknown, so the browser build reads the JS clock instead.
+#[cfg(not(target_arch = "wasm32"))]
+fn now_ms() -> f64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_secs_f64() * 1000.0
+}
+
+#[cfg(target_arch = "wasm32")]
+fn now_ms() -> f64 {
+    // Date.now() is monotonic enough for a per-move budget and needs no
+    // performance.now() plumbing through the Worker.
+    js_sys::Date::now()
+}
 use crate::board::{Board, Color, Outcome};
 use crate::turn::{Action, Turn};
 
@@ -95,7 +110,7 @@ pub struct Search {
     base_history: std::collections::HashMap<u64, u8>,
     /// Zobrist keys along the current search path.
     path: Vec<u64>,
-    deadline: Option<Instant>,
+    deadline: Option<f64>,   // absolute ms from now_ms()
     pub stats: SearchStats,
     window: usize,
     width_scale: usize,
@@ -154,9 +169,7 @@ impl Search {
     pub fn go(&mut self, root: &Board, c: Color, max_depth: i32, time_ms: u64)
         -> (Option<Turn>, i32, SearchStats)
     {
-        self.deadline = if time_ms > 0 {
-            Some(Instant::now() + std::time::Duration::from_millis(time_ms))
-        } else { None };
+        self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();
 
@@ -343,6 +356,6 @@ impl Search {
 
     #[inline]
     fn out_of_time(&self) -> bool {
-        match self.deadline { Some(d) => Instant::now() >= d, None => false }
+        match self.deadline { Some(d) => now_ms() >= d, None => false }
     }
 }
