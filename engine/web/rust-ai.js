@@ -87,8 +87,14 @@ class RustAI {
 				'  expected: ' + key(res.expected_sfn));
 		}
 
+		// `score_ui` is already in the units game-board-local.js renders (it
+		// multiplies by 39 and treats |s| >= 37 as a proven mate). Passing raw
+		// centistones inflated the display 3900x and made ordinary positions
+		// print as forced wins, e.g. "win in -94".
 		this.lastMeta = {
-			depth: res.depth, nodes: res.nodes, score: res.score,
+			depth: res.depth, nodes: res.nodes,
+			score: (res.score_ui !== undefined ? res.score_ui : res.score),
+			scoreCentistones: res.score,
 			timeMs: Math.round((res.seconds || 0) * 1000),
 		};
 		if (onProgress) onProgress(this.lastMeta);

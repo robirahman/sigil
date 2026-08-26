@@ -136,7 +136,7 @@ python3 -m venv .venv && .venv/bin/pip install maturin
 cd engine && VIRTUAL_ENV=../.venv ../.venv/bin/maturin develop --release && cd ..
 
 # 2. serve the real game UI with the engine behind it
-python engine/server/serve.py --docs docs --time 60
+python engine/server/serve.py --docs docs --time 60      # eval defaults to `material`
 
 # 3. open the printed URL
 #    http://localhost:8000/game.html?ai=rust
@@ -186,3 +186,21 @@ than mis-resolved.
 This cannot work on the deployed site: GitHub Pages is static, so there is no
 server to answer `/api/pick`. It only works when the page is served by
 `serve.py`.
+
+### Eval selection matters
+
+`--eval` defaults to `material`, and that is the only leaf eval that beat the
+shipped engine in the arenas. The alternatives are kept for A/B work only:
+`classic` and `default` (my structural set) both **lost heavily** — 17.5% and 22.5%
+against material-only over 80 games each — and the capped variants (`mc`,
+`manavoid`, `mix`) were neutral-to-negative. Do not read a playtest against
+anything but `material` as representative.
+
+### Score units
+
+The engine works in centistones (100 = 1 stone). `game-board-local.js` speaks
+Caveman units, where one stone is `1/39` and `|score| >= 37` means a proven mate,
+so scores are converted by `search::ui_score` before display. Feeding raw
+centistones through inflated the readout 3900x and tripped the mate branch on
+almost every position — a −0.18-stone position showed as `eval -702.0`, and a
++1.94-stone one as `win in -94`.

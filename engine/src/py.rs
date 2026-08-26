@@ -489,10 +489,10 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
 /// is not limited by the browser's capped enumerator.
 #[pyfunction]
 #[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=1,
-                    history_sfns=vec![]))]
+                    history_sfns=vec![], eval_name="material"))]
 fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
-                     width_scale: usize, history_sfns: Vec<String>)
-    -> PyResult<(String, String, i32, u64, i32, f64)>
+                     width_scale: usize, history_sfns: Vec<String>, eval_name: &str)
+    -> PyResult<(String, String, i32, u64, i32, f64, f64)>
 {
     use std::time::Instant;
     let b = crate::board::Board::from_sfn(sfn)
@@ -500,6 +500,18 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
     let c = b.to_move;
     let mut s = crate::search::Search::new(tt_bits);
     s.set_width_scale(width_scale);
+    // MUST be set explicitly. Search::new defaults to Weights::default(), the
+    // structural set that scored 22.5% against material-only over 80 games, so
+    // omitting this had the GUI opponent playing weights already known to be bad
+    // while every reported strength number came from the material eval.
+    s.weights = match eval_name {
+        "material" => crate::eval::MATERIAL_ONLY,
+        "classic" => crate::eval::CLASSIC,
+        "mc" => crate::eval::CAPPED_MC,
+        "manavoid" => crate::eval::CAPPED_MANAVOID,
+        "mix" => crate::eval::CAPPED_MIX,
+        _ => crate::eval::Weights::default(),
+    };
     for h in history_sfns {
         if let Ok(hb) = crate::board::Board::from_sfn(&h) {
             s.add_history(crate::zobrist::ZOBRIST.key_js(&hb));
@@ -510,11 +522,12 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
     let dt = t.elapsed().as_secs_f64();
     let turn = match best {
         Some(t) => t,
-        None => return Ok(("[]".to_string(), b.to_sfn(), 0, 0, 0, dt)),
+        None => return Ok(("[]".to_string(), b.to_sfn(), 0, 0, 0, dt, 0.0)),
     };
     let (acts, after) = b.emit_actions(&turn, c);
     Ok((crate::actions::acts_to_json(&acts), after.to_sfn(),
-        st.depth_completed, st.nodes, score, dt))
+        st.depth_completed, st.nodes, score, dt,
+        crate::search::ui_score(score)))
 }
 
 #[pymodule]

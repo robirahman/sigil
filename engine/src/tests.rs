@@ -1003,3 +1003,34 @@ fn lazy_iterator_covers_every_first_move() {
         "lazy generator hid first moves: missing {:?}",
         want.difference(&got).collect::<Vec<_>>());
 }
+
+#[test]
+fn ui_score_matches_what_the_web_ui_renders() {
+    use crate::search::{ui_score, WIN, MAX_PLY};
+    // The UI shows `score * 39` as stones, and treats |score| >= 37 as a PROVEN
+    // mate printing `win in round(100 - score)`. Feeding it raw centistones
+    // inflated everything 3900x AND tripped the mate branch constantly: a
+    // -0.18-stone position displayed as "eval -702.0", and a +1.94-stone one as
+    // "win in -94" (the negative ply count being the tell).
+    let stones = |cs: i32| ui_score(cs) * 39.0;
+    assert!((stones(-18) - -0.18).abs() < 1e-9, "-18 cs must render as -0.18 stones");
+    assert!((stones(194) - 1.94).abs() < 1e-9, "+194 cs must render as +1.94 stones");
+    assert!((stones(100) - 1.0).abs() < 1e-9, "one stone");
+
+    // A scaled non-mate score can never reach the mate threshold of 37: that
+    // would take ~1,443 stones, which the 39-node board cannot hold.
+    for cs in [-5000, -700, -1, 0, 1, 700, 5000, 100_000] {
+        assert!(ui_score(cs).abs() < 37.0,
+                "{} cs scaled to {} must stay under the mate threshold", cs, ui_score(cs));
+    }
+
+    // Mate scores map onto Caveman's own encoding: CAVEMAN_WIN(100) - ply.
+    let ply = 7;
+    assert!((ui_score(WIN - ply) - (100.0 - ply as f64)).abs() < 1e-9,
+            "a win in {} plies must render as 100 - {}", ply, ply);
+    assert!((ui_score(-(WIN - ply)) + (100.0 - ply as f64)).abs() < 1e-9,
+            "and the loss is its negation");
+    // Mate scores land at or above the threshold, so the UI's mate branch is
+    // reached only for real mates.
+    assert!(ui_score(WIN - MAX_PLY as i32 + 1).abs() >= 37.0);
+}

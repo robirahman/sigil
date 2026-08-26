@@ -422,3 +422,32 @@ impl Search {
         (best_idx, best_score, self.stats)
     }
 }
+
+/// Convert an engine score (centistones) into the units the web UI renders.
+///
+/// The UI (`game-board-local.js:1140-1158`) speaks Caveman units, where the leaf
+/// eval is `(stoneDiff + positional) / 39`, so one stone is `1/39 ≈ 0.0256`; it
+/// then displays `score * 39` as stones. Our centistones put one stone at 100, a
+/// **3900x** difference — feeding raw centistones in reported a −0.18 stone
+/// position as `eval -702.0`.
+///
+/// Worse, the UI treats `|score| >= CAVEMAN_PROVEN_MIN` (37) as a PROVEN mate and
+/// prints `win in round(100 - score)`. Un-scaled scores clear 37 at ±0.37 stones,
+/// i.e. in almost every real position, so ordinary evaluations were rendered as
+/// forced wins — one showed as `win in -94`, the negative ply count being the tell.
+///
+/// So: mate scores map onto Caveman's own mate encoding (`CAVEMAN_WIN - ply`, with
+/// `CAVEMAN_WIN = 100`), and everything else scales by 1/3900. A scaled non-mate
+/// score cannot reach 37 (that would need ~1,443 stones), so it can never be
+/// misread as a mate.
+pub fn ui_score(centistones: i32) -> f64 {
+    const CAVEMAN_WIN: f64 = 100.0;
+    let mate_floor = WIN - MAX_PLY as i32;
+    if centistones.abs() >= mate_floor {
+        // Our terminal score is WIN - ply, so ply = WIN - |score|.
+        let ply = (WIN - centistones.abs()) as f64;
+        let s = CAVEMAN_WIN - ply;
+        return if centistones >= 0 { s } else { -s };
+    }
+    centistones as f64 / 3900.0
+}
