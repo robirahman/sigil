@@ -1,38 +1,32 @@
 'use strict';
 /**
- * RustAI — plays through the normal web UI, backed by the native Rust engine
- * running on a localhost helper (engine/server/serve.py).
+ * RustAI — plays through the normal web UI, backed by the native Rust engine on a
+ * localhost helper (engine/server/serve.py).
  *
- * WHY THIS SHAPE. The site is static GitHub Pages with every AI running
- * client-side, so there is no deployed server; and the Rust engine's turn
- * representation cannot be applied by the JS (a `Cast` carries an outcome index
- * into the engine's own enumeration). Rather than build a translation layer for
- * all 39 spells, this adapter inverts the flow:
+ * The engine chooses from its OWN full enumeration — every push destination, dash
+ * sacrifice subset, dash target and spell-resolution variant — and returns a JS
+ * action list plus the position that list must produce. The browser asserts the
+ * replay landed there and refuses the move otherwise.
  *
- *   1. the browser enumerates its OWN legal turns, exactly as CavemanAI does
- *   2. it applies each with its OWN rules and serialises the result to SFN
- *   3. the server searches from each candidate and returns the best INDEX
- *   4. the browser plays that turn through the normal applyAITurn path
+ * Why the assertion matters: `turns[].actions` feeds game review,
+ * `reconstructGameLog`, SGN export and `ai/import_human_games.py`, so a silent
+ * divergence between the engine's idea of the position and the board's would
+ * corrupt recorded history and training data. Better to stop with a clear error.
  *
- * So animations, the action log, and the recorded game history all behave like
- * any other AI, and no engine-internal representation crosses the wire.
+ * An earlier version had the browser propose candidates and the engine pick an
+ * index. That was safe but capped the engine at the browser's `ENUM_CAPS`, which
+ * offers on the order of 4,000x fewer turns per position.
  *
- * HONEST LIMITATION: the engine can only choose among the turns the browser
- * offered, and the browser's enumerator is capped (ENUM_CAPS), whereas the
- * standalone engine generates ~4,000x more turns per position. This is therefore
- * a weaker configuration than the standalone arena numbers. `lastMeta.candidates`
- * reports how wide the choice actually was.
- *
- * Only the 39 official spells are supported: the engine deliberately does not
- * implement Tectonic, Providence, Aftershock, Ambush or the fan-made Panda pack,
- * and will reject a position containing them.
+ * Only the 39 official spells are supported: the engine does not implement
+ * Tectonic, Providence, Aftershock, Ambush or the fan-made Panda pack and rejects
+ * positions containing them rather than mis-resolving.
  */
 class RustAI {
 	constructor(options) {
 		options = options || {};
-		this.endpoint = options.endpoint || '/api/pick';
+		this.endpoint = options.endpoint || '/api/move';
 		this.timeMs = (options.timeLimit !== undefined ? options.timeLimit : 60) * 1000;
-		this.pondering = false;      // no ponder: the search lives in another process
+		this.pondering = false;      // the search lives in another process
 		this.lastMeta = null;
 		this._historySfns = [];
 	}
@@ -41,44 +35,15 @@ class RustAI {
 
 	async pickTurn(board, color, onProgress) {
 		const sim = SimBoard.fromSigilBoard(board);
+		const sfn = boardToSfn(sim);
 
-		// 1. enumerate our own legal turns (exhaustive where available, so spell
-		//    variants and push destinations are offered rather than collapsed)
-		let turns;
-		if (typeof getLegalTurnsExhaustive === 'function' && typeof ENUM_CAPS !== 'undefined') {
-			turns = [...getLegalTurnsExhaustive(sim, color, ENUM_CAPS)];
-		} else {
-			turns = [...sim.getLegalTurns(color)];
-		}
-		if (turns.length === 0) return new SimTurn([new SimAction('pass')]);
-		if (turns.length === 1) {
-			this.lastMeta = { candidates: 1, depth: 0, nodes: 0, note: 'forced' };
-			return turns[0];
-		}
-
-		// 2. apply each candidate with OUR rules and serialise the result
-		const sfns = [];
-		const keep = [];
-		for (const t of turns) {
-			try {
-				const after = _minimaxApplyTurn(sim, t, color);
-				sfns.push(boardToSfn(after));
-				keep.push(t);
-			} catch (e) { /* skip anything our own applier rejects */ }
-		}
-		if (sfns.length === 0) return turns[0];
-
-		if (onProgress) onProgress({ depth: 0, nodes: 0, note: `${sfns.length} candidates` });
-
-		// 3. ask the engine which resulting position it prefers
 		let res;
 		try {
 			const r = await fetch(this.endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					sfns: sfns,
-					us: color,
+					sfn: sfn,
 					time_ms: this.timeMs,
 					history_sfns: this._historySfns.slice(-64),
 				}),
@@ -97,15 +62,42 @@ class RustAI {
 				'engine does not implement (Tectonic / Providence / Aftershock / Ambush / Panda).');
 		}
 
-		const idx = Math.max(0, Math.min(res.index | 0, keep.length - 1));
+		// Verify the actions reproduce the engine's position BEFORE playing them on
+		// the real board: replay on a throwaway copy and compare.
+		const probe = sim.copy();
+		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
+		probe.getBoardStatePayload = () => ({});
+		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
+		try {
+			await applyAITurn(probe, { actions: res.actions }, color, () => {});
+			probe.update();
+			probe.checkGameOver(color);
+			probe.turnCounter++;
+			probe.whoseTurn = (color === 'red') ? 'blue' : 'red';
+			probe.update();
+		} catch (e) {
+			throw new Error('Rust engine action replay threw: ' + e);
+		}
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+		if (key(boardToSfn(probe)) !== key(res.expected_sfn)) {
+			throw new Error(
+				'Rust engine action list did not reproduce its own position — refusing ' +
+				'the move rather than corrupting the game record.\n' +
+				'  replayed: ' + key(boardToSfn(probe)) + '\n' +
+				'  expected: ' + key(res.expected_sfn));
+		}
+
 		this.lastMeta = {
 			depth: res.depth, nodes: res.nodes, score: res.score,
-			timeMs: Math.round((res.seconds || 0) * 1000), candidates: res.candidates,
+			timeMs: Math.round((res.seconds || 0) * 1000),
 		};
 		if (onProgress) onProgress(this.lastMeta);
-		// remember the position we are moving FROM, for repetition detection
-		this._historySfns.push(boardToSfn(sim));
-		return keep[idx];
+		this._historySfns.push(sfn);
+		return new SimTurn(res.actions.map((a) => {
+			const act = new SimAction(a.type, {});
+			Object.assign(act, a);
+			return act;
+		}));
 	}
 }
 

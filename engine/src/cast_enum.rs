@@ -1,60 +1,63 @@
-//! Exhaustive spell resolution: every DISTINCT board a legal resolution can reach.
+//! Exhaustive spell resolution: every DISTINCT board a legal resolution can reach,
+//! each paired with the action sequence that produced it.
 //!
-//! Rationale. A search does not care which action script it used, only which
-//! successor states exist. Enumerating outcome BOARDS rather than choice tuples
-//! (a) composes cleanly across multi-step resolvers, (b) lets us dedupe after each
-//! step so the frontier stays small instead of exploding as targets^count, and
-//! (c) makes "did we hide an option?" a question about states, which is the thing
-//! that actually loses games.
+//! Rationale. A search only cares which successor states exist, so enumerating
+//! outcome BOARDS rather than choice tuples (a) composes across multi-step
+//! resolvers, (b) lets us dedupe after each step so the frontier stays small
+//! instead of exploding as targets^count, and (c) makes "did we hide an option?"
+//! a question about states.
 //!
-//! Mid-resolution nothing outside `stones` changes (locks, counters and side to
-//! move are touched only by `finish_cast`), so `stones` alone identifies a state
-//! and is a sound dedupe key.
+//! Each outcome also carries a `JsAct` log, so the chosen resolution can be handed
+//! to the browser and replayed by `applyAITurn`. Reconstructing actions from a
+//! before/after delta is NOT safe here: `applyAITurn` recomputes push options for
+//! `hard_move`, and it calls `update()` between actions, which can trip the
+//! zero-stones immediate-loss rule on an intermediate state. Recording what the
+//! resolver actually did avoids both hazards.
 //!
-//! Every resolver here branches over EVERY choice the live game offers, including
-//! push destinations, which the greedy engine collapses to `options[0]`.
+//! Mid-resolution nothing outside `stones` changes, so `stones` alone identifies a
+//! state and is a sound dedupe key.
 
 use std::collections::HashSet;
+use crate::actions::JsAct;
 use crate::board::{Board, Color, Outcome};
 use crate::spells_meta::*;
 use crate::topology::{ADJ, BIG_SPELL_NODES, SIGIL};
 
-/// A working set of distinct boards, deduped by stone masks.
+/// Board + the actions that produced it.
+type Step = (Board, Vec<JsAct>);
+
 struct Frontier {
     seen: HashSet<(u64, u64)>,
-    boards: Vec<Board>,
+    items: Vec<Step>,
     cap: usize,
     truncated: bool,
 }
 
 impl Frontier {
     fn new(cap: usize) -> Self {
-        Frontier { seen: HashSet::new(), boards: Vec::new(), cap, truncated: false }
+        Frontier { seen: HashSet::new(), items: Vec::new(), cap, truncated: false }
     }
-    fn from_one(b: Board, cap: usize) -> Self {
-        let mut f = Frontier::new(cap);
-        f.push(b);
-        f
+    fn push(&mut self, b: Board, log: Vec<JsAct>) {
+        if self.items.len() >= self.cap { self.truncated = true; return; }
+        if self.seen.insert((b.stones[0], b.stones[1])) { self.items.push((b, log)); }
     }
-    fn push(&mut self, b: Board) {
-        if self.boards.len() >= self.cap { self.truncated = true; return; }
-        if self.seen.insert((b.stones[0], b.stones[1])) { self.boards.push(b); }
-    }
-    fn take(&mut self) -> Vec<Board> {
-        self.seen.clear();
-        std::mem::take(&mut self.boards)
-    }
+    fn take(&mut self) -> Vec<Step> { self.seen.clear(); std::mem::take(&mut self.items) }
+    fn is_empty(&self) -> bool { self.items.is_empty() }
+}
+
+fn plus(base: &[JsAct], a: JsAct) -> Vec<JsAct> {
+    let mut v = base.to_vec(); v.push(a); v
 }
 
 impl Board {
-    /// Apply one move step to `self` in every legal way, pushing results into `f`.
-    /// `targets` is the permitted landing set; push destinations are all enumerated.
-    fn branch_move(&self, targets: u64, c: Color, f: &mut Frontier) {
+    /// One move step, every legal way, recording a `move` / `hard_move` action.
+    fn branch_move(&self, log: &[JsAct], targets: u64, c: Color, f: &mut Frontier) {
         let mut m = targets;
         while m != 0 {
             let node = m.trailing_zeros() as u8;
             m &= m - 1;
-            if self.theirs(c) & (1u64 << node) != 0 {
+            let is_enemy = self.theirs(c) & (1u64 << node) != 0;
+            if is_enemy {
                 let (opts, k) = self.push_options(node, c);
                 if k == 0 {
                     let mut b = *self;
@@ -62,7 +65,7 @@ impl Board {
                     b.stones[c.other().idx()] &= !bit;
                     b.stones[c.idx()] |= bit;
                     b.update();
-                    f.push(b);
+                    f.push(b, plus(log, JsAct::mv(node, None, true, false)));
                 } else {
                     for &d in &opts[..k] {
                         let mut b = *self;
@@ -71,21 +74,34 @@ impl Board {
                         b.stones[c.idx()] |= bit;
                         b.stones[c.other().idx()] |= 1u64 << d;
                         b.update();
-                        f.push(b);
+                        f.push(b, plus(log, JsAct::mv(node, Some(d), true, false)));
                     }
                 }
             } else {
                 let mut b = *self;
                 b.stones[c.idx()] |= 1u64 << node;
                 b.update();
-                f.push(b);
+                f.push(b, plus(log, JsAct::mv(node, None, false, false)));
             }
         }
     }
 
+    /// A soft BLINK (place on an empty node, no adjacency needed).
+    fn branch_blink(&self, log: &[JsAct], targets: u64, c: Color, f: &mut Frontier) {
+        let mut m = targets;
+        while m != 0 {
+            let node = m.trailing_zeros() as u8;
+            m &= m - 1;
+            let mut b = *self;
+            b.stones[c.idx()] |= 1u64 << node;
+            b.update();
+            f.push(b, plus(log, JsAct::mv(node, None, false, true)));
+        }
+    }
+
     /// Repeat `branch_move` `count` times over a per-board target selector.
-    fn branch_move_n<F>(start: Vec<Board>, count: u8, c: Color, cap: usize, sel: F)
-        -> (Vec<Board>, bool)
+    fn branch_move_n<F>(start: Vec<Step>, count: u8, c: Color, cap: usize, sel: F)
+        -> (Vec<Step>, bool)
     where F: Fn(&Board) -> u64 + Copy
     {
         let mut cur = start;
@@ -93,14 +109,10 @@ impl Board {
         for _ in 0..count {
             let mut f = Frontier::new(cap);
             let mut any = false;
-            for b in &cur {
+            for (b, log) in &cur {
                 let t = sel(b);
-                if t == 0 {
-                    f.push(*b);            // step unavailable: effect ends early here
-                } else {
-                    any = true;
-                    b.branch_move(t, c, &mut f);
-                }
+                if t == 0 { f.push(*b, log.clone()); }      // step unavailable: ends early
+                else { any = true; b.branch_move(log, t, c, &mut f); }
             }
             trunc |= f.truncated;
             cur = f.take();
@@ -109,62 +121,76 @@ impl Board {
         (cur, trunc)
     }
 
-    /// Every board reachable by legally resolving the spell in sigil `pos`,
-    /// starting AFTER `cast_clear_and_refill`. Returns (boards, truncated).
-    pub fn resolve_outcomes(&self, pos: usize, c: Color, cap: usize) -> (Vec<Board>, bool) {
+    /// Every board reachable by legally resolving the spell in sigil `pos`, starting
+    /// AFTER `cast_clear_and_refill`, each with its action log.
+    pub fn resolve_outcomes_logged(&self, pos: usize, c: Color, cap: usize)
+        -> (Vec<Step>, bool)
+    {
         let id = self.spells[pos];
-        if (id as usize) >= NUM_OFFICIAL_SPELLS { return (vec![*self], false); }
+        if (id as usize) >= NUM_OFFICIAL_SPELLS { return (vec![(*self, vec![])], false); }
         let info = &SPELLS[id as usize];
-        let start = vec![*self];
+        let start = vec![(*self, Vec::<JsAct>::new())];
+        let enemy_of = |b: &Board| b.theirs(c);
 
         match info.resolve {
-            // ---- no internal choice at all ----
             Resolve::None_ => (start, false),
+
             Resolve::DestroyExposed => {
-                let mut b = *self; b.resolve_destroy_exposed(c); (vec![b], false)
+                let empty = self.empty();
+                let mut doomed = 0u64;
+                let mut m = enemy_of(self);
+                while m != 0 {
+                    let i = m.trailing_zeros() as usize; m &= m - 1;
+                    if (ADJ[i] & empty).count_ones() >= 2 { doomed |= 1u64 << i; }
+                }
+                let mut b = *self;
+                b.stones[c.other().idx()] &= !doomed;
+                b.update();
+                let log = if doomed == 0 { vec![] }
+                          else { vec![JsAct::list("decay", mask_vec(doomed))] };
+                (vec![(b, log)], false)
             }
+
             Resolve::Gust => {
-                // Pickup is forced; placement order is a choice, but every stone
-                // lands on some empty node and the enemy set is what matters.
-                // Enumerate placements as unordered subsets of empties of the
-                // right size, which is exactly the set of distinct outcomes.
-                let picked = self.theirs(c) & Board::dilate(self.mine(c));
+                // Pickup is forced; where each lands is the caster's choice, and the
+                // outcome depends only on the SET of landing nodes.
+                let picked = enemy_of(self) & Board::dilate(self.mine(c));
                 if picked == 0 { return (start, false); }
                 let n = picked.count_ones() as usize;
                 let mut b0 = *self;
                 b0.stones[c.other().idx()] &= !picked;
                 b0.update();
-                let empties: Vec<u8> = {
-                    let mut v = Vec::new(); let mut m = b0.empty();
-                    while m != 0 { v.push(m.trailing_zeros() as u8); m &= m - 1; }
-                    v
-                };
+                let empties = mask_vec(b0.empty());
                 let mut f = Frontier::new(cap);
-                // choose n of the empties
-                let mut idx = vec![0usize; n];
-                fn rec(depth: usize, startpos: usize, n: usize, empties: &[u8], idx: &mut Vec<usize>,
-                       b0: &Board, c: Color, f: &mut Frontier) {
-                    if depth == n {
-                        let mut b = *b0;
-                        for &i in idx.iter() { b.stones[c.other().idx()] |= 1u64 << empties[i]; }
-                        b.update();
-                        f.push(b);
-                        return;
-                    }
-                    for i in startpos..empties.len() {
-                        if f.truncated { return; }
-                        idx[depth] = i;
-                        rec(depth + 1, i + 1, n, empties, idx, b0, c, f);
-                    }
-                }
                 if n <= empties.len() {
-                    rec(0, 0, n, &empties, &mut idx, &b0, c, &mut f);
-                } else { f.push(b0); }
-                let tr = f.truncated;
-                (f.take(), tr)
+                    let mut idx = vec![0usize; n];
+                    fn rec(d: usize, s: usize, n: usize, e: &[u8], idx: &mut Vec<usize>,
+                           b0: &Board, picked: u64, c: Color, f: &mut Frontier) {
+                        if d == n {
+                            let mut b = *b0;
+                            let mut kept = Vec::with_capacity(n);
+                            for &i in idx.iter() {
+                                b.stones[c.other().idx()] |= 1u64 << e[i];
+                                kept.push(e[i]);
+                            }
+                            b.update();
+                            f.push(b, vec![JsAct::gust(mask_vec(picked), kept)]);
+                            return;
+                        }
+                        for i in s..e.len() {
+                            if f.truncated { return; }
+                            idx[d] = i;
+                            rec(d + 1, i + 1, n, e, idx, b0, picked, c, f);
+                        }
+                    }
+                    rec(0, 0, n, &empties, &mut idx, &b0, picked, c, &mut f);
+                } else {
+                    f.push(b0, vec![JsAct::gust(mask_vec(picked), vec![])]);
+                }
+                let tr = f.truncated; (f.take(), tr)
             }
 
-            // ---- move-family: branch every step over every target and push dest ----
+            // ---- move families ----
             Resolve::SoftMoves =>
                 Board::branch_move_n(start, info.count, c, cap, |b| b.soft_moveable(c)),
             Resolve::HardMoves =>
@@ -188,43 +214,37 @@ impl Board {
                                      move |b| b.all_moveable(c) & zone)
             }
             Resolve::Azimuth => {
-                // Any sigil at exactly one uncontrolled node is a legal target set,
-                // not only the first such sigil in scan order.
                 let mut t = 0u64;
                 for p in 0..9 { if self.uncontrolled_count(p, c) == 1 { t |= SIGIL[p]; } }
                 Board::branch_move_n(start, 1, c, cap, move |b| b.all_moveable(c) & t)
             }
             Resolve::Eclipse => {
-                // Commit to a sigil at exactly two uncontrolled nodes, then two moves
-                // inside it. Every qualifying sigil is a branch.
                 let mut f = Frontier::new(cap);
                 let mut trunc = false;
                 for p in 0..9 {
                     if self.uncontrolled_count(p, c) != 2 { continue; }
                     let m = SIGIL[p];
-                    let (res, t) = Board::branch_move_n(vec![*self], 2, c, cap,
+                    let (res, t) = Board::branch_move_n(start.clone(), 2, c, cap,
                                                         move |b| b.all_moveable(c) & m);
                     trunc |= t;
-                    for b in res { f.push(b); }
+                    for (b, l) in res { f.push(b, l); }
                 }
-                if f.boards.is_empty() { return (start, trunc); }
-                trunc |= f.truncated;
-                (f.take(), trunc)
+                if f.is_empty() { return (start, trunc); }
+                trunc |= f.truncated; (f.take(), trunc)
             }
             Resolve::Erupt => {
-                // Up to two moves into each qualifying sigil, in sigil order.
                 let mut cur = start;
                 let mut trunc = false;
                 for p in 0..6 {
                     if p == pos { continue; }
                     let m = SIGIL[p];
                     let mut next = Frontier::new(cap);
-                    for b in &cur {
-                        if m & b.mine(c) == 0 { next.push(*b); continue; }
-                        let (res, t) = Board::branch_move_n(vec![*b], 2, c, cap,
+                    for (b, log) in &cur {
+                        if m & b.mine(c) == 0 { next.push(*b, log.clone()); continue; }
+                        let (res, t) = Board::branch_move_n(vec![(*b, log.clone())], 2, c, cap,
                                                             move |x| x.all_moveable(c) & m);
                         trunc |= t;
-                        for r in res { next.push(r); }
+                        for (rb, rl) in res { next.push(rb, rl); }
                     }
                     trunc |= next.truncated;
                     cur = next.take();
@@ -237,66 +257,44 @@ impl Board {
                 let charm_node = SIGIL[charm].trailing_zeros() as u8;
                 let mut f = Frontier::new(cap);
                 if self.mine(c) & (1u64 << charm_node) == 0 {
-                    self.branch_move(1u64 << charm_node, c, &mut f);
-                } else { f.push(*self); }
+                    self.branch_move(&[], 1u64 << charm_node, c, &mut f);
+                } else { f.push(*self, vec![]); }
                 let mid = f.take();
                 let m = SIGIL[sorcery];
-                let (end, t) = Board::branch_move_n(mid, 3, c, cap,
-                                                    move |b| m & !b.mine(c));
-                (end, t)
+                Board::branch_move_n(mid, 3, c, cap, move |b| m & !b.mine(c))
             }
             Resolve::Scatter => {
-                // One blink into each of two DIFFERENT sigils: branch over which
-                // sigils and which node inside each.
                 let mut f = Frontier::new(cap);
                 for p1 in 0..9 {
                     let e1 = SIGIL[p1] & self.empty();
                     if e1 == 0 { continue; }
-                    let mut m1 = e1;
-                    while m1 != 0 {
-                        let n1 = m1.trailing_zeros() as u8; m1 &= m1 - 1;
-                        let mut b1 = *self;
-                        b1.stones[c.idx()] |= 1u64 << n1;
-                        b1.update();
+                    let mut g = Frontier::new(cap);
+                    self.branch_blink(&[], e1, c, &mut g);
+                    for (b1, l1) in g.take() {
                         let mut any2 = false;
                         for p2 in 0..9 {
                             if p2 == p1 { continue; }
-                            let mut m2 = SIGIL[p2] & b1.empty();
-                            while m2 != 0 {
-                                let n2 = m2.trailing_zeros() as u8; m2 &= m2 - 1;
-                                let mut b2 = b1;
-                                b2.stones[c.idx()] |= 1u64 << n2;
-                                b2.update();
-                                f.push(b2);
-                                any2 = true;
-                            }
+                            let e2 = SIGIL[p2] & b1.empty();
+                            if e2 == 0 { continue; }
+                            b1.branch_blink(&l1, e2, c, &mut f);
+                            any2 = true;
                         }
-                        if !any2 { f.push(b1); }   // only one sigil available
+                        if !any2 { f.push(b1, l1); }
                     }
                 }
-                if f.boards.is_empty() { return (start, false); }
-                let tr = f.truncated;
-                (f.take(), tr)
+                if f.is_empty() { return (start, false); }
+                let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Blossom => {
-                // One blink into each OTHER 3-/5-node sigil; WHICH node in each is a
-                // choice. A full sigil is skipped, never a stop.
                 let mut cur = start;
                 let mut trunc = false;
                 for p in 0..6 {
                     if p == pos { continue; }
                     let mut next = Frontier::new(cap);
-                    for b in &cur {
+                    for (b, log) in &cur {
                         let e = SIGIL[p] & b.empty();
-                        if e == 0 { next.push(*b); continue; }
-                        let mut m = e;
-                        while m != 0 {
-                            let nd = m.trailing_zeros() as u8; m &= m - 1;
-                            let mut nb = *b;
-                            nb.stones[c.idx()] |= 1u64 << nd;
-                            nb.update();
-                            next.push(nb);
-                        }
+                        if e == 0 { next.push(*b, log.clone()); continue; }
+                        b.branch_blink(log, e, c, &mut next);
                     }
                     trunc |= next.truncated;
                     cur = next.take();
@@ -305,26 +303,21 @@ impl Board {
             }
 
             Resolve::HailStorm => {
-                // The live game PROMPTS for which enemy stone to destroy in each
-                // qualifying 3-/5-node sigil (spells.js:190), so the victim is a
-                // real choice per sigil - the greedy engine collapses it to node
-                // order. The qualifying list is frozen up front, and sigils are
-                // disjoint, so the choices are independent: one branching stage each.
                 let mut cur = start;
                 let mut trunc = false;
                 for p in 0..6 {
-                    if SIGIL[p] & self.theirs(c) == 0 { continue; }  // frozen: not hailable
+                    if SIGIL[p] & enemy_of(self) == 0 { continue; }
                     let mut next = Frontier::new(cap);
-                    for b in &cur {
+                    for (b, log) in &cur {
                         let victims = SIGIL[p] & b.theirs(c);
-                        if victims == 0 { next.push(*b); continue; }
+                        if victims == 0 { next.push(*b, log.clone()); continue; }
                         let mut m = victims;
                         while m != 0 {
-                            let v = m.trailing_zeros(); m &= m - 1;
+                            let v = m.trailing_zeros() as u8; m &= m - 1;
                             let mut nb = *b;
                             nb.stones[c.other().idx()] &= !(1u64 << v);
                             nb.update();
-                            next.push(nb);
+                            next.push(nb, plus(log, JsAct::list("hail_storm", vec![v])));
                         }
                     }
                     trunc |= next.truncated;
@@ -333,7 +326,6 @@ impl Board {
                 (cur, trunc)
             }
 
-            // ---- pair / set selection ----
             Resolve::Bewitch => {
                 let mut f = Frontier::new(cap);
                 for (a, b_) in self.bewitch_pairs(c) {
@@ -342,9 +334,9 @@ impl Board {
                     b.stones[c.other().idx()] &= !bits;
                     b.stones[c.idx()] |= bits;
                     b.update();
-                    f.push(b);
+                    f.push(b, vec![JsAct::pair("bewitch", a, Some(b_), vec![])]);
                 }
-                if f.boards.is_empty() { return (start, false); }
+                if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Starfall => {
@@ -355,13 +347,12 @@ impl Board {
                     let kills = (ADJ[a as usize] | ADJ[b_ as usize]) & b.theirs(c);
                     b.stones[c.other().idx()] &= !kills;
                     b.update();
-                    f.push(b);
+                    f.push(b, vec![JsAct::pair("starfall", a, Some(b_), mask_vec(kills))]);
                 }
-                if f.boards.is_empty() { return (start, false); }
+                if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Hurricane => {
-                // Ties between equally smallest groups are the caster's choice.
                 let groups = self.enemy_groups(c);
                 if groups.is_empty() { return (start, false); }
                 let min = groups.iter().map(|g| g.count_ones()).min().unwrap();
@@ -370,44 +361,42 @@ impl Board {
                     let mut b = *self;
                     b.stones[c.other().idx()] &= !*g;
                     b.update();
-                    f.push(b);
+                    f.push(b, vec![JsAct::list("hurricane", mask_vec(*g))]);
                 }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::StormFront => {
-                // Any two enemy stones, in any combination.
                 let mut f = Frontier::new(cap);
-                let mut ea = self.theirs(c);
+                let mut ea = enemy_of(self);
                 if ea == 0 { return (start, false); }
                 while ea != 0 {
                     let a = ea.trailing_zeros() as u8; ea &= ea - 1;
                     let mut b1 = *self;
                     b1.stones[c.other().idx()] &= !(1u64 << a);
                     b1.update();
-                    if b1.outcome != Outcome::Ongoing { f.push(b1); continue; }
+                    if b1.outcome != Outcome::Ongoing {
+                        f.push(b1, vec![JsAct::list("storm_front", vec![a])]); continue;
+                    }
                     let mut eb = b1.theirs(c);
-                    if eb == 0 { f.push(b1); continue; }
+                    if eb == 0 { f.push(b1, vec![JsAct::list("storm_front", vec![a])]); continue; }
                     while eb != 0 {
                         let b_ = eb.trailing_zeros() as u8; eb &= eb - 1;
                         let mut b2 = b1;
                         b2.stones[c.other().idx()] &= !(1u64 << b_);
                         b2.update();
-                        f.push(b2);
+                        f.push(b2, vec![JsAct::list("storm_front", vec![a, b_])]);
                     }
                 }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Corrupt => {
-                // Any up-to-three of the eligible (frozen pre-conversion) set, then
-                // any own stone sacrificed.
-                let eligible = self.theirs(c) & Board::dilate(self.mine(c));
-                let el: Vec<u8> = { let mut v = Vec::new(); let mut m = eligible;
-                                    while m != 0 { v.push(m.trailing_zeros() as u8); m &= m - 1; } v };
-                let mut f = Frontier::new(cap);
+                let eligible = enemy_of(self) & Board::dilate(self.mine(c));
+                let el = mask_vec(eligible);
                 let k = el.len().min(3);
-                // all subsets of size exactly k (fewer only if fewer eligible)
-                fn subsets(el: &[u8], k: usize, start: usize, acc: &mut Vec<u8>,
-                           base: &Board, c: Color, f: &mut Frontier) {
+                let mut f = Frontier::new(cap);
+                let mut acc: Vec<u8> = Vec::new();
+                fn rec(el: &[u8], k: usize, s: usize, acc: &mut Vec<u8>,
+                       base: &Board, c: Color, f: &mut Frontier) {
                     if acc.len() == k {
                         let mut b = *base;
                         let mut bits = 0u64;
@@ -415,121 +404,126 @@ impl Board {
                         b.stones[c.other().idx()] &= !bits;
                         b.stones[c.idx()] |= bits;
                         b.update();
-                        if b.outcome != Outcome::Ongoing { f.push(b); return; }
+                        let log0 = vec![JsAct::list("corrupt", acc.clone())];
+                        if b.outcome != Outcome::Ongoing { f.push(b, log0); return; }
                         let mut own = b.mine(c);
-                        if own == 0 { f.push(b); return; }
+                        if own == 0 { f.push(b, log0); return; }
                         while own != 0 {
-                            let s = own.trailing_zeros(); own &= own - 1;
+                            let s2 = own.trailing_zeros() as u8; own &= own - 1;
                             let mut b2 = b;
-                            b2.stones[c.idx()] &= !(1u64 << s);
+                            b2.stones[c.idx()] &= !(1u64 << s2);
                             b2.update();
-                            f.push(b2);
+                            f.push(b2, plus(&log0, JsAct::simple("sacrifice", s2)));
                         }
                         return;
                     }
-                    for i in start..el.len() {
+                    for i in s..el.len() {
                         if f.truncated { return; }
                         acc.push(el[i]);
-                        subsets(el, k, i + 1, acc, base, c, f);
+                        rec(el, k, i + 1, acc, base, c, f);
                         acc.pop();
                     }
                 }
-                let mut acc = Vec::new();
-                subsets(&el, k, 0, &mut acc, self, c, &mut f);
-                if f.boards.is_empty() { return (start, false); }
+                rec(&el, k, 0, &mut acc, self, c, &mut f);
+                if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Fireblast => {
-                // Destruction is forced; the sacrifice is a free choice.
-                let mine = self.mine(c);
-                let doomed = self.theirs(c) & Board::dilate(mine);
+                let doomed = enemy_of(self) & Board::dilate(self.mine(c));
                 let mut b0 = *self;
                 b0.stones[c.other().idx()] &= !doomed;
                 b0.update();
-                if b0.outcome != Outcome::Ongoing { return (vec![b0], false); }
-                let mut f = Frontier::new(cap);
+                let log0 = if doomed == 0 { vec![] }
+                           else { vec![JsAct::list("fireblast", mask_vec(doomed))] };
+                if b0.outcome != Outcome::Ongoing { return (vec![(b0, log0)], false); }
                 let mut own = b0.mine(c);
-                if own == 0 { return (vec![b0], false); }
+                if own == 0 { return (vec![(b0, log0)], false); }
+                let mut f = Frontier::new(cap);
                 while own != 0 {
-                    let s = own.trailing_zeros(); own &= own - 1;
+                    let s = own.trailing_zeros() as u8; own &= own - 1;
                     let mut b = b0;
                     b.stones[c.idx()] &= !(1u64 << s);
                     b.update();
-                    f.push(b);
+                    f.push(b, plus(&log0, JsAct::simple("sacrifice", s)));
                 }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Fury => {
-                // Any sacrifice, then three hard moves branching fully.
-                let mut f = Frontier::new(cap);
                 let mut own = self.mine(c);
                 if own == 0 { return (start, false); }
+                let mut f = Frontier::new(cap);
                 let mut trunc = false;
                 while own != 0 {
-                    let s = own.trailing_zeros(); own &= own - 1;
+                    let s = own.trailing_zeros() as u8; own &= own - 1;
                     let mut b = *self;
                     b.stones[c.idx()] &= !(1u64 << s);
                     b.update();
-                    if b.outcome != Outcome::Ongoing { f.push(b); continue; }
-                    let (res, t) = Board::branch_move_n(vec![b], 3, c, cap,
+                    let log0 = vec![JsAct::simple("sacrifice", s)];
+                    if b.outcome != Outcome::Ongoing { f.push(b, log0); continue; }
+                    let (res, t) = Board::branch_move_n(vec![(b, log0)], 3, c, cap,
                                                         |x| x.hard_moveable(c));
                     trunc |= t;
-                    for r in res { f.push(r); }
+                    for (rb, rl) in res { f.push(rb, rl); }
                 }
-                trunc |= f.truncated;
-                (f.take(), trunc)
+                trunc |= f.truncated; (f.take(), trunc)
             }
             Resolve::Meteor => {
-                // Blink anywhere not yours (push destinations enumerated), then
-                // destroy ANY one adjacent enemy - the greedy engine forces a mana
-                // preference, which hides the other victims.
                 let mut f = Frontier::new(cap);
                 let mut t = self.blinkable(c);
                 while t != 0 {
                     let node = t.trailing_zeros() as u8; t &= t - 1;
                     let mut lands = Frontier::new(cap);
-                    self.branch_move(1u64 << node, c, &mut lands);
-                    for b in lands.take() {
+                    self.branch_move(&[], 1u64 << node, c, &mut lands);
+                    for (b, l) in lands.take() {
                         let adj = ADJ[node as usize] & b.theirs(c);
-                        if adj == 0 { f.push(b); continue; }
+                        if adj == 0 { f.push(b, l); continue; }
                         let mut a = adj;
                         while a != 0 {
-                            let v = a.trailing_zeros(); a &= a - 1;
+                            let v = a.trailing_zeros() as u8; a &= a - 1;
                             let mut b2 = b;
                             b2.stones[c.other().idx()] &= !(1u64 << v);
                             b2.update();
-                            f.push(b2);
+                            f.push(b2, plus(&l, JsAct::simple("meteor_destroy", v)));
                         }
                     }
                 }
-                if f.boards.is_empty() { return (start, false); }
+                if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Comet => {
-                // Blink anywhere not yours, then sacrifice any own stone EXCEPT the
-                // one just placed.
                 let mut f = Frontier::new(cap);
                 let mut t = self.blinkable(c);
                 while t != 0 {
                     let node = t.trailing_zeros() as u8; t &= t - 1;
                     let mut lands = Frontier::new(cap);
-                    self.branch_move(1u64 << node, c, &mut lands);
-                    for b in lands.take() {
+                    self.branch_move(&[], 1u64 << node, c, &mut lands);
+                    for (b, l) in lands.take() {
                         let mut own = b.mine(c) & !(1u64 << node);
-                        if own == 0 { f.push(b); continue; }
+                        if own == 0 { f.push(b, l); continue; }
                         while own != 0 {
-                            let s = own.trailing_zeros(); own &= own - 1;
+                            let s = own.trailing_zeros() as u8; own &= own - 1;
                             let mut b2 = b;
                             b2.stones[c.idx()] &= !(1u64 << s);
                             b2.update();
-                            f.push(b2);
+                            f.push(b2, plus(&l, JsAct::simple("sacrifice", s)));
                         }
                     }
                 }
-                if f.boards.is_empty() { return (start, false); }
+                if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
             }
         }
     }
 
+    /// Boards only, for the search (which does not need the logs).
+    pub fn resolve_outcomes(&self, pos: usize, c: Color, cap: usize) -> (Vec<Board>, bool) {
+        let (v, t) = self.resolve_outcomes_logged(pos, c, cap);
+        (v.into_iter().map(|(b, _)| b).collect(), t)
+    }
+}
+
+fn mask_vec(mut m: u64) -> Vec<u8> {
+    let mut v = Vec::with_capacity(m.count_ones() as usize);
+    while m != 0 { v.push(m.trailing_zeros() as u8); m &= m - 1; }
+    v
 }

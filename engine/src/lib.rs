@@ -7,6 +7,7 @@ pub mod zobrist;
 pub mod spells_meta;
 pub mod cast;
 pub mod resolvers;
+pub mod actions;
 pub mod cast_enum;
 pub mod turn;
 pub mod order;

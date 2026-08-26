@@ -396,3 +396,71 @@ pub const RESOLVER_LEVEL_COMPLETE: &[&str] = &[
     "blossom: which node inside each other sigil",
     "gust: where each displaced enemy stone lands",
 ];
+
+impl Board {
+    /// Emit the JS action list for `t`, plus the position it must produce.
+    ///
+    /// The caller (rust-ai.js) hands the list to `applyAITurn`, which replays it on
+    /// the live board. The expected SFN comes back alongside so the client can
+    /// assert the replay landed where we predicted and refuse the move otherwise —
+    /// a silent divergence would corrupt the recorded game history, which feeds
+    /// game review, SGN export and `ai/import_human_games.py`.
+    pub fn emit_actions(&self, t: &Turn, c: Color) -> (Vec<crate::actions::JsAct>, Board) {
+        use crate::actions::JsAct;
+        let mut acts: Vec<JsAct> = Vec::new();
+        let mut b = *self;
+        for a in t.slice() {
+            match *a {
+                Action::Move { node, push_to } | Action::Blink { node, push_to } => {
+                    let is_enemy = b.theirs(c) & (1u64 << node) != 0;
+                    let blink = matches!(*a, Action::Blink { .. });
+                    acts.push(JsAct::mv(node, push_to, is_enemy, blink));
+                    b.do_move_with_pub(node, push_to, c);
+                }
+                Action::Dash { sacs, n_sacs, node, push_to } => {
+                    let cost = b.dash_cost(c);
+                    let list = sacs[..n_sacs as usize].to_vec();
+                    // dash_lightning is the one-stone variant; the applier only
+                    // clears `sacrificed` in either case, but the type is recorded
+                    // in the game history so it must be right.
+                    acts.push(JsAct::list(
+                        if cost == 1 { "dash_lightning" } else { "dash" }, list));
+                    for i in 0..n_sacs as usize {
+                        b.stones[c.idx()] &= !(1u64 << sacs[i]);
+                    }
+                    b.update();
+                    let is_enemy = b.theirs(c) & (1u64 << node) != 0;
+                    acts.push(JsAct::mv(node, push_to, is_enemy, false));
+                    b.do_move_with_pub(node, push_to, c);
+                }
+                Action::Cast { pos, outcome } => {
+                    let id = b.spells[pos as usize];
+                    let name = crate::spells_meta::SPELLS[id as usize].name;
+                    let before = b;
+                    b.cast_clear_and_refill(pos as usize, c);
+                    // `kept` is exactly what the refill placed inside the sigil.
+                    let kept_mask = b.mine(c) & crate::topology::SIGIL[pos as usize];
+                    let mut kept = Vec::new();
+                    let mut m = kept_mask;
+                    while m != 0 { kept.push(m.trailing_zeros() as u8); m &= m - 1; }
+                    let _ = before;
+                    acts.push(JsAct::cast(name, kept));
+                    let (outs, _tr) = b.resolve_outcomes_logged(pos as usize, c, OUTCOME_CAP);
+                    if let Some((ob, log)) = outs.get(outcome as usize) {
+                        acts.extend(log.iter().cloned());
+                        b.stones = ob.stones;
+                    }
+                    b.update();
+                    b.finish_cast(id, c);
+                    b.update();
+                }
+                Action::Pass => { acts.push(JsAct::list("pass", vec![])); }
+            }
+        }
+        b.check_game_over(c);
+        b.turn_counter += 1;
+        b.to_move = c.other();
+        b.update();
+        (acts, b)
+    }
+}

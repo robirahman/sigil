@@ -45,7 +45,9 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_POST(self):
-        if self.path.rstrip('/') != '/api/pick':
+        route = self.path.rstrip('/')
+        if route == '/api/move': return self._do_move()
+        if route != '/api/pick':
             self.send_error(404, 'unknown endpoint'); return
         try:
             n = int(self.headers.get('Content-Length') or 0)
@@ -78,6 +80,31 @@ class Handler(SimpleHTTPRequestHandler):
             import traceback; traceback.print_exc()
             self._json({'ok': False, 'error': f'{type(e).__name__}: {e}'}, code=500)
 
+    def _do_move(self):
+        """The engine chooses from its OWN full enumeration and returns a JS action
+        list plus the position that list must produce, so the browser is not capped
+        by its own ENUM_CAPS."""
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+            req = json.loads(self.rfile.read(n) or b'{}')
+            sfn = req.get('sfn')
+            if not sfn: self._json({'ok': False, 'error': 'no sfn'}); return
+            budget = int(req.get('time_ms') or ARGS.time * 1000)
+            hist = list(req.get('history_sfns') or [])
+            aj, expected, depth, nodes, score, secs = se.pick_move_actions(
+                sfn, budget, 64, 21, ARGS.width_scale, hist)
+            acts = json.loads(aj)
+            STATS['moves'] += 1; STATS['nodes'] += nodes; STATS['seconds'] += secs
+            kinds = ','.join(a['type'] for a in acts)
+            print(f"  move {STATS['moves']:3d}  depth {depth:2d}  {nodes:>10,} nodes  "
+                  f"{secs:5.1f}s  eval {score/100:+.2f}  [{kinds}]", flush=True)
+            self._json({'ok': True, 'actions': acts, 'expected_sfn': expected,
+                        'depth': depth, 'nodes': nodes, 'score': score,
+                        'seconds': round(secs, 2)})
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            self._json({'ok': False, 'error': f'{type(e).__name__}: {e}'}, code=500)
+
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
@@ -106,6 +133,8 @@ def main():
     print(f"serving {ARGS.docs} on http://localhost:{ARGS.port}")
     print(f"engine: {ARGS.time}s/move, width_scale {ARGS.width_scale}")
     print(f"\n  open  http://localhost:{ARGS.port}/game.html?ai=rust\n")
+    print("  the engine chooses from its full enumeration; the browser verifies")
+    print("  each action list reproduces the engine's position before playing it\n")
     ThreadingHTTPServer(('127.0.0.1', ARGS.port), Handler).serve_forever()
 
 if __name__ == '__main__':

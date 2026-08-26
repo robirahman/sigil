@@ -153,16 +153,35 @@ the resulting positions as SFN. The server searches from each candidate and retu
 the best index; the browser plays that turn through the normal `applyAITurn` path.
 Nothing engine-internal crosses the wire.
 
-**Two honest limitations.**
+**How it avoids being capped.** The engine chooses from its **own** full
+enumeration — every push destination, dash sacrifice subset, dash target and
+spell-resolution variant — and returns a JS action list together with the position
+that list must produce. `src/actions.rs` emits the action types `applyAITurn`
+already understands; `cast_enum.rs` records the actions each resolution actually
+took, because reconstructing them from a before/after delta is unsafe (the applier
+recomputes push options, and calls `update()` between actions, which can trip the
+zero-stones loss rule on an intermediate state).
 
-* The engine can only pick among the turns the browser offered, and the browser's
-  enumerator is capped by `ENUM_CAPS`, whereas the standalone engine generates
-  ~4,000× more turns per position. So expect this to be **weaker than the arena
-  numbers above**. The server logs the candidate count per move so you can see how
-  wide the choice actually was.
-* Only the 39 official spells are supported, so `?ai=rust` restricts the draw to
-  those nine packs. A position containing Tectonic / Providence / Aftershock /
-  Ambush / Panda is rejected with a clear error rather than mis-resolved.
+**The assertion gate.** Before playing a move the browser replays the action list
+on a throwaway copy and refuses the move unless it reproduces the engine's
+position. A silent divergence would corrupt `turns[].actions`, which feeds game
+review, `reconstructGameLog`, SGN export and `ai/import_human_games.py`.
+
+Offline, the same property is checked in bulk against the **real** `applyAITurn`:
+
+```sh
+python engine/harness/run_emit_gate.py 150 9
+```
+
+Latest run: **5,839 (position, turn) pairs, 3,280 casts, 30/30 castable spells,
+17 action types, 0 mismatches.** Coverage is reported alongside the pass rate,
+because the first version of this gate passed 3,270/3,270 while exercising **zero
+casts** — moves and dashes are the easy half.
+
+**Remaining limitation.** Only the 39 official spells are supported, so `?ai=rust`
+restricts the draw to those nine packs. A position containing Tectonic /
+Providence / Aftershock / Ambush / Panda is rejected with a clear error rather
+than mis-resolved.
 
 This cannot work on the deployed site: GitHub Pages is static, so there is no
 server to answer `/api/pick`. It only works when the page is served by

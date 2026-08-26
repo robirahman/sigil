@@ -200,6 +200,33 @@ impl PyBoard {
     }
 
     /// Charged spell names for a colour, for the status line.
+    /// Emit the JS action list for a (first move, continuation) pair, plus the
+    /// position it must produce. Used by the SFN-assertion gate.
+    fn emit_choice_actions(&self, node: u8, push_to: i32, kind: &str,
+                           a: i32, b_: i32, cc: i32, c: &str) -> PyResult<(String, String)> {
+        use crate::turn::{Action, Turn, MAX_ACTIONS};
+        let col = color(c)?;
+        let mut t = Turn { actions: [Action::Pass; MAX_ACTIONS], len: 0, greedy_casts: 0 };
+        let blink = self.b.is_blink_pub(node, col);
+        let pt = if push_to < 0 { None } else { Some(push_to as u8) };
+        t = t.push_pub(if blink { Action::Blink { node, push_to: pt } }
+                       else { Action::Move { node, push_to: pt } });
+        match kind {
+            "dash" => {
+                let dn = (cc & 0xff) as u8;
+                let dpv = ((cc >> 8) & 0xff) as u8;
+                let dp = if dpv == 63 { None } else { Some(dpv) };
+                let n_sacs = if b_ < 0 { 1u8 } else { 2 };
+                let sacs = [a as u8, if b_ < 0 { 0 } else { b_ as u8 }];
+                t = t.push_pub(Action::Dash { sacs, n_sacs, node: dn, push_to: dp });
+            }
+            "cast" => { t = t.push_pub(Action::Cast { pos: a as u8, outcome: b_ as u16 }); }
+            _ => {}
+        }
+        let (acts, after) = self.b.emit_actions(&t, col);
+        Ok((crate::actions::acts_to_json(&acts), after.to_sfn()))
+    }
+
     fn charged_names(&self, c: &str) -> PyResult<Vec<String>> {
         let col = color(c)?;
         Ok((0..9usize).filter(|&p| self.b.charged[col.idx()] & (1 << p) != 0)
@@ -457,11 +484,45 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
     Ok((idx, score, st.depth_completed, st.nodes, t.elapsed().as_secs_f64(), boards.len()))
 }
 
+/// Search from `sfn` and return (actions_json, expected_post_move_sfn, depth,
+/// nodes, score, seconds). The engine chooses from its OWN full enumeration, so it
+/// is not limited by the browser's capped enumerator.
+#[pyfunction]
+#[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=1,
+                    history_sfns=vec![]))]
+fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
+                     width_scale: usize, history_sfns: Vec<String>)
+    -> PyResult<(String, String, i32, u64, i32, f64)>
+{
+    use std::time::Instant;
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let mut s = crate::search::Search::new(tt_bits);
+    s.set_width_scale(width_scale);
+    for h in history_sfns {
+        if let Ok(hb) = crate::board::Board::from_sfn(&h) {
+            s.add_history(crate::zobrist::ZOBRIST.key_js(&hb));
+        }
+    }
+    let t = Instant::now();
+    let (best, score, st) = s.go(&b, c, max_depth, time_ms);
+    let dt = t.elapsed().as_secs_f64();
+    let turn = match best {
+        Some(t) => t,
+        None => return Ok(("[]".to_string(), b.to_sfn(), 0, 0, 0, dt)),
+    };
+    let (acts, after) = b.emit_actions(&turn, c);
+    Ok((crate::actions::acts_to_json(&acts), after.to_sfn(),
+        st.depth_completed, st.nodes, score, dt))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     Ok(())
 }
