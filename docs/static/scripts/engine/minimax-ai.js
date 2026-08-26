@@ -16,6 +16,13 @@
 
 const MINIMAX_INF = 1e9;
 const MINIMAX_WIN = 100.0;
+// Mate-distance score band (mirrors caveman-ai.js). Terminal leaves
+// score ±(WIN − ply), so a slower loss (or faster win) always outranks
+// a quicker one; |score| >= PROVEN_MIN is an unambiguous "proven mate"
+// test and mate distance = WIN − |score|.
+const MINIMAX_MATE_PLY_CAP = 63;
+const MINIMAX_PROVEN_MIN = MINIMAX_WIN - MINIMAX_MATE_PLY_CAP;   // 37.0
+const MINIMAX_NONTERMINAL_CAP = MINIMAX_PROVEN_MIN - 1.0;        // 36.0
 
 // Transposition-table bound classifications.
 const _BOUND_EXACT = 0;
@@ -325,15 +332,19 @@ function _minimaxApplyTurn(board, turn, color) {
 	return sim;
 }
 
-function _minimaxEvalLeaf(board, color, model) {
+function _minimaxEvalLeaf(board, color, model, ply) {
 	if (board.gameover) {
-		if (board.winner === color) return MINIMAX_WIN;
+		const d = Math.min(ply || 0, MINIMAX_MATE_PLY_CAP);
+		if (board.winner === color) return MINIMAX_WIN - d;
 		if (board.winner === null) return 0.0;
-		return -MINIMAX_WIN;
+		return -(MINIMAX_WIN - d);
 	}
 	const { raw, spellIds } = boardToTensor(board, color);
 	const { value } = model.forward(raw, spellIds, null, 0);
-	return value;
+	// A non-terminal leaf must never masquerade as a proven mate (the NN
+	// value head is ±1, so this clamp is belt-and-braces).
+	return Math.max(-MINIMAX_NONTERMINAL_CAP,
+	                Math.min(MINIMAX_NONTERMINAL_CAP, value));
 }
 
 function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps, blunderLambda) {
@@ -379,13 +390,28 @@ function _minimaxOrderedTurns(board, color, model, orderingAlpha, exhaustiveCaps
 	return order.map(o => turns[o[0]]);
 }
 
+// Mate scores are ply-relative to the root, but TT entries are probed
+// from arbitrary plies, so they're stored node-relative and re-based on
+// probe — the standard mate-score-in-TT adjustment. Heuristic scores
+// (inside ±NONTERMINAL_CAP) pass through untouched.
+function _minimaxMateToTT(s, ply) {
+	if (s > MINIMAX_NONTERMINAL_CAP) return s + ply;
+	if (s < -MINIMAX_NONTERMINAL_CAP) return s - ply;
+	return s;
+}
+function _minimaxMateFromTT(s, ply) {
+	if (s > MINIMAX_NONTERMINAL_CAP) return Math.max(MINIMAX_PROVEN_MIN, s - ply);
+	if (s < -MINIMAX_NONTERMINAL_CAP) return Math.min(-MINIMAX_PROVEN_MIN, s + ply);
+	return s;
+}
+
 function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
                            orderingAlpha, exhaustiveRoot, exhaustiveOpponent,
                            blunderLambda, isRoot, tt, killers, ply,
                            positionHistory) {
 	if (Date.now() > deadline) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
-		return { score: _minimaxEvalLeaf(board, color, model), move: null };
+		return { score: _minimaxEvalLeaf(board, color, model, ply), move: null };
 	}
 
 	// ---- Transposition-table probe ----
@@ -398,18 +424,19 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 		if (entry) {
 			ttMove = entry.bestMove;
 			if (entry.depth >= depth) {
+				const es = _minimaxMateFromTT(entry.score, ply);
 				if (entry.bound === _BOUND_EXACT) {
 					tt.cutoffs += 1;
-					return { score: entry.score, move: entry.bestMove };
+					return { score: es, move: entry.bestMove };
 				}
 				if (entry.bound === _BOUND_LOWER) {
-					if (entry.score > alpha) alpha = entry.score;
+					if (es > alpha) alpha = es;
 				} else if (entry.bound === _BOUND_UPPER) {
-					if (entry.score < beta) beta = entry.score;
+					if (es < beta) beta = es;
 				}
 				if (alpha >= beta) {
 					tt.cutoffs += 1;
-					return { score: entry.score, move: entry.bestMove };
+					return { score: es, move: entry.bestMove };
 				}
 			}
 		}
@@ -421,7 +448,7 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 	}
 	const turns = _minimaxOrderedTurns(board, color, model, orderingAlpha, caps, blunderLambda);
 	if (turns.length === 0) {
-		return { score: _minimaxEvalLeaf(board, color, model), move: null };
+		return { score: _minimaxEvalLeaf(board, color, model, ply), move: null };
 	}
 
 	const killerMoves = killers ? killers.get(ply) : [];
@@ -452,7 +479,9 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 		}
 		try {
 			if (sim.gameover && sim.winner === color) {
-				bestScore = MINIMAX_WIN;
+				// Fastest possible win from this node — still dominates
+				// any deeper win, so breaking here stays sound.
+				bestScore = MINIMAX_WIN - Math.min(ply + 1, MINIMAX_MATE_PLY_CAP);
 				bestMove = turn;
 				cutoff = true;
 				break;
@@ -485,10 +514,151 @@ function _minimaxAlphaBeta(board, color, depth, alpha, beta, model, deadline,
 		if (cutoff && bestScore >= beta) bound = _BOUND_LOWER;
 		else if (bestScore <= alphaOrig) bound = _BOUND_UPPER;
 		else bound = _BOUND_EXACT;
-		tt.store(ttKey, depth, bestScore, bound, bestMove);
+		tt.store(ttKey, depth, _minimaxMateToTT(bestScore, ply), bound, bestMove);
 	}
 
 	return { score: bestScore, move: bestMove };
+}
+
+// Trappiness-pass tuning (mirrors caveman-ai.js _TRAP_*).
+const _MINIMAX_TRAP_MARGIN_PLIES = 2;
+const _MINIMAX_TRAP_MAX_CANDIDATES = 8;
+const _MINIMAX_TRAP_MAX_REPLY_DEPTH = 8;
+
+/**
+ * Pick the most resistant losing move (mirrors _cavemanTrappiness, but
+ * synchronous — this legacy engine runs on the main thread with no
+ * abort flag; the deadline is enforced by the recursion's throw).
+ * Returns the chosen move, or null on a Phase A timeout (the caller
+ * keeps its ID-loop move).
+ */
+function _minimaxTrappiness(board, color, legal, provenDepth, model,
+                            deadline, tt, killers, abHistory,
+                            orderingAlpha, exhaustiveOpponent,
+                            blunderLambda, maxDepth, verbose) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+
+	const inject = (sim) => {
+		if (!abHistory || sim.gameover) return null;
+		const k = sim.loopingSnapshot();
+		const n = (abHistory[k] || 0) + 1;
+		abHistory[k] = n;
+		if (n >= 3) { sim.gameover = true; sim.winner = 'blue'; }
+		return k;
+	};
+	const restore = (k) => {
+		if (k === null) return;
+		abHistory[k] -= 1;
+		if (abHistory[k] <= 0) delete abHistory[k];
+	};
+	const subSearch = (sim, side, depth, ply) => _minimaxAlphaBeta(
+		sim, side, depth, -MINIMAX_INF, MINIMAX_INF, model, deadline,
+		orderingAlpha, false, exhaustiveOpponent, blunderLambda,
+		false, tt, killers, ply, abHistory).score;
+
+	// Phase A: exact loss distance per root move at the proven depth.
+	const scored = [];
+	try {
+		for (const m of legal) {
+			if (Date.now() > deadline) throw new MinimaxTimeout();
+			const child = _minimaxApplyTurn(board, m, color);
+			const snap = inject(child);
+			let v;
+			try {
+				v = child.gameover
+					? _minimaxEvalLeaf(child, color, model, 1)
+					: -subSearch(child, enemy, provenDepth - 1, 1);
+			} finally {
+				restore(snap);
+			}
+			// Unrefuted at the proven horizon (a draw line) — maximal
+			// stubbornness by definition.
+			if (v > -MINIMAX_PROVEN_MIN) return m;
+			scored.push({ move: m, dist: MINIMAX_WIN + v });
+		}
+	} catch (e) {
+		if (!(e instanceof MinimaxTimeout)) throw e;
+		return null;
+	}
+	scored.sort((a, b) => b.dist - a.dist);
+	const maxDist = scored[0].dist;
+	const candidates = scored
+		.filter((s) => s.dist >= maxDist - _MINIMAX_TRAP_MARGIN_PLIES)
+		.slice(0, _MINIMAX_TRAP_MAX_CANDIDATES);
+	let best = candidates[0].move;
+	if (candidates.length === 1) return best;
+
+	// Phase B: iterative-deepening resistance measurement.
+	const kMax = Math.min(_MINIMAX_TRAP_MAX_REPLY_DEPTH, maxDepth - 1);
+	try {
+		for (let k = 1; k <= kMax; k++) {
+			const round = [];
+			for (const c of candidates) {
+				const child = _minimaxApplyTurn(board, c.move, color);
+				const snap = inject(child);
+				try {
+					if (child.gameover) {
+						round.push({ move: c.move, key: [0, c.dist, -MINIMAX_INF, c.dist] });
+						continue;
+					}
+					const caps = (exhaustiveOpponent
+						&& typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
+					const replies = _minimaxOrderedTurns(
+						child, enemy, model, orderingAlpha, caps, blunderLambda);
+					let refuted = 0, refDistSum = 0;
+					let nonRef = 0, nonRefSum = 0;
+					for (const r of replies) {
+						if (Date.now() > deadline) throw new MinimaxTimeout();
+						const grand = _minimaxApplyTurn(child, r, enemy);
+						const snap2 = inject(grand);
+						let v;
+						try {
+							v = grand.gameover
+								? _minimaxEvalLeaf(grand, color, model, 2)
+								: subSearch(grand, color, k, 2);
+						} finally {
+							restore(snap2);
+						}
+						if (v <= -MINIMAX_PROVEN_MIN) {
+							refuted += 1;
+							refDistSum += MINIMAX_WIN + v;
+						} else {
+							nonRef += 1;
+							nonRefSum += v;
+						}
+					}
+					const total = refuted + nonRef;
+					round.push({
+						move: c.move,
+						key: [
+							total ? nonRef / total : 0,
+							refuted ? refDistSum / refuted : c.dist,
+							nonRef ? nonRefSum / nonRef : -MINIMAX_INF,
+							c.dist,
+						],
+					});
+				} finally {
+					restore(snap);
+				}
+			}
+			// Round fully completed: adopt its lexicographic best.
+			let top = round[0];
+			for (const e of round.slice(1)) {
+				for (let i = 0; i < 4; i++) {
+					if (e.key[i] > top.key[i]) { top = e; break; }
+					if (e.key[i] < top.key[i]) break;
+				}
+			}
+			best = top.move;
+			if (verbose) {
+				console.log(`minimax: trappiness k=${k} nonRefFrac=${top.key[0].toFixed(2)}`);
+			}
+		}
+	} catch (e) {
+		if (!(e instanceof MinimaxTimeout)) throw e;
+		// Deadline mid-round: keep the last completed round's pick.
+	}
+	return best;
 }
 
 /**
@@ -550,6 +720,7 @@ function minimaxSearch(board, color, model, opts) {
 	let bestMove = legal[0];
 	let completedDepth = 0;
 	let prevScore = null;
+	let lossProven = false;
 	for (let depth = 1; depth <= maxDepth; depth++) {
 		const t0 = Date.now();
 		try {
@@ -585,7 +756,10 @@ function minimaxSearch(board, color, model, opts) {
 				if (tt) msg += ` tt=${tt.size} hits=${tt.hits} cuts=${tt.cutoffs}`;
 				console.log(msg);
 			}
-			if (Math.abs(r.score) >= MINIMAX_WIN - 1) break;
+			// Proven win: play it now. Proven loss: stop deepening and
+			// spend the remaining time on the trappiness pass below.
+			if (r.score >= MINIMAX_PROVEN_MIN) break;
+			if (r.score <= -MINIMAX_PROVEN_MIN) { lossProven = true; break; }
 		} catch (e) {
 			if (e instanceof MinimaxTimeout) {
 				if (verbose) console.log(`minimax: timed out at depth=${depth}, using depth-${completedDepth}`);
@@ -593,6 +767,18 @@ function minimaxSearch(board, color, model, opts) {
 			}
 			throw e;
 		}
+	}
+
+	// Stubbornness: the position is lost against perfect play, so spend
+	// the remaining budget picking the losing move that's hardest to
+	// convert, instead of the first one move ordering surfaced.
+	if (lossProven && maxDepth >= 2 && legal.length > 1
+			&& Date.now() < deadline) {
+		const trapMove = _minimaxTrappiness(
+			board, color, legal, completedDepth, model, deadline,
+			tt, killers, abHistory, orderingAlpha, exhaustiveOpponent,
+			blunderLambda, maxDepth, verbose);
+		if (trapMove) bestMove = trapMove;
 	}
 	return bestMove;
 }

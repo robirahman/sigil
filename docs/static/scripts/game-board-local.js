@@ -1113,18 +1113,23 @@ document.addEventListener('alpine:init', () => {
 					const c = payload.color ? payload.color[0].toUpperCase() + payload.color.slice(1) : 'AI';
 					const seconds = ((payload.timeMs || 0) / 1000).toFixed(1);
 					// The search returns its evaluation from the moving AI's
-					// perspective (positive = the AI is favored). Large magnitudes
-					// (±100) are the forced win/loss sentinels. The leaf eval is
-					// (stone difference + sub-stone positional terms)/39, so
-					// multiplying by 39 recovers the lead in stone equivalents
-					// (fractional part = mana/void/map-control terms), matching
-					// the game-review scale.
+					// perspective (positive = the AI is favored). Mate scores
+					// are distance-encoded (±(100 − plies to mate)); anything
+					// at or beyond ±CAVEMAN_PROVEN_MIN is proven. The leaf
+					// eval is (stone difference + sub-stone positional
+					// terms)/39, so multiplying by 39 recovers the lead in
+					// stone equivalents (fractional part = mana/void/
+					// map-control terms), matching the game-review scale.
 					let evalStr = '';
 					if (typeof payload.score === 'number' && isFinite(payload.score)) {
 						const s = payload.score;
+						const proven = (typeof CAVEMAN_PROVEN_MIN === 'number')
+							? CAVEMAN_PROVEN_MIN : 37;
 						let shown;
-						if (Math.abs(s) >= 99) {
-							shown = s > 0 ? 'win' : 'loss';
+						if (s >= proven) {
+							shown = `win in ${Math.round(100 - s)}`;
+						} else if (s <= -proven) {
+							shown = `loss in ${Math.round(100 + s)}`;
 						} else {
 							// One decimal: with positional leaf terms the eval
 							// is no longer an integer stone count (matches the
@@ -1134,7 +1139,16 @@ document.addEventListener('alpine:init', () => {
 						}
 						evalStr = `, eval ${shown}`;
 					}
-					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${evalStr}`);
+					// Trappiness pass ran (proven loss): show how deep it got
+					// and what fraction of opponent replies dodge the win.
+					let trapStr = '';
+					if (typeof payload.trapDepth === 'number' && payload.trapDepth > 0) {
+						trapStr = `, trap d${payload.trapDepth}`;
+						if (typeof payload.trapFrac === 'number') {
+							trapStr += ` (${Math.round(payload.trapFrac * 100)}% slip)`;
+						}
+					}
+					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${evalStr}${trapStr}`);
 				}
 
 				function handleMessageEvent(payload) {

@@ -10,11 +10,16 @@ const REVIEW_DEFAULTS = {
 	timeLimitPerPly: 3.0,
 	maxDepth: 8,
 	sigmoidK: 8.0,
-	forcedWinFloor: 50,  // |score| >= this is treated as a mate.
+	// |score| >= this is treated as a mate. Mate scores are now
+	// distance-encoded (±(100 − ply), ply <= 63), so the proven band
+	// starts at 37; heuristic evals are clamped to ±36 (see
+	// CAVEMAN_PROVEN_MIN / CAVEMAN_NONTERMINAL_CAP in caveman-ai.js).
+	forcedWinFloor: 36,
 	// Bump when the search semantics change so cached reviews recompute
 	// instead of being served stale. v2: deep mode is now a 60s/ply time
-	// budget (was a depth-8 cap).
-	modelVersion: 'caveman-v2',
+	// budget (was a depth-8 cap). v3: mate-distance scores + stubborn
+	// (slowest-loss/trappiness) search.
+	modelVersion: 'caveman-v3',
 	mode: 'quick',
 };
 
@@ -346,7 +351,7 @@ function aiReviewMixin() {
 			if (!this.aiReview || !this.aiReview.evalPerPly.length) return '';
 			const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
 			const redScore = this._aiReviewRedScore(idx);
-			const floor = this.aiReview.forcedWinFloor || 50;
+			const floor = this.aiReview.forcedWinFloor || 36;
 			if (redScore >= floor) return '+M';
 			if (redScore <= -floor) return '-M';
 			const stones = redScore * 39;
@@ -363,7 +368,7 @@ function aiReviewMixin() {
 		isCurrentReviewPlyAmbiguous() {
 			if (!this.aiReview || this.reviewIndex <= 0) return false;
 			const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
-			const floor = this.aiReview.forcedWinFloor || 50;
+			const floor = this.aiReview.forcedWinFloor || 36;
 			const redScore = this._aiReviewRedScore(idx);
 			if (Math.abs(redScore) >= floor) return false;
 			const redWp = this._aiReviewRedWp(idx);

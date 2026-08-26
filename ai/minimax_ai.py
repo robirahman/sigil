@@ -43,7 +43,16 @@ from ai.enumerator import get_legal_turns_exhaustive, NARROW_CAPS, OPPONENT_CAPS
 
 
 _INF = 1e9
-_WIN = 100.0   # large but finite (so we still prefer faster wins / slower losses)
+_WIN = 100.0
+# Mate-distance score band (mirrors caveman-ai.js CAVEMAN_MATE_PLY_CAP /
+# CAVEMAN_PROVEN_MIN / CAVEMAN_NONTERMINAL_CAP). Terminal leaves score
+# ±(_WIN - ply) so the search genuinely prefers faster wins and slower
+# losses. Ply is clamped to _MATE_PLY_CAP so mate scores never dip into
+# the heuristic band; |score| >= _PROVEN_MIN is an unambiguous "proven
+# mate" test and mate distance = _WIN - |score|.
+_MATE_PLY_CAP = 63
+_PROVEN_MIN = _WIN - _MATE_PLY_CAP      # 37.0
+
 
 # Positional leaf-eval terms for stones sitting on non-spell nodes.
 # "Void" nodes belong to no spell position and are not mana nodes (a11/a12/a13,
@@ -68,11 +77,12 @@ _MANA_STONE_WEIGHT = 0.3   # +own-perspective per own stone, − per enemy stone
 # Hard ceiling for a NON-terminal leaf score. Only the genuine forced game
 # endings (handled via board.gameover: +3 stone advantage, all enemy stones
 # cleared, spell counter reaching 6 with an advantage, or a full Seal of
-# Destruction at the opponent's start-of-turn) may reach the ±_WIN band that
-# the search treats as a mate (abs(score) >= _WIN - 1). No accumulation of NN
-# value + positional top-up may masquerade as a win/loss, so we clamp strictly
-# below that threshold.
-_NONTERMINAL_CAP = _WIN - 2.0
+# Destruction at the opponent's start-of-turn) may reach the mate band that
+# the search treats as proven (abs(score) >= _PROVEN_MIN). No accumulation of
+# NN value + positional top-up may masquerade as a win/loss, so we clamp
+# strictly below that threshold. (NN value is ±1 and the top-ups are small,
+# so this clamp never binds on real heuristic scores.)
+_NONTERMINAL_CAP = _PROVEN_MIN - 1.0    # 36.0
 
 # Transposition-table bound classifications.
 _BOUND_EXACT = 0   # true score equals stored score
@@ -360,10 +370,11 @@ def _apply_turn(board, turn, color):
     return sim
 
 
-def _eval_leaf(board, color, model):
+def _eval_leaf(board, color, model, ply=0):
     """Static evaluation in [-1, +1] from `color`'s perspective.
 
-    Game-over short-circuits: +WIN if we win, -WIN if we lose, 0 draw.
+    Game-over short-circuits: ±(_WIN - ply) — distance-encoded so the
+    search prefers faster wins and slower losses — or 0 for a draw.
     Otherwise: NN value head, plus a positional top-up for stones on
     non-spell nodes — penalize our own stones stranded on void nodes and
     off mana nodes, reward the enemy being so positioned. The strategic
@@ -371,11 +382,12 @@ def _eval_leaf(board, color, model):
     *current* board's pre-state (no per-turn lookahead at leaves).
     """
     if board.gameover:
+        d = min(ply, _MATE_PLY_CAP)
         if board.winner == color:
-            return _WIN
+            return _WIN - d
         if board.winner is None:
             return 0.0
-        return -_WIN
+        return -(_WIN - d)
     raw, spell_ids = board_to_tensor(board, color)
     with torch.no_grad():
         v, _ = model(raw.unsqueeze(0), spell_ids.unsqueeze(0))
@@ -448,6 +460,31 @@ class _Timeout(Exception):
     pass
 
 
+def _mate_to_tt(score, ply):
+    """Root-relative mate score -> node-relative for TT storage.
+
+    Mate scores are ply-relative to the root, but TT entries are probed
+    from arbitrary plies (and across roots when a TT is reused), so
+    they're stored node-relative and re-based on probe — the standard
+    mate-score-in-TT adjustment. Heuristic scores (inside
+    ±_NONTERMINAL_CAP) pass through untouched.
+    """
+    if score > _NONTERMINAL_CAP:
+        return score + ply
+    if score < -_NONTERMINAL_CAP:
+        return score - ply
+    return score
+
+
+def _mate_from_tt(score, ply):
+    """Stored (node-relative) mate score -> root-relative at the probing node."""
+    if score > _NONTERMINAL_CAP:
+        return max(_PROVEN_MIN, score - ply)
+    if score < -_NONTERMINAL_CAP:
+        return min(-_PROVEN_MIN, score + ply)
+    return score
+
+
 def _alphabeta(board, color, depth, alpha, beta, model, deadline,
                ordering_alpha=1.0, exhaustive_root=False,
                exhaustive_opponent=False, blunder_lambda=0.0,
@@ -472,7 +509,7 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
     if time.time() > deadline:
         raise _Timeout()
     if board.gameover or depth == 0:
-        return _eval_leaf(board, color, model), None
+        return _eval_leaf(board, color, model, ply=ply), None
 
     # ---- Transposition-table probe ----
     alpha_orig = alpha
@@ -484,18 +521,19 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
         if entry is not None:
             tt_move = entry.best_move
             if entry.depth >= depth:
+                entry_score = _mate_from_tt(entry.score, ply)
                 if entry.bound == _BOUND_EXACT:
                     tt.cutoffs += 1
-                    return entry.score, entry.best_move
+                    return entry_score, entry.best_move
                 if entry.bound == _BOUND_LOWER:
-                    if entry.score > alpha:
-                        alpha = entry.score
+                    if entry_score > alpha:
+                        alpha = entry_score
                 elif entry.bound == _BOUND_UPPER:
-                    if entry.score < beta:
-                        beta = entry.score
+                    if entry_score < beta:
+                        beta = entry_score
                 if alpha >= beta:
                     tt.cutoffs += 1
-                    return entry.score, entry.best_move
+                    return entry_score, entry.best_move
 
     if exhaustive_root and _is_root:
         caps = NARROW_CAPS
@@ -510,7 +548,7 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
         blunder_lambda=blunder_lambda,
     )
     if not turns:
-        return _eval_leaf(board, color, model), None
+        return _eval_leaf(board, color, model, ply=ply), None
 
     # ---- Hint-driven re-ordering: TT-move first, then killers ----
     killer_moves = killers.get(ply) if killers is not None else ()
@@ -536,7 +574,9 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
                 sim.winner = 'blue'
         try:
             if sim.gameover and sim.winner == color:
-                best_score = _WIN
+                # Fastest possible win from this node — still dominates
+                # any deeper win, so breaking here stays sound.
+                best_score = _WIN - min(ply + 1, _MATE_PLY_CAP)
                 best_move = turn
                 cutoff = True
                 break
@@ -575,9 +615,170 @@ def _alphabeta(board, color, depth, alpha, beta, model, deadline,
             bound = _BOUND_UPPER
         else:
             bound = _BOUND_EXACT
-        tt.store(tt_key, depth, best_score, bound, best_move)
+        tt.store(tt_key, depth, _mate_to_tt(best_score, ply), bound, best_move)
 
     return best_score, best_move
+
+
+# Trappiness-pass tuning (mirrors caveman-ai.js _TRAP_*). When the ID
+# loop proves a forced loss, the remaining time budget goes into choosing
+# WHICH losing move to play: candidates within _TRAP_MARGIN_PLIES of the
+# slowest loss are re-scored by how many opponent replies actually still
+# win (fewer = trappier).
+_TRAP_MARGIN_PLIES = 2
+_TRAP_MAX_CANDIDATES = 8
+_TRAP_MAX_REPLY_DEPTH = 8
+
+
+def _trappiness_pass(board, color, legal, proven_depth, model, deadline,
+                     tt=None, killers=None, hasher=None, ab_history=None,
+                     ordering_alpha=1.0, exhaustive_opponent=False,
+                     blunder_lambda=0.0, max_depth=4, verbose=False):
+    """Pick the most resistant losing move (mirrors _cavemanTrappiness).
+
+    Runs only after the ID loop has proven a root loss at `proven_depth`.
+    Phase A re-scores every root move at the proven depth (mostly TT
+    probes) to get exact per-move loss distances. Phase B takes the moves
+    within _TRAP_MARGIN_PLIES of the slowest loss and, at increasing
+    reply depth k, measures for each: what fraction of opponent replies
+    still force the win, how slow those refutations are, and how well we
+    stand after the replies that don't refute. Lexicographic max wins;
+    the slowest loss is the fallback if no Phase B round completes.
+
+    Returns the chosen CompleteTurn, or None on a Phase A timeout (the
+    caller keeps its ID-loop move).
+    """
+    enemy = 'blue' if color == 'red' else 'red'
+
+    # Repetition bookkeeping identical to the search loop: count the
+    # child position while searching under it, restore afterwards.
+    def inject(sim):
+        if ab_history is None or sim.gameover:
+            return None
+        k = sim.looping_snapshot()
+        n = ab_history.get(k, 0) + 1
+        ab_history[k] = n
+        if n >= 5:
+            sim.gameover = True
+            sim.winner = 'blue'
+        return k
+
+    def restore(k):
+        if k is None:
+            return
+        ab_history[k] -= 1
+        if ab_history[k] <= 0:
+            del ab_history[k]
+
+    def sub_search(sim, side, depth, ply):
+        score, _move = _alphabeta(
+            sim, side, depth, -_INF, _INF, model, deadline,
+            ordering_alpha=ordering_alpha,
+            exhaustive_root=False,
+            exhaustive_opponent=exhaustive_opponent,
+            blunder_lambda=blunder_lambda,
+            _is_root=False,
+            tt=tt, killers=killers, hasher=hasher, ply=ply,
+            position_history=ab_history,
+        )
+        return score
+
+    # Phase A: exact loss distance per root move at the proven depth.
+    try:
+        scored = []
+        for m in legal:
+            if time.time() > deadline:
+                raise _Timeout()
+            child = _apply_turn(board, m, color)
+            snap = inject(child)
+            try:
+                if child.gameover:
+                    v = _eval_leaf(child, color, model, ply=1)
+                else:
+                    v = -sub_search(child, enemy, proven_depth - 1, 1)
+            finally:
+                restore(snap)
+            if v > -_PROVEN_MIN:
+                # Not actually refuted at the proven horizon (a draw
+                # line, or shouldn't otherwise happen — same depth and
+                # TT as the proving search). Unrefuted is maximal
+                # stubbornness by definition.
+                return m
+            scored.append((_WIN + v, m))
+    except _Timeout:
+        return None
+    scored.sort(key=lambda e: -e[0])
+    max_dist = scored[0][0]
+    candidates = [e for e in scored if e[0] >= max_dist - _TRAP_MARGIN_PLIES]
+    candidates = candidates[:_TRAP_MAX_CANDIDATES]
+
+    best = candidates[0][1]
+    if len(candidates) == 1:
+        return best
+
+    # Phase B: iterative-deepening resistance measurement.
+    k_max = min(_TRAP_MAX_REPLY_DEPTH, max_depth - 1)
+    try:
+        for k in range(1, k_max + 1):
+            round_keys = []
+            for dist, m in candidates:
+                child = _apply_turn(board, m, color)
+                snap = inject(child)
+                try:
+                    if child.gameover:
+                        # Game ends on the spot — no replies to grade;
+                        # frac 0 leaves it ranked by loss distance only.
+                        round_keys.append(((0.0, dist, -_INF, dist), m))
+                        continue
+                    replies = _ordered_turns(
+                        child, enemy, model,
+                        ordering_alpha=ordering_alpha,
+                        exhaustive_caps=OPPONENT_CAPS if exhaustive_opponent else None,
+                        blunder_lambda=blunder_lambda,
+                    )
+                    refuted, ref_dist_sum = 0, 0.0
+                    non_ref, non_ref_sum = 0, 0.0
+                    for r in replies:
+                        if time.time() > deadline:
+                            raise _Timeout()
+                        grand = _apply_turn(child, r, enemy)
+                        snap2 = inject(grand)
+                        try:
+                            if grand.gameover:
+                                v = _eval_leaf(grand, color, model, ply=2)
+                            else:
+                                v = sub_search(grand, color, k, 2)
+                        finally:
+                            restore(snap2)
+                        if v <= -_PROVEN_MIN:
+                            refuted += 1
+                            ref_dist_sum += _WIN + v
+                        else:
+                            non_ref += 1
+                            non_ref_sum += v
+                    total = refuted + non_ref
+                    round_keys.append((
+                        (non_ref / total if total else 0.0,
+                         ref_dist_sum / refuted if refuted else dist,
+                         non_ref_sum / non_ref if non_ref else -_INF,
+                         dist),
+                        m,
+                    ))
+                finally:
+                    restore(snap)
+            # Round fully completed: adopt its lexicographic best
+            # (fewest refuting replies, then slower refutations, then
+            # better standing after non-refuting replies, then distance).
+            round_keys.sort(key=lambda e: e[0], reverse=True)
+            best = round_keys[0][1]
+            if verbose:
+                key = round_keys[0][0]
+                print(f'minimax: trappiness k={k} -> dist={key[3]:.0f} '
+                      f'non_ref_frac={key[0]:.2f}', flush=True)
+    except _Timeout:
+        # Deadline mid-round: keep the last completed round's pick.
+        pass
+    return best
 
 
 def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
@@ -659,6 +860,7 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
     killers = _KillerTable(max_ply=max_ply) if enable_killers else None
 
     prev_score = None
+    loss_proven = False
     for depth in range(1, max_depth + 1):
         t0 = time.time()
         try:
@@ -700,12 +902,34 @@ def minimax_search(board, color, model, time_limit=10.0, max_depth=4,
                         msg += (f' tt={len(tt_obj.entries)}'
                                 f' hits={tt_obj.hits} cuts={tt_obj.cutoffs}')
                     print(msg, flush=True)
-            # Early exit if we found a forced win / loss.
-            if abs(score) >= _WIN - 1:
+            # Proven win: play it now. Proven loss: stop deepening (the
+            # loss distances are already exact within the proven horizon,
+            # so deeper iterations return the same value) and spend the
+            # remaining time on the trappiness pass below instead.
+            if score >= _PROVEN_MIN:
+                break
+            if score <= -_PROVEN_MIN:
+                loss_proven = True
                 break
         except _Timeout:
             if verbose:
                 print(f'minimax: timed out at depth={depth} after {time.time()-t0:.2f}s, '
                       f'using depth-{completed_depth} result', flush=True)
             break
+
+    # Stubbornness: the position is lost against perfect play, so spend
+    # the remaining budget picking the losing move that's hardest to
+    # convert, instead of the first one move ordering surfaced.
+    if (loss_proven and max_depth >= 2 and len(legal) > 1
+            and time.time() < deadline):
+        trap_move = _trappiness_pass(
+            board, color, legal, completed_depth, model, deadline,
+            tt=tt_obj, killers=killers, hasher=hasher, ab_history=ab_history,
+            ordering_alpha=ordering_alpha,
+            exhaustive_opponent=exhaustive_opponent,
+            blunder_lambda=blunder_lambda,
+            max_depth=max_depth, verbose=verbose,
+        )
+        if trap_move is not None:
+            best_move = trap_move
     return best_move

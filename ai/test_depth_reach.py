@@ -21,7 +21,7 @@ import torch
 from simboard import SimBoard
 from ai.sigil_net import SigilNet
 from ai.minimax_ai import (
-    _alphabeta, _Timeout, _get_hasher, _TT, _KillerTable, _INF, _WIN,
+    _alphabeta, _Timeout, _get_hasher, _TT, _KillerTable, _INF, _PROVEN_MIN,
 )
 
 
@@ -48,7 +48,7 @@ def _completed_depth(board, color, model, time_limit, max_depth, *,
             )
             completed = depth
             last_score = score
-            if abs(score) >= _WIN - 1:
+            if abs(score) >= _PROVEN_MIN:
                 break
         except _Timeout:
             break

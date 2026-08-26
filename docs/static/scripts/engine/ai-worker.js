@@ -169,6 +169,10 @@ async function _runSearch(msg) {
 			nodes: result.nodes,
 			ttSize: result.ttSize,
 			cutoffs: result.cutoffs,
+			provenLoss: result.provenLoss,
+			mateIn: result.mateIn,
+			trapDepth: result.trapDepth,
+			trapFrac: result.trapFrac,
 			aborted: !!abortFlag.aborted,
 		});
 	} catch (err) {

@@ -15,6 +15,15 @@
 
 const CAVEMAN_INF = 1e9;
 const CAVEMAN_WIN = 100.0;
+// Mate-distance score band. Terminal leaves score ±(WIN − ply), so a
+// slower loss (or faster win) always outranks a quicker one. Ply is
+// clamped to MATE_PLY_CAP (one below maxDepth's 64 sentinel) so mate
+// scores never dip into the heuristic band, and heuristic leaves are
+// clamped to ±NONTERMINAL_CAP, making |score| >= PROVEN_MIN an
+// unambiguous "proven mate" test. Mate distance = WIN − |score|.
+const CAVEMAN_MATE_PLY_CAP = 63;
+const CAVEMAN_PROVEN_MIN = CAVEMAN_WIN - CAVEMAN_MATE_PLY_CAP;   // 37.0
+const CAVEMAN_NONTERMINAL_CAP = CAVEMAN_PROVEN_MIN - 1.0;        // 36.0
 const _CAVEMAN_TT_MAX = 200000;
 const _CAVEMAN_MAX_PLY = 12;
 
@@ -125,11 +134,12 @@ function _hailStormPrepKills(board, side, enemyOfSide) {
 	return slots;
 }
 
-function _cavemanLeaf(board, color, w) {
+function _cavemanLeaf(board, color, w, ply) {
 	if (board.gameover) {
-		if (board.winner === color) return CAVEMAN_WIN;
+		const d = Math.min(ply || 0, CAVEMAN_MATE_PLY_CAP);
+		if (board.winner === color) return CAVEMAN_WIN - d;
 		if (board.winner === null) return 0.0;
-		return -CAVEMAN_WIN;
+		return -(CAVEMAN_WIN - d);
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
 	// Material includes Providence phantoms, Ambush snares, and pending
@@ -153,7 +163,9 @@ function _cavemanLeaf(board, color, w) {
 		const d = mapControlDiff(board.stones);
 		score += w.mapControl * (color === 'red' ? d : -d);
 	}
-	return score / 39.0;
+	const s = score / 39.0;
+	return Math.max(-CAVEMAN_NONTERMINAL_CAP,
+	                Math.min(CAVEMAN_NONTERMINAL_CAP, s));
 }
 
 function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
@@ -233,6 +245,22 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
 	return scored.map(s => turns[s[1]]);
 }
 
+// Mate scores are ply-relative to the root, but TT entries are probed
+// from arbitrary plies (including across roots via the ponder/review
+// shared TT), so they're stored node-relative and re-based on probe —
+// the standard mate-score-in-TT adjustment. Heuristic scores (inside
+// ±NONTERMINAL_CAP) pass through untouched.
+function _cavemanMateToTT(s, ply) {
+	if (s > CAVEMAN_NONTERMINAL_CAP) return s + ply;
+	if (s < -CAVEMAN_NONTERMINAL_CAP) return s - ply;
+	return s;
+}
+function _cavemanMateFromTT(s, ply) {
+	if (s > CAVEMAN_NONTERMINAL_CAP) return Math.max(CAVEMAN_PROVEN_MIN, s - ply);
+	if (s < -CAVEMAN_NONTERMINAL_CAP) return Math.min(-CAVEMAN_PROVEN_MIN, s + ply);
+	return s;
+}
+
 function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
                            tt, killers, ply, positionHistory,
                            exhaustiveRoot, exhaustiveOpponent, isRoot,
@@ -245,7 +273,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 	// MinimaxTimeout sentinel so the IDDFS loop catches it cleanly.
 	if (abortFlag && abortFlag.aborted) throw new MinimaxTimeout();
 	if (board.gameover || depth === 0) {
-		return { score: _cavemanLeaf(board, color, weights), move: null };
+		return { score: _cavemanLeaf(board, color, weights, ply), move: null };
 	}
 
 	const alphaOrig = alpha;
@@ -257,18 +285,19 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 		if (entry) {
 			ttMove = entry.bestMove;
 			if (entry.depth >= depth) {
+				const es = _cavemanMateFromTT(entry.score, ply);
 				if (entry.bound === _BOUND_EXACT) {
 					tt.cutoffs += 1;
-					return { score: entry.score, move: entry.bestMove };
+					return { score: es, move: entry.bestMove };
 				}
 				if (entry.bound === _BOUND_LOWER) {
-					if (entry.score > alpha) alpha = entry.score;
+					if (es > alpha) alpha = es;
 				} else if (entry.bound === _BOUND_UPPER) {
-					if (entry.score < beta) beta = entry.score;
+					if (es < beta) beta = es;
 				}
 				if (alpha >= beta) {
 					tt.cutoffs += 1;
-					return { score: entry.score, move: entry.bestMove };
+					return { score: es, move: entry.bestMove };
 				}
 			}
 		}
@@ -280,7 +309,7 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 	}
 	const turns = _cavemanOrderedTurns(board, color, caps, weights, orderMc);
 	if (turns.length === 0) {
-		return { score: _cavemanLeaf(board, color, weights), move: null };
+		return { score: _cavemanLeaf(board, color, weights, ply), move: null };
 	}
 	const killerMoves = killers ? killers.get(ply) : [];
 	const ordered = (ttMove !== null || killerMoves.length > 0)
@@ -305,7 +334,9 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 		}
 		try {
 			if (sim.gameover && sim.winner === color) {
-				bestScore = CAVEMAN_WIN;
+				// Fastest possible win from this node — still dominates
+				// any deeper win, so breaking here stays sound.
+				bestScore = CAVEMAN_WIN - Math.min(ply + 1, CAVEMAN_MATE_PLY_CAP);
 				bestMove = turn;
 				cutoff = true;
 				break;
@@ -336,9 +367,188 @@ function _cavemanAlphaBeta(board, color, depth, alpha, beta, deadline,
 		if (cutoff && bestScore >= beta) bound = _BOUND_LOWER;
 		else if (bestScore <= alphaOrig) bound = _BOUND_UPPER;
 		else bound = _BOUND_EXACT;
-		tt.store(ttKey, depth, bestScore, bound, bestMove);
+		tt.store(ttKey, depth, _cavemanMateToTT(bestScore, ply), bound, bestMove);
 	}
 	return { score: bestScore, move: bestMove };
+}
+
+// Trappiness-pass tuning. When the ID loop proves a forced loss, the
+// remaining time budget goes into choosing WHICH losing move to play:
+// candidates within TRAP_MARGIN_PLIES of the slowest loss are re-scored
+// by how many opponent replies actually still win (fewer = trappier).
+const _TRAP_MARGIN_PLIES = 2;
+const _TRAP_MAX_CANDIDATES = 8;
+const _TRAP_MAX_REPLY_DEPTH = 8;
+
+/**
+ * Pick the most resistant losing move. Runs only after the ID loop has
+ * proven a root loss at depth `provenDepth`.
+ *
+ * Phase A re-scores every root move at the proven depth (mostly TT
+ * probes) to get exact per-move loss distances. Phase B takes the
+ * moves within _TRAP_MARGIN_PLIES of the slowest loss and, at
+ * increasing reply depth k, measures for each: what fraction of
+ * opponent replies still force the win, how slow those refutations
+ * are, and how well we stand after the replies that don't refute.
+ * Lexicographic max wins; the slowest loss is the fallback if no
+ * Phase B round completes before the deadline. A MinimaxTimeout in
+ * Phase A propagates to the caller (which keeps the ID-loop move).
+ *
+ * Returns { move, score, mateIn, trapFrac, trapDepth }.
+ */
+async function _cavemanTrappiness(board, color, legal, provenDepth,
+                                  deadline, tt, killers, abHistory,
+                                  exhaustiveOpponent, abortFlag,
+                                  weights, orderMc, maxDepth, verbose) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+
+	// Repetition bookkeeping identical to the root loop: count the
+	// child position while searching under it, restore afterwards.
+	const inject = (sim) => {
+		if (!abHistory || sim.gameover) return null;
+		const k = sim.loopingSnapshot();
+		const n = (abHistory[k] || 0) + 1;
+		abHistory[k] = n;
+		if (n >= 3) { sim.gameover = true; sim.winner = 'blue'; }
+		return k;
+	};
+	const restore = (k) => {
+		if (k === null) return;
+		abHistory[k] -= 1;
+		if (abHistory[k] <= 0) delete abHistory[k];
+	};
+
+	// Phase A: exact loss distance per root move at the proven depth.
+	const scored = [];
+	for (const m of legal) {
+		if (Date.now() > deadline) throw new MinimaxTimeout();
+		const child = _minimaxApplyTurn(board, m, color);
+		const snap = inject(child);
+		let v;
+		try {
+			if (child.gameover) {
+				v = _cavemanLeaf(child, color, weights, 1);
+			} else {
+				const sub = _cavemanAlphaBeta(
+					child, enemy, provenDepth - 1, -CAVEMAN_INF, CAVEMAN_INF,
+					deadline, tt, killers, 1, abHistory,
+					false, exhaustiveOpponent, false, abortFlag,
+					weights, orderMc);
+				v = -sub.score;
+			}
+		} finally {
+			restore(snap);
+		}
+		if (v > -CAVEMAN_PROVEN_MIN) {
+			// Not actually refuted at the proven horizon (a draw line, or
+			// shouldn't otherwise happen — same depth and TT as the
+			// proving search). Unrefuted is maximal stubbornness.
+			return { move: m, score: v, mateIn: null, trapFrac: null, trapDepth: 0 };
+		}
+		scored.push({ move: m, dist: CAVEMAN_WIN + v });
+	}
+	scored.sort((a, b) => b.dist - a.dist);
+	const maxDist = scored[0].dist;
+	const candidates = scored
+		.filter((s) => s.dist >= maxDist - _TRAP_MARGIN_PLIES)
+		.slice(0, _TRAP_MAX_CANDIDATES);
+
+	const asResult = (c, frac, k) => ({
+		move: c.move,
+		score: c.dist - CAVEMAN_WIN,
+		mateIn: Math.round(c.dist),
+		trapFrac: frac,
+		trapDepth: k,
+	});
+	let best = asResult(candidates[0], null, 0);
+	if (candidates.length === 1) return best;
+
+	// Phase B: iterative-deepening resistance measurement.
+	const kMax = Math.min(_TRAP_MAX_REPLY_DEPTH, maxDepth - 1);
+	try {
+		for (let k = 1; k <= kMax; k++) {
+			// Same macrotask yield as the ID loop so cancel signals land.
+			await new Promise((r) => setTimeout(r, 0));
+			if (abortFlag && abortFlag.aborted) break;
+			const round = [];
+			for (const c of candidates) {
+				const child = _minimaxApplyTurn(board, c.move, color);
+				const snap = inject(child);
+				try {
+					if (child.gameover) {
+						// Game ends on the spot — no replies to grade;
+						// frac 0 leaves it ranked by loss distance only.
+						round.push({ c, key: [0, c.dist, -CAVEMAN_INF, c.dist] });
+						continue;
+					}
+					const caps = (exhaustiveOpponent
+						&& typeof ENUM_CAPS !== 'undefined') ? ENUM_CAPS : null;
+					const replies = _cavemanOrderedTurns(
+						child, enemy, caps, weights, orderMc);
+					let refuted = 0, refDistSum = 0;
+					let nonRef = 0, nonRefSum = 0;
+					for (const r of replies) {
+						if (Date.now() > deadline) throw new MinimaxTimeout();
+						const grand = _minimaxApplyTurn(child, r, enemy);
+						const snap2 = inject(grand);
+						let v;
+						try {
+							if (grand.gameover) {
+								v = _cavemanLeaf(grand, color, weights, 2);
+							} else {
+								const sub = _cavemanAlphaBeta(
+									grand, color, k, -CAVEMAN_INF, CAVEMAN_INF,
+									deadline, tt, killers, 2, abHistory,
+									false, exhaustiveOpponent, false, abortFlag,
+									weights, orderMc);
+								v = sub.score;
+							}
+						} finally {
+							restore(snap2);
+						}
+						if (v <= -CAVEMAN_PROVEN_MIN) {
+							refuted += 1;
+							refDistSum += CAVEMAN_WIN + v;
+						} else {
+							nonRef += 1;
+							nonRefSum += v;
+						}
+					}
+					const total = refuted + nonRef;
+					round.push({
+						c,
+						key: [
+							total ? nonRef / total : 0,
+							refuted ? refDistSum / refuted : c.dist,
+							nonRef ? nonRefSum / nonRef : -CAVEMAN_INF,
+							c.dist,
+						],
+					});
+				} finally {
+					restore(snap);
+				}
+			}
+			// Round fully completed: adopt its lexicographic best
+			// (fewest refuting replies, then slower refutations, then
+			// better standing after non-refuting replies, then distance).
+			let top = round[0];
+			for (const e of round.slice(1)) {
+				for (let i = 0; i < 4; i++) {
+					if (e.key[i] > top.key[i]) { top = e; break; }
+					if (e.key[i] < top.key[i]) break;
+				}
+			}
+			best = asResult(top.c, top.key[0], k);
+			if (verbose) {
+				console.log(`caveman: trappiness k=${k} -> dist=${top.c.dist} `
+				            + `nonRefFrac=${top.key[0].toFixed(2)}`);
+			}
+		}
+	} catch (e) {
+		if (!(e instanceof MinimaxTimeout)) throw e;
+		// Deadline/abort mid-round: keep the last completed round's pick.
+	}
+	return best;
 }
 
 /**
@@ -411,7 +621,7 @@ async function cavemanSearch(board, color, opts) {
 		}
 		if (sim.gameover && sim.winner === color) {
 			return {
-				turn, score: CAVEMAN_WIN, depth: 1,
+				turn, score: CAVEMAN_WIN - 1, depth: 1,
 				timeMs: Date.now() - searchStart,
 				nodes: 0, ttSize: 0, cutoffs: 0,
 			};
@@ -431,6 +641,7 @@ async function cavemanSearch(board, color, opts) {
 	let bestMove = legal[0];
 	let bestScore = 0;
 	let completedDepth = 0;
+	let lossProven = false;
 	for (let depth = 1; depth <= maxDepth; depth++) {
 		if (abortFlag && abortFlag.aborted) {
 			if (verbose) console.log(`caveman: aborted before depth=${depth}`);
@@ -476,7 +687,12 @@ async function cavemanSearch(board, color, opts) {
 					} catch (e) { /* progress hook errors are non-fatal */ }
 				}
 			}
-			if (Math.abs(r.score) >= CAVEMAN_WIN - 1) break;
+			// Proven win: play it now. Proven loss: stop deepening (the
+			// loss distances are already exact within the proven horizon,
+			// so deeper iterations return the same value) and spend the
+			// remaining time on the trappiness pass below instead.
+			if (r.score >= CAVEMAN_PROVEN_MIN) break;
+			if (r.score <= -CAVEMAN_PROVEN_MIN) { lossProven = true; break; }
 		} catch (e) {
 			if (e instanceof MinimaxTimeout) {
 				if (verbose) console.log(`caveman: timed out at depth=${depth}, using depth-${completedDepth}`);
@@ -485,6 +701,31 @@ async function cavemanSearch(board, color, opts) {
 			throw e;
 		}
 	}
+
+	// Stubbornness: the position is lost against perfect play, so spend
+	// the remaining budget picking the losing move that's hardest to
+	// convert, instead of the first one the ordering shuffled up.
+	// Skipped for ponder (Infinity budget, result discarded anyway).
+	let trapInfo = null;
+	if (lossProven && timeLimit !== Infinity && maxDepth >= 2
+			&& legal.length > 1
+			&& Date.now() < deadline
+			&& !(abortFlag && abortFlag.aborted)) {
+		try {
+			trapInfo = await _cavemanTrappiness(
+				board, color, legal, completedDepth, deadline, tt, killers,
+				abHistory, exhaustiveOpponent, abortFlag, evalW, orderMc,
+				maxDepth, verbose);
+		} catch (e) {
+			if (!(e instanceof MinimaxTimeout)) throw e;
+			if (verbose) console.log('caveman: trappiness pass timed out, keeping ID-loop move');
+		}
+		if (trapInfo && trapInfo.move) {
+			bestMove = trapInfo.move;
+			bestScore = trapInfo.score;
+		}
+	}
+
 	return {
 		turn: bestMove,
 		score: bestScore,
@@ -493,6 +734,12 @@ async function cavemanSearch(board, color, opts) {
 		nodes: tt.nodes,
 		ttSize: tt.size,
 		cutoffs: tt.cutoffs,
+		provenLoss: lossProven,
+		mateIn: (lossProven && bestScore <= -CAVEMAN_PROVEN_MIN)
+			? Math.round(CAVEMAN_WIN + bestScore) : undefined,
+		trapDepth: trapInfo ? trapInfo.trapDepth : undefined,
+		trapFrac: (trapInfo && trapInfo.trapFrac !== null)
+			? trapInfo.trapFrac : undefined,
 	};
 }
 
@@ -714,6 +961,10 @@ class CavemanAI {
 					score: msg.score,
 					ttSize: msg.ttSize,
 					cutoffs: msg.cutoffs,
+					provenLoss: msg.provenLoss,
+					mateIn: msg.mateIn,
+					trapDepth: msg.trapDepth,
+					trapFrac: msg.trapFrac,
 				};
 				return _reviveTurn(msg.turn);
 			} catch (e) {
@@ -734,6 +985,10 @@ class CavemanAI {
 			score: result.score,
 			ttSize: result.ttSize,
 			cutoffs: result.cutoffs,
+			provenLoss: result.provenLoss,
+			mateIn: result.mateIn,
+			trapDepth: result.trapDepth,
+			trapFrac: result.trapFrac,
 		};
 		return result.turn;
 	}
