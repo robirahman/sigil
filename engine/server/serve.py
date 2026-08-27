@@ -68,7 +68,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._json({'ok': False, 'error': 'no candidates supplied'}); return
             t0 = time.perf_counter()
             idx, score, depth, nodes, secs, parsed = se.pick_successor(
-                sfns, us, budget, 64, 21, ARGS.width_scale, hist)
+                sfns, us, budget, 64, 21, ARGS.width_scale, hist, ARGS.eval)
             STATS['moves'] += 1; STATS['nodes'] += nodes; STATS['seconds'] += secs
             print(f"  move {STATS['moves']:3d}  {parsed:5d} candidates  "
                   f"depth {depth:2d}  {nodes:>10,} nodes  {secs:5.1f}s  "

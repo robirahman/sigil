@@ -183,6 +183,60 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
     }
 }
 
+/// Worst-case |positional contribution| of a weight set, in centistones, using the
+/// maximum each feature can reach on a 39-node board. This is the quantity
+/// `cavemanCapWeights` holds below one stone so that "position only ever breaks
+/// material ties, never outbids a stone".
+///
+/// The structural default measures **2,578 centistones = 25.8 STONES**, i.e. 27x
+/// the production budget, in a game where blue wins on a real lead of 2. That is
+/// almost certainly why it scored 19.4% against material-only at matched time
+/// (-247 Elo) while WINNING 63.2% at matched depth: the knowledge is good, but at
+/// that scale it can outbid twelve wins' worth of material.
+pub const fn worst_case_positional(w: &Weights) -> i32 {
+    // max |feature|: liberties ~6 stones apiece, sigil_stone sums mine^2/n over the
+    // nine sigils (5+5+5+3+3+3+1+1+1 = 27), 9 sigils, 3 mana, 9 void, 39 nodes.
+    abs_i32(w.near_threshold) * 1
+        + abs_i32(w.own_zero_liberty) * 6 + abs_i32(w.own_one_liberty) * 6
+        + abs_i32(w.enemy_zero_liberty) * 6 + abs_i32(w.enemy_one_liberty) * 6
+        + abs_i32(w.sigil_stone) * 27 + abs_i32(w.sigil_charged) * 9
+        + abs_i32(w.mana) * 3 + abs_i32(w.sixth_spell_danger) * 1
+        + abs_i32(w.control) * 39 + abs_i32(w.void_penalty) * 9
+}
+
+const fn abs_i32(x: i32) -> i32 { if x < 0 { -x } else { x } }
+
+/// The structural set with every positional term scaled by `num/den`, leaving
+/// `lead` and `tempo` alone. The right scale is an empirical question, not a
+/// principle: at full strength the set is 27x over budget and loses badly, while
+/// scaling it all the way down to the 0.96-stone budget (~4%) may leave nothing.
+/// So sweep it.
+pub const fn scaled_structural(num: i32, den: i32) -> Weights {
+    let d = Weights::default_const();
+    Weights {
+        lead: d.lead,
+        tempo: d.tempo,
+        near_threshold: d.near_threshold * num / den,
+        own_zero_liberty: d.own_zero_liberty * num / den,
+        own_one_liberty: d.own_one_liberty * num / den,
+        enemy_zero_liberty: d.enemy_zero_liberty * num / den,
+        enemy_one_liberty: d.enemy_one_liberty * num / den,
+        sigil_stone: d.sigil_stone * num / den,
+        sigil_charged: d.sigil_charged * num / den,
+        mana: d.mana * num / den,
+        sixth_spell_danger: d.sixth_spell_danger * num / den,
+        control: d.control * num / den,
+        void_penalty: d.void_penalty * num / den,
+    }
+}
+
+/// Sweep points. `s04` is roughly the production 0.96-stone budget; `s100` is the
+/// current structural default.
+pub const STRUCT_04: Weights = scaled_structural(4, 100);
+pub const STRUCT_12: Weights = scaled_structural(12, 100);
+pub const STRUCT_25: Weights = scaled_structural(25, 100);
+pub const STRUCT_50: Weights = scaled_structural(50, 100);
+
 /// The whole budget on map control: 96/39 = 2 centistones per node, matching the
 /// `caveman:mc=0.0246` arm from the committed arena runs.
 pub const CAPPED_MC: Weights = cap(0, 0, POSITIONAL_BUDGET / 39);

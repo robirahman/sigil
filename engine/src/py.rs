@@ -475,9 +475,10 @@ fn bench_primitives(iters: u64, seed: u64) -> (u64, f64) {
 /// (index, score_centistones, depth, nodes, seconds, n_parsed).
 #[pyfunction]
 #[pyo3(signature = (sfns, us, time_ms=60000, max_depth=64, tt_bits=21,
-                    width_scale=1, history=vec![]))]
+                    width_scale=1, history=vec![], eval_name="material"))]
 fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
-                  tt_bits: u32, width_scale: usize, history: Vec<u64>)
+                  tt_bits: u32, width_scale: usize, history: Vec<u64>,
+                  eval_name: &str)
     -> PyResult<(usize, i32, i32, u64, f64, usize)>
 {
     use std::time::Instant;
@@ -493,6 +494,10 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
     }
     let mut se = crate::search::Search::new(tt_bits);
     se.set_width_scale(width_scale);
+    // MUST be set explicitly: omitting it inherits Weights::default(), i.e. the
+    // structural set, which measures 19.4% against material-only at matched time.
+    // `pick_move_actions` was already fixed for exactly this; this is its twin.
+    se.weights = weights_by_name(eval_name)?;
     for k in history { se.add_history(k); }
     let t = Instant::now();
     let (idx, score, st) = se.pick_successor(&boards, col, max_depth, time_ms);
@@ -557,6 +562,10 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
         "material" => crate::eval::MATERIAL_ONLY,
         "mtempo" => crate::eval::MATERIAL_TEMPO,
         "snotempo" => crate::eval::STRUCTURAL_NO_TEMPO,
+        "s04" => crate::eval::STRUCT_04,
+        "s12" => crate::eval::STRUCT_12,
+        "s25" => crate::eval::STRUCT_25,
+        "s50" => crate::eval::STRUCT_50,
         "classic" => crate::eval::CLASSIC,
         "mana" => crate::eval::MANA_ONLY,
         "mc" => crate::eval::CAPPED_MC,
@@ -565,7 +574,7 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
         "control" => crate::eval::CONTROL_ONLY,
         other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, classic, mana, mc, manavoid, mix, control"))),
+             material, mtempo, snotempo, s04, s12, s25, s50, classic, mana, mc, manavoid, mix, control"))),
     })
 }
 

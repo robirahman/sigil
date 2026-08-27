@@ -1101,6 +1101,8 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
     use crate::features::N_HAND;
     let sets = [crate::eval::Weights::default(), crate::eval::MATERIAL_ONLY,
                 crate::eval::MATERIAL_TEMPO, crate::eval::STRUCTURAL_NO_TEMPO,
+                crate::eval::STRUCT_04, crate::eval::STRUCT_12,
+                crate::eval::STRUCT_25, crate::eval::STRUCT_50,
                 crate::eval::CLASSIC,
                 crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
                 crate::eval::CAPPED_MIX];
@@ -1152,5 +1154,34 @@ fn the_tempo_term_cancels_the_one_stone_per_ply_parity_wave() {
         let diff = r.evaluate(c, &crate::eval::MATERIAL_TEMPO)
                  - r.evaluate(c, &crate::eval::MATERIAL_ONLY);
         assert!(diff == 50 || diff == -50, "tempo is a +/-50 offset, got {diff}");
+    }
+}
+
+
+#[test]
+fn the_structural_set_is_wildly_over_the_positional_budget() {
+    // The production engine holds the positional part below one stone so that
+    // "position only ever breaks material ties, never outbids a stone". Recording
+    // the actual numbers, because this is the likeliest explanation for the
+    // structural set scoring 19.4% at matched time while winning 63.2% at matched
+    // depth: good knowledge, priced 27x too high.
+    use crate::eval::*;
+    let budget = POSITIONAL_BUDGET;
+    let full = worst_case_positional(&Weights::default());
+    assert!(full > 20 * budget,
+            "expected the structural default to be far over budget, got {full}");
+    // The sweep must be monotone in scale and must bracket the budget.
+    let s04 = worst_case_positional(&STRUCT_04);
+    let s12 = worst_case_positional(&STRUCT_12);
+    let s25 = worst_case_positional(&STRUCT_25);
+    let s50 = worst_case_positional(&STRUCT_50);
+    assert!(s04 < s12 && s12 < s25 && s25 < s50 && s50 < full, "sweep not monotone");
+    assert!(s04 <= 2 * budget, "s04 should be near the production budget, got {s04}");
+    // Scaling must leave material and the tempo correction untouched: the point is
+    // to re-price the POSITIONAL terms, not to weaken the ruler they are measured
+    // against.
+    for w in [STRUCT_04, STRUCT_12, STRUCT_25, STRUCT_50] {
+        assert_eq!(w.lead, Weights::default().lead);
+        assert_eq!(w.tempo, Weights::default().tempo);
     }
 }

@@ -608,3 +608,65 @@ early terminations. Whether it is worth Elo is an open SPRT question, not a clai
   selected the structural eval — the same shape as the `merge_min_width` binding
   default that invalidated a 120-game campaign. Now one `weights_by_name` that
   **errors** on an unknown name.
+
+## B4: the tempo fix is Elo-neutral, and the structural eval is mispriced 27x
+
+Six arms, `ab_eval.py`, SPRT, colour-swapped, merge off, 300 ms matched-time or
+depth 6 matched-depth:
+
+| arm | vs | mode | n | score | Elo | 95% CI | SPRT |
+|---|---|---|---|---|---|---|---|
+| mtempo | material | time | 277 | 45.5% | −31 | [−73,+9] | continue |
+| mtempo | material | depth | 95 | 52.6% | +18 | [−52,+90] | continue |
+| structural | material | **time** | 283 | **19.4%** | **−247** | [−304,−200] | **H0** |
+| structural | material | **depth** | 95 | **63.2%** | **+94** | [+24,+172] | continue |
+| structural | mtempo | time | 278 | 14.7% | −305 | [−371,−253] | **H0** |
+| structural | snotempo | time | 250 | 46.4% | −25 | [−69,+18] | continue |
+
+**The tempo correction is Elo-neutral.** −31 [−73,+9] at matched time and +18 at
+matched depth: a wash, possibly slightly negative. It flattens the parity wave
+beautifully (96 → 4 centistones/ply) and makes the reported score readable, but it
+does not buy strength. The hedge in the previous section was the right call, and the
+hypothesis that the wave was what killed richer evals is **dead** — removing it
+changes the structural set's result by −25 Elo, not by the +250 that hypothesis
+needed.
+
+**The real defect is that the structural set is priced 27x too high.** Worst-case
+positional contribution, using each feature's maximum on a 39-node board:
+
+```text
+  near_threshold      |w|=150 x   1 =  150
+  own_zero_liberty    |w|= 70 x   6 =  420
+  own_one_liberty     |w|= 20 x   6 =  120
+  enemy_zero_liberty  |w|= 70 x   6 =  420
+  enemy_one_liberty   |w|= 20 x   6 =  120
+  sigil_stone         |w|= 14 x  27 =  378
+  sigil_charged       |w|= 80 x   9 =  720
+  mana                |w|= 40 x   3 =  120
+  sixth_spell_danger  |w|=130 x   1 =  130
+  TOTAL                          = 2578 centistones = 25.8 STONES
+```
+
+The production engine holds this below **96** centistones so "position only ever
+breaks material ties, never outbids a stone". 2,578 is **27x** the budget, in a game
+where blue wins on a real lead of 2 — the eval can outbid twelve wins' worth of
+material.
+
+That reconciles the two halves of the table, and it is the most useful result here:
+**at matched depth the structural knowledge is worth +94 Elo, and at matched time
+its pricing throws away 247.** The verdict is "re-price", not "abandon" — which is
+exactly the distinction the matched-nodes/matched-time split was added to expose,
+and which the four dash experiments never had.
+
+So the next experiment is a scale sweep, not a new feature: `scaled_structural()`
+plus presets `s04` / `s12` / `s25` / `s50`. `s04` sits at roughly the production
+0.96-stone budget; `s100` is the current default. Both ends are known-bad, so the
+answer is in between or nowhere.
+
+## A third instance of the silent-default hazard
+
+`pick_successor` never set `s.weights`, so `/api/pick` silently ran the 25.8-stone
+structural set. It is not the route the browser client uses (`rust-ai.js` posts to
+`/api/move`, which goes through `pick_move_actions` with `--eval material`), so no
+published measurement or playtest was affected — but it is the same shape as the two
+that did invalidate results. Now takes `eval_name`, defaulting to `material`.
