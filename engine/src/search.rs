@@ -286,7 +286,9 @@ impl Search {
             child.turn_counter += 1;
             child.to_move = c.other();
             let key = crate::zobrist::ZOBRIST.key_js(&child);
-            let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, 1, key);
+            let mut rep = false;    // the root itself never caches, so unused here
+            let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, 1, key,
+                                  &mut rep);
             if v > best_val {
                 best_val = v;
                 best_local = Some(t);
@@ -300,17 +302,21 @@ impl Search {
         best_val
     }
 
+    /// `rep_out` is only ever SET (never cleared) when this node's score depended
+    /// on a repetition anywhere in its subtree, so callers can pass their own
+    /// accumulator directly. That is what makes the no-caching invariant hold
+    /// transitively: an ancestor of a repetition, however deep, must not store
+    /// its path-dependent score in the TT.
     fn negamax(&mut self, b: &Board, c: Color, depth: i32,
-               mut alpha: i32, beta: i32, ply: i32, key: u64) -> i32
+               mut alpha: i32, beta: i32, ply: i32, key: u64, rep_out: &mut bool) -> i32
     {
         self.stats.nodes += 1;
         self.stats.max_ply_seen = self.stats.max_ply_seen.max(ply);
         if (ply as usize) >= MAX_PLY - 1 { return self.eval(b, c); }
 
         // Threefold repetition ends the game with BLUE winning.
-        let mut saw_repetition = false;
         if self.rep_count(key) + 1 >= 3 {
-            saw_repetition = true;
+            *rep_out = true;
             return if c == Color::Blue { WIN - ply } else { -(WIN - ply) };
         }
         if b.outcome != Outcome::Ongoing { return Self::terminal_score(b, c, ply); }
@@ -337,6 +343,7 @@ impl Search {
         let alpha_orig = alpha;
         let mut best_val = -WIN * 2;
         let mut best_turn: Option<Turn> = None;
+        let mut saw_repetition = false;
 
         self.path.push(key);
         let w = width_for_depth(depth, self.width_scale);
@@ -348,8 +355,10 @@ impl Search {
             child.turn_counter += 1;
             child.to_move = c.other();
             let ckey = crate::zobrist::ZOBRIST.key_js(&child);
-            if self.rep_count(ckey) + 1 >= 3 { saw_repetition = true; }
-            let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1, ckey);
+            // The child reports repetition anywhere in ITS subtree — including
+            // itself being the third occurrence — into our accumulator.
+            let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
+                                  ckey, &mut saw_repetition);
             if v > best_val {
                 best_val = v;
                 best_turn = Some(t);
@@ -370,6 +379,8 @@ impl Search {
 
         // Do NOT cache a score whose subtree depended on repetition counts: it is
         // only valid for the path we reached it by (graph-history interaction).
+        // And propagate the dependence, so no ancestor caches it either.
+        if saw_repetition { *rep_out = true; }
         if !saw_repetition && !self.stats.timed_out {
             let bound = if best_val <= alpha_orig { Bound::Upper }
                         else if best_val >= beta { Bound::Lower }
@@ -502,7 +513,9 @@ impl Search {
                     // Threefold is a blue win, from `us`'s point of view.
                     if us == Color::Blue { WIN - 1 } else { -(WIN - 1) }
                 } else {
-                    -self.negamax(&child, us.other(), depth - 1, -WIN, -alpha, 1, key)
+                    let mut rep = false;    // top level never caches, so unused
+                    -self.negamax(&child, us.other(), depth - 1, -WIN, -alpha, 1, key,
+                                  &mut rep)
                 };
                 if v > iter_score { iter_score = v; iter_best = i; }
                 if v > alpha { alpha = v; }

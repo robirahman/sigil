@@ -1187,3 +1187,108 @@ fn the_structural_set_is_wildly_over_the_positional_budget() {
         assert_eq!(w.tempo, Weights::default().tempo);
     }
 }
+
+// ---------------- PR review regressions ----------------
+
+#[test]
+fn sfn_round_trips_the_variant_token() {
+    // The variant is TOKEN 7 (right after `score`); reading token 8 parsed every
+    // non-standard SFN emitted by `to_sfn`/`boardToSfn` as Standard, which lost
+    // the competitive free-blink opening and re-enabled the lead/spell-count win
+    // conditions in deathmatch.
+    for v in [Variant::Standard, Variant::Competitive, Variant::Deathmatch,
+              Variant::CompetitiveDeathmatch] {
+        let mut b = Board::new(Board::legal_draw(3), v);
+        b.setup_initial();
+        let back = Board::from_sfn(&b.to_sfn()).expect("round trip");
+        assert_eq!(back.variant, v, "variant lost in SFN round trip");
+    }
+}
+
+/// A position with NO legal first move: enemy Seal of Stone forces the first
+/// move to be soft, and every node adjacent to a red stone is occupied.
+/// Deathmatch, so blue's huge wall does not simply win by score lead.
+fn no_first_move_board() -> Board {
+    let mut b = Board::new([0, 1, 2, SEAL_OF_STONE, 6, 7, 14, 10, 11],
+                           Variant::Deathmatch);
+    // Both sides get stones BEFORE the first update(), or elimination fires.
+    let s = SIGIL[b.position_of(10).unwrap()].trailing_zeros() as usize;
+    b.stones[0] = 1u64 << s;                           // charges Sprout, castable
+    b.stones[1] = SIGIL[b.position_of(SEAL_OF_STONE).unwrap()];
+    let mut free = ADJ[s] & !(b.stones[0] | b.stones[1]);
+    for _ in 0..2 {                                    // dash material (total 3 > 2)
+        assert!(free != 0, "need two free neighbors next to Sprout");
+        b.stones[0] |= 1u64 << free.trailing_zeros();
+        free &= free - 1;
+    }
+    b.update();
+    assert!(b.holds_charged(Color::Red, 10));
+    assert!(b.holds_charged(Color::Blue, SEAL_OF_STONE));
+    assert_eq!(b.total[0], 3, "Stone's sigil must not overlap red's stones");
+    // Wall every empty node adjacent to a red stone.
+    b.stones[1] |= Board::dilate(b.stones[0]) & !(b.stones[0] | b.stones[1]);
+    b.update();
+    assert_eq!(b.outcome, Outcome::Ongoing);
+    assert_eq!(b.first_move_targets(Color::Red).0, 0, "setup must bar the move");
+    b
+}
+
+#[test]
+fn no_first_move_still_offers_dash_cast_and_pass() {
+    let b = no_first_move_board();
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated && !st.resolver_truncated);
+    // A missing first move invalidates only the MOVE of move+dash+cast.
+    assert!(turns.iter().any(|t| matches!(t.slice()[0], Action::Pass)), "no bare pass");
+    assert!(turns.iter().any(|t| matches!(t.slice()[0], Action::Dash { .. })), "no dash");
+    assert!(turns.iter().any(|t| matches!(t.slice()[0], Action::Cast { .. })), "no cast");
+    for t in &turns {
+        assert!(!matches!(t.slice()[0], Action::Move { .. } | Action::Blink { .. }),
+                "a first move appeared in a position that has none: {:?}", t.slice());
+    }
+}
+
+#[test]
+fn lazy_iterator_matches_the_enumerator_when_no_first_move_exists() {
+    use std::collections::HashSet;
+    let b = no_first_move_board();
+    // The lazy stream used to start in Stage::Done here: ZERO successors, so the
+    // search returned an empty action list the browser then rejected.
+    let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
+    let want: HashSet<String> =
+        b.enumerate_turns(Color::Red).0.iter().map(key).collect();
+    let got: HashSet<String> =
+        b.turns_ordered(Color::Red).take(20_000).map(|t| key(&t)).collect();
+    assert_eq!(got, want, "lazy stream must agree with the enumerator exactly");
+}
+
+#[test]
+fn seal_of_summer_second_cast_reaches_the_lazy_stream() {
+    use std::collections::HashSet;
+    // Red holds Seal of Summer plus two castable spells; deathmatch so the stone
+    // imbalance does not end the game by score lead.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SEAL_OF_SUMMER, 10, 11],
+                           Variant::Deathmatch);
+    b.stones[0] = 1 << n("a1");
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    charge(&mut b, SEAL_OF_SUMMER, Color::Red);
+    charge(&mut b, 0, Color::Red);                     // Flourish
+    charge(&mut b, 10, Color::Red);                    // Sprout
+    assert_eq!(b.outcome, Outcome::Ongoing);
+    let two_casts = |t: &crate::turn::Turn|
+        t.slice().iter().filter(|a| matches!(a, Action::Cast { .. })).count() == 2;
+    let (turns, _) = b.enumerate_turns(Color::Red);
+    assert!(turns.iter().any(|t| two_casts(t)),
+            "enumerator must offer the Summer second cast");
+    // The stream must contain at least one [move, cast, cast, pass]...
+    let lazy: Vec<crate::turn::Turn> = b.turns_ordered(Color::Red).take(50_000).collect();
+    assert!(lazy.iter().any(|t| two_casts(t)),
+            "lazy stream never reaches the Summer second cast");
+    // ...and must not invent one the exhaustive generator does not know.
+    let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
+    let legal: HashSet<String> = turns.iter().map(key).collect();
+    for t in lazy.iter().filter(|t| two_casts(t)) {
+        assert!(legal.contains(&key(t)), "lazy invented {:?}", t.slice());
+    }
+}

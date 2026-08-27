@@ -45,7 +45,11 @@ class RustAI {
 				body: JSON.stringify({
 					sfn: sfn,
 					time_ms: this.timeMs,
-					history_sfns: this._historySfns.slice(-64),
+					// The CURRENT position is itself an occurrence for threefold
+					// counting (the engine's search path does not include its root),
+					// so send it along with the saved history. `_historySfns` only
+					// gains `sfn` after this call, so each visit counts exactly once.
+					history_sfns: this._historySfns.slice(-64).concat([sfn]),
 				}),
 			});
 			res = await r.json();

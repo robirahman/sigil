@@ -95,7 +95,7 @@ impl Board {
             spells[i] = spell_id(nm)
                 .ok_or_else(|| format!("unknown or out-of-scope spell {:?}", nm))?;
         }
-        let variant = match toks.get(8).copied().unwrap_or("standard") {
+        let variant = match toks.get(7).copied().unwrap_or("standard") {
             "competitive" => Variant::Competitive,
             "deathmatch" => Variant::Deathmatch,
             "competitive_deathmatch" => Variant::CompetitiveDeathmatch,

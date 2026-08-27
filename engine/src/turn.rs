@@ -237,8 +237,14 @@ impl Board {
 
         let (targets, has_wind) = base.first_move_targets(c);
         if targets == 0 {
-            out.push(Turn::new().push(Action::Pass));
-            st.turns = 1;
+            // No legal first move (enemy Seal of Stone forcing soft moves with
+            // nowhere soft to go) only invalidates the MOVE. A turn is
+            // move + optional dash + optional cast (Robi's ruling, 2026-08-26),
+            // so the dash and cast options — and the bare pass — remain.
+            base.enumerate_post_move(c, Turn::new(), true, true, true,
+                                     &mut out, cap, &mut st);
+            st.turns = out.len();
+            st.turns_with_greedy_cast = out.iter().filter(|t| t.greedy_casts > 0).count();
             return (out, st);
         }
 

@@ -27,6 +27,10 @@ use crate::turn::{Action, Turn, OUTCOME_CAP};
 /// with the rest still reachable by raising this.
 pub const CAST_OUTCOME_WINDOW: usize = 24;
 
+/// Cap on the eagerly-enumerated turns of a NO-first-move position (dash/cast
+/// continuations only, so the real count is small). `windowed` is set if it bites.
+pub const NO_MOVE_TURN_CAP: usize = 4096;
+
 impl Board {
     /// Outcomes of casting at `pos`, best-first for `c`, at most `limit`.
     /// Gust routes through the ranked-placement generator so we never materialise
@@ -134,6 +138,25 @@ impl<'a> TurnIter<'a> {
             windowed: false, yielded: 0,
             key: Vec::new(), ki: 0, reasons,
         };
+        // No legal first move (e.g. an enemy Seal of Stone forcing soft moves while
+        // every reachable node is occupied) only invalidates the MOVE: the optional
+        // dash and/or cast — and the bare pass — remain. This class is rare and its
+        // turn count small (no first-move fan-out), so instead of teaching every
+        // stage to run move-less we take the exhaustive enumerator's answer, which
+        // is the reference for exactly this case. Starting in Stage::Done with
+        // nothing pending made the search see ZERO successors here.
+        if it.moves.is_empty() {
+            let (turns, st) = b.enumerate_turns_capped(c, NO_MOVE_TURN_CAP);
+            if st.truncated || st.resolver_truncated { it.windowed = true; }
+            for t in turns {
+                // `pending` holds turns WITHOUT the trailing Pass (`next()` appends
+                // it), so strip the one the enumerator added.
+                debug_assert!(matches!(t.slice().last(), Some(Action::Pass)));
+                let mut t2 = t;
+                t2.len -= 1;
+                it.pending.push_back(t2);
+            }
+        }
         it.build_key_dashes();
         it
     }
@@ -213,6 +236,35 @@ impl<'a> TurnIter<'a> {
                 for k in 0..outs.len() {
                     self.pending.push_back(
                         Turn::single(a).push_pub(Action::Cast { pos: pos as u8, outcome: k as u16 }));
+                }
+                // Seal of Summer: a SECOND cast may follow the first, as in
+                // `enumerate_post_move`'s recursion (can_spell=false, can_summer=true,
+                // gated on the POST-cast board holding Summer charged). Without this
+                // the stream never contains `[move, cast, cast]` and no width budget
+                // can recover it. `apply_turn` indexes the RAW `resolve_outcomes`
+                // list, so the continuation applies raw outcome `k`.
+                let id = b.spells[pos];
+                let (raw, _) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
+                for k in 0..outs.len().min(raw.len()) {
+                    let mut bs = cl;
+                    bs.stones = raw[k].stones;
+                    bs.update();
+                    bs.finish_cast(id, self.c);
+                    bs.update();
+                    if !bs.holds_charged(self.c, crate::spells_meta::SEAL_OF_SUMMER) { continue; }
+                    for id2 in bs.castable(self.c, false, true, false) {
+                        let Some(pos2) = bs.position_of(id2) else { continue };
+                        let mut cl2 = bs;
+                        cl2.cast_clear_and_refill(pos2, self.c);
+                        let (outs2, tr2) = cl2.resolve_outcomes_ordered(pos2, self.c, self.window);
+                        if tr2 { self.windowed = true; }
+                        for k2 in 0..outs2.len() {
+                            self.pending.push_back(
+                                Turn::single(a)
+                                    .push_pub(Action::Cast { pos: pos as u8, outcome: k as u16 })
+                                    .push_pub(Action::Cast { pos: pos2 as u8, outcome: k2 as u16 }));
+                        }
+                    }
                 }
                 true
             }
