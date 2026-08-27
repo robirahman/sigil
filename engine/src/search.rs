@@ -121,6 +121,12 @@ pub struct Search {
     legacy_order: bool,
     /// Which key-dash interest rules are live; see `key_dash`. `0` disables the
     /// reserved slot, leaving the stage ordering untouched.
+    ///
+    /// DEFAULT `0`, i.e. OFF. The filter closes the blindness — first dash in the
+    /// ordered stream moves from median index 12 to 3 — but every configuration
+    /// measured LOST, including the strictly-additive one that displaces nothing.
+    /// See FINDINGS.md for the 250-games-per-arm table. Shipping it on would ship a
+    /// -115 Elo regression, so it stays reachable and off.
     key_dash_reasons: u8,
     /// APPEND up to this many key dashes to the successor list instead of
     /// reserving slots inside it. Strictly additive: the search still sees every
@@ -173,7 +179,7 @@ impl Search {
             width_scale: 1,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
-            key_dash_reasons: crate::key_dash::REASONS_ALL,
+            key_dash_reasons: 0,
             key_dash_min_width: 0,
             key_dash_extra: 0,
             merge_min_width: usize::MAX,

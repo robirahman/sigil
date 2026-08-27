@@ -19,7 +19,7 @@
 use std::collections::VecDeque;
 use crate::board::{Board, Color};
 use crate::spells_meta::GUST;
-use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP, KEY_DASH_MOVES, REASONS_ALL};
+use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP, KEY_DASH_MOVES};
 use crate::turn::{Action, Turn, OUTCOME_CAP};
 
 /// How many outcomes of a single cast to surface. Gust's placements are
@@ -51,13 +51,16 @@ impl Board {
         (outs, truncated)
     }
 
-    /// Lazy best-first turn generator.
+    /// Lazy best-first turn generator, in the SHIPPED configuration: stage order,
+    /// no reserved key-dash slot. The filter is off by default because every
+    /// measured configuration of it lost — see `key_dash` and FINDINGS.md — so
+    /// asking for it has to be explicit.
     pub fn turns_ordered(&self, c: Color) -> TurnIter<'_> {
-        TurnIter::new(self, c, CAST_OUTCOME_WINDOW, REASONS_ALL)
+        TurnIter::new(self, c, CAST_OUTCOME_WINDOW, 0)
     }
 
     pub fn turns_ordered_window(&self, c: Color, window: usize) -> TurnIter<'_> {
-        TurnIter::new(self, c, window, REASONS_ALL)
+        TurnIter::new(self, c, window, 0)
     }
 
     /// Same stream with an explicit interest-rule set. `reasons == 0` reproduces

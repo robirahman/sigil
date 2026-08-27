@@ -963,10 +963,8 @@ fn lazy_iterator_is_ordered_and_cheap_to_start() {
     b.update();
     let first: Vec<Turn> = b.turns_ordered(Color::Red).take(12).collect();
     assert_eq!(first.len(), 12, "iterator yields lazily without materialising");
-    // Stage 1 is [move, pass] everywhere except the slots reserved for key dashes.
-    let plain: Vec<&Turn> = first.iter().enumerate()
-        .filter(|(i, _)| (i + 1) % crate::key_dash::KEY_DASH_EVERY != 0)
-        .map(|(_, t)| t).collect();
+    // The shipped default reserves no slots, so every early turn is [move, pass].
+    let plain: Vec<&Turn> = first.iter().collect();
     for t in plain.iter().take(4) {
         assert_eq!(t.len, 2, "stage 1 should be move+pass");
         assert!(matches!(t.slice()[1], Action::Pass));
@@ -1052,15 +1050,17 @@ fn a_key_dash_is_reachable_inside_a_narrow_width_budget() {
     b.stones[1] = (1 << n("b1")) | (1 << n("c1")) | (1 << n("b8"));
     b.update();
     assert!(b.can_dash(Color::Red));
-    let head: Vec<Turn> = b.turns_ordered(Color::Red)
+    // The filter is OFF in the shipped configuration, so ask for it explicitly.
+    let head: Vec<Turn> = b
+        .turns_ordered_reasons(Color::Red, 24, crate::key_dash::REASONS_ALL)
         .take(crate::key_dash::KEY_DASH_EVERY).collect();
     let has_dash = head.iter().any(|t|
         t.slice().iter().any(|a| matches!(a, Action::Dash { .. })));
     assert!(has_dash, "a qualifying dash must be inside the first {} turns",
             crate::key_dash::KEY_DASH_EVERY);
 
-    // ... and turning the filter off must reproduce the old stream exactly.
-    let off: Vec<Turn> = b.turns_ordered_reasons(Color::Red, 24, 0).take(24).collect();
+    // ... and the shipped default must reproduce the old stream exactly.
+    let off: Vec<Turn> = b.turns_ordered(Color::Red).take(24).collect();
     assert!(!off.iter().take(crate::key_dash::KEY_DASH_EVERY).any(|t|
         t.slice().iter().any(|a| matches!(a, Action::Dash { .. }))),
         "reasons == 0 must reproduce the pre-fix stage ordering");
@@ -1084,7 +1084,8 @@ fn the_key_dash_filter_never_invents_an_illegal_turn() {
         if st.truncated { continue; }
         let norm = |t: &Turn| t.slice().to_vec();
         let legal: std::collections::HashSet<_> = full.iter().map(norm).collect();
-        for t in b.turns_ordered(Color::Red).take(40) {
+        for t in b.turns_ordered_reasons(Color::Red, 24, crate::key_dash::REASONS_ALL)
+                  .take(40) {
             if !t.slice().iter().any(|a| matches!(a, Action::Dash { .. })) { continue; }
             assert!(legal.contains(&norm(&t)),
                     "seed {seed}: promoted dash {:?} is not in full enumeration", t.slice());

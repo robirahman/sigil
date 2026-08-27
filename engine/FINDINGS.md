@@ -471,3 +471,52 @@ scoring sees only when the cast wins stones outright; MANA and DOOMED are purely
 positional. Promoting those turns spends budget on moves the leaf evaluation is
 structurally unable to reward — which would also explain why CRUSH, the one rule
 whose payoff IS material, is the least bad.
+
+### The decisive experiment: strictly additive, 490 games per arm (2026-08-27)
+
+Every earlier attempt confounded two things — the dashes the search gained and the
+moves it lost to make room. `key_dash_extra` APPENDS key dashes to the successor
+list instead of reserving slots inside it, so the search still sees every turn it
+saw before. A loss on this path can only be the cost of the extra subtrees.
+
+| rules | min_w | extra | games | score | SE | Elo | depth new/old |
+|---|---|---|---|---|---|---|---|
+| CRUSH | 0 | 1 | 490 | 39.6% | 2.2% | −73 | 5.50 / 5.91 |
+| CRUSH | 0 | 4 | 490 | 42.9% | 2.2% | −50 | 5.50 / 5.93 |
+| CRUSH | 16 | 4 | 490 | **50.6%** | 2.3% | **+4** | 5.86 / 5.98 |
+| all five | 0 | 4 | 490 | 35.5% | 2.2% | −104 | 5.28 / 5.93 |
+
+**The additive path loses too.** So it was never displacement: the extra subtrees
+cost 0.4-0.6 ply of depth, and that depth is worth more than the dashes. The one
+arm at parity (+4 ± 17) is the one gated to `min_width >= 16`, i.e. the sparse upper
+tree, where it fires rarely enough to cost nothing — and it gains nothing either.
+
+### Conclusion after four attempts
+
+The blindness is real, was correctly diagnosed, and is now closed on demand — the
+first dash in the ordered stream moves from median index 12 (p90 171) to median 3
+(p90 7), and from 37/120 positions inside width 10 to 114/120. **Closing it does
+not make the engine stronger**, by four independent constructions:
+
+| attempt | mechanism | best result |
+|---|---|---|
+| 1 | class quota, whole-turn simulation scoring | 21.2% (−228) |
+| 2 | class quota, simulation-free scoring | 16.2% (−285) |
+| 3 | interest filter, reserved 1-in-4 slot | 47.6% (−17) |
+| 4 | interest filter, strictly additive | 50.6% (+4) |
+
+Attempts 3 and 4 are far better than 1 and 2 — the filter is the right idea and
+Robi's Gust analogy holds — but the ceiling is parity, not gain.
+
+Everything ships OFF (`key_dash_reasons: 0`), and the shipped default is verified
+bit-identical to the pre-change engine (same completed depth and same node count on
+four seeds). The machinery stays reachable behind `set_key_dash_*`.
+
+**Where this points.** The per-reason ordering is the informative part: CRUSH, the
+only rule whose payoff is material, is the least bad (−17 / +4); the purely
+positional rules are the worst (FILLS took the reserved-slot arm from −76 to −118).
+A material-only eval cannot price a dash that fills a sigil or claims a mana, so
+surfacing those turns spends search budget on moves the leaf evaluation is
+structurally unable to reward. The next lever is therefore the EVAL, not the
+generator — which is also the one place a 39-node bitboard at depth ~6 has headroom
+the old Python/JS engines never had.
