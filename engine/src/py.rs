@@ -585,6 +585,15 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 /// The old `_ => Weights::default()` arm meant a typo silently selected the
 /// structural eval, which is the same failure shape as the `merge_min_width`
 /// binding default that invalidated a 120-game campaign.
+/// Every accepted preset name, in one place. Exported as `EVAL_NAMES` so callers
+/// (argparse `choices`, harnesses, docs) enumerate rather than restate: a hardcoded
+/// copy in `serve.py` rejected `--eval s04` outright, which is the fourth instance
+/// of the same "list written down twice" failure in this codebase.
+pub const EVAL_NAMES: [&str; 15] = [
+    "default", "structural", "material", "mtempo", "snotempo",
+    "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
+];
+
 fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
     Ok(match name {
         "default" | "structural" => crate::eval::Weights::default(),
@@ -601,10 +610,10 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
         "s50" => crate::eval::STRUCT_50,
         "classic" => crate::eval::CLASSIC,
         "mana" => crate::eval::MANA_ONLY,
-        "mc" => crate::eval::CAPPED_MC,
-        "manavoid" => crate::eval::CAPPED_MANAVOID,
         "mix" => crate::eval::CAPPED_MIX,
         "control" => crate::eval::CONTROL_ONLY,
+        "mc" => crate::eval::CAPPED_MC,
+        "manavoid" => crate::eval::CAPPED_MANAVOID,
         other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
              material, mtempo, snotempo, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control"))),
@@ -651,6 +660,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
+    m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()

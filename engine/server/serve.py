@@ -123,9 +123,11 @@ def main():
     ap.add_argument('--time', type=int, default=60, help='seconds per move')
     ap.add_argument('--width-scale', type=int, default=1)
     ap.add_argument('--eval', default='material',
-                    choices=['material', 'classic', 'mc', 'manavoid', 'mix', 'default'],
-                    help="leaf eval; 'material' is the only one that beat the "
-                         "shipped engine in the arenas")
+                    choices=sorted(se.EVAL_NAMES),
+                    help="leaf eval preset; enumerated from the engine, never "
+                         "restated here. 'material' is the measured default; "
+                         "'s04' scored +93 Elo over it at 300 ms but is not yet "
+                         "gated at 60 s/move")
     ap.add_argument('--verbose', action='store_true')
     ARGS = ap.parse_args()
     if ARGS.docs is None:
