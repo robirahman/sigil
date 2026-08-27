@@ -670,3 +670,59 @@ structural set. It is not the route the browser client uses (`rust-ai.js` posts 
 `/api/move`, which goes through `pick_move_actions` with `--eval material`), so no
 published measurement or playtest was affected — but it is the same shape as the two
 that did invalidate results. Now takes `eval_name`, defaulting to `material`.
+
+## The eval's MAGNITUDES were the problem, and fixing them scales with depth
+
+Three shapes, each rescaled by `at_budget()` to exactly 1.00x the production
+96-centistone budget, so the comparison isolates SHAPE from SCALE. Against
+material-only, colour-swapped, SPRT:
+
+| shape | 300 ms | 3000 ms | 10000 ms |
+|---|---|---|---|
+| `hand` (hand-chosen magnitudes) | **+40** [+20,+60] H1 | **+5** [−28,+37] | — |
+| `tfit` (magnitudes from a texel fit) | **+42** [+22,+62] H1 | **+112** [+79,+147] H1 | **+159** [+96,+233] H1 |
+| `tflip` (hand shape, 4 signs flipped) | **−38** [−59,−17] H0 | −14 [−63,+34] | — |
+
+n = 1000-1200 at 300 ms, 450 at 3 s, 126 at 10 s.
+
+**The hand magnitudes decay with depth; the fitted magnitudes grow with it.** That is
+the whole result. Everything earlier in this file that reads "static positional
+knowledge substitutes for depth in this game" was drawn from the `hand` row alone and
+is wrong as a general claim -- it is true of those particular magnitudes and false of
+better ones.
+
+Where the two shapes differ, and why it plausibly matters at depth: `tfit` has a much
+smaller `near_threshold` (56 vs 150) and `sigil_charged` (2 vs 80), and larger `mana`
+(82 vs 40) and `sigil_stone` (36 vs 14). The hand set's two big DISCONTINUOUS bonuses
+are exactly the kind of thing a deep search discovers unaided -- and can be actively
+misled by -- while the smooth mana and sigil-progress terms encode long-horizon value
+search cannot reach inside its horizon.
+
+`tfit` pays for this in depth and still wins: 7.11 vs 7.38 ply at 3 s, 7.75 vs 8.23 at
+10 s. So it is buying more than the ~0.3-0.5 ply it costs.
+
+Three things this corrects, all mine:
+* The `s04 = +93 Elo` claim was 442 games and regressed to +41 on 1200. My own SPRT
+  self-check said a true zero needs ~900 games; I ran 440 and believed it.
+* "The gain evaporates at longer TC" came from 200 games on the `hand` shape. With
+  450 games and a second shape it is the opposite.
+* The texel fit's SIGNS are not to be trusted -- `tflip` is -38 Elo -- but its
+  MAGNITUDES are. That is a coherent split: signs on confounded observational data
+  are unreliable, while relative magnitudes carry real information about which terms
+  deserve weight.
+
+### The beyond-search residual, on one subset
+
+Excluding the 12.6% of positions the search had already solved:
+
+```text
+  (a') lead only               0.6623 nats
+  (b') 12 features only        0.6483    features beat material by +0.0140
+  (s)  search score only       0.6269    search beats the features by +0.0214
+  (d)  search score + features 0.6190    features add +0.0079 on top of search
+```
+
+A depth-7 search absorbs ~44% of what the static features know; ~56% survives. That
+residual is small in log-loss and large in Elo, which is the point: log-loss on
+isolated positions understates an eval applied at millions of leaves, because
+alpha-beta compounds leaf error. The arena is the instrument for eval value.

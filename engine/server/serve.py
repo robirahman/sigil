@@ -122,12 +122,14 @@ def main():
     ap.add_argument('--port', type=int, default=8000)
     ap.add_argument('--time', type=int, default=60, help='seconds per move')
     ap.add_argument('--width-scale', type=int, default=1)
-    ap.add_argument('--eval', default='material',
+    ap.add_argument('--eval', default='tfit',
                     choices=sorted(se.EVAL_NAMES),
                     help="leaf eval preset; enumerated from the engine, never "
-                         "restated here. 'material' is the measured default; "
-                         "'s04' scored +93 Elo over it at 300 ms but is not yet "
-                         "gated at 60 s/move")
+                         "restated here. 'tfit' is the default: measured +42 Elo "
+                         "at 300 ms, +112 at 3 s and +159 at 10 s over 'material', "
+                         "SPRT-accepted, and the gain GROWS with time control. The "
+                         "60 s/move gate is still pending. Pass --eval material "
+                         "for the previous behaviour.")
     ap.add_argument('--verbose', action='store_true')
     ARGS = ap.parse_args()
     if ARGS.docs is None:
