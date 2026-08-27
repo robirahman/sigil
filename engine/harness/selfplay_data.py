@@ -46,13 +46,14 @@ def play_one(seed, depth, rng, random_ply_pct, competitive):
     b = se.Board(se.Board.legal_draw(seed), variant)
     b.setup_initial()
     spells = b.spell_ids()
-    rows = []          # (ply, side_is_red, hand, full)
+    rows = []          # (ply, side_is_red, hand, full, search_score)
     hist = []
     for ply in range(140):
         side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
         # Record BEFORE moving, from the side-to-move's point of view.
-        rows.append((ply, 1 if side == 'red' else 0,
-                     b.hand_features(side), b.full_features(side)))
+        row = [ply, 1 if side == 'red' else 0,
+               b.hand_features(side), b.full_features(side), float('nan')]
+        rows.append(row)
         hist.append(b.key_js)
         if rng.random() < random_ply_pct:
             # A random legal turn. Cheap diversity, and safe because the label is
@@ -63,9 +64,10 @@ def play_one(seed, depth, rng, random_ply_pct, competitive):
                 if b.gameover:
                     return rows, b.winner, spells
                 b.advance_turn()
-                continue
+                continue    # row keeps NaN: no search was run for this position
         d, n, dt, over, w, sc, wd = b.play_best(
             0, depth, 20, 16, 1, hist, "material", False, MERGE_OFF)
+        row[4] = float(sc)          # the depth-`depth` score for THIS position
         if over:
             return rows, w, spells
     return rows, None, spells
@@ -79,7 +81,7 @@ if __name__ == "__main__":
     out = os.path.join(out_dir, f"positions_{off}.npz")
 
     rng = random.Random(12345 + off)
-    H, F, S, P, R, Y, G = [], [], [], [], [], [], []
+    H, F, S, P, R, Y, G, Q = [], [], [], [], [], [], [], []
     kept = dropped = 0
     for i in range(games):
         seed = 9_000_000 + off + i
@@ -89,9 +91,10 @@ if __name__ == "__main__":
             dropped += 1                # unfinished games carry no label
             continue
         kept += 1
-        for ply, is_red, hand, full in rows:
+        for ply, is_red, hand, full, q in rows:
             H.append(hand); F.append(full); S.append(spells)
             P.append(ply); R.append(is_red); G.append(off * 1_000_000 + i)
+            Q.append(q)
             # y = 1 if the SIDE TO MOVE at this position went on to win.
             Y.append(1 if (winner == 'red') == bool(is_red) else 0)
         if (i + 1) % 200 == 0:
@@ -103,6 +106,7 @@ if __name__ == "__main__":
         spells=np.asarray(S, dtype=np.uint8), ply=np.asarray(P, dtype=np.int16),
         is_red=np.asarray(R, dtype=np.uint8), y=np.asarray(Y, dtype=np.uint8),
         game=np.asarray(G, dtype=np.int64),
+        score=np.asarray(Q, dtype=np.float32),
         hand_names=np.asarray(se.HAND_FEATURE_NAMES))
     print(f"WROTE {out}: {len(Y)} positions from {kept} games "
           f"({dropped} unfinished dropped), depth {depth}, random_ply {rpct}")
