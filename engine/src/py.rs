@@ -589,9 +589,10 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 /// (argparse `choices`, harnesses, docs) enumerate rather than restate: a hardcoded
 /// copy in `serve.py` rejected `--eval s04` outright, which is the fourth instance
 /// of the same "list written down twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 15] = [
+pub const EVAL_NAMES: [&str; 18] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
+    "hand", "tfit", "tflip",
 ];
 
 fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
@@ -600,6 +601,9 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
         "material" => crate::eval::MATERIAL_ONLY,
         "mtempo" => crate::eval::MATERIAL_TEMPO,
         "snotempo" => crate::eval::STRUCTURAL_NO_TEMPO,
+        "hand" => crate::eval::HAND_AT_BUDGET,
+        "tfit" => crate::eval::FIT_AT_BUDGET,
+        "tflip" => crate::eval::FLIP_AT_BUDGET,
         "s01" => crate::eval::STRUCT_01,
         "s02" => crate::eval::STRUCT_02,
         "s04" => crate::eval::STRUCT_04,

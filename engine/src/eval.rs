@@ -68,6 +68,16 @@ pub struct Weights {
     pub control: i32,
     /// Penalty per net own stone sitting on a VOID node (they charge nothing).
     pub void_penalty: i32,
+    /// Scale applied to the SUM of the positional terms, as `pos_num/pos_den`.
+    ///
+    /// WHY THE SUM AND NOT EACH WEIGHT. Scaling weights individually destroys the
+    /// BALANCE between terms once they reach small integers: at 4% of the base set,
+    /// `own_one_liberty` truncates from -0.8 to 0 while `near_threshold` keeps 6, so
+    /// the ratio between them changes with the scale and each "scale point" is a
+    /// DIFFERENT evaluation function. Scaling the accumulated sum keeps every ratio
+    /// exact and costs one division per leaf.
+    pub pos_num: i32,
+    pub pos_den: i32,
     /// Centistones credited to the SIDE TO MOVE, cancelling the one-stone-per-ply
     /// square wave that "every move places a stone" produces. See the module docs;
     /// 50 is the derived value, 0 reproduces the old behaviour for A/B.
@@ -91,6 +101,8 @@ impl Weights {
             sixth_spell_danger: -130,
             control: 0,
             void_penalty: 0,
+            pos_num: 1,
+            pos_den: 1,
             tempo: 50,
         }
     }
@@ -110,7 +122,8 @@ pub const CLASSIC: Weights = Weights {
     own_zero_liberty: 0, own_one_liberty: 0,
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0,
-    mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0, tempo: 50,
+    mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0,
+    pos_num: 1, pos_den: 1, tempo: 50,
 };
 
 /// Mana term only, to separate the two contributions.
@@ -124,7 +137,7 @@ pub const MATERIAL_ONLY: Weights = Weights {
     own_zero_liberty: 0, own_one_liberty: 0,
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0, mana: 0, sixth_spell_danger: 0, control: 0,
-    void_penalty: 0, tempo: 0,
+    void_penalty: 0, pos_num: 1, pos_den: 1, tempo: 0,
 };
 
 /// Material only PLUS the tempo correction: the minimal change that removes the
@@ -179,7 +192,8 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
         own_zero_liberty: 0, own_one_liberty: 0,
         enemy_zero_liberty: 0, enemy_one_liberty: 0,
         sigil_stone: 0, sigil_charged: 0,
-        mana: m, sixth_spell_danger: 0, control: c, void_penalty: v, tempo: 50,
+        mana: m, sixth_spell_danger: 0, control: c, void_penalty: v,
+        pos_num: 1, pos_den: 1, tempo: 50,
     }
 }
 
@@ -194,6 +208,11 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
 /// (-247 Elo) while WINNING 63.2% at matched depth: the knowledge is good, but at
 /// that scale it can outbid twelve wins' worth of material.
 pub const fn worst_case_positional(w: &Weights) -> i32 {
+    unscaled_worst_case(w) * w.pos_num / w.pos_den
+}
+
+/// The same total before `pos_num/pos_den` is applied.
+pub const fn unscaled_worst_case(w: &Weights) -> i32 {
     // max |feature|: liberties ~6 stones apiece, sigil_stone sums mine^2/n over the
     // nine sigils (5+5+5+3+3+3+1+1+1 = 27), 9 sigils, 3 mana, 9 void, 39 nodes.
     abs_i32(w.near_threshold) * 1
@@ -212,23 +231,20 @@ const fn abs_i32(x: i32) -> i32 { if x < 0 { -x } else { x } }
 /// scaling it all the way down to the 0.96-stone budget (~4%) may leave nothing.
 /// So sweep it.
 pub const fn scaled_structural(num: i32, den: i32) -> Weights {
-    let d = Weights::default_const();
-    Weights {
-        lead: d.lead,
-        tempo: d.tempo,
-        near_threshold: d.near_threshold * num / den,
-        own_zero_liberty: d.own_zero_liberty * num / den,
-        own_one_liberty: d.own_one_liberty * num / den,
-        enemy_zero_liberty: d.enemy_zero_liberty * num / den,
-        enemy_one_liberty: d.enemy_one_liberty * num / den,
-        sigil_stone: d.sigil_stone * num / den,
-        sigil_charged: d.sigil_charged * num / den,
-        mana: d.mana * num / den,
-        sixth_spell_danger: d.sixth_spell_danger * num / den,
-        control: d.control * num / den,
-        void_penalty: d.void_penalty * num / den,
-    }
+    Weights { pos_num: num, pos_den: den, ..Weights::default_const() }
 }
+
+/// Rescale a weight set so its worst-case positional contribution lands on the
+/// production budget, leaving `lead` and `tempo` alone. Self-adjusting, so a shape
+/// can be edited without recomputing a scale by hand -- and it is the scale the
+/// arena favoured: everything at or just inside the budget won, everything above
+/// ~2x lost.
+pub const fn at_budget(w: Weights) -> Weights {
+    let worst = unscaled_worst_case(&w);
+    if worst <= 0 { return w; }
+    Weights { pos_num: POSITIONAL_BUDGET, pos_den: worst, ..w }
+}
+
 
 /// Sweep points. `s04` is roughly the production 0.96-stone budget; `s100` is the
 /// current structural default. Measured at 300 ms, colour-swapped, vs material:
@@ -236,6 +252,57 @@ pub const fn scaled_structural(num: i32, den: i32) -> Weights {
 /// the optimum at or BELOW 4%, which is to say right at the budget
 /// `cavemanCapWeights` already enforced. So the finer points below extend the sweep
 /// downward rather than upward.
+/// ====================== SHAPE HYPOTHESES FROM THE TEXEL FIT =================
+///
+/// A logistic fit of game outcome on the 12 hand features, over 181k positions from
+/// 7,283 self-play games, disagrees with the hand-chosen weights on FOUR SIGNS and
+/// several magnitudes (centistones, normalised so lead = 100):
+///
+/// ```text
+///   term                   fitted    hand
+///   near_threshold          +56.2    +150
+///   own_zero_liberty         +1.3     -70   sign differs
+///   own_one_liberty         +15.0     -20   sign differs
+///   enemy_zero_liberty       +2.5     +70
+///   enemy_one_liberty       -17.0     +20   sign differs
+///   sigil_stone             +35.6     +14
+///   sigil_charged            +2.4     +80
+///   mana                    +82.2     +40
+///   sixth_spell_danger      +63.6    -130   sign differs
+///   control                  +3.3      +0
+///   void_penalty            -21.9      +0
+/// ```
+///
+/// These are OBSERVATIONAL and confounded -- a winner tends to have spare stones,
+/// which is why void stones "look good" and why a player who has cast five spells
+/// looks like a winner rather than someone in danger from the sixth. So they are an
+/// arena hypothesis, not a weight set. The three presets below let the arena decide
+/// between the two SHAPES at the same budget, which is the only way to separate
+/// "the hand weights were wrong" from "these features are useless".
+pub const FIT_SHAPE: Weights = Weights {
+    lead: 100, near_threshold: 56,
+    own_zero_liberty: 1, own_one_liberty: 15,
+    enemy_zero_liberty: 3, enemy_one_liberty: -17,
+    sigil_stone: 36, sigil_charged: 2,
+    mana: 82, sixth_spell_danger: 64,
+    control: 3, void_penalty: -22,
+    pos_num: 1, pos_den: 1, tempo: 50,
+};
+
+/// The hand shape with only the four disputed SIGNS flipped, magnitudes untouched.
+/// Isolates the sign question from the magnitude question.
+pub const FLIP_SHAPE: Weights = Weights {
+    own_zero_liberty: 70, own_one_liberty: 20,
+    enemy_one_liberty: -20, sixth_spell_danger: 130,
+    ..Weights::default_const()
+};
+
+/// The three shapes, each rescaled to the production budget -- the scale the arena
+/// favoured, since everything at or just inside it won and everything above ~2x lost.
+pub const HAND_AT_BUDGET: Weights = at_budget(Weights::default_const());
+pub const FIT_AT_BUDGET: Weights = at_budget(FIT_SHAPE);
+pub const FLIP_AT_BUDGET: Weights = at_budget(FLIP_SHAPE);
+
 pub const STRUCT_01: Weights = scaled_structural(1, 100);
 pub const STRUCT_02: Weights = scaled_structural(2, 100);
 pub const STRUCT_06: Weights = scaled_structural(6, 100);
@@ -307,37 +374,53 @@ impl Board {
     }
 
     /// Score in centistones from `c`'s point of view.
+    ///
+    /// Three parts, kept separate on purpose: MATERIAL (`lead`), the POSITIONAL sum
+    /// scaled by `pos_num/pos_den`, and the TEMPO offset. Only the middle one is
+    /// scaled, so re-pricing position never re-prices the ruler it is measured
+    /// against, and every ratio inside the positional part stays exact.
+    ///
+    /// Deliberately does NOT call `hand_features`, even though the two must agree
+    /// exactly: this is the leaf path and has to stay lazy, while `hand_features`
+    /// computes `control_diff` (a 12-layer flood fill) unconditionally. The
+    /// duplication is safe only because
+    /// `evaluate_is_exactly_the_dot_product_of_the_hand_features` fails the build
+    /// when they drift -- which it has already caught once, on an integer
+    /// truncation difference in the sigil term.
     pub fn evaluate(&self, c: Color, w: &Weights) -> i32 {
         let red = self.total[0] as i32;
         let blue = self.total[1] as i32;
         // Signed lead in *score* terms, i.e. including blue's +1 counter token.
         let red_score_lead = red - (blue + 1);
-        let mut v = w.lead * if c == Color::Red { red_score_lead } else { -red_score_lead };
+        let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
 
-        // Being one step from the winning margin is worth much more than linear.
-        // Red wins at red-blue >= 4, blue at blue-red >= 2.
+        // --- material, never scaled ---
+        let mut mat = w.lead * my_lead;
+        // --- positional, scaled as one sum ---
+        let mut pos = 0i32;
+
         if w.near_threshold != 0 {
+            // Red wins at red-blue >= 4, blue at blue-red >= 2.
             let (my_margin, their_margin) = if c == Color::Red {
                 (4 - (red - blue), 2 - (blue - red))
             } else {
                 (2 - (blue - red), 4 - (red - blue))
             };
-            if my_margin <= 1 { v += w.near_threshold; }
-            if their_margin <= 1 { v -= w.near_threshold; }
+            pos += w.near_threshold
+                 * ((my_margin <= 1) as i32 - (their_margin <= 1) as i32);
         }
 
-        let (own0, own1) = self.liberty_census(c);
-        let (en0, en1) = self.liberty_census(c.other());
-        v += w.own_zero_liberty * own0 + w.own_one_liberty * own1;
-        v += w.enemy_zero_liberty * en0 + w.enemy_one_liberty * en1;
+        if w.own_zero_liberty != 0 || w.own_one_liberty != 0
+            || w.enemy_zero_liberty != 0 || w.enemy_one_liberty != 0 {
+            let (own0, own1) = self.liberty_census(c);
+            let (en0, en1) = self.liberty_census(c.other());
+            pos += w.own_zero_liberty * own0 + w.own_one_liberty * own1;
+            pos += w.enemy_zero_liberty * en0 + w.enemy_one_liberty * en1;
+        }
 
         if w.sigil_stone != 0 || w.sigil_charged != 0 {
             // The FEATURE is summed first and the weight applied once, so that
-            // `evaluate == dot(weights, hand_features)` holds exactly. Multiplying
-            // per sigil and dividing afterwards truncated differently in the two
-            // code paths, which the dot-product invariant test caught; a fitted
-            // weight vector would otherwise have meant something subtly different
-            // from what the search computes.
+            // `evaluate == dot(weights, hand_features)` holds exactly.
             let mut stone_feat = 0i32;
             let mut charged_feat = 0i32;
             for p in 0..9 {
@@ -350,36 +433,42 @@ impl Board {
                 if mine == n { charged_feat += 1; }
                 if theirs == n { charged_feat -= 1; }
             }
-            v += w.sigil_stone * stone_feat + w.sigil_charged * charged_feat;
+            pos += w.sigil_stone * stone_feat + w.sigil_charged * charged_feat;
         }
 
-        v += w.mana * ((self.mine(c) & MANA).count_ones() as i32
-                     - (self.theirs(c) & MANA).count_ones() as i32);
-
-        if w.control != 0 { v += w.control * self.control_diff(c); }
-
-        // Void stones charge nothing, so holding them is a liability.
-        if w.void_penalty != 0 {
-            let vd = (self.mine(c) & crate::topology::VOID).count_ones() as i32
-                   - (self.theirs(c) & crate::topology::VOID).count_ones() as i32;
-            v -= w.void_penalty * vd;
+        if w.mana != 0 {
+            pos += w.mana * ((self.mine(c) & MANA).count_ones() as i32
+                           - (self.theirs(c) & MANA).count_ones() as i32);
         }
 
-        // The sixth cast ENDS the game and awards it on stone count, so a high
-        // counter while behind is a liability: casting becomes self-destructive.
         if w.sixth_spell_danger != 0 {
+            // The sixth cast ENDS the game and awards it on stone count, so a high
+            // counter while behind is a liability: casting becomes self-destructive.
             let my_sc = self.spell_counter[c.idx()] as i32;
             let their_sc = self.spell_counter[c.other().idx()] as i32;
-            let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
-            if my_sc >= 5 && my_lead < 0 { v += w.sixth_spell_danger; }
-            if their_sc >= 5 && my_lead > 0 { v -= w.sixth_spell_danger; }
+            pos += w.sixth_spell_danger
+                 * (((my_sc >= 5 && my_lead < 0) as i32)
+                    - ((their_sc >= 5 && my_lead > 0) as i32));
         }
 
-        // Tempo: cancel the one-stone-per-ply parity wave. Anchored to the real
-        // side to move rather than to `c`.
-        if w.tempo != 0 {
-            v += if self.to_move == c { w.tempo } else { -w.tempo };
+        // Guarded: a 12-layer flood fill, and most presets set it to 0.
+        if w.control != 0 { pos += w.control * self.control_diff(c); }
+
+        if w.void_penalty != 0 {
+            // Void stones charge nothing, so holding them is a liability. The sign
+            // is folded into the FEATURE to match `hand_features`.
+            let vd = (self.mine(c) & crate::topology::VOID).count_ones() as i32
+                   - (self.theirs(c) & crate::topology::VOID).count_ones() as i32;
+            pos += w.void_penalty * (-vd);
         }
-        v
+
+        mat += pos * w.pos_num / w.pos_den;
+
+        // Tempo: cancel the one-stone-per-ply parity wave. Anchored to the real
+        // side to move rather than to `c`, and never scaled.
+        if w.tempo != 0 {
+            mat += if self.to_move == c { w.tempo } else { -w.tempo };
+        }
+        mat
     }
 }

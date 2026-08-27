@@ -1119,8 +1119,17 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
             let f = b.hand_features(c);
             for w in &sets {
                 let wv = Board::hand_weight_vec(w);
-                let dot: i32 = (0..N_HAND).map(|i| wv[i] * f[i]).sum();
-                assert_eq!(dot, b.evaluate(c, w),
+                // `lead` and `tempo` are material and are never scaled; every other
+                // term is part of the positional sum, scaled by pos_num/pos_den.
+                let mut mat = 0i32;
+                let mut pos = 0i32;
+                for i in 0..N_HAND {
+                    match crate::features::HAND_NAMES[i] {
+                        "lead" | "tempo" => mat += wv[i] * f[i],
+                        _ => pos += wv[i] * f[i],
+                    }
+                }
+                assert_eq!(mat + pos * w.pos_num / w.pos_den, b.evaluate(c, w),
                     "seed {seed} {c:?}: hand_features dot != evaluate");
             }
         }
