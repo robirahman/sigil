@@ -297,11 +297,12 @@ impl PyBoard {
     /// `history` is the list of prior position keys, for repetition counting.
     #[pyo3(signature = (time_ms=1000, max_depth=64, tt_bits=20, window=16,
                         width_scale=1, history=vec![], eval_name="default",
-                        legacy_order=false, merge_min_width=None, key_dash_reasons=None))]
+                        legacy_order=false, merge_min_width=None, key_dash_reasons=None,
+                        key_dash_min_width=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: usize, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
-                 key_dash_reasons: Option<u8>)
+                 key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -318,6 +319,7 @@ impl PyBoard {
         // now Option: absent means "leave the engine's own default alone".
         if let Some(w) = merge_min_width { s.set_merge_min_width(w); }
         if let Some(r) = key_dash_reasons { s.set_key_dash_reasons(r); }
+        if let Some(w) = key_dash_min_width { s.set_key_dash_min_width(w); }
         s.weights = match eval_name {
             "material" => crate::eval::MATERIAL_ONLY,
             "classic" => crate::eval::CLASSIC,
@@ -570,6 +572,7 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     let mut m = std::collections::HashMap::new();
     m.insert("merge_min_width".to_string(), s.merge_min_width_get() as u64);
     m.insert("key_dash_reasons".to_string(), s.key_dash_reasons_get() as u64);
+    m.insert("key_dash_min_width".to_string(), s.key_dash_min_width_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
     Ok(m)
 }

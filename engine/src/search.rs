@@ -122,6 +122,15 @@ pub struct Search {
     /// Which key-dash interest rules are live; see `key_dash`. `0` disables the
     /// reserved slot, leaving the stage ordering untouched.
     key_dash_reasons: u8,
+    /// Reserve the dash slot only where the width budget is at least this.
+    ///
+    /// The blindness is NOT uniform over the tree. `width_for_depth` gives 40 at
+    /// depth >= 6 and 6 at depth <= 1, so the root already reaches a dash in most
+    /// positions (median index 12) and it is the leaf-adjacent nodes at width 6
+    /// that are blind. Buying a dash there costs a real move in every one of the
+    /// many shallow nodes, which is the likeliest reason the unconditional filter
+    /// measured -168 Elo. 0 means always.
+    key_dash_min_width: usize,
     /// Merge move classes only when the width budget is at least this.
     ///
     /// DEFAULT `usize::MAX`, i.e. OFF, because the merge is a MEASURED REGRESSION.
@@ -159,6 +168,7 @@ impl Search {
             weights: crate::eval::Weights::default(),
             legacy_order: false,
             key_dash_reasons: crate::key_dash::REASONS_ALL,
+            key_dash_min_width: 0,
             merge_min_width: usize::MAX,
         }
     }
@@ -169,11 +179,13 @@ impl Search {
     /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
     /// interest rule instead of to "the dash filter" as a whole.
     pub fn set_key_dash_reasons(&mut self, r: u8) { self.key_dash_reasons = r; }
+    pub fn set_key_dash_min_width(&mut self, w: usize) { self.key_dash_min_width = w; }
 
     // Readers, so a harness can REPORT the configuration it is running instead of
     // restating a default that may have drifted.
     pub fn merge_min_width_get(&self) -> usize { self.merge_min_width }
     pub fn key_dash_reasons_get(&self) -> u8 { self.key_dash_reasons }
+    pub fn key_dash_min_width_get(&self) -> usize { self.key_dash_min_width }
     pub fn legacy_order_get(&self) -> bool { self.legacy_order }
     /// Multiply every widening bound. 1 is the tuned default; raising it trades
     /// depth for breadth and, taken far enough, reaches full enumeration.
@@ -385,7 +397,8 @@ impl Search {
         // budget is wide; deeper nodes keep the cheap ordering.
         let mut v: Vec<Turn>;
         if self.legacy_order || width < self.merge_min_width {
-            let reasons = if self.legacy_order { 0 } else { self.key_dash_reasons };
+            let reasons = if self.legacy_order || width < self.key_dash_min_width { 0 }
+                          else { self.key_dash_reasons };
             let mut it = b.turns_ordered_reasons(c, self.window, reasons);
             v = it.by_ref().take(width).collect();
             if it.next().is_some() { self.stats.widened = true; }
