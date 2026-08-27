@@ -53,6 +53,11 @@ def load(path):
     out = {}
     for k in ('hand', 'full', 'spells', 'ply', 'is_red', 'y'):
         out[k] = np.concatenate([p[k] for p in parts])
+    # `score` is optional: only datasets generated after the search-score change
+    # carry it, and its absence must not be silently read as "no signal" -- the
+    # beyond-search models simply do not run.
+    if all('score' in p.files for p in parts):
+        out['score'] = np.concatenate([p['score'] for p in parts])
     # game ids: use the recorded field when present, else reconstruct from ply
     # resetting to 0, which marks a game boundary because rows are appended in
     # play order. Offset per file so ids never collide across shards.
@@ -183,13 +188,36 @@ def run(d, tr, te, tag):
         both_te = np.hstack([sc_te, d['hand'][oke][:, keep].astype(float)])
         d_all, d_mid, _, _ = evaluate('d', LogisticRegression(max_iter=4000),
                                       both_tr, yt2, both_te, ye2, plyte2)
+        # Same-subset baselines, so the comparison is apples to apples.
+        la_all, la_mid, _, _ = evaluate('a2', LogisticRegression(max_iter=2000),
+                                        d['hand'][okt][:, [names.index('lead')]], yt2,
+                                        d['hand'][oke][:, [names.index('lead')]], ye2,
+                                        plyte2)
+        fb_all, fb_mid, _, _ = evaluate('b2', LogisticRegression(max_iter=4000),
+                                        d['hand'][okt][:, keep].astype(float), yt2,
+                                        d['hand'][oke][:, keep].astype(float), ye2,
+                                        plyte2)
         print(f"\n  [{tag}] does static knowledge add anything beyond search?")
+        print(f"    all four rows below are on the SAME restricted subset")
+        print(f"    (a') lead only               plies 10-25 {la_mid:.4f}")
+        print(f"    (b') 12 features only        plies 10-25 {fb_mid:.4f}")
         print(f"    (s) search score only        plies 10-25 {s_mid:.4f}")
         print(f"    (d) search score + features  plies 10-25 {d_mid:.4f}"
               f"   (adds {s_mid-d_mid:+.4f} nats)")
         add = s_mid - d_mid
-        print(f"    -> features add {add:+.4f} nats on top of the search score; "
-              f"{'search does NOT subsume them' if add >= 0.01 else 'search already subsumes them'}")
+        base = la_mid - fb_mid          # what the features add over material alone
+        frac = (add / base) if base > 1e-9 else float('nan')
+        print(f"    -> features add {add:+.4f} nats on top of the search score, "
+              f"vs {base:+.4f} on top of material alone")
+        print(f"       so search absorbs ~{100*(1-frac):.0f}% of what the features "
+              f"know and ~{100*frac:.0f}% survives as residual")
+        print("       NOTE: this deliberately does not print a pass/fail verdict.")
+        print("       Log-loss on ISOLATED positions understates an eval that is")
+        print("       applied at millions of leaves, because alpha-beta compounds")
+        print("       small leaf differences -- which is how a residual of a few")
+        print("       thousandths of a nat coexists with a measured +92 Elo. The")
+        print("       arena is the instrument for eval value; this number only says")
+        print("       whether any residual information EXISTS for it to exploit.")
         res.update(s_mid=s_mid, d_mid=d_mid, beyond_search=add)
     else:
         print(f"\n  [{tag}] no search score in the data; "
