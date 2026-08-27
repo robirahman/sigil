@@ -611,6 +611,26 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
     })
 }
 
+/// The actual weight vector and worst-case positional budget of a named preset.
+///
+/// Reporting must read these OFF THE ENGINE, never recompute them: Python floors
+/// negative integer division while Rust truncates toward zero, so an analysis
+/// script that re-derives `scaled_structural` disagrees with the engine on every
+/// negative weight. That produced a wrong term list the first time it was reported.
+#[pyfunction]
+fn eval_weights(name: &str) -> PyResult<std::collections::HashMap<String, i32>> {
+    let w = weights_by_name(name)?;
+    let f = crate::board::Board::hand_weight_vec(&w);
+    let mut m = std::collections::HashMap::new();
+    for (n, v) in crate::features::HAND_NAMES.iter().zip(f.iter()) {
+        m.insert(n.to_string(), *v);
+    }
+    m.insert("_worst_case_positional".to_string(),
+             crate::eval::worst_case_positional(&w));
+    m.insert("_positional_budget".to_string(), crate::eval::POSITIONAL_BUDGET);
+    Ok(m)
+}
+
 #[pyfunction]
 fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     let s = crate::search::Search::new(16);
@@ -630,6 +650,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
+    m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()
