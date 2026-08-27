@@ -278,16 +278,7 @@ impl PyBoard {
 
     #[pyo3(signature = (c, eval_name="default"))]
     fn evaluate(&self, c: &str, eval_name: &str) -> PyResult<i32> {
-        let w = match eval_name {
-            "material" => crate::eval::MATERIAL_ONLY,
-            "classic" => crate::eval::CLASSIC,
-            "mana" => crate::eval::MANA_ONLY,
-            "mc" => crate::eval::CAPPED_MC,
-            "manavoid" => crate::eval::CAPPED_MANAVOID,
-            "mix" => crate::eval::CAPPED_MIX,
-            "control" => crate::eval::CONTROL_ONLY,
-            _ => crate::eval::Weights::default(),
-        };
+        let w = weights_by_name(eval_name)?;
         Ok(self.b.evaluate(color(c)?, &w))
     }
     fn control_diff(&self, c: &str) -> PyResult<i32> { Ok(self.b.control_diff(color(c)?)) }
@@ -322,16 +313,7 @@ impl PyBoard {
         if let Some(r) = key_dash_reasons { s.set_key_dash_reasons(r); }
         if let Some(w) = key_dash_min_width { s.set_key_dash_min_width(w); }
         if let Some(n) = key_dash_extra { s.set_key_dash_extra(n); }
-        s.weights = match eval_name {
-            "material" => crate::eval::MATERIAL_ONLY,
-            "classic" => crate::eval::CLASSIC,
-            "mana" => crate::eval::MANA_ONLY,
-            "mc" => crate::eval::CAPPED_MC,
-            "manavoid" => crate::eval::CAPPED_MANAVOID,
-            "mix" => crate::eval::CAPPED_MIX,
-            "control" => crate::eval::CONTROL_ONLY,
-            _ => crate::eval::Weights::default(),
-        };
+        s.weights = weights_by_name(eval_name)?;
         for k in history { s.add_history(k); }
         let t = Instant::now();
         let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);
@@ -537,14 +519,10 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
     // structural set that scored 22.5% against material-only over 80 games, so
     // omitting this had the GUI opponent playing weights already known to be bad
     // while every reported strength number came from the material eval.
-    s.weights = match eval_name {
-        "material" => crate::eval::MATERIAL_ONLY,
-        "classic" => crate::eval::CLASSIC,
-        "mc" => crate::eval::CAPPED_MC,
-        "manavoid" => crate::eval::CAPPED_MANAVOID,
-        "mix" => crate::eval::CAPPED_MIX,
-        _ => crate::eval::Weights::default(),
-    };
+    // This list used to be a THIRD copy and was missing several presets; a name it
+    // did not know silently became the structural default. One resolver now, and it
+    // errors rather than guessing.
+    s.weights = weights_by_name(eval_name)?;
     for h in history_sfns {
         if let Ok(hb) = crate::board::Board::from_sfn(&h) {
             s.add_history(crate::zobrist::ZOBRIST.key_js(&hb));
@@ -568,6 +546,28 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 /// never again be ambiguous about which engine produced it — a Python-side default
 /// of 32 for `merge_min_width` silently re-enabled a -285 Elo regression and cost a
 /// whole 120-game campaign.
+
+/// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
+/// The old `_ => Weights::default()` arm meant a typo silently selected the
+/// structural eval, which is the same failure shape as the `merge_min_width`
+/// binding default that invalidated a 120-game campaign.
+fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
+    Ok(match name {
+        "default" | "structural" => crate::eval::Weights::default(),
+        "material" => crate::eval::MATERIAL_ONLY,
+        "mtempo" => crate::eval::MATERIAL_TEMPO,
+        "classic" => crate::eval::CLASSIC,
+        "mana" => crate::eval::MANA_ONLY,
+        "mc" => crate::eval::CAPPED_MC,
+        "manavoid" => crate::eval::CAPPED_MANAVOID,
+        "mix" => crate::eval::CAPPED_MIX,
+        "control" => crate::eval::CONTROL_ONLY,
+        other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown eval name {other:?}; expected one of default/structural, \
+             material, mtempo, classic, mana, mc, manavoid, mix, control"))),
+    })
+}
+
 #[pyfunction]
 fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     let s = crate::search::Search::new(16);

@@ -15,6 +15,7 @@ pub mod key_dash;
 pub mod turn_iter;
 pub mod sfn;
 pub mod eval;
+pub mod features;
 pub mod search;
 #[cfg(feature = "python")]
 pub mod py;

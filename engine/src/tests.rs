@@ -1092,3 +1092,64 @@ fn the_key_dash_filter_never_invents_an_illegal_turn() {
         }
     }
 }
+
+#[test]
+fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
+    // This invariant is what makes a logistic/texel fit on `hand_features` produce
+    // numbers that drop straight into `Weights`. If the two paths ever drift, a
+    // fitted weight vector would silently mean something else.
+    use crate::features::N_HAND;
+    let sets = [crate::eval::Weights::default(), crate::eval::MATERIAL_ONLY,
+                crate::eval::MATERIAL_TEMPO, crate::eval::CLASSIC,
+                crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
+                crate::eval::CAPPED_MIX];
+    for seed in 0..40u64 {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        b.stones[0] = (0x1234_5678_9abcu64 ^ (seed * 2654435761)) & crate::topology::ALL;
+        b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
+        b.spell_counter = [(seed % 7) as u8, ((seed / 7) % 7) as u8];
+        b.to_move = if seed % 2 == 0 { Color::Red } else { Color::Blue };
+        b.update();
+        for c in [Color::Red, Color::Blue] {
+            let f = b.hand_features(c);
+            for w in &sets {
+                let wv = Board::hand_weight_vec(w);
+                let dot: i32 = (0..N_HAND).map(|i| wv[i] * f[i]).sum();
+                assert_eq!(dot, b.evaluate(c, w),
+                    "seed {seed} {c:?}: hand_features dot != evaluate");
+            }
+        }
+    }
+}
+
+#[test]
+fn the_tempo_term_cancels_the_one_stone_per_ply_parity_wave() {
+    // Measured on the real engine: with material-only the root score alternates by
+    // exactly 100 centistones per ply and never converges, because every move
+    // places a stone. The tempo term must remove that, and must do so by shifting
+    // the two phases onto their mean rather than by flattening the eval.
+    let mut b = Board::new(Board::legal_draw(11), Variant::Standard);
+    b.stones[0] = (1 << n("a1")) | (1 << n("a4")) | (1 << n("b1"));
+    b.stones[1] = (1 << n("a3")) | (1 << n("a5"));
+    b.update();
+
+    // Same position, opposite side to move: material-only must differ by 0 (the
+    // lead does not depend on the clock) while the tempo eval must differ by 2*50.
+    let mut r = b; r.to_move = Color::Red; r.update();
+    let mut l = b; l.to_move = Color::Blue; l.update();
+    for c in [Color::Red, Color::Blue] {
+        assert_eq!(r.evaluate(c, &crate::eval::MATERIAL_ONLY),
+                   l.evaluate(c, &crate::eval::MATERIAL_ONLY),
+                   "material-only must be blind to the side to move");
+        let d = r.evaluate(c, &crate::eval::MATERIAL_TEMPO)
+              - l.evaluate(c, &crate::eval::MATERIAL_TEMPO);
+        assert_eq!(d.abs(), 100, "tempo must be worth exactly one stone of swing");
+    }
+    // And it must be a pure offset: the tempo eval is the material eval plus or
+    // minus 50, never anything else.
+    for c in [Color::Red, Color::Blue] {
+        let diff = r.evaluate(c, &crate::eval::MATERIAL_TEMPO)
+                 - r.evaluate(c, &crate::eval::MATERIAL_ONLY);
+        assert!(diff == 50 || diff == -50, "tempo is a +/-50 offset, got {diff}");
+    }
+}

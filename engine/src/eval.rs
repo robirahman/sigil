@@ -19,6 +19,35 @@
 //!
 //! Weights are in centistones (100 = one stone) and deliberately tunable, so this
 //! can be arena-gated against material-only the way the original campaign was.
+//!
+//! ## THE TEMPO TERM, and why it is not optional
+//!
+//! Every move PLACES a stone, so the side that has just moved is always exactly one
+//! stone up on that account alone. Measured directly (root score at fixed search
+//! depth, material eval, three real midgame positions):
+//!
+//! ```text
+//!     seed      d1     d2     d3     d4     d5     d6     d7     d8
+//!       11     100      0    100      0    100      0    100      0
+//!       19       0   -100      0   -100      0   -100      0   -100
+//!       27       0   -100    100      0    100      0    100      0
+//! ```
+//!
+//! A pure square wave of exactly ONE STONE per ply, with no convergence. Blue wins
+//! on a real lead of 2, so the search's answer was dominated by whose turn it
+//! happened to be at the horizon rather than by the position. That is the whole
+//! explanation for "20x thinking time is worth only ~57.5%": extra depth cannot
+//! express a better judgement when the returned score is a parity bit.
+//!
+//! The correction is exact to first order and follows from the measurement: the
+//! side that has just placed looks +1, so the side TO MOVE is half a stone below
+//! the mean. `tempo = 50` centistones for the side to move flattens both phases of
+//! the wave onto their average. It is only first-order because a dash places one
+//! stone while sacrificing two, and a cast places and removes a variable number --
+//! but the wave is exactly 100 everywhere, so the first-order term dominates.
+//!
+//! Anchored to `self.to_move`, NOT to the POV argument, so it stays correct when
+//! `evaluate` is called for a side that is not the side to move.
 
 use crate::board::{Board, Color};
 use crate::topology::{ADJ, MANA, SIGIL};
@@ -39,6 +68,10 @@ pub struct Weights {
     pub control: i32,
     /// Penalty per net own stone sitting on a VOID node (they charge nothing).
     pub void_penalty: i32,
+    /// Centistones credited to the SIDE TO MOVE, cancelling the one-stone-per-ply
+    /// square wave that "every move places a stone" produces. See the module docs;
+    /// 50 is the derived value, 0 reproduces the old behaviour for A/B.
+    pub tempo: i32,
 }
 
 impl Default for Weights {
@@ -56,6 +89,7 @@ impl Default for Weights {
             sixth_spell_danger: -130,
             control: 0,
             void_penalty: 0,
+            tempo: 50,
         }
     }
 }
@@ -70,7 +104,7 @@ pub const CLASSIC: Weights = Weights {
     own_zero_liberty: 0, own_one_liberty: 0,
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0,
-    mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0,
+    mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0, tempo: 50,
 };
 
 /// Mana term only, to separate the two contributions.
@@ -84,8 +118,12 @@ pub const MATERIAL_ONLY: Weights = Weights {
     own_zero_liberty: 0, own_one_liberty: 0,
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0, mana: 0, sixth_spell_danger: 0, control: 0,
-    void_penalty: 0,
+    void_penalty: 0, tempo: 0,
 };
+
+/// Material only PLUS the tempo correction: the minimal change that removes the
+/// one-stone-per-ply square wave, and the first thing to gate.
+pub const MATERIAL_TEMPO: Weights = Weights { tempo: 50, ..MATERIAL_ONLY };
 
 
 // ===================== caveman-faithful positional eval =====================
@@ -128,7 +166,7 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
         own_zero_liberty: 0, own_one_liberty: 0,
         enemy_zero_liberty: 0, enemy_one_liberty: 0,
         sigil_stone: 0, sigil_charged: 0,
-        mana: m, sixth_spell_danger: 0, control: c, void_penalty: v,
+        mana: m, sixth_spell_danger: 0, control: c, void_penalty: v, tempo: 50,
     }
 }
 
@@ -144,6 +182,10 @@ impl Board {
     /// Liberty census: (stones with 0 empty neighbours, stones with exactly 1).
     /// A cheap stand-in for crushability — a full `escape_distance` per stone would
     /// be several BFS traversals per leaf, which the search cannot afford.
+    /// Public alias so `features.rs` can build the same vector the weights index.
+    #[inline]
+    pub fn liberty_census_pub(&self, c: Color) -> (i32, i32) { self.liberty_census(c) }
+
     #[inline]
     fn liberty_census(&self, c: Color) -> (i32, i32) {
         let empty = self.empty();
@@ -215,17 +257,25 @@ impl Board {
         v += w.enemy_zero_liberty * en0 + w.enemy_one_liberty * en1;
 
         if w.sigil_stone != 0 || w.sigil_charged != 0 {
+            // The FEATURE is summed first and the weight applied once, so that
+            // `evaluate == dot(weights, hand_features)` holds exactly. Multiplying
+            // per sigil and dividing afterwards truncated differently in the two
+            // code paths, which the dot-product invariant test caught; a fitted
+            // weight vector would otherwise have meant something subtly different
+            // from what the search computes.
+            let mut stone_feat = 0i32;
+            let mut charged_feat = 0i32;
             for p in 0..9 {
                 let m = SIGIL[p];
                 let n = m.count_ones() as i32;
                 let mine = (m & self.mine(c)).count_ones() as i32;
                 let theirs = (m & self.theirs(c)).count_ones() as i32;
                 // Quadratic-ish: filling the last node of a sigil is what pays.
-                v += w.sigil_stone * mine * mine / n.max(1);
-                v -= w.sigil_stone * theirs * theirs / n.max(1);
-                if mine == n { v += w.sigil_charged; }
-                if theirs == n { v -= w.sigil_charged; }
+                stone_feat += mine * mine / n.max(1) - theirs * theirs / n.max(1);
+                if mine == n { charged_feat += 1; }
+                if theirs == n { charged_feat -= 1; }
             }
+            v += w.sigil_stone * stone_feat + w.sigil_charged * charged_feat;
         }
 
         v += w.mana * ((self.mine(c) & MANA).count_ones() as i32
@@ -248,6 +298,12 @@ impl Board {
             let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
             if my_sc >= 5 && my_lead < 0 { v += w.sixth_spell_danger; }
             if their_sc >= 5 && my_lead > 0 { v -= w.sixth_spell_danger; }
+        }
+
+        // Tempo: cancel the one-stone-per-ply parity wave. Anchored to the real
+        // side to move rather than to `c`.
+        if w.tempo != 0 {
+            v += if self.to_move == c { w.tempo } else { -w.tempo };
         }
         v
     }

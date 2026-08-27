@@ -520,3 +520,91 @@ surfacing those turns spends search budget on moves the leaf evaluation is
 structurally unable to reward. The next lever is therefore the EVAL, not the
 generator — which is also the one place a 39-node bitboard at depth ~6 has headroom
 the old Python/JS engines never had.
+
+# Phase A/B, 2026-08-27
+
+## A3 CORRECTION: depth scaling is NOT flat. The old measurement was wrong.
+
+`FINDINGS.md` has said "20x thinking time was worth only ~57.5% (40 games)" and that
+claim has been load-bearing for two plans. It was forty games — SE +/-7.8%, i.e.
+52 +/- 55 Elo — and it does not survive re-measurement.
+
+Re-run with SPRT (`engine/harness/ab_time.py`), same engine against itself at a time
+ratio, colour-swapped, seeded, merge held off, 3 shards x 100 pairs per arm:
+
+| eval | mult | games | score | Elo | 95% CI | Elo/doubling | SPRT |
+|---|---|---|---|---|---|---|---|
+| material | 2x | 529 | 55.4% | +38 | [+8,+68] | +38 | continue |
+| material | 4x | 283 | 68.2% | +133 | [+91,+178] | +66 | **H1** |
+| material | 8x | 180 | 68.9% | +138 | [+86,+197] | +46 | **H1** |
+| material | 16x | 95 | 68.4% | +134 | [+64,+218] | +34 | continue |
+| structural | 2x | 485 | 62.7% | +90 | [+59,+123] | +90 | **H1** |
+| structural | 4x | 288 | 69.8% | +145 | [+104,+192] | +73 | **H1** |
+| structural | 8x | 181 | 68.0% | +131 | [+79,+189] | +44 | **H1** |
+| structural | 16x | 104 | 90.4% | +389 | [+298,+554] | +97 | **H1** |
+
+**34-66 Elo per doubling on material is a HEALTHY curve** (40-70 is normal), with the
+usual diminishing returns. 16x time is worth +134 Elo, not the +52 previously
+believed. So "the search is fine but depth buys nothing" is false, and any argument
+resting on it — including the headline framing of the current plan — has to be
+rebuilt.
+
+What survives, and is arguably more useful: **the structural eval scales
+substantially better with time than material does** (+389 vs +134 at 16x, and a
+steeper per-doubling curve throughout). A richer evaluation converts depth into
+strength more efficiently. That is a direct, positive argument for the learned-eval
+programme, and it replaces the flat-scaling argument that just died. Caveat: the 16x
+arms are ~100 games with wide intervals, and these are two separate self-play
+ladders rather than a head-to-head.
+
+## The one-stone-per-ply parity wave is real, and now fixed
+
+Every move PLACES a stone, so the side that has just moved is exactly one stone up on
+that account alone. Root score at fixed search depth, material eval, five real
+midgame positions:
+
+```text
+ seed     d1    d2    d3    d4    d5    d6    d7    d8    d9   d10
+   11    100     0   100     0   100     0   100     0   100     0
+   19      0  -100     0  -100     0  -100     0  -100     0  -100
+   33      0  -100     0  -100     0  -100     0  -100     0  -100
+```
+
+A pure square wave of exactly ONE STONE per ply with no convergence — and blue wins
+on a real lead of 2. The structural eval is *worse*: 152 centistones/ply, because its
+extra terms also move when a stone lands. That plausibly explains why every richer
+eval tried so far lost (22.5%, 17.5%) and why capped sub-material positional terms
+were inert: they were being stacked on top of a one-stone square wave.
+
+`Weights::tempo` (default 50 centistones to the side to move) is the exact
+first-order correction — the side that has just placed looks +1, so the side to move
+sits half a stone below the mean. Measured effect:
+
+| eval | mean \|score change per extra ply\|, d3..d8 |
+|---|---|
+| material | 96 centistones |
+| material + tempo | **4 centistones** |
+
+Note what this does and does not buy. It removes an artifact; it does not add
+knowledge — with material-only the corrected score is now *constant* across depth,
+because material genuinely has nothing to say about these positions. And it does not
+explain the strength numbers on its own: within a single fixed-depth search all
+leaves share the same parity, so alpha-beta's comparisons were already consistent,
+which is exactly why scaling could be healthy despite the wave. The wave mainly
+corrupted the reported score, the aspiration window and cross-depth comparisons at
+early terminations. Whether it is worth Elo is an open SPRT question, not a claim.
+
+## Two silent-default hazards closed
+
+* `hand_features` returns the raw quantity each `Weights` field multiplies, and a
+  test asserts `evaluate(c, w) == dot(w, hand_features(c))` over 7 weight sets x 40
+  positions x both colours. It **failed on first run**: `eval.rs` multiplied the
+  weight in before dividing by sigil size, truncating differently from the feature
+  path. Fixed by summing the feature and applying the weight once. Without that
+  invariant a fitted weight vector would have meant something subtly different from
+  what the search computes.
+* The eval-name resolver existed in **three** copies with `_ => Weights::default()`
+  fallbacks, and one copy was missing several presets. A typo'd or new name silently
+  selected the structural eval — the same shape as the `merge_min_width` binding
+  default that invalidated a 120-game campaign. Now one `weights_by_name` that
+  **errors** on an unknown name.
