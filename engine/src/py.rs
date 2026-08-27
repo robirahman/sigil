@@ -100,6 +100,18 @@ impl PyBoard {
         }
     }
     #[getter] fn gameover(&self) -> bool { self.b.outcome != Outcome::Ongoing }
+
+    /// Hand the turn over: bump the counter, flip the side to move, recompute.
+    /// `apply_turn` deliberately does NOT do this (it applies a turn to a position
+    /// without committing to a clock), and `play_best` does it inline -- so a
+    /// caller that applies its own turn, e.g. a random-ply data generator, needs
+    /// this or the game silently never progresses.
+    fn advance_turn(&mut self) {
+        let c = self.b.to_move;
+        self.b.turn_counter += 1;
+        self.b.to_move = c.other();
+        self.b.update();
+    }
     #[getter] fn key_js(&self) -> u64 { ZOBRIST.key_js(&self.b) }
     #[getter] fn key_py(&self) -> u64 { ZOBRIST.key_py(&self.b) }
     fn has_deferred_spell(&self) -> bool { self.b.has_deferred_spell() }
@@ -282,6 +294,23 @@ impl PyBoard {
         Ok(self.b.evaluate(color(c)?, &w))
     }
     fn control_diff(&self, c: &str) -> PyResult<i32> { Ok(self.b.control_diff(color(c)?)) }
+
+    /// The raw, unweighted quantity each `Weights` field multiplies, from `c`'s POV,
+    /// in `HAND_FEATURE_NAMES` order. `evaluate(c, w) == dot(w, this)` exactly (unit
+    /// tested), so a logistic/texel fit on these produces numbers that drop straight
+    /// into `Weights` with no reinterpretation.
+    fn hand_features(&self, c: &str) -> PyResult<Vec<i32>> {
+        Ok(self.b.hand_features(color(c)?).to_vec())
+    }
+
+    /// Rich, close-to-the-board features for the offline learnability test.
+    fn full_features(&self, c: &str) -> PyResult<Vec<f32>> {
+        Ok(self.b.full_features(color(c)?))
+    }
+
+    /// Spell id per sigil slot. Constant for a whole game, so a consumer embeds
+    /// these once per game rather than per position.
+    fn spell_ids(&self) -> PyResult<Vec<u8>> { Ok(self.b.spell_ids().to_vec()) }
 
     /// Search, play the best turn, advance the turn. Returns
     /// (depth_completed, nodes, seconds, gameover, winner, score, widened).
@@ -598,5 +627,8 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
+    m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
+    m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()
+        .map(|s| s.name).collect::<Vec<_>>())?;
     Ok(())
 }
