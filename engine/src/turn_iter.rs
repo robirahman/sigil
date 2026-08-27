@@ -135,29 +135,9 @@ impl<'a> TurnIter<'a> {
         it
     }
 
-    /// Scan the top few first moves for dashes that pass the interest filter, and
-    /// rank the survivors. Bounded work: `KEY_DASH_MOVES` post-move boards, each
-    /// resolving push options only for landing nodes that already qualified.
     fn build_key_dashes(&mut self) {
         if self.reasons == 0 || self.moves.is_empty() { return; }
-        let mut all: Vec<(i32, Turn)> = Vec::new();
-        for i in 0..self.moves.len().min(KEY_DASH_MOVES) {
-            let b = self.post_move_board(i);
-            if b.outcome != crate::board::Outcome::Ongoing { continue; }
-            let a = self.first_action(i);
-            // Ranked across first moves as well as within one, so a strong dash
-            // under the second-best move can outrank a weak one under the best.
-            // `turn_score` already scores the leading move, so there is no separate
-            // base term to add.
-            for (t, _bd, _why) in b.key_dash_branches(self.c, self.reasons, KEY_DASH_KEEP) {
-                let mut full = Turn::single(a);
-                for act in t.slice() { full = full.push_pub(*act); }
-                all.push((self.board.turn_score(&full, self.c), full));
-            }
-        }
-        all.sort_by(|x, y| y.0.cmp(&x.0));
-        all.truncate(KEY_DASH_KEEP);
-        self.key = all.into_iter().map(|(_, t)| t).collect();
+        self.key = self.board.key_dash_turns(self.c, self.reasons, KEY_DASH_KEEP);
     }
 
     /// True when this turn is a key dash. Those are emitted from the reserved
@@ -305,6 +285,38 @@ impl<'a> Iterator for TurnIter<'a> {
 }
 
 impl Board {
+    /// Turns of the form `[first move, key dash]`, best-first, at most `cap`.
+    ///
+    /// Bounded work: `KEY_DASH_MOVES` post-move boards, each resolving push options
+    /// only for landing nodes that already passed the interest filter. Shared by
+    /// `TurnIter`'s reserved slot and by the search's strictly-additive path, so
+    /// both see exactly the same candidates.
+    pub fn key_dash_turns(&self, c: Color, reasons: u8, cap: usize) -> Vec<Turn> {
+        if reasons == 0 || cap == 0 { return Vec::new(); }
+        let moves: Vec<(u8, Option<u8>)> = self.ordered_first_moves(c);
+        let has_wind = self.holds_charged(c, crate::spells_meta::SEAL_OF_WIND);
+        let mut all: Vec<(i32, Turn)> = Vec::new();
+        for &(n, p) in moves.iter().take(KEY_DASH_MOVES) {
+            let mut b = *self;
+            b.do_move_with_pub(n, p, c);
+            if b.outcome != crate::board::Outcome::Ongoing { continue; }
+            let blink = has_wind && (crate::topology::ADJ[n as usize] & self.mine(c)) == 0;
+            let a = if blink { Action::Blink { node: n, push_to: p } }
+                    else { Action::Move { node: n, push_to: p } };
+            // Ranked across first moves as well as within one, so a strong dash
+            // under the second-best move can outrank a weak one under the best.
+            // `turn_score` already scores the leading move.
+            for (t, _bd, _why) in b.key_dash_branches(c, reasons, cap) {
+                let mut full = Turn::single(a);
+                for act in t.slice() { full = full.push_pub(*act); }
+                all.push((self.turn_score(&full, c), full));
+            }
+        }
+        all.sort_by(|x, y| y.0.cmp(&x.0));
+        all.truncate(cap);
+        all.into_iter().map(|(_, t)| t).collect()
+    }
+
     /// Dash branches from a post-move board, best-first, capped at `limit`.
     /// Sacrifice choice is ordered by giving up our least valuable stones.
     pub fn ordered_dash_branches(&self, c: Color, limit: usize) -> Vec<(Turn, Board)> {

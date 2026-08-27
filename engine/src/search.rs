@@ -122,6 +122,12 @@ pub struct Search {
     /// Which key-dash interest rules are live; see `key_dash`. `0` disables the
     /// reserved slot, leaving the stage ordering untouched.
     key_dash_reasons: u8,
+    /// APPEND up to this many key dashes to the successor list instead of
+    /// reserving slots inside it. Strictly additive: the search still sees every
+    /// turn it saw before, plus the dashes, so a loss here can only be the cost of
+    /// the extra subtrees — never a displaced move. That distinction is what the
+    /// reserved-slot and quota variants could not separate.
+    key_dash_extra: usize,
     /// Reserve the dash slot only where the width budget is at least this.
     ///
     /// The blindness is NOT uniform over the tree. `width_for_depth` gives 40 at
@@ -169,6 +175,7 @@ impl Search {
             legacy_order: false,
             key_dash_reasons: crate::key_dash::REASONS_ALL,
             key_dash_min_width: 0,
+            key_dash_extra: 0,
             merge_min_width: usize::MAX,
         }
     }
@@ -180,12 +187,15 @@ impl Search {
     /// interest rule instead of to "the dash filter" as a whole.
     pub fn set_key_dash_reasons(&mut self, r: u8) { self.key_dash_reasons = r; }
     pub fn set_key_dash_min_width(&mut self, w: usize) { self.key_dash_min_width = w; }
+    /// > 0 switches from reserved slots to the additive path.
+    pub fn set_key_dash_extra(&mut self, n: usize) { self.key_dash_extra = n; }
 
     // Readers, so a harness can REPORT the configuration it is running instead of
     // restating a default that may have drifted.
     pub fn merge_min_width_get(&self) -> usize { self.merge_min_width }
     pub fn key_dash_reasons_get(&self) -> u8 { self.key_dash_reasons }
     pub fn key_dash_min_width_get(&self) -> usize { self.key_dash_min_width }
+    pub fn key_dash_extra_get(&self) -> usize { self.key_dash_extra }
     pub fn legacy_order_get(&self) -> bool { self.legacy_order }
     /// Multiply every widening bound. 1 is the tuned default; raising it trades
     /// depth for breadth and, taken far enough, reaches full enumeration.
@@ -397,12 +407,22 @@ impl Search {
         // budget is wide; deeper nodes keep the cheap ordering.
         let mut v: Vec<Turn>;
         if self.legacy_order || width < self.merge_min_width {
-            let reasons = if self.legacy_order || width < self.key_dash_min_width { 0 }
+            // The additive path takes the stream WITHOUT reserved slots and appends
+            // the key dashes afterwards, so nothing falls out of the budget.
+            let additive = self.key_dash_extra > 0 && !self.legacy_order
+                           && width >= self.key_dash_min_width;
+            let reasons = if additive { 0 }
+                          else if self.legacy_order || width < self.key_dash_min_width { 0 }
                           else { self.key_dash_reasons };
             let mut it = b.turns_ordered_reasons(c, self.window, reasons);
             v = it.by_ref().take(width).collect();
             if it.next().is_some() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }
+            if additive {
+                for t in b.key_dash_turns(c, self.key_dash_reasons, self.key_dash_extra) {
+                    if !v.iter().any(|x| x.slice() == t.slice()) { v.push(t); }
+                }
+            }
         } else {
             let mut it = b.turns_best_first(c, self.window, width);
             v = it.by_ref().take(width).collect();

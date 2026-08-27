@@ -437,3 +437,37 @@ Fixes, both structural rather than a corrected constant:
 This is the second time a stale structural default silently invalidated reported
 numbers (the first was `pick_move_actions` never setting `s.weights`). Both had the
 same shape: a default restated in a second place.
+
+### Per-reason A/B, 250 games per arm, 300 ms/move (2026-08-27)
+
+Every arm is the same binary against the same pre-fix stage ordering, merge held
+off in both sides, colour-swapped and seeded. `min_w` reserves the dash slot only
+where the width budget is at least that.
+
+| rules | min_w | games | score | SE | Elo | depth new/old |
+|---|---|---|---|---|---|---|
+| CRUSH | 0 | 250 | 47.6% | 3.2% | −17 | 5.52 / 5.88 |
+| CRUSH\|SPELL_CRUSH | 0 | 250 | 39.2% | 3.1% | −76 | 5.48 / 5.88 |
+| CRUSH\|SPELL_CRUSH | 16 | 250 | 48.8% | 3.2% | −8 | 5.79 / 5.90 |
+| CRUSH\|SPELL_CRUSH\|FILLS | 0 | 250 | 33.6% | 3.0% | −118 | 5.51 / 5.87 |
+| all five | 0 | 250 | 34.0% | 3.0% | −115 | 5.47 / 5.86 |
+| all five | 16 | 250 | 46.4% | 3.2% | −25 | 5.83 / 5.90 |
+
+Two monotone trends, and neither is noise at this sample size:
+
+* **the more reasons are live, the worse it plays** — CRUSH alone −17, adding
+  SPELL_CRUSH −76, adding FILLS −118;
+* **the more the filter is gated off (`min_w`), the closer to neutral** — the best
+  arms are the ones that do the least.
+
+So the reserved slot is a cost with no measurable payoff, and the payoff is absent
+even for CRUSH, the most tactically justified rule. This is the fourth measured
+attempt at the dash blindness and the fourth regression.
+
+A plausible reading, and one that connects to the eval work rather than the
+ordering work: **a material-only eval cannot price a positional dash.** FILLS is
+worth something only if the cast it enables is worth something, which material
+scoring sees only when the cast wins stones outright; MANA and DOOMED are purely
+positional. Promoting those turns spends budget on moves the leaf evaluation is
+structurally unable to reward — which would also explain why CRUSH, the one rule
+whose payoff IS material, is the least bad.
