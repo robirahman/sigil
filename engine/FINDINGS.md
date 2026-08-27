@@ -356,3 +356,84 @@ Any real fix has to make dash generation cheap, not merely fair.
 
 Kept behind `Search::set_merge_min_width` (default `usize::MAX`, off) so the next
 attempt has a harness. The blindness is real and still unfixed.
+
+## Dash blindness, attempt 3: filter the class instead of quota-ing it (2026-08-27)
+
+Robi's framing, which is what finally worked: do to dashes what was done to Gust —
+don't rank the whole class, GENERATE only the part a human would consider.
+
+A dash earns a slot when it does one of the things players actually dash for:
+
+| reason | test |
+|---|---|
+| `CRUSH` | the dash's move crushes an enemy stone outright |
+| `SPELL_CRUSH` | it leaves MORE enemy stones crushable by an ALREADY-CHARGED spell than the same turn would without dashing |
+| `FILLS` | it lands the last stone of a sigil — dash, fill, cast, one turn |
+| `MANA` | it claims a mana node |
+| `DOOMED` | the stones spent had no escape and were lost anyway |
+
+Two corrections from Robi shaped `SPELL_CRUSH`, and both matter:
+
+1. Not "a 1-node spell" but **any spell already charged that can hard-move**.
+   Carnage, Tsunami, Torrent and Fury all pay for a dash that encircles a group
+   first; a one-node crusher only helps if it happens to be charged already. So the
+   set is classified off the RESOLVER (`Resolve::HardMoves`, `SoftHardChain`,
+   `SurgeMove`, `Fury`, plus the restricted steppers Lurk/Meteor/Comet/Azimuth/
+   Charge/Erupt/Eclipse/Syzygy), not off the spell's sigil size.
+2. The gain must be **marginal**. A dash that seals a stone you could already crush
+   without it has spent two stones for nothing, so the crushable count is compared
+   against the no-dash baseline rather than against zero.
+
+### Measured: the blindness is gone
+
+120 midgame positions sampled from engine-vs-engine play, index of the first dash
+turn in the ordered stream:
+
+| ordering | median | p90 | dash inside width 4 / 6 / 10 |
+|---|---|---|---|
+| stage order (shipped before) | 12 | 171 | 0 / 12 / 37 of 120 |
+| key-dash filter | **3** | **7** | **103 / 103 / 114** of 120 |
+
+The 17 positions with no dash in the first four are positions where nothing passes
+the filter — which is the intent, not a miss.
+
+### Why this differs from the two attempts that lost
+
+Both earlier fixes gave dashes a QUOTA of the width budget (`take_each = width.max(8)`),
+so at width 10 up to two thirds of the budget went to a class that is mostly junk.
+This reserves ONE slot in four (`KEY_DASH_EVERY`), never re-sorts the plain moves,
+and only fills the slot when a dash passes the filter. Displacement is bounded at
+17-25% instead of 66%, and what displaces is a dash that does something.
+
+### Gates
+
+* 58/58 Rust unit tests, including `the_key_dash_filter_never_invents_an_illegal_turn`
+  (promoted dashes must all appear in full enumeration) and
+  `a_key_dash_is_reachable_inside_a_narrow_width_budget`.
+* `parity_primitives` 4,000 positions OK.
+* Emit gate: **4,335 (position, turn) pairs replayed through the real `applyAITurn`,
+  0 mismatches**, 30/30 castable spells covered, 347 dash + 258 sacrifice actions.
+
+## The `hard` arena result was invalid — a Python default re-enabled the regression
+
+`merge_min_width` shipped in `1f61f1f` with the **Rust** default `usize::MAX` (off,
+because the merge is a -285 Elo regression) and a **Python binding** default of
+**32** (on). `vs_caveman.py` passes the argument positionally and never reached it,
+so every cloud arena launched on that commit ran the crippled engine.
+
+That is what the 120-game `hard` campaign measured: 44.2% (53-67) against
+`__ai_hard__`, i.e. ~993 — consistent with the -285 Elo the merge was already known
+to cost, and NOT a strength result. It also explains the apparent non-transitivity
+(beating `positional` and `very_hard` while losing to the weaker `hard`).
+
+Fixes, both structural rather than a corrected constant:
+* `play_best`'s `merge_min_width` and `key_dash_reasons` are now `Option`. Absent
+  means "leave the engine's own default alone", so a binding default cannot drift
+  from the Rust default again.
+* `search_defaults()` reads the knobs off a real `Search`, and `vs_caveman.py`
+  prints an `ENGINE CONFIG` line into every arena log. A result can no longer be
+  ambiguous about which engine produced it.
+
+This is the second time a stale structural default silently invalidated reported
+numbers (the first was `pick_move_actions` never setting `s.weights`). Both had the
+same shape: a default restated in a second place.

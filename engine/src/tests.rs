@@ -963,8 +963,11 @@ fn lazy_iterator_is_ordered_and_cheap_to_start() {
     b.update();
     let first: Vec<Turn> = b.turns_ordered(Color::Red).take(12).collect();
     assert_eq!(first.len(), 12, "iterator yields lazily without materialising");
-    // Stage 1 is [move, pass], so the first turns are two actions long.
-    for t in first.iter().take(4) {
+    // Stage 1 is [move, pass] everywhere except the slots reserved for key dashes.
+    let plain: Vec<&Turn> = first.iter().enumerate()
+        .filter(|(i, _)| (i + 1) % crate::key_dash::KEY_DASH_EVERY != 0)
+        .map(|(_, t)| t).collect();
+    for t in plain.iter().take(4) {
         assert_eq!(t.len, 2, "stage 1 should be move+pass");
         assert!(matches!(t.slice()[1], Action::Pass));
     }
@@ -974,7 +977,7 @@ fn lazy_iterator_is_ordered_and_cheap_to_start() {
             b.move_score(node, push_to, Color::Red),
         _ => i32::MIN,
     };
-    assert!(score(&first[0]) >= score(&first[1]), "stage 1 must be best-first");
+    assert!(score(plain[0]) >= score(plain[1]), "stage 1 must be best-first");
     // Every yielded turn must be applicable and legal.
     for t in &first {
         let mut x = b; x.apply_turn(t, Color::Red);
@@ -1033,4 +1036,58 @@ fn ui_score_matches_what_the_web_ui_renders() {
     // Mate scores land at or above the threshold, so the UI's mate branch is
     // reached only for real mates.
     assert!(ui_score(WIN - MAX_PLY as i32 + 1).abs() >= 37.0);
+}
+
+
+#[test]
+fn a_key_dash_is_reachable_inside_a_narrow_width_budget() {
+    // The regression this whole filter exists for: dashes used to sit at median
+    // index 40 in the stream, so progressive widening (6 near the leaves) never
+    // reached them. A dash must now appear inside the first KEY_DASH_EVERY turns
+    // whenever one qualifies.
+    let mut b = Board::new(Board::legal_draw(7), Variant::Standard);
+    // Red is one stone short of charging sigil 1 and has spare stones to spend.
+    b.stones[0] = (SIGIL[0] & !(1 << n("a2"))) | (1 << n("a11")) | (1 << n("a12"))
+                  | (1 << n("a1"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("c1")) | (1 << n("b8"));
+    b.update();
+    assert!(b.can_dash(Color::Red));
+    let head: Vec<Turn> = b.turns_ordered(Color::Red)
+        .take(crate::key_dash::KEY_DASH_EVERY).collect();
+    let has_dash = head.iter().any(|t|
+        t.slice().iter().any(|a| matches!(a, Action::Dash { .. })));
+    assert!(has_dash, "a qualifying dash must be inside the first {} turns",
+            crate::key_dash::KEY_DASH_EVERY);
+
+    // ... and turning the filter off must reproduce the old stream exactly.
+    let off: Vec<Turn> = b.turns_ordered_reasons(Color::Red, 24, 0).take(24).collect();
+    assert!(!off.iter().take(crate::key_dash::KEY_DASH_EVERY).any(|t|
+        t.slice().iter().any(|a| matches!(a, Action::Dash { .. }))),
+        "reasons == 0 must reproduce the pre-fix stage ordering");
+}
+
+#[test]
+fn the_key_dash_filter_never_invents_an_illegal_turn() {
+    // Every turn the filter promotes must also be a turn full enumeration accepts.
+    for seed in 0..24u64 {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        b.stones[0] = 0b1010110110101u64 ^ (seed * 2654435761);
+        b.stones[1] = (0b0101001001010u64 << 13) ^ (seed * 40503);
+        b.stones[0] &= crate::topology::ALL;
+        b.stones[1] &= crate::topology::ALL & !b.stones[0];
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        if !b.can_dash(Color::Red) { continue; }
+        let (full, st) = b.enumerate_turns(Color::Red);
+        // A truncated enumeration stops mid-way through the FIRST-move loop, so it
+        // is not a complete reference to compare against.
+        if st.truncated { continue; }
+        let norm = |t: &Turn| t.slice().to_vec();
+        let legal: std::collections::HashSet<_> = full.iter().map(norm).collect();
+        for t in b.turns_ordered(Color::Red).take(40) {
+            if !t.slice().iter().any(|a| matches!(a, Action::Dash { .. })) { continue; }
+            assert!(legal.contains(&norm(&t)),
+                    "seed {seed}: promoted dash {:?} is not in full enumeration", t.slice());
+        }
+    }
 }

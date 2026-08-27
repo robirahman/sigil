@@ -19,6 +19,7 @@
 use std::collections::VecDeque;
 use crate::board::{Board, Color};
 use crate::spells_meta::GUST;
+use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP, KEY_DASH_MOVES, REASONS_ALL};
 use crate::turn::{Action, Turn, OUTCOME_CAP};
 
 /// How many outcomes of a single cast to surface. Gust's placements are
@@ -52,11 +53,19 @@ impl Board {
 
     /// Lazy best-first turn generator.
     pub fn turns_ordered(&self, c: Color) -> TurnIter<'_> {
-        TurnIter::new(self, c, CAST_OUTCOME_WINDOW)
+        TurnIter::new(self, c, CAST_OUTCOME_WINDOW, REASONS_ALL)
     }
 
     pub fn turns_ordered_window(&self, c: Color, window: usize) -> TurnIter<'_> {
-        TurnIter::new(self, c, window)
+        TurnIter::new(self, c, window, REASONS_ALL)
+    }
+
+    /// Same stream with an explicit interest-rule set. `reasons == 0` reproduces
+    /// the pre-fix stage ordering exactly, which is what the A/B arena compares to.
+    pub fn turns_ordered_reasons(&self, c: Color, window: usize, reasons: u8)
+        -> TurnIter<'_>
+    {
+        TurnIter::new(self, c, window, reasons)
     }
 }
 
@@ -80,10 +89,17 @@ pub struct TurnIter<'a> {
     /// Set if any stage dropped options because of `window`.
     pub windowed: bool,
     pub yielded: usize,
+    /// Dashes that pass the interest filter, best-first. One of these takes every
+    /// `KEY_DASH_EVERY`-th slot of the stream, so a width-4 budget always contains
+    /// a dash and never loses more than a quarter of itself to the class.
+    key: Vec<Turn>,
+    ki: usize,
+    /// Which interest rules are live. `0` reproduces the pre-fix stage ordering.
+    reasons: u8,
 }
 
 impl<'a> TurnIter<'a> {
-    fn new(board: &'a Board, c: Color, window: usize) -> Self {
+    fn new(board: &'a Board, c: Color, window: usize, reasons: u8) -> Self {
         let mut b = *board;
         b.update();
         // Competitive opening: a free blink onto any empty node, ordered.
@@ -96,6 +112,7 @@ impl<'a> TurnIter<'a> {
                 board, c, window, stage: Stage::Done, moves: Vec::new(), mi: 0,
                 casts: Vec::new(), ci: 0, dashes: VecDeque::new(),
                 pending: VecDeque::new(), windowed: false, yielded: 0,
+                key: Vec::new(), ki: 0, reasons: 0,
             };
             for (n, _, _) in v {
                 it.pending.push_back(Turn::single(Action::Blink { node: n, push_to: None }));
@@ -106,13 +123,48 @@ impl<'a> TurnIter<'a> {
             .into_iter()
             .map(|(n, p)| (n, p, board.is_blink_pub(n, c)))
             .collect();
-        TurnIter {
+        let mut it = TurnIter {
             board, c, window,
             stage: if moves.is_empty() { Stage::Done } else { Stage::Moves },
             moves, mi: 0, casts: Vec::new(), ci: 0,
             dashes: VecDeque::new(), pending: VecDeque::new(),
             windowed: false, yielded: 0,
+            key: Vec::new(), ki: 0, reasons,
+        };
+        it.build_key_dashes();
+        it
+    }
+
+    /// Scan the top few first moves for dashes that pass the interest filter, and
+    /// rank the survivors. Bounded work: `KEY_DASH_MOVES` post-move boards, each
+    /// resolving push options only for landing nodes that already qualified.
+    fn build_key_dashes(&mut self) {
+        if self.reasons == 0 || self.moves.is_empty() { return; }
+        let mut all: Vec<(i32, Turn)> = Vec::new();
+        for i in 0..self.moves.len().min(KEY_DASH_MOVES) {
+            let b = self.post_move_board(i);
+            if b.outcome != crate::board::Outcome::Ongoing { continue; }
+            let a = self.first_action(i);
+            // Ranked across first moves as well as within one, so a strong dash
+            // under the second-best move can outrank a weak one under the best.
+            // `turn_score` already scores the leading move, so there is no separate
+            // base term to add.
+            for (t, _bd, _why) in b.key_dash_branches(self.c, self.reasons, KEY_DASH_KEEP) {
+                let mut full = Turn::single(a);
+                for act in t.slice() { full = full.push_pub(*act); }
+                all.push((self.board.turn_score(&full, self.c), full));
+            }
         }
+        all.sort_by(|x, y| y.0.cmp(&x.0));
+        all.truncate(KEY_DASH_KEEP);
+        self.key = all.into_iter().map(|(_, t)| t).collect();
+    }
+
+    /// True when this turn is a key dash. Those are emitted from the reserved
+    /// slots — or flushed at the end of the stream if the slots ran out — so the
+    /// dash stage must not emit them a second time.
+    fn is_key_dup(&self, t: &Turn) -> bool {
+        self.key.iter().any(|k| k.slice() == t.slice())
     }
 
     fn first_action(&self, i: usize) -> Action {
@@ -190,6 +242,7 @@ impl<'a> TurnIter<'a> {
                 for (t, _bd) in b.ordered_dash_branches(self.c, self.window) {
                     let mut full = Turn::single(a);
                     for act in t.slice() { full = full.push_pub(*act); }
+                    if self.is_key_dup(&full) { continue; }
                     self.pending.push_back(full);
                 }
                 self.mi += 1;
@@ -226,11 +279,27 @@ impl<'a> Iterator for TurnIter<'a> {
     type Item = Turn;
     fn next(&mut self) -> Option<Turn> {
         loop {
+            // Reserved slot: one dash in every KEY_DASH_EVERY of the stream.
+            if self.ki < self.key.len() && (self.yielded + 1) % KEY_DASH_EVERY == 0 {
+                let t = self.key[self.ki];
+                self.ki += 1;
+                self.yielded += 1;
+                return Some(t.push_pub(Action::Pass));
+            }
             if let Some(t) = self.pending.pop_front() {
                 self.yielded += 1;
                 return Some(t.push_pub(Action::Pass));
             }
-            if !self.step() { return None; }
+            if !self.step() {
+                // Never drop a key dash just because the schedule ran out of slots.
+                if self.ki < self.key.len() {
+                    let t = self.key[self.ki];
+                    self.ki += 1;
+                    self.yielded += 1;
+                    return Some(t.push_pub(Action::Pass));
+                }
+                return None;
+            }
         }
     }
 }

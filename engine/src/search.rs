@@ -115,8 +115,13 @@ pub struct Search {
     window: usize,
     width_scale: usize,
     pub weights: crate::eval::Weights,
-    /// A/B switch: true reproduces the pre-fix stage ordering.
+    /// A/B switch: true reproduces the pre-fix stage ordering — stages in order,
+    /// no class merge AND no reserved key-dash slot. This is the baseline every
+    /// ordering change is measured against.
     legacy_order: bool,
+    /// Which key-dash interest rules are live; see `key_dash`. `0` disables the
+    /// reserved slot, leaving the stage ordering untouched.
+    key_dash_reasons: u8,
     /// Merge move classes only when the width budget is at least this.
     ///
     /// DEFAULT `usize::MAX`, i.e. OFF, because the merge is a MEASURED REGRESSION.
@@ -153,6 +158,7 @@ impl Search {
             width_scale: 1,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
+            key_dash_reasons: crate::key_dash::REASONS_ALL,
             merge_min_width: usize::MAX,
         }
     }
@@ -160,6 +166,15 @@ impl Search {
     pub fn set_window(&mut self, w: usize) { self.window = w; }
     pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
+    /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
+    /// interest rule instead of to "the dash filter" as a whole.
+    pub fn set_key_dash_reasons(&mut self, r: u8) { self.key_dash_reasons = r; }
+
+    // Readers, so a harness can REPORT the configuration it is running instead of
+    // restating a default that may have drifted.
+    pub fn merge_min_width_get(&self) -> usize { self.merge_min_width }
+    pub fn key_dash_reasons_get(&self) -> u8 { self.key_dash_reasons }
+    pub fn legacy_order_get(&self) -> bool { self.legacy_order }
     /// Multiply every widening bound. 1 is the tuned default; raising it trades
     /// depth for breadth and, taken far enough, reaches full enumeration.
     pub fn set_width_scale(&mut self, s: usize) { self.width_scale = s.max(1); }
@@ -370,7 +385,8 @@ impl Search {
         // budget is wide; deeper nodes keep the cheap ordering.
         let mut v: Vec<Turn>;
         if self.legacy_order || width < self.merge_min_width {
-            let mut it = b.turns_ordered_window(c, self.window);
+            let reasons = if self.legacy_order { 0 } else { self.key_dash_reasons };
+            let mut it = b.turns_ordered_reasons(c, self.window, reasons);
             v = it.by_ref().take(width).collect();
             if it.next().is_some() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }

@@ -74,6 +74,12 @@ OPPONENTS = {
                        evalWeights={'mana': 0.0, 'voidPenalty': 0.0, 'mapControl': 0.0246}),
 }
 
+# Ordering knobs, so an arena can A/B them without a rebuild. Unset means "use the
+# engine's own default" — never restate one here.
+KEY_DASH = os.environ.get('KEY_DASH')          # 'off' | a REASON_* bitmask | unset
+_REASONS = None if KEY_DASH in (None, '', 'on') else (0 if KEY_DASH == 'off'
+                                                      else int(KEY_DASH))
+
 def game(seed, rust_color, ms, cav, width_scale=1, eval_name="material",
          max_plies=140, opp='very_hard'):
     draw = se.Board.legal_draw(seed)
@@ -88,8 +94,9 @@ def game(seed, rust_color, ms, cav, width_scale=1, eval_name="material",
         if side == rust_color:
             rb = se.Board.from_sfn(state_to_sfn(st, names))
             hist.append(rb.key_js)
-            d, nodes, dt, over, w, sc, wd = rb.play_best(ms, 64, 20, 16, width_scale,
-                                                         hist, eval_name)
+            d, nodes, dt, over, w, sc, wd = rb.play_best(
+                ms, 64, 20, 16, width_scale, hist, eval_name,
+                key_dash_reasons=_REASONS)
             rd.append(d)
             st = board_to_state(rb)
             if over: return (w, ply+1, rd, cd)
@@ -134,6 +141,12 @@ if __name__ == "__main__":
           f"unfinished={unfinished} plies={statistics.mean(plies):.1f} "
           f"rdepth={statistics.mean(rdepth) if rdepth else 0:.2f} "
           f"cdepth={statistics.mean(cdepth) if cdepth else 0:.2f}")
+    cfg = se.search_defaults()
+    mmw = cfg['merge_min_width']
+    print("  ENGINE CONFIG  merge_min_width="
+          + ("OFF" if mmw >= (1 << 63) else str(mmw))
+          + f"  key_dash_reasons={_REASONS if _REASONS is not None else cfg['key_dash_reasons']}"
+          + f"  legacy_order={bool(cfg['legacy_order'])}")
     print(f"Rust({ev}, {ms} ms) vs deployed JS '{opp}' "
           f"({OPPONENTS[opp]['timeLimit']} s"
           f"{', mc=0.0246' if OPPONENTS[opp]['evalWeights'] else ', pure stone-count'})"

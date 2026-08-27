@@ -32,7 +32,7 @@ use crate::topology::ADJ;
 
 pub const MAX_ACTIONS: usize = 8;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Action {
     /// Competitive-variant opening, or a Wind blink onto a non-adjacent node.
     Blink { node: u8, push_to: Option<u8> },
