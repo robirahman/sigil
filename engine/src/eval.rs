@@ -231,7 +231,15 @@ pub const fn scaled_structural(num: i32, den: i32) -> Weights {
 }
 
 /// Sweep points. `s04` is roughly the production 0.96-stone budget; `s100` is the
-/// current structural default.
+/// current structural default. Measured at 300 ms, colour-swapped, vs material:
+/// s04 +93, s12 +84, s25 +22, s50 -44, s100 -247 Elo -- a clean monotone curve with
+/// the optimum at or BELOW 4%, which is to say right at the budget
+/// `cavemanCapWeights` already enforced. So the finer points below extend the sweep
+/// downward rather than upward.
+pub const STRUCT_01: Weights = scaled_structural(1, 100);
+pub const STRUCT_02: Weights = scaled_structural(2, 100);
+pub const STRUCT_06: Weights = scaled_structural(6, 100);
+pub const STRUCT_08: Weights = scaled_structural(8, 100);
 pub const STRUCT_04: Weights = scaled_structural(4, 100);
 pub const STRUCT_12: Weights = scaled_structural(12, 100);
 pub const STRUCT_25: Weights = scaled_structural(25, 100);

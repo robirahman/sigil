@@ -79,7 +79,7 @@ if __name__ == "__main__":
     out = os.path.join(out_dir, f"positions_{off}.npz")
 
     rng = random.Random(12345 + off)
-    H, F, S, P, R, Y = [], [], [], [], [], []
+    H, F, S, P, R, Y, G = [], [], [], [], [], [], []
     kept = dropped = 0
     for i in range(games):
         seed = 9_000_000 + off + i
@@ -91,7 +91,7 @@ if __name__ == "__main__":
         kept += 1
         for ply, is_red, hand, full in rows:
             H.append(hand); F.append(full); S.append(spells)
-            P.append(ply); R.append(is_red)
+            P.append(ply); R.append(is_red); G.append(off * 1_000_000 + i)
             # y = 1 if the SIDE TO MOVE at this position went on to win.
             Y.append(1 if (winner == 'red') == bool(is_red) else 0)
         if (i + 1) % 200 == 0:
@@ -102,6 +102,7 @@ if __name__ == "__main__":
         hand=np.asarray(H, dtype=np.int32), full=np.asarray(F, dtype=np.float32),
         spells=np.asarray(S, dtype=np.uint8), ply=np.asarray(P, dtype=np.int16),
         is_red=np.asarray(R, dtype=np.uint8), y=np.asarray(Y, dtype=np.uint8),
+        game=np.asarray(G, dtype=np.int64),
         hand_names=np.asarray(se.HAND_FEATURE_NAMES))
     print(f"WROTE {out}: {len(Y)} positions from {kept} games "
           f"({dropped} unfinished dropped), depth {depth}, random_ply {rpct}")

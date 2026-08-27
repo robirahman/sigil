@@ -1101,7 +1101,9 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
     use crate::features::N_HAND;
     let sets = [crate::eval::Weights::default(), crate::eval::MATERIAL_ONLY,
                 crate::eval::MATERIAL_TEMPO, crate::eval::STRUCTURAL_NO_TEMPO,
-                crate::eval::STRUCT_04, crate::eval::STRUCT_12,
+                crate::eval::STRUCT_01, crate::eval::STRUCT_02,
+                crate::eval::STRUCT_04, crate::eval::STRUCT_06,
+                crate::eval::STRUCT_08, crate::eval::STRUCT_12,
                 crate::eval::STRUCT_25, crate::eval::STRUCT_50,
                 crate::eval::CLASSIC,
                 crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
