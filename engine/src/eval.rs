@@ -74,8 +74,10 @@ pub struct Weights {
     pub tempo: i32,
 }
 
-impl Default for Weights {
-    fn default() -> Self {
+impl Weights {
+    /// `const` twin of `Default::default`, so const presets can build on it.
+    /// `Default` delegates here, so the two cannot drift apart.
+    pub const fn default_const() -> Weights {
         Weights {
             lead: 100,
             near_threshold: 150,
@@ -92,6 +94,10 @@ impl Default for Weights {
             tempo: 50,
         }
     }
+}
+
+impl Default for Weights {
+    fn default() -> Self { Weights::default_const() }
 }
 
 /// Robi's classic positional recipe, at the scale he actually used: material plus
@@ -124,6 +130,13 @@ pub const MATERIAL_ONLY: Weights = Weights {
 /// Material only PLUS the tempo correction: the minimal change that removes the
 /// one-stone-per-ply square wave, and the first thing to gate.
 pub const MATERIAL_TEMPO: Weights = Weights { tempo: 50, ..MATERIAL_ONLY };
+
+/// The structural set with the tempo correction REMOVED, so an arena can isolate
+/// what the correction is worth inside a rich eval. This is the configuration that
+/// scored 22.5% against material-only; the open question is whether it lost because
+/// its terms are wrong or because it was riding a one-stone-per-ply square wave
+/// (its wave measured 152 centistones/ply, worse than material's 96).
+pub const STRUCTURAL_NO_TEMPO: Weights = Weights { tempo: 0, ..Weights::default_const() };
 
 
 // ===================== caveman-faithful positional eval =====================

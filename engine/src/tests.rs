@@ -1100,7 +1100,8 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
     // fitted weight vector would silently mean something else.
     use crate::features::N_HAND;
     let sets = [crate::eval::Weights::default(), crate::eval::MATERIAL_ONLY,
-                crate::eval::MATERIAL_TEMPO, crate::eval::CLASSIC,
+                crate::eval::MATERIAL_TEMPO, crate::eval::STRUCTURAL_NO_TEMPO,
+                crate::eval::CLASSIC,
                 crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
                 crate::eval::CAPPED_MIX];
     for seed in 0..40u64 {

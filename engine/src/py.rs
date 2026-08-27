@@ -556,6 +556,7 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
         "default" | "structural" => crate::eval::Weights::default(),
         "material" => crate::eval::MATERIAL_ONLY,
         "mtempo" => crate::eval::MATERIAL_TEMPO,
+        "snotempo" => crate::eval::STRUCTURAL_NO_TEMPO,
         "classic" => crate::eval::CLASSIC,
         "mana" => crate::eval::MANA_ONLY,
         "mc" => crate::eval::CAPPED_MC,
@@ -564,7 +565,7 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
         "control" => crate::eval::CONTROL_ONLY,
         other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, classic, mana, mc, manavoid, mix, control"))),
+             material, mtempo, snotempo, classic, mana, mc, manavoid, mix, control"))),
     })
 }
 
