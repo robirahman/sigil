@@ -115,8 +115,13 @@ for arm in $ARMS; do
   # and leaving slashes in made every shard die with "No such file or directory".
   tag=$(echo "$arm" | tr -c 'A-Za-z0-9_.-' '_' | sed 's/__*/_/g; s/^_//; s/_$//')
   for ((w=0; w<WORKERS; w++)); do
-    ( $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
-        $(echo "$arm" | tr ',' ' ') $((w*1000)) \
+    # The offset goes in the ENVIRONMENT. Appending it to argv silently failed for
+    # every ab_eval arm that also passed an optional trailing argument: the offset
+    # landed past the last position the harness reads, all shards ran identical
+    # seeds, and the reported "n" was replication rather than sample size.
+    ( SIGIL_SHARD_OFF=$((w*1000)) \
+      $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
+        $(echo "$arm" | tr ',' ' ') \
         > "$WORK/out/arm${ai}_${tag}_w${w}.log" 2>&1 ) &
     PIDS+=($!)
   done

@@ -22,7 +22,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
-from sprt import Sprt
+from sprt import Sprt, shard_offset
 
 MERGE_OFF = 1 << 62      # the class merge is a known -285 Elo regression
 
@@ -49,7 +49,7 @@ def game(seed, slow_color, base_ms, mult, eval_name, max_plies=140):
 if __name__ == "__main__":
     pairs = int(sys.argv[1]); base = int(sys.argv[2])
     mult = int(sys.argv[3]); ev = sys.argv[4]
-    off = int(sys.argv[5]) if len(sys.argv) > 5 else 0
+    off = shard_offset(sys.argv[5] if len(sys.argv) > 5 else None)
 
     cfg = se.search_defaults()
     mmw = cfg['merge_min_width']

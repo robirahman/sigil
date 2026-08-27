@@ -23,7 +23,7 @@ Colours are still swapped in pairs by the callers: Sigil is NOT colour-symmetric
 colour split biases the result. LLR is accumulated per GAME; pairing only keeps the
 colour counts equal.
 """
-import math
+import math, os
 
 
 def elo_to_p(elo):
@@ -119,3 +119,23 @@ def replay(results, elo0=0.0, elo1=25.0):
         if stop_at is None and s.verdict != 'continue':
             stop_at = (s.n, s.verdict)
     return s, stop_at
+
+
+def shard_offset(argv_fallback=None):
+    """Seed offset for this shard, from SIGIL_SHARD_OFF.
+
+    NEVER take this from a positional argument. It used to be appended by the cloud
+    runner as the last argv element, but `ab_eval.py` read argv[5] as the offset and
+    argv[6] as the mode -- so an arm passing both explicitly pushed the real offset to
+    argv[7], where nothing read it. All 14 shards then ran the SAME seeds and produced
+    byte-identical games, so a reported "56 games" was FOUR distinct games replicated
+    fourteen times. SPRT assumes independent trials, so every verdict computed that
+    way was invalid and every confidence interval was too narrow by roughly the
+    square root of the worker count.
+    """
+    v = os.environ.get('SIGIL_SHARD_OFF')
+    if v is not None and v != '':
+        return int(v)
+    if argv_fallback is not None:
+        return int(argv_fallback)
+    return 0

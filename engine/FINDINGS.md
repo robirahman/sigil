@@ -726,3 +726,56 @@ A depth-7 search absorbs ~44% of what the static features know; ~56% survives. T
 residual is small in log-loss and large in Elo, which is the point: log-loss on
 isolated positions understates an eval applied at millions of leaves, because
 alpha-beta compounds leaf error. The arena is the instrument for eval value.
+
+## RETRACTION: every ab_eval sample size was replication, not independence
+
+`ab_eval.py` read `off = argv[5]` and `mode = argv[6]`, while the cloud runner
+appended each shard's seed offset as the LAST argv element. Any arm that passed
+`mode` explicitly -- which all of them did -- pushed the real offset to `argv[7]`,
+where nothing read it. **Every shard therefore ran the same seeds.** At 60 s/move the
+14 shards produced byte-identical games, verified by diffing two shard logs.
+
+So a reported "56 games" was **four distinct games replicated fourteen times**. SPRT
+assumes independent trials, so every SPRT verdict computed on an `ab_eval` run was
+invalid, and every confidence interval was too narrow by roughly sqrt(workers).
+Distinct games = reported n / workers.
+
+Re-analysed by deduplicating on (seed, colour):
+
+| run | shape | ms | reported | distinct | score | Elo | 95% CI |
+|---|---|---|---|---|---|---|---|
+| shape | `tfit` | 300 | 1200 | **300** | 57.7% | **+54** | [+14,+94] |
+| shape | `tflip` | 300 | 1048 | **300** | 42.3% | **−54** | [−94,−14] |
+| shape | `hand` | 300 | 1170 | **300** | 54.3% | +30 | [−9,+70] |
+| shape | `tfit` | 3000 | 200 | 50 | 62.0% | +85 | [−10,+195] |
+| longtc | `tfit` | 3000 | 450 | 50 | 68.0% | +131 | [+35,+251] |
+| longtc | `tfit` | 10000 | 126 | 14 | 64.3% | +102 | [−76,+370] |
+| gate60 | `tfit` | 30000 | 112 | 8 | 50.0% | 0 | uninformative |
+| gate60 | `tfit` | 60000 | 56 | **4** | 100% | — | worthless |
+
+### What survives and what does not
+
+SURVIVES: **`tfit` beats material at 300 ms, +54 Elo [+14,+94] over 300 distinct
+games**, and **`tflip` is genuinely bad, −54 [−94,−14]** -- so the texel fit's
+MAGNITUDES help and its SIGNS hurt. Both rest on 300 independent games.
+
+WEAKLY SUPPORTED: `tfit` at 3 s. Two independent 50-game samples, +85 [−10,+195] and
++131 [+35,+251]; pooled over 100 distinct games it is plausibly around +105, and both
+samples point the same way.
+
+WITHDRAWN: "+112 Elo at 3 s, +159 at 10 s, and the gain GROWS with time control", and
+the 60 s figure entirely. The 10 s estimate rests on 14 games and the 60 s on 4.
+**There is still no valid measurement at Robi's 60 s/move acceptance gate.**
+
+Also withdrawn: the claim that the hand magnitudes DECAY with depth while the fitted
+ones GROW. At honest sample sizes the long-TC arms cannot separate those hypotheses.
+
+### The fix
+
+The shard offset now travels in `$SIGIL_SHARD_OFF`, set by the runner, read by
+`sprt.shard_offset()`. It can no longer depend on argv position. `ab_eval.py` also
+prints its seed RANGE at startup, so two shards sharing seeds is visible in the log
+rather than silently halving the information content.
+
+This is the fifth "value written down in two places" failure in this project, and the
+first that corrupted results rather than merely wasting time or money.

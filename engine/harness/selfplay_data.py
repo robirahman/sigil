@@ -34,6 +34,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
+from sprt import shard_offset
 
 MERGE_OFF = 1 << 62
 # Checkpoint cadence. Small enough that a watchdog kill costs little, large enough
@@ -79,7 +80,7 @@ def play_one(seed, depth, rng, random_ply_pct, competitive):
 if __name__ == "__main__":
     games = int(sys.argv[1]); depth = int(sys.argv[2]); out_dir = sys.argv[3]
     rpct = float(sys.argv[4]) if len(sys.argv) > 4 else 0.08
-    off = int(sys.argv[5]) if len(sys.argv) > 5 else 0
+    off = shard_offset(sys.argv[5] if len(sys.argv) > 5 else None)
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, f"positions_{off}.npz")
 

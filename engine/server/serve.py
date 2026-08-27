@@ -125,11 +125,12 @@ def main():
     ap.add_argument('--eval', default='tfit',
                     choices=sorted(se.EVAL_NAMES),
                     help="leaf eval preset; enumerated from the engine, never "
-                         "restated here. 'tfit' is the default: measured +42 Elo "
-                         "at 300 ms, +112 at 3 s and +159 at 10 s over 'material', "
-                         "SPRT-accepted, and the gain GROWS with time control. The "
-                         "60 s/move gate is still pending. Pass --eval material "
-                         "for the previous behaviour.")
+                         "restated here. 'tfit' beats 'material' by +54 Elo "
+                         "[+14,+94] over 300 DISTINCT games at 300 ms, and is "
+                         "ahead at 3 s on two independent 50-game samples (+85, "
+                         "+131). Longer time controls are NOT yet measured with "
+                         "independent seeds. Pass --eval material for the "
+                         "previous behaviour.")
     ap.add_argument('--verbose', action='store_true')
     ARGS = ap.parse_args()
     if ARGS.docs is None:

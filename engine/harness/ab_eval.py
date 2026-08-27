@@ -1,6 +1,8 @@
 """A/B two eval presets head-to-head under SPRT, at matched TIME and matched NODES.
 
-    ab_eval.py <pairs> <ms> <arm_eval> <base_eval> [seed_offset] [mode]
+    ab_eval.py <pairs> <ms> <arm_eval> <base_eval> [mode]
+
+The shard's seed offset comes from $SIGIL_SHARD_OFF, never a positional argument.
 
     mode = time  (default) both sides get `ms` milliseconds
          = nodes both sides get a fixed DEPTH instead, so the comparison is
@@ -19,7 +21,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
-from sprt import Sprt
+from sprt import Sprt, shard_offset
 
 MERGE_OFF = 1 << 62
 
@@ -49,8 +51,9 @@ def game(seed, arm_color, ms, arm_eval, base_eval, mode, max_plies=140):
 if __name__ == "__main__":
     pairs = int(sys.argv[1]); ms = int(sys.argv[2])
     arm_eval = sys.argv[3]; base_eval = sys.argv[4]
-    off = int(sys.argv[5]) if len(sys.argv) > 5 else 0
-    mode = sys.argv[6] if len(sys.argv) > 6 else 'time'
+    mode = sys.argv[5] if len(sys.argv) > 5 else 'time'
+    # From the environment, never from argv position -- see shard_offset().
+    off = shard_offset(sys.argv[6] if len(sys.argv) > 6 else None)
 
     cfg = se.search_defaults()
     mmw = cfg['merge_min_width']
@@ -59,6 +62,9 @@ if __name__ == "__main__":
           f"merge_min_width={'OFF' if mmw >= (1<<63) else mmw} "
           f"key_dash_reasons={cfg['key_dash_reasons']} "
           f"key_dash_extra={cfg['key_dash_extra']}", flush=True)
+    print(f"  SEEDS  {8_000_000 + off}..{8_000_000 + off + pairs - 1} "
+          f"(shard offset {off}) -- two shards sharing a range replicate games "
+          f"and invalidate the statistics", flush=True)
 
     s = Sprt(elo0=0.0, elo1=25.0)
     plies = []; dep = {'arm': [], 'base': []}
