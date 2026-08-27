@@ -79,10 +79,16 @@ $WORK/venv/bin/pip -q install --upgrade pip maturin numpy 2>&1 | tail -1
 cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2
 export SCRATCH=$WORK
 
+# Uploads .npz as well as logs. Data-generation shards checkpoint their npz in
+# place, so shipping them continuously is what makes a watchdog kill survivable:
+# an earlier depth-8 run lost 90 minutes across 28 shards because nothing left the
+# VM until the very end.
 ( while true; do
     for f in $WORK/out/*.log $WORK/out/*.txt; do [ -e "$f" ] || continue
       gcs_put "$f" "runs/$RUN/live/$(basename "$f")" 2>/dev/null || true; done
-    sleep 60; done ) &
+    for f in $WORK/out/*.npz $WORK/out/data/*.npz; do [ -e "$f" ] || continue
+      gcs_put "$f" "runs/$RUN/data/$(basename "$f")" 2>/dev/null || true; done
+    sleep 120; done ) &
 UPLOADER=$!
 
 if [ -n "$SMOKE" ]; then

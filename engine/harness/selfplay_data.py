@@ -36,6 +36,9 @@ sys.path.insert(0, _HERE)
 import sigil_engine as se
 
 MERGE_OFF = 1 << 62
+# Checkpoint cadence. Small enough that a watchdog kill costs little, large enough
+# that recompressing the whole array is not the bottleneck.
+CHECKPOINT_GAMES = 20
 # Positions are dumped from every ply, but the consumer weights plies ~5-22: with
 # depth 10-12 over a 34.5-ply game the engine is already near-exact over the last
 # third, so that is where the evaluation earns its keep.
@@ -83,6 +86,19 @@ if __name__ == "__main__":
     rng = random.Random(12345 + off)
     H, F, S, P, R, Y, G, Q = [], [], [], [], [], [], [], []
     kept = dropped = 0
+
+    def write(n):
+        # Rewritten in place every CHECKPOINT_GAMES, so a shard cut short by the
+        # VM watchdog still yields everything it had finished. An earlier run wrote
+        # only at the end and lost 90 minutes of compute across 28 shards.
+        np.savez_compressed(
+            out,
+            hand=np.asarray(H, dtype=np.int32), full=np.asarray(F, dtype=np.float32),
+            spells=np.asarray(S, dtype=np.uint8), ply=np.asarray(P, dtype=np.int16),
+            is_red=np.asarray(R, dtype=np.uint8), y=np.asarray(Y, dtype=np.uint8),
+            game=np.asarray(G, dtype=np.int64),
+            score=np.asarray(Q, dtype=np.float32),
+            hand_names=np.asarray(se.HAND_FEATURE_NAMES))
     for i in range(games):
         seed = 9_000_000 + off + i
         competitive = (i % 4 == 0)      # a quarter of games use the free opening
@@ -97,16 +113,13 @@ if __name__ == "__main__":
             Q.append(q)
             # y = 1 if the SIDE TO MOVE at this position went on to win.
             Y.append(1 if (winner == 'red') == bool(is_red) else 0)
-        if (i + 1) % 200 == 0:
-            print(f"  {i+1}/{games} games, {len(Y)} positions", flush=True)
+        if (i + 1) % CHECKPOINT_GAMES == 0:
+            write(len(Y))
+            print(f"  {i+1}/{games} games, {len(Y)} positions (checkpointed)",
+                  flush=True)
 
-    np.savez_compressed(
-        out,
-        hand=np.asarray(H, dtype=np.int32), full=np.asarray(F, dtype=np.float32),
-        spells=np.asarray(S, dtype=np.uint8), ply=np.asarray(P, dtype=np.int16),
-        is_red=np.asarray(R, dtype=np.uint8), y=np.asarray(Y, dtype=np.uint8),
-        game=np.asarray(G, dtype=np.int64),
-        score=np.asarray(Q, dtype=np.float32),
-        hand_names=np.asarray(se.HAND_FEATURE_NAMES))
+    write(len(Y))
     print(f"WROTE {out}: {len(Y)} positions from {kept} games "
           f"({dropped} unfinished dropped), depth {depth}, random_ply {rpct}")
+
+
