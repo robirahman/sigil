@@ -1,6 +1,6 @@
 """C1: generate self-play positions labelled with the eventual game outcome.
 
-    selfplay_data.py <games> <depth> <out_dir> <random_ply_pct> [seed_offset]
+    selfplay_data.py <games> <depth> <out_dir> <random_ply_pct> [eval] [rank_every]
 
 `seed_offset` is LAST so the argument list composes with the generic cloud runner,
 which appends the shard offset. Each shard writes `<out_dir>/positions_<offset>.npz`.
@@ -45,18 +45,19 @@ CHECKPOINT_GAMES = 20
 # third, so that is where the evaluation earns its keep.
 
 
-def play_one(seed, depth, rng, random_ply_pct, competitive):
+def play_one(seed, depth, rng, random_ply_pct, competitive, ev='material', rank_every=0):
     variant = "competitive" if competitive else "standard"
     b = se.Board(se.Board.legal_draw(seed), variant)
     b.setup_initial()
     spells = b.spell_ids()
-    rows = []          # (ply, side_is_red, hand, full, search_score)
+    rows = []          # (ply, side_is_red, hand, full, search_score, best_rank)
     hist = []
     for ply in range(140):
-        side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
+        sfn_before = b.to_sfn()
+        side = 'red' if sfn_before.split()[1] == 'r' else 'blue'
         # Record BEFORE moving, from the side-to-move's point of view.
         row = [ply, 1 if side == 'red' else 0,
-               b.hand_features(side), b.full_features(side), float('nan')]
+               b.hand_features(side), b.full_features(side), float('nan'), -1]
         rows.append(row)
         hist.append(b.key_js)
         if rng.random() < random_ply_pct:
@@ -70,8 +71,18 @@ def play_one(seed, depth, rng, random_ply_pct, competitive):
                 b.advance_turn()
                 continue    # row keeps NaN: no search was run for this position
         d, n, dt, over, w, sc, wd = b.play_best(
-            0, depth, 20, 16, 1, hist, "material", False, MERGE_OFF)
+            0, depth, 20, 16, 1, hist, ev, False, MERGE_OFF)
         row[4] = float(sc)          # the depth-`depth` score for THIS position
+        # POLICY LABEL: where the chosen turn sits in the current ordering. The
+        # search expands only the first 6-40 successors, so if this is routinely
+        # large the engine is losing to move SELECTION, and a learned prior over
+        # turns is worth more than a better leaf evaluation.
+        if rank_every > 0 and ply % rank_every == 0:
+            try:
+                rk, _gen, _d, _n = se.best_turn_rank(sfn_before, depth, 0, ev, 400, 1)
+                row[5] = int(rk)
+            except Exception:
+                pass
         if over:
             return rows, w, spells
     return rows, None, spells
@@ -80,12 +91,14 @@ def play_one(seed, depth, rng, random_ply_pct, competitive):
 if __name__ == "__main__":
     games = int(sys.argv[1]); depth = int(sys.argv[2]); out_dir = sys.argv[3]
     rpct = float(sys.argv[4]) if len(sys.argv) > 4 else 0.08
-    off = shard_offset(sys.argv[5] if len(sys.argv) > 5 else None)
+    ev = sys.argv[5] if len(sys.argv) > 5 else "tfit"
+    rank_every = int(sys.argv[6]) if len(sys.argv) > 6 else 3
+    off = shard_offset()      # env only; argv positions are for real arguments
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, f"positions_{off}.npz")
 
     rng = random.Random(12345 + off)
-    H, F, S, P, R, Y, G, Q = [], [], [], [], [], [], [], []
+    H, F, S, P, R, Y, G, Q, K = [], [], [], [], [], [], [], [], []
     kept = dropped = 0
 
     def write(n):
@@ -99,19 +112,21 @@ if __name__ == "__main__":
             is_red=np.asarray(R, dtype=np.uint8), y=np.asarray(Y, dtype=np.uint8),
             game=np.asarray(G, dtype=np.int64),
             score=np.asarray(Q, dtype=np.float32),
+            best_rank=np.asarray(K, dtype=np.int16),
             hand_names=np.asarray(se.HAND_FEATURE_NAMES))
     for i in range(games):
         seed = 9_000_000 + off + i
         competitive = (i % 4 == 0)      # a quarter of games use the free opening
-        rows, winner, spells = play_one(seed, depth, rng, rpct, competitive)
+        rows, winner, spells = play_one(seed, depth, rng, rpct, competitive,
+                                        ev, rank_every)
         if winner not in ('red', 'blue'):
             dropped += 1                # unfinished games carry no label
             continue
         kept += 1
-        for ply, is_red, hand, full, q in rows:
+        for ply, is_red, hand, full, q, rk in rows:
             H.append(hand); F.append(full); S.append(spells)
             P.append(ply); R.append(is_red); G.append(off * 1_000_000 + i)
-            Q.append(q)
+            Q.append(q); K.append(rk)
             # y = 1 if the SIDE TO MOVE at this position went on to win.
             Y.append(1 if (winner == 'red') == bool(is_red) else 0)
         if (i + 1) % CHECKPOINT_GAMES == 0:

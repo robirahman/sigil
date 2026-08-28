@@ -635,6 +635,42 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
 /// negative integer division while Rust truncates toward zero, so an analysis
 /// script that re-derives `scaled_structural` disagrees with the engine on every
 /// negative weight. That produced a wrong term list the first time it was reported.
+/// Where the search's chosen turn sits in the CURRENT move ordering, and how many
+/// turns the ordered generator can produce.
+///
+/// This is the cheapest possible measurement of how much a learned policy could be
+/// worth. Progressive widening expands only the first 6-40 successors; if the move
+/// the search actually wants is routinely ranked far below that, the engine is
+/// losing games to move SELECTION rather than to evaluation or depth -- which is
+/// what the widening arena implies, since raising `width_scale` wins even while
+/// giving up a full ply of depth.
+///
+/// Returns (rank, generated, depth, nodes). `rank` is -1 when the chosen turn is
+/// not found within `cap` (it exists, but far down the stream).
+#[pyfunction]
+#[pyo3(signature = (sfn, max_depth=6, time_ms=0, eval_name="tfit", cap=400, width_scale=1))]
+fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
+                  cap: usize, width_scale: usize)
+    -> PyResult<(i64, usize, i32, u64)>
+{
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    let mut s = crate::search::Search::new(20);
+    s.set_width_scale(width_scale);
+    s.weights = weights_by_name(eval_name)?;
+    let (best, _score, st) = s.go(&b, c, max_depth, time_ms);
+    let Some(best) = best else { return Ok((-1, 0, st.depth_completed, st.nodes)) };
+    let want = best.slice().to_vec();
+    let mut rank: i64 = -1;
+    let mut generated = 0usize;
+    for (i, t) in b.turns_ordered(c).take(cap).enumerate() {
+        generated = i + 1;
+        if t.slice().to_vec() == want { rank = i as i64; break; }
+    }
+    Ok((rank, generated, st.depth_completed, st.nodes))
+}
+
 #[pyfunction]
 fn eval_weights(name: &str) -> PyResult<std::collections::HashMap<String, i32>> {
     let w = weights_by_name(name)?;
@@ -671,6 +707,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
+    m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
