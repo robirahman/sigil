@@ -712,6 +712,10 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
+    // Exported so a harness uses the SHIPPED widening scale as its baseline rather
+    // than restating 1. Every eval arena so far ran at scale 1 because the harness
+    // hardcoded it, which is fine historically but would confound any future test.
+    m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()

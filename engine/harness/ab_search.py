@@ -25,16 +25,28 @@ import sigil_engine as se
 from sprt import Sprt, shard_offset
 
 MERGE_OFF = 1 << 62
-KNOBS = ('q_depth', 'aspiration', 'width_scale')
+# Baseline widening comes from the ENGINE, not a literal: the shipped scale is now 4,
+# and a harness that hardcoded 1 would silently test every other knob under the old,
+# far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
+BASE_WS = se.DEFAULT_WIDTH_SCALE
+KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
+         'key_dash_extra', 'key_dash_min_width')
 
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
-    ws = val if knob == 'width_scale' else 1
+    ws = val if knob == 'width_scale' else BASE_WS
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
-    return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, MERGE_OFF,
-                       None, None, None, qd, None, asp)
+    merge = val if knob == 'merge_min_width' else MERGE_OFF
+    # key_dash needs BOTH its reason mask and its slot count to do anything, so the
+    # extra/min_width knobs turn on CRUSH-only reasons, the one rule that was not
+    # harmful at scale 1.
+    kdr = 1 if knob in ('key_dash_extra', 'key_dash_min_width') else None
+    kdx = val if knob == 'key_dash_extra' else None
+    kdmw = val if knob == 'key_dash_min_width' else None
+    return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
+                       kdr, kdmw, kdx, qd, None, asp)
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
@@ -62,6 +74,7 @@ if __name__ == "__main__":
 
     cfg = se.search_defaults()
     print(f"  ENGINE CONFIG  eval={ev} knob={knob} arm={arm_val} base={base_val} "
+          f"base_width_scale={BASE_WS} "
           f"ms={ms} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "
           f"defaults(q_depth={cfg['q_depth']}, aspiration={cfg['aspiration']})",
