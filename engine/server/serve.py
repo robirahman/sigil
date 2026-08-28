@@ -121,7 +121,11 @@ def main():
     ap.add_argument('--docs', default=None, help="path to the repo's docs/ directory")
     ap.add_argument('--port', type=int, default=8000)
     ap.add_argument('--time', type=int, default=60, help='seconds per move')
-    ap.add_argument('--width-scale', type=int, default=1)
+    ap.add_argument('--width-scale', type=int, default=4, dest='width_scale',
+                    help="multiplier on the progressive-widening schedule. 4 is "
+                         "the measured default: +47 Elo at 300 ms and +223 at 3 s "
+                         "over the old value of 1, peaking at 4-6. It gives up "
+                         "~2 plies of depth to do it")
     ap.add_argument('--eval', default='tfit',
                     choices=sorted(se.EVAL_NAMES),
                     help="leaf eval preset; enumerated from the engine, never "

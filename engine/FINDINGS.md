@@ -834,3 +834,46 @@ would be worth the DEPTH that widening spends: reaching the same coverage at wid
 ~20 instead of ~120 gives back the ply that scale 3 costs. That is a real prize, and
 it is bounded by that ply rather than by the 11% coverage gap, which brute widening
 already closes.
+
+## SHIPPED: width_scale 4, and the 60 s gate passes
+
+Full widening sweep vs scale 1, eval `tfit`, colour-swapped, SPRT, all H1:
+
+| scale | 300 ms | 3000 ms |
+|---|---|---|
+| 2 | +29 [+8,+51] | +107 [+54,+165] |
+| 3 | +38 [+20,+58] | +144 [+90,+206] |
+| **4** | +47 [+28,+65] | **+223 [+155,+311]** peak |
+| 6 | **+69 [+46,+92]** peak | +191 [+125,+272] |
+| 8 | +56 [+33,+79] | +154 [+90,+230] |
+
+Peaks at 4-6, worth MORE at the longer clock. `DEFAULT_WIDTH_SCALE = 4`, chosen
+because 4 peaks at the longest control measured and 60 s/move is the target.
+
+At scale 4 and 3 s the search reaches **5.47 ply against 7.68** -- it gives up 2.2
+plies and still wins by 223 Elo. The schedule sat at 1 for the entire life of this
+project, and it was the single largest loss in it.
+
+### The 60 s acceptance gate
+
+`tfit` vs `material`, 224 independent games at 60 s/move: **57.1%, +50 Elo [+5,+97]**,
+depth 9.28 vs 9.62. Above the project's own 55% threshold, on 224 games rather than
+400. Consistent across every control tested: +54 / +54 / +82 / +50 at
+300 ms / 3 s / 10 s / 60 s. The evaluation gain is real and does not decay.
+
+### What the tail is made of, and the next re-test
+
+The rank data says the ordering is already optimal at the MEDIAN (best move at rank
+0-1) and the whole deficit is the tail past rank ~40. `TurnIter` yields in STAGE
+order -- every plain move, then move+cast, then dashes, then dash+cast -- so the tail
+is systematically casts and dashes.
+
+That makes two shelved results worth re-testing rather than replacing:
+
+* `merge_min_width`, which interleaves the classes, measured **-285 Elo at scale 1**.
+  That was a budget of 6-40, where merging starved plain moves. At 24-160 the
+  arithmetic is entirely different.
+* `key_dash` gated to wide nodes, already +19 [+3,+35] at scale 1 with `tfit`.
+
+Neither is a new idea; both were measured under a narrow budget and a weaker eval,
+and both of those premises have now changed.

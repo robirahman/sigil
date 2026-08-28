@@ -1345,3 +1345,17 @@ fn quiescence_is_off_by_default_and_changes_nothing_when_off() {
     assert_eq!(st.qnodes, 0, "no quiescence nodes when q_depth is 0");
     let _ = &mut b;
 }
+
+#[test]
+fn the_shipped_width_scale_is_the_measured_one() {
+    // The widening schedule shipped at scale 1 for the whole project and turned out
+    // to be the largest single loss in it: the ordered generator produces a median
+    // of 316 turns, so scale 1 expanded 2-13% of the move set. Measured peak is 4-6;
+    // 4 is shipped because it peaks at the longest time control tested.
+    assert_eq!(crate::search::DEFAULT_WIDTH_SCALE, 4);
+    let s = crate::search::Search::new(16);
+    // widths a search actually uses at scale 4, vs the old 6..40
+    assert_eq!(crate::search::width_for_depth(1, crate::search::DEFAULT_WIDTH_SCALE), 24);
+    assert_eq!(crate::search::width_for_depth(6, crate::search::DEFAULT_WIDTH_SCALE), 160);
+    let _ = s;
+}

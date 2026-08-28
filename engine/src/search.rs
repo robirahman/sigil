@@ -43,6 +43,31 @@ pub const MAX_PLY: usize = 64;
 /// Cast-outcome window the search offers the generator per node.
 pub const DEFAULT_WINDOW: usize = 16;
 
+/// Multiplier on the progressive-widening schedule. **4, not 1.**
+///
+/// `width_for_depth` was written as 6 successors near the leaves up to 40 deep, and
+/// that turns out to be far too narrow: the ordered generator produces a MEDIAN OF
+/// 316 turns, so scale 1 expands 2-13% of the move set. Measured against scale 1 at
+/// eval `tfit`, colour-swapped, SPRT:
+///
+/// ```text
+///   scale    300 ms                    3000 ms
+///     2      +29 [+8,+51]   H1         +107 [+54,+165]  H1
+///     3      +38 [+20,+58]  H1         +144 [+90,+206]  H1
+///     4      +47 [+28,+65]  H1         +223 [+155,+311] H1   <- peak at 3 s
+///     6      +69 [+46,+92]  H1         +191 [+125,+272] H1   <- peak at 300 ms
+///     8      +56 [+33,+79]  H1         +154 [+90,+230]  H1
+/// ```
+///
+/// It peaks at 4-6 and is worth MORE at the longer clock, which is the opposite
+/// shape from the evaluation work. 4 is chosen because the target time control is
+/// 60 s/move and 4 is the peak at the longest control measured.
+///
+/// Note what it buys this with: at scale 4 and 3 s the search reaches 5.47 ply
+/// against 7.68 at scale 1 -- it gives up **2.2 plies** and still wins by 223 Elo.
+/// In this game seeing more moves beats looking further ahead.
+pub const DEFAULT_WIDTH_SCALE: usize = 4;
+
 /// PROGRESSIVE WIDENING.
 ///
 /// Sigil's true branching factor is ~10^4 (measured: mean 210k enumerated turns
@@ -189,7 +214,7 @@ impl Search {
             deadline: None,
             stats: SearchStats::default(),
             window: DEFAULT_WINDOW,
-            width_scale: 1,
+            width_scale: DEFAULT_WIDTH_SCALE,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
             aspiration: 60,
