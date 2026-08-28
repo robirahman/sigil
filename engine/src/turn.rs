@@ -470,3 +470,61 @@ impl Board {
         (acts, b)
     }
 }
+
+impl Board {
+    /// Turns that change material beyond the free placement every move gives:
+    /// a CRUSH, or a CAST. This is the quiescence move set.
+    ///
+    /// WHY NOT "ALL CAPTURES". The chess rule of thumb -- extend on captures until
+    /// the position is quiet -- does not transfer, because in Sigil EVERY move
+    /// places a stone, so every move is a capture in material terms and the
+    /// quiescence search would be the full search. What is actually forcing is the
+    /// subset that moves material by more than the +1 every move already gives:
+    ///
+    ///   * a CRUSH: a hard move onto an enemy stone with nowhere to go, +1/-1
+    ///   * a CAST: destroys stones outright (Fireblast, Hail Storm, Decay,
+    ///     Hurricane, Corrupt, Meteor) and, on the sixth, ENDS the game
+    ///
+    /// A turn must begin with a move, so a cast cannot be searched on its own. For
+    /// the cast branch we therefore take only the best `cast_moves` first moves by
+    /// `move_score` and the single best outcome per spell: quiescence is selective
+    /// by nature, and the alternative is |moves| x |casts| x |outcomes| at every
+    /// leaf. The crush branch, by contrast, is exact -- every crush is generated.
+    pub fn forcing_turns(&self, c: Color, cast_moves: usize) -> Vec<Turn> {
+        let mut out = Vec::new();
+        let (targets, has_wind) = self.first_move_targets(c);
+
+        // --- crushes: exact, and cheap (one BFS per adjacent enemy stone) ---
+        let mut m = targets & self.theirs(c);
+        while m != 0 {
+            let node = m.trailing_zeros() as u8;
+            m &= m - 1;
+            let (_opts, k) = self.push_options(node, c);
+            if k == 0 {
+                let blink = has_wind && (ADJ[node as usize] & self.mine(c)) == 0;
+                let a = if blink { Action::Blink { node, push_to: None } }
+                        else { Action::Move { node, push_to: None } };
+                out.push(Turn::single(a).push(Action::Pass));
+            }
+        }
+
+        // --- casts, behind the best few first moves ---
+        if cast_moves > 0 {
+            for (n, p) in self.ordered_first_moves(c).into_iter().take(cast_moves) {
+                let mut b = *self;
+                b.do_move_with_pub(n, p, c);
+                if b.outcome != Outcome::Ongoing { continue; }
+                let blink = self.is_blink_pub(n, c);
+                let a = if blink { Action::Blink { node: n, push_to: p } }
+                        else { Action::Move { node: n, push_to: p } };
+                for id in b.castable(c, true, true, false) {
+                    let Some(pos) = b.position_of(id) else { continue };
+                    out.push(Turn::single(a)
+                        .push(Action::Cast { pos: pos as u8, outcome: 0 })
+                        .push(Action::Pass));
+                }
+            }
+        }
+        out
+    }
+}

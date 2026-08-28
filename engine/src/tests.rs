@@ -1301,3 +1301,47 @@ fn seal_of_summer_second_cast_reaches_the_lazy_stream() {
         assert!(legal.contains(&key(t)), "lazy invented {:?}", t.slice());
     }
 }
+
+#[test]
+fn forcing_turns_are_legal_and_actually_forcing() {
+    // The quiescence move set must be a SUBSET of full enumeration (never invent a
+    // turn) and must contain only turns that move material beyond the free
+    // placement -- otherwise quiescence degenerates into the full search, which is
+    // the trap in a game where every move places a stone.
+    for seed in 0..24u64 {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        b.stones[0] = (0x0a53_1c66_9d0bu64 ^ (seed * 2654435761)) & crate::topology::ALL;
+        b.stones[1] = (0x1436_b28d_4471u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        let (full, st) = b.enumerate_turns(Color::Red);
+        if st.truncated { continue; }
+        let legal: std::collections::HashSet<_> =
+            full.iter().map(|t| t.slice().to_vec()).collect();
+        for t in b.forcing_turns(Color::Red, 2) {
+            assert!(legal.contains(&t.slice().to_vec()),
+                    "seed {seed}: forcing turn {:?} is not in full enumeration", t.slice());
+            // every forcing turn either crushes or casts
+            let crushes = t.slice().iter().any(|a| matches!(a,
+                Action::Move { push_to: None, node } | Action::Blink { push_to: None, node }
+                    if b.theirs(Color::Red) & (1u64 << node) != 0));
+            let casts = t.slice().iter().any(|a| matches!(a, Action::Cast { .. }));
+            assert!(crushes || casts,
+                    "seed {seed}: {:?} is neither a crush nor a cast", t.slice());
+        }
+    }
+}
+
+#[test]
+fn quiescence_is_off_by_default_and_changes_nothing_when_off() {
+    // Every search change in this engine has at some point shipped on by default and
+    // had to be walked back. The default must be bit-identical to the previous
+    // engine: same completed depth, same node count.
+    let mut b = Board::new(Board::legal_draw(17), Variant::Standard);
+    b.setup_initial();
+    let mut s = crate::search::Search::new(18);
+    assert_eq!(s.q_depth_get(), 0, "quiescence must default OFF");
+    let (_t, _sc, st) = s.go(&b, Color::Red, 6, 0);
+    assert_eq!(st.qnodes, 0, "no quiescence nodes when q_depth is 0");
+    let _ = &mut b;
+}

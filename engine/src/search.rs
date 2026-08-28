@@ -100,6 +100,8 @@ pub struct SearchStats {
     /// Successors actually expanded, summed — lets a caller see the effective
     /// branching factor (`expanded / nodes`).
     pub expanded: u64,
+    /// Nodes spent inside quiescence, so its cost is visible rather than inferred.
+    pub qnodes: u64,
 }
 
 pub struct Search {
@@ -119,6 +121,17 @@ pub struct Search {
     /// no class merge AND no reserved key-dash slot. This is the baseline every
     /// ordering change is measured against.
     legacy_order: bool,
+    /// Half-width of the aspiration window, in centistones. Was a hardcoded 60,
+    /// chosen by eye against the MATERIAL eval -- whose score distribution is a
+    /// one-stone square wave, nothing like `tfit`'s. Too narrow costs re-searches,
+    /// too wide costs cutoffs, and the right value depends on the eval.
+    aspiration: i32,
+    /// Plies of quiescence at the horizon. DEFAULT 0, i.e. OFF, until measured --
+    /// every other search change in this engine was shipped on by default at some
+    /// point and had to be walked back.
+    q_depth: i32,
+    /// First moves considered when generating the cast branch of the forcing set.
+    q_cast_moves: usize,
     /// Which key-dash interest rules are live; see `key_dash`. `0` disables the
     /// reserved slot, leaving the stage ordering untouched.
     ///
@@ -179,6 +192,9 @@ impl Search {
             width_scale: 1,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
+            aspiration: 60,
+            q_depth: 0,
+            q_cast_moves: 2,
             key_dash_reasons: 0,
             key_dash_min_width: 0,
             key_dash_extra: 0,
@@ -191,6 +207,11 @@ impl Search {
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
     /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
     /// interest rule instead of to "the dash filter" as a whole.
+    pub fn set_aspiration(&mut self, a: i32) { self.aspiration = a.max(1); }
+    pub fn aspiration_get(&self) -> i32 { self.aspiration }
+    pub fn set_q_depth(&mut self, d: i32) { self.q_depth = d; }
+    pub fn set_q_cast_moves(&mut self, n: usize) { self.q_cast_moves = n; }
+    pub fn q_depth_get(&self) -> i32 { self.q_depth }
     pub fn set_key_dash_reasons(&mut self, r: u8) { self.key_dash_reasons = r; }
     pub fn set_key_dash_min_width(&mut self, w: usize) { self.key_dash_min_width = w; }
     /// > 0 switches from reserved slots to the additive path.
@@ -251,7 +272,8 @@ impl Search {
         for depth in 1..=max_depth {
             // Aspiration window around the previous score, matching the existing
             // engine's ±0.15-of-a-stone idea scaled to integer material.
-            let (mut alpha, mut beta) = if depth <= 2 { (-WIN, WIN) } else { (prev - 60, prev + 60) };
+            let (mut alpha, mut beta) = if depth <= 2 { (-WIN, WIN) }
+                                        else { (prev - self.aspiration, prev + self.aspiration) };
             let mut score;
             let mut iter_best: Option<Turn> = best;   // seed ordering with the last best
             loop {
@@ -320,7 +342,13 @@ impl Search {
             return if c == Color::Blue { WIN - ply } else { -(WIN - ply) };
         }
         if b.outcome != Outcome::Ongoing { return Self::terminal_score(b, c, ply); }
-        if depth <= 0 { return self.eval(b, c); }
+        if depth <= 0 {
+            return if self.q_depth > 0 {
+                self.quiesce(b, c, alpha, beta, ply, self.q_depth)
+            } else {
+                self.eval(b, c)
+            };
+        }
         if self.out_of_time() { self.stats.timed_out = true; return self.eval(b, c); }
 
         // --- transposition table ---
@@ -397,6 +425,40 @@ impl Search {
             }
         }
         best_val
+    }
+
+    /// Quiescence: at the horizon, keep searching only FORCING turns -- crushes and
+    /// casts -- so the search is not asked to judge a position in the middle of an
+    /// exchange. See `Board::forcing_turns` for why that set and not "all captures".
+    ///
+    /// Stand-pat is the static eval: the side to move may decline to force anything,
+    /// so a forcing continuation only ever raises alpha. Bounded by `q` plies, since
+    /// a cast can enable another cast and the recursion would otherwise be limited
+    /// only by the sixth-cast rule.
+    fn quiesce(&mut self, b: &Board, c: Color, mut alpha: i32, beta: i32,
+               ply: i32, q: i32) -> i32
+    {
+        self.stats.nodes += 1;
+        self.stats.qnodes += 1;
+        if b.outcome != Outcome::Ongoing { return Self::terminal_score(b, c, ply); }
+        if (ply as usize) >= MAX_PLY - 1 || q <= 0 { return self.eval(b, c); }
+        if self.out_of_time() { self.stats.timed_out = true; return self.eval(b, c); }
+
+        let stand_pat = self.eval(b, c);
+        if stand_pat >= beta { return stand_pat; }
+        if stand_pat > alpha { alpha = stand_pat; }
+
+        for t in b.forcing_turns(c, self.q_cast_moves) {
+            if self.out_of_time() { self.stats.timed_out = true; break; }
+            let mut child = *b;
+            child.apply_turn(&t, c);
+            child.turn_counter += 1;
+            child.to_move = c.other();
+            let v = -self.quiesce(&child, c.other(), -beta, -alpha, ply + 1, q - 1);
+            if v >= beta { return v; }
+            if v > alpha { alpha = v; }
+        }
+        alpha
     }
 
     /// Ordered turns with the TT/killer hints promoted to the front.
