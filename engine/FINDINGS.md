@@ -779,3 +779,58 @@ rather than silently halving the information content.
 
 This is the fifth "value written down in two places" failure in this project, and the
 first that corrupted results rather than merely wasting time or money.
+
+## The bottleneck is MOVE COVERAGE, not evaluation or depth
+
+`width_scale` multiplies the progressive-widening schedule (6 successors near the
+leaves up to 40 deep). Raising it, at eval `tfit`, vs the shipped schedule:
+
+| `width_scale` | 300 ms | 3000 ms |
+|---|---|---|
+| 2 vs 1 | +29 [+8,+51] H1 | **+107 [+54,+165] H1** |
+| 3 vs 1 | +38 [+20,+58] H1 | **+144 [+90,+206] H1** |
+| 4 vs 1 | +47 [+28,+65] H1 | — |
+
+Monotone in scale, and far stronger at the longer clock -- the opposite shape from
+the evaluation work, which was ~+58 and flat. This is the largest effect measured in
+the project, and it is a one-line default change.
+
+It also wins while GIVING UP DEPTH: at scale 2, 4.73 ply vs 5.77. The engine would
+rather see more moves than look further ahead.
+
+### Why, quantified
+
+Two direct measurements over 846 sampled midgame positions, searching to depth 6:
+
+**True branching is far higher than assumed.** The ordered generator produces a
+median of **316** turns (p10 125, p90 at the 400 cap). The plan's "~80-150" was an
+underestimate; the search at scale 1 expands 6-40 of them, i.e. 2-13%.
+
+**Where the best move ranks in the current ordering:**
+
+```text
+  median 1    p75 6    p90 42    p95 99    max 165
+  within width   6:  73.8%
+  within width  40:  88.9%
+  within width  80:  93.9%
+  within width 120:  97.2%
+```
+
+So the ordering is ALREADY GOOD at the median -- the best move is rank 0 or 1 most of
+the time -- and the problem is entirely the tail: in ~11% of positions the move the
+search wants is ranked beyond 40, and it simply never gets expanded. Widening from 40
+to 120 (scale 3) lifts coverage 88.9% -> 97.2%, and that 8-point tail is worth +144
+Elo at 3 s.
+
+### What this says about NNUE vs a policy network
+
+It argues against a value network. The binding constraint is which moves get
+EXPANDED, not how accurately leaves are scored, and the residual positional
+information beyond a depth-7 search score is small (+0.0079 nats).
+
+It argues for a policy -- but the honest version of that case is narrower than
+"policy is the answer". Widening already buys 97% coverage for free. A learned prior
+would be worth the DEPTH that widening spends: reaching the same coverage at width
+~20 instead of ~120 gives back the ply that scale 3 costs. That is a real prize, and
+it is bounded by that ply rather than by the 11% coverage gap, which brute widening
+already closes.

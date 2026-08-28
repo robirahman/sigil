@@ -662,11 +662,14 @@ fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
     let (best, _score, st) = s.go(&b, c, max_depth, time_ms);
     let Some(best) = best else { return Ok((-1, 0, st.depth_completed, st.nodes)) };
     let want = best.slice().to_vec();
+    // `generated` must be the TOTAL the ordered stream produces, not where the
+    // search stopped: breaking on the match made it report rank+1, which reads as a
+    // branching factor of 2 in a game whose true branching is ~80-150.
     let mut rank: i64 = -1;
     let mut generated = 0usize;
     for (i, t) in b.turns_ordered(c).take(cap).enumerate() {
         generated = i + 1;
-        if t.slice().to_vec() == want { rank = i as i64; break; }
+        if rank < 0 && t.slice().to_vec() == want { rank = i as i64; }
     }
     Ok((rank, generated, st.depth_completed, st.nodes))
 }
