@@ -877,3 +877,45 @@ That makes two shelved results worth re-testing rather than replacing:
 
 Neither is a new idea; both were measured under a narrow budget and a weaker eval,
 and both of those premises have now changed.
+
+## Policy-label data: 175,500 games, and the coverage curve on 1.39M labels
+
+The full-scale generation run hit the plan's Phase D target. Watchdog-truncated at
+8 h, but checkpointing meant the data survived:
+
+```text
+  positions                4,366,971
+  independent games          175,500     (plan target: 150,000-600,000)
+  with a search score       4,016,560
+  with a POLICY label       1,392,592
+  corrupt shards                   1 of 28  (0 bytes, see below)
+```
+
+Where the search's chosen turn ranks in the current ordering, on 1.39M labels rather
+than the 846-position probe:
+
+```text
+  median 1   p75 5   p90 34   p95 63   p99 112   max 295
+  coverage:  w6 = 75.5%   w24 = 86.9%   w40 = 91.5%
+             w96 = 98.2%  w160 = 100.0%
+```
+
+This confirms the probe and sharpens the target. At the shipped `width_scale 4` the
+budget runs 24 near the leaves to 160 deep, i.e. **86.9% coverage at the frontier and
+100% at the root**; the old scale 1 (6-40) gave 75.5% and 91.5%. The gap a learned
+ordering would close is w24 -> w96, **86.9% -> 98.2%**, and the prize is the ~2.2
+plies that reaching w96-160 by brute widening costs.
+
+### Checkpointing was not atomic
+
+One shard came back 0 bytes: the watchdog killed it inside `savez_compressed`, which
+rewrites the target file IN PLACE. A corrupt shard is worse than a missing one
+because it breaks the loader for every other shard. Now writes to `<out>.tmp.npz` and
+`os.replace`s it, so a reader never sees a partial file.
+
+Worth recording how that fix went wrong twice before it worked: `savez_compressed`
+appends `.npz` unless the name already ends in it, so the first temp name became
+`positions_0.npz.tmp.npz`; and the anchored edit that inserted the rename matched
+nothing and failed SILENTLY, leaving the temp file as the only output. The check that
+caught both was running the generator and asserting the output loads and no `.tmp`
+remains -- not reading the diff.

@@ -102,11 +102,18 @@ if __name__ == "__main__":
     kept = dropped = 0
 
     def write(n):
-        # Rewritten in place every CHECKPOINT_GAMES, so a shard cut short by the
-        # VM watchdog still yields everything it had finished. An earlier run wrote
-        # only at the end and lost 90 minutes of compute across 28 shards.
+        # Rewritten every CHECKPOINT_GAMES, so a shard cut short by the VM watchdog
+        # still yields everything it had finished. An earlier run wrote only at the
+        # end and lost 90 minutes of compute across 28 shards.
+        #
+        # ATOMIC: write to a temp file and rename. Rewriting `out` IN PLACE is not
+        # atomic, and a watchdog kill landing inside savez_compressed leaves a
+        # 0-byte file -- which is exactly what happened to 1 of 28 shards, and a
+        # corrupt shard is worse than a missing one because it breaks the loader.
+        # must itself end in .npz, or savez_compressed appends another one
+        tmp = out + ".tmp.npz"
         np.savez_compressed(
-            out,
+            tmp,
             hand=np.asarray(H, dtype=np.int32), full=np.asarray(F, dtype=np.float32),
             spells=np.asarray(S, dtype=np.uint8), ply=np.asarray(P, dtype=np.int16),
             is_red=np.asarray(R, dtype=np.uint8), y=np.asarray(Y, dtype=np.uint8),
@@ -114,6 +121,8 @@ if __name__ == "__main__":
             score=np.asarray(Q, dtype=np.float32),
             best_rank=np.asarray(K, dtype=np.int16),
             hand_names=np.asarray(se.HAND_FEATURE_NAMES))
+        os.replace(tmp, out)      # atomic: readers never see a partial file
+
     for i in range(games):
         seed = 9_000_000 + off + i
         competitive = (i % 4 == 0)      # a quarter of games use the free opening
