@@ -165,3 +165,67 @@ impl Board {
     /// Spell id per sigil slot, for the consumer to embed once per game.
     pub fn spell_ids(&self) -> [u8; 9] { self.spells }
 }
+
+/// Per-candidate-turn features, for training a re-ranker.
+pub const N_TURN: usize = 18;
+
+pub const TURN_NAMES: [&str; N_TURN] = [
+    "is_move", "is_blink", "is_dash", "is_cast", "is_crush", "move_score",
+    "lands_mana", "lands_void", "n_sacs", "charges_sigil",
+    "d_my_total", "d_their_total", "d_my_mana", "d_their_mana",
+    "d_my_zero_lib", "d_enemy_zero_lib", "d_control", "order_rank",
+];
+
+impl Board {
+    /// Features of ONE candidate turn, from `c`'s point of view.
+    ///
+    /// `best_rank` in the self-play data says WHERE the current ordering failed; it
+    /// cannot train a re-ranker, because it does not describe the candidates that
+    /// were passed over. This does: a ranker is trained on these rows plus which row
+    /// the search chose.
+    ///
+    /// Deltas are computed by applying the turn, which costs a board copy per
+    /// candidate. That is fine here -- this runs offline during data generation, not
+    /// in the search.
+    pub fn turn_features(&self, t: &crate::turn::Turn, c: Color, rank: usize)
+        -> [f32; N_TURN]
+    {
+        use crate::turn::Action;
+        let mut f = [0.0f32; N_TURN];
+        let (mut node, mut push) = (0u8, None);
+        for a in t.slice() {
+            match *a {
+                Action::Move { node: n, push_to } => { f[0] = 1.0; node = n; push = push_to; }
+                Action::Blink { node: n, push_to } => { f[1] = 1.0; node = n; push = push_to; }
+                Action::Dash { node: n, push_to, n_sacs, .. } => {
+                    f[2] = 1.0; f[8] = n_sacs as f32; node = n; push = push_to;
+                }
+                Action::Cast { .. } => f[3] = 1.0,
+                Action::Pass => {}
+            }
+        }
+        let bit = 1u64 << node;
+        // a crush: the landing square held an enemy stone and nothing was relocated
+        if self.theirs(c) & bit != 0 && push.is_none() { f[4] = 1.0; }
+        f[5] = self.move_score(node, push, c) as f32 / 100.0;
+        if crate::topology::MANA & bit != 0 { f[6] = 1.0; }
+        if crate::topology::VOID & bit != 0 { f[7] = 1.0; }
+
+        let mut after = *self;
+        after.apply_turn(t, c);
+        let (b0, b1) = (self.liberty_census_pub(c), self.liberty_census_pub(c.other()));
+        let (a0, a1) = (after.liberty_census_pub(c), after.liberty_census_pub(c.other()));
+        let ch_before = (self.charged[c.idx()]).count_ones() as f32;
+        let ch_after = (after.charged[c.idx()]).count_ones() as f32;
+        f[9] = ch_after - ch_before;
+        f[10] = after.total[c.idx()] as f32 - self.total[c.idx()] as f32;
+        f[11] = after.total[c.other().idx()] as f32 - self.total[c.other().idx()] as f32;
+        f[12] = after.mana[c.idx()] as f32 - self.mana[c.idx()] as f32;
+        f[13] = after.mana[c.other().idx()] as f32 - self.mana[c.other().idx()] as f32;
+        f[14] = (a0.0 - b0.0) as f32;
+        f[15] = (a1.0 - b1.0) as f32;
+        f[16] = (after.control_diff(c) - self.control_diff(c)) as f32;
+        f[17] = rank as f32;
+        f
+    }
+}

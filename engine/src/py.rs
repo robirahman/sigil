@@ -299,6 +299,42 @@ impl PyBoard {
     /// in `HAND_FEATURE_NAMES` order. `evaluate(c, w) == dot(w, this)` exactly (unit
     /// tested), so a logistic/texel fit on these produces numbers that drop straight
     /// into `Weights` with no reinterpretation.
+    /// Search this position, record every candidate's features and which one the
+    /// search chose, THEN play that move. Returns (rows, chosen, generated).
+    ///
+    /// One search, not two. Calling `turn_candidates` and then `play_best` on the
+    /// same position searched it twice, which at width_scale 4 doubled the cost of
+    /// the most expensive step in ranking-data generation.
+    #[pyo3(signature = (max_depth=6, eval_name="tfit", cap=64, width_scale=4,
+                        history=vec![]))]
+    fn candidates_and_play(&mut self, max_depth: i32, eval_name: &str, cap: usize,
+                           width_scale: usize, history: Vec<u64>)
+        -> PyResult<(Vec<Vec<f32>>, i64, usize)>
+    {
+        let c = self.b.to_move;
+        let mut s = crate::search::Search::new(20);
+        s.set_width_scale(width_scale);
+        s.weights = weights_by_name(eval_name)?;
+        for k in history { s.add_history(k); }
+        let (best, _sc, _st) = s.go(&self.b, c, max_depth, 0);
+        let Some(best) = best else { return Ok((vec![], -1, 0)) };
+        let want = best.slice().to_vec();
+
+        let mut rows = Vec::with_capacity(cap);
+        let mut chosen: i64 = -1;
+        let mut generated = 0usize;
+        for (i, t) in self.b.turns_ordered(c).take(cap).enumerate() {
+            generated = i + 1;
+            if chosen < 0 && t.slice().to_vec() == want { chosen = i as i64; }
+            rows.push(self.b.turn_features(&t, c, i).to_vec());
+        }
+        self.b.apply_turn(&best, c);
+        self.b.turn_counter += 1;
+        self.b.to_move = c.other();
+        self.b.update();
+        Ok((rows, chosen, generated))
+    }
+
     fn hand_features(&self, c: &str) -> PyResult<Vec<i32>> {
         Ok(self.b.hand_features(color(c)?).to_vec())
     }
@@ -674,6 +710,42 @@ fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
     Ok((rank, generated, st.depth_completed, st.nodes))
 }
 
+/// Candidate-turn features for a position, plus which candidate the search chose.
+///
+/// This is what training a re-ranker needs and what `best_rank` could not provide:
+/// `best_rank` says where the current ordering failed, not what the alternatives
+/// looked like. Returns (features[cap][N_TURN], chosen_index, n_generated).
+///
+/// `chosen_index` is -1 if the search's turn falls outside `cap`; the caller should
+/// drop those rows rather than train on a missing label.
+#[pyfunction]
+#[pyo3(signature = (sfn, max_depth=6, eval_name="tfit", cap=64, width_scale=4))]
+fn turn_candidates(sfn: &str, max_depth: i32, eval_name: &str, cap: usize,
+                   width_scale: usize)
+    -> PyResult<(Vec<Vec<f32>>, i64, usize)>
+{
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    let mut s = crate::search::Search::new(20);
+    s.set_width_scale(width_scale);
+    s.weights = weights_by_name(eval_name)?;
+    let (best, _sc, _st) = s.go(&b, c, max_depth, 0);
+    let want = best.map(|t| t.slice().to_vec());
+
+    let mut rows = Vec::with_capacity(cap);
+    let mut chosen: i64 = -1;
+    let mut generated = 0usize;
+    for (i, t) in b.turns_ordered(c).take(cap).enumerate() {
+        generated = i + 1;
+        if chosen < 0 {
+            if let Some(w) = &want { if t.slice().to_vec() == *w { chosen = i as i64; } }
+        }
+        rows.push(b.turn_features(&t, c, i).to_vec());
+    }
+    Ok((rows, chosen, generated))
+}
+
 #[pyfunction]
 fn eval_weights(name: &str) -> PyResult<std::collections::HashMap<String, i32>> {
     let w = weights_by_name(name)?;
@@ -711,6 +783,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
@@ -718,6 +791,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
+    m.add("TURN_FEATURE_NAMES", crate::features::TURN_NAMES.to_vec())?;
     m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()
         .map(|s| s.name).collect::<Vec<_>>())?;
     Ok(())
