@@ -355,13 +355,15 @@ impl PyBoard {
                         width_scale=1, history=vec![], eval_name="default",
                         legacy_order=false, merge_min_width=None, key_dash_reasons=None,
                         key_dash_min_width=None, key_dash_extra=None,
-                        q_depth=None, q_cast_moves=None, aspiration=None))]
+                        q_depth=None, q_cast_moves=None, aspiration=None,
+                        adaptive=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: usize, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
                  key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>,
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
-                 q_cast_moves: Option<usize>, aspiration: Option<i32>)
+                 q_cast_moves: Option<usize>, aspiration: Option<i32>,
+                 adaptive: Option<(f32, usize, usize)>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -383,6 +385,7 @@ impl PyBoard {
         if let Some(d) = q_depth { s.set_q_depth(d); }
         if let Some(n) = q_cast_moves { s.set_q_cast_moves(n); }
         if let Some(a) = aspiration { s.set_aspiration(a); }
+        if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
         s.weights = weights_by_name(eval_name)?;
         for k in history { s.add_history(k); }
         let t = Instant::now();

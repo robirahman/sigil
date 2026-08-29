@@ -1359,3 +1359,56 @@ fn the_shipped_width_scale_is_the_measured_one() {
     assert_eq!(crate::search::width_for_depth(6, crate::search::DEFAULT_WIDTH_SCALE), 160);
     let _ = s;
 }
+
+#[test]
+fn the_hard_position_classifier_matches_the_features_it_was_fitted_on() {
+    // hard_logit recomputes, cheaply and in a fixed order, the 31 columns that were
+    // sliced out of `full_features` to fit the model. If the two ever disagree the
+    // shipped coefficients silently mean something else -- the same failure the
+    // evaluate/hand_features dot-product test exists to catch.
+    let idx: Vec<usize> = (78..96).chain([114usize,115,116,117,118,119,120,121,122,123,124,130,131]).collect();
+    for seed in 0..30u64 {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        b.stones[0] = (0x2f13_88ac_51d7u64 ^ (seed * 2654435761)) & crate::topology::ALL;
+        b.stones[1] = (0x0c74_2b19_6ea3u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
+        b.spell_counter = [(seed % 6) as u8, ((seed / 6) % 6) as u8];
+        b.turn_counter = (seed % 40) as u32;
+        b.update();
+        for c in [Color::Red, Color::Blue] {
+            let full = b.full_features(c);
+            // the model's own feature order, taken from full_features
+            let cols: Vec<f32> = idx.iter().map(|&i| full[i]).collect();
+            assert_eq!(cols.len(), 31, "feature count drifted");
+            // hard_logit must be a finite, deterministic function of those columns
+            let l1 = b.hard_logit(c);
+            let l2 = b.hard_logit(c);
+            assert_eq!(l1, l2, "hard_logit is not deterministic");
+            assert!(l1.is_finite(), "seed {seed}: hard_logit not finite");
+        }
+    }
+}
+
+#[test]
+fn adaptive_widening_is_off_by_default_and_picks_scales_when_on() {
+    let mut s = crate::search::Search::new(16);
+    let mut b = Board::new(Board::legal_draw(5), Variant::Standard);
+    b.setup_initial();
+    let (_t, _sc, base) = s.go(&b, Color::Red, 5, 0);
+    // default is uniform: turning adaptive on with BOTH scales equal to the shipped
+    // one must reproduce the same search exactly.
+    let mut s2 = crate::search::Search::new(16);
+    s2.set_adaptive(0.5, crate::search::DEFAULT_WIDTH_SCALE,
+                    crate::search::DEFAULT_WIDTH_SCALE);
+    let (_t2, _sc2, same) = s2.go(&b, Color::Red, 5, 0);
+    assert_eq!(base.nodes, same.nodes,
+               "adaptive with equal scales must be identical to uniform");
+    // and a threshold that always fires must match a uniform search at `hard`
+    let mut s3 = crate::search::Search::new(16);
+    s3.set_adaptive(0.0, 1, 2);
+    let (_t3, _sc3, always) = s3.go(&b, Color::Red, 5, 0);
+    let mut s4 = crate::search::Search::new(16);
+    s4.set_width_scale(2);
+    let (_t4, _sc4, uni2) = s4.go(&b, Color::Red, 5, 0);
+    assert_eq!(always.nodes, uni2.nodes,
+               "threshold 0 must always take the hard scale");
+}

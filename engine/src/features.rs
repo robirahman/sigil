@@ -229,3 +229,75 @@ impl Board {
         f
     }
 }
+
+// ===================== ADAPTIVE WIDENING: "is this position hard?" ============
+//
+// Logistic model for P(the search's best move lies beyond width 24), fitted on
+// 1,392,592 policy-labelled positions from 175,485 self-play games, split by GAME.
+//
+// WHY THESE 31 FEATURES. The full 132-feature vector scores AUC 0.8403; this cheap
+// subset scores **0.8306**, and it drops everything the hot path cannot afford.
+// `control_diff` -- a 12-layer flood fill, by far the most expensive feature --
+// contributes NOTHING: removing it moves AUC from 0.8403 to 0.8401. What remains is
+// sigil occupancy and scalars the board already maintains, so the whole model is a
+// few popcounts and a 31-term dot product, well under 2% of a ~6.4 us node.
+//
+// Coefficients are fitted on RAW features, deliberately unstandardised, so the
+// engine needs no mean/scale table alongside them.
+const HARD_BIAS: f32 = -0.00081;
+const HARD_W: [f32; 31] = [
+    0.40639, -0.33818, -0.62829, 0.30003, 0.15960, 0.30633, 0.18265, 0.27887, 0.12354,
+    0.70531, -0.19231, -0.43788, 0.17759, -0.15970, -0.00014, -0.05098, -0.10145, -0.12445,
+    0.17338,   // total_me
+    -0.08686,  // total_them
+    0.14656,   // mana_me
+    -0.04456,  // mana_them
+    -0.05578,  // void_me
+    -0.19427,  // void_them
+    -0.03855,  // casts_me
+    -0.07404,  // casts_them
+    0.01490,   // turn_counter
+    -0.25468,  // is_red
+    -0.11808,  // empty
+    0.00331,   // lock_me
+    0.34646,   // lock_them
+];
+
+impl Board {
+    /// Logit of "this position's best move lies beyond width 24", from `c`'s POV.
+    ///
+    /// Returned as a LOGIT rather than a probability so the caller compares against
+    /// a pre-transformed threshold and no `exp` runs in the search.
+    pub fn hard_logit(&self, c: Color) -> f32 {
+        let mine = self.mine(c);
+        let theirs = self.theirs(c);
+        let mut acc = HARD_BIAS;
+        let mut k = 0usize;
+        for p in 0..9 {
+            let m = SIGIL[p];
+            let n = m.count_ones() as f32;
+            acc += HARD_W[k] * ((m & mine).count_ones() as f32 / n); k += 1;
+        }
+        for p in 0..9 {
+            let m = SIGIL[p];
+            let n = m.count_ones() as f32;
+            acc += HARD_W[k] * ((m & theirs).count_ones() as f32 / n); k += 1;
+        }
+        let i = c.idx();
+        let j = c.other().idx();
+        let scal = [
+            self.total[i] as f32, self.total[j] as f32,
+            self.mana[i] as f32, self.mana[j] as f32,
+            (mine & VOID).count_ones() as f32, (theirs & VOID).count_ones() as f32,
+            self.spell_counter[i] as f32, self.spell_counter[j] as f32,
+            self.turn_counter as f32,
+            if c == Color::Red { 1.0 } else { 0.0 },
+            self.empty().count_ones() as f32,
+            (self.lock[i] != crate::board::NO_SPELL) as u8 as f32,
+            (self.lock[j] != crate::board::NO_SPELL) as u8 as f32,
+        ];
+        for v in scal { acc += HARD_W[k] * v; k += 1; }
+        debug_assert_eq!(k, HARD_W.len());
+        acc
+    }
+}

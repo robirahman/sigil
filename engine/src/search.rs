@@ -146,6 +146,16 @@ pub struct Search {
     /// no class merge AND no reserved key-dash slot. This is the baseline every
     /// ordering change is measured against.
     legacy_order: bool,
+    /// Adaptive widening: `(logit_threshold, easy_scale, hard_scale)`.
+    ///
+    /// The search pays a UNIFORM width everywhere, but the coverage curve over 1.39M
+    /// labelled positions says most positions resolve at rank 0-1 while a minority
+    /// need 100+. `Board::hard_logit` predicts which is which at AUC 0.831 for a few
+    /// popcounts and a 31-term dot product, so the budget can follow the position
+    /// instead of being flat.
+    ///
+    /// DEFAULT `None`, i.e. uniform `width_scale`, until an arena says otherwise.
+    adaptive: Option<(f32, usize, usize)>,
     /// Half-width of the aspiration window, in centistones. Was a hardcoded 60,
     /// chosen by eye against the MATERIAL eval -- whose score distribution is a
     /// one-stone square wave, nothing like `tfit`'s. Too narrow costs re-searches,
@@ -217,6 +227,7 @@ impl Search {
             width_scale: DEFAULT_WIDTH_SCALE,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
+            adaptive: None,
             aspiration: 60,
             q_depth: 0,
             q_cast_moves: 2,
@@ -233,6 +244,21 @@ impl Search {
     /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
     /// interest rule instead of to "the dash filter" as a whole.
     pub fn set_aspiration(&mut self, a: i32) { self.aspiration = a.max(1); }
+    /// `p` is a PROBABILITY; it is converted to a logit once here so the search
+    /// never evaluates `exp`.
+    pub fn set_adaptive(&mut self, p: f32, easy: usize, hard: usize) {
+        let p = p.clamp(1e-6, 1.0 - 1e-6);
+        self.adaptive = Some(((p / (1.0 - p)).ln(), easy.max(1), hard.max(1)));
+    }
+    pub fn clear_adaptive(&mut self) { self.adaptive = None; }
+    /// The widening scale to use for THIS position.
+    #[inline]
+    fn scale_for(&self, b: &Board, c: Color) -> usize {
+        match self.adaptive {
+            None => self.width_scale,
+            Some((t, easy, hard)) => if b.hard_logit(c) >= t { hard } else { easy },
+        }
+    }
     pub fn aspiration_get(&self) -> i32 { self.aspiration }
     pub fn set_q_depth(&mut self, d: i32) { self.q_depth = d; }
     pub fn set_q_cast_moves(&mut self, n: usize) { self.q_cast_moves = n; }
@@ -324,7 +350,7 @@ impl Search {
         let mut best_local = *best;
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
-        let w = width_for_depth(depth, self.width_scale) * 3;
+        let w = width_for_depth(depth, self.scale_for(b, c)) * 3;
         let turns = self.ordered_turns(b, c, 0, best_local, w);
         for t in turns {
             if self.out_of_time() { self.stats.timed_out = true; break; }
@@ -399,7 +425,7 @@ impl Search {
         let mut saw_repetition = false;
 
         self.path.push(key);
-        let w = width_for_depth(depth, self.width_scale);
+        let w = width_for_depth(depth, self.scale_for(b, c));
         let turns = self.ordered_turns_action_hint(b, c, ply as usize, tt_move, w);
         for t in turns {
             if self.out_of_time() { self.stats.timed_out = true; break; }

@@ -919,3 +919,50 @@ appends `.npz` unless the name already ends in it, so the first temp name became
 nothing and failed SILENTLY, leaving the temp file as the only output. The check that
 caught both was running the generator and asserting the output loads and no `.tmp`
 remains -- not reading the diff.
+
+## Adaptive widening: the budget follows the position
+
+The coverage gate passed at **grad-boost AUC 0.8947** / logistic 0.8403 for predicting
+"this position's best move lies beyond width 24", over 1,392,592 labelled positions
+from 175,485 games, split by game. Its most useful number was the ORACLE floor: a
+perfect predictor reaches 98% coverage at average width **10.5**, against **96**
+today -- a ~9x reduction in effective branching, which sizes better move SELECTION far
+above the 2.2 plies uniform widening costs.
+
+### The model is nearly free
+
+| feature set | AUC |
+|---|---|
+| all 132 | 0.8403 |
+| no `control_diff` | 0.8401 |
+| no control, no castable (113) | 0.8341 |
+| **31 cheap: sigil fills + scalars** | **0.8306** |
+
+`control_diff`, a 12-layer flood fill and by far the most expensive feature,
+contributes **nothing**. The shipped model is 31 features the board already
+maintains -- a few popcounts and a 31-term dot product, well under 2% of a ~6.4 us
+node. Coefficients are fitted on RAW features so the engine carries no mean/scale
+table, and the logit is compared against a pre-transformed threshold so no `exp` runs
+in the search.
+
+What the threshold buys, on the held-out split:
+
+```text
+  threshold   %wide   coverage (w24 easy / w96 hard)
+       0.10   42.4%                          96.7%
+       0.20   23.4%                          93.6%
+       0.50    3.2%                          88.0%
+  uniform w96  100%                          98.1%
+```
+
+At threshold 0.10 the average width is ~54 instead of 96 for 1.4 points of coverage.
+
+### Guards
+
+Two tests, both of the kind that has caught real drift here: `hard_logit` must be a
+deterministic, finite function of exactly the 31 columns sliced out of
+`full_features` (the same shape as the `evaluate == dot(weights, hand_features)`
+invariant), and adaptive widening with BOTH scales equal to the shipped one must
+reproduce the uniform search **node for node**.
+
+Default is `None` -- uniform -- until an arena says otherwise.

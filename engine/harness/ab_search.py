@@ -30,7 +30,12 @@ MERGE_OFF = 1 << 62
 # far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
 BASE_WS = se.DEFAULT_WIDTH_SCALE
 KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
-         'key_dash_extra', 'key_dash_min_width')
+         'key_dash_extra', 'key_dash_min_width', 'adaptive')
+
+# Adaptive arms are named `adaptive` and encode (easy_scale, hard_scale) in the arm
+# value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
+# one-knob-one-integer shape of this harness.
+ADAPTIVE_P = 0.10
 
 
 def play(b, ms, ev, hist, knob, val):
@@ -39,6 +44,9 @@ def play(b, ms, ev, hist, knob, val):
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
     merge = val if knob == 'merge_min_width' else MERGE_OFF
+    adaptive = None
+    if knob == 'adaptive' and val > 0:
+        adaptive = (ADAPTIVE_P, val // 100, val % 100)
     # key_dash needs BOTH its reason mask and its slot count to do anything, so the
     # extra/min_width knobs turn on CRUSH-only reasons, the one rule that was not
     # harmful at scale 1.
@@ -46,7 +54,7 @@ def play(b, ms, ev, hist, knob, val):
     kdx = val if knob == 'key_dash_extra' else None
     kdmw = val if knob == 'key_dash_min_width' else None
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
-                       kdr, kdmw, kdx, qd, None, asp)
+                       kdr, kdmw, kdx, qd, None, asp, adaptive)
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
