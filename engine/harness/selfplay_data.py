@@ -77,6 +77,14 @@ def play_one(seed, depth, rng, random_ply_pct, competitive, ev='material', rank_
         # search expands only the first 6-40 successors, so if this is routinely
         # large the engine is losing to move SELECTION, and a learned prior over
         # turns is worth more than a better leaf evaluation.
+        #
+        # NOTE: this is NOT sufficient to train a re-ranker. It says WHERE the
+        # ordering failed, not what the right ordering was. A policy network needs
+        # per-CANDIDATE-TURN features plus which turn was chosen, which this
+        # generator does not emit; adding that is a separate pass. What best_rank
+        # does support is the cheaper adjacent question -- whether the position
+        # alone predicts THAT the ordering will fail, which is what adaptive
+        # widening needs.
         if rank_every > 0 and ply % rank_every == 0:
             try:
                 rk, _gen, _d, _n = se.best_turn_rank(sfn_before, depth, 0, ev, 400, 1)
