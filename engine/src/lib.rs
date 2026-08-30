@@ -12,6 +12,7 @@ pub mod cast_enum;
 pub mod turn;
 pub mod order;
 pub mod key_dash;
+pub mod ranker;
 pub mod turn_iter;
 pub mod sfn;
 pub mod eval;

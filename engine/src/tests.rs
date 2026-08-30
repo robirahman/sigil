@@ -1412,3 +1412,48 @@ fn adaptive_widening_is_off_by_default_and_picks_scales_when_on() {
     assert_eq!(always.nodes, uni2.nodes,
                "threshold 0 must always take the hard scale");
 }
+
+#[test]
+fn the_reranker_is_off_by_default_and_neutral_when_disabled() {
+    // Default must reproduce the shipped engine exactly: same nodes, same depth.
+    let mut b = Board::new(Board::legal_draw(13), Variant::Standard);
+    b.setup_initial();
+    let mut s = crate::search::Search::new(18);
+    assert_eq!(s.rank_oversample_get(), 1, "re-ranker must default OFF");
+    let (_t, _sc, base) = s.go(&b, Color::Red, 5, 0);
+    let mut s2 = crate::search::Search::new(18);
+    s2.set_rank_oversample(1);
+    let (_t2, _sc2, same) = s2.go(&b, Color::Red, 5, 0);
+    assert_eq!(base.nodes, same.nodes, "oversample 1 must be a no-op");
+}
+
+#[test]
+fn rank_score_needs_no_board_copy_and_orders_sensibly() {
+    // The whole point of the closed-form feature set: scoring must not mutate or
+    // copy the board. Also sanity-check the sign of the two largest weights --
+    // a turn that crushes should outscore the same-shaped turn that does not.
+    let mut b = Board::new(Board::legal_draw(3), Variant::Standard);
+    b.stones[0] = (1 << n("a1")) | (1 << n("a2")) | (1 << n("a4")) | (1 << n("b1"));
+    b.stones[1] = (1 << n("a3")) | (1 << n("a5")) | (1 << n("c1"));
+    b.update();
+    let before = b;
+    let turns: Vec<Turn> = b.turns_ordered(Color::Red).take(24).collect();
+    assert!(!turns.is_empty());
+    for (i, t) in turns.iter().enumerate() {
+        let s = b.rank_score(t, Color::Red, i);
+        assert!(s.is_finite(), "rank_score not finite for {:?}", t.slice());
+    }
+    assert_eq!(before, b, "rank_score must not modify the board");
+    // a dash costs stones, so it must score below an otherwise similar plain move
+    let plain: Vec<f32> = turns.iter().enumerate()
+        .filter(|(_, t)| !t.slice().iter().any(|a| matches!(a, Action::Dash { .. })))
+        .map(|(i, t)| b.rank_score(t, Color::Red, i)).collect();
+    let dashes: Vec<f32> = turns.iter().enumerate()
+        .filter(|(_, t)| t.slice().iter().any(|a| matches!(a, Action::Dash { .. })))
+        .map(|(i, t)| b.rank_score(t, Color::Red, i)).collect();
+    if !plain.is_empty() && !dashes.is_empty() {
+        let pm = plain.iter().cloned().fold(f32::MIN, f32::max);
+        let dm = dashes.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(pm > dm, "a dash should not outscore every plain move ({pm} vs {dm})");
+    }
+}

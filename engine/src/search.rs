@@ -146,6 +146,18 @@ pub struct Search {
     /// no class merge AND no reserved key-dash slot. This is the baseline every
     /// ordering change is measured against.
     legacy_order: bool,
+    /// Over-sample factor for the learned re-ranker. Generate `rank_oversample x
+    /// width` turns, score them with `Board::rank_score`, expand the best `width`.
+    ///
+    /// 1 disables it, and that is the DEFAULT. Re-ranking only buys anything if more
+    /// candidates are generated than are expanded -- the turns already inside the
+    /// budget ARE the top-k of the current ordering, so re-sorting them changes the
+    /// order they are searched in, not which ones are searched. Generation is
+    /// essentially all of a ~6.4 us node, so over-sampling 2x roughly doubles node
+    /// cost, i.e. costs about a ply. Whether the measured +2.7 coverage points at
+    /// equal width are worth that ply is an arena question, and the same trade
+    /// killed quiescence (-13 Elo) and the class merge (-253).
+    rank_oversample: usize,
     /// Adaptive widening: `(logit_threshold, easy_scale, hard_scale)`.
     ///
     /// The search pays a UNIFORM width everywhere, but the coverage curve over 1.39M
@@ -227,6 +239,7 @@ impl Search {
             width_scale: DEFAULT_WIDTH_SCALE,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
+            rank_oversample: 1,
             adaptive: None,
             aspiration: 60,
             q_depth: 0,
@@ -251,6 +264,8 @@ impl Search {
         self.adaptive = Some(((p / (1.0 - p)).ln(), easy.max(1), hard.max(1)));
     }
     pub fn clear_adaptive(&mut self) { self.adaptive = None; }
+    pub fn set_rank_oversample(&mut self, n: usize) { self.rank_oversample = n.max(1); }
+    pub fn rank_oversample_get(&self) -> usize { self.rank_oversample }
     /// The widening scale to use for THIS position.
     #[inline]
     fn scale_for(&self, b: &Board, c: Color) -> usize {
@@ -545,13 +560,21 @@ impl Search {
                           else if self.legacy_order || width < self.key_dash_min_width { 0 }
                           else { self.key_dash_reasons };
             let mut it = b.turns_ordered_reasons(c, self.window, reasons);
-            v = it.by_ref().take(width).collect();
+            // pull a larger pool only when the re-ranker will actually use it
+            v = it.by_ref().take(width * self.rank_oversample).collect();
             if it.next().is_some() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }
             if additive {
                 for t in b.key_dash_turns(c, self.key_dash_reasons, self.key_dash_extra) {
                     if !v.iter().any(|x| x.slice() == t.slice()) { v.push(t); }
                 }
+            }
+            if self.rank_oversample > 1 && v.len() > width {
+                // Learned re-ranking: keep the best `width` of the larger pool.
+                let mut scored: Vec<(f32, Turn)> = v.iter().enumerate()
+                    .map(|(i, t)| (b.rank_score(t, c, i), *t)).collect();
+                scored.sort_by(|x, y| y.0.partial_cmp(&x.0).unwrap_or(std::cmp::Ordering::Equal));
+                v = scored.into_iter().take(width).map(|(_, t)| t).collect();
             }
         } else {
             let mut it = b.turns_best_first(c, self.window, width);

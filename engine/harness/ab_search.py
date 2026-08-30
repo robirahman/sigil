@@ -30,7 +30,8 @@ MERGE_OFF = 1 << 62
 # far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
 BASE_WS = se.DEFAULT_WIDTH_SCALE
 KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
-         'key_dash_extra', 'key_dash_min_width', 'adaptive')
+         'key_dash_extra', 'key_dash_min_width', 'adaptive',
+         'rank_oversample')
 
 # Adaptive arms are named `adaptive` and encode (easy_scale, hard_scale) in the arm
 # value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
@@ -53,8 +54,9 @@ def play(b, ms, ev, hist, knob, val):
     kdr = 1 if knob in ('key_dash_extra', 'key_dash_min_width') else None
     kdx = val if knob == 'key_dash_extra' else None
     kdmw = val if knob == 'key_dash_min_width' else None
+    ros = val if knob == 'rank_oversample' else None
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
-                       kdr, kdmw, kdx, qd, None, asp, adaptive)
+                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros)
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):

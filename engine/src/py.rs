@@ -356,14 +356,15 @@ impl PyBoard {
                         legacy_order=false, merge_min_width=None, key_dash_reasons=None,
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
-                        adaptive=None))]
+                        adaptive=None, rank_oversample=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: usize, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
                  key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>,
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
                  q_cast_moves: Option<usize>, aspiration: Option<i32>,
-                 adaptive: Option<(f32, usize, usize)>)
+                 adaptive: Option<(f32, usize, usize)>,
+                 rank_oversample: Option<usize>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -386,6 +387,7 @@ impl PyBoard {
         if let Some(n) = q_cast_moves { s.set_q_cast_moves(n); }
         if let Some(a) = aspiration { s.set_aspiration(a); }
         if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+        if let Some(n) = rank_oversample { s.set_rank_oversample(n); }
         s.weights = weights_by_name(eval_name)?;
         for k in history { s.add_history(k); }
         let t = Instant::now();
@@ -774,6 +776,7 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("key_dash_min_width".to_string(), s.key_dash_min_width_get() as u64);
     m.insert("key_dash_extra".to_string(), s.key_dash_extra_get() as u64);
     m.insert("q_depth".to_string(), s.q_depth_get() as u64);
+    m.insert("rank_oversample".to_string(), s.rank_oversample_get() as u64);
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
     Ok(m)
