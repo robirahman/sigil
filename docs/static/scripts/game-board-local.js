@@ -1270,8 +1270,22 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				let _turnCount = 0;
+				// Where in messageHistory the current turn's header sits, and its
+				// text. After a Reset Turn the controller re-announces the SAME
+				// header ("Red Turn N"), so a repeat is the reset replay: drop
+				// everything from the aborted attempt (its prompts, casts and the
+				// "Resetting Turn" notice) so the transcript only keeps final,
+				// submitted moves — that's what makes it paste-able as a log.
+				let _turnMsgMark = -1;
+				let _turnMsgText = null;
 				function handleWhoseTurnEvent(payload) {
 					_this.showReset = false;
+					if (payload.message === _turnMsgText
+						&& _turnMsgMark >= 0 && _turnMsgMark <= _this.messageHistory.length) {
+						_this.messageHistory.splice(_turnMsgMark);
+					}
+					_turnMsgMark = _this.messageHistory.length;
+					_turnMsgText = payload.message;
 					_this.messageHistory.push(payload.message);
 					_this.whoseTurn = payload.color;
 					if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart');

@@ -557,6 +557,12 @@ document.addEventListener('alpine:init', () => {
 				});
 
 				let _turnCount = 0;
+				// A repeated turn header is a Reset Turn replay (the controller
+				// re-announces "Red Turn N" after restoring the snapshot): drop the
+				// aborted attempt's messages so the transcript only keeps final,
+				// submitted moves. Mirrors game-board-local.js.
+				let _turnMsgMark = -1;
+				let _turnMsgText = null;
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
 					if (type === 'message') {
@@ -592,7 +598,19 @@ document.addEventListener('alpine:init', () => {
 							_this._recomputeDevEval().catch(() => {});
 						}
 					}
-					else if (type === 'whoseturndisplay') { _this.showReset = false; _this.messageHistory.push(rest.message); _this.whoseTurn = rest.color; if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart'); _turnCount++; }
+					else if (type === 'whoseturndisplay') {
+						_this.showReset = false;
+						if (rest.message === _turnMsgText
+							&& _turnMsgMark >= 0 && _turnMsgMark <= _this.messageHistory.length) {
+							_this.messageHistory.splice(_turnMsgMark);
+						}
+						_turnMsgMark = _this.messageHistory.length;
+						_turnMsgText = rest.message;
+						_this.messageHistory.push(rest.message);
+						_this.whoseTurn = rest.color;
+						if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart');
+						_turnCount++;
+					}
 					else if (type === 'turn_complete') {
 						// Track the most recent opponent turn for annotation eligibility.
 						const t = rest.turn;
