@@ -1487,15 +1487,19 @@ fn every_width_shape_is_monotone_in_scale_and_nonzero() {
 }
 
 #[test]
-fn the_lead_rule_is_symmetric_in_score_and_matches_the_live_engine() {
-    // Robi flagged "red needs +3, blue +2", which is the same rule stated in two
-    // different UNITS -- and the ambiguity was in our wording, not the code.
+fn the_lead_rule_is_symmetric_in_score_including_overshoot() {
+    // Robi flagged "red needs +3, blue +2" against our "red needs a real lead of 4,
+    // blue 2". Both are the same rule in different UNITS: it is the +/-3 lead and it
+    // is SYMMETRIC IN SCORE, where blue's score is its real stones PLUS its token.
     //
-    // The live sim-board.js computes `rt > bt + 2` with `bt = blue + 1`, i.e. a
-    // SCORE lead of 3 for either side. Blue's +1 token is what turns that into
-    // red +4 / blue +2 in REAL stones. This test pins both readings so neither can
-    // drift, and so the boundary is checked rather than described.
-    let place = |r: u32, b: u32| {
+    // Robi then caught a real flaw in the first version of this test: it asserted
+    // `score_lead == 3` at a few hand-picked positions, which is a tautology about
+    // the inputs rather than a property of the engine. A turn can OVERSHOOT the
+    // threshold -- a crush swings the score by 2 (+1 mine, -1 theirs) and a
+    // destructive cast by more -- so a game can jump from a lead of 1 straight past
+    // 3. The rule is "wins iff |score lead| >= 3", and that is what is tested here,
+    // exhaustively.
+    let outcome_of = |r: u32, b: u32| {
         let mut x = Board::new(Board::legal_draw(3), Variant::Standard);
         x.stones[0] = (0..r).fold(0u64, |m, i| m | (1u64 << i));
         x.stones[1] = (0..b).fold(0u64, |m, i| m | (1u64 << (13 + i)));
@@ -1503,24 +1507,27 @@ fn the_lead_rule_is_symmetric_in_score_and_matches_the_live_engine() {
         x.check_game_over(Color::Red);
         x.outcome
     };
-    // Both sides on the board, so this isolates the lead from elimination.
-    assert_eq!(place(4, 1), Outcome::Ongoing, "real +3 for red is NOT a win");
-    assert_eq!(place(5, 2), Outcome::Ongoing, "real +3 for red is NOT a win");
-    assert_eq!(place(5, 1), Outcome::RedWins, "real +4 (score +3) wins for red");
-    assert_eq!(place(6, 2), Outcome::RedWins, "real +4 (score +3) wins for red");
-    assert_eq!(place(3, 1), Outcome::Ongoing, "real +2 for red is NOT a win");
-    assert_eq!(place(2, 3), Outcome::Ongoing, "real +1 for blue is NOT a win");
-    assert_eq!(place(1, 3), Outcome::BlueWins, "real +2 (score +3) wins for blue");
-    assert_eq!(place(2, 4), Outcome::BlueWins, "real +2 (score +3) wins for blue");
-    // The symmetry itself: a SCORE lead of exactly 3 wins for whoever holds it.
-    for (r, b) in [(5u32, 1u32), (6, 2), (7, 3)] {
-        assert_eq!(place(r, b), Outcome::RedWins);
-        let score_lead = r as i32 - (b as i32 + 1);
-        assert_eq!(score_lead, 3, "red wins exactly at a score lead of 3");
+    let mut overshoot = 0;
+    // Both sides non-empty throughout, so elimination is never the cause.
+    for r in 1..10u32 {
+        for b in 1..10u32 {
+            if r + b > 13 { continue; }
+            let score_lead = r as i32 - (b as i32 + 1);
+            let want = if score_lead >= 3 { Outcome::RedWins }
+                       else if score_lead <= -3 { Outcome::BlueWins }
+                       else { Outcome::Ongoing };
+            assert_eq!(outcome_of(r, b), want,
+                "red {r} blue {b}: score lead {score_lead} should be {want:?}");
+            if score_lead.abs() > 3 { overshoot += 1; }
+        }
     }
-    for (r, b) in [(1u32, 3u32), (2, 4), (3, 5)] {
-        assert_eq!(place(r, b), Outcome::BlueWins);
-        let score_lead = (b as i32 + 1) - r as i32;
-        assert_eq!(score_lead, 3, "blue wins exactly at a score lead of 3");
-    }
+    assert!(overshoot >= 20, "the sweep must actually cover overshooting leads");
+
+    // And the two unit statements, pinned so neither reading can drift:
+    // real +3 is NOT a win for red; real +4 (score +3) is.
+    assert_eq!(outcome_of(4, 1), Outcome::Ongoing);
+    assert_eq!(outcome_of(5, 1), Outcome::RedWins);
+    // real +2 (score +3) IS a win for blue.
+    assert_eq!(outcome_of(2, 3), Outcome::Ongoing);
+    assert_eq!(outcome_of(1, 3), Outcome::BlueWins);
 }
