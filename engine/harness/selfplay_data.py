@@ -1,6 +1,20 @@
 """C1: generate self-play positions labelled with the eventual game outcome.
 
     selfplay_data.py <games> <depth> <out_dir> <random_ply_pct> [eval] [rank_every]
+                     [width_scale] [adaptive]
+
+`width_scale` and `adaptive` are the widening knobs, and they are the whole
+reason this file changed. The generator hardcoded `width_scale=1` while the
+engine ships at `DEFAULT_WIDTH_SCALE` (4) with adaptive widening on, so every
+position in the 4.37M-row set was produced by a search worth -223 Elo against
+the one we actually run. Leaf distributions from a narrow search do not cover
+the deep dash/cast lines a wide search reaches, and alpha-beta *selects* the
+positions where a model trained off-policy is least constrained.
+
+`adaptive` is `P:EASY:HARD` (colon-separated -- the cloud runner splits arms on
+commas) or `off`, and it is REQUIRED. It has no default on purpose: a default
+here would be a restatement of a value that lives in two other files, which is
+the mistake that invalidated two campaigns.
 
 `seed_offset` is LAST so the argument list composes with the generic cloud runner,
 which appends the shard offset. Each shard writes `<out_dir>/positions_<offset>.npz`.
@@ -45,7 +59,8 @@ CHECKPOINT_GAMES = 20
 # third, so that is where the evaluation earns its keep.
 
 
-def play_one(seed, depth, rng, random_ply_pct, competitive, ev='material', rank_every=0):
+def play_one(seed, depth, rng, random_ply_pct, competitive, ev='material',
+             rank_every=0, width_scale=1, adaptive=None):
     variant = "competitive" if competitive else "standard"
     b = se.Board(se.Board.legal_draw(seed), variant)
     b.setup_initial()
@@ -71,7 +86,8 @@ def play_one(seed, depth, rng, random_ply_pct, competitive, ev='material', rank_
                 b.advance_turn()
                 continue    # row keeps NaN: no search was run for this position
         d, n, dt, over, w, sc, wd = b.play_best(
-            0, depth, 20, 16, 1, hist, ev, False, MERGE_OFF)
+            0, depth, 20, 16, width_scale, hist, ev, False, MERGE_OFF,
+            adaptive=adaptive)
         row[4] = float(sc)          # the depth-`depth` score for THIS position
         # POLICY LABEL: where the chosen turn sits in the current ordering. The
         # search expands only the first 6-40 successors, so if this is routinely
@@ -101,9 +117,28 @@ if __name__ == "__main__":
     rpct = float(sys.argv[4]) if len(sys.argv) > 4 else 0.08
     ev = sys.argv[5] if len(sys.argv) > 5 else "tfit"
     rank_every = int(sys.argv[6]) if len(sys.argv) > 6 else 3
+    # Not a literal: ask the engine what it ships, so this file cannot drift
+    # away from the search the data is supposed to be on-policy for.
+    width_scale = int(sys.argv[7]) if len(sys.argv) > 7 else se.DEFAULT_WIDTH_SCALE
+    if len(sys.argv) <= 8:
+        sys.exit("adaptive is required: pass P:EASY:HARD (e.g. 0.10:2:6) or off")
+    _a = sys.argv[8]
+    if _a.lower() in ("off", "none"):
+        adaptive = None
+    else:
+        _p, _e, _h = _a.split(":")
+        adaptive = (float(_p), int(_e), int(_h))
     off = shard_offset()      # env only; argv positions are for real arguments
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, f"positions_{off}.npz")
+
+    print(f"ENGINE CONFIG: width_scale={width_scale} adaptive={adaptive} "
+          f"eval={ev} depth={depth} random_ply={rpct} rank_every={rank_every}",
+          flush=True)
+    print(f"  engine DEFAULT_WIDTH_SCALE={se.DEFAULT_WIDTH_SCALE} "
+          f"other defaults={se.search_defaults()}", flush=True)
+    print(f"  seeds {9_000_000 + off} .. {9_000_000 + off + games - 1} "
+          f"(shard offset {off})", flush=True)
 
     rng = random.Random(12345 + off)
     H, F, S, P, R, Y, G, Q, K = [], [], [], [], [], [], [], [], []
@@ -128,14 +163,19 @@ if __name__ == "__main__":
             game=np.asarray(G, dtype=np.int64),
             score=np.asarray(Q, dtype=np.float32),
             best_rank=np.asarray(K, dtype=np.int16),
-            hand_names=np.asarray(se.HAND_FEATURE_NAMES))
+            hand_names=np.asarray(se.HAND_FEATURE_NAMES),
+            # Provenance travels WITH the data. The log that records how a
+            # shard was generated is not the file the trainer opens.
+            cfg=np.asarray([f"width_scale={width_scale}",
+                            f"adaptive={adaptive}", f"eval={ev}",
+                            f"depth={depth}", f"random_ply={rpct}"]))
         os.replace(tmp, out)      # atomic: readers never see a partial file
 
     for i in range(games):
         seed = 9_000_000 + off + i
         competitive = (i % 4 == 0)      # a quarter of games use the free opening
         rows, winner, spells = play_one(seed, depth, rng, rpct, competitive,
-                                        ev, rank_every)
+                                        ev, rank_every, width_scale, adaptive)
         if winner not in ('red', 'blue'):
             dropped += 1                # unfinished games carry no label
             continue
