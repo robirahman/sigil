@@ -22,10 +22,15 @@ BUCKET=focus-surfer-494820-g0-sigil
 md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
+# Base index for this VM's shards. Every VM in a fleet runs workers 0..N-1,
+# so without a per-VM base they all compute the SAME SIGIL_SHARD_OFF, play
+# the SAME seeds, and write the SAME npz filenames over each other in GCS --
+# replication masquerading as sample size, which is the ab_eval bug again.
+SHARD_BASE=$(md shard-base)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=rust-bitboard-engine}" \
-  "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}"
-echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH max_hours=$MAXH"
+  "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" "${SHARD_BASE:=0}"
+echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH max_hours=$MAXH shard_base=$SHARD_BASE"
 echo "arms: $ARMS"
 
 # ---------------------------------------------------------------------------
@@ -119,10 +124,10 @@ for arm in $ARMS; do
     # every ab_eval arm that also passed an optional trailing argument: the offset
     # landed past the last position the harness reads, all shards ran identical
     # seeds, and the reported "n" was replication rather than sample size.
-    ( SIGIL_SHARD_OFF=$((w*1000)) \
+    ( SIGIL_SHARD_OFF=$(((SHARD_BASE + w)*1000)) \
       $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
         $(echo "$arm" | tr ',' ' ') \
-        > "$WORK/out/arm${ai}_${tag}_w${w}.log" 2>&1 ) &
+        > "$WORK/out/arm${ai}_${tag}_w$((SHARD_BASE + w)).log" 2>&1 ) &
     PIDS+=($!)
   done
 done
