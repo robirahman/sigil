@@ -18,10 +18,12 @@ MACHINE=${8:-c3d-highcpu-30}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
 BRANCH=${BRANCH:-rust-bitboard-engine}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-RUN=$(date -u +%Y%m%dT%H%M%SZ)
+# Overridable so every VM in one fleet writes under ONE run prefix.
+RUN=${RUN:-$(date -u +%Y%m%dT%H%M%SZ)}
+SHARD_BASE=${SHARD_BASE:-0}
 
 SMOKE_FILE=$(mktemp); printf '%s' "$SMOKE" > "$SMOKE_FILE"
-echo "RUN=$RUN  name=$NAME  harness=$HARNESS  workers=$WORKERS  zone=$ZONE  cap=${MAXH}h  machine=$MACHINE"
+echo "RUN=$RUN  name=$NAME  harness=$HARNESS  workers=$WORKERS  shard_base=$SHARD_BASE  zone=$ZONE  cap=${MAXH}h  machine=$MACHINE"
 echo "arms: $(cat "$ARMS_FILE")"
 
 gcloud compute instances create "$NAME" \
@@ -31,7 +33,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE" \
   --metadata-from-file="startup-script=$HERE/runner.sh,arms=$ARMS_FILE,smoke=$SMOKE_FILE" \
   --format="value(name,status)"
 rm -f "$SMOKE_FILE"
