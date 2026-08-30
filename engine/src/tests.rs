@@ -162,7 +162,8 @@ fn win_by_three_score_lead_is_asymmetric() {
     assert!(!b.check_game_over(Color::Red), "red lead of 3 is not enough");
     b.stones[0] = 0b11111; b.update();
     assert!(b.check_game_over(Color::Red));
-    assert_eq!(b.outcome, Outcome::RedWins, "red needs a real lead of 4");
+    assert_eq!(b.outcome, Outcome::RedWins,
+               "the +/-3 lead is symmetric in SCORE; for red that is +4 real stones");
 
     let mut b = Board::new([0;9], Variant::Standard);
     b.stones[0] = 1 << 0; b.stones[1] = 0b110 << 20; b.update();
@@ -1482,5 +1483,44 @@ fn every_width_shape_is_monotone_in_scale_and_nonzero() {
             assert!(a > 0, "shape {shape} depth {d} has zero width");
             assert_eq!(b, a * 4, "scale must multiply cleanly");
         }
+    }
+}
+
+#[test]
+fn the_lead_rule_is_symmetric_in_score_and_matches_the_live_engine() {
+    // Robi flagged "red needs +3, blue +2", which is the same rule stated in two
+    // different UNITS -- and the ambiguity was in our wording, not the code.
+    //
+    // The live sim-board.js computes `rt > bt + 2` with `bt = blue + 1`, i.e. a
+    // SCORE lead of 3 for either side. Blue's +1 token is what turns that into
+    // red +4 / blue +2 in REAL stones. This test pins both readings so neither can
+    // drift, and so the boundary is checked rather than described.
+    let place = |r: u32, b: u32| {
+        let mut x = Board::new(Board::legal_draw(3), Variant::Standard);
+        x.stones[0] = (0..r).fold(0u64, |m, i| m | (1u64 << i));
+        x.stones[1] = (0..b).fold(0u64, |m, i| m | (1u64 << (13 + i)));
+        x.update();
+        x.check_game_over(Color::Red);
+        x.outcome
+    };
+    // Both sides on the board, so this isolates the lead from elimination.
+    assert_eq!(place(4, 1), Outcome::Ongoing, "real +3 for red is NOT a win");
+    assert_eq!(place(5, 2), Outcome::Ongoing, "real +3 for red is NOT a win");
+    assert_eq!(place(5, 1), Outcome::RedWins, "real +4 (score +3) wins for red");
+    assert_eq!(place(6, 2), Outcome::RedWins, "real +4 (score +3) wins for red");
+    assert_eq!(place(3, 1), Outcome::Ongoing, "real +2 for red is NOT a win");
+    assert_eq!(place(2, 3), Outcome::Ongoing, "real +1 for blue is NOT a win");
+    assert_eq!(place(1, 3), Outcome::BlueWins, "real +2 (score +3) wins for blue");
+    assert_eq!(place(2, 4), Outcome::BlueWins, "real +2 (score +3) wins for blue");
+    // The symmetry itself: a SCORE lead of exactly 3 wins for whoever holds it.
+    for (r, b) in [(5u32, 1u32), (6, 2), (7, 3)] {
+        assert_eq!(place(r, b), Outcome::RedWins);
+        let score_lead = r as i32 - (b as i32 + 1);
+        assert_eq!(score_lead, 3, "red wins exactly at a score lead of 3");
+    }
+    for (r, b) in [(1u32, 3u32), (2, 4), (3, 5)] {
+        assert_eq!(place(r, b), Outcome::BlueWins);
+        let score_lead = (b as i32 + 1) - r as i32;
+        assert_eq!(score_lead, 3, "blue wins exactly at a score lead of 3");
     }
 }

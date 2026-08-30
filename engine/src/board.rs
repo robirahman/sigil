@@ -142,7 +142,13 @@ impl Board {
 
     /// `check_game_over`. Every phantom-stone term (Providence/Ambush/Aftershock)
     /// is zero in this scope, so it reduces to real stones plus blue's +1 token.
-    /// That token makes the lead asymmetric: red needs 4 real stones, blue 2.
+    /// ALWAYS STATE THE UNIT. The rule is the "+/-3 lead" and it is SYMMETRIC IN
+    /// SCORE: each side wins on a score lead of 3, where blue's score is its real
+    /// stones PLUS the token. Converting to real stones is what makes it look
+    /// asymmetric -- red needs +4 real, blue +2 real -- and quoting only that half
+    /// reads as an off-by-one to anyone thinking in score. Verified against the live
+    /// `sim-board.js` (`rt > bt + 2` with `bt = blue + 1`) and empirically: red 5 vs
+    /// blue 1 wins, red 5 vs blue 2 and red 4 vs blue 1 do not.
     pub fn check_game_over(&mut self, active: Color) -> bool {
         if self.outcome != Outcome::Ongoing { return true; }
         if self.variant.has_deathmatch() { return false; }

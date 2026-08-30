@@ -12,7 +12,8 @@
 //!
 //! So the terms below are not "positional weights" in the sense that campaign
 //! tested. They measure progress toward the three win conditions:
-//!   * distance to the +-3 lead (asymmetric: red needs 4 real stones, blue 2)
+//!   * distance to the +-3 lead: SYMMETRIC in score (both need +3, blue's score
+//!     includes its +1 token), which is red +4 / blue +2 in REAL stones
 //!   * whose stones are in danger of being crushed (liberty pressure)
 //!   * how close each side is to charging and casting (sigil fill, mana tempo)
 //!   * the sixth-spell trigger, which is a liability when you are behind

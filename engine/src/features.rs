@@ -99,7 +99,8 @@ impl Board {
     /// Rich, close-to-the-board features for the offline learnability test and as
     /// the seed of the learned eval's inputs. Returned from `c`'s POV so a single
     /// model serves both sides without mirroring — Sigil is NOT colour-symmetric
-    /// (red needs a real lead of 4, blue 2, and blue holds the +1 token), so a
+    /// (the +/-3 lead is symmetric in SCORE, which is red +4 / blue +2 in real
+    /// stones because blue holds the +1 token), so a
     /// mirrored two-perspective encoding would be a correctness bug here.
     pub fn full_features(&self, c: Color) -> Vec<f32> {
         let mine = self.mine(c);

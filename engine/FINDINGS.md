@@ -53,7 +53,10 @@ Go-like movement.
 
 ## Win conditions, deferred packs out
 All phantom-stone terms are zero, so `check_game_over` is real stones plus blue's
-+1 token, which makes the lead **asymmetric**: red needs a real lead of 4, blue 2.
++1 token. The rule is the **±3 lead and it is SYMMETRIC IN SCORE** — each side wins
+on a score lead of 3, where blue's score is its real stones **+1**. In REAL STONES
+that is red +4 / blue +2, and quoting only the real-stone half without naming the
+unit reads as an off-by-one to anyone thinking in score.
 Sixth spell: higher total wins, tie goes to the player NOT to move. Elimination is
 checked in `update()` and the token does not save blue. Deathmatch disables both
 the lead and sixth-spell conditions (and the spell counter never increments).
@@ -230,7 +233,7 @@ aspiration windows, threefold-repetition-aware (blue wins), progressive widening
 Two bugs found while measuring, both worth remembering:
 
 1. **Benchmarking on random positions is invalid here.** 52% of independently-placed
-   random positions are ALREADY game over, because red needs a real lead of 4 and
+   random positions are ALREADY game over, because in REAL STONES red needs +4 and
    blue only 2. Depth measured that way looked like 1.25. Measure over played games.
 2. **Expanding the full move set collapses the search.** With b ~ 10^4, generation
    not evaluation dominates and depth fell to ~1.25 — worse than the shipped engine,
