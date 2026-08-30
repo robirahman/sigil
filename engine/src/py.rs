@@ -582,9 +582,10 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
 /// is not limited by the browser's capped enumerator.
 #[pyfunction]
 #[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=1,
-                    history_sfns=vec![], eval_name="material"))]
+                    history_sfns=vec![], eval_name="material", adaptive=None))]
 fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
-                     width_scale: usize, history_sfns: Vec<String>, eval_name: &str)
+                     width_scale: usize, history_sfns: Vec<String>, eval_name: &str,
+                     adaptive: Option<(f32, usize, usize)>)
     -> PyResult<(String, String, i32, u64, i32, f64, f64)>
 {
     use std::time::Instant;
@@ -601,6 +602,7 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
     // did not know silently became the structural default. One resolver now, and it
     // errors rather than guessing.
     s.weights = weights_by_name(eval_name)?;
+    if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
     for h in history_sfns {
         if let Ok(hb) = crate::board::Board::from_sfn(&h) {
             s.add_history(crate::zobrist::ZOBRIST.key_js(&hb));

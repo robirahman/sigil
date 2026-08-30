@@ -30,6 +30,7 @@ os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
 import sigil_engine as se
 
 ARGS = None
+ADAPTIVE = None
 STATS = {'moves': 0, 'nodes': 0, 'seconds': 0.0}
 
 class Handler(SimpleHTTPRequestHandler):
@@ -92,7 +93,8 @@ class Handler(SimpleHTTPRequestHandler):
             budget = int(req.get('time_ms') or ARGS.time * 1000)
             hist = list(req.get('history_sfns') or [])
             aj, expected, depth, nodes, score, secs, score_ui = se.pick_move_actions(
-                sfn, budget, 64, 21, ARGS.width_scale, hist, ARGS.eval)
+                sfn, budget, 64, 21, ARGS.width_scale, hist, ARGS.eval,
+                ADAPTIVE)
             acts = json.loads(aj)
             STATS['moves'] += 1; STATS['nodes'] += nodes; STATS['seconds'] += secs
             kinds = ','.join(a['type'] for a in acts)
@@ -135,6 +137,12 @@ def main():
                          "+131). Longer time controls are NOT yet measured with "
                          "independent seeds. Pass --eval material for the "
                          "previous behaviour.")
+    ap.add_argument('--adaptive', default='2,6', dest='adaptive',
+                    help="adaptive widening as EASY,HARD scales, or 'off'. The "
+                         "default 2,6 spends a narrow budget on positions a "
+                         "classifier calls easy and a wide one on the rest: "
+                         "+22 Elo [+7,+36] at 3 s over uniform width_scale 4, "
+                         "SPRT-accepted over 2,239 games")
     ap.add_argument('--verbose', action='store_true')
     ARGS = ap.parse_args()
     if ARGS.docs is None:
@@ -146,7 +154,13 @@ def main():
     if not os.path.isfile(os.path.join(ARGS.docs, 'game.html')):
         sys.exit(f"{ARGS.docs} has no game.html — is that the docs/ directory?")
     print(f"serving {ARGS.docs} on http://localhost:{ARGS.port}")
-    print(f"engine: {ARGS.time}s/move, width_scale {ARGS.width_scale}, eval {ARGS.eval}")
+    ADAPTIVE = None
+    if ARGS.adaptive and ARGS.adaptive.lower() not in ('off','none',''):
+        _e, _h = (int(x) for x in ARGS.adaptive.split(','))
+        ADAPTIVE = (0.10, _e, _h)      # 0.10 is the fitted threshold
+    globals()['ADAPTIVE'] = ADAPTIVE
+    print(f"engine: {ARGS.time}s/move, width_scale {ARGS.width_scale}, "
+          f"eval {ARGS.eval}, adaptive {ARGS.adaptive}")
     print(f"\n  open  http://localhost:{ARGS.port}/game.html?ai=rust\n")
     print("  the engine chooses from its full enumeration; the browser verifies")
     print("  each action list reproduces the engine's position before playing it\n")
