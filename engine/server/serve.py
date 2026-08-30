@@ -161,7 +161,9 @@ def main():
     globals()['ADAPTIVE'] = ADAPTIVE
     print(f"engine: {ARGS.time}s/move, width_scale {ARGS.width_scale}, "
           f"eval {ARGS.eval}, adaptive {ARGS.adaptive}")
-    print(f"\n  open  http://localhost:{ARGS.port}/game.html?ai=rust\n")
+    # ?ai=rust is now the WASM tier (runs client-side even on this server);
+    # rust_native is the tier that actually calls this helper.
+    print(f"\n  open  http://localhost:{ARGS.port}/game.html?ai=rust_native\n")
     print("  the engine chooses from its full enumeration; the browser verifies")
     print("  each action list reproduces the engine's position before playing it\n")
     ThreadingHTTPServer(('127.0.0.1', ARGS.port), Handler).serve_forever()

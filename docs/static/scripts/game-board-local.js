@@ -881,6 +881,18 @@ document.addEventListener('alpine:init', () => {
 					// after a sweep showed Caveman <=2-ply beats every one of them
 					// 4/4. Same Firebase UIDs (__ai_easy__, etc.) for URL/bookmark
 					// stability — the AIs got replaced, the slots stayed.
+					// Rust engine tiers: per-move seconds and TT size. tt_bits is
+					// memory-bound in a tab (2^20 entries is ~34 MB; 2^21 is ~67 MB and
+					// silently kills low-RAM iOS Safari), so Deep sizes up only on
+					// machines that report >= 8 GB.
+					const _RUST_TIERS = {
+						rust_quick: { time: 3, ttBits: 18 },
+						rust: { time: 10, ttBits: 20 },
+						rust_deep: {
+							time: 30,
+							ttBits: (navigator.deviceMemory || 4) >= 8 ? 21 : 20,
+						},
+					};
 					const _CAVEMAN_TIER_BUDGETS = {
 						easy: 0.1,
 						medium: 1.0,
@@ -899,11 +911,12 @@ document.addEventListener('alpine:init', () => {
 						});
 						options.ai.pondering = _aiAuthManager
 							? _aiAuthManager.enablePondering : false;
-					} else if (aiMode === 'rust') {
-						// Unlisted local tier (?ai=rust): the native Rust engine, reached
-						// through a localhost helper (engine/server/serve.py). Not usable
-						// on the deployed site - GitHub Pages is static and there is no
-						// server, so this only works when the page is served by that helper.
+					} else if (_RUST_TIERS[aiMode] || aiMode === 'rust_native') {
+						// The Rust engine. The public tiers run its WebAssembly build in
+						// a Web Worker - fully client-side, so they work on the static
+						// GitHub Pages deployment. ?ai=rust_native is the unlisted dev
+						// tier: the native engine through the localhost helper
+						// (engine/server/serve.py) at full playtest strength.
 						//
 						// The engine implements the 39 OFFICIAL spells only, so the draw is
 						// restricted to those packs; it rejects Tectonic / Providence /
@@ -915,7 +928,17 @@ document.addEventListener('alpine:init', () => {
 								'flood', 'autumn', 'gloom', 'covenant',
 							]);
 						}
-						options.ai = new RustAI({ timeLimit: 60 });
+						if (aiMode === 'rust_native') {
+							options.ai = new RustAI({ transport: 'fetch', timeLimit: 60 });
+						} else {
+							const t = _RUST_TIERS[aiMode];
+							options.ai = new RustAI({
+								transport: 'worker', timeLimit: t.time, ttBits: t.ttBits,
+							});
+							// Fetch+compile the wasm during the human's first think,
+							// not the AI's.
+							RustAI.preload();
+						}
 						options.ai.pondering = false;
 					} else if (aiMode === 'positional') {
 						// Unlisted experimental tier (?ai=positional): Hard-class

@@ -473,3 +473,52 @@ impl Board {
         mat
     }
 }
+
+/// Every accepted preset name, in one place. Exported (via py.rs) as
+/// `EVAL_NAMES` so callers (argparse `choices`, harnesses, docs) enumerate
+/// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
+/// outright, which is the fourth instance of the same "list written down
+/// twice" failure in this codebase.
+pub const EVAL_NAMES: [&str; 18] = [
+    "default", "structural", "material", "mtempo", "snotempo",
+    "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
+    "hand", "tfit", "tflip",
+];
+
+/// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
+/// The old `_ => Weights::default()` arm meant a typo silently selected the
+/// structural eval, which is the same failure shape as the `merge_min_width`
+/// binding default that invalidated a 120-game campaign.
+///
+/// Lives here (not in py.rs) so BOTH front ends — the CPython module and the
+/// wasm build — resolve presets through the one list. The wasm feature does not
+/// compile py.rs at all, and a wasm entry point that could not resolve names
+/// would fall back to `Weights::default()`, the exact trap this exists to close.
+pub fn weights_by_name(name: &str) -> Result<Weights, String> {
+    Ok(match name {
+        "default" | "structural" => Weights::default(),
+        "material" => MATERIAL_ONLY,
+        "mtempo" => MATERIAL_TEMPO,
+        "snotempo" => STRUCTURAL_NO_TEMPO,
+        "hand" => HAND_AT_BUDGET,
+        "tfit" => FIT_AT_BUDGET,
+        "tflip" => FLIP_AT_BUDGET,
+        "s01" => STRUCT_01,
+        "s02" => STRUCT_02,
+        "s04" => STRUCT_04,
+        "s06" => STRUCT_06,
+        "s08" => STRUCT_08,
+        "s12" => STRUCT_12,
+        "s25" => STRUCT_25,
+        "s50" => STRUCT_50,
+        "classic" => CLASSIC,
+        "mana" => MANA_ONLY,
+        "mix" => CAPPED_MIX,
+        "control" => CONTROL_ONLY,
+        "mc" => CAPPED_MC,
+        "manavoid" => CAPPED_MANAVOID,
+        other => return Err(format!(
+            "unknown eval name {other:?}; expected one of default/structural, \
+             material, mtempo, snotempo, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+    })
+}

@@ -21,7 +21,7 @@
 /// Monotonic milliseconds. `std::time::Instant` panics on
 /// wasm32-unknown-unknown, so the browser build reads the JS clock instead.
 #[cfg(not(target_arch = "wasm32"))]
-fn now_ms() -> f64 {
+pub(crate) fn now_ms() -> f64 {
     use std::sync::OnceLock;
     use std::time::Instant;
     static START: OnceLock<Instant> = OnceLock::new();
@@ -29,7 +29,7 @@ fn now_ms() -> f64 {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn now_ms() -> f64 {
+pub(crate) fn now_ms() -> f64 {
     // Date.now() is monotonic enough for a per-move budget and needs no
     // performance.now() plumbing through the Worker.
     js_sys::Date::now()
@@ -352,6 +352,18 @@ impl Search {
     pub fn go(&mut self, root: &Board, c: Color, max_depth: i32, time_ms: u64)
         -> (Option<Turn>, i32, SearchStats)
     {
+        self.go_with_progress(root, c, max_depth, time_ms, None)
+    }
+
+    /// `go` with an optional per-completed-iteration callback
+    /// `(depth, score, nodes)` — the browser build reports live search progress
+    /// through it. Fires once per completed depth, so its cost is nil; the
+    /// native path always passes `None`.
+    pub fn go_with_progress(&mut self, root: &Board, c: Color, max_depth: i32,
+                            time_ms: u64,
+                            mut progress: Option<&mut dyn FnMut(i32, i32, u64)>)
+        -> (Option<Turn>, i32, SearchStats)
+    {
         self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();
@@ -383,6 +395,7 @@ impl Search {
             prev = score;
             best_score = score;
             self.stats.depth_completed = depth;
+            if let Some(p) = progress.as_deref_mut() { p(depth, score, self.stats.nodes); }
             if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
         }
         (best, best_score, self.stats)

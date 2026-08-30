@@ -94,14 +94,9 @@ Two things worth a maintainer's attention:
 
 ## Playing it locally
 
-`sigilbattle.com` is static GitHub Pages with every AI running client-side, so an
-in-browser `?ai=rust` would need two things this branch does not have: a
-WebAssembly build (groundwork is in place — see below) *and* a translation layer
-emitting JS-compatible action lists for every spell resolution, since a `Cast`
-action here carries an outcome index into our own enumeration that the JS side
-cannot apply.
-
-The terminal opponent needs neither:
+`sigilbattle.com` is static GitHub Pages with every AI running client-side, and
+the engine now ships there as WebAssembly — see the section below. The terminal
+opponent needs none of that:
 
 ```sh
 python engine/harness/play.py --color red --time 60 --seed 7
@@ -112,21 +107,37 @@ Move entry mirrors the real UI in two stages — first move, then continuation
 listed. Every legal option stays reachable, and each cast variant is offered
 separately with its net stone effect.
 
-## WebAssembly
+## WebAssembly (the deployed opponent)
+
+This is how site visitors play the engine: `?ai=rust_quick` / `rust` /
+`rust_deep` (3 / 10 / 30 s per move) run the wasm build inside a Web Worker,
+fully client-side. `src/wasm.rs::pick_move_actions` mirrors `serve.py`'s
+`/api/move` response byte-for-byte — action list, `expected_sfn` for the
+browser's replay-verification gate, `score_ui`, threefold history — and plays
+the shipped config (`tfit`, `width_scale 4`, adaptive widening); the eval
+resolver lives in `eval.rs` so the wasm build cannot silently fall back to the
+structural default the way a py.rs-gated resolver would have. A per-completed-
+depth callback feeds the page's live progress readout.
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown --no-default-features --features wasm
+engine/build-wasm.sh     # cargo build + wasm-bindgen (pinned CLI) + wasm-opt
+node tools/wasm-smoke.js # replay-verifies the committed artifacts headlessly
 ```
 
-756 KB unoptimised; `wasm-opt` and gzip both cut that substantially. `pyo3` is
-optional behind a default `python` feature (a CPython extension module cannot also
-be a wasm module), and the search's clock is `cfg`'d because
-`std::time::Instant` panics on `wasm32-unknown-unknown`. `src/wasm.rs` exposes
-`pick_move(sfn, time_ms, ...)`.
+The artifacts are COMMITTED (`docs/static/wasm/sigil_engine.js` no-modules glue
++ `sigil_engine_bg.wasm`, ~512 KB) because GitHub Pages has no build step. After
+any engine change that ships: run the script, bump `RUST_ENGINE_VERSION`
+(`docs/static/scripts/engine/rust-ai.js`) and `CACHE_VERSION` + the `?v=`
+precache entries (`docs/sw.js`) — the versioned URLs are what make a stale
+service-worker-cached engine impossible.
 
-Note for anyone finishing the browser path: expect the wasm build to be weaker
-than the native measurements above — wasm is typically 1.5–3× slower on this kind
-of integer search, so 60 s in a tab is worth roughly 20–40 s of native thinking.
+`pyo3` is optional behind a default `python` feature (a CPython extension module
+cannot also be a wasm module), and the search's clock is `cfg`'d because
+`std::time::Instant` panics on `wasm32-unknown-unknown`.
+
+Expect the wasm build to be weaker than the native measurements above — wasm is
+typically 1.5–3× slower on this kind of integer search, so 60 s in a tab is
+worth roughly 20–40 s of native thinking. The tier budgets price that in.
 
 ## Playing it in the real web UI (localhost)
 
@@ -136,10 +147,10 @@ python3 -m venv .venv && .venv/bin/pip install maturin
 cd engine && VIRTUAL_ENV=../.venv ../.venv/bin/maturin develop --release && cd ..
 
 # 2. serve the real game UI with the engine behind it
-python engine/server/serve.py --docs docs --time 60      # eval defaults to `material`
+python engine/server/serve.py --docs docs --time 60      # shipped config by default
 
 # 3. open the printed URL
-#    http://localhost:8000/game.html?ai=rust
+#    http://localhost:8000/game.html?ai=rust_native
 ```
 
 The board, animations, move entry, spell prompts and game history are the real
@@ -178,14 +189,14 @@ Latest run: **5,839 (position, turn) pairs, 3,280 casts, 30/30 castable spells,
 because the first version of this gate passed 3,270/3,270 while exercising **zero
 casts** — moves and dashes are the easy half.
 
-**Remaining limitation.** Only the 39 official spells are supported, so `?ai=rust`
-restricts the draw to those nine packs. A position containing Tectonic /
-Providence / Aftershock / Ambush / Panda is rejected with a clear error rather
-than mis-resolved.
+**Remaining limitation.** Only the 39 official spells are supported, so every
+rust tier restricts the draw to those nine packs. A position containing
+Tectonic / Providence / Aftershock / Ambush / Panda is rejected with a clear
+error rather than mis-resolved.
 
-This cannot work on the deployed site: GitHub Pages is static, so there is no
-server to answer `/api/pick`. It only works when the page is served by
-`serve.py`.
+`?ai=rust_native` only works when the page is served by `serve.py` (GitHub
+Pages is static, so there is no server to answer `/api/move` there); the wasm
+tiers work everywhere, this server included.
 
 ### Eval selection matters
 

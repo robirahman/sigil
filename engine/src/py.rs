@@ -631,47 +631,13 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 /// of 32 for `merge_min_width` silently re-enabled a -285 Elo regression and cost a
 /// whole 120-game campaign.
 
-/// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
-/// The old `_ => Weights::default()` arm meant a typo silently selected the
-/// structural eval, which is the same failure shape as the `merge_min_width`
-/// binding default that invalidated a 120-game campaign.
-/// Every accepted preset name, in one place. Exported as `EVAL_NAMES` so callers
-/// (argparse `choices`, harnesses, docs) enumerate rather than restate: a hardcoded
-/// copy in `serve.py` rejected `--eval s04` outright, which is the fourth instance
-/// of the same "list written down twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 18] = [
-    "default", "structural", "material", "mtempo", "snotempo",
-    "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
-    "hand", "tfit", "tflip",
-];
+/// Preset resolution lives in `eval.rs` (`eval::weights_by_name` /
+/// `eval::EVAL_NAMES`) so the wasm front end resolves through the SAME single
+/// list — see the note there. This wrapper only converts the error type.
+pub use crate::eval::EVAL_NAMES;
 
 fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
-    Ok(match name {
-        "default" | "structural" => crate::eval::Weights::default(),
-        "material" => crate::eval::MATERIAL_ONLY,
-        "mtempo" => crate::eval::MATERIAL_TEMPO,
-        "snotempo" => crate::eval::STRUCTURAL_NO_TEMPO,
-        "hand" => crate::eval::HAND_AT_BUDGET,
-        "tfit" => crate::eval::FIT_AT_BUDGET,
-        "tflip" => crate::eval::FLIP_AT_BUDGET,
-        "s01" => crate::eval::STRUCT_01,
-        "s02" => crate::eval::STRUCT_02,
-        "s04" => crate::eval::STRUCT_04,
-        "s06" => crate::eval::STRUCT_06,
-        "s08" => crate::eval::STRUCT_08,
-        "s12" => crate::eval::STRUCT_12,
-        "s25" => crate::eval::STRUCT_25,
-        "s50" => crate::eval::STRUCT_50,
-        "classic" => crate::eval::CLASSIC,
-        "mana" => crate::eval::MANA_ONLY,
-        "mix" => crate::eval::CAPPED_MIX,
-        "control" => crate::eval::CONTROL_ONLY,
-        "mc" => crate::eval::CAPPED_MC,
-        "manavoid" => crate::eval::CAPPED_MANAVOID,
-        other => return Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control"))),
-    })
+    crate::eval::weights_by_name(name).map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
 /// The actual weight vector and worst-case positional budget of a named preset.
