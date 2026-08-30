@@ -472,31 +472,91 @@ document.addEventListener('alpine:init', () => {
 				this.rematchStage = this.rematchStage === 'rematch' ? 'idle' : 'rematch';
 			},
 
+			// True while one turn's animated replay is in flight. Guards every
+			// navigation entry point (buttons are also disabled, but arrow keys
+			// and the eval-chart click bypass the disabled attribute).
+			reviewReplaying: false,
+			// True while the whole-game playthrough is running; clearing it
+			// stops the playthrough after the turn currently animating.
+			reviewAutoplay: false,
+
+			// Animated replay needs the action transcripts; legacy v1 imports
+			// carry only per-turn SFNs and fall back to instant state flips.
+			get reviewCanReplay() {
+				const log = this._gameLogForExport;
+				return !!(log && log.length && typeof this._animateReviewTurn === 'function');
+			},
+
 			reviewPrev() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
 				if (this.reviewIndex > 0) {
 					this.reviewIndex--;
 					this._showReviewPosition();
 				}
 			},
 
-			reviewNext() {
-				if (this.reviewIndex < this.reviewSfns.length - 1) {
-					this.reviewIndex++;
+			// Stepping FORWARD animates the turn exactly as it played live —
+			// the transcript replays through the real engine, emitting the same
+			// animation events — then snaps to the stored after-state. Falls
+			// back to the instant flip when no transcript exists for the turn.
+			async reviewNext() {
+				if (this.reviewReplaying) return;
+				if (this.reviewIndex >= this.reviewSfns.length - 1) return;
+				const i = this.reviewIndex;
+				if (this.reviewCanReplay) {
+					this.reviewReplaying = true;
+					try {
+						await this._animateReviewTurn(i);
+					} catch (e) {
+						console.warn('Animated replay failed; showing stored position:', e);
+					} finally {
+						this.reviewReplaying = false;
+					}
+				}
+				this.reviewIndex = i + 1;
+				this._showReviewPosition();
+			},
+
+			// Whole-game playthrough: animate turn after turn from the current
+			// position (from the start when already at the end). Toggling again
+			// pauses after the turn currently animating.
+			async toggleReviewAutoplay() {
+				if (this.reviewAutoplay) { this.reviewAutoplay = false; return; }
+				if (this.reviewReplaying) return;
+				if (this.reviewIndex >= this.reviewSfns.length - 1) {
+					this.reviewIndex = 0;
 					this._showReviewPosition();
+				}
+				this.reviewAutoplay = true;
+				try {
+					while (this.reviewAutoplay && this.reviewIndex < this.reviewSfns.length - 1) {
+						await this.reviewNext();
+						// A beat between turns, mirroring the live game's rhythm.
+						if (this.reviewAutoplay) await new Promise(r => setTimeout(r, 700));
+					}
+				} finally {
+					this.reviewAutoplay = false;
 				}
 			},
 
 			reviewFirst() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
 				this.reviewIndex = 0;
 				this._showReviewPosition();
 			},
 
 			reviewLast() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
 				this.reviewIndex = this.reviewSfns.length - 1;
 				this._showReviewPosition();
 			},
 
 			exitReview() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
 				this.reviewMode = false;
 				// Restore final board state
 				this.reviewIndex = this.reviewSfns.length - 1;
@@ -1169,6 +1229,72 @@ document.addEventListener('alpine:init', () => {
 					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${evalStr}${trapStr}`);
 				}
 
+				// Shared by live messages and animated replay narration.
+				function maybeSpellFx(message) {
+					if (message && message.includes(' casts ')) {
+						if (typeof soundManager !== 'undefined') soundManager.play('spellCast');
+						if (typeof playSpellEffect === 'function') {
+							const spellName = message.split(' casts ')[1]?.replace(/ /g, '_');
+							if (spellName) playSpellEffect(_this.$refs.spellFxOverlay, _this.$refs.gameBoardContainer, spellName);
+						}
+					}
+				}
+
+				/**
+				 * Animated replay of review turn `i` (reviewSfns[i] -> [i+1]):
+				 * rebuild the turn from its stored action transcript through the
+				 * real engine (reconstructGameLog) on a throwaway board, and
+				 * forward its animation/boardstate events to the same handlers a
+				 * live game drives. Replay narration goes to the prompt line, NOT
+				 * messageHistory — the console stays a clean record of the real
+				 * game. sfn_update / turn_complete / game_over stay ours: the
+				 * replay must never touch persistence or the live game record.
+				 */
+				_this._animateReviewTurn = async function (i) {
+					const log = _this._gameLogForExport;
+					const t = log && log[i];
+					const sfnBefore = _this.reviewSfns[i];
+					if (!t || !sfnBefore || !Array.isArray(t.actions)) return false;
+					if (typeof reconstructGameLog !== 'function') return false;
+					const spellNames = (_this._spellNamesForExport || []).slice();
+					if (spellNames.length !== 9) return false;
+					let variant = 'standard';
+					try { variant = sfnToDict(sfnBefore).variant || 'standard'; } catch (e) { /* default */ }
+					// The boardstate diff baseline belongs to the live game; reset
+					// it so the replay's first snapshot applies in full against
+					// whatever position is currently displayed.
+					_this.previousBoardState = {};
+					// Replayed stone placements must follow the action on screen,
+					// never re-arm the Reset button (handleNewStonePlacement keys
+					// off currentPlayer for that).
+					_this.currentPlayer = '';
+					const label = _this.reviewTurnLabels[i + 1] || '';
+					if (label) _this.message = 'Replaying ' + label;
+					const emit = (ev) => {
+						if (!ev || !ev.type) return;
+						const { type, ...rest } = ev;
+						if (type === 'boardstate') {
+							handleBoardStateEvent(rest);
+							_this._recomputeMapControl();
+						} else if (type === 'new_stone_animation') {
+							handleNewStonePlacement(rest);
+						} else if (type === 'push_animation') {
+							handlePushAnimation(rest);
+						} else if (type === 'crush_animation') {
+							handleCrushAnimation(rest);
+						} else if (type === 'message' && rest.message) {
+							_this.message = rest.message;
+							maybeSpellFx(rest.message);
+						}
+					};
+					await reconstructGameLog(spellNames, variant, sfnBefore, [t], { emit, paceMs: 450 });
+					// Let the last animation land before the caller snaps to the
+					// stored after-state (which also corrects any drift).
+					await new Promise(r => setTimeout(r, 450));
+					if (label) _this.message = label;
+					return true;
+				};
+
 				function handleMessageEvent(payload) {
 					_this.actionList = payload.actionlist || [];
 					_this.awaiting = payload.awaiting;
@@ -1183,13 +1309,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					// Spell cast sound + visual effect
-					if (_this.message && _this.message.includes(' casts ')) {
-						if (typeof soundManager !== 'undefined') soundManager.play('spellCast');
-						if (typeof playSpellEffect === 'function') {
-							const spellName = _this.message.split(' casts ')[1]?.replace(/ /g, '_');
-							if (spellName) playSpellEffect(_this.$refs.spellFxOverlay, _this.$refs.gameBoardContainer, spellName);
-						}
-					}
+					maybeSpellFx(_this.message);
 
 					if (_this.awaiting !== 'action' && payload.message !== '' && payload.message) {
 						_this.messageHistory.push(payload.message);
