@@ -85,15 +85,39 @@ pub const DEFAULT_WIDTH_SCALE: usize = 4;
 /// raising `width_scale` recovers any of them.
 #[inline]
 pub fn width_for_depth(depth: i32, scale: usize) -> usize {
-    let base = match depth {
-        d if d >= 6 => 40,
-        5 => 32,
-        4 => 24,
-        3 => 16,
-        2 => 10,
-        _ => 6,
-    };
-    base * scale
+    width_for_depth_shaped(depth, scale, 0)
+}
+
+/// Candidate width schedules, indexed by remaining depth bucket
+/// `[<=1, 2, 3, 4, 5, >=6]`. Shape 0 is what has always shipped.
+///
+/// The SCALE has been tuned (1 -> 4, worth +223 Elo at 3 s); the SHAPE never has.
+/// It ramps narrow-at-the-leaves to wide-deep, which was a guess, and there are two
+/// competing arguments about it:
+///
+///  * coverage says the LEAVES are starved -- at scale 4 the frontier budget is 24,
+///    where only 86.9% of best moves are reachable, against ~100% at the 160 used
+///    deep. That argues for flattening or even inverting the ramp.
+///  * cost says the opposite -- leaf-adjacent nodes are the overwhelming majority,
+///    so width spent there is the most expensive width in the tree.
+///
+/// Shape 5 inverts the ramp outright. It should be bad on cost grounds and good on
+/// coverage grounds, so it is the cleanest discriminator between those two stories,
+/// and worth running precisely because it is expected to lose.
+pub const WIDTH_SHAPES: [[usize; 6]; 6] = [
+    [6, 10, 16, 24, 32, 40],   // 0 RAMP     (shipped)
+    [10, 10, 10, 10, 10, 10],  // 1 FLAT10
+    [16, 16, 16, 16, 16, 16],  // 2 FLAT16
+    [4, 6, 12, 24, 40, 64],    // 3 STEEP    narrower leaves, wider deep
+    [10, 14, 18, 22, 26, 30],  // 4 SHALLOW
+    [40, 32, 24, 16, 10, 6],   // 5 INVERTED wide leaves, narrow deep
+];
+
+#[inline]
+pub fn width_for_depth_shaped(depth: i32, scale: usize, shape: usize) -> usize {
+    let row = &WIDTH_SHAPES[shape.min(WIDTH_SHAPES.len() - 1)];
+    let i = match depth { d if d >= 6 => 5, 5 => 4, 4 => 3, 3 => 2, 2 => 1, _ => 0 };
+    row[i] * scale
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -146,6 +170,8 @@ pub struct Search {
     /// no class merge AND no reserved key-dash slot. This is the baseline every
     /// ordering change is measured against.
     legacy_order: bool,
+    /// Index into `WIDTH_SHAPES`. 0 is the shipped ramp.
+    width_shape: usize,
     /// Over-sample factor for the learned re-ranker. Generate `rank_oversample x
     /// width` turns, score them with `Board::rank_score`, expand the best `width`.
     ///
@@ -239,6 +265,7 @@ impl Search {
             width_scale: DEFAULT_WIDTH_SCALE,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
+            width_shape: 0,
             rank_oversample: 1,
             adaptive: None,
             aspiration: 60,
@@ -264,6 +291,8 @@ impl Search {
         self.adaptive = Some(((p / (1.0 - p)).ln(), easy.max(1), hard.max(1)));
     }
     pub fn clear_adaptive(&mut self) { self.adaptive = None; }
+    pub fn set_width_shape(&mut self, s: usize) { self.width_shape = s.min(WIDTH_SHAPES.len()-1); }
+    pub fn width_shape_get(&self) -> usize { self.width_shape }
     pub fn set_rank_oversample(&mut self, n: usize) { self.rank_oversample = n.max(1); }
     pub fn rank_oversample_get(&self) -> usize { self.rank_oversample }
     /// The widening scale to use for THIS position.
@@ -365,7 +394,7 @@ impl Search {
         let mut best_local = *best;
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
-        let w = width_for_depth(depth, self.scale_for(b, c)) * 3;
+        let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape) * 3;
         let turns = self.ordered_turns(b, c, 0, best_local, w);
         for t in turns {
             if self.out_of_time() { self.stats.timed_out = true; break; }
@@ -440,7 +469,7 @@ impl Search {
         let mut saw_repetition = false;
 
         self.path.push(key);
-        let w = width_for_depth(depth, self.scale_for(b, c));
+        let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape);
         let turns = self.ordered_turns_action_hint(b, c, ply as usize, tt_move, w);
         for t in turns {
             if self.out_of_time() { self.stats.timed_out = true; break; }

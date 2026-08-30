@@ -31,7 +31,7 @@ MERGE_OFF = 1 << 62
 BASE_WS = se.DEFAULT_WIDTH_SCALE
 KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
-         'rank_oversample')
+         'rank_oversample', 'width_shape')
 
 # Adaptive arms are named `adaptive` and encode (easy_scale, hard_scale) in the arm
 # value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
@@ -55,8 +55,9 @@ def play(b, ms, ev, hist, knob, val):
     kdx = val if knob == 'key_dash_extra' else None
     kdmw = val if knob == 'key_dash_min_width' else None
     ros = val if knob == 'rank_oversample' else None
+    wsh = val if knob == 'width_shape' else None
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
-                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros)
+                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh)
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):

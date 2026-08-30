@@ -356,7 +356,8 @@ impl PyBoard {
                         legacy_order=false, merge_min_width=None, key_dash_reasons=None,
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
-                        adaptive=None, rank_oversample=None))]
+                        adaptive=None, rank_oversample=None,
+                        width_shape=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: usize, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -364,7 +365,7 @@ impl PyBoard {
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
                  q_cast_moves: Option<usize>, aspiration: Option<i32>,
                  adaptive: Option<(f32, usize, usize)>,
-                 rank_oversample: Option<usize>)
+                 rank_oversample: Option<usize>, width_shape: Option<usize>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -388,6 +389,7 @@ impl PyBoard {
         if let Some(a) = aspiration { s.set_aspiration(a); }
         if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
         if let Some(n) = rank_oversample { s.set_rank_oversample(n); }
+        if let Some(w) = width_shape { s.set_width_shape(w); }
         s.weights = weights_by_name(eval_name)?;
         for k in history { s.add_history(k); }
         let t = Instant::now();
@@ -777,6 +779,7 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("key_dash_extra".to_string(), s.key_dash_extra_get() as u64);
     m.insert("q_depth".to_string(), s.q_depth_get() as u64);
     m.insert("rank_oversample".to_string(), s.rank_oversample_get() as u64);
+    m.insert("width_shape".to_string(), s.width_shape_get() as u64);
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
     Ok(m)

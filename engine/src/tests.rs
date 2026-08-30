@@ -1457,3 +1457,30 @@ fn rank_score_needs_no_board_copy_and_orders_sensibly() {
         assert!(pm > dm, "a dash should not outscore every plain move ({pm} vs {dm})");
     }
 }
+
+#[test]
+fn width_shape_zero_is_the_shipped_schedule() {
+    // Shape 0 must be byte-identical to what has always shipped, so a shape sweep
+    // can never silently move the baseline it is measured against.
+    for d in -2..12 {
+        assert_eq!(crate::search::width_for_depth(d, 4),
+                   crate::search::width_for_depth_shaped(d, 4, 0),
+                   "shape 0 diverged from width_for_depth at depth {d}");
+    }
+    assert_eq!(crate::search::width_for_depth(1, 4), 24);
+    assert_eq!(crate::search::width_for_depth(6, 4), 160);
+    let s = crate::search::Search::new(16);
+    assert_eq!(s.width_shape_get(), 0, "shape must default to the shipped ramp");
+}
+
+#[test]
+fn every_width_shape_is_monotone_in_scale_and_nonzero() {
+    for shape in 0..crate::search::WIDTH_SHAPES.len() {
+        for d in 1..8 {
+            let a = crate::search::width_for_depth_shaped(d, 1, shape);
+            let b = crate::search::width_for_depth_shaped(d, 4, shape);
+            assert!(a > 0, "shape {shape} depth {d} has zero width");
+            assert_eq!(b, a * 4, "scale must multiply cleanly");
+        }
+    }
+}
