@@ -254,6 +254,28 @@ class SimBoard:
         format so a dict carried over from a live Board produces matching
         keys: red+blue spell counters, every node's stone in NODE_ORDER,
         red lock name (or 'None'), blue lock name (or 'None').
+
+        FIXME (pre-existing, confirmed by Robi 2026-08-26): this key is WRONG.
+        Two positions are the same position for repetition purposes only if the
+        SIDE TO MOVE and the SPRINGLOCK state also match, and neither is in the
+        key. Concretely `self.whose_turn` and `self.springlock` are both omitted,
+        so:
+
+          * a position reached with red to move and the same position reached
+            with blue to move collide, and
+          * a player who has spent their Seal of Spring re-cast collides with one
+            who has not, even though only one of them may cast the locked spell.
+
+        Both make threefold repetition (a BLUE WIN, per the rulebook) fire early
+        or late. Do not "fix" this by appending to the key casually: the format is
+        byte-compatible with game.py's take_snapshot and with dicts carried over
+        from live Boards, so a change has to be made on both sides together, or
+        suffixed the way the |P and |B schedule suffixes below are — non-empty
+        only, so legacy keys stay identical.
+
+        The Rust engine does NOT inherit this bug: `zobrist.rs::key_js` folds in
+        side-to-move and springlock, which is why its repetition handling and this
+        function's disagree on purpose.
         """
         key = str(self.spell_counter['red']) + str(self.spell_counter['blue'])
         for nodename in NODE_ORDER:

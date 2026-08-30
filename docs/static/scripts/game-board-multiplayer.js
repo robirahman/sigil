@@ -390,11 +390,80 @@ document.addEventListener('alpine:init', () => {
 				this.reviewIndex = sfns.length - 1;
 				this._showReviewPosition();
 			},
-			reviewPrev() { if (this.reviewIndex > 0) { this.reviewIndex--; this._showReviewPosition(); } },
-			reviewNext() { if (this.reviewIndex < this.reviewSfns.length - 1) { this.reviewIndex++; this._showReviewPosition(); } },
-			reviewFirst() { this.reviewIndex = 0; this._showReviewPosition(); },
-			reviewLast() { this.reviewIndex = this.reviewSfns.length - 1; this._showReviewPosition(); },
-			exitReview() { this.reviewMode = false; this.reviewIndex = this.reviewSfns.length - 1; this._showReviewPosition(); },
+			// Animated replay state + navigation, mirroring game-board-local.js.
+			// reviewReplaying guards every entry point while one turn's animation
+			// is in flight (buttons are disabled too, but arrow keys and the
+			// eval-chart click bypass the disabled attribute); clearing
+			// reviewAutoplay stops the playthrough after the animating turn.
+			reviewReplaying: false,
+			reviewAutoplay: false,
+			get reviewCanReplay() {
+				const log = this._gameLogForExport;
+				return !!(log && log.length && typeof this._animateReviewTurn === 'function');
+			},
+			reviewPrev() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
+				if (this.reviewIndex > 0) { this.reviewIndex--; this._showReviewPosition(); }
+			},
+			// Stepping FORWARD animates the turn exactly as it played live, then
+			// snaps to the stored after-state; instant flip when no transcript.
+			async reviewNext() {
+				if (this.reviewReplaying) return;
+				if (this.reviewIndex >= this.reviewSfns.length - 1) return;
+				const i = this.reviewIndex;
+				if (this.reviewCanReplay) {
+					this.reviewReplaying = true;
+					try {
+						await this._animateReviewTurn(i);
+					} catch (e) {
+						console.warn('Animated replay failed; showing stored position:', e);
+					} finally {
+						this.reviewReplaying = false;
+					}
+				}
+				this.reviewIndex = i + 1;
+				this._showReviewPosition();
+			},
+			// Whole-game playthrough from the current position (from the start
+			// when already at the end); toggling again pauses after the turn
+			// currently animating.
+			async toggleReviewAutoplay() {
+				if (this.reviewAutoplay) { this.reviewAutoplay = false; return; }
+				if (this.reviewReplaying) return;
+				if (this.reviewIndex >= this.reviewSfns.length - 1) {
+					this.reviewIndex = 0;
+					this._showReviewPosition();
+				}
+				this.reviewAutoplay = true;
+				try {
+					while (this.reviewAutoplay && this.reviewIndex < this.reviewSfns.length - 1) {
+						await this.reviewNext();
+						if (this.reviewAutoplay) await new Promise(r => setTimeout(r, 700));
+					}
+				} finally {
+					this.reviewAutoplay = false;
+				}
+			},
+			reviewFirst() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
+				this.reviewIndex = 0;
+				this._showReviewPosition();
+			},
+			reviewLast() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
+				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+			},
+			exitReview() {
+				if (this.reviewReplaying) return;
+				this.reviewAutoplay = false;
+				this.reviewMode = false;
+				this.reviewIndex = this.reviewSfns.length - 1;
+				this._showReviewPosition();
+			},
 			_showReviewPosition() {
 				const sfn = this.reviewSfns[this.reviewIndex];
 				if (!sfn) return;
@@ -557,18 +626,76 @@ document.addEventListener('alpine:init', () => {
 				});
 
 				let _turnCount = 0;
+				// A repeated turn header is a Reset Turn replay (the controller
+				// re-announces "Red Turn N" after restoring the snapshot): drop the
+				// aborted attempt's messages so the transcript only keeps final,
+				// submitted moves. Mirrors game-board-local.js.
+				let _turnMsgMark = -1;
+				let _turnMsgText = null;
+
+				// Shared by live messages and animated replay narration.
+				function maybeSpellFx(message) {
+					if (message && message.includes(' casts ')) {
+						if (typeof soundManager !== 'undefined') soundManager.play('spellCast');
+						if (typeof playSpellEffect === 'function') {
+							const spellName = message.split(' casts ')[1]?.replace(/ /g, '_');
+							if (spellName) playSpellEffect(_this.$refs.spellFxOverlay, _this.$refs.gameBoardContainer, spellName);
+						}
+					}
+				}
+
+				/**
+				 * Animated replay of review turn `i`, mirroring game-board-local.js:
+				 * rebuild the turn from its stored transcript through the real engine
+				 * (reconstructGameLog) on a throwaway board. Board/animation events
+				 * are forwarded through handleIncomingEvent; replay narration goes to
+				 * the prompt line, NOT messageHistory. sfn_update / turn_complete /
+				 * game_over / timer and rematch events stay ours — the replay must
+				 * never touch the live game record or room state.
+				 */
+				_this._animateReviewTurn = async function (i) {
+					const log = _this._gameLogForExport;
+					const t = log && log[i];
+					const sfnBefore = _this.reviewSfns[i];
+					if (!t || !sfnBefore || !Array.isArray(t.actions)) return false;
+					if (typeof reconstructGameLog !== 'function') return false;
+					const spellNames = (_this._spellNamesForExport || []).slice();
+					if (spellNames.length !== 9) return false;
+					let variant = 'standard';
+					try { variant = sfnToDict(sfnBefore).variant || 'standard'; } catch (e) { /* default */ }
+					// The boardstate diff baseline belongs to the live game; reset it
+					// so the replay's first snapshot applies in full against whatever
+					// position is currently displayed.
+					_this.previousBoardState = {};
+					// Replayed placements must never re-arm the Reset button
+					// (the new_stone branch keys off currentPlayer for that).
+					_this.currentPlayer = '';
+					const label = _this.reviewTurnLabels[i + 1] || '';
+					if (label) _this.message = 'Replaying ' + label;
+					const emit = (ev) => {
+						if (!ev || !ev.type) return;
+						if (ev.type === 'boardstate' || ev.type === 'new_stone_animation'
+							|| ev.type === 'push_animation' || ev.type === 'crush_animation') {
+							handleIncomingEvent(ev);
+						} else if (ev.type === 'message' && ev.message) {
+							_this.message = ev.message;
+							maybeSpellFx(ev.message);
+						}
+					};
+					await reconstructGameLog(spellNames, variant, sfnBefore, [t], { emit, paceMs: 450 });
+					// Let the last animation land before the caller snaps to the
+					// stored after-state (which also corrects any drift).
+					await new Promise(r => setTimeout(r, 450));
+					if (label) _this.message = label;
+					return true;
+				};
+
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
 					if (type === 'message') {
 						_this.actionList = rest.actionlist || []; _this.awaiting = rest.awaiting; _this.message = rest.message; if (rest.moveoptions) _this.validMoves = rest.moveoptions;
 						// Spell cast sound + visual effect
-						if (_this.message && _this.message.includes(' casts ')) {
-							if (typeof soundManager !== 'undefined') soundManager.play('spellCast');
-							if (typeof playSpellEffect === 'function') {
-								const spellName = _this.message.split(' casts ')[1]?.replace(/ /g, '_');
-								if (spellName) playSpellEffect(_this.$refs.spellFxOverlay, _this.$refs.gameBoardContainer, spellName);
-							}
-						}
+						maybeSpellFx(_this.message);
 						if (_this.awaiting !== 'action' && rest.message) _this.messageHistory.push(rest.message);
 					}
 					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${v}.png`; }); }
@@ -592,7 +719,19 @@ document.addEventListener('alpine:init', () => {
 							_this._recomputeDevEval().catch(() => {});
 						}
 					}
-					else if (type === 'whoseturndisplay') { _this.showReset = false; _this.messageHistory.push(rest.message); _this.whoseTurn = rest.color; if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart'); _turnCount++; }
+					else if (type === 'whoseturndisplay') {
+						_this.showReset = false;
+						if (rest.message === _turnMsgText
+							&& _turnMsgMark >= 0 && _turnMsgMark <= _this.messageHistory.length) {
+							_this.messageHistory.splice(_turnMsgMark);
+						}
+						_turnMsgMark = _this.messageHistory.length;
+						_turnMsgText = rest.message;
+						_this.messageHistory.push(rest.message);
+						_this.whoseTurn = rest.color;
+						if (typeof soundManager !== 'undefined' && _turnCount === 0) soundManager.play('gameStart');
+						_turnCount++;
+					}
 					else if (type === 'turn_complete') {
 						// Track the most recent opponent turn for annotation eligibility.
 						const t = rest.turn;

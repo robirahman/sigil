@@ -1,0 +1,28 @@
+[package]
+name = "sigil_engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "sigil_engine"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python"]
+# Native CPython extension module (maturin / PyO3) - the harnesses use this.
+python = ["pyo3"]
+# Browser build: wasm32-unknown-unknown via wasm-bindgen. Mutually exclusive with
+# `python`, since a CPython extension module cannot be a wasm module.
+wasm = ["wasm-bindgen", "js-sys"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"], optional = true }
+# Pinned EXACTLY: the wasm-bindgen CLI that generates the JS glue must match
+# the crate version or the glue mis-imports at runtime. build-wasm.sh asserts.
+wasm-bindgen = { version = "=0.2.127", optional = true }
+js-sys = { version = "0.3", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1

@@ -436,6 +436,8 @@ function aiReviewMixin() {
 
 		jumpToReviewPly(plyIdx) {
 			if (!this.aiReview) return;
+			if (this.reviewReplaying) return;   // a turn's animated replay is in flight
+			this.reviewAutoplay = false;
 			if (!this.reviewMode) this.startReview();
 			const target = Math.max(0, Math.min(this.reviewSfns.length - 1, plyIdx));
 			this.reviewIndex = target;
@@ -516,15 +518,25 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
 	return rebuilt;
 }
 
-async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
+/**
+ * `opts` (optional) turns the silent rebuild into an ANIMATED replay:
+ *   emit   — receives the same events a live game emits (animations,
+ *            boardstate, messages); default noop.
+ *   paceMs — delay before each replayed input token, and keeps applyAITurn's
+ *            own animation delays live instead of instant. 0 (default) is the
+ *            silent instant rebuild every existing caller gets.
+ */
+async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const noop = () => {};
+	const emit = (opts && opts.emit) || noop;
+	const paceMs = (opts && opts.paceMs) || 0;
 	// Stored records may predate spell renames: normalize the spell list,
 	// raw cast tokens (input turns), and sim cast actions before replay.
 	spellNames = normalizeSpellNames(spellNames);
 	const normToken = tok => typeof tok === 'string' ? normalizeSpellName(tok) : tok;
 	const normAction = a => (a && a.spell)
 		? Object.assign({}, a, { spell: normalizeSpellName(a.spell) }) : a;
-	const gc = new GameController(noop, { variant });
+	const gc = new GameController(emit, { variant });
 	const board = new SigilBoard(spellNames, variant || 'standard');
 	if (setupSfn) {
 		board.loadFromSfn(setupSfn);
@@ -539,7 +551,7 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 
 	const rebuilt = [];
 	const wasInstant = AI_REPLAY_INSTANT;
-	AI_REPLAY_INSTANT = true;
+	AI_REPLAY_INSTANT = paceMs === 0;
 	try {
 		for (const t of turns) {
 			board.takeSnapshot();
@@ -612,15 +624,16 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns) {
 			const inputTokens = t.kind === 'sim'
 				? null : (t.tokens || t.actions || []).map(normToken);
 			if (t.kind === 'sim') {
-				await applyAITurn(board, { actions: simActions }, t.color, noop);
+				await applyAITurn(board, { actions: simActions }, t.color, emit);
 			} else {
 				const queue = inputTokens.slice();
 				gc.getInput = async () => {
 					if (!queue.length) throw new Error('transcript exhausted at turn ' + board.turnCounter);
+					if (paceMs) await _sleep(paceMs);
 					return queue.shift();
 				};
 				if (burnsNow > 0) {
-					await resolveBurnsAtTurnStart(board, t.color, burnsNow, gc.getInput, noop);
+					await resolveBurnsAtTurnStart(board, t.color, burnsNow, gc.getInput, emit);
 					board.burnsThisTurn = 0;
 					// A live partial turn (burn-elimination) recorded only
 					// its burn clicks and skipped the move phase.

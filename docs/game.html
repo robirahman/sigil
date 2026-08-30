@@ -721,12 +721,17 @@
 					</div>
 				</div>
 				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
-					<button class="review-bar__btn" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0">&#x23EE;</button>
-					<button class="review-bar__btn" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0">&#x25C0;</button>
+					<button class="review-bar__btn" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x23EE;</button>
+					<button class="review-bar__btn" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x25C0;</button>
 					<span class="review-bar__label" x-text="reviewTurnLabels[reviewIndex] || ''"></span>
 					<span class="review-bar__pos" x-text="(reviewIndex + 1) + '/' + reviewSfns.length"></span>
-					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1">&#x25B6;</button>
-					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1">&#x23ED;</button>
+					<!-- Whole-game animated playthrough; toggles to pause while running. -->
+					<button class="review-bar__btn" x-show="reviewCanReplay"
+						x-on:click="toggleReviewAutoplay"
+						x-bind:title="reviewAutoplay ? 'Pause playthrough' : 'Replay game with animations'"
+						x-text="reviewAutoplay ? '⏸' : '⏯'"></button>
+					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x25B6;</button>
+					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x23ED;</button>
 					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
 				</div>
 
@@ -812,6 +817,7 @@
 		<script src="static/scripts/engine/mcts.js"></script>
 		<script src="static/scripts/engine/minimax-ai.js"></script>
 		<script src="static/scripts/engine/caveman-ai.js"></script>
+		<script src="static/scripts/engine/rust-ai.js"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
 		<script src="static/scripts/engine/game-review.js"></script>
