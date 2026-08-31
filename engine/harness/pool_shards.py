@@ -39,17 +39,34 @@ def main():
     d = sys.argv[1]
     files = glob.glob(os.path.join(d, '*.log'))
     W = L = U = 0
-    shards = 0
+    shards = complete = 0
     verdicts = {}
     cfg = set()
     for f in files:
         t = open(f, errors='ignore').read()
-        m = re.search(r'^SHARD .*?n=(\d+) armwins=(\d+) basewins=(\d+) unf=(\d+)',
-                      t, re.M)
-        if not m:
+        # Count from the GAME lines, NOT the SHARD summary. ab_search prints SHARD
+        # only after its loop finishes, so a shard the VM watchdog kills mid-run
+        # contributes nothing to a SHARD-based pool and its games vanish silently --
+        # the games are right there in the log, already uploaded, being thrown away.
+        games = re.findall(r'^GAME seed=\d+ arm=(\w+) winner=(\w+)', t, re.M)
+        if not games:
             continue
         shards += 1
-        W += int(m.group(2)); L += int(m.group(3)); U += int(m.group(4))
+        for arm_c, win_c in games:
+            if win_c == 'None':
+                U += 1
+            elif win_c == arm_c:
+                W += 1
+            else:
+                L += 1
+        m = re.search(r'^SHARD .*?n=(\d+) armwins=(\d+) basewins=(\d+) unf=(\d+)',
+                      t, re.M)
+        if m:
+            complete += 1
+            # cross-check: the shard's own tally must match what we counted
+            if int(m.group(2)) != sum(1 for a, w in games if w == a):
+                print(f"  WARNING {os.path.basename(f)}: SHARD armwins={m.group(2)} "
+                      f"but {sum(1 for a, w in games if w == a)} GAME lines say otherwise")
         v = re.search(r'^SPRT.*?(H0|H1|continue)', t, re.M)
         if v:
             verdicts[v.group(1)] = verdicts.get(v.group(1), 0) + 1
@@ -58,7 +75,8 @@ def main():
             cfg.add(c.group(1).strip())
 
     n = W + L
-    print(f"{shards} shards reporting, {len(files)} logs seen")
+    print(f"{shards} shards with games, {complete} reached their own SPRT verdict, "
+          f"{len(files)} logs seen")
     if len(cfg) == 1:
         print(f"config: {next(iter(cfg))}")
     elif len(cfg) > 1:
