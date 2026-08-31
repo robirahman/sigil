@@ -199,8 +199,24 @@ impl Board {
     }
 
     /// Build a legal draw from a seed: 3 distinct rituals, 3 sorceries, 3 charms.
+    /// A legal 9-spell draw for `seed`. DISTINCT seeds must give DISTINCT draws.
+    ///
+    /// This used to seed the xorshift with `seed | 1`, which avoids the zero state
+    /// that xorshift cannot leave -- but at the cost of the low bit, so seeds 2n
+    /// and 2n+1 produced the SAME draw. Measured over 2,320 generated games: every
+    /// draw appeared exactly twice, seed gap exactly 1, in 100% of cases. Spell
+    /// diversity was half what the seed count implied in every seeded dataset, and
+    /// the training-set assumption that "essentially every held-out game is a
+    /// novel combination" was false by construction.
+    ///
+    /// SplitMix64's finalizer mixes all 64 bits instead, so no seed is discarded
+    /// and 0 is a perfectly good input.
     pub fn legal_draw(seed: u64) -> [u8; 9] {
-        let mut s = seed | 1;
+        let mut s = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        s = (s ^ (s >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        s = (s ^ (s >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        s ^= s >> 31;
+        if s == 0 { s = 0x9E37_79B9_7F4A_7C15; }   // xorshift cannot escape 0
         let mut next = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
         let mut out = [0u8; 9];
         for (slot, pool) in [(0usize, &RITUALS[..]), (3, &SORCERIES[..]), (6, &CHARMS[..])] {
