@@ -39,6 +39,40 @@ and `control` is a 12-layer BFS.
 At the measured exchange rate (~1 us ~ 0.2 ply ~ 10 Elo) 1.35 us costs ~13 Elo
 against a ~0.010-nat gain worth maybe +20-30 Elo naive. Thin enough to land negative.
 
+## E0 VERDICT (2026-08-31): no net. Nonlinearity buys nothing.
+
+`fit_gbm_check.py` on 698k on-policy positions, one variable at a time:
+
+| base | model | grouped by draw | grouped by game |
+|---|---|---|---|
+| material + score + ply | linear | 0.01046 | 0.01032 |
+| material + score + ply | GBM | **0.00212** | 0.00203 |
+| material + 12 hand | linear | 0.00986 | 0.00969 |
+| material + 12 hand | GBM | **0.00963** | 0.00975 |
+
+(The MLP rows from that run are uninformative -- capped at 40 iterations for
+runtime and flagged non-converged by sklearn. E0b's ladder MLP was properly
+early-stopped and is the one to cite.)
+
+1. **GBM ~ linear (0.00963 vs 0.00986).** 300 boosted trees extract nothing beyond a
+   linear model. The learned-net direction is dead on the strongest tabular model
+   available, not merely on an MLP's failure.
+2. **No leakage anywhere**: every draw-vs-game pair differs by <= 0.0002. The
+   `legal_draw` collision leaked nothing measurable.
+3. **E0a's 0.050 nats does not replicate** -- the same base and model class give
+   0.0021, 24x smaller. E0a used 17k positions from 4,662 games and its `+- 0.002`
+   was fold spread, not a confidence interval. **Do not act on a learnability number
+   from under ~50k games without replicating it.**
+4. **Search absorbs nearly everything.** Add a depth-4 search score to the base and
+   the 131 features contribute 0.0021 instead of 0.0096.
+
+Ceiling for a better leaf eval: **~0.0096 nats, so roughly +15-25 Elo before cost**,
+against 9-12% of a node if all 131 features are computed. Compare `width_scale`
+1 -> 4, which was **+223 Elo**.
+
+**Recommendation: do branch C (width classifier). Treat branch A as a cheap
+side-bet, gated on the per-block cost measurement.**
+
 ## The gate
 
 `fit_eval_ladder.py` reports L0 material, L1 the 12 hand features, L2 linear on
