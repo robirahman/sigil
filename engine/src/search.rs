@@ -67,6 +67,12 @@ pub const DEFAULT_WINDOW: usize = 16;
 /// against 7.68 at scale 1 -- it gives up **2.2 plies** and still wins by 223 Elo.
 /// In this game seeing more moves beats looking further ahead.
 pub const DEFAULT_WIDTH_SCALE: usize = 4;
+/// The adaptive-widening configuration actually shipped: (threshold probability,
+/// easy scale, hard scale). Exported so `serve.py` and every harness read ONE
+/// source of truth. It was previously written out in serve.py AND again in
+/// ab_search.py while the engine's own default is `None` -- three places, no
+/// authority, which is exactly how `merge_min_width` invalidated two campaigns.
+pub const SHIPPED_ADAPTIVE: (f32, usize, usize) = (0.10, 2, 6);
 
 /// PROGRESSIVE WIDENING.
 ///
@@ -194,6 +200,8 @@ pub struct Search {
     ///
     /// DEFAULT `None`, i.e. uniform `width_scale`, until an arena says otherwise.
     adaptive: Option<(f32, usize, usize)>,
+    /// Which `hard_logit` weight set adaptive widening consults. 0 = shipped.
+    hard_model: u8,
     /// Half-width of the aspiration window, in centistones. Was a hardcoded 60,
     /// chosen by eye against the MATERIAL eval -- whose score distribution is a
     /// one-stone square wave, nothing like `tfit`'s. Too narrow costs re-searches,
@@ -268,6 +276,7 @@ impl Search {
             width_shape: 0,
             rank_oversample: 1,
             adaptive: None,
+            hard_model: 0,
             aspiration: 60,
             q_depth: 0,
             q_cast_moves: 2,
@@ -291,6 +300,8 @@ impl Search {
         self.adaptive = Some(((p / (1.0 - p)).ln(), easy.max(1), hard.max(1)));
     }
     pub fn clear_adaptive(&mut self) { self.adaptive = None; }
+    pub fn set_hard_model(&mut self, m: u8) { self.hard_model = m; }
+    pub fn hard_model_get(&self) -> u8 { self.hard_model }
     pub fn set_width_shape(&mut self, s: usize) { self.width_shape = s.min(WIDTH_SHAPES.len()-1); }
     pub fn width_shape_get(&self) -> usize { self.width_shape }
     pub fn set_rank_oversample(&mut self, n: usize) { self.rank_oversample = n.max(1); }
@@ -300,7 +311,8 @@ impl Search {
     fn scale_for(&self, b: &Board, c: Color) -> usize {
         match self.adaptive {
             None => self.width_scale,
-            Some((t, easy, hard)) => if b.hard_logit(c) >= t { hard } else { easy },
+            Some((t, easy, hard)) =>
+                if b.hard_logit_with(c, self.hard_model) >= t { hard } else { easy },
         }
     }
     pub fn aspiration_get(&self) -> i32 { self.aspiration }
