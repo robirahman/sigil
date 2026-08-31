@@ -427,6 +427,46 @@ class FirebaseSync {
 	}
 
 	/**
+	 * Announce a forfeit: `color` concedes and their opponent wins. The
+	 * `forfeitedBy` field is what the opponent's client listens to; the
+	 * status/winner writes mirror writeTimeout so the room finishes (and
+	 * spectators get their game-finished signal) even if the opponent's tab
+	 * is already gone.
+	 * @param {string} color - the CONCEDING player, 'red' or 'blue'
+	 */
+	async sendForfeit(color) {
+		if (!this.roomRef) return;
+		try {
+			// forfeitedBy FIRST, so the opponent ends the game through the
+			// forfeit path (with attribution) rather than the bare
+			// status-finished signal.
+			await this.roomRef.child('forfeitedBy').set(color);
+			await this.roomRef.child('status').transaction((current) => {
+				if (current === 'playing') return 'finished';
+				return; // abort if already finished
+			});
+			await this.roomRef.child('winner').set(color === 'red' ? 'blue' : 'red');
+			this._removeActiveGameIndex();
+		} catch (e) {
+			console.error('[Sync] sendForfeit FAILED:', e.code, e.message);
+		}
+	}
+
+	/**
+	 * Listen for a forfeit by either player. Fires immediately on subscribe if
+	 * one is already recorded (reconnect), and on the forfeiter's own client
+	 * too — callers guard against re-entry.
+	 * @param {function} callback - receives the conceding color
+	 */
+	listenForForfeit(callback) {
+		if (!this.roomRef) return;
+		this.roomRef.child('forfeitedBy').on('value', (snap) => {
+			const c = snap.val();
+			if (c === 'red' || c === 'blue') callback(c);
+		});
+	}
+
+	/**
 	 * Write a timeout result (game over due to clock).
 	 * Uses a transaction to prevent double-writes.
 	 * @param {string} winner - 'red' or 'blue'

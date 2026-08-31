@@ -510,6 +510,23 @@ document.addEventListener('alpine:init', () => {
 			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
 			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
 			handleEndTurn() { if (this.isSpectator) return; this.sendEvent('pass'); this.actionList = []; },
+			// Two-click forfeit, mirroring game-board-local.js: first click arms
+			// (relabels to confirm), second concedes; arming decays on its own so
+			// a stray click can't leave a live one-click forfeit sitting around.
+			forfeitArmed: false,
+			_forfeitTimer: null,
+			handleForfeit() {
+				if (this.isSpectator) return;
+				if (!this.forfeitArmed) {
+					this.forfeitArmed = true;
+					clearTimeout(this._forfeitTimer);
+					this._forfeitTimer = setTimeout(() => { this.forfeitArmed = false; }, 5000);
+					return;
+				}
+				clearTimeout(this._forfeitTimer);
+				this.forfeitArmed = false;
+				this.sendEvent('forfeit');
+			},
 			handleCharmClick(spell) {
 				const cn = this.spellDict[spell];
 				if (this.awaiting === 'action' && this.actionList.includes(cn)) {

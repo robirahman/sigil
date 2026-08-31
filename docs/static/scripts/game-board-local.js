@@ -599,6 +599,24 @@ document.addEventListener('alpine:init', () => {
 				this.actionList = [];
 			},
 
+			// Two-click forfeit: the first click arms the button (it relabels to
+			// ask for confirmation), the second concedes. Arming decays on its
+			// own so a stray first click can't leave a live one-click forfeit
+			// sitting under the cursor.
+			forfeitArmed: false,
+			_forfeitTimer: null,
+			handleForfeit() {
+				if (!this.forfeitArmed) {
+					this.forfeitArmed = true;
+					clearTimeout(this._forfeitTimer);
+					this._forfeitTimer = setTimeout(() => { this.forfeitArmed = false; }, 5000);
+					return;
+				}
+				clearTimeout(this._forfeitTimer);
+				this.forfeitArmed = false;
+				this.sendEvent('forfeit');
+			},
+
 			handleCharmClick(spell) {
 				const charmName = this.spellDict[spell];
 				if (this.awaiting === 'action' && this.actionList.includes(charmName)) {
@@ -876,23 +894,33 @@ document.addEventListener('alpine:init', () => {
 					options.variant = gameVariant;
 					_this.isDeathmatch = variantHasDeathmatch(gameVariant);
 
-					// Easy / Medium / Hard / Very Hard are now all time-budgeted
-					// Caveman variants. The previous NN-based tiers were retired
-					// after a sweep showed Caveman <=2-ply beats every one of them
-					// 4/4. Same Firebase UIDs (__ai_easy__, etc.) for URL/bookmark
-					// stability — the AIs got replaced, the slots stayed.
-					// Rust engine tiers: per-move seconds and TT size. tt_bits is
-					// memory-bound in a tab (2^20 entries is ~34 MB; 2^21 is ~67 MB and
-					// silently kills low-RAM iOS Safari), so Deep sizes up only on
+					// Rust engine tiers (the wasm build in a Web Worker): per-move
+					// seconds and TT size. tt_bits is memory-bound in a tab (2^20
+					// entries is ~34 MB; 2^21 is ~67 MB and silently kills low-RAM
+					// iOS Safari), so only the long tiers size up, and only on
 					// machines that report >= 8 GB.
+					//
+					// rust_easy..rust_very_hard are the PICKER's Easy/Medium/Hard/
+					// Very Hard: same budgets as the retired Caveman tiers they
+					// replaced, distinct aiMode strings so their Elo posts to the
+					// new "(Rust)" records (__ai_rust_easy__ etc.) instead of the
+					// frozen "(JS)" ones. rust_quick/rust/rust_deep predate the
+					// tier swap and stay reachable for old links and saved games.
+					const _bigTT = (navigator.deviceMemory || 4) >= 8 ? 21 : 20;
 					const _RUST_TIERS = {
+						rust_easy: { time: 0.1, ttBits: 16 },
+						rust_medium: { time: 1, ttBits: 18 },
+						rust_hard: { time: 5, ttBits: 20 },
+						rust_very_hard: { time: 60, ttBits: _bigTT },
 						rust_quick: { time: 3, ttBits: 18 },
 						rust: { time: 10, ttBits: 20 },
-						rust_deep: {
-							time: 30,
-							ttBits: (navigator.deviceMemory || 4) >= 8 ? 21 : 20,
-						},
+						rust_deep: { time: 30, ttBits: _bigTT },
 					};
+					// RETIRED from the picker (replaced by the rust_* tiers above),
+					// but still playable via direct URL and resumed saved games.
+					// Their Elo keeps posting to the __ai_easy__-style records,
+					// which are renamed "(JS)" in Firebase — the history stays
+					// attached to the AIs that earned it.
 					const _CAVEMAN_TIER_BUDGETS = {
 						easy: 0.1,
 						medium: 1.0,
@@ -1724,11 +1752,20 @@ document.addEventListener('alpine:init', () => {
 
 				function _aiNameFor(difficulty) {
 					const labels = {
-						easy: 'AI (Easy)',
-						medium: 'AI (Medium)',
-						hard: 'AI (Hard)',
-						very_hard: 'AI (Very Hard)',
+						// Retired JS Caveman tiers — records renamed "(JS)" when the
+						// Rust tiers took their picker slots (2026-08).
+						easy: 'AI (Easy) (JS)',
+						medium: 'AI (Medium) (JS)',
+						hard: 'AI (Hard) (JS)',
+						very_hard: 'AI (Very Hard) (JS)',
+						// The Rust engine tiers that replaced them, same budgets.
+						rust_easy: 'AI (Easy) (Rust)',
+						rust_medium: 'AI (Medium) (Rust)',
+						rust_hard: 'AI (Hard) (Rust)',
+						rust_very_hard: 'AI (Very Hard) (Rust)',
+						rust_quick: 'AI (Rust Quick)',
 						rust: 'AI (Rust)',
+						rust_deep: 'AI (Rust Deep)',
 						minimax: 'AI (Minimax 3-ply)',
 						positional: 'AI (Positional)',
 						caveman: 'AI (Caveman)',

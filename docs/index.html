@@ -182,8 +182,12 @@
 					var section = document.getElementById('resume-section');
 					var list = document.getElementById('resume-list');
 					var AI_LABELS = {
-						easy: 'AI (Easy)', medium: 'AI (Medium)', hard: 'AI (Hard)',
-						very_hard: 'AI (Very Hard)', positional: 'AI (Positional)',
+						easy: 'AI (Easy) (JS)', medium: 'AI (Medium) (JS)', hard: 'AI (Hard) (JS)',
+						very_hard: 'AI (Very Hard) (JS)',
+						rust_easy: 'AI (Easy) (Rust)', rust_medium: 'AI (Medium) (Rust)',
+						rust_hard: 'AI (Hard) (Rust)', rust_very_hard: 'AI (Very Hard) (Rust)',
+						rust_quick: 'AI (Rust Quick)', rust: 'AI (Rust)', rust_deep: 'AI (Rust Deep)',
+						positional: 'AI (Positional)',
 						caveman: 'Caveman',
 						caveman_1: 'Caveman 1', caveman_2: 'Caveman 2',
 						caveman_3: 'Caveman 3', caveman_4: 'Caveman 4',
@@ -242,37 +246,27 @@
 				<small>Play against the computer</small>
 			</a>
 			<div class="ai-difficulty-row" id="ai-difficulty-row">
-				<a class="mode-button" href="game.html?ai=easy">
+				<!-- All four tiers are the Rust engine (WebAssembly, in-browser),
+				     which replaced the retired JS Caveman tiers at the same time
+				     budgets — roughly +200 Elo at equal time. Old ?ai=easy-style
+				     URLs still reach the JS AIs; their records are the "(JS)"
+				     entries on the leaderboard. Draws are restricted to the nine
+				     official packs (the engine plays official spells only). -->
+				<a class="mode-button" href="game.html?ai=rust_easy">
 					Easy
 					<small>0.1s per turn</small>
 				</a>
-				<a class="mode-button" href="game.html?ai=medium">
+				<a class="mode-button" href="game.html?ai=rust_medium">
 					Medium
 					<small>1s per turn</small>
 				</a>
-				<a class="mode-button" href="game.html?ai=hard">
+				<a class="mode-button" href="game.html?ai=rust_hard">
 					Hard
 					<small>5s per turn</small>
 				</a>
-				<a class="mode-button" href="game.html?ai=very_hard">
+				<a class="mode-button" href="game.html?ai=rust_very_hard">
 					Very Hard
 					<small>60s per turn</small>
-				</a>
-				<!-- The Rust engine, running as WebAssembly in the browser.
-				     Notably stronger than the tiers above at every budget; draws
-				     are restricted to the nine official packs (the engine plays
-				     official spells only). -->
-				<a class="mode-button" href="game.html?ai=rust_quick">
-					Engine &ndash; Quick
-					<small>3s per turn</small>
-				</a>
-				<a class="mode-button" href="game.html?ai=rust">
-					Engine &ndash; Standard
-					<small>10s per turn</small>
-				</a>
-				<a class="mode-button" href="game.html?ai=rust_deep">
-					Engine &ndash; Deep
-					<small>30s per turn</small>
 				</a>
 			</div>
 			<script>

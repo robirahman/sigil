@@ -1077,6 +1077,19 @@ html[data-theme="volcanic"].webp {
 	background: var(--color-btn-reset-hover);
 }
 
+/* Forfeit: muted until armed, then unmistakably the reset-red danger color. */
+.action-button--forfeit {
+	background: var(--color-btn-reset);
+	filter: saturate(0.45);
+}
+
+.action-button--forfeit:focus,
+.action-button--forfeit:hover,
+.action-button--forfeit-armed {
+	background: var(--color-btn-reset-hover);
+	filter: none;
+}
+
 .action-button--rematch {
 	background: var(--color-btn-rematch);
 }

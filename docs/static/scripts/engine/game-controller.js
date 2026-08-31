@@ -42,6 +42,18 @@ class GameController {
 			}
 			return;
 		}
+		if (message === 'forfeit') {
+			// The game ends as a win for the forfeiter's opponent. Takes effect
+			// at the next input prompt (immediately when one is pending), so a
+			// forfeit clicked during the AI's think lands at the start of the
+			// human's turn — the human is then the side to move, i.e. the loser.
+			this._forfeitRequested = true;
+			if (this._inputResolve) {
+				this._inputResolve('__forfeit__');
+				this._inputResolve = null;
+			}
+			return;
+		}
 		if (this._inputResolve) {
 			const resolve = this._inputResolve;
 			this._inputResolve = null;
@@ -59,7 +71,12 @@ class GameController {
 
 	/** Convenience: get input and check for reset. Throws ResetError if reset requested. */
 	async getInput(payload) {
+		// Checked BEFORE the wait too, so a forfeit clicked while no input was
+		// pending (during the opponent's turn) fires at the next prompt instead
+		// of requiring one more click from the player who already gave up.
+		if (this._forfeitRequested) throw new ForfeitError();
 		const resp = await this._waitForInput(payload);
+		if (this._forfeitRequested) throw new ForfeitError();
 		if (this._resetRequested) {
 			throw new ResetError();
 		}
@@ -319,6 +336,28 @@ class GameController {
 					this._emitSfn();
 					resetThisTurn = true;
 					continue;
+				}
+				if (e instanceof ForfeitError) {
+					// The side to move gave up: their opponent wins. Capture the
+					// loser BEFORE restoring the snapshot (restore rewinds
+					// whoseTurn along with everything else), then rewind so the
+					// recorded final position is the clean start of the forfeited
+					// turn rather than whatever mid-turn state the click caught.
+					this._forfeitRequested = false;
+					const loser = board.whoseTurn;
+					const victor = board.enemy(loser);
+					board.restoreSnapshot();
+					board.gameover = true;
+					board.winner = victor;
+					this.emit(board.getBoardStatePayload());
+					this._emitSfn();
+					this.emit({ type: 'message', awaiting: null,
+						message: (loser === 'red' ? 'Red' : 'Blue') + ' forfeits.' });
+					if (this.ai && typeof this.ai.cancelPonder === 'function') {
+						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
+					}
+					this.emit({ type: 'game_over', winner: victor, gameLog: this._gameLog });
+					return;
 				}
 				throw e;
 			}
@@ -784,4 +823,8 @@ class GameController {
 
 class ResetError extends Error {
 	constructor() { super('reset'); }
+}
+
+class ForfeitError extends Error {
+	constructor() { super('forfeit'); }
 }

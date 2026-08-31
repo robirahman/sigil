@@ -459,6 +459,16 @@
 							>
 								End Turn
 							</button>
+							<!-- Concede: first click arms and asks for confirmation,
+							     second click declares the game a win for the opponent. -->
+							<button
+								class="action-button action-button--forfeit"
+								x-bind:class="{ 'is-hidden': !whoseTurn || winner || reviewMode, 'action-button--forfeit-armed': forfeitArmed }"
+								x-on:click="handleForfeit"
+								x-text="forfeitArmed ? 'Confirm forfeit?' : 'Forfeit'"
+							>
+								Forfeit
+							</button>
 							<button
 								class="action-button"
 								x-bind:class="{ 'is-hidden': !currentSfn || winner }"

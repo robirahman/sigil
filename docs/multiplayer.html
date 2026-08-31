@@ -523,10 +523,13 @@
 								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
 							</div>
 					</div>
-					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass'))}">
+					<!-- Visible whenever a live game is on (not only mid-own-turn): the Forfeit button must be reachable during the opponent's turn too. -->
+					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass') || (whoseTurn && !winner && !reviewMode))}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
 						<button class="action-button action-button--dash" x-bind:class="{ 'is-hidden': !actionList.includes('dash') }" x-on:click="handleDash">Dash</button>
 						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
+						<!-- Concede: first click arms and asks for confirmation, second declares the game a win for the opponent. -->
+						<button class="action-button action-button--forfeit" x-bind:class="{ 'is-hidden': isSpectator || !whoseTurn || winner || reviewMode, 'action-button--forfeit-armed': forfeitArmed }" x-on:click="handleForfeit" x-text="forfeitArmed ? 'Confirm forfeit?' : 'Forfeit'">Forfeit</button>
 					</div>
 				</div></div>
 				<div class="container" style="overflow: auto"><div class="container__inner game-board-container" x-ref="gameBoardContainer">

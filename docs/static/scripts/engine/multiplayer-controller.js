@@ -99,6 +99,18 @@ class MultiplayerController {
 			}
 			return;
 		}
+		if (message === 'forfeit') {
+			// Never buffered — a forfeit is room state, not a turn action.
+			// Works on either player's turn: the game ends immediately here,
+			// and on the opponent's client through the forfeitedBy listener.
+			if (this._forfeitHandled || this._timedOut
+				|| (this.board && this.board.gameover)) return;
+			// Announce FIRST, so the opponent still learns of it even if this
+			// tab dies right after the click.
+			this.sync.sendForfeit(this.myColor);
+			this._endByForfeit(this.myColor);
+			return;
+		}
 
 		// Buffer the action locally (don't send yet)
 		if (this.board && this.board.whoseTurn === this.myColor) {
@@ -278,6 +290,10 @@ class MultiplayerController {
 		}
 
 		this._subscribeToRematch();
+
+		// A forfeit by either player ends the game on this client too. Fires
+		// immediately on reconnect into a forfeited room.
+		this.sync.listenForForfeit((color) => this._endByForfeit(color));
 
 		// Send spell setup
 		const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
@@ -594,6 +610,37 @@ class MultiplayerController {
 			else await this._takeTurn(color, false, candash, false, false);
 			return;
 		}
+	}
+
+	/**
+	 * End the game as a win for `loser`'s opponent. Runs on BOTH clients —
+	 * the forfeiter directly from handlePlayerAction, the opponent via the
+	 * room's forfeitedBy listener (the forfeiter's own listener echo is
+	 * absorbed by the _forfeitHandled guard). Result recording mirrors a
+	 * natural game ending: _saveGameRecord on both clients.
+	 */
+	_endByForfeit(loser) {
+		if (this._forfeitHandled || this._timedOut
+			|| (this.board && this.board.gameover)) return;
+		this._forfeitHandled = true;
+		const board = this.board;
+		const winner = board.enemy(loser);
+		// A mid-turn forfeit leaves half a turn on the forfeiter's own board;
+		// rewind to the turn-start snapshot so the recorded final position is
+		// clean. The opponent's board never needs this: partial turns are
+		// buffered locally and never reach the wire.
+		if (loser === this.myColor && board.whoseTurn === this.myColor && !board.gameover) {
+			board.restoreSnapshot();
+		}
+		board.gameover = true;
+		board.winner = winner;
+		board.update();
+		this.emit(board.getBoardStatePayload());
+		this.emit({ type: 'message', awaiting: null,
+			message: (loser === 'red' ? 'Red' : 'Blue') + ' forfeits.' });
+		this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
+		this._saveGameRecord(winner);
+		this._stopTimer();
 	}
 
 	_saveGameRecord(winner) {
