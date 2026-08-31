@@ -80,6 +80,36 @@ def tails(p, y):
     return overconfident, float(np.percentile(np.abs(p - y), 99.9))
 
 
+def fit_mlp_grouped(X, y, groups, make, max_rounds=250, patience=12):
+    """Fit an MLP, early-stopping on a GAME-grouped validation split.
+
+    sklearn's own `early_stopping` carves its validation set at random from the
+    ROWS, so ~25 positions from one game land on both sides of it and the
+    stopping signal is leaked -- the very split error this file exists to
+    prevent. Left in place it trained happily to a held-out log-loss of 2.34 on a
+    1,340-game sample, worse than predicting material alone.
+    """
+    gs = np.unique(groups)
+    val = set(np.random.default_rng(0).permutation(gs)[:max(1, len(gs) // 10)])
+    m = np.isin(groups, list(val))
+    clf = make()
+    best, best_w, bad = np.inf, None, 0
+    for _ in range(max_rounds):
+        clf.partial_fit(X[~m], y[~m], classes=np.array([0.0, 1.0]))
+        v = ll(clf.predict_proba(X[m])[:, 1], y[m])
+        if v < best - 1e-5:
+            best, bad = v, 0
+            best_w = ([w.copy() for w in clf.coefs_],
+                      [b.copy() for b in clf.intercepts_])
+        else:
+            bad += 1
+            if bad >= patience:
+                break
+    if best_w is not None:
+        clf.coefs_, clf.intercepts_ = best_w
+    return clf
+
+
 def main():
     data_dir = sys.argv[1]
     cap = int(sys.argv[2]) if len(sys.argv) > 2 else 600_000
@@ -116,24 +146,31 @@ def main():
     L4 = np.column_stack([L2, SPOH])
 
     lin = lambda: LogisticRegression(C=0.1, max_iter=5000)
-    mlp = lambda: MLPClassifier(hidden_layer_sizes=(64, 32), alpha=1e-3,
-                                learning_rate_init=3e-3, max_iter=60,
-                                early_stopping=True, n_iter_no_change=5,
-                                random_state=0)
-    rungs = [("L0 material",        MAT,  lin),
-             ("L1 12 hand feats",   L1,   lin),
-             ("L2 linear 131",      L2,   lin),
-             ("L3 MLP 131",         L2,   mlp),
-             ("L4 MLP + spells",    L4,   mlp)]
+    # These settings are not incidental. At lr 3e-3 / max_iter 60 this net
+    # DIVERGED on a 34k-position sample: log-loss 2.29 against 0.65 for material
+    # alone, 31% of losing positions scored above 0.9. That is a saturated
+    # optimiser, not a weak feature set, and it would have been reported as a KILL
+    # of the whole learned-eval direction. Lower the rate, give it iterations, and
+    # let early stopping decide when to quit.
+    mlp = lambda: MLPClassifier(hidden_layer_sizes=(64, 32), alpha=1e-2,
+                                learning_rate_init=1e-3, batch_size=512,
+                                max_iter=1, warm_start=True, random_state=0)
+    rungs = [("L0 material",        MAT,  lin, False),
+             ("L1 12 hand feats",   L1,   lin, False),
+             ("L2 linear 131",      L2,   lin, False),
+             ("L3 MLP 131",         L2,   mlp, True),
+             ("L4 MLP + spells",    L4,   mlp, True)]
 
     splits = list(GroupKFold(n_splits=folds).split(MAT, y, game))
     print(f"\n{'rung':<20}{'logloss':>10}{'+-se':>8}{'vs L1':>9}"
           f"{'conf-wrong':>12}{'p99.9 err':>11}")
     res = {}
-    for name, X, mk in rungs:
+    for name, X, mk, grouped in rungs:
         per, ow, pe = np.zeros(folds), [], []
         for i, (tr, te) in enumerate(splits):
-            p = mk().fit(X[tr], y[tr]).predict_proba(X[te])[:, 1]
+            model = (fit_mlp_grouped(X[tr], y[tr], game[tr], mk) if grouped
+                     else mk().fit(X[tr], y[tr]))
+            p = model.predict_proba(X[te])[:, 1]
             per[i] = ll(p, y[te])
             a, b = tails(p, y[te])
             ow.append(a); pe.append(b)
@@ -141,6 +178,16 @@ def main():
         vs = f"{(res['L1 12 hand feats'] - per).mean():+.4f}" if 'L1 12 hand feats' in res else ""
         print(f"{name:<20}{per.mean():10.5f}{per.std(ddof=1)/np.sqrt(folds):8.5f}"
               f"{vs:>9}{np.mean(ow):12.4f}{np.mean(pe):11.4f}")
+
+    # A rung that cannot beat material-only did not fit; it failed. Reporting that
+    # as evidence against the features would be reporting an optimiser bug as a
+    # scientific result, so the gate is not allowed to fire on it at all.
+    floor = res["L0 material"].mean()
+    broken = [n for n, v in res.items() if n != "L0 material" and v.mean() > floor]
+    if broken:
+        print(f"\nFIT FAILED for {broken}: worse than material alone "
+              f"({floor:.5f}). No verdict -- fix the model, then rerun.")
+        return
 
     gain = (res["L1 12 hand feats"] - res["L4 MLP + spells"])
     se = gain.std(ddof=1) / np.sqrt(folds)
