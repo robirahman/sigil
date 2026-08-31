@@ -161,14 +161,25 @@ def main():
              ("L3 MLP 131",         L2,   mlp, True),
              ("L4 MLP + spells",    L4,   mlp, True)]
 
-    splits = list(GroupKFold(n_splits=folds).split(MAT, y, game))
+    # Group by SPELL DRAW, not by game. `Board.legal_draw(seed)` returns the same
+    # 9-spell set for consecutive seeds (2n, 2n+1): measured over 2,320 games,
+    # every draw appeared exactly twice with a seed gap of exactly 1, 100% of the
+    # time. Splitting by game alone would therefore leave half of every held-out
+    # draw sitting in the training set, and L4 -- the rung whose whole claim is
+    # conditioning on an UNSEEN draw -- would be scored on draws it had seen.
+    # This grouping subsumes the game split, since each draw maps to whole games.
+    draw = np.array([hash(tuple(r)) for r in SP], dtype=np.int64)
+    ngame, ndraw = len(np.unique(game)), len(np.unique(draw))
+    print(f"grouping by spell draw: {ndraw} distinct draws over {ngame} games "
+          f"({ngame/max(ndraw,1):.2f} games per draw)")
+    splits = list(GroupKFold(n_splits=folds).split(MAT, y, draw))
     print(f"\n{'rung':<20}{'logloss':>10}{'+-se':>8}{'vs L1':>9}"
           f"{'conf-wrong':>12}{'p99.9 err':>11}")
     res = {}
     for name, X, mk, grouped in rungs:
         per, ow, pe = np.zeros(folds), [], []
         for i, (tr, te) in enumerate(splits):
-            model = (fit_mlp_grouped(X[tr], y[tr], game[tr], mk) if grouped
+            model = (fit_mlp_grouped(X[tr], y[tr], draw[tr], mk) if grouped
                      else mk().fit(X[tr], y[tr]))
             p = model.predict_proba(X[te])[:, 1]
             per[i] = ll(p, y[te])
