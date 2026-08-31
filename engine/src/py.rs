@@ -305,15 +305,15 @@ impl PyBoard {
     /// One search, not two. Calling `turn_candidates` and then `play_best` on the
     /// same position searched it twice, which at width_scale 4 doubled the cost of
     /// the most expensive step in ranking-data generation.
-    #[pyo3(signature = (max_depth=6, eval_name="tfit", cap=64, width_scale=4,
+    #[pyo3(signature = (max_depth=6, eval_name="tfit", cap=64, width_scale=None,
                         history=vec![]))]
     fn candidates_and_play(&mut self, max_depth: i32, eval_name: &str, cap: usize,
-                           width_scale: usize, history: Vec<u64>)
+                           width_scale: Option<usize>, history: Vec<u64>)
         -> PyResult<(Vec<Vec<f32>>, i64, usize)>
     {
         let c = self.b.to_move;
         let mut s = crate::search::Search::new(20);
-        s.set_width_scale(width_scale);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
         s.weights = weights_by_name(eval_name)?;
         for k in history { s.add_history(k); }
         let (best, _sc, _st) = s.go(&self.b, c, max_depth, 0);
@@ -352,14 +352,14 @@ impl PyBoard {
     /// (depth_completed, nodes, seconds, gameover, winner, score, widened).
     /// `history` is the list of prior position keys, for repetition counting.
     #[pyo3(signature = (time_ms=1000, max_depth=64, tt_bits=20, window=16,
-                        width_scale=1, history=vec![], eval_name="default",
+                        width_scale=None, history=vec![], eval_name="default",
                         legacy_order=false, merge_min_width=None, key_dash_reasons=None,
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
                         adaptive=None, rank_oversample=None,
                         width_shape=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
-                 width_scale: usize, history: Vec<u64>, eval_name: &str,
+                 width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
                  key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>,
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
@@ -372,7 +372,7 @@ impl PyBoard {
         let c = self.b.to_move;
         let mut s = crate::search::Search::new(tt_bits);
         s.set_window(window);
-        s.set_width_scale(width_scale);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
         s.set_legacy_order(legacy_order);
         // NEVER restate a Rust default here. `merge_min_width` shipped with the
         // Rust default OFF (usize::MAX) and a Python default of 32, so every
@@ -409,15 +409,15 @@ impl PyBoard {
     /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
     /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
     ///  windowed, seconds, best_first_kind, best_first_node)
-    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=1))]
+    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=None))]
     fn search(&self, max_depth: i32, time_ms: u64, tt_bits: u32, window: usize,
-              width_scale: usize)
+              width_scale: Option<usize>)
         -> PyResult<(i32, i32, u64, u64, u64, i32, bool, bool, f64, String, i32, u64)>
     {
         use std::time::Instant;
         let mut s = crate::search::Search::new(tt_bits);
         s.set_window(window);
-        s.set_width_scale(width_scale);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
         let t = Instant::now();
         let (best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
         let dt = t.elapsed().as_secs_f64();
@@ -552,9 +552,9 @@ fn bench_primitives(iters: u64, seed: u64) -> (u64, f64) {
 /// (index, score_centistones, depth, nodes, seconds, n_parsed).
 #[pyfunction]
 #[pyo3(signature = (sfns, us, time_ms=60000, max_depth=64, tt_bits=21,
-                    width_scale=1, history=vec![], eval_name="material"))]
+                    width_scale=None, history=vec![], eval_name="material"))]
 fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
-                  tt_bits: u32, width_scale: usize, history: Vec<u64>,
+                  tt_bits: u32, width_scale: Option<usize>, history: Vec<u64>,
                   eval_name: &str)
     -> PyResult<(usize, i32, i32, u64, f64, usize)>
 {
@@ -570,7 +570,7 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
         }
     }
     let mut se = crate::search::Search::new(tt_bits);
-    se.set_width_scale(width_scale);
+    if let Some(w) = width_scale { se.set_width_scale(w); }
     // MUST be set explicitly: omitting it inherits Weights::default(), i.e. the
     // structural set, which measures 19.4% against material-only at matched time.
     // `pick_move_actions` was already fixed for exactly this; this is its twin.
@@ -585,10 +585,10 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
 /// nodes, score, seconds). The engine chooses from its OWN full enumeration, so it
 /// is not limited by the browser's capped enumerator.
 #[pyfunction]
-#[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=1,
+#[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=None,
                     history_sfns=vec![], eval_name="material", adaptive=None))]
 fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
-                     width_scale: usize, history_sfns: Vec<String>, eval_name: &str,
+                     width_scale: Option<usize>, history_sfns: Vec<String>, eval_name: &str,
                      adaptive: Option<(f32, usize, usize)>)
     -> PyResult<(String, String, i32, u64, i32, f64, f64)>
 {
@@ -597,7 +597,7 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
         .map_err(pyo3::exceptions::PyValueError::new_err)?;
     let c = b.to_move;
     let mut s = crate::search::Search::new(tt_bits);
-    s.set_width_scale(width_scale);
+    if let Some(w) = width_scale { s.set_width_scale(w); }
     // MUST be set explicitly. Search::new defaults to Weights::default(), the
     // structural set that scored 22.5% against material-only over 80 games, so
     // omitting this had the GUI opponent playing weights already known to be bad
@@ -659,16 +659,16 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
 /// Returns (rank, generated, depth, nodes). `rank` is -1 when the chosen turn is
 /// not found within `cap` (it exists, but far down the stream).
 #[pyfunction]
-#[pyo3(signature = (sfn, max_depth=6, time_ms=0, eval_name="tfit", cap=400, width_scale=1))]
+#[pyo3(signature = (sfn, max_depth=6, time_ms=0, eval_name="tfit", cap=400, width_scale=None))]
 fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
-                  cap: usize, width_scale: usize)
+                  cap: usize, width_scale: Option<usize>)
     -> PyResult<(i64, usize, i32, u64)>
 {
     let b = crate::board::Board::from_sfn(sfn)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
     let c = b.to_move;
     let mut s = crate::search::Search::new(20);
-    s.set_width_scale(width_scale);
+    if let Some(w) = width_scale { s.set_width_scale(w); }
     s.weights = weights_by_name(eval_name)?;
     let (best, _score, st) = s.go(&b, c, max_depth, time_ms);
     let Some(best) = best else { return Ok((-1, 0, st.depth_completed, st.nodes)) };
@@ -694,16 +694,16 @@ fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
 /// `chosen_index` is -1 if the search's turn falls outside `cap`; the caller should
 /// drop those rows rather than train on a missing label.
 #[pyfunction]
-#[pyo3(signature = (sfn, max_depth=6, eval_name="tfit", cap=64, width_scale=4))]
+#[pyo3(signature = (sfn, max_depth=6, eval_name="tfit", cap=64, width_scale=None))]
 fn turn_candidates(sfn: &str, max_depth: i32, eval_name: &str, cap: usize,
-                   width_scale: usize)
+                   width_scale: Option<usize>)
     -> PyResult<(Vec<Vec<f32>>, i64, usize)>
 {
     let b = crate::board::Board::from_sfn(sfn)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
     let c = b.to_move;
     let mut s = crate::search::Search::new(20);
-    s.set_width_scale(width_scale);
+    if let Some(w) = width_scale { s.set_width_scale(w); }
     s.weights = weights_by_name(eval_name)?;
     let (best, _sc, _st) = s.go(&b, c, max_depth, 0);
     let want = best.map(|t| t.slice().to_vec());
