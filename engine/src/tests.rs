@@ -1531,3 +1531,95 @@ fn the_lead_rule_is_symmetric_in_score_including_overshoot() {
     assert_eq!(outcome_of(2, 3), Outcome::Ongoing);
     assert_eq!(outcome_of(1, 3), Outcome::BlueWins);
 }
+
+#[test]
+fn invariants_hold_on_draws_the_old_seeding_could_never_reach() {
+    // ATTRIBUTION TEST. `legal_draw` seeded its xorshift with `seed | 1`, so only
+    // ODD states were reachable: half of all draws could not be produced by ANY
+    // seed, and were therefore never tested. Fixing the seeding made two shipped
+    // tests fail, and the question is whether that fix introduced a regression or
+    // merely exposed bugs that were already there.
+    //
+    // This builds draws from the previously-unreachable states -- exactly the draws
+    // the fixed `legal_draw` produces -- and runs the SAME invariants, so it can be
+    // executed against the UNFIXED engine. Failing here means the violations are
+    // pre-existing and independent of the seeding change.
+    fn draw_from_state(mut s: u64) -> [u8; 9] {
+        let mut next = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let mut out = [0u8; 9];
+        for (slot, pool) in [(0usize, &RITUALS[..]), (3, &SORCERIES[..]), (6, &CHARMS[..])] {
+            let mut p: Vec<u8> = pool.to_vec();
+            for i in (1..p.len()).rev() {
+                let j = (next() % (i as u64 + 1)) as usize;
+                p.swap(i, j);
+            }
+            out[slot..slot + 3].copy_from_slice(&p[..3]);
+        }
+        out
+    }
+    // the fixed seeding: SplitMix64's finalizer
+    fn mixed(seed: u64) -> u64 {
+        let mut s = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        s = (s ^ (s >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        s = (s ^ (s >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        s ^= s >> 31;
+        if s == 0 { 0x9E37_79B9_7F4A_7C15 } else { s }
+    }
+
+    let mut greedy_miss = Vec::new();
+    for seed in 1..60u64 {
+        let draw = draw_from_state(mixed(seed));
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL;
+        let bl = (nx() & ALL) & !r;
+        b.stones = [r, bl];
+        b.update();
+        for pos in 0..9 {
+            for c in [Color::Red, Color::Blue] {
+                let mut cleared = b;
+                cleared.cast_clear_and_refill(pos, c);
+                let (outs, _t) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                let mut g = cleared;
+                g.resolve_spell_at(pos, c);
+                if !outs.iter().any(|o| o.stones == g.stones) {
+                    greedy_miss.push(format!("seed {} pos {} spell {}",
+                        seed, pos + 1, SPELLS[draw[pos] as usize].name));
+                }
+            }
+        }
+    }
+
+    let mut dash_bad = Vec::new();
+    for seed in 0..24u64 {
+        let mut b = Board::new(draw_from_state(mixed(seed)), Variant::Standard);
+        b.stones[0] = 0b1010110110101u64 ^ (seed * 2654435761);
+        b.stones[1] = (0b0101001001010u64 << 13) ^ (seed * 40503);
+        b.stones[0] &= crate::topology::ALL;
+        b.stones[1] &= crate::topology::ALL & !b.stones[0];
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        if !b.can_dash(Color::Red) { continue; }
+        let (full, st) = b.enumerate_turns(Color::Red);
+        if st.truncated { continue; }
+        let norm = |t: &Turn| t.slice().to_vec();
+        let legal: std::collections::HashSet<_> = full.iter().map(norm).collect();
+        for t in b.turns_ordered_reasons(Color::Red, 24, crate::key_dash::REASONS_ALL)
+                  .take(40) {
+            if !t.slice().iter().any(|a| matches!(a, Action::Dash { .. })) { continue; }
+            if !legal.contains(&norm(&t)) {
+                dash_bad.push(format!("seed {} dash {:?}", seed, t.slice()));
+            }
+        }
+    }
+
+    println!("PREVIOUSLY-UNREACHABLE DRAWS: {} greedy misses, {} illegal promoted dashes",
+             greedy_miss.len(), dash_bad.len());
+    for m in greedy_miss.iter().take(8) { println!("  greedy: {}", m); }
+    for m in dash_bad.iter().take(4) { println!("  dash:   {}", m); }
+    assert!(greedy_miss.is_empty() && dash_bad.is_empty(),
+        "invariants already violated on draws the old seeding could not reach: \
+         {} greedy misses, {} illegal dashes -- these are pre-existing engine bugs, \
+         not regressions from fixing legal_draw", greedy_miss.len(), dash_bad.len());
+}
