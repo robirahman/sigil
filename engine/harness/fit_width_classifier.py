@@ -153,10 +153,32 @@ def main():
             aucs.append(roc_auc_score(yk[te], m.predict_proba(X[te])[:, 1]))
         print(f"  P(rank > {k:3d}):  base rate {yk.mean():.4f}   AUC {np.mean(aucs):.4f}")
 
+    # ---- calibrate v2 to the incumbent's OPERATING POINT ------------------------
+    # The arena applies ONE threshold to whichever model is selected. If v2's score
+    # distribution differs, the same threshold widens a different share of nodes and
+    # the A/B confounds "targets better" with "widens more". Shift v2's bias so that
+    # at the shipped p it widens exactly the share the incumbent does, making the
+    # comparison purely about targeting quality at equal cost.
+    t_ship = np.log(0.10 / 0.90)
+    share_inc = float((inc >= t_ship).mean())
+    oof_logit = np.log(np.clip(oof, 1e-9, 1 - 1e-9) / np.clip(1 - oof, 1e-9, 1 - 1e-9))
+    # the v2 logit that widens `share_inc` of nodes
+    t_new = float(np.quantile(oof_logit, 1 - share_inc))
+    delta = t_ship - t_new          # add to the bias so t_ship lands on that point
+    print(f"\nincumbent widens {share_inc*100:.2f}% of nodes at p=0.10 "
+          f"(logit {t_ship:.5f})")
+    print(f"v2 raw would widen {float((oof_logit >= t_ship).mean())*100:.2f}% -- "
+          f"bias shift {delta:+.5f} makes it {share_inc*100:.2f}%")
+    for share in (0.05, 0.10, 0.20, 0.30, 0.50):
+        print(f"  share {share:.2f}: incumbent logit "
+              f"{float(np.quantile(inc, 1-share)):+.4f}   "
+              f"v2 logit {float(np.quantile(oof_logit, 1-share)):+.4f}")
+
     # ---- emit the port ----------------------------------------------------------
     final = lin().fit(X, y24)
-    w = final.coef_[0]; b = float(final.intercept_[0])
-    print(f"\n// refit on {len(y24)} on-policy rows, AUC {results['31 incumbent feats, refit'][0]:.4f}")
+    w = final.coef_[0]; b = float(final.intercept_[0]) + delta
+    print(f"\n// refit on {len(y24)} on-policy rows, AUC {results['31 incumbent feats, refit'][0]:.4f}, "
+      f"bias shifted {delta:+.5f} to match the incumbent's {share_inc*100:.2f}% widened share")
     print(f"const HARD_BIAS: f32 = {b:.5f};")
     print("const HARD_W: [f32; 31] = [")
     for i in range(0, 31, 9):
