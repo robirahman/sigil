@@ -335,6 +335,16 @@ impl PyBoard {
         Ok((rows, chosen, generated))
     }
 
+    /// The adaptive-widening classifier's logit, for either weight set.
+    ///
+    /// Exposed because node counts are too blunt to verify the two models differ:
+    /// early positions score far below the threshold under BOTH sets, so an
+    /// opening-only comparison shows zero divergence and looks exactly like broken
+    /// plumbing.
+    fn hard_logit(&self, c: &str, model: u8) -> PyResult<f32> {
+        Ok(self.b.hard_logit_with(color(c)?, model))
+    }
+
     fn hand_features(&self, c: &str) -> PyResult<Vec<i32>> {
         Ok(self.b.hand_features(color(c)?).to_vec())
     }
