@@ -357,7 +357,7 @@ impl PyBoard {
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
                         adaptive=None, rank_oversample=None,
-                        width_shape=None))]
+                        width_shape=None, hard_model=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: usize, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -365,7 +365,8 @@ impl PyBoard {
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
                  q_cast_moves: Option<usize>, aspiration: Option<i32>,
                  adaptive: Option<(f32, usize, usize)>,
-                 rank_oversample: Option<usize>, width_shape: Option<usize>)
+                 rank_oversample: Option<usize>, width_shape: Option<usize>,
+                 hard_model: Option<u8>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -388,6 +389,7 @@ impl PyBoard {
         if let Some(n) = q_cast_moves { s.set_q_cast_moves(n); }
         if let Some(a) = aspiration { s.set_aspiration(a); }
         if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+        if let Some(m) = hard_model { s.set_hard_model(m); }
         if let Some(n) = rank_oversample { s.set_rank_oversample(n); }
         if let Some(w) = width_shape { s.set_width_shape(w); }
         s.weights = weights_by_name(eval_name)?;
@@ -748,6 +750,7 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("width_shape".to_string(), s.width_shape_get() as u64);
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
+    m.insert("hard_model".to_string(), s.hard_model_get() as u64);
     Ok(m)
 }
 
@@ -766,6 +769,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
     // hardcoded it, which is fine historically but would confound any future test.
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
+    m.add("SHIPPED_ADAPTIVE", crate::search::SHIPPED_ADAPTIVE)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("TURN_FEATURE_NAMES", crate::features::TURN_NAMES.to_vec())?;
