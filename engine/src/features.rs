@@ -264,25 +264,56 @@ const HARD_W: [f32; 31] = [
     0.34646,   // lock_them
 ];
 
+/// Refit of the SAME 31 features on 317,400 on-policy games generated at
+/// `width_scale` 4. The shipped constants above were fitted on data generated at
+/// `width_scale` 1, so they predict the rank behaviour of a search we no longer
+/// run -- the same off-policy provenance bug that made the eval training set
+/// useless. Same features, same cost per node, different numbers.
+/// NOTE the bias is the fitted intercept SHIFTED BY +0.56003, so that the shipped
+/// threshold widens the same 41.28% of nodes the incumbent does. Without that shift
+/// the same threshold would widen only 24.68%, and an arena comparing the two would
+/// be measuring "widens less" rather than "targets better".
+///
+/// Worth knowing: the shipped `p = 0.10` is not a 10% rate. On-policy it fires on
+/// 41.28% of nodes, and the refit's recall advantage is concentrated at 5-20%
+/// (+0.018 to +0.036) and is ~0 by 41%. The threshold, not the weights, is where
+/// the remaining value most likely sits.
+const HARD_BIAS_V2: f32 = 0.55731;
+const HARD_W_V2: [f32; 31] = [
+    -0.02591, -0.23904, -0.56125, 0.46387, 0.28233, 0.32022, 0.35605, 0.48428, 0.21085,
+    0.14914, 0.05872, -0.14810, 0.16929, -0.15377, -0.09006, -0.01942, -0.05461, -0.08510,
+    0.12150, -0.09131, 0.21149, 0.09298, -0.20944, -0.10033, 0.00059, -0.01465, 0.00587,
+    -0.00271, -0.13605, -0.10168, 0.26711,
+];
+
 impl Board {
     /// Logit of "this position's best move lies beyond width 24", from `c`'s POV.
     ///
     /// Returned as a LOGIT rather than a probability so the caller compares against
     /// a pre-transformed threshold and no `exp` runs in the search.
-    pub fn hard_logit(&self, c: Color) -> f32 {
+    pub fn hard_logit(&self, c: Color) -> f32 { self.hard_logit_with(c, 0) }
+
+    /// `model` 0 = the shipped constants, 1 = the on-policy refit.
+    ///
+    /// ONE copy of the feature extraction, selecting only which constants to use.
+    /// Two copies would be free to drift apart, and a silently drifting duplicate
+    /// is the failure this codebase has already paid for three times.
+    pub fn hard_logit_with(&self, c: Color, model: u8) -> f32 {
+        let (bias, w): (f32, &[f32; 31]) =
+            if model == 0 { (HARD_BIAS, &HARD_W) } else { (HARD_BIAS_V2, &HARD_W_V2) };
         let mine = self.mine(c);
         let theirs = self.theirs(c);
-        let mut acc = HARD_BIAS;
+        let mut acc = bias;
         let mut k = 0usize;
         for p in 0..9 {
             let m = SIGIL[p];
             let n = m.count_ones() as f32;
-            acc += HARD_W[k] * ((m & mine).count_ones() as f32 / n); k += 1;
+            acc += w[k] * ((m & mine).count_ones() as f32 / n); k += 1;
         }
         for p in 0..9 {
             let m = SIGIL[p];
             let n = m.count_ones() as f32;
-            acc += HARD_W[k] * ((m & theirs).count_ones() as f32 / n); k += 1;
+            acc += w[k] * ((m & theirs).count_ones() as f32 / n); k += 1;
         }
         let i = c.idx();
         let j = c.other().idx();
@@ -297,8 +328,8 @@ impl Board {
             (self.lock[i] != crate::board::NO_SPELL) as u8 as f32,
             (self.lock[j] != crate::board::NO_SPELL) as u8 as f32,
         ];
-        for v in scal { acc += HARD_W[k] * v; k += 1; }
-        debug_assert_eq!(k, HARD_W.len());
+        for v in scal { acc += w[k] * v; k += 1; }
+        debug_assert_eq!(k, w.len());
         acc
     }
 }
