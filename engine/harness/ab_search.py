@@ -31,12 +31,15 @@ MERGE_OFF = 1 << 62
 BASE_WS = se.DEFAULT_WIDTH_SCALE
 KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
-         'rank_oversample', 'width_shape')
+         'rank_oversample', 'width_shape', 'hard_model', 'adaptive_p')
 
 # Adaptive arms are named `adaptive` and encode (easy_scale, hard_scale) in the arm
 # value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
 # one-knob-one-integer shape of this harness.
-ADAPTIVE_P = 0.10
+# From the ENGINE, not restated here. This triple used to be written out in
+# serve.py and again in this file while the engine default was None.
+SHIPPED_ADAPTIVE = se.SHIPPED_ADAPTIVE
+ADAPTIVE_P = SHIPPED_ADAPTIVE[0]
 
 
 def play(b, ms, ev, hist, knob, val):
@@ -56,8 +59,19 @@ def play(b, ms, ev, hist, knob, val):
     kdmw = val if knob == 'key_dash_min_width' else None
     ros = val if knob == 'rank_oversample' else None
     wsh = val if knob == 'width_shape' else None
+    # `scale_for` only consults the classifier when adaptive widening is ON, so a
+    # hard_model A/B must enable it at the SHIPPED setting on both sides and differ
+    # only in which weight set is read. Without this the arm and base are identical.
+    hm = None
+    if knob == 'hard_model':
+        adaptive = SHIPPED_ADAPTIVE
+        hm = val
+    # The shipped p=0.10 is NOT a 10% rate: on-policy it widens 41.28% of nodes.
+    # Value is p in thousandths (100 -> 0.100), keeping one-knob-one-integer.
+    if knob == 'adaptive_p':
+        adaptive = (val / 1000.0, SHIPPED_ADAPTIVE[1], SHIPPED_ADAPTIVE[2])
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
-                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh)
+                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, hm)
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
