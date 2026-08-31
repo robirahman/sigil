@@ -11,7 +11,8 @@ times in one session; anything needed to resume work belongs under version contr
 | residual static gain over material + search score | **0.050 nats** at a 10 s search | E0a, GBM on 131 features, ply-controlled, game-grouped |
 | absorption of that signal by search | **~8%** across 10 ms -> 10 s | E0a paired folds, t = -3.9 |
 | 12 hand features over exact material | **+0.013 to +0.016 nats** | E0b dry runs; matches the +0.0140 reference, so the loader is right |
-| engine speed | **~18k turn-nodes/sec**, median branching 316 | on-VM benchmark |
+| engine speed, IDLE box | **66k nodes/s @ d4, 88k @ d5** (15.0 / 11.4 us per node) | on-VM benchmark |
+| engine speed, 88 shards/VM | ~18k nodes/s -- contention-depressed, do not quote as engine speed | fleet |
 | depth 4 @ ws 4 + adaptive | **2.50 s/ply** | on-VM benchmark |
 | depth 5 @ ws 4 + adaptive | **7.88 s/ply** | on-VM benchmark, matched fleet rate exactly |
 | adaptive widening cost | **+48%** runtime | on-VM benchmark |
@@ -22,6 +23,22 @@ E1 dataset: `gs://focus-surfer-494820-g0-sigil/runs/20260831T0045Z/data/`,
 `adaptive (0.10, 2, 6)`, `tfit`. 796 shards, each carrying its generation config in
 a `cfg` array. Replaces a 175,500-game set generated at `width_scale` 1.
 
+## Cost of the features a wider eval would need (2026-08-31)
+
+| call | net cost | share of a node |
+|---|---|---|
+| `evaluate` (12 features) | 149 ns | **1.0-1.3%** |
+| `hand_features` (13) | 185 ns | 1.2-1.6% |
+| `full_features` (132) | **1351 ns** | **9.0-11.9%** |
+
+`full_features` is 9.1x `evaluate`. The plan's node-rate gate is "> 5% gets fixed
+first", so **a linear eval over all 131 features fails that gate outright**. The
+arithmetic of a wider dot product was never the problem; extracting the features is,
+and `control` is a 12-layer BFS.
+
+At the measured exchange rate (~1 us ~ 0.2 ply ~ 10 Elo) 1.35 us costs ~13 Elo
+against a ~0.010-nat gain worth maybe +20-30 Elo naive. Thin enough to land negative.
+
 ## The gate
 
 `fit_eval_ladder.py` reports L0 material, L1 the 12 hand features, L2 linear on
@@ -29,15 +46,25 @@ a `cfg` array. Replaces a 175,500-game set generated at `width_scale` 1.
 Everything is grouped by **spell draw**, not by game — see the `legal_draw` note
 below.
 
-### A. `L2 - L1` carries most of the gain -> re-price the linear eval
+### A. A WIDER BUT CHEAP linear eval  <- the live option
 
-The cheapest outcome and the best precedent: `tfit` was a pure weights change worth
-+50 Elo. No net, no node-rate cost, no parity risk.
+Measured: a linear model over (12 hand features + 131 full) beats today's eval by
+**+0.0099 +- 0.0006 nats**, and that is nearly 3x what replacing the hand features
+with the 131 achieves (+0.0038) -- so the hand features are nonlinear aggregates the
+raw set does not linearly span. Keep both.
 
-1. Fit a 131-feature linear model on outcomes, grouped by draw.
-2. Export as a new `Weights` variant beside `tfit`; `weights_by_name` must error on
+But `full_features` costs 9-12% of a node, which fails the node-rate gate. So the
+task is explicitly **gain per nanosecond**, not gain:
+
+1. Measure `full_features` cost **per block**: 39+39 occupancy, 9+9 sigil fractions,
+   9+9 castable, the scalars, the liberty census, `control`. Occupancy should be
+   near-free bit extraction; `control` (12-layer BFS) and the liberty census are the
+   suspects.
+2. Fit linear models on cheap blocks only; find the best nats-per-ns point. Drop
+   `control` first -- it moves a related classifier's AUC by 0.0002.
+3. Export as a new `Weights` variant beside `tfit`; `weights_by_name` errors on
    unknown names, as it already does.
-3. Node-rate delta (expect ~0), then SPRT 300 ms -> 3 s -> 60 s.
+4. **Measured** node-rate delta under 5%, then SPRT 300 ms -> 3 s -> 60 s.
 
 ### B. `L4 - L1 >= 0.020` -> build the eval model
 
