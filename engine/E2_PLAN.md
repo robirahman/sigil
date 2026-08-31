@@ -124,6 +124,32 @@ If the signal really is absent:
   default of `4`, so an omitting caller silently got the unwidened engine. That is
   why the original 4.37M-position set was off-policy. Same branch.
 
+### Two engine bugs the `legal_draw` fix exposed (2026-08-31)
+
+`seed | 1` did not only halve spell diversity -- it made half the draw space
+unreachable by ANY seed, and so untested. Fixing the seeding turned two shipped
+tests red. Branch `attribute-draw-failures` proves these are **pre-existing**, by
+running the same invariants against the UNFIXED engine using draws built from the
+previously-unreachable states: 75 original tests pass, the new one fails with
+2 greedy misses and 15 illegal promoted dashes.
+
+1. **Fury enumeration gap — affects the shipped engine.** `resolve_outcomes` does
+   not contain the outcome `resolve_spell_at` produces (seed 38 pos 6, seed 44
+   pos 5, both Fury). The invariant is "whatever the shipped greedy engine would
+   play must appear in our enumeration", so for Fury in some positions **search
+   cannot see the move the engine would play**. Plausibly a strength bug. NEEDS A
+   RULES DECISION: when the greedy resolver and the enumeration disagree about
+   Fury, which is authoritative?
+2. **`key_dash` promotes illegal dashes — latent, not live.** 15 cases where
+   `turns_ordered_reasons(REASONS_ALL)` yields a `Move` + 2-sacrifice `Dash` turn
+   that full enumeration rejects (all at seed 0, `sacs: [10, 2]`). `key_dash`
+   ships OFF (`key_dash_reasons = 0`), so nothing in production is affected, but
+   this must be fixed before the dash filter could ever be enabled.
+
+Neither is fixed. `fix-binding-defaults-and-draw` is therefore NOT merged: it is
+correct, but merging it makes these two failures visible in CI, and choosing the
+right fix for (1) needs a ruling on Fury's semantics.
+
 ## Infrastructure notes
 
 - Long jobs run on GCE with their own watchdog and a continuous GCS upload loop.
