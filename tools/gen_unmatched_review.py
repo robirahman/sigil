@@ -15,6 +15,12 @@ through the replay bridge) and shows which deduction rules to add.
 Cases are ordered by failure-pattern frequency (most common cluster
 first, members grouped), shown one at a time.
 
+It also serves a SECOND caller: `tools/export_engine_disputes.py` emits cases in
+this same schema for the engine's own rules disputes (Fury resolution, key_dash
+promotion), which are adjudicated the same way -- by replaying the transition in
+the real UI, which is the rules oracle. Pass those with `--cases` to skip the
+Firebase report path entirely and reuse this page rather than duplicating it.
+
 Usage:
     python -m tools.gen_unmatched_review \
         [--report ai/data/slim_migration_report.json] \
@@ -32,7 +38,10 @@ from collections import defaultdict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from notation import NODE_ORDER, sfn_to_dict
-from ai.slim_completed_games import _cast_spell_name
+
+# `_cast_spell_name` is imported LAZILY, inside the Firebase path only. The
+# `--cases` path needs no Firebase machinery, and a module-level import here would
+# make the engine-dispute workflow depend on the migration module for nothing.
 
 
 def signature(before, after, color, cast):
@@ -67,12 +76,30 @@ def main():
     ap.add_argument('--report', default='ai/data/slim_migration_report.json')
     ap.add_argument('--dump', default='ai/data/completed_games_raw.json')
     ap.add_argument('--out', default='docs/dev/unmatched-review.html')
+    ap.add_argument('--cases', default=None,
+                    help='JSON file with a prebuilt {"cases": [...]} payload '
+                         '(e.g. from tools.export_engine_disputes); skips the '
+                         'Firebase report entirely')
     ap.add_argument('--max-cases', type=int, default=4000)
     ap.add_argument('--solutions', default='ai/data/solved_turns.json',
                     help='solved/flagged turns file; those cases are '
                          'excluded from the page')
     args = ap.parse_args()
+    # A prebuilt case list needs none of the Firebase machinery below -- no dump,
+    # no report, no clustering. Emit the page and stop.
+    if args.cases:
+        with open(args.cases, encoding='utf-8') as fh:
+            payload = json.load(fh)
+        cases = payload['cases'][:args.max_cases]
+        payload = {'cases': cases, 'totalUnmatched': len(cases)}
+        html = _PAGE.replace('__DATA__', json.dumps(payload))
+        os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
+        with open(args.out, 'w', encoding='utf-8') as fh:
+            fh.write(html)
+        print(f'wrote {len(cases)} case(s) -> {args.out}')
+        return
 
+    from ai.slim_completed_games import _cast_spell_name
     with open(args.report) as f:
         report = json.load(f)
     with open(args.dump) as f:
@@ -268,11 +295,14 @@ _PAGE = r'''<!DOCTYPE html>
   <div class="sig" id="case-sig"></div>
   <div class="meta" id="case-meta"></div>
   <div class="meta" id="case-state"></div>
+  <!-- key_dash cases already KNOW the disputed turn; the question is whether
+       that exact sequence is legal, so show it verbatim to be entered. -->
+  <div class="meta" id="case-actions" style="display:none;color:#e8a06a"></div>
   <button onclick="prevCase()" class="secondary">&larr; Prev</button>
   <button onclick="nextCase()" class="secondary">Skip &rarr;</button>
   <button onclick="nextUnsolved()" class="secondary">Next unsolved pattern</button>
   <button onclick="resetTurn()">Reset turn</button>
-  <button onclick="flagMultiTurn()" style="background:#a2543a">Flag: multiple turns</button>
+  <button onclick="flagMultiTurn()" style="background:#a2543a" id="flag-btn">Flag: multiple turns</button>
 </div>
 <div class="layout">
   <div class="col-board">
@@ -532,7 +562,9 @@ function loadCase(i) {
     'Case ' + (idx + 1) + '/' + DATA.cases.length + ' — pattern #' + c.cluster +
     ' (' + c.clusterSize + ' turns), game ' + c.key + ', turn ' + c.turnNumber +
     ', ' + c.color + ' to move' +
-    (st ? (st.multiTurn ? ' — FLAGGED MULTI-TURN' : ' — SOLVED') : '');
+    (st ? ((st.multiTurn || st.unreachable)
+             ? (st.unreachable ? ' — FLAGGED NO LEGAL TURN' : ' — FLAGGED MULTI-TURN')
+             : ' — SOLVED') : '');
   document.getElementById('case-sig').textContent = c.signature +
     (c.cast ? ' | deduced cast: ' + c.cast : '');
   const mover = c.color === 'red' ? c.redPlayer : c.bluePlayer;
@@ -545,6 +577,18 @@ function loadCase(i) {
       ? 'start & target: ' + (c.stateBefore || '')
       : 'start:  ' + (c.stateBefore || '') +
         '  →  target: ' + (c.stateAfter || '');
+  const ab = document.getElementById('flag-btn');
+  if (ab) ab.textContent = (c.flagAs === 'unreachable')
+    ? 'Flag: NO legal turn reaches this' : 'Flag: multiple turns';
+  const ael = document.getElementById('case-actions');
+  if (c.disputedActions) {
+    ael.style.display = '';
+    ael.textContent = 'ENTER EXACTLY: ' + c.disputedActions
+      .map(a => a[0] + (a[1] >= 0 ? ' ' + a[1] : '') +
+                (a[2] >= 0 ? '->' + a[2] : '') +
+                (a[3] && a[3].length ? ' sac[' + a[3].join(',') + ']' : '') +
+                (a[4] >= 0 ? ' pos' + a[4] : '')).join('  |  ');
+  } else { ael.style.display = 'none'; ael.textContent = ''; }
   renderTarget(c);
   renderSpells(c);
   playCase(c);
@@ -573,7 +617,7 @@ function nextUnsolved() {
 function updateSolvedCount() {
   const all = Object.values(solutions);
   const nSolved = all.filter(s => s.actions).length;
-  const nFlagged = all.filter(s => s.multiTurn).length;
+  const nFlagged = all.filter(s => s.multiTurn || s.unreachable).length;
   document.getElementById('n-solved').textContent = nSolved;
   document.getElementById('n-flagged').textContent = nFlagged;
   document.getElementById('solved-count').textContent =
@@ -581,10 +625,15 @@ function updateSolvedCount() {
 }
 
 function flagMultiTurn() {
+  // Two meanings share one button. For Firebase snapshots it means "this pair is
+  // two turns collapsed into one". For an engine dispute it means "NO legal turn
+  // reaches the after-state", which is the whole answer being asked for -- so the
+  // flag is recorded under its own key rather than overloading multiTurn.
   const c = DATA.cases[idx];
-  solutions[caseId(c)] = {
-    key: c.key, turnNumber: c.turnNumber, color: c.color, multiTurn: true,
-  };
+  const rec = { key: c.key, turnNumber: c.turnNumber, color: c.color };
+  rec[c.flagAs || 'multiTurn'] = true;
+  if (c.flagAs === 'unreachable') rec.note = 'no legal turn reaches the after-state';
+  solutions[caseId(c)] = rec;
   localStorage.setItem(LS_KEY, JSON.stringify(solutions));
   updateSolvedCount();
   setMsg('Flagged as multiple turns — this stays a snapshot in the record. Advancing…');
