@@ -190,6 +190,9 @@ def keydash_cases(seeds=range(0, 24)):
                 # the position the disputed turn claims to reach
                 a = se.Board.from_sfn(sfn)
                 try:
+                    # NB apply_turn_tuples APPLIES without validating, so its
+                    # success is not evidence the turn is legal -- that is
+                    # exactly the question being sent for a ruling.
                     a.apply_turn_tuples(t, 'red')
                     rec['sfnAfter'] = a.to_sfn()
                 except Exception as e:
@@ -295,15 +298,42 @@ def main():
     recs = fury_cases() + keydash_cases()
     from collections import Counter
     tally = Counter(r['verdict'].split(':')[0] for r in recs)
+
+    # Report per INVARIANT and per full reason. A bare 'vacuous' count hides the
+    # thing that matters: whether an invariant has any genuine case left at all.
     print("\ntriage over synthetic test positions")
-    for k, v in sorted(tally.items(), key=lambda kv: -kv[1]):
-        print(f"  {k:12s} {v}")
+    for kind in ('fury', 'keydash'):
+        sub = [r for r in recs if r['kind'] == kind]
+        if not sub:
+            continue
+        gen = sum(1 for r in sub if r['verdict'] == 'GENUINE')
+        print(f"  {kind.upper()}: {len(sub)} checks, {gen} GENUINE")
+        for reason, n in sorted(Counter(r['verdict'] for r in sub).items(),
+                                key=lambda kv: -kv[1]):
+            print(f"      {n:5d}  {reason}")
+        if gen == 0:
+            print(f"      => no rules question survives for {kind}: every "
+                  f"disagreement is vacuous, so the TEST is what needs fixing, "
+                  f"not the engine.")
+
     genuine = [r for r in recs if r['verdict'] == 'GENUINE']
-    print(f"\n{len(genuine)} case(s) survive triage and need a ruling")
-    for r in genuine[:20]:
-        tag = (f"pos {r['pos']} {r['spell']}" if r['kind'] == 'fury'
-               else f"actions {r.get('actions')}")
-        print(f"  {r['kind']:8s} seed {r['seed']:3d} {r.get('colour','-'):5s} {tag}")
+    # Distinct BEFORE positions is the number of questions Robi actually faces;
+    # many action variants off one position are one root cause, not many.
+    distinct = {}
+    for r in genuine:
+        distinct.setdefault(r['sfnBefore'], []).append(r)
+    print(f"\n{len(genuine)} case(s) survive triage, over "
+          f"{len(distinct)} DISTINCT before-position(s)")
+    for i, (sfn, group) in enumerate(distinct.items(), 1):
+        print(f"  position {i}: {sfn}")
+        print(f"    {len(group)} disputed transition(s), kinds "
+              f"{sorted({g['kind'] for g in group})}")
+        for r in group[:6]:
+            tag = (f"pos {r['pos']} {r['spell']}" if r['kind'] == 'fury'
+                   else f"actions {r.get('actions')}")
+            print(f"      seed {r['seed']:3d} {r.get('colour','-'):5s} {tag}")
+        if len(group) > 6:
+            print(f"      ... and {len(group) - 6} more off the same position")
 
     if args.inplay_games:
         print(f"\nsweeping {args.inplay_games} real self-play games ...")
