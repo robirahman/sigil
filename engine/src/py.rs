@@ -49,6 +49,9 @@ impl PyBoard {
 
     #[getter] fn red(&self) -> Vec<u8> { mask_to_vec(self.b.stones[0]) }
     #[getter] fn blue(&self) -> Vec<u8> { mask_to_vec(self.b.stones[1]) }
+    /// Raw occupancy masks (red, blue). Saves round-tripping through SFN when a
+    /// caller only needs to compare resulting positions.
+    #[getter] fn stones(&self) -> (u64, u64) { (self.b.stones[0], self.b.stones[1]) }
     #[getter] fn total(&self) -> (u32, u32) { (self.b.total[0], self.b.total[1]) }
     #[getter] fn mana(&self) -> (u32, u32) { (self.b.mana[0], self.b.mana[1]) }
     #[getter] fn turn_counter(&self) -> u32 { self.b.turn_counter }
@@ -474,6 +477,33 @@ impl PyBoard {
         }).collect()).collect())
     }
 
+    /// The ORDERED turn stream under an explicit key-dash interest mask, as the
+    /// same (kind, node, push_to, sacs, pos) tuples `enumerate_turns` emits.
+    ///
+    /// Exposed so the `key_dash` promotion invariant can be reproduced and
+    /// adjudicated from Python: the shipped filter promotes dashes that full
+    /// enumeration rejects, and deciding whether those turns are legal needs the
+    /// turns themselves, outside a Rust test.
+    #[pyo3(signature = (c, window, reasons, cap=64))]
+    fn turns_ordered_reasons(&self, c: &str, window: usize, reasons: u8, cap: usize)
+        -> PyResult<Vec<Vec<(String, i32, i32, Vec<u8>, i32)>>>
+    {
+        let col = color(c)?;
+        Ok(self.b.turns_ordered_reasons(col, window, reasons).take(cap)
+            .map(|t| t.slice().iter().map(|a| match *a {
+                crate::turn::Action::Blink { node, push_to } =>
+                    ("blink".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Move { node, push_to } =>
+                    ("move".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                    ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
+                     sacs[..n_sacs as usize].to_vec(), -1),
+                crate::turn::Action::Cast { pos, outcome } =>
+                    ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            }).collect()).collect())
+    }
+
     fn enum_stats(&self) -> PyResult<(usize, usize, bool, bool)> {
         let (_t, st) = self.b.enumerate_turns(self.b.to_move);
         Ok((st.turns, st.turns_with_greedy_cast, st.truncated, st.resolver_truncated))
@@ -766,6 +796,11 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
     // hardcoded it, which is fine historically but would confound any future test.
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
+    // Exported so a harness never restates them. REASONS_ALL is the full
+    // key-dash interest mask; OUTCOME_CAP is how a caller detects that a
+    // resolver enumeration was TRUNCATED rather than complete.
+    m.add("REASONS_ALL", crate::key_dash::REASONS_ALL)?;
+    m.add("OUTCOME_CAP", crate::turn::OUTCOME_CAP)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("TURN_FEATURE_NAMES", crate::features::TURN_NAMES.to_vec())?;
