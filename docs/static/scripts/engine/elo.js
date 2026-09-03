@@ -4,11 +4,17 @@
  * After a ranked game ends, the winner's client computes the Elo change
  * and writes it to Firebase RTDB via an atomic multi-path update.
  *
- * Security: Firebase RTDB rules should validate that:
- *   - The writer is authenticated (auth !== null)
- *   - Elo changes are bounded (1–32 points for K=32)
- *   - The completed game record exists and is marked ranked
- *   - The eloProcessed flag prevents double-processing
+ * Security (enforced by database.rules.json):
+ *   - Profile fields (displayName, settings, created) are writable only by
+ *     their owner; AI records (__ai_*__) may be created by any signed-in user.
+ *   - elo / gamesPlayed / wins / losses may be written by any signed-in user
+ *     (so the winner's client can update both players), but each write must
+ *     move Elo by at most 32 and bump counters by at most 1.
+ *   - /user_games/{uid}/{gameId} may be written by the owner or by the
+ *     opponent named in the entry's opponentUid.
+ *   Without a server there is no rule tying an Elo write to a specific
+ *   completed game, so repeated ±32 writes remain possible; that requires
+ *   the Cloud Function in functions/index.js (Blaze plan).
  */
 
 /**
