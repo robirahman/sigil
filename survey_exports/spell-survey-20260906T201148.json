@@ -1,0 +1,1991 @@
+{
+ "version": 1,
+ "exportedAt": "2026-09-06T20:11:48.708Z",
+ "scales": {
+  "quality": [
+   "good",
+   "medium",
+   "bad"
+  ],
+  "board": [
+   "empty",
+   "neither",
+   "crowded"
+  ],
+  "synergy": [
+   "positive",
+   "none",
+   "negative"
+  ],
+  "advantage": "<spell name> | even",
+  "better": "<spell name> | equal"
+ },
+ "spells": {
+  "Flourish": {
+   "pack": "core",
+   "type": "ritual",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:04:43.128Z",
+   "board": "empty"
+  },
+  "Carnage": {
+   "pack": "core",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:04:49.814Z",
+   "board": "crowded"
+  },
+  "Bewitch": {
+   "pack": "core",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:04:59.577Z",
+   "board": "empty"
+  },
+  "Starfall": {
+   "pack": "core",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:05:04.490Z",
+   "board": "empty"
+  },
+  "Seal_of_Lightning": {
+   "pack": "core",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:05:15.156Z",
+   "board": "neither"
+  },
+  "Grow": {
+   "pack": "core",
+   "type": "sorcery",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:05:28.394Z",
+   "board": "empty"
+  },
+  "Fireblast": {
+   "pack": "core",
+   "type": "sorcery",
+   "board": "crowded",
+   "source": "robi",
+   "quality": "good",
+   "at": "2026-09-06T03:05:33.239Z"
+  },
+  "Hail_Storm": {
+   "pack": "core",
+   "type": "sorcery",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:05:40.478Z",
+   "board": "crowded"
+  },
+  "Meteor": {
+   "pack": "core",
+   "type": "sorcery",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:05:50.069Z",
+   "board": "empty"
+  },
+  "Seal_of_Wind": {
+   "pack": "core",
+   "type": "sorcery",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:05:55.396Z",
+   "board": "empty"
+  },
+  "Sprout": {
+   "pack": "core",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "empty",
+   "at": "2026-09-06T03:06:03.107Z"
+  },
+  "Slash": {
+   "pack": "core",
+   "type": "charm",
+   "quality": "good",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:06:07.382Z"
+  },
+  "Surge": {
+   "pack": "core",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:06:19.781Z",
+   "board": "crowded"
+  },
+  "Comet": {
+   "pack": "core",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "empty",
+   "at": "2026-09-06T03:06:23.011Z"
+  },
+  "Seal_of_Summer": {
+   "pack": "core",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:06:26.734Z"
+  },
+  "Blossom": {
+   "pack": "springtime",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:06:31.777Z",
+   "board": "empty"
+  },
+  "Scatter": {
+   "pack": "springtime",
+   "type": "sorcery",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T18:59:57.601Z",
+   "board": "empty"
+  },
+  "Seal_of_Spring": {
+   "pack": "springtime",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:06:44.573Z"
+  },
+  "Syzygy": {
+   "pack": "celestial",
+   "type": "ritual",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:06:54.183Z",
+   "board": "crowded"
+  },
+  "Eclipse": {
+   "pack": "celestial",
+   "type": "sorcery",
+   "quality": "bad",
+   "source": "robi",
+   "at": "2026-09-06T03:07:05.735Z",
+   "board": "crowded"
+  },
+  "Azimuth": {
+   "pack": "celestial",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:07:14.848Z"
+  },
+  "Erupt": {
+   "pack": "fury",
+   "type": "ritual",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:07:36.056Z",
+   "board": "neither"
+  },
+  "Fury": {
+   "pack": "fury",
+   "type": "sorcery",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:07:50.067Z",
+   "board": "crowded"
+  },
+  "Charge": {
+   "pack": "fury",
+   "type": "charm",
+   "quality": "good",
+   "source": "robi",
+   "board": "neither",
+   "at": "2026-09-06T03:08:06.613Z"
+  },
+  "Hurricane": {
+   "pack": "tempest",
+   "type": "ritual",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:08:45.228Z",
+   "board": "neither"
+  },
+  "Storm_Front": {
+   "pack": "tempest",
+   "type": "sorcery",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:08:49.719Z",
+   "board": "neither"
+  },
+  "Gust": {
+   "pack": "tempest",
+   "type": "charm",
+   "quality": "bad",
+   "source": "robi",
+   "board": "empty",
+   "at": "2026-09-06T03:09:01.079Z"
+  },
+  "Tsunami": {
+   "pack": "flood",
+   "type": "ritual",
+   "quality": "bad",
+   "source": "robi",
+   "at": "2026-09-06T03:09:09.480Z",
+   "board": "crowded"
+  },
+  "Torrent": {
+   "pack": "flood",
+   "type": "sorcery",
+   "quality": "bad",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:09:11.260Z"
+  },
+  "Splash": {
+   "pack": "flood",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:09:17.048Z"
+  },
+  "Harvest": {
+   "pack": "autumn",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:09:25.493Z",
+   "board": "neither"
+  },
+  "Gather": {
+   "pack": "autumn",
+   "type": "sorcery",
+   "quality": "good",
+   "source": "robi",
+   "at": "2026-09-06T03:09:32.137Z",
+   "board": "neither"
+  },
+  "Seal_of_Autumn": {
+   "pack": "autumn",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "neither",
+   "at": "2026-09-06T03:09:41.218Z"
+  },
+  "Corrupt": {
+   "pack": "gloom",
+   "type": "ritual",
+   "quality": "good",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:09:43.476Z"
+  },
+  "Decay": {
+   "pack": "gloom",
+   "type": "sorcery",
+   "board": "empty",
+   "source": "robi",
+   "quality": "bad",
+   "at": "2026-09-06T03:09:48.177Z"
+  },
+  "Lurk": {
+   "pack": "gloom",
+   "type": "charm",
+   "quality": "medium",
+   "source": "robi",
+   "board": "neither",
+   "at": "2026-09-06T03:10:01.453Z"
+  },
+  "Seal_of_Destruction": {
+   "pack": "covenant",
+   "type": "ritual",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:10:19.997Z",
+   "board": "neither"
+  },
+  "Seal_of_Stone": {
+   "pack": "covenant",
+   "type": "sorcery",
+   "quality": "medium",
+   "source": "robi",
+   "at": "2026-09-06T03:10:36.707Z",
+   "board": "crowded"
+  },
+  "Seal_of_Winter": {
+   "pack": "covenant",
+   "type": "charm",
+   "quality": "bad",
+   "source": "robi",
+   "board": "crowded",
+   "at": "2026-09-06T03:10:50.037Z"
+  }
+ },
+ "pairs": {
+  "Grow|Harvest": {
+   "a": "Grow",
+   "b": "Harvest",
+   "synergy": "positive",
+   "source": "robi",
+   "advantage": "Harvest",
+   "at": "2026-09-06T19:02:49.601Z",
+   "better": "Harvest"
+  },
+  "Flourish|Gather": {
+   "a": "Flourish",
+   "b": "Gather",
+   "synergy": "positive",
+   "source": "robi",
+   "better": "Gather",
+   "at": "2026-09-06T04:40:40.666Z",
+   "advantage": "Gather"
+  },
+  "Blossom|Erupt": {
+   "a": "Blossom",
+   "b": "Erupt",
+   "synergy": "positive",
+   "source": "prefill"
+  },
+  "Scatter|Erupt": {
+   "a": "Scatter",
+   "b": "Erupt",
+   "synergy": "positive",
+   "source": "prefill"
+  },
+  "Seal_of_Lightning|Surge": {
+   "a": "Seal_of_Lightning",
+   "b": "Surge",
+   "synergy": "positive",
+   "source": "prefill"
+  },
+  "Seal_of_Lightning|Splash": {
+   "a": "Seal_of_Lightning",
+   "b": "Splash",
+   "synergy": "negative",
+   "source": "prefill"
+  },
+  "Gust|Decay": {
+   "a": "Gust",
+   "b": "Decay",
+   "synergy": "positive",
+   "source": "prefill"
+  },
+  "Carnage|Fireblast": {
+   "a": "Carnage",
+   "b": "Fireblast",
+   "synergy": "none",
+   "source": "robi",
+   "advantage": "Carnage",
+   "better": "Fireblast",
+   "at": "2026-09-06T04:09:06.037Z"
+  },
+  "Hail_Storm|Blossom": {
+   "a": "Hail_Storm",
+   "b": "Blossom",
+   "advantage": "Hail_Storm",
+   "source": "prefill"
+  },
+  "Hail_Storm|Lurk": {
+   "a": "Hail_Storm",
+   "b": "Lurk",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Seal_of_Lightning|Storm_Front": {
+   "a": "Seal_of_Lightning",
+   "b": "Storm_Front",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Seal_of_Lightning|Meteor": {
+   "a": "Seal_of_Lightning",
+   "b": "Meteor",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Seal_of_Wind|Storm_Front": {
+   "a": "Seal_of_Wind",
+   "b": "Storm_Front",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Wind": {
+   "a": "Meteor",
+   "b": "Seal_of_Wind",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Seal_of_Summer|Storm_Front": {
+   "a": "Seal_of_Summer",
+   "b": "Storm_Front",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Summer": {
+   "a": "Meteor",
+   "b": "Seal_of_Summer",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Seal_of_Spring|Storm_Front": {
+   "a": "Seal_of_Spring",
+   "b": "Storm_Front",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Spring": {
+   "a": "Meteor",
+   "b": "Seal_of_Spring",
+   "advantage": "even",
+   "source": "robi",
+   "synergy": "positive",
+   "at": "2026-09-06T18:57:00.528Z",
+   "better": "Meteor"
+  },
+  "Storm_Front|Seal_of_Autumn": {
+   "a": "Storm_Front",
+   "b": "Seal_of_Autumn",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Autumn": {
+   "a": "Meteor",
+   "b": "Seal_of_Autumn",
+   "advantage": "even",
+   "source": "robi",
+   "at": "2026-09-06T19:09:29.121Z",
+   "synergy": "none",
+   "better": "Meteor"
+  },
+  "Storm_Front|Seal_of_Destruction": {
+   "a": "Storm_Front",
+   "b": "Seal_of_Destruction",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Destruction": {
+   "a": "Meteor",
+   "b": "Seal_of_Destruction",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Storm_Front|Seal_of_Stone": {
+   "a": "Storm_Front",
+   "b": "Seal_of_Stone",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Stone": {
+   "a": "Meteor",
+   "b": "Seal_of_Stone",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Storm_Front|Seal_of_Winter": {
+   "a": "Storm_Front",
+   "b": "Seal_of_Winter",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Meteor|Seal_of_Winter": {
+   "a": "Meteor",
+   "b": "Seal_of_Winter",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Blossom|Decay": {
+   "a": "Blossom",
+   "b": "Decay",
+   "advantage": "Decay",
+   "source": "prefill"
+  },
+  "Scatter|Decay": {
+   "a": "Scatter",
+   "b": "Decay",
+   "advantage": "Decay",
+   "source": "prefill"
+  },
+  "Starfall|Decay": {
+   "a": "Starfall",
+   "b": "Decay",
+   "advantage": "Decay",
+   "source": "prefill"
+  },
+  "Carnage|Seal_of_Stone": {
+   "a": "Carnage",
+   "b": "Seal_of_Stone",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Fury|Seal_of_Stone": {
+   "a": "Fury",
+   "b": "Seal_of_Stone",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Slash|Seal_of_Stone": {
+   "a": "Slash",
+   "b": "Seal_of_Stone",
+   "advantage": "even",
+   "source": "prefill"
+  },
+  "Seal_of_Lightning|Seal_of_Stone": {
+   "a": "Seal_of_Lightning",
+   "b": "Seal_of_Stone",
+   "advantage": "Seal_of_Lightning",
+   "source": "prefill"
+  },
+  "Sprout|Hurricane": {
+   "a": "Sprout",
+   "b": "Hurricane",
+   "advantage": "Sprout",
+   "source": "prefill"
+  },
+  "Slash|Hurricane": {
+   "a": "Slash",
+   "b": "Hurricane",
+   "advantage": "Slash",
+   "source": "prefill"
+  },
+  "Surge|Hurricane": {
+   "a": "Surge",
+   "b": "Hurricane",
+   "advantage": "Surge",
+   "source": "robi",
+   "synergy": "none",
+   "at": "2026-09-06T04:42:29.243Z",
+   "better": "equal"
+  },
+  "Hurricane|Splash": {
+   "a": "Hurricane",
+   "b": "Splash",
+   "advantage": "Splash",
+   "source": "prefill"
+  },
+  "Charge|Hurricane": {
+   "a": "Charge",
+   "b": "Hurricane",
+   "advantage": "Charge",
+   "source": "prefill"
+  },
+  "Azimuth|Hurricane": {
+   "a": "Azimuth",
+   "b": "Hurricane",
+   "advantage": "Azimuth",
+   "source": "prefill"
+  },
+  "Hurricane|Lurk": {
+   "a": "Hurricane",
+   "b": "Lurk",
+   "advantage": "Lurk",
+   "source": "prefill"
+  },
+  "Flourish|Carnage": {
+   "a": "Flourish",
+   "b": "Carnage",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:04:42.600Z",
+   "advantage": "even",
+   "better": "Carnage"
+  },
+  "Flourish|Bewitch": {
+   "a": "Flourish",
+   "b": "Bewitch",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:04:23.254Z",
+   "advantage": "even",
+   "better": "Bewitch"
+  },
+  "Flourish|Starfall": {
+   "a": "Flourish",
+   "b": "Starfall",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:04:25.795Z",
+   "advantage": "even",
+   "better": "Starfall"
+  },
+  "Flourish|Seal_of_Lightning": {
+   "a": "Flourish",
+   "b": "Seal_of_Lightning",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:04:28.708Z",
+   "advantage": "even",
+   "better": "Seal_of_Lightning"
+  },
+  "Flourish|Grow": {
+   "a": "Flourish",
+   "b": "Grow",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:04:31.235Z",
+   "advantage": "Flourish",
+   "better": "Flourish"
+  },
+  "Flourish|Fireblast": {
+   "a": "Flourish",
+   "b": "Fireblast",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:04:34.214Z",
+   "advantage": "Fireblast",
+   "better": "Fireblast"
+  },
+  "Flourish|Hail_Storm": {
+   "a": "Flourish",
+   "b": "Hail_Storm",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:04:49.702Z",
+   "advantage": "even",
+   "better": "Hail_Storm"
+  },
+  "Flourish|Meteor": {
+   "a": "Flourish",
+   "b": "Meteor",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:04:53.416Z",
+   "advantage": "Meteor",
+   "better": "Meteor"
+  },
+  "Flourish|Seal_of_Wind": {
+   "a": "Flourish",
+   "b": "Seal_of_Wind",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:04:57.305Z",
+   "advantage": "Seal_of_Wind",
+   "better": "Seal_of_Wind"
+  },
+  "Flourish|Sprout": {
+   "a": "Flourish",
+   "b": "Sprout",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:05:03.740Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Flourish|Slash": {
+   "a": "Flourish",
+   "b": "Slash",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:05:06.473Z",
+   "advantage": "even",
+   "better": "Slash"
+  },
+  "Flourish|Surge": {
+   "a": "Flourish",
+   "b": "Surge",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:05:08.298Z",
+   "advantage": "even",
+   "better": "Surge"
+  },
+  "Flourish|Comet": {
+   "a": "Flourish",
+   "b": "Comet",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:05:16.905Z",
+   "advantage": "Comet",
+   "better": "equal"
+  },
+  "Flourish|Seal_of_Summer": {
+   "a": "Flourish",
+   "b": "Seal_of_Summer",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:05:23.439Z",
+   "advantage": "Flourish",
+   "better": "Flourish"
+  },
+  "Flourish|Blossom": {
+   "a": "Flourish",
+   "b": "Blossom",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:30:11.707Z",
+   "advantage": "Blossom",
+   "better": "Blossom"
+  },
+  "Flourish|Scatter": {
+   "a": "Flourish",
+   "b": "Scatter",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:30:17.731Z",
+   "advantage": "Scatter",
+   "better": "Scatter"
+  },
+  "Flourish|Seal_of_Spring": {
+   "a": "Flourish",
+   "b": "Seal_of_Spring",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:30:27.125Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Flourish|Syzygy": {
+   "a": "Flourish",
+   "b": "Syzygy",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:30:36.311Z",
+   "advantage": "Syzygy",
+   "better": "Flourish"
+  },
+  "Comet|Seal_of_Stone": {
+   "a": "Comet",
+   "b": "Seal_of_Stone",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:42:36.976Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Seal_of_Summer|Harvest": {
+   "a": "Seal_of_Summer",
+   "b": "Harvest",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:42:47.103Z",
+   "advantage": "Harvest",
+   "better": "Harvest"
+  },
+  "Bewitch|Tsunami": {
+   "a": "Bewitch",
+   "b": "Tsunami",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T03:16:42.520Z",
+   "advantage": "even"
+  },
+  "Seal_of_Summer|Lurk": {
+   "a": "Seal_of_Summer",
+   "b": "Lurk",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:43:48.255Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Bewitch|Fireblast": {
+   "a": "Bewitch",
+   "b": "Fireblast",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:20:58.027Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Carnage|Bewitch": {
+   "a": "Carnage",
+   "b": "Bewitch",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T04:05:37.652Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Carnage|Starfall": {
+   "a": "Carnage",
+   "b": "Starfall",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T04:06:05.673Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Carnage|Seal_of_Lightning": {
+   "a": "Carnage",
+   "b": "Seal_of_Lightning",
+   "advantage": "Carnage",
+   "source": "robi",
+   "at": "2026-09-06T04:08:49.558Z",
+   "better": "equal",
+   "synergy": "none"
+  },
+  "Carnage|Grow": {
+   "a": "Carnage",
+   "b": "Grow",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:08:58.085Z",
+   "advantage": "Carnage",
+   "better": "Carnage"
+  },
+  "Carnage|Hail_Storm": {
+   "a": "Carnage",
+   "b": "Hail_Storm",
+   "advantage": "even",
+   "source": "robi",
+   "at": "2026-09-06T04:09:49.249Z",
+   "synergy": "negative",
+   "better": "equal"
+  },
+  "Carnage|Meteor": {
+   "a": "Carnage",
+   "b": "Meteor",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T04:10:07.548Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Carnage|Slash": {
+   "a": "Carnage",
+   "b": "Slash",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:10:54.446Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Carnage|Surge": {
+   "a": "Carnage",
+   "b": "Surge",
+   "better": "Carnage",
+   "source": "robi",
+   "at": "2026-09-06T04:11:08.034Z",
+   "advantage": "even",
+   "synergy": "negative"
+  },
+  "Carnage|Comet": {
+   "a": "Carnage",
+   "b": "Comet",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:11:35.259Z",
+   "advantage": "Comet",
+   "better": "Carnage"
+  },
+  "Carnage|Seal_of_Summer": {
+   "a": "Carnage",
+   "b": "Seal_of_Summer",
+   "advantage": "Carnage",
+   "source": "robi",
+   "at": "2026-09-06T04:11:45.966Z",
+   "synergy": "positive",
+   "better": "Carnage"
+  },
+  "Bewitch|Starfall": {
+   "a": "Bewitch",
+   "b": "Starfall",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:14:46.894Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Bewitch|Seal_of_Lightning": {
+   "a": "Bewitch",
+   "b": "Seal_of_Lightning",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:15:10.527Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Bewitch|Grow": {
+   "a": "Bewitch",
+   "b": "Grow",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:20:23.948Z",
+   "advantage": "Bewitch",
+   "better": "Bewitch"
+  },
+  "Bewitch|Hail_Storm": {
+   "a": "Bewitch",
+   "b": "Hail_Storm",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:21:13.691Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Bewitch|Meteor": {
+   "a": "Bewitch",
+   "b": "Meteor",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:21:55.586Z",
+   "advantage": "Meteor",
+   "better": "equal"
+  },
+  "Bewitch|Seal_of_Wind": {
+   "a": "Bewitch",
+   "b": "Seal_of_Wind",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:22:36.043Z",
+   "advantage": "Seal_of_Wind",
+   "better": "equal"
+  },
+  "Bewitch|Sprout": {
+   "a": "Bewitch",
+   "b": "Sprout",
+   "better": "Bewitch",
+   "source": "robi",
+   "at": "2026-09-06T04:23:05.406Z",
+   "advantage": "Bewitch",
+   "synergy": "none"
+  },
+  "Bewitch|Slash": {
+   "a": "Bewitch",
+   "b": "Slash",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T04:23:40.467Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Bewitch|Surge": {
+   "a": "Bewitch",
+   "b": "Surge",
+   "better": "Bewitch",
+   "source": "robi",
+   "at": "2026-09-06T04:24:13.089Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Bewitch|Comet": {
+   "a": "Bewitch",
+   "b": "Comet",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:25:16.826Z",
+   "advantage": "Comet",
+   "better": "Bewitch"
+  },
+  "Bewitch|Seal_of_Summer": {
+   "a": "Bewitch",
+   "b": "Seal_of_Summer",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:25:26.735Z",
+   "advantage": "Bewitch",
+   "better": "Bewitch"
+  },
+  "Starfall|Seal_of_Lightning": {
+   "a": "Starfall",
+   "b": "Seal_of_Lightning",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:25:55.797Z",
+   "advantage": "Seal_of_Lightning",
+   "better": "equal"
+  },
+  "Starfall|Grow": {
+   "a": "Starfall",
+   "b": "Grow",
+   "better": "Starfall",
+   "source": "robi",
+   "at": "2026-09-06T04:26:09.751Z",
+   "advantage": "Starfall",
+   "synergy": "none"
+  },
+  "Flourish|Eclipse": {
+   "a": "Flourish",
+   "b": "Eclipse",
+   "better": "Flourish",
+   "source": "robi",
+   "at": "2026-09-06T04:31:02.547Z",
+   "synergy": "positive",
+   "advantage": "Flourish"
+  },
+  "Flourish|Azimuth": {
+   "a": "Flourish",
+   "b": "Azimuth",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:31:31.536Z",
+   "better": "Azimuth",
+   "advantage": "even"
+  },
+  "Flourish|Erupt": {
+   "a": "Flourish",
+   "b": "Erupt",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:32:53.581Z",
+   "better": "Erupt",
+   "advantage": "Erupt"
+  },
+  "Flourish|Fury": {
+   "a": "Flourish",
+   "b": "Fury",
+   "advantage": "Fury",
+   "source": "robi",
+   "at": "2026-09-06T04:33:08.600Z",
+   "better": "Fury",
+   "synergy": "positive"
+  },
+  "Flourish|Charge": {
+   "a": "Flourish",
+   "b": "Charge",
+   "better": "Charge",
+   "source": "robi",
+   "at": "2026-09-06T04:33:20.846Z",
+   "advantage": "Charge",
+   "synergy": "positive"
+  },
+  "Flourish|Hurricane": {
+   "a": "Flourish",
+   "b": "Hurricane",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:33:52.312Z",
+   "better": "Hurricane",
+   "advantage": "Flourish"
+  },
+  "Flourish|Storm_Front": {
+   "a": "Flourish",
+   "b": "Storm_Front",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:38:33.923Z",
+   "advantage": "even",
+   "better": "Storm_Front"
+  },
+  "Flourish|Gust": {
+   "a": "Flourish",
+   "b": "Gust",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:39:00.337Z",
+   "advantage": "Flourish",
+   "better": "Flourish"
+  },
+  "Flourish|Tsunami": {
+   "a": "Flourish",
+   "b": "Tsunami",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:39:37.125Z",
+   "advantage": "Flourish",
+   "better": "Flourish"
+  },
+  "Flourish|Torrent": {
+   "a": "Flourish",
+   "b": "Torrent",
+   "better": "Flourish",
+   "source": "robi",
+   "at": "2026-09-06T04:39:56.070Z",
+   "advantage": "Flourish",
+   "synergy": "positive"
+  },
+  "Flourish|Splash": {
+   "a": "Flourish",
+   "b": "Splash",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T04:40:11.229Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Flourish|Harvest": {
+   "a": "Flourish",
+   "b": "Harvest",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:40:29.692Z",
+   "better": "Harvest",
+   "advantage": "Harvest"
+  },
+  "Harvest|Gather": {
+   "a": "Harvest",
+   "b": "Gather",
+   "better": "Gather",
+   "source": "robi",
+   "at": "2026-09-06T04:41:10.314Z",
+   "advantage": "Gather",
+   "synergy": "negative"
+  },
+  "Harvest|Seal_of_Autumn": {
+   "a": "Harvest",
+   "b": "Seal_of_Autumn",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:41:36.698Z",
+   "advantage": "even",
+   "better": "Harvest"
+  },
+  "Gather|Seal_of_Autumn": {
+   "a": "Gather",
+   "b": "Seal_of_Autumn",
+   "advantage": "even",
+   "source": "robi",
+   "at": "2026-09-06T04:41:45.254Z",
+   "better": "Gather",
+   "synergy": "none"
+  },
+  "Slash|Syzygy": {
+   "a": "Slash",
+   "b": "Syzygy",
+   "better": "Slash",
+   "source": "robi",
+   "at": "2026-09-06T04:44:23.258Z",
+   "advantage": "Syzygy",
+   "synergy": "positive"
+  },
+  "Meteor|Blossom": {
+   "a": "Meteor",
+   "b": "Blossom",
+   "better": "Blossom",
+   "source": "robi",
+   "at": "2026-09-06T04:44:39.396Z",
+   "advantage": "even",
+   "synergy": "negative"
+  },
+  "Comet|Corrupt": {
+   "a": "Comet",
+   "b": "Corrupt",
+   "better": "Corrupt",
+   "source": "robi",
+   "at": "2026-09-06T04:47:53.454Z",
+   "synergy": "positive",
+   "advantage": "even"
+  },
+  "Seal_of_Wind|Lurk": {
+   "a": "Seal_of_Wind",
+   "b": "Lurk",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:48:20.664Z",
+   "advantage": "Seal_of_Wind",
+   "better": "Seal_of_Wind"
+  },
+  "Grow|Corrupt": {
+   "a": "Grow",
+   "b": "Corrupt",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:48:33.093Z",
+   "advantage": "even",
+   "better": "Corrupt"
+  },
+  "Grow|Lurk": {
+   "a": "Grow",
+   "b": "Lurk",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T04:48:59.699Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Hail_Storm|Decay": {
+   "a": "Hail_Storm",
+   "b": "Decay",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T04:49:24.624Z",
+   "advantage": "Hail_Storm",
+   "better": "Hail_Storm"
+  },
+  "Flourish|Seal_of_Autumn": {
+   "a": "Flourish",
+   "b": "Seal_of_Autumn",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T17:42:16.809Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Flourish|Corrupt": {
+   "a": "Flourish",
+   "b": "Corrupt",
+   "better": "Corrupt",
+   "source": "robi",
+   "at": "2026-09-06T17:42:28.825Z",
+   "advantage": "Corrupt",
+   "synergy": "positive"
+  },
+  "Flourish|Decay": {
+   "a": "Flourish",
+   "b": "Decay",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T17:42:50.863Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Flourish|Lurk": {
+   "a": "Flourish",
+   "b": "Lurk",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T17:43:33.884Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Flourish|Seal_of_Destruction": {
+   "a": "Flourish",
+   "b": "Seal_of_Destruction",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T17:45:28.268Z",
+   "advantage": "Flourish",
+   "better": "equal"
+  },
+  "Flourish|Seal_of_Stone": {
+   "a": "Flourish",
+   "b": "Seal_of_Stone",
+   "advantage": "Seal_of_Stone",
+   "source": "robi",
+   "at": "2026-09-06T17:50:35.935Z",
+   "better": "equal",
+   "synergy": "positive"
+  },
+  "Flourish|Seal_of_Winter": {
+   "a": "Flourish",
+   "b": "Seal_of_Winter",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T17:50:55.836Z",
+   "advantage": "Flourish",
+   "better": "equal"
+  },
+  "Syzygy|Seal_of_Autumn": {
+   "a": "Syzygy",
+   "b": "Seal_of_Autumn",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T17:51:32.085Z",
+   "advantage": "Seal_of_Autumn",
+   "better": "Seal_of_Autumn"
+  },
+  "Comet|Erupt": {
+   "a": "Comet",
+   "b": "Erupt",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:15:11.807Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Seal_of_Wind|Charge": {
+   "a": "Seal_of_Wind",
+   "b": "Charge",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:16:01.956Z",
+   "advantage": "even",
+   "better": "Charge"
+  },
+  "Grow|Erupt": {
+   "a": "Grow",
+   "b": "Erupt",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:16:17.036Z",
+   "advantage": "Erupt",
+   "better": "Erupt"
+  },
+  "Grow|Charge": {
+   "a": "Grow",
+   "b": "Charge",
+   "better": "Charge",
+   "source": "robi",
+   "at": "2026-09-06T18:16:37.318Z",
+   "advantage": "Charge",
+   "synergy": "none"
+  },
+  "Hail_Storm|Fury": {
+   "a": "Hail_Storm",
+   "b": "Fury",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T18:17:23.690Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Charge|Torrent": {
+   "a": "Charge",
+   "b": "Torrent",
+   "better": "Charge",
+   "source": "robi",
+   "at": "2026-09-06T18:17:34.627Z",
+   "advantage": "Charge",
+   "synergy": "none"
+  },
+  "Slash|Fury": {
+   "a": "Slash",
+   "b": "Fury",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:18:48.072Z",
+   "better": "equal",
+   "advantage": "Fury"
+  },
+  "Comet|Fury": {
+   "a": "Comet",
+   "b": "Fury",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:19:39.648Z",
+   "advantage": "Comet",
+   "better": "Fury"
+  },
+  "Fury|Corrupt": {
+   "a": "Fury",
+   "b": "Corrupt",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:20:00.884Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Fireblast|Charge": {
+   "a": "Fireblast",
+   "b": "Charge",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T18:20:19.762Z",
+   "advantage": "even",
+   "better": "Fireblast"
+  },
+  "Charge|Seal_of_Winter": {
+   "a": "Charge",
+   "b": "Seal_of_Winter",
+   "advantage": "Seal_of_Winter",
+   "source": "robi",
+   "at": "2026-09-06T18:20:47.157Z",
+   "better": "Charge",
+   "synergy": "none"
+  },
+  "Bewitch|Charge": {
+   "a": "Bewitch",
+   "b": "Charge",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T18:21:06.300Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Surge|Erupt": {
+   "a": "Surge",
+   "b": "Erupt",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T18:21:39.828Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Comet|Blossom": {
+   "a": "Comet",
+   "b": "Blossom",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:36:54.747Z",
+   "advantage": "Blossom",
+   "better": "Blossom"
+  },
+  "Seal_of_Wind|Seal_of_Spring": {
+   "a": "Seal_of_Wind",
+   "b": "Seal_of_Spring",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:45:42.897Z",
+   "better": "Seal_of_Wind",
+   "advantage": "even"
+  },
+  "Grow|Blossom": {
+   "a": "Grow",
+   "b": "Blossom",
+   "better": "Blossom",
+   "source": "robi",
+   "at": "2026-09-06T18:46:02.617Z",
+   "synergy": "none",
+   "advantage": "Blossom"
+  },
+  "Grow|Seal_of_Spring": {
+   "a": "Grow",
+   "b": "Seal_of_Spring",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:48:10.260Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Hail_Storm|Scatter": {
+   "a": "Hail_Storm",
+   "b": "Scatter",
+   "better": "Scatter",
+   "source": "robi",
+   "at": "2026-09-06T18:48:52.387Z",
+   "advantage": "Hail_Storm",
+   "synergy": "negative"
+  },
+  "Seal_of_Spring|Torrent": {
+   "a": "Seal_of_Spring",
+   "b": "Torrent",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T18:49:31.641Z",
+   "better": "Seal_of_Spring",
+   "advantage": "Seal_of_Spring"
+  },
+  "Slash|Scatter": {
+   "a": "Slash",
+   "b": "Scatter",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T18:49:44.497Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Comet|Scatter": {
+   "a": "Comet",
+   "b": "Scatter",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:49:55.089Z",
+   "advantage": "Scatter",
+   "better": "Scatter"
+  },
+  "Seal_of_Spring|Syzygy": {
+   "a": "Seal_of_Spring",
+   "b": "Syzygy",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:53:48.437Z",
+   "advantage": "Seal_of_Spring",
+   "better": "equal"
+  },
+  "Fireblast|Seal_of_Spring": {
+   "a": "Fireblast",
+   "b": "Seal_of_Spring",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T18:54:56.561Z",
+   "advantage": "Fireblast",
+   "better": "Fireblast"
+  },
+  "Seal_of_Spring|Seal_of_Winter": {
+   "a": "Seal_of_Spring",
+   "b": "Seal_of_Winter",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T18:55:40.713Z",
+   "advantage": "Seal_of_Spring",
+   "better": "equal"
+  },
+  "Bewitch|Seal_of_Spring": {
+   "a": "Bewitch",
+   "b": "Seal_of_Spring",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:56:03.536Z",
+   "advantage": "Bewitch",
+   "better": "equal"
+  },
+  "Surge|Blossom": {
+   "a": "Surge",
+   "b": "Blossom",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T18:56:23.137Z",
+   "advantage": "even",
+   "better": "Blossom"
+  },
+  "Bewitch|Blossom": {
+   "a": "Bewitch",
+   "b": "Blossom",
+   "better": "Blossom",
+   "source": "robi",
+   "at": "2026-09-06T18:56:43.001Z",
+   "advantage": "Blossom",
+   "synergy": "none"
+  },
+  "Blossom|Scatter": {
+   "a": "Blossom",
+   "b": "Scatter",
+   "better": "Scatter",
+   "source": "robi",
+   "at": "2026-09-06T18:57:29.145Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Comet|Harvest": {
+   "a": "Comet",
+   "b": "Harvest",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:01:00.227Z",
+   "advantage": "Harvest",
+   "better": "Harvest"
+  },
+  "Seal_of_Wind|Seal_of_Autumn": {
+   "a": "Seal_of_Wind",
+   "b": "Seal_of_Autumn",
+   "advantage": "Seal_of_Wind",
+   "source": "robi",
+   "at": "2026-09-06T19:02:41.985Z",
+   "better": "Seal_of_Wind",
+   "synergy": "none"
+  },
+  "Grow|Seal_of_Autumn": {
+   "a": "Grow",
+   "b": "Seal_of_Autumn",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T19:03:14.617Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Hail_Storm|Gather": {
+   "a": "Hail_Storm",
+   "b": "Gather",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:03:39.216Z",
+   "advantage": "Gather",
+   "better": "Gather"
+  },
+  "Gather|Decay": {
+   "a": "Gather",
+   "b": "Decay",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:03:49.512Z",
+   "advantage": "Gather",
+   "better": "Gather"
+  },
+  "Slash|Gather": {
+   "a": "Slash",
+   "b": "Gather",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:04:07.121Z",
+   "advantage": "even",
+   "better": "Gather"
+  },
+  "Comet|Gather": {
+   "a": "Comet",
+   "b": "Gather",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T19:04:34.905Z",
+   "advantage": "Gather",
+   "better": "Gather"
+  },
+  "Fireblast|Seal_of_Autumn": {
+   "a": "Fireblast",
+   "b": "Seal_of_Autumn",
+   "advantage": "Seal_of_Autumn",
+   "source": "robi",
+   "at": "2026-09-06T19:05:03.825Z",
+   "synergy": "none",
+   "better": "Fireblast"
+  },
+  "Seal_of_Autumn|Seal_of_Winter": {
+   "a": "Seal_of_Autumn",
+   "b": "Seal_of_Winter",
+   "advantage": "Seal_of_Autumn",
+   "source": "robi",
+   "at": "2026-09-06T19:05:27.377Z",
+   "synergy": "none",
+   "better": "equal"
+  },
+  "Bewitch|Seal_of_Autumn": {
+   "a": "Bewitch",
+   "b": "Seal_of_Autumn",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:05:45.323Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Surge|Harvest": {
+   "a": "Surge",
+   "b": "Harvest",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:08:15.481Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Bewitch|Harvest": {
+   "a": "Bewitch",
+   "b": "Harvest",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:08:25.521Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Blossom|Harvest": {
+   "a": "Blossom",
+   "b": "Harvest",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:09:52.097Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Comet|Tsunami": {
+   "a": "Comet",
+   "b": "Tsunami",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T19:10:14.865Z",
+   "advantage": "Comet",
+   "better": "Comet"
+  },
+  "Comet|Syzygy": {
+   "a": "Comet",
+   "b": "Syzygy",
+   "advantage": "Comet",
+   "source": "robi",
+   "at": "2026-09-06T19:15:22.177Z",
+   "synergy": "positive",
+   "better": "Comet"
+  },
+  "Seal_of_Wind|Azimuth": {
+   "a": "Seal_of_Wind",
+   "b": "Azimuth",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T19:15:49.018Z",
+   "advantage": "Seal_of_Wind",
+   "better": "equal"
+  },
+  "Grow|Syzygy": {
+   "a": "Grow",
+   "b": "Syzygy",
+   "advantage": "Syzygy",
+   "source": "robi",
+   "at": "2026-09-06T19:16:36.729Z",
+   "better": "Syzygy",
+   "synergy": "negative"
+  },
+  "Grow|Azimuth": {
+   "a": "Grow",
+   "b": "Azimuth",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:16:52.313Z",
+   "advantage": "even",
+   "better": "Azimuth"
+  },
+  "Hail_Storm|Eclipse": {
+   "a": "Hail_Storm",
+   "b": "Eclipse",
+   "better": "Hail_Storm",
+   "source": "robi",
+   "at": "2026-09-06T19:17:05.297Z",
+   "advantage": "even",
+   "synergy": "negative"
+  },
+  "Azimuth|Torrent": {
+   "a": "Azimuth",
+   "b": "Torrent",
+   "better": "Azimuth",
+   "source": "robi",
+   "at": "2026-09-06T19:18:02.697Z",
+   "advantage": "Azimuth",
+   "synergy": "none"
+  },
+  "Slash|Eclipse": {
+   "a": "Slash",
+   "b": "Eclipse",
+   "better": "Slash",
+   "source": "robi",
+   "at": "2026-09-06T19:18:39.593Z",
+   "advantage": "even",
+   "synergy": "negative"
+  },
+  "Comet|Eclipse": {
+   "a": "Comet",
+   "b": "Eclipse",
+   "better": "Comet",
+   "source": "robi",
+   "at": "2026-09-06T19:23:49.929Z",
+   "advantage": "even",
+   "synergy": "positive"
+  },
+  "Eclipse|Seal_of_Destruction": {
+   "a": "Eclipse",
+   "b": "Seal_of_Destruction",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:26:46.722Z",
+   "advantage": "Seal_of_Destruction",
+   "better": "equal"
+  },
+  "Fireblast|Azimuth": {
+   "a": "Fireblast",
+   "b": "Azimuth",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:27:38.705Z",
+   "advantage": "Fireblast",
+   "better": "Fireblast"
+  },
+  "Azimuth|Seal_of_Winter": {
+   "a": "Azimuth",
+   "b": "Seal_of_Winter",
+   "advantage": "Seal_of_Winter",
+   "source": "robi",
+   "at": "2026-09-06T19:27:59.753Z",
+   "synergy": "none",
+   "better": "equal"
+  },
+  "Bewitch|Azimuth": {
+   "a": "Bewitch",
+   "b": "Azimuth",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:28:13.505Z",
+   "advantage": "even",
+   "better": "Bewitch"
+  },
+  "Surge|Syzygy": {
+   "a": "Surge",
+   "b": "Syzygy",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:29:06.945Z",
+   "advantage": "even",
+   "better": "Surge"
+  },
+  "Bewitch|Syzygy": {
+   "a": "Bewitch",
+   "b": "Syzygy",
+   "advantage": "Bewitch",
+   "source": "robi",
+   "at": "2026-09-06T19:29:17.369Z",
+   "better": "Bewitch",
+   "synergy": "negative"
+  },
+  "Grow|Gust": {
+   "a": "Grow",
+   "b": "Gust",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:32:17.993Z",
+   "advantage": "even",
+   "better": "Grow"
+  },
+  "Hail_Storm|Storm_Front": {
+   "a": "Hail_Storm",
+   "b": "Storm_Front",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:36:20.145Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Gust|Torrent": {
+   "a": "Gust",
+   "b": "Torrent",
+   "advantage": "even",
+   "source": "robi",
+   "at": "2026-09-06T19:36:31.865Z",
+   "better": "equal",
+   "synergy": "none"
+  },
+  "Comet|Seal_of_Destruction": {
+   "a": "Comet",
+   "b": "Seal_of_Destruction",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T19:40:21.505Z",
+   "advantage": "Seal_of_Destruction",
+   "better": "Comet"
+  },
+  "Seal_of_Wind|Seal_of_Winter": {
+   "a": "Seal_of_Wind",
+   "b": "Seal_of_Winter",
+   "advantage": "Seal_of_Wind",
+   "source": "robi",
+   "at": "2026-09-06T19:45:15.504Z",
+   "synergy": "none",
+   "better": "Seal_of_Wind"
+  },
+  "Corrupt|Lurk": {
+   "a": "Corrupt",
+   "b": "Lurk",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T19:58:58.412Z",
+   "advantage": "Corrupt",
+   "better": "Corrupt"
+  },
+  "Slash|Decay": {
+   "a": "Slash",
+   "b": "Decay",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T19:59:23.043Z",
+   "advantage": "Slash",
+   "better": "Slash"
+  },
+  "Comet|Decay": {
+   "a": "Comet",
+   "b": "Decay",
+   "advantage": "Decay",
+   "source": "robi",
+   "at": "2026-09-06T19:59:39.649Z",
+   "synergy": "negative",
+   "better": "Comet"
+  },
+  "Harvest|Corrupt": {
+   "a": "Harvest",
+   "b": "Corrupt",
+   "better": "equal",
+   "source": "robi",
+   "at": "2026-09-06T20:00:35.368Z",
+   "advantage": "even",
+   "synergy": "positive"
+  },
+  "Fireblast|Lurk": {
+   "a": "Fireblast",
+   "b": "Lurk",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T20:01:09.990Z",
+   "advantage": "Fireblast",
+   "better": "Fireblast"
+  },
+  "Tsunami|Splash": {
+   "a": "Tsunami",
+   "b": "Splash",
+   "better": "Splash",
+   "source": "robi",
+   "at": "2026-09-06T20:01:51.444Z",
+   "advantage": "even",
+   "synergy": "negative"
+  },
+  "Torrent|Splash": {
+   "a": "Torrent",
+   "b": "Splash",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T20:02:04.367Z",
+   "advantage": "Splash",
+   "better": "Splash"
+  },
+  "Tsunami|Torrent": {
+   "a": "Tsunami",
+   "b": "Torrent",
+   "better": "Tsunami",
+   "source": "robi",
+   "at": "2026-09-06T20:02:34.170Z",
+   "advantage": "Tsunami",
+   "synergy": "positive"
+  },
+  "Seal_of_Wind|Splash": {
+   "a": "Seal_of_Wind",
+   "b": "Splash",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T20:02:59.825Z",
+   "advantage": "Seal_of_Wind",
+   "better": "Seal_of_Wind"
+  },
+  "Grow|Tsunami": {
+   "a": "Grow",
+   "b": "Tsunami",
+   "better": "Tsunami",
+   "source": "robi",
+   "at": "2026-09-06T20:03:29.229Z",
+   "advantage": "even",
+   "synergy": "none"
+  },
+  "Grow|Splash": {
+   "a": "Grow",
+   "b": "Splash",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T20:03:46.550Z",
+   "advantage": "even",
+   "better": "equal"
+  },
+  "Hail_Storm|Torrent": {
+   "a": "Hail_Storm",
+   "b": "Torrent",
+   "better": "Hail_Storm",
+   "source": "robi",
+   "at": "2026-09-06T20:06:52.120Z",
+   "advantage": "even",
+   "synergy": "negative"
+  },
+  "Torrent|Seal_of_Stone": {
+   "a": "Torrent",
+   "b": "Seal_of_Stone",
+   "advantage": "Seal_of_Stone",
+   "source": "robi",
+   "at": "2026-09-06T20:10:07.561Z",
+   "better": "Seal_of_Stone",
+   "synergy": "positive"
+  },
+  "Slash|Torrent": {
+   "a": "Slash",
+   "b": "Torrent",
+   "synergy": "negative",
+   "source": "robi",
+   "at": "2026-09-06T20:10:16.234Z",
+   "advantage": "Slash",
+   "better": "Slash"
+  },
+  "Comet|Torrent": {
+   "a": "Comet",
+   "b": "Torrent",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T20:10:30.608Z",
+   "advantage": "Comet",
+   "better": "Comet"
+  },
+  "Tsunami|Seal_of_Stone": {
+   "a": "Tsunami",
+   "b": "Seal_of_Stone",
+   "synergy": "positive",
+   "source": "robi",
+   "at": "2026-09-06T20:10:47.727Z",
+   "advantage": "even",
+   "better": "Seal_of_Stone"
+  },
+  "Fireblast|Splash": {
+   "a": "Fireblast",
+   "b": "Splash",
+   "synergy": "none",
+   "source": "robi",
+   "at": "2026-09-06T20:11:25.366Z",
+   "better": "Fireblast",
+   "advantage": "even"
+  },
+  "Splash|Seal_of_Winter": {
+   "a": "Splash",
+   "b": "Seal_of_Winter",
+   "advantage": "Seal_of_Winter",
+   "source": "robi",
+   "at": "2026-09-06T20:11:44.877Z",
+   "better": "equal",
+   "synergy": "none"
+  }
+ }
+}

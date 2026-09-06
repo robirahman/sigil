@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sigil Spell Survey</title>
+<style>
+	:root { --bg:#f6f4ee; --card:#fff; --ink:#222; --muted:#6b6b6b; --line:#ddd; --accent:#3b6ea5; --good:#2e8b57; --bad:#b4413c; --mid:#8a7a3a; }
+	* { box-sizing:border-box; }
+	body { margin:0; font:15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+	header { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; padding:12px 18px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+	header h1 { font-size:18px; margin:0 12px 0 0; }
+	.tabs button { padding:6px 14px; border:1px solid var(--line); background:#f2f2f2; cursor:pointer; border-radius:6px; }
+	.tabs button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+	.controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; }
+	.controls button, .controls select, .controls label { font-size:13px; }
+	.controls button { padding:5px 10px; border:1px solid var(--line); background:#fafafa; border-radius:6px; cursor:pointer; }
+	.progress { font-size:13px; color:var(--muted); }
+	main { max-width: 1100px; margin: 22px auto; padding: 0 16px; }
+	.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+	.spells { display:grid; grid-template-columns: 1fr; gap:14px; }
+	.spells.two { grid-template-columns: 1fr 1fr; }
+	.spell { border:1px solid var(--line); border-radius:10px; padding:14px 16px; background:#fcfcfa; }
+	.spell.a { border-left:5px solid #c0392b; } .spell.b { border-left:5px solid #2f6fb3; }
+	.spell h2 { margin:0 0 4px; font-size:22px; }
+	.badge { display:inline-block; font-size:11px; letter-spacing:.04em; text-transform:uppercase; padding:2px 7px; border-radius:10px; background:#eee; color:#444; margin-right:6px; }
+	.text { margin:8px 0 0; color:#333; }
+	.q { margin-top:18px; }
+	.q .label { font-weight:600; margin-bottom:8px; }
+	.opts { display:flex; gap:10px; flex-wrap:wrap; }
+	.opts button { flex:1 1 120px; padding:12px 10px; border:2px solid var(--line); background:#fff; border-radius:10px; cursor:pointer; font-size:15px; }
+	.opts button kbd { float:right; font-size:11px; color:var(--muted); border:1px solid #ccc; border-radius:4px; padding:0 4px; background:#f7f7f7; }
+	.opts button.sel { border-color:var(--accent); background:#e8f0fa; font-weight:600; }
+	.opts button.sel.good { border-color:var(--good); background:#e9f6ee; }
+	.opts button.sel.bad  { border-color:var(--bad);  background:#fbeceb; }
+	.nav { display:flex; gap:10px; margin-top:22px; align-items:center; }
+	.nav button { padding:9px 16px; border:1px solid var(--line); background:#fafafa; border-radius:8px; cursor:pointer; }
+	.nav .primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+	.nav .spacer { flex:1; }
+	.hint { color:var(--muted); font-size:13px; }
+	.prefill { background:#fff6d6; border:1px solid #e6d28a; color:#6b5a12; padding:6px 10px; border-radius:8px; font-size:13px; margin-top:12px; }
+	textarea { width:100%; height:180px; font:12px/1.35 ui-monospace, Menlo, Consolas, monospace; margin-top:10px; }
+	.toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:8px 14px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
+	.toast.show { opacity:1; }
+	details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:14px; }
+	.done { text-align:center; padding:40px 0; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+	<h1>Spell Survey</h1>
+	<div class="tabs">
+		<button id="tab-single" class="active">Single spell</button>
+		<button id="tab-pair">Two spells</button>
+	</div>
+	<span class="progress" id="progress"></span>
+	<div class="controls">
+		<label><input type="checkbox" id="only-unanswered" checked> unanswered only</label>
+		<select id="order">
+			<option value="pack">order: by pack</option>
+			<option value="shuffle">order: shuffled</option>
+		</select>
+		<select id="pack-filter"><option value="">all packs</option></select>
+		<select id="pair-scope" title="Pair mode only">
+			<option value="both">pairs: both spells in pack</option>
+			<option value="either">pairs: either spell in pack</option>
+		</select>
+		<button id="export">Download JSON</button>
+		<button id="import">Import JSON…</button>
+		<input type="file" id="import-file" accept="application/json" hidden>
+		<button id="reset" title="Clears every answer saved in this browser">Reset</button>
+	</div>
+</header>
+
+<main>
+	<div class="card" id="card"></div>
+	<details>
+		<summary>Show current JSON (copy/paste fallback if the download is blocked)</summary>
+		<textarea id="json-view" readonly></textarea>
+	</details>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="../static/scripts/engine/constants.js"></script>
+<script>
+(() => {
+	// ---- Spell universe: the 39 official spells (core + 8 rated packs) ----
+	const OFFICIAL_PACKS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+	const SPELLS = [];   // {name, pack, type}
+	const push = (names, pack, type) => names.forEach(n => SPELLS.push({ name: n, pack, type }));
+	push(CORE_RITUALS, 'core', 'ritual'); push(CORE_SORCERIES, 'core', 'sorcery'); push(CORE_CHARMS, 'core', 'charm');
+	for (const k of OFFICIAL_PACKS.slice(1)) {
+		const e = EXPANSIONS[k];
+		push(e.rituals, k, 'ritual'); push(e.sorceries, k, 'sorcery'); push(e.charms, k, 'charm');
+	}
+	const INDEX = Object.fromEntries(SPELLS.map((s, i) => [s.name, i]));
+	const packName = k => k === 'core' ? 'Core' : EXPANSIONS[k].name;
+	const pretty = n => n.replace(/_/g, ' ');
+	const isStatic = n => /^STATIC:/.test(SPELL_TEXTS[n] || '');
+	const sizeOf = t => t === 'ritual' ? '5-node' : t === 'sorcery' ? '3-node' : '1-node';
+
+	// All unordered pairs, canonical order = (lower index, higher index)
+	const PAIRS = [];
+	for (let i = 0; i < SPELLS.length; i++) for (let j = i + 1; j < SPELLS.length; j++) PAIRS.push([SPELLS[i].name, SPELLS[j].name]);
+	const pairKey = (a, b) => INDEX[a] < INDEX[b] ? a + '|' + b : b + '|' + a;
+
+	// ---- Prefilled rulings Robi already gave in chat (2026-09-05). Shown with a
+	// banner; any click overrides them. source:'prefill' is kept in the export.
+	const PREFILL = { spells: {}, pairs: {} };
+	const ps = (n, quality, board) => { PREFILL.spells[n] = { quality, board, source: 'prefill' }; };
+	const pp = (a, b, synergy, advantage) => {
+		const k = pairKey(a, b); const cur = PREFILL.pairs[k] || { source: 'prefill' };
+		if (synergy !== undefined) cur.synergy = synergy;
+		if (advantage !== undefined) cur.advantage = advantage;   // spell name or 'even'
+		PREFILL.pairs[k] = cur;
+	};
+	ps('Fireblast', undefined, 'crowded'); ps('Decay', undefined, 'empty');
+	ps('Corrupt', 'good'); ps('Torrent', 'bad'); ps('Charge', 'good'); ps('Slash', 'good');
+	for (const n of ['Sprout', 'Comet', 'Azimuth', 'Splash', 'Lurk', 'Seal_of_Spring', 'Seal_of_Summer', 'Seal_of_Autumn']) ps(n, 'medium');
+	ps('Seal_of_Winter', 'bad'); ps('Gust', 'bad');
+	pp('Grow', 'Harvest', 'positive'); pp('Flourish', 'Gather', 'positive');
+	pp('Blossom', 'Erupt', 'positive'); pp('Scatter', 'Erupt', 'positive');
+	pp('Seal_of_Lightning', 'Surge', 'positive'); pp('Seal_of_Lightning', 'Splash', 'negative');
+	pp('Gust', 'Decay', 'positive'); pp('Carnage', 'Fireblast', 'none', 'Carnage');
+	pp('Hail_Storm', 'Blossom', undefined, 'Hail_Storm'); pp('Hail_Storm', 'Lurk', undefined, 'even');
+	const SEALS = SPELLS.filter(s => isStatic(s.name)).map(s => s.name);
+	for (const s of SEALS) { pp('Storm_Front', s, undefined, 'even'); pp('Meteor', s, undefined, 'even'); }
+	pp('Decay', 'Blossom', undefined, 'Decay'); pp('Decay', 'Scatter', undefined, 'Decay'); pp('Decay', 'Starfall', undefined, 'Decay');
+	for (const s of ['Carnage', 'Fury', 'Slash']) pp('Seal_of_Stone', s, undefined, 'even');
+	pp('Seal_of_Lightning', 'Seal_of_Stone', undefined, 'Seal_of_Lightning');
+	for (const s of ['Sprout', 'Slash', 'Surge', 'Splash', 'Charge', 'Azimuth', 'Lurk']) pp('Hurricane', s, undefined, s);
+
+	// ---- State ----
+	const KEY = 'sigil-spell-survey-v1';   // v1 storage stays compatible: 'better' is simply a new optional field
+	let state = load();
+	function blank() { return { version: 1, spells: {}, pairs: {}, mode: 'single', pos: { single: 0, pair: 0 } }; }
+	function load() {
+		let s = null;
+		try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
+		if (!s) s = blank();
+		s.spells = s.spells || {}; s.pairs = s.pairs || {}; s.pos = s.pos || { single: 0, pair: 0 };
+		// seed prefills for anything unanswered
+		for (const [n, v] of Object.entries(PREFILL.spells)) {
+			const cur = s.spells[n] || {};
+			if (cur.quality === undefined && v.quality !== undefined) { cur.quality = v.quality; cur.source = 'prefill'; }
+			if (cur.board === undefined && v.board !== undefined) { cur.board = v.board; cur.source = cur.source || 'prefill'; }
+			if (Object.keys(cur).length) s.spells[n] = cur;
+		}
+		for (const [k, v] of Object.entries(PREFILL.pairs)) {
+			const cur = s.pairs[k] || {};
+			if (cur.synergy === undefined && v.synergy !== undefined) { cur.synergy = v.synergy; cur.source = 'prefill'; }
+			if (cur.advantage === undefined && v.advantage !== undefined) { cur.advantage = v.advantage; cur.source = cur.source || 'prefill'; }
+			if (Object.keys(cur).length) s.pairs[k] = cur;
+		}
+		return s;
+	}
+	function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { toast('Could not save to localStorage'); } renderJson(); }
+
+	const spellDone = n => { const v = state.spells[n]; return v && v.quality !== undefined && v.board !== undefined; };
+	const pairDone = k => { const v = state.pairs[k]; return v && v.synergy !== undefined && v.advantage !== undefined && v.better !== undefined; };
+	const isPrefill = v => v && v.source === 'prefill';
+
+	// ---- Ordering / filtering ----
+	function seededShuffle(arr, seed) {
+		const a = arr.slice(); let x = seed >>> 0;
+		const rnd = () => { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+		for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+		return a;
+	}
+	const el = id => document.getElementById(id);
+	function queue() {
+		const mode = state.mode;
+		const pack = el('pack-filter').value;
+		const only = el('only-unanswered').checked;
+		let items = mode === 'single'
+			? SPELLS.map(s => s.name).filter(n => !pack || SPELLS[INDEX[n]].pack === pack)
+			: PAIRS.filter(([a, b]) => {
+				if (!pack) return true;
+				const inA = SPELLS[INDEX[a]].pack === pack, inB = SPELLS[INDEX[b]].pack === pack;
+				return el('pair-scope').value === 'both' ? (inA && inB) : (inA || inB);
+			});
+		if (el('order').value === 'shuffle') items = seededShuffle(items, 20260905);
+		if (only) items = items.filter(it => mode === 'single' ? !spellDone(it) : !pairDone(pairKey(it[0], it[1])));
+		return items;
+	}
+
+	// ---- Rendering ----
+	function spellBox(name, cls) {
+		const s = SPELLS[INDEX[name]];
+		return `<div class="spell ${cls || ''}">
+			<h2>${pretty(name)}</h2>
+			<span class="badge">${packName(s.pack)}</span><span class="badge">${s.type} · ${sizeOf(s.type)}</span>${isStatic(name) ? '<span class="badge">static</span>' : ''}
+			<p class="text">${SPELL_TEXTS[name] || ''}</p>
+		</div>`;
+	}
+	function optBtn(q, value, label, key, sel, tone) {
+		return `<button data-q="${q}" data-v="${value}" class="${sel === value ? 'sel ' + (tone || '') : ''}">${label}<kbd>${key}</kbd></button>`;
+	}
+	let current = null;   // current item (spell name or pair)
+	function render() {
+		const items = queue();
+		const posKey = state.mode;
+		if (!items.length) {
+			current = null;
+			el('card').innerHTML = `<div class="done">Nothing left to answer with the current filters.<br><span class="hint">Untick “unanswered only” to review or change earlier answers.</span></div>`;
+			renderProgress(); return;
+		}
+		if (state.pos[posKey] >= items.length) state.pos[posKey] = 0;
+		if (state.pos[posKey] < 0) state.pos[posKey] = items.length - 1;
+		current = items[state.pos[posKey]];
+		let html = '';
+		if (state.mode === 'single') {
+			const n = current; const v = state.spells[n] || {};
+			html += `<div class="spells">${spellBox(n)}</div>`;
+			if (isPrefill(v)) html += `<div class="prefill">Prefilled from our chat, click any option to override.</div>`;
+			html += `<div class="q"><div class="label">How good is ${pretty(n)} overall?</div><div class="opts">
+				${optBtn('quality', 'good', 'Good', '1', v.quality, 'good')}${optBtn('quality', 'medium', 'Medium', '2', v.quality)}${optBtn('quality', 'bad', 'Bad', '3', v.quality, 'bad')}</div></div>`;
+			html += `<div class="q"><div class="label">Which board suits it better?</div><div class="opts">
+				${optBtn('board', 'empty', 'Emptier board', 'Q', v.board)}${optBtn('board', 'neither', 'Neither / no preference', 'W', v.board)}${optBtn('board', 'crowded', 'Crowded board', 'E', v.board)}</div></div>`;
+		} else {
+			const [a, b] = current; const k = pairKey(a, b); const v = state.pairs[k] || {};
+			html += `<div class="spells two">${spellBox(a, 'a')}${spellBox(b, 'b')}</div>`;
+			if (isPrefill(v)) html += `<div class="prefill">Prefilled from our chat, click any option to override.</div>`;
+			html += `<div class="q"><div class="label">Same player holds both: do they have synergy?</div><div class="opts">
+				${optBtn('synergy', 'positive', 'Positive synergy', '1', v.synergy, 'good')}${optBtn('synergy', 'none', 'No synergy', '2', v.synergy)}${optBtn('synergy', 'negative', 'Negative (anti-synergy)', '3', v.synergy, 'bad')}</div></div>`;
+			html += `<div class="q"><div class="label">Opposite players: who has the advantage?</div><div class="opts">
+				${optBtn('advantage', a, pretty(a) + ' favoured', 'Q', v.advantage)}${optBtn('advantage', 'even', 'Even', 'W', v.advantage)}${optBtn('advantage', b, pretty(b) + ' favoured', 'E', v.advantage)}</div></div>`;
+			html += `<div class="q"><div class="label">Which spell is better in general?</div><div class="opts">
+				${optBtn('better', a, pretty(a) + ' is better', 'Z', v.better)}${optBtn('better', 'equal', 'About equal', 'X', v.better)}${optBtn('better', b, pretty(b) + ' is better', 'C', v.better)}</div></div>`;
+		}
+		html += `<div class="nav">
+			<button id="prev">← Prev <kbd>Backspace</kbd></button>
+			<button id="skip">Skip <kbd>S</kbd></button>
+			<span class="spacer"></span>
+			<span class="hint">Advances automatically once every question is answered. Keys: 1/2/3, Q/W/E, Z/X/C by row.</span>
+			<button id="next" class="primary">Next →</button>
+		</div>`;
+		el('card').innerHTML = html;
+		el('card').querySelectorAll('.opts button').forEach(b => b.addEventListener('click', () => answer(b.dataset.q, b.dataset.v)));
+		el('prev').onclick = () => step(-1);
+		el('next').onclick = () => step(1);
+		el('skip').onclick = () => step(1);
+		renderProgress();
+	}
+	function renderProgress() {
+		const sDone = SPELLS.filter(s => spellDone(s.name)).length;
+		const pDone = PAIRS.filter(([a, b]) => pairDone(pairKey(a, b))).length;
+		const items = queue();
+		const pos = items.length ? state.pos[state.mode] + 1 : 0;
+		el('progress').textContent = `spells ${sDone}/${SPELLS.length} · pairs ${pDone}/${PAIRS.length} · viewing ${pos}/${items.length}`;
+	}
+	function renderJson() { el('json-view').value = JSON.stringify(exportObject(), null, 1); }
+
+	function answer(q, v) {
+		if (current === null) return;
+		if (state.mode === 'single') {
+			const cur = state.spells[current] || {};
+			cur[q] = v; cur.source = 'robi'; cur.at = new Date().toISOString();
+			state.spells[current] = cur;
+			save();
+			if (spellDone(current)) setTimeout(() => advanceAfterAnswer(), 180); else render();
+		} else {
+			const k = pairKey(current[0], current[1]);
+			const cur = state.pairs[k] || {};
+			cur[q] = v; cur.source = 'robi'; cur.at = new Date().toISOString();
+			state.pairs[k] = cur;
+			save();
+			if (pairDone(k)) setTimeout(() => advanceAfterAnswer(), 180); else render();
+		}
+	}
+	function advanceAfterAnswer() {
+		// With "unanswered only" on, the answered item drops out of the queue so
+		// the same index now points at the next item; otherwise move forward.
+		if (!el('only-unanswered').checked) state.pos[state.mode]++;
+		save(); render();
+	}
+	function step(d) { state.pos[state.mode] += d; save(); render(); }
+
+	// ---- Export / import ----
+	function exportObject() {
+		const spells = {};
+		for (const s of SPELLS) if (state.spells[s.name]) spells[s.name] = { pack: s.pack, type: s.type, ...state.spells[s.name] };
+		const pairs = {};
+		for (const [k, v] of Object.entries(state.pairs)) { const [a, b] = k.split('|'); pairs[k] = { a, b, ...v }; }
+		return {
+			version: 1, exportedAt: new Date().toISOString(),
+			scales: { quality: ['good', 'medium', 'bad'], board: ['empty', 'neither', 'crowded'], synergy: ['positive', 'none', 'negative'], advantage: '<spell name> | even', better: '<spell name> | equal' },
+			spells, pairs,
+		};
+	}
+	el('export').onclick = () => {
+		const blob = new Blob([JSON.stringify(exportObject(), null, 1)], { type: 'application/json' });
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(blob);
+		a.download = `spell-survey-${new Date().toISOString().slice(0, 10)}.json`;
+		document.body.appendChild(a); a.click(); a.remove();
+		setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+		toast('JSON downloaded');
+	};
+	el('import').onclick = () => el('import-file').click();
+	el('import-file').onchange = ev => {
+		const f = ev.target.files[0]; if (!f) return;
+		f.text().then(t => {
+			const j = JSON.parse(t); let n = 0;
+			for (const [k, v] of Object.entries(j.spells || {})) { const { pack, type, ...rest } = v; state.spells[k] = { ...(state.spells[k] || {}), ...rest }; n++; }
+			for (const [k, v] of Object.entries(j.pairs || {})) { const { a, b, ...rest } = v; state.pairs[k] = { ...(state.pairs[k] || {}), ...rest }; n++; }
+			save(); render(); toast(`Imported ${n} entries`);
+		}).catch(e => toast('Import failed: ' + e.message));
+		ev.target.value = '';
+	};
+	el('reset').onclick = () => {
+		if (!confirm('Erase every answer stored in this browser? (Download the JSON first if you want to keep it.)')) return;
+		localStorage.removeItem(KEY); state = load(); save(); render(); toast('Reset');
+	};
+
+	// ---- Tabs, filters, keyboard ----
+	function setMode(m) {
+		state.mode = m; save();
+		el('tab-single').classList.toggle('active', m === 'single');
+		el('tab-pair').classList.toggle('active', m === 'pair');
+		render();
+	}
+	el('tab-single').onclick = () => setMode('single');
+	el('tab-pair').onclick = () => setMode('pair');
+	['only-unanswered', 'order', 'pack-filter', 'pair-scope'].forEach(id => el(id).addEventListener('change', () => { state.pos[state.mode] = 0; render(); }));
+	for (const k of OFFICIAL_PACKS) { const o = document.createElement('option'); o.value = k; o.textContent = packName(k); el('pack-filter').appendChild(o); }
+	document.addEventListener('keydown', ev => {
+		if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+		const k = ev.key.toLowerCase();
+		const top = state.mode === 'single' ? ['quality', ['good', 'medium', 'bad']] : ['synergy', ['positive', 'none', 'negative']];
+		const bottom = state.mode === 'single' ? ['board', ['empty', 'neither', 'crowded']] : ['advantage', current ? [current[0], 'even', current[1]] : []];
+		if (['1', '2', '3'].includes(k)) { answer(top[0], top[1][+k - 1]); ev.preventDefault(); }
+		else if (['q', 'w', 'e'].includes(k) && current) { answer(bottom[0], bottom[1]['qwe'.indexOf(k)]); ev.preventDefault(); }
+		else if (['z', 'x', 'c'].includes(k) && current && state.mode === 'pair') { answer('better', [current[0], 'equal', current[1]]['zxc'.indexOf(k)]); ev.preventDefault(); }
+		else if (k === 'backspace' || k === 'arrowleft') { step(-1); ev.preventDefault(); }
+		else if (k === 's' || k === 'arrowright' || k === 'enter') { step(1); ev.preventDefault(); }
+	});
+	let toastTimer;
+	function toast(msg) { const t = el('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800); }
+
+	setMode(state.mode || 'single');
+	renderJson();
+})();
+</script>
+</body>
+</html>
