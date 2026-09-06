@@ -910,7 +910,7 @@ document.addEventListener('alpine:init', () => {
 					const _RUST_TIERS = {
 						rust_easy: { time: 0.1, ttBits: 16 },
 						rust_medium: { time: 1, ttBits: 18 },
-						rust_hard: { time: 5, ttBits: 20 },
+						rust_hard: { time: 10, ttBits: 20 },
 						rust_very_hard: { time: 60, ttBits: _bigTT },
 						rust_quick: { time: 3, ttBits: 18 },
 						rust: { time: 10, ttBits: 20 },
