@@ -1,14 +1,14 @@
-"""Regenerate the survey-derived sections of spell_dynamics_draft.md from one or
+"""Regenerate the survey-derived sections of docs/strategy/spell_dynamics_draft.md from one or
 more spell-survey-*.json exports (later files override earlier ones).
 
-usage: python3 tools/ingest_spell_survey.py spell-survey-2026-09-06.json [more.json ...]
+usage: python3 tools/ingest_spell_survey.py docs/strategy/survey_exports/*.json
 """
 import json, sys, re, os
 from collections import defaultdict
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DRAFT = os.path.join(REPO, 'spell_dynamics_draft.md')
-STATS = os.path.join(REPO, 'tools', 'spell_stats2.json')  # optional copy of the data tier fit
+DRAFT = os.path.join(REPO, 'docs', 'strategy', 'spell_dynamics_draft.md')
+STATS = os.path.join(REPO, 'docs', 'strategy', 'data', 'spell_stats2.json')  # data tier fit (from tools/spell_tier_stats.py)
 
 # Pairs Robi rated at the extreme in chat; the 3-level survey maps to +/-, these keep ++/--.
 STRONG_SYN = {('Grow','Harvest'):'++', ('Flourish','Gather'):'++', ('Blossom','Erupt'):'++', ('Scatter','Erupt'):'++',

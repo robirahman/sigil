@@ -76,7 +76,7 @@ for k, v in d.items():
             elif cb > cr: tally('more10', s, 'blue', win)
 def wr(x): return x[0] / x[1] if x[1] else float('nan')
 out = {s: {b: {'wr': wr(acc[s][b]), 'n': acc[s][b][1]} for b in acc[s]} for s in OFFICIAL}
-json.dump(out, open(os.path.join(REPO, 'tools', 'spell_position_winrates.json'), 'w'), indent=1)
+json.dump(out, open(os.path.join(REPO, 'docs', 'strategy', 'data', 'spell_position_winrates.json'), 'w'), indent=1)
 for b, title in (('cast', '(a) side that cast it'), ('closer', '(b) side starting closer'), ('closer_std', '(b-std) standard games only: closer under the RANDOM layout'), ('closer_comp', '(b-comp) competitive games only: closer after each side chose its first stone'), ('more10', '(c) side with more stones in it after turn 10')):
     print(f"\n== {title} ==")
     for s in sorted(OFFICIAL, key=lambda s: -(out[s][b]['wr'] if out[s][b]['n'] else -1)):

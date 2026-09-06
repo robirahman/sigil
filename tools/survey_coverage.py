@@ -1,12 +1,14 @@
-"""Archive new spell-survey-*.json exports, re-ingest, and report comparison coverage."""
+"""Archive new spell-survey-*.json exports (repo root or docs/strategy/) into docs/strategy/survey_exports, re-ingest, and report comparison coverage."""
 import json, glob, shutil, os, subprocess
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EXPORTS = os.path.join(REPO, "docs", "strategy", "survey_exports")
 from collections import defaultdict
-for f in glob.glob('spell-survey-*.json'):
+for f in glob.glob(os.path.join(REPO, 'spell-survey-*.json')) + glob.glob(os.path.join(REPO, 'docs', 'strategy', 'spell-survey-*.json')):
     j = json.load(open(f)); stamp = j['exportedAt'].replace(':', '').replace('-', '')[:15]
-    dst = f'survey_exports/spell-survey-{stamp}.json'
+    dst = os.path.join(EXPORTS, f'spell-survey-{stamp}.json')
     if not os.path.exists(dst): shutil.copy(f, dst); print('archived', dst)
-files = sorted(glob.glob('survey_exports/*.json'))
-print(subprocess.run(['python3', 'tools/ingest_spell_survey.py', *files], capture_output=True, text=True).stdout.strip())
+files = sorted(glob.glob(os.path.join(EXPORTS, '*.json')))
+print(subprocess.run(['python3', os.path.join(REPO, 'tools', 'ingest_spell_survey.py'), *files], capture_output=True, text=True).stdout.strip())
 spells = {}; pairs = {}
 for f in files:
     j = json.load(open(f))

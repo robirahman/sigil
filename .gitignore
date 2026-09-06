@@ -53,3 +53,5 @@ _train_orchestrator.py
 _train_orchestrator.log
 _arena_tournament.py
 _arena_tournament.log
+# raw survey downloads (archived copies live in docs/strategy/survey_exports)
+spell-survey-*.json

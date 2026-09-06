@@ -54,7 +54,7 @@ Reproduce: `python3 tools/spell_tier_stats.py <dir containing completed_games_li
 
 
 ### Workflow change (2026-09-05)
-Ratings are now collected through the survey page `docs/dev/spell-survey.html` (serve `docs/` on localhost, open /dev/spell-survey.html). Robi exports JSON; ingest it into these tables. Confirmed rulings below are prefilled in the page.
+Ratings are now collected through the survey page `docs/dev/spell-survey.html` (serve `docs/` on localhost, open /dev/spell-survey.html). Robi exports JSON; `python3 tools/survey_coverage.py` archives it into docs/strategy/survey_exports and regenerates these tables. Confirmed rulings below are prefilled in the page.
 
 ### Robi's rulings, round 7 (2026-09-06): reasons behind the article's flagged sentences
 - Comet > Carnage / Bewitch: Comet's sacrifice lets you remove a stone the enemy was about to target, cutting the damage Carnage/Bewitch can do. Comet also drops a stone into or next to enemy groups to raise the number of enemy stones you border (not only mana-grabbing).
@@ -155,11 +155,13 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Pair | Rating | Source |
 |---|---|---|
 | Blossom + Erupt | ++ | prefill |
+| Fireblast + Seal of Wind | ++ | robi |
 | Flourish + Gather | ++ | robi |
 | Grow + Harvest | ++ | robi |
 | Gust + Decay | ++ | prefill |
 | Scatter + Erupt | ++ | prefill |
 | Seal of Lightning + Surge | ++ | prefill |
+| Seal of Wind + Corrupt | ++ | robi |
 | Bewitch + Comet | + | robi |
 | Bewitch + Fireblast | + | robi |
 | Bewitch + Tsunami | + | robi |
@@ -173,6 +175,7 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Comet + Syzygy | + | robi |
 | Comet + Torrent | + | robi |
 | Comet + Tsunami | + | robi |
+| Fireblast + Corrupt | + | robi |
 | Flourish + Azimuth | + | robi |
 | Flourish + Charge | + | robi |
 | Flourish + Comet | + | robi |
@@ -195,6 +198,8 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Hail Storm + Decay | + | robi |
 | Harvest + Corrupt | + | robi |
 | Meteor + Seal of Spring | + | robi |
+| Seal of Lightning + Decay | + | robi |
+| Seal of Lightning + Lurk | + | robi |
 | Seal of Spring + Torrent | + | robi |
 | Seal of Summer + Harvest | + | robi |
 | Seal of Wind + Azimuth | + | robi |
@@ -209,7 +214,7 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Azimuth + Torrent | = | robi |
 | Bewitch + Blossom | = | robi |
 | Bewitch + Charge | = | robi |
-| Bewitch + Grow | = | robi-chat |
+| Bewitch + Grow | = | robi |
 | Bewitch + Harvest | = | robi |
 | Bewitch + Seal of Autumn | = | robi |
 | Bewitch + Seal of Lightning | = | robi |
@@ -273,6 +278,7 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Seal of Autumn + Seal of Winter | = | robi |
 | Seal of Spring + Seal of Winter | = | robi |
 | Seal of Summer + Lurk | = | robi |
+| Seal of Wind + Decay | = | robi |
 | Seal of Wind + Seal of Autumn | = | robi |
 | Seal of Wind + Seal of Winter | = | robi |
 | Seal of Wind + Splash | = | robi |
@@ -336,7 +342,7 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Sprout | Hurricane | ++ | prefill |
 | Surge | Hurricane | ++ | robi |
 | Azimuth | Torrent | + | robi |
-| Bewitch | Grow | + | robi-chat |
+| Bewitch | Grow | + | robi |
 | Bewitch | Seal of Spring | + | robi |
 | Bewitch | Seal of Summer | + | robi |
 | Bewitch | Sprout | + | robi |
@@ -362,10 +368,12 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Corrupt | Flourish | + | robi |
 | Corrupt | Lurk | + | robi |
 | Decay | Comet | + | robi |
+| Decay | Seal of Wind | + | robi |
 | Decay | Starfall | + | prefill |
 | Erupt | Flourish | + | robi |
 | Erupt | Grow | + | robi |
 | Fireblast | Azimuth | + | robi |
+| Fireblast | Corrupt | + | robi |
 | Fireblast | Flourish | + | robi |
 | Fireblast | Lurk | + | robi |
 | Fireblast | Seal of Spring | + | robi |
@@ -400,6 +408,8 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Seal of Autumn | Syzygy | + | robi |
 | Seal of Destruction | Comet | + | robi |
 | Seal of Destruction | Eclipse | + | robi |
+| Seal of Lightning | Decay | + | robi |
+| Seal of Lightning | Lurk | + | robi |
 | Seal of Lightning | Seal of Stone | + | prefill |
 | Seal of Lightning | Starfall | + | robi |
 | Seal of Spring | Seal of Winter | + | robi |
@@ -409,6 +419,7 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Seal of Stone | Torrent | + | robi |
 | Seal of Wind | Azimuth | + | robi |
 | Seal of Wind | Bewitch | + | robi |
+| Seal of Wind | Corrupt | + | robi |
 | Seal of Wind | Flourish | + | robi |
 | Seal of Wind | Lurk | + | robi |
 | Seal of Wind | Seal of Autumn | + | robi |
@@ -450,6 +461,7 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Comet | Erupt | = | robi |
 | Comet | Seal of Stone | = | robi |
 | Fireblast | Charge | = | robi |
+| Fireblast | Seal of Wind | = | robi |
 | Fireblast | Splash | = | robi |
 | Flourish | Azimuth | = | robi |
 | Flourish | Bewitch | = | robi |
@@ -560,25 +572,25 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | Comet | medium | -0.30 |  |
 | Seal of Destruction | medium | -0.75 |  |
 
-### Ranking from "which spell is better" (160 comparisons, Bradley-Terry)
+### Ranking from "which spell is better" (166 comparisons, Bradley-Terry)
 
 | # | Spell | Strength | Comparisons | Robi quality |
 |---|---|---|---|---|
 | 1 | Gather | +1.63 | 7 | good |
-| 2 | Fireblast | +1.56 | 9 | good |
+| 2 | Fireblast | +1.62 | 11 | good |
 | 3 | Scatter | +1.24 | 5 | good |
 | 4 | Blossom | +1.12 | 8 | good |
-| 5 | Charge | +0.84 | 7 | good |
-| 6 | Corrupt | +0.81 | 6 | good |
-| 7 | Bewitch | +0.77 | 21 | good |
-| 8 | Seal of Wind | +0.77 | 9 | good |
-| 9 | Harvest | +0.73 | 10 | good |
-| 10 | Carnage | +0.70 | 12 | good |
-| 11 | Slash | +0.69 | 10 | good |
-| 12 | Fury | +0.63 | 5 | good |
-| 13 | Meteor | +0.55 | 6 | medium |
-| 14 | Starfall | +0.53 | 5 | good |
-| 15 | Seal of Lightning | +0.46 | 4 | good |
+| 5 | Corrupt | +0.88 | 8 | good |
+| 6 | Charge | +0.85 | 7 | good |
+| 7 | Bewitch | +0.78 | 21 | good |
+| 8 | Harvest | +0.74 | 10 | good |
+| 9 | Carnage | +0.73 | 12 | good |
+| 10 | Seal of Wind | +0.72 | 12 | good |
+| 11 | Slash | +0.68 | 10 | good |
+| 12 | Seal of Lightning | +0.66 | 6 | good |
+| 13 | Fury | +0.64 | 5 | good |
+| 14 | Starfall | +0.56 | 5 | good |
+| 15 | Meteor | +0.55 | 6 | medium |
 | 16 | Hail Storm | +0.42 | 10 | medium |
 | 17 | Storm Front | +0.33 | 2 | medium |
 | 18 | Erupt | +0.28 | 4 | medium |
@@ -587,22 +599,22 @@ Refit with separate coefficients for red's and blue's uses of each spell. NO spe
 | 21 | Azimuth | +0.11 | 7 | medium |
 | 22 | Surge | -0.01 | 8 | medium |
 | 23 | Comet | -0.20 | 17 | medium |
-| 24 | Splash | -0.31 | 7 | medium |
+| 24 | Splash | -0.32 | 7 | medium |
 | 25 | Sprout | -0.40 | 2 | medium |
-| 26 | Seal of Winter | -0.46 | 7 | bad |
-| 27 | Seal of Spring | -0.55 | 9 | medium |
+| 26 | Seal of Winter | -0.47 | 7 | bad |
+| 27 | Seal of Spring | -0.56 | 9 | medium |
 | 28 | Seal of Autumn | -0.56 | 10 | medium |
 | 29 | Seal of Destruction | -0.66 | 3 | medium |
-| 30 | Lurk | -0.78 | 6 | medium |
-| 31 | Flourish | -0.79 | 38 | medium |
-| 32 | Decay | -0.92 | 5 | bad |
-| 33 | Tsunami | -0.93 | 6 | bad |
-| 34 | Seal of Summer | -1.03 | 5 | medium |
+| 30 | Flourish | -0.79 | 38 | medium |
+| 31 | Lurk | -0.88 | 7 | medium |
+| 32 | Tsunami | -0.93 | 6 | bad |
+| 33 | Seal of Summer | -1.05 | 5 | medium |
+| 34 | Decay | -1.12 | 7 | bad |
 | 35 | Eclipse | -1.14 | 5 | bad |
 | 36 | Syzygy | -1.18 | 8 | medium |
 | 37 | Gust | -1.34 | 3 | bad |
-| 38 | Grow | -1.36 | 17 | bad |
-| 39 | Torrent | -1.92 | 11 | bad |
+| 38 | Grow | -1.37 | 17 | bad |
+| 39 | Torrent | -1.93 | 11 | bad |
 <!-- SURVEY-END -->
 
 <!-- POSWR-BEGIN (generated by tools/spell_position_winrates.py + this block) -->

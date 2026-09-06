@@ -113,4 +113,4 @@ print(f"{'spell':20s}{'avail':>6}{'uses':>6}{'users':>6}{'perUsr':>7}{'useWR':>7
 for s in sorted(OFFICIAL,key=lambda s:-cnt[s][0]):
     r=raw[s]; tag='(held turns)' if s in STATIC else ''
     print(f"{s:20s}{r['avail']:6d}{r['total']:6d}{r['users']:6d}{r['per_game']:7.2f}{r['user_wr']:7.3f}{r['nonuser_wr']:7.3f}{cnt[s][0]:9.2f}{cnt[s][1]:6.2f}{ind[s][0]:9.2f}{ind[s][1]:6.2f}{cntH[s][0]:8.2f} {tag}")
-json.dump(dict(raw=raw,coef_count={s:cnt[s] for s in OFFICIAL},coef_ind={s:ind[s] for s in OFFICIAL},coef_count_noAIvAI={s:cntH[s] for s in OFFICIAL},controls={f:cnt[f] for f in cnt if f.startswith('cls') or f=='elo'},n=n1),open(S+'/spell_stats2.json','w'),indent=1)
+json.dump(dict(raw=raw,coef_count={s:cnt[s] for s in OFFICIAL},coef_ind={s:ind[s] for s in OFFICIAL},coef_count_noAIvAI={s:cntH[s] for s in OFFICIAL},controls={f:cnt[f] for f in cnt if f.startswith('cls') or f=='elo'},n=n1),open(S+'/spell_stats2.json','w')  # copy to docs/strategy/data/spell_stats2.json for the ingest script,indent=1)
