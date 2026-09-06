@@ -12,7 +12,8 @@ STATS = os.path.join(REPO, 'tools', 'spell_stats2.json')  # optional copy of the
 
 # Pairs Robi rated at the extreme in chat; the 3-level survey maps to +/-, these keep ++/--.
 STRONG_SYN = {('Grow','Harvest'):'++', ('Flourish','Gather'):'++', ('Blossom','Erupt'):'++', ('Scatter','Erupt'):'++',
-              ('Seal_of_Lightning','Surge'):'++', ('Seal_of_Lightning','Splash'):'--', ('Gust','Decay'):'++'}
+              ('Seal_of_Lightning','Surge'):'++', ('Seal_of_Lightning','Splash'):'--', ('Gust','Decay'):'++',
+              ('Seal_of_Wind','Fireblast'):'++', ('Seal_of_Wind','Corrupt'):'++'}   # Robi, chat 2026-09-06
 STRONG_ADV = {('Hail_Storm','Blossom'):'++', ('Decay','Blossom'):'++', ('Decay','Scatter'):'++'}
 for c in ['Sprout','Slash','Surge','Splash','Charge','Azimuth','Lurk']: STRONG_ADV[(c,'Hurricane')] = '++'  # charm beats Hurricane
 

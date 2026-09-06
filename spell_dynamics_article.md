@@ -47,11 +47,11 @@ A few notes on the placements that tend to surprise people.
 
 **Scatter and Blossom are top tier for how they combine.** Both drop stones into several spells at once, which both develops the board and sets up Erupt (two moves into every spell you already have a stone in). Their weakness is a specific counter: Hail Storm destroys one enemy stone in every three- and five-node spell, and Decay destroys every enemy stone touching two or more empty nodes. Against either, a freshly cast Blossom can be wiped in one turn.
 
-**Charge and Slash are the best charms.** A one-node spell that reliably places or pushes a stone is worth more than its size suggests, because a charm can be recast every turn you can refill it. Slash is the strongest charm in the core set; Charge (a move into any three- or five-node spell) is the strongest overall.
+**Charge and Slash are the best charms.** Their value shows at the front line. When you and your opponent are fighting over a spell and you hold one of these charms behind your side of it, you can spend the charm's stone to push forward. At minimum your opponent can never push you back past the charm, so they lose ground over time; at best the push crushes an enemy stone outright. Slash is the strongest charm in the core set; Charge (a move into any three- or five-node spell) is the strongest overall.
 
 **Grow is near the bottom, despite being a fine partner.** Two soft moves for a three-node investment does not net stones. Grow is good in one situation only: next to Harvest, where the pair refill each other. Torrent, one soft move then one hard move, is the weakest spell in the game.
 
-**The static seals are mostly weak.** Seal of Wind is the exception and sits in the strong tier: a blink for your first move every turn is real mobility. Seal of Lightning (dash for one sacrifice instead of two) is solid. Seal of Summer looks powerful on paper, but two casts a turn is only useful if you have the stones to fill two spells. Seal of Destruction is a special case: it destroys everything touching you at the end of your turn, but if it is still filled at the start of your next turn you lose, and only your opponent moves in between. It is a finisher, not a spell you develop toward, and it is much stronger for blue, who can win from a two-stone lead by bordering two enemy stones and filling the seal.
+**The static seals are mostly weak.** Seal of Wind is the exception and sits in the strong tier: a blink for your first move every turn is real mobility. Seal of Lightning (dash for one sacrifice instead of two) is solid. Seal of Summer looks powerful on paper, but two casts a turn only matters on a board crowded enough to have several spells filled at once, or when one spell fills another. With one or no spells filled it does nothing. Seal of Destruction is a special case: it destroys everything touching you at the end of your turn, but if it is still filled at the start of your next turn you lose, and only your opponent moves in between. It is a finisher, not a spell you develop toward, and it is much stronger for blue, who can win from a two-stone lead by bordering two enemy stones and filling the seal.
 
 ## Open board or crowded board?
 
@@ -99,7 +99,7 @@ There is also a small, universal anti-synergy: with one cast per turn, any two s
 
 | Rating | Pairs |
 |---|---|
-| ++ | Grow + Harvest, Flourish + Gather, Blossom + Erupt, Scatter + Erupt, Seal of Lightning + Surge, Gust + Decay |
+| ++ | Grow + Harvest, Flourish + Gather, Blossom + Erupt, Scatter + Erupt, Seal of Lightning + Surge, Gust + Decay, Seal of Wind + Fireblast, Seal of Wind + Corrupt |
 | + | Bewitch + Comet, Bewitch + Fireblast, Bewitch + Tsunami |
 | + | Carnage + Seal of Summer |
 | + | Comet + Corrupt, Eclipse, Erupt, Gather, Seal of Destruction, Seal of Stone, Syzygy, Torrent, Tsunami |
@@ -120,8 +120,9 @@ Some of the entries worth explaining:
 - Blossom or Scatter, then Erupt. The first seeds a stone into several spells; Erupt then makes two moves into every spell you have a stone in.
 - Seal of Lightning and Surge. Lightning makes dashing cost one sacrifice; Surge gives a free move whenever you dashed. Together, a cheap dash every turn pays for itself.
 - Gust and Decay. Gust picks up every enemy stone touching you and drops them wherever you like. Drop them in isolation and Decay destroys them all next turn.
-- Comet and Flourish. Comet's blink can grab a mana; Flourish's four soft moves then convert two or more mana into a stone advantage. Comet pairs well with many spells for the same reason: it converts a blink into mana, and most spells are better with more mana.
-- Bewitch and Fireblast. Bewitch converts the two stones at the front of an enemy formation; the rest of it is now touching you.
+- Comet and Flourish. Comet's blink can grab a mana; Flourish's four soft moves then convert two or more mana into a stone advantage. Comet pairs well with many spells for two reasons: the blink can fetch a mana that makes the next cast stronger, or it can drop a stone into or beside an enemy group to raise the number of enemy stones you border before a destruction or conversion spell.
+- Seal of Wind with Fireblast or Corrupt. This is the same idea at full strength. Wind's blink is your regular move, so it does not use up your cast: drop a stone anywhere, then destroy or convert everything around it in the same turn.
+- Bewitch and Fireblast. Convert part of an enemy group with Bewitch, and the rest of the group is now touching you for the Fireblast that follows.
 
 ### Negative synergies
 
@@ -190,9 +191,9 @@ The stories behind the strongest entries:
 
 **Hail Storm and Decay punish spread.** Blossom places one stone in each other three- and five-node spell, which is exactly one target per spell for Hail Storm. Those same lonely stones each touch two or more empty nodes, which is Decay's condition. Scatter has the same problem against Decay.
 
-**Carnage beats Fireblast.** Fireblast needs many bordering stones to be worth its cost, and building that contact takes turns. Carnage's four hard moves can seize the contested area, or the Fireblast spell itself, before the buildup pays off. Comet beats Carnage and Bewitch the same way: its blink lets you avoid contact, and both of those spells need contact to do anything.
+**Carnage beats Fireblast.** Fireblast needs many bordering stones to be worth its cost, and building that contact takes turns. Carnage's four hard moves can seize the contested area, or the Fireblast spell itself, before the buildup pays off. Comet beats Carnage and Bewitch for a different reason. Comet costs a sacrifice, and you choose which stone to give up: pick the one your opponent was about to push or convert, and their spell has less to work with.
 
-**Seal of Lightning beats Seal of Stone.** Seal of Stone forces your opponent's regular move to be soft, but dashes and spell casts still push and destroy. Lightning makes the dash cheap, so the restriction hardly bites. For the same reason Seal of Stone does not really counter Carnage, Fury, or Slash. Seal of Autumn, which forbids sacrificing stones in spells to dash, is the real answer to Lightning.
+**Seal of Lightning beats Seal of Stone.** Seal of Stone forces your opponent's regular move to be soft, but dashes and spell casts still push and destroy. Lightning makes the dash cheap, so the restriction hardly bites. For the same reason Seal of Stone does not really counter Carnage, Fury, or Slash. Seal of Autumn is the real answer to Lightning: a Lightning holder dashes every turn because it is nearly free, and Autumn forbids paying for dashes with stones that sit in spells, which chokes the supply.
 
 **Storm Front and Meteor do not counter seals.** In theory knocking one stone out of a static seal switches it off. In practice the stone is easy to replace and the tempo is rarely worth it, so we rate those matchups even. Fissure, in the Tectonic pack (not covered here), is the real seal counter because its void disables the spell permanently.
 

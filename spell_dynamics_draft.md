@@ -56,6 +56,14 @@ Reproduce: `python3 tools/spell_tier_stats.py <dir containing completed_games_li
 ### Workflow change (2026-09-05)
 Ratings are now collected through the survey page `docs/dev/spell-survey.html` (serve `docs/` on localhost, open /dev/spell-survey.html). Robi exports JSON; ingest it into these tables. Confirmed rulings below are prefilled in the page.
 
+### Robi's rulings, round 7 (2026-09-06): reasons behind the article's flagged sentences
+- Comet > Carnage / Bewitch: Comet's sacrifice lets you remove a stone the enemy was about to target, cutting the damage Carnage/Bewitch can do. Comet also drops a stone into or next to enemy groups to raise the number of enemy stones you border (not only mana-grabbing).
+- Seal of Wind + Fireblast / Corrupt = ++ (extremely strong): the blink drops a stone anywhere, and because Wind doesn't consume your cast step you can then destroy/convert everything around it in the same turn.
+- Bewitch + Fireblast CONFIRMED: convert part of an enemy group so the rest is hit by the following Fireblast.
+- Seal of Autumn vs Seal of Lightning CONFIRMED (+): Lightning holders dash every turn since it's cheap; Autumn stops spell stones paying for dashes, limiting the supply.
+- Charge / Slash are top charms because of front-line dynamics: with one behind your side of a contested spell, you can spend its stone to push forward; at minimum the opponent can't push you back past the charm, so they lose ground over time, and crush opportunities arise.
+- Seal of Summer is good on boards crowded enough to have several spells filled at once (or with a spell that fills another spell); useless with one or zero spells filled.
+
 ### Robi's rulings, round 6 (2026-09-06)
 - RETRACTED: Bewitch − Grow is neutral (=), they simply don't interact. (Applied as a chat override in tools/ingest_spell_survey.py.)
 - Carnage − Slash / Surge: all three destroy cornered enemy stones, so (a) there may be only so many enemy stones you can trap, and (b) they compete for the one spell cast per turn (unless you hold Seal of Summer). Reason (b) is minor and technically gives EVERY pair a sliver of negative synergy, except soft-move spells with Gather/Harvest, which refill and accelerate each other on alternating turns.
