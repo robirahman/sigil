@@ -48,7 +48,26 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import sigil_engine as se
-from notation import NODE_ORDER
+from notation import NODE_ORDER, sfn_to_dict
+
+
+def state_line(sfn):
+    """Counters and locks, in the shape the review page already renders.
+
+    These two fields are the ONLY place the page shows lock state. An earlier
+    version of this exporter put instructional prose here instead, which removed
+    the one diagnostic a reviewer needs when stones match but locks do not.
+    """
+    d = sfn_to_dict(sfn)
+
+    def lk(side):
+        lock = d.get(f'{side}_lock') or '-'
+        spring = d.get(f'{side}_springlock')
+        return f'{lock} (sprung {spring})' if spring else lock
+
+    return (f"{d.get('turn')} to move, turn {d.get('turncounter')} | "
+            f"counters R{d.get('red_spellcounter', 0)}:B{d.get('blue_spellcounter', 0)}"
+            f" | locks R:{lk('red')} B:{lk('blue')}")
 
 M64 = (1 << 64) - 1
 ALL39 = (1 << 39) - 1
@@ -194,6 +213,15 @@ def keydash_cases(seeds=range(0, 24)):
                     # success is not evidence the turn is legal -- that is
                     # exactly the question being sent for a ruling.
                     a.apply_turn_tuples(t, 'red')
+                    # advance_turn is NOT optional. Without it the state is
+                    # mid-turn: the turn counter has not incremented, the side to
+                    # move has not flipped and locks/springlocks have not resolved.
+                    # A first version of this exporter omitted it and shipped
+                    # targets no legal turn could ever reach, which cost Robi a
+                    # review round: the UI reported "stones match but
+                    # counters/locks differ" and there was no way to satisfy it.
+                    if not a.gameover:
+                        a.advance_turn()
                     rec['sfnAfter'] = a.to_sfn()
                 except Exception as e:
                     rec['sfnAfter'] = None
@@ -247,10 +275,43 @@ def inplay_frequency(n_games, play_ms=200):
             'fury_failures': fury_fail, 'keydash_failures': keydash_fail}
 
 
+# Rulings already given, so they are never re-asked. Each entry is a predicate over
+# a record plus the ruling and its date, kept in code rather than in a chat log so
+# the reasoning survives and can be audited against the engine's behaviour.
+RULINGS = [
+    (lambda r: (r['kind'] == 'keydash' and r.get('actions')
+                and any(a[0] == 'dash' and a[1] in a[3] for a in r['actions'])),
+     "2026-09-01 Robi: LEGAL. A dash may place onto a node its own sacrifices came "
+     "from -- pointless in general, but the real use is Seal of Lightning + Surge: "
+     "with every stone already optimally placed, lift a stone, put it back where it "
+     "was, then Surge for one more move. => full enumeration is MISSING these turns, "
+     "so key_dash was right and enumerate_turns is wrong."),
+]
+
+
+def apply_rulings(recs):
+    """Tag records already settled, so the review page only carries open questions."""
+    n = 0
+    for r in recs:
+        if r.get('verdict') != 'GENUINE':
+            continue
+        for pred, ruling in RULINGS:
+            try:
+                hit = pred(r)
+            except Exception:
+                hit = False
+            if hit:
+                r['ruling'] = ruling
+                n += 1
+                break
+    return n
+
+
 def to_review_cases(recs):
     """Emit GENUINE records in the schema `tools/gen_unmatched_review.py` consumes."""
     cases = []
-    for i, r in enumerate(x for x in recs if x.get('verdict') == 'GENUINE'):
+    for i, r in enumerate(x for x in recs
+                          if x.get('verdict') == 'GENUINE' and not x.get('ruling')):
         if not r.get('sfnAfter'):
             continue
         names = [se.SPELL_NAMES[j] for j in r['spellIds']]
@@ -270,12 +331,13 @@ def to_review_cases(recs):
             'sfnBefore': r['sfnBefore'], 'sfnAfter': r['sfnAfter'],
             'spellNames': names, 'variant': 'standard',
             'cast': r.get('spell'), 'redPlayer': 'synthetic', 'bluePlayer': 'synthetic',
-            'stateBefore': question, 'stateAfter': sig,
+            'stateBefore': state_line(r['sfnBefore']),
+            'stateAfter': state_line(r['sfnAfter']),
             'disputedActions': r.get('actions'),
             # the answer we actually want when no sequence works
             'flagAs': 'unreachable',
             'cluster': 1 if r['kind'] == 'fury' else 2, 'clusterSize': 0,
-            'memberIndex': i + 1, 'signature': sig,
+            'memberIndex': i + 1, 'signature': f'{sig} — {question}',
         })
     for c in cases:
         c['clusterSize'] = sum(1 for d in cases if d['cluster'] == c['cluster'])
@@ -316,7 +378,13 @@ def main():
                   f"disagreement is vacuous, so the TEST is what needs fixing, "
                   f"not the engine.")
 
-    genuine = [r for r in recs if r['verdict'] == 'GENUINE']
+    n_ruled = apply_rulings(recs)
+    if n_ruled:
+        print(f"\n{n_ruled} case(s) already RULED and excluded from review:")
+        for ruling in {r['ruling'] for r in recs if r.get('ruling')}:
+            print(f"  - {ruling}")
+
+    genuine = [r for r in recs if r['verdict'] == 'GENUINE' and not r.get('ruling')]
     # Distinct BEFORE positions is the number of questions Robi actually faces;
     # many action variants off one position are one root cause, not many.
     distinct = {}
