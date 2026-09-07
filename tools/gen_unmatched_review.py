@@ -528,7 +528,14 @@ function finishAttempt(c) {
   renderLive();
   const got = boardToSfn(liveBoard);
   const v = document.getElementById('verdict');
-  if (got === c.sfnAfter) {
+  // `matchOn: 'stones'` compares ONLY the stone layout. Engine-dispute cases ask
+  // whether an action sequence is legal and where the stones land; requiring full
+  // SFN equality also demanded agreement about turn bookkeeping this harness
+  // rewrites from case metadata, which is not what is in dispute.
+  const stonesOnly = c.matchOn === 'stones';
+  const gotKey = stonesOnly ? got.split('/')[0] : got;
+  const wantKey = stonesOnly ? c.sfnAfter.split('/')[0] : c.sfnAfter;
+  if (gotKey === wantKey) {
     solutions[caseId(c)] = {
       key: c.key, turnNumber: c.turnNumber, color: c.color,
       actions: gc._currentTurnActions.slice(),
@@ -553,8 +560,9 @@ function finishAttempt(c) {
     const SCALARS = ['turn', 'turncounter', 'red_spellcounter', 'blue_spellcounter',
                      'red_lock', 'blue_lock', 'red_springlock', 'blue_springlock',
                      'score'];
-    const sdiffs = SCALARS.filter(k => String(want[k] ?? '-') !== String(have[k] ?? '-'))
-      .map(k => k + ': got ' + (have[k] ?? '-') + ', want ' + (want[k] ?? '-'));
+    const sdiffs = stonesOnly ? [] :
+      SCALARS.filter(k => String(want[k] ?? '-') !== String(have[k] ?? '-'))
+        .map(k => k + ': got ' + (have[k] ?? '-') + ', want ' + (want[k] ?? '-'));
     const all = diffs.concat(sdiffs);
     v.innerHTML = '<span class="status-bad">Not a match — ' +
       (all.length
