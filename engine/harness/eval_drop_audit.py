@@ -347,6 +347,13 @@ def main():
     ap.add_argument('--shard', type=int, default=0,
                     help='take every Nth game starting at $SIGIL_SHARD_OFF/1000')
     ap.add_argument('--shards', type=int, default=1)
+    ap.add_argument('--hydrate-out', default=None,
+                    help='hydrate the dump, write the per-turn SFN lines, and exit. '
+                         'Hydration needs node and the browser engine files; doing '
+                         'it ONCE centrally means fleet workers need neither, and '
+                         'the same games are not replayed hundreds of times.')
+    ap.add_argument('--lines', default=None,
+                    help='read pre-hydrated lines instead of hydrating')
     args = ap.parse_args()
     depths = [int(x) for x in args.depths.split(',')]
     assert all(d % 2 == 0 for d in depths), "depths must be EVEN so the side to move matches"
@@ -354,7 +361,24 @@ def main():
         time_depths(depths)
         return
 
-    if args.games:
+    if args.hydrate_out:
+        out = []
+        for key, line, meta in dump_lines(args.games, limit=args.limit_games):
+            out.append({'key': key, 'sfns': [p[0] for p in line], 'meta': meta})
+        os.makedirs(os.path.dirname(args.hydrate_out) or '.', exist_ok=True)
+        with open(args.hydrate_out, 'w', encoding='utf-8') as fh:
+            json.dump(out, fh)
+        n = sum(len(x['sfns']) for x in out)
+        print(f"hydrated {len(out)} games / {n} positions -> {args.hydrate_out}")
+        return
+
+    if args.lines:
+        with open(args.lines, encoding='utf-8') as fh:
+            pre = json.load(fh)
+        src = ((x['key'], [(s, []) for s in x['sfns']], x.get('meta')) for x in pre)
+        label = f"{len(pre)} pre-hydrated games from {args.lines}"
+        do_reach = True
+    elif args.games:
         src = dump_lines(args.games, limit=args.limit_games)
         label = f"real games from {args.games}"
         do_reach = True
