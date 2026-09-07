@@ -72,19 +72,37 @@ this*, then *Download solutions*.
 | the sequence is legal | enumeration is missing these too | extend enumeration |
 | the UI refuses an action | `key_dash` over-promotes | fix the filter |
 
-## Two exporter bugs that cost a review round (fixed)
+## Three exporter bugs that cost two review rounds (fixed)
 
-1. `sfnAfter` was built with `apply_turn_tuples` and **no `advance_turn()`**, so the
-   target was a MID-TURN state — turn counter unincremented, side to move unflipped.
-   The page reported "stones match but counters/locks differ" and no legal turn
-   could satisfy it. The locks were identical throughout; the differing fields were
-   `turn` and `turncounter`.
-2. `stateBefore`/`stateAfter` are the page's ONLY lock display, and the exporter had
-   overwritten them with instructions — removing the exact diagnostic needed.
+The harness rewrites turn bookkeeping from the case metadata and never advances it:
 
-The page's mismatch message now **names the differing fields** rather than saying
-"counters/locks differ", so a stale target cannot be mistaken for a rules problem
-again.
+```js
+board.turnCounter = c.turnNumber;   // overrides whatever the SFN said
+board.whoseTurn   = c.color;
+await gc._takeTurn(c.color, ...); gc._eotTriggers(c.color);
+// then compares boardToSfn(liveBoard) to c.sfnAfter
+```
+
+so the expected after-state keeps **the mover to move at the same turn counter**.
+
+1. `turnNumber` was hardcoded to `1` against a turn-0 position, so the counter could
+   never agree. That produced "stones match but counters/locks differ" — which was
+   the TURN COUNTER, never the locks. The locks were `R:- B:-` throughout.
+2. The "fix" for (1) called `advance_turn()`, which flipped the side and produced
+   "turn: got red, want blue". Reverted; `turnNumber` now comes from the
+   before-state.
+3. `stateBefore`/`stateAfter` are the page's ONLY lock display, and the exporter had
+   overwritten them with instructions — removing the exact diagnostic needed to see
+   (1) for what it was.
+
+Two changes make this class of failure not recur:
+
+* the mismatch message **names the differing fields** instead of saying
+  "counters/locks differ";
+* engine-dispute cases set **`matchOn: 'stones'`**. The question is whether an ACTION
+  SEQUENCE is legal and where the stones land — a dash changes no counters or locks —
+  so coupling the answer to turn bookkeeping settled nothing and cost two rounds.
+  The Firebase path keeps full-SFN equality, where reproducing the record is the point.
 
 ## Regenerating
 
