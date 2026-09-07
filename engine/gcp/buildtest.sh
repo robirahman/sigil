@@ -34,7 +34,10 @@ import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$2")" >
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
-apt-get -qq install -y build-essential git python3-venv >/dev/null 2>&1
+# nodejs and docs/static/scripts are for ai/replay_bridge.py: slim game records
+# store INPUT TOKENS, and the only sanctioned replayer is the browser engine's
+# reconstructGameLog, run under node. There is deliberately no Python port.
+apt-get -qq install -y build-essential git python3-venv nodejs >/dev/null 2>&1
 W=/opt/sigil; rm -rf $W; mkdir -p $W/out; cd $W
 export RUSTUP_HOME=$W/rustup CARGO_HOME=$W/cargo PATH=$W/cargo/bin:$PATH
 curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
@@ -42,9 +45,10 @@ git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$
   https://github.com/robirahman/sigil.git repo >/dev/null 2>&1 \
   || { echo "FATAL: clone failed"; shutdown -h now; exit 1; }
 cd repo && git sparse-checkout init --cone >/dev/null 2>&1
-git sparse-checkout set engine tools ai notation.py simboard.py >/dev/null 2>&1
+git sparse-checkout set engine tools ai docs/static/scripts notation.py simboard.py >/dev/null 2>&1
 git checkout >/dev/null 2>&1
 git log --oneline -1 | tee $W/out/COMMIT.txt
+node --version 2>/dev/null | sed 's/^/node /' || echo 'node MISSING'
 cd $W/repo/engine
 
 md smoke-py > $W/smoke.py 2>/dev/null || true
