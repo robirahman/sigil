@@ -97,7 +97,8 @@ def _who(uid):
     return 'human'
 
 
-def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0):
+def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0,
+               rust_only=False):
     """Hydrate a raw completed_games dump into per-turn SFN pairs.
 
     Slim records store INPUT TOKENS, not positions, so they are replayed through
@@ -122,8 +123,20 @@ def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0):
             skipped['no turns'] += 1
             continue
         r, b = _who(g.get('redUid')), _who(g.get('blueUid'))
-        if skip_rust_vs_rust and r == 'rust' and b == 'rust':
-            skipped['rust vs rust'] += 1
+        # Rust-vs-Rust is normally skipped: the engine cannot play a turn it
+        # failed to generate, so those games carry no evidence of a gap.
+        # `rust_only` inverts that, and is the CONTROL for this whole audit:
+        # every one of those turns CAME OUT of `enumerate_turns`, so after a
+        # faithful round-trip through Firebase, the replay bridge and SFN it
+        # must come back 100% reachable. Whatever rate it shows instead is
+        # harness error, and it is the amount to subtract from the real-game
+        # rate before believing any of it.
+        if r == 'rust' and b == 'rust':
+            if not rust_only:
+                skipped['rust vs rust'] += 1
+                continue
+        elif rust_only:
+            skipped['not rust vs rust'] += 1
             continue
         if not g.get('setupSfn') and not (
                 isinstance(g['turns'], list) and g['turns'] and g['turns'][0].get('sfnBefore')):
@@ -163,7 +176,11 @@ def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0):
                 # number, which no single turn can produce.
                 pairs.append({'before': t['sfnBefore'], 'after': t['sfnAfter'],
                               'color': t.get('color'), 'turnNumber': t.get('turnNumber'),
-                              'playedBy': who})
+                              'playedBy': who,
+                              # the replayer's own action list: when the engine
+                              # cannot generate the turn, this is the sequence
+                              # to hand Robi to re-enter in the real UI.
+                              'actions': t.get('actions') or t.get('tokens')})
             if turns and turns[-1].get('sfnAfter'):
                 line.append((turns[-1]['sfnAfter'], []))
                 movers.append(None)
@@ -211,9 +228,20 @@ def check_reachability(pairs, enum_cap=250_000):
                 # WHO played it decides what a miss means: a turn played by a HUMAN
                 # or an OLDER JS engine that Rust cannot generate is a Rust
                 # generator gap; one played by Rust points at replay/identity.
+                mi = 0 if mover == 'red' else 1
+                # How many spells the mover cast in this ONE turn. The replay
+                # bridge reports counter jumps of 2 and 3, so the real rules
+                # allow multiple casts per turn; if Rust only ever emits one,
+                # that is a systematic gap rather than a per-spell bug.
+                try:
+                    n_casts = (int(at[3].split(':')[mi])
+                               - int(bt[3].split(':')[mi]))
+                except Exception:
+                    n_casts = None
                 misses.append({'turnNumber': p.get('turnNumber'), 'mover': mover,
                                'playedBy': p.get('playedBy', 'unknown'),
                                'sfnBefore': before, 'sfnAfter': after,
+                               'nCasts': n_casts, 'actions': p.get('actions'),
                                'nEnumerated': n_turns})
         except Exception as e:
             misses.append({'turnNumber': p.get('turnNumber'), 'error': str(e),
@@ -287,6 +315,11 @@ def cast_between(sfn0, sfn1):
 
 def to_cases(recs, kind):
     cases = []
+    # Rows recording an exception (an out-of-scope spell, unrepresentable
+    # state) have no 'mover' and no 'sfnAfter'. Indexing them raised
+    # KeyError AFTER every flag had printed, so 70 of 88 shards wrote no
+    # JSON at all. They are not adjudicable positions -- drop them here.
+    recs = [r for r in recs if r.get('mover') and r.get('sfnAfter')]
     for i, r in enumerate(recs):
         sfn = r['sfnBefore']
         spells = [s.replace('_', ' ') for s in sfn.split('/')[1].split()[0].split(',')]
@@ -377,6 +410,10 @@ def main():
     ap.add_argument('--time-only', action='store_true',
                     help='just measure cost per position per depth and exit')
     ap.add_argument('--limit-games', type=int, default=0)
+    ap.add_argument('--rust-only', action='store_true',
+                    help='CONTROL: audit ONLY Rust-vs-Rust games. Those turns\n'
+                         'came out of the enumerator, so anything unreachable\n'
+                         'there is harness error, not an engine gap.')
     ap.add_argument('--shard', type=int, default=0,
                     help='take every Nth game starting at $SIGIL_SHARD_OFF/1000')
     ap.add_argument('--shards', type=int, default=1)
@@ -396,7 +433,8 @@ def main():
 
     if args.hydrate_out:
         out = []
-        for key, line, meta in dump_lines(args.games, limit=args.limit_games):
+        for key, line, meta in dump_lines(args.games, limit=args.limit_games,
+                                          rust_only=args.rust_only):
             out.append({'key': key, 'sfns': [p[0] for p in line], 'meta': meta})
         os.makedirs(os.path.dirname(args.hydrate_out) or '.', exist_ok=True)
         with open(args.hydrate_out, 'w', encoding='utf-8') as fh:
@@ -432,7 +470,8 @@ def main():
         label = f"{len(pre)} pre-hydrated games from {args.lines}"
         do_reach = True
     elif args.games:
-        src = dump_lines(args.games, limit=args.limit_games)
+        src = dump_lines(args.games, limit=args.limit_games,
+                         rust_only=args.rust_only)
         label = f"real games from {args.games}"
         do_reach = True
     else:
@@ -471,9 +510,22 @@ def main():
     print(f"\n=== {n_lines} lines, {n_plies} positions ===")
     if do_reach:
         print(f"CHECK B unreachable played positions: {len(misses)}")
+        errs = [m for m in misses if m.get('error')]
+        real = [m for m in misses if not m.get('error')]
+        # Out-of-scope games swamp the real signal: the shipped engine knows
+        # one spell pool, and the RTDB holds games from several. Separating
+        # them is the difference between 12% of turns and 3%.
+        print(f"  of which OUT OF SCOPE (not engine bugs): {len(errs)}")
+        if errs:
+            from collections import Counter as _C0
+            for k, v in _C0(m['error'] for m in errs).most_common(8):
+                print(f"    {v:5d}  {k}")
+        print(f"  GENUINE unreachable turns: {len(real)}")
+        misses_all, misses = misses, real
         for m in misses[:10]:
-            print(f"  {m.get('game')} ply {m.get('ply')} {m.get('mover','?')}: "
-                  f"{m.get('nEnumerated','?')} turns enumerated, none match")
+            print(f"  {m.get('game')} turn {m.get('turnNumber')} "
+                  f"{m.get('mover','?')}: {m.get('nEnumerated','?')} turns "
+                  f"enumerated, none match")
         if not misses:
             print("  => every played turn IS enumerable; no enumeration gap here")
         else:
@@ -486,6 +538,11 @@ def main():
             print("  by what changed in between:")
             for k, v in what.most_common(10):
                 print(f"    {v:5d}  {k}")
+            # A counter jump above 1 means the turn cast more than once,
+            # which the Rust enumerator may simply never emit.
+            nc = _C(m.get('nCasts') for m in misses)
+            order = sorted(nc.items(), key=lambda x: (x[0] is None, x[0]))
+            print("  by casts made in the turn: " + str(dict(order)))
 
     # dedup: the same (game, ply, depth) must appear once
     seen, uniq = set(), []

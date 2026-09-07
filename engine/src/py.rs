@@ -528,6 +528,64 @@ impl PyBoard {
         Ok((false, st.turns, st.truncated))
     }
 
+    /// Diagnose a layout the enumeration MISSED: how close did it get?
+    ///
+    /// `layout_reachable` answers yes/no, which localises nothing. This returns
+    /// the nearest enumerated layout by Hamming distance over both stone masks,
+    /// that turn's action log, and -- the thing `layout_reachable` never
+    /// reported -- whether a RESOLVER truncated. The turn cap is guarded in the
+    /// audit, but a per-cast outcome cap is invisible to it, so a capped
+    /// resolution looks exactly like a complete enumeration that found nothing.
+    ///
+    /// A minimum distance of 1 or 2 means the turn is right except for a single
+    /// choice (which stone was sacrificed, which of several equal targets); a
+    /// large minimum means a whole turn shape is missing.
+    #[pyo3(signature = (c, red, blue, cap=1_000_000))]
+    fn layout_nearest(&self, c: &str, red: u64, blue: u64, cap: usize)
+        -> PyResult<(u32, u64, u64, Vec<(String, i32, i32, Vec<u8>, i32)>,
+                     usize, bool, bool)>
+    {
+        let col = color(c)?;
+        let (turns, st) = self.b.enumerate_turns_capped(col, cap);
+        let mut best = u32::MAX;
+        let mut best_masks = (0u64, 0u64);
+        let mut best_turn: Option<crate::turn::Turn> = None;
+        for t in turns.iter() {
+            let mut b = self.b;
+            b.apply_turn(t, col);
+            let d = (b.stones[0] ^ red).count_ones()
+                  + (b.stones[1] ^ blue).count_ones();
+            if d < best {
+                best = d;
+                best_masks = (b.stones[0], b.stones[1]);
+                best_turn = Some(*t);
+                if d == 0 { break; }
+            }
+        }
+        // Same (kind, node, push_to, sacs, pos) tuple shape `enumerate_turns`
+        // and `turns_ordered_reasons` emit, so one Python decoder reads all three.
+        let log = match best_turn {
+            None => vec![],
+            Some(t) => t.slice().iter().map(|a| match *a {
+                crate::turn::Action::Blink { node, push_to } =>
+                    ("blink".to_string(), node as i32,
+                     push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Move { node, push_to } =>
+                    ("move".to_string(), node as i32,
+                     push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                    ("dash".to_string(), node as i32,
+                     push_to.map_or(-1, |x| x as i32),
+                     sacs[..n_sacs as usize].to_vec(), -1),
+                crate::turn::Action::Cast { pos, outcome } =>
+                    ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            }).collect(),
+        };
+        Ok((if best == u32::MAX { 64 } else { best }, best_masks.0, best_masks.1,
+            log, st.turns, st.truncated, st.resolver_truncated))
+    }
+
     fn enum_stats(&self) -> PyResult<(usize, usize, bool, bool)> {
         let (_t, st) = self.b.enumerate_turns(self.b.to_move);
         Ok((st.turns, st.turns_with_greedy_cast, st.truncated, st.resolver_truncated))
