@@ -213,15 +213,13 @@ def keydash_cases(seeds=range(0, 24)):
                     # success is not evidence the turn is legal -- that is
                     # exactly the question being sent for a ruling.
                     a.apply_turn_tuples(t, 'red')
-                    # advance_turn is NOT optional. Without it the state is
-                    # mid-turn: the turn counter has not incremented, the side to
-                    # move has not flipped and locks/springlocks have not resolved.
-                    # A first version of this exporter omitted it and shipped
-                    # targets no legal turn could ever reach, which cost Robi a
-                    # review round: the UI reported "stones match but
-                    # counters/locks differ" and there was no way to satisfy it.
-                    if not a.gameover:
-                        a.advance_turn()
+                    # Do NOT advance the turn. The review harness sets
+                    #     board.turnCounter = c.turnNumber
+                    #     board.whoseTurn   = c.color
+                    # then runs _takeTurn + _eotTriggers and compares, so its
+                    # expected after-state keeps THE MOVER to move at the SAME turn
+                    # counter. Calling advance_turn here flipped the side and the
+                    # page reported "turn: got red, want blue".
                     rec['sfnAfter'] = a.to_sfn()
                 except Exception as e:
                     rec['sfnAfter'] = None
@@ -327,7 +325,13 @@ def to_review_cases(recs):
             question = ("Enter EXACTLY the listed actions. If the UI refuses one, "
                         "flag unreachable.")
         cases.append({
-            'key': key, 'turnNumber': 1, 'color': r['colour'],
+            'key': key,
+            # The harness FORCES board.turnCounter to this value, so it must
+            # match the before-state or the after-state can never compare
+            # equal. Hardcoding 1 against a turn-0 position is what produced
+            # the first 'counters/locks differ' report.
+            'turnNumber': int(sfn_to_dict(r['sfnBefore'])['turncounter']),
+            'color': r['colour'],
             'sfnBefore': r['sfnBefore'], 'sfnAfter': r['sfnAfter'],
             'spellNames': names, 'variant': 'standard',
             'cast': r.get('spell'), 'redPlayer': 'synthetic', 'bluePlayer': 'synthetic',
@@ -336,6 +340,12 @@ def to_review_cases(recs):
             'disputedActions': r.get('actions'),
             # the answer we actually want when no sequence works
             'flagAs': 'unreachable',
+            # The question is whether this ACTION SEQUENCE is legal and where
+            # the stones land. Counters and locks are not in dispute for a
+            # dash, and requiring full-SFN equality coupled the answer to the
+            # harness's turn-bookkeeping convention -- which cost two review
+            # rounds and settled nothing.
+            'matchOn': 'stones',
             'cluster': 1 if r['kind'] == 'fury' else 2, 'clusterSize': 0,
             'memberIndex': i + 1, 'signature': f'{sig} — {question}',
         })
