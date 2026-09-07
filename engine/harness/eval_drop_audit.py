@@ -149,37 +149,59 @@ def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0):
             if not isinstance(out, dict) or not out.get('ok'):
                 continue
             turns = out.get('turns') or []
-            line, movers = [], []
+            line, movers, pairs = [], [], []
             for t in turns:
-                if t.get('sfnBefore'):
-                    line.append((t['sfnBefore'], []))
-                    movers.append(r if t.get('color') == 'red' else b)
+                if not (t.get('sfnBefore') and t.get('sfnAfter')):
+                    continue
+                who = r if t.get('color') == 'red' else b
+                line.append((t['sfnBefore'], []))
+                movers.append(who)
+                # Each turn's OWN before/after pair. Chaining consecutive
+                # sfnBefore values instead looked identical to an enumeration
+                # gap whenever a record held an intra-turn snapshot or a gap --
+                # one smoke flag showed 'r 21 -> r 21', same mover and same turn
+                # number, which no single turn can produce.
+                pairs.append({'before': t['sfnBefore'], 'after': t['sfnAfter'],
+                              'color': t.get('color'), 'turnNumber': t.get('turnNumber'),
+                              'playedBy': who})
             if turns and turns[-1].get('sfnAfter'):
                 line.append((turns[-1]['sfnAfter'], []))
                 movers.append(None)
             if len(line) > 2:
                 yield key, line, {'movers': movers, 'red': r, 'blue': b,
-                                  'winner': g.get('winner')}
+                                  'winner': g.get('winner'), 'pairs': pairs}
         print(f"  hydrated {min(start + batch, len(keep))}/{len(keep)} games", flush=True)
 
 
-def check_reachability(line, movers=None):
-    """CHECK B: was each played position reachable by an enumerated turn?
+def check_reachability(pairs):
+    """CHECK B: was each played turn reproducible by `enumerate_turns`?
 
-    Compares STONE LAYOUT, because that is what a turn's actions determine; turn
-    bookkeeping differs by convention between the recorder and the engine and is not
-    what is in dispute.
+    Walks each turn's OWN before/after pair, and screens out record artefacts the
+    same way tools/gen_unmatched_review.py does -- otherwise a recording gap is
+    indistinguishable from a missing move:
+
+      * the mover's own actions can never ADD enemy stones, so a growth in the
+        enemy count means the pair spans more than one turn;
+      * a pair whose two halves disagree about whose turn it is, or that share a
+        turn number, is not one turn of play.
+
+    Compares STONE LAYOUT only: that is what a turn's actions determine, and the
+    replayer's turn bookkeeping follows its own convention.
     """
     misses = []
-    for i in range(len(line) - 1):
-        before, after = line[i][0], line[i + 1][0]
+    for p in pairs:
+        before, after = p['before'], p['after']
         try:
+            bt, at = before.split(), after.split()
+            mover = 'red' if bt[1] == 'r' else 'blue'
+            enemy = 'b' if mover == 'red' else 'r'
+            bs, as_ = before.split('/')[0], after.split('/')[0]
+            if as_.count(enemy) > bs.count(enemy):
+                continue                      # spans more than one turn
             b = se.Board.from_sfn(before)
-            mover = 'red' if before.split()[1] == 'r' else 'blue'
             st = b.enum_stats()
-            if st[2]:                     # truncated: not a complete reference
-                continue
-            want = after.split('/')[0]
+            if st[2]:
+                continue                      # truncated: not a complete reference
             reachable = False
             for t in b.enumerate_turns():
                 a = se.Board.from_sfn(before)
@@ -187,21 +209,20 @@ def check_reachability(line, movers=None):
                     a.apply_turn_tuples(t, mover)
                 except Exception:
                     continue
-                if a.to_sfn().split('/')[0] == want:
+                if a.to_sfn().split('/')[0] == as_:
                     reachable = True
                     break
             if not reachable:
-                # WHO played it decides what a miss means. A turn played by the
-                # Rust engine it cannot re-enumerate is a replay/identity problem;
-                # a turn played by a HUMAN or an OLDER engine that Rust cannot
-                # generate is a Rust generator gap.
-                misses.append({'ply': i, 'mover': mover,
-                               'playedBy': (movers[i] if movers and i < len(movers)
-                                            else 'unknown'),
+                # WHO played it decides what a miss means: a turn played by a HUMAN
+                # or an OLDER JS engine that Rust cannot generate is a Rust
+                # generator gap; one played by Rust points at replay/identity.
+                misses.append({'turnNumber': p.get('turnNumber'), 'mover': mover,
+                               'playedBy': p.get('playedBy', 'unknown'),
                                'sfnBefore': before, 'sfnAfter': after,
                                'nEnumerated': st[0]})
         except Exception as e:
-            misses.append({'ply': i, 'error': str(e), 'sfnBefore': before})
+            misses.append({'turnNumber': p.get('turnNumber'), 'error': str(e),
+                           'sfnBefore': before})
     return misses
 
 
@@ -390,7 +411,10 @@ def main():
                  + urllib.parse.quote(obj, safe='') + "?alt=media")
             data = urllib.request.urlopen(urllib.request.Request(
                 u, headers={"Authorization": "Bearer " + tok})).read()
-            path = '/tmp/hydrated_lines.json'
+            # Per-process path. All ~90 workers on a VM fetch this, and a
+            # shared name means one truncates the file while another reads
+            # it -- every shard died with JSONDecodeError on an empty file.
+            path = f"/tmp/hydrated_{os.environ.get('SIGIL_SHARD_OFF','0')}_{os.getpid()}.json"
             open(path, 'wb').write(data)
             print(f"fetched {args.lines} ({len(data)} bytes)", flush=True)
         with open(path, encoding='utf-8') as fh:
@@ -422,7 +446,7 @@ def main():
         n_lines += 1
         n_plies += len(line)
         if do_reach:
-            for m in check_reachability(line, (meta or {}).get('movers')):
+            for m in check_reachability((meta or {}).get('pairs') or []):
                 m['game'] = key
                 misses.append(m)
         for r in check_eval_drops(line, depths, args.stride, args.per_ply_limit,
