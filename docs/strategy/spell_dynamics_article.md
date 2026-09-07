@@ -10,34 +10,34 @@ A reminder on two rules that come up repeatedly below. Casting a spell locks it 
 
 ## The tier list
 
-We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 160 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers are our own grouping of that order.
+We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 179 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers are our own grouping of that order.
 
 | Tier | Spells |
 |---|---|
-| Top | Gather, Fireblast, Scatter, Blossom |
-| Strong | Charge, Corrupt, Bewitch, Seal of Wind, Harvest, Carnage, Slash, Fury |
-| Solid | Meteor, Starfall, Seal of Lightning, Hail Storm, Storm Front, Erupt, Hurricane |
-| Middling | Seal of Stone, Azimuth, Surge, Comet, Splash, Sprout |
-| Weak | Seal of Winter, Seal of Spring, Seal of Autumn, Seal of Destruction, Lurk, Flourish, Decay, Tsunami, Seal of Summer |
-| Bottom | Eclipse, Syzygy, Gust, Grow, Torrent |
+| Top | Fireblast, Gather, Scatter, Blossom |
+| Strong | Corrupt, Charge, Bewitch, Carnage, Seal of Lightning, Seal of Wind, Slash, Harvest, Starfall, Fury |
+| Solid | Hail Storm, Meteor, Storm Front, Erupt, Hurricane |
+| Middling | Azimuth, Surge, Seal of Stone, Comet, Splash |
+| Weak | Seal of Winter, Sprout, Seal of Spring, Seal of Autumn, Flourish, Lurk, Seal of Destruction, Tsunami, Seal of Summer |
+| Bottom | Decay, Eclipse, Syzygy, Grow, Gust, Torrent |
 
 Full order, best to worst:
 
 | # | Spell | Type | # | Spell | Type | # | Spell | Type |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Gather | sorcery | 14 | Starfall | ritual | 27 | Seal of Spring | charm |
-| 2 | Fireblast | sorcery | 15 | Seal of Lightning | ritual | 28 | Seal of Autumn | charm |
-| 3 | Scatter | sorcery | 16 | Hail Storm | sorcery | 29 | Seal of Destruction | ritual |
+| 1 | Fireblast | sorcery | 14 | Fury | sorcery | 27 | Seal of Spring | charm |
+| 2 | Gather | sorcery | 15 | Hail Storm | sorcery | 28 | Seal of Autumn | charm |
+| 3 | Scatter | sorcery | 16 | Meteor | sorcery | 29 | Flourish | ritual |
 | 4 | Blossom | ritual | 17 | Storm Front | sorcery | 30 | Lurk | charm |
-| 5 | Charge | charm | 18 | Erupt | ritual | 31 | Flourish | ritual |
-| 6 | Corrupt | ritual | 19 | Hurricane | ritual | 32 | Decay | sorcery |
-| 7 | Bewitch | ritual | 20 | Seal of Stone | sorcery | 33 | Tsunami | ritual |
-| 8 | Seal of Wind | sorcery | 21 | Azimuth | charm | 34 | Seal of Summer | charm |
-| 9 | Harvest | ritual | 22 | Surge | charm | 35 | Eclipse | sorcery |
-| 10 | Carnage | ritual | 23 | Comet | charm | 36 | Syzygy | ritual |
-| 11 | Slash | charm | 24 | Splash | charm | 37 | Gust | charm |
-| 12 | Fury | sorcery | 25 | Sprout | charm | 38 | Grow | sorcery |
-| 13 | Meteor | sorcery | 26 | Seal of Winter | charm | 39 | Torrent | sorcery |
+| 5 | Corrupt | ritual | 18 | Erupt | ritual | 31 | Seal of Destruction | ritual |
+| 6 | Charge | charm | 19 | Hurricane | ritual | 32 | Tsunami | ritual |
+| 7 | Bewitch | ritual | 20 | Azimuth | charm | 33 | Seal of Summer | charm |
+| 8 | Carnage | ritual | 21 | Surge | charm | 34 | Decay | sorcery |
+| 9 | Seal of Lightning | ritual | 22 | Seal of Stone | sorcery | 35 | Eclipse | sorcery |
+| 10 | Seal of Wind | sorcery | 23 | Comet | charm | 36 | Syzygy | ritual |
+| 11 | Slash | charm | 24 | Splash | charm | 37 | Grow | sorcery |
+| 12 | Harvest | ritual | 25 | Seal of Winter | charm | 38 | Gust | charm |
+| 13 | Starfall | ritual | 26 | Sprout | charm | 39 | Torrent | sorcery |
 
 A few notes on the placements that tend to surprise people.
 
@@ -51,7 +51,7 @@ A few notes on the placements that tend to surprise people.
 
 **Grow is near the bottom, despite being a fine partner.** Two soft moves for a three-node investment does not net stones. Grow is good in one situation only: next to Harvest, where the pair refill each other. Torrent, one soft move then one hard move, is the weakest spell in the game.
 
-**The static seals are mostly weak.** Seal of Wind is the exception and sits in the strong tier: a blink for your first move every turn is real mobility. Seal of Lightning (dash for one sacrifice instead of two) is solid. Seal of Summer looks powerful on paper, but two casts a turn only matters on a board crowded enough to have several spells filled at once, or when one spell fills another. With one or no spells filled it does nothing. Seal of Destruction is a special case: it destroys everything touching you at the end of your turn, but if it is still filled at the start of your next turn you lose, and only your opponent moves in between. It is a finisher, not a spell you develop toward, and it is much stronger for blue, who can win from a two-stone lead by bordering two enemy stones and filling the seal.
+**The static seals are mostly weak.** Seal of Wind is the exception and sits in the strong tier: a blink for your first move every turn is real mobility. Seal of Lightning (dash for one sacrifice instead of two) is solid. Seal of Summer looks powerful on paper, but two casts a turn only matters on a board crowded enough to have several spells filled at once, or when one spell fills another. With one or no spells filled it does nothing. Seal of Destruction is a special case: it destroys everything touching you at the end of your turn, but if it is still filled at the start of your next turn you lose, and only your opponent moves in between. It is a finisher, not a spell you develop toward, and it is much stronger for blue, who can win from a two-stone lead by bordering two enemy stones and filling the seal. The way to land it is with a spell that fills it in one cast, such as Tsunami, Grow, Flourish, or Eclipse, at a moment when you already border many enemy stones elsewhere: the seal fills and fires in the same turn, before your opponent can react. The way to lose with it is to build it slowly while Gust is on the board. Gust picks up every enemy stone touching the caster and drops them anywhere, including the five nodes of your half-built seal, and a seal that is full at the start of your turn ends the game against you.
 
 ## Open board or crowded board?
 
@@ -99,21 +99,27 @@ There is also a small, universal anti-synergy: with one cast per turn, any two s
 
 | Rating | Pairs |
 |---|---|
-| ++ | Grow + Harvest, Flourish + Gather, Blossom + Erupt, Scatter + Erupt, Seal of Lightning + Surge, Gust + Decay, Seal of Wind + Fireblast, Seal of Wind + Corrupt |
-| + | Bewitch + Comet, Bewitch + Fireblast, Bewitch + Tsunami |
-| + | Carnage + Seal of Summer |
-| + | Comet + Corrupt, Eclipse, Erupt, Gather, Seal of Destruction, Seal of Stone, Syzygy, Torrent, Tsunami |
-| + | Flourish + Azimuth, Charge, Comet, Corrupt, Eclipse, Erupt, Fireblast, Fury, Grow, Gust, Harvest, Seal of Destruction, Seal of Stone, Seal of Summer, Torrent |
-| + | Fury + Corrupt |
-| + | Grow + Corrupt, Erupt, Seal of Spring |
-| + | Hail Storm + Decay |
-| + | Harvest + Corrupt, Seal of Summer |
+| ++ | Blossom + Erupt, Fireblast + Seal of Wind, Flourish + Gather, Grow + Harvest, Gust + Decay, Gust + Seal of Destruction, Scatter + Erupt, Seal of Lightning + Surge, Seal of Wind + Corrupt |
+| + | Azimuth + Flourish, Seal of Wind |
+| + | Bewitch + Comet, Fireblast, Seal of Destruction, Tsunami |
+| + | Carnage + Seal of Destruction, Seal of Summer |
+| + | Charge + Flourish, Seal of Wind |
+| + | Comet + Corrupt, Eclipse, Erupt, Flourish, Gather, Seal of Destruction, Seal of Stone, Syzygy, Torrent, Tsunami |
+| + | Corrupt + Fireblast, Flourish, Fury, Grow, Harvest |
+| + | Decay + Hail Storm, Seal of Lightning |
+| + | Eclipse + Flourish, Seal of Destruction |
+| + | Erupt + Flourish, Grow |
+| + | Fireblast + Flourish |
+| + | Flourish + Fury, Grow, Gust, Harvest, Seal of Destruction, Seal of Stone, Seal of Summer, Torrent |
+| + | Grow + Seal of Destruction, Seal of Spring |
+| + | Harvest + Seal of Summer |
+| + | Lurk + Seal of Lightning, Seal of Wind |
 | + | Meteor + Seal of Spring |
-| + | Seal of Spring + Torrent |
-| + | Seal of Wind + Azimuth, Charge, Lurk, Seal of Spring |
+| + | Seal of Destruction + Seal of Lightning, Seal of Wind, Slash, Sprout, Surge |
+| + | Seal of Spring + Seal of Wind, Torrent |
+| + | Seal of Stone + Torrent, Tsunami |
 | + | Slash + Syzygy |
-| + | Torrent + Seal of Stone, Tsunami |
-| + | Tsunami + Seal of Stone |
+| + | Torrent + Tsunami |
 
 Some of the entries worth explaining:
 
@@ -123,26 +129,31 @@ Some of the entries worth explaining:
 - Comet and Flourish. Comet's blink can grab a mana; Flourish's four soft moves then convert two or more mana into a stone advantage. Comet pairs well with many spells for two reasons: the blink can fetch a mana that makes the next cast stronger, or it can drop a stone into or beside an enemy group to raise the number of enemy stones you border before a destruction or conversion spell.
 - Seal of Wind with Fireblast or Corrupt. This is the same idea at full strength. Wind's blink is your regular move, so it does not use up your cast: drop a stone anywhere, then destroy or convert everything around it in the same turn.
 - Bewitch and Fireblast. Convert part of an enemy group with Bewitch, and the rest of the group is now touching you for the Fireblast that follows.
+- Seal of Destruction and a fast filler. Tsunami, Grow, Flourish, or Eclipse can fill the seal in one cast while you already border many enemy stones elsewhere, turning a slow finisher into a sudden one. Gust does the same from the other direction: it drops up to five enemy stones into the seal for you.
 
 ### Negative synergies
 
 | Rating | Pairs |
 |---|---|
 | -- | Seal of Lightning + Splash (Splash needs you not to have dashed; Lightning makes you want to dash every turn) |
-| - | Bewitch + Azimuth, Hail Storm, Meteor, Seal of Spring, Syzygy |
+| - | Azimuth + Bewitch, Fireblast |
+| - | Bewitch + Hail Storm, Meteor, Seal of Spring, Syzygy |
+| - | Blossom + Comet, Meteor, Surge |
 | - | Carnage + Hail Storm, Slash, Surge |
-| - | Comet + Blossom, Decay, Fury, Scatter |
-| - | Fireblast + Azimuth |
+| - | Comet + Decay, Fury, Scatter |
+| - | Decay + Gather, Slash |
+| - | Eclipse + Hail Storm, Slash |
+| - | Fireblast + Seal of Destruction |
 | - | Flourish + Seal of Wind, Splash, Syzygy |
-| - | Gather + Decay, Harvest |
+| - | Fury + Slash |
+| - | Gather + Hail Storm, Harvest |
 | - | Grow + Splash, Syzygy |
-| - | Hail Storm + Eclipse, Gather, Scatter, Torrent |
-| - | Meteor + Blossom |
+| - | Hail Storm + Scatter, Torrent |
+| - | Harvest + Surge |
 | - | Seal of Spring + Syzygy |
-| - | Slash + Decay, Eclipse, Fury, Torrent |
-| - | Surge + Blossom, Harvest, Syzygy |
-| - | Torrent + Splash |
-| - | Tsunami + Splash |
+| - | Slash + Torrent |
+| - | Splash + Torrent, Tsunami |
+| - | Surge + Syzygy |
 
 Carnage, Slash, and Surge all trap and destroy cornered enemy stones, and there are only so many enemy stones you can corner. Carnage and Hail Storm both want a crowded board, then thin it out for each other.
 
@@ -152,38 +163,40 @@ The matchup question is different from the synergy question: if you are building
 
 | Rating | Favoured spell | Beats |
 |---|---|---|
-| ++ | Hail Storm | Blossom |
-| ++ | Decay | Blossom, Scatter |
 | ++ | Azimuth, Charge, Lurk, Slash, Splash, Sprout, Surge | Hurricane |
-| + | Bewitch | Grow, Seal of Spring, Seal of Summer, Sprout, Syzygy |
+| ++ | Decay | Scatter |
+| ++ | Decay, Hail Storm | Blossom |
+| ++ | Gust | Seal of Destruction |
+| + | Azimuth | Torrent |
+| + | Bewitch | Grow, Seal of Destruction, Seal of Spring, Seal of Summer, Sprout, Syzygy |
 | + | Blossom | Bewitch, Comet, Flourish, Grow |
-| + | Carnage | Fireblast, Grow, Seal of Lightning, Seal of Summer |
+| + | Carnage | Fireblast, Grow, Seal of Destruction, Seal of Lightning, Seal of Summer |
 | + | Charge | Flourish, Grow, Torrent |
 | + | Comet | Bewitch, Carnage, Flourish, Fury, Syzygy, Torrent, Tsunami |
 | + | Corrupt | Flourish, Lurk |
-| + | Decay | Comet, Starfall |
+| + | Decay | Comet, Seal of Wind, Starfall |
 | + | Erupt | Flourish, Grow |
-| + | Fireblast | Azimuth, Flourish, Lurk, Seal of Spring |
+| + | Fireblast | Azimuth, Corrupt, Flourish, Lurk, Seal of Destruction, Seal of Spring |
 | + | Flourish | Eclipse, Grow, Gust, Hurricane, Seal of Destruction, Seal of Summer, Seal of Winter, Torrent, Tsunami |
 | + | Fury | Flourish, Slash |
 | + | Gather | Comet, Decay, Flourish, Hail Storm, Harvest |
-| + | Hail Storm | Decay, Scatter |
+| + | Hail Storm | Decay, Scatter, Seal of Destruction |
 | + | Harvest | Comet, Flourish, Grow, Seal of Summer |
 | + | Meteor | Bewitch, Flourish |
 | + | Scatter | Comet, Flourish |
 | + | Seal of Autumn | Fireblast, Seal of Winter, Syzygy |
 | + | Seal of Destruction | Comet, Eclipse |
-| + | Seal of Lightning | Seal of Stone, Starfall |
+| + | Seal of Lightning | Decay, Lurk, Seal of Destruction, Seal of Stone, Starfall |
 | + | Seal of Spring | Seal of Winter, Syzygy, Torrent |
 | + | Seal of Stone | Flourish, Torrent |
-| + | Seal of Wind | Azimuth, Bewitch, Flourish, Lurk, Seal of Autumn, Seal of Winter, Splash |
+| + | Seal of Wind | Azimuth, Bewitch, Corrupt, Flourish, Lurk, Seal of Autumn, Seal of Destruction, Seal of Winter, Splash |
 | + | Seal of Winter | Azimuth, Charge, Splash |
-| + | Slash | Decay, Torrent |
+| + | Slash | Decay, Seal of Destruction, Torrent |
 | + | Splash | Torrent |
 | + | Starfall | Grow |
+| + | Surge | Seal of Destruction |
 | + | Syzygy | Flourish, Grow, Slash |
 | + | Tsunami | Torrent |
-| + | Azimuth | Torrent |
 
 The stories behind the strongest entries:
 
@@ -194,6 +207,8 @@ The stories behind the strongest entries:
 **Carnage beats Fireblast.** Fireblast needs many bordering stones to be worth its cost, and building that contact takes turns. Carnage's four hard moves can seize the contested area, or the Fireblast spell itself, before the buildup pays off. Comet beats Carnage and Bewitch for a different reason. Comet costs a sacrifice, and you choose which stone to give up: pick the one your opponent was about to push or convert, and their spell has less to work with.
 
 **Seal of Lightning beats Seal of Stone.** Seal of Stone forces your opponent's regular move to be soft, but dashes and spell casts still push and destroy. Lightning makes the dash cheap, so the restriction hardly bites. For the same reason Seal of Stone does not really counter Carnage, Fury, or Slash. Seal of Autumn is the real answer to Lightning: a Lightning holder dashes every turn because it is nearly free, and Autumn forbids paying for dashes with stones that sit in spells, which chokes the supply.
+
+**Gust hard-counters Seal of Destruction.** If your opponent is building toward the seal, Gust can pick up your bordering stones and drop them into the empty nodes of their seal. It is now full at the start of their turn, and they lose on the spot. Fireblast is the other natural enemy of the seal, since the same contact that powers the seal powers a Fireblast first.
 
 **Storm Front and Meteor do not counter seals.** In theory knocking one stone out of a static seal switches it off. In practice the stone is easy to replace and the tempo is rarely worth it, so we rate those matchups even. Fissure, in the Tectonic pack (not covered here), is the real seal counter because its void disables the spell permanently.
 
@@ -252,4 +267,4 @@ Nine turns, no opponent blunder required beyond leaving the engine alone. As far
 
 ---
 
-*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 160 pairwise comparisons, with all 39 spells connected and no preference cycles. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
+*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 179 pairwise comparisons, with all 39 spells connected and no preference cycles. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
