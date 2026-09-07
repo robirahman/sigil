@@ -56,6 +56,10 @@ Reproduce: `python3 tools/spell_tier_stats.py <dir containing completed_games_li
 ### Workflow change (2026-09-05)
 Ratings are now collected through the survey page `docs/dev/spell-survey.html` (serve `docs/` on localhost, open /dev/spell-survey.html). Robi exports JSON; `python3 tools/survey_coverage.py` archives it into docs/strategy/survey_exports and regenerates these tables. Confirmed rulings below are prefilled in the page.
 
+### Robi's rulings, round 8 (2026-09-07): Seal of Destruction
+- Seal of Destruction + fast-fill spells (Tsunami, Grow, Flourish, Eclipse) = positive synergy: while you border many enemy stones elsewhere, one spell cast fills the seal and the end-of-turn blast produces a very sudden win. (Survey previously had Eclipse + SoD as =; Robi to re-answer in the harness.)
+- Gust + Seal of Destruction: Gust picks up every enemy stone touching you and can drop up to 5 of them INTO Seal of Destruction. Strong synergy when both are on the board, and Gust hard-counters an opponent building SoD (filling it for them at the start of their turn is their loss condition).
+
 ### Robi's rulings, round 7 (2026-09-06): reasons behind the article's flagged sentences
 - Comet > Carnage / Bewitch: Comet's sacrifice lets you remove a stone the enemy was about to target, cutting the damage Carnage/Bewitch can do. Comet also drops a stone into or next to enemy groups to raise the number of enemy stones you border (not only mana-grabbing).
 - Seal of Wind + Fireblast / Corrupt = ++ (extremely strong): the blink drops a stone anywhere, and because Wind doesn't consume your cast step you can then destroy/convert everything around it in the same turn.
@@ -742,7 +746,7 @@ Reproduce: `python3 tools/spell_position_winrates.py <dir with completed_games_l
 | Seal of Winter + Seal of Summer | + | |
 | Seal of Wind + Meteor/Comet | = | redundant blinks |
 | Seal of Wind + Flourish | + | |
-| Seal of Destruction + ? | ? | ask Robi how it is actually used |
+| Seal of Destruction + fast fillers / Gust | + / ++ | see round 8 |
 
 ## 3. Matchups (row spell vs column spell; rating is for the ROW holder)
 

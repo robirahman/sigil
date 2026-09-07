@@ -59,6 +59,7 @@
 		<select id="order">
 			<option value="pack">order: by pack</option>
 			<option value="shuffle">order: shuffled</option>
+			<option value="priority">order: priority pairs first</option>
 		</select>
 		<select id="pack-filter"><option value="">all packs</option></select>
 		<select id="pair-scope" title="Pair mode only">
@@ -130,6 +131,18 @@
 	pp('Seal_of_Lightning', 'Seal_of_Stone', undefined, 'Seal_of_Lightning');
 	for (const s of ['Sprout', 'Slash', 'Surge', 'Splash', 'Charge', 'Azimuth', 'Lurk']) pp('Hurricane', s, undefined, s);
 
+	// ---- Priority pairs: asked first under "order: priority pairs first" (pair mode).
+	// Edit freely; entries are [spellA, spellB]. Untick "unanswered only" to re-answer ones already rated.
+	const PRIORITY_PAIRS = [
+		['Seal_of_Destruction', 'Tsunami'], ['Seal_of_Destruction', 'Grow'], ['Seal_of_Destruction', 'Flourish'],
+		['Seal_of_Destruction', 'Eclipse'], ['Seal_of_Destruction', 'Gust'], ['Seal_of_Destruction', 'Scatter'],
+		['Seal_of_Destruction', 'Blossom'], ['Seal_of_Destruction', 'Seal_of_Wind'], ['Seal_of_Destruction', 'Fireblast'],
+		['Seal_of_Destruction', 'Seal_of_Stone'], ['Seal_of_Destruction', 'Carnage'],
+		['Storm_Front', 'Hail_Storm'], ['Splash', 'Surge'], ['Gust', 'Decay'], ['Hurricane', 'Fury'],
+		['Sprout', 'Lurk'], ['Tsunami', 'Torrent'], ['Seal_of_Stone', 'Seal_of_Winter'], ['Decay', 'Eclipse'],
+	];
+	const PRIORITY_KEYS = PRIORITY_PAIRS.map(([a, b]) => pairKey(a, b));
+
 	// ---- State ----
 	const KEY = 'sigil-spell-survey-v1';   // v1 storage stays compatible: 'better' is simply a new optional field
 	let state = load();
@@ -180,6 +193,11 @@
 				return el('pair-scope').value === 'both' ? (inA && inB) : (inA || inB);
 			});
 		if (el('order').value === 'shuffle') items = seededShuffle(items, 20260905);
+		if (el('order').value === 'priority' && mode === 'pair') {
+			const rank = new Map(PRIORITY_KEYS.map((k, i) => [k, i]));
+			const pri = items.filter(it => rank.has(pairKey(it[0], it[1]))).sort((x, y) => rank.get(pairKey(x[0], x[1])) - rank.get(pairKey(y[0], y[1])));
+			items = pri.concat(items.filter(it => !rank.has(pairKey(it[0], it[1]))));
+		}
 		if (only) items = items.filter(it => mode === 'single' ? !spellDone(it) : !pairDone(pairKey(it[0], it[1])));
 		return items;
 	}
