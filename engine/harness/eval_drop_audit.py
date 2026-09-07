@@ -84,34 +84,86 @@ def selfplay_lines(n_games, play_ms, ev='tfit'):
         yield f"selfplay-{g}", line, r[4]
 
 
-def dump_lines(path):
-    """Turn a Firebase-style completed-games dump into (key, line, winner).
+RUST_UIDS = ('__ai_rust',)          # the engine under audit
 
-    These are the games that matter for check B: the opponent is a human, so a turn
-    the engine cannot enumerate can actually appear.
+
+def _who(uid):
+    if not uid:
+        return 'unknown'
+    if uid.startswith(RUST_UIDS):
+        return 'rust'
+    if uid.startswith('__ai'):
+        return uid.strip('_')           # an OLDER engine: still a useful source
+    return 'human'
+
+
+def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0):
+    """Hydrate a raw completed_games dump into per-turn SFN pairs.
+
+    Slim records store INPUT TOKENS, not positions, so they are replayed through
+    `ai.replay_bridge.hydrate_records` -> the browser engine's reconstructGameLog.
+    That replayer is the authority here: it is the code that actually accepted these
+    human inputs, and the repo deliberately keeps no second Python port so the two
+    cannot drift. If Rust's `enumerate_turns` cannot reproduce a turn the JS engine
+    accepted, that is a proven Rust generator gap.
+
+    Rust-vs-Rust games are skipped: a turn the Rust engine played is a turn it
+    generated, so its own games cannot reveal its own missing moves -- the same
+    reason self-play is useless for check B.
     """
+    from ai.replay_bridge import hydrate_records
     with open(path, encoding='utf-8') as fh:
         games = json.load(fh)
-    for key, g in (games.items() if isinstance(games, dict) else enumerate(games)):
-        if not isinstance(g, dict):
+    items = list(games.items()) if isinstance(games, dict) else list(enumerate(games))
+    keep = []
+    skipped = Counter()
+    for key, g in items:
+        if not isinstance(g, dict) or not g.get('turns'):
+            skipped['no turns'] += 1
             continue
-        turns = g.get('turns')
-        if isinstance(turns, dict):
-            turns = [v for _k, v in sorted(turns.items(), key=lambda kv: int(kv[0]))]
-        if not turns:
+        r, b = _who(g.get('redUid')), _who(g.get('blueUid'))
+        if skip_rust_vs_rust and r == 'rust' and b == 'rust':
+            skipped['rust vs rust'] += 1
             continue
-        line = []
-        for t in turns:
-            if t.get('sfnBefore'):
-                line.append((t['sfnBefore'], []))
-        last = turns[-1]
-        if last.get('sfnAfter'):
-            line.append((last['sfnAfter'], []))
-        if len(line) > 2:
-            yield key, line, g.get('winner')
+        if not g.get('setupSfn') and not (
+                isinstance(g['turns'], list) and g['turns'] and g['turns'][0].get('sfnBefore')):
+            skipped['no setupSfn'] += 1
+            continue
+        keep.append((key, g, r, b))
+    if limit:
+        keep = keep[:limit]
+    print(f"  {len(keep)} games to hydrate; skipped {dict(skipped)}", flush=True)
+
+    for start in range(0, len(keep), batch):
+        chunk = keep[start:start + batch]
+        recs = [{'spellNames': g.get('spellNames') or [],
+                 'variant': g.get('variant') or 'standard',
+                 'setupSfn': g.get('setupSfn'), 'finalSfn': g.get('finalSfn'),
+                 'turns': g['turns']} for _k, g, _r, _b in chunk]
+        try:
+            res = hydrate_records(recs)
+        except Exception as e:
+            print(f"  hydration failed for batch at {start}: {e}", flush=True)
+            continue
+        for (key, g, r, b), out in zip(chunk, res):
+            if not isinstance(out, dict) or not out.get('ok'):
+                continue
+            turns = out.get('turns') or []
+            line, movers = [], []
+            for t in turns:
+                if t.get('sfnBefore'):
+                    line.append((t['sfnBefore'], []))
+                    movers.append(r if t.get('color') == 'red' else b)
+            if turns and turns[-1].get('sfnAfter'):
+                line.append((turns[-1]['sfnAfter'], []))
+                movers.append(None)
+            if len(line) > 2:
+                yield key, line, {'movers': movers, 'red': r, 'blue': b,
+                                  'winner': g.get('winner')}
+        print(f"  hydrated {min(start + batch, len(keep))}/{len(keep)} games", flush=True)
 
 
-def check_reachability(line):
+def check_reachability(line, movers=None):
     """CHECK B: was each played position reachable by an enumerated turn?
 
     Compares STONE LAYOUT, because that is what a turn's actions determine; turn
@@ -139,7 +191,13 @@ def check_reachability(line):
                     reachable = True
                     break
             if not reachable:
+                # WHO played it decides what a miss means. A turn played by the
+                # Rust engine it cannot re-enumerate is a replay/identity problem;
+                # a turn played by a HUMAN or an OLDER engine that Rust cannot
+                # generate is a Rust generator gap.
                 misses.append({'ply': i, 'mover': mover,
+                               'playedBy': (movers[i] if movers and i < len(movers)
+                                            else 'unknown'),
                                'sfnBefore': before, 'sfnAfter': after,
                                'nEnumerated': st[0]})
         except Exception as e:
@@ -221,6 +279,35 @@ def to_cases(recs, kind):
     return cases
 
 
+def time_depths(depths, n=6, ev='tfit'):
+    """Cost per position at each depth, so the run is SIZED and not guessed.
+
+    Sizing E1 off an unmeasured rate cost this project a full restart; the depth
+    numbers here are what decide whether depth 8 is affordable at all.
+    """
+    import time
+    b = se.Board(se.Board.legal_draw(4242), "standard")
+    b.setup_initial()
+    hist = []
+    for _ in range(8):                  # get off the opening
+        r = b.play_best(80, 64, 20, 16, se.DEFAULT_WIDTH_SCALE, hist, ev, False,
+                        MERGE_OFF, adaptive=shipped_adaptive())
+        hist.append(b.key_js)
+        if r[3]:
+            break
+    sfn = b.to_sfn()
+    print("cost per position, shipped width_scale/adaptive:")
+    per = {}
+    for d in depths:
+        t0 = time.perf_counter()
+        for _ in range(n):
+            score_at(sfn, d, hist, ev)
+        dt = (time.perf_counter() - t0) / n
+        per[d] = dt
+        print(f"  depth {d}: {dt:8.3f} s/position")
+    return per
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--selfplay', type=int, default=0)
@@ -233,12 +320,21 @@ def main():
                          'stone per full move (both sides). Raise to 1.0 to read '
                          '"1 per half-move" instead.')
     ap.add_argument('--out', default='ai/data/eval_drop_audit.json')
+    ap.add_argument('--time-only', action='store_true',
+                    help='just measure cost per position per depth and exit')
+    ap.add_argument('--limit-games', type=int, default=0)
+    ap.add_argument('--shard', type=int, default=0,
+                    help='take every Nth game starting at $SIGIL_SHARD_OFF/1000')
+    ap.add_argument('--shards', type=int, default=1)
     args = ap.parse_args()
     depths = [int(x) for x in args.depths.split(',')]
     assert all(d % 2 == 0 for d in depths), "depths must be EVEN so the side to move matches"
+    if args.time_only:
+        time_depths(depths)
+        return
 
     if args.games:
-        src = dump_lines(args.games)
+        src = dump_lines(args.games, limit=args.limit_games)
         label = f"real games from {args.games}"
         do_reach = True
     else:
@@ -252,11 +348,16 @@ def main():
     print(f"auditing {label}, depths {depths}, "
           f"flagging drops over {args.per_ply_limit} stones/half-move\n")
     drops, misses, n_lines, n_plies = [], [], 0, 0
-    for key, line, _winner in src:
+    shard_i = int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000
+    seen_games = -1
+    for key, line, meta in src:
+        seen_games += 1
+        if args.shards > 1 and seen_games % args.shards != shard_i % args.shards:
+            continue
         n_lines += 1
         n_plies += len(line)
         if do_reach:
-            for m in check_reachability(line):
+            for m in check_reachability(line, (meta or {}).get('movers')):
                 m['game'] = key
                 misses.append(m)
         for r in check_eval_drops(line, depths, args.stride, args.per_ply_limit):
