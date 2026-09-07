@@ -291,16 +291,19 @@ def to_cases(recs, kind):
         sfn = r['sfnBefore']
         spells = [s.replace('_', ' ') for s in sfn.split('/')[1].split()[0].split(',')]
         if kind == 'reach':
-            sig = (f"UNREACHABLE: the position played at ply {r['ply']} is not "
-                   f"produced by any of the {r.get('nEnumerated','?')} enumerated "
-                   f"turns — the engine cannot generate a move that was played")
+            sig = (f"UNREACHABLE: the position played at turn "
+                   f"{r.get('turnNumber', r.get('ply', '?'))} is not produced by any "
+                   f"of the {r.get('nEnumerated','?')} enumerated turns — the engine "
+                   f"cannot generate a move that WAS legally played "
+                   f"(by {r.get('playedBy','?')})")
         else:
             sig = (f"EVAL DROP: depth {r['depth']} score {r['score0']/STONE:+.2f} -> "
                    f"{r['score1']/STONE:+.2f} over {r['depth']} half-moves "
                    f"({r['dropPerPly']:+.2f}/ply)"
                    + (" — FLIPPED INTO A PROVEN LOSS" if r.get('mateFlip') else ""))
         cases.append({
-            'key': f"{kind}-{i}", 'turnNumber': int(sfn.split()[2]),
+            'key': f"{kind}-{r.get('playedBy','?')}-{i}",
+            'turnNumber': int(sfn.split()[2]),
             'color': r['mover'], 'sfnBefore': sfn, 'sfnAfter': r['sfnAfter'],
             'spellNames': spells, 'variant': 'standard', 'cast': None,
             'redPlayer': 'audit', 'bluePlayer': 'audit',
@@ -473,6 +476,16 @@ def main():
                   f"{m.get('nEnumerated','?')} turns enumerated, none match")
         if not misses:
             print("  => every played turn IS enumerable; no enumeration gap here")
+        else:
+            from collections import Counter as _C
+            who = _C(m.get('playedBy', '?') for m in misses)
+            print(f"  by who played it: {dict(who)}   "
+                  f"(human / an OLDER engine => a RUST GENERATOR GAP)")
+            what = _C(cast_between(m['sfnBefore'], m['sfnAfter'])
+                      for m in misses if m.get('sfnAfter'))
+            print("  by what changed in between:")
+            for k, v in what.most_common(10):
+                print(f"    {v:5d}  {k}")
 
     # dedup: the same (game, ply, depth) must appear once
     seen, uniq = set(), []
