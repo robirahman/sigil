@@ -373,7 +373,24 @@ def main():
         return
 
     if args.lines:
-        with open(args.lines, encoding='utf-8') as fh:
+        path = args.lines
+        if path.startswith('gs://'):
+            # Fetch with the VM's own service-account token. Keeps the fleet
+            # runner unchanged: no extra sparse-checkout, no node, no new metadata.
+            import urllib.request, urllib.parse
+            bucket, _, obj = path[5:].partition('/')
+            tok = json.load(urllib.request.urlopen(urllib.request.Request(
+                "http://metadata.google.internal/computeMetadata/v1/instance/"
+                "service-accounts/default/token",
+                headers={"Metadata-Flavor": "Google"})))["access_token"]
+            u = (f"https://storage.googleapis.com/storage/v1/b/{bucket}/o/"
+                 + urllib.parse.quote(obj, safe='') + "?alt=media")
+            data = urllib.request.urlopen(urllib.request.Request(
+                u, headers={"Authorization": "Bearer " + tok})).read()
+            path = '/tmp/hydrated_lines.json'
+            open(path, 'wb').write(data)
+            print(f"fetched {args.lines} ({len(data)} bytes)", flush=True)
+        with open(path, encoding='utf-8') as fh:
             pre = json.load(fh)
         src = ((x['key'], [(s, []) for s in x['sfns']], x.get('meta')) for x in pre)
         label = f"{len(pre)} pre-hydrated games from {args.lines}"
@@ -453,6 +470,14 @@ def main():
         print("  flags by what changed in between:")
         for k, v in sorted(g.items(), key=lambda kv: -kv[1])[:8]:
             print(f"    {v:5d}  {k}")
+
+    # The fleet runner uploads *.log and *.npz, not *.json, so every finding is
+    # also printed as a FLAG line. That makes the shard log self-sufficient and
+    # survives a watchdog kill, the same reason generation shards checkpoint.
+    for m in misses:
+        print("FLAG " + json.dumps({'kind': 'reach', **m}), flush=True)
+    for r in drops:
+        print("FLAG " + json.dumps({'kind': 'drop', **r}), flush=True)
 
     cases = to_cases(misses, 'reach') + to_cases(
         sorted(drops, key=lambda r: -r['dropPerPly'])[:60], 'drop')
