@@ -7,7 +7,7 @@ used by the alpha-beta search and self-play data generation.
 
 import copy
 from collections import deque
-from notation import NODE_ORDER, ADJACENCY, POSITIONS
+from notation import NODE_ORDER, ADJACENCY, POSITIONS, base_spell_name, DUPLICATE_SUFFIXES
 
 # Mana nodes
 MANA_NODES = ['a1', 'b1', 'c1']
@@ -23,6 +23,12 @@ def variant_has_competitive(v):
 def variant_has_deathmatch(v):
     """Mirror of JS variantHasDeathmatch."""
     return isinstance(v, str) and 'deathmatch' in v
+
+
+def variant_has_duplicates(v):
+    """Mirror of JS variantHasDuplicates: the spell draw may repeat a
+    spell (X, X~2, X~3 aliases). Setup-only; play is otherwise standard."""
+    return isinstance(v, str) and 'duplicates' in v
 
 # Sentinel stored in a node's `stones[...]` slot when the node has been
 # permanently destroyed by Fissure. It is a wall: not None (so it is never a
@@ -92,7 +98,21 @@ CORE_SPELLS = {
     'Tripwire': {'resolve': 'place_snares', 'count': 1, 'static': False, 'ischarm': True},
     'Deadfall': {'resolve': 'place_snares', 'count': 2, 'static': False, 'ischarm': False},
     'Minefield': {'resolve': 'place_snares', 'count': 4, 'static': False, 'ischarm': False},
+    # Experimental expansion (unofficial, unrated: unreleased spells under
+    # playtest). Spring Tide rides the Flood soft_hard_chain resolver with an
+    # optional trailing 'sacrifice' count (Torrent/Tsunami leave it unset).
+    'Spring_Tide': {'resolve': 'soft_hard_chain', 'counts': [2, 2], 'hard_first': True, 'sacrifice': 2, 'static': False, 'ischarm': False},
+    # Rapids: Torrent's chain plus 'extra_cast' — the cast reopens the turn's
+    # spell window once (one more cast, no dash), like Seal of Summer's
+    # second cast. Consumed by the turn enumerators, not the resolver.
+    'Rapids': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'extra_cast': True, 'static': False, 'ischarm': False},
 }
+
+# Duplicate-copy aliases (allow-duplicates variant): X~2 and X~3 share X's
+# metadata so every CORE_SPELLS lookup works untouched. Mirrors constants.js.
+for _alias_base in list(CORE_SPELLS):
+    for _sfx in DUPLICATE_SUFFIXES:
+        CORE_SPELLS[_alias_base + _sfx] = CORE_SPELLS[_alias_base]
 
 # Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
 # Lurk (Gloom charm) may move onto any node EXCEPT these.
@@ -177,8 +197,12 @@ class SimBoard:
     # nodes neutral); red's turn-0 is a free blink to any of the 39 nodes;
     # blue's turn-1 is a free soft-blink to any of the remaining 38 empty
     # nodes; play proceeds normally from turn 2.
-    VARIANTS = ('standard', 'competitive', 'deathmatch',
-                'competitive_deathmatch')
+    # Tokens compose in this fixed order (mirrors JS composeVariant):
+    # competitive, deathmatch, duplicates -> 8 strings.
+    VARIANTS = tuple(
+        '_'.join(p for p, on in (('competitive', m & 1), ('deathmatch', m & 2),
+                                 ('duplicates', m & 4)) if on) or 'standard'
+        for m in range(8))
 
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
@@ -418,7 +442,12 @@ class SimBoard:
                 continue
             all_same = all(self.stones[n] == first for n in nodes[1:])
             if all_same:
-                self.charged_spells[first].append(spell_name)
+                # Duplicates variant: statics list under their BASE name (any
+                # copy satisfies "Seal_of_X charged"); castables keep their
+                # unique name. Mirrors board.js / sim-board.js.
+                info = CORE_SPELLS.get(spell_name)
+                self.charged_spells[first].append(
+                    base_spell_name(spell_name) if info and info['static'] else spell_name)
 
     def pending_sum(self, color):
         """Total extra stones still scheduled for color's future turns."""
@@ -1406,40 +1435,81 @@ class SimBoard:
 
         elif resolve_type == 'soft_hard_chain':
             # N soft moves, then M hard moves (Torrent [1,1], Tsunami [2,2]).
+            # 'hard_first' flips the two phases (Spring Tide: pushes, then
+            # placements). Each phase stops early when it runs out of legal
+            # targets; the other phase still runs.
             soft_count, hard_count = info['counts']
             soft_overrides = list(overrides.get('soft_move_targets') or [])
             hard_overrides = list(overrides.get('hard_move_targets') or [])
-            for _ in range(soft_count):
-                targets = self._soft_moveable(color)
-                if not targets:
-                    break
-                chosen = None
-                while soft_overrides and chosen is None:
-                    candidate = soft_overrides.pop(0)
-                    if candidate in targets:
-                        chosen = candidate
-                if chosen is None:
-                    for t in targets:
-                        if t not in spell_position_nodes:
-                            chosen = t
-                            break
-                if chosen is None:
-                    chosen = targets[0]
-                actions.append(self._do_soft_move(color, chosen))
-                self.update()
-            for _ in range(hard_count):
-                targets = self._hard_moveable(color)
-                if not targets:
-                    break
-                chosen = None
-                while hard_overrides and chosen is None:
-                    candidate = hard_overrides.pop(0)
-                    if candidate in targets:
-                        chosen = candidate
-                if chosen is None:
-                    chosen = targets[0]
-                actions.append(self._do_hard_move(color, chosen))
-                self.update()
+
+            def _soft_phase():
+                for _ in range(soft_count):
+                    targets = self._soft_moveable(color)
+                    if not targets:
+                        break
+                    chosen = None
+                    while soft_overrides and chosen is None:
+                        candidate = soft_overrides.pop(0)
+                        if candidate in targets:
+                            chosen = candidate
+                    if chosen is None:
+                        for t in targets:
+                            if t not in spell_position_nodes:
+                                chosen = t
+                                break
+                    if chosen is None:
+                        chosen = targets[0]
+                    actions.append(self._do_soft_move(color, chosen))
+                    self.update()
+
+            def _hard_phase():
+                for _ in range(hard_count):
+                    targets = self._hard_moveable(color)
+                    if not targets:
+                        break
+                    chosen = None
+                    while hard_overrides and chosen is None:
+                        candidate = hard_overrides.pop(0)
+                        if candidate in targets:
+                            chosen = candidate
+                    if chosen is None:
+                        chosen = targets[0]
+                    actions.append(self._do_hard_move(color, chosen))
+                    self.update()
+
+            if info.get('hard_first'):
+                _hard_phase()
+                _soft_phase()
+            else:
+                _soft_phase()
+                _hard_phase()
+            # Optional trailing sacrifice (Spring Tide: 2). Not paid when the
+            # moves already ended the game (Fireblast/Corrupt convention).
+            # Greedy pick mirrors Fury: the caster's last stone in NODE_ORDER;
+            # 'sacrifice_targets' overrides it (skipping stale entries).
+            sac_count = info.get('sacrifice', 0)
+            if sac_count > 0:
+                if self.gameover:
+                    return actions
+                sac_overrides = list(overrides.get('sacrifice_targets') or [])
+                for _ in range(sac_count):
+                    sacrificed = None
+                    while sac_overrides and sacrificed is None:
+                        candidate = sac_overrides.pop(0)
+                        if self.stones.get(candidate) == color:
+                            sacrificed = candidate
+                    if sacrificed is None:
+                        for name in reversed(NODE_ORDER):
+                            if self.stones[name] == color:
+                                sacrificed = name
+                                break
+                    if sacrificed is None:
+                        break
+                    self.stones[sacrificed] = None
+                    actions.append(Action('sacrifice', node=sacrificed))
+                    self.update()
+                    if self.gameover:
+                        return actions
 
         elif resolve_type == 'destroy_exposed':
             self._destroy_exposed(color, actions)
@@ -1997,7 +2067,15 @@ class SimBoard:
                 board_s = self.copy()
                 spell_actions = board_s._cast_spell(spell_name, color)
                 board_s.update()
-                if can_spell:
+                if CORE_SPELLS[spell_name].get('extra_cast'):
+                    # Rapids: the cast reopens the spell window once — one
+                    # more cast, never a dash. Seal of Summer's own window
+                    # is spent only if THIS was the Summer cast.
+                    yield from board_s._enumerate_post_move(
+                        color, actions_so_far + spell_actions,
+                        can_dash=False, can_spell=True,
+                        can_summer=(can_summer if can_spell else False))
+                elif can_spell:
                     yield from board_s._enumerate_post_move(
                         color, actions_so_far + spell_actions,
                         can_dash=can_dash, can_spell=False, can_summer=can_summer)
@@ -2018,6 +2096,13 @@ class SimBoard:
                 board_s = self.copy()
                 spell_actions = board_s._cast_spell(spell_name, color)
                 board_s.update()
+                if CORE_SPELLS[spell_name].get('extra_cast'):
+                    # Rapids after a dash: one more (post-dash) cast or pass.
+                    yield from board_s._enumerate_post_dash(
+                        color, actions_so_far + spell_actions,
+                        can_spell=True,
+                        can_summer=(can_summer if can_spell else False))
+                    continue
                 # After spell, can only pass or cast summer spell
                 yield CompleteTurn(actions_so_far + spell_actions + [Action('pass')])
 
@@ -2043,11 +2128,11 @@ class SimBoard:
             if info['ischarm']:
                 if has_winter:
                     continue
-                if spell_name == 'Surge':
+                if base_spell_name(spell_name) == 'Surge':
                     # Surge can only be cast if we dashed this turn
                     # (caller manages this via can_dash flag)
                     continue
-                if spell_name == 'Splash' and post_dash:
+                if base_spell_name(spell_name) == 'Splash' and post_dash:
                     # Splash is the inverse of Surge: castable only if we
                     # have NOT dashed this turn.
                     continue

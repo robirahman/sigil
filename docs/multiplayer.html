@@ -317,6 +317,14 @@
 			</small>
 
 			<label class="allow-spec">
+				<input type="checkbox" x-model="duplicatesVariant" />
+				<span>Allow duplicates variant</span>
+			</label>
+			<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
+				The spell draw may repeat a spell (up to three copies). Unrated. Joiners inherit the creator's choice.
+			</small>
+
+			<label class="allow-spec">
 				<input type="checkbox" x-model="useArtOnlySpells" x-on:change="localStorage.setItem('sigilArtOnlySpellCircles', useArtOnlySpells ? 'true' : 'false')" />
 				<span>Art-only spell circles</span>
 			</label>
@@ -355,7 +363,7 @@
 				<span class="share-link__url" x-text="shareUrl"></span>
 				<button class="share-link__btn" x-on:click="copyShareLink" x-text="shareCopied ? 'Copied!' : 'Copy link'"></button>
 			</div>
-			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null].filter(Boolean).join(' + ')"></strong></p>
+			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant || duplicatesVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null, duplicatesVariant ? 'Duplicates' : null].filter(Boolean).join(' + ')"></strong></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
 		</div>
 
@@ -695,6 +703,7 @@
 				// (end) are orthogonal and combine.
 				competitiveVariant: (localStorage.getItem('sigilVariant') || '').indexOf('competitive') !== -1,
 				deathmatchVariant: (localStorage.getItem('sigilVariant') || '').indexOf('deathmatch') !== -1,
+				duplicatesVariant: (localStorage.getItem('sigilVariant') || '').indexOf('duplicates') !== -1,
 				useArtOnlySpells: localStorage.getItem('sigilArtOnlySpellCircles') === 'true',
 
 				// Active correspondence games
@@ -765,6 +774,9 @@
 							}
 							if (rematchVariant.indexOf('deathmatch') !== -1) {
 								this.deathmatchVariant = true;
+							}
+							if (rematchVariant.indexOf('duplicates') !== -1) {
+								this.duplicatesVariant = true;
 							}
 							rematchHandled = true;
 							this._waitForAuth().then(() => {
@@ -930,13 +942,11 @@
 							? opts.spellNames.slice()
 							: null;
 						if (!spellNames) {
-							spellNames = generateSpellList(readStoredExpansions());
+							spellNames = generateSpellList(readStoredExpansions(), this.duplicatesVariant);
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
-						const variant = this.competitiveVariant
-						? (this.deathmatchVariant ? 'competitive_deathmatch' : 'competitive')
-						: (this.deathmatchVariant ? 'deathmatch' : 'standard');
+						const variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant);
 						// Persist the lobby choice across visits (mirrors the
 						// localStorage key used by the static index page).
 						try {

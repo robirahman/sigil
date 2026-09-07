@@ -25,7 +25,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from notation import NODE_ORDER, ADJACENCY, POSITIONS
+from notation import NODE_ORDER, ADJACENCY, POSITIONS, base_spell_name
 from simboard import CORE_SPELLS, MANA_NODES, DESTROYED, apply_sim_turn
 
 from ai.config import (
@@ -460,7 +460,7 @@ def board_to_tensor(board, side_to_move=None):
 
     # --- Spell IDs: 9 integers ---
     spell_ids = torch.tensor(
-        [SPELL_TO_ID.get(board.spell_names[i], 0) for i in range(NUM_SPELL_SLOTS)],
+        [SPELL_TO_ID.get(base_spell_name(board.spell_names[i]), 0) for i in range(NUM_SPELL_SLOTS)],
         dtype=torch.long
     )
 
@@ -571,7 +571,7 @@ def encode_turn(turn, board, color):
 
         elif action.type == 'cast':
             features[42] = 1.0
-            spell_id = SPELL_TO_ID.get(action.spell, 0)
+            spell_id = SPELL_TO_ID.get(base_spell_name(action.spell), 0)
             # Core spells one-hot at [43:58]; expansion spells (IDs 15-44)
             # at [84:114] — the legacy region only had 15 slots, and writing
             # 43 + id for larger IDs overflowed into the tactical columns.

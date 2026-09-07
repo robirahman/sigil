@@ -9,7 +9,7 @@ class SigilBoard {
 		for (const n of NODE_ORDER) {
 			this.stones[n] = null;
 		}
-		this.spellNames = spellNames || generateSpellList();
+		this.spellNames = spellNames || generateSpellList(undefined, variantHasDuplicates(variant));
 		this.turnCounter = 0;
 		this.whoseTurn = 'red';
 		this.gameover = false;
@@ -157,7 +157,12 @@ class SigilBoard {
 			if (first === null) continue;
 			const allSame = nodes.every(n => this.stones[n] === first);
 			if (allSame) {
-				this.chargedSpells[first].push(this.spellNames[i]);
+				// Duplicates variant: a charged static seal is listed under its
+				// BASE name, so every "is Seal_of_X charged" rule sees any copy.
+				// Castable spells keep their unique (possibly ~2/~3) name.
+				const nm = this.spellNames[i];
+				const info = CORE_SPELLS[nm];
+				this.chargedSpells[first].push(info && info.static ? baseSpellName(nm) : nm);
 			}
 		}
 	}

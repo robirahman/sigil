@@ -137,6 +137,43 @@ sixth-spell counts (2026-08 buff; originally defense-only).*
 | Sorcery | Deadfall | Place snares on up to 2 empty nodes. |
 | Charm | Tripwire | Place a snare on an empty node. |
 
+### Experimental (shipped, unofficial, permanently unrated)
+
+*Not a themed pack: the holding pen for not-yet-released spells undergoing
+playtest. Spells here may be rebalanced, renamed or cut without notice, and
+a game drawing any of them is never rated. The pack need not fill all three
+slots (the draw only requires core + selected packs to reach 3 per
+category). Experimental spells are absent from the NN spell-ID table (they
+encode as ID 0, like Panda) and from the Rust engine, which rejects them.*
+
+| Slot | Spell | Effect |
+|---|---|---|
+| Sorcery | Spring Tide | Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones. |
+| Sorcery | Rapids | Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn. |
+
+Spring Tide (added 2026-09-07; phases flipped to pushes-first the same day)
+is Tsunami's chain with the hard moves ahead of the soft ones, at sorcery
+price, with the 2-stone sacrifice as the balancing cost. Net material at M mana (a hard move
+places a stone on the pushed node, so every move is +1): −3 + M + 4 − 2 =
+M − 1, exactly the sorcery line shared by Torrent (−3 + M + 2 = M − 1) and
+Tsunami (−5 + M + 4 = M − 1). Without the sacrifice it would sit at M + 1,
+two above the line. What the caster buys over Torrent is tempo and shape: a
+ritual's four-move burst, two of them pushes, out of a 3-node slot that
+charges far sooner, at the cost of choosing which two stones to give up
+afterwards. The sacrifice is not paid if the moves already ended the game
+(Fireblast/Corrupt convention).
+
+Rapids (added 2026-09-07) is Torrent (M − 1 material) plus a one-turn Seal
+of Summer: after it resolves, the caster's spell window reopens for exactly
+one more cast, with no dash. Rulings: the extra cast may be any castable
+spell, charm or not, and pays its own full cost; Rapids itself is locked by
+its own cast, so a second Rapids needs Seal of Spring (and the springlock
+then bars a third); it stacks with Seal of Summer (Rapids + Summer = three
+casts); a Rapids cast as the Summer second spell still grants its extra
+cast. Encoded as the `extra_cast` metadata flag consumed by every turn
+driver (live controllers, both sims, both exhaustive enumerators, Flask),
+not by the resolver.
+
 ### Cosmic
 
 *Symmetry, orbits, and cross-board movement.*

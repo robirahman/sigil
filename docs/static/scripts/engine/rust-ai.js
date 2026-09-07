@@ -30,8 +30,9 @@
  * offers on the order of 4,000x fewer turns per position.
  *
  * Only the 39 official spells are supported: the engine does not implement
- * Tectonic, Providence, Aftershock, Ambush or the fan-made Panda pack and rejects
- * positions containing them rather than mis-resolving.
+ * Tectonic, Providence, Aftershock, Ambush, the fan-made Panda pack or the
+ * Experimental playtest pack and rejects positions containing them rather
+ * than mis-resolving.
  */
 
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
@@ -190,6 +191,12 @@ class RustAI {
 	}
 
 	async pickTurn(board, color, onProgress) {
+		// The Allow Duplicates variant names copies X~2/X~3, which the engine's
+		// fixed spell table cannot represent (and its SFN reader would fold the
+		// variant token to standard). Refuse up front with a clear message.
+		if (variantHasDuplicates(board.variant)) {
+			throw new Error('Rust engine error: the Allow Duplicates variant is not supported by this engine tier.');
+		}
 		const sim = SimBoard.fromSigilBoard(board);
 		const sfn = boardToSfn(sim);
 
@@ -197,7 +204,7 @@ class RustAI {
 		if (!res || !res.ok) {
 			throw new Error('Rust engine error: ' + ((res && res.error) || 'unknown') +
 				'\nIf this mentions an out-of-scope spell, the draw includes a pack the ' +
-				'engine does not implement (Tectonic / Providence / Aftershock / Ambush / Panda).');
+				'engine does not implement (Tectonic / Providence / Aftershock / Ambush / Panda / Experimental).');
 		}
 
 		// Verify the actions reproduce the engine's position BEFORE playing them on

@@ -58,10 +58,13 @@ const SPELL_FX = {
 	Tripwire:             { type: 'pulse', color: '#556b2f', shake: false },
 	Deadfall:             { type: 'flash', color: '#6e7f5a', shake: false },
 	Minefield:            { type: 'burst', color: '#3f5d2a', shake: true  },
+	// Experimental expansion (unreleased playtest spells)
+	Spring_Tide:          { type: 'burst', color: '#3fa7d6', shake: true  },
+	Rapids:               { type: 'flash', color: '#2fc4c9', shake: false },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {
-	const fx = SPELL_FX[spellName];
+	const fx = SPELL_FX[typeof baseSpellName === 'function' ? baseSpellName(spellName) : spellName];
 	if (!fx || !overlayEl) return;
 
 	// Create overlay element for the color effect

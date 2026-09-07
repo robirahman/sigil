@@ -25,7 +25,7 @@ Used by ai/minimax_ai.py when ``exhaustive=True`` is set.
 from collections import deque
 from itertools import combinations
 
-from notation import NODE_ORDER, POSITIONS
+from notation import NODE_ORDER, POSITIONS, base_spell_name
 from simboard import Action, CompleteTurn, CORE_SPELLS
 
 
@@ -47,6 +47,7 @@ DEFAULT_STORM_FRONT_CAP = 12    # Storm Front enemy-pair variants
 DEFAULT_HURRICANE_CAP = 4       # Hurricane smallest-group variants
 DEFAULT_SOFT_HARD_SOFT_CAP = 4  # Torrent/Tsunami first-soft-target variants
 DEFAULT_SOFT_HARD_HARD_CAP = 4  # Torrent/Tsunami first-hard-target variants (× soft)
+DEFAULT_SOFT_HARD_SAC_CAP = 3   # Spring Tide trailing-sacrifice SET variants (beyond greedy)
 DEFAULT_SPLASH_CAP = 6          # Splash move-target variants
 DEFAULT_FISSURE_CAP = 4         # Fissure wall-target variants
 DEFAULT_EXTRA_MOVE_CAP = 3      # Providence extra-move targets per step
@@ -73,6 +74,7 @@ DEFAULT_CAPS = {
     'storm_front': DEFAULT_STORM_FRONT_CAP,
     'hurricane': DEFAULT_HURRICANE_CAP,
     'soft_hard_soft': DEFAULT_SOFT_HARD_SOFT_CAP,
+    'soft_hard_sac': DEFAULT_SOFT_HARD_SAC_CAP,
     'soft_hard_hard': DEFAULT_SOFT_HARD_HARD_CAP,
     'splash': DEFAULT_SPLASH_CAP,
     'fissure': DEFAULT_FISSURE_CAP,
@@ -350,6 +352,26 @@ def _spell_overrides(board, color, spell_name, caps):
                 out.append({'soft_move_targets': [s], 'hard_move_targets': [h]})
             if not hard_targets:
                 out.append({'soft_move_targets': [s]})
+        # Spring Tide's trailing sacrifice: branch over WHICH own stones to
+        # give up (moves stay greedy in these variants). Candidates are the
+        # pre-cast own stones outside the spell's own position — those are
+        # cleared by the cast itself (same caveat as fury) — as sliding
+        # windows over NODE_ORDER, so every variant is a different set. The
+        # greedy {} already covers the reversed-NODE_ORDER default.
+        sac_count = info.get('sacrifice', 0)
+        if sac_count:
+            try:
+                spell_idx = board.spell_names.index(spell_name)
+                spell_pos = set(POSITIONS[spell_idx + 1])
+            except (ValueError, KeyError):
+                spell_pos = set()
+            own = [n for n in NODE_ORDER
+                   if board.stones[n] == color and n not in spell_pos]
+            for i in range(caps['soft_hard_sac']):
+                window = own[i:i + sac_count]
+                if len(window) < sac_count:
+                    break
+                out.append({'sacrifice_targets': window})
     elif rt == 'fissure':
         # Branch over which node to permanently destroy. Each candidate is
         # scored by its net stone-count advantage so the search explores the
@@ -385,7 +407,7 @@ def _spell_overrides(board, color, spell_name, caps):
             if not window:
                 break
             out.append({'snare_targets': window})
-    elif rt == 'surge_move' and spell_name == 'Splash':
+    elif rt == 'surge_move' and base_spell_name(spell_name) == 'Splash':
         # Splash: 1 move (only castable when not dashed — see castability).
         # Plain Surge stays greedy (post-dash only, fewer options).
         for t in board._all_moveable(color)[:caps['splash']]:
@@ -604,6 +626,13 @@ def _exhaustive_post_move(board, color, prefix, caps,
                 except Exception:
                     continue
                 board_s.update()
+                if CORE_SPELLS[spell_name].get('extra_cast'):
+                    # Rapids: reopen the spell window once (no dash).
+                    yield from _exhaustive_post_move(
+                        board_s, color, prefix + spell_actions, caps,
+                        can_dash=False, can_spell=True, can_summer=can_summer,
+                    )
+                    continue
                 # After cast, dash is still allowed (engine permits) but
                 # another cast isn't. Recurse to enumerate dash-after-cast.
                 yield from _exhaustive_post_move(
@@ -633,3 +662,23 @@ def _exhaustive_post_move(board, color, prefix, caps,
                     board_s.update()
                     yield CompleteTurn(prefix + dash_actions + spell_actions
                                        + [Action('pass')])
+                    if not CORE_SPELLS[spell_name].get('extra_cast'):
+                        continue
+                    # Rapids after a dash: one more post-dash cast (with its
+                    # own override variants). No further chaining.
+                    try:
+                        castable2 = list(board_s._get_castable_spells(
+                            color, can_spell=True, can_summer=can_summer, post_dash=True))
+                    except Exception:
+                        castable2 = []
+                    for spell2 in castable2:
+                        for override2 in _spell_overrides(board_s, color, spell2, caps):
+                            board_2 = board_s.copy()
+                            try:
+                                spell_actions2 = board_2._cast_spell(
+                                    spell2, color, target_overrides=override2)
+                            except Exception:
+                                continue
+                            board_2.update()
+                            yield CompleteTurn(prefix + dash_actions + spell_actions
+                                               + spell_actions2 + [Action('pass')])

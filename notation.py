@@ -16,9 +16,26 @@ from datetime import date
 # 2026-08-24: spell Flood -> Tsunami (pack Tsunami -> Flood in the same swap).
 LEGACY_SPELL_RENAMES = {'Flood': 'Tsunami'}
 
+# Duplicate-copy aliases (the "allow duplicates" variant): the spell pool
+# holds every spell as X, X~2, X~3 so a board never carries two spells with
+# the same name. JS mirror: DUPLICATE_SUFFIXES / baseSpellName in
+# engine/constants.js.
+DUPLICATE_SUFFIXES = ('~2', '~3')
+
+
+def base_spell_name(name):
+    if not isinstance(name, str):
+        return name
+    i = name.find('~')
+    return name if i == -1 else name[:i]
+
 
 def normalize_spell_name(name):
-    return LEGACY_SPELL_RENAMES.get(name, name)
+    if not isinstance(name, str):
+        return name
+    base = base_spell_name(name)
+    renamed = LEGACY_SPELL_RENAMES.get(base)
+    return renamed + name[len(base):] if renamed else name
 
 
 def normalize_spell_names(names):
