@@ -205,9 +205,23 @@ def check_reachability(line, movers=None):
     return misses
 
 
-def check_eval_drops(line, depths, stride, per_ply_limit):
-    """CHECK A: score at ply i and ply i+d, same side to move, and compare."""
+def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from):
+    """CHECK A: score at ply i and ply i+d, same side to move, and compare.
+
+    Two calibration lessons from the first run, which flagged 22 cases in 6 games
+    and was almost all noise:
+
+    * MATE SCORES ARE +-1e7, so leaving them in the arithmetic produced drops of
+      50,000 stones/ply and swamped everything. They are clamped for the gradual
+      metric and handled separately.
+    * A GAME ENDING IS NOT A DEFECT. A position already scored at -1.5 that becomes
+      a proven loss two plies later is an ordinary horizon effect. The reported
+      symptom is narrower and much more specific: the engine said it was FINE or
+      WINNING and then lost. So a mate flip only counts when the earlier score was
+      at least `surprise_from` stones -- default 0, i.e. the engine was not behind.
+    """
     out = []
+    clamp = 20 * STONE          # ignore magnitudes past +-20 stones for the slope
     for d in depths:
         for i in range(0, len(line) - d, stride):
             sfn0, h0 = line[i]
@@ -219,15 +233,18 @@ def check_eval_drops(line, depths, stride, per_ply_limit):
                 s1 = score_at(sfn1, d, h1)
             except Exception:
                 continue
-            drop = s0 - s1
-            rec = {'ply': i, 'depth': d, 'score0': s0, 'score1': s1,
-                   'drop': drop, 'dropPerPly': drop / d / STONE,
-                   'sfnBefore': sfn0, 'sfnAfter': sfn1,
-                   'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'}
-            # A swing from "I am fine" into a PROVEN loss is the mate-in-one shape.
-            rec['mateFlip'] = bool(s0 > -MATE and s1 <= -MATE)
-            if rec['mateFlip'] or rec['dropPerPly'] > per_ply_limit:
-                out.append(rec)
+            # the engine thought it was OK, and then it was lost: the reported bug
+            mate_flip = (s1 <= -MATE) and (s0 >= surprise_from * STONE)
+            c0, c1 = max(-clamp, min(clamp, s0)), max(-clamp, min(clamp, s1))
+            drop_per_ply = (c0 - c1) / d / STONE
+            if not (mate_flip or drop_per_ply > per_ply_limit):
+                continue
+            out.append({'ply': i, 'depth': d, 'score0': s0, 'score1': s1,
+                        'drop': s0 - s1, 'dropPerPly': drop_per_ply,
+                        'clampedFrom': c0 / STONE, 'clampedTo': c1 / STONE,
+                        'mateFlip': mate_flip,
+                        'sfnBefore': sfn0, 'sfnAfter': sfn1,
+                        'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'})
     return out
 
 
@@ -315,6 +332,10 @@ def main():
     ap.add_argument('--play-ms', type=int, default=200)
     ap.add_argument('--depths', default='2,4,6')
     ap.add_argument('--stride', type=int, default=1)
+    ap.add_argument('--surprise-from', type=float, default=0.0,
+                    help='a mate flip only counts if the EARLIER score was at least '
+                         'this many stones. 0 = the engine was not behind. This is '
+                         'what separates the reported bug from a game simply ending.')
     ap.add_argument('--per-ply-limit', type=float, default=0.5,
                     help='stones per HALF-MOVE that count as a defect. 0.5 = one '
                          'stone per full move (both sides). Raise to 1.0 to read '
@@ -360,7 +381,8 @@ def main():
             for m in check_reachability(line, (meta or {}).get('movers')):
                 m['game'] = key
                 misses.append(m)
-        for r in check_eval_drops(line, depths, args.stride, args.per_ply_limit):
+        for r in check_eval_drops(line, depths, args.stride, args.per_ply_limit,
+                                  args.surprise_from):
             r['game'] = key
             drops.append(r)
         if n_lines % 20 == 0:
@@ -376,18 +398,30 @@ def main():
         if not misses:
             print("  => every played turn IS enumerable; no enumeration gap here")
 
+    # dedup: the same (game, ply, depth) must appear once
+    seen, uniq = set(), []
+    for r in drops:
+        k = (r.get('game'), r['ply'], r['depth'])
+        if k in seen:
+            continue
+        seen.add(k); uniq.append(r)
+    drops = uniq
     print(f"\nCHECK A eval-drop flags: {len(drops)}")
     mate = [r for r in drops if r['mateFlip']]
-    print(f"  of which flipped into a PROVEN LOSS: {len(mate)}  <- the mate-in-one shape")
+    print(f"  MATE FLIPS from a non-losing score (the reported bug): {len(mate)}")
+    print(f"  gradual drops over {args.per_ply_limit} stones/half-move: "
+          f"{len(drops) - len(mate)}")
     by_depth = Counter(r['depth'] for r in drops)
     print(f"  by depth: {dict(sorted(by_depth.items()))}")
     if drops:
         worst = sorted(drops, key=lambda r: -r['dropPerPly'])[:10]
         print("  worst:")
         for r in worst:
+            tag = 'MATE FLIP' if r['mateFlip'] else f"{r['dropPerPly']:+.2f}/ply"
+            to = 'LOSS' if r['score1'] <= -MATE else f"{r['clampedTo']:+.2f}"
             print(f"    d{r['depth']} ply {r['ply']:3d} {r['mover']:5s} "
-                  f"{r['score0']/STONE:+8.2f} -> {r['score1']/STONE:+8.2f} "
-                  f"({r['dropPerPly']:+.2f}/ply)  [{cast_between(r['sfnBefore'], r['sfnAfter'])}]")
+                  f"{r['clampedFrom']:+7.2f} -> {to:>8s}  {tag:>12s}  "
+                  f"[{cast_between(r['sfnBefore'], r['sfnAfter'])}]")
         # Robi named Seal of Destruction; group so a culprit spell is visible.
         g = defaultdict(int)
         for r in drops:
