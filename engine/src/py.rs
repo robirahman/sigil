@@ -504,6 +504,30 @@ impl PyBoard {
             }).collect()).collect())
     }
 
+    /// Is the stone layout `(red, blue)` reachable from here by ONE legal turn
+    /// of `c`? Returns (reachable, n_turns_enumerated, truncated).
+    ///
+    /// Enumerating AND comparing in Rust, rather than looping in Python, is the
+    /// difference between a tractable audit and an impossible one: full
+    /// enumeration expands every cast outcome, so one midgame position yields
+    /// 9,000-54,000 turns. A PyO3 round-trip per turn to apply and compare cost
+    /// ~5 s per position, which is days of compute over 64,000 turns.
+    #[pyo3(signature = (c, red, blue, cap=1_000_000))]
+    fn layout_reachable(&self, c: &str, red: u64, blue: u64, cap: usize)
+        -> PyResult<(bool, usize, bool)>
+    {
+        let col = color(c)?;
+        let (turns, st) = self.b.enumerate_turns_capped(col, cap);
+        for t in turns.iter() {
+            let mut b = self.b;
+            b.apply_turn(t, col);
+            if b.stones[0] == red && b.stones[1] == blue {
+                return Ok((true, st.turns, st.truncated));
+            }
+        }
+        Ok((false, st.turns, st.truncated))
+    }
+
     fn enum_stats(&self) -> PyResult<(usize, usize, bool, bool)> {
         let (_t, st) = self.b.enumerate_turns(self.b.to_move);
         Ok((st.turns, st.turns_with_greedy_cast, st.truncated, st.resolver_truncated))
