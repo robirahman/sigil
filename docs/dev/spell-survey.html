@@ -15,6 +15,8 @@
 	.controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; }
 	.controls button, .controls select, .controls label { font-size:13px; }
 	.controls button { padding:5px 10px; border:1px solid var(--line); background:#fafafa; border-radius:6px; cursor:pointer; }
+	.slot { display:inline-flex; gap:4px; align-items:center; padding:2px 6px; border:1px dashed var(--line); border-radius:6px; }
+	.slot b { font-size:12px; color:var(--muted); }
 	.progress { font-size:13px; color:var(--muted); }
 	main { max-width: 1100px; margin: 22px auto; padding: 0 16px; }
 	.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
@@ -60,12 +62,10 @@
 			<option value="pack">order: by pack</option>
 			<option value="shuffle">order: shuffled</option>
 		</select>
-		<select id="pack-filter"><option value="">all packs</option></select>
-		<select id="spell-filter" title="Only this spell (single mode) or pairs involving it (pair mode)"><option value="">any spell</option></select>
-		<select id="pair-scope" title="Pair mode only">
-			<option value="both">pairs: both spells in pack</option>
-			<option value="either">pairs: either spell in pack</option>
-		</select>
+		<span class="slot" title="Single mode: which spells to show. Pair mode: one spell of the pair must fit slot A and the other slot B.">
+			<b>A</b> <select id="pack-a"><option value="">any pack</option></select> <select id="spell-a"><option value="">any spell</option></select>
+		</span>
+		<span class="slot" id="slot-b"><b>B</b> <select id="pack-b"><option value="">any pack</option></select> <select id="spell-b"><option value="">any spell</option></select></span>
 		<button id="export">Download JSON</button>
 		<button id="import">Import JSON…</button>
 		<input type="file" id="import-file" accept="application/json" hidden>
@@ -169,19 +169,17 @@
 		return a;
 	}
 	const el = id => document.getElementById(id);
+	// Slot filters: each slot is (pack, spell); a spell fits a slot if it matches both constraints.
+	function fits(name, slot) {
+		const pack = el('pack-' + slot).value, spell = el('spell-' + slot).value;
+		return (!pack || SPELLS[INDEX[name]].pack === pack) && (!spell || name === spell);
+	}
 	function queue() {
 		const mode = state.mode;
-		const pack = el('pack-filter').value;
-		const focus = el('spell-filter').value;
 		const only = el('only-unanswered').checked;
 		let items = mode === 'single'
-			? SPELLS.map(s => s.name).filter(n => !pack || SPELLS[INDEX[n]].pack === pack)
-			: PAIRS.filter(([a, b]) => {
-				if (!pack) return true;
-				const inA = SPELLS[INDEX[a]].pack === pack, inB = SPELLS[INDEX[b]].pack === pack;
-				return el('pair-scope').value === 'both' ? (inA && inB) : (inA || inB);
-			});
-		if (focus) items = items.filter(it => mode === 'single' ? it === focus : (it[0] === focus || it[1] === focus));
+			? SPELLS.map(s => s.name).filter(n => fits(n, 'a'))
+			: PAIRS.filter(([a, b]) => (fits(a, 'a') && fits(b, 'b')) || (fits(a, 'b') && fits(b, 'a')));
 		if (el('order').value === 'shuffle') items = seededShuffle(items, 20260905);
 		if (only) items = items.filter(it => mode === 'single' ? !spellDone(it) : !pairDone(pairKey(it[0], it[1])));
 		return items;
@@ -320,14 +318,27 @@
 	function setMode(m) {
 		state.mode = m; save();
 		el('tab-single').classList.toggle('active', m === 'single');
+		el('slot-b').style.opacity = m === 'pair' ? '1' : '0.4';
 		el('tab-pair').classList.toggle('active', m === 'pair');
 		render();
 	}
 	el('tab-single').onclick = () => setMode('single');
 	el('tab-pair').onclick = () => setMode('pair');
-	['only-unanswered', 'order', 'pack-filter', 'pair-scope', 'spell-filter'].forEach(id => el(id).addEventListener('change', () => { state.pos[state.mode] = 0; render(); }));
-	for (const k of OFFICIAL_PACKS) { const o = document.createElement('option'); o.value = k; o.textContent = packName(k); el('pack-filter').appendChild(o); }
-	for (const sp of SPELLS.map(s => s.name).sort()) { const o = document.createElement('option'); o.value = sp; o.textContent = pretty(sp); el('spell-filter').appendChild(o); }
+	['only-unanswered', 'order', 'spell-a', 'spell-b'].forEach(id => el(id).addEventListener('change', () => { state.pos[state.mode] = 0; render(); }));
+	// Changing a slot's pack narrows that slot's spell list to the pack (and clears a spell that no longer fits).
+	for (const slot of ['a', 'b']) el('pack-' + slot).addEventListener('change', () => { fillSpellSelect(slot); state.pos[state.mode] = 0; render(); });
+	function fillSpellSelect(slot) {
+		const sel = el('spell-' + slot), pack = el('pack-' + slot).value, keep = sel.value;
+		sel.innerHTML = '<option value="">any spell</option>';
+		for (const sp of SPELLS.filter(s => !pack || s.pack === pack).map(s => s.name)) {
+			const o = document.createElement('option'); o.value = sp; o.textContent = pretty(sp); sel.appendChild(o);
+		}
+		sel.value = [...sel.options].some(o => o.value === keep) ? keep : '';
+	}
+	for (const slot of ['a', 'b']) {
+		for (const k of OFFICIAL_PACKS) { const o = document.createElement('option'); o.value = k; o.textContent = packName(k); el('pack-' + slot).appendChild(o); }
+		fillSpellSelect(slot);
+	}
 	document.addEventListener('keydown', ev => {
 		if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
 		const k = ev.key.toLowerCase();
