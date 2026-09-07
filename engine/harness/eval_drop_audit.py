@@ -199,19 +199,13 @@ def check_reachability(pairs):
             if as_.count(enemy) > bs.count(enemy):
                 continue                      # spans more than one turn
             b = se.Board.from_sfn(before)
-            st = b.enum_stats()
-            if st[2]:
+            # One native call: enumerate AND compare in Rust. Looping in Python
+            # cost ~5 s per position, because full enumeration expands every cast
+            # outcome and a midgame position yields 9,000-54,000 turns.
+            tgt = se.Board.from_sfn(after).stones
+            reachable, n_turns, trunc = b.layout_reachable(mover, tgt[0], tgt[1])
+            if trunc:
                 continue                      # truncated: not a complete reference
-            reachable = False
-            for t in b.enumerate_turns():
-                a = se.Board.from_sfn(before)
-                try:
-                    a.apply_turn_tuples(t, mover)
-                except Exception:
-                    continue
-                if a.to_sfn().split('/')[0] == as_:
-                    reachable = True
-                    break
             if not reachable:
                 # WHO played it decides what a miss means: a turn played by a HUMAN
                 # or an OLDER JS engine that Rust cannot generate is a Rust
@@ -219,7 +213,7 @@ def check_reachability(pairs):
                 misses.append({'turnNumber': p.get('turnNumber'), 'mover': mover,
                                'playedBy': p.get('playedBy', 'unknown'),
                                'sfnBefore': before, 'sfnAfter': after,
-                               'nEnumerated': st[0]})
+                               'nEnumerated': n_turns})
         except Exception as e:
             misses.append({'turnNumber': p.get('turnNumber'), 'error': str(e),
                            'sfnBefore': before})
