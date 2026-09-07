@@ -330,7 +330,10 @@ def main():
     ap.add_argument('--selfplay', type=int, default=0)
     ap.add_argument('--games', default=None)
     ap.add_argument('--play-ms', type=int, default=200)
-    ap.add_argument('--depths', default='2,4,6')
+    ap.add_argument('--depths', default='2,4,6',
+                    help="comma OR colon separated. Use COLONS in a cloud arm: "
+                         "runner.sh splits arms on spaces and each arm's args on "
+                         "commas, so '2,4,6' arrives as three separate arguments.")
     ap.add_argument('--stride', type=int, default=1)
     ap.add_argument('--surprise-from', type=float, default=0.0,
                     help='a mate flip only counts if the EARLIER score was at least '
@@ -355,7 +358,7 @@ def main():
     ap.add_argument('--lines', default=None,
                     help='read pre-hydrated lines instead of hydrating')
     args = ap.parse_args()
-    depths = [int(x) for x in args.depths.split(',')]
+    depths = [int(x) for x in args.depths.replace(':', ',').split(',') if x]
     assert all(d % 2 == 0 for d in depths), "depths must be EVEN so the side to move matches"
     if args.time_only:
         time_depths(depths)
