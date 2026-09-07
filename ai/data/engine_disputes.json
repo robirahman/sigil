@@ -5,7 +5,7 @@
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r...rrrrrr..r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r...rrrrrr..r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -21,8 +21,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -51,16 +51,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
+   "clusterSize": 11,
    "memberIndex": 1,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
    "key": "keydash-s0-1",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r...rrrrr...r.b.bb.b..b.r............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r...rrrrr...r.b.bb.b..b.r............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -76,8 +76,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -106,16 +106,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
+   "clusterSize": 11,
    "memberIndex": 2,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
    "key": "keydash-s0-2",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "rr..rrrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "rr..rrrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -131,8 +131,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -161,16 +161,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
+   "clusterSize": 11,
    "memberIndex": 3,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
    "key": "keydash-s0-3",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r.rrrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r..rrrrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -186,63 +186,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
-   "disputedActions": [
-    [
-     "move",
-     6,
-     -1,
-     [],
-     -1
-    ],
-    [
-     "dash",
-     2,
-     -1,
-     [
-      10,
-      2
-     ],
-     -1
-    ],
-    [
-     "pass",
-     -1,
-     -1,
-     [],
-     -1
-    ]
-   ],
-   "flagAs": "unreachable",
-   "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 4,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
-  },
-  {
-   "key": "keydash-s0-4",
-   "turnNumber": 1,
-   "color": "red",
-   "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r..rrrrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "spellNames": [
-    "Corrupt",
-    "Hurricane",
-    "Seal_of_Destruction",
-    "Fury",
-    "Seal_of_Wind",
-    "Seal_of_Stone",
-    "Azimuth",
-    "Splash",
-    "Gust"
-   ],
-   "variant": "standard",
-   "cast": null,
-   "redPlayer": "synthetic",
-   "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -271,16 +216,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 5,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 4,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-5",
+   "key": "keydash-s0-4",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r...rrrrr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r...rrrrr..rr.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -296,63 +241,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
-   "disputedActions": [
-    [
-     "move",
-     6,
-     -1,
-     [],
-     -1
-    ],
-    [
-     "dash",
-     10,
-     -1,
-     [
-      10,
-      2
-     ],
-     -1
-    ],
-    [
-     "pass",
-     -1,
-     -1,
-     [],
-     -1
-    ]
-   ],
-   "flagAs": "unreachable",
-   "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 6,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
-  },
-  {
-   "key": "keydash-s0-6",
-   "turnNumber": 1,
-   "color": "red",
-   "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r...rrrrr..rr.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "spellNames": [
-    "Corrupt",
-    "Hurricane",
-    "Seal_of_Destruction",
-    "Fury",
-    "Seal_of_Wind",
-    "Seal_of_Stone",
-    "Azimuth",
-    "Splash",
-    "Gust"
-   ],
-   "variant": "standard",
-   "cast": null,
-   "redPlayer": "synthetic",
-   "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -381,16 +271,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 7,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 5,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-7",
+   "key": "keydash-s0-5",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r..rrrrr..r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r.r..rrrrr..r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -406,8 +296,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -436,16 +326,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 8,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 6,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-8",
+   "key": "keydash-s0-6",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r..rrrr...r.b.bb.b..b.r............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r.r..rrrr...r.b.bb.b..b.r............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -461,8 +351,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -491,16 +381,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 9,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 7,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-9",
+   "key": "keydash-s0-7",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "rrr..rrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "rrr..rrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -516,8 +406,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -546,16 +436,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 10,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 8,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-10",
+   "key": "keydash-s0-8",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.rr.rrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r.rr.rrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -571,8 +461,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -601,16 +491,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 11,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 9,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-11",
+   "key": "keydash-s0-9",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r.rrrrr...r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r.r.r.rrrr..r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -626,118 +516,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
-   "disputedActions": [
-    [
-     "move",
-     6,
-     -1,
-     [],
-     -1
-    ],
-    [
-     "dash",
-     4,
-     -1,
-     [
-      10,
-      4
-     ],
-     -1
-    ],
-    [
-     "pass",
-     -1,
-     -1,
-     [],
-     -1
-    ]
-   ],
-   "flagAs": "unreachable",
-   "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 12,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
-  },
-  {
-   "key": "keydash-s0-12",
-   "turnNumber": 1,
-   "color": "red",
-   "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r..rrrr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "spellNames": [
-    "Corrupt",
-    "Hurricane",
-    "Seal_of_Destruction",
-    "Fury",
-    "Seal_of_Wind",
-    "Seal_of_Stone",
-    "Azimuth",
-    "Splash",
-    "Gust"
-   ],
-   "variant": "standard",
-   "cast": null,
-   "redPlayer": "synthetic",
-   "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
-   "disputedActions": [
-    [
-     "move",
-     6,
-     -1,
-     [],
-     -1
-    ],
-    [
-     "dash",
-     10,
-     -1,
-     [
-      10,
-      4
-     ],
-     -1
-    ],
-    [
-     "pass",
-     -1,
-     -1,
-     [],
-     -1
-    ]
-   ],
-   "flagAs": "unreachable",
-   "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 13,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
-  },
-  {
-   "key": "keydash-s0-13",
-   "turnNumber": 1,
-   "color": "red",
-   "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r.r.rrrr..r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "spellNames": [
-    "Corrupt",
-    "Hurricane",
-    "Seal_of_Destruction",
-    "Fury",
-    "Seal_of_Wind",
-    "Seal_of_Stone",
-    "Azimuth",
-    "Splash",
-    "Gust"
-   ],
-   "variant": "standard",
-   "cast": null,
-   "redPlayer": "synthetic",
-   "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -766,16 +546,16 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 14,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 10,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   },
   {
-   "key": "keydash-s0-14",
+   "key": "keydash-s0-10",
    "turnNumber": 1,
    "color": "red",
    "sfnBefore": "r.r.rr.rr.r.r.b.b..b..b.b............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
-   "sfnAfter": "r.r.r.rrr...r.b.bb.b..b.r............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust r 0 0:0 -:- -:- r2",
+   "sfnAfter": "r.r.r.rrr...r.b.bb.b..b.r............../Corrupt,Hurricane,Seal_of_Destruction,Fury,Seal_of_Wind,Seal_of_Stone,Azimuth,Splash,Gust b 1 0:0 -:- -:- r2",
    "spellNames": [
     "Corrupt",
     "Hurricane",
@@ -791,8 +571,8 @@
    "cast": null,
    "redPlayer": "synthetic",
    "bluePlayer": "synthetic",
-   "stateBefore": "Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable.",
-   "stateAfter": "KEY_DASH: promoted a dash turn full enumeration rejects",
+   "stateBefore": "red to move, turn 0 | counters R0:B0 | locks R:- B:-",
+   "stateAfter": "blue to move, turn 1 | counters R0:B0 | locks R:- B:-",
    "disputedActions": [
     [
      "move",
@@ -821,12 +601,12 @@
    ],
    "flagAs": "unreachable",
    "cluster": 2,
-   "clusterSize": 15,
-   "memberIndex": 15,
-   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects"
+   "clusterSize": 11,
+   "memberIndex": 11,
+   "signature": "KEY_DASH: promoted a dash turn full enumeration rejects \u2014 Enter EXACTLY the listed actions. If the UI refuses one, flag unreachable."
   }
  ],
- "totalUnmatched": 15,
+ "totalUnmatched": 11,
  "triage": {
   "vacuous": 993,
   "ok": 180,
