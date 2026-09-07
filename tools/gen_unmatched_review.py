@@ -547,8 +547,19 @@ function finishAttempt(c) {
         diffs.push(n + ': got ' + (have.stones[n] || '·') + ', want ' + (want.stones[n] || '·'));
       }
     }
+    // Name the fields that actually differ. Saying only "counters/locks differ"
+    // once sent a reviewer hunting for a lock-changing spell when the real
+    // mismatch was side-to-move and the turn counter -- a wasted review round.
+    const SCALARS = ['turn', 'turncounter', 'red_spellcounter', 'blue_spellcounter',
+                     'red_lock', 'blue_lock', 'red_springlock', 'blue_springlock',
+                     'score'];
+    const sdiffs = SCALARS.filter(k => String(want[k] ?? '-') !== String(have[k] ?? '-'))
+      .map(k => k + ': got ' + (have[k] ?? '-') + ', want ' + (want[k] ?? '-'));
+    const all = diffs.concat(sdiffs);
     v.innerHTML = '<span class="status-bad">Not a match — ' +
-      (diffs.length ? diffs.slice(0, 8).join('; ') : 'stones match but counters/locks differ') +
+      (all.length
+        ? (diffs.length ? '' : 'stones match; ') + all.slice(0, 8).join('; ')
+        : 'differs outside the compared fields') +
       '</span>. Reset turn to retry.';
     setMsg('No match. Hit "Reset turn" to try again.');
   }
