@@ -173,7 +173,7 @@ def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0):
         print(f"  hydrated {min(start + batch, len(keep))}/{len(keep)} games", flush=True)
 
 
-def check_reachability(pairs):
+def check_reachability(pairs, enum_cap=250_000):
     """CHECK B: was each played turn reproducible by `enumerate_turns`?
 
     Walks each turn's OWN before/after pair, and screens out record artefacts the
@@ -203,7 +203,8 @@ def check_reachability(pairs):
             # cost ~5 s per position, because full enumeration expands every cast
             # outcome and a midgame position yields 9,000-54,000 turns.
             tgt = se.Board.from_sfn(after).stones
-            reachable, n_turns, trunc = b.layout_reachable(mover, tgt[0], tgt[1])
+            reachable, n_turns, trunc = b.layout_reachable(
+                mover, tgt[0], tgt[1], enum_cap)
             if trunc:
                 continue                      # truncated: not a complete reference
             if not reachable:
@@ -350,6 +351,17 @@ def main():
                          "runner.sh splits arms on spaces and each arm's args on "
                          "commas, so '2,4,6' arrives as three separate arguments.")
     ap.add_argument('--stride', type=int, default=1)
+    ap.add_argument('--checks', default='ab', choices=['a', 'b', 'ab'],
+                    help="which checks to run. 'b' (reachability) is cheap and is "
+                         "the decisive test of whether the engine can generate a "
+                         "played turn; 'a' (eval drop) is dominated by depth-6 "
+                         "search at ~17 s/position. Coupling them made the cheap, "
+                         "decisive answer wait on the expensive, secondary one.")
+    ap.add_argument('--enum-cap', type=int, default=250_000,
+                    help='cap on turns enumerated per position for check B. Some '
+                         'positions enumerate enormously; past the cap the answer '
+                         'is "cannot tell" and the position is skipped, which is '
+                         'reported rather than silently counted as reachable.')
     ap.add_argument('--surprise-from', type=float, default=0.0,
                     help='a mate flip only counts if the EARLIER score was at least '
                          'this many stones. 0 = the engine was not behind. This is '
@@ -439,15 +451,17 @@ def main():
             continue
         n_lines += 1
         n_plies += len(line)
-        if do_reach:
-            for m in check_reachability((meta or {}).get('pairs') or []):
+        if do_reach and 'b' in args.checks:
+            for m in check_reachability((meta or {}).get('pairs') or [],
+                                        args.enum_cap):
                 m['game'] = key
                 misses.append(m)
-        for r in check_eval_drops(line, depths, args.stride, args.per_ply_limit,
-                                  args.surprise_from):
+        for r in ([] if 'a' not in args.checks else
+                  check_eval_drops(line, depths, args.stride,
+                                   args.per_ply_limit, args.surprise_from)):
             r['game'] = key
             drops.append(r)
-        if n_lines % 20 == 0:
+        if n_lines % 5 == 0:
             print(f"  {n_lines} lines, {n_plies} plies, "
                   f"{len(drops)} eval flags, {len(misses)} unreachable", flush=True)
 
