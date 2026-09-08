@@ -587,6 +587,36 @@ impl PyBoard {
             }).collect()).collect())
     }
 
+    /// Where in the ORDERED stream does the turn reaching `(red, blue)` sit?
+    ///
+    /// Reachability is not the same question as visibility. Progressive
+    /// widening expands only `width` turns per node -- 24 near the frontier
+    /// against a median branching of 316 -- so a turn the enumerator CAN
+    /// generate is still invisible to the search if `move_score` ranks it
+    /// past the budget. An opponent's mate-in-one that ranks 400th is not an
+    /// enumeration gap and not an evaluation error; it is a width gap, and
+    /// the three have different fixes.
+    ///
+    /// Returns (rank, n_scanned, found). `rank` is the 0-based index of the
+    /// first ordered turn whose application produces that layout.
+    #[pyo3(signature = (c, red, blue, window=24, reasons=0, cap=4096))]
+    fn layout_rank(&self, c: &str, red: u64, blue: u64, window: usize,
+                   reasons: u8, cap: usize)
+        -> PyResult<(i64, usize, bool)>
+    {
+        let col = color(c)?;
+        let mut i = 0usize;
+        for t in self.b.turns_ordered_reasons(col, window, reasons).take(cap) {
+            let mut b = self.b;
+            b.apply_turn(&t, col);
+            if b.stones[0] == red && b.stones[1] == blue {
+                return Ok((i as i64, i + 1, true));
+            }
+            i += 1;
+        }
+        Ok((-1, i, false))
+    }
+
     /// Is the stone layout `(red, blue)` reachable from here by ONE legal turn
     /// of `c`? Returns (reachable, n_turns_enumerated, truncated).
     ///
