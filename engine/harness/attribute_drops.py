@@ -68,6 +68,15 @@ def load_reach(paths):
     return s
 
 
+def fmt_score(v):
+    """Mate is +-1e7; dividing that by STONE prints a nonsense +2441.41."""
+    if v >= 1_000_000:
+        return '  +MATE'
+    if v <= -1_000_000:
+        return '  -MATE'
+    return f'{v / 4096:+7.2f}'
+
+
 def turn_of(sfn):
     try:
         return int(sfn.split()[2])
@@ -99,11 +108,24 @@ def main():
               f'{args.limit}/half-move on this corpus')
         return
 
-    # Which (game, ply) are flagged at each depth, for the deepening test.
-    by_depth = collections.defaultdict(set)
+    # The deepening test compares the SAME (game, ply, WINDOW) at a greater
+    # search depth. Keying on depth alone silently compared a 2-half-move
+    # window searched 2 deep against a 4-half-move window searched 4 deep --
+    # two different questions, so absence proved nothing and the HORIZON
+    # bucket was meaningless. A run whose windows are not decoupled from its
+    # depths cannot answer this, and says so instead of guessing.
+    by_dw = collections.defaultdict(set)
+    windows = set()
     for d in drops:
-        by_depth[d['depth']].add((d.get('game'), d.get('ply')))
-    depths = sorted(by_depth)
+        w = d.get('window', d['depth'])
+        windows.add(w)
+        by_dw[(d['depth'], w)].add((d.get('game'), d.get('ply')))
+    depths = sorted({k[0] for k in by_dw})
+    coupled = all(d.get('window', d['depth']) == d['depth'] for d in drops)
+    if coupled:
+        print('NOTE: this run has window == depth for every flag, so the '
+              'deepening test is NOT AVAILABLE.\n      Re-run with --windows '
+              'to score the same window at several depths.\n')
 
     buckets = collections.Counter()
     per_depth = collections.defaultdict(collections.Counter)
@@ -119,14 +141,20 @@ def main():
         # this drop and inflate the ENUMERATION GAP bucket.
         spanned = set()
         if tc is not None:
-            spanned = {(g, tc + k) for k in range(dep)}
+            spanned = {(g, tc + k) for k in range(d.get('window', dep))}
+        w = d.get('window', dep)
         deeper = [x for x in depths if x > dep]
-        cured = deeper and all((g, ply) not in by_depth[x] for x in deeper)
+        # Same window, greater depth. Keying on depth alone compared different
+        # windows and made this bucket meaningless.
+        cured = (not coupled) and deeper and all(
+            (g, ply) not in by_dw[(x, w)] for x in deeper)
 
         if spanned & reach:
             b = 'ENUMERATION GAP'
         elif cured:
             b = 'HORIZON EFFECT (deepening cured it)'
+        elif coupled:
+            b = 'UNATTRIBUTED (no deepening test in this run)'
         else:
             b = 'OTHER (eval wrong, not blind)'
         buckets[b] += 1
@@ -150,7 +178,7 @@ def main():
     print(f'\n=== MATE FLIPS (scored not-losing, then lost): {len(mate_flips)} ===')
     for b, d in mate_flips[:12]:
         print(f"  [{b.split()[0]:11s}] depth {d['depth']} "
-              f"{d['score0'] / 4096:+.2f} -> lost   {d.get('game')} ply {d.get('ply')}")
+              f"{fmt_score(d['score0'])} -> lost   {d.get('game')} ply {d.get('ply')}")
     # Magnitude matters: a flag at 0.51/half-move is at the envelope's edge,
     # one at 9.71 is not the same animal.
     print('\n=== by magnitude x cause ===')
@@ -181,7 +209,7 @@ def main():
     worst.sort(key=lambda x: -x[0])
     for dp, b, d in worst[:12]:
         print(f"  {dp:+7.2f}/half-move  [{b.split()[0]:11s}] depth {d['depth']} "
-              f"{d['score0'] / 4096:+.2f} -> {d['score1'] / 4096:+.2f}  "
+              f"{fmt_score(d['score0'])} -> {fmt_score(d['score1'])}  "
               f"{d.get('game')} ply {d.get('ply')}")
 
 
