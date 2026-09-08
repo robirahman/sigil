@@ -404,7 +404,7 @@ impl PyBoard {
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
                         adaptive=None, rank_oversample=None,
-                        width_shape=None))]
+                        width_shape=None, keep_window=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: usize, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -412,7 +412,10 @@ impl PyBoard {
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
                  q_cast_moves: Option<usize>, aspiration: Option<i32>,
                  adaptive: Option<(f32, usize, usize)>,
-                 rank_oversample: Option<usize>, width_shape: Option<usize>)
+                 rank_oversample: Option<usize>, width_shape: Option<usize>,
+                 // How many keep choices per cast to expand. `None` leaves the
+                 // engine's own default alone -- never restate it here.
+                 keep_window: Option<usize>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -951,6 +954,12 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
     // hardcoded it, which is fine historically but would confound any future test.
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
+    // The shipped adaptive-widening point, exported for the same reason: a
+    // harness that wants the shipped search must pass it, and every literal
+    // copy is somewhere for it to drift.
+    m.add("SHIPPED_ADAPTIVE", crate::search::SHIPPED_ADAPTIVE)?;
+    m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
+    m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
     // Exported so a harness never restates them. REASONS_ALL is the full
     // key-dash interest mask; OUTCOME_CAP is how a caller detects that a
     // resolver enumeration was TRUNCATED rather than complete.

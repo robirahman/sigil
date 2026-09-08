@@ -68,6 +68,16 @@ pub const DEFAULT_WINDOW: usize = 16;
 /// In this game seeing more moves beats looking further ahead.
 pub const DEFAULT_WIDTH_SCALE: usize = 4;
 
+/// The SHIPPED adaptive-widening operating point: (threshold p, easy, hard).
+///
+/// The engine default is `adaptive: None` (off), so every harness that wants
+/// the shipped search has to pass this triple -- and each one that writes the
+/// literal is another place for it to drift, which is the mistake that has
+/// already invalidated two campaigns. This is its single home; harnesses read
+/// `se.SHIPPED_ADAPTIVE`. Measured optimal: the threshold sweep put p=0.10 at
+/// the knee (-26 Elo at 20% widened, -44 at 10%, -0.0 at 50%).
+pub const SHIPPED_ADAPTIVE: (f32, usize, usize) = (0.10, 2, 6);
+
 /// PROGRESSIVE WIDENING.
 ///
 /// Sigil's true branching factor is ~10^4 (measured: mean 210k enumerated turns
