@@ -1299,7 +1299,17 @@ fn seal_of_summer_second_cast_reaches_the_lazy_stream() {
     let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
     let legal: HashSet<String> = turns.iter().map(key).collect();
     for t in lazy.iter().filter(|t| two_casts(t)) {
-        assert!(legal.contains(&key(t)), "lazy invented {:?}", t.slice());
+        if !legal.contains(&key(t)) {
+            // Say WHAT the exhaustive generator does offer. A bare "invented"
+            // message names the symptom and hides the difference, which is the
+            // only thing that identifies the cause.
+            let mut offered: Vec<String> =
+                turns.iter().filter(|u| two_casts(u)).map(key).collect();
+            offered.sort();
+            offered.dedup();
+            panic!("lazy invented {:?}\nfull enumeration offers {} two-cast \
+                    turns:\n  {}", t.slice(), offered.len(), offered.join("\n  "));
+        }
     }
 }
 

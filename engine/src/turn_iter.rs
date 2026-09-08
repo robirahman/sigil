@@ -149,6 +149,39 @@ impl Board {
     }
 }
 
+/// Interleave per-keep candidate lists so a window holds as many DISTINCT
+/// keeps as it has slots.
+///
+/// Scoring the (keep, outcome) pairs and taking the best `window` is not
+/// enough, and the test that caught it is
+/// `the_ordered_stream_offers_more_than_one_keep`: `configuration_value` often
+/// cannot tell two keeps apart, every pair ties, the tie-break to the lower
+/// canonical index hands the whole window to keep 0, and the search stays
+/// exactly as blind as it was before the choice was enumerated. Round-robin
+/// instead, best keep first, so a width-`k` budget sees `k` distinct keeps.
+/// This is the same starvation the KEY_DASH reserved slot exists to prevent.
+fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
+    -> (Vec<(i32, usize, usize)>, bool)
+{
+    per_keep.sort_by_key(|v| v.first().map(|&(s, _, _)| -s).unwrap_or(i32::MAX));
+    let total: usize = per_keep.iter().map(|v| v.len()).sum();
+    let mut out: Vec<(i32, usize, usize)> = Vec::with_capacity(window.min(total));
+    let mut round = 0usize;
+    while out.len() < window {
+        let mut pushed = false;
+        for v in per_keep.iter() {
+            if let Some(&x) = v.get(round) {
+                out.push(x);
+                pushed = true;
+                if out.len() >= window { break; }
+            }
+        }
+        if !pushed { break; }
+        round += 1;
+    }
+    (out, total > window)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Stage { Moves, MoveCast, Dash, DashCast, Done }
 
@@ -317,22 +350,21 @@ impl<'a> TurnIter<'a> {
                 // options progressive widening would discard anyway.
                 let (kis, ktr) = b.keep_indices_ordered(pos, self.c, KEEP_WINDOW);
                 if ktr { self.windowed = true; }
-                let mut cands: Vec<(i32, usize, usize)> = Vec::new();
+                let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
                 for &ki in &kis {
                     let mut cl = b;
                     cl.cast_clear_and_keep(pos, self.c, ki);
                     let (ranked, trunc) =
                         cl.resolve_outcomes_ranked(pos, self.c, self.window);
                     if trunc { self.windowed = true; }
-                    for (raw, ob) in ranked {
-                        cands.push((ob.outcome_score(self.c, goal), ki, raw));
-                    }
+                    let mut v: Vec<(i32, usize, usize)> = ranked.into_iter()
+                        .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, raw))
+                        .collect();
+                    v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
+                    if !v.is_empty() { per_keep.push(v); }
                 }
-                cands.sort_by_key(|&(s, ki, raw)| (-s, ki, raw));
-                if cands.len() > self.window {
-                    self.windowed = true;
-                    cands.truncate(self.window);
-                }
+                let (cands, more) = stratify_by_keep(per_keep, self.window);
+                if more { self.windowed = true; }
                 for &(_, ki, raw) in &cands {
                     self.pending.push_back(Turn::single(a).push_pub(Action::Cast {
                         pos: pos as u8, keep: ki as u8, outcome: raw as u16,
@@ -413,22 +445,21 @@ impl<'a> TurnIter<'a> {
                         let (kis, ktr) =
                             bd.keep_indices_ordered(pos, self.c, KEEP_WINDOW);
                         if ktr { self.windowed = true; }
-                        let mut cands: Vec<(i32, usize, usize)> = Vec::new();
+                        let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
                         for &ki in &kis {
                             let mut cl = bd;
                             cl.cast_clear_and_keep(pos, self.c, ki);
                             let (ranked, trunc) =
                                 cl.resolve_outcomes_ranked(pos, self.c, self.window);
                             if trunc { self.windowed = true; }
-                            for (raw, ob) in ranked {
-                                cands.push((ob.outcome_score(self.c, goal), ki, raw));
-                            }
+                            let mut v: Vec<(i32, usize, usize)> = ranked.into_iter()
+                                .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, raw))
+                                .collect();
+                            v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
+                            if !v.is_empty() { per_keep.push(v); }
                         }
-                        cands.sort_by_key(|&(s, ki, raw)| (-s, ki, raw));
-                        if cands.len() > self.window {
-                            self.windowed = true;
-                            cands.truncate(self.window);
-                        }
+                        let (cands, more) = stratify_by_keep(per_keep, self.window);
+                        if more { self.windowed = true; }
                         for &(_, ki, raw) in &cands {
                             let mut full = Turn::single(a);
                             for act in t.slice() { full = full.push_pub(*act); }
