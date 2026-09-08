@@ -49,6 +49,12 @@ for g in lines:
     if len(sfns) >= 40:
         break
 print(f"  {len(sfns)} midgame positions")
+# search(max_depth, time_ms, tt_bits, window, width_scale). Fixed DEPTH with a
+# huge time budget, so the number is nodes/second and not a time-limited race:
+# a node-rate A/B has to hold the work constant, not the clock.
+WINDOW = se.CAST_OUTCOME_WINDOW if hasattr(se, 'CAST_OUTCOME_WINDOW') else 24
+WS = se.DEFAULT_WIDTH_SCALE if hasattr(se, 'DEFAULT_WIDTH_SCALE') else 4
+print(f"  window={WINDOW} width_scale={WS} (shipped)")
 for depth in (3, 4):
     t0 = time.perf_counter()
     nodes = 0
@@ -59,11 +65,11 @@ for depth in (3, 4):
         except Exception:
             continue
         try:
-            r = bb.search(depth)
+            r = bb.search(depth, 600_000, 20, WINDOW, WS)
         except Exception as e:
             print(f"  search failed: {e}")
             break
-        nodes += r[2] if isinstance(r, tuple) and len(r) > 2 else 0
+        nodes += r[2]
         done += 1
     el = time.perf_counter() - t0
     if done and nodes:
