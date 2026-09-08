@@ -667,7 +667,8 @@ impl PyBoard {
                     Action::Dash { sacs: s, n_sacs: sacs.len().min(2) as u8,
                                    node: node as u8, push_to: pt }
                 }
-                "cast"  => Action::Cast { pos: pos as u8, keep: push_to.max(0) as u8,
+                // The push_to slot carries `keep` for a cast; here it is `push`.
+                "cast"  => Action::Cast { pos: pos as u8, keep: push.max(0) as u8,
                                           outcome: node.max(0) as u16 },
                 _ => Action::Pass,
             };
