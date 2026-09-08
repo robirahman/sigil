@@ -38,6 +38,20 @@ use crate::board::{Board, Color, Outcome};
 use crate::turn::{Action, Turn};
 
 pub const WIN: i32 = 10_000_000;
+/// What an unproven mate is reported as. Two bounds pin this down:
+///
+///   * ABOVE any real material score, so it still reads "winning decisively".
+///     A 39-node board caps a lead near 20 stones, i.e. ~2,000 centistones.
+///   * BELOW what `ui_score` renders as a proof. The UI calls anything at or
+///     past 37 Caveman units a proven mate and prints "win in N", and the
+///     conversion is centistones/3900, so the ceiling is 144,300. Reporting
+///     100,000 would clear the material bar but display as 1,000 stones.
+///
+/// 5,000 centistones = 50 stones: 2.5x any achievable lead, 1.3 Caveman units,
+/// nowhere near the UI's mate threshold. The clamp is applied to the RETURNED
+/// score only, after the search has finished, so it cannot affect move choice
+/// or alpha-beta bounds -- it changes what the engine CLAIMS, not what it does.
+pub const UNPROVEN_MATE: i32 = 5_000;
 pub const MAX_PLY: usize = 64;
 
 /// Cast-outcome window the search offers the generator per node.
@@ -156,6 +170,10 @@ pub struct SearchStats {
     pub windowed: bool,
     /// Set if progressive widening dropped ordered successors at some node.
     pub widened: bool,
+    /// Set when the reported score was a mate that the search could NOT prove,
+    /// because some node was width- or window-limited. The score is reported as
+    /// `UNPROVEN_MATE` in that case rather than as a proof.
+    pub unproven_mate: bool,
     /// Successors actually expanded, summed — lets a caller see the effective
     /// branching factor (`expanded / nodes`).
     pub expanded: u64,
@@ -727,7 +745,35 @@ impl Search {
             self.stats.depth_completed = depth;
             // Search the previous best first next time.
             order.sort_by_key(|&i| if i == best_idx { 0 } else { 1 });
-            if best_score.abs() >= WIN - MAX_PLY as i32 { break; }
+            // A MATE SCORE IS A PROOF ONLY IF THE SEARCH THAT FOUND IT SAW
+            // EVERY MOVE. Breaking out of iterative deepening here on any mate
+            // score treated a width-limited result as certain: with
+            // progressive widening a "forced win" can simply be the
+            // opponent's saving move falling outside the budget -- 24 turns
+            // near the frontier against a median branching of 316 -- and the
+            // engine then stopped looking and announced a win it did not
+            // have. Measured in self-play from real positions: 4 of 126
+            // self-inconsistencies were +MATE announcements that decayed to
+            // +0.38..+1.52 stones two half-moves later.
+            //
+            // `widened`/`windowed` are search-wide, so this is conservative:
+            // if ANY node ran out of budget we keep deepening rather than
+            // claim proof. Real mates are still found and still returned; the
+            // engine just no longer stops early on an unproven one.
+            let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
+            let proven = !self.stats.widened && !self.stats.windowed;
+            if mate_score && proven { break; }
+        }
+        // Report an UNPROVEN mate as large-but-finite. The web UI treats a
+        // score past its own threshold as a proven mate and prints "win in N",
+        // so passing a width-limited mate score through makes the interface
+        // state a certainty the search never established. The move choice is
+        // untouched -- only the number the engine announces.
+        let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
+        if mate_score && (self.stats.widened || self.stats.windowed) {
+            self.stats.unproven_mate = true;
+            let sign = if best_score > 0 { 1 } else { -1 };
+            best_score = sign * UNPROVEN_MATE;
         }
         (best_idx, best_score, self.stats)
     }
