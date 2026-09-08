@@ -161,6 +161,16 @@ def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0,
         for (key, g, r, b), out in zip(chunk, res):
             if not isinstance(out, dict) or not out.get('ok'):
                 continue
+            # FAT vs SLIM. A slim turn stores an action list and its after-state
+            # is REPLAYED through the browser engine, so "no legal turn reaches
+            # this" is evidence about the engine. A fat turn stores only a board
+            # snapshot -- {color, kind, sfnAfter, turnNumber} -- so its
+            # after-state was never derived from actions and nothing checks that
+            # it is one legal turn away. Counting those as engine gaps blames
+            # the enumerator for the recorder: 59 of the 675 turns still
+            # unreachable after the keep fix are fat Meteor records.
+            has_acts = {t.get('turnNumber'): bool(t.get('actions'))
+                        for t in (g.get('turns') or []) if isinstance(t, dict)}
             turns = out.get('turns') or []
             line, movers, pairs = [], [], []
             for t in turns:
@@ -180,7 +190,8 @@ def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0,
                               # the replayer's own action list: when the engine
                               # cannot generate the turn, this is the sequence
                               # to hand Robi to re-enter in the real UI.
-                              'actions': t.get('actions') or t.get('tokens')})
+                              'actions': t.get('actions') or t.get('tokens'),
+                              'fat': not has_acts.get(t.get('turnNumber'), False)})
             if turns and turns[-1].get('sfnAfter'):
                 line.append((turns[-1]['sfnAfter'], []))
                 movers.append(None)
@@ -242,6 +253,7 @@ def check_reachability(pairs, enum_cap=250_000):
                                'playedBy': p.get('playedBy', 'unknown'),
                                'sfnBefore': before, 'sfnAfter': after,
                                'nCasts': n_casts, 'actions': p.get('actions'),
+                               'fat': bool(p.get('fat')),
                                'nEnumerated': n_turns})
         except Exception as e:
             misses.append({'turnNumber': p.get('turnNumber'), 'error': str(e),
@@ -526,7 +538,13 @@ def main():
             from collections import Counter as _C0
             for k, v in _C0(m['error'] for m in errs).most_common(8):
                 print(f"    {v:5d}  {k}")
+        fat = [m for m in real if m.get('fat')]
+        slim = [m for m in real if not m.get('fat')]
         print(f"  GENUINE unreachable turns: {len(real)}")
+        print(f"    from SLIM records (after-state REPLAYED from actions): "
+              f"{len(slim)}  <- evidence about the engine")
+        print(f"    from FAT records (after-state is a stored snapshot):   "
+              f"{len(fat)}  <- unverifiable; nothing checks it is one turn")
         misses_all, misses = misses, real
         for m in misses[:10]:
             print(f"  {m.get('game')} turn {m.get('turnNumber')} "
