@@ -369,6 +369,17 @@ impl Board {
     ) {
         if out.len() >= cap { st.truncated = true; return; }
         out.push(so_far.push(Action::Pass));
+        // THE GATE, which `enumerate_post_move` has always had and this
+        // function never did. Without it the recursion added below does not
+        // terminate: `castable` pushes non-charms regardless of `can_spell`,
+        // and it excludes only the CURRENTLY locked spell, so two unlocked
+        // non-charms alternate A, B, A, B forever -- each cast relocks and
+        // frees the other. The smoke died with SIGSEGV on a blown stack.
+        // Gating on the same condition bounds it at a first cast plus one
+        // Seal of Summer second cast, exactly like the post-move path.
+        if !(can_spell || (can_summer && self.holds_charged(c, SEAL_OF_SUMMER))) {
+            return;
+        }
         for id in self.castable(c, can_spell, can_summer, true) {
             let Some(pos) = self.position_of(id) else { continue };
             // canSpell becomes false after a cast; canSummer survives only if
