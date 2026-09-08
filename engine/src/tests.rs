@@ -740,7 +740,10 @@ fn applying_an_enumerated_turn_is_deterministic_and_legal() {
     for seed in 1..25u64 {
         let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
         // scatter some stones deterministically
-        let mut s = seed | 1;
+        // Local board RNG. `seed | 1` here only needs varied stone masks, but
+        // it is the same pathology `legal_draw` had, so spread it the same way
+        // rather than leave a second copy of the bug in the tree.
+        let mut s = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
         let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
         let r = nx() & ALL;
         let bl = (nx() & ALL) & !r;
@@ -774,14 +777,26 @@ fn greedy_resolution_is_always_among_the_enumerated_outcomes() {
         b.update();
         for pos in 0..9 {
             for c in [Color::Red, Color::Blue] {
+                // The spell has to be CASTABLE for the invariant to mean
+                // anything. Without this guard the test compared a greedy
+                // resolution against an enumeration of a cast that could never
+                // happen: triage over 1,062 failures found 0 genuine, 973 of
+                // them vacuous exactly this way. It reported a shipped-engine
+                // bug that did not exist.
+                let id = draw[pos];
+                if !b.castable(c, true, true, false).contains(&id) { continue; }
                 let mut cleared = b;
                 cleared.cast_clear_and_refill(pos, c);
-                let (outs, _t) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                // A TRUNCATED enumeration is not a complete reference, so
+                // "missing" proves nothing -- the same rule the reachability
+                // audit follows and the Summer test had to learn.
+                if trunc { continue; }
                 let mut g = cleared;
                 g.resolve_spell_at(pos, c);
                 assert!(outs.iter().any(|o| o.stones == g.stones),
-                    "greedy outcome missing for {} at pos {}",
-                    SPELLS[draw[pos] as usize].name, pos + 1);
+                    "greedy outcome missing for {} at pos {} (seed {})",
+                    SPELLS[draw[pos] as usize].name, pos + 1, seed);
             }
         }
     }
