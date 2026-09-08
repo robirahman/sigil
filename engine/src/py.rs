@@ -216,9 +216,9 @@ impl PyBoard {
             for ki in kis {
                 let mut cl = b;
                 cl.cast_clear_and_keep(pos, col, ki);
+                let kept_mask = cl.mine(col) & crate::topology::SIGIL[pos];
                 let kept = crate::topology::NAMES.iter().enumerate()
-                    .filter(|(n, _)| cl.mine(col) & crate::topology::SIGIL[pos]
-                                     & (1u64 << n) != 0)
+                    .filter(|&(i, _)| kept_mask & (1u64 << i) != 0)
                     .map(|(_, s)| *s).collect::<Vec<_>>().join(" ");
                 let (ranked, _t) = cl.resolve_outcomes_ranked(pos, col, 12);
                 for (k, ob) in ranked {

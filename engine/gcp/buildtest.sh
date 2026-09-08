@@ -53,12 +53,21 @@ cd $W/repo/engine
 
 md smoke-py > $W/smoke.py 2>/dev/null || true
 {
+  # Keep the FULL compiler output and report EVERY error, not a tail of it.
+  # `tail -30` once truncated a 5-error build to 1 visible error and cost a
+  # whole VM round-trip to find the rest: cargo prints errors first and the
+  # summary last, so a tail shows the summary and hides the causes.
   echo "### cargo build --release"
-  cargo build --release 2>&1 | tail -30
-  echo "BUILD_EXIT=${PIPESTATUS[0]}"
+  cargo build --release > $W/out/build_full.log 2>&1
+  echo "BUILD_EXIT=$?"
+  grep -E '^(error|warning): |^error\[' -A 12 $W/out/build_full.log | head -250
+  echo "--- last 20 lines ---"; tail -20 $W/out/build_full.log
   echo; echo "### cargo test --release"
-  cargo test --release 2>&1 | tail -45
-  echo "TEST_EXIT=${PIPESTATUS[0]}"
+  cargo test --release > $W/out/test_full.log 2>&1
+  echo "TEST_EXIT=$?"
+  grep -E '^(error|warning): |^error\[|^test .* FAILED|^failures:|panicked at' -A 12 \
+    $W/out/test_full.log | head -250
+  echo "--- test summary ---"; grep -E 'test result:' $W/out/test_full.log
   echo; echo "### python smoke"
   python3 -m venv $W/venv
   $W/venv/bin/pip -q install maturin numpy 2>&1 | tail -1
@@ -72,6 +81,8 @@ md smoke-py > $W/smoke.py 2>/dev/null || true
 
 tail -70 $W/out/build.log
 gcs_put "$W/out/build.log" "builds/$TAG/build.log" || true
+gcs_put "$W/out/build_full.log" "builds/$TAG/build_full.log" || true
+gcs_put "$W/out/test_full.log" "builds/$TAG/test_full.log" || true
 gcs_put "$W/out/COMMIT.txt" "builds/$TAG/COMMIT.txt" || true
 gcs_put /var/log/sigil-build.log "builds/$TAG/bootstrap.log" || true
 shutdown -h now

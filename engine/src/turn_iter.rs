@@ -65,7 +65,7 @@ impl Board {
 
     /// One cast's resolution score, the key both the ordered and ranked forms use.
     #[inline]
-    fn outcome_score(&self, c: Color, goal: u64) -> i32 {
+    fn outcome_score(&self, c: Color, goal: crate::order::PlacementGoal) -> i32 {
         self.configuration_value(c, goal) + 30 * self.total[c.idx()] as i32
             - 30 * self.total[c.other().idx()] as i32
     }
