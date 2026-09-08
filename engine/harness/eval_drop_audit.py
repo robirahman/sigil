@@ -54,17 +54,35 @@ def shipped_adaptive():
     return tuple(se.SHIPPED_ADAPTIVE) if hasattr(se, 'SHIPPED_ADAPTIVE') else (0.10, 2, 6)
 
 
+_SCORE_CACHE = {}
+
+
 def score_at(sfn, depth, hist, ev='tfit'):
     """Fixed-depth score for the side to move, at the SHIPPED search config.
 
     Uses play_best because `search()` cannot select an eval and would silently run
     whatever Search::new defaults to -- the restated-default trap this project has
     paid for three times.
+
+    MEMOISED on (sfn, depth, eval). Once the comparison WINDOW is decoupled from
+    the search depth, the same position is scored once per window -- three times
+    for windows 2/4/6 -- and at depth 6 a single search is ~17 s, so the cache is
+    the difference between ~310 and ~1,800 CPU-hours. `hist` only affects
+    repetition counting and is excluded from the key deliberately: two windows
+    over the same position differ in history yet the score difference is not what
+    this audit measures, and keying on it would defeat the cache entirely.
     """
+    key = (sfn, depth, ev)
+    hit = _SCORE_CACHE.get(key)
+    if hit is not None:
+        return hit
     b = se.Board.from_sfn(sfn)
     r = b.play_best(0, depth, 20, 16, se.DEFAULT_WIDTH_SCALE, list(hist), ev,
                     False, MERGE_OFF, adaptive=shipped_adaptive())
-    return int(r[5])
+    v = int(r[5])
+    if len(_SCORE_CACHE) < 400_000:
+        _SCORE_CACHE[key] = v
+    return v
 
 
 def selfplay_lines(n_games, play_ms, ev='tfit'):
@@ -261,7 +279,8 @@ def check_reachability(pairs, enum_cap=250_000):
     return misses
 
 
-def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from):
+def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
+                     windows=None):
     """CHECK A: score at ply i and ply i+d, same side to move, and compare.
 
     Two calibration lessons from the first run, which flagged 22 cases in 6 games
@@ -278,29 +297,40 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from):
     """
     out = []
     clamp = 20 * STONE          # ignore magnitudes past +-20 stones for the slope
+    # SEARCH DEPTH and COMPARISON WINDOW are separate axes, and conflating them
+    # makes the horizon test impossible. With one `d` doing both, "flagged at
+    # depth 2 but not at depth 4" compares a 2-half-move window searched 2 deep
+    # against a 4-half-move window searched 4 deep -- two different questions,
+    # so absence proves nothing. Scoring the SAME window at increasing depth is
+    # what "deepening cured it" means, and it is the only way to tell a horizon
+    # effect from an evaluation error.
+    #
+    # `windows=None` keeps the original coupled behaviour (window == depth).
     for d in depths:
-        for i in range(0, len(line) - d, stride):
-            sfn0, h0 = line[i]
-            sfn1, h1 = line[i + d]
-            if sfn0.split()[1] != sfn1.split()[1]:
-                continue              # not the same side to move; d must be even
-            try:
-                s0 = score_at(sfn0, d, h0)
-                s1 = score_at(sfn1, d, h1)
-            except Exception:
-                continue
-            # the engine thought it was OK, and then it was lost: the reported bug
-            mate_flip = (s1 <= -MATE) and (s0 >= surprise_from * STONE)
-            c0, c1 = max(-clamp, min(clamp, s0)), max(-clamp, min(clamp, s1))
-            drop_per_ply = (c0 - c1) / d / STONE
-            if not (mate_flip or drop_per_ply > per_ply_limit):
-                continue
-            out.append({'ply': i, 'depth': d, 'score0': s0, 'score1': s1,
-                        'drop': s0 - s1, 'dropPerPly': drop_per_ply,
-                        'clampedFrom': c0 / STONE, 'clampedTo': c1 / STONE,
-                        'mateFlip': mate_flip,
-                        'sfnBefore': sfn0, 'sfnAfter': sfn1,
-                        'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'})
+        for w in (windows or [d]):
+            for i in range(0, len(line) - w, stride):
+                sfn0, h0 = line[i]
+                sfn1, h1 = line[i + w]
+                if sfn0.split()[1] != sfn1.split()[1]:
+                    continue          # not the same side to move; w must be even
+                try:
+                    s0 = score_at(sfn0, d, h0)
+                    s1 = score_at(sfn1, d, h1)
+                except Exception:
+                    continue
+                # the engine thought it was OK, then it was lost: the reported bug
+                mate_flip = (s1 <= -MATE) and (s0 >= surprise_from * STONE)
+                c0, c1 = max(-clamp, min(clamp, s0)), max(-clamp, min(clamp, s1))
+                drop_per_ply = (c0 - c1) / w / STONE
+                if not (mate_flip or drop_per_ply > per_ply_limit):
+                    continue
+                out.append({'ply': i, 'depth': d, 'window': w,
+                            'score0': s0, 'score1': s1,
+                            'drop': s0 - s1, 'dropPerPly': drop_per_ply,
+                            'clampedFrom': c0 / STONE, 'clampedTo': c1 / STONE,
+                            'mateFlip': mate_flip,
+                            'sfnBefore': sfn0, 'sfnAfter': sfn1,
+                            'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'})
     return out
 
 
@@ -399,6 +429,11 @@ def main():
                          "runner.sh splits arms on spaces and each arm's args on "
                          "commas, so '2,4,6' arrives as three separate arguments.")
     ap.add_argument('--stride', type=int, default=1)
+    ap.add_argument('--windows', default=None,
+                    help="comma OR colon separated comparison windows in "
+                         "half-moves, INDEPENDENT of the search depth. Omit to "
+                         "keep window == depth, which cannot distinguish a "
+                         "horizon effect from an evaluation error.")
     ap.add_argument('--checks', default='ab', choices=['a', 'b', 'ab'],
                     help="which checks to run. 'b' (reachability) is cheap and is "
                          "the decisive test of whether the engine can generate a "
@@ -438,6 +473,8 @@ def main():
                     help='read pre-hydrated lines instead of hydrating')
     args = ap.parse_args()
     depths = [int(x) for x in args.depths.replace(':', ',').split(',') if x]
+    windows = ([int(x) for x in args.windows.replace(':', ',').split(',') if x]
+               if args.windows else None)
     assert all(d % 2 == 0 for d in depths), "depths must be EVEN so the side to move matches"
     if args.time_only:
         time_depths(depths)
@@ -518,7 +555,8 @@ def main():
                 misses.append(m)
         for r in ([] if 'a' not in args.checks else
                   check_eval_drops(line, depths, args.stride,
-                                   args.per_ply_limit, args.surprise_from)):
+                                   args.per_ply_limit, args.surprise_from,
+                                   windows)):
             r['game'] = key
             drops.append(r)
         if n_lines % 5 == 0:
