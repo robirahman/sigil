@@ -82,6 +82,12 @@ def main():
                     help='Check B flag file(s); repeatable')
     ap.add_argument('--limit', type=float, default=0.5,
                     help="the horizon-effect envelope, stones per half-move")
+    ap.add_argument('--mate-from', type=float, default=-0.5,
+                    help="score (in stones) at or above which a flip into a "
+                         "proven loss counts as a SURPRISE. The audit's own "
+                         "`surprise_from` defaults to 0.0, which does not count "
+                         "a position scored -0.014 -- dead even -- flipping to "
+                         "a proven loss, and that is exactly the reported bug.")
     args = ap.parse_args()
 
     drops = load_flags(args.drops, 'drop')
@@ -125,7 +131,10 @@ def main():
             b = 'OTHER (eval wrong, not blind)'
         buckets[b] += 1
         per_depth[dep][b] += 1
-        if d.get('mateFlip'):
+        # Recomputed here, not taken from the flag: see --mate-from.
+        MATE = 1_000_000
+        STONE = 4096
+        if d['score1'] <= -MATE and d['score0'] >= args.mate_from * STONE:
             mate_flips.append((b, d))
         worst.append((d.get('dropPerPly', 0), b, d))
 
@@ -142,6 +151,32 @@ def main():
     for b, d in mate_flips[:12]:
         print(f"  [{b.split()[0]:11s}] depth {d['depth']} "
               f"{d['score0'] / 4096:+.2f} -> lost   {d.get('game')} ply {d.get('ply')}")
+    # Magnitude matters: a flag at 0.51/half-move is at the envelope's edge,
+    # one at 9.71 is not the same animal.
+    print('\n=== by magnitude x cause ===')
+    mag = collections.defaultdict(collections.Counter)
+    for dp, b, d in worst:
+        if d['score1'] <= -1_000_000:
+            band = 'flip to proven loss'
+        elif dp < 0.75:
+            band = '0.50-0.75 (envelope edge)'
+        elif dp < 1.0:
+            band = '0.75-1.00'
+        elif dp < 2.0:
+            band = '1.00-2.00'
+        else:
+            band = '>2.00'
+        mag[band][b] += 1
+    order = ['0.50-0.75 (envelope edge)', '0.75-1.00', '1.00-2.00', '>2.00',
+             'flip to proven loss']
+    for band in order:
+        if band not in mag:
+            continue
+        row = mag[band]
+        n = sum(row.values())
+        print(f'  {band:26s} n={n:6d}  ' +
+              '  '.join(f'{k.split()[0]}={v}' for k, v in row.most_common()))
+
     print('\n=== worst declines ===')
     worst.sort(key=lambda x: -x[0])
     for dp, b, d in worst[:12]:
