@@ -969,3 +969,145 @@ invariant), and adaptive widening with BOTH scales equal to the shipped one must
 reproduce the uniform search **node for node**.
 
 Default is `None` -- uniform -- until an arena says otherwise.
+
+## The cast keep choice was never enumerated (2026-09-08)
+
+The largest rules gap found in the engine so far, and the only one measured against
+the recorded game history rather than against synthetic positions.
+
+### What the rules are
+
+Casting a charged spell clears the spell's sigil, and the caster then places `mana`
+stones back onto nodes **of its choice**. `game-controller.js:644-718` — the live
+game — emits `chooserefills` and prompts "Select a stone to keep:" once per refill,
+skipping the prompt only when `refills >= emptyNodes.length` leaves no degrees of
+freedom. The choice is `C(n, mana)` over all of the sigil's nodes, at most
+`C(5,2) = 10`.
+
+`sim-board.js:1633 _castClearAndRefill` substitutes ONE fixed priority order for
+that choice — 5-node `[2,3,4,0,1]`, 3-node `[2,1,0]` — and `engine/src/cast.rs`
+mirrored sim-board rather than the rules (its comment reads "JS priority", so the
+port was faithful to the wrong reference). **The bug therefore predates the Rust
+engine and the whole AI lineage shares it.**
+
+### How it was found, and how the harness was validated
+
+`eval_drop_audit.py --checks b` asks, for every turn in `completed_games`, whether
+the engine's own enumeration can produce the layout that was actually played.
+Over 2,403 games / 66,820 positions it found **2,016 turns the engine cannot
+generate**.
+
+The control was already inside the run: the 165 human-vs-rust games contain 2,305
+turns the Rust engine played itself, through the identical Firebase -> replay bridge
+-> SFN -> `enumerate_turns` pipeline. **0 of 2,305 were unreachable**, so the
+pipeline is faithful. The rate then orders itself by how much of the move space a
+player uses — human 6.67%, ai_very_hard 2.71%, ai_hard 1.31%, ai_medium 0.20%,
+ai_easy 0.09%, rust 0.00% — which a harness bug would not do.
+
+Also required: separating the **5,809 out-of-scope flags** (spell pools the engine
+does not implement — Fissure, Gush, Thunder, Rock_Slide, Endowment, Bulwark,
+Lifesap — or state SFN cannot carry: Providence `pm:`, Aftershock `ab:`, Ambush
+`sn:`). Mixing them in reports 12% of turns unreachable instead of 3%.
+
+### The natural experiment that identified the cause
+
+Over 4,598 audited casts matched to a sigil position:
+
+| played by | keeps by priority | keeps differently |
+|---|---|---|
+| human | 25/725 = 3.4% missed | **1001/1644 = 60.9% missed** |
+| ai_hard | 24/705 = 3.4% | 0/7 |
+| ai_very_hard | 18/351 = 5.1% | 1/2 |
+| ai_easy | 9/483 = 1.9% | 0/0 |
+| **rust** | **0/252 = 0.0%** | 0/0 |
+
+Every engine keeps by priority in ~100% of its casts because none has a chooser;
+humans are prompted and keep differently in **69.4%**. The two groups differ by
+which code path chose the keep, so this is not a correlation.
+
+Ruled out by measurement, not argument: `OUTCOME_CAP` truncation
+(`layout_nearest` reports `resolver_truncated` 0/83 and `turn_cap_truncated` 0/83,
+and the Hamming distance to the nearest enumerated layout is almost always 1 or 2 —
+one stone misplaced, not a missing turn shape); and dash generation
+(dash-without-cast was **0/5,671**, which also closes the `key_dash` "unenumerable
+dashes" as an identity bug).
+
+### The fix
+
+`Board::keep_options` / `keep_count` / `cast_clear_and_keep`, with **index 0 the
+priority order**, so `cast_clear_and_refill` is `cast_clear_and_keep(.., 0)` and
+enumerating the rest is a provable superset. `Action::Cast` gained `keep`;
+`apply_turn` and `emit_actions` replay it. Both full-enumeration cast branches
+expand every keep. The ordered stream expands them too, windowed by the
+`keep_window` Search knob and **stratified round-robin** — scoring the (keep,
+outcome) pairs jointly collapsed the entire window onto keep 0, because
+`configuration_value` often cannot tell two keeps apart and the tie-break to the
+lower index took everything. Full enumeration being complete buys nothing if the
+search never sees the options.
+
+### Results
+
+| gate | before | after |
+|---|---|---|
+| unreachable turns (2,403 games) | 2,016 (3.13%) | **675 (1.05%)** — 66.5% recovered |
+| human-played | 1,623 (6.67%) | **318 (1.31%)** — **80%** recovered |
+| engine-played | 377 | 353 — 6-7% |
+| node rate, kw=1 / 2 / 3 / 10 | 20.15 us/node | 18.04 / 19.38 / 21.47 / 25.74 |
+| `cargo test` | 75 | **84 passed, 0 failed** |
+| `parity_primitives` | — | 4,000 positions, OK |
+| `run_emit_gate` | — | **12,474 matched, 0 mismatch**, 30/30 spells |
+
+Engine-played misses barely move because those engines already kept by priority;
+their residual has other causes. Of the 675 remaining, 417 show no spell-counter
+change — charm casts (charms skip `finish_cast`) and non-cast turns, i.e. a
+different gap: `enumerate_post_dash` emits only `Pass` or `Cast`+`Pass`, and
+`RESOLVER_LEVEL_COMPLETE` in turn.rs lists the resolver choice points still
+outstanding.
+
+### Elo: NEUTRAL in self-play, at every dose
+
+| arm | games | win rate | Elo |
+|---|---|---|---|
+| keep_window 2 vs 1 | 7,040 | 49.94% [48.78, 51.11] | **-0.4 [-8.5, +7.7]** |
+| keep_window 10 vs 1 | 6,997 | 49.91% [48.74, 51.08] | **-0.6 [-8.8, +7.5]** |
+
+Not a dose problem: at kw=10 the search picks a **non-priority keep 40.9%** of the
+time (38 of 93 cast positions at depth 4), so it is making different decisions and
+they are neither better nor worse — the eval cannot tell a good keep from a bad
+one. Fourth instance of the pattern, after the leaf eval, the width classifier and
+the re-ranker.
+
+**Why self-play understates THIS knob specifically.** Engine-vs-engine, both sides
+draw keeps from the same distribution, so "the opponent always keeps by priority"
+is a *correct* opponent model. Against a human it is wrong 69.4% of the time in
+cast positions. No self-play SPRT can see that cost, and the right instrument for
+the reported symptom — an eval of +0.5 into a mate-in-one — is **Check A**, the
+eval-drop audit over real human games (~630 CPU-hours), which has NOT been run.
+
+Ship it as a correctness fix at `keep_window = 2`. Do not sell it as an Elo lever.
+
+### Four collateral bugs, each found by a test or a log rather than by reading
+
+1. The ordered generator stored `Action::Cast::outcome` as a position in the
+   **sorted** `resolve_outcomes_ordered` list while `apply_turn` applies it against
+   the **raw** list — so the search applied a resolution it had not scored.
+   `resolve_outcomes_ranked` returns raw indices.
+2. `ordered_dash_branches` built `sacs` in `sacrifice_cost` order against
+   `turn.rs`'s node order, so one dash compared and hashed as two turns under the
+   derived `PartialEq`/`Hash`. One `sort_unstable()`; changes no board, only turn
+   identity, so TT probes, killer matching and the emit gate stop missing.
+3. `legal_draw` seeded its xorshift with `seed | 1`, so seeds 2n and 2n+1 gave the
+   SAME draw. Caught by an SPRT whose first 22 games had 5 of 5 seed pairs identical
+   in winner AND ply count — an SPRT over duplicated games understates its variance
+   and reaches a boundary with false confidence. SplitMix64, and a test.
+4. `--limit-games` was ignored on the audit's pre-hydrated path, so a fleet smoke
+   gate audited all 2,403 games, ran past `runner.sh`'s 900s timeout, and a
+   90-vCPU VM spent its entire life inside its own smoke test.
+
+Two tooling repairs of the same kind: `buildtest.sh` piped cargo through
+`tail -30`, and since cargo prints errors first and the summary last it showed
+"5 previous errors" while hiding four of them; and the parity/emit harnesses need
+`SCRATCH` plus a `ref/` tree that only `runner.sh` built, so all three exited 1 for
+environmental reasons — the emit gate printing a 12,474-pair census and then dying
+*before* its node comparison, which looks exactly like mismatches. A gate that
+cannot run is worse than no gate.
