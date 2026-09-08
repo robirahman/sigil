@@ -106,10 +106,14 @@ def main():
     for d in drops:
         g, ply, dep = d.get('game'), d.get('ply'), d['depth']
         tc = turn_of(d.get('sfnBefore', ''))
-        # Every turn played between the two scored positions.
+        # Every turn PLAYED between the two scored positions. Position i has
+        # turn counter tc and position i+d has tc+d, and each turn advances one
+        # position, so the turns in between are tc .. tc+d-1 -- d of them, not
+        # d+1. Including tc+d would credit a later turn's unreachability to
+        # this drop and inflate the ENUMERATION GAP bucket.
         spanned = set()
         if tc is not None:
-            spanned = {(g, tc + k) for k in range(dep + 1)}
+            spanned = {(g, tc + k) for k in range(dep)}
         deeper = [x for x in depths if x > dep]
         cured = deeper and all((g, ply) not in by_depth[x] for x in deeper)
 
