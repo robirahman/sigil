@@ -453,10 +453,6 @@ impl PyBoard {
         Ok((st.depth_completed, st.nodes, dt, over, w, score, st.widened))
     }
 
-    /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
-    /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
-    ///  windowed, seconds, best_first_kind, best_first_node)
-    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=1))]
     /// `search` with an explicit keep budget, for the node-rate sweep.
     ///
     /// A separate method rather than a parameter on `search`, because adding a
@@ -480,6 +476,10 @@ impl PyBoard {
         Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs))
     }
 
+    /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
+    /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
+    ///  windowed, seconds, best_first_kind, best_first_node)
+    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=1))]
     fn search(&self, max_depth: i32, time_ms: u64, tt_bits: u32, window: usize,
               width_scale: usize)
         -> PyResult<(i32, i32, u64, u64, u64, i32, bool, bool, f64, String, i32, u64)>
