@@ -27,6 +27,14 @@ use crate::turn::{Action, Turn, OUTCOME_CAP};
 /// with the rest still reachable by raising this.
 pub const CAST_OUTCOME_WINDOW: usize = 24;
 
+/// How many of a cast's keep choices to expand in the ORDERED stream.
+///
+/// Full enumeration always expands every one — reachability is not negotiable
+/// there. Here it is a cost knob: each extra keep costs one full resolution per
+/// cast candidate. Set to the maximum so nothing is dropped until a node-rate
+/// measurement says otherwise; `windowed` records it if it ever bites.
+pub const KEEP_WINDOW: usize = crate::cast::MAX_KEEPS;
+
 /// Cap on the eagerly-enumerated turns of a NO-first-move position (dash/cast
 /// continuations only, so the real count is small). `windowed` is set if it bites.
 pub const NO_MOVE_TURN_CAP: usize = 4096;
@@ -53,6 +61,71 @@ impl Board {
         let truncated = trunc || outs.len() > limit;
         outs.truncate(limit);
         (outs, truncated)
+    }
+
+    /// One cast's resolution score, the key both the ordered and ranked forms use.
+    #[inline]
+    fn outcome_score(&self, c: Color, goal: u64) -> i32 {
+        self.configuration_value(c, goal) + 30 * self.total[c.idx()] as i32
+            - 30 * self.total[c.other().idx()] as i32
+    }
+
+    /// Outcomes of casting at `pos`, best-first for `c`, at most `limit`, each
+    /// paired with its index in the RAW `resolve_outcomes` list.
+    ///
+    /// The raw index is the point. `apply_turn` applies `Action::Cast::outcome`
+    /// against the RAW list, so a generator that stored a position in the
+    /// SORTED list made the search apply a different resolution than the one it
+    /// scored -- legal, but not the turn the ordering picked, and the ordering
+    /// is the entire job of this file. Returning raw indices keeps `outcome` a
+    /// faithful witness, which is exactly the property `keep` needs too.
+    ///
+    /// Gust is deliberately NOT special-cased here: `gust_placements_ordered`
+    /// yields boards with no correspondence to the raw list, so its positions
+    /// cannot be applied faithfully at all. Gust is rare enough -- 5 casts in
+    /// the entire recorded history -- that paying full `resolve_outcomes` for
+    /// it is the right trade against being silently wrong.
+    pub fn resolve_outcomes_ranked(&self, pos: usize, c: Color, limit: usize)
+        -> (Vec<(usize, Board)>, bool)
+    {
+        let goal = self.placement_goal(c);
+        let (outs, trunc) = self.resolve_outcomes(pos, c, OUTCOME_CAP);
+        let mut v: Vec<(usize, Board)> = outs.into_iter().enumerate().collect();
+        v.sort_by_key(|(i, b)| (-b.outcome_score(c, goal), *i));
+        let truncated = trunc || v.len() > limit;
+        v.truncate(limit);
+        (v, truncated)
+    }
+
+    /// Keep choices for a cast at `pos`, best-first for `c`, at most `limit`,
+    /// as CANONICAL `keep_options` indices — never positions in this ordering,
+    /// for the reason `resolve_outcomes_ranked` documents.
+    ///
+    /// Scored on the board the keep leaves, BEFORE resolving. Ranking by the
+    /// resolved outcome instead would cost one full resolution per keep per
+    /// cast candidate, and that resolver work is the whole node-rate risk of
+    /// enumerating this choice at all. Ties break toward the lower canonical
+    /// index, so index 0 — the order the engine used to be fixed to — still
+    /// wins whenever nothing distinguishes the options.
+    pub fn keep_indices_ordered(&self, pos: usize, c: Color, limit: usize)
+        -> (Vec<usize>, bool)
+    {
+        let (keeps, n) = self.keep_options(pos, c);
+        if n <= 1 { return (vec![0], false); }
+        let goal = self.placement_goal(c);
+        let mask = crate::topology::SIGIL[pos];
+        let mut v: Vec<(i32, usize)> = (0..n).map(|i| {
+            let mut b = *self;
+            b.stones[0] &= !mask;
+            b.stones[1] &= !mask;
+            b.stones[c.idx()] |= keeps[i];
+            b.update();
+            (b.configuration_value(c, goal), i)
+        }).collect();
+        v.sort_by_key(|&(s, i)| (-s, i));
+        let truncated = v.len() > limit.max(1);
+        v.truncate(limit.max(1));
+        (v.into_iter().map(|(_, i)| i).collect(), truncated)
     }
 
     /// Lazy best-first turn generator, in the SHIPPED configuration: stage order,
@@ -211,8 +284,13 @@ impl<'a> TurnIter<'a> {
                         .into_iter()
                         .filter_map(|id| b.position_of(id))
                         .map(|pos| {
+                            // Which SPELL to try first is a heuristic, so it is
+                            // scored on the priority keep alone. Scoring every
+                            // keep here would multiply this ordering pass by
+                            // `keep_count` for a tie-break that the joint
+                            // window below re-decides properly anyway.
                             let mut cl = b;
-                            cl.cast_clear_and_refill(pos, self.c);
+                            cl.cast_clear_and_keep(pos, self.c, 0);
                             let (outs, _) = cl.resolve_outcomes_ordered(pos, self.c, 1);
                             let s = outs.first()
                                 .map(|o| o.configuration_value(self.c, goal)
@@ -228,41 +306,81 @@ impl<'a> TurnIter<'a> {
                 }
                 let pos = self.casts[self.ci];
                 self.ci += 1;
-                let mut cl = b;
-                cl.cast_clear_and_refill(pos, self.c);
-                let (outs, trunc) = cl.resolve_outcomes_ordered(pos, self.c, self.window);
-                if trunc { self.windowed = true; }
                 let a = self.first_action(self.mi);
-                for k in 0..outs.len() {
-                    self.pending.push_back(
-                        Turn::single(a).push_pub(Action::Cast { pos: pos as u8, outcome: k as u16 }));
+                let goal = b.placement_goal(self.c);
+
+                // The keep and the resolution are ONE choice -- the resolver
+                // runs on whatever board the keep leaves -- so they are scored
+                // and windowed JOINTLY. That holds the turns surfaced per cast
+                // at `window`, the same as before this dimension existed, so
+                // the search's view improves without the stream paying for
+                // options progressive widening would discard anyway.
+                let (kis, ktr) = b.keep_indices_ordered(pos, self.c, KEEP_WINDOW);
+                if ktr { self.windowed = true; }
+                let mut cands: Vec<(i32, usize, usize)> = Vec::new();
+                for &ki in &kis {
+                    let mut cl = b;
+                    cl.cast_clear_and_keep(pos, self.c, ki);
+                    let (ranked, trunc) =
+                        cl.resolve_outcomes_ranked(pos, self.c, self.window);
+                    if trunc { self.windowed = true; }
+                    for (raw, ob) in ranked {
+                        cands.push((ob.outcome_score(self.c, goal), ki, raw));
+                    }
                 }
+                cands.sort_by_key(|&(s, ki, raw)| (-s, ki, raw));
+                if cands.len() > self.window {
+                    self.windowed = true;
+                    cands.truncate(self.window);
+                }
+                for &(_, ki, raw) in &cands {
+                    self.pending.push_back(Turn::single(a).push_pub(Action::Cast {
+                        pos: pos as u8, keep: ki as u8, outcome: raw as u16,
+                    }));
+                }
+
                 // Seal of Summer: a SECOND cast may follow the first, as in
                 // `enumerate_post_move`'s recursion (can_spell=false, can_summer=true,
                 // gated on the POST-cast board holding Summer charged). Without this
                 // the stream never contains `[move, cast, cast]` and no width budget
-                // can recover it. `apply_turn` indexes the RAW `resolve_outcomes`
-                // list, so the continuation applies raw outcome `k`.
+                // can recover it. The first cast's own board is rebuilt from its
+                // (keep, raw outcome) pair, so the continuation starts exactly where
+                // `apply_turn` will put it.
                 let id = b.spells[pos];
-                let (raw, _) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
-                for k in 0..outs.len().min(raw.len()) {
+                for &(_, ki, raw) in &cands {
+                    let mut cl = b;
+                    cl.cast_clear_and_keep(pos, self.c, ki);
+                    let (outs, _) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
+                    let Some(ob) = outs.get(raw) else { continue };
                     let mut bs = cl;
-                    bs.stones = raw[k].stones;
+                    bs.stones = ob.stones;
                     bs.update();
                     bs.finish_cast(id, self.c);
                     bs.update();
                     if !bs.holds_charged(self.c, crate::spells_meta::SEAL_OF_SUMMER) { continue; }
                     for id2 in bs.castable(self.c, false, true, false) {
                         let Some(pos2) = bs.position_of(id2) else { continue };
-                        let mut cl2 = bs;
-                        cl2.cast_clear_and_refill(pos2, self.c);
-                        let (outs2, tr2) = cl2.resolve_outcomes_ordered(pos2, self.c, self.window);
-                        if tr2 { self.windowed = true; }
-                        for k2 in 0..outs2.len() {
-                            self.pending.push_back(
-                                Turn::single(a)
-                                    .push_pub(Action::Cast { pos: pos as u8, outcome: k as u16 })
-                                    .push_pub(Action::Cast { pos: pos2 as u8, outcome: k2 as u16 }));
+                        let (kis2, tr0) =
+                            bs.keep_indices_ordered(pos2, self.c, KEEP_WINDOW);
+                        if tr0 { self.windowed = true; }
+                        for &ki2 in &kis2 {
+                            let mut cl2 = bs;
+                            cl2.cast_clear_and_keep(pos2, self.c, ki2);
+                            let (ranked2, tr2) =
+                                cl2.resolve_outcomes_ranked(pos2, self.c, self.window);
+                            if tr2 { self.windowed = true; }
+                            for (raw2, _ob2) in ranked2 {
+                                self.pending.push_back(
+                                    Turn::single(a)
+                                        .push_pub(Action::Cast {
+                                            pos: pos as u8, keep: ki as u8,
+                                            outcome: raw as u16,
+                                        })
+                                        .push_pub(Action::Cast {
+                                            pos: pos2 as u8, keep: ki2 as u8,
+                                            outcome: raw2 as u16,
+                                        }));
+                            }
                         }
                     }
                 }
@@ -289,16 +407,34 @@ impl<'a> TurnIter<'a> {
                 let a = self.first_action(self.mi);
                 for (t, bd) in b.ordered_dash_branches(self.c, self.window) {
                     // post-dash casts
+                    let goal = bd.placement_goal(self.c);
                     for id in bd.castable(self.c, true, true, true) {
                         let Some(pos) = bd.position_of(id) else { continue };
-                        let mut cl = bd;
-                        cl.cast_clear_and_refill(pos, self.c);
-                        let (outs, trunc) = cl.resolve_outcomes_ordered(pos, self.c, self.window);
-                        if trunc { self.windowed = true; }
-                        for k in 0..outs.len() {
+                        let (kis, ktr) =
+                            bd.keep_indices_ordered(pos, self.c, KEEP_WINDOW);
+                        if ktr { self.windowed = true; }
+                        let mut cands: Vec<(i32, usize, usize)> = Vec::new();
+                        for &ki in &kis {
+                            let mut cl = bd;
+                            cl.cast_clear_and_keep(pos, self.c, ki);
+                            let (ranked, trunc) =
+                                cl.resolve_outcomes_ranked(pos, self.c, self.window);
+                            if trunc { self.windowed = true; }
+                            for (raw, ob) in ranked {
+                                cands.push((ob.outcome_score(self.c, goal), ki, raw));
+                            }
+                        }
+                        cands.sort_by_key(|&(s, ki, raw)| (-s, ki, raw));
+                        if cands.len() > self.window {
+                            self.windowed = true;
+                            cands.truncate(self.window);
+                        }
+                        for &(_, ki, raw) in &cands {
                             let mut full = Turn::single(a);
                             for act in t.slice() { full = full.push_pub(*act); }
-                            full = full.push_pub(Action::Cast { pos: pos as u8, outcome: k as u16 });
+                            full = full.push_pub(Action::Cast {
+                                pos: pos as u8, keep: ki as u8, outcome: raw as u16,
+                            });
                             self.pending.push_back(full);
                         }
                     }

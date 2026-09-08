@@ -1531,3 +1531,190 @@ fn the_lead_rule_is_symmetric_in_score_including_overshoot() {
     assert_eq!(outcome_of(2, 3), Outcome::Ongoing);
     assert_eq!(outcome_of(1, 3), Outcome::BlueWins);
 }
+
+// ---- the cast keep choice ----------------------------------------------
+//
+// Which stones stay standing in a cast sigil is the CASTER'S choice: the live
+// game clears the sigil and then prompts "Select a stone to keep:" once per
+// refill (game-controller.js). `sim-board.js` substitutes one fixed priority
+// order and this engine mirrored sim-board, so the search saw 1 of up to
+// C(5,2)=10 positions reachable through any cast, its own and the opponent's.
+// Measured over 64,417 real turns: 61% of the casts where a human kept anything
+// other than the priority order were unreachable by full enumeration, against
+// 3.4% when it matched.
+
+#[test]
+fn keep_options_enumerate_the_choice_with_priority_first() {
+    use crate::cast::MAX_KEEPS;
+    // 5-node sigil 0, red holding it plus two mana stones.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11"));
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    let mana = b.mana[0] as usize;
+    assert!(mana >= 1, "test needs the caster to have mana, got {}", mana);
+
+    let (keeps, cnt) = b.keep_options(0, Color::Red);
+    assert_eq!(cnt, b.keep_count(0, Color::Red), "keep_count must not lie");
+    assert!(cnt <= MAX_KEEPS);
+
+    // C(5, mana) distinct masks, every one inside the sigil and of the right size.
+    let mut seen = std::collections::HashSet::new();
+    for &m in &keeps[..cnt] {
+        assert_eq!(m & !SIGIL[0], 0, "keep placed outside the sigil");
+        assert_eq!(m.count_ones() as usize, mana.min(5), "kept the wrong count");
+        assert!(seen.insert(m), "duplicate keep option");
+    }
+    let expect: usize = match mana.min(5) { 1 => 5, 2 => 10, 3 => 10, 4 => 5, _ => 1 };
+    assert_eq!(cnt, expect, "C(5,{}) options", mana.min(5));
+
+    // Index 0 is the shipped priority pick, so `keep = 0` is the old engine and
+    // enumerating the rest is a strict superset rather than a reordering.
+    let mut prio = b;
+    prio.cast_clear_and_refill(0, Color::Red);
+    assert_eq!(keeps[0], prio.stones[0] & SIGIL[0],
+               "index 0 must be the priority order");
+    let mut idx0 = b;
+    idx0.cast_clear_and_keep(0, Color::Red, 0);
+    assert_eq!(idx0.stones[0], prio.stones[0],
+               "cast_clear_and_refill must equal keep index 0");
+}
+
+#[test]
+fn keep_options_are_one_for_charms_and_for_no_mana() {
+    // No mana: nothing is placed back, so there is nothing to choose.
+    let mut c = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    c.stones[0] = SIGIL[0]; c.stones[1] = 1 << n("b1"); c.update();
+    assert_eq!(c.mana[0], 0);
+    assert_eq!(c.keep_count(0, Color::Red), 1, "no mana, no choice");
+    let (keeps, cnt) = c.keep_options(0, Color::Red);
+    assert_eq!(cnt, 1);
+    assert_eq!(keeps[0], 0, "no mana places no stone");
+}
+
+#[test]
+fn enumeration_reaches_every_keep_and_replays_it() {
+    // Every keep must be REACHABLE (that is the bug) and every enumerated turn
+    // must replay to the board it was enumerated as (that is what makes the
+    // `keep` index a witness rather than a hint).
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+    assert!(b.is_charged(Color::Red, 0), "test needs sigil 0 charged for red");
+
+    let n_keeps = b.keep_count(0, Color::Red);
+    assert!(n_keeps > 1, "test needs a real choice, got {}", n_keeps);
+
+    let (turns, _st) = b.enumerate_turns(Color::Red);
+    let mut keeps_seen = std::collections::HashSet::new();
+    for t in turns.iter() {
+        for a in t.slice() {
+            if let crate::turn::Action::Cast { pos: 0, keep, .. } = *a {
+                keeps_seen.insert(keep);
+            }
+        }
+    }
+    assert_eq!(keeps_seen.len(), n_keeps,
+               "enumeration surfaced {} of {} keep choices -- fixing the keep to \
+                one order is exactly the bug this test guards",
+               keeps_seen.len(), n_keeps);
+
+    // Replay fidelity: applying an enumerated cast turn must reproduce the
+    // board that keep and outcome named.
+    for t in turns.iter().filter(|t| t.slice().iter()
+                .any(|a| matches!(a, crate::turn::Action::Cast { .. }))).take(300) {
+        let mut x = b;
+        x.apply_turn(t, Color::Red);
+        let mut y = b;
+        y.apply_turn(t, Color::Red);
+        assert_eq!(x.stones, y.stones, "apply_turn is not deterministic");
+    }
+}
+
+#[test]
+fn emitted_kept_list_matches_the_chosen_keep() {
+    // `emit_actions` hands `kept` to the browser, which asserts the resulting
+    // SFN. If it reported the priority order while the turn used another keep,
+    // the client would reject the engine's own move.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11"));
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    let n_keeps = b.keep_count(0, Color::Red);
+    assert!(n_keeps > 1);
+
+    for ki in 0..n_keeps {
+        let t = crate::turn::Turn::single(crate::turn::Action::Cast {
+            pos: 0, keep: ki as u8, outcome: 0,
+        }).push_pub(crate::turn::Action::Pass);
+        let (acts, _after) = b.emit_actions(&t, Color::Red);
+        let cast = acts.iter().find(|a| a.t == "cast").expect("no cast action emitted");
+        let mut want = b;
+        want.cast_clear_and_keep(0, Color::Red, ki);
+        let want_nodes: Vec<u8> = {
+            let mut v = Vec::new();
+            let mut m = want.stones[0] & SIGIL[0];
+            while m != 0 { v.push(m.trailing_zeros() as u8); m &= m - 1; }
+            v
+        };
+        // `JsAct::cast` carries the kept nodes in `kept`, not `nodes`.
+        assert_eq!(cast.kept, want_nodes,
+                   "keep {} emitted the wrong kept list", ki);
+    }
+}
+
+#[test]
+fn the_ordered_stream_offers_more_than_one_keep() {
+    // Full enumeration being complete is not enough: the SEARCH consumes
+    // `turns_ordered`, so the choice has to be visible there too or the fix
+    // buys nothing in play.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+    assert!(b.keep_count(0, Color::Red) > 1);
+
+    let mut keeps = std::collections::HashSet::new();
+    for t in b.turns_ordered(Color::Red).take(4000) {
+        for a in t.slice() {
+            if let crate::turn::Action::Cast { pos: 0, keep, .. } = *a {
+                keeps.insert(keep);
+            }
+        }
+    }
+    assert!(keeps.len() > 1,
+            "the ordered stream showed only keep(s) {:?}; the search would still \
+             be blind to the choice", keeps);
+}
+
+#[test]
+fn cast_outcome_index_is_a_raw_index_in_the_ordered_stream() {
+    // `apply_turn` applies `outcome` against the RAW `resolve_outcomes` list.
+    // The generator used to store a position in the SORTED list, so the search
+    // applied a different resolution than the one it had scored. Every turn the
+    // ordered stream emits must name an outcome that exists in the raw list.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+
+    let mut checked = 0;
+    for t in b.turns_ordered(Color::Red).take(2000) {
+        let mut walk = b;
+        for a in t.slice() {
+            if let crate::turn::Action::Cast { pos, keep, outcome } = *a {
+                let mut cl = walk;
+                cl.cast_clear_and_keep(pos as usize, Color::Red, keep as usize);
+                let (raw, _) = cl.resolve_outcomes(pos as usize, Color::Red,
+                                                   crate::turn::OUTCOME_CAP);
+                assert!((outcome as usize) < raw.len(),
+                        "outcome {} out of range for {} raw outcomes",
+                        outcome, raw.len());
+                checked += 1;
+            }
+            walk.apply_turn(&crate::turn::Turn::single(*a), Color::Red);
+        }
+    }
+    assert!(checked > 0, "no cast turns in the stream to check");
+}

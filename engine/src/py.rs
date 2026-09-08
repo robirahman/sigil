@@ -90,6 +90,27 @@ impl PyBoard {
     fn cast_clear_and_refill(&mut self, pos: usize, c: &str) -> PyResult<()> {
         self.b.cast_clear_and_refill(pos, color(c)?); Ok(())
     }
+
+    /// The stone sets a cast at `pos` may leave standing, as node lists.
+    ///
+    /// Which stones survive a cast is the caster's choice — the live game
+    /// prompts "Select a stone to keep:" once per refill — and the engine used
+    /// to fix it to one priority order, which is what made 61% of the casts
+    /// where a human chose otherwise unreachable by full enumeration. Index 0
+    /// is that priority order, so `keep_options(...)[0]` is the old behaviour.
+    fn keep_options(&self, pos: usize, c: &str) -> PyResult<Vec<Vec<u8>>> {
+        let (keeps, n) = self.b.keep_options(pos, color(c)?);
+        Ok(keeps[..n].iter().map(|&m| mask_to_vec(m)).collect())
+    }
+
+    fn keep_count(&self, pos: usize, c: &str) -> PyResult<usize> {
+        Ok(self.b.keep_count(pos, color(c)?))
+    }
+
+    /// Clear the cast sigil and keep the `keep_ix`-th option.
+    fn cast_clear_and_keep(&mut self, pos: usize, c: &str, keep_ix: usize) -> PyResult<()> {
+        self.b.cast_clear_and_keep(pos, color(c)?, keep_ix); Ok(())
+    }
     fn resolve_autumn_moves(&mut self, pos: usize, c: &str, count: u8) -> PyResult<u8> {
         Ok(self.b.resolve_autumn_moves(pos, color(c)?, count))
     }
@@ -184,18 +205,31 @@ impl PyBoard {
                           (dn as i32) | ((dp.map_or(63u8, |x| x) as i32) << 8)));
             }
         }
-        // casts, with each distinct outcome offered separately
+        // Casts: every (keep, outcome) pair offered separately. The keep is
+        // which stones stay standing in the cast sigil, a choice the live game
+        // prompts for; the menu has to offer it or a human driving this cannot
+        // reproduce their own turn. `k` is the RAW outcome index, which is what
+        // `apply_choice` applies.
         for id in b.castable(col, true, true, false) {
             let Some(pos) = b.position_of(id) else { continue };
-            let mut cl = b;
-            cl.cast_clear_and_refill(pos, col);
-            let (outs, _t) = cl.resolve_outcomes_ordered(pos, col, 12);
-            for (k, ob) in outs.iter().enumerate() {
-                let gained = (ob.stones[col.idx()] & !b.stones[col.idx()]).count_ones();
-                let killed = (b.stones[col.other().idx()] & !ob.stones[col.other().idx()]).count_ones();
-                out.push((format!("cast {} [{}]  (+{} own, -{} enemy)",
-                                  crate::spells_meta::SPELLS[id as usize].name, k, gained, killed),
-                          "cast".to_string(), pos as i32, k as i32, -1));
+            let (kis, _kt) = b.keep_indices_ordered(pos, col, crate::cast::MAX_KEEPS);
+            for ki in kis {
+                let mut cl = b;
+                cl.cast_clear_and_keep(pos, col, ki);
+                let kept = crate::topology::NAMES.iter().enumerate()
+                    .filter(|(n, _)| cl.mine(col) & crate::topology::SIGIL[pos]
+                                     & (1u64 << n) != 0)
+                    .map(|(_, s)| *s).collect::<Vec<_>>().join(" ");
+                let (ranked, _t) = cl.resolve_outcomes_ranked(pos, col, 12);
+                for (k, ob) in ranked {
+                    let gained = (ob.stones[col.idx()] & !b.stones[col.idx()]).count_ones();
+                    let killed = (b.stones[col.other().idx()]
+                                  & !ob.stones[col.other().idx()]).count_ones();
+                    out.push((format!("cast {} keep[{}] out[{}]  (+{} own, -{} enemy)",
+                                      crate::spells_meta::SPELLS[id as usize].name,
+                                      kept, k, gained, killed),
+                              "cast".to_string(), pos as i32, k as i32, ki as i32));
+                }
             }
         }
         Ok(out)
@@ -220,7 +254,12 @@ impl PyBoard {
                 let sacs = [a as u8, if b_ < 0 { 0 } else { b_ as u8 }];
                 t = t.push_pub(Action::Dash { sacs, n_sacs, node: dn, push_to: dp });
             }
-            "cast" => { t = t.push_pub(Action::Cast { pos: a as u8, outcome: b_ as u16 }); }
+            // `cc` is dash-only, so a cast carries its keep index there.
+            "cast" => {
+                t = t.push_pub(Action::Cast {
+                    pos: a as u8, keep: cc.max(0) as u8, outcome: b_ as u16,
+                });
+            }
             _ => {}
         }
         t = t.push_pub(Action::Pass);
@@ -252,7 +291,12 @@ impl PyBoard {
                 let sacs = [a as u8, if b_ < 0 { 0 } else { b_ as u8 }];
                 t = t.push_pub(Action::Dash { sacs, n_sacs, node: dn, push_to: dp });
             }
-            "cast" => { t = t.push_pub(Action::Cast { pos: a as u8, outcome: b_ as u16 }); }
+            // `cc` is dash-only, so a cast carries its keep index there.
+            "cast" => {
+                t = t.push_pub(Action::Cast {
+                    pos: a as u8, keep: cc.max(0) as u8, outcome: b_ as u16,
+                });
+            }
             _ => {}
         }
         let (acts, after) = self.b.emit_actions(&t, col);
@@ -471,8 +515,8 @@ impl PyBoard {
             crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
                 ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
                  sacs[..n_sacs as usize].to_vec(), -1),
-            crate::turn::Action::Cast { pos, outcome } =>
-                ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+            crate::turn::Action::Cast { pos, keep, outcome } =>
+                ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
             crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
         }).collect()).collect())
     }
@@ -498,8 +542,10 @@ impl PyBoard {
                 crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
                     ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
                      sacs[..n_sacs as usize].to_vec(), -1),
-                crate::turn::Action::Cast { pos, outcome } =>
-                    ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+                // (kind, node, push_to, sacs, pos): a cast has no push_to,
+                // so `keep` rides that slot and the arity is unchanged.
+                crate::turn::Action::Cast { pos, keep, outcome } =>
+                    ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -577,8 +623,10 @@ impl PyBoard {
                     ("dash".to_string(), node as i32,
                      push_to.map_or(-1, |x| x as i32),
                      sacs[..n_sacs as usize].to_vec(), -1),
-                crate::turn::Action::Cast { pos, outcome } =>
-                    ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+                // (kind, node, push_to, sacs, pos): a cast has no push_to,
+                // so `keep` rides that slot and the arity is unchanged.
+                crate::turn::Action::Cast { pos, keep, outcome } =>
+                    ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect(),
         };
@@ -619,7 +667,8 @@ impl PyBoard {
                     Action::Dash { sacs: s, n_sacs: sacs.len().min(2) as u8,
                                    node: node as u8, push_to: pt }
                 }
-                "cast"  => Action::Cast { pos: pos as u8, outcome: node.max(0) as u16 },
+                "cast"  => Action::Cast { pos: pos as u8, keep: push_to.max(0) as u8,
+                                          outcome: node.max(0) as u16 },
                 _ => Action::Pass,
             };
             if (t.len as usize) < crate::turn::MAX_ACTIONS {
