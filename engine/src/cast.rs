@@ -68,7 +68,25 @@ impl Board {
             if info.is_static { continue; }
             if info.is_charm {
                 if has_winter { continue; }               // enemy Seal of Winter
-                if id == SURGE { continue; }              // never via this path
+                // Surge is the POST-DASH charm and Splash the PRE-DASH one --
+                // game-controller.js offers Surge only when a dash is no
+                // longer available (`!candash`) and Splash only while it still
+                // is (`candash`). Splash was handled; Surge was excluded
+                // outright ("never via this path"), so NO turn using it could
+                // be generated. 73.2% of the 675 turns still unreachable after
+                // the cast-keep fix have Surge in the draw, and its granted
+                // move places a stone, which is exactly the distance-1-to-4
+                // signature `layout_nearest` reported.
+                //
+                // Nothing else is needed: `Resolve::SurgeMove` already
+                // enumerates the granted move (`branch_move_n(.., 1, ..,
+                // all_moveable)`, matching the JS `getAllMoveTargets`), so the
+                // move lives inside the cast resolution rather than needing a
+                // turn-grammar change. This deliberately reads `post_dash`
+                // rather than trying to reproduce every state in which the JS
+                // `candash` flag is false: after an actual dash it certainly
+                // is, so this can under-generate but never invent a turn.
+                if id == SURGE && !post_dash { continue; }
                 if id == SPLASH && post_dash { continue; }
                 if can_spell || (has_summer && can_summer) { out.push(id); }
             } else if self.lock[c.idx()] == id {

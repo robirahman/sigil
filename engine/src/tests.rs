@@ -1831,3 +1831,68 @@ fn legal_draw_distinguishes_adjacent_seeds() {
     ids.dedup();
     assert_eq!(ids.len(), 9, "a draw must not repeat a spell");
 }
+
+#[test]
+fn surge_is_castable_after_a_dash_and_only_then() {
+    // Surge is the POST-DASH charm; Splash is the pre-dash one. `castable`
+    // excluded Surge outright ("never via this path"), so no turn using it
+    // could be generated at all -- 73.2% of the turns still unreachable after
+    // the cast-keep fix had Surge in the draw.
+    // SPLASH is already a pub const; writing 29 here would be the same
+    // restated-literal mistake this branch has been removing from py.rs.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SURGE, SPLASH, 11],
+                           Variant::Standard);
+    b.stones[0] = (1 << n("a7")) | (1 << n("b7")) | (1 << n("a1"))
+                | (1 << n("a11")) | (1 << n("a12")) | (1 << n("a13"));
+    b.stones[1] = 1 << n("c1");
+    b.update();
+    assert!(b.is_charged(Color::Red, 6), "Surge sigil (a7) must be charged");
+    assert!(b.is_charged(Color::Red, 7), "Splash sigil (b7) must be charged");
+
+    let pre = b.castable(Color::Red, true, true, false);
+    let post = b.castable(Color::Red, true, true, true);
+    assert!(!pre.contains(&SURGE), "Surge must NOT be castable before a dash");
+    assert!(post.contains(&SURGE), "Surge MUST be castable after a dash");
+    assert!(pre.contains(&SPLASH), "Splash must be castable before a dash");
+    assert!(!post.contains(&SPLASH), "Splash must NOT be castable after one");
+}
+
+#[test]
+fn a_surge_turn_is_enumerable_and_grants_its_move() {
+    // The granted move lives INSIDE the cast resolution
+    // (`Resolve::SurgeMove` -> branch_move_n(.., 1, .., all_moveable)), so a
+    // post-dash Surge needs no turn-grammar change -- but the turn has to
+    // actually appear, and it has to place a stone.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SURGE, 10, 11], Variant::Standard);
+    b.stones[0] = (1 << n("a7")) | (1 << n("a1")) | (1 << n("a11"))
+                | (1 << n("a12")) | (1 << n("a13")) | (1 << n("a2"));
+    b.stones[1] = (1 << n("c1")) | (1 << n("c2"));
+    b.update();
+    assert!(b.is_charged(Color::Red, 6));
+    assert!(b.can_dash(Color::Red), "test needs a dash to be available");
+
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated, "reference truncated at {} turns", turns.len());
+    let surge_pos = b.position_of(SURGE).expect("Surge not drawn");
+    let with_surge: Vec<_> = turns.iter().filter(|t| {
+        let mut saw_dash = false;
+        for a in t.slice() {
+            match *a {
+                Action::Dash { .. } => saw_dash = true,
+                Action::Cast { pos, .. } if pos as usize == surge_pos => {
+                    return saw_dash;
+                }
+                _ => {}
+            }
+        }
+        false
+    }).collect();
+    assert!(!with_surge.is_empty(),
+            "enumeration contains no post-dash Surge cast");
+    // A dash spends stones and Surge gives one back, so the count has to move.
+    for t in with_surge.iter().take(20) {
+        let mut x = b;
+        x.apply_turn(t, Color::Red);
+        assert!(x.total[0] > 0, "applying a Surge turn wiped the caster");
+    }
+}
