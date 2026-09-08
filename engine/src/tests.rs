@@ -1789,3 +1789,30 @@ fn keep_window_one_reproduces_the_priority_only_stream() {
                "keep_window 1 must surface ONLY the priority keep, got {:?}", one);
     assert!(keeps_of(2).len() > 1, "keep_window 2 must surface a second keep");
 }
+
+#[test]
+fn legal_draw_distinguishes_adjacent_seeds() {
+    // `seed | 1` made 2n and 2n+1 the same draw, so every seeded arena played
+    // each draw twice: the effective sample size and the draw diversity were
+    // both halved, and half the draw space was unreachable and so untested.
+    // An SPRT over duplicated games understates its variance and reaches a
+    // boundary with false confidence -- which is how this was caught, in the
+    // first 22 games of a keep_window run where 5 of 5 seed pairs agreed on
+    // winner AND ply count.
+    let mut seen = std::collections::HashSet::new();
+    for seed in 8_000_000u64..8_000_400 {
+        seen.insert(Board::legal_draw(seed));
+    }
+    assert!(seen.len() > 380,
+            "400 consecutive seeds produced only {} distinct draws", seen.len());
+    for seed in (8_000_000u64..8_000_100).step_by(2) {
+        assert_ne!(Board::legal_draw(seed), Board::legal_draw(seed + 1),
+                   "seeds {} and {} share a draw", seed, seed + 1);
+    }
+    // And every draw must still be legal: 3 rituals, 3 sorceries, 3 charms.
+    let d = Board::legal_draw(8_123_456);
+    let mut ids: Vec<u8> = d.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), 9, "a draw must not repeat a spell");
+}

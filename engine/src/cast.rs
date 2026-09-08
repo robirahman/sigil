@@ -276,7 +276,19 @@ impl Board {
 
     /// Build a legal draw from a seed: 3 distinct rituals, 3 sorceries, 3 charms.
     pub fn legal_draw(seed: u64) -> [u8; 9] {
-        let mut s = seed | 1;
+        // SplitMix64 to spread the seed BEFORE the xorshift. `seed | 1` set the
+        // low bit, so seeds 2n and 2n+1 produced the SAME 9-spell draw: every
+        // arena played each draw twice, halving both the effective sample size
+        // and the draw diversity, and making half the draw space unreachable
+        // and therefore untested. Caught here by a keep_window SPRT whose first
+        // 22 games had 5 of 5 seed pairs identical in winner AND ply count --
+        // an SPRT on duplicated games understates its own variance and hits a
+        // boundary with false confidence.
+        let mut s = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        s = (s ^ (s >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        s = (s ^ (s >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        s ^= s >> 31;
+        if s == 0 { s = 0x9E37_79B9_7F4A_7C15; }   // xorshift cannot escape 0
         let mut next = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
         let mut out = [0u8; 9];
         for (slot, pool) in [(0usize, &RITUALS[..]), (3, &SORCERIES[..]), (6, &CHARMS[..])] {
