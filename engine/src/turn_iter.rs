@@ -120,6 +120,11 @@ impl Board {
     {
         let (keeps, n) = self.keep_options(pos, c);
         if n <= 1 { return (vec![0], false); }
+        // A budget of 1 is the pre-fix engine: the priority keep, no ranking.
+        // Without this the scoring loop below still ran over every keep and
+        // then threw all but one away, so `keep_window = 1` was not free and
+        // could not serve as the A/B baseline it exists to be.
+        if limit <= 1 { return (vec![0], n > 1); }
         let goal = self.placement_goal(c);
         let mask = crate::topology::SIGIL[pos];
         let mut v: Vec<(i32, usize)> = (0..n).map(|i| {
@@ -369,18 +374,28 @@ impl<'a> TurnIter<'a> {
                 // options progressive widening would discard anyway.
                 let (kis, ktr) = b.keep_indices_ordered(pos, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
                 if ktr { self.windowed = true; }
+                // Resolve once per KEEP and hold the raw list. The Summer
+                // continuation below needs to index outcomes by RAW index, and
+                // re-resolving there per candidate cost up to `window` full
+                // resolutions per cast candidate -- measured at 5.4x the node
+                // rate, and initially misattributed to the keep choice itself.
+                // The sweep is what separated them: the keep budget costs
+                // 1.08x at its maximum, this cost the other 5x.
                 let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
+                let mut resolved: Vec<(usize, Board, Vec<Board>)> =
+                    Vec::with_capacity(kis.len());
                 for &ki in &kis {
                     let mut cl = b;
                     cl.cast_clear_and_keep(pos, self.c, ki);
-                    let (ranked, trunc) =
-                        cl.resolve_outcomes_ranked(pos, self.c, self.window);
+                    let (outs, trunc) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
                     if trunc { self.windowed = true; }
-                    let mut v: Vec<(i32, usize, usize)> = ranked.into_iter()
+                    let mut v: Vec<(i32, usize, usize)> = outs.iter().enumerate()
                         .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, raw))
                         .collect();
                     v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
+                    v.truncate(self.window);
                     if !v.is_empty() { per_keep.push(v); }
+                    resolved.push((ki, cl, outs));
                 }
                 let (cands, more) = stratify_by_keep(per_keep, self.window);
                 if more { self.windowed = true; }
@@ -399,11 +414,10 @@ impl<'a> TurnIter<'a> {
                 // `apply_turn` will put it.
                 let id = b.spells[pos];
                 for &(_, ki, raw) in &cands {
-                    let mut cl = b;
-                    cl.cast_clear_and_keep(pos, self.c, ki);
-                    let (outs, _) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
+                    let Some((_, cl, outs)) =
+                        resolved.iter().find(|(k, _, _)| *k == ki) else { continue };
                     let Some(ob) = outs.get(raw) else { continue };
-                    let mut bs = cl;
+                    let mut bs = *cl;
                     bs.stones = ob.stones;
                     bs.update();
                     bs.finish_cast(id, self.c);
@@ -591,6 +605,18 @@ impl Board {
             vars.sort_by_key(|&(n, p)| -bd.move_score(n, p, c));
             let mut sacs = [0u8; 2];
             for (i, &s) in combo.iter().enumerate() { sacs[i] = s; }
+            // CANONICAL NODE ORDER. `cands` above is sorted by `sacrifice_cost`
+            // to pick the cheapest stones, so `combo` arrives cost-ordered
+            // while `turn.rs`'s `sac_candidates` (trailing_zeros) is
+            // node-ordered. The two therefore built the SAME dash with `sacs`
+            // in different orders, and since `Action` derives PartialEq/Hash,
+            // they compared and hashed as different turns -- which is what the
+            // `key_dash` "unenumerable dashes" were: 11 of 15 matched a legal
+            // enumerated turn modulo this order, and Robi adjudicated every one
+            // legal by replay. Sorting here changes no board, only the
+            // identity, so TT probes, killer-move matching and the emit gate
+            // stop missing.
+            sacs[..combo.len()].sort_unstable();
             for (node, push_to) in vars.into_iter().take(limit) {
                 let mut b2 = bd;
                 b2.do_move_with_pub(node, push_to, c);
