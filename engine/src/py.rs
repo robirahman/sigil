@@ -457,6 +457,29 @@ impl PyBoard {
     /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
     ///  windowed, seconds, best_first_kind, best_first_node)
     #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=1))]
+    /// `search` with an explicit keep budget, for the node-rate sweep.
+    ///
+    /// A separate method rather than a parameter on `search`, because adding a
+    /// required argument there would break every existing Python caller -- and
+    /// giving it a default would restate an engine default in a binding, which
+    /// is the mistake that put a whole campaign off-policy.
+    /// `keep_window = 1` is the pre-fix search: the priority keep only.
+    #[allow(clippy::too_many_arguments)]
+    fn search_keeps(&self, max_depth: i32, time_ms: u64, tt_bits: u32,
+                    window: usize, width_scale: usize, keep_window: usize)
+        -> PyResult<(i32, i32, u64, u64, u64)>
+    {
+        use std::time::Instant;
+        let mut s = crate::search::Search::new(tt_bits);
+        s.set_window(window);
+        s.set_width_scale(width_scale);
+        s.set_keep_window(keep_window);
+        let t = Instant::now();
+        let (_best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
+        let _ = t.elapsed();
+        Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs))
+    }
+
     fn search(&self, max_depth: i32, time_ms: u64, tt_bits: u32, window: usize,
               width_scale: usize)
         -> PyResult<(i32, i32, u64, u64, u64, i32, bool, bool, f64, String, i32, u64)>

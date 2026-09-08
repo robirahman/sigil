@@ -165,6 +165,12 @@ pub struct Search {
     pub stats: SearchStats,
     window: usize,
     width_scale: usize,
+    /// How many keep choices per cast the ordered stream expands. Which stones
+    /// survive a cast is the caster's choice; expanding more of them is what
+    /// makes the search able to see it, and each one costs a full
+    /// `resolve_outcomes` per cast candidate -- at 10 the node rate regressed
+    /// 5.4x. Swept, not guessed.
+    keep_window: usize,
     pub weights: crate::eval::Weights,
     /// A/B switch: true reproduces the pre-fix stage ordering — stages in order,
     /// no class merge AND no reserved key-dash slot. This is the baseline every
@@ -263,6 +269,7 @@ impl Search {
             stats: SearchStats::default(),
             window: DEFAULT_WINDOW,
             width_scale: DEFAULT_WIDTH_SCALE,
+            keep_window: crate::turn_iter::DEFAULT_KEEP_WINDOW,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
             width_shape: 0,
@@ -279,6 +286,11 @@ impl Search {
     }
 
     pub fn set_window(&mut self, w: usize) { self.window = w; }
+    /// 1 reproduces the pre-fix search exactly: the priority keep only.
+    pub fn set_keep_window(&mut self, k: usize) {
+        self.keep_window = k.clamp(1, crate::turn_iter::MAX_KEEP_WINDOW);
+    }
+    pub fn keep_window_get(&self) -> usize { self.keep_window }
     pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
     /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
@@ -601,7 +613,8 @@ impl Search {
             let reasons = if additive { 0 }
                           else if self.legacy_order || width < self.key_dash_min_width { 0 }
                           else { self.key_dash_reasons };
-            let mut it = b.turns_ordered_reasons(c, self.window, reasons);
+            let mut it = b.turns_ordered_keeps(c, self.window, reasons,
+                                               self.keep_window);
             // pull a larger pool only when the re-ranker will actually use it
             v = it.by_ref().take(width * self.rank_oversample).collect();
             if it.next().is_some() { self.stats.widened = true; }

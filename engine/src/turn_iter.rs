@@ -27,13 +27,21 @@ use crate::turn::{Action, Turn, OUTCOME_CAP};
 /// with the rest still reachable by raising this.
 pub const CAST_OUTCOME_WINDOW: usize = 24;
 
-/// How many of a cast's keep choices to expand in the ORDERED stream.
+/// Default number of a cast's keep choices to expand in the ORDERED stream.
 ///
 /// Full enumeration always expands every one — reachability is not negotiable
-/// there. Here it is a cost knob: each extra keep costs one full resolution per
-/// cast candidate. Set to the maximum so nothing is dropped until a node-rate
-/// measurement says otherwise; `windowed` records it if it ever bites.
-pub const KEEP_WINDOW: usize = crate::cast::MAX_KEEPS;
+/// there. Here it is purely a cost knob, and a measured one: at the maximum of
+/// 10 the node rate went from 20.15 to 108.16 us/node, a 5.4x regression,
+/// because each extra keep is one more full `resolve_outcomes` per cast
+/// candidate. Every width lever in this project is gated on node rate, so the
+/// default is low and `Search::set_keep_window` exists to sweep it.
+///
+/// 2 still doubles what the search can see -- stratification guarantees the
+/// second slot is a DIFFERENT keep, not another outcome of the priority one.
+pub const DEFAULT_KEEP_WINDOW: usize = 2;
+
+/// Ceiling, from `keep_options`: no cast offers more than C(5,2) choices.
+pub const MAX_KEEP_WINDOW: usize = crate::cast::MAX_KEEPS;
 
 /// Cap on the eagerly-enumerated turns of a NO-first-move position (dash/cast
 /// continuations only, so the real count is small). `windowed` is set if it bites.
@@ -133,11 +141,18 @@ impl Board {
     /// measured configuration of it lost — see `key_dash` and FINDINGS.md — so
     /// asking for it has to be explicit.
     pub fn turns_ordered(&self, c: Color) -> TurnIter<'_> {
-        TurnIter::new(self, c, CAST_OUTCOME_WINDOW, 0)
+        TurnIter::new(self, c, CAST_OUTCOME_WINDOW, 0, DEFAULT_KEEP_WINDOW)
     }
 
     pub fn turns_ordered_window(&self, c: Color, window: usize) -> TurnIter<'_> {
-        TurnIter::new(self, c, window, 0)
+        TurnIter::new(self, c, window, 0, DEFAULT_KEEP_WINDOW)
+    }
+
+    /// The stream with an explicit keep budget, for the node-rate sweep.
+    pub fn turns_ordered_keeps(&self, c: Color, window: usize, reasons: u8,
+                               keep_window: usize) -> TurnIter<'_>
+    {
+        TurnIter::new(self, c, window, reasons, keep_window)
     }
 
     /// Same stream with an explicit interest-rule set. `reasons == 0` reproduces
@@ -145,7 +160,7 @@ impl Board {
     pub fn turns_ordered_reasons(&self, c: Color, window: usize, reasons: u8)
         -> TurnIter<'_>
     {
-        TurnIter::new(self, c, window, reasons)
+        TurnIter::new(self, c, window, reasons, DEFAULT_KEEP_WINDOW)
     }
 }
 
@@ -209,10 +224,14 @@ pub struct TurnIter<'a> {
     ki: usize,
     /// Which interest rules are live. `0` reproduces the pre-fix stage ordering.
     reasons: u8,
+    /// How many keep choices per cast this stream expands. 1 reproduces the
+    /// pre-fix behaviour exactly: only the priority keep.
+    keep_window: usize,
 }
 
 impl<'a> TurnIter<'a> {
-    fn new(board: &'a Board, c: Color, window: usize, reasons: u8) -> Self {
+    fn new(board: &'a Board, c: Color, window: usize, reasons: u8,
+           keep_window: usize) -> Self {
         let mut b = *board;
         b.update();
         // Competitive opening: a free blink onto any empty node, ordered.
@@ -225,7 +244,7 @@ impl<'a> TurnIter<'a> {
                 board, c, window, stage: Stage::Done, moves: Vec::new(), mi: 0,
                 casts: Vec::new(), ci: 0, dashes: VecDeque::new(),
                 pending: VecDeque::new(), windowed: false, yielded: 0,
-                key: Vec::new(), ki: 0, reasons: 0,
+                key: Vec::new(), ki: 0, reasons: 0, keep_window,
             };
             for (n, _, _) in v {
                 it.pending.push_back(Turn::single(Action::Blink { node: n, push_to: None }));
@@ -242,7 +261,7 @@ impl<'a> TurnIter<'a> {
             moves, mi: 0, casts: Vec::new(), ci: 0,
             dashes: VecDeque::new(), pending: VecDeque::new(),
             windowed: false, yielded: 0,
-            key: Vec::new(), ki: 0, reasons,
+            key: Vec::new(), ki: 0, reasons, keep_window,
         };
         // No legal first move (e.g. an enemy Seal of Stone forcing soft moves while
         // every reachable node is occupied) only invalidates the MOVE: the optional
@@ -348,7 +367,7 @@ impl<'a> TurnIter<'a> {
                 // at `window`, the same as before this dimension existed, so
                 // the search's view improves without the stream paying for
                 // options progressive widening would discard anyway.
-                let (kis, ktr) = b.keep_indices_ordered(pos, self.c, KEEP_WINDOW);
+                let (kis, ktr) = b.keep_indices_ordered(pos, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
                 if ktr { self.windowed = true; }
                 let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
                 for &ki in &kis {
@@ -393,7 +412,7 @@ impl<'a> TurnIter<'a> {
                     for id2 in bs.castable(self.c, false, true, false) {
                         let Some(pos2) = bs.position_of(id2) else { continue };
                         let (kis2, tr0) =
-                            bs.keep_indices_ordered(pos2, self.c, KEEP_WINDOW);
+                            bs.keep_indices_ordered(pos2, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
                         if tr0 { self.windowed = true; }
                         for &ki2 in &kis2 {
                             let mut cl2 = bs;
@@ -443,7 +462,7 @@ impl<'a> TurnIter<'a> {
                     for id in bd.castable(self.c, true, true, true) {
                         let Some(pos) = bd.position_of(id) else { continue };
                         let (kis, ktr) =
-                            bd.keep_indices_ordered(pos, self.c, KEEP_WINDOW);
+                            bd.keep_indices_ordered(pos, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
                         if ktr { self.windowed = true; }
                         let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
                         for &ki in &kis {

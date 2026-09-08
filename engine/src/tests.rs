@@ -1283,12 +1283,21 @@ fn seal_of_summer_second_cast_reaches_the_lazy_stream() {
     b.stones[1] = 1 << n("b1");
     b.update();
     charge(&mut b, SEAL_OF_SUMMER, Color::Red);
-    charge(&mut b, 0, Color::Red);                     // Flourish
-    charge(&mut b, 10, Color::Red);                    // Sprout
+    // Both castable spells sit in SINGLETON sigils (b7, c7), so each offers
+    // exactly one keep. Charging the 5-node Flourish instead multiplied the
+    // enumeration past `enumerate_turns`' 1<<20 cap -- 422,380 two-cast turns
+    // alone -- and the subset assertion below was then comparing against a
+    // TRUNCATED reference, where "not in the set" means nothing. Same rule the
+    // reachability audit follows: an incomplete reference proves nothing.
+    charge(&mut b, 10, Color::Red);                    // Sprout   (b7)
+    charge(&mut b, 11, Color::Red);                    // Slash    (c7)
     assert_eq!(b.outcome, Outcome::Ongoing);
     let two_casts = |t: &crate::turn::Turn|
         t.slice().iter().filter(|a| matches!(a, Action::Cast { .. })).count() == 2;
-    let (turns, _) = b.enumerate_turns(Color::Red);
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated,
+            "reference enumeration truncated at {} turns; shrink the position \
+             rather than compare against an incomplete set", turns.len());
     assert!(turns.iter().any(|t| two_casts(t)),
             "enumerator must offer the Summer second cast");
     // The stream must contain at least one [move, cast, cast, pass]...
@@ -1727,4 +1736,56 @@ fn cast_outcome_index_is_a_raw_index_in_the_ordered_stream() {
         }
     }
     assert!(checked > 0, "no cast turns in the stream to check");
+}
+
+#[test]
+fn the_lazy_stream_never_invents_a_keep() {
+    // The subset invariant, now that a cast carries a keep: every turn the
+    // ordered stream emits must be one full enumeration also produces. Run on
+    // a position whose COMPLETE enumeration fits, and assert that it does --
+    // the same trap the Summer test fell into.
+    use std::collections::HashSet;
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, 8, 9, 10], Variant::Standard);
+    // One charged 5-node sigil, so keeps really are enumerated, and few enough
+    // stones elsewhere to keep the first-move fan-out small.
+    b.stones[0] = SIGIL[0] | (1 << n("a1"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b2"));
+    b.update();
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated, "reference truncated at {} turns", turns.len());
+    assert!(b.keep_count(0, Color::Red) >= 1);
+
+    let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
+    let legal: HashSet<String> = turns.iter().map(key).collect();
+    let mut casts_seen = 0;
+    for t in b.turns_ordered(Color::Red).take(20_000) {
+        if t.slice().iter().any(|a| matches!(a, Action::Cast { .. })) { casts_seen += 1; }
+        assert!(legal.contains(&key(&t)), "lazy invented {:?}", t.slice());
+    }
+    assert!(casts_seen > 0, "no cast turns in the stream to check");
+}
+
+#[test]
+fn keep_window_one_reproduces_the_priority_only_stream() {
+    // The knob has to have an OFF position that is the old engine exactly,
+    // or no A/B against the shipped search means anything.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, 8, 9, 10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+    assert!(b.keep_count(0, Color::Red) > 1, "position must offer a choice");
+
+    let keeps_of = |kw: usize| {
+        let mut set = std::collections::HashSet::new();
+        for t in b.turns_ordered_keeps(Color::Red, 24, 0, kw).take(4000) {
+            for a in t.slice() {
+                if let Action::Cast { keep, .. } = *a { set.insert(keep); }
+            }
+        }
+        set
+    };
+    let one = keeps_of(1);
+    assert_eq!(one, std::collections::HashSet::from([0u8]),
+               "keep_window 1 must surface ONLY the priority keep, got {:?}", one);
+    assert!(keeps_of(2).len() > 1, "keep_window 2 must surface a second keep");
 }
