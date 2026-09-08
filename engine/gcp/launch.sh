@@ -15,13 +15,18 @@ set -euo pipefail
 NAME=$1; HARNESS=$2; ARMS_FILE=$3; SMOKE=$4
 WORKERS=${5:-5}; ZONE=${6:-us-central1-f}; MAXH=${7:-4}
 MACHINE=${8:-c3d-highcpu-30}
+# Which slice of the shard space this VM takes. MUST differ per VM in a fleet:
+# without it every VM derives its offsets from the worker index alone and they
+# all run the same shards.
+SHARD_BASE=${SHARD_BASE:-0}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
 BRANCH=${BRANCH:-rust-bitboard-engine}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
 
 SMOKE_FILE=$(mktemp); printf '%s' "$SMOKE" > "$SMOKE_FILE"
-echo "RUN=$RUN  name=$NAME  harness=$HARNESS  workers=$WORKERS  zone=$ZONE  cap=${MAXH}h  machine=$MACHINE"
+echo "RUN=$RUN  name=$NAME  harness=$HARNESS  workers=$WORKERS  zone=$ZONE \
+cap=${MAXH}h  machine=$MACHINE  shard_base=$SHARD_BASE"
 echo "arms: $(cat "$ARMS_FILE")"
 
 gcloud compute instances create "$NAME" \
@@ -31,7 +36,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE" \
   --metadata-from-file="startup-script=$HERE/runner.sh,arms=$ARMS_FILE,smoke=$SMOKE_FILE" \
   --format="value(name,status)"
 rm -f "$SMOKE_FILE"
