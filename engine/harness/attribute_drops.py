@@ -91,6 +91,21 @@ def main():
                     help='Check B flag file(s); repeatable')
     ap.add_argument('--limit', type=float, default=0.5,
                     help="the horizon-effect envelope, stones per half-move")
+    ap.add_argument('--identities', default=None,
+                    help="hydrated_lines json. Check A re-scores a position "
+                         "after the ACTUAL continuation, so a decline means the "
+                         "MOVER's position got worse -- either the opponent "
+                         "found something the engine could not see (the bug) or "
+                         "THE MOVER BLUNDERED, which the engine is scoring "
+                         "correctly. The original design said 'games played by "
+                         "the new engine', where the mover IS the engine. On a "
+                         "human/old-AI corpus 94.8% of flags have someone else "
+                         "to move and are not evidence about the engine. Pass "
+                         "this plus --mover to restrict to an interpretable "
+                         "slice.")
+    ap.add_argument('--mover', default=None,
+                    help="keep only flags where this agent was to move, "
+                         "e.g. 'rust'")
     ap.add_argument('--mate-from', type=float, default=-0.5,
                     help="score (in stones) at or above which a flip into a "
                          "proven loss counts as a SURPRISE. The audit's own "
@@ -101,6 +116,20 @@ def main():
 
     drops = load_flags(args.drops, 'drop')
     reach = load_reach(args.reach)
+    if args.identities and args.mover:
+        ident = {}
+        for g in json.load(open(args.identities, encoding='utf-8')):
+            m = g.get('meta') or {}
+            ident[g['key']] = (m.get('red'), m.get('blue'))
+        before = len(drops)
+        keep = []
+        for d in drops:
+            r, b = ident.get(d.get('game'), (None, None))
+            if (r if d.get('mover') == 'red' else b) == args.mover:
+                keep.append(d)
+        drops = keep
+        print(f'restricted to {args.mover} to move: {len(drops)} of {before} '
+              f'({100.0 * len(drops) / max(1, before):.1f}%)')
     print(f'eval-drop flags: {len(drops)}')
     print(f'unreachable turns known from Check B: {len(reach)}\n')
     if not drops:
