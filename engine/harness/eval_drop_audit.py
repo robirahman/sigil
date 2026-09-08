@@ -466,6 +466,12 @@ def main():
             print(f"fetched {args.lines} ({len(data)} bytes)", flush=True)
         with open(path, encoding='utf-8') as fh:
             pre = json.load(fh)
+        # --limit-games has to work HERE too, not just on the Firebase path.
+        # It did not, so the fleet's smoke gate audited all 2,403 games, blew
+        # through the runner's 900s smoke timeout and the arms never launched --
+        # a 90-vCPU VM sat in its smoke for its whole life.
+        if args.limit_games:
+            pre = pre[:args.limit_games]
         src = ((x['key'], [(s, []) for s in x['sfns']], x.get('meta')) for x in pre)
         label = f"{len(pre)} pre-hydrated games from {args.lines}"
         do_reach = True
