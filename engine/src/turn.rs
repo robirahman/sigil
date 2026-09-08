@@ -371,17 +371,41 @@ impl Board {
         out.push(so_far.push(Action::Pass));
         for id in self.castable(c, can_spell, can_summer, true) {
             let Some(pos) = self.position_of(id) else { continue };
+            // canSpell becomes false after a cast; canSummer survives only if
+            // the cast was made while canSpell was true. Same rule as
+            // `enumerate_post_move`.
+            let next_summer = if can_spell { can_summer } else { false };
             for ki in 0..self.keep_count(pos, c) {
                 let mut cleared = *self;
                 cleared.cast_clear_and_keep(pos, c, ki);
                 let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
                 if trunc { st.resolver_truncated = true; }
-                for (i, _ob) in outs.iter().enumerate() {
-                    out.push(so_far.push(Action::Cast {
-                                    pos: pos as u8, keep: ki as u8, outcome: i as u16,
-                                })
-                                   .push(Action::Pass));
-                    if out.len() >= cap { st.truncated = true; return; }
+                for (i, ob) in outs.iter().enumerate() {
+                    let t = so_far.push(Action::Cast {
+                        pos: pos as u8, keep: ki as u8, outcome: i as u16,
+                    });
+                    // RECURSE rather than forcing Pass. This branch used to
+                    // emit only `Cast + Pass`, so a Seal of Summer SECOND cast
+                    // was unreachable after a dash even though
+                    // `enumerate_post_move` has always allowed one -- and a
+                    // second cast of the charm Surge grants a move, which
+                    // places a stone. That is the residual signature
+                    // `layout_nearest` reported: post-dash Fireblast and
+                    // Meteor turns sitting at distance exactly 1, 14/14 each,
+                    // with the nearest enumerated turn being the same
+                    // move+dash+cast ending in Pass.
+                    let mut bs = cleared;
+                    bs.stones = ob.stones;
+                    bs.update();
+                    bs.finish_cast(id, c);
+                    bs.update();
+                    if bs.outcome != Outcome::Ongoing {
+                        out.push(t.push(Action::Pass));
+                        if out.len() >= cap { st.truncated = true; return; }
+                        continue;
+                    }
+                    bs.enumerate_post_dash(c, t, false, next_summer, out, cap, st);
+                    if st.truncated { return; }
                 }
             }
         }
