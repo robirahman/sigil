@@ -466,7 +466,7 @@ impl PyBoard {
     #[allow(clippy::too_many_arguments)]
     fn search_keeps(&self, max_depth: i32, time_ms: u64, tt_bits: u32,
                     window: usize, width_scale: usize, keep_window: usize)
-        -> PyResult<(i32, i32, u64, u64, u64)>
+        -> PyResult<(i32, i32, u64, u64, u64, i32)>
     {
         use std::time::Instant;
         let mut s = crate::search::Search::new(tt_bits);
@@ -474,9 +474,20 @@ impl PyBoard {
         s.set_width_scale(width_scale);
         s.set_keep_window(keep_window);
         let t = Instant::now();
-        let (_best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
+        let (best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
         let _ = t.elapsed();
-        Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs))
+        // Which keep the CHOSEN move uses, or -1 if it does not cast. This is
+        // what decides whether the keep choice can ever pay: if the search,
+        // handed all ten options, still picks the priority keep, then the
+        // fixed order was already a good heuristic and there is nothing here
+        // to win no matter how many keeps are expanded.
+        let keep_used = best.map(|b| {
+            b.slice().iter().find_map(|a| match *a {
+                crate::turn::Action::Cast { keep, .. } => Some(keep as i32),
+                _ => None,
+            }).unwrap_or(-1)
+        }).unwrap_or(-2);
+        Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs, keep_used))
     }
 
     /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
