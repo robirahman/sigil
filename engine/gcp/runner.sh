@@ -23,9 +23,12 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
+SHARD_BASE=$(md shard-base)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=rust-bitboard-engine}" \
-  "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}"
-echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH max_hours=$MAXH"
+  "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \
+  "${SHARD_BASE:=0}"
+echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH \
+max_hours=$MAXH shard_base=$SHARD_BASE"
 echo "arms: $ARMS"
 
 # ---------------------------------------------------------------------------
@@ -119,7 +122,12 @@ for arm in $ARMS; do
     # every ab_eval arm that also passed an optional trailing argument: the offset
     # landed past the last position the harness reads, all shards ran identical
     # seeds, and the reported "n" was replication rather than sample size.
-    ( SIGIL_SHARD_OFF=$((w*1000)) \
+    # SHARD_BASE offsets this VM's workers. Deriving the offset from the
+    # worker index ALONE makes every VM in a fleet run the same shards: a
+    # 3-VM run then audits a third of the corpus three times and two thirds
+    # never, while the logs look complete. This has bitten twice -- two runs
+    # in the bucket are byte-identical because of it.
+    ( SIGIL_SHARD_OFF=$(( (SHARD_BASE + w) * 1000 )) \
       $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
         $(echo "$arm" | tr ',' ' ') \
         > "$WORK/out/arm${ai}_${tag}_w${w}.log" 2>&1 ) &
