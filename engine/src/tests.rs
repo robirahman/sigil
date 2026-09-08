@@ -1896,3 +1896,35 @@ fn a_surge_turn_is_enumerable_and_grants_its_move() {
         assert!(x.total[0] > 0, "applying a Surge turn wiped the caster");
     }
 }
+
+#[test]
+fn an_unproven_mate_is_not_reported_as_a_proof() {
+    // A mate score is a claim of CERTAINTY. The root used to break out of
+    // iterative deepening on any mate score, so a "forced win" that was really
+    // the opponent's saving move falling outside the progressive-widening
+    // budget stopped the search and got announced as a win. Measured in
+    // self-play from real positions: 4 of 126 self-inconsistencies were +MATE
+    // announcements that decayed to +0.38..+1.52 stones two half-moves later.
+    //
+    // The guard: a mate is reported as a mate only when no node ran out of
+    // width or window budget. Otherwise it comes back as UNPROVEN_MATE, which
+    // sits above any achievable material score and far below what `ui_score`
+    // renders as a proof.
+    use crate::search::{ui_score, UNPROVEN_MATE, WIN, MAX_PLY};
+    let mate_floor = WIN - MAX_PLY as i32;
+    assert!(UNPROVEN_MATE < mate_floor,
+            "an unproven mate must not clear the mate floor");
+    // Above any real material score: a 39-node board cannot produce a 20-stone
+    // lead, i.e. 2,000 centistones.
+    assert!(UNPROVEN_MATE > 2_000,
+            "an unproven mate must still read as winning decisively");
+    // And the UI must not call it a proof. It treats >= 37 Caveman units as a
+    // proven mate, and ui_score divides by 3900.
+    assert!(ui_score(UNPROVEN_MATE).abs() < 37.0,
+            "ui_score({}) = {} would be rendered as a PROVEN mate",
+            UNPROVEN_MATE, ui_score(UNPROVEN_MATE));
+    assert!(ui_score(-UNPROVEN_MATE).abs() < 37.0);
+    // A real mate still encodes as one.
+    assert!(ui_score(WIN - 3).abs() >= 37.0,
+            "a proven mate must still render as a mate");
+}
