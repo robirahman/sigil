@@ -1,0 +1,864 @@
+"""Find where the engine's own evaluation is contradicted by what happens next.
+
+    eval_drop_audit.py --selfplay 200 [--depths 2,4,6] [--stride 1]
+    eval_drop_audit.py --games ai/data/completed_games_raw.json [--depths 2,4,6]
+
+Two symptoms prompted this (Robi, 2026-09-07):
+
+  * the engine announced ~+0.5 in its favour and missed a mate-in-one against it;
+  * it filled Seal of Destruction and immediately lost, without bordering or
+    destroying anything.
+
+CHECK A -- EVAL DROP (Robi's design). Score every position to depth d, fast-forward
+d HALF-MOVES along the line actually played, score again, and compare. d is even, so
+the same side is to move both times and the two negamax scores share a perspective.
+A drop of ~1 stone per turn is not automatically a defect: at low depth the opponent
+may be making moves whose payoff lies past the horizon. A drop much larger than that
+says the opponent did something good the engine did not know was possible.
+
+CHECK B -- REACHABILITY. For each turn actually played, is the resulting position
+reachable by ANY turn `enumerate_turns` produces from the position before it? If
+not, the engine cannot generate a move that was legally played, which is a proven
+enumeration gap rather than an inference from an eval swing.
+
+WHY BOTH, AND WHY CHECK B NEEDS REAL GAMES: in self-play the engine is both players,
+so it only ever plays turns it generated -- a missing turn is never played and never
+punished. Self-play can therefore surface EVALUATION errors but NOT enumeration gaps.
+Check B is only meaningful on games with a non-engine opponent, i.e. the site's
+recorded human games. Run `--selfplay` for check A and `--games` for both.
+
+Flagged positions are written in the schema `tools/gen_unmatched_review.py --cases`
+consumes, so anything ambiguous goes straight into the adjudication page.
+"""
+
+import argparse
+import json
+import os
+import sys
+from collections import Counter, defaultdict
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
+sys.path.insert(0, _HERE)
+sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))
+
+import sigil_engine as se
+
+MERGE_OFF = 1 << 62
+MATE = 1_000_000          # |score| above this is a proven win/loss, not a heuristic
+STONE = 100               # centistones per stone
+# Read from the engine rather than restated: the whole point of
+# `sigil-restate-no-default-twice` is that a constant duplicated in Python
+# drifts from the Rust silently. Falls back only if the binding predates it.
+UNPROVEN_MATE_SENTINEL = getattr(se, 'UNPROVEN_MATE', 5_000)
+
+
+def shipped_adaptive():
+    """The shipped widening config, from the ENGINE -- never restated here."""
+    return tuple(se.SHIPPED_ADAPTIVE) if hasattr(se, 'SHIPPED_ADAPTIVE') else (0.10, 2, 6)
+
+
+_SCORE_CACHE = {}
+
+
+def score_at(sfn, depth, hist, ev='tfit'):
+    """Fixed-depth score for the side to move, at the SHIPPED search config.
+
+    Uses play_best because `search()` cannot select an eval and would silently run
+    whatever Search::new defaults to -- the restated-default trap this project has
+    paid for three times.
+
+    MEMOISED on (sfn, depth, eval). Once the comparison WINDOW is decoupled from
+    the search depth, the same position is scored once per window -- three times
+    for windows 2/4/6 -- and at depth 6 a single search is ~17 s, so the cache is
+    the difference between ~310 and ~1,800 CPU-hours. `hist` only affects
+    repetition counting and is excluded from the key deliberately: two windows
+    over the same position differ in history yet the score difference is not what
+    this audit measures, and keying on it would defeat the cache entirely.
+    """
+    key = (sfn, depth, ev)
+    hit = _SCORE_CACHE.get(key)
+    if hit is not None:
+        return hit
+    b = se.Board.from_sfn(sfn)
+    r = b.play_best(0, depth, 20, 16, se.DEFAULT_WIDTH_SCALE, list(hist), ev,
+                    False, MERGE_OFF, adaptive=shipped_adaptive())
+    v = int(r[5])
+    if len(_SCORE_CACHE) < 400_000:
+        _SCORE_CACHE[key] = v
+    return v
+
+
+def selfplay_lines(n_games, play_ms, ev='tfit'):
+    """Play games at the shipped config, recording the SFN at every ply."""
+    for g in range(n_games):
+        b = se.Board(se.Board.legal_draw(8_000_000 + g), "standard")
+        b.setup_initial()
+        hist, line = [], []
+        for _ply in range(140):
+            line.append((b.to_sfn(), list(hist)))
+            r = b.play_best(play_ms, 64, 20, 16, se.DEFAULT_WIDTH_SCALE, hist, ev,
+                            False, MERGE_OFF, adaptive=shipped_adaptive())
+            hist.append(b.key_js)
+            if r[3]:
+                line.append((b.to_sfn(), list(hist)))
+                break
+        # META MUST BE A DICT. This yielded `r[4]`, the winner STRING, and
+        # every consumer treats meta as a mapping -- the record filter does
+        # `(meta or {}).get('pairs')`, which raises AttributeError on a str.
+        # It survived only because that lookup used to sit behind
+        # `do_reach and 'b' in args.checks`, and `do_reach` is False for
+        # self-play; moving it under `'a' in args.checks` for the record
+        # filter put it in the self-play path and broke it.
+        #
+        # `movers` is filled with the engine's own name, which is the whole
+        # point of auditing self-play: EVERY continuation here is the engine's
+        # own choice, so `--mover rust` keeps 100% of flags instead of the
+        # 7.1% it keeps on the recorded human corpus.
+        yield (f"selfplay-{g}", line,
+               {'winner': r[4], 'movers': ['rust'] * len(line),
+                'red': 'rust', 'blue': 'rust'})
+
+
+RUST_UIDS = ('__ai_rust',)          # the engine under audit
+
+
+def _who(uid):
+    if not uid:
+        return 'unknown'
+    if uid.startswith(RUST_UIDS):
+        return 'rust'
+    if uid.startswith('__ai'):
+        return uid.strip('_')           # an OLDER engine: still a useful source
+    return 'human'
+
+
+def dump_lines(path, batch=150, skip_rust_vs_rust=True, limit=0,
+               rust_only=False):
+    """Hydrate a raw completed_games dump into per-turn SFN pairs.
+
+    Slim records store INPUT TOKENS, not positions, so they are replayed through
+    `ai.replay_bridge.hydrate_records` -> the browser engine's reconstructGameLog.
+    That replayer is the authority here: it is the code that actually accepted these
+    human inputs, and the repo deliberately keeps no second Python port so the two
+    cannot drift. If Rust's `enumerate_turns` cannot reproduce a turn the JS engine
+    accepted, that is a proven Rust generator gap.
+
+    Rust-vs-Rust games are skipped: a turn the Rust engine played is a turn it
+    generated, so its own games cannot reveal its own missing moves -- the same
+    reason self-play is useless for check B.
+    """
+    from ai.replay_bridge import hydrate_records
+    with open(path, encoding='utf-8') as fh:
+        games = json.load(fh)
+    items = list(games.items()) if isinstance(games, dict) else list(enumerate(games))
+    keep = []
+    skipped = Counter()
+    for key, g in items:
+        if not isinstance(g, dict) or not g.get('turns'):
+            skipped['no turns'] += 1
+            continue
+        r, b = _who(g.get('redUid')), _who(g.get('blueUid'))
+        # Rust-vs-Rust is normally skipped: the engine cannot play a turn it
+        # failed to generate, so those games carry no evidence of a gap.
+        # `rust_only` inverts that, and is the CONTROL for this whole audit:
+        # every one of those turns CAME OUT of `enumerate_turns`, so after a
+        # faithful round-trip through Firebase, the replay bridge and SFN it
+        # must come back 100% reachable. Whatever rate it shows instead is
+        # harness error, and it is the amount to subtract from the real-game
+        # rate before believing any of it.
+        if r == 'rust' and b == 'rust':
+            if not rust_only:
+                skipped['rust vs rust'] += 1
+                continue
+        elif rust_only:
+            skipped['not rust vs rust'] += 1
+            continue
+        if not g.get('setupSfn') and not (
+                isinstance(g['turns'], list) and g['turns'] and g['turns'][0].get('sfnBefore')):
+            skipped['no setupSfn'] += 1
+            continue
+        keep.append((key, g, r, b))
+    if limit:
+        keep = keep[:limit]
+    print(f"  {len(keep)} games to hydrate; skipped {dict(skipped)}", flush=True)
+
+    for start in range(0, len(keep), batch):
+        chunk = keep[start:start + batch]
+        recs = [{'spellNames': g.get('spellNames') or [],
+                 'variant': g.get('variant') or 'standard',
+                 'setupSfn': g.get('setupSfn'), 'finalSfn': g.get('finalSfn'),
+                 'turns': g['turns']} for _k, g, _r, _b in chunk]
+        try:
+            res = hydrate_records(recs)
+        except Exception as e:
+            print(f"  hydration failed for batch at {start}: {e}", flush=True)
+            continue
+        for (key, g, r, b), out in zip(chunk, res):
+            if not isinstance(out, dict) or not out.get('ok'):
+                continue
+            # FAT vs SLIM. A slim turn stores an action list and its after-state
+            # is REPLAYED through the browser engine, so "no legal turn reaches
+            # this" is evidence about the engine. A fat turn stores only a board
+            # snapshot -- {color, kind, sfnAfter, turnNumber} -- so its
+            # after-state was never derived from actions and nothing checks that
+            # it is one legal turn away. Counting those as engine gaps blames
+            # the enumerator for the recorder: 59 of the 675 turns still
+            # unreachable after the keep fix are fat Meteor records.
+            has_acts = {t.get('turnNumber'): bool(t.get('actions'))
+                        for t in (g.get('turns') or []) if isinstance(t, dict)}
+            turns = out.get('turns') or []
+            line, movers, pairs = [], [], []
+            for t in turns:
+                if not (t.get('sfnBefore') and t.get('sfnAfter')):
+                    continue
+                who = r if t.get('color') == 'red' else b
+                line.append((t['sfnBefore'], []))
+                movers.append(who)
+                # Each turn's OWN before/after pair. Chaining consecutive
+                # sfnBefore values instead looked identical to an enumeration
+                # gap whenever a record held an intra-turn snapshot or a gap --
+                # one smoke flag showed 'r 21 -> r 21', same mover and same turn
+                # number, which no single turn can produce.
+                pairs.append({'before': t['sfnBefore'], 'after': t['sfnAfter'],
+                              'color': t.get('color'), 'turnNumber': t.get('turnNumber'),
+                              'playedBy': who,
+                              # the replayer's own action list: when the engine
+                              # cannot generate the turn, this is the sequence
+                              # to hand Robi to re-enter in the real UI.
+                              'actions': t.get('actions') or t.get('tokens'),
+                              'fat': not has_acts.get(t.get('turnNumber'), False)})
+            if turns and turns[-1].get('sfnAfter'):
+                line.append((turns[-1]['sfnAfter'], []))
+                movers.append(None)
+            if len(line) > 2:
+                yield key, line, {'movers': movers, 'red': r, 'blue': b,
+                                  'winner': g.get('winner'), 'pairs': pairs}
+        print(f"  hydrated {min(start + batch, len(keep))}/{len(keep)} games", flush=True)
+
+
+def check_reachability(pairs, enum_cap=250_000):
+    """CHECK B: was each played turn reproducible by `enumerate_turns`?
+
+    Walks each turn's OWN before/after pair, and screens out record artefacts the
+    same way tools/gen_unmatched_review.py does -- otherwise a recording gap is
+    indistinguishable from a missing move:
+
+      * the mover's own actions can never ADD enemy stones, so a growth in the
+        enemy count means the pair spans more than one turn;
+      * a pair whose two halves disagree about whose turn it is, or that share a
+        turn number, is not one turn of play.
+
+    Compares STONE LAYOUT only: that is what a turn's actions determine, and the
+    replayer's turn bookkeeping follows its own convention.
+    """
+    misses = []
+    for p in pairs:
+        before, after = p['before'], p['after']
+        try:
+            bt, at = before.split(), after.split()
+            mover = 'red' if bt[1] == 'r' else 'blue'
+            enemy = 'b' if mover == 'red' else 'r'
+            bs, as_ = before.split('/')[0], after.split('/')[0]
+            if as_.count(enemy) > bs.count(enemy):
+                continue                      # spans more than one turn
+            b = se.Board.from_sfn(before)
+            # One native call: enumerate AND compare in Rust. Looping in Python
+            # cost ~5 s per position, because full enumeration expands every cast
+            # outcome and a midgame position yields 9,000-54,000 turns.
+            tgt = se.Board.from_sfn(after).stones
+            reachable, n_turns, trunc = b.layout_reachable(
+                mover, tgt[0], tgt[1], enum_cap)
+            if trunc:
+                continue                      # truncated: not a complete reference
+            if not reachable:
+                # WHO played it decides what a miss means: a turn played by a HUMAN
+                # or an OLDER JS engine that Rust cannot generate is a Rust
+                # generator gap; one played by Rust points at replay/identity.
+                mi = 0 if mover == 'red' else 1
+                # How many spells the mover cast in this ONE turn. The replay
+                # bridge reports counter jumps of 2 and 3, so the real rules
+                # allow multiple casts per turn; if Rust only ever emits one,
+                # that is a systematic gap rather than a per-spell bug.
+                try:
+                    n_casts = (int(at[3].split(':')[mi])
+                               - int(bt[3].split(':')[mi]))
+                except Exception:
+                    n_casts = None
+                misses.append({'turnNumber': p.get('turnNumber'), 'mover': mover,
+                               'playedBy': p.get('playedBy', 'unknown'),
+                               'sfnBefore': before, 'sfnAfter': after,
+                               'nCasts': n_casts, 'actions': p.get('actions'),
+                               'fat': bool(p.get('fat')),
+                               'nEnumerated': n_turns})
+        except Exception as e:
+            misses.append({'turnNumber': p.get('turnNumber'), 'error': str(e),
+                           'sfnBefore': before})
+    return misses
+
+
+def make_verifier(pairs, enum_cap=250_000):
+    """Which of a game's turns are POSITIVELY CONFIRMED as one legal turn.
+
+    Returns `confirmed(i) -> bool`, memoised, `True` only when
+    `layout_reachable` says some turn the engine generates carries pairs[i]'s
+    `before` to its `after`. LAZY on purpose: confirming all 64,417 turns
+    upfront costs ~54 CPU-hours to filter a flag population of a few
+    thousand, so only the pairs a FLAGGED window spans are ever checked.
+
+    Check A needs this because the 0.5-stones-per-half-move envelope is a
+    statement about a REAL half-move sequence. Across a transition that no
+    legal turn produces, an arbitrarily large drop is consistent with a
+    perfect eval AND perfect enumeration, so the flag carries no information
+    about the engine. Robi adjudicated the survivors through the real UI and
+    genuine enumeration gaps came out at ZERO -- all 432 unreachable turns are
+    record damage, because `applyAITurn` applies a stored action list without
+    validating legality, so a corrupt transcript replays "cleanly" and its
+    after-state gets stored.
+
+    Measured: corrupt turns are 0.65% of audited turns (432 of 66,820), so
+    1.3%-5.1% of windows straddle one -- but they were 37.9% of the FLAGS, a
+    7-29x enrichment, because an illegal jump between two states produces a
+    large apparent drop. Two in five flags were windows that never happened.
+
+    THE GATE IS POSITIVE VERIFICATION, NOT AN ARTEFACT TAXONOMY. `fat` /
+    no-op-sacrifice / transcription-glitch are three names for "the record is
+    damaged", and `layout_reachable` already decides the question they were
+    invented to answer -- it works on the STATES, not on how the record stored
+    them. So provenance is not consulted here: a fat record whose after-state
+    a legal turn does reach is fine, and only a FAILURE needs explaining. That
+    keeps every correctly-recorded turn instead of discarding all fat ones.
+
+    Anything not confirmed is excluded, which is the conservative direction:
+      * the enemy stone count grew, so the pair spans more than one turn;
+      * enumeration truncated, so there is no complete reference to compare;
+      * the SFN did not parse.
+    """
+    cache = {}
+
+    def confirmed(i):
+        """Is pairs[i] one legal turn? Memoised: a position sits in several
+        windows, and the answer cannot change within a run."""
+        if i in cache:
+            return cache[i][0]
+        cache[i] = v = _confirm_pair(pairs[i], enum_cap)
+        return v[0]
+
+    return confirmed, cache
+
+
+def _confirm_pair(p, enum_cap):
+    """One pair: does any turn the engine generates carry `before` to `after`?
+
+    Returns `(confirmed, reason)`. The reason matters for the report: "not
+    confirmed" covers four quite different situations, and collapsing them
+    into one number hides which one dominates. `unreachable` is the one that
+    means the record is damaged; `truncated` and `multi_turn` mean the
+    question could not be put; `error` means the SFN did not parse. All four
+    are excluded -- confirmation is positive-only, which is the conservative
+    direction -- but a run where most exclusions are `truncated` is telling
+    you the cap is too low, not that the records are bad.
+    """
+    try:
+        before, after = p['before'], p['after']
+        bt = before.split()
+        mover = 'red' if bt[1] == 'r' else 'blue'
+        enemy = 'b' if mover == 'red' else 'r'
+        bs, as_ = before.split('/')[0], after.split('/')[0]
+        if as_.count(enemy) > bs.count(enemy):
+            return False, 'multi_turn'    # spans more than one turn
+        b = se.Board.from_sfn(before)
+        tgt = se.Board.from_sfn(after).stones
+        reachable, _n, trunc = b.layout_reachable(
+            mover, tgt[0], tgt[1], enum_cap)
+        if trunc:
+            return False, 'truncated'
+        return bool(reachable), 'ok' if reachable else 'unreachable'
+    except Exception:
+        return False, 'error'
+
+
+def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
+                     windows=None, verified=None):
+    """CHECK A: score at ply i and ply i+d, same side to move, and compare.
+
+    Two calibration lessons from the first run, which flagged 22 cases in 6 games
+    and was almost all noise:
+
+    * MATE SCORES ARE +-1e7, so leaving them in the arithmetic produced drops of
+      50,000 stones/ply and swamped everything. They are clamped for the gradual
+      metric and handled separately.
+    * A GAME ENDING IS NOT A DEFECT. A position already scored at -1.5 that becomes
+      a proven loss two plies later is an ordinary horizon effect. The reported
+      symptom is narrower and much more specific: the engine said it was FINE or
+      WINNING and then lost. So a mate flip only counts when the earlier score was
+      at least `surprise_from` stones -- default 0, i.e. the engine was not behind.
+    """
+    out = []
+    skipped = [0]               # windows dropped for straddling a bad turn
+    clamp = 20 * STONE          # ignore magnitudes past +-20 stones for the slope
+    # SEARCH DEPTH and COMPARISON WINDOW are separate axes, and conflating them
+    # makes the horizon test impossible. With one `d` doing both, "flagged at
+    # depth 2 but not at depth 4" compares a 2-half-move window searched 2 deep
+    # against a 4-half-move window searched 4 deep -- two different questions,
+    # so absence proves nothing. Scoring the SAME window at increasing depth is
+    # what "deepening cured it" means, and it is the only way to tell a horizon
+    # effect from an evaluation error.
+    #
+    # `windows=None` keeps the original coupled behaviour (window == depth).
+    for d in depths:
+        for w in (windows or [d]):
+            for i in range(0, len(line) - w, stride):
+                sfn0, h0 = line[i]
+                sfn1, h1 = line[i + w]
+                if sfn0.split()[1] != sfn1.split()[1]:
+                    continue          # not the same side to move; w must be even
+                try:
+                    s0 = score_at(sfn0, d, h0)
+                    s1 = score_at(sfn1, d, h1)
+                except Exception:
+                    continue
+                # the engine thought it was OK, then it was lost: the reported bug
+                mate_flip = (s1 <= -MATE) and (s0 >= surprise_from * STONE)
+                c0, c1 = max(-clamp, min(clamp, s0)), max(-clamp, min(clamp, s1))
+                drop_per_ply = (c0 - c1) / w / STONE
+                if not (mate_flip or drop_per_ply > per_ply_limit):
+                    continue
+                # Only now, having flagged, ask whether this window is even a
+                # half-move sequence. `line` and `pairs` are appended in
+                # lockstep during hydration after the same guard, so
+                # len(line) == len(pairs) + 1 and line[i] -> line[i+w]
+                # traverses exactly pairs[i:i+w]. Every one must be a
+                # confirmed legal turn, or the window did not happen and the
+                # 0.5/half-move envelope says nothing about it.
+                if verified is not None and not all(
+                        verified(k) for k in range(i, i + w)):
+                    skipped[0] += 1
+                    continue
+                out.append({'ply': i, 'depth': d, 'window': w,
+                            'score0': s0, 'score1': s1,
+                            'drop': s0 - s1, 'dropPerPly': drop_per_ply,
+                            'clampedFrom': c0 / STONE, 'clampedTo': c1 / STONE,
+                            'mateFlip': mate_flip,
+                            'sfnBefore': sfn0, 'sfnAfter': sfn1,
+                            'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'})
+    return out, skipped[0]
+
+
+def cast_between(sfn0, sfn1):
+    """Which side's spell counter moved, as a cheap 'what was cast' signal.
+
+    Robi reports Seal of Destruction specifically, so grouping flags by the spell
+    involved is what turns a list of swings into a diagnosis.
+    """
+    try:
+        a, b = sfn0.split(), sfn1.split()
+        ca, cb = a[3].split(':'), b[3].split(':')
+        la, lb = a[4].split(':'), b[4].split(':')
+        changed = []
+        for i, side in ((0, 'red'), (1, 'blue')):
+            if int(cb[i]) != int(ca[i]):
+                changed.append(f"{side} cast (counter {ca[i]}->{cb[i]})")
+            if la[i] != lb[i]:
+                changed.append(f"{side} lock {la[i]}->{lb[i]}")
+        return '; '.join(changed) or 'no cast'
+    except Exception:
+        return '?'
+
+
+def to_cases(recs, kind):
+    cases = []
+    # Rows recording an exception (an out-of-scope spell, unrepresentable
+    # state) have no 'mover' and no 'sfnAfter'. Indexing them raised
+    # KeyError AFTER every flag had printed, so 70 of 88 shards wrote no
+    # JSON at all. They are not adjudicable positions -- drop them here.
+    recs = [r for r in recs if r.get('mover') and r.get('sfnAfter')]
+    for i, r in enumerate(recs):
+        sfn = r['sfnBefore']
+        spells = [s.replace('_', ' ') for s in sfn.split('/')[1].split()[0].split(',')]
+        if kind == 'reach':
+            sig = (f"UNREACHABLE: the position played at turn "
+                   f"{r.get('turnNumber', r.get('ply', '?'))} is not produced by any "
+                   f"of the {r.get('nEnumerated','?')} enumerated turns — the engine "
+                   f"cannot generate a move that WAS legally played "
+                   f"(by {r.get('playedBy','?')})")
+        else:
+            sig = (f"EVAL DROP: depth {r['depth']} score {r['score0']/STONE:+.2f} -> "
+                   f"{r['score1']/STONE:+.2f} over {r['depth']} half-moves "
+                   f"({r['dropPerPly']:+.2f}/ply)"
+                   + (" — FLIPPED INTO A PROVEN LOSS" if r.get('mateFlip') else ""))
+        cases.append({
+            'key': f"{kind}-{r.get('playedBy','?')}-{i}",
+            'turnNumber': int(sfn.split()[2]),
+            'color': r['mover'], 'sfnBefore': sfn, 'sfnAfter': r['sfnAfter'],
+            'spellNames': spells, 'variant': 'standard', 'cast': None,
+            'redPlayer': 'audit', 'bluePlayer': 'audit',
+            'stateBefore': cast_between(sfn, r['sfnAfter']), 'stateAfter': sig,
+            'matchOn': 'stones', 'flagAs': 'unreachable',
+            'cluster': 1 if kind == 'reach' else 2, 'clusterSize': len(recs),
+            'memberIndex': i + 1, 'signature': sig,
+        })
+    return cases
+
+
+def time_depths(depths, n=6, ev='tfit'):
+    """Cost per position at each depth, so the run is SIZED and not guessed.
+
+    Sizing E1 off an unmeasured rate cost this project a full restart; the depth
+    numbers here are what decide whether depth 8 is affordable at all.
+    """
+    import time
+    b = se.Board(se.Board.legal_draw(4242), "standard")
+    b.setup_initial()
+    hist = []
+    for _ in range(8):                  # get off the opening
+        r = b.play_best(80, 64, 20, 16, se.DEFAULT_WIDTH_SCALE, hist, ev, False,
+                        MERGE_OFF, adaptive=shipped_adaptive())
+        hist.append(b.key_js)
+        if r[3]:
+            break
+    sfn = b.to_sfn()
+    print("cost per position, shipped width_scale/adaptive:")
+    per = {}
+    for d in depths:
+        t0 = time.perf_counter()
+        for _ in range(n):
+            score_at(sfn, d, hist, ev)
+        dt = (time.perf_counter() - t0) / n
+        per[d] = dt
+        print(f"  depth {d}: {dt:8.3f} s/position")
+    return per
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--selfplay', type=int, default=0)
+    ap.add_argument('--games', default=None)
+    ap.add_argument('--play-ms', type=int, default=200)
+    ap.add_argument('--depths', default='2,4,6',
+                    help="comma OR colon separated. Use COLONS in a cloud arm: "
+                         "runner.sh splits arms on spaces and each arm's args on "
+                         "commas, so '2,4,6' arrives as three separate arguments.")
+    ap.add_argument('--stride', type=int, default=1)
+    ap.add_argument('--windows', default=None,
+                    help="comma OR colon separated comparison windows in "
+                         "half-moves, INDEPENDENT of the search depth. Omit to "
+                         "keep window == depth, which cannot distinguish a "
+                         "horizon effect from an evaluation error.")
+    ap.add_argument('--checks', default='ab', choices=['a', 'b', 'ab'],
+                    help="which checks to run. 'b' (reachability) is cheap and is "
+                         "the decisive test of whether the engine can generate a "
+                         "played turn; 'a' (eval drop) is dominated by depth-6 "
+                         "search at ~17 s/position. Coupling them made the cheap, "
+                         "decisive answer wait on the expensive, secondary one.")
+    ap.add_argument('--enum-cap', type=int, default=250_000,
+                    help='cap on turns enumerated per position for check B. Some '
+                         'positions enumerate enormously; past the cap the answer '
+                         'is "cannot tell" and the position is skipped, which is '
+                         'reported rather than silently counted as reachable.')
+    ap.add_argument('--surprise-from', type=float, default=0.0,
+                    help='a mate flip only counts if the EARLIER score was at least '
+                         'this many stones. 0 = the engine was not behind. This is '
+                         'what separates the reported bug from a game simply ending.')
+    ap.add_argument('--no-record-filter', action='store_true',
+                    help='do NOT confirm each turn is reachable before scoring '
+                         'windows across it. Only for reproducing the first '
+                         "campaign's numbers: 37.9% of those flags straddled a "
+                         'turn no legal move produces, so the window never '
+                         'happened and the envelope does not apply to it.')
+    ap.add_argument('--per-ply-limit', type=float, default=0.5,
+                    help='stones per HALF-MOVE that count as a defect. 0.5 = one '
+                         'stone per full move (both sides). Raise to 1.0 to read '
+                         '"1 per half-move" instead.')
+    ap.add_argument('--out', default='ai/data/eval_drop_audit.json')
+    ap.add_argument('--time-only', action='store_true',
+                    help='just measure cost per position per depth and exit')
+    ap.add_argument('--limit-games', type=int, default=0)
+    ap.add_argument('--rust-only', action='store_true',
+                    help='CONTROL: audit ONLY Rust-vs-Rust games. Those turns\n'
+                         'came out of the enumerator, so anything unreachable\n'
+                         'there is harness error, not an engine gap.')
+    ap.add_argument('--shard', type=int, default=0,
+                    help='take every Nth game starting at $SIGIL_SHARD_OFF/1000')
+    ap.add_argument('--shards', type=int, default=1)
+    ap.add_argument('--hydrate-out', default=None,
+                    help='hydrate the dump, write the per-turn SFN lines, and exit. '
+                         'Hydration needs node and the browser engine files; doing '
+                         'it ONCE centrally means fleet workers need neither, and '
+                         'the same games are not replayed hundreds of times.')
+    ap.add_argument('--lines', default=None,
+                    help='read pre-hydrated lines instead of hydrating')
+    args = ap.parse_args()
+    depths = [int(x) for x in args.depths.replace(':', ',').split(',') if x]
+    windows = ([int(x) for x in args.windows.replace(':', ',').split(',') if x]
+               if args.windows else None)
+    assert all(d % 2 == 0 for d in depths), "depths must be EVEN so the side to move matches"
+    if args.time_only:
+        time_depths(depths)
+        return
+
+    if args.hydrate_out:
+        out = []
+        for key, line, meta in dump_lines(args.games, limit=args.limit_games,
+                                          rust_only=args.rust_only):
+            out.append({'key': key, 'sfns': [p[0] for p in line], 'meta': meta})
+        os.makedirs(os.path.dirname(args.hydrate_out) or '.', exist_ok=True)
+        with open(args.hydrate_out, 'w', encoding='utf-8') as fh:
+            json.dump(out, fh)
+        n = sum(len(x['sfns']) for x in out)
+        print(f"hydrated {len(out)} games / {n} positions -> {args.hydrate_out}")
+        return
+
+    if args.lines:
+        path = args.lines
+        if path.startswith('gs://'):
+            # Fetch with the VM's own service-account token. Keeps the fleet
+            # runner unchanged: no extra sparse-checkout, no node, no new metadata.
+            import urllib.request, urllib.parse
+            bucket, _, obj = path[5:].partition('/')
+            tok = json.load(urllib.request.urlopen(urllib.request.Request(
+                "http://metadata.google.internal/computeMetadata/v1/instance/"
+                "service-accounts/default/token",
+                headers={"Metadata-Flavor": "Google"})))["access_token"]
+            u = (f"https://storage.googleapis.com/storage/v1/b/{bucket}/o/"
+                 + urllib.parse.quote(obj, safe='') + "?alt=media")
+            data = urllib.request.urlopen(urllib.request.Request(
+                u, headers={"Authorization": "Bearer " + tok})).read()
+            # Per-process path. All ~90 workers on a VM fetch this, and a
+            # shared name means one truncates the file while another reads
+            # it -- every shard died with JSONDecodeError on an empty file.
+            path = f"/tmp/hydrated_{os.environ.get('SIGIL_SHARD_OFF','0')}_{os.getpid()}.json"
+            open(path, 'wb').write(data)
+            print(f"fetched {args.lines} ({len(data)} bytes)", flush=True)
+        with open(path, encoding='utf-8') as fh:
+            pre = json.load(fh)
+        # --limit-games has to work HERE too, not just on the Firebase path.
+        # It did not, so the fleet's smoke gate audited all 2,403 games, blew
+        # through the runner's 900s smoke timeout and the arms never launched --
+        # a 90-vCPU VM sat in its smoke for its whole life.
+        if args.limit_games:
+            pre = pre[:args.limit_games]
+        src = ((x['key'], [(s, []) for s in x['sfns']], x.get('meta')) for x in pre)
+        label = f"{len(pre)} pre-hydrated games from {args.lines}"
+        do_reach = True
+    elif args.games:
+        src = dump_lines(args.games, limit=args.limit_games,
+                         rust_only=args.rust_only)
+        label = f"real games from {args.games}"
+        do_reach = True
+    else:
+        src = selfplay_lines(args.selfplay, args.play_ms)
+        label = f"{args.selfplay} self-play games at {args.play_ms}ms"
+        do_reach = False
+        print("NOTE: self-play cannot surface enumeration gaps -- the engine is both\n"
+              "      players, so it never plays a turn it failed to generate. Check B\n"
+              "      is skipped; use --games with recorded human games for that.\n")
+
+    print(f"auditing {label}, depths {depths}, "
+          f"flagging drops over {args.per_ply_limit} stones/half-move\n")
+    drops, misses, n_lines, n_plies = [], [], 0, 0
+    n_pairs = n_bad_pairs = n_skipped_windows = 0
+    misaligned = [0]        # games whose line/pairs index join does not hold
+    caches = []             # per-game verifier caches, for the filter report
+    shard_i = int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000
+    seen_games = -1
+    for key, line, meta in src:
+        seen_games += 1
+        if args.shards > 1 and seen_games % args.shards != shard_i % args.shards:
+            continue
+        n_lines += 1
+        n_plies += len(line)
+        if do_reach and 'b' in args.checks:
+            for m in check_reachability((meta or {}).get('pairs') or [],
+                                        args.enum_cap):
+                m['game'] = key
+                misses.append(m)
+        if 'a' in args.checks:
+            # Confirm every turn in the line BEFORE scoring any window, so a
+            # window straddling a turn no legal move produces is never
+            # measured. Check B is far cheaper than Check A -- one native
+            # enumerate-and-compare per turn against a full search per window
+            # -- so this is close to free, and it removes the largest and most
+            # misleading slice of the flag population.
+            verified = None
+            m = meta if isinstance(meta, dict) else {}
+            pairs = m.get('pairs') or []
+            if not args.no_record_filter and pairs:
+                # The index join is the whole mechanism, so PROVE it holds
+                # rather than trusting it. Hydration appends to `line` and
+                # `pairs` in lockstep and then adds the final after-state, so
+                # len(line) must be len(pairs) + 1. If that ever drifts, a
+                # silent off-by-one would filter the WRONG windows, which is
+                # worse than not filtering: refuse instead.
+                if len(line) != len(pairs) + 1:
+                    if not misaligned[0]:
+                        print(f"  WARNING: line/pairs misaligned "
+                              f"({len(line)} vs {len(pairs)}); record filter "
+                              f"OFF for such games", flush=True)
+                    misaligned[0] += 1
+                else:
+                    verified, vcache = make_verifier(pairs, args.enum_cap)
+                    caches.append(vcache)
+            flags, nskip = check_eval_drops(
+                line, depths, args.stride, args.per_ply_limit,
+                args.surprise_from, windows, verified)
+            n_skipped_windows += nskip
+            for r in flags:
+                r['game'] = key
+                drops.append(r)
+        if n_lines % 5 == 0:
+            print(f"  {n_lines} lines, {n_plies} plies, "
+                  f"{len(drops)} eval flags, {len(misses)} unreachable", flush=True)
+
+    print(f"\n=== {n_lines} lines, {n_plies} positions ===")
+    # Only meaningful where the source HAS per-turn pairs. Self-play has none
+    # -- the engine generated every half-move it played -- so the block would
+    # report "of the 0 turns a flagged window spanned, 0 excluded", which
+    # reads like a filter that found nothing rather than one that was never
+    # needed.
+    if 'a' in args.checks and not args.no_record_filter and caches:
+        n_pairs = sum(len(c) for c in caches)
+        n_bad_pairs = sum(1 for c in caches for v in c.values() if not v[0])
+        why = Counter(v[1] for c in caches for v in c.values() if not v[0])
+        pct = 100.0 * n_bad_pairs / n_pairs if n_pairs else 0.0
+        print(f"RECORD FILTER: of the {n_pairs} turns a FLAGGED window "
+              f"spanned, {n_bad_pairs} ({pct:.2f}%) are\n"
+              f"  not confirmed reachable;\n"
+              f"  {n_skipped_windows} windows excluded for straddling one. A "
+              f"window across a transition no\n"
+              f"  legal turn produces is not a half-move sequence, so the "
+              f"0.5/half-move envelope\n"
+              f"  says nothing about it. Pass --no-record-filter to see the "
+              f"unfiltered count.")
+        if why:
+            # Which reason dominates changes what the number means: mostly
+            # `unreachable` says the records are damaged, mostly `truncated`
+            # says --enum-cap is too low and the filter is discarding turns it
+            # simply could not judge.
+            print("  why they were not confirmed: " + "  ".join(
+                f"{k}={v}" for k, v in why.most_common()))
+        if misaligned[0]:
+            print(f"  {misaligned[0]} games had no usable index join and were "
+                  f"scored UNFILTERED")
+    # `do_reach` says the SOURCE can support Check B, not that Check B ran.
+    # Printing this block on `--checks a` reported "CHECK B unreachable played
+    # positions: 0 ... every played turn IS enumerable; no enumeration gap
+    # here" from an empty miss list that nothing had populated -- a clean bill
+    # of health for a check that never executed. That is worse than no output.
+    if do_reach and 'b' in args.checks:
+        print(f"CHECK B unreachable played positions: {len(misses)}")
+        errs = [m for m in misses if m.get('error')]
+        real = [m for m in misses if not m.get('error')]
+        # Out-of-scope games swamp the real signal: the shipped engine knows
+        # one spell pool, and the RTDB holds games from several. Separating
+        # them is the difference between 12% of turns and 3%.
+        print(f"  of which OUT OF SCOPE (not engine bugs): {len(errs)}")
+        if errs:
+            from collections import Counter as _C0
+            for k, v in _C0(m['error'] for m in errs).most_common(8):
+                print(f"    {v:5d}  {k}")
+        fat = [m for m in real if m.get('fat')]
+        slim = [m for m in real if not m.get('fat')]
+        print(f"  GENUINE unreachable turns: {len(real)}")
+        print(f"    from SLIM records (after-state REPLAYED from actions): "
+              f"{len(slim)}  <- evidence about the engine")
+        print(f"    from FAT records (after-state is a stored snapshot):   "
+              f"{len(fat)}  <- unverifiable; nothing checks it is one turn")
+        misses_all, misses = misses, real
+        for m in misses[:10]:
+            print(f"  {m.get('game')} turn {m.get('turnNumber')} "
+                  f"{m.get('mover','?')}: {m.get('nEnumerated','?')} turns "
+                  f"enumerated, none match")
+        if not misses:
+            print("  => every played turn IS enumerable; no enumeration gap here")
+        else:
+            from collections import Counter as _C
+            who = _C(m.get('playedBy', '?') for m in misses)
+            print(f"  by who played it: {dict(who)}   "
+                  f"(human / an OLDER engine => a RUST GENERATOR GAP)")
+            what = _C(cast_between(m['sfnBefore'], m['sfnAfter'])
+                      for m in misses if m.get('sfnAfter'))
+            print("  by what changed in between:")
+            for k, v in what.most_common(10):
+                print(f"    {v:5d}  {k}")
+            # A counter jump above 1 means the turn cast more than once,
+            # which the Rust enumerator may simply never emit.
+            nc = _C(m.get('nCasts') for m in misses)
+            order = sorted(nc.items(), key=lambda x: (x[0] is None, x[0]))
+            print("  by casts made in the turn: " + str(dict(order)))
+
+    # dedup: the same (game, ply, depth) must appear once
+    seen, uniq = set(), []
+    for r in drops:
+        k = (r.get('game'), r['ply'], r['depth'])
+        if k in seen:
+            continue
+        seen.add(k); uniq.append(r)
+    drops = uniq
+    if 'a' in args.checks and not caches and not args.no_record_filter:
+        print("record filter: N/A -- this source has no per-turn pairs. In "
+              "self-play the engine\n  generated every half-move it played, so "
+              "no window can cross a transition no\n  legal turn produces, and "
+              "every flag is about the engine (100% of them, against\n  7.1% "
+              "on the recorded human corpus).")
+    print(f"\nCHECK A eval-drop flags: {len(drops)}")
+    mate = [r for r in drops if r['mateFlip']]
+    print(f"  MATE FLIPS from a non-losing score (the reported bug): {len(mate)}")
+    print(f"  gradual drops over {args.per_ply_limit} stones/half-move: "
+          f"{len(drops) - len(mate)}")
+    # THE MATE-FLIP COUNT IS NOT COMPARABLE ACROSS THE MATE-GUARD FIX, and
+    # reading it as progress would be a straightforward mistake. `mate_flip`
+    # tests `score1 <= -MATE` (1e6). With the guard on, a mate the search
+    # cannot prove is reported as UNPROVEN_MATE (5,000), which is well above
+    # -MATE, so the SAME flag stops being labelled a mate flip.
+    #
+    # `dropPerPly` is unaffected: the gradual metric clamps at +-20 stones
+    # (2,000 centistones) and 1e7 and 5,000 both saturate to that bound, so
+    # the number is identical either way. Only the LABEL moves. Count the
+    # unproven ones separately so a run says what it actually found.
+    unproven = [r for r in drops
+                if abs(r['score1']) == abs(UNPROVEN_MATE_SENTINEL)]
+    print(f"  of those, ones where the engine now announces an UNPROVEN mate "
+          f"against the mover: {len(unproven)}")
+    print(f"    <- before the mate-guard fix these were counted as MATE FLIPS. "
+          f"Same positions,\n       same dropPerPly; the engine no longer "
+          f"claims the loss is proven.")
+    by_depth = Counter(r['depth'] for r in drops)
+    print(f"  by depth: {dict(sorted(by_depth.items()))}")
+    if drops:
+        worst = sorted(drops, key=lambda r: -r['dropPerPly'])[:10]
+        print("  worst:")
+        for r in worst:
+            tag = 'MATE FLIP' if r['mateFlip'] else f"{r['dropPerPly']:+.2f}/ply"
+            to = 'LOSS' if r['score1'] <= -MATE else f"{r['clampedTo']:+.2f}"
+            print(f"    d{r['depth']} ply {r['ply']:3d} {r['mover']:5s} "
+                  f"{r['clampedFrom']:+7.2f} -> {to:>8s}  {tag:>12s}  "
+                  f"[{cast_between(r['sfnBefore'], r['sfnAfter'])}]")
+        # Robi named Seal of Destruction; group so a culprit spell is visible.
+        g = defaultdict(int)
+        for r in drops:
+            g[cast_between(r['sfnBefore'], r['sfnAfter'])] += 1
+        print("  flags by what changed in between:")
+        for k, v in sorted(g.items(), key=lambda kv: -kv[1])[:8]:
+            print(f"    {v:5d}  {k}")
+
+    # The fleet runner uploads *.log and *.npz, not *.json, so every finding is
+    # also printed as a FLAG line. That makes the shard log self-sufficient and
+    # survives a watchdog kill, the same reason generation shards checkpoint.
+    for m in misses:
+        print("FLAG " + json.dumps({'kind': 'reach', **m}), flush=True)
+    for r in drops:
+        print("FLAG " + json.dumps({'kind': 'drop', **r}), flush=True)
+
+    cases = to_cases(misses, 'reach') + to_cases(
+        sorted(drops, key=lambda r: -r['dropPerPly'])[:60], 'drop')
+    os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
+    with open(args.out, 'w', encoding='utf-8') as fh:
+        json.dump({'cases': cases, 'totalUnmatched': len(cases),
+                   'drops': drops, 'unreachable': misses,
+                   'lines': n_lines, 'positions': n_plies}, fh, indent=1)
+    print(f"\nwrote {len(cases)} review case(s) -> {args.out}")
+
+
+if __name__ == '__main__':
+    main()

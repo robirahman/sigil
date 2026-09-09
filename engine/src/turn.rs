@@ -41,11 +41,17 @@ pub enum Action {
     Move { node: u8, push_to: Option<u8> },
     /// Dash: sacrifice `n_sacs` stones (1 with Seal of Lightning, else 2), then move.
     Dash { sacs: [u8; 2], n_sacs: u8, node: u8, push_to: Option<u8> },
-    /// Cast the spell in sigil `pos`, taking outcome `outcome` from the
-    /// deterministic list `resolve_outcomes` produces. The index is a faithful
-    /// witness: the same board and pos always yield the same ordering, so
-    /// `apply_turn` reproduces the enumerated state exactly.
-    Cast { pos: u8, outcome: u16 },
+    /// Cast the spell in sigil `pos`, keeping the `keep`-th of the stone sets
+    /// `keep_options` offers, then taking outcome `outcome` from the
+    /// deterministic list `resolve_outcomes` produces on THAT board. Both
+    /// indices are faithful witnesses: the same board and pos always yield the
+    /// same ordering, so `apply_turn` reproduces the enumerated state exactly.
+    ///
+    /// `keep` exists because which stones survive a cast is the caster's
+    /// choice, which the engine used to fix to one priority order -- see
+    /// `Board::keep_options`. `keep = 0` is that order, so a Turn built before
+    /// this field existed still means what it meant.
+    Cast { pos: u8, keep: u8, outcome: u16 },
     Pass,
 }
 
@@ -182,9 +188,9 @@ impl Board {
                     self.update();
                     self.do_move_with(node, push_to, c);
                 }
-                Action::Cast { pos, outcome } => {
+                Action::Cast { pos, keep, outcome } => {
                     let id = self.spells[pos as usize];
-                    self.cast_clear_and_refill(pos as usize, c);
+                    self.cast_clear_and_keep(pos as usize, c, keep as usize);
                     let (outs, _) = self.resolve_outcomes(pos as usize, c, OUTCOME_CAP);
                     if let Some(b) = outs.get(outcome as usize) {
                         self.stones = b.stones;
@@ -325,22 +331,33 @@ impl Board {
         if can_spell || (can_summer && self.holds_charged(c, SEAL_OF_SUMMER)) {
             for id in self.castable(c, can_spell, can_summer, false) {
                 let Some(pos) = self.position_of(id) else { continue };
-                let mut cleared = *self;
-                cleared.cast_clear_and_refill(pos, c);
-                let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
-                if trunc { st.resolver_truncated = true; }
                 // canSpell becomes false; canSummer survives only after a first
                 // cast made while canSpell was true.
                 let next_summer = if can_spell { can_summer } else { false };
-                for (i, ob) in outs.iter().enumerate() {
-                    let mut bs = cleared;
-                    bs.stones = ob.stones;
-                    bs.update();
-                    bs.finish_cast(id, c);
-                    bs.update();
-                    let t = so_far.push(Action::Cast { pos: pos as u8, outcome: i as u16 });
-                    bs.enumerate_post_move(c, t, can_dash, false, next_summer, out, cap, st);
-                    if st.truncated { return; }
+                // WHICH stones survive the cast is the caster's choice, and the
+                // resolution runs on the board that choice leaves -- so the keep
+                // has to be the OUTER loop. Fixing it to the priority order made
+                // the search blind to up to nine tenths of the positions
+                // reachable through any cast. `keep_options` puts that order at
+                // index 0, so the turns this used to emit still come first.
+                for ki in 0..self.keep_count(pos, c) {
+                    let mut cleared = *self;
+                    cleared.cast_clear_and_keep(pos, c, ki);
+                    let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                    if trunc { st.resolver_truncated = true; }
+                    for (i, ob) in outs.iter().enumerate() {
+                        let mut bs = cleared;
+                        bs.stones = ob.stones;
+                        bs.update();
+                        bs.finish_cast(id, c);
+                        bs.update();
+                        let t = so_far.push(Action::Cast {
+                            pos: pos as u8, keep: ki as u8, outcome: i as u16,
+                        });
+                        bs.enumerate_post_move(c, t, can_dash, false, next_summer,
+                                               out, cap, st);
+                        if st.truncated { return; }
+                    }
                 }
             }
         }
@@ -352,16 +369,55 @@ impl Board {
     ) {
         if out.len() >= cap { st.truncated = true; return; }
         out.push(so_far.push(Action::Pass));
+        // THE GATE, which `enumerate_post_move` has always had and this
+        // function never did. Without it the recursion added below does not
+        // terminate: `castable` pushes non-charms regardless of `can_spell`,
+        // and it excludes only the CURRENTLY locked spell, so two unlocked
+        // non-charms alternate A, B, A, B forever -- each cast relocks and
+        // frees the other. The smoke died with SIGSEGV on a blown stack.
+        // Gating on the same condition bounds it at a first cast plus one
+        // Seal of Summer second cast, exactly like the post-move path.
+        if !(can_spell || (can_summer && self.holds_charged(c, SEAL_OF_SUMMER))) {
+            return;
+        }
         for id in self.castable(c, can_spell, can_summer, true) {
             let Some(pos) = self.position_of(id) else { continue };
-            let mut cleared = *self;
-            cleared.cast_clear_and_refill(pos, c);
-            let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
-            if trunc { st.resolver_truncated = true; }
-            for (i, _ob) in outs.iter().enumerate() {
-                out.push(so_far.push(Action::Cast { pos: pos as u8, outcome: i as u16 })
-                               .push(Action::Pass));
-                if out.len() >= cap { st.truncated = true; return; }
+            // canSpell becomes false after a cast; canSummer survives only if
+            // the cast was made while canSpell was true. Same rule as
+            // `enumerate_post_move`.
+            let next_summer = if can_spell { can_summer } else { false };
+            for ki in 0..self.keep_count(pos, c) {
+                let mut cleared = *self;
+                cleared.cast_clear_and_keep(pos, c, ki);
+                let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                if trunc { st.resolver_truncated = true; }
+                for (i, ob) in outs.iter().enumerate() {
+                    let t = so_far.push(Action::Cast {
+                        pos: pos as u8, keep: ki as u8, outcome: i as u16,
+                    });
+                    // RECURSE rather than forcing Pass. This branch used to
+                    // emit only `Cast + Pass`, so a Seal of Summer SECOND cast
+                    // was unreachable after a dash even though
+                    // `enumerate_post_move` has always allowed one -- and a
+                    // second cast of the charm Surge grants a move, which
+                    // places a stone. That is the residual signature
+                    // `layout_nearest` reported: post-dash Fireblast and
+                    // Meteor turns sitting at distance exactly 1, 14/14 each,
+                    // with the nearest enumerated turn being the same
+                    // move+dash+cast ending in Pass.
+                    let mut bs = cleared;
+                    bs.stones = ob.stones;
+                    bs.update();
+                    bs.finish_cast(id, c);
+                    bs.update();
+                    if bs.outcome != Outcome::Ongoing {
+                        out.push(t.push(Action::Pass));
+                        if out.len() >= cap { st.truncated = true; return; }
+                        continue;
+                    }
+                    bs.enumerate_post_dash(c, t, false, next_summer, out, cap, st);
+                    if st.truncated { return; }
+                }
             }
         }
     }
@@ -439,12 +495,16 @@ impl Board {
                     acts.push(JsAct::mv(node, push_to, is_enemy, false));
                     b.do_move_with_pub(node, push_to, c);
                 }
-                Action::Cast { pos, outcome } => {
+                Action::Cast { pos, keep, outcome } => {
                     let id = b.spells[pos as usize];
                     let name = crate::spells_meta::SPELLS[id as usize].name;
                     let before = b;
-                    b.cast_clear_and_refill(pos as usize, c);
-                    // `kept` is exactly what the refill placed inside the sigil.
+                    b.cast_clear_and_keep(pos as usize, c, keep as usize);
+                    // `kept` is exactly what the keep placed inside the sigil,
+                    // read off the board, so the list handed to `applyAITurn`
+                    // is the stones the client is about to be told to keep. If
+                    // this ever disagreed with `keep`, the client's own SFN
+                    // assertion would reject the engine's move.
                     let kept_mask = b.mine(c) & crate::topology::SIGIL[pos as usize];
                     let mut kept = Vec::new();
                     let mut m = kept_mask;
@@ -520,7 +580,7 @@ impl Board {
                 for id in b.castable(c, true, true, false) {
                     let Some(pos) = b.position_of(id) else { continue };
                     out.push(Turn::single(a)
-                        .push(Action::Cast { pos: pos as u8, outcome: 0 })
+                        .push(Action::Cast { pos: pos as u8, keep: 0, outcome: 0 })
                         .push(Action::Pass));
                 }
             }

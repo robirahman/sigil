@@ -23,9 +23,12 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
+SHARD_BASE=$(md shard-base)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=rust-bitboard-engine}" \
-  "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}"
-echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH max_hours=$MAXH"
+  "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \
+  "${SHARD_BASE:=0}"
+echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH \
+max_hours=$MAXH shard_base=$SHARD_BASE"
 echo "arms: $ARMS"
 
 # ---------------------------------------------------------------------------
@@ -93,7 +96,15 @@ UPLOADER=$!
 
 if [ -n "$SMOKE" ]; then
   echo "=== smoke: $HARNESS $SMOKE ==="
-  if ! timeout 900 $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
+  # 900s was hard-coded and it is not enough for every harness. A CHECK A
+  # smoke of 2 games at depth 6 costs ~950s in depth-6 scoring alone (~17 s a
+  # position), so the smoke would be killed and the arms would never launch --
+  # the failure that once left a 90-vCPU VM inside its own smoke test for its
+  # whole life. Overridable per run; the point of a cap is that a HANGING
+  # smoke cannot burn the VM, not that every harness fits one number.
+  SMOKE_TIMEOUT=$(md smoke-timeout); : "${SMOKE_TIMEOUT:=900}"
+  echo "smoke timeout ${SMOKE_TIMEOUT}s"
+  if ! timeout "$SMOKE_TIMEOUT" $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
        $(echo "$SMOKE" | tr ',' ' ') > $WORK/out/smoke.log 2>&1; then
     echo "FATAL: smoke failed"; sed -n '1,40p' $WORK/out/smoke.log
     gcs_put "$WORK/out/smoke.log" "runs/$RUN/smoke_FAILED.log"; shutdown -h now; exit 1
@@ -119,7 +130,12 @@ for arm in $ARMS; do
     # every ab_eval arm that also passed an optional trailing argument: the offset
     # landed past the last position the harness reads, all shards ran identical
     # seeds, and the reported "n" was replication rather than sample size.
-    ( SIGIL_SHARD_OFF=$((w*1000)) \
+    # SHARD_BASE offsets this VM's workers. Deriving the offset from the
+    # worker index ALONE makes every VM in a fleet run the same shards: a
+    # 3-VM run then audits a third of the corpus three times and two thirds
+    # never, while the logs look complete. This has bitten twice -- two runs
+    # in the bucket are byte-identical because of it.
+    ( SIGIL_SHARD_OFF=$(( (SHARD_BASE + w) * 1000 )) \
       $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
         $(echo "$arm" | tr ',' ' ') \
         > "$WORK/out/arm${ai}_${tag}_w${w}.log" 2>&1 ) &

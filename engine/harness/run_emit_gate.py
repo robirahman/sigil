@@ -56,7 +56,23 @@ def main():
         for kind, node, push in b.first_move_variants()[:nmove]:
             conts = b.continuations(node, push, 'red')
             # always include 'pass', then prefer the CAST continuations
-            picks = [conts[0]] + [c for c in conts if c[1] == 'cast'][:4] \
+            # Cast continuations now carry a KEEP index in the 5th slot --
+            # which stones stay standing in the cast sigil, a choice the live
+            # game prompts for. Taking the first four would take four outcomes
+            # of the SAME (best) keep and never exercise the others, so spread
+            # the picks across distinct keeps: this gate replays through the
+            # real browser engine, so it is the only thing that proves a
+            # non-priority keep emits a `kept` list the client agrees with.
+            casts = [c for c in conts if c[1] == 'cast']
+            by_keep = collections.defaultdict(list)
+            for c in casts:
+                by_keep[c[4]].append(c)
+            spread = []
+            for keep in sorted(by_keep):
+                spread += by_keep[keep][:2]
+                if len(spread) >= 6:
+                    break
+            picks = [conts[0]] + spread[:6] \
                                + [c for c in conts if c[1] == 'dash'][:1]
             for label, ckind, ca, cb, ccc in picks:
                 aj, exp = b.emit_choice_actions(node, push, ckind, ca, cb, ccc, 'red')

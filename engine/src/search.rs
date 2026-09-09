@@ -38,6 +38,32 @@ use crate::board::{Board, Color, Outcome};
 use crate::turn::{Action, Turn};
 
 pub const WIN: i32 = 10_000_000;
+/// What an unproven mate is reported as. Two bounds pin this down:
+///
+///   * ABOVE any real material score, so it still reads "winning decisively".
+///     A 39-node board caps a lead near 20 stones, i.e. ~2,000 centistones.
+///   * BELOW what `ui_score` renders as a proof. The UI calls anything at or
+///     past 37 Caveman units a proven mate and prints "win in N", and the
+///     conversion is centistones/3900, so the ceiling is 144,300. Reporting
+///     100,000 would clear the material bar but display as 1,000 stones.
+///
+/// 5,000 centistones = 50 stones: 2.5x any achievable lead, 1.3 Caveman units,
+/// nowhere near the UI's mate threshold. It is deliberately ABOVE the physical
+/// maximum for a 39-node board, so it cannot be mistaken for a real count.
+///
+/// The clamp is applied to the RETURNED score only, after the search has
+/// finished and after `prev` has already seeded the next aspiration window, so
+/// the CLAMP cannot affect move choice or alpha-beta bounds.
+///
+/// The GUARD AS A WHOLE CAN change the move played, and saying otherwise was
+/// wrong. Suppressing the early break makes iterative deepening continue in a
+/// position where it used to stop, and a deeper iteration may pick a different
+/// move -- which is the point: it may discover the "mate" was the opponent's
+/// saving move falling outside the width budget. So this is a playing change
+/// in those positions, not merely a display change. It is still not
+/// SPRT-able: the positions are ~4 in 3,665 starts, so gate it by counting
+/// the defect it removes (`eval_consistency.py --mate-guard on|off`).
+pub const UNPROVEN_MATE: i32 = 5_000;
 pub const MAX_PLY: usize = 64;
 
 /// Cast-outcome window the search offers the generator per node.
@@ -67,6 +93,16 @@ pub const DEFAULT_WINDOW: usize = 16;
 /// against 7.68 at scale 1 -- it gives up **2.2 plies** and still wins by 223 Elo.
 /// In this game seeing more moves beats looking further ahead.
 pub const DEFAULT_WIDTH_SCALE: usize = 4;
+
+/// The SHIPPED adaptive-widening operating point: (threshold p, easy, hard).
+///
+/// The engine default is `adaptive: None` (off), so every harness that wants
+/// the shipped search has to pass this triple -- and each one that writes the
+/// literal is another place for it to drift, which is the mistake that has
+/// already invalidated two campaigns. This is its single home; harnesses read
+/// `se.SHIPPED_ADAPTIVE`. Measured optimal: the threshold sweep put p=0.10 at
+/// the knee (-26 Elo at 20% widened, -44 at 10%, -0.0 at 50%).
+pub const SHIPPED_ADAPTIVE: (f32, usize, usize) = (0.10, 2, 6);
 
 /// PROGRESSIVE WIDENING.
 ///
@@ -146,6 +182,10 @@ pub struct SearchStats {
     pub windowed: bool,
     /// Set if progressive widening dropped ordered successors at some node.
     pub widened: bool,
+    /// Set when the reported score was a mate that the search could NOT prove,
+    /// because some node was width- or window-limited. The score is reported as
+    /// `UNPROVEN_MATE` in that case rather than as a proof.
+    pub unproven_mate: bool,
     /// Successors actually expanded, summed — lets a caller see the effective
     /// branching factor (`expanded / nodes`).
     pub expanded: u64,
@@ -165,6 +205,17 @@ pub struct Search {
     pub stats: SearchStats,
     window: usize,
     width_scale: usize,
+    /// How many keep choices per cast the ordered stream expands. Which stones
+    /// survive a cast is the caster's choice; expanding more of them is what
+    /// makes the search able to see it, and each one costs a full
+    /// `resolve_outcomes` per cast candidate -- at 10 the node rate regressed
+    /// 5.4x. Swept, not guessed.
+    keep_window: usize,
+    /// Whether a mate score from a WIDTH-LIMITED search is treated as a proof.
+    /// Off reproduces the pre-guard engine exactly, which is what makes the
+    /// A/B meaningful; on is the shipped default because announcing a win the
+    /// search never established is a soundness bug, not a tuning choice.
+    mate_guard: bool,
     pub weights: crate::eval::Weights,
     /// A/B switch: true reproduces the pre-fix stage ordering — stages in order,
     /// no class merge AND no reserved key-dash slot. This is the baseline every
@@ -263,6 +314,8 @@ impl Search {
             stats: SearchStats::default(),
             window: DEFAULT_WINDOW,
             width_scale: DEFAULT_WIDTH_SCALE,
+            keep_window: crate::turn_iter::DEFAULT_KEEP_WINDOW,
+            mate_guard: true,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
             width_shape: 0,
@@ -279,6 +332,15 @@ impl Search {
     }
 
     pub fn set_window(&mut self, w: usize) { self.window = w; }
+    /// 1 reproduces the pre-fix search exactly: the priority keep only.
+    pub fn set_keep_window(&mut self, k: usize) {
+        self.keep_window = k.clamp(1, crate::turn_iter::MAX_KEEP_WINDOW);
+    }
+    pub fn keep_window_get(&self) -> usize { self.keep_window }
+    /// false reproduces the pre-guard search: any mate score ends deepening
+    /// and is reported as a proof.
+    pub fn set_mate_guard(&mut self, on: bool) { self.mate_guard = on; }
+    pub fn mate_guard_get(&self) -> bool { self.mate_guard }
     pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
     /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
@@ -396,7 +458,34 @@ impl Search {
             best_score = score;
             self.stats.depth_completed = depth;
             if let Some(p) = progress.as_deref_mut() { p(depth, score, self.stats.nodes); }
-            if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
+            // A MATE SCORE IS A PROOF ONLY IF THE SEARCH THAT FOUND IT SAW
+            // EVERY MOVE -- the full argument is on `pick_successor`, which is
+            // where this guard was FIRST written, and only there. That was the
+            // bug: `pick_successor` serves the browser's successor-picking
+            // path, while THIS loop is what `play_best` drives, i.e. every
+            // arena, every audit, and the native engine. `set_mate_guard`
+            // therefore set a field the shipped search never read.
+            //
+            // Two measurements that looked like evidence about the guard were
+            // really evidence of this omission, and both are retracted:
+            // `smoke_knobbite` found the knob changed nothing on 60 of 60
+            // midgame positions, and the A/B over the 145 flagged positions
+            // returned 4 false mates with the guard OFF and the same 4, at
+            // byte-identical scores, with it ON.
+            let proven = !self.mate_guard
+                         || (!self.stats.widened && !self.stats.windowed);
+            if score.abs() >= WIN - MAX_PLY as i32 && proven { break; }   // decisive
+        }
+        // Report an UNPROVEN mate as large-but-finite. `ui_score` divides by
+        // 3900 and the UI multiplies by 39, so UNPROVEN_MATE reaches the player
+        // as +50 stones: unmistakably winning, past no mate threshold. The move
+        // choice is untouched -- only the number the engine announces.
+        let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
+        if self.mate_guard && mate_score
+           && (self.stats.widened || self.stats.windowed) {
+            self.stats.unproven_mate = true;
+            let sign = if best_score > 0 { 1 } else { -1 };
+            best_score = sign * UNPROVEN_MATE;
         }
         (best, best_score, self.stats)
     }
@@ -601,7 +690,8 @@ impl Search {
             let reasons = if additive { 0 }
                           else if self.legacy_order || width < self.key_dash_min_width { 0 }
                           else { self.key_dash_reasons };
-            let mut it = b.turns_ordered_reasons(c, self.window, reasons);
+            let mut it = b.turns_ordered_keeps(c, self.window, reasons,
+                                               self.keep_window);
             // pull a larger pool only when the re-ranker will actually use it
             v = it.by_ref().take(width * self.rank_oversample).collect();
             if it.next().is_some() { self.stats.widened = true; }
@@ -704,7 +794,38 @@ impl Search {
             self.stats.depth_completed = depth;
             // Search the previous best first next time.
             order.sort_by_key(|&i| if i == best_idx { 0 } else { 1 });
-            if best_score.abs() >= WIN - MAX_PLY as i32 { break; }
+            // A MATE SCORE IS A PROOF ONLY IF THE SEARCH THAT FOUND IT SAW
+            // EVERY MOVE. Breaking out of iterative deepening here on any mate
+            // score treated a width-limited result as certain: with
+            // progressive widening a "forced win" can simply be the
+            // opponent's saving move falling outside the budget -- 24 turns
+            // near the frontier against a median branching of 316 -- and the
+            // engine then stopped looking and announced a win it did not
+            // have. Measured in self-play from real positions: 4 of 126
+            // self-inconsistencies were +MATE announcements that decayed to
+            // +0.38..+1.52 stones two half-moves later.
+            //
+            // `widened`/`windowed` are search-wide, so this is conservative:
+            // if ANY node ran out of budget we keep deepening rather than
+            // claim proof. Real mates are still found and still returned; the
+            // engine just no longer stops early on an unproven one.
+            let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
+            let proven = !self.mate_guard
+                         || (!self.stats.widened && !self.stats.windowed);
+            if mate_score && proven { break; }
+        }
+        // Report an UNPROVEN mate as large-but-finite. The web UI treats a
+        // score past its own threshold as a proven mate and prints "win in N",
+        // so passing a width-limited mate score through makes the interface
+        // state a certainty the search never established. This CLAMP leaves the
+        // chosen move alone; the guard's other half, not breaking out of
+        // iterative deepening, can and does change it.
+        let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
+        if self.mate_guard && mate_score
+           && (self.stats.widened || self.stats.windowed) {
+            self.stats.unproven_mate = true;
+            let sign = if best_score > 0 { 1 } else { -1 };
+            best_score = sign * UNPROVEN_MATE;
         }
         (best_idx, best_score, self.stats)
     }

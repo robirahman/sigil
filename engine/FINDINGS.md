@@ -969,3 +969,401 @@ invariant), and adaptive widening with BOTH scales equal to the shipped one must
 reproduce the uniform search **node for node**.
 
 Default is `None` -- uniform -- until an arena says otherwise.
+
+## The cast keep choice was never enumerated (2026-09-08)
+
+The largest rules gap found in the engine so far, and the only one measured against
+the recorded game history rather than against synthetic positions.
+
+### What the rules are
+
+Casting a charged spell clears the spell's sigil, and the caster then places `mana`
+stones back onto nodes **of its choice**. `game-controller.js:644-718` — the live
+game — emits `chooserefills` and prompts "Select a stone to keep:" once per refill,
+skipping the prompt only when `refills >= emptyNodes.length` leaves no degrees of
+freedom. The choice is `C(n, mana)` over all of the sigil's nodes, at most
+`C(5,2) = 10`.
+
+`sim-board.js:1633 _castClearAndRefill` substitutes ONE fixed priority order for
+that choice — 5-node `[2,3,4,0,1]`, 3-node `[2,1,0]` — and `engine/src/cast.rs`
+mirrored sim-board rather than the rules (its comment reads "JS priority", so the
+port was faithful to the wrong reference). **The bug therefore predates the Rust
+engine and the whole AI lineage shares it.**
+
+### How it was found, and how the harness was validated
+
+`eval_drop_audit.py --checks b` asks, for every turn in `completed_games`, whether
+the engine's own enumeration can produce the layout that was actually played.
+Over 2,403 games / 66,820 positions it found **2,016 turns the engine cannot
+generate**.
+
+The control was already inside the run: the 165 human-vs-rust games contain 2,305
+turns the Rust engine played itself, through the identical Firebase -> replay bridge
+-> SFN -> `enumerate_turns` pipeline. **0 of 2,305 were unreachable**, so the
+pipeline is faithful. The rate then orders itself by how much of the move space a
+player uses — human 6.67%, ai_very_hard 2.71%, ai_hard 1.31%, ai_medium 0.20%,
+ai_easy 0.09%, rust 0.00% — which a harness bug would not do.
+
+Also required: separating the **5,809 out-of-scope flags** (spell pools the engine
+does not implement — Fissure, Gush, Thunder, Rock_Slide, Endowment, Bulwark,
+Lifesap — or state SFN cannot carry: Providence `pm:`, Aftershock `ab:`, Ambush
+`sn:`). Mixing them in reports 12% of turns unreachable instead of 3%.
+
+### The natural experiment that identified the cause
+
+Over 4,598 audited casts matched to a sigil position:
+
+| played by | keeps by priority | keeps differently |
+|---|---|---|
+| human | 25/725 = 3.4% missed | **1001/1644 = 60.9% missed** |
+| ai_hard | 24/705 = 3.4% | 0/7 |
+| ai_very_hard | 18/351 = 5.1% | 1/2 |
+| ai_easy | 9/483 = 1.9% | 0/0 |
+| **rust** | **0/252 = 0.0%** | 0/0 |
+
+Every engine keeps by priority in ~100% of its casts because none has a chooser;
+humans are prompted and keep differently in **69.4%**. The two groups differ by
+which code path chose the keep, so this is not a correlation.
+
+Ruled out by measurement, not argument: `OUTCOME_CAP` truncation
+(`layout_nearest` reports `resolver_truncated` 0/83 and `turn_cap_truncated` 0/83,
+and the Hamming distance to the nearest enumerated layout is almost always 1 or 2 —
+one stone misplaced, not a missing turn shape); and dash generation
+(dash-without-cast was **0/5,671**, which also closes the `key_dash` "unenumerable
+dashes" as an identity bug).
+
+### The fix
+
+`Board::keep_options` / `keep_count` / `cast_clear_and_keep`, with **index 0 the
+priority order**, so `cast_clear_and_refill` is `cast_clear_and_keep(.., 0)` and
+enumerating the rest is a provable superset. `Action::Cast` gained `keep`;
+`apply_turn` and `emit_actions` replay it. Both full-enumeration cast branches
+expand every keep. The ordered stream expands them too, windowed by the
+`keep_window` Search knob and **stratified round-robin** — scoring the (keep,
+outcome) pairs jointly collapsed the entire window onto keep 0, because
+`configuration_value` often cannot tell two keeps apart and the tie-break to the
+lower index took everything. Full enumeration being complete buys nothing if the
+search never sees the options.
+
+### Results
+
+| gate | before | after |
+|---|---|---|
+| unreachable turns (2,403 games) | 2,016 (3.13%) | **675 (1.05%)** — 66.5% recovered |
+| human-played | 1,623 (6.67%) | **318 (1.31%)** — **80%** recovered |
+| engine-played | 377 | 353 — 6-7% |
+| node rate, kw=1 / 2 / 3 / 10 | 20.15 us/node | 18.04 / 19.38 / 21.47 / 25.74 |
+| `cargo test` | 75 | **84 passed, 0 failed** |
+| `parity_primitives` | — | 4,000 positions, OK |
+| `run_emit_gate` | — | **12,474 matched, 0 mismatch**, 30/30 spells |
+
+Engine-played misses barely move because those engines already kept by priority;
+their residual has other causes. Of the 675 remaining, 417 show no spell-counter
+change — charm casts (charms skip `finish_cast`) and non-cast turns, i.e. a
+different gap: `enumerate_post_dash` emits only `Pass` or `Cast`+`Pass`, and
+`RESOLVER_LEVEL_COMPLETE` in turn.rs lists the resolver choice points still
+outstanding.
+
+### Elo: NEUTRAL in self-play, at every dose
+
+| arm | games | win rate | Elo |
+|---|---|---|---|
+| keep_window 2 vs 1 | 7,040 | 49.94% [48.78, 51.11] | **-0.4 [-8.5, +7.7]** |
+| keep_window 10 vs 1 | 6,997 | 49.91% [48.74, 51.08] | **-0.6 [-8.8, +7.5]** |
+
+Not a dose problem: at kw=10 the search picks a **non-priority keep 40.9%** of the
+time (38 of 93 cast positions at depth 4), so it is making different decisions and
+they are neither better nor worse — the eval cannot tell a good keep from a bad
+one. Fourth instance of the pattern, after the leaf eval, the width classifier and
+the re-ranker.
+
+**Why self-play understates THIS knob specifically.** Engine-vs-engine, both sides
+draw keeps from the same distribution, so "the opponent always keeps by priority"
+is a *correct* opponent model. Against a human it is wrong 69.4% of the time in
+cast positions. No self-play SPRT can see that cost, and the right instrument for
+the reported symptom — an eval of +0.5 into a mate-in-one — is **Check A**, the
+eval-drop audit over real human games (~630 CPU-hours), which has NOT been run.
+
+Ship it as a correctness fix at `keep_window = 2`. Do not sell it as an Elo lever.
+
+### Four collateral bugs, each found by a test or a log rather than by reading
+
+1. The ordered generator stored `Action::Cast::outcome` as a position in the
+   **sorted** `resolve_outcomes_ordered` list while `apply_turn` applies it against
+   the **raw** list — so the search applied a resolution it had not scored.
+   `resolve_outcomes_ranked` returns raw indices.
+2. `ordered_dash_branches` built `sacs` in `sacrifice_cost` order against
+   `turn.rs`'s node order, so one dash compared and hashed as two turns under the
+   derived `PartialEq`/`Hash`. One `sort_unstable()`; changes no board, only turn
+   identity, so TT probes, killer matching and the emit gate stop missing.
+3. `legal_draw` seeded its xorshift with `seed | 1`, so seeds 2n and 2n+1 gave the
+   SAME draw. Caught by an SPRT whose first 22 games had 5 of 5 seed pairs identical
+   in winner AND ply count — an SPRT over duplicated games understates its variance
+   and reaches a boundary with false confidence. SplitMix64, and a test.
+4. `--limit-games` was ignored on the audit's pre-hydrated path, so a fleet smoke
+   gate audited all 2,403 games, ran past `runner.sh`'s 900s timeout, and a
+   90-vCPU VM spent its entire life inside its own smoke test.
+
+Two tooling repairs of the same kind: `buildtest.sh` piped cargo through
+`tail -30`, and since cargo prints errors first and the summary last it showed
+"5 previous errors" while hiding four of them; and the parity/emit harnesses need
+`SCRATCH` plus a `ref/` tree that only `runner.sh` built, so all three exited 1 for
+environmental reasons — the emit gate printing a 12,474-pair census and then dying
+*before* its node comparison, which looks exactly like mismatches. A gate that
+cannot run is worse than no gate.
+
+### Adjudicated 2026-09-09: the enumeration campaign closes at ZERO
+
+Robi ruled on 7 of the 61, through the real UI, and every one came back
+**"no legal turn reaches the after-state"**. The 7 span both patterns -- four
+from the dash-empties-its-own-sigil group, one from the no-cast `dist=4`
+outlier, two from the no-overlap group -- so the finding generalises rather
+than covering only the dominant mechanism.
+
+So the whole residual is record artifacts and the engine is right:
+
+| classification | count | what it is |
+|---|---|---|
+| FAT | 237 | after-state is a stored snapshot, never derived from actions |
+| NO-OP SACRIFICE | 134 | a `sacrifice` names a sigil node the cast already cleared, so a mandatory cost goes unpaid |
+| TRANSCRIPTION GLITCH | 61 | adjudicated unreachable by any legal turn |
+| **GENUINE ENUMERATION GAP** | **0** | |
+
+**2,016 -> 0.** The engine can now generate every turn in the recorded
+history that was ever legal.
+
+Why the records contain them at all: `applyAITurn` applies a stored action
+list WITHOUT validating legality, so a corrupted or mis-ordered transcript
+replays "cleanly" and its after-state gets stored. The no-op sacrifice is the
+clearest case -- the cast clears the sigil, then a `sacrifice` names a node
+inside it, and the applier silently does nothing. Any future audit against
+`completed_games` needs these three filters or it will attribute record
+damage to the engine: 371 of 432 flags here were not engine behaviour at all,
+and the 61 that survived every mechanical filter still were not.
+
+**Do NOT relax `castable` to accept them.** Allowing a cast whose sigil the
+dash emptied would let the search play illegal moves -- strictly worse than
+the 0.095% it was declining -- and the emit gate would then reject the
+engine's own output.
+
+---
+
+## The mate guard was in a function nothing ships (2026-09-09)
+
+The guard exists because the engine announced `+MATE` and then, two half-moves
+later, announced `+0.38` — a "proof" that was not one. It clamps such a score
+to `UNPROVEN_MATE` and stops iterative deepening from breaking early on it.
+
+**It was written into `pick_successor` and only there.** The call graph:
+
+| entry point | who drives it | had the guard |
+|---|---|---|
+| `pick_successor` | `py.rs` only, i.e. `engine/server/serve.py`, the local `?ai=rust_native` playtest | yes |
+| `go_with_progress` | `wasm.rs pick_move_actions` — **the shipped site** | **no** |
+| `go_with_progress` | `play_best` — **every arena, every audit, the native engine** | **no** |
+
+`go_with_progress` ended its loop with
+
+    if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
+
+and had no clamp after it, so `set_mate_guard` set a field the shipped search
+never read. The symptom Robi reported — the engine showing a win it does not
+have — reaches the player through `pick_move_actions` → `go_with_progress` →
+`ui_score`, every step of which bypassed the guard.
+
+### Two measurements retracted
+
+Both were evidence of the omission, not of the guard:
+
+1. **`smoke_knobbite`: `mate_guard` changed nothing on 60 of 60 positions.** I
+   explained it away — "the guard only fires where a mate meets a
+   width-limited search, so a low count is expected" — and let the check exit
+   0 with a WARNING. **"Expected to be rare" is indistinguishable from "not
+   wired."** The check had found the bug and I talked it out of reporting it.
+2. **The A/B over the 145 flagged positions.** Guard off: 145 starts, 117
+   self-inconsistencies, **4 false mates**. Guard on: 145, 117, **4** — the
+   same four transitions at byte-identical scores (`9999997` → `+1.50`,
+   `+0.38`, `+1.49`, `+1.52`). I had written the gate as "off should
+   reproduce the four seen earlier; on should be zero", so this was a clean
+   failed gate. The correct reading was not "the guard does not work" but
+   "the guard was never called", and the only way to tell those apart was to
+   read the call graph.
+
+The self-play control arm was uninformative either way, as designed: 3,915
+starts guard-off and 3,960 guard-on, 0 false mates in both, because fresh
+self-play does not produce them.
+
+### The fix, and the gate that would have caught it
+
+`go_with_progress` now carries the same two-part treatment as
+`pick_successor`. `UNPROVEN_MATE` reaches the player as +50 stones
+(`ui_score` divides by 3900, the UI multiplies by 39): unmistakably winning,
+past no mate threshold.
+
+The smoke test no longer samples and hopes. It **constructs** the condition —
+mate-bearing positions with the cast-outcome window starved so the search is
+certainly budget-limited — requires the guard to clamp every mate it finds,
+and **fails when zero positions were exercised**, which is precisely how the
+first version passed. Two `cargo test`s pin the behaviour to `go` itself so
+it cannot drift back out of the shipping path.
+
+### Measured after the fix
+
+| gate | before | after |
+|---|---|---|
+| `smoke_knobbite`, mate_guard differs | **0 / 60** | **2 / 2** mates clamped, 0 missed |
+| `smoke_guardfires` window 2, depth 4 | — | 10 mates, all budget-limited, **10 clamped, 0 leaked** |
+| `smoke_guardfires` window 1, depth 4 | — | 11 mates, **10** budget-limited, 10 clamped, 0 leaked |
+| `cargo test` | 84 | 87 passing, plus the two below |
+
+The window-1 row is the one that shows the guard is not simply clamping every
+mate it sees: one of the 11 was found by a search that never exhausted its
+budget, and the guard left it alone. A mate from an exhaustive search IS a
+proof. The cargo test asserts that direction too.
+
+`an_unproven_mate_is_not_announced_as_a_mate_through_go` pins ten harvested
+positions and fails when none is exercised.
+`the_mate_guard_defaults_on_and_leaves_ordinary_scores_alone` asserts the
+default is on and that guard on/off agree at the opening on score, node count,
+completed depth and chosen turn.
+
+### Rule
+
+**A knob is not wired until it is proven to bite in the function the
+deliverable calls.** `play_best` is not the only such function: the site
+calls `wasm.rs`, the playtest server calls `pick_successor`. A guard that
+exists in one root loop and not the others is worse than no guard, because
+the field, the setter, the stats flag and the tests all read as present.
+
+---
+
+## keep_window, re-measured with the knob actually wired (2026-09-09)
+
+The first two keep-window SPRTs were void: `play_best` took `keep_window` and
+dropped it, so both arms of both runs were the same engine. Re-run on the
+fixed binding, with `smoke_knobbite` first showing the knob changes something
+on 56 of 60 real midgame positions:
+
+| | |
+|---|---|
+| config | kw arm 2 vs base 1, 300 ms, tfit, width_scale 4, adaptive (0.10,2,6) |
+| games | 7,040 decided, 0 unfinished, 3,520 distinct seeds, both colours |
+| arm | **48.89%** [47.73, 50.06] |
+| Elo | **-7.7 [-15.8, +0.4]** |
+| depth at matched time | arm 4.30, base 4.40 |
+
+The interval spans parity: **no measured difference.** What downward drift
+there is matches the node-rate cost — expanding keeps costs time, and the arm
+completes 0.1 ply less at the same clock. Note the engine default is now
+kw=2, so the *base* arm is the narrower engine and kw=1 reproduces the
+pre-fix search exactly.
+
+This is a real null, unlike the two it replaces, and it does not change the
+case for the enumeration fix. Self-play cannot price this particular change:
+both sides draw keeps from the same distribution, so "the opponent keeps by
+priority" is a correct opponent model in an arena and a wrong one against a
+human, who keeps non-priority in 69.4% of casts. The fix ships on
+correctness.
+
+---
+
+## Check A re-run, with the corrupt-window filter (2026-09-09)
+
+2,403 recorded games / 66,820 positions, depths 2 and 4 against windows 2 and
+4, 264 shards, **264 of 264 finished** (no shard dropped, so the rates below
+are over the whole corpus).
+
+| | all flags | engine to move |
+|---|---|---|
+| flagged windows | **5,655** | **404 (7.1%)** |
+| announced provably lost (`score1 <= -1e6`) | **0** | **0** |
+| announced lost, NOT provably (`+-5000`) | 1,023 | — |
+| UNTESTED -- nothing deeper in the run | — | **220 (54.5%)** |
+| `OTHER` -- a deeper search DID still flag | — | 107 (26.5%) |
+| horizon effect (deepening cured it) | — | 77 (19.1%) |
+| dropPerPly 0.5-1.0 | 4,057 | 230 |
+| dropPerPly 1.0-2.0 | 336 | 43 |
+| dropPerPly > 2.0 | — | **128** |
+
+### Three things this table does not say
+
+**1. `MATE FLIPS: 0` is the mate guard, not the defect going away.**
+`mateFlip` tests `score1 <= -MATE` (1e6). A mate the search cannot prove is
+now reported as `UNPROVEN_MATE` = 5,000, far above `-MATE`, so the SAME flag
+stops being labelled one. `dropPerPly` is untouched, because the gradual
+metric clamps at +-20 stones (2,000 centistones) and both `1e7` and `5,000`
+saturate to that bound. The symptom is still there and now reads
+`+UNPRV -> -1.57` at 10.79 stones/half-move. **Compare drop distributions
+across runs, never the mate-flip label.**
+
+**2. Only 184 of the 404 flags were TESTABLE, and the first report of this
+run said `80.9% OTHER`, which was misleading.** The horizon test asks whether
+a DEEPER search at the SAME window still flags, so it needs a deeper depth in
+the same run, and the flags at a run's deepest depth have none. Lumping those
+in with genuinely-still-flagged ones inflated `OTHER` from 107 to 327.
+`attribute_drops` now has a separate `UNTESTED AT THIS DEPTH` bucket so this
+cannot be read as a verdict again. Of the 184 testable flags: **107 other
+(58.2%) / 77 horizon (41.8%)**. Depth 6 tests the remaining 220.
+
+**2b. The big drops are MATE-related, and deepening cures them fastest.**
+Of the 128 flags past 2 stones/half-move with the engine to move, **126 have
+`+-UNPROVEN_MATE` at one end** -- the engine claimed a win or loss it could
+not prove and then did not have it, which is the originally reported symptom
+rather than the eval mispricing material. Cure rate by band, depth 2 -> 4:
+
+| dropPerPly | n | cured | rate |
+|---|---|---|---|
+| 0.5-0.75 (envelope edge) | 118 | 45 | 38.1% |
+| 0.75-1 | 1 | 0 | — |
+| 1-2 | 21 | 6 | 28.6% |
+| 2-5 | 15 | 9 | **60.0%** |
+| 5+ | 29 | 17 | **58.6%** |
+
+So the mate-adjacent drops behave like horizon effects -- a shallow search
+sees a mate that depth dissolves -- while the harder residual sits at the
+envelope edge. The mate guard fixes the CLAIM; depth fixes the CAUSE.
+
+**3. The recorded corpus is a 3.6% instrument.** `rust` played **2,305 of
+64,417 turns**; the rest are human (24,322), ai_hard (13,568), ai_medium
+(8,896), ai_easy (7,776), ai_very_hard (6,321) and a long tail. Check A
+re-scores after the ACTUAL continuation, so a decline means the mover's
+position got worse -- and when the mover is a human who blundered, **the
+engine's declining eval is CORRECT**. That is why 5,655 flags collapse to 404.
+
+### What to run instead, and when
+
+**Make Check A on engine SELF-PLAY the primary instrument.** Every
+continuation is then the engine's own choice, so 100% of flags bear on the
+0.5-stones-per-half-move envelope instead of 7%. It is cheap enough to be a
+pre-merge gate, and the `--checks a` path already supports it: self-play has
+no `pairs`, so no record filter is built and nothing is refused.
+
+**Re-run the recorded-games audit on a TRIGGER, never a schedule:** changed
+eval weights, a changed width schedule or move ordering, or a materially
+larger human corpus. The corpus is static at 2,403 games, so a repeat without
+one of those returns this same number.
+
+### Two unit bugs found in the reporting, both the same 41x error
+
+`attribute_drops.fmt_score` still divided by **4096** while `STONE = 100`,
+after the module-level shadow had been fixed -- so every endpoint in the
+worst-declines table printed 41x too small, a +50.00 stone unproven mate as
+`+1.22`. The tell was a self-contradicting row: `+20.00/half-move ... +1.22 ->
+-1.22`, where the RATE came from the flag JSON (correct) and the ENDPOINTS
+came from `fmt_score`. A 1.22-to--1.22 swing over two half-moves is
+1.22/half-move, not 20.
+
+And `--checks a` printed a CHECK B verdict -- "every played turn IS
+enumerable; no enumeration gap here" -- from an empty miss list that nothing
+had populated. `do_reach` says the SOURCE supports Check B, not that it ran.
+
+### And one fleet trap
+
+`runner.sh` hard-coded `timeout 900` on the smoke arm. A Check A smoke of 2
+games at depth 6 is ~950 s of scoring alone, so the smoke is killed, the
+runner reads that as a smoke failure, and the arms never launch. Three
+90-vCPU VMs were killed before they burned the cycle. The cap is now
+overridable (`SMOKE_TIMEOUT=` -> `smoke-timeout` metadata) and the runner
+echoes which cap applied. Related: the ~17 s/position figure for depth 6 is
+inherited from full-width self-play and is far too pessimistic for the filled
+midgame boards this audit scores.

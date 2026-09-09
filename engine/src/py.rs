@@ -49,6 +49,9 @@ impl PyBoard {
 
     #[getter] fn red(&self) -> Vec<u8> { mask_to_vec(self.b.stones[0]) }
     #[getter] fn blue(&self) -> Vec<u8> { mask_to_vec(self.b.stones[1]) }
+    /// Raw occupancy masks (red, blue). Saves round-tripping through SFN when a
+    /// caller only needs to compare resulting positions.
+    #[getter] fn stones(&self) -> (u64, u64) { (self.b.stones[0], self.b.stones[1]) }
     #[getter] fn total(&self) -> (u32, u32) { (self.b.total[0], self.b.total[1]) }
     #[getter] fn mana(&self) -> (u32, u32) { (self.b.mana[0], self.b.mana[1]) }
     #[getter] fn turn_counter(&self) -> u32 { self.b.turn_counter }
@@ -86,6 +89,27 @@ impl PyBoard {
     }
     fn cast_clear_and_refill(&mut self, pos: usize, c: &str) -> PyResult<()> {
         self.b.cast_clear_and_refill(pos, color(c)?); Ok(())
+    }
+
+    /// The stone sets a cast at `pos` may leave standing, as node lists.
+    ///
+    /// Which stones survive a cast is the caster's choice — the live game
+    /// prompts "Select a stone to keep:" once per refill — and the engine used
+    /// to fix it to one priority order, which is what made 61% of the casts
+    /// where a human chose otherwise unreachable by full enumeration. Index 0
+    /// is that priority order, so `keep_options(...)[0]` is the old behaviour.
+    fn keep_options(&self, pos: usize, c: &str) -> PyResult<Vec<Vec<u8>>> {
+        let (keeps, n) = self.b.keep_options(pos, color(c)?);
+        Ok(keeps[..n].iter().map(|&m| mask_to_vec(m)).collect())
+    }
+
+    fn keep_count(&self, pos: usize, c: &str) -> PyResult<usize> {
+        Ok(self.b.keep_count(pos, color(c)?))
+    }
+
+    /// Clear the cast sigil and keep the `keep_ix`-th option.
+    fn cast_clear_and_keep(&mut self, pos: usize, c: &str, keep_ix: usize) -> PyResult<()> {
+        self.b.cast_clear_and_keep(pos, color(c)?, keep_ix); Ok(())
     }
     fn resolve_autumn_moves(&mut self, pos: usize, c: &str, count: u8) -> PyResult<u8> {
         Ok(self.b.resolve_autumn_moves(pos, color(c)?, count))
@@ -181,18 +205,31 @@ impl PyBoard {
                           (dn as i32) | ((dp.map_or(63u8, |x| x) as i32) << 8)));
             }
         }
-        // casts, with each distinct outcome offered separately
+        // Casts: every (keep, outcome) pair offered separately. The keep is
+        // which stones stay standing in the cast sigil, a choice the live game
+        // prompts for; the menu has to offer it or a human driving this cannot
+        // reproduce their own turn. `k` is the RAW outcome index, which is what
+        // `apply_choice` applies.
         for id in b.castable(col, true, true, false) {
             let Some(pos) = b.position_of(id) else { continue };
-            let mut cl = b;
-            cl.cast_clear_and_refill(pos, col);
-            let (outs, _t) = cl.resolve_outcomes_ordered(pos, col, 12);
-            for (k, ob) in outs.iter().enumerate() {
-                let gained = (ob.stones[col.idx()] & !b.stones[col.idx()]).count_ones();
-                let killed = (b.stones[col.other().idx()] & !ob.stones[col.other().idx()]).count_ones();
-                out.push((format!("cast {} [{}]  (+{} own, -{} enemy)",
-                                  crate::spells_meta::SPELLS[id as usize].name, k, gained, killed),
-                          "cast".to_string(), pos as i32, k as i32, -1));
+            let (kis, _kt) = b.keep_indices_ordered(pos, col, crate::cast::MAX_KEEPS);
+            for ki in kis {
+                let mut cl = b;
+                cl.cast_clear_and_keep(pos, col, ki);
+                let kept_mask = cl.mine(col) & crate::topology::SIGIL[pos];
+                let kept = crate::topology::NAMES.iter().enumerate()
+                    .filter(|&(i, _)| kept_mask & (1u64 << i) != 0)
+                    .map(|(_, s)| *s).collect::<Vec<_>>().join(" ");
+                let (ranked, _t) = cl.resolve_outcomes_ranked(pos, col, 12);
+                for (k, ob) in ranked {
+                    let gained = (ob.stones[col.idx()] & !b.stones[col.idx()]).count_ones();
+                    let killed = (b.stones[col.other().idx()]
+                                  & !ob.stones[col.other().idx()]).count_ones();
+                    out.push((format!("cast {} keep[{}] out[{}]  (+{} own, -{} enemy)",
+                                      crate::spells_meta::SPELLS[id as usize].name,
+                                      kept, k, gained, killed),
+                              "cast".to_string(), pos as i32, k as i32, ki as i32));
+                }
             }
         }
         Ok(out)
@@ -217,7 +254,12 @@ impl PyBoard {
                 let sacs = [a as u8, if b_ < 0 { 0 } else { b_ as u8 }];
                 t = t.push_pub(Action::Dash { sacs, n_sacs, node: dn, push_to: dp });
             }
-            "cast" => { t = t.push_pub(Action::Cast { pos: a as u8, outcome: b_ as u16 }); }
+            // `cc` is dash-only, so a cast carries its keep index there.
+            "cast" => {
+                t = t.push_pub(Action::Cast {
+                    pos: a as u8, keep: cc.max(0) as u8, outcome: b_ as u16,
+                });
+            }
             _ => {}
         }
         t = t.push_pub(Action::Pass);
@@ -249,7 +291,12 @@ impl PyBoard {
                 let sacs = [a as u8, if b_ < 0 { 0 } else { b_ as u8 }];
                 t = t.push_pub(Action::Dash { sacs, n_sacs, node: dn, push_to: dp });
             }
-            "cast" => { t = t.push_pub(Action::Cast { pos: a as u8, outcome: b_ as u16 }); }
+            // `cc` is dash-only, so a cast carries its keep index there.
+            "cast" => {
+                t = t.push_pub(Action::Cast {
+                    pos: a as u8, keep: cc.max(0) as u8, outcome: b_ as u16,
+                });
+            }
             _ => {}
         }
         let (acts, after) = self.b.emit_actions(&t, col);
@@ -305,15 +352,15 @@ impl PyBoard {
     /// One search, not two. Calling `turn_candidates` and then `play_best` on the
     /// same position searched it twice, which at width_scale 4 doubled the cost of
     /// the most expensive step in ranking-data generation.
-    #[pyo3(signature = (max_depth=6, eval_name="tfit", cap=64, width_scale=4,
+    #[pyo3(signature = (max_depth=6, eval_name="tfit", cap=64, width_scale=None,
                         history=vec![]))]
     fn candidates_and_play(&mut self, max_depth: i32, eval_name: &str, cap: usize,
-                           width_scale: usize, history: Vec<u64>)
+                           width_scale: Option<usize>, history: Vec<u64>)
         -> PyResult<(Vec<Vec<f32>>, i64, usize)>
     {
         let c = self.b.to_move;
         let mut s = crate::search::Search::new(20);
-        s.set_width_scale(width_scale);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
         s.weights = weights_by_name(eval_name)?;
         for k in history { s.add_history(k); }
         let (best, _sc, _st) = s.go(&self.b, c, max_depth, 0);
@@ -352,27 +399,41 @@ impl PyBoard {
     /// (depth_completed, nodes, seconds, gameover, winner, score, widened).
     /// `history` is the list of prior position keys, for repetition counting.
     #[pyo3(signature = (time_ms=1000, max_depth=64, tt_bits=20, window=16,
-                        width_scale=1, history=vec![], eval_name="default",
+                        width_scale=None, history=vec![], eval_name="default",
                         legacy_order=false, merge_min_width=None, key_dash_reasons=None,
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
                         adaptive=None, rank_oversample=None,
-                        width_shape=None))]
+                        width_shape=None, keep_window=None, mate_guard=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
-                 width_scale: usize, history: Vec<u64>, eval_name: &str,
+                 width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
                  key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>,
                  key_dash_extra: Option<usize>, q_depth: Option<i32>,
                  q_cast_moves: Option<usize>, aspiration: Option<i32>,
                  adaptive: Option<(f32, usize, usize)>,
-                 rank_oversample: Option<usize>, width_shape: Option<usize>)
+                 rank_oversample: Option<usize>, width_shape: Option<usize>,
+                 // How many keep choices per cast to expand. `None` leaves the
+                 // engine's own default alone -- never restate it here.
+                 keep_window: Option<usize>,
+                 // None leaves the engine's own default alone.
+                 mate_guard: Option<bool>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
         let c = self.b.to_move;
         let mut s = crate::search::Search::new(tt_bits);
         s.set_window(window);
-        s.set_width_scale(width_scale);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
+        // THESE TWO WERE MISSING. `play_best` accepted `keep_window` in its
+        // signature and never applied it, so `ab_keep.py` ran both arms at the
+        // engine default: two SPRTs of 7,040 and 6,997 games compared
+        // IDENTICAL engines and reported -0.4 and -0.6 Elo. A binding that
+        // takes an argument and drops it is the same class of bug as one that
+        // restates a default, and it is harder to spot -- the tell was two
+        // independent runs landing within 0.1% of parity.
+        if let Some(k) = keep_window { s.set_keep_window(k); }
+        if let Some(m) = mate_guard { s.set_mate_guard(m); }
         s.set_legacy_order(legacy_order);
         // NEVER restate a Rust default here. `merge_min_width` shipped with the
         // Rust default OFF (usize::MAX) and a Python default of 32, so every
@@ -406,18 +467,52 @@ impl PyBoard {
         Ok((st.depth_completed, st.nodes, dt, over, w, score, st.widened))
     }
 
-    /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
-    /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
-    ///  windowed, seconds, best_first_kind, best_first_node)
-    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=1))]
-    fn search(&self, max_depth: i32, time_ms: u64, tt_bits: u32, window: usize,
-              width_scale: usize)
-        -> PyResult<(i32, i32, u64, u64, u64, i32, bool, bool, f64, String, i32, u64)>
+    /// `search` with an explicit keep budget, for the node-rate sweep.
+    ///
+    /// A separate method rather than a parameter on `search`, because adding a
+    /// required argument there would break every existing Python caller -- and
+    /// giving it a default would restate an engine default in a binding, which
+    /// is the mistake that put a whole campaign off-policy.
+    /// `keep_window = 1` is the pre-fix search: the priority keep only.
+    #[allow(clippy::too_many_arguments)]
+    fn search_keeps(&self, max_depth: i32, time_ms: u64, tt_bits: u32,
+                    window: usize, width_scale: usize, keep_window: usize)
+        -> PyResult<(i32, i32, u64, u64, u64, i32)>
     {
         use std::time::Instant;
         let mut s = crate::search::Search::new(tt_bits);
         s.set_window(window);
         s.set_width_scale(width_scale);
+        s.set_keep_window(keep_window);
+        let t = Instant::now();
+        let (best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
+        let _ = t.elapsed();
+        // Which keep the CHOSEN move uses, or -1 if it does not cast. This is
+        // what decides whether the keep choice can ever pay: if the search,
+        // handed all ten options, still picks the priority keep, then the
+        // fixed order was already a good heuristic and there is nothing here
+        // to win no matter how many keeps are expanded.
+        let keep_used = best.map(|b| {
+            b.slice().iter().find_map(|a| match *a {
+                crate::turn::Action::Cast { keep, .. } => Some(keep as i32),
+                _ => None,
+            }).unwrap_or(-1)
+        }).unwrap_or(-2);
+        Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs, keep_used))
+    }
+
+    /// Run iterative-deepening alpha-beta. Returns a dict-like tuple:
+    /// (score, depth_completed, nodes, tt_hits, cutoffs, max_ply, timed_out,
+    ///  windowed, seconds, best_first_kind, best_first_node)
+    #[pyo3(signature = (max_depth=64, time_ms=1000, tt_bits=20, window=16, width_scale=None))]
+    fn search(&self, max_depth: i32, time_ms: u64, tt_bits: u32, window: usize,
+              width_scale: Option<usize>)
+        -> PyResult<(i32, i32, u64, u64, u64, i32, bool, bool, f64, String, i32, u64)>
+    {
+        use std::time::Instant;
+        let mut s = crate::search::Search::new(tt_bits);
+        s.set_window(window);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
         let t = Instant::now();
         let (best, score, st) = s.go(&self.b, self.b.to_move, max_depth, time_ms);
         let dt = t.elapsed().as_secs_f64();
@@ -468,10 +563,153 @@ impl PyBoard {
             crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
                 ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
                  sacs[..n_sacs as usize].to_vec(), -1),
-            crate::turn::Action::Cast { pos, outcome } =>
-                ("cast".to_string(), outcome as i32, -1, vec![], pos as i32),
+            crate::turn::Action::Cast { pos, keep, outcome } =>
+                ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
             crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
         }).collect()).collect())
+    }
+
+    /// The ORDERED turn stream under an explicit key-dash interest mask, as the
+    /// same (kind, node, push_to, sacs, pos) tuples `enumerate_turns` emits.
+    ///
+    /// Exposed so the `key_dash` promotion invariant can be reproduced and
+    /// adjudicated from Python: the shipped filter promotes dashes that full
+    /// enumeration rejects, and deciding whether those turns are legal needs the
+    /// turns themselves, outside a Rust test.
+    #[pyo3(signature = (c, window, reasons, cap=64))]
+    fn turns_ordered_reasons(&self, c: &str, window: usize, reasons: u8, cap: usize)
+        -> PyResult<Vec<Vec<(String, i32, i32, Vec<u8>, i32)>>>
+    {
+        let col = color(c)?;
+        Ok(self.b.turns_ordered_reasons(col, window, reasons).take(cap)
+            .map(|t| t.slice().iter().map(|a| match *a {
+                crate::turn::Action::Blink { node, push_to } =>
+                    ("blink".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Move { node, push_to } =>
+                    ("move".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                    ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
+                     sacs[..n_sacs as usize].to_vec(), -1),
+                // (kind, node, push_to, sacs, pos): a cast has no push_to,
+                // so `keep` rides that slot and the arity is unchanged.
+                crate::turn::Action::Cast { pos, keep, outcome } =>
+                    ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            }).collect()).collect())
+    }
+
+    /// Where in the ORDERED stream does the turn reaching `(red, blue)` sit?
+    ///
+    /// Reachability is not the same question as visibility. Progressive
+    /// widening expands only `width` turns per node -- 24 near the frontier
+    /// against a median branching of 316 -- so a turn the enumerator CAN
+    /// generate is still invisible to the search if `move_score` ranks it
+    /// past the budget. An opponent's mate-in-one that ranks 400th is not an
+    /// enumeration gap and not an evaluation error; it is a width gap, and
+    /// the three have different fixes.
+    ///
+    /// Returns (rank, n_scanned, found). `rank` is the 0-based index of the
+    /// first ordered turn whose application produces that layout.
+    #[pyo3(signature = (c, red, blue, window=24, reasons=0, cap=4096))]
+    fn layout_rank(&self, c: &str, red: u64, blue: u64, window: usize,
+                   reasons: u8, cap: usize)
+        -> PyResult<(i64, usize, bool)>
+    {
+        let col = color(c)?;
+        let mut i = 0usize;
+        for t in self.b.turns_ordered_reasons(col, window, reasons).take(cap) {
+            let mut b = self.b;
+            b.apply_turn(&t, col);
+            if b.stones[0] == red && b.stones[1] == blue {
+                return Ok((i as i64, i + 1, true));
+            }
+            i += 1;
+        }
+        Ok((-1, i, false))
+    }
+
+    /// Is the stone layout `(red, blue)` reachable from here by ONE legal turn
+    /// of `c`? Returns (reachable, n_turns_enumerated, truncated).
+    ///
+    /// Enumerating AND comparing in Rust, rather than looping in Python, is the
+    /// difference between a tractable audit and an impossible one: full
+    /// enumeration expands every cast outcome, so one midgame position yields
+    /// 9,000-54,000 turns. A PyO3 round-trip per turn to apply and compare cost
+    /// ~5 s per position, which is days of compute over 64,000 turns.
+    #[pyo3(signature = (c, red, blue, cap=1_000_000))]
+    fn layout_reachable(&self, c: &str, red: u64, blue: u64, cap: usize)
+        -> PyResult<(bool, usize, bool)>
+    {
+        let col = color(c)?;
+        let (turns, st) = self.b.enumerate_turns_capped(col, cap);
+        for t in turns.iter() {
+            let mut b = self.b;
+            b.apply_turn(t, col);
+            if b.stones[0] == red && b.stones[1] == blue {
+                return Ok((true, st.turns, st.truncated));
+            }
+        }
+        Ok((false, st.turns, st.truncated))
+    }
+
+    /// Diagnose a layout the enumeration MISSED: how close did it get?
+    ///
+    /// `layout_reachable` answers yes/no, which localises nothing. This returns
+    /// the nearest enumerated layout by Hamming distance over both stone masks,
+    /// that turn's action log, and -- the thing `layout_reachable` never
+    /// reported -- whether a RESOLVER truncated. The turn cap is guarded in the
+    /// audit, but a per-cast outcome cap is invisible to it, so a capped
+    /// resolution looks exactly like a complete enumeration that found nothing.
+    ///
+    /// A minimum distance of 1 or 2 means the turn is right except for a single
+    /// choice (which stone was sacrificed, which of several equal targets); a
+    /// large minimum means a whole turn shape is missing.
+    #[pyo3(signature = (c, red, blue, cap=1_000_000))]
+    fn layout_nearest(&self, c: &str, red: u64, blue: u64, cap: usize)
+        -> PyResult<(u32, u64, u64, Vec<(String, i32, i32, Vec<u8>, i32)>,
+                     usize, bool, bool)>
+    {
+        let col = color(c)?;
+        let (turns, st) = self.b.enumerate_turns_capped(col, cap);
+        let mut best = u32::MAX;
+        let mut best_masks = (0u64, 0u64);
+        let mut best_turn: Option<crate::turn::Turn> = None;
+        for t in turns.iter() {
+            let mut b = self.b;
+            b.apply_turn(t, col);
+            let d = (b.stones[0] ^ red).count_ones()
+                  + (b.stones[1] ^ blue).count_ones();
+            if d < best {
+                best = d;
+                best_masks = (b.stones[0], b.stones[1]);
+                best_turn = Some(*t);
+                if d == 0 { break; }
+            }
+        }
+        // Same (kind, node, push_to, sacs, pos) tuple shape `enumerate_turns`
+        // and `turns_ordered_reasons` emit, so one Python decoder reads all three.
+        let log = match best_turn {
+            None => vec![],
+            Some(t) => t.slice().iter().map(|a| match *a {
+                crate::turn::Action::Blink { node, push_to } =>
+                    ("blink".to_string(), node as i32,
+                     push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Move { node, push_to } =>
+                    ("move".to_string(), node as i32,
+                     push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                    ("dash".to_string(), node as i32,
+                     push_to.map_or(-1, |x| x as i32),
+                     sacs[..n_sacs as usize].to_vec(), -1),
+                // (kind, node, push_to, sacs, pos): a cast has no push_to,
+                // so `keep` rides that slot and the arity is unchanged.
+                crate::turn::Action::Cast { pos, keep, outcome } =>
+                    ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            }).collect(),
+        };
+        Ok((if best == u32::MAX { 64 } else { best }, best_masks.0, best_masks.1,
+            log, st.turns, st.truncated, st.resolver_truncated))
     }
 
     fn enum_stats(&self) -> PyResult<(usize, usize, bool, bool)> {
@@ -507,7 +745,9 @@ impl PyBoard {
                     Action::Dash { sacs: s, n_sacs: sacs.len().min(2) as u8,
                                    node: node as u8, push_to: pt }
                 }
-                "cast"  => Action::Cast { pos: pos as u8, outcome: node.max(0) as u16 },
+                // The push_to slot carries `keep` for a cast; here it is `push`.
+                "cast"  => Action::Cast { pos: pos as u8, keep: push.max(0) as u8,
+                                          outcome: node.max(0) as u16 },
                 _ => Action::Pass,
             };
             if (t.len as usize) < crate::turn::MAX_ACTIONS {
@@ -552,9 +792,9 @@ fn bench_primitives(iters: u64, seed: u64) -> (u64, f64) {
 /// (index, score_centistones, depth, nodes, seconds, n_parsed).
 #[pyfunction]
 #[pyo3(signature = (sfns, us, time_ms=60000, max_depth=64, tt_bits=21,
-                    width_scale=1, history=vec![], eval_name="material"))]
+                    width_scale=None, history=vec![], eval_name="material"))]
 fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
-                  tt_bits: u32, width_scale: usize, history: Vec<u64>,
+                  tt_bits: u32, width_scale: Option<usize>, history: Vec<u64>,
                   eval_name: &str)
     -> PyResult<(usize, i32, i32, u64, f64, usize)>
 {
@@ -570,7 +810,7 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
         }
     }
     let mut se = crate::search::Search::new(tt_bits);
-    se.set_width_scale(width_scale);
+    if let Some(w) = width_scale { se.set_width_scale(w); }
     // MUST be set explicitly: omitting it inherits Weights::default(), i.e. the
     // structural set, which measures 19.4% against material-only at matched time.
     // `pick_move_actions` was already fixed for exactly this; this is its twin.
@@ -585,10 +825,10 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
 /// nodes, score, seconds). The engine chooses from its OWN full enumeration, so it
 /// is not limited by the browser's capped enumerator.
 #[pyfunction]
-#[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=1,
+#[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=None,
                     history_sfns=vec![], eval_name="material", adaptive=None))]
 fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
-                     width_scale: usize, history_sfns: Vec<String>, eval_name: &str,
+                     width_scale: Option<usize>, history_sfns: Vec<String>, eval_name: &str,
                      adaptive: Option<(f32, usize, usize)>)
     -> PyResult<(String, String, i32, u64, i32, f64, f64)>
 {
@@ -597,7 +837,7 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
         .map_err(pyo3::exceptions::PyValueError::new_err)?;
     let c = b.to_move;
     let mut s = crate::search::Search::new(tt_bits);
-    s.set_width_scale(width_scale);
+    if let Some(w) = width_scale { s.set_width_scale(w); }
     // MUST be set explicitly. Search::new defaults to Weights::default(), the
     // structural set that scored 22.5% against material-only over 80 games, so
     // omitting this had the GUI opponent playing weights already known to be bad
@@ -659,16 +899,16 @@ fn weights_by_name(name: &str) -> PyResult<crate::eval::Weights> {
 /// Returns (rank, generated, depth, nodes). `rank` is -1 when the chosen turn is
 /// not found within `cap` (it exists, but far down the stream).
 #[pyfunction]
-#[pyo3(signature = (sfn, max_depth=6, time_ms=0, eval_name="tfit", cap=400, width_scale=1))]
+#[pyo3(signature = (sfn, max_depth=6, time_ms=0, eval_name="tfit", cap=400, width_scale=None))]
 fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
-                  cap: usize, width_scale: usize)
+                  cap: usize, width_scale: Option<usize>)
     -> PyResult<(i64, usize, i32, u64)>
 {
     let b = crate::board::Board::from_sfn(sfn)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
     let c = b.to_move;
     let mut s = crate::search::Search::new(20);
-    s.set_width_scale(width_scale);
+    if let Some(w) = width_scale { s.set_width_scale(w); }
     s.weights = weights_by_name(eval_name)?;
     let (best, _score, st) = s.go(&b, c, max_depth, time_ms);
     let Some(best) = best else { return Ok((-1, 0, st.depth_completed, st.nodes)) };
@@ -694,16 +934,16 @@ fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
 /// `chosen_index` is -1 if the search's turn falls outside `cap`; the caller should
 /// drop those rows rather than train on a missing label.
 #[pyfunction]
-#[pyo3(signature = (sfn, max_depth=6, eval_name="tfit", cap=64, width_scale=4))]
+#[pyo3(signature = (sfn, max_depth=6, eval_name="tfit", cap=64, width_scale=None))]
 fn turn_candidates(sfn: &str, max_depth: i32, eval_name: &str, cap: usize,
-                   width_scale: usize)
+                   width_scale: Option<usize>)
     -> PyResult<(Vec<Vec<f32>>, i64, usize)>
 {
     let b = crate::board::Board::from_sfn(sfn)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
     let c = b.to_move;
     let mut s = crate::search::Search::new(20);
-    s.set_width_scale(width_scale);
+    if let Some(w) = width_scale { s.set_width_scale(w); }
     s.weights = weights_by_name(eval_name)?;
     let (best, _sc, _st) = s.go(&b, c, max_depth, 0);
     let want = best.map(|t| t.slice().to_vec());
@@ -766,6 +1006,18 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
     // hardcoded it, which is fine historically but would confound any future test.
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
+    // The shipped adaptive-widening point, exported for the same reason: a
+    // harness that wants the shipped search must pass it, and every literal
+    // copy is somewhere for it to drift.
+    m.add("SHIPPED_ADAPTIVE", crate::search::SHIPPED_ADAPTIVE)?;
+    m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
+    m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
+    m.add("UNPROVEN_MATE", crate::search::UNPROVEN_MATE)?;
+    // Exported so a harness never restates them. REASONS_ALL is the full
+    // key-dash interest mask; OUTCOME_CAP is how a caller detects that a
+    // resolver enumeration was TRUNCATED rather than complete.
+    m.add("REASONS_ALL", crate::key_dash::REASONS_ALL)?;
+    m.add("OUTCOME_CAP", crate::turn::OUTCOME_CAP)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("TURN_FEATURE_NAMES", crate::features::TURN_NAMES.to_vec())?;

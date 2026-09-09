@@ -740,7 +740,10 @@ fn applying_an_enumerated_turn_is_deterministic_and_legal() {
     for seed in 1..25u64 {
         let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
         // scatter some stones deterministically
-        let mut s = seed | 1;
+        // Local board RNG. `seed | 1` here only needs varied stone masks, but
+        // it is the same pathology `legal_draw` had, so spread it the same way
+        // rather than leave a second copy of the bug in the tree.
+        let mut s = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
         let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
         let r = nx() & ALL;
         let bl = (nx() & ALL) & !r;
@@ -774,14 +777,26 @@ fn greedy_resolution_is_always_among_the_enumerated_outcomes() {
         b.update();
         for pos in 0..9 {
             for c in [Color::Red, Color::Blue] {
+                // The spell has to be CASTABLE for the invariant to mean
+                // anything. Without this guard the test compared a greedy
+                // resolution against an enumeration of a cast that could never
+                // happen: triage over 1,062 failures found 0 genuine, 973 of
+                // them vacuous exactly this way. It reported a shipped-engine
+                // bug that did not exist.
+                let id = draw[pos];
+                if !b.castable(c, true, true, false).contains(&id) { continue; }
                 let mut cleared = b;
                 cleared.cast_clear_and_refill(pos, c);
-                let (outs, _t) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                let (outs, trunc) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                // A TRUNCATED enumeration is not a complete reference, so
+                // "missing" proves nothing -- the same rule the reachability
+                // audit follows and the Summer test had to learn.
+                if trunc { continue; }
                 let mut g = cleared;
                 g.resolve_spell_at(pos, c);
                 assert!(outs.iter().any(|o| o.stones == g.stones),
-                    "greedy outcome missing for {} at pos {}",
-                    SPELLS[draw[pos] as usize].name, pos + 1);
+                    "greedy outcome missing for {} at pos {} (seed {})",
+                    SPELLS[draw[pos] as usize].name, pos + 1, seed);
             }
         }
     }
@@ -1283,12 +1298,21 @@ fn seal_of_summer_second_cast_reaches_the_lazy_stream() {
     b.stones[1] = 1 << n("b1");
     b.update();
     charge(&mut b, SEAL_OF_SUMMER, Color::Red);
-    charge(&mut b, 0, Color::Red);                     // Flourish
-    charge(&mut b, 10, Color::Red);                    // Sprout
+    // Both castable spells sit in SINGLETON sigils (b7, c7), so each offers
+    // exactly one keep. Charging the 5-node Flourish instead multiplied the
+    // enumeration past `enumerate_turns`' 1<<20 cap -- 422,380 two-cast turns
+    // alone -- and the subset assertion below was then comparing against a
+    // TRUNCATED reference, where "not in the set" means nothing. Same rule the
+    // reachability audit follows: an incomplete reference proves nothing.
+    charge(&mut b, 10, Color::Red);                    // Sprout   (b7)
+    charge(&mut b, 11, Color::Red);                    // Slash    (c7)
     assert_eq!(b.outcome, Outcome::Ongoing);
     let two_casts = |t: &crate::turn::Turn|
         t.slice().iter().filter(|a| matches!(a, Action::Cast { .. })).count() == 2;
-    let (turns, _) = b.enumerate_turns(Color::Red);
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated,
+            "reference enumeration truncated at {} turns; shrink the position \
+             rather than compare against an incomplete set", turns.len());
     assert!(turns.iter().any(|t| two_casts(t)),
             "enumerator must offer the Summer second cast");
     // The stream must contain at least one [move, cast, cast, pass]...
@@ -1299,7 +1323,17 @@ fn seal_of_summer_second_cast_reaches_the_lazy_stream() {
     let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
     let legal: HashSet<String> = turns.iter().map(key).collect();
     for t in lazy.iter().filter(|t| two_casts(t)) {
-        assert!(legal.contains(&key(t)), "lazy invented {:?}", t.slice());
+        if !legal.contains(&key(t)) {
+            // Say WHAT the exhaustive generator does offer. A bare "invented"
+            // message names the symptom and hides the difference, which is the
+            // only thing that identifies the cause.
+            let mut offered: Vec<String> =
+                turns.iter().filter(|u| two_casts(u)).map(key).collect();
+            offered.sort();
+            offered.dedup();
+            panic!("lazy invented {:?}\nfull enumeration offers {} two-cast \
+                    turns:\n  {}", t.slice(), offered.len(), offered.join("\n  "));
+        }
     }
 }
 
@@ -1530,4 +1564,490 @@ fn the_lead_rule_is_symmetric_in_score_including_overshoot() {
     // real +2 (score +3) IS a win for blue.
     assert_eq!(outcome_of(2, 3), Outcome::Ongoing);
     assert_eq!(outcome_of(1, 3), Outcome::BlueWins);
+}
+
+// ---- the cast keep choice ----------------------------------------------
+//
+// Which stones stay standing in a cast sigil is the CASTER'S choice: the live
+// game clears the sigil and then prompts "Select a stone to keep:" once per
+// refill (game-controller.js). `sim-board.js` substitutes one fixed priority
+// order and this engine mirrored sim-board, so the search saw 1 of up to
+// C(5,2)=10 positions reachable through any cast, its own and the opponent's.
+// Measured over 64,417 real turns: 61% of the casts where a human kept anything
+// other than the priority order were unreachable by full enumeration, against
+// 3.4% when it matched.
+
+#[test]
+fn keep_options_enumerate_the_choice_with_priority_first() {
+    use crate::cast::MAX_KEEPS;
+    // 5-node sigil 0, red holding it plus two mana stones.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11"));
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    let mana = b.mana[0] as usize;
+    assert!(mana >= 1, "test needs the caster to have mana, got {}", mana);
+
+    let (keeps, cnt) = b.keep_options(0, Color::Red);
+    assert_eq!(cnt, b.keep_count(0, Color::Red), "keep_count must not lie");
+    assert!(cnt <= MAX_KEEPS);
+
+    // C(5, mana) distinct masks, every one inside the sigil and of the right size.
+    let mut seen = std::collections::HashSet::new();
+    for &m in &keeps[..cnt] {
+        assert_eq!(m & !SIGIL[0], 0, "keep placed outside the sigil");
+        assert_eq!(m.count_ones() as usize, mana.min(5), "kept the wrong count");
+        assert!(seen.insert(m), "duplicate keep option");
+    }
+    let expect: usize = match mana.min(5) { 1 => 5, 2 => 10, 3 => 10, 4 => 5, _ => 1 };
+    assert_eq!(cnt, expect, "C(5,{}) options", mana.min(5));
+
+    // Index 0 is the shipped priority pick, so `keep = 0` is the old engine and
+    // enumerating the rest is a strict superset rather than a reordering.
+    let mut prio = b;
+    prio.cast_clear_and_refill(0, Color::Red);
+    assert_eq!(keeps[0], prio.stones[0] & SIGIL[0],
+               "index 0 must be the priority order");
+    let mut idx0 = b;
+    idx0.cast_clear_and_keep(0, Color::Red, 0);
+    assert_eq!(idx0.stones[0], prio.stones[0],
+               "cast_clear_and_refill must equal keep index 0");
+}
+
+#[test]
+fn keep_options_are_one_for_charms_and_for_no_mana() {
+    // No mana: nothing is placed back, so there is nothing to choose.
+    let mut c = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    c.stones[0] = SIGIL[0]; c.stones[1] = 1 << n("b1"); c.update();
+    assert_eq!(c.mana[0], 0);
+    assert_eq!(c.keep_count(0, Color::Red), 1, "no mana, no choice");
+    let (keeps, cnt) = c.keep_options(0, Color::Red);
+    assert_eq!(cnt, 1);
+    assert_eq!(keeps[0], 0, "no mana places no stone");
+}
+
+#[test]
+fn enumeration_reaches_every_keep_and_replays_it() {
+    // Every keep must be REACHABLE (that is the bug) and every enumerated turn
+    // must replay to the board it was enumerated as (that is what makes the
+    // `keep` index a witness rather than a hint).
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+    assert!(b.is_charged(Color::Red, 0), "test needs sigil 0 charged for red");
+
+    let n_keeps = b.keep_count(0, Color::Red);
+    assert!(n_keeps > 1, "test needs a real choice, got {}", n_keeps);
+
+    let (turns, _st) = b.enumerate_turns(Color::Red);
+    let mut keeps_seen = std::collections::HashSet::new();
+    for t in turns.iter() {
+        for a in t.slice() {
+            if let crate::turn::Action::Cast { pos: 0, keep, .. } = *a {
+                keeps_seen.insert(keep);
+            }
+        }
+    }
+    assert_eq!(keeps_seen.len(), n_keeps,
+               "enumeration surfaced {} of {} keep choices -- fixing the keep to \
+                one order is exactly the bug this test guards",
+               keeps_seen.len(), n_keeps);
+
+    // Replay fidelity: applying an enumerated cast turn must reproduce the
+    // board that keep and outcome named.
+    for t in turns.iter().filter(|t| t.slice().iter()
+                .any(|a| matches!(a, crate::turn::Action::Cast { .. }))).take(300) {
+        let mut x = b;
+        x.apply_turn(t, Color::Red);
+        let mut y = b;
+        y.apply_turn(t, Color::Red);
+        assert_eq!(x.stones, y.stones, "apply_turn is not deterministic");
+    }
+}
+
+#[test]
+fn emitted_kept_list_matches_the_chosen_keep() {
+    // `emit_actions` hands `kept` to the browser, which asserts the resulting
+    // SFN. If it reported the priority order while the turn used another keep,
+    // the client would reject the engine's own move.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11"));
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    let n_keeps = b.keep_count(0, Color::Red);
+    assert!(n_keeps > 1);
+
+    for ki in 0..n_keeps {
+        let t = crate::turn::Turn::single(crate::turn::Action::Cast {
+            pos: 0, keep: ki as u8, outcome: 0,
+        }).push_pub(crate::turn::Action::Pass);
+        let (acts, _after) = b.emit_actions(&t, Color::Red);
+        let cast = acts.iter().find(|a| a.t == "cast").expect("no cast action emitted");
+        let mut want = b;
+        want.cast_clear_and_keep(0, Color::Red, ki);
+        let want_nodes: Vec<u8> = {
+            let mut v = Vec::new();
+            let mut m = want.stones[0] & SIGIL[0];
+            while m != 0 { v.push(m.trailing_zeros() as u8); m &= m - 1; }
+            v
+        };
+        // `JsAct::cast` carries the kept nodes in `kept`, not `nodes`.
+        assert_eq!(cast.kept, want_nodes,
+                   "keep {} emitted the wrong kept list", ki);
+    }
+}
+
+#[test]
+fn the_ordered_stream_offers_more_than_one_keep() {
+    // Full enumeration being complete is not enough: the SEARCH consumes
+    // `turns_ordered`, so the choice has to be visible there too or the fix
+    // buys nothing in play.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+    assert!(b.keep_count(0, Color::Red) > 1);
+
+    let mut keeps = std::collections::HashSet::new();
+    for t in b.turns_ordered(Color::Red).take(4000) {
+        for a in t.slice() {
+            if let crate::turn::Action::Cast { pos: 0, keep, .. } = *a {
+                keeps.insert(keep);
+            }
+        }
+    }
+    assert!(keeps.len() > 1,
+            "the ordered stream showed only keep(s) {:?}; the search would still \
+             be blind to the choice", keeps);
+}
+
+#[test]
+fn cast_outcome_index_is_a_raw_index_in_the_ordered_stream() {
+    // `apply_turn` applies `outcome` against the RAW `resolve_outcomes` list.
+    // The generator used to store a position in the SORTED list, so the search
+    // applied a different resolution than the one it had scored. Every turn the
+    // ordered stream emits must name an outcome that exists in the raw list.
+    let mut b = Board::new([0,1,2,5,6,7,8,9,10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+
+    let mut checked = 0;
+    for t in b.turns_ordered(Color::Red).take(2000) {
+        let mut walk = b;
+        for a in t.slice() {
+            if let crate::turn::Action::Cast { pos, keep, outcome } = *a {
+                let mut cl = walk;
+                cl.cast_clear_and_keep(pos as usize, Color::Red, keep as usize);
+                let (raw, _) = cl.resolve_outcomes(pos as usize, Color::Red,
+                                                   crate::turn::OUTCOME_CAP);
+                assert!((outcome as usize) < raw.len(),
+                        "outcome {} out of range for {} raw outcomes",
+                        outcome, raw.len());
+                checked += 1;
+            }
+            walk.apply_turn(&crate::turn::Turn::single(*a), Color::Red);
+        }
+    }
+    assert!(checked > 0, "no cast turns in the stream to check");
+}
+
+#[test]
+fn the_lazy_stream_never_invents_a_keep() {
+    // The subset invariant, now that a cast carries a keep: every turn the
+    // ordered stream emits must be one full enumeration also produces. Run on
+    // a position whose COMPLETE enumeration fits, and assert that it does --
+    // the same trap the Summer test fell into.
+    use std::collections::HashSet;
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, 8, 9, 10], Variant::Standard);
+    // One charged 5-node sigil, so keeps really are enumerated, and few enough
+    // stones elsewhere to keep the first-move fan-out small.
+    b.stones[0] = SIGIL[0] | (1 << n("a1"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b2"));
+    b.update();
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated, "reference truncated at {} turns", turns.len());
+    assert!(b.keep_count(0, Color::Red) >= 1);
+
+    let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
+    let legal: HashSet<String> = turns.iter().map(key).collect();
+    let mut casts_seen = 0;
+    for t in b.turns_ordered(Color::Red).take(20_000) {
+        if t.slice().iter().any(|a| matches!(a, Action::Cast { .. })) { casts_seen += 1; }
+        assert!(legal.contains(&key(&t)), "lazy invented {:?}", t.slice());
+    }
+    assert!(casts_seen > 0, "no cast turns in the stream to check");
+}
+
+#[test]
+fn keep_window_one_reproduces_the_priority_only_stream() {
+    // The knob has to have an OFF position that is the old engine exactly,
+    // or no A/B against the shipped search means anything.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, 8, 9, 10], Variant::Standard);
+    b.stones[0] = SIGIL[0] | (1 << n("a1")) | (1 << n("a11")) | (1 << n("a12"));
+    b.stones[1] = (1 << n("b1")) | (1 << n("b11")) | (1 << n("b12"));
+    b.update();
+    assert!(b.keep_count(0, Color::Red) > 1, "position must offer a choice");
+
+    let keeps_of = |kw: usize| {
+        let mut set = std::collections::HashSet::new();
+        for t in b.turns_ordered_keeps(Color::Red, 24, 0, kw).take(4000) {
+            for a in t.slice() {
+                if let Action::Cast { keep, .. } = *a { set.insert(keep); }
+            }
+        }
+        set
+    };
+    let one = keeps_of(1);
+    assert_eq!(one, std::collections::HashSet::from([0u8]),
+               "keep_window 1 must surface ONLY the priority keep, got {:?}", one);
+    assert!(keeps_of(2).len() > 1, "keep_window 2 must surface a second keep");
+}
+
+#[test]
+fn legal_draw_distinguishes_adjacent_seeds() {
+    // `seed | 1` made 2n and 2n+1 the same draw, so every seeded arena played
+    // each draw twice: the effective sample size and the draw diversity were
+    // both halved, and half the draw space was unreachable and so untested.
+    // An SPRT over duplicated games understates its variance and reaches a
+    // boundary with false confidence -- which is how this was caught, in the
+    // first 22 games of a keep_window run where 5 of 5 seed pairs agreed on
+    // winner AND ply count.
+    let mut seen = std::collections::HashSet::new();
+    for seed in 8_000_000u64..8_000_400 {
+        seen.insert(Board::legal_draw(seed));
+    }
+    assert!(seen.len() > 380,
+            "400 consecutive seeds produced only {} distinct draws", seen.len());
+    for seed in (8_000_000u64..8_000_100).step_by(2) {
+        assert_ne!(Board::legal_draw(seed), Board::legal_draw(seed + 1),
+                   "seeds {} and {} share a draw", seed, seed + 1);
+    }
+    // And every draw must still be legal: 3 rituals, 3 sorceries, 3 charms.
+    let d = Board::legal_draw(8_123_456);
+    let mut ids: Vec<u8> = d.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), 9, "a draw must not repeat a spell");
+}
+
+#[test]
+fn surge_is_castable_after_a_dash_and_only_then() {
+    // Surge is the POST-DASH charm; Splash is the pre-dash one. `castable`
+    // excluded Surge outright ("never via this path"), so no turn using it
+    // could be generated at all -- 73.2% of the turns still unreachable after
+    // the cast-keep fix had Surge in the draw.
+    // SPLASH is already a pub const; writing 29 here would be the same
+    // restated-literal mistake this branch has been removing from py.rs.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SURGE, SPLASH, 11],
+                           Variant::Standard);
+    b.stones[0] = (1 << n("a7")) | (1 << n("b7")) | (1 << n("a1"))
+                | (1 << n("a11")) | (1 << n("a12")) | (1 << n("a13"));
+    b.stones[1] = 1 << n("c1");
+    b.update();
+    assert!(b.is_charged(Color::Red, 6), "Surge sigil (a7) must be charged");
+    assert!(b.is_charged(Color::Red, 7), "Splash sigil (b7) must be charged");
+
+    let pre = b.castable(Color::Red, true, true, false);
+    let post = b.castable(Color::Red, true, true, true);
+    assert!(!pre.contains(&SURGE), "Surge must NOT be castable before a dash");
+    assert!(post.contains(&SURGE), "Surge MUST be castable after a dash");
+    assert!(pre.contains(&SPLASH), "Splash must be castable before a dash");
+    assert!(!post.contains(&SPLASH), "Splash must NOT be castable after one");
+}
+
+#[test]
+fn a_surge_turn_is_enumerable_and_grants_its_move() {
+    // The granted move lives INSIDE the cast resolution
+    // (`Resolve::SurgeMove` -> branch_move_n(.., 1, .., all_moveable)), so a
+    // post-dash Surge needs no turn-grammar change -- but the turn has to
+    // actually appear, and it has to place a stone.
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SURGE, 10, 11], Variant::Standard);
+    b.stones[0] = (1 << n("a7")) | (1 << n("a1")) | (1 << n("a11"))
+                | (1 << n("a12")) | (1 << n("a13")) | (1 << n("a2"));
+    b.stones[1] = (1 << n("c1")) | (1 << n("c2"));
+    b.update();
+    assert!(b.is_charged(Color::Red, 6));
+    assert!(b.can_dash(Color::Red), "test needs a dash to be available");
+
+    let (turns, st) = b.enumerate_turns(Color::Red);
+    assert!(!st.truncated, "reference truncated at {} turns", turns.len());
+    let surge_pos = b.position_of(SURGE).expect("Surge not drawn");
+    let with_surge: Vec<_> = turns.iter().filter(|t| {
+        let mut saw_dash = false;
+        for a in t.slice() {
+            match *a {
+                Action::Dash { .. } => saw_dash = true,
+                Action::Cast { pos, .. } if pos as usize == surge_pos => {
+                    return saw_dash;
+                }
+                _ => {}
+            }
+        }
+        false
+    }).collect();
+    assert!(!with_surge.is_empty(),
+            "enumeration contains no post-dash Surge cast");
+    // A dash spends stones and Surge gives one back, so the count has to move.
+    for t in with_surge.iter().take(20) {
+        let mut x = b;
+        x.apply_turn(t, Color::Red);
+        assert!(x.total[0] > 0, "applying a Surge turn wiped the caster");
+    }
+}
+
+#[test]
+fn an_unproven_mate_is_not_reported_as_a_proof() {
+    // A mate score is a claim of CERTAINTY. The root used to break out of
+    // iterative deepening on any mate score, so a "forced win" that was really
+    // the opponent's saving move falling outside the progressive-widening
+    // budget stopped the search and got announced as a win. Measured in
+    // self-play from real positions: 4 of 126 self-inconsistencies were +MATE
+    // announcements that decayed to +0.38..+1.52 stones two half-moves later.
+    //
+    // The guard: a mate is reported as a mate only when no node ran out of
+    // width or window budget. Otherwise it comes back as UNPROVEN_MATE, which
+    // sits above any achievable material score and far below what `ui_score`
+    // renders as a proof.
+    use crate::search::{ui_score, UNPROVEN_MATE, WIN, MAX_PLY};
+    let mate_floor = WIN - MAX_PLY as i32;
+    assert!(UNPROVEN_MATE < mate_floor,
+            "an unproven mate must not clear the mate floor");
+    // Above any real material score: a 39-node board cannot produce a 20-stone
+    // lead, i.e. 2,000 centistones.
+    assert!(UNPROVEN_MATE > 2_000,
+            "an unproven mate must still read as winning decisively");
+    // And the UI must not call it a proof. It treats >= 37 Caveman units as a
+    // proven mate, and ui_score divides by 3900.
+    assert!(ui_score(UNPROVEN_MATE).abs() < 37.0,
+            "ui_score({}) = {} would be rendered as a PROVEN mate",
+            UNPROVEN_MATE, ui_score(UNPROVEN_MATE));
+    assert!(ui_score(-UNPROVEN_MATE).abs() < 37.0);
+    // A real mate still encodes as one.
+    assert!(ui_score(WIN - 3).abs() >= 37.0,
+            "a proven mate must still render as a mate");
+}
+
+#[test]
+fn an_unproven_mate_is_not_announced_as_a_mate_through_go() {
+    // THE GUARD WAS IN THE WRONG FUNCTION. It was written into
+    // `pick_successor`, which `py.rs` exposes for the local playtest server
+    // and nothing else, while `play_best` -- every arena, every audit, the
+    // native engine -- and `wasm.rs pick_move_actions` -- the shipped site --
+    // both drive `go_with_progress`, whose
+    //
+    //     if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
+    //
+    // had no guard and no clamp after the loop. `set_mate_guard` therefore set
+    // a field the shipped search never read, and the false "win in N" a player
+    // sees reaches them through a path that bypassed the guard at every step.
+    //
+    // Two results were consequently evidence of that omission rather than of
+    // the guard, and both were retracted: `smoke_knobbite` saw the knob change
+    // nothing on 60 of 60 midgame positions, which I explained away as the
+    // guard being rare; and the A/B over the 145 flagged positions returned 4
+    // false mates with the guard OFF and the same 4, at byte-identical scores,
+    // with it ON.
+    //
+    // So this pins the behaviour to `go`, the entry point that actually ships.
+    // The positions are real and were HARVESTED, not guessed: each is a
+    // position from `mateflip_cases.json` that `smoke_guardfires` confirmed
+    // announces a mate from a budget-limited search at window 2 / depth 4.
+    // Reading the recorded `score0` would not have found them -- only 1 of the
+    // 145 cases has a mate as its FROM-score; the rest flip into one.
+    const MATE_POSITIONS: [&str; 10] = [
+        "b........brb.b...r........rrrr..rrbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 32 4:4 Carnage:Meteor -:Meteor r2 competitive",
+        "r........bbb.b...r........rrrrr.bbbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring r 33 4:5 Carnage:Fury -:- b1 competitive",
+        "r...bb...brb.b............r.r.r.rrrr..b/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 34 5:5 Carnage:Fury Carnage:- r2 competitive",
+        "r.....r......rrrrr..r.....bbbbbb....br./Tsunami,Harvest,Erupt,Gather,Fury,Storm_Front,Seal_of_Summer,Lurk,Slash b 20 2:1 Fury:Fury -:- r1 competitive",
+        "b......rbr..rbrr.rr....r..b.......bb.../Blossom,Seal_of_Lightning,Corrupt,Meteor,Hail_Storm,Seal_of_Wind,Lurk,Surge,Seal_of_Spring b 16 0:0 -:- -:- r1 competitive",
+        "r.....rbrrr..r......b...rbbb.b.bb....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout b 24 0:1 -:Hail_Storm -:- b1 competitive",
+        "r.....rbrrr..r......b...rbbbbbbb.....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout r 25 0:1 -:Hail_Storm -:- b2 competitive",
+        "rrrb.rbrr.b.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge r 67 3:4 Corrupt:Hail_Storm -:- b1 competitive",
+        "rrrrrrbr.rb.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge b 68 4:4 Gather:Hail_Storm -:- r2 competitive",
+        "r...r..rrr...bb...b.rrrr.rbrbbbb...bbb./Bewitch,Carnage,Harvest,Grow,Seal_of_Wind,Scatter,Surge,Splash,Slash r 27 1:3 Grow:Scatter -:- b1 competitive",
+    ];
+
+    fn search(window: usize, guard: bool) -> crate::search::Search {
+        let mut s = crate::search::Search::new(18);
+        s.set_window(window);
+        s.set_adaptive(0.10, 2, 6);
+        s.set_mate_guard(guard);
+        s.weights = crate::eval::weights_by_name("tfit").expect("tfit weights");
+        s
+    }
+    let floor = crate::search::WIN - crate::search::MAX_PLY as i32;
+
+    let mut exercised = 0;
+    let mut clamped = 0;
+    let mut exhaustive = 0;
+    let mut leaked = Vec::new();
+    for sfn in MATE_POSITIONS.iter() {
+        let b = Board::from_sfn(sfn).expect("case SFN parses");
+        let c = b.to_move;
+
+        let (_t, s_off, st_off) = search(2, false).go(&b, c, 4, 0);
+        if s_off.abs() < floor { continue; }   // no longer announces a mate
+        if !(st_off.widened || st_off.windowed) {
+            // A mate from a search that never ran out of budget IS a proof,
+            // and the guard must leave it alone. Not our case here, but worth
+            // counting rather than silently skipping.
+            exhaustive += 1;
+            let (_t, s_on, _st) = search(2, true).go(&b, c, 4, 0);
+            assert_eq!(s_on, s_off,
+                       "the guard clamped an EXHAUSTIVE mate, which is a proof");
+            continue;
+        }
+        exercised += 1;
+
+        let (_t2, s_on, st_on) = search(2, true).go(&b, c, 4, 0);
+        if s_on.abs() == crate::search::UNPROVEN_MATE {
+            assert!(st_on.unproven_mate, "the clamp must record itself in stats");
+            clamped += 1;
+        } else {
+            leaked.push((s_off, s_on));
+        }
+    }
+    // If nothing was exercised the test proves nothing, which is exactly how
+    // the first smoke test passed while the guard was unwired. Fail loudly
+    // rather than report green.
+    assert!(exercised > 0,
+            "no embedded position produced a budget-limited mate, so the guard \
+             is UNTESTED -- re-harvest with smoke_guardfires.py rather than \
+             trusting this ({} were exhaustive mates)", exhaustive);
+    assert!(leaked.is_empty(),
+            "{} of {} budget-limited mates were announced as mates anyway: {:?}",
+            leaked.len(), exercised, leaked);
+    assert_eq!(clamped, exercised);
+}
+
+#[test]
+fn the_mate_guard_defaults_on_and_leaves_ordinary_scores_alone() {
+    // The clamp must touch nothing but a mate score from a budget-limited
+    // search. Self-play from fresh positions produced 0 false mates in 3,915
+    // starts with the guard off and 0 in 3,960 with it on, so ordinary play is
+    // where it has to be invisible.
+    let mut b = Board::new(Board::legal_draw(17), Variant::Standard);
+    b.setup_initial();
+    assert!(crate::search::Search::new(16).mate_guard_get(),
+            "the guard must default ON");
+
+    let mut on = crate::search::Search::new(18);
+    on.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    let (t_on, sc_on, st_on) = on.go(&b, Color::Red, 5, 0);
+    let mut off = crate::search::Search::new(18);
+    off.set_mate_guard(false);
+    off.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    let (t_off, sc_off, st_off) = off.go(&b, Color::Red, 5, 0);
+
+    // No mate anywhere near the opening, so the two must agree node for node.
+    assert!(sc_on.abs() < crate::search::WIN - crate::search::MAX_PLY as i32);
+    assert_eq!(sc_on, sc_off, "the guard changed a non-mate score");
+    assert_eq!(st_on.nodes, st_off.nodes, "the guard changed the node count");
+    assert_eq!(st_on.depth_completed, st_off.depth_completed);
+    assert!(!st_on.unproven_mate);
+    assert_eq!(t_on.map(|x| x.slice().to_vec()),
+               t_off.map(|x| x.slice().to_vec()));
+    let _ = st_off.unproven_mate;
 }

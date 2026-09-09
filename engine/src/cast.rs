@@ -8,6 +8,9 @@ use crate::board::{Board, Color, Outcome, NO_SPELL};
 use crate::spells_meta::*;
 use crate::topology::{SIGIL, SPELL_NODES};
 
+/// Most distinct keep choices one cast can offer: `C(5,2) = C(5,3) = 10`.
+pub const MAX_KEEPS: usize = 10;
+
 impl Board {
     /// Sigil position (0-based) holding `spell_id`, if drawn this game.
     #[inline]
@@ -65,7 +68,25 @@ impl Board {
             if info.is_static { continue; }
             if info.is_charm {
                 if has_winter { continue; }               // enemy Seal of Winter
-                if id == SURGE { continue; }              // never via this path
+                // Surge is the POST-DASH charm and Splash the PRE-DASH one --
+                // game-controller.js offers Surge only when a dash is no
+                // longer available (`!candash`) and Splash only while it still
+                // is (`candash`). Splash was handled; Surge was excluded
+                // outright ("never via this path"), so NO turn using it could
+                // be generated. 73.2% of the 675 turns still unreachable after
+                // the cast-keep fix have Surge in the draw, and its granted
+                // move places a stone, which is exactly the distance-1-to-4
+                // signature `layout_nearest` reported.
+                //
+                // Nothing else is needed: `Resolve::SurgeMove` already
+                // enumerates the granted move (`branch_move_n(.., 1, ..,
+                // all_moveable)`, matching the JS `getAllMoveTargets`), so the
+                // move lives inside the cast resolution rather than needing a
+                // turn-grammar change. This deliberately reads `post_dash`
+                // rather than trying to reproduce every state in which the JS
+                // `candash` flag is false: after an actual dash it certainly
+                // is, so this can under-generate but never invent a turn.
+                if id == SURGE && !post_dash { continue; }
                 if id == SPLASH && post_dash { continue; }
                 if can_spell || (has_summer && can_summer) { out.push(id); }
             } else if self.lock[c.idx()] == id {
@@ -78,30 +99,103 @@ impl Board {
         out
     }
 
-    /// Clear the cast sigil, then (non-charms) refill up to `mana` of its nodes in
-    /// the engine's fixed priority order. Mirrors `_castClearAndRefill`
-    /// (sim-board.js:1633) minus the Lifesap branch, which is Panda.
-    pub fn cast_clear_and_refill(&mut self, pos: usize, c: Color) {
+    /// Which stones a cast may leave standing in its own sigil, as masks.
+    ///
+    /// Casting clears the spell's sigil, and the caster then places `mana`
+    /// stones back onto nodes OF ITS CHOICE: `game-controller.js` emits
+    /// `chooserefills` and prompts "Select a stone to keep:" once per refill,
+    /// skipping the prompt only when `refills >= emptyNodes.length` leaves no
+    /// degrees of freedom. `sim-board.js:1633 _castClearAndRefill` substitutes
+    /// ONE fixed priority order for that choice, and this engine mirrored
+    /// sim-board rather than the rules, so the search saw 1 of up to
+    /// `C(5,2) = 10` legal positions after every cast -- its own and the
+    /// opponent's. Measured over 64,417 real turns from the game history: 61%
+    /// of the casts where a human kept anything other than the priority order
+    /// were unreachable by full enumeration, against 3.4% when it matched.
+    ///
+    /// **Index 0 is always the priority pick**, so `keep = 0` reproduces the
+    /// shipped engine exactly and enumerating the rest is a strict superset
+    /// rather than a reordering. Order beyond index 0 is by ascending mask, so
+    /// the list is deterministic and a `keep` index is a faithful witness in
+    /// the same way `Action::Cast::outcome` is.
+    ///
+    /// Charms never refill, and neither does a caster with no mana: one option,
+    /// the empty mask.
+    ///
+    /// The 39-official-spell scope is what makes the candidate set simply "the
+    /// sigil's nodes": `board.rs` has no `destroyed` mask, so unlike the JS
+    /// there is never a wall to exclude from `emptyNodes`.
+    pub fn keep_options(&self, pos: usize, c: Color) -> ([u64; MAX_KEEPS], usize) {
+        let mut out = [0u64; MAX_KEEPS];
+        let mask = SIGIL[pos];
+        let id = self.spells[pos];
+        let is_charm = (id as usize) < NUM_OFFICIAL_SPELLS && SPELLS[id as usize].is_charm;
+        if is_charm { return (out, 1); }
+
+        let mut nodes = [0u8; 5];
+        let mut n = 0;
+        let mut m = mask;
+        while m != 0 { nodes[n] = m.trailing_zeros() as u8; n += 1; m &= m - 1; }
+
+        // Read BEFORE any clearing, exactly as the JS does: `update()` is what
+        // recomputes mana, and both engines clear the sigil without calling it.
+        let k = (self.mana[c.idx()] as usize).min(n);
+        if k == 0 { return (out, 1); }
+
+        // JS priority: 5-node -> [2,3,4,0,1]; 3-node -> [2,1,0]; singleton -> [0].
+        let order: &[usize] = match n { 5 => &[2, 3, 4, 0, 1], 3 => &[2, 1, 0], _ => &[0] };
+        let mut prio = 0u64;
+        for &i in &order[..k] { prio |= 1u64 << nodes[i]; }
+        out[0] = prio;
+        let mut cnt = 1;
+
+        for bits in 0u32..(1u32 << n) {
+            if bits.count_ones() as usize != k { continue; }
+            let mut mk = 0u64;
+            for i in 0..n {
+                if bits & (1 << i) != 0 { mk |= 1u64 << nodes[i]; }
+            }
+            if mk == prio { continue; }
+            if cnt < MAX_KEEPS { out[cnt] = mk; cnt += 1; }
+        }
+        (out, cnt)
+    }
+
+    /// How many keep choices `keep_options` would return, without building them.
+    #[inline]
+    pub fn keep_count(&self, pos: usize, c: Color) -> usize {
+        let id = self.spells[pos];
+        if (id as usize) < NUM_OFFICIAL_SPELLS && SPELLS[id as usize].is_charm { return 1; }
+        let n = SIGIL[pos].count_ones() as usize;
+        let k = (self.mana[c.idx()] as usize).min(n);
+        if k == 0 { return 1; }
+        // C(n, k) for n in {1,3,5}: never above C(5,2) = 10.
+        let mut num = 1usize;
+        let mut den = 1usize;
+        for i in 0..k { num *= n - i; den *= i + 1; }
+        num / den
+    }
+
+    /// Clear the cast sigil, then place the caster's `mana` stones back on the
+    /// `keep_ix`-th choice from `keep_options`. Mirrors `_castClearAndRefill`
+    /// (sim-board.js:1633) minus the Lifesap branch, which is Panda -- except
+    /// that the choice the live game prompts for is a parameter here instead of
+    /// being fixed. An out-of-range index clamps to the last option rather than
+    /// panicking, so a stale or hand-built Turn degrades instead of aborting.
+    pub fn cast_clear_and_keep(&mut self, pos: usize, c: Color, keep_ix: usize) {
+        let (keeps, n) = self.keep_options(pos, c);
         let mask = SIGIL[pos];
         self.stones[0] &= !mask;
         self.stones[1] &= !mask;
-        let id = self.spells[pos];
-        let is_charm = (id as usize) < NUM_OFFICIAL_SPELLS && SPELLS[id as usize].is_charm;
-        if !is_charm {
-            let mut nodes = [0u8; 5];
-            let mut n = 0;
-            let mut m = mask;
-            while m != 0 { nodes[n] = m.trailing_zeros() as u8; n += 1; m &= m - 1; }
-            // JS priority: 5-node -> [2,3,4,0,1]; 3-node -> [2,1,0]; singleton -> [0].
-            let order: &[usize] = match n { 5 => &[2, 3, 4, 0, 1], 3 => &[2, 1, 0], _ => &[0] };
-            let mut refills = self.mana[c.idx()];
-            for &k in order {
-                if refills == 0 { break; }
-                self.stones[c.idx()] |= 1u64 << nodes[k];
-                refills -= 1;
-            }
-        }
+        self.stones[c.idx()] |= keeps[keep_ix.min(n - 1)];
         self.update();
+    }
+
+    /// The shipped behaviour: keep by the fixed priority order. Kept as the
+    /// name every caller already uses, and as `keep_options`' index 0, so
+    /// "enumerate the choice" is provably a superset of "take option 0".
+    pub fn cast_clear_and_refill(&mut self, pos: usize, c: Color) {
+        self.cast_clear_and_keep(pos, c, 0);
     }
 
     /// Post-resolve bookkeeping: lock, springlock, spell counter.
@@ -200,7 +294,19 @@ impl Board {
 
     /// Build a legal draw from a seed: 3 distinct rituals, 3 sorceries, 3 charms.
     pub fn legal_draw(seed: u64) -> [u8; 9] {
-        let mut s = seed | 1;
+        // SplitMix64 to spread the seed BEFORE the xorshift. `seed | 1` set the
+        // low bit, so seeds 2n and 2n+1 produced the SAME 9-spell draw: every
+        // arena played each draw twice, halving both the effective sample size
+        // and the draw diversity, and making half the draw space unreachable
+        // and therefore untested. Caught here by a keep_window SPRT whose first
+        // 22 games had 5 of 5 seed pairs identical in winner AND ply count --
+        // an SPRT on duplicated games understates its own variance and hits a
+        // boundary with false confidence.
+        let mut s = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        s = (s ^ (s >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        s = (s ^ (s >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        s ^= s >> 31;
+        if s == 0 { s = 0x9E37_79B9_7F4A_7C15; }   // xorshift cannot escape 0
         let mut next = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
         let mut out = [0u8; 9];
         for (slot, pool) in [(0usize, &RITUALS[..]), (3, &SORCERIES[..]), (6, &CHARMS[..])] {
