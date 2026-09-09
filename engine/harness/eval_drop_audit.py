@@ -279,8 +279,63 @@ def check_reachability(pairs, enum_cap=250_000):
     return misses
 
 
+def verify_pairs(pairs, enum_cap=250_000):
+    """Which of a game's turns are POSITIVELY CONFIRMED as one legal turn.
+
+    Returns a list aligned to `pairs`: `True` only when `layout_reachable`
+    says some turn the engine generates carries `before` to `after`.
+
+    Check A needs this because the 0.5-stones-per-half-move envelope is a
+    statement about a REAL half-move sequence. Across a transition that no
+    legal turn produces, an arbitrarily large drop is consistent with a
+    perfect eval AND perfect enumeration, so the flag carries no information
+    about the engine. Robi adjudicated the survivors through the real UI and
+    genuine enumeration gaps came out at ZERO -- all 432 unreachable turns are
+    record damage, because `applyAITurn` applies a stored action list without
+    validating legality, so a corrupt transcript replays "cleanly" and its
+    after-state gets stored.
+
+    Measured: corrupt turns are 0.65% of audited turns (432 of 66,820), so
+    1.3%-5.1% of windows straddle one -- but they were 37.9% of the FLAGS, a
+    7-29x enrichment, because an illegal jump between two states produces a
+    large apparent drop. Two in five flags were windows that never happened.
+
+    THE GATE IS POSITIVE VERIFICATION, NOT AN ARTEFACT TAXONOMY. `fat` /
+    no-op-sacrifice / transcription-glitch are three names for "the record is
+    damaged", and `layout_reachable` already decides the question they were
+    invented to answer -- it works on the STATES, not on how the record stored
+    them. So provenance is not consulted here: a fat record whose after-state
+    a legal turn does reach is fine, and only a FAILURE needs explaining. That
+    keeps every correctly-recorded turn instead of discarding all fat ones.
+
+    Anything not confirmed is excluded, which is the conservative direction:
+      * the enemy stone count grew, so the pair spans more than one turn;
+      * enumeration truncated, so there is no complete reference to compare;
+      * the SFN did not parse.
+    """
+    ok = []
+    for p in pairs:
+        try:
+            before, after = p['before'], p['after']
+            bt = before.split()
+            mover = 'red' if bt[1] == 'r' else 'blue'
+            enemy = 'b' if mover == 'red' else 'r'
+            bs, as_ = before.split('/')[0], after.split('/')[0]
+            if as_.count(enemy) > bs.count(enemy):
+                ok.append(False)          # spans more than one turn
+                continue
+            b = se.Board.from_sfn(before)
+            tgt = se.Board.from_sfn(after).stones
+            reachable, _n, trunc = b.layout_reachable(
+                mover, tgt[0], tgt[1], enum_cap)
+            ok.append(bool(reachable) and not trunc)
+        except Exception:
+            ok.append(False)
+    return ok
+
+
 def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
-                     windows=None):
+                     windows=None, verified=None):
     """CHECK A: score at ply i and ply i+d, same side to move, and compare.
 
     Two calibration lessons from the first run, which flagged 22 cases in 6 games
@@ -296,6 +351,7 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
       at least `surprise_from` stones -- default 0, i.e. the engine was not behind.
     """
     out = []
+    skipped = [0]               # windows dropped for straddling a bad turn
     clamp = 20 * STONE          # ignore magnitudes past +-20 stones for the slope
     # SEARCH DEPTH and COMPARISON WINDOW are separate axes, and conflating them
     # makes the horizon test impossible. With one `d` doing both, "flagged at
@@ -313,6 +369,15 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
                 sfn1, h1 = line[i + w]
                 if sfn0.split()[1] != sfn1.split()[1]:
                     continue          # not the same side to move; w must be even
+                # `line` and `pairs` are appended in lockstep during hydration,
+                # after the same guard, so len(line) == len(pairs) + 1 and the
+                # window line[i] -> line[i+w] traverses exactly pairs[i:i+w].
+                # Every one of them must be a confirmed legal turn or this
+                # window is not a half-move sequence at all.
+                if verified is not None:
+                    if not all(verified[i:i + w]):
+                        skipped[0] += 1
+                        continue
                 try:
                     s0 = score_at(sfn0, d, h0)
                     s1 = score_at(sfn1, d, h1)
@@ -331,7 +396,7 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
                             'mateFlip': mate_flip,
                             'sfnBefore': sfn0, 'sfnAfter': sfn1,
                             'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'})
-    return out
+    return out, skipped[0]
 
 
 def cast_between(sfn0, sfn1):
@@ -449,6 +514,12 @@ def main():
                     help='a mate flip only counts if the EARLIER score was at least '
                          'this many stones. 0 = the engine was not behind. This is '
                          'what separates the reported bug from a game simply ending.')
+    ap.add_argument('--no-record-filter', action='store_true',
+                    help='do NOT confirm each turn is reachable before scoring '
+                         'windows across it. Only for reproducing the first '
+                         "campaign's numbers: 37.9% of those flags straddled a "
+                         'turn no legal move produces, so the window never '
+                         'happened and the envelope does not apply to it.')
     ap.add_argument('--per-ply-limit', type=float, default=0.5,
                     help='stones per HALF-MOVE that count as a defect. 0.5 = one '
                          'stone per full move (both sides). Raise to 1.0 to read '
@@ -540,6 +611,8 @@ def main():
     print(f"auditing {label}, depths {depths}, "
           f"flagging drops over {args.per_ply_limit} stones/half-move\n")
     drops, misses, n_lines, n_plies = [], [], 0, 0
+    n_pairs = n_bad_pairs = n_skipped_windows = 0
+    misaligned = [0]        # games whose line/pairs index join does not hold
     shard_i = int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000
     seen_games = -1
     for key, line, meta in src:
@@ -553,17 +626,57 @@ def main():
                                         args.enum_cap):
                 m['game'] = key
                 misses.append(m)
-        for r in ([] if 'a' not in args.checks else
-                  check_eval_drops(line, depths, args.stride,
-                                   args.per_ply_limit, args.surprise_from,
-                                   windows)):
-            r['game'] = key
-            drops.append(r)
+        if 'a' in args.checks:
+            # Confirm every turn in the line BEFORE scoring any window, so a
+            # window straddling a turn no legal move produces is never
+            # measured. Check B is far cheaper than Check A -- one native
+            # enumerate-and-compare per turn against a full search per window
+            # -- so this is close to free, and it removes the largest and most
+            # misleading slice of the flag population.
+            verified = None
+            pairs = (meta or {}).get('pairs') or []
+            if not args.no_record_filter and pairs:
+                # The index join is the whole mechanism, so PROVE it holds
+                # rather than trusting it. Hydration appends to `line` and
+                # `pairs` in lockstep and then adds the final after-state, so
+                # len(line) must be len(pairs) + 1. If that ever drifts, a
+                # silent off-by-one would filter the WRONG windows, which is
+                # worse than not filtering: refuse instead.
+                if len(line) != len(pairs) + 1:
+                    if not misaligned[0]:
+                        print(f"  WARNING: line/pairs misaligned "
+                              f"({len(line)} vs {len(pairs)}); record filter "
+                              f"OFF for such games", flush=True)
+                    misaligned[0] += 1
+                else:
+                    verified = verify_pairs(pairs, args.enum_cap)
+                    n_pairs += len(verified)
+                    n_bad_pairs += sum(1 for v in verified if not v)
+            flags, nskip = check_eval_drops(
+                line, depths, args.stride, args.per_ply_limit,
+                args.surprise_from, windows, verified)
+            n_skipped_windows += nskip
+            for r in flags:
+                r['game'] = key
+                drops.append(r)
         if n_lines % 5 == 0:
             print(f"  {n_lines} lines, {n_plies} plies, "
                   f"{len(drops)} eval flags, {len(misses)} unreachable", flush=True)
 
     print(f"\n=== {n_lines} lines, {n_plies} positions ===")
+    if 'a' in args.checks and not args.no_record_filter:
+        pct = 100.0 * n_bad_pairs / n_pairs if n_pairs else 0.0
+        print(f"RECORD FILTER: {n_bad_pairs}/{n_pairs} turns ({pct:.2f}%) are "
+              f"not confirmed reachable;\n"
+              f"  {n_skipped_windows} windows excluded for straddling one. A "
+              f"window across a transition no\n"
+              f"  legal turn produces is not a half-move sequence, so the "
+              f"0.5/half-move envelope\n"
+              f"  says nothing about it. Pass --no-record-filter to see the "
+              f"unfiltered count.")
+        if misaligned[0]:
+            print(f"  {misaligned[0]} games had no usable index join and were "
+                  f"scored UNFILTERED")
     if do_reach:
         print(f"CHECK B unreachable played positions: {len(misses)}")
         errs = [m for m in misses if m.get('error')]
