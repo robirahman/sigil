@@ -1,0 +1,1 @@
+--checks,a,--lines,gs://focus-surfer-494820-g0-sigil/data/hydrated_lines_v2.json,--depths,6,--windows,2,--shards,90,--out,/opt/sigil/out/checka.json

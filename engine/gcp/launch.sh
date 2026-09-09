@@ -24,7 +24,7 @@ SHARD_BASE=${SHARD_BASE:-0}
 # means the arms never launch at all.
 SMOKE_TIMEOUT=${SMOKE_TIMEOUT:-900}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
-BRANCH=${BRANCH:-rust-bitboard-engine}
+BRANCH=${BRANCH:-main}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
 

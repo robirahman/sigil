@@ -24,7 +24,7 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
 RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
 SHARD_BASE=$(md shard-base)
-: "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=rust-bitboard-engine}" \
+: "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=main}" \
   "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \
   "${SHARD_BASE:=0}"
 echo "run=$RUN workers=$WORKERS harness=$HARNESS branch=$BRANCH \
