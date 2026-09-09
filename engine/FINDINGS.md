@@ -1572,5 +1572,6 @@ pooled with `pool_shards.py` (which now checks matched average time via the GAME
 | knob | games | arm% | 95% CI | Elo | time ratio | read |
 |---|---|---|---|---|---|---|
 | `force_hints` | 399 | 47.1% | [42.3, 52.0] | −20 [−54, +14] | 0.999 | null, leaning negative: a hint the width dropped is rarely the best move at 300 ms, and its subtree costs |
+| `pvs` | 400 | 50.5% | [45.6, 55.4] | +4 [−31, +38] | 1.000 | null; completed depth identical (4.68 vs 4.68): the zero windows save what the re-searches cost, so ordering is already good enough that plain alpha-beta cuts almost as early |
 
 (rows appended as each knob's shard set finishes)
