@@ -131,6 +131,23 @@ impl Board {
         has_wind && (ADJ[node as usize] & self.mine(c)) == 0
     }
 
+    /// Is `a` a legal FIRST action for `c` on this board? Used by the search's
+    /// `force_hints` to add a TT move or killer the width budget dropped: a
+    /// killer comes from a sibling position and a TT key can collide, so the
+    /// action is checked against this position's own first-move set.
+    pub fn first_action_is_legal(&self, a: Action, c: Color) -> bool {
+        let (node, push_to, blink) = match a {
+            Action::Move { node, push_to } => (node, push_to, false),
+            Action::Blink { node, push_to } => (node, push_to, true),
+            _ => return false,
+        };
+        if self.outcome != Outcome::Ongoing { return false; }
+        let (targets, _) = self.first_move_targets(c);
+        if targets & (1u64 << node) == 0 { return false; }
+        if self.is_blink_pub(node, c) != blink { return false; }
+        self.move_variants(targets, c).contains(&(node, push_to))
+    }
+
     /// Every (target, push_to) pair for one move onto `targets`.
     /// A hard move's push destination is a genuine choice the live game offers
     /// (`doPushEnemy` prompts), so all destinations are enumerated.

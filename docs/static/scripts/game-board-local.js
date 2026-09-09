@@ -833,7 +833,10 @@ document.addEventListener('alpine:init', () => {
 								// populate the readout now that gating is known.
 								_this._recomputeMapControl();
 								if (_engineRef && _engineRef.ai) {
-									_engineRef.ai.pondering = _aiAuthManager.enablePondering;
+									_engineRef.ai.pondering =
+										(typeof _engineRef.ai.ponderEnabledFor === 'function')
+											? _engineRef.ai.ponderEnabledFor(_aiAuthManager)
+											: _aiAuthManager.enablePondering;
 								}
 							} catch (e) {
 								// Non-fatal; just leave annotation mode off
@@ -1029,12 +1032,16 @@ document.addEventListener('alpine:init', () => {
 							const t = _RUST_TIERS[aiMode];
 							options.ai = new RustAI({
 								transport: 'worker', timeLimit: t.time, ttBits: t.ttBits,
+								// The two top tiers ponder unless the account setting
+								// is explicitly off; the quick tiers follow the setting.
+								ponderPolicy: (t.time >= 10) ? 'default-on' : 'setting',
 							});
 							// Fetch+compile the wasm during the human's first think,
 							// not the AI's.
 							RustAI.preload();
 						}
-						options.ai.pondering = false;
+						options.ai.pondering = (typeof options.ai.ponderEnabledFor === 'function')
+							? options.ai.ponderEnabledFor(_aiAuthManager) : false;
 					} else if (aiMode === 'positional') {
 						// Unlisted experimental tier (?ai=positional): Hard-class
 						// time budget plus the capped map-control tiebreaker from

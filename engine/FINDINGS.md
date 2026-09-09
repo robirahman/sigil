@@ -1461,3 +1461,56 @@ flood fill), `escape_distance` 5%, dash-branch generation ~5%, malloc ~8%. Nothi
 to `apply_turn` (`turn.rs:194` re-resolves every cast it expands), which is a structural
 change and is deferred until the search work in §1.2-1.4 settles what the generator must
 return.
+
+## §1.3 TT persistence: wired, 16-byte entries, Elo-neutral at 300 ms (2026-09-09)
+
+`TtEntry` is now 16 bytes (`key_hi: u32`, packed first action `u32`, score, depth,
+bound, age) in a plain `Vec` with `depth == TT_EMPTY` as the empty marker, instead of
+`Option<TtEntry>` at 32 bytes. Same `tt_bits` -> half the memory (2^21 = 32 MB), and the
+fixed-depth bench HASH is unchanged. Mate scores are stored node-relative
+(`score_to_tt`/`score_from_tt`), which is also what makes entries reusable across moves.
+`age` is bumped per `go`; a stale-generation entry yields to any new one. For a fresh
+`Search` per move -- every path that shipped before this -- the aging rule never fires,
+so the single-search tree is byte-identical (bench HASH `753f5ce31fd8f037`, unchanged).
+
+Persistence surfaces: `Search::new_game/clear_history/tt_filled`, the wasm `Engine`
+(`engine.search / ponder_begin / ponder_step / ponder_end / new_game`), and the Python
+`SearchSession` for harnesses. `rust-worker.js` now holds ONE `Engine` per table size for
+the whole game; `RustAI` sends `new_game` from its constructor. `pick_move_actions` is
+kept as a wrapper (fresh table) so `tools/wasm-smoke.js`'s existing gate still runs, and
+the smoke now also drives a search -> ponder -> search cycle on one `Engine`.
+
+**Local A/B, persistence alone** (`harness/ab_session.py 25 300 persist`, 8 shards, this
+machine, colour-swapped, seeds 8,000,000+): **400 games, 200-200, 50.0%**; the arm
+completed 0.15 ply deeper at equal clock (4.40 vs 4.25 / 4.64 vs 4.49 on two shards).
+The plan expected +8-20, which 400 games cannot resolve (SE 2.5% ~ +/-35 Elo), so this is
+"wired and not harmful", not a measured gain. It ships as the substrate pondering needs.
+Do not re-measure it alone; measure it with pondering, at 3 s and 10 s on the fleet.
+
+## §1.2 / §1.4 / §1.5 wired, default off, smoke-proven; arenas pending (2026-09-09)
+
+Knobs added to `Search`, every one OFF by default and node-identical when off (bench
+HASH `753f5ce31fd8f037` / `e87151533a366158` unchanged; `the_section_1_2_knobs_default_off…`):
+
+| knob | what | bites through `play_best` (gcp/smoke_knobs12.py) |
+|---|---|---|
+| `force_hints` | a TT move or killer the width budget dropped is ADDED as `[move, pass]` if legal here (`Board::first_action_is_legal`, pinned to the generator by test) | yes |
+| `root_resort` | root ordered by the previous iteration's scores, PV first | 71/76 positions differ at depth 5 |
+| `aspiration_steps` | failed side widens x3 per fail, full after 3 | 12/76 |
+| `adopt_partial` | a timed-out iteration may adopt a later root move whose COMPLETED subtree beat the fully-searched seed | 16/40 moves differ at 300 ms, same mean time |
+| `elastic` (`Elastic::DEFAULT` 2.0/0.4/2/50/predict) | instability extension, stability early-stop, don't-start-unfinishable-iteration | 14/40; mean 324 vs 302 ms -> MUST be gated at matched average time |
+| `pvs` | zero-window after the first child, re-search on `alpha < v < beta` | pending |
+| `lmr (ext, r)` | pull `width*ext`, search the band past `width` at `depth-1-r` zero-window, re-search on fail-high, instead of dropping it | pending |
+| `use_history` | per-colour history on (node, push_to) / cast spell / dash; +d^2 bonus, -d^2 malus; halved per `go`; orders tier 3 | pending |
+
+Pondering (§1.5) is wired end to end: `rust-worker.js` owns one `Engine`, `RustAI.startPonder`
+posts the human-to-move position (and now records it in the repetition history, fixing the
+gap where only AI-root positions were recorded), `ponder_step` slices of 250 ms to depth 12
+run between messages, and `game-board-local.js` turns pondering on for the >= 10 s tiers unless
+the account setting is explicitly off (`RustAI.ponderEnabledFor`). `RUST_ENGINE_VERSION` 3,
+`sw.js` cache `v27`, wasm rebuilt (430,424 bytes unoptimised; the `Log` refactor shrank it).
+
+Harnesses: `harness/ab_session.py <pairs> <ms> persist|ponder` (honest ponder: the arm
+ponders the pre-move position for the opponent's think time and never sees their choice),
+`harness/ab_search.py` gained the knobs (`lmr` arm value = ext*10 + r) and per-arm mean
+seconds on every GAME line, so an elastic arm can be checked for matched time when pooled.

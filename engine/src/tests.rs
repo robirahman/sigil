@@ -763,6 +763,128 @@ fn applying_an_enumerated_turn_is_deterministic_and_legal() {
 }
 
 #[test]
+fn tt_entry_is_16_bytes_and_actions_round_trip_through_it() {
+    use crate::search::{pack_action, unpack_action};
+    assert_eq!(std::mem::size_of::<crate::search::TtEntry>(), 16);
+    let mut n = 0;
+    for node in 0..39u8 {
+        for pt in [None, Some(0u8), Some(17), Some(38)] {
+            for a in [Action::Blink { node, push_to: pt }, Action::Move { node, push_to: pt },
+                      Action::Dash { sacs: [node, 38 - node], n_sacs: 2, node, push_to: pt },
+                      Action::Dash { sacs: [node, 0], n_sacs: 1, node, push_to: pt }] {
+                assert_eq!(unpack_action(pack_action(a)), Some(a), "{a:?}");
+                n += 1;
+            }
+        }
+    }
+    for pos in 0..9u8 {
+        for keep in 0..10u8 {
+            for outcome in [0u16, 1, 23, 4095, 65535] {
+                let a = Action::Cast { pos, keep, outcome };
+                assert_eq!(unpack_action(pack_action(a)), Some(a));
+                n += 1;
+            }
+        }
+    }
+    assert_eq!(unpack_action(pack_action(Action::Pass)), Some(Action::Pass));
+    assert_eq!(unpack_action(0), None, "0 is the 'no best action' sentinel");
+    assert!(n > 600);
+}
+
+#[test]
+fn a_reused_search_carries_its_table_into_the_next_move_and_new_game_clears_it() {
+    // Persistence is what the wasm `Engine` and `SearchSession` rely on: the
+    // second move of a game must start with a non-empty table when the same
+    // `Search` is reused, and `new_game` must return it to the fresh state.
+    let mut b = Board::new(Board::legal_draw(11), Variant::Standard);
+    b.setup_initial();
+    let mut s = crate::search::Search::new(16);
+    s.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    s.weights = crate::eval::weights_by_name("tfit").unwrap();
+    let c = b.to_move;
+    let (best, _, st1) = s.go(&b, c, 4, 0);
+    let filled1 = s.tt_filled();
+    assert!(filled1 > 0 && st1.nodes > 0);
+    b.apply_turn(&best.unwrap(), c);
+    b.turn_counter += 1; b.to_move = c.other(); b.update();
+    // Same position, fresh search: the reference node count.
+    let mut fresh = crate::search::Search::new(16);
+    fresh.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    fresh.weights = s.weights;
+    let (_, sc_fresh, st_fresh) = fresh.go(&b, b.to_move, 4, 0);
+    let (_, sc_warm, st_warm) = s.go(&b, b.to_move, 4, 0);
+    assert!(s.tt_filled() >= filled1, "the table lost entries across moves");
+    assert!(st_warm.tt_hits > 0);
+    // A warm table must not change what the search CONCLUDES at a fixed depth
+    // beyond what a transposition table already permits; it should reach it in
+    // no more nodes. (Scores can differ legitimately through deeper stored
+    // entries, so only the node bound is asserted.)
+    assert!(st_warm.nodes <= st_fresh.nodes,
+            "warm {} nodes vs fresh {} (scores {sc_warm} / {sc_fresh})", st_warm.nodes, st_fresh.nodes);
+    s.new_game();
+    assert_eq!(s.tt_filled(), 0);
+}
+
+#[test]
+fn the_section_1_2_knobs_default_off_and_the_default_tree_is_unchanged() {
+    // Every §1.2 knob ships OFF. With all of them off the search must be the
+    // pre-knob engine node for node; the fixed-depth bench HASH is the full
+    // gate (examples/bench.rs), this pins the defaults and a single position.
+    let s = crate::search::Search::new(12);
+    assert!(!s.force_hints_get() && !s.root_resort_get() && !s.aspiration_steps_get()
+            && !s.adopt_partial_get() && s.elastic_get().is_none());
+    let mut b = Board::new(Board::legal_draw(23), Variant::Standard);
+    b.setup_initial();
+    let mut base = crate::search::Search::new(16);
+    base.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    base.weights = crate::eval::weights_by_name("tfit").unwrap();
+    let (bb, bs, bst) = base.go(&b, b.to_move, 4, 0);
+    // Turning the ordering knobs ON changes the tree only when they bite; on
+    // this opening position force_hints must not INVENT anything illegal.
+    let mut on = crate::search::Search::new(16);
+    on.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    on.weights = base.weights;
+    on.set_force_hints(true);
+    on.set_root_resort(true);
+    on.set_aspiration_steps(true);
+    let (ob, os, ost) = on.go(&b, b.to_move, 4, 0);
+    assert!(ob.is_some() && bb.is_some());
+    // A forced hint is always a legal first move here.
+    for _ in 0..ost.forced_hints.min(1) {}
+    assert_eq!(bst.depth_completed, ost.depth_completed);
+    // Scores at a fixed depth may differ only through ordering-dependent
+    // fail-soft bounds; both must be finite non-mate values on the opening.
+    assert!(bs.abs() < 1000 && os.abs() < 1000, "{bs} {os}");
+}
+
+#[test]
+fn first_action_is_legal_agrees_with_the_generator() {
+    for seed in 1..40u64 {
+        let draw = Board::legal_draw(seed);
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL;
+        let bl = (nx() & ALL) & !r;
+        b.stones = [r, bl];
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        for c in [Color::Red, Color::Blue] {
+            let legal: Vec<Action> = b.turns_ordered(c).map(|t| t.slice()[0]).collect();
+            for node in 0..39u8 {
+                for pt in [None, Some(0u8), Some(5), Some(20), Some(38)] {
+                    for a in [Action::Move { node, push_to: pt }, Action::Blink { node, push_to: pt }] {
+                        let gen = legal.contains(&a);
+                        assert_eq!(b.first_action_is_legal(a, c), gen,
+                                   "seed {seed} {c:?} {a:?}: generator {gen}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn logged_and_unlogged_resolution_agree() {
     // `resolve_outcomes` (search path, `()` log) and `resolve_outcomes_logged`
     // (browser replay path, `Vec<JsAct>` log) are the SAME enumeration

@@ -159,19 +159,154 @@ pub fn width_for_depth_shaped(depth: i32, scale: usize, shape: usize) -> usize {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Bound { Exact, Lower, Upper }
 
+impl Bound {
+    #[inline] fn to_u8(self) -> u8 { match self { Bound::Exact => 0, Bound::Lower => 1, Bound::Upper => 2 } }
+    #[inline] fn from_u8(v: u8) -> Bound { match v { 0 => Bound::Exact, 1 => Bound::Lower, _ => Bound::Upper } }
+}
+
+/// One transposition-table slot, 16 bytes. It was `Option<TtEntry>` at 32 bytes
+/// (a quarter of the table spent on the `Option` tag), so at equal `tt_bits`
+/// this halves the memory and doubles the cache density; a phone at
+/// `tt_bits 21` now costs 32 MB instead of 64.
+///
+/// * `key_hi` is the upper 32 bits of the Zobrist key; the low bits chose the
+///   slot, so the verification is 32 + tt_bits bits.
+/// * `best` is the packed first action of the best turn (`pack_action`),
+///   0 = none. Only the first action, which is all move ordering needs.
+/// * `depth == TT_EMPTY` marks an unused slot.
+/// * `age` is the search generation that wrote the entry; a persistent table
+///   (one `Search` across a game) replaces stale-generation entries freely.
 #[derive(Clone, Copy)]
-struct TtEntry {
-    key: u64,
+pub(crate) struct TtEntry {
+    key_hi: u32,
+    best: u32,
     score: i32,
     depth: i8,
-    bound: Bound,
-    /// Only the first action, which is all move ordering needs.
-    best_first: Option<Action>,
+    bound: u8,
+    age: u8,
+    _pad: u8,
+}
+
+const TT_EMPTY: i8 = i8::MIN;
+
+
+impl TtEntry {
+    const EMPTY: TtEntry = TtEntry { key_hi: 0, best: 0, score: 0, depth: TT_EMPTY,
+                                     bound: 0, age: 0, _pad: 0 };
+}
+
+#[inline]
+fn pack_push(p: Option<u8>) -> u32 { match p { Some(d) => d as u32, None => 0x7F } }
+#[inline]
+fn unpack_push(v: u32) -> Option<u8> { if v == 0x7F { None } else { Some(v as u8) } }
+
+/// Lossless packing of an `Action` into 32 bits (round-trip asserted in tests).
+/// Layout: tag in bits 0..3; node bits 3..9; push_to bits 9..16 (0x7F = none);
+/// dash sacs bits 16..22 and 22..28, n_sacs bits 28..30; cast pos bits 3..7,
+/// keep bits 7..11, outcome bits 11..27.
+pub fn pack_action(a: Action) -> u32 {
+    match a {
+        Action::Blink { node, push_to } =>
+            1 | (node as u32) << 3 | pack_push(push_to) << 9,
+        Action::Move { node, push_to } =>
+            2 | (node as u32) << 3 | pack_push(push_to) << 9,
+        Action::Dash { sacs, n_sacs, node, push_to } =>
+            3 | (node as u32) << 3 | pack_push(push_to) << 9
+              | (sacs[0] as u32) << 16 | (sacs[1] as u32) << 22 | (n_sacs as u32) << 28,
+        Action::Cast { pos, keep, outcome } =>
+            4 | (pos as u32) << 3 | (keep as u32) << 7 | (outcome as u32) << 11,
+        Action::Pass => 5,
+    }
+}
+
+pub fn unpack_action(v: u32) -> Option<Action> {
+    let node = ((v >> 3) & 0x3F) as u8;
+    let push_to = unpack_push((v >> 9) & 0x7F);
+    match v & 7 {
+        1 => Some(Action::Blink { node, push_to }),
+        2 => Some(Action::Move { node, push_to }),
+        3 => Some(Action::Dash {
+            sacs: [((v >> 16) & 0x3F) as u8, ((v >> 22) & 0x3F) as u8],
+            n_sacs: ((v >> 28) & 3) as u8, node, push_to }),
+        4 => Some(Action::Cast { pos: ((v >> 3) & 0xF) as u8, keep: ((v >> 7) & 0xF) as u8,
+                                 outcome: ((v >> 11) & 0xFFFF) as u16 }),
+        5 => Some(Action::Pass),
+        _ => None,
+    }
+}
+
+
+/// `Turn` has no `PartialEq` (padding actions and `greedy_casts` are not
+/// identity), so compare turns by their action slices.
+#[inline]
+fn same_turn(a: Option<Turn>, b: Option<Turn>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(x), Some(y)) => x.slice() == y.slice(),
+        _ => false,
+    }
+}
+
+/// Mate scores are stored NODE-relative and read back root-relative, so an
+/// entry written at one ply and probed at another -- or, with a persistent
+/// table, in a later move's search -- still names the right distance.
+#[inline]
+fn score_to_tt(score: i32, ply: i32) -> i32 {
+    if score >= WIN - MAX_PLY as i32 { score + ply }
+    else if score <= -(WIN - MAX_PLY as i32) { score - ply }
+    else { score }
+}
+#[inline]
+fn score_from_tt(score: i32, ply: i32) -> i32 {
+    if score >= WIN - MAX_PLY as i32 { score - ply }
+    else if score <= -(WIN - MAX_PLY as i32) { score + ply }
+    else { score }
+}
+
+/// Time-budget elasticity (§1.2). The base budget is `time_ms`; the search may
+/// stop early or run over it under these rules, all measured against the
+/// AVERAGE time actually used (the harness calibrates `base` so the arm's mean
+/// time matches the fixed arm's).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Elastic {
+    /// Hard ceiling on total time as a multiple of the base budget (2.0).
+    pub max_factor: f32,
+    /// Earliest early-stop, as a fraction of the base budget (0.4).
+    pub min_factor: f32,
+    /// Stop early once the best move has been unchanged for this many
+    /// consecutive completed iterations with a stable score (2).
+    pub stable_iters: u8,
+    /// A score fall of at least this many centistones, or a changed best move,
+    /// at the last completed iteration extends the deadline to `max_factor`
+    /// once per move (50).
+    pub drop_cs: i32,
+    /// Do not START an iteration that the branching-factor estimate says
+    /// cannot finish inside the (possibly extended) deadline.
+    pub predict: bool,
+}
+
+impl Elastic {
+    pub const DEFAULT: Elastic = Elastic { max_factor: 2.0, min_factor: 0.4, stable_iters: 2,
+                                           drop_cs: 50, predict: true };
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SearchStats {
     pub nodes: u64,
+    /// Wall time this search used, ms (for matched-average-time gating).
+    pub elapsed_ms: f64,
+    /// Elastic: the deadline was extended for instability.
+    pub extended: bool,
+    /// Elastic: the search stopped before its budget (stable, or the next
+    /// iteration was predicted not to finish).
+    pub stopped_early: bool,
+    /// `adopt_partial` replaced the best move from a timed-out iteration.
+    pub adopted_partial: bool,
+    /// `force_hints`: hints added to a candidate list that had dropped them.
+    pub forced_hints: u64,
+    pub pvs_researches: u64,
+    pub lmr_probes: u64,
+    pub lmr_researches: u64,
     pub tt_hits: u64,
     pub cutoffs: u64,
     /// Deepest iteration COMPLETED (not merely started) — the honest depth number.
@@ -194,9 +329,51 @@ pub struct SearchStats {
 }
 
 pub struct Search {
-    tt: Vec<Option<TtEntry>>,
+    tt: Vec<TtEntry>,
     mask: usize,
+    /// Search generation, bumped per `go`; see `TtEntry::age`.
+    age: u8,
     killers: [[Option<Turn>; 2]; MAX_PLY],
+    /// §1.2 knobs. Every one defaults OFF and reproduces the shipped tree
+    /// node for node when off (asserted in tests).
+    ///
+    /// `force_hints`: the TT move and killers are promoted to the front of the
+    /// candidate list -- but only if the width budget already generated them.
+    /// A hash move ranked past the width was silently dropped. With this on,
+    /// a legal hint that is missing from the pulled list is ADDED as its plain
+    /// `[move, pass]` turn.
+    force_hints: bool,
+    /// `root_resort`: order the root by the previous iteration's scores (PV
+    /// first, then descending) instead of the generator's order.
+    root_resort: bool,
+    /// `aspiration_steps`: widen the failed side of the window x3 per fail
+    /// (60 -> 180 -> 540 -> full) instead of jumping straight to full.
+    aspiration_steps: bool,
+    /// `adopt_partial`: when an iteration times out, adopt a LATER root move
+    /// whose subtree completed and beat the fully-searched previous best. The
+    /// previous best is searched first, so that comparison is sound; the old
+    /// rule discarded the whole iteration.
+    adopt_partial: bool,
+    /// Time-budget elasticity; `None` = fixed budget, exactly as before.
+    elastic: Option<Elastic>,
+    /// §1.4a Principal-variation search: first child full window, the rest
+    /// zero-window with a full re-search on `alpha < v < beta`.
+    pvs: bool,
+    /// §1.4b LMR band: pull `width * lmr_ext` successors; those past `width`
+    /// are searched `lmr_r` plies shallower with a zero window and re-searched
+    /// at full depth on a fail-high, instead of being DROPPED. 0 = off.
+    lmr_ext: usize,
+    lmr_r: i32,
+    /// §1.4c History heuristic: per colour, per (node, push_to) for the first
+    /// move, per spell for a cast, one cell for dashes. Bonus +depth^2 to the
+    /// cutting turn's components, malus -depth^2 to the turns tried before it;
+    /// halved per `go`. Orders tier 3 (after TT move and killers).
+    use_history: bool,
+    hist_move: Vec<i32>,     // [2][39][40] flattened
+    hist_cast: [[i32; 39]; 2],
+    hist_dash: [i32; 2],
+    /// Scratch: this iteration's per-root-move scores (root_resort).
+    root_scores_out: Vec<(Turn, i32)>,
     /// Repetition counts for positions already played in the real game.
     base_history: std::collections::HashMap<u64, u8>,
     /// Zobrist keys along the current search path.
@@ -301,13 +478,27 @@ pub struct Search {
 }
 
 impl Search {
-    /// `tt_bits` sizes the table at 2^tt_bits entries (~24 bytes each).
+    /// `tt_bits` sizes the table at 2^tt_bits entries (16 bytes each).
     pub fn new(tt_bits: u32) -> Self {
         let n = 1usize << tt_bits;
         Search {
-            tt: vec![None; n],
+            tt: vec![TtEntry::EMPTY; n],
             mask: n - 1,
+            age: 0,
             killers: [[None; 2]; MAX_PLY],
+            force_hints: false,
+            root_resort: false,
+            aspiration_steps: false,
+            adopt_partial: false,
+            elastic: None,
+            root_scores_out: Vec::new(),
+            pvs: false,
+            lmr_ext: 0,
+            lmr_r: 1,
+            use_history: false,
+            hist_move: vec![0; 2 * 39 * 40],
+            hist_cast: [[0; 39]; 2],
+            hist_dash: [0; 2],
             base_history: std::collections::HashMap::new(),
             path: Vec::with_capacity(MAX_PLY),
             deadline: None,
@@ -385,10 +576,101 @@ impl Search {
     /// depth for breadth and, taken far enough, reaches full enumeration.
     pub fn set_width_scale(&mut self, s: usize) { self.width_scale = s.max(1); }
 
+    pub fn set_force_hints(&mut self, on: bool) { self.force_hints = on; }
+    pub fn set_root_resort(&mut self, on: bool) { self.root_resort = on; }
+    pub fn set_aspiration_steps(&mut self, on: bool) { self.aspiration_steps = on; }
+    pub fn set_adopt_partial(&mut self, on: bool) { self.adopt_partial = on; }
+    pub fn set_elastic(&mut self, e: Option<Elastic>) { self.elastic = e; }
+    pub fn set_pvs(&mut self, on: bool) { self.pvs = on; }
+    pub fn set_lmr(&mut self, ext: usize, r: i32) { self.lmr_ext = ext; self.lmr_r = r.max(1); }
+    pub fn set_history(&mut self, on: bool) { self.use_history = on; }
+    pub fn pvs_get(&self) -> bool { self.pvs }
+    pub fn lmr_get(&self) -> (usize, i32) { (self.lmr_ext, self.lmr_r) }
+    pub fn history_get(&self) -> bool { self.use_history }
+
+    /// History score of a turn = sum over its components (first move, casts, dash).
+    #[inline]
+    fn hist_score(&self, b: &Board, t: &Turn, c: Color) -> i32 {
+        let ci = c.idx();
+        let mut v = 0i32;
+        for a in t.slice() {
+            match *a {
+                Action::Move { node, push_to } | Action::Blink { node, push_to } => {
+                    let pt = push_to.map(|d| d as usize).unwrap_or(39);
+                    v += self.hist_move[(ci * 39 + node as usize) * 40 + pt];
+                }
+                Action::Cast { pos, .. } => {
+                    let id = b.spells[pos as usize] as usize;
+                    if id < 39 { v += self.hist_cast[ci][id]; }
+                }
+                Action::Dash { .. } => v += self.hist_dash[ci],
+                Action::Pass => {}
+            }
+        }
+        v
+    }
+
+    #[inline]
+    fn hist_update(&mut self, b: &Board, t: &Turn, c: Color, delta: i32) {
+        let ci = c.idx();
+        for a in t.slice() {
+            match *a {
+                Action::Move { node, push_to } | Action::Blink { node, push_to } => {
+                    let pt = push_to.map(|d| d as usize).unwrap_or(39);
+                    let cell = &mut self.hist_move[(ci * 39 + node as usize) * 40 + pt];
+                    *cell = (*cell + delta).clamp(-1 << 20, 1 << 20);
+                }
+                Action::Cast { pos, .. } => {
+                    let id = b.spells[pos as usize] as usize;
+                    if id < 39 {
+                        let cell = &mut self.hist_cast[ci][id];
+                        *cell = (*cell + delta).clamp(-1 << 20, 1 << 20);
+                    }
+                }
+                Action::Dash { .. } => {
+                    let cell = &mut self.hist_dash[ci];
+                    *cell = (*cell + delta).clamp(-1 << 20, 1 << 20);
+                }
+                Action::Pass => {}
+            }
+        }
+    }
+
+    fn hist_decay(&mut self) {
+        for v in self.hist_move.iter_mut() { *v /= 2; }
+        for r in self.hist_cast.iter_mut() { for v in r.iter_mut() { *v /= 2; } }
+        for v in self.hist_dash.iter_mut() { *v /= 2; }
+    }
+    pub fn force_hints_get(&self) -> bool { self.force_hints }
+    pub fn root_resort_get(&self) -> bool { self.root_resort }
+    pub fn aspiration_steps_get(&self) -> bool { self.aspiration_steps }
+    pub fn adopt_partial_get(&self) -> bool { self.adopt_partial }
+    pub fn elastic_get(&self) -> Option<Elastic> { self.elastic }
+
     /// Record a position that has already occurred in the real game, so the search
     /// counts repetitions against actual history rather than only its own path.
     pub fn add_history(&mut self, key: u64) {
         *self.base_history.entry(key).or_insert(0) += 1;
+    }
+
+    /// Forget the recorded game history (a persistent `Search` is handed the
+    /// whole history again before every move, so it must not accumulate).
+    pub fn clear_history(&mut self) { self.base_history.clear(); }
+
+    /// Reset everything a previous game could have left behind: the table, the
+    /// killers, the history and the generation counter. A fresh `Search::new`
+    /// with the same `tt_bits` is equivalent but re-allocates the table.
+    pub fn new_game(&mut self) {
+        for e in self.tt.iter_mut() { *e = TtEntry::EMPTY; }
+        self.killers = [[None; 2]; MAX_PLY];
+        self.base_history.clear();
+        self.age = 0;
+    }
+
+    /// Number of table slots currently holding an entry -- a harness reads this
+    /// to prove a persistent table actually carries knowledge between moves.
+    pub fn tt_filled(&self) -> usize {
+        self.tt.iter().filter(|e| e.depth != TT_EMPTY).count()
     }
 
     #[inline]
@@ -429,6 +711,15 @@ impl Search {
         self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();
+        // One generation per search. A fresh `Search` therefore writes every
+        // entry with age 1 and the aging rule never fires, which keeps the
+        // single-search tree identical to the pre-persistence engine; only a
+        // REUSED `Search` sees entries of an older generation.
+        self.age = self.age.wrapping_add(1);
+        // Killers are ply-indexed refutations of THIS root's tree; a reused
+        // search must not inherit the previous move's.
+        self.killers = [[None; 2]; MAX_PLY];
+        if self.use_history { self.hist_decay(); }
 
         // The best move is committed ONLY when an iteration completes. Accepting a
         // move from a timed-out iteration is a classic strength bug: the partial
@@ -437,23 +728,63 @@ impl Search {
         let mut best: Option<Turn> = None;
         let mut best_score = 0i32;
         let mut prev = 0i32;
+        // §1.2 bookkeeping. `root_scores` is the previous completed iteration's
+        // per-move scores (root_resort); the timing fields drive `elastic`.
+        let t_start = now_ms();
+        let base_ms = time_ms as f64;
+        let mut root_scores: Vec<(Turn, i32)> = Vec::new();
+        let mut t_prev_iter = 0.0f64;
+        let mut stable_count: u8 = 0;
+        let mut extended = false;
+        self.root_scores_out.clear();
 
         for depth in 1..=max_depth {
+            let t_iter0 = now_ms();
             // Aspiration window around the previous score, matching the existing
             // engine's ±0.15-of-a-stone idea scaled to integer material.
             let (mut alpha, mut beta) = if depth <= 2 { (-WIN, WIN) }
                                         else { (prev - self.aspiration, prev + self.aspiration) };
+            let mut fails = 0u32;
             let mut score;
             let mut iter_best: Option<Turn> = best;   // seed ordering with the last best
             loop {
-                score = self.root_search(root, c, depth, alpha, beta, &mut iter_best);
+                self.root_scores_out.clear();
+                score = self.root_search(root, c, depth, alpha, beta, &mut iter_best, &root_scores);
                 if self.stats.timed_out { break; }
-                if score <= alpha && alpha > -WIN { alpha = -WIN; beta = WIN; continue; }
-                if score >= beta && beta < WIN { alpha = -WIN; beta = WIN; continue; }
+                if self.aspiration_steps {
+                    // Widen only the side that failed, x3 per fail; full after 3.
+                    fails += 1;
+                    let widen = self.aspiration * 3i32.saturating_pow(fails);
+                    if score <= alpha && alpha > -WIN {
+                        alpha = if fails >= 3 { -WIN } else { (prev - widen).max(-WIN) };
+                        continue;
+                    }
+                    if score >= beta && beta < WIN {
+                        beta = if fails >= 3 { WIN } else { (prev + widen).min(WIN) };
+                        continue;
+                    }
+                } else {
+                    if score <= alpha && alpha > -WIN { alpha = -WIN; beta = WIN; continue; }
+                    if score >= beta && beta < WIN { alpha = -WIN; beta = WIN; continue; }
+                }
                 break;
             }
-            if self.stats.timed_out { break; }          // discard the partial result
+            if self.stats.timed_out {
+                // `adopt_partial`: root_search has already written a sound
+                // replacement into `iter_best` if one exists.
+                if self.adopt_partial && iter_best.is_some() && !same_turn(iter_best, best) {
+                    best = iter_best;
+                    self.stats.adopted_partial = true;
+                }
+                break;          // discard the partial result
+            }
+            let changed = best.is_some() && iter_best.is_some() && !same_turn(iter_best, best);
+            let dropped = depth > 1 && score < prev - self.elastic.map(|e| e.drop_cs).unwrap_or(0);
             if iter_best.is_some() { best = iter_best; }
+            if self.root_resort {
+                root_scores = std::mem::take(&mut self.root_scores_out);
+            }
+            let stable_score = depth > 1 && (score - prev).abs() <= 30;
             prev = score;
             best_score = score;
             self.stats.depth_completed = depth;
@@ -475,7 +806,39 @@ impl Search {
             let proven = !self.mate_guard
                          || (!self.stats.widened && !self.stats.windowed);
             if score.abs() >= WIN - MAX_PLY as i32 && proven { break; }   // decisive
+
+            // ---- elastic time management (off => nothing below runs) ----
+            if let (Some(e), Some(_)) = (self.elastic, self.deadline) {
+                let now = now_ms();
+                let elapsed = now - t_start;
+                let t_iter = now - t_iter0;
+                if !changed && stable_score { stable_count += 1; } else { stable_count = 0; }
+                // Instability: one extension per move, to max_factor x base.
+                if (changed || dropped) && !extended && depth >= 3 {
+                    extended = true;
+                    self.stats.extended = true;
+                    self.deadline = Some(t_start + base_ms * e.max_factor as f64);
+                }
+                // Stability: stop once the answer has settled and the minimum
+                // fraction of the budget is spent.
+                if stable_count >= e.stable_iters && elapsed >= base_ms * e.min_factor as f64
+                   && depth >= 4 {
+                    self.stats.stopped_early = true;
+                    break;
+                }
+                // Prediction: do not start an iteration that cannot finish.
+                if e.predict && depth >= 3 && t_prev_iter > 0.0 {
+                    let ebf = (t_iter / t_prev_iter).clamp(2.0, 6.0);
+                    let remaining = self.deadline.unwrap() - now;
+                    if t_iter * ebf > remaining * 1.15 {
+                        self.stats.stopped_early = true;
+                        break;
+                    }
+                }
+                t_prev_iter = t_iter;
+            }
         }
+        self.stats.elapsed_ms = now_ms() - t_start;
         // Report an UNPROVEN mate as large-but-finite. `ui_score` divides by
         // 3900 and the UI multiplies by 39, so UNPROVEN_MATE reaches the player
         // as +50 stones: unmistakably winning, past no mate threshold. The move
@@ -491,13 +854,32 @@ impl Search {
     }
 
     fn root_search(&mut self, b: &Board, c: Color, depth: i32,
-                   mut alpha: i32, beta: i32, best: &mut Option<Turn>) -> i32
+                   mut alpha: i32, beta: i32, best: &mut Option<Turn>,
+                   prev_scores: &[(Turn, i32)]) -> i32
     {
         let mut best_local = *best;
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
         let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape) * 3;
-        let turns = self.ordered_turns(b, c, 0, best_local, w);
+        let mut turns = self.ordered_turns(b, c, 0, best_local, w);
+        if self.root_resort && !prev_scores.is_empty() {
+            // PV first (already promoted), then the previous iteration's scores
+            // descending; moves it never scored keep generator order after them.
+            let rank = |t: &Turn| -> (i32, i32) {
+                if same_turn(Some(*t), best_local) { return (i32::MIN, 0); }
+                match prev_scores.iter().position(|(pt, _)| pt.slice() == t.slice()) {
+                    Some(i) => (-prev_scores[i].1, 0),
+                    None => (i32::MAX, 1),
+                }
+            };
+            turns.sort_by_cached_key(rank);
+        }
+        // `adopt_partial` bookkeeping: did a move whose subtree COMPLETED beat
+        // the seed (which is searched first and therefore completes first)?
+        let seed = best_local;
+        let mut seed_completed = false;
+        let mut completed_beat_seed = false;
+        let mut i = 0usize;
         for t in turns {
             if self.out_of_time() { self.stats.timed_out = true; break; }
             let mut child = *b;
@@ -508,16 +890,30 @@ impl Search {
             let mut rep = false;    // the root itself never caches, so unused here
             let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, 1, key,
                                   &mut rep);
-            if v > best_val {
+            let completed = !self.stats.timed_out;
+            if completed {
+                if i == 0 { seed_completed = true; }
+                if self.root_resort { self.root_scores_out.push((t, v)); }
+            }
+            if v > best_val && (completed || !self.adopt_partial) {
+                if completed && seed_completed && !same_turn(Some(t), seed)
+                   && same_turn(best_local, seed) && seed.is_some() && v > alpha {
+                    completed_beat_seed = true;
+                }
                 best_val = v;
                 best_local = Some(t);
                 if v > alpha { alpha = v; }
             }
             if alpha >= beta { self.stats.cutoffs += 1; break; }
+            i += 1;
         }
         // Only hand back a move if this call actually finished; otherwise the
-        // caller keeps the previous iteration's fully-searched choice.
+        // caller keeps the previous iteration's fully-searched choice -- unless
+        // `adopt_partial` proved a completed later move beat it.
         if !self.stats.timed_out && best_local.is_some() { *best = best_local; }
+        else if self.stats.timed_out && self.adopt_partial && completed_beat_seed {
+            *best = best_local;
+        }
         best_val
     }
 
@@ -550,16 +946,19 @@ impl Search {
 
         // --- transposition table ---
         let slot = (key as usize) & self.mask;
+        let key_hi = (key >> 32) as u32;
         let mut tt_move: Option<Action> = None;
-        if let Some(e) = self.tt[slot] {
-            if e.key == key {
+        {
+            let e = self.tt[slot];
+            if e.depth != TT_EMPTY && e.key_hi == key_hi {
                 self.stats.tt_hits += 1;
-                tt_move = e.best_first;
+                tt_move = unpack_action(e.best);
                 if e.depth as i32 >= depth {
-                    match e.bound {
-                        Bound::Exact => return e.score,
-                        Bound::Lower => if e.score >= beta { return e.score; },
-                        Bound::Upper => if e.score <= alpha { return e.score; },
+                    let sc = score_from_tt(e.score, ply);
+                    match Bound::from_u8(e.bound) {
+                        Bound::Exact => return sc,
+                        Bound::Lower => if sc >= beta { return sc; },
+                        Bound::Upper => if sc <= alpha { return sc; },
                     }
                 }
             }
@@ -572,8 +971,14 @@ impl Search {
 
         self.path.push(key);
         let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape);
-        let turns = self.ordered_turns_action_hint(b, c, ply as usize, tt_move, w);
-        for t in turns {
+        // §1.4b: with an LMR band the generator is pulled for `w * lmr_ext`
+        // successors; the first `w` are searched as before, the band beyond
+        // them at reduced depth instead of being dropped.
+        let pull = if self.lmr_ext > 1 { w * self.lmr_ext } else { w };
+        let turns = self.ordered_turns_action_hint(b, c, ply as usize, tt_move, pull);
+        let mut idx = 0usize;
+        for t in turns.iter() {
+            let t = *t;
             if self.out_of_time() { self.stats.timed_out = true; break; }
             let mut child = *b;
             child.apply_turn(&t, c);
@@ -582,8 +987,33 @@ impl Search {
             let ckey = crate::zobrist::ZOBRIST.key_js(&child);
             // The child reports repetition anywhere in ITS subtree — including
             // itself being the third occurrence — into our accumulator.
-            let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
-                                  ckey, &mut saw_repetition);
+            let in_band = idx >= w;                 // LMR band member
+            let v = if in_band {
+                // Reduced, zero-window probe; a fail-high earns the full search.
+                let r = if self.lmr_ext >= 3 && idx >= 2 * w { self.lmr_r + 1 } else { self.lmr_r };
+                let d_red = (depth - 1 - r).max(0);
+                self.stats.lmr_probes += 1;
+                let mut v = -self.negamax(&child, c.other(), d_red, -alpha - 1, -alpha, ply + 1,
+                                          ckey, &mut saw_repetition);
+                if v > alpha && !self.stats.timed_out {
+                    self.stats.lmr_researches += 1;
+                    v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
+                                      ckey, &mut saw_repetition);
+                }
+                v
+            } else if self.pvs && idx > 0 {
+                let mut v = -self.negamax(&child, c.other(), depth - 1, -alpha - 1, -alpha, ply + 1,
+                                          ckey, &mut saw_repetition);
+                if v > alpha && v < beta && !self.stats.timed_out {
+                    self.stats.pvs_researches += 1;
+                    v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
+                                      ckey, &mut saw_repetition);
+                }
+                v
+            } else {
+                -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
+                              ckey, &mut saw_repetition)
+            };
             if v > best_val {
                 best_val = v;
                 best_turn = Some(t);
@@ -597,8 +1027,16 @@ impl Search {
                     self.killers[p][1] = self.killers[p][0];
                     self.killers[p][0] = Some(t);
                 }
+                if self.use_history {
+                    let bonus = depth * depth;
+                    self.hist_update(b, &t, c, bonus);
+                    for tried in turns.iter().take(idx) {
+                        self.hist_update(b, tried, c, -bonus);
+                    }
+                }
                 break;
             }
+            idx += 1;
         }
         self.path.pop();
 
@@ -610,15 +1048,20 @@ impl Search {
             let bound = if best_val <= alpha_orig { Bound::Upper }
                         else if best_val >= beta { Bound::Lower }
                         else { Bound::Exact };
-            let replace = match self.tt[slot] {
-                None => true,
-                Some(e) => e.key == key || (e.depth as i32) <= depth,
-            };
+            let e = self.tt[slot];
+            // Same position, a stale generation, or a shallower entry all yield.
+            let replace = e.depth == TT_EMPTY || e.key_hi == key_hi
+                          || e.age != self.age || (e.depth as i32) <= depth;
             if replace {
-                self.tt[slot] = Some(TtEntry {
-                    key, score: best_val, depth: depth as i8, bound,
-                    best_first: best_turn.map(|t| t.slice()[0]),
-                });
+                self.tt[slot] = TtEntry {
+                    key_hi,
+                    best: best_turn.map(|t| pack_action(t.slice()[0])).unwrap_or(0),
+                    score: score_to_tt(best_val, ply),
+                    depth: depth as i8,
+                    bound: bound.to_u8(),
+                    age: self.age,
+                    _pad: 0,
+                };
             }
         }
         best_val
@@ -723,6 +1166,18 @@ impl Search {
         let p = ply.min(MAX_PLY - 1);
         let k0 = self.killers[p][0].map(|t| t.slice()[0]);
         let k1 = self.killers[p][1].map(|t| t.slice()[0]);
+        if self.force_hints {
+            // A hint the width budget did not generate is added as its plain
+            // `[first action, pass]` turn, if that first action is legal HERE
+            // (killers come from sibling positions; a TT key can collide).
+            for h in [hint, k0, k1].into_iter().flatten() {
+                if v.iter().any(|t| t.slice()[0] == h) { continue; }
+                if b.first_action_is_legal(h, c) {
+                    v.push(Turn::single(h).push_pub(Action::Pass));
+                    self.stats.forced_hints += 1;
+                }
+            }
+        }
         if hint.is_some() || k0.is_some() || k1.is_some() {
             let mut tiers: [Vec<Turn>; 3] = [Vec::new(), Vec::new(), Vec::new()];
             let mut rest: Vec<Turn> = Vec::with_capacity(v.len());
@@ -733,15 +1188,36 @@ impl Search {
                 else if Some(a) == k1 { tiers[2].push(t); }
                 else { rest.push(t); }
             }
+            if self.use_history && rest.len() > 1 {
+                // Tier 3 by history score, descending; stable, so untouched
+                // turns keep the generator's order.
+                let hs: Vec<i32> = rest.iter().map(|t| self.hist_score(b, t, c)).collect();
+                let mut order: Vec<usize> = (0..rest.len()).collect();
+                order.sort_by_key(|&i| -hs[i]);
+                rest = order.into_iter().map(|i| rest[i]).collect();
+            }
             for tier in tiers.iter_mut() { v.append(tier); }
             v.append(&mut rest);
+        } else if self.use_history && v.len() > 1 {
+            let hs: Vec<i32> = v.iter().map(|t| self.hist_score(b, t, c)).collect();
+            let mut order: Vec<usize> = (0..v.len()).collect();
+            order.sort_by_key(|&i| -hs[i]);
+            v = order.into_iter().map(|i| v[i]).collect();
         }
         v
     }
 
+    /// Deadline check, throttled to one clock read per 64 nodes. On wasm
+    /// `now_ms` is a JS import (`Date.now`), and it was being called at every
+    /// node AND every expanded child. The node counter advances at every node,
+    /// so a timed-out search still stops within 64 nodes (< 1 ms). A clockless
+    /// search (`time_ms == 0`, the bench) is unaffected.
     #[inline]
     fn out_of_time(&self) -> bool {
-        match self.deadline { Some(d) => now_ms() >= d, None => false }
+        match self.deadline {
+            Some(d) => self.stats.nodes & 63 == 0 && now_ms() >= d,
+            None => false,
+        }
     }
 }
 
@@ -769,6 +1245,15 @@ impl Search {
         self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();
+        // One generation per search. A fresh `Search` therefore writes every
+        // entry with age 1 and the aging rule never fires, which keeps the
+        // single-search tree identical to the pre-persistence engine; only a
+        // REUSED `Search` sees entries of an older generation.
+        self.age = self.age.wrapping_add(1);
+        // Killers are ply-indexed refutations of THIS root's tree; a reused
+        // search must not inherit the previous move's.
+        self.killers = [[None; 2]; MAX_PLY];
+        if self.use_history { self.hist_decay(); }
         if positions.is_empty() { return (0, 0, self.stats); }
 
         let mut best_idx = 0usize;

@@ -31,7 +31,16 @@ MERGE_OFF = 1 << 62
 BASE_WS = se.DEFAULT_WIDTH_SCALE
 KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
-         'rank_oversample', 'width_shape')
+         'rank_oversample', 'width_shape',
+         # §1.2 booleans: arm value 1 = on, 0 = off (engine default).
+         'force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
+         # elastic: arm value 1 = Elastic::DEFAULT; the GAME lines carry each
+         # arm's mean seconds per move so pool_shards can check matched time.
+         'elastic',
+         # §1.4: pvs 1/0; history 1/0; lmr = ext*10 + r (e.g. 21 = band x2, R 1)
+         'pvs', 'history', 'lmr')
+BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
+              'pvs', 'history')
 
 # Adaptive arms are named `adaptive` and encode (easy_scale, hard_scale) in the arm
 # value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
@@ -56,8 +65,15 @@ def play(b, ms, ev, hist, knob, val):
     kdmw = val if knob == 'key_dash_min_width' else None
     ros = val if knob == 'rank_oversample' else None
     wsh = val if knob == 'width_shape' else None
+    extra = {}
+    if knob in BOOL_KNOBS and val:
+        extra['use_history' if knob == 'history' else knob] = True
+    if knob == 'elastic' and val:
+        extra['elastic'] = (2.0, 0.4, 2, 50, True)
+    if knob == 'lmr' and val:
+        extra['lmr'] = (val // 10, val % 10)
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
-                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh)
+                       kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, **extra)
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
@@ -65,15 +81,17 @@ def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
     b.setup_initial()
     hist = []
     dep = {'arm': [], 'base': []}
+    secs = {'arm': [], 'base': []}
     for ply in range(max_plies):
         side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
         is_arm = (side == arm_color)
         hist.append(b.key_js)
         r = play(b, ms, ev, hist, knob, arm_val if is_arm else base_val)
         dep['arm' if is_arm else 'base'].append(r[0])
+        secs['arm' if is_arm else 'base'].append(r[2])
         if r[3]:
-            return r[4], ply + 1, dep
-    return None, max_plies, dep
+            return r[4], ply + 1, dep, secs
+    return None, max_plies, dep, secs
 
 
 if __name__ == "__main__":
@@ -95,14 +113,17 @@ if __name__ == "__main__":
           f"and invalidate the statistics", flush=True)
 
     s = Sprt(elo0=0.0, elo1=25.0)
-    plies = []; dep = {'arm': [], 'base': []}
+    plies = []; dep = {'arm': [], 'base': []}; secs = {'arm': [], 'base': []}
     for i in range(pairs):
         for arm in ('red', 'blue'):
-            w, n, d = game(6_000_000 + off + i, arm, ms, ev, knob, arm_val, base_val)
+            w, n, d, sc = game(6_000_000 + off + i, arm, ms, ev, knob, arm_val, base_val)
             plies.append(n); dep['arm'] += d['arm']; dep['base'] += d['base']
+            secs['arm'] += sc['arm']; secs['base'] += sc['base']
             s.update(None if w is None else (w == arm))
-            print(f"GAME seed={6_000_000+off+i} arm={arm} winner={w} plies={n}",
-                  flush=True)
+            ma = statistics.mean(sc['arm']) if sc['arm'] else 0.0
+            mb = statistics.mean(sc['base']) if sc['base'] else 0.0
+            print(f"GAME seed={6_000_000+off+i} arm={arm} winner={w} plies={n} "
+                  f"arm_s={ma:.3f} base_s={mb:.3f}", flush=True)
         if s.verdict != 'continue':
             break
     print(f"SHARD knob={knob} arm={arm_val} base={base_val} eval={ev} ms={ms} "
@@ -112,3 +133,7 @@ if __name__ == "__main__":
     if dep['arm']:
         print(f"  depth: arm {statistics.mean(dep['arm']):.2f}  "
               f"base {statistics.mean(dep['base']):.2f}")
+    if secs['arm']:
+        print(f"  mean s/move: arm {statistics.mean(secs['arm']):.3f}  "
+              f"base {statistics.mean(secs['base']):.3f}  "
+              f"(an elastic arm must be gated at MATCHED average time)")

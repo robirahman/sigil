@@ -5,6 +5,151 @@ let wasm_bindgen = (function(exports) {
     }
 
     /**
+     * A PERSISTENT engine: one `Search` (one transposition table) that lives for a
+     * whole game inside the worker, instead of a fresh table per move.
+     *
+     * Two things this buys that `pick_move_actions` cannot:
+     *
+     * * **TT persistence.** The previous move's tree is largely this move's tree
+     *   two plies down, so the first iterations of every search come almost free.
+     * * **Pondering.** While the human thinks, `ponder_step` searches the position
+     *   they are looking at (TT priming, as the JS Caveman does): whatever they
+     *   play, the engine's root is a child of the ponder root whose subtree is
+     *   already in the table. Slices keep the worker responsive -- the search is
+     *   synchronous, so a queued `search` message runs between slices.
+     *
+     * Repetition history is replaced on every call from the list the client sends,
+     * never accumulated (`clear_history`).
+     */
+    class Engine {
+        __destroy_into_raw() {
+            const ptr = this.__wbg_ptr;
+            this.__wbg_ptr = 0;
+            EngineFinalization.unregister(this);
+            return ptr;
+        }
+        free() {
+            const ptr = this.__destroy_into_raw();
+            wasm.__wbg_engine_free(ptr, 0);
+        }
+        /**
+         * @param {number} tt_bits
+         */
+        constructor(tt_bits) {
+            const ret = wasm.engine_new(tt_bits);
+            this.__wbg_ptr = ret;
+            EngineFinalization.register(this, this.__wbg_ptr, this);
+            return this;
+        }
+        /**
+         * Forget the previous game (table, killers, history).
+         */
+        new_game() {
+            wasm.engine_new_game(this.__wbg_ptr);
+        }
+        /**
+         * Begin pondering `sfn` (the position the OPPONENT is thinking about).
+         * `history_sfns` as for `search`. Returns an error JSON or `{"ok":true}`.
+         * @param {string} sfn
+         * @param {number} width_scale
+         * @param {string[]} history_sfns
+         * @param {string} eval_name
+         * @param {number} adaptive_p
+         * @param {number} adaptive_easy
+         * @param {number} adaptive_hard
+         * @returns {string}
+         */
+        ponder_begin(sfn, width_scale, history_sfns, eval_name, adaptive_p, adaptive_easy, adaptive_hard) {
+            let deferred4_0;
+            let deferred4_1;
+            try {
+                const ptr0 = passStringToWasm0(sfn, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+                const len0 = WASM_VECTOR_LEN;
+                const ptr1 = passArrayJsValueToWasm0(history_sfns, wasm.__wbindgen_malloc);
+                const len1 = WASM_VECTOR_LEN;
+                const ptr2 = passStringToWasm0(eval_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+                const len2 = WASM_VECTOR_LEN;
+                const ret = wasm.engine_ponder_begin(this.__wbg_ptr, ptr0, len0, width_scale, ptr1, len1, ptr2, len2, adaptive_p, adaptive_easy, adaptive_hard);
+                deferred4_0 = ret[0];
+                deferred4_1 = ret[1];
+                return getStringFromWasm0(ret[0], ret[1]);
+            } finally {
+                wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+            }
+        }
+        /**
+         * Stop pondering (the table keeps everything it learned).
+         */
+        ponder_end() {
+            wasm.engine_ponder_end(this.__wbg_ptr);
+        }
+        /**
+         * One pondering slice of at most `slice_ms`. Each slice re-drives iterative
+         * deepening from depth 1 to at most `max_depth`; with the warm table the
+         * already-completed depths cost microseconds, and whatever the cut-off
+         * iteration stored stays in the table for the next slice. Returns
+         * `{"ok":true,"depth":d,"nodes":n,"done":bool}`; `done` when `max_depth`
+         * completed, a decisive score was found, or nothing is being pondered.
+         * @param {number} slice_ms
+         * @param {number} max_depth
+         * @returns {string}
+         */
+        ponder_step(slice_ms, max_depth) {
+            let deferred1_0;
+            let deferred1_1;
+            try {
+                const ret = wasm.engine_ponder_step(this.__wbg_ptr, slice_ms, max_depth);
+                deferred1_0 = ret[0];
+                deferred1_1 = ret[1];
+                return getStringFromWasm0(ret[0], ret[1]);
+            } finally {
+                wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+            }
+        }
+        /**
+         * Same contract and JSON as `pick_move_actions`, on the persistent table.
+         * @param {string} sfn
+         * @param {number} time_ms
+         * @param {number} width_scale
+         * @param {string[]} history_sfns
+         * @param {string} eval_name
+         * @param {number} adaptive_p
+         * @param {number} adaptive_easy
+         * @param {number} adaptive_hard
+         * @param {Function | null} [on_depth]
+         * @returns {string}
+         */
+        search(sfn, time_ms, width_scale, history_sfns, eval_name, adaptive_p, adaptive_easy, adaptive_hard, on_depth) {
+            let deferred4_0;
+            let deferred4_1;
+            try {
+                const ptr0 = passStringToWasm0(sfn, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+                const len0 = WASM_VECTOR_LEN;
+                const ptr1 = passArrayJsValueToWasm0(history_sfns, wasm.__wbindgen_malloc);
+                const len1 = WASM_VECTOR_LEN;
+                const ptr2 = passStringToWasm0(eval_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+                const len2 = WASM_VECTOR_LEN;
+                const ret = wasm.engine_search(this.__wbg_ptr, ptr0, len0, time_ms, width_scale, ptr1, len1, ptr2, len2, adaptive_p, adaptive_easy, adaptive_hard, isLikeNone(on_depth) ? 0 : addToExternrefTable0(on_depth));
+                deferred4_0 = ret[0];
+                deferred4_1 = ret[1];
+                return getStringFromWasm0(ret[0], ret[1]);
+            } finally {
+                wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+            }
+        }
+        /**
+         * Slots in use, for the smoke test's "the table survived the move" check.
+         * @returns {number}
+         */
+        tt_filled() {
+            const ret = wasm.engine_tt_filled(this.__wbg_ptr);
+            return ret >>> 0;
+        }
+    }
+    if (Symbol.dispose) Engine.prototype[Symbol.dispose] = Engine.prototype.free;
+    exports.Engine = Engine;
+
+    /**
      * Sanity handle for the loader: confirms the module initialised.
      * @returns {string}
      */
@@ -109,6 +254,10 @@ let wasm_bindgen = (function(exports) {
             "./sigil_engine_bg.js": import0,
         };
     }
+
+    const EngineFinalization = (typeof FinalizationRegistry === 'undefined')
+        ? { register: () => {}, unregister: () => {} }
+        : new FinalizationRegistry(ptr => wasm.__wbg_engine_free(ptr, 1));
 
     function addToExternrefTable0(obj) {
         const idx = wasm.__externref_table_alloc();

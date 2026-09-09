@@ -134,6 +134,51 @@ async function driver() {
 			sfn, 50, 18, 4, [], 'tfit', 0, 0, 0, undefined));
 		if (bad.ok) throw new Error('out-of-scope spell was not refused');
 	}
+	// Persistent Engine: the table survives a move, a ponder primes it, and the
+	// result is still replay-verified through the real applyAITurn.
+	let engineMoves = 0;
+	{
+		const spells = generateSpellList(OFFICIAL);
+		const b = new SigilBoard(spells.slice(), 'standard');
+		b.setupInitial();
+		let sfn = boardToSfn(b);
+		const history = [];
+		const eng = new wasm_bindgen.Engine(18);
+		if (eng.tt_filled() !== 0) throw new Error('fresh Engine has a non-empty table');
+		const esearch = (s, ms) => JSON.parse(eng.search(
+			s, ms, 4, history.concat([s]), 'tfit', 0.10, 2, 6, undefined));
+		// Move 1: ordinary search.
+		let res = esearch(sfn, BUDGET_MS);
+		if (!res.ok) throw new Error('Engine.search: ' + res.error);
+		const filled1 = eng.tt_filled();
+		if (filled1 === 0) throw new Error('Engine table empty after a search');
+		await verify(sfn, res); history.push(sfn); sfn = res.expected_sfn; engineMoves++;
+		// Human "thinks": ponder the position they are looking at in slices.
+		const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6));
+		if (!pb.ok) throw new Error('ponder_begin: ' + pb.error);
+		let steps = 0, last = null;
+		for (; steps < 20; steps++) {
+			last = JSON.parse(eng.ponder_step(30, 12));
+			if (last.done) break;
+		}
+		if (!last || last.depth < 1) throw new Error('ponder completed no depth: ' + JSON.stringify(last));
+		eng.ponder_end();
+		const filled2 = eng.tt_filled();
+		if (filled2 <= filled1) throw new Error('ponder added no table entries (' + filled1 + ' -> ' + filled2 + ')');
+		// Reply on the primed table: the human's move is the engine's own choice
+		// here (we have no human), so the primed subtree must be reachable.
+		res = esearch(sfn, BUDGET_MS);
+		if (!res.ok) throw new Error('Engine.search after ponder: ' + res.error);
+		await verify(sfn, res); engineMoves++;
+		// new_game clears everything.
+		eng.new_game();
+		if (eng.tt_filled() !== 0) throw new Error('new_game left ' + eng.tt_filled() + ' entries');
+		// ponder_step with nothing to ponder is a no-op, not an error.
+		const idle = JSON.parse(eng.ponder_step(10, 4));
+		if (!idle.ok || !idle.done) throw new Error('idle ponder_step: ' + JSON.stringify(idle));
+		eng.free();
+	}
 	console.log('wasm smoke OK: ' + GAMES + ' games, ' + plies +
-	            ' plies replay-verified, ' + progressTicks + ' progress ticks, edge cases pass');
+	            ' plies replay-verified, ' + progressTicks + ' progress ticks, ' +
+	            engineMoves + ' persistent-Engine moves + ponder cycle, edge cases pass');
 }

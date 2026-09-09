@@ -404,7 +404,10 @@ impl PyBoard {
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
                         adaptive=None, rank_oversample=None,
-                        width_shape=None, keep_window=None, mate_guard=None))]
+                        width_shape=None, keep_window=None, mate_guard=None,
+                        force_hints=None, root_resort=None, aspiration_steps=None,
+                        adopt_partial=None, elastic=None, pvs=None, lmr=None,
+                        use_history=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -417,41 +420,25 @@ impl PyBoard {
                  // engine's own default alone -- never restate it here.
                  keep_window: Option<usize>,
                  // None leaves the engine's own default alone.
-                 mate_guard: Option<bool>)
+                 mate_guard: Option<bool>,
+                 // §1.2 knobs, all Option for the same reason.
+                 force_hints: Option<bool>, root_resort: Option<bool>,
+                 aspiration_steps: Option<bool>, adopt_partial: Option<bool>,
+                 // (max_factor, min_factor, stable_iters, drop_cs, predict)
+                 elastic: Option<(f32, f32, u8, i32, bool)>,
+                 // §1.4: PVS on/off, LMR (ext, r) with 0 = off, history on/off
+                 pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
         let c = self.b.to_move;
         let mut s = crate::search::Search::new(tt_bits);
-        s.set_window(window);
-        if let Some(w) = width_scale { s.set_width_scale(w); }
-        // THESE TWO WERE MISSING. `play_best` accepted `keep_window` in its
-        // signature and never applied it, so `ab_keep.py` ran both arms at the
-        // engine default: two SPRTs of 7,040 and 6,997 games compared
-        // IDENTICAL engines and reported -0.4 and -0.6 Elo. A binding that
-        // takes an argument and drops it is the same class of bug as one that
-        // restates a default, and it is harder to spot -- the tell was two
-        // independent runs landing within 0.1% of parity.
-        if let Some(k) = keep_window { s.set_keep_window(k); }
-        if let Some(m) = mate_guard { s.set_mate_guard(m); }
-        s.set_legacy_order(legacy_order);
-        // NEVER restate a Rust default here. `merge_min_width` shipped with the
-        // Rust default OFF (usize::MAX) and a Python default of 32, so every
-        // harness call that did not pass it silently re-enabled a measured -285
-        // Elo regression — the `hard` arena scored 44.2% against an anchor the
-        // engine should beat, and that is what it was measuring. Both knobs are
-        // now Option: absent means "leave the engine's own default alone".
-        if let Some(w) = merge_min_width { s.set_merge_min_width(w); }
-        if let Some(r) = key_dash_reasons { s.set_key_dash_reasons(r); }
-        if let Some(w) = key_dash_min_width { s.set_key_dash_min_width(w); }
-        if let Some(n) = key_dash_extra { s.set_key_dash_extra(n); }
-        if let Some(d) = q_depth { s.set_q_depth(d); }
-        if let Some(n) = q_cast_moves { s.set_q_cast_moves(n); }
-        if let Some(a) = aspiration { s.set_aspiration(a); }
-        if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
-        if let Some(n) = rank_oversample { s.set_rank_oversample(n); }
-        if let Some(w) = width_shape { s.set_width_shape(w); }
-        s.weights = weights_by_name(eval_name)?;
+        configure_search(&mut s, window, width_scale, eval_name, legacy_order,
+                         merge_min_width, key_dash_reasons, key_dash_min_width,
+                         key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
+                         rank_oversample, width_shape, keep_window, mate_guard,
+                         force_hints, root_resort, aspiration_steps, adopt_partial,
+                         elastic, pvs, lmr, use_history)?;
         for k in history { s.add_history(k); }
         let t = Instant::now();
         let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);
@@ -988,12 +975,179 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("width_shape".to_string(), s.width_shape_get() as u64);
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
+    m.insert("force_hints".to_string(), s.force_hints_get() as u64);
+    m.insert("root_resort".to_string(), s.root_resort_get() as u64);
+    m.insert("aspiration_steps".to_string(), s.aspiration_steps_get() as u64);
+    m.insert("adopt_partial".to_string(), s.adopt_partial_get() as u64);
+    m.insert("elastic".to_string(), s.elastic_get().is_some() as u64);
+    m.insert("pvs".to_string(), s.pvs_get() as u64);
+    m.insert("lmr_ext".to_string(), s.lmr_get().0 as u64);
+    m.insert("history".to_string(), s.history_get() as u64);
     Ok(m)
+}
+
+
+/// Apply the `play_best` knob set to a `Search`. ONE place, shared by
+/// `PyBoard::play_best` and `SearchSession::play_best`, so a knob cannot be
+/// accepted by one binding and dropped by the other (the `keep_window` bug).
+/// Every `Option` means "leave the engine's own default alone".
+#[allow(clippy::too_many_arguments)]
+fn configure_search(s: &mut crate::search::Search, window: usize, width_scale: Option<usize>,
+                    eval_name: &str, legacy_order: bool, merge_min_width: Option<usize>,
+                    key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>,
+                    key_dash_extra: Option<usize>, q_depth: Option<i32>,
+                    q_cast_moves: Option<usize>, aspiration: Option<i32>,
+                    adaptive: Option<(f32, usize, usize)>, rank_oversample: Option<usize>,
+                    width_shape: Option<usize>, keep_window: Option<usize>,
+                    mate_guard: Option<bool>, force_hints: Option<bool>,
+                    root_resort: Option<bool>, aspiration_steps: Option<bool>,
+                    adopt_partial: Option<bool>,
+                    elastic: Option<(f32, f32, u8, i32, bool)>,
+                    pvs: Option<bool>, lmr: Option<(usize, i32)>,
+                    history: Option<bool>) -> PyResult<()> {
+        if let Some(v) = pvs { s.set_pvs(v); }
+        if let Some((ext, r)) = lmr { s.set_lmr(ext, r); }
+        if let Some(v) = history { s.set_history(v); }
+        if let Some(v) = force_hints { s.set_force_hints(v); }
+        if let Some(v) = root_resort { s.set_root_resort(v); }
+        if let Some(v) = aspiration_steps { s.set_aspiration_steps(v); }
+        if let Some(v) = adopt_partial { s.set_adopt_partial(v); }
+        if let Some((mx, mn, st, dc, pr)) = elastic {
+            s.set_elastic(Some(crate::search::Elastic {
+                max_factor: mx, min_factor: mn, stable_iters: st, drop_cs: dc, predict: pr }));
+        }
+        s.set_window(window);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
+        // THESE TWO WERE MISSING. `play_best` accepted `keep_window` in its
+        // signature and never applied it, so `ab_keep.py` ran both arms at the
+        // engine default: two SPRTs of 7,040 and 6,997 games compared
+        // IDENTICAL engines and reported -0.4 and -0.6 Elo. A binding that
+        // takes an argument and drops it is the same class of bug as one that
+        // restates a default, and it is harder to spot -- the tell was two
+        // independent runs landing within 0.1% of parity.
+        if let Some(k) = keep_window { s.set_keep_window(k); }
+        if let Some(m) = mate_guard { s.set_mate_guard(m); }
+        s.set_legacy_order(legacy_order);
+        // NEVER restate a Rust default here. `merge_min_width` shipped with the
+        // Rust default OFF (usize::MAX) and a Python default of 32, so every
+        // harness call that did not pass it silently re-enabled a measured -285
+        // Elo regression — the `hard` arena scored 44.2% against an anchor the
+        // engine should beat, and that is what it was measuring. Both knobs are
+        // now Option: absent means "leave the engine's own default alone".
+        if let Some(w) = merge_min_width { s.set_merge_min_width(w); }
+        if let Some(r) = key_dash_reasons { s.set_key_dash_reasons(r); }
+        if let Some(w) = key_dash_min_width { s.set_key_dash_min_width(w); }
+        if let Some(n) = key_dash_extra { s.set_key_dash_extra(n); }
+        if let Some(d) = q_depth { s.set_q_depth(d); }
+        if let Some(n) = q_cast_moves { s.set_q_cast_moves(n); }
+        if let Some(a) = aspiration { s.set_aspiration(a); }
+        if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+        if let Some(n) = rank_oversample { s.set_rank_oversample(n); }
+        if let Some(w) = width_shape { s.set_width_shape(w); }
+        s.weights = weights_by_name(eval_name)?;
+        Ok(())
+}
+
+/// One `Search` reused across a whole game: the persistent-table / pondering
+/// counterpart of `PyBoard::play_best`, so `ab_persist.py` and `ab_ponder.py`
+/// can A/B those two levers through a `play_best`-shaped binding. `history` is
+/// REPLACED on every call (the caller passes the whole game so far), never
+/// accumulated.
+#[pyclass]
+struct SearchSession { s: crate::search::Search }
+
+#[pymethods]
+impl SearchSession {
+    #[new]
+    fn new(tt_bits: u32) -> Self { SearchSession { s: crate::search::Search::new(tt_bits) } }
+
+    fn new_game(&mut self) { self.s.new_game(); }
+
+    #[getter]
+    fn tt_filled(&self) -> usize { self.s.tt_filled() }
+
+    /// Same contract and return tuple as `PyBoard::play_best`, on the persistent
+    /// table. `board` is advanced in place.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (board, time_ms=1000, max_depth=64, window=16,
+                        width_scale=None, history=vec![], eval_name="default",
+                        legacy_order=false, merge_min_width=None, key_dash_reasons=None,
+                        key_dash_min_width=None, key_dash_extra=None,
+                        q_depth=None, q_cast_moves=None, aspiration=None,
+                        adaptive=None, rank_oversample=None,
+                        width_shape=None, keep_window=None, mate_guard=None,
+                        force_hints=None, root_resort=None, aspiration_steps=None,
+                        adopt_partial=None, elastic=None, pvs=None, lmr=None,
+                        use_history=None))]
+    fn play_best(&mut self, mut board: PyRefMut<'_, PyBoard>, time_ms: u64, max_depth: i32,
+                 window: usize, width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
+                 legacy_order: bool, merge_min_width: Option<usize>,
+                 key_dash_reasons: Option<u8>, key_dash_min_width: Option<usize>,
+                 key_dash_extra: Option<usize>, q_depth: Option<i32>,
+                 q_cast_moves: Option<usize>, aspiration: Option<i32>,
+                 adaptive: Option<(f32, usize, usize)>,
+                 rank_oversample: Option<usize>, width_shape: Option<usize>,
+                 keep_window: Option<usize>, mate_guard: Option<bool>,
+                 force_hints: Option<bool>, root_resort: Option<bool>,
+                 aspiration_steps: Option<bool>, adopt_partial: Option<bool>,
+                 elastic: Option<(f32, f32, u8, i32, bool)>,
+                 pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>)
+        -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
+    {
+        use std::time::Instant;
+        let c = board.b.to_move;
+        configure_search(&mut self.s, window, width_scale, eval_name, legacy_order,
+                         merge_min_width, key_dash_reasons, key_dash_min_width,
+                         key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
+                         rank_oversample, width_shape, keep_window, mate_guard,
+                         force_hints, root_resort, aspiration_steps, adopt_partial,
+                         elastic, pvs, lmr, use_history)?;
+        self.s.clear_history();
+        for k in history { self.s.add_history(k); }
+        let t = Instant::now();
+        let (best, score, st) = self.s.go(&board.b, c, max_depth, time_ms);
+        let dt = t.elapsed().as_secs_f64();
+        if let Some(turn) = best {
+            board.b.apply_turn(&turn, c);
+        }
+        board.b.turn_counter += 1;
+        board.b.to_move = c.other();
+        board.b.update();
+        let over = board.b.outcome != Outcome::Ongoing;
+        let w = board.winner();
+        Ok((st.depth_completed, st.nodes, dt, over, w, score, st.widened))
+    }
+
+    /// Ponder `board` -- the position the OPPONENT is thinking about -- for
+    /// `time_ms`, priming the table. Returns (depth_completed, nodes). The board
+    /// is not changed. Same knobs as `play_best` where they matter for the tree.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (board, time_ms, max_depth=64, window=16, width_scale=None,
+                        history=vec![], eval_name="default", adaptive=None,
+                        keep_window=None, mate_guard=None, pvs=None, lmr=None,
+                        use_history=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn ponder(&mut self, board: PyRef<'_, PyBoard>, time_ms: u64, max_depth: i32, window: usize,
+              width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
+              adaptive: Option<(f32, usize, usize)>, keep_window: Option<usize>,
+              mate_guard: Option<bool>, pvs: Option<bool>, lmr: Option<(usize, i32)>,
+              use_history: Option<bool>) -> PyResult<(i32, u64)>
+    {
+        let history_knob = use_history;
+        configure_search(&mut self.s, window, width_scale, eval_name, false, None, None, None,
+                         None, None, None, None, adaptive, None, None, keep_window, mate_guard,
+                         None, None, None, None, None, pvs, lmr, history_knob)?;
+        self.s.clear_history();
+        for k in history { self.s.add_history(k); }
+        let (_, _, st) = self.s.go(&board.b, board.b.to_move, max_depth, time_ms);
+        Ok((st.depth_completed, st.nodes))
+    }
 }
 
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
+    m.add_class::<SearchSession>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;

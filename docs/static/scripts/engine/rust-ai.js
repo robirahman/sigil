@@ -38,7 +38,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 2;
+const RUST_ENGINE_VERSION = 3;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -69,6 +69,10 @@ class RustEngineWorker {
 	}
 
 	_onMessage(msg) {
+		if (msg.type === 'ponder_progress') {
+			if (this.onPonderProgress) this.onPonderProgress(msg);
+			return;                                    // fire-and-forget, no id
+		}
 		const p = this._pending.get(msg.id);
 		if (!p) return;
 		if (msg.type === 'progress') {
@@ -112,6 +116,13 @@ class RustEngineWorker {
 			this._worker.postMessage(Object.assign({ type: 'search', id }, req));
 		});
 	}
+
+	/** Fire-and-forget control message (new_game / ponder / ponder_stop). The
+	 *  worker handles messages in order, so this never races a search. */
+	post(msg) {
+		try { this._ensureWorker().postMessage(msg); }
+		catch (e) { /* surfaced on the next search */ }
+	}
 }
 
 let _rustEngineWorker = null;
@@ -132,9 +143,33 @@ class RustAI {
 		this.widthScale = options.widthScale || 4;
 		this.evalName = options.evalName || 'tfit';
 		this.adaptive = options.adaptive || [0.10, 2, 6];
-		this.pondering = false;      // the search lives in another thread/process
+		// Pondering: while the human thinks, the worker searches the position
+		// they are looking at and primes the persistent table (TT priming, as
+		// caveman-ai.js does). Set by game-board-local.js from the account
+		// setting; `ponderPolicy` 'default-on' means ponder unless the user has
+		// explicitly turned it off (anonymous players have no profile).
+		this.pondering = false;
+		this.ponderPolicy = options.ponderPolicy || 'setting';
+		this.ponderSliceMs = options.ponderSliceMs || 250;
+		this.ponderMaxDepth = options.ponderMaxDepth || 12;
 		this.lastMeta = null;
 		this._historySfns = [];
+		// One RustAI per game: reset the worker's persistent table so a previous
+		// game's entries cannot leak into this one.
+		if (this.transport === 'worker') {
+			try { getRustEngineWorker().post({ type: 'new_game', ttBits: this.ttBits }); }
+			catch (e) { /* surfaced on first move */ }
+		}
+	}
+
+	/** Whether pondering should be on for this AI given the auth manager's
+	 *  profile. 'default-on' policy: on unless explicitly disabled. */
+	ponderEnabledFor(auth) {
+		const profile = auth && auth.userProfile;
+		if (this.ponderPolicy === 'default-on') {
+			return !(profile && profile.enablePondering === false);
+		}
+		return !!(auth && auth.enablePondering);
 	}
 
 	/** Start fetching+compiling the wasm now, so the first AI move doesn't pay
@@ -144,7 +179,33 @@ class RustAI {
 		catch (e) { /* surfaced on first move */ }
 	}
 
-	cancelPonder() { /* nothing to cancel: one synchronous search per move */ }
+	/**
+	 * Called by the controller when the HUMAN is on move. Always records the
+	 * position in the repetition history (it used to record only AI-root
+	 * positions, so a threefold that repeated on the human's move was invisible
+	 * to the engine). Then, if pondering is on, asks the worker to prime the
+	 * table from this position until the next search or cancelPonder.
+	 */
+	startPonder(board) {
+		if (this.transport !== 'worker') return;
+		let sfn;
+		try {
+			if (variantHasDuplicates(board.variant)) return;
+			sfn = boardToSfn(SimBoard.fromSigilBoard(board));
+		} catch (e) { return; }
+		if (this._historySfns[this._historySfns.length - 1] !== sfn) this._historySfns.push(sfn);
+		if (!this.pondering) return;
+		getRustEngineWorker().post({
+			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale,
+			historySfns: this._historySfns.slice(-64), evalName: this.evalName,
+			adaptive: this.adaptive, sliceMs: this.ponderSliceMs, maxDepth: this.ponderMaxDepth,
+		});
+	}
+
+	cancelPonder() {
+		if (this.transport !== 'worker') return;
+		getRustEngineWorker().post({ type: 'ponder_stop' });
+	}
 
 	async _send(sfn, onProgress) {
 		// The CURRENT position is itself an occurrence for threefold counting
