@@ -69,11 +69,23 @@ md smoke-py > $W/smoke.py 2>/dev/null || true
     $W/out/test_full.log | head -250
   echo "--- test summary ---"; grep -E 'test result:' $W/out/test_full.log
   echo; echo "### python smoke"
+  # Upload build+test BEFORE the smoke runs. The first version uploaded only
+  # after all three stages, so a smoke test that outran the watchdog took the
+  # cargo results down with it -- one guard-fix pass searched 435 positions at
+  # depth 6 (~17 s each) and lost a clean build and 84 passing tests to the
+  # 1-hour cap. The smoke's own log is appended by the final upload.
+  gcs_put "$W/out/build_full.log" "builds/$TAG/build_full.log" || true
+  gcs_put "$W/out/test_full.log" "builds/$TAG/test_full.log" || true
   python3 -m venv $W/venv
   $W/venv/bin/pip -q install maturin numpy 2>&1 | tail -1
   VIRTUAL_ENV=$W/venv $W/venv/bin/maturin develop --release 2>&1 | tail -3
   if [ -s $W/smoke.py ]; then
-    ( cd $W/repo && $W/venv/bin/python $W/smoke.py ); echo "SMOKE_EXIT=$?"
+    # Cap the smoke so it cannot eat the watchdog: a smoke test is a gate, not
+    # a campaign. `smoke-max-min` metadata overrides the 20-minute default.
+    SMOKE_MIN=$(md smoke-max-min); : "${SMOKE_MIN:=20}"
+    ( cd $W/repo && timeout $((SMOKE_MIN * 60)) $W/venv/bin/python $W/smoke.py )
+    SX=$?; echo "SMOKE_EXIT=$SX"
+    [ $SX -eq 124 ] && echo "SMOKE TIMED OUT after ${SMOKE_MIN}m -- the gate did not run"
   else
     echo "(no smoke-py supplied)"; echo "SMOKE_EXIT=0"
   fi
