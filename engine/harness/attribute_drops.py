@@ -92,14 +92,33 @@ def load_reach(paths):
                         s.add((d.get('game'), d.get('turnNumber')))
     return s
 
+UNPROVEN = 5_000        # the engine's UNPROVEN_MATE, in centistones
+
 
 def fmt_score(v):
-    """Mate is +-1e7; dividing that by STONE prints a nonsense +2441.41."""
+    # Centistones -> stones, with the two sentinels named.
+    #
+    # THE 4096 DIVISOR WAS STILL HERE. The module-level `STONE = 4096` shadow
+    # was found and fixed, and this function kept its own copy of the same
+    # mistake, so every score in the "worst declines" table printed 41x too
+    # small -- a +50.00 stone unproven mate as "+1.22", a -1.50 stone position
+    # as "-0.04". The giveaway was a row reading
+    #     +20.00/half-move ... +1.22 -> -1.22
+    # where the RATE came from the flag JSON (computed correctly against
+    # STONE = 100) and the ENDPOINTS came from here, so the row contradicted
+    # itself by a factor of 41.
     if v >= 1_000_000:
         return '  +MATE'
     if v <= -1_000_000:
         return '  -MATE'
-    return f'{v / 4096:+7.2f}'
+    # After the mate-guard fix, a mate the search cannot prove is reported as
+    # +-UNPROVEN_MATE. That is a real number and would otherwise read as a
+    # 50-stone material lead, which a 39-node board cannot hold.
+    if v == UNPROVEN:
+        return ' +UNPRV'
+    if v == -UNPROVEN:
+        return ' -UNPRV'
+    return f'{v / STONE:+7.2f}'
 
 
 def turn_of(sfn):
