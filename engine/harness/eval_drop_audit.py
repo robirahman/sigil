@@ -35,6 +35,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections import Counter, defaultdict
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -90,9 +91,23 @@ def score_at(sfn, depth, hist, ev='tfit'):
 
 
 def selfplay_lines(n_games, play_ms, ev='tfit'):
-    """Play games at the shipped config, recording the SFN at every ply."""
+    """Play games at the shipped config, recording the SFN at every ply.
+
+    SEEDED PER SHARD, and this is not optional on a fleet. The seed used to be
+    `8_000_000 + g` with no shard term, while the driver filtered games by
+    `seen_games % shards`. So every shard PLAYED all n_games -- the expensive
+    half -- and AUDITED one in `shards` of them: with 88 workers, 88x
+    duplicated generation for 1/88 of the audit. Same family as the
+    `shard-base` bug that once made nine VMs produce one VM of data.
+
+    Each shard now plays its OWN games and audits all of them. The 1,000
+    stride per shard is the same spacing the arena harnesses use, so shards
+    cannot overlap while n_games stays under 1,000.
+    """
+    shard = int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000
+    base = 8_000_000 + shard * 1000
     for g in range(n_games):
-        b = se.Board(se.Board.legal_draw(8_000_000 + g), "standard")
+        b = se.Board(se.Board.legal_draw(base + g), "standard")
         b.setup_initial()
         hist, line = [], []
         for _ply in range(140):
@@ -574,6 +589,12 @@ def main():
     ap.add_argument('--time-only', action='store_true',
                     help='just measure cost per position per depth and exit')
     ap.add_argument('--limit-games', type=int, default=0)
+    ap.add_argument('--max-seconds', type=int, default=0,
+                    help='stop auditing after this many seconds and report how '
+                         'much of the corpus was covered. A depth-6 estimate '
+                         'was wrong by ~5x twice, and the fleet watchdog then '
+                         'kills shards mid-write; this turns a bad estimate '
+                         'into a smaller ANSWER rather than no answer.')
     ap.add_argument('--rust-only', action='store_true',
                     help='CONTROL: audit ONLY Rust-vs-Rust games. Those turns\n'
                          'came out of the enumerator, so anything unreachable\n'
@@ -641,15 +662,20 @@ def main():
         src = ((x['key'], [(s, []) for s in x['sfns']], x.get('meta')) for x in pre)
         label = f"{len(pre)} pre-hydrated games from {args.lines}"
         do_reach = True
+        selfplay_src = False
     elif args.games:
         src = dump_lines(args.games, limit=args.limit_games,
                          rust_only=args.rust_only)
         label = f"real games from {args.games}"
         do_reach = True
+        selfplay_src = False
     else:
         src = selfplay_lines(args.selfplay, args.play_ms)
-        label = f"{args.selfplay} self-play games at {args.play_ms}ms"
+        shard_seed = 8_000_000 + (int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000) * 1000
+        label = (f"{args.selfplay} self-play games at {args.play_ms}ms "
+                 f"(seeds {shard_seed}..{shard_seed + args.selfplay - 1})")
         do_reach = False
+        selfplay_src = True
         print("NOTE: self-play cannot surface enumeration gaps -- the engine is both\n"
               "      players, so it never plays a turn it failed to generate. Check B\n"
               "      is skipped; use --games with recorded human games for that.\n")
@@ -662,9 +688,25 @@ def main():
     caches = []             # per-game verifier caches, for the filter report
     shard_i = int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000
     seen_games = -1
+    t_start = time.time()
+    stopped_early = False
     for key, line, meta in src:
+        # Checked BEFORE the next game, so the budget bounds a WHOLE game
+        # and every flag collected comes from a fully audited line. A
+        # partially audited line would bias the drop distribution toward
+        # early plies, which is worse than a smaller corpus.
+        if args.max_seconds and time.time() - t_start > args.max_seconds:
+            stopped_early = True
+            print(f"  STOPPING at the {args.max_seconds}s budget after "
+                  f"{n_lines} lines", flush=True)
+            break
         seen_games += 1
-        if args.shards > 1 and seen_games % args.shards != shard_i % args.shards:
+        # Self-play is sharded BY SEED in `selfplay_lines`, so each shard already
+        # holds a disjoint set of games. Applying the modulo filter as well
+        # would throw away all but 1/shards of what this shard just paid to
+        # play.
+        if (not selfplay_src) and args.shards > 1 \
+           and seen_games % args.shards != shard_i % args.shards:
             continue
         n_lines += 1
         n_plies += len(line)
@@ -711,6 +753,11 @@ def main():
                   f"{len(drops)} eval flags, {len(misses)} unreachable", flush=True)
 
     print(f"\n=== {n_lines} lines, {n_plies} positions ===")
+    if stopped_early:
+        print(f"  BUDGET-LIMITED: stopped at {args.max_seconds}s, so the "
+              f"corpus is whatever {n_lines} games fitted. Counts are not "
+              f"a rate over any\n  intended corpus size; ratios computed "
+              f"WITHIN these games are still valid.")
     # Only meaningful where the source HAS per-turn pairs. Self-play has none
     # -- the engine generated every half-move it played -- so the block would
     # report "of the 0 turns a flagged window spanned, 0 excluded", which
