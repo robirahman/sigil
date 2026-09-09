@@ -35,9 +35,37 @@ wasm-bindgen --target no-modules --no-typescript \
 
 # Optional size pass: ~756 KB -> ~500-600 KB. Skipped silently without binaryen;
 # the unoptimised size is acceptable (Pages gzips on the wire).
-if command -v wasm-opt >/dev/null 2>&1; then
-    wasm-opt -O2 -o "$OUT/sigil_engine_bg.wasm.opt" "$OUT/sigil_engine_bg.wasm"
-    mv "$OUT/sigil_engine_bg.wasm.opt" "$OUT/sigil_engine_bg.wasm"
+#
+# TWO THINGS THIS GOT WRONG, both found by tools/wasm-smoke.js on a rebuild.
+#
+# 1. `wasm-opt -O2` alone SILENTLY CORRUPTS the module. wasm-bindgen 0.2.127
+#    emits an externref table, and binaryen drops features it was not told to
+#    enable, so the output linked fine and then died at INIT with
+#    "WebAssembly.Table.grow(): failed to grow table by 4" inside
+#    __wbindgen_init_externref_table. Nothing fails at build time; the site
+#    just stops loading the engine. The features must be named explicitly.
+#
+# 2. The pass overwrote the only good copy. Now it writes to a temp file and
+#    the caller decides, so a bad optimiser can never destroy a working
+#    artifact. Set SKIP_WASM_OPT=1 to bypass the pass entirely.
+if [ "${SKIP_WASM_OPT:-0}" != "1" ] && command -v wasm-opt >/dev/null 2>&1; then
+    echo "wasm-opt: $(wasm-opt --version 2>&1 | head -1)"
+    cp "$OUT/sigil_engine_bg.wasm" "$OUT/sigil_engine_bg.wasm.preopt"
+    if wasm-opt -O2 \
+         --enable-reference-types --enable-bulk-memory \
+         --enable-mutable-globals --enable-nontrapping-float-to-int \
+         --enable-sign-ext \
+         -o "$OUT/sigil_engine_bg.wasm.opt" \
+         "$OUT/sigil_engine_bg.wasm.preopt"; then
+        mv "$OUT/sigil_engine_bg.wasm.opt" "$OUT/sigil_engine_bg.wasm"
+        echo "wasm-opt applied ($(stat -c%s "$OUT/sigil_engine_bg.wasm.preopt")"\
+             "-> $(stat -c%s "$OUT/sigil_engine_bg.wasm") bytes)."
+        echo "VERIFY WITH tools/wasm-smoke.js BEFORE COMMITTING: an optimiser"
+        echo "that drops a feature fails at init, not at build."
+    else
+        echo "wasm-opt FAILED; keeping the unoptimised module." >&2
+        rm -f "$OUT/sigil_engine_bg.wasm.opt"
+    fi
 fi
 
 ls -la "$OUT"
