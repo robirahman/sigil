@@ -26,6 +26,7 @@ import argparse
 import collections
 import glob
 import json
+import re
 import sys
 
 UNPROVEN = 5_000
@@ -55,8 +56,15 @@ def main():
                     except Exception:
                         pass
                 elif ln.startswith('auditing '):
-                    headers.add(ln.split(' from ')[-1].strip()
-                                if ' from ' in ln else ln.strip())
+                    # Compare CONFIGURATION, not provenance. Self-play shards
+                    # print their own seed range -- deliberately, so a log says
+                    # which games it audited -- and that made this guard see 64
+                    # distinct "arms" in one run and refuse to pool a perfectly
+                    # homogeneous fleet. A seed range is not a configuration;
+                    # depths, windows, the per-ply limit and the move time are.
+                    h = re.sub(r'\(seeds [^)]*\)', '', ln).strip()
+                    headers.add(h.split(' from ')[-1].strip()
+                                if ' from ' in h else h)
                 elif 'CHECK A eval-drop flags:' in ln:
                     done += 1
         if not got:
