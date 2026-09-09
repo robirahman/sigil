@@ -103,7 +103,21 @@ def selfplay_lines(n_games, play_ms, ev='tfit'):
             if r[3]:
                 line.append((b.to_sfn(), list(hist)))
                 break
-        yield f"selfplay-{g}", line, r[4]
+        # META MUST BE A DICT. This yielded `r[4]`, the winner STRING, and
+        # every consumer treats meta as a mapping -- the record filter does
+        # `(meta or {}).get('pairs')`, which raises AttributeError on a str.
+        # It survived only because that lookup used to sit behind
+        # `do_reach and 'b' in args.checks`, and `do_reach` is False for
+        # self-play; moving it under `'a' in args.checks` for the record
+        # filter put it in the self-play path and broke it.
+        #
+        # `movers` is filled with the engine's own name, which is the whole
+        # point of auditing self-play: EVERY continuation here is the engine's
+        # own choice, so `--mover rust` keeps 100% of flags instead of the
+        # 7.1% it keeps on the recorded human corpus.
+        yield (f"selfplay-{g}", line,
+               {'winner': r[4], 'movers': ['rust'] * len(line),
+                'red': 'rust', 'blue': 'rust'})
 
 
 RUST_UIDS = ('__ai_rust',)          # the engine under audit
@@ -667,7 +681,8 @@ def main():
             # -- so this is close to free, and it removes the largest and most
             # misleading slice of the flag population.
             verified = None
-            pairs = (meta or {}).get('pairs') or []
+            m = meta if isinstance(meta, dict) else {}
+            pairs = m.get('pairs') or []
             if not args.no_record_filter and pairs:
                 # The index join is the whole mechanism, so PROVE it holds
                 # rather than trusting it. Hydration appends to `line` and
@@ -696,7 +711,12 @@ def main():
                   f"{len(drops)} eval flags, {len(misses)} unreachable", flush=True)
 
     print(f"\n=== {n_lines} lines, {n_plies} positions ===")
-    if 'a' in args.checks and not args.no_record_filter:
+    # Only meaningful where the source HAS per-turn pairs. Self-play has none
+    # -- the engine generated every half-move it played -- so the block would
+    # report "of the 0 turns a flagged window spanned, 0 excluded", which
+    # reads like a filter that found nothing rather than one that was never
+    # needed.
+    if 'a' in args.checks and not args.no_record_filter and caches:
         n_pairs = sum(len(c) for c in caches)
         n_bad_pairs = sum(1 for c in caches for v in c.values() if not v[0])
         why = Counter(v[1] for c in caches for v in c.values() if not v[0])
@@ -775,6 +795,12 @@ def main():
             continue
         seen.add(k); uniq.append(r)
     drops = uniq
+    if 'a' in args.checks and not caches and not args.no_record_filter:
+        print("record filter: N/A -- this source has no per-turn pairs. In "
+              "self-play the engine\n  generated every half-move it played, so "
+              "no window can cross a transition no\n  legal turn produces, and "
+              "every flag is about the engine (100% of them, against\n  7.1% "
+              "on the recorded human corpus).")
     print(f"\nCHECK A eval-drop flags: {len(drops)}")
     mate = [r for r in drops if r['mateFlip']]
     print(f"  MATE FLIPS from a non-losing score (the reported bug): {len(mate)}")
