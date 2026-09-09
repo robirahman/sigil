@@ -219,6 +219,15 @@ def main():
         deeper = [x for x in depths if x > dep]
         # Same window, greater depth. Keying on depth alone compared different
         # windows and made this bucket meaningless.
+        #
+        # `all(...)` over EVERY deeper depth, so a flag that vanishes at depth
+        # 4 but returns at depth 6 is NOT cured -- deepening has to settle it,
+        # not merely perturb it. Conservative and right, but it means A CURE
+        # RATE IS NOT COMPARABLE ACROSS RUNS WITH DIFFERENT DEPTH SETS: the
+        # same depth-2 flags scored 41.8% cured in a {2,4} run and can only
+        # score lower in a {2,4,6} run, because they must now survive two
+        # tests instead of one. Compare within one run, or between runs with
+        # identical --depths.
         cured = (not coupled) and deeper and all(
             (g, ply) not in by_dw[(x, w)] for x in deeper)
 
@@ -299,6 +308,11 @@ def main():
               f'attribution is not evidence about\n     the engine. Re-run '
               f'without that flag.')
 
+    if len(depths) > 2:
+        print(f'\n  NOTE: "cured" requires a flag to be absent at EVERY deeper '
+              f'depth in\n  {sorted(depths)}, so cure rates here are stricter '
+              f'than in a two-depth run and are\n  NOT comparable with one. '
+              f'Read the split within this run only.')
     print('\n=== by search depth ===')
     for dep in depths:
         row = per_depth[dep]
