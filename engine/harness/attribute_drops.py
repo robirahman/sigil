@@ -225,7 +225,20 @@ def main():
             #
             # If this bucket ever exceeds the known record damage, THAT is new
             # engine behaviour and worth investigating.
+            #
+            # `eval_drop_audit` now excludes these UPSTREAM, using Check B's
+            # per-pair verdicts, so on a current run this bucket should be
+            # empty. A non-zero count means the audit ran without Check B or
+            # with --no-corrupt-filter, and the run is contaminated.
             b = 'CORRUPT RECORD (window never happened; excluded)'
+        elif d.get('unverified'):
+            # A window crossing a half-move Check B DECLINED to judge --
+            # enumeration truncated past the cap, or a pair whose enemy-stone
+            # count grew and so spans more than one turn. Not attributable
+            # either way: it may be a real drop or another record artefact,
+            # and nothing in the pass distinguishes them. Kept visible instead
+            # of being folded into the eval's column.
+            b = 'UNVERIFIED WINDOW (a crossed half-move went unjudged)'
         elif cured:
             b = 'HORIZON EFFECT (deepening cured it)'
         elif coupled:
@@ -244,6 +257,18 @@ def main():
     tot = sum(buckets.values())
     for b, n in buckets.most_common():
         print(f'  {n:6d} ({100.0 * n / tot:5.1f}%)  {b}')
+    n_corrupt = buckets.get('CORRUPT RECORD (window never happened; excluded)', 0)
+    if n_corrupt:
+        print(f'\n  !! {n_corrupt} flags cross a half-move no legal turn can '
+              f'produce.\n     eval_drop_audit excludes those upstream now, so '
+              f'this run was made\n     without Check B or with '
+              f'--no-corrupt-filter, and its eval attribution\n     is not '
+              f'evidence about the engine. Re-run with --checks ab.')
+    n_unsure = buckets.get('UNVERIFIED WINDOW (a crossed half-move went unjudged)', 0)
+    if n_unsure:
+        print(f'\n  {n_unsure} flags cross a half-move Check B declined to '
+              f'judge: the residual\n  uncertainty here, neither attributable '
+              f'nor safely excluded.')
     print('\n=== by search depth ===')
     for dep in depths:
         row = per_depth[dep]
