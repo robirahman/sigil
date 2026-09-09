@@ -386,6 +386,48 @@ impl PyBoard {
         Ok(self.b.hand_features(color(c)?).to_vec())
     }
 
+    /// §2 label: search this position at a FIXED depth with the shipped config
+    /// (fixed depth so the label does not depend on the machine), return
+    /// (sfn_before, chosen turn as packed actions, score, nodes), then play it.
+    #[pyo3(signature = (max_depth=7, eval_name="tfit", width_scale=None, adaptive=None,
+                        keep_window=None, history=vec![]))]
+    fn prior_label_and_play(&mut self, max_depth: i32, eval_name: &str,
+                            width_scale: Option<usize>, adaptive: Option<(f32, usize, usize)>,
+                            keep_window: Option<usize>, history: Vec<u64>)
+        -> PyResult<(String, Vec<u32>, i32, u64)>
+    {
+        let c = self.b.to_move;
+        let before = self.b.to_sfn();
+        let mut s = crate::search::Search::new(20);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
+        if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+        if let Some(k) = keep_window { s.set_keep_window(k); }
+        s.weights = weights_by_name(eval_name)?;
+        for k in history { s.add_history(k); }
+        let (best, score, st) = s.go(&self.b, c, max_depth, 0);
+        let Some(best) = best else { return Ok((before, vec![], score, st.nodes)) };
+        let packed: Vec<u32> = best.slice().iter().map(|a| crate::search::pack_action(*a)).collect();
+        self.b.apply_turn(&best, c);
+        self.b.turn_counter += 1;
+        self.b.to_move = c.other();
+        self.b.update();
+        Ok((before, packed, score, st.nodes))
+    }
+
+    /// §2 dataset row set for THIS position (side to move): context inputs,
+    /// spell ids, per-candidate parts (cap x MAX_PARTS, NO_PART padded), stub
+    /// ids, within-stub ranks, packed action lists, truncated flag.
+    #[pyo3(signature = (cap=400))]
+    fn prior_dataset(&self, cap: usize)
+        -> PyResult<(Vec<i16>, Vec<u8>, Vec<Vec<u16>>, Vec<u16>, Vec<u16>, Vec<Vec<u32>>, bool)>
+    {
+        let c = self.b.to_move;
+        let x = self.b.context_inputs(c).to_vec();
+        let (rows, stubs, ranks, packed, trunc) = self.b.dataset_rows(c, cap);
+        Ok((x, self.b.spells.to_vec(), rows.into_iter().map(|r| r.to_vec()).collect(),
+            stubs, ranks, packed, trunc))
+    }
+
     /// Rich, close-to-the-board features for the offline learnability test.
     fn full_features(&self, c: &str) -> PyResult<Vec<f32>> {
         Ok(self.b.full_features(color(c)?))
@@ -1164,6 +1206,12 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // harness that wants the shipped search must pass it, and every literal
     // copy is somewhere for it to drift.
     m.add("SHIPPED_ADAPTIVE", crate::search::SHIPPED_ADAPTIVE)?;
+    m.add("PRIOR_NX", crate::prior::NX)?;
+    m.add("PRIOR_NP", crate::prior::NP)?;
+    m.add("PRIOR_MAX_PARTS", crate::prior::MAX_PARTS)?;
+    m.add("PRIOR_NO_PART", crate::prior::NO_PART)?;
+    m.add("PRIOR_PART_GROUPS", crate::prior::PART_GROUPS.iter()
+          .map(|(n, b, k)| (n.to_string(), *b, *k)).collect::<Vec<_>>())?;
     m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
     m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
     m.add("UNPROVEN_MATE", crate::search::UNPROVEN_MATE)?;

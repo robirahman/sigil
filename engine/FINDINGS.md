@@ -1536,3 +1536,29 @@ the engine 30-60 s of priming per move, so the shipped effect should be larger, 
 one doubling (34-66 Elo). Fleet confirmation at 3 s/3 s and 10 s/10 s is queued behind the
 knob arenas; the wasm side already ships it (`rust-worker.js` slices, default-on for the
 >= 10 s tiers).
+
+## §2 step A: prior inputs, parts, labels -- pipeline built, gate 0 pending data (2026-09-09)
+
+`engine/src/prior.rs` defines the data side of the move-ordering prior in one place
+shared by training and serving: `context_inputs` (`NX = 170` integers: sigil fills,
+charged, castable-now, one-short flags for both sides, 20 scalars, 78 occupancy bits),
+`turn_parts` (up to `MAX_PARTS = 16` indices into a `NP = 284` vocabulary: first-move
+kind/node/push/`move_score` bucket, dash n_sacs/sacs/landing/push/kind, cast spell/pos/
+keep bucket/within-stub outcome rank, second cast, class), and `dataset_rows` (the
+shipped generator drained to `cap`, each turn with parts, a STUB id -- the generator's own
+choice point -- and its rank within the stub). Layout pinned by
+`prior_part_layout_is_contiguous_and_parts_are_in_range`.
+
+Bindings: `PyBoard.prior_label_and_play(depth, …)` (fixed-depth shipped-config search;
+returns the SFN before, the chosen turn as `pack_action` words, score, nodes; plays it) and
+`PyBoard.prior_dataset(cap)`. Harnesses: `harness/selfplay_prior.py` (labels every 3rd ply
+from ply 4 at depth 7, play depth 5, atomic npz per shard, seeds 12,000,000 + shard) and
+`harness/prior_gate0.py` (stream-rank coverage, stub oracle, oracle width).
+
+Smoke only -- 3 games, label depth 5, **34 labels**, NOT a result: stream rank median 2 /
+p90 64, coverage w24 79%, w96 91%; stub oracle k1 85%, k2 88%, **k4 94%** (gate needs
+>= 97% on >= 10^5 labels); 1 of 35 labels outside cap 400. The within-stub number is the one
+to watch: if it holds near 94% at scale, the heuristic ORDER INSIDE a cast stub is a real
+part of the tail and the prior needs the within-stub scorer (plan §2.4 gate 0) before
+training. Data run: one `c3d-highcpu-90` x 8 h ≈ $26 (`selfplay_prior.py 1000 <out> 7 5 3 4`
+per shard), not launched -- fleet spend needs Robi's go.

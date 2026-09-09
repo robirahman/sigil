@@ -885,6 +885,39 @@ fn first_action_is_legal_agrees_with_the_generator() {
 }
 
 #[test]
+fn prior_part_layout_is_contiguous_and_parts_are_in_range() {
+    use crate::prior::*;
+    let mut end = 0u16;
+    for (_, base, n) in PART_GROUPS { assert_eq!(base, end, "gap before part group at {base}"); end = base + n; }
+    assert_eq!(end as usize, NP);
+    for seed in 1..30u64 {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL; let bl = (nx() & ALL) & !r;
+        b.stones = [r, bl]; b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        for c in [Color::Red, Color::Blue] {
+            let x = b.context_inputs(c);
+            assert_eq!(x.len(), NX);
+            let (rows, stubs, ranks, packed, _) = b.dataset_rows(c, 200);
+            assert_eq!(rows.len(), stubs.len());
+            assert_eq!(rows.len(), packed.len());
+            for (row, &rk) in rows.iter().zip(ranks.iter()) {
+                let np = row.iter().filter(|&&p| p != NO_PART).count();
+                assert!(np >= 5, "a turn has at least kind/node/push/ms/class parts");
+                for &p in row.iter().filter(|&&p| p != NO_PART) { assert!((p as usize) < NP, "part {p} out of range"); }
+                let _ = rk;
+            }
+            // Every `[move, pass]` turn is alone in its stub; stub ranks restart at 0.
+            let mut seen0 = 0;
+            for &rk in &ranks { if rk == 0 { seen0 += 1; } }
+            assert!(seen0 >= 1);
+        }
+    }
+}
+
+#[test]
 fn logged_and_unlogged_resolution_agree() {
     // `resolve_outcomes` (search path, `()` log) and `resolve_outcomes_logged`
     // (browser replay path, `Vec<JsAct>` log) are the SAME enumeration

@@ -18,6 +18,7 @@ pub mod sfn;
 pub mod eval;
 pub mod features;
 pub mod search;
+pub mod prior;
 #[cfg(feature = "python")]
 pub mod py;
 
