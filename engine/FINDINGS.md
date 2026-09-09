@@ -1145,3 +1145,122 @@ and the 61 that survived every mechanical filter still were not.
 dash emptied would let the search play illegal moves -- strictly worse than
 the 0.095% it was declining -- and the emit gate would then reject the
 engine's own output.
+
+---
+
+## The mate guard was in a function nothing ships (2026-09-09)
+
+The guard exists because the engine announced `+MATE` and then, two half-moves
+later, announced `+0.38` — a "proof" that was not one. It clamps such a score
+to `UNPROVEN_MATE` and stops iterative deepening from breaking early on it.
+
+**It was written into `pick_successor` and only there.** The call graph:
+
+| entry point | who drives it | had the guard |
+|---|---|---|
+| `pick_successor` | `py.rs` only, i.e. `engine/server/serve.py`, the local `?ai=rust_native` playtest | yes |
+| `go_with_progress` | `wasm.rs pick_move_actions` — **the shipped site** | **no** |
+| `go_with_progress` | `play_best` — **every arena, every audit, the native engine** | **no** |
+
+`go_with_progress` ended its loop with
+
+    if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
+
+and had no clamp after it, so `set_mate_guard` set a field the shipped search
+never read. The symptom Robi reported — the engine showing a win it does not
+have — reaches the player through `pick_move_actions` → `go_with_progress` →
+`ui_score`, every step of which bypassed the guard.
+
+### Two measurements retracted
+
+Both were evidence of the omission, not of the guard:
+
+1. **`smoke_knobbite`: `mate_guard` changed nothing on 60 of 60 positions.** I
+   explained it away — "the guard only fires where a mate meets a
+   width-limited search, so a low count is expected" — and let the check exit
+   0 with a WARNING. **"Expected to be rare" is indistinguishable from "not
+   wired."** The check had found the bug and I talked it out of reporting it.
+2. **The A/B over the 145 flagged positions.** Guard off: 145 starts, 117
+   self-inconsistencies, **4 false mates**. Guard on: 145, 117, **4** — the
+   same four transitions at byte-identical scores (`9999997` → `+1.50`,
+   `+0.38`, `+1.49`, `+1.52`). I had written the gate as "off should
+   reproduce the four seen earlier; on should be zero", so this was a clean
+   failed gate. The correct reading was not "the guard does not work" but
+   "the guard was never called", and the only way to tell those apart was to
+   read the call graph.
+
+The self-play control arm was uninformative either way, as designed: 3,915
+starts guard-off and 3,960 guard-on, 0 false mates in both, because fresh
+self-play does not produce them.
+
+### The fix, and the gate that would have caught it
+
+`go_with_progress` now carries the same two-part treatment as
+`pick_successor`. `UNPROVEN_MATE` reaches the player as +50 stones
+(`ui_score` divides by 3900, the UI multiplies by 39): unmistakably winning,
+past no mate threshold.
+
+The smoke test no longer samples and hopes. It **constructs** the condition —
+mate-bearing positions with the cast-outcome window starved so the search is
+certainly budget-limited — requires the guard to clamp every mate it finds,
+and **fails when zero positions were exercised**, which is precisely how the
+first version passed. Two `cargo test`s pin the behaviour to `go` itself so
+it cannot drift back out of the shipping path.
+
+### Measured after the fix
+
+| gate | before | after |
+|---|---|---|
+| `smoke_knobbite`, mate_guard differs | **0 / 60** | **2 / 2** mates clamped, 0 missed |
+| `smoke_guardfires` window 2, depth 4 | — | 10 mates, all budget-limited, **10 clamped, 0 leaked** |
+| `smoke_guardfires` window 1, depth 4 | — | 11 mates, **10** budget-limited, 10 clamped, 0 leaked |
+| `cargo test` | 84 | 87 passing, plus the two below |
+
+The window-1 row is the one that shows the guard is not simply clamping every
+mate it sees: one of the 11 was found by a search that never exhausted its
+budget, and the guard left it alone. A mate from an exhaustive search IS a
+proof. The cargo test asserts that direction too.
+
+`an_unproven_mate_is_not_announced_as_a_mate_through_go` pins ten harvested
+positions and fails when none is exercised.
+`the_mate_guard_defaults_on_and_leaves_ordinary_scores_alone` asserts the
+default is on and that guard on/off agree at the opening on score, node count,
+completed depth and chosen turn.
+
+### Rule
+
+**A knob is not wired until it is proven to bite in the function the
+deliverable calls.** `play_best` is not the only such function: the site
+calls `wasm.rs`, the playtest server calls `pick_successor`. A guard that
+exists in one root loop and not the others is worse than no guard, because
+the field, the setter, the stats flag and the tests all read as present.
+
+---
+
+## keep_window, re-measured with the knob actually wired (2026-09-09)
+
+The first two keep-window SPRTs were void: `play_best` took `keep_window` and
+dropped it, so both arms of both runs were the same engine. Re-run on the
+fixed binding, with `smoke_knobbite` first showing the knob changes something
+on 56 of 60 real midgame positions:
+
+| | |
+|---|---|
+| config | kw arm 2 vs base 1, 300 ms, tfit, width_scale 4, adaptive (0.10,2,6) |
+| games | 7,040 decided, 0 unfinished, 3,520 distinct seeds, both colours |
+| arm | **48.89%** [47.73, 50.06] |
+| Elo | **-7.7 [-15.8, +0.4]** |
+| depth at matched time | arm 4.30, base 4.40 |
+
+The interval spans parity: **no measured difference.** What downward drift
+there is matches the node-rate cost — expanding keeps costs time, and the arm
+completes 0.1 ply less at the same clock. Note the engine default is now
+kw=2, so the *base* arm is the narrower engine and kw=1 reproduces the
+pre-fix search exactly.
+
+This is a real null, unlike the two it replaces, and it does not change the
+case for the enumeration fix. Self-play cannot price this particular change:
+both sides draw keeps from the same distribution, so "the opponent keeps by
+priority" is a correct opponent model in an arena and a wrong one against a
+human, who keeps non-priority in 69.4% of casts. The fix ships on
+correctness.
