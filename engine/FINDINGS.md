@@ -1278,8 +1278,9 @@ are over the whole corpus).
 | flagged windows | **5,655** | **404 (7.1%)** |
 | announced provably lost (`score1 <= -1e6`) | **0** | **0** |
 | announced lost, NOT provably (`+-5000`) | 1,023 | — |
+| UNTESTED -- nothing deeper in the run | — | **220 (54.5%)** |
+| `OTHER` -- a deeper search DID still flag | — | 107 (26.5%) |
 | horizon effect (deepening cured it) | — | 77 (19.1%) |
-| `OTHER` | — | 327 (80.9%) |
 | dropPerPly 0.5-1.0 | 4,057 | 230 |
 | dropPerPly 1.0-2.0 | 336 | 43 |
 | dropPerPly > 2.0 | — | **128** |
@@ -1295,13 +1296,32 @@ saturate to that bound. The symptom is still there and now reads
 `+UNPRV -> -1.57` at 10.79 stones/half-move. **Compare drop distributions
 across runs, never the mate-flip label.**
 
-**2. `80.9% OTHER` is not a verdict on the eval.** The horizon test asks
-whether a DEEPER search at the SAME window still flags, so it needs a deeper
-depth in the same run. Of the 327 `OTHER`, **220 are depth-4 flags with
-nothing deeper to test against** -- they are `OTHER` by default, not by
-evidence. Among the depth-2 flags, which can be tested, the split is 77
-horizon / 107 other: **42% cured by deepening.** Depth 6 is queued to settle
-the rest.
+**2. Only 184 of the 404 flags were TESTABLE, and the first report of this
+run said `80.9% OTHER`, which was misleading.** The horizon test asks whether
+a DEEPER search at the SAME window still flags, so it needs a deeper depth in
+the same run, and the flags at a run's deepest depth have none. Lumping those
+in with genuinely-still-flagged ones inflated `OTHER` from 107 to 327.
+`attribute_drops` now has a separate `UNTESTED AT THIS DEPTH` bucket so this
+cannot be read as a verdict again. Of the 184 testable flags: **107 other
+(58.2%) / 77 horizon (41.8%)**. Depth 6 tests the remaining 220.
+
+**2b. The big drops are MATE-related, and deepening cures them fastest.**
+Of the 128 flags past 2 stones/half-move with the engine to move, **126 have
+`+-UNPROVEN_MATE` at one end** -- the engine claimed a win or loss it could
+not prove and then did not have it, which is the originally reported symptom
+rather than the eval mispricing material. Cure rate by band, depth 2 -> 4:
+
+| dropPerPly | n | cured | rate |
+|---|---|---|---|
+| 0.5-0.75 (envelope edge) | 118 | 45 | 38.1% |
+| 0.75-1 | 1 | 0 | — |
+| 1-2 | 21 | 6 | 28.6% |
+| 2-5 | 15 | 9 | **60.0%** |
+| 5+ | 29 | 17 | **58.6%** |
+
+So the mate-adjacent drops behave like horizon effects -- a shallow search
+sees a mate that depth dissolves -- while the harder residual sits at the
+envelope edge. The mate guard fixes the CLAIM; depth fixes the CAUSE.
 
 **3. The recorded corpus is a 3.6% instrument.** `rust` played **2,305 of
 64,417 turns**; the rest are human (24,322), ai_hard (13,568), ai_medium
