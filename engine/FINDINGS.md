@@ -1111,3 +1111,37 @@ Two tooling repairs of the same kind: `buildtest.sh` piped cargo through
 environmental reasons — the emit gate printing a 12,474-pair census and then dying
 *before* its node comparison, which looks exactly like mismatches. A gate that
 cannot run is worse than no gate.
+
+### Adjudicated 2026-09-09: the enumeration campaign closes at ZERO
+
+Robi ruled on 7 of the 61, through the real UI, and every one came back
+**"no legal turn reaches the after-state"**. The 7 span both patterns -- four
+from the dash-empties-its-own-sigil group, one from the no-cast `dist=4`
+outlier, two from the no-overlap group -- so the finding generalises rather
+than covering only the dominant mechanism.
+
+So the whole residual is record artifacts and the engine is right:
+
+| classification | count | what it is |
+|---|---|---|
+| FAT | 237 | after-state is a stored snapshot, never derived from actions |
+| NO-OP SACRIFICE | 134 | a `sacrifice` names a sigil node the cast already cleared, so a mandatory cost goes unpaid |
+| TRANSCRIPTION GLITCH | 61 | adjudicated unreachable by any legal turn |
+| **GENUINE ENUMERATION GAP** | **0** | |
+
+**2,016 -> 0.** The engine can now generate every turn in the recorded
+history that was ever legal.
+
+Why the records contain them at all: `applyAITurn` applies a stored action
+list WITHOUT validating legality, so a corrupted or mis-ordered transcript
+replays "cleanly" and its after-state gets stored. The no-op sacrifice is the
+clearest case -- the cast clears the sigil, then a `sacrifice` names a node
+inside it, and the applier silently does nothing. Any future audit against
+`completed_games` needs these three filters or it will attribute record
+damage to the engine: 371 of 432 flags here were not engine behaviour at all,
+and the 61 that survived every mechanical filter still were not.
+
+**Do NOT relax `castable` to accept them.** Allowing a cast whose sigil the
+dash emptied would let the search play illegal moves -- strictly worse than
+the 0.095% it was declining -- and the emit gate would then reject the
+engine's own output.
