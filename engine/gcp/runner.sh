@@ -96,7 +96,15 @@ UPLOADER=$!
 
 if [ -n "$SMOKE" ]; then
   echo "=== smoke: $HARNESS $SMOKE ==="
-  if ! timeout 900 $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
+  # 900s was hard-coded and it is not enough for every harness. A CHECK A
+  # smoke of 2 games at depth 6 costs ~950s in depth-6 scoring alone (~17 s a
+  # position), so the smoke would be killed and the arms would never launch --
+  # the failure that once left a 90-vCPU VM inside its own smoke test for its
+  # whole life. Overridable per run; the point of a cap is that a HANGING
+  # smoke cannot burn the VM, not that every harness fits one number.
+  SMOKE_TIMEOUT=$(md smoke-timeout); : "${SMOKE_TIMEOUT:=900}"
+  echo "smoke timeout ${SMOKE_TIMEOUT}s"
+  if ! timeout "$SMOKE_TIMEOUT" $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
        $(echo "$SMOKE" | tr ',' ' ') > $WORK/out/smoke.log 2>&1; then
     echo "FATAL: smoke failed"; sed -n '1,40p' $WORK/out/smoke.log
     gcs_put "$WORK/out/smoke.log" "runs/$RUN/smoke_FAILED.log"; shutdown -h now; exit 1
