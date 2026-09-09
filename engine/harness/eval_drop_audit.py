@@ -716,7 +716,12 @@ def main():
         if misaligned[0]:
             print(f"  {misaligned[0]} games had no usable index join and were "
                   f"scored UNFILTERED")
-    if do_reach:
+    # `do_reach` says the SOURCE can support Check B, not that Check B ran.
+    # Printing this block on `--checks a` reported "CHECK B unreachable played
+    # positions: 0 ... every played turn IS enumerable; no enumeration gap
+    # here" from an empty miss list that nothing had populated -- a clean bill
+    # of health for a check that never executed. That is worse than no output.
+    if do_reach and 'b' in args.checks:
         print(f"CHECK B unreachable played positions: {len(misses)}")
         errs = [m for m in misses if m.get('error')]
         real = [m for m in misses if not m.get('error')]
