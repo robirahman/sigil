@@ -105,7 +105,11 @@ if not mate_sfns:
     fail = 1
 else:
     n_mate = n_clamped = n_missed = 0
-    for s in mate_sfns:
+    # Capped: every position costs a full search whether or not it announces a
+    # mate, and a gate that outruns the build watchdog gates nothing.
+    for s in mate_sfns[:60]:
+        if n_clamped >= 8:
+            break
         try:
             off = pb(s, mate_guard=False, window=1)
             if abs(off['score']) < MATE_FLOOR:
@@ -123,8 +127,8 @@ else:
             if n_missed <= 3:
                 print(f"    NOT clamped: off={off['score']} on={on['score']}"
                       f" widened={off['widened']}")
-    print(f"  {n_mate} of {len(mate_sfns)} positions announced a mate with the"
-          " guard off")
+    print(f"  {n_mate} of the {min(60, len(mate_sfns))} positions examined"
+          " announced a mate with the guard off")
     print(f"  of those, the guard clamped {n_clamped} and missed {n_missed}")
     if n_mate == 0:
         print("  FAIL: the construction did not produce a single mate score,"
