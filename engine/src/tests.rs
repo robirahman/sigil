@@ -1928,3 +1928,126 @@ fn an_unproven_mate_is_not_reported_as_a_proof() {
     assert!(ui_score(WIN - 3).abs() >= 37.0,
             "a proven mate must still render as a mate");
 }
+
+#[test]
+fn an_unproven_mate_is_not_announced_as_a_mate_through_go() {
+    // THE GUARD WAS IN THE WRONG FUNCTION. It was written into
+    // `pick_successor`, which `py.rs` exposes for the local playtest server
+    // and nothing else, while `play_best` -- every arena, every audit, the
+    // native engine -- and `wasm.rs pick_move_actions` -- the shipped site --
+    // both drive `go_with_progress`, whose
+    //
+    //     if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
+    //
+    // had no guard and no clamp after the loop. `set_mate_guard` therefore set
+    // a field the shipped search never read, and the false "win in N" a player
+    // sees reaches them through a path that bypassed the guard at every step.
+    //
+    // Two results were consequently evidence of that omission rather than of
+    // the guard, and both were retracted: `smoke_knobbite` saw the knob change
+    // nothing on 60 of 60 midgame positions, which I explained away as the
+    // guard being rare; and the A/B over the 145 flagged positions returned 4
+    // false mates with the guard OFF and the same 4, at byte-identical scores,
+    // with it ON.
+    //
+    // So this pins the behaviour to `go`, the entry point that actually ships.
+    // The positions are real and were HARVESTED, not guessed: each is a
+    // position from `mateflip_cases.json` that `smoke_guardfires` confirmed
+    // announces a mate from a budget-limited search at window 2 / depth 4.
+    // Reading the recorded `score0` would not have found them -- only 1 of the
+    // 145 cases has a mate as its FROM-score; the rest flip into one.
+    const MATE_POSITIONS: [&str; 10] = [
+        "b........brb.b...r........rrrr..rrbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 32 4:4 Carnage:Meteor -:Meteor r2 competitive",
+        "r........bbb.b...r........rrrrr.bbbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring r 33 4:5 Carnage:Fury -:- b1 competitive",
+        "r...bb...brb.b............r.r.r.rrrr..b/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 34 5:5 Carnage:Fury Carnage:- r2 competitive",
+        "r.....r......rrrrr..r.....bbbbbb....br./Tsunami,Harvest,Erupt,Gather,Fury,Storm_Front,Seal_of_Summer,Lurk,Slash b 20 2:1 Fury:Fury -:- r1 competitive",
+        "b......rbr..rbrr.rr....r..b.......bb.../Blossom,Seal_of_Lightning,Corrupt,Meteor,Hail_Storm,Seal_of_Wind,Lurk,Surge,Seal_of_Spring b 16 0:0 -:- -:- r1 competitive",
+        "r.....rbrrr..r......b...rbbb.b.bb....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout b 24 0:1 -:Hail_Storm -:- b1 competitive",
+        "r.....rbrrr..r......b...rbbbbbbb.....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout r 25 0:1 -:Hail_Storm -:- b2 competitive",
+        "rrrb.rbrr.b.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge r 67 3:4 Corrupt:Hail_Storm -:- b1 competitive",
+        "rrrrrrbr.rb.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge b 68 4:4 Gather:Hail_Storm -:- r2 competitive",
+        "r...r..rrr...bb...b.rrrr.rbrbbbb...bbb./Bewitch,Carnage,Harvest,Grow,Seal_of_Wind,Scatter,Surge,Splash,Slash r 27 1:3 Grow:Scatter -:- b1 competitive",
+    ];
+
+    fn search(window: usize, guard: bool) -> crate::search::Search {
+        let mut s = crate::search::Search::new(18);
+        s.set_window(window);
+        s.set_adaptive(0.10, 2, 6);
+        s.set_mate_guard(guard);
+        s.weights = crate::eval::weights_by_name("tfit").expect("tfit weights");
+        s
+    }
+    let floor = crate::search::WIN - crate::search::MAX_PLY as i32;
+
+    let mut exercised = 0;
+    let mut clamped = 0;
+    let mut exhaustive = 0;
+    let mut leaked = Vec::new();
+    for sfn in MATE_POSITIONS.iter() {
+        let b = Board::from_sfn(sfn).expect("case SFN parses");
+        let c = b.to_move;
+
+        let (_t, s_off, st_off) = search(2, false).go(&b, c, 4, 0);
+        if s_off.abs() < floor { continue; }   // no longer announces a mate
+        if !(st_off.widened || st_off.windowed) {
+            // A mate from a search that never ran out of budget IS a proof,
+            // and the guard must leave it alone. Not our case here, but worth
+            // counting rather than silently skipping.
+            exhaustive += 1;
+            let (_t, s_on, _st) = search(2, true).go(&b, c, 4, 0);
+            assert_eq!(s_on, s_off,
+                       "the guard clamped an EXHAUSTIVE mate, which is a proof");
+            continue;
+        }
+        exercised += 1;
+
+        let (_t2, s_on, st_on) = search(2, true).go(&b, c, 4, 0);
+        if s_on.abs() == crate::search::UNPROVEN_MATE {
+            assert!(st_on.unproven_mate, "the clamp must record itself in stats");
+            clamped += 1;
+        } else {
+            leaked.push((s_off, s_on));
+        }
+    }
+    // If nothing was exercised the test proves nothing, which is exactly how
+    // the first smoke test passed while the guard was unwired. Fail loudly
+    // rather than report green.
+    assert!(exercised > 0,
+            "no embedded position produced a budget-limited mate, so the guard \
+             is UNTESTED -- re-harvest with smoke_guardfires.py rather than \
+             trusting this ({} were exhaustive mates)", exhaustive);
+    assert!(leaked.is_empty(),
+            "{} of {} budget-limited mates were announced as mates anyway: {:?}",
+            leaked.len(), exercised, leaked);
+    assert_eq!(clamped, exercised);
+}
+
+#[test]
+fn the_mate_guard_defaults_on_and_leaves_ordinary_scores_alone() {
+    // The clamp must touch nothing but a mate score from a budget-limited
+    // search. Self-play from fresh positions produced 0 false mates in 3,915
+    // starts with the guard off and 0 in 3,960 with it on, so ordinary play is
+    // where it has to be invisible.
+    let mut b = Board::new(Board::legal_draw(17), Variant::Standard);
+    b.setup_initial();
+    assert!(crate::search::Search::new(16).mate_guard_get(),
+            "the guard must default ON");
+
+    let mut on = crate::search::Search::new(18);
+    on.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    let (t_on, sc_on, st_on) = on.go(&b, Color::Red, 5, 0);
+    let mut off = crate::search::Search::new(18);
+    off.set_mate_guard(false);
+    off.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    let (t_off, sc_off, st_off) = off.go(&b, Color::Red, 5, 0);
+
+    // No mate anywhere near the opening, so the two must agree node for node.
+    assert!(sc_on.abs() < crate::search::WIN - crate::search::MAX_PLY as i32);
+    assert_eq!(sc_on, sc_off, "the guard changed a non-mate score");
+    assert_eq!(st_on.nodes, st_off.nodes, "the guard changed the node count");
+    assert_eq!(st_on.depth_completed, st_off.depth_completed);
+    assert!(!st_on.unproven_mate);
+    assert_eq!(t_on.map(|x| x.slice().to_vec()),
+               t_off.map(|x| x.slice().to_vec()));
+    let _ = st_off.unproven_mate;
+}
