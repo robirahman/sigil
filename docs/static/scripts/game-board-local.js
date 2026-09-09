@@ -918,6 +918,11 @@ document.addEventListener('alpine:init', () => {
 						rust_quick: { time: 3, ttBits: 18 },
 						rust: { time: 10, ttBits: 20 },
 						rust_deep: { time: 30, ttBits: _bigTT },
+						// §0.3 ANCHOR: the 2026-09-09 shipped engine, frozen. Fresh
+						// table per move, no pondering, no search knobs, 10 s. Never
+						// upgraded, so human ratings keep one fixed reference while
+						// the listed tiers improve. Unlisted (?ai=rust_anchor).
+						rust_anchor: { time: 10, ttBits: 20, fresh: true },
 					};
 					// RETIRED from the picker (replaced by the rust_* tiers above),
 					// but still playable via direct URL and resumed saved games.
@@ -950,7 +955,7 @@ document.addEventListener('alpine:init', () => {
 					const _RUST_TO_JS_TIER = {
 						rust_easy: 'easy', rust_medium: 'medium', rust_hard: 'hard',
 						rust_very_hard: 'very_hard', rust_quick: 'medium', rust: 'hard',
-						rust_deep: 'very_hard', rust_native: 'very_hard',
+						rust_deep: 'very_hard', rust_native: 'very_hard', rust_anchor: 'hard',
 					};
 					const _RUST_PACKS = ['core', 'springtime', 'celestial', 'fury',
 					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
@@ -1032,9 +1037,11 @@ document.addEventListener('alpine:init', () => {
 							const t = _RUST_TIERS[aiMode];
 							options.ai = new RustAI({
 								transport: 'worker', timeLimit: t.time, ttBits: t.ttBits,
+								fresh: !!t.fresh,
 								// The two top tiers ponder unless the account setting
-								// is explicitly off; the quick tiers follow the setting.
-								ponderPolicy: (t.time >= 10) ? 'default-on' : 'setting',
+								// is explicitly off; the quick tiers follow the setting;
+								// the frozen anchor never ponders.
+								ponderPolicy: t.fresh ? 'off' : (t.time >= 10) ? 'default-on' : 'setting',
 							});
 							// Fetch+compile the wasm during the human's first think,
 							// not the AI's.
@@ -1843,6 +1850,7 @@ document.addEventListener('alpine:init', () => {
 						rust_quick: 'AI (Rust Quick)',
 						rust: 'AI (Rust)',
 						rust_deep: 'AI (Rust Deep)',
+						rust_anchor: 'AI (Anchor 2026-09)',
 						minimax: 'AI (Minimax 3-ply)',
 						positional: 'AI (Positional)',
 						caveman: 'AI (Caveman)',

@@ -26,7 +26,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(__file__))
-from sprt import p_to_elo  # noqa: E402
+from sprt import p_to_elo, Sprt  # noqa: E402
 
 
 def wilson(w, n, z=1.96):
@@ -61,6 +61,9 @@ def main():
     ap.add_argument('--min-human-elo', type=float, default=0.0,
                     help='only count humans at/above this rating in the pooled row')
     ap.add_argument('--json', help='write the per-(ai, human) table here')
+    ap.add_argument('--gate', default=None,
+                    help='AI uid to run the §0.2 acceptance SPRT on (vs humans rated '
+                         '>= --min-human-elo): H0 AI score <= 50%%, H1 >= 65%%')
     args = ap.parse_args()
 
     games = json.load(open(args.dump, encoding='utf-8'))
@@ -196,6 +199,32 @@ def main():
         es = f'{e:.0f}' if e is not None else '?'
         print(f'  {ai:24} {name(hum)[:16]:16} ({es:>4}) {aw:3d}/{n:3d} ai wins  '
               f'{100*p:5.1f}% [{100*lo:5.1f},{100*hi:5.1f}]  elo gap {elo_str(p)}')
+
+    if args.gate:
+        # §0.2: draw-free SPRT over the AI's rated games against strong humans,
+        # in timestamp order. Site Elo is not the instrument; this is.
+        rows = []
+        for key, g in games.items():
+            if not isinstance(g, dict) or g.get('autoArena') or g.get('isAiArena'):
+                continue
+            r, b = g.get('redUid'), g.get('blueUid')
+            if args.gate not in (r, b) or not g.get('ranked'):
+                continue
+            hum = b if r == args.gate else r
+            if who(hum) != 'human' or (elo(hum) or 0) < args.min_human_elo:
+                continue
+            w = g.get('winner')
+            if w not in ('red', 'blue'):
+                continue
+            ai_won = (w == 'red') == (r == args.gate)
+            rows.append((g.get('timestamp') or 0, ai_won))
+        rows.sort()
+        sp = Sprt(elo0=0.0, elo1=p_to_elo(0.65))
+        for _, ai_won in rows:
+            sp.update(ai_won)
+        print(f'\n§0.2 acceptance gate for {args.gate} vs humans rated >= {args.min_human_elo:.0f}:')
+        print('  ' + sp.line(f'{args.gate} vs strong humans'))
+        print('  H1 = superhuman by this gate; H0 = not; continue = more games needed')
 
     if args.json:
         out = {

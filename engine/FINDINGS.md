@@ -1514,3 +1514,25 @@ Harnesses: `harness/ab_session.py <pairs> <ms> persist|ponder` (honest ponder: t
 ponders the pre-move position for the opponent's think time and never sees their choice),
 `harness/ab_search.py` gained the knobs (`lmr` arm value = ext*10 + r) and per-arm mean
 seconds on every GAME line, so an elastic arm can be checked for matched time when pooled.
+
+## §1.5 Pondering: +40 Elo [+3, +77] at 300 ms, local (2026-09-09)
+
+`harness/ab_session.py 25 300 ponder`, 7 shards on this machine, colour-swapped, seeds
+8,000,000+, honest ponder (the arm ponders the pre-move position for the opponent's think
+time and never sees the opponent's choice; the opponent searches on a fresh table):
+
+| | |
+|---|---|
+| games | **350** (195-155) |
+| arm score | **55.7%** [50.5, 60.8] Wilson |
+| Elo | **+40 [+3, +77]** |
+| depth at equal clock | arm 4.96 / 4.36 vs base 4.62 / 4.08 (two shards) |
+| table at the arm's 2nd move | median 21,756 entries |
+
+Persistence alone was 200-200, so the gain is the ponder. This is the deploy-only lever
+(self-play cannot see it; a human's think time is free), at the LEAST favourable ratio --
+300 ms of ponder for 300 ms of search. A human at 30 s/move against `rust_very_hard` gives
+the engine 30-60 s of priming per move, so the shipped effect should be larger, bounded by
+one doubling (34-66 Elo). Fleet confirmation at 3 s/3 s and 10 s/10 s is queued behind the
+knob arenas; the wasm side already ships it (`rust-worker.js` slices, default-on for the
+>= 10 s tiers).

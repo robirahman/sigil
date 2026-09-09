@@ -12,7 +12,8 @@
  * Protocol (mirrors ai-worker.js):
  *   in:  { type:'init',   id }
  *   in:  { type:'search', id, sfn, timeMs, ttBits, widthScale,
- *          historySfns, evalName, adaptive: [p, easy, hard] }
+ *          historySfns, evalName, adaptive: [p, easy, hard], fresh }
+ *          (fresh: throwaway table per move -- the frozen rust_anchor tier)
  *   in:  { type:'new_game', ttBits }                    // forget the last game
  *   in:  { type:'ponder', sfn, ttBits, widthScale, historySfns, evalName,
  *          adaptive, sliceMs, maxDepth }                // prime the TT while the human thinks
@@ -128,16 +129,19 @@ self.onmessage = async (e) => {
 			await ensureInit();
 			_ponder.active = false;            // the real search takes over the table
 			const a = msg.adaptive || [0, 0, 0];
-			const raw = engineFor(msg.ttBits).search(
-				msg.sfn,
-				msg.timeMs >>> 0,
-				(msg.widthScale || 4) >>> 0,
-				msg.historySfns || [],
-				msg.evalName || 'tfit',
-				a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0,
-				(depth, score, nodes) => {
-					self.postMessage({ type: 'progress', id, depth, score, nodes });
-				});
+			const onDepth = (depth, score, nodes) => {
+				self.postMessage({ type: 'progress', id, depth, score, nodes });
+			};
+			const raw = msg.fresh
+				// Throwaway table per move: the frozen reference engine (rust_anchor).
+				? wasm_bindgen.pick_move_actions(
+					msg.sfn, msg.timeMs >>> 0, (msg.ttBits || 20) >>> 0,
+					(msg.widthScale || 4) >>> 0, msg.historySfns || [], msg.evalName || 'tfit',
+					a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, onDepth)
+				: engineFor(msg.ttBits).search(
+					msg.sfn, msg.timeMs >>> 0, (msg.widthScale || 4) >>> 0,
+					msg.historySfns || [], msg.evalName || 'tfit',
+					a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, onDepth);
 			self.postMessage({ type: 'result', id, res: JSON.parse(raw) });
 		} finally {
 			_busy = false;

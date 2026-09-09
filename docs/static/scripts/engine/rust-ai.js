@@ -150,6 +150,10 @@ class RustAI {
 		// explicitly turned it off (anonymous players have no profile).
 		this.pondering = false;
 		this.ponderPolicy = options.ponderPolicy || 'setting';
+		// `fresh`: search on a throwaway table every move (the pre-persistence
+		// engine). The unlisted ?ai=rust_anchor tier uses it so human ratings
+		// keep one fixed reference across engine releases (§0.3).
+		this.fresh = !!options.fresh;
 		this.ponderSliceMs = options.ponderSliceMs || 250;
 		this.ponderMaxDepth = options.ponderMaxDepth || 12;
 		this.lastMeta = null;
@@ -165,6 +169,7 @@ class RustAI {
 	/** Whether pondering should be on for this AI given the auth manager's
 	 *  profile. 'default-on' policy: on unless explicitly disabled. */
 	ponderEnabledFor(auth) {
+		if (this.ponderPolicy === 'off') return false;
 		const profile = auth && auth.userProfile;
 		if (this.ponderPolicy === 'default-on') {
 			return !(profile && profile.enablePondering === false);
@@ -236,6 +241,7 @@ class RustAI {
 		const t0 = Date.now();
 		return getRustEngineWorker().search({
 			sfn: sfn,
+			fresh: this.fresh,
 			timeMs: this.timeMs,
 			ttBits: this.ttBits,
 			widthScale: this.widthScale,

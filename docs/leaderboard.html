@@ -279,6 +279,9 @@
 						{ uid: '__ai_rust_medium__', name: 'AI (Medium) (Rust)', elo: 1200 },
 						{ uid: '__ai_rust_hard__', name: 'AI (Hard) (Rust)', elo: 1200 },
 						{ uid: '__ai_rust_very_hard__', name: 'AI (Very Hard) (Rust)', elo: 1200 },
+						// §0.3 frozen reference engine; seeded at the rating its
+						// configuration measured against humans (rust_hard, 2026-09-09).
+						{ uid: '__ai_rust_anchor__', name: 'AI (Anchor 2026-09)', elo: 1300 },
 					];
 					for (const ai of ais) {
 						const snap = await db.ref('leaderboard/' + ai.uid).once('value');
