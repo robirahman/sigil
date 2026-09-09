@@ -1,0 +1,51 @@
+{
+ "gap-ai_very_hard-0:t12": {
+  "key": "gap-ai_very_hard-0",
+  "turnNumber": 12,
+  "color": "blue",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ },
+ "gap-ai_hard-1:t16": {
+  "key": "gap-ai_hard-1",
+  "turnNumber": 16,
+  "color": "blue",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ },
+ "gap-human-2:t17": {
+  "key": "gap-human-2",
+  "turnNumber": 17,
+  "color": "red",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ },
+ "gap-human-3:t15": {
+  "key": "gap-human-3",
+  "turnNumber": 15,
+  "color": "red",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ },
+ "gap-ai_hard-7:t21": {
+  "key": "gap-ai_hard-7",
+  "turnNumber": 21,
+  "color": "red",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ },
+ "gap-ai_hard-12:t36": {
+  "key": "gap-ai_hard-12",
+  "turnNumber": 36,
+  "color": "blue",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ },
+ "gap-ai_very_hard-13:t24": {
+  "key": "gap-ai_very_hard-13",
+  "turnNumber": 24,
+  "color": "blue",
+  "unreachable": true,
+  "note": "no legal turn reaches the after-state"
+ }
+}
