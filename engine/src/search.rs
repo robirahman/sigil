@@ -48,9 +48,21 @@ pub const WIN: i32 = 10_000_000;
 ///     100,000 would clear the material bar but display as 1,000 stones.
 ///
 /// 5,000 centistones = 50 stones: 2.5x any achievable lead, 1.3 Caveman units,
-/// nowhere near the UI's mate threshold. The clamp is applied to the RETURNED
-/// score only, after the search has finished, so it cannot affect move choice
-/// or alpha-beta bounds -- it changes what the engine CLAIMS, not what it does.
+/// nowhere near the UI's mate threshold. It is deliberately ABOVE the physical
+/// maximum for a 39-node board, so it cannot be mistaken for a real count.
+///
+/// The clamp is applied to the RETURNED score only, after the search has
+/// finished and after `prev` has already seeded the next aspiration window, so
+/// the CLAMP cannot affect move choice or alpha-beta bounds.
+///
+/// The GUARD AS A WHOLE CAN change the move played, and saying otherwise was
+/// wrong. Suppressing the early break makes iterative deepening continue in a
+/// position where it used to stop, and a deeper iteration may pick a different
+/// move -- which is the point: it may discover the "mate" was the opponent's
+/// saving move falling outside the width budget. So this is a playing change
+/// in those positions, not merely a display change. It is still not
+/// SPRT-able: the positions are ~4 in 3,665 starts, so gate it by counting
+/// the defect it removes (`eval_consistency.py --mate-guard on|off`).
 pub const UNPROVEN_MATE: i32 = 5_000;
 pub const MAX_PLY: usize = 64;
 
@@ -805,8 +817,9 @@ impl Search {
         // Report an UNPROVEN mate as large-but-finite. The web UI treats a
         // score past its own threshold as a proven mate and prints "win in N",
         // so passing a width-limited mate score through makes the interface
-        // state a certainty the search never established. The move choice is
-        // untouched -- only the number the engine announces.
+        // state a certainty the search never established. This CLAMP leaves the
+        // chosen move alone; the guard's other half, not breaking out of
+        // iterative deepening, can and does change it.
         let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
         if self.mate_guard && mate_score
            && (self.stats.widened || self.stats.windowed) {
