@@ -1264,3 +1264,86 @@ both sides draw keeps from the same distribution, so "the opponent keeps by
 priority" is a correct opponent model in an arena and a wrong one against a
 human, who keeps non-priority in 69.4% of casts. The fix ships on
 correctness.
+
+---
+
+## Check A re-run, with the corrupt-window filter (2026-09-09)
+
+2,403 recorded games / 66,820 positions, depths 2 and 4 against windows 2 and
+4, 264 shards, **264 of 264 finished** (no shard dropped, so the rates below
+are over the whole corpus).
+
+| | all flags | engine to move |
+|---|---|---|
+| flagged windows | **5,655** | **404 (7.1%)** |
+| announced provably lost (`score1 <= -1e6`) | **0** | **0** |
+| announced lost, NOT provably (`+-5000`) | 1,023 | — |
+| horizon effect (deepening cured it) | — | 77 (19.1%) |
+| `OTHER` | — | 327 (80.9%) |
+| dropPerPly 0.5-1.0 | 4,057 | 230 |
+| dropPerPly 1.0-2.0 | 336 | 43 |
+| dropPerPly > 2.0 | — | **128** |
+
+### Three things this table does not say
+
+**1. `MATE FLIPS: 0` is the mate guard, not the defect going away.**
+`mateFlip` tests `score1 <= -MATE` (1e6). A mate the search cannot prove is
+now reported as `UNPROVEN_MATE` = 5,000, far above `-MATE`, so the SAME flag
+stops being labelled one. `dropPerPly` is untouched, because the gradual
+metric clamps at +-20 stones (2,000 centistones) and both `1e7` and `5,000`
+saturate to that bound. The symptom is still there and now reads
+`+UNPRV -> -1.57` at 10.79 stones/half-move. **Compare drop distributions
+across runs, never the mate-flip label.**
+
+**2. `80.9% OTHER` is not a verdict on the eval.** The horizon test asks
+whether a DEEPER search at the SAME window still flags, so it needs a deeper
+depth in the same run. Of the 327 `OTHER`, **220 are depth-4 flags with
+nothing deeper to test against** -- they are `OTHER` by default, not by
+evidence. Among the depth-2 flags, which can be tested, the split is 77
+horizon / 107 other: **42% cured by deepening.** Depth 6 is queued to settle
+the rest.
+
+**3. The recorded corpus is a 3.6% instrument.** `rust` played **2,305 of
+64,417 turns**; the rest are human (24,322), ai_hard (13,568), ai_medium
+(8,896), ai_easy (7,776), ai_very_hard (6,321) and a long tail. Check A
+re-scores after the ACTUAL continuation, so a decline means the mover's
+position got worse -- and when the mover is a human who blundered, **the
+engine's declining eval is CORRECT**. That is why 5,655 flags collapse to 404.
+
+### What to run instead, and when
+
+**Make Check A on engine SELF-PLAY the primary instrument.** Every
+continuation is then the engine's own choice, so 100% of flags bear on the
+0.5-stones-per-half-move envelope instead of 7%. It is cheap enough to be a
+pre-merge gate, and the `--checks a` path already supports it: self-play has
+no `pairs`, so no record filter is built and nothing is refused.
+
+**Re-run the recorded-games audit on a TRIGGER, never a schedule:** changed
+eval weights, a changed width schedule or move ordering, or a materially
+larger human corpus. The corpus is static at 2,403 games, so a repeat without
+one of those returns this same number.
+
+### Two unit bugs found in the reporting, both the same 41x error
+
+`attribute_drops.fmt_score` still divided by **4096** while `STONE = 100`,
+after the module-level shadow had been fixed -- so every endpoint in the
+worst-declines table printed 41x too small, a +50.00 stone unproven mate as
+`+1.22`. The tell was a self-contradicting row: `+20.00/half-move ... +1.22 ->
+-1.22`, where the RATE came from the flag JSON (correct) and the ENDPOINTS
+came from `fmt_score`. A 1.22-to--1.22 swing over two half-moves is
+1.22/half-move, not 20.
+
+And `--checks a` printed a CHECK B verdict -- "every played turn IS
+enumerable; no enumeration gap here" -- from an empty miss list that nothing
+had populated. `do_reach` says the SOURCE supports Check B, not that it ran.
+
+### And one fleet trap
+
+`runner.sh` hard-coded `timeout 900` on the smoke arm. A Check A smoke of 2
+games at depth 6 is ~950 s of scoring alone, so the smoke is killed, the
+runner reads that as a smoke failure, and the arms never launch. Three
+90-vCPU VMs were killed before they burned the cycle. The cap is now
+overridable (`SMOKE_TIMEOUT=` -> `smoke-timeout` metadata) and the runner
+echoes which cap applied. Related: the ~17 s/position figure for depth 6 is
+inherited from full-width self-play and is far too pessimistic for the filled
+midgame boards this audit scores.
