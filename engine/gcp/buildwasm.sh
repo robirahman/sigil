@@ -72,12 +72,38 @@ git log --oneline -1 | tee $W/out/COMMIT.txt
     [ -f "$f" ] && echo "SHA256 $(sha256sum "$f")"
   done
 
-  echo; echo "### tools/wasm-smoke.js"
+  # SMOKE THE OPTIMISED ARTIFACT, AND FALL BACK IF IT FAILS. `wasm-opt -O2`
+  # without explicit feature flags produced a module that linked and then died
+  # at init -- "WebAssembly.Table.grow(): failed to grow table by 4" in
+  # __wbindgen_init_externref_table -- because wasm-bindgen 0.2.127 emits an
+  # externref table and binaryen drops what it is not told to keep. Build-time
+  # exit codes were all zero. So the size pass is not trusted: it is verified,
+  # and a failure reverts to the unoptimised module rather than shipping.
+  echo; echo "### tools/wasm-smoke.js (optimised)"
+  SMOKE_EXIT=0
   if [ -f tools/wasm-smoke.js ]; then
-    node tools/wasm-smoke.js; echo "SMOKE_EXIT=$?"
+    node tools/wasm-smoke.js; SMOKE_EXIT=$?
+    echo "SMOKE_EXIT_OPT=$SMOKE_EXIT"
+    if [ $SMOKE_EXIT -ne 0 ] && [ -f docs/static/wasm/sigil_engine_bg.wasm.preopt ]; then
+      echo "### optimised module FAILED the smoke; reverting to unoptimised"
+      mv docs/static/wasm/sigil_engine_bg.wasm.preopt \
+         docs/static/wasm/sigil_engine_bg.wasm
+      node tools/wasm-smoke.js; SMOKE_EXIT=$?
+      echo "SMOKE_EXIT_UNOPT=$SMOKE_EXIT"
+      echo "SHIPPING=unoptimised ($(stat -c%s docs/static/wasm/sigil_engine_bg.wasm) bytes)"
+    else
+      echo "SHIPPING=optimised ($(stat -c%s docs/static/wasm/sigil_engine_bg.wasm) bytes)"
+    fi
   else
-    echo "(no wasm-smoke.js)"; echo "SMOKE_EXIT=0"
+    echo "(no wasm-smoke.js)"
   fi
+  rm -f docs/static/wasm/sigil_engine_bg.wasm.preopt
+  echo "SMOKE_EXIT=$SMOKE_EXIT"
+  echo; echo "### final artifacts"
+  ls -l docs/static/wasm/
+  for f in docs/static/wasm/sigil_engine.js docs/static/wasm/sigil_engine_bg.wasm; do
+    [ -f "$f" ] && echo "FINAL_SHA256 $(sha256sum "$f")"
+  done
 } > $W/out/wasm.log 2>&1
 
 tail -60 $W/out/wasm.log
