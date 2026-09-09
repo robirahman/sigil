@@ -130,7 +130,11 @@ def selfplay_lines(n_games, play_ms, ev='tfit'):
         # point of auditing self-play: EVERY continuation here is the engine's
         # own choice, so `--mover rust` keeps 100% of flags instead of the
         # 7.1% it keeps on the recorded human corpus.
-        yield (f"selfplay-{g}", line,
+        # KEYED BY SEED, not by the shard-local index. `selfplay-{g}` collided
+        # across shards -- every shard has a game 0 -- so pooling a fleet
+        # deduped distinct games as duplicates and silently discarded half the
+        # corpus (1,736 flags collapsing to 879 "distinct windows").
+        yield (f"selfplay-{base + g}", line,
                {'winner': r[4], 'movers': ['rust'] * len(line),
                 'red': 'rust', 'blue': 'rust'})
 
@@ -394,7 +398,7 @@ def _confirm_pair(p, enum_cap):
 
 
 def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
-                     windows=None, verified=None):
+                     windows=None, verified=None, deadline=None):
     """CHECK A: score at ply i and ply i+d, same side to move, and compare.
 
     Two calibration lessons from the first run, which flagged 22 cases in 6 games
@@ -409,6 +413,15 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
       WINNING and then lost. So a mate flip only counts when the earlier score was
       at least `surprise_from` stones -- default 0, i.e. the engine was not behind.
     """
+    # PER-GAME DEADLINE. `--max-seconds` was checked only before the next
+    # game, which bounds whole games but CANNOT bound a single one: at
+    # depths 2:4:6 one self-play game costs more than the whole budget, so
+    # 201 of 264 shards never reached the check and the VM watchdog killed
+    # them mid-game -- 76% of a fleet hour for nothing. A game that
+    # overruns now returns `complete=False` and the caller DISCARDS its
+    # flags: a partially audited line is biased toward early plies, and a
+    # biased line is worse than a smaller corpus.
+    complete = True
     out = []
     skipped = [0]               # windows dropped for straddling a bad turn
     clamp = 20 * STONE          # ignore magnitudes past +-20 stones for the slope
@@ -423,6 +436,9 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
     # `windows=None` keeps the original coupled behaviour (window == depth).
     for d in depths:
         for w in (windows or [d]):
+            if deadline is not None and time.time() > deadline:
+                complete = False
+                break
             for i in range(0, len(line) - w, stride):
                 sfn0, h0 = line[i]
                 sfn1, h1 = line[i + w]
@@ -457,7 +473,9 @@ def check_eval_drops(line, depths, stride, per_ply_limit, surprise_from,
                             'mateFlip': mate_flip,
                             'sfnBefore': sfn0, 'sfnAfter': sfn1,
                             'mover': 'red' if sfn0.split()[1] == 'r' else 'blue'})
-    return out, skipped[0]
+        if not complete:
+            break
+    return out, skipped[0], complete
 
 
 def cast_between(sfn0, sfn1):
@@ -690,6 +708,7 @@ def main():
     seen_games = -1
     t_start = time.time()
     stopped_early = False
+    abandoned = [0]     # games whose audit overran the budget; flags discarded
     for key, line, meta in src:
         # Checked BEFORE the next game, so the budget bounds a WHOLE game
         # and every flag collected comes from a fully audited line. A
@@ -741,9 +760,20 @@ def main():
                 else:
                     verified, vcache = make_verifier(pairs, args.enum_cap)
                     caches.append(vcache)
-            flags, nskip = check_eval_drops(
+            per_game_deadline = (t_start + args.max_seconds
+                                 if args.max_seconds else None)
+            flags, nskip, complete = check_eval_drops(
                 line, depths, args.stride, args.per_ply_limit,
-                args.surprise_from, windows, verified)
+                args.surprise_from, windows, verified,
+                deadline=per_game_deadline)
+            if not complete:
+                # Discard rather than record a line audited at only some of
+                # its depths -- that would look like "deepening cured it".
+                abandoned[0] += 1
+                stopped_early = True
+                print(f"  ABANDONED game {key}: budget expired mid-audit, its "
+                      f"{len(flags)} partial flags discarded", flush=True)
+                break
             n_skipped_windows += nskip
             for r in flags:
                 r['game'] = key
