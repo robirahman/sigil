@@ -19,6 +19,10 @@ MACHINE=${8:-c3d-highcpu-30}
 # without it every VM derives its offsets from the worker index alone and they
 # all run the same shards.
 SHARD_BASE=${SHARD_BASE:-0}
+# Seconds the smoke arm may take before it is killed. 900 suits a fast harness;
+# a CHECK A smoke that scores at depth 6 needs more, and being killed there
+# means the arms never launch at all.
+SMOKE_TIMEOUT=${SMOKE_TIMEOUT:-900}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
 BRANCH=${BRANCH:-rust-bitboard-engine}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -36,7 +40,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE,smoke-timeout=$SMOKE_TIMEOUT" \
   --metadata-from-file="startup-script=$HERE/runner.sh,arms=$ARMS_FILE,smoke=$SMOKE_FILE" \
   --format="value(name,status)"
 rm -f "$SMOKE_FILE"
