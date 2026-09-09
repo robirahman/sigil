@@ -446,7 +446,34 @@ impl Search {
             best_score = score;
             self.stats.depth_completed = depth;
             if let Some(p) = progress.as_deref_mut() { p(depth, score, self.stats.nodes); }
-            if score.abs() >= WIN - MAX_PLY as i32 { break; }   // decisive
+            // A MATE SCORE IS A PROOF ONLY IF THE SEARCH THAT FOUND IT SAW
+            // EVERY MOVE -- the full argument is on `pick_successor`, which is
+            // where this guard was FIRST written, and only there. That was the
+            // bug: `pick_successor` serves the browser's successor-picking
+            // path, while THIS loop is what `play_best` drives, i.e. every
+            // arena, every audit, and the native engine. `set_mate_guard`
+            // therefore set a field the shipped search never read.
+            //
+            // Two measurements that looked like evidence about the guard were
+            // really evidence of this omission, and both are retracted:
+            // `smoke_knobbite` found the knob changed nothing on 60 of 60
+            // midgame positions, and the A/B over the 145 flagged positions
+            // returned 4 false mates with the guard OFF and the same 4, at
+            // byte-identical scores, with it ON.
+            let proven = !self.mate_guard
+                         || (!self.stats.widened && !self.stats.windowed);
+            if score.abs() >= WIN - MAX_PLY as i32 && proven { break; }   // decisive
+        }
+        // Report an UNPROVEN mate as large-but-finite. `ui_score` divides by
+        // 3900 and the UI multiplies by 39, so UNPROVEN_MATE reaches the player
+        // as +50 stones: unmistakably winning, past no mate threshold. The move
+        // choice is untouched -- only the number the engine announces.
+        let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
+        if self.mate_guard && mate_score
+           && (self.stats.widened || self.stats.windowed) {
+            self.stats.unproven_mate = true;
+            let sign = if best_score > 0 { 1 } else { -1 };
+            best_score = sign * UNPROVEN_MATE;
         }
         (best, best_score, self.stats)
     }
