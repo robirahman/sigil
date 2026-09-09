@@ -1573,5 +1573,6 @@ pooled with `pool_shards.py` (which now checks matched average time via the GAME
 |---|---|---|---|---|---|---|
 | `force_hints` | 399 | 47.1% | [42.3, 52.0] | −20 [−54, +14] | 0.999 | null, leaning negative: a hint the width dropped is rarely the best move at 300 ms, and its subtree costs |
 | `pvs` | 400 | 50.5% | [45.6, 55.4] | +4 [−31, +38] | 1.000 | null; completed depth identical (4.68 vs 4.68): the zero windows save what the re-searches cost, so ordering is already good enough that plain alpha-beta cuts almost as early |
+| `lmr` 2/1 (band x2, R=1) | 400 | 46.8% | [41.9, 51.7] | −23 [−57, +12] | 1.000 | leaning negative at 300 ms and 0.4 ply shallower (4.00 vs 4.38): the reduced band's subtrees cost depth that a 300 ms search cannot spare. This is the one knob where a 300 ms verdict is least informative -- it trades depth for coverage exactly as `width_scale` did, and that trade was +47 at 300 ms but +223 at 3 s. Worth the ~$5 fleet run at 3 s despite the local rule |
 
 (rows appended as each knob's shard set finishes)
