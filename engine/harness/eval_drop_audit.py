@@ -47,6 +47,10 @@ import sigil_engine as se
 MERGE_OFF = 1 << 62
 MATE = 1_000_000          # |score| above this is a proven win/loss, not a heuristic
 STONE = 100               # centistones per stone
+# Read from the engine rather than restated: the whole point of
+# `sigil-restate-no-default-twice` is that a constant duplicated in Python
+# drifts from the Rust silently. Falls back only if the binding predates it.
+UNPROVEN_MATE_SENTINEL = getattr(se, 'UNPROVEN_MATE', 5_000)
 
 
 def shipped_adaptive():
@@ -776,6 +780,23 @@ def main():
     print(f"  MATE FLIPS from a non-losing score (the reported bug): {len(mate)}")
     print(f"  gradual drops over {args.per_ply_limit} stones/half-move: "
           f"{len(drops) - len(mate)}")
+    # THE MATE-FLIP COUNT IS NOT COMPARABLE ACROSS THE MATE-GUARD FIX, and
+    # reading it as progress would be a straightforward mistake. `mate_flip`
+    # tests `score1 <= -MATE` (1e6). With the guard on, a mate the search
+    # cannot prove is reported as UNPROVEN_MATE (5,000), which is well above
+    # -MATE, so the SAME flag stops being labelled a mate flip.
+    #
+    # `dropPerPly` is unaffected: the gradual metric clamps at +-20 stones
+    # (2,000 centistones) and 1e7 and 5,000 both saturate to that bound, so
+    # the number is identical either way. Only the LABEL moves. Count the
+    # unproven ones separately so a run says what it actually found.
+    unproven = [r for r in drops
+                if abs(r['score1']) == abs(UNPROVEN_MATE_SENTINEL)]
+    print(f"  of those, ones where the engine now announces an UNPROVEN mate "
+          f"against the mover: {len(unproven)}")
+    print(f"    <- before the mate-guard fix these were counted as MATE FLIPS. "
+          f"Same positions,\n       same dropPerPly; the engine no longer "
+          f"claims the loss is proven.")
     by_depth = Counter(r['depth'] for r in drops)
     print(f"  by depth: {dict(sorted(by_depth.items()))}")
     if drops:
