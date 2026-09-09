@@ -1,3 +1,75 @@
+# Engine status
+
+**Current as of 2026-09-09.** Everything below the "Phase 0 status" heading is
+the original bitboard-port log and is kept for provenance; where it disagrees
+with this section, this section is right.
+
+## Shipped on `main` (merge 90d96c35)
+
+| | |
+|---|---|
+| strength vs the previously playtested engine | **+228 Elo @3s, +348 @60s** |
+| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2 |
+| tests | **89/89** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
+| browser build | `RUST_ENGINE_VERSION` 2, cache `v26`, wasm 558,686 bytes |
+
+Four things landed in that merge and each is worth knowing about:
+
+**1. The cast keep choice is ENUMERATED.** Casting clears the spell's sigil and
+the caster keeps `mana` of its stones **choosing which**. Both engines
+hard-coded one priority order, so the search saw 1 of up to `C(5,2)=10` legal
+positions after every cast — its own and the opponent's. Humans keep
+non-priority in 69.4% of casts against ~0% for every engine. `keep_options` /
+`keep_count` / `cast_clear_and_keep` in `cast.rs`, index 0 being the old
+priority order; `Action::Cast` carries `keep`. Elo-neutral in self-play
+(-7.7 [-15.8, +0.4] over 7,040 games) because both arms share the wrong
+opponent model; it ships on correctness.
+
+**2. A mate score is a proof only if the search that found it saw every move.**
+`UNPROVEN_MATE` (5,000 centistones, +50 stones as the UI renders it) is
+reported instead when `widened` or `windowed` is set, and iterative deepening
+no longer breaks early on such a score. An EXHAUSTIVE mate is untouched.
+**The guard must live in every root loop:** it was written only into
+`pick_successor` (the local playtest server's entry point) while `play_best`
+and `wasm.rs pick_move_actions` — every arena, every audit, and the site —
+drive `go_with_progress`, which went unguarded for the guard's whole life.
+
+**3. The enumeration audit closed at ZERO.** Of 2,016 originally unreachable
+recorded turns: 237 fat records, 134 no-op sacrifices, 61 transcription
+glitches adjudicated through the real UI, **0 genuine gaps**. `applyAITurn`
+applies a stored action list without validating legality, so any future audit
+against `completed_games` needs all three filters or it blames the enumerator
+for the recorder.
+
+**4. Two binding bugs.** `legal_draw` no longer seeds with `seed | 1` (seeds
+2n and 2n+1 gave the SAME nine-spell draw, leaving half the draw space
+unreachable), and seven pyo3 signatures no longer restate `width_scale`.
+
+## Where the next Elo is not
+
+Closed by measurement, do not re-open without new evidence: a learned leaf
+eval (GBM extracts nothing beyond linear over 8.2M on-policy positions,
+ceiling ~+15-25 Elo before cost), a wider linear eval (`full_features` is
+9-12% of a node against a 5% gate), retuning adaptive widening (the shipped
+p=0.10 sits at the knee), and six move-ordering campaigns. The open lever is a
+policy prior that NARROWS width — measured oracle floor is 98% coverage at
+average width 10.5 against 96 today — gated on `turn_features` cost.
+
+## Rules the tooling now enforces
+
+* **A knob is not wired until it is proven to bite in the function the
+  deliverable calls.** `engine/gcp/smoke_knobbite.py` asserts this through
+  `play_best`; run it before any SPRT. Two SPRTs of 7,040 and 6,997 games once
+  compared identical engines because `play_best` accepted `keep_window` and
+  dropped it.
+* **A gate that passes on zero evidence is not a gate.** The mate-guard smoke
+  saw 0 of 60 positions differ and exited 0 with a warning; it now CONSTRUCTS
+  the condition and fails on zero clamps.
+* Gate at fixed time, split by spell draw, never restate an engine default in
+  a binding, and pool fleet shards before reading any verdict.
+
+---
+
 # Phase 0 status
 
 ## Done and verified
@@ -11,9 +83,12 @@
   static/charm flags.
 * `cast.rs`: `holds_charged`, dash rules (Seal of Autumn + Seal of Lightning),
   `castable` (locks, Seal of Spring/Summer/Winter, Surge/Splash rules),
-  `cast_clear_and_refill` (engine priority order), `finish_cast`
-  (lock/springlock/counter), and the Autumn resolvers.
-* 28 unit tests green. 4,000-position differential parity vs simboard.py green.
+  `cast_clear_and_refill` (engine priority order — **superseded**: the caster
+  CHOOSES which stones to keep, see `keep_options` / `cast_clear_and_keep`;
+  `cast_clear_and_refill` now just calls the latter with index 0),
+  `finish_cast` (lock/springlock/counter), and the Autumn resolvers.
+* 28 unit tests green at the time of writing (**89** on `main` today).
+  4,000-position differential parity vs simboard.py green.
 
 ## Throughput (1 core, this Cloud Shell)
 | workload | rate |
