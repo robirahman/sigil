@@ -29,6 +29,7 @@ import re
 import sys
 
 GAME = re.compile(r'^GAME seed=(\d+) arm=(\w+) winner=(\S+) plies=(\d+)')
+TIMES = re.compile(r'arm_s=([0-9.]+) base_s=([0-9.]+)')
 CONFIG = re.compile(r'ENGINE CONFIG\s+(.*)$')
 
 
@@ -56,6 +57,10 @@ def main():
     ap.add_argument('logs')
     ap.add_argument('--expect-config', default=None,
                     help='substring every ENGINE CONFIG line must contain')
+    ap.add_argument('--max-time-ratio', type=float, default=None,
+                    help='refuse a verdict if the arm used more than this multiple of the '
+                         'base arm\'s mean seconds per move (elastic arms: gate at MATCHED '
+                         'average time; GAME lines must carry arm_s=/base_s=)')
     args = ap.parse_args()
 
     files = sorted(glob.glob(args.logs))
@@ -66,6 +71,7 @@ def main():
     wins = losses = unfinished = 0
     per_shard = collections.Counter()
     plies = []
+    arm_secs, base_secs = [], []
     seeds = collections.Counter()
     for path in files:
         with open(path, encoding='utf-8', errors='replace') as fh:
@@ -80,6 +86,9 @@ def main():
                 _seed, arm, winner, n = g.groups()
                 seeds[int(_seed)] += 1
                 plies.append(int(n))
+                t = TIMES.search(ln)
+                if t:
+                    arm_secs.append(float(t.group(1))); base_secs.append(float(t.group(2)))
                 per_shard[path] += 1
                 if winner in ('None', 'none', ''):
                     unfinished += 1
@@ -108,6 +117,16 @@ def main():
           + ('   <-- SHARD OFFSETS COLLIDED' if dup else ''))
     if plies:
         print(f'mean plies: {sum(plies) / len(plies):.1f}')
+    if arm_secs and base_secs:
+        ma = sum(arm_secs) / len(arm_secs); mb = sum(base_secs) / len(base_secs)
+        ratio = ma / mb if mb > 0 else float('inf')
+        print(f'mean s/move: arm {ma:.3f}  base {mb:.3f}  ratio {ratio:.3f}')
+        if args.max_time_ratio is not None and ratio > args.max_time_ratio:
+            sys.exit(f'\nREFUSING A VERDICT: the arm used {ratio:.3f}x the base arm\'s time '
+                     f'(limit {args.max_time_ratio}); re-run with the arm\'s base budget '
+                     f'scaled by 1/{ratio:.3f} so average time matches')
+    elif args.max_time_ratio is not None:
+        sys.exit('\n--max-time-ratio given but the GAME lines carry no arm_s=/base_s= times')
     if n == 0:
         sys.exit('no decided games')
 

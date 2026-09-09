@@ -1562,3 +1562,15 @@ to watch: if it holds near 94% at scale, the heuristic ORDER INSIDE a cast stub 
 part of the tail and the prior needs the within-stub scorer (plan §2.4 gate 0) before
 training. Data run: one `c3d-highcpu-90` x 8 h ≈ $26 (`selfplay_prior.py 1000 <out> 7 5 3 4`
 per shard), not launched -- fleet spend needs Robi's go.
+
+## §1.2/§1.4 knob arenas, local, 300 ms, 8 shards x 25 pairs (2026-09-09, running)
+
+Same binary both arms, eval tfit, shipped widening, colour-swapped, seeds 6,000,000+shard,
+pooled with `pool_shards.py` (which now checks matched average time via the GAME lines'
+`arm_s=`/`base_s=` and refuses a verdict past `--max-time-ratio`):
+
+| knob | games | arm% | 95% CI | Elo | time ratio | read |
+|---|---|---|---|---|---|---|
+| `force_hints` | 399 | 47.1% | [42.3, 52.0] | −20 [−54, +14] | 0.999 | null, leaning negative: a hint the width dropped is rarely the best move at 300 ms, and its subtree costs |
+
+(rows appended as each knob's shard set finishes)
