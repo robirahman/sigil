@@ -25,7 +25,8 @@ def adaptive():
 
 def pb(sfn, **kw):
     b = se.Board.from_sfn(sfn)
-    r = b.play_best(kw.pop('ms', 0), kw.pop('depth', 4), 20, 16,
+    r = b.play_best(kw.pop('ms', 0), kw.pop('depth', 4), 20,
+                    kw.pop('window', 16),
                     se.DEFAULT_WIDTH_SCALE, [], 'tfit', False, MERGE_OFF,
                     None, None, None, None, None, None, adaptive(),
                     None, None, kw.pop('keep_window', None),
@@ -78,25 +79,60 @@ if diff == 0:
     fail = 1
 
 print("\n=== mate_guard must bite through play_best ===")
-d2 = s2 = 0
-for s in sfns:
-    try:
-        a = pb(s, mate_guard=False)
-        b = pb(s, mate_guard=True)
-    except Exception as e:
-        print(f"  call failed: {e}")
+# The first version of this block compared guard on/off over the same 60
+# midgame positions, saw 0 of 60 differ, printed a WARNING and exited 0 --
+# reasoning that "the guard only fires where a mate meets a width-limited
+# search, so a low count is expected". That excuse is indistinguishable from
+# the knob not being wired at all, which is exactly what it was: the guard was
+# written into `pick_successor` and `play_best` drives `go_with_progress`.
+#
+# So do not sample and hope. CONSTRUCT the condition: search positions that are
+# known to produce a mate announcement, with `window=1` starving the
+# cast-outcome window so the search is certainly width-limited. Every mate
+# reported with the guard off MUST come back clamped with it on. No escape
+# hatch: zero clamps is a FAIL.
+UNPROVEN = getattr(se, 'UNPROVEN_MATE', 5000)
+MATE_FLOOR = 10_000_000 - 64
+try:
+    cases = json.loads(fetch('data/mateflip_cases.json'))
+    mate_sfns = [c['sfn_i'] for c in cases if c.get('sfn_i')]
+except Exception as e:
+    print(f"  could not load mateflip_cases.json: {e}")
+    mate_sfns = []
+
+if not mate_sfns:
+    print("  FAIL: no mate-bearing positions to test the guard on")
+    fail = 1
+else:
+    n_mate = n_clamped = n_missed = 0
+    for s in mate_sfns:
+        try:
+            off = pb(s, mate_guard=False, window=1)
+            if abs(off['score']) < MATE_FLOOR:
+                continue
+            n_mate += 1
+            on = pb(s, mate_guard=True, window=1)
+        except Exception as e:
+            print(f"  call failed: {e}")
+            fail = 1
+            break
+        if abs(on['score']) == UNPROVEN:
+            n_clamped += 1
+        else:
+            n_missed += 1
+            if n_missed <= 3:
+                print(f"    NOT clamped: off={off['score']} on={on['score']}"
+                      f" widened={off['widened']}")
+    print(f"  {n_mate} of {len(mate_sfns)} positions announced a mate with the"
+          " guard off")
+    print(f"  of those, the guard clamped {n_clamped} and missed {n_missed}")
+    if n_mate == 0:
+        print("  FAIL: the construction did not produce a single mate score,"
+              " so the guard is UNTESTED -- fix the construction, do not pass")
         fail = 1
-        break
-    if (a['nodes'], a['score'], a['depth']) != (b['nodes'], b['score'], b['depth']):
-        d2 += 1
-    else:
-        s2 += 1
-print(f"  guard off vs on differ on {d2}/{d2+s2} positions")
-print("  (the guard only fires where a mate score meets a width-limited search,")
-print("   so a low count is expected -- zero over 60 midgame positions is not)")
-if d2 == 0:
-    print("  WARNING: no position exercised the guard; widen the sample before"
-          " trusting an SPRT on it")
+    elif n_clamped == 0:
+        print("  FAIL: the guard does not bite through play_best")
+        fail = 1
 
 print(f"\nKNOBBITE_EXIT={fail}")
 sys.exit(fail)
