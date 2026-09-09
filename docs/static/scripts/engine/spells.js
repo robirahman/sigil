@@ -1018,42 +1018,74 @@ const SpellResolvers = {
 	async soft_hard_chain(board, color, spellName, getInput, emit) {
 		const info = CORE_SPELLS[spellName];
 		const [softCount, hardCount] = info.counts;
-		for (let i = 0; i < softCount; i++) {
-			const targets = getSoftMoveTargets(board, color);
-			if (Object.keys(targets).length === 0) {
-				emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
-				break;
+		// `hard_first` (Spring Tide) runs the pushes before the placements.
+		const softPhase = async () => {
+			for (let i = 0; i < softCount; i++) {
+				const targets = getSoftMoveTargets(board, color);
+				if (Object.keys(targets).length === 0) {
+					emit({ type: 'message', message: 'No legal soft moves.', awaiting: null });
+					break;
+				}
+				while (true) {
+					const resp = await getInput({
+						type: 'message', message: 'Choose where to soft move.',
+						awaiting: 'node', moveoptions: targets,
+					});
+					if (!targets[resp]) continue;
+					board.stones[resp] = color;
+					emit({ type: 'new_stone_animation', color, node: resp });
+					board.lastPlay = resp; board.lastPlayer = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
 			}
+		};
+		const hardPhase = async () => {
+			for (let i = 0; i < hardCount; i++) {
+				const targets = getHardMoveTargets(board, color);
+				if (Object.keys(targets).length === 0) {
+					emit({ type: 'message', message: 'No legal hard moves.', awaiting: null });
+					break;
+				}
+				while (true) {
+					const resp = await getInput({
+						type: 'message', message: 'Choose where to hard move.',
+						awaiting: 'node', moveoptions: targets,
+					});
+					if (!targets[resp]) continue;
+					await doPushEnemy(board, resp, color, getInput, emit);
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
+			}
+		};
+		if (info.hard_first) { await hardPhase(); await softPhase(); }
+		else { await softPhase(); await hardPhase(); }
+		// Optional trailing sacrifice (Spring Tide: 2). Not paid when the
+		// moves already ended the game (Fireblast/Corrupt convention), and
+		// stops early if the caster has no stones left to give.
+		const sacCount = info.sacrifice || 0;
+		for (let i = 0; i < sacCount; i++) {
+			if (board.gameover) return;
+			const hasOwn = NODE_ORDER.some(n => board.stones[n] === color);
+			if (!hasOwn) return;
 			while (true) {
 				const resp = await getInput({
-					type: 'message', message: 'Choose where to soft move.',
-					awaiting: 'node', moveoptions: targets,
+					type: 'message', message: `Sacrifice a stone (${i + 1} of ${sacCount}).`,
+					awaiting: 'node', moveoptions: {},
 				});
-				if (!targets[resp]) continue;
-				board.stones[resp] = color;
-				emit({ type: 'new_stone_animation', color, node: resp });
-				board.lastPlay = resp; board.lastPlayer = color;
-				board.update();
-				emit(board.getBoardStatePayload());
-				break;
-			}
-		}
-		for (let i = 0; i < hardCount; i++) {
-			const targets = getHardMoveTargets(board, color);
-			if (Object.keys(targets).length === 0) {
-				emit({ type: 'message', message: 'No legal hard moves.', awaiting: null });
-				break;
-			}
-			while (true) {
-				const resp = await getInput({
-					type: 'message', message: 'Choose where to hard move.',
-					awaiting: 'node', moveoptions: targets,
-				});
-				if (!targets[resp]) continue;
-				await doPushEnemy(board, resp, color, getInput, emit);
-				board.update();
-				emit(board.getBoardStatePayload());
-				break;
+				if (board.stones[resp] === color) {
+					board.stones[resp] = null;
+					if (board.lastPlay === resp) {
+						board.lastPlay = null;
+						board.lastPlayer = null;
+					}
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
 			}
 		}
 	},

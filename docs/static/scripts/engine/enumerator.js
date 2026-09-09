@@ -50,6 +50,8 @@ const ENUM_CAPS = {
 	hurricane: 4,
 	soft_hard_soft: 4,
 	soft_hard_hard: 4,
+	// Spring Tide (Experimental): trailing-sacrifice SET variants beyond greedy.
+	soft_hard_sac: 3,
 	splash: 6,
 	// Tectonic expansion caps.
 	fissure: 6,
@@ -457,6 +459,22 @@ function _spellOverrides(board, color, spellName, caps) {
 				}
 			}
 		}
+		// Spring Tide's trailing sacrifice: branch over WHICH own stones to
+		// give up (moves stay greedy in these variants). Candidates are the
+		// pre-cast own stones outside the spell's own position (cleared by
+		// the cast itself — same caveat as fury), as sliding windows over
+		// NODE_ORDER. Mirrors ai/enumerator.py.
+		const sacCount = info.sacrifice || 0;
+		if (sacCount) {
+			const spellIdx = board.spellNames.indexOf(spellName);
+			const spellPos = new Set(spellIdx >= 0 ? POSITIONS[spellIdx + 1] : []);
+			const own = NODE_ORDER.filter(n => board.stones[n] === color && !spellPos.has(n));
+			for (let i = 0; i < (caps.soft_hard_sac || 0); i++) {
+				const window = own.slice(i, i + sacCount);
+				if (window.length < sacCount) break;
+				out.push({ sacrifice_targets: window });
+			}
+		}
 	} else if (rt === 'fissure') {
 		// Branch over which node to permanently destroy, scored by net
 		// stone-count advantage so the strongest walls are explored first:
@@ -487,7 +505,7 @@ function _spellOverrides(board, color, spellName, caps) {
 			if (!window.length) break;
 			out.push({ snare_targets: window });
 		}
-	} else if (rt === 'surge_move' && spellName === 'Splash') {
+	} else if (rt === 'surge_move' && baseSpellName(spellName) === 'Splash') {
 		// Splash enumerates each possible move destination. (Surge — the
 		// other surge_move user — only runs post-dash and is currently
 		// excluded by sim-board's _getCastableSpells, so this branch is
@@ -572,6 +590,14 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 					spellActions = bs._castSpell(spellName, color, ovr);
 				} catch (e) { continue; }
 				bs.update();
+				if (CORE_SPELLS[spellName].extra_cast) {
+					// Rapids: reopen the spell window once (no dash).
+					_enumeratePostMoveExhaustive(
+						bs, color, prefix.concat(spellActions), caps,
+						false, true, canSummer, out,
+					);
+					continue;
+				}
 				_enumeratePostMoveExhaustive(
 					bs, color, prefix.concat(spellActions), caps,
 					canDash, false, canSummer, out,
@@ -632,6 +658,24 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 							out.push(new SimTurn(
 								prefix.concat(dashActions, spellActions, [new SimAction('pass')])
 							));
+							if (!CORE_SPELLS[spellName].extra_cast) continue;
+							// Rapids after a dash: one more post-dash cast (with
+							// its own override variants). No further chaining.
+							let castable2;
+							try { castable2 = bs._getCastableSpells(color, true, canSummer, true); }
+							catch (e) { castable2 = []; }
+							for (const spell2 of castable2) {
+								for (const ovr2 of _spellOverrides(bs, color, spell2, caps)) {
+									const b2 = bs.copy();
+									let spellActions2;
+									try { spellActions2 = b2._castSpell(spell2, color, ovr2); }
+									catch (e) { continue; }
+									b2.update();
+									out.push(new SimTurn(
+										prefix.concat(dashActions, spellActions, spellActions2, [new SimAction('pass')])
+									));
+								}
+							}
 						}
 					}
 				}

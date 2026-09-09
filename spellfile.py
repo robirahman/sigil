@@ -21,6 +21,10 @@ class Spell():
 		### True iff it's static
 		self.static = False
 
+		### True iff casting it reopens the turn's spell window once
+		### (Rapids). Consumed by Player.taketurn, not by resolve().
+		self.extra_cast = False
+
 		### The 'charged' attribute will equal 'red' or 'blue'
 		### if one of them has the spell fully charged, and None otherwise
 		self.charged = None
@@ -1415,23 +1419,32 @@ class Splash(Spell):
 
 
 # Make `soft_count` soft moves, then `hard_count` hard moves (Torrent [1,1],
-# Tsunami [2,2]). Soft-then-hard order is mandatory.
-def _soft_hard_chain(player, spell, soft_count, hard_count):
-	for _ in range(soft_count):
-		if not player.allsoftmoveablenodes():
-			break
-		if player.ishuman:
-			player.softmove()
-		else:
-			player.softmove(spell.position.copy())
-		if player.board.gameover:
-			return
-	for _ in range(hard_count):
-		if not player.allhardmoveablenodes():
+# Tsunami [2,2]). The order is mandatory; `hard_first` flips it (Spring
+# Tide: pushes, then placements).
+def _soft_hard_chain(player, spell, soft_count, hard_count, hard_first=False):
+	def soft_phase():
+		for _ in range(soft_count):
+			if not player.allsoftmoveablenodes():
+				return
 			if player.ishuman:
-				player.jmessage("No legal hard moves")
-			break
-		player.hardmove()
+				player.softmove()
+			else:
+				player.softmove(spell.position.copy())
+			if player.board.gameover:
+				return
+
+	def hard_phase():
+		for _ in range(hard_count):
+			if not player.allhardmoveablenodes():
+				if player.ishuman:
+					player.jmessage("No legal hard moves")
+				return
+			player.hardmove()
+			if player.board.gameover:
+				return
+
+	for phase in ((hard_phase, soft_phase) if hard_first else (soft_phase, hard_phase)):
+		phase()
 		if player.board.gameover:
 			return
 
@@ -1454,6 +1467,79 @@ class Tsunami(Spell):
 
 	def resolve(self, player):
 		_soft_hard_chain(player, self, 2, 2)
+
+
+# Helper: the caster sacrifices `count` of their own stones, one at a time
+# (human picks each; the bot gives up its lowest-priority stones). Stops
+# early if the game ends or the caster has no stones left. Mirrors the
+# Fury/Fireblast sacrifice code.
+def _sacrifice_stones(player, count):
+	for i in range(count):
+		if player.board.gameover:
+			return
+		has_own = any(player.board.nodes[n].stone == player.color
+		              for n in player.board.nodes)
+		if not has_own:
+			return
+		if player.ishuman:
+			while True:
+				player.jmessage("Sacrifice a stone ({} of {}).".format(i + 1, count), "node")
+				resp = player.receivemessage()
+				if resp not in player.board.nodes:
+					continue
+				node = player.board.nodes[resp]
+				if node.stone != player.color:
+					continue
+				node.stone = None
+				if player.board.last_play == node.name:
+					player.board.last_play = None
+					player.board.last_player = None
+				player.board.update()
+				break
+		else:
+			time.sleep(1)
+			for name in reversed(player.priority_order):
+				node = player.board.nodes[name]
+				if node.stone == player.color:
+					node.stone = None
+					if player.board.last_play == node.name:
+						player.board.last_play = None
+						player.board.last_player = None
+					player.board.update()
+					break
+
+
+###############################################################################################
+#####  EXPERIMENTAL SPELLS (unofficial, unrated: unreleased designs under playtest)
+
+
+class Spring_Tide(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones."
+
+	def resolve(self, player):
+		### Tsunami's chain with the phases flipped (pushes first), then a
+		### 2-stone cost. The sacrifice is not paid if the moves already
+		### ended the game (Fireblast/Corrupt rule).
+		_soft_hard_chain(player, self, 2, 2, hard_first=True)
+		if player.board.gameover:
+			return
+		_sacrifice_stones(player, 2)
+
+
+class Rapids(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+
+		self.text = "Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn."
+		### Torrent's chain; the extra cast is a turn-structure effect the
+		### turn driver grants after cast() returns (one more cast, no dash).
+		self.extra_cast = True
+
+	def resolve(self, player):
+		_soft_hard_chain(player, self, 1, 1)
 
 
 ###############################################################################################

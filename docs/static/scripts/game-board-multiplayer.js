@@ -321,9 +321,9 @@ document.addEventListener('alpine:init', () => {
 				for (let i = 0; i < 9 && i < spellNames.length; i++) {
 					const name = spellNames[i];
 					dict[posNames[i]] = name;
-					images[posNames[i]] = 'static/images/spells/' + name + '.png';
+					images[posNames[i]] = 'static/images/spells/' + baseSpellName(name) + '.png';
 					text[posNames[i]] = {
-						name: name.replace(/_/g, ' '),
+						name: displaySpellName(name),
 						text: (typeof SPELL_TEXTS !== 'undefined' && SPELL_TEXTS[name]) || '',
 					};
 				}
@@ -715,7 +715,7 @@ document.addEventListener('alpine:init', () => {
 						maybeSpellFx(_this.message);
 						if (_this.awaiting !== 'action' && rest.message) _this.messageHistory.push(rest.message);
 					}
-					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${v}.png`; }); }
+					else if (type === 'spellsetup') { _this.spellDict = rest; Object.entries(rest).forEach(([k, v]) => { _this.spells.images[k] = `static/images/spells/${baseSpellName(v)}.png`; }); }
 					else if (type === 'spelltextsetup') { _this.spells.text = rest; }
 					else if (type === 'sfn_update') { _this.currentSfn = rest.sfn; }
 					else if (type === 'boardstate') {

@@ -192,7 +192,9 @@ class CataclysmController {
 		}
 	}
 
-	async _takeTurn(color, canmove, candash, canspell, cansummer) {
+	// `extracast`: the spell window Rapids reopens (one more cast, no dash);
+	// see GameController._takeTurn.
+	async _takeTurn(color, canmove, candash, canspell, cansummer, extracast = false) {
 		const board = this.board;
 		board.update();
 
@@ -219,7 +221,7 @@ class CataclysmController {
 			}
 		} else {
 			// Post-move options
-			if (candash && canspell && board.totalStones[color] > 2) {
+			if (candash && canspell && !extracast && board.totalStones[color] > 2) {
 				let autumnBlocked = false;
 				for (const enemy of board.enemies(color)) {
 					if (board.chargedSpells[enemy].includes('Autumn')) {
@@ -299,7 +301,7 @@ class CataclysmController {
 		}
 
 		if (!actions.includes(action) && !nodeNames.includes(action)) {
-			await this._takeTurn(color, canmove, candash, canspell, cansummer);
+			await this._takeTurn(color, canmove, candash, canspell, cansummer, extracast);
 			return;
 		}
 
@@ -314,7 +316,10 @@ class CataclysmController {
 
 		if (spellList.includes(action)) {
 			await this._castSpell(action, color);
-			if (canspell) {
+			if (CORE_SPELLS[action] && CORE_SPELLS[action].extra_cast) {
+				// Rapids: one more cast this turn (no dash).
+				await this._takeTurn(color, false, candash, true, canspell ? cansummer : false, true);
+			} else if (canspell) {
 				await this._takeTurn(color, false, candash, false, cansummer);
 			} else {
 				await this._takeTurn(color, false, candash, false, false);

@@ -3,21 +3,28 @@
     "users": {
       "$uid": {
         ".read": true,
-        ".write": "auth !== null",
+        ".write": "auth !== null && newData.exists() && (auth.uid === $uid || $uid.matches(/^__ai_[a-z0-9_]+__$/))",
         "displayName": {
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
         },
         "elo": {
-          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000"
+          ".write": "auth !== null",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000 && (data.exists() ? (newData.val() - data.val() <= 32 && data.val() - newData.val() <= 32) : (newData.val() >= 900 && newData.val() <= 1300))"
         },
         "gamesPlayed": {
-          ".validate": "newData.isNumber() && newData.val() >= 0"
+          ".write": "auth !== null",
+          ".validate": "newData.isNumber() && (data.exists() ? (newData.val() >= data.val() && newData.val() <= data.val() + 1) : (newData.val() === 0 || newData.val() === 1))"
         },
         "wins": {
-          ".validate": "newData.isNumber() && newData.val() >= 0"
+          ".write": "auth !== null",
+          ".validate": "newData.isNumber() && (data.exists() ? (newData.val() >= data.val() && newData.val() <= data.val() + 1) : (newData.val() === 0 || newData.val() === 1))"
         },
         "losses": {
-          ".validate": "newData.isNumber() && newData.val() >= 0"
+          ".write": "auth !== null",
+          ".validate": "newData.isNumber() && (data.exists() ? (newData.val() >= data.val() && newData.val() <= data.val() + 1) : (newData.val() === 0 || newData.val() === 1))"
+        },
+        "created": {
+          ".validate": "newData.isNumber()"
         },
         "annotationMode": {
           ".validate": "newData.isBoolean()"
@@ -25,8 +32,17 @@
         "showAiEval": {
           ".validate": "newData.isBoolean()"
         },
+        "showAiThinkReport": {
+          ".validate": "newData.isBoolean()"
+        },
         "showMapControl": {
           ".validate": "newData.isBoolean()"
+        },
+        "enablePondering": {
+          ".validate": "newData.isBoolean()"
+        },
+        "isAI": {
+          ".validate": "newData.isBoolean() && $uid.matches(/^__ai_[a-z0-9_]+__$/)"
         },
         "isDeveloper": {
           ".validate": "newData.isBoolean() && newData.val() === false"
@@ -35,16 +51,27 @@
     },
     "leaderboard": {
       ".read": true,
+      ".indexOn": ["elo"],
       "$uid": {
-        ".write": "auth !== null",
-        "elo": { ".validate": "newData.isNumber()" },
-        "displayName": { ".validate": "newData.isString()" },
-        "gamesPlayed": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        ".write": "auth !== null && newData.exists() && (auth.uid === $uid || $uid.matches(/^__ai_[a-z0-9_]+__$/))",
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "elo": {
+          ".write": "auth !== null",
+          ".validate": "newData.isNumber() && (data.exists() ? (newData.val() - data.val() <= 32 && data.val() - newData.val() <= 32) : (root.child('users/' + $uid + '/elo').exists() ? (newData.val() - root.child('users/' + $uid + '/elo').val() <= 32 && root.child('users/' + $uid + '/elo').val() - newData.val() <= 32) : (newData.val() >= 900 && newData.val() <= 1300)))"
+        },
+        "gamesPlayed": {
+          ".write": "auth !== null",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && (!data.exists() || newData.val() >= data.val())"
+        },
+        "isAI": {
+          ".validate": "newData.isBoolean() && $uid.matches(/^__ai_[a-z0-9_]+__$/)"
+        },
         "isDeveloper": {
           ".validate": "newData.isBoolean() && newData.val() === false"
         }
-      },
-      ".indexOn": ["elo"]
+      }
     },
     "rooms": {
       "$roomId": {
@@ -74,7 +101,7 @@
         ".read": true,
         ".indexOn": ["timestamp"],
         "$gameId": {
-          ".write": "auth !== null"
+          ".write": "auth !== null && (auth.uid === $uid || newData.child('opponentUid').val() === auth.uid)"
         }
       }
     },
@@ -82,7 +109,7 @@
       "$uid": {
         ".read": true,
         "$roomCode": {
-          ".write": "auth !== null"
+          ".write": "auth !== null && (auth.uid === $uid || (!newData.exists() && (root.child('rooms/' + $roomCode + '/red/uid').val() === auth.uid || root.child('rooms/' + $roomCode + '/blue/uid').val() === auth.uid)))"
         }
       }
     },

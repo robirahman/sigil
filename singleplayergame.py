@@ -559,7 +559,10 @@ class AIPlayer():
 
 
 
-	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
+	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True, extracast=False):
+		### `extracast` mirrors game.py: the spell window Rapids reopens
+		### (one more cast, no dash). This easy bot never casts Rapids, but
+		### the turn loop stays byte-for-byte aligned with the human one.
 		self.board.update()
 
 		### One second delay between actions, for more realistic-feeling AI
@@ -653,7 +656,7 @@ class AIPlayer():
 		if canmove:
 			actions.append('move')
 		else:
-			if (candash & canspell & (self.totalstones > 2)):
+			if (candash & canspell & (not extracast) & (self.totalstones > 2)):
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
@@ -744,7 +747,12 @@ class AIPlayer():
 
 		elif action in spelllist:
 			self.board.record('cast', spell=action)
-			self.board.spelldict[action].cast(self)
+			spell_obj = self.board.spelldict[action]
+			spell_obj.cast(self)
+			if getattr(spell_obj, 'extra_cast', False):
+				### Rapids: one more cast this turn (no dash).
+				self.taketurn(False, candash, True, cansummer if canspell else False, True)
+				return None
 			if canspell:
 				self.taketurn(False, candash, False, cansummer)
 				return None

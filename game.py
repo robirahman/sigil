@@ -700,7 +700,10 @@ class Player():
 
 
 
-	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True):
+	def taketurn(self, canmove=True, candash=True, canspell=True, cansummer=True, extracast=False):
+		### `extracast` marks the spell window Rapids reopens after its
+		### cast: one more cast is allowed but no dash. Separate from
+		### candash because Surge/Splash read candash as "has not dashed".
 		self.board.update()
 
 		if self.opp.ishuman:
@@ -826,7 +829,7 @@ class Player():
 				moveoptions = self.allmoveablenodes()
 		else:
 			moveoptions = {}
-			if (candash & canspell & (self.totalstones > 2)):
+			if (candash & canspell & (not extracast) & (self.totalstones > 2)):
 				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
@@ -876,7 +879,7 @@ class Player():
 			shortcuts = []
 
 		if action not in actions and action not in shortcuts:
-			self.taketurn(canmove, candash, canspell, cansummer)
+			self.taketurn(canmove, candash, canspell, cansummer, extracast)
 			return None
 
 		elif action in shortcuts:
@@ -905,7 +908,13 @@ class Player():
 
 		elif action in spelllist:
 			self.board.record('cast', spell=action)
-			self.board.spelldict[action].cast(self)
+			spell_obj = self.board.spelldict[action]
+			spell_obj.cast(self)
+			if getattr(spell_obj, 'extra_cast', False):
+				### Rapids: one more cast this turn (no dash). Seal of
+				### Summer's window is spent only if THIS was the Summer cast.
+				self.taketurn(False, candash, True, cansummer if canspell else False, True)
+				return None
 			if canspell:
 				self.taketurn(False, candash, False, cansummer)
 				return None

@@ -303,7 +303,7 @@ class MultiplayerController {
 			const name = this.board.spellNames[i];
 			spellSetup[posNames[i]] = name;
 			spellTextSetup[posNames[i]] = {
-				name: name.replace(/_/g, ' '),
+				name: displaySpellName(name),
 				text: SPELL_TEXTS[name] || '',
 			};
 		}
@@ -488,7 +488,9 @@ class MultiplayerController {
 
 	// Reuse the same _takeTurn, _doMove, _doDash, _castSpell, _eotTriggers
 	// from GameController — copy them here for independence
-	async _takeTurn(color, canmove, candash, canspell, cansummer) {
+	// `extracast`: the spell window Rapids reopens (one more cast, no dash);
+	// see GameController._takeTurn.
+	async _takeTurn(color, canmove, candash, canspell, cansummer, extracast = false) {
 		// This is identical to GameController._takeTurn
 		const board = this.board;
 		board.update();
@@ -546,7 +548,7 @@ class MultiplayerController {
 		} else {
 			// canDash() folds in Seal of Autumn: when the enemy holds it, only
 			// stones outside the spell sigils may be sacrificed for a dash.
-			if (candash && canspell && canDash(board, color)) {
+			if (candash && canspell && !extracast && canDash(board, color)) {
 				actions.push('dash');
 			}
 			let summerActive = false;
@@ -558,8 +560,8 @@ class MultiplayerController {
 					if (!info || info.static) continue;
 					if (info.ischarm) {
 						if (board.chargedSpells[enemy].includes('Seal_of_Winter')) continue;
-						if (spellName === 'Surge') { if (!candash) { actions.push(spellName); spellList.push(spellName); } continue; }
-						if (spellName === 'Splash') { if (candash) { actions.push(spellName); spellList.push(spellName); } continue; }
+						if (baseSpellName(spellName) === 'Surge') { if (!candash) { actions.push(spellName); spellList.push(spellName); } continue; }
+						if (baseSpellName(spellName) === 'Splash') { if (candash) { actions.push(spellName); spellList.push(spellName); } continue; }
 						if (canspell || (!canspell && summerActive)) { actions.push(spellName); spellList.push(spellName); }
 					} else {
 						if (board.lock[color] === spellName) {
@@ -594,7 +596,7 @@ class MultiplayerController {
 			return;
 		}
 		if (!actions.includes(action) && !nodeNames.includes(action)) {
-			await this._takeTurn(color, canmove, candash, canspell, cansummer);
+			await this._takeTurn(color, canmove, candash, canspell, cansummer, extracast);
 			return;
 		}
 		if (action === 'pass') return;
@@ -606,7 +608,10 @@ class MultiplayerController {
 		}
 		if (spellList.includes(action)) {
 			await this._castSpell(action, color);
-			if (canspell) await this._takeTurn(color, false, candash, false, cansummer);
+			if (CORE_SPELLS[action] && CORE_SPELLS[action].extra_cast) {
+				// Rapids: one more cast this turn (no dash).
+				await this._takeTurn(color, false, candash, true, canspell ? cansummer : false, true);
+			} else if (canspell) await this._takeTurn(color, false, candash, false, cansummer);
 			else await this._takeTurn(color, false, candash, false, false);
 			return;
 		}
@@ -772,7 +777,7 @@ class MultiplayerController {
 		const spellIdx = board.spellNames.indexOf(spellName);
 		const positionNodes = POSITIONS[spellIdx + 1];
 		const pname = color[0].toUpperCase() + color.slice(1);
-		this.emit({ type: 'message', message: pname + ' casts ' + spellName.replace(/_/g, ' '), awaiting: null });
+		this.emit({ type: 'message', message: pname + ' casts ' + displaySpellName(spellName), awaiting: null });
 		for (const n of positionNodes) { board.stones[n] = null; if (board.lastPlay === n) { board.lastPlay = null; board.lastPlayer = null; } }
 		if (!info.ischarm) {
 			let refills = board.mana[color];

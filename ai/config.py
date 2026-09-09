@@ -15,7 +15,10 @@ NUM_SPELL_SLOTS = 9
 # IDs 0-14 are the original core spells and MUST keep these values so older
 # checkpoints' first 15 embedding rows stay aligned when the table is grown
 # (see ai/migrate_checkpoint.py). IDs 15-44 are the official expansion
-# spells; IDs 45-50 are the Aftershock + Ambush playtest packs.
+# spells; IDs 45-50 are the Aftershock + Ambush playtest packs. Panda and
+# Experimental spells are deliberately absent (they fall back to ID 0 via
+# .get(name, 0)) — an Experimental design only earns an embedding row, and
+# the checkpoint migration that comes with it, once it graduates.
 NUM_POSSIBLE_SPELLS = 51
 
 # Spell name -> integer ID (fixed mapping for embedding layer).

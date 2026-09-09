@@ -181,9 +181,9 @@ document.addEventListener('alpine:init', () => {
 				for (let i = 0; i < 9 && i < spellNames.length; i++) {
 					const name = spellNames[i];
 					dict[posNames[i]] = name;
-					images[posNames[i]] = 'static/images/spells/' + name + '.png';
+					images[posNames[i]] = 'static/images/spells/' + baseSpellName(name) + '.png';
 					text[posNames[i]] = {
-						name: name.replace(/_/g, ' '),
+						name: displaySpellName(name),
 						text: (typeof SPELL_TEXTS !== 'undefined' && SPELL_TEXTS[name]) || '',
 					};
 				}
@@ -910,7 +910,7 @@ document.addEventListener('alpine:init', () => {
 					const _RUST_TIERS = {
 						rust_easy: { time: 0.1, ttBits: 16 },
 						rust_medium: { time: 1, ttBits: 18 },
-						rust_hard: { time: 5, ttBits: 20 },
+						rust_hard: { time: 10, ttBits: 20 },
 						rust_very_hard: { time: 60, ttBits: _bigTT },
 						rust_quick: { time: 3, ttBits: 18 },
 						rust: { time: 10, ttBits: 20 },
@@ -927,6 +927,82 @@ document.addEventListener('alpine:init', () => {
 						hard: 5.0,
 						very_hard: 60.0,
 					};
+					// Rust tiers: decide the draw (and whether the Rust engine can host
+					// it) BEFORE tier dispatch, so a hand-off to the JS engine tier
+					// carries through to the AI record, saves and labels.
+					//
+					// The engine implements the 39 OFFICIAL spells only and keys casts
+					// and locks by spell id, resolving a cast at the FIRST slot holding
+					// that id (engine/src/cast.rs). So it cannot play the unofficial
+					// packs (Tectonic / Providence / Aftershock / Ambush / Panda /
+					// Experimental) and cannot hold two copies of one spell. Rules:
+					//   1. Allow Duplicates variant -> the JS tier with the same time
+					//      budget plays; the normal draw applies (repeats from the
+					//      player's packs).
+					//   2. Otherwise drop the unsupported packs. If what remains fills
+					//      the board, the Rust engine plays it.
+					//   3. If it cannot (too few packs, or nothing playable), the JS
+					//      tier plays and the board is filled by REPEATING spells from
+					//      the player's packs — never by switching to Core.
+					const _RUST_TO_JS_TIER = {
+						rust_easy: 'easy', rust_medium: 'medium', rust_hard: 'hard',
+						rust_very_hard: 'very_hard', rust_quick: 'medium', rust: 'hard',
+						rust_deep: 'very_hard', rust_native: 'very_hard',
+					};
+					const _RUST_PACKS = ['core', 'springtime', 'celestial', 'fury',
+					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+					if (_RUST_TO_JS_TIER[aiMode]) {
+						const jsTier = _RUST_TO_JS_TIER[aiMode];
+						const jsLabel = jsTier.replace('_', ' ');
+						const packName = k => (EXPANSIONS[k] && EXPANSIONS[k].name) || k;
+						if (variantHasDuplicates(gameVariant)) {
+							_this.messageHistory.push('The Rust engine does not support the Allow Duplicates variant yet; '
+								+ 'playing the ' + jsLabel + ' JS engine tier (same time budget) instead.');
+							aiMode = jsTier;
+						} else if (!_rematchSpells && typeof generateSpellList === 'function') {
+							const chosen = readStoredExpansions();
+							const playable = chosen.filter(k => _RUST_PACKS.includes(k));
+							const dropped = chosen.filter(k => !_RUST_PACKS.includes(k));
+							let drawn = null;
+							if (playable.length) {
+								try { drawn = generateSpellList(playable); } catch (e) { drawn = null; }
+							}
+							if (drawn) {
+								options.spellNames = drawn;
+								if (dropped.length) {
+									_this.messageHistory.push('The Rust engine does not support ' + dropped.map(packName).join(', ')
+										+ ' yet; drew from ' + playable.map(packName).join(', ') + ' only.');
+								}
+							} else {
+								// The Rust engine cannot host this board: either nothing it
+								// plays was selected, or too few playable spells remain for a
+								// full board. The JS tier plays instead, from the player's own
+								// packs — repeating spells (the duplicate-copy aliases) only
+								// when a repeat-free draw is impossible. Never Core.
+								const source = playable.length ? playable : chosen;
+								let repeats = false;
+								try {
+									options.spellNames = generateSpellList(source);
+								} catch (e) {
+									options.spellNames = generateSpellList(source, true);
+									repeats = true;
+								}
+								const minus = (playable.length && dropped.length)
+									? ' (minus ' + dropped.map(packName).join(', ') + ', which the Rust engine does not support)'
+									: '';
+								if (repeats) {
+									_this.messageHistory.push('Your selected packs' + minus
+										+ ' have too few spells to fill the board without repeats; repeating spells from '
+										+ source.map(packName).join(', ') + ' and playing the ' + jsLabel
+										+ ' JS engine tier (same time budget) instead of the Rust engine.');
+								} else {
+									_this.messageHistory.push('The Rust engine does not support ' + dropped.map(packName).join(', ')
+										+ ' yet; playing the ' + jsLabel + ' JS engine tier (same time budget) with your selected packs instead.');
+								}
+								aiMode = jsTier;
+							}
+						}
+					}
 					if (Object.prototype.hasOwnProperty.call(_CAVEMAN_TIER_BUDGETS, aiMode)) {
 						options.aiColor = _aiColor;
 						options.ai = new CavemanAI({
@@ -944,18 +1020,9 @@ document.addEventListener('alpine:init', () => {
 						// a Web Worker - fully client-side, so they work on the static
 						// GitHub Pages deployment. ?ai=rust_native is the unlisted dev
 						// tier: the native engine through the localhost helper
-						// (engine/server/serve.py) at full playtest strength.
-						//
-						// The engine implements the 39 OFFICIAL spells only, so the draw is
-						// restricted to those packs; it rejects Tectonic / Providence /
-						// Aftershock / Ambush / Panda outright rather than mis-resolving them.
+						// (engine/server/serve.py) at full playtest strength. The draw
+						// (and the hand-off rules) were settled above.
 						options.aiColor = _aiColor;
-						if (!_rematchSpells && typeof generateSpellList === 'function') {
-							options.spellNames = generateSpellList([
-								'core', 'springtime', 'celestial', 'fury', 'tempest',
-								'flood', 'autumn', 'gloom', 'covenant',
-							]);
-						}
 						if (aiMode === 'rust_native') {
 							options.ai = new RustAI({ transport: 'fetch', timeLimit: 60 });
 						} else {
@@ -1371,7 +1438,7 @@ document.addEventListener('alpine:init', () => {
 					_this.spellDict = payload;
 
 					Object.entries(_this.spellDict).forEach(([key, value]) => {
-						_this.spells.images[key] = `static/images/spells/${value}.png`;
+						_this.spells.images[key] = `static/images/spells/${baseSpellName(value)}.png`;
 					});
 
 					setTimeout(() => {
@@ -1657,7 +1724,8 @@ document.addEventListener('alpine:init', () => {
 						// in edge cases like rematch/reconnect).
 						const recordVariant = normalizeVariant(_engineRef && _engineRef.board && _engineRef.board.variant);
 						const _isDeathmatch = variantHasDeathmatch(recordVariant);
-						const _unrated = _isUnratedPack || _isDeathmatch;
+						const _isDuplicates = variantHasDuplicates(recordVariant);
+						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -1716,6 +1784,8 @@ document.addEventListener('alpine:init', () => {
 
 						if (_isDeathmatch) {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
+						} else if (_isDuplicates) {
+							_this.messageHistory.push('Unrated: Allow Duplicates games do not affect rating.');
 						} else if (_isUnratedPack) {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}

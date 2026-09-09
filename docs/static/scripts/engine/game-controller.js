@@ -96,7 +96,7 @@ class GameController {
 			if (this.spellNamesOverride) {
 				spellNames = this.spellNamesOverride;
 			} else {
-				spellNames = generateSpellList(readStoredExpansions());
+				spellNames = generateSpellList(readStoredExpansions(), variantHasDuplicates(this.variant));
 			}
 		}
 		this.board = new SigilBoard(spellNames, this.variant);
@@ -122,7 +122,7 @@ class GameController {
 			const name = this.board.spellNames[i];
 			spellSetup[posNames[i]] = name;
 			spellTextSetup[posNames[i]] = {
-				name: name.replace(/_/g, ' '),
+				name: displaySpellName(name),
 				text: SPELL_TEXTS[name] || '',
 			};
 		}
@@ -364,7 +364,10 @@ class GameController {
 		}
 	}
 
-	async _takeTurn(color, canmove, candash, canspell, cansummer) {
+	// `extracast` marks the spell window Rapids reopens after its cast: one
+	// more cast is allowed but no dash. It is a separate flag (rather than
+	// candash=false) because Surge/Splash read `candash` as "has not dashed".
+	async _takeTurn(color, canmove, candash, canspell, cansummer, extracast = false) {
 		const board = this.board;
 		board.update();
 
@@ -423,7 +426,7 @@ class GameController {
 			// canDash() folds in Seal of Autumn: when the enemy holds it, only
 			// stones outside the spell sigils may be sacrificed, so a dash is
 			// offered only when enough eligible stones exist to pay for it.
-			if (candash && canspell && canDash(board, color)) {
+			if (candash && canspell && !extracast && canDash(board, color)) {
 				actions.push('dash');
 			}
 
@@ -440,14 +443,14 @@ class GameController {
 
 					if (info.ischarm) {
 						if (board.chargedSpells[enemy].includes('Seal_of_Winter')) continue;
-						if (spellName === 'Surge') {
+						if (baseSpellName(spellName) === 'Surge') {
 							if (!candash) {
 								actions.push(spellName);
 								spellList.push(spellName);
 							}
 							continue;
 						}
-						if (spellName === 'Splash') {
+						if (baseSpellName(spellName) === 'Splash') {
 							if (candash) {
 								actions.push(spellName);
 								spellList.push(spellName);
@@ -502,7 +505,7 @@ class GameController {
 
 		if (!actions.includes(action) && !nodeNames.includes(action)) {
 			// Invalid — retry
-			await this._takeTurn(color, canmove, candash, canspell, cansummer);
+			await this._takeTurn(color, canmove, candash, canspell, cansummer, extracast);
 			return;
 		}
 
@@ -519,7 +522,11 @@ class GameController {
 
 		if (spellList.includes(action)) {
 			await this._castSpell(action, color);
-			if (canspell) {
+			if (CORE_SPELLS[action] && CORE_SPELLS[action].extra_cast) {
+				// Rapids: one more cast this turn (no dash). Seal of Summer's
+				// window is spent only if THIS was the Summer cast.
+				await this._takeTurn(color, false, candash, true, canspell ? cansummer : false, true);
+			} else if (canspell) {
 				await this._takeTurn(color, false, candash, false, cansummer);
 			} else {
 				await this._takeTurn(color, false, candash, false, false);
@@ -649,7 +656,7 @@ class GameController {
 		const positionNodes = POSITIONS[posIdx];
 
 		const pname = color[0].toUpperCase() + color.slice(1);
-		this.emit({ type: 'message', message: pname + ' casts ' + spellName.replace(/_/g, ' '), awaiting: null });
+		this.emit({ type: 'message', message: pname + ' casts ' + displaySpellName(spellName), awaiting: null });
 
 		// Sacrifice all stones in spell position (never clobber a wall: a
 		// destroyed node stays destroyed even if it sits in this position).
@@ -679,8 +686,8 @@ class GameController {
 					this.emit({ type: 'donerefilling', playercolor: color });
 				} else {
 					const msg = refills === 1
-						? 'You get to keep 1 stone in ' + spellName.replace(/_/g, ' ') + '.'
-						: 'You get to keep ' + refills + ' stones in ' + spellName.replace(/_/g, ' ') + '.';
+						? 'You get to keep 1 stone in ' + displaySpellName(spellName) + '.'
+						: 'You get to keep ' + refills + ' stones in ' + displaySpellName(spellName) + '.';
 					this.emit({ type: 'message', message: msg, awaiting: null });
 
 					while (refills > 0) {
@@ -734,7 +741,7 @@ class GameController {
 		if (!info.ischarm) {
 			if (board.lock[color] === spellName) {
 				board.springlock[color] = spellName;
-				this.emit({ type: 'message', message: spellName.replace(/_/g, ' ') + ' is Springlocked for ' + pname, awaiting: null });
+				this.emit({ type: 'message', message: displaySpellName(spellName) + ' is Springlocked for ' + pname, awaiting: null });
 			} else {
 				board.lock[color] = spellName;
 				board.springlock[color] = null;

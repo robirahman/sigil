@@ -156,6 +156,8 @@ class GreedyAI {
 
 	_evaluateSpell(board, spellName, color) {
 		const enemy = color === 'red' ? 'blue' : 'red';
+		// Per-spell heuristics key off the BASE name (duplicates variant aliases).
+		const baseName = baseSpellName(spellName);
 		const info = CORE_SPELLS[spellName];
 
 		// For non-charm spells, consider stone cost
@@ -172,41 +174,41 @@ class GreedyAI {
 			}
 		}
 
-		if (spellName === 'Carnage') {
+		if (baseName === 'Carnage') {
 			const targets = this._countHardMoveTargets(board, color, spellName);
 			if (targets >= 2) return 8;
 			if (targets >= 1) return 4;
 			return -1;
 		}
-		if (spellName === 'Starfall') {
+		if (baseName === 'Starfall') {
 			return this._starfallTargetExists(board, color) ? 7 : -1;
 		}
-		if (spellName === 'Bewitch') {
+		if (baseName === 'Bewitch') {
 			return this._bewitchTargetExists(board, color) ? 6 : -1;
 		}
-		if (spellName === 'Flourish') return 5;
-		if (spellName === 'Fireblast') {
+		if (baseName === 'Flourish') return 5;
+		if (baseName === 'Fireblast') {
 			const targets = this._countHardMoveTargets(board, color, spellName);
 			// Latest-edition rules: Fireblast forces a sacrifice, so net
 			// stone gain is (targets - 1). Need 3+ destruction targets to
 			// match the old "destroy 2" net advantage that triggered cast.
 			return targets >= 3 ? 5 : -1;
 		}
-		if (spellName === 'Hail_Storm') {
+		if (baseName === 'Hail_Storm') {
 			const count = this._hailableSpellCount(board, color);
 			return count >= 2 ? count * 2 : -1;
 		}
-		if (spellName === 'Meteor') return 4;
-		if (spellName === 'Grow') return 3;
-		if (spellName === 'Comet') {
+		if (baseName === 'Meteor') return 4;
+		if (baseName === 'Grow') return 3;
+		if (baseName === 'Comet') {
 			return this._cometTargetExists(board, color) ? 3 : -1;
 		}
-		if (spellName === 'Surge') return 2;
-		if (spellName === 'Slash') {
+		if (baseName === 'Surge') return 2;
+		if (baseName === 'Slash') {
 			const targets = this._countHardMoveTargets(board, color, spellName);
 			return targets >= 1 ? 2 : -1;
 		}
-		if (spellName === 'Sprout') return 2;
+		if (baseName === 'Sprout') return 2;
 		return 1;
 	}
 
@@ -473,7 +475,7 @@ async function applyAITurn(board, turn, color, emit) {
 			const posNodes = POSITIONS[spellIdx + 1];
 
 			const pname = color[0].toUpperCase() + color.slice(1);
-			emit({ type: 'message', message: pname + ' casts ' + spellName.replace(/_/g, ' '), awaiting: null });
+			emit({ type: 'message', message: pname + ' casts ' + displaySpellName(spellName), awaiting: null });
 
 			// Sacrifice stones in position
 			for (const n of posNodes) {
@@ -498,7 +500,7 @@ async function applyAITurn(board, turn, color, emit) {
 			if (!info.ischarm) {
 				if (board.lock[color] === spellName) {
 					board.springlock[color] = spellName;
-					emit({ type: 'message', message: spellName.replace(/_/g, ' ') + ' is Springlocked for ' + pname, awaiting: null });
+					emit({ type: 'message', message: displaySpellName(spellName) + ' is Springlocked for ' + pname, awaiting: null });
 				} else {
 					board.lock[color] = spellName;
 					board.springlock[color] = null;

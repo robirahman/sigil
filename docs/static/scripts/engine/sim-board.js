@@ -233,8 +233,14 @@ class SimBoard {
 			if (nodes.some(n => this.stones[n] === DESTROYED)) continue;
 			const first = this.stones[nodes[0]];
 			if (first === null) continue;
-			if (nodes.every(n => this.stones[n] === first))
-				this.chargedSpells[first].push(this.spellNames[i]);
+			if (nodes.every(n => this.stones[n] === first)) {
+				// Duplicates variant: statics list under their BASE name (any
+				// copy satisfies "Seal_of_X charged"); castables keep their
+				// unique name. Mirrors board.js / simboard.py.
+				const nm = this.spellNames[i];
+				const info = CORE_SPELLS[nm];
+				this.chargedSpells[first].push(info && info.static ? baseSpellName(nm) : nm);
+			}
 		}
 	}
 
@@ -1201,32 +1207,66 @@ class SimBoard {
 			actions.push(new SimAction('hurricane', { destroyed: chosen.slice() }));
 			this.update();
 		} else if (rt === 'soft_hard_chain') {
+			// N soft moves, then M hard moves (Torrent [1,1], Tsunami [2,2]).
+			// `hard_first` flips the two phases (Spring Tide). Mirrors simboard.py.
 			const [softCount, hardCount] = info.counts;
 			const softOverrides = (overrides.soft_move_targets || []).slice();
 			const hardOverrides = (overrides.hard_move_targets || []).slice();
-			for (let i = 0; i < softCount; i++) {
-				const targets = this._softMoveable(color);
-				if (!targets.length) break;
-				let chosen = null;
-				while (softOverrides.length && chosen === null) {
-					const cand = softOverrides.shift();
-					if (targets.includes(cand)) chosen = cand;
+			const softPhase = () => {
+				for (let i = 0; i < softCount; i++) {
+					const targets = this._softMoveable(color);
+					if (!targets.length) break;
+					let chosen = null;
+					while (softOverrides.length && chosen === null) {
+						const cand = softOverrides.shift();
+						if (targets.includes(cand)) chosen = cand;
+					}
+					if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
+					actions.push(this._doSoftMove(color, chosen));
+					this.update();
 				}
-				if (chosen === null) chosen = targets.find(t => !posNodes.includes(t)) || targets[0];
-				actions.push(this._doSoftMove(color, chosen));
-				this.update();
-			}
-			for (let i = 0; i < hardCount; i++) {
-				const targets = this._hardMoveable(color);
-				if (!targets.length) break;
-				let chosen = null;
-				while (hardOverrides.length && chosen === null) {
-					const cand = hardOverrides.shift();
-					if (targets.includes(cand)) chosen = cand;
+			};
+			const hardPhase = () => {
+				for (let i = 0; i < hardCount; i++) {
+					const targets = this._hardMoveable(color);
+					if (!targets.length) break;
+					let chosen = null;
+					while (hardOverrides.length && chosen === null) {
+						const cand = hardOverrides.shift();
+						if (targets.includes(cand)) chosen = cand;
+					}
+					if (chosen === null) chosen = targets[0];
+					actions.push(this._doHardMove(color, chosen, pushDests.shift()));
+					this.update();
 				}
-				if (chosen === null) chosen = targets[0];
-				actions.push(this._doHardMove(color, chosen, pushDests.shift()));
-				this.update();
+			};
+			if (info.hard_first) { hardPhase(); softPhase(); }
+			else { softPhase(); hardPhase(); }
+			// Optional trailing sacrifice (Spring Tide: 2). Not paid when the
+			// moves already ended the game (Fireblast/Corrupt convention).
+			// Greedy pick mirrors Fury: the caster's last stone in NODE_ORDER;
+			// 'sacrifice_targets' overrides it (skipping stale entries).
+			const sacCount = info.sacrifice || 0;
+			if (sacCount > 0) {
+				if (this.gameover) return actions;
+				const sacOverrides = (overrides.sacrifice_targets || []).slice();
+				for (let i = 0; i < sacCount; i++) {
+					let sacrificed = null;
+					while (sacOverrides.length && sacrificed === null) {
+						const cand = sacOverrides.shift();
+						if (this.stones[cand] === color) sacrificed = cand;
+					}
+					if (sacrificed === null) {
+						for (const name of [...NODE_ORDER].reverse()) {
+							if (this.stones[name] === color) { sacrificed = name; break; }
+						}
+					}
+					if (sacrificed === null) break;
+					this.stones[sacrificed] = null;
+					actions.push(new SimAction('sacrifice', { node: sacrificed }));
+					this.update();
+					if (this.gameover) return actions;
+				}
 			}
 		} else if (rt === 'azimuth') {
 			// 1 move into a spell where this color controls all but 1 node.
@@ -1681,8 +1721,8 @@ class SimBoard {
 			if (!info || info.static) continue;
 			if (info.ischarm) {
 				if (hasWinter) continue;
-				if (spellName === 'Surge') continue;
-				if (spellName === 'Splash' && postDash) continue;
+				if (baseSpellName(spellName) === 'Surge') continue;
+				if (baseSpellName(spellName) === 'Splash' && postDash) continue;
 				if (canSpell || (!canSpell && hasSummer && canSummer)) castable.push(spellName);
 			} else {
 				if (this.lock[color] === spellName) {
@@ -1703,6 +1743,11 @@ class SimBoard {
 			const bs = this.copy();
 			const sa = bs._castSpell(spellName, color);
 			bs.update();
+			if (CORE_SPELLS[spellName].extra_cast) {
+				// Rapids after a dash: one more (post-dash) cast or pass.
+				yield* bs._enumeratePostDash(color, [...actionsSoFar, ...sa], true, canSpell ? canSummer : false);
+				continue;
+			}
 			yield new SimTurn([...actionsSoFar, ...sa, new SimAction('pass')]);
 		}
 	}
@@ -1777,7 +1822,12 @@ class SimBoard {
 				const bs = this.copy();
 				const sa = bs._castSpell(spellName, color);
 				bs.update();
-				if (canSpell) {
+				if (CORE_SPELLS[spellName].extra_cast) {
+					// Rapids: the cast reopens the spell window once — one more
+					// cast, never a dash. Seal of Summer's own window is spent
+					// only if THIS was the Summer cast. Mirrors simboard.py.
+					yield* bs._enumeratePostMove(color, [...actionsSoFar, ...sa], false, true, canSpell ? canSummer : false);
+				} else if (canSpell) {
 					yield* bs._enumeratePostMove(color, [...actionsSoFar, ...sa], canDash, false, canSummer);
 				} else {
 					yield* bs._enumeratePostMove(color, [...actionsSoFar, ...sa], canDash, false, false);

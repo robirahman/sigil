@@ -162,6 +162,15 @@ const CORE_SPELLS = {
 	Tripwire:          { resolve: 'place_snares', count: 1, static: false, ischarm: true },
 	Deadfall:          { resolve: 'place_snares', count: 2, static: false, ischarm: false },
 	Minefield:         { resolve: 'place_snares', count: 4, static: false, ischarm: false },
+	// Experimental expansion (unofficial, unrated: unreleased spells under
+	// playtest). Spring Tide rides the Flood soft_hard_chain resolver with
+	// `hard_first` (pushes before placements) and an optional trailing
+	// `sacrifice` count; Torrent/Tsunami leave both unset.
+	Spring_Tide:       { resolve: 'soft_hard_chain', counts: [2, 2], hard_first: true, sacrifice: 2, static: false, ischarm: false },
+	// Rapids: Torrent's chain, plus `extra_cast` — the cast reopens the turn's
+	// spell window once (one more cast, no dash), the way Seal of Summer's
+	// second cast works. Consumed by the turn drivers, not the resolver.
+	Rapids:            { resolve: 'soft_hard_chain', counts: [1, 1], extra_cast: true, static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -228,7 +237,35 @@ const SPELL_TEXTS = {
 	Tripwire:          'Place a snare on 1 empty node. The first enemy stone that stops there is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
 	Deadfall:          'Place snares on up to 2 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
 	Minefield:         'Place snares on up to 4 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
+	Spring_Tide:       'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.',
+	Rapids:            'Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn.',
 };
+
+// ---- Duplicate-copy aliases (the "allow duplicates" variant) ----
+// Spell identity is the NAME everywhere (slot lookup by indexOf, locks, SFN
+// lock fields, transcript cast tokens), so a board may never hold two
+// spells with the same name. The variant instead draws from a pool that
+// holds every spell three times under three names — X, X~2, X~3 — and the
+// two extra names alias X's metadata here, so every CORE_SPELLS /
+// SPELL_TEXTS lookup works untouched. Only art paths, display strings,
+// NN spell IDs and the few by-name rules (Surge/Splash, statics) reduce a
+// name to its base. `~` is safe in SFN (never a separator), in Firebase
+// keys (unlike `#`) and in URLs.
+const DUPLICATE_SUFFIXES = ['~2', '~3'];
+function baseSpellName(name) {
+	if (typeof name !== 'string') return name;
+	const i = name.indexOf('~');
+	return i === -1 ? name : name.slice(0, i);
+}
+function displaySpellName(name) {
+	return baseSpellName(name).replace(/_/g, ' ');
+}
+for (const name of Object.keys(CORE_SPELLS)) {
+	for (const sfx of DUPLICATE_SUFFIXES) {
+		CORE_SPELLS[name + sfx] = CORE_SPELLS[name];
+		if (SPELL_TEXTS[name] !== undefined) SPELL_TEXTS[name + sfx] = SPELL_TEXTS[name];
+	}
+}
 
 const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning'];
 const CORE_SORCERIES = ['Grow', 'Fireblast', 'Hail_Storm', 'Meteor', 'Seal_of_Wind'];
@@ -282,6 +319,14 @@ const AMBUSH_RITUALS = ['Minefield'];
 const AMBUSH_SORCERIES = ['Deadfall'];
 const AMBUSH_CHARMS = ['Tripwire'];
 
+// Experimental: the unofficial, permanently unrated home for spells that are
+// still being playtested before release. Unlike the official packs it need
+// not fill all three slots — the pool check only requires core + selected
+// packs to reach 3 spells per category.
+const EXPERIMENTAL_RITUALS = [];
+const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids'];
+const EXPERIMENTAL_CHARMS = [];
+
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
 const PANDA_CHARMS = ['Bear_Trap', 'Shiver', 'Blood_Saplings', 'Itch', 'Free_Spirit', 'Residue_Mixture'];
@@ -304,8 +349,9 @@ const EXPANSIONS = {
 	providence: { name: 'Providence', rituals: PROVIDENCE_RITUALS, sorceries: PROVIDENCE_SORCERIES, charms: PROVIDENCE_CHARMS },
 	aftershock: { name: 'Aftershock', rituals: AFTERSHOCK_RITUALS, sorceries: AFTERSHOCK_SORCERIES, charms: AFTERSHOCK_CHARMS },
 	ambush:     { name: 'Ambush',     rituals: AMBUSH_RITUALS,     sorceries: AMBUSH_SORCERIES,     charms: AMBUSH_CHARMS },
+	experimental: { name: 'Experimental', rituals: EXPERIMENTAL_RITUALS, sorceries: EXPERIMENTAL_SORCERIES, charms: EXPERIMENTAL_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush', 'experimental'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
@@ -313,7 +359,7 @@ const EXPANSION_SPELL_NAMES = new Set(
 	EXPANSION_KEYS.flatMap(k => [...EXPANSIONS[k].rituals, ...EXPANSIONS[k].sorceries, ...EXPANSIONS[k].charms])
 );
 function isExpansionSpell(name) {
-	return EXPANSION_SPELL_NAMES.has(name);
+	return EXPANSION_SPELL_NAMES.has(baseSpellName(name));
 }
 
 // Panda is the unofficial expansion: its games stay unrated even though every
@@ -322,7 +368,7 @@ const PANDA_SPELL_NAMES = new Set(
 	[...EXPANSIONS.panda.rituals, ...EXPANSIONS.panda.sorceries, ...EXPANSIONS.panda.charms]
 );
 function isPandaSpell(name) {
-	return PANDA_SPELL_NAMES.has(name);
+	return PANDA_SPELL_NAMES.has(baseSpellName(name));
 }
 
 // Derived from the EXPANSIONS map so it stays in sync. (Providence
@@ -332,7 +378,7 @@ const PROVIDENCE_SPELL_NAMES = new Set(
 	[...EXPANSIONS.providence.rituals, ...EXPANSIONS.providence.sorceries, ...EXPANSIONS.providence.charms]
 );
 function isProvidenceSpell(name) {
-	return PROVIDENCE_SPELL_NAMES.has(name);
+	return PROVIDENCE_SPELL_NAMES.has(baseSpellName(name));
 }
 
 // Aftershock + Ambush are in their unrated playtest window (launched
@@ -341,20 +387,28 @@ const AFTERSHOCK_SPELL_NAMES = new Set(
 	[...EXPANSIONS.aftershock.rituals, ...EXPANSIONS.aftershock.sorceries, ...EXPANSIONS.aftershock.charms]
 );
 function isAftershockSpell(name) {
-	return AFTERSHOCK_SPELL_NAMES.has(name);
+	return AFTERSHOCK_SPELL_NAMES.has(baseSpellName(name));
 }
 const AMBUSH_SPELL_NAMES = new Set(
 	[...EXPANSIONS.ambush.rituals, ...EXPANSIONS.ambush.sorceries, ...EXPANSIONS.ambush.charms]
 );
 function isAmbushSpell(name) {
-	return AMBUSH_SPELL_NAMES.has(name);
+	return AMBUSH_SPELL_NAMES.has(baseSpellName(name));
+}
+// Experimental is permanently unrated: it holds unreleased designs under
+// playtest, which graduate into a real pack (or get cut) rather than rate.
+const EXPERIMENTAL_SPELL_NAMES = new Set(
+	[...EXPANSIONS.experimental.rituals, ...EXPANSIONS.experimental.sorceries, ...EXPANSIONS.experimental.charms]
+);
+function isExperimentalSpell(name) {
+	return EXPERIMENTAL_SPELL_NAMES.has(baseSpellName(name));
 }
 
 // One switch for every "does this spell set stay unrated?" consumer.
-// Panda is permanently unrated (unofficial); Aftershock and Ambush stay
-// here while they playtest.
+// Panda and Experimental are permanently unrated (unofficial); Aftershock
+// and Ambush stay here while they playtest.
 function isUnratedSpell(name) {
-	return isPandaSpell(name) || isAftershockSpell(name) || isAmbushSpell(name);
+	return isPandaSpell(name) || isAftershockSpell(name) || isAmbushSpell(name) || isExperimentalSpell(name);
 }
 
 // Game variants. Two orthogonal dimensions encoded in a single string:
@@ -364,25 +418,39 @@ function isUnratedSpell(name) {
 //                 6th-spell terminal conditions are disabled (threefold board
 //                 repetition still ends the game as a Blue win, to guarantee
 //                 termination). Spell counters are removed in this mode.
-// They combine: 'competitive_deathmatch'. Kept as one string so it rides the
-// existing variant plumbing (SFN, Firebase, URL, localStorage) unchanged.
-const SIGIL_VARIANTS = ['standard', 'competitive', 'deathmatch', 'competitive_deathmatch'];
+//   duplicates  — the spell draw may repeat a spell (up to three copies):
+//                 the pool holds every spell as X, X~2, X~3 (see
+//                 DUPLICATE_SUFFIXES) and the draw stays without
+//                 replacement. A setup-only rule: play is otherwise
+//                 standard. Unrated.
+// They combine, tokens in this fixed order: 'competitive_deathmatch_duplicates'.
+// Kept as one string so it rides the existing variant plumbing (SFN,
+// Firebase, URL, localStorage) unchanged.
+const VARIANT_TOKENS = ['competitive', 'deathmatch', 'duplicates'];
+function composeVariant(competitive, deathmatch, duplicates) {
+	const parts = [];
+	if (competitive) parts.push('competitive');
+	if (deathmatch) parts.push('deathmatch');
+	if (duplicates) parts.push('duplicates');
+	return parts.length ? parts.join('_') : 'standard';
+}
+const SIGIL_VARIANTS = [];
+for (let mask = 0; mask < 8; mask++) {
+	SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4));
+}
 function variantHasCompetitive(v) {
 	return typeof v === 'string' && v.indexOf('competitive') !== -1;
 }
 function variantHasDeathmatch(v) {
 	return typeof v === 'string' && v.indexOf('deathmatch') !== -1;
 }
-function composeVariant(competitive, deathmatch) {
-	if (competitive && deathmatch) return 'competitive_deathmatch';
-	if (competitive) return 'competitive';
-	if (deathmatch) return 'deathmatch';
-	return 'standard';
+function variantHasDuplicates(v) {
+	return typeof v === 'string' && v.indexOf('duplicates') !== -1;
 }
 // Canonicalize any input (handles legacy strings, wrong order, junk) to one of
-// the four SIGIL_VARIANTS values.
+// the eight SIGIL_VARIANTS values.
 function normalizeVariant(v) {
-	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v));
+	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v), variantHasDuplicates(v));
 }
 
 // Stone-spot positions (fractions of the square spell image), measured from the
@@ -414,7 +482,10 @@ function spellSpotTemplate(type) {
 const LEGACY_SPELL_RENAMES = { Flood: 'Tsunami' };
 
 function normalizeSpellName(name) {
-	return LEGACY_SPELL_RENAMES[name] || name;
+	if (typeof name !== 'string') return name;
+	const base = baseSpellName(name);
+	const renamed = LEGACY_SPELL_RENAMES[base];
+	return renamed ? renamed + name.slice(base.length) : name;
 }
 
 function normalizeSpellNames(names) {
@@ -485,7 +556,11 @@ function shuffleArray(arr) {
 	return a;
 }
 
-function generateSpellList(selection) {
+// `allowDuplicates` (the 'duplicates' variant) triples the pool — every spell
+// as X, X~2, X~3 — and then draws WITHOUT replacement exactly as before, so
+// the board comes out as if drawn with replacement while every slot still
+// carries a unique name.
+function generateSpellList(selection, allowDuplicates = false) {
 	let selectedKeys = normalizeExpansionSelection(selection);
 	if (selectedKeys.length === 0) {
 		if (typeof localStorage !== 'undefined') {
@@ -503,6 +578,12 @@ function generateSpellList(selection) {
 			poolByCat[0].push(...pack.rituals);
 			poolByCat[1].push(...pack.sorceries);
 			poolByCat[2].push(...pack.charms);
+		}
+	}
+
+	if (allowDuplicates) {
+		for (let c = 0; c < 3; c++) {
+			poolByCat[c] = poolByCat[c].flatMap(n => [n, ...DUPLICATE_SUFFIXES.map(s => n + s)]);
 		}
 	}
 

@@ -6,6 +6,8 @@
  */
 
 // Must mirror ai/config.py:SPELL_TO_ID exactly (every non-Panda spell).
+// Panda and Experimental spells are deliberately absent: like Panda, an
+// Experimental spell encodes as ID 0 until it graduates into a real pack.
 // IDs 0-14 are fixed for backward-compatible checkpoint warm-starts.
 const SPELL_TO_ID = {
 	// Core
@@ -494,7 +496,7 @@ function boardToTensor(board, sideToMove) {
 	// Spell IDs
 	const spellIds = new Int32Array(NUM_SPELL_SLOTS);
 	for (let i = 0; i < NUM_SPELL_SLOTS; i++) {
-		spellIds[i] = SPELL_TO_ID[board.spellNames[i]] || 0;
+		spellIds[i] = SPELL_TO_ID[baseSpellName(board.spellNames[i])] || 0;
 	}
 
 	return { raw: features, spellIds };
@@ -640,7 +642,7 @@ function encodeTurn(turn, board, color) {
 			features[66] = 1;
 		} else if (action.type === 'cast') {
 			features[42] = 1;
-			const spellId = SPELL_TO_ID[action.spell] || 0;
+			const spellId = SPELL_TO_ID[baseSpellName(action.spell)] || 0;
 			// Core spells one-hot at [43:58]; expansion spells (IDs 15-44)
 			// at [84:114]; Aftershock/Ambush (IDs 45-50) at [116:122] —
 			// mirrors ai/features.py:encode_turn.

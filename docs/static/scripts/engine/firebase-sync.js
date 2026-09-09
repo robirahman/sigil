@@ -147,7 +147,8 @@ class FirebaseSync {
 			// not a Deathmatch game (always unrated).
 			const hasUnrated = (data.spellNames || []).some(s => isUnratedSpell(s));
 			const isDeathmatch = variantHasDeathmatch(data.variant);
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch) {
+			const isDuplicates = variantHasDuplicates(data.variant);
+			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates) {
 				this.ranked = true;
 				await roomRef.child('ranked').set(true);
 			}
