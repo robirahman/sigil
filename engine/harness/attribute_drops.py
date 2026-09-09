@@ -256,6 +256,19 @@ def main():
             b = 'HORIZON EFFECT (deepening cured it)'
         elif coupled:
             b = 'UNATTRIBUTED (no deepening test in this run)'
+        elif not deeper:
+            # NOTHING DEEPER IN THIS RUN TESTED THIS FLAG, so calling it an
+            # eval error is a default, not a finding. The flags at a run's
+            # DEEPEST depth always land here: the horizon test asks whether a
+            # deeper search at the same window still flags, and for them there
+            # is no deeper search.
+            #
+            # This mattered immediately. At depths 2 and 4, 220 of the 327
+            # `OTHER` flags with the engine to move were depth-4 flags with
+            # nothing deeper to test, so "80.9% OTHER" read as a verdict on the
+            # eval when two thirds of it was untested. Among the depth-2 flags,
+            # which COULD be tested, 42% were cured by deepening.
+            b = 'UNTESTED AT THIS DEPTH (nothing deeper in this run)'
         else:
             b = 'OTHER (eval wrong, not blind)'
         buckets[b] += 1
@@ -270,6 +283,14 @@ def main():
     tot = sum(buckets.values())
     for b, n in buckets.most_common():
         print(f'  {n:6d} ({100.0 * n / tot:5.1f}%)  {b}')
+    n_untested = buckets.get('UNTESTED AT THIS DEPTH (nothing deeper in this run)', 0)
+    if n_untested:
+        deepest = max(depths) if depths else '?'
+        print(f'\n  {n_untested} flags are at depth {deepest}, the deepest in '
+              f'this run, so NOTHING\n  tested whether deepening cures them. '
+              f'They are not evidence about the eval.\n  Add a deeper depth to '
+              f'attribute them; the OTHER bucket above is only the flags a\n'
+              f'  deeper search DID still flag.')
     n_corrupt = buckets.get('CORRUPT RECORD (window never happened; excluded)', 0)
     if n_corrupt:
         print(f'\n  !! {n_corrupt} flags cross a half-move no legal turn can '
