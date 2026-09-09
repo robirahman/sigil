@@ -22,7 +22,7 @@ Two jobs, because the guard's first version could do neither:
    -- only 1 of 145 cases has a mate as its from-score; the rest flip *into*
    one -- so the positions have to be found by searching, not by reading.
 """
-import json, sys, urllib.parse, urllib.request
+import json, sys, time, urllib.parse, urllib.request
 import sigil_engine as se
 
 MERGE_OFF = 1 << 62
@@ -68,12 +68,29 @@ for c in cases:
             sfns.append(s)
 print(f"{len(sfns)} distinct positions from {len(cases)} cases\n")
 
+# A GATE IS NOT A CAMPAIGN. Every position costs a full search even when it
+# announces no mate, so the first version -- 435 positions x 3 configs
+# including depth 6 at ~17 s each -- was several hours of work behind a
+# 1-hour watchdog, and took a clean build and 84 passing tests down with it.
+# Both configs are depth 4, capped by position count AND by wall clock, and
+# each stops as soon as it has confirmed enough clamps to be conclusive.
+POS_CAP = 120           # positions examined per config
+CONFIRM = 10            # clamps that settle the question
+BUDGET_S = 420          # per-config wall clock
+
 fail = 0
 harvest = []
-for window, depth in ((2, 4), (1, 4), (2, 6)):
+for window, depth in ((2, 4), (1, 4)):
     mate = clamped = leaked = widelim = 0
     examples = []
-    for s in sfns:
+    t0 = time.time()
+    for n, s in enumerate(sfns[:POS_CAP]):
+        if clamped >= CONFIRM:
+            print(f"  ({CONFIRM} clamps confirmed; stopping at position {n})")
+            break
+        if time.time() - t0 > BUDGET_S:
+            print(f"  (budget {BUDGET_S}s spent at position {n})")
+            break
         try:
             off, w_off = pb(s, window, depth, False)
         except Exception as e:
@@ -89,13 +106,14 @@ for window, depth in ((2, 4), (1, 4), (2, 6)):
         on, _ = pb(s, window, depth, True)
         if abs(on) == UNPROVEN:
             clamped += 1
-            if (window, depth) == (2, 4):
+            if (window, depth) == (2, 4) and s not in harvest:
                 harvest.append(s)
         else:
             leaked += 1
             if len(examples) < 3:
                 examples.append((off, on))
-    print(f"=== window={window} depth={depth} ===")
+    print(f"=== window={window} depth={depth}"
+          f"  ({time.time() - t0:.0f}s) ===")
     print(f"  announced a mate with the guard off: {mate}")
     print(f"    of those, from a budget-limited search: {widelim}")
     print(f"    guard clamped: {clamped}   leaked as a mate: {leaked}")
