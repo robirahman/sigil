@@ -1576,5 +1576,6 @@ pooled with `pool_shards.py` (which now checks matched average time via the GAME
 | `lmr` 2/1 (band x2, R=1) | 400 | 46.8% | [41.9, 51.7] | −23 [−57, +12] | 1.000 | leaning negative at 300 ms and 0.4 ply shallower (4.00 vs 4.38): the reduced band's subtrees cost depth that a 300 ms search cannot spare. This is the one knob where a 300 ms verdict is least informative -- it trades depth for coverage exactly as `width_scale` did, and that trade was +47 at 300 ms but +223 at 3 s. Worth the ~$5 fleet run at 3 s despite the local rule |
 | `use_history` | 400 | 47.5% | [42.7, 52.4] | −17 [−51, +17] | 1.000 | null, leaning negative, same depth (4.63 vs 4.64): re-sorting tier 3 by history displaces the generator's order, which is already best at the median (FINDINGS "best move rank median 1"); the tail it could help is casts/dashes that the width never generates anyway |
 | `root_resort` | 400 | 49.0% | [44.1, 53.9] | −7 [−41, +27] | 1.000 | null, same depth: the root already searches the previous best first, and with a root width of 72-480 the order of the rest rarely changes which move wins |
+| `aspiration_steps` | 400 | 51.5% | [46.6, 56.4] | +10 [−24, +44] | 1.000 | first knob with a point estimate above 50% (same depth); qualifies for the 3 s fleet run (`arms/aspiration_steps_3s.txt`) |
 
 (rows appended as each knob's shard set finishes)

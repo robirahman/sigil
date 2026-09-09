@@ -37,6 +37,7 @@ printf '25,3000,tfit,lmr,21,0\n'        > arms/lmr_3s.txt        # LMR band x2, 
 printf '25,3000,tfit,history,1,0\n'     > arms/history_3s.txt
 printf '25,3000,tfit,root_resort,1,0\n' > arms/root_resort_3s.txt
 printf '25,3000,tfit,elastic,1,0\n'     > arms/elastic_3s.txt    # gate at MATCHED average time
+printf '25,3000,tfit,aspiration_steps,1,0\n' > arms/aspiration_steps_3s.txt   # local 51.5%: qualifies
 ./launch.sh sigil-knob-lmr ab_search.py arms/lmr_3s.txt "1,200,tfit,lmr,21,0" 45 us-central1-f 4 c3d-highcpu-90
 ```
 
