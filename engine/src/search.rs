@@ -199,6 +199,11 @@ pub struct Search {
     /// `resolve_outcomes` per cast candidate -- at 10 the node rate regressed
     /// 5.4x. Swept, not guessed.
     keep_window: usize,
+    /// Whether a mate score from a WIDTH-LIMITED search is treated as a proof.
+    /// Off reproduces the pre-guard engine exactly, which is what makes the
+    /// A/B meaningful; on is the shipped default because announcing a win the
+    /// search never established is a soundness bug, not a tuning choice.
+    mate_guard: bool,
     pub weights: crate::eval::Weights,
     /// A/B switch: true reproduces the pre-fix stage ordering — stages in order,
     /// no class merge AND no reserved key-dash slot. This is the baseline every
@@ -298,6 +303,7 @@ impl Search {
             window: DEFAULT_WINDOW,
             width_scale: DEFAULT_WIDTH_SCALE,
             keep_window: crate::turn_iter::DEFAULT_KEEP_WINDOW,
+            mate_guard: true,
             weights: crate::eval::Weights::default(),
             legacy_order: false,
             width_shape: 0,
@@ -319,6 +325,10 @@ impl Search {
         self.keep_window = k.clamp(1, crate::turn_iter::MAX_KEEP_WINDOW);
     }
     pub fn keep_window_get(&self) -> usize { self.keep_window }
+    /// false reproduces the pre-guard search: any mate score ends deepening
+    /// and is reported as a proof.
+    pub fn set_mate_guard(&mut self, on: bool) { self.mate_guard = on; }
+    pub fn mate_guard_get(&self) -> bool { self.mate_guard }
     pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
     /// Bitmask over `key_dash::REASON_*`. Lets an arena attribute a result to one
@@ -761,7 +771,8 @@ impl Search {
             // claim proof. Real mates are still found and still returned; the
             // engine just no longer stops early on an unproven one.
             let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
-            let proven = !self.stats.widened && !self.stats.windowed;
+            let proven = !self.mate_guard
+                         || (!self.stats.widened && !self.stats.windowed);
             if mate_score && proven { break; }
         }
         // Report an UNPROVEN mate as large-but-finite. The web UI treats a
@@ -770,7 +781,8 @@ impl Search {
         // state a certainty the search never established. The move choice is
         // untouched -- only the number the engine announces.
         let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
-        if mate_score && (self.stats.widened || self.stats.windowed) {
+        if self.mate_guard && mate_score
+           && (self.stats.widened || self.stats.windowed) {
             self.stats.unproven_mate = true;
             let sign = if best_score > 0 { 1 } else { -1 };
             best_score = sign * UNPROVEN_MATE;
