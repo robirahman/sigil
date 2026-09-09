@@ -46,16 +46,17 @@ def fetch(obj):
         u, headers={"Authorization": "Bearer " + tok})).read()
 
 
-def play_one(b, depth, ms, hist):
+def play_one(b, depth, ms, hist, mate_guard=None):
     """One move at the shipped config. Returns the announced score, from the
     perspective of the side that just moved, plus whether the game ended."""
     r = b.play_best(ms, depth, 20, 16, se.DEFAULT_WIDTH_SCALE, list(hist),
-                    'tfit', False, MERGE_OFF, adaptive=shipped_adaptive())
+                    'tfit', False, MERGE_OFF, adaptive=shipped_adaptive(),
+                    mate_guard=mate_guard)
     # (depth_completed, nodes, secs, over, winner, score, widened)
     return int(r[5]), bool(r[3]), r[4]
 
 
-def run(sfn, plies, depth, ms, limit, tag):
+def run(sfn, plies, depth, ms, limit, tag, mate_guard=None):
     b = se.Board.from_sfn(sfn)
     hist = []
     # Announced score per side, in the order that side announced it.
@@ -65,7 +66,7 @@ def run(sfn, plies, depth, ms, limit, tag):
         side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
         hist.append(b.key_js)
         try:
-            sc, over, winner = play_one(b, depth, ms, hist)
+            sc, over, winner = play_one(b, depth, ms, hist, mate_guard)
         except Exception as e:
             return flags, f'play failed at ply {k}: {str(e)[:100]}'
         seq[side].append((k, sc, b.to_sfn()))
@@ -80,11 +81,15 @@ def run(sfn, plies, depth, ms, limit, tag):
             c1 = max(-20 * STONE, min(20 * STONE, s1))
             per_ply = (c0 - c1) / gap / STONE
             mate_flip = s1 <= -MATE and s0 >= -0.5 * STONE
-            if per_ply > limit or mate_flip:
+            # A FALSE MATE: this side announced a proven win and later
+            # announced a finite score, so the "proof" was not one.
+            false_mate = s0 >= MATE and s1 < MATE
+            if per_ply > limit or mate_flip or false_mate:
                 flags.append({'tag': tag, 'side': side, 'ply_from': k0,
                               'ply_to': k1, 'score_from': s0, 'score_to': s1,
                               'perPly': round(per_ply, 3),
-                              'mateFlip': mate_flip, 'sfn_from': sfn0,
+                              'mateFlip': mate_flip, 'falseMate': false_mate,
+                              'sfn_from': sfn0,
                               'sfn_to': sfn1})
         if over:
             break
@@ -101,6 +106,15 @@ def main():
                     help='0 = fixed DEPTH, which is what makes this repeatable')
     ap.add_argument('--limit', type=float, default=0.5)
     ap.add_argument('--shards', type=int, default=1)
+    ap.add_argument('--mate-guard', choices=['on','off'], default=None,
+                    help="A/B the mate guard by COUNTING what it fixes. The "
+                         "guard fires only where a mate score meets a "
+                         "width-limited search -- 0 of 60 midgame positions "
+                         "in the knob-bite check -- so an SPRT on it would "
+                         "measure nothing. What it is for is announcing wins "
+                         "the search never proved, so count those instead: a "
+                         "FALSE MATE is an announcement of +MATE by a side "
+                         "whose score later decays to a finite value.")
     args = ap.parse_args()
 
     off = int(os.environ.get('SIGIL_SHARD_OFF', '0'))
@@ -127,14 +141,16 @@ def main():
           f"/half-move", flush=True)
     n_flag = 0
     for tag, sfn in starts:
-        flags, err = run(sfn, args.plies, args.depth, args.ms, args.limit, tag)
+        mg = None if args.mate_guard is None else (args.mate_guard == 'on')
+        flags, err = run(sfn, args.plies, args.depth, args.ms, args.limit, tag, mg)
         if err:
             print(f"  SKIP {tag}: {err}", flush=True)
             continue
         for f in flags:
             n_flag += 1
             print("SELFFLAG " + json.dumps(f), flush=True)
-    print(f"DONE starts={len(starts)} self-inconsistencies={n_flag}", flush=True)
+    print(f"DONE starts={len(starts)} self-inconsistencies={n_flag} "
+          f"mate_guard={args.mate_guard}", flush=True)
 
 
 if __name__ == '__main__':
