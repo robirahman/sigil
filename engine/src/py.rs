@@ -404,7 +404,7 @@ impl PyBoard {
                         key_dash_min_width=None, key_dash_extra=None,
                         q_depth=None, q_cast_moves=None, aspiration=None,
                         adaptive=None, rank_oversample=None,
-                        width_shape=None, keep_window=None))]
+                        width_shape=None, keep_window=None, mate_guard=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -415,7 +415,9 @@ impl PyBoard {
                  rank_oversample: Option<usize>, width_shape: Option<usize>,
                  // How many keep choices per cast to expand. `None` leaves the
                  // engine's own default alone -- never restate it here.
-                 keep_window: Option<usize>)
+                 keep_window: Option<usize>,
+                 // None leaves the engine's own default alone.
+                 mate_guard: Option<bool>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -423,6 +425,15 @@ impl PyBoard {
         let mut s = crate::search::Search::new(tt_bits);
         s.set_window(window);
         if let Some(w) = width_scale { s.set_width_scale(w); }
+        // THESE TWO WERE MISSING. `play_best` accepted `keep_window` in its
+        // signature and never applied it, so `ab_keep.py` ran both arms at the
+        // engine default: two SPRTs of 7,040 and 6,997 games compared
+        // IDENTICAL engines and reported -0.4 and -0.6 Elo. A binding that
+        // takes an argument and drops it is the same class of bug as one that
+        // restates a default, and it is harder to spot -- the tell was two
+        // independent runs landing within 0.1% of parity.
+        if let Some(k) = keep_window { s.set_keep_window(k); }
+        if let Some(m) = mate_guard { s.set_mate_guard(m); }
         s.set_legacy_order(legacy_order);
         // NEVER restate a Rust default here. `merge_min_width` shipped with the
         // Rust default OFF (usize::MAX) and a Python default of 32, so every
@@ -1001,6 +1012,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("SHIPPED_ADAPTIVE", crate::search::SHIPPED_ADAPTIVE)?;
     m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
     m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
+    m.add("UNPROVEN_MATE", crate::search::UNPROVEN_MATE)?;
     // Exported so a harness never restates them. REASONS_ALL is the full
     // key-dash interest mask; OUTCOME_CAP is how a caller detects that a
     // resolver enumeration was TRUNCATED rather than complete.
