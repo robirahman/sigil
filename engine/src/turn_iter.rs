@@ -61,7 +61,7 @@ impl Board {
             return (v, truncated);
         }
         let (mut outs, trunc) = self.resolve_outcomes(pos, c, OUTCOME_CAP);
-        outs.sort_by_key(|b| {
+        outs.sort_by_cached_key(|b| {
             // Prefer configurations the goal likes, and our own material.
             -(b.configuration_value(c, goal) + 30 * b.total[c.idx()] as i32
               - 30 * b.total[c.other().idx()] as i32)
@@ -244,7 +244,8 @@ impl<'a> TurnIter<'a> {
             let mut v: Vec<(u8, Option<u8>, bool)> = Vec::new();
             let mut m = b.empty();
             while m != 0 { v.push((m.trailing_zeros() as u8, None, true)); m &= m - 1; }
-            v.sort_by_key(|&(n, p, _)| -board.move_score(n, p, c));
+            let goal = board.placement_goal(c);
+            v.sort_by_cached_key(|&(n, p, _)| -board.move_score_goal(n, p, c, goal));
             let mut it = TurnIter {
                 board, c, window, stage: Stage::Done, moves: Vec::new(), mi: 0,
                 casts: Vec::new(), ci: 0, dashes: VecDeque::new(),
@@ -582,27 +583,33 @@ impl Board {
         while m != 0 { cands.push(m.trailing_zeros() as u8); m &= m - 1; }
         if cands.len() < cost { return Vec::new(); }
         // Cheapest stones to give up first: low sigil progress, not on mana.
-        cands.sort_by_key(|&n| self.sacrifice_cost(n, c));
+        cands.sort_by_cached_key(|&n| self.sacrifice_cost(n, c));   // key = escape_distance BFS; once per stone
 
-        let combos: Vec<Vec<u8>> = if cost == 1 {
-            cands.iter().map(|&s| vec![s]).collect()
+        // Fixed-size combos: one allocation for the list instead of one per
+        // pair (C(n,2) heap Vecs per post-move board, mostly never consumed
+        // because the loop below returns at `limit`).
+        let n = cands.len();
+        let mut combos: Vec<([u8; 2], u8)> =
+            Vec::with_capacity(if cost == 1 { n } else { n * (n - 1) / 2 });
+        if cost == 1 {
+            for &s in &cands { combos.push(([s, 0], 1)); }
         } else {
-            let mut v = Vec::new();
-            for i in 0..cands.len() {
-                for j in (i + 1)..cands.len() { v.push(vec![cands[i], cands[j]]); }
+            for i in 0..n {
+                for j in (i + 1)..n { combos.push(([cands[i], cands[j]], 2)); }
             }
-            v
-        };
+        }
         let mut out = Vec::new();
-        for combo in combos {
+        for (combo_sacs, n_sacs) in combos {
+            let combo = &combo_sacs[..n_sacs as usize];
             let mut bd = *self;
-            for &s in &combo { bd.stones[c.idx()] &= !(1u64 << s); }
+            for &s in combo { bd.stones[c.idx()] &= !(1u64 << s); }
             bd.update();
             if bd.outcome != crate::board::Outcome::Ongoing { continue; }
             let dt = bd.all_moveable(c);
             if dt == 0 { continue; }
             let mut vars = bd.move_variants_pub(dt, c);
-            vars.sort_by_key(|&(n, p)| -bd.move_score(n, p, c));
+            let goal = bd.placement_goal(c);
+            vars.sort_by_cached_key(|&(n, p)| -bd.move_score_goal(n, p, c, goal));
             let mut sacs = [0u8; 2];
             for (i, &s) in combo.iter().enumerate() { sacs[i] = s; }
             // CANONICAL NODE ORDER. `cands` above is sorted by `sacrifice_cost`

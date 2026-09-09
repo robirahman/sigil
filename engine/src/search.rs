@@ -716,16 +716,26 @@ impl Search {
         }
         self.stats.expanded += v.len() as u64;
         // Promote the TT move, then the two killers, by matching first action.
+        // A STABLE partition into the four tiers: identical order to the
+        // `sort_by_key` it replaces (stable sort by a 0..=3 key), in one pass
+        // instead of O(n log n) key evaluations -- that sort was 6% of the
+        // depth-5 profile at 24-480 turns per node.
         let p = ply.min(MAX_PLY - 1);
         let k0 = self.killers[p][0].map(|t| t.slice()[0]);
         let k1 = self.killers[p][1].map(|t| t.slice()[0]);
-        v.sort_by_key(|t| {
-            let a = t.slice()[0];
-            if Some(a) == hint { 0 }
-            else if Some(a) == k0 { 1 }
-            else if Some(a) == k1 { 2 }
-            else { 3 }
-        });
+        if hint.is_some() || k0.is_some() || k1.is_some() {
+            let mut tiers: [Vec<Turn>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+            let mut rest: Vec<Turn> = Vec::with_capacity(v.len());
+            for t in v.drain(..) {
+                let a = t.slice()[0];
+                if Some(a) == hint { tiers[0].push(t); }
+                else if Some(a) == k0 { tiers[1].push(t); }
+                else if Some(a) == k1 { tiers[2].push(t); }
+                else { rest.push(t); }
+            }
+            for tier in tiers.iter_mut() { v.append(tier); }
+            v.append(&mut rest);
+        }
         v
     }
 

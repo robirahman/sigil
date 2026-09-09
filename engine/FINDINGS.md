@@ -1367,3 +1367,97 @@ overridable (`SMOKE_TIMEOUT=` -> `smoke-timeout` metadata) and the runner
 echoes which cap applied. Related: the ~17 s/position figure for depth 6 is
 inherited from full-width self-play and is far too pessimistic for the filled
 midgame boards this audit scores.
+
+---
+
+# Superhuman campaign, 2026-09-09
+
+Plan: `~/.claude/plans/this-is-the-repo-silly-glacier.md` (Robi approved 2026-09-09).
+Acceptance: the top listed in-browser Rust tier at >= 30 s/move beats the humans rated
+>= 1400, measured by a draw-free SPRT over rated `completed_games`, not by site Elo.
+
+## §0.1 The human-vs-Rust record nobody had computed
+
+`engine/harness/human_vs_rust_report.py` over the 2026-09-09 dump (2,465 games; 655 arena
+records, 113 unranked, 10 AI-vs-AI, 1 human-vs-human and 10 uid-less excluded). Ranked
+human-vs-AI only, Wilson 95% intervals, Elo gap = `p_to_elo(ai win rate)`:
+
+| ai uid | games | ai wins | ai% | 95% CI | elo gap | first..last |
+|---|---|---|---|---|---|---|
+| `__ai_hard__` (JS, 5 s) | 587 | 44 | 7.5% | [5.6, 9.9] | −437 | 05-04..08-18 |
+| `__ai_very_hard__` (JS, 60 s) | 164 | 16 | 9.8% | [6.1, 15.3] | −386 | 05-05..08-26 |
+| **`__ai_rust_hard__` (10 s)** | **167** | **59** | **35.3%** | **[28.5, 42.8]** | **−105** | 08-31..09-09 |
+| `__ai_rust__` (10 s, pre-swap) | 9 | 5 | 55.6% | [26.7, 81.1] | +39 | 08-26..08-30 |
+| `__ai_rust_very_hard__` (60 s) | 5 | 3 | 60.0% | [23.1, 88.2] | +70 | 09-02..09-08 |
+
+Per human against the Rust tiers: Robi (1403) 157 games vs `rust_hard`, **AI 33.1%
+[26.2, 40.8], gap −122**; 4 vs `rust_very_hard`, AI 2/4; FlyingPandas (1372) 9 games vs
+`rust_hard`, **AI 7/9**; Simonster 0/1 and 1/1. Fakey_McFaker (1503) and Futuresight (1501)
+have not played a Rust tier at all.
+
+Three things this changes:
+
+1. **The gap is ~100-150 Elo at 10 s, not the 300-450 the plan's context section estimated
+   from the JS tiers.** The Rust swap moved the AI from 7.5% to 35% against the same humans,
+   i.e. ~+330 Elo in human play, which is consistent with the self-play chain (+120 at 200 ms
+   growing with the clock). With 34-66 Elo per doubling, 10 s -> 60 s alone is worth +90-170,
+   so the 60 s tier may already be near parity with Robi (2/4 is no evidence either way).
+2. **The human sample is one person.** 157 of the 167 `rust_hard` games are Robi's. The
+   acceptance SPRT needs the other >= 1400 players (Fakey, Futuresight) to play the top Rust
+   tier; until they do, "superhuman" means "beats Robi", and Robi's own rating has fallen from
+   1542 (2026-08-17) to 1403 while playing it, which is the site Elo doing exactly what §0.2
+   says it does (the pool is anchored through AI games).
+3. **Colour is not the story:** `rust_hard` scored 27/74 as red and 32/93 as blue.
+
+Baseline JSON: `ai/data/human_vs_ai_2026-09-09.json`. Re-run on a trigger (new tier, new
+engine release, a new strong human), never on a schedule.
+
+## §1.0-1.1 Node rate: 2.93x, tree byte-identical (2026-09-09)
+
+Tooling first: `engine/examples/bench.rs` runs a fixed-depth, CLOCKLESS search over
+`engine/harness/positions_midgame.txt` (76 self-play midgame positions at plies 8/14/20/26,
+generated once by `harness/midgame_positions.py` and committed; regenerating it moves the
+baseline) and prints per-position `(nodes, score, best)` hashes plus a combined HASH. Two
+binaries with the same HASH searched the same tree, so wall time is the only thing being
+compared. `perf` on a `CARGO_PROFILE_RELEASE_DEBUG=1` build of the bench gave the profile.
+
+What the first profile said (12 positions, depth 5, self time): `sort_by_key` recomputing
+`move_score` -> `placement_goal` -> `escape_distance` PER COMPARISON ~15%; malloc/free
+~20% plus SipHash ~9%, both from `resolve_outcomes_logged` building and discarding a
+`Vec<JsAct>` log per branch and a fresh `HashSet` per resolution step; `Board::update` 7.5%;
+the TT/killer promotion `sort_by_key` 3%.
+
+Five changes, each verified by an unchanged HASH on the 12-position subset before the next:
+
+| change | where | subset us/node |
+|---|---|---|
+| (baseline, main `b5c6a366`) | | 7.34 |
+| `sort_by_cached_key`, `placement_goal` hoisted (`move_score_goal`) | `order.rs`, `turn_iter.rs`, `key_dash.rs` | 5.77 |
+| `Log` trait: `()` for the search, `Vec<JsAct>` for replay; `StoneHasher` | `cast_enum.rs` | 3.24 |
+| stable 4-tier partition replaces the promotion sort; cached `sacrifice_cost`; lazy dedupe set (`LINEAR_DEDUPE_MAX` 24) | `search.rs`, `turn_iter.rs`, `cast_enum.rs` | 3.69 (noise: a background bench was running) |
+| `Frontier::push` dedupes on stones BEFORE `update()`; 13 pre-push `update()` calls dropped | `cast_enum.rs` | 2.89 |
+| fixed-size dash combos instead of `Vec<Vec<u8>>` | `turn_iter.rs` | 2.64 |
+
+Clean sequential A/B on the full 76 positions at depth 5, same machine, nothing else running:
+
+| | nodes | ms | us/node | HASH |
+|---|---|---|---|---|
+| main | 9,078,002 | 308,486 | **33.98** | `753f5ce31fd8f037` |
+| this branch | 9,078,002 | 105,385 | **11.61** | `753f5ce31fd8f037` |
+
+**2.93x at an identical tree.** At the measured 34-66 Elo per doubling that is +53-102 Elo
+of effective time for free, before any search change. (This box is ~2x slower per node
+than the cloud c3d figures in this file; the RATIO is the portable number.)
+
+Guard added: `logged_and_unlogged_resolution_agree` -- the `()`-log enumeration and the
+`Vec<JsAct>` enumeration must produce the same outcome boards in the same order over
+~250 castable (position, spell) pairs, because `Action::Cast::outcome` is an index into
+that list. `cargo test --release`: 90 passed.
+
+What is left in the profile after these (self time): `Board::update` ~16% (now mostly
+genuine per-branch derivation), `TurnIter::next` 7%, `evaluate` 5% (the `tfit` control
+flood fill), `escape_distance` 5%, dash-branch generation ~5%, malloc ~8%. Nothing above
+5% is a free win any more; the next 1.3x would need the generator to hand resolved boards
+to `apply_turn` (`turn.rs:194` re-resolves every cast it expands), which is a structural
+change and is deferred until the search work in §1.2-1.4 settles what the generator must
+return.

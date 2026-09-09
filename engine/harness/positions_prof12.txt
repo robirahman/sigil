@@ -1,0 +1,12 @@
+rrrr..rbbb...b.........b.............../Starfall,Seal_of_Destruction,Corrupt,Torrent,Seal_of_Wind,Fireblast,Seal_of_Autumn,Azimuth,Charge r 8 0:0 -:- -:- b1
+r.rrbbbbbb....r...r.....r............../Starfall,Seal_of_Destruction,Corrupt,Torrent,Seal_of_Wind,Fireblast,Seal_of_Autumn,Azimuth,Charge r 14 1:0 Starfall:- -:- b1
+rbbbrbb.b.rbb.r...r.....r..........r.../Starfall,Seal_of_Destruction,Corrupt,Torrent,Seal_of_Wind,Fireblast,Seal_of_Autumn,Azimuth,Charge r 20 1:1 Starfall:Torrent -:- b2
+bbb...bbb.r.brr...r..............r.r.../Starfall,Seal_of_Destruction,Corrupt,Torrent,Seal_of_Wind,Fireblast,Seal_of_Autumn,Azimuth,Charge r 26 2:1 Fireblast:Torrent -:- b2
+r..rrr.bbbr..b.........b.............../Starfall,Flourish,Bewitch,Seal_of_Stone,Seal_of_Wind,Scatter,Charge,Splash,Seal_of_Summer r 8 0:0 -:- -:- b1
+rr.....bbbr..rb..rb....br............../Starfall,Flourish,Bewitch,Seal_of_Stone,Seal_of_Wind,Scatter,Charge,Splash,Seal_of_Summer r 14 1:0 Starfall:- -:- b1
+rrrr...bbbr..bbbbrbr...br............../Starfall,Flourish,Bewitch,Seal_of_Stone,Seal_of_Wind,Scatter,Charge,Splash,Seal_of_Summer r 20 1:0 Starfall:- -:- b2
+rrrrrrbbbbr..bbbbrb.rb..b............r./Starfall,Flourish,Bewitch,Seal_of_Stone,Seal_of_Wind,Scatter,Charge,Splash,Seal_of_Summer r 26 1:0 Starfall:- -:- b2
+r......bbbr..b.........b.........rrr.../Seal_of_Lightning,Harvest,Erupt,Seal_of_Wind,Seal_of_Stone,Storm_Front,Seal_of_Spring,Seal_of_Winter,Sprout r 8 0:0 -:- -:- b1
+r......bbbr..b.....b...b...rrr.....r.../Seal_of_Lightning,Harvest,Erupt,Seal_of_Wind,Seal_of_Stone,Storm_Front,Seal_of_Spring,Seal_of_Winter,Sprout r 14 1:0 Storm_Front:- -:- b1
+r......bbbr..b.....b...b..rrrrb.bb.r.rr/Seal_of_Lightning,Harvest,Erupt,Seal_of_Wind,Seal_of_Stone,Storm_Front,Seal_of_Spring,Seal_of_Winter,Sprout r 20 1:0 Storm_Front:- -:- b1
+rrrr....bb.b.b.....b...b..r..rr.r.rrb.b/Seal_of_Lightning,Harvest,Erupt,Seal_of_Wind,Seal_of_Stone,Storm_Front,Seal_of_Spring,Seal_of_Winter,Sprout r 26 3:0 Storm_Front:- -:- r1

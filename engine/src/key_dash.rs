@@ -237,7 +237,8 @@ impl Board {
             let mut targets = interesting & moveable;
             if doomed && targets == 0 {
                 let mut best = bd.move_variants_pub(moveable, c);
-                best.sort_by_key(|&(n, p)| -bd.move_score(n, p, c));
+                let goal = bd.placement_goal(c);
+                best.sort_by_cached_key(|&(n, p)| -bd.move_score_goal(n, p, c, goal));
                 best.truncate(1);
                 for (n, _) in best { targets |= 1u64 << n; }
             }

@@ -18,40 +18,107 @@
 //! state and is a sound dedupe key.
 
 use std::collections::HashSet;
+use std::hash::{BuildHasherDefault, Hasher};
 use crate::actions::JsAct;
 use crate::board::{Board, Color, Outcome};
 use crate::spells_meta::*;
 use crate::topology::{ADJ, BIG_SPELL_NODES, SIGIL};
 
-/// Board + the actions that produced it.
-type Step = (Board, Vec<JsAct>);
+/// The per-outcome action record. Two implementations:
+///
+/// * `Vec<JsAct>` -- the real log, for the browser replay path
+///   (`resolve_outcomes_logged`, `emit_actions`);
+/// * `()` -- nothing, for the SEARCH (`resolve_outcomes`), which only needs the
+///   boards. Before this the search path built a `Vec<JsAct>` per branch and threw
+///   it away: `plus` + malloc/free were ~15% of the profile at depth 5.
+///
+/// The enumeration order is a function of the boards alone, so the two produce
+/// the same outcome list in the same order (asserted by
+/// `logged_and_unlogged_resolution_agree`).
+pub trait Log: Clone + Default {
+    fn plus(&self, a: JsAct) -> Self;
+}
+impl Log for Vec<JsAct> {
+    #[inline]
+    fn plus(&self, a: JsAct) -> Self { let mut v = self.clone(); v.push(a); v }
+}
+impl Log for () {
+    #[inline]
+    fn plus(&self, _a: JsAct) -> Self {}
+}
 
-struct Frontier {
-    seen: HashSet<(u64, u64)>,
-    items: Vec<Step>,
+/// Board + the actions that produced it.
+type Step<L> = (Board, L);
+
+/// Dedupe key is a `(u64, u64)` stone pair -- already well mixed, so SipHash
+/// (the `HashSet` default, ~9% of the profile) is replaced by one multiply.
+#[derive(Default)]
+struct StoneHasher(u64);
+impl Hasher for StoneHasher {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut w = [0u8; 8];
+            w[..chunk.len()].copy_from_slice(chunk);
+            self.write_u64(u64::from_le_bytes(w));
+        }
+    }
+    #[inline]
+    fn write_u64(&mut self, x: u64) {
+        self.0 = (self.0.rotate_left(29) ^ x).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+    #[inline]
+    fn finish(&self) -> u64 { self.0 ^ (self.0 >> 31) }
+}
+type StoneSet = HashSet<(u64, u64), BuildHasherDefault<StoneHasher>>;
+
+/// Below this many items the dedupe is a linear scan over `items`; most
+/// resolutions have a handful of outcomes and a hash set per step cost more
+/// (allocation + rehash) than the scan. The set is built on demand past it.
+const LINEAR_DEDUPE_MAX: usize = 24;
+
+struct Frontier<L: Log> {
+    seen: Option<StoneSet>,
+    items: Vec<Step<L>>,
     cap: usize,
     truncated: bool,
 }
 
-impl Frontier {
+impl<L: Log> Frontier<L> {
     fn new(cap: usize) -> Self {
-        Frontier { seen: HashSet::new(), items: Vec::new(), cap, truncated: false }
+        Frontier { seen: None, items: Vec::new(), cap, truncated: false }
     }
-    fn push(&mut self, b: Board, log: Vec<JsAct>) {
+    /// Dedupe on `stones` FIRST, then derive (`update`) only the boards that are
+    /// actually kept. Mid-resolution nothing but `stones` changes, and `update`
+    /// is a pure function of them, so a rejected duplicate would have derived the
+    /// same fields as the item it duplicates -- computing them was wasted work
+    /// (Harvest's 120 orderings collapse to one outcome). `update` is idempotent,
+    /// so callers that already derived are unaffected.
+    fn push(&mut self, mut b: Board, log: L) {
         if self.items.len() >= self.cap { self.truncated = true; return; }
-        if self.seen.insert((b.stones[0], b.stones[1])) { self.items.push((b, log)); }
+        let key = (b.stones[0], b.stones[1]);
+        match self.seen.as_mut() {
+            Some(set) => { if set.insert(key) { b.update(); self.items.push((b, log)); } }
+            None => {
+                if self.items.iter().any(|(x, _)| x.stones == b.stones) { return; }
+                b.update();
+                self.items.push((b, log));
+                if self.items.len() > LINEAR_DEDUPE_MAX {
+                    let mut set = StoneSet::with_capacity_and_hasher(
+                        self.items.len() * 4, Default::default());
+                    for (x, _) in &self.items { set.insert((x.stones[0], x.stones[1])); }
+                    self.seen = Some(set);
+                }
+            }
+        }
     }
-    fn take(&mut self) -> Vec<Step> { self.seen.clear(); std::mem::take(&mut self.items) }
+    fn take(&mut self) -> Vec<Step<L>> { self.seen = None; std::mem::take(&mut self.items) }
     fn is_empty(&self) -> bool { self.items.is_empty() }
-}
-
-fn plus(base: &[JsAct], a: JsAct) -> Vec<JsAct> {
-    let mut v = base.to_vec(); v.push(a); v
 }
 
 impl Board {
     /// One move step, every legal way, recording a `move` / `hard_move` action.
-    fn branch_move(&self, log: &[JsAct], targets: u64, c: Color, f: &mut Frontier) {
+    fn branch_move<L: Log>(&self, log: &L, targets: u64, c: Color, f: &mut Frontier<L>) {
         let mut m = targets;
         while m != 0 {
             let node = m.trailing_zeros() as u8;
@@ -64,8 +131,7 @@ impl Board {
                     let bit = 1u64 << node;
                     b.stones[c.other().idx()] &= !bit;
                     b.stones[c.idx()] |= bit;
-                    b.update();
-                    f.push(b, plus(log, JsAct::mv(node, None, true, false)));
+                    f.push(b, log.plus(JsAct::mv(node, None, true, false)));
                 } else {
                     for &d in &opts[..k] {
                         let mut b = *self;
@@ -73,35 +139,32 @@ impl Board {
                         b.stones[c.other().idx()] &= !bit;
                         b.stones[c.idx()] |= bit;
                         b.stones[c.other().idx()] |= 1u64 << d;
-                        b.update();
-                        f.push(b, plus(log, JsAct::mv(node, Some(d), true, false)));
+                        f.push(b, log.plus(JsAct::mv(node, Some(d), true, false)));
                     }
                 }
             } else {
                 let mut b = *self;
                 b.stones[c.idx()] |= 1u64 << node;
-                b.update();
-                f.push(b, plus(log, JsAct::mv(node, None, false, false)));
+                f.push(b, log.plus(JsAct::mv(node, None, false, false)));
             }
         }
     }
 
     /// A soft BLINK (place on an empty node, no adjacency needed).
-    fn branch_blink(&self, log: &[JsAct], targets: u64, c: Color, f: &mut Frontier) {
+    fn branch_blink<L: Log>(&self, log: &L, targets: u64, c: Color, f: &mut Frontier<L>) {
         let mut m = targets;
         while m != 0 {
             let node = m.trailing_zeros() as u8;
             m &= m - 1;
             let mut b = *self;
             b.stones[c.idx()] |= 1u64 << node;
-            b.update();
-            f.push(b, plus(log, JsAct::mv(node, None, false, true)));
+            f.push(b, log.plus(JsAct::mv(node, None, false, true)));
         }
     }
 
     /// Repeat `branch_move` `count` times over a per-board target selector.
-    fn branch_move_n<F>(start: Vec<Step>, count: u8, c: Color, cap: usize, sel: F)
-        -> (Vec<Step>, bool)
+    fn branch_move_n<L: Log, F>(start: Vec<Step<L>>, count: u8, c: Color, cap: usize, sel: F)
+        -> (Vec<Step<L>>, bool)
     where F: Fn(&Board) -> u64 + Copy
     {
         let mut cur = start;
@@ -124,12 +187,19 @@ impl Board {
     /// Every board reachable by legally resolving the spell in sigil `pos`, starting
     /// AFTER `cast_clear_and_refill`, each with its action log.
     pub fn resolve_outcomes_logged(&self, pos: usize, c: Color, cap: usize)
-        -> (Vec<Step>, bool)
+        -> (Vec<Step<Vec<JsAct>>>, bool)
+    {
+        self.resolve_outcomes_impl::<Vec<JsAct>>(pos, c, cap)
+    }
+
+    /// The enumeration, generic over how much is recorded per outcome (see `Log`).
+    fn resolve_outcomes_impl<L: Log>(&self, pos: usize, c: Color, cap: usize)
+        -> (Vec<Step<L>>, bool)
     {
         let id = self.spells[pos];
-        if (id as usize) >= NUM_OFFICIAL_SPELLS { return (vec![(*self, vec![])], false); }
+        if (id as usize) >= NUM_OFFICIAL_SPELLS { return (vec![(*self, L::default())], false); }
         let info = &SPELLS[id as usize];
-        let start = vec![(*self, Vec::<JsAct>::new())];
+        let start = vec![(*self, L::default())];
         let enemy_of = |b: &Board| b.theirs(c);
 
         match info.resolve {
@@ -146,8 +216,8 @@ impl Board {
                 let mut b = *self;
                 b.stones[c.other().idx()] &= !doomed;
                 b.update();
-                let log = if doomed == 0 { vec![] }
-                          else { vec![JsAct::list("decay", mask_vec(doomed))] };
+                let log = if doomed == 0 { L::default() }
+                          else { L::default().plus(JsAct::list("decay", mask_vec(doomed))) };
                 (vec![(b, log)], false)
             }
 
@@ -164,8 +234,8 @@ impl Board {
                 let mut f = Frontier::new(cap);
                 if n <= empties.len() {
                     let mut idx = vec![0usize; n];
-                    fn rec(d: usize, s: usize, n: usize, e: &[u8], idx: &mut Vec<usize>,
-                           b0: &Board, picked: u64, c: Color, f: &mut Frontier) {
+                    fn rec<L: Log>(d: usize, s: usize, n: usize, e: &[u8], idx: &mut Vec<usize>,
+                                   b0: &Board, picked: u64, c: Color, f: &mut Frontier<L>) {
                         if d == n {
                             let mut b = *b0;
                             let mut kept = Vec::with_capacity(n);
@@ -173,8 +243,7 @@ impl Board {
                                 b.stones[c.other().idx()] |= 1u64 << e[i];
                                 kept.push(e[i]);
                             }
-                            b.update();
-                            f.push(b, vec![JsAct::gust(mask_vec(picked), kept)]);
+                            f.push(b, L::default().plus(JsAct::gust(mask_vec(picked), kept)));
                             return;
                         }
                         for i in s..e.len() {
@@ -185,7 +254,7 @@ impl Board {
                     }
                     rec(0, 0, n, &empties, &mut idx, &b0, picked, c, &mut f);
                 } else {
-                    f.push(b0, vec![JsAct::gust(mask_vec(picked), vec![])]);
+                    f.push(b0, L::default().plus(JsAct::gust(mask_vec(picked), vec![])));
                 }
                 let tr = f.truncated; (f.take(), tr)
             }
@@ -257,8 +326,8 @@ impl Board {
                 let charm_node = SIGIL[charm].trailing_zeros() as u8;
                 let mut f = Frontier::new(cap);
                 if self.mine(c) & (1u64 << charm_node) == 0 {
-                    self.branch_move(&[], 1u64 << charm_node, c, &mut f);
-                } else { f.push(*self, vec![]); }
+                    self.branch_move(&L::default(), 1u64 << charm_node, c, &mut f);
+                } else { f.push(*self, L::default()); }
                 let mid = f.take();
                 let m = SIGIL[sorcery];
                 Board::branch_move_n(mid, 3, c, cap, move |b| m & !b.mine(c))
@@ -269,7 +338,7 @@ impl Board {
                     let e1 = SIGIL[p1] & self.empty();
                     if e1 == 0 { continue; }
                     let mut g = Frontier::new(cap);
-                    self.branch_blink(&[], e1, c, &mut g);
+                    self.branch_blink(&L::default(), e1, c, &mut g);
                     for (b1, l1) in g.take() {
                         let mut any2 = false;
                         for p2 in 0..9 {
@@ -317,7 +386,7 @@ impl Board {
                             let mut nb = *b;
                             nb.stones[c.other().idx()] &= !(1u64 << v);
                             nb.update();
-                            next.push(nb, plus(log, JsAct::list("hail_storm", vec![v])));
+                            next.push(nb, log.plus(JsAct::list("hail_storm", vec![v])));
                         }
                     }
                     trunc |= next.truncated;
@@ -333,8 +402,7 @@ impl Board {
                     let mut b = *self;
                     b.stones[c.other().idx()] &= !bits;
                     b.stones[c.idx()] |= bits;
-                    b.update();
-                    f.push(b, vec![JsAct::pair("bewitch", a, Some(b_), vec![])]);
+                    f.push(b, L::default().plus(JsAct::pair("bewitch", a, Some(b_), vec![])));
                 }
                 if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
@@ -346,8 +414,7 @@ impl Board {
                     b.stones[c.idx()] |= (1u64 << a) | (1u64 << b_);
                     let kills = (ADJ[a as usize] | ADJ[b_ as usize]) & b.theirs(c);
                     b.stones[c.other().idx()] &= !kills;
-                    b.update();
-                    f.push(b, vec![JsAct::pair("starfall", a, Some(b_), mask_vec(kills))]);
+                    f.push(b, L::default().plus(JsAct::pair("starfall", a, Some(b_), mask_vec(kills))));
                 }
                 if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
@@ -360,8 +427,7 @@ impl Board {
                 for g in groups.iter().filter(|g| g.count_ones() == min) {
                     let mut b = *self;
                     b.stones[c.other().idx()] &= !*g;
-                    b.update();
-                    f.push(b, vec![JsAct::list("hurricane", mask_vec(*g))]);
+                    f.push(b, L::default().plus(JsAct::list("hurricane", mask_vec(*g))));
                 }
                 let tr = f.truncated; (f.take(), tr)
             }
@@ -375,16 +441,15 @@ impl Board {
                     b1.stones[c.other().idx()] &= !(1u64 << a);
                     b1.update();
                     if b1.outcome != Outcome::Ongoing {
-                        f.push(b1, vec![JsAct::list("storm_front", vec![a])]); continue;
+                        f.push(b1, L::default().plus(JsAct::list("storm_front", vec![a]))); continue;
                     }
                     let mut eb = b1.theirs(c);
-                    if eb == 0 { f.push(b1, vec![JsAct::list("storm_front", vec![a])]); continue; }
+                    if eb == 0 { f.push(b1, L::default().plus(JsAct::list("storm_front", vec![a]))); continue; }
                     while eb != 0 {
                         let b_ = eb.trailing_zeros() as u8; eb &= eb - 1;
                         let mut b2 = b1;
                         b2.stones[c.other().idx()] &= !(1u64 << b_);
-                        b2.update();
-                        f.push(b2, vec![JsAct::list("storm_front", vec![a, b_])]);
+                        f.push(b2, L::default().plus(JsAct::list("storm_front", vec![a, b_])));
                     }
                 }
                 let tr = f.truncated; (f.take(), tr)
@@ -395,8 +460,8 @@ impl Board {
                 let k = el.len().min(3);
                 let mut f = Frontier::new(cap);
                 let mut acc: Vec<u8> = Vec::new();
-                fn rec(el: &[u8], k: usize, s: usize, acc: &mut Vec<u8>,
-                       base: &Board, c: Color, f: &mut Frontier) {
+                fn rec<L: Log>(el: &[u8], k: usize, s: usize, acc: &mut Vec<u8>,
+                               base: &Board, c: Color, f: &mut Frontier<L>) {
                     if acc.len() == k {
                         let mut b = *base;
                         let mut bits = 0u64;
@@ -404,7 +469,7 @@ impl Board {
                         b.stones[c.other().idx()] &= !bits;
                         b.stones[c.idx()] |= bits;
                         b.update();
-                        let log0 = vec![JsAct::list("corrupt", acc.clone())];
+                        let log0 = L::default().plus(JsAct::list("corrupt", acc.clone()));
                         if b.outcome != Outcome::Ongoing { f.push(b, log0); return; }
                         let mut own = b.mine(c);
                         if own == 0 { f.push(b, log0); return; }
@@ -412,8 +477,7 @@ impl Board {
                             let s2 = own.trailing_zeros() as u8; own &= own - 1;
                             let mut b2 = b;
                             b2.stones[c.idx()] &= !(1u64 << s2);
-                            b2.update();
-                            f.push(b2, plus(&log0, JsAct::simple("sacrifice", s2)));
+                            f.push(b2, log0.plus(JsAct::simple("sacrifice", s2)));
                         }
                         return;
                     }
@@ -433,8 +497,8 @@ impl Board {
                 let mut b0 = *self;
                 b0.stones[c.other().idx()] &= !doomed;
                 b0.update();
-                let log0 = if doomed == 0 { vec![] }
-                           else { vec![JsAct::list("fireblast", mask_vec(doomed))] };
+                let log0 = if doomed == 0 { L::default() }
+                           else { L::default().plus(JsAct::list("fireblast", mask_vec(doomed))) };
                 if b0.outcome != Outcome::Ongoing { return (vec![(b0, log0)], false); }
                 let mut own = b0.mine(c);
                 if own == 0 { return (vec![(b0, log0)], false); }
@@ -443,8 +507,7 @@ impl Board {
                     let s = own.trailing_zeros() as u8; own &= own - 1;
                     let mut b = b0;
                     b.stones[c.idx()] &= !(1u64 << s);
-                    b.update();
-                    f.push(b, plus(&log0, JsAct::simple("sacrifice", s)));
+                    f.push(b, log0.plus(JsAct::simple("sacrifice", s)));
                 }
                 let tr = f.truncated; (f.take(), tr)
             }
@@ -458,7 +521,7 @@ impl Board {
                     let mut b = *self;
                     b.stones[c.idx()] &= !(1u64 << s);
                     b.update();
-                    let log0 = vec![JsAct::simple("sacrifice", s)];
+                    let log0 = L::default().plus(JsAct::simple("sacrifice", s));
                     if b.outcome != Outcome::Ongoing { f.push(b, log0); continue; }
                     let (res, t) = Board::branch_move_n(vec![(b, log0)], 3, c, cap,
                                                         |x| x.hard_moveable(c));
@@ -473,7 +536,7 @@ impl Board {
                 while t != 0 {
                     let node = t.trailing_zeros() as u8; t &= t - 1;
                     let mut lands = Frontier::new(cap);
-                    self.branch_move(&[], 1u64 << node, c, &mut lands);
+                    self.branch_move(&L::default(), 1u64 << node, c, &mut lands);
                     for (b, l) in lands.take() {
                         let adj = ADJ[node as usize] & b.theirs(c);
                         if adj == 0 { f.push(b, l); continue; }
@@ -482,8 +545,7 @@ impl Board {
                             let v = a.trailing_zeros() as u8; a &= a - 1;
                             let mut b2 = b;
                             b2.stones[c.other().idx()] &= !(1u64 << v);
-                            b2.update();
-                            f.push(b2, plus(&l, JsAct::simple("meteor_destroy", v)));
+                            f.push(b2, l.plus(JsAct::simple("meteor_destroy", v)));
                         }
                     }
                 }
@@ -496,7 +558,7 @@ impl Board {
                 while t != 0 {
                     let node = t.trailing_zeros() as u8; t &= t - 1;
                     let mut lands = Frontier::new(cap);
-                    self.branch_move(&[], 1u64 << node, c, &mut lands);
+                    self.branch_move(&L::default(), 1u64 << node, c, &mut lands);
                     for (b, l) in lands.take() {
                         let mut own = b.mine(c) & !(1u64 << node);
                         if own == 0 { f.push(b, l); continue; }
@@ -504,8 +566,7 @@ impl Board {
                             let s = own.trailing_zeros() as u8; own &= own - 1;
                             let mut b2 = b;
                             b2.stones[c.idx()] &= !(1u64 << s);
-                            b2.update();
-                            f.push(b2, plus(&l, JsAct::simple("sacrifice", s)));
+                            f.push(b2, l.plus(JsAct::simple("sacrifice", s)));
                         }
                     }
                 }
@@ -517,7 +578,7 @@ impl Board {
 
     /// Boards only, for the search (which does not need the logs).
     pub fn resolve_outcomes(&self, pos: usize, c: Color, cap: usize) -> (Vec<Board>, bool) {
-        let (v, t) = self.resolve_outcomes_logged(pos, c, cap);
+        let (v, t) = self.resolve_outcomes_impl::<()>(pos, c, cap);
         (v.into_iter().map(|(b, _)| b).collect(), t)
     }
 }

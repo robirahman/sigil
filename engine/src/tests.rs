@@ -763,6 +763,50 @@ fn applying_an_enumerated_turn_is_deterministic_and_legal() {
 }
 
 #[test]
+fn logged_and_unlogged_resolution_agree() {
+    // `resolve_outcomes` (search path, `()` log) and `resolve_outcomes_logged`
+    // (browser replay path, `Vec<JsAct>` log) are the SAME enumeration
+    // instantiated twice. The search must see exactly the boards the replay
+    // path would emit, in the same order, because `Action::Cast::outcome` is
+    // an index into that list. Same random-position sweep as the greedy test.
+    let mut checked = 0;
+    for seed in 1..180u64 {
+        let draw = Board::legal_draw(seed);
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL;
+        let bl = (nx() & ALL) & !r;
+        b.stones = [r, bl];
+        b.update();
+        for pos in 0..9 {
+            for c in [Color::Red, Color::Blue] {
+                let id = draw[pos];
+                if !b.castable(c, true, true, false).contains(&id) { continue; }
+                let mut cleared = b;
+                cleared.cast_clear_and_refill(pos, c);
+                let (plain, t1) = cleared.resolve_outcomes(pos, c, OUTCOME_CAP);
+                let (logged, t2) = cleared.resolve_outcomes_logged(pos, c, OUTCOME_CAP);
+                assert_eq!(t1, t2, "truncation differs for {} (seed {})",
+                           SPELLS[id as usize].name, seed);
+                assert_eq!(plain.len(), logged.len(), "count differs for {} (seed {})",
+                           SPELLS[id as usize].name, seed);
+                for (i, (p, (l, log))) in plain.iter().zip(logged.iter()).enumerate() {
+                    assert_eq!(p.stones, l.stones,
+                               "outcome {} differs for {} (seed {})", i, SPELLS[id as usize].name, seed);
+                    // The logged path records at least one action per outcome
+                    // unless the resolver had nothing to do.
+                    assert!(!log.is_empty() || p.stones == cleared.stones,
+                            "empty log with a changed board for {}", SPELLS[id as usize].name);
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 200, "sweep exercised only {checked} casts");
+}
+
+#[test]
 fn greedy_resolution_is_always_among_the_enumerated_outcomes() {
     // The property that makes "nothing hidden" checkable: whatever the shipped
     // greedy engine would play must appear in our enumeration.
