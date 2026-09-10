@@ -29,8 +29,10 @@ Pool: `python harness/pool_shards.py "runs/<id>/live/arm*.log"`.
 ## Run 2 -- search knobs that survived the local 300 ms arenas (~$3-7 each at 3 s)
 
 Only knobs whose local point estimate is >= 50% get a fleet run (local results: FINDINGS
-"§1.2/§1.4 knob arenas"). `force_hints` (47.1%) and `pvs` (50.5%, identical depth) do NOT
-qualify. For each survivor the arm is `25,3000,tfit,<knob>,<arm>,<base>`:
+"§1.2/§1.4 knob arenas"). Qualifying: `aspiration_steps` (51.5%), `adopt_partial` (51.0%),
+`elastic` (untested locally; needs matched time), and `lmr` (46.8% at 300 ms, but its
+depth-for-coverage trade grows with the clock, as `width_scale` did). Not qualifying:
+`force_hints` 47.1%, `use_history` 47.5%, `root_resort` 49.0%, `pvs` 50.5% with identical depth. For each survivor the arm is `25,3000,tfit,<knob>,<arm>,<base>`:
 
 ```sh
 printf '25,3000,tfit,lmr,21,0\n'        > arms/lmr_3s.txt        # LMR band x2, R=1
@@ -38,6 +40,7 @@ printf '25,3000,tfit,history,1,0\n'     > arms/history_3s.txt
 printf '25,3000,tfit,root_resort,1,0\n' > arms/root_resort_3s.txt
 printf '25,3000,tfit,elastic,1,0\n'     > arms/elastic_3s.txt    # gate at MATCHED average time
 printf '25,3000,tfit,aspiration_steps,1,0\n' > arms/aspiration_steps_3s.txt   # local 51.5%: qualifies
+printf '25,3000,tfit,adopt_partial,1,0\n'    > arms/adopt_partial_3s.txt      # local 51.0%: qualifies
 ./launch.sh sigil-knob-lmr ab_search.py arms/lmr_3s.txt "1,200,tfit,lmr,21,0" 45 us-central1-f 4 c3d-highcpu-90
 ```
 

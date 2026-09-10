@@ -1577,5 +1577,16 @@ pooled with `pool_shards.py` (which now checks matched average time via the GAME
 | `use_history` | 400 | 47.5% | [42.7, 52.4] | −17 [−51, +17] | 1.000 | null, leaning negative, same depth (4.63 vs 4.64): re-sorting tier 3 by history displaces the generator's order, which is already best at the median (FINDINGS "best move rank median 1"); the tail it could help is casts/dashes that the width never generates anyway |
 | `root_resort` | 400 | 49.0% | [44.1, 53.9] | −7 [−41, +27] | 1.000 | null, same depth: the root already searches the previous best first, and with a root width of 72-480 the order of the rest rarely changes which move wins |
 | `aspiration_steps` | 400 | 51.5% | [46.6, 56.4] | +10 [−24, +44] | 1.000 | first knob with a point estimate above 50% (same depth); qualifies for the 3 s fleet run (`arms/aspiration_steps_3s.txt`) |
+| `adopt_partial` | 400 | 51.0% | [46.1, 55.9] | +7 [−27, +41] | 1.000 | above 50%, same depth; qualifies for the 3 s fleet run (`arms/adopt_partial_3s.txt`) |
 
-(rows appended as each knob's shard set finishes)
+`elastic` was not in the local queue (it needs matched-average-time calibration); its 3 s
+fleet arm is listed in CAMPAIGN.md with `--max-time-ratio 1.05` pooling.
+
+Summary of the seven at 300 ms: nothing clears on its own (all seven intervals span
+parity; SE ~2.5% = +/-35 Elo), two lean positive (`aspiration_steps` 51.5%,
+`adopt_partial` 51.0%), three lean negative (`force_hints` 47.1%, `lmr` 46.8%, `use_history`
+47.5%), two flat (`pvs` 50.5%, `root_resort` 49.0%). The pattern matches the engine's
+history: ordering is already good at the median, and anything that spends nodes on the tail
+(hints, LMR band, history re-sorts) costs depth that 300 ms cannot spare. The two positive
+leaners and `lmr` (the depth-for-coverage trade that grows with the clock) go to the fleet
+at 3 s; the rest stay off and are not re-tried without a changed premise.
