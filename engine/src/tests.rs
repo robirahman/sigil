@@ -826,13 +826,16 @@ fn a_reused_search_carries_its_table_into_the_next_move_and_new_game_clears_it()
 }
 
 #[test]
-fn the_section_1_2_knobs_default_off_and_the_default_tree_is_unchanged() {
-    // Every §1.2 knob ships OFF. With all of them off the search must be the
-    // pre-knob engine node for node; the fixed-depth bench HASH is the full
-    // gate (examples/bench.rs), this pins the defaults and a single position.
+fn the_shipped_search_knobs_are_pinned_and_the_default_tree_is_sane() {
+    // The ordering knobs ship OFF (each measured null or negative at 3 s);
+    // elastic time and the LMR band ship ON (+58 / +47 alone, +81 together at
+    // 10 s, FINDINGS "Run 2 at 10 s"). This pins every shipped default so a
+    // binding that restates one is caught here, and checks a single position.
     let s = crate::search::Search::new(12);
     assert!(!s.force_hints_get() && !s.root_resort_get() && !s.aspiration_steps_get()
-            && !s.adopt_partial_get() && s.elastic_get().is_none());
+            && !s.adopt_partial_get() && !s.pvs_get() && !s.history_get());
+    assert_eq!(s.elastic_get(), Some(crate::search::Elastic::DEFAULT));
+    assert_eq!(s.lmr_get(), (2, 1));
     let mut b = Board::new(Board::legal_draw(23), Variant::Standard);
     b.setup_initial();
     let mut base = crate::search::Search::new(16);
