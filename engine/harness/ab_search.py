@@ -38,7 +38,11 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # arm's mean seconds per move so pool_shards can check matched time.
          'elastic',
          # §1.4: pvs 1/0; history 1/0; lmr = ext*10 + r (e.g. 21 = band x2, R 1)
-         'pvs', 'history', 'lmr')
+         'pvs', 'history', 'lmr',
+         # bundle: the two knobs that cleared individually at 3 s, together.
+         # Knobs interact through node rate, so a default flip needs the pair
+         # measured as one arm. Value = the lmr code (21); elastic is DEFAULT.
+         'bundle')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -71,6 +75,9 @@ def play(b, ms, ev, hist, knob, val):
     if knob == 'elastic' and val:
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
     if knob == 'lmr' and val:
+        extra['lmr'] = (val // 10, val % 10)
+    if knob == 'bundle' and val:
+        extra['elastic'] = (2.0, 0.4, 2, 50, True)
         extra['lmr'] = (val // 10, val % 10)
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
                        kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, **extra)
