@@ -1,17 +1,26 @@
 # Engine status
 
-**Current as of 2026-09-09.** Everything below the "Phase 0 status" heading is
+**Current as of 2026-09-16.** Everything below the "Phase 0 status" heading is
 the original bitboard-port log and is kept for provenance; where it disagrees
 with this section, this section is right.
 
-## Shipped on `main` (merge 90d96c35)
+## Shipped on `main` (merge 90d96c35; search defaults flipped 8f2cbf88, 2026-09-16)
 
 | | |
 |---|---|
 | strength vs the previously playtested engine | **+228 Elo @3s, +348 @60s** |
-| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2 |
-| tests | **89/89** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
-| browser build | `RUST_ENGINE_VERSION` 2, cache `v26`, wasm 558,686 bytes |
+| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` (2.0, 0.4, 2, 50, predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2; `?ai=rust_anchor` pins elastic OFF / lmr 0 |
+| tests | **95/95** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
+| browser build | `RUST_ENGINE_VERSION` 4, cache `v28`, wasm 465,955 bytes (unoptimised; `wasm-opt` still fails the smoke) |
+
+**2026-09-16: elastic time management and the LMR band ship ON.** Fleet arenas at
+10 s, matched average time: elastic +58 Elo [+29, +88], `lmr` 21 +47 [+17, +76], the
+pair +81 [+51, +111] (FINDINGS "Run 2 at 10 s"). Both live in `Search::new`, so every
+binding inherits them; the frozen anchor tier turns them off in `wasm.rs
+pick_move_actions`. Elastic matches the AVERAGE budget, not each move: a single move may
+run to 2x the tier time once when the answer is unstable and stop at 0.4x when stable.
+Pondering (default-on for >= 10 s tiers) confirmed at +24 [+10, +39] (3 s) and +31
+[+2, +60] (10 s).
 
 Four things landed in that merge and each is worth knowing about:
 
