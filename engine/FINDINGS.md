@@ -1690,3 +1690,27 @@ answer is horizon.
 
 Run 1 ~2.4 h + ~2.2 h = $14; Run 2 four VMs ~1.6-1.9 h = $24; Run 3 9 h = $29; Run 4
 9 h = $29. Campaign so far ~**$96**, plus the three 10 s runs in flight (~2.2 h each, ~$21).
+
+### Run 2 at 10 s -- both knobs confirm, and the pair is worth more than either (2026-09-16)
+
+45 shards x 6 pairs, `ab_search.py`, same binary both arms, colour-swapped:
+
+| arm at 10 s | games | arm% | 95% CI | Elo | time ratio |
+|---|---|---|---|---|---|
+| `elastic` DEFAULT (`20260916T151012Z`) | 540 | **58.33%** | [54.13, 62.42] | **+58 [+29, +88]** | 1.018 |
+| `lmr` 21 (`20260916T151027Z`) | 540 | **56.67%** | [52.45, 60.78] | **+47 [+17, +76]** | 1.000 |
+| **`bundle` 21 = elastic + lmr** (`20260916T151519Z`) | 540 | **61.48%** | [57.31, 65.49] | **+81 [+51, +111]** | 1.014 |
+
+Every lower bound clears 50%, the elastic arms sit inside the 1.05 matched-time gate, and
+the pair does not cancel through node rate: +81 against +58 and +47 alone. Both grow
+with the clock (elastic +32 -> +58, lmr +21 -> +47 from 3 s to 10 s), the `width_scale`
+signature again. Decision per the runbook: flip both defaults in `Search::new` (and so in
+`search_defaults`), STATUS.md shipped config, rebuild the wasm, redeploy. The 300 ms
+local arena had `lmr` at 46.8% -- the single knob whose short-clock verdict the runbook
+explicitly refused to trust, and it is the second-largest search gain in the project.
+
+One consequence to decide before the flip: `?ai=rust_anchor` ("frozen reference; never
+upgrade it") runs the SAME wasm and pins only `fresh` (a throwaway table), not the search
+knobs, so a default flip would move the anchor too. The anchor path must set
+`elastic None` / `lmr 0` explicitly, which is the one place restating a default is the
+point rather than the trap.
