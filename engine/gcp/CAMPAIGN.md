@@ -33,7 +33,7 @@ Pool: `python harness/pool_shards.py "runs/<id>/live/arm*.log"`.
 
 **3 s DONE 2026-09-10**: `aspiration_steps` 50.2% and `adopt_partial` 51.7% span parity (OFF, recorded);
 `elastic` **+32 [+18, +47]** and `lmr` 21 **+21 [+7, +35]** clear. 10 s confirmations `20260916T151012Z`
-(elastic), `20260916T151027Z` (lmr) and the pair as ONE arm, knob `bundle` 21, `20260916T151519Z`, launched 2026-09-16.
+(elastic), `20260916T151027Z` (lmr) and the pair as ONE arm, knob `bundle` 21, `20260916T151519Z`, launched 2026-09-16. **10 s DONE**: elastic **+58 [+29, +88]**, lmr **+47 [+17, +76]**, bundle **+81 [+51, +111]** -> flip both defaults (pin the anchor first).
 
 Only knobs whose local point estimate is >= 50% get a fleet run (local results: FINDINGS
 "§1.2/§1.4 knob arenas"). Qualifying: `aspiration_steps` (51.5%), `adopt_partial` (51.0%),
