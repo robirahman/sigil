@@ -42,6 +42,14 @@ pub fn pick_move_actions(sfn: &str, time_ms: u32, tt_bits: u32, width_scale: u32
     };
     let c = b.to_move;
     let mut s = Search::new(tt_bits.clamp(10, 22));
+    // This entry point serves ONLY the frozen `?ai=rust_anchor` tier (a fresh
+    // table every move; every listed tier goes through `Engine`). The anchor
+    // exists so human ratings against it stay comparable over time, so it is
+    // pinned to the 2026-09 shipped search: `Search::new` now turns elastic
+    // time and the LMR band on by default, and the anchor turns them back off.
+    // Restating a default is the trap everywhere else; here it is the point.
+    s.set_elastic(None);
+    s.set_lmr(0, 1);
     s.set_width_scale(width_scale.max(1) as usize);
     // MUST be set explicitly — same trap py.rs documents at its call site.
     s.weights = match crate::eval::weights_by_name(eval_name) {
