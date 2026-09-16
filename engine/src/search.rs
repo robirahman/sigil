@@ -354,7 +354,7 @@ pub struct Search {
     /// previous best is searched first, so that comparison is sound; the old
     /// rule discarded the whole iteration.
     adopt_partial: bool,
-    /// Time-budget elasticity; `None` = fixed budget, exactly as before.
+    /// Time-budget elasticity; `None` = fixed budget. Ships as `Some(DEFAULT)`.
     elastic: Option<Elastic>,
     /// §1.4a Principal-variation search: first child full window, the rest
     /// zero-window with a full re-search on `alpha < v < beta`.
@@ -490,10 +490,15 @@ impl Search {
             root_resort: false,
             aspiration_steps: false,
             adopt_partial: false,
-            elastic: None,
+            // SHIPPED ON since 2026-09-16: elastic time management and the LMR
+            // band (x2, R=1) measured +58 [+29, +88] and +47 [+17, +76] Elo at
+            // 10 s alone and +81 [+51, +111] together, at matched average time
+            // (FINDINGS "Run 2 at 10 s"). Both grow with the clock. The frozen
+            // `rust_anchor` tier turns them back off in wasm.rs.
+            elastic: Some(Elastic::DEFAULT),
             root_scores_out: Vec::new(),
             pvs: false,
-            lmr_ext: 0,
+            lmr_ext: 2,
             lmr_r: 1,
             use_history: false,
             hist_move: vec![0; 2 * 39 * 40],
