@@ -11,6 +11,9 @@ Run `teardown.sh` when the bucket shows `COMPLETE` for every run.
 
 ## Run 1 -- pondering + persistence, the thing that just shipped (~$8 + ~$7)
 
+**DONE 2026-09-10** (`20260909T233422Z`, `20260909T233436Z`): 3 s **+24 [+10, +39]**, 10 s **+31 [+2, +60]**;
+both lower bounds > 50% -> confirmed, default-on, no redeploy. FINDINGS "Fleet campaign, runs 1-4".
+
 ```sh
 cd engine/gcp
 ./launch.sh sigil-ponder3 ab_session.py arms/ponder_3s.txt "1,200,ponder" 45 us-central1-f 4 c3d-highcpu-90
@@ -27,6 +30,10 @@ Pool: `python harness/pool_shards.py "runs/<id>/live/arm*.log"`.
 | upper CI bound < 50% at either control | set `ponderPolicy: 'setting'` for every tier in game-board-local.js (opt-in only), bump RUST_ENGINE_VERSION and sw.js, redeploy; investigate slice overhead in `Engine::ponder_step` |
 
 ## Run 2 -- search knobs that survived the local 300 ms arenas (~$3-7 each at 3 s)
+
+**3 s DONE 2026-09-10**: `aspiration_steps` 50.2% and `adopt_partial` 51.7% span parity (OFF, recorded);
+`elastic` **+32 [+18, +47]** and `lmr` 21 **+21 [+7, +35]** clear. 10 s confirmations `20260916T151012Z`
+(elastic), `20260916T151027Z` (lmr) and the pair as ONE arm, knob `bundle` 21, `20260916T151519Z`, launched 2026-09-16.
 
 Only knobs whose local point estimate is >= 50% get a fleet run (local results: FINDINGS
 "§1.2/§1.4 knob arenas"). Qualifying: `aspiration_steps` (51.5%), `adopt_partial` (51.0%),
@@ -58,6 +65,9 @@ defaults (knobs interact through node rate).
 
 ## Run 3 -- §2 prior labels (~$26, 8 h)
 
+**RAN 2026-09-10** (`20260909T233450Z`), watchdog-killed at 9 h: 4,605 labels / 520 games, not 700k -- a depth-7
+label costs ~15 s under 90-process contention; plan on **~20 labels per shard-hour**. Gate 0 pending (needs a build VM).
+
 ```sh
 SMOKE_TIMEOUT=1800 ./launch.sh sigil-prior selfplay_prior.py arms/prior_labels.txt "2,/opt/sigil/out/data,5,4,3,4" 90 us-central1-f 9 c3d-highcpu-90
 ```
@@ -80,6 +90,9 @@ Gate 1 failing stops §2 (~$60 spent, recorded). Passing leads to `prior_iter.rs
 node-cost gate (< 5%), knobbite, then arenas exactly as in Run 2.
 
 ## Run 4 -- Check A over the recorded human games (~$25, 7 h)
+
+**DONE 2026-09-10** (`20260909T233502Z`, 88/90 shards): human movers 537 flags, >= 1400 144 flags; 100% of
+>5/half-move drops carry an UNPROVEN_MATE sentinel, 0% below 2; no spell structure -> second row: horizon, nothing to change.
 
 ```sh
 SMOKE_TIMEOUT=3600 ./launch.sh sigil-checka eval_drop_audit.py arms/checka_human.txt "--checks,a,--lines,gs://focus-surfer-494820-g0-sigil/data/hydrated_lines_v2.json,--depths,2,--windows,2,--limit-games,2,--out,/opt/sigil/out/smoke.json" 90 us-central1-f 9 c3d-highcpu-90
