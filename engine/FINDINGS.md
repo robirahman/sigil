@@ -1714,3 +1714,15 @@ upgrade it") runs the SAME wasm and pins only `fresh` (a throwaway table), not t
 knobs, so a default flip would move the anchor too. The anchor path must set
 `elastic None` / `lmr 0` explicitly, which is the one place restating a default is the
 point rather than the trap.
+
+### SHIPPED 2026-09-16: elastic + LMR defaults, RUST_ENGINE_VERSION 4
+
+`Search::new` carries `elastic: Some(Elastic::DEFAULT)` and `lmr_ext: 2` (`aba05af2`);
+`pick_move_actions` -- the only entry point `?ai=rust_anchor` uses -- sets both back off
+(`3a0f96c1`), so the frozen reference is still the 2026-09 search. The defaults test now
+pins every knob (`8f2cbf88`). Build VM on `main` at `8f2cbf8`: **95/95 tests**; wasm
+465,955 bytes unoptimised (`wasm-opt` -O2 still fails `tools/wasm-smoke.js` at init and
+the build falls back, as designed). `RUST_ENGINE_VERSION` 3 -> 4, `sw.js` v27 -> v28 with
+`?v=4` on the three engine assets. Human-facing consequence: the >= 10 s tiers now think
+for a variable time per move around the same average; the acceptance gate (Run 0) is the
+measurement that matters next, and it needs Fakey_McFaker / Futuresight on the top tier.
