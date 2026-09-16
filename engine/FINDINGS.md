@@ -1590,3 +1590,103 @@ history: ordering is already good at the median, and anything that spends nodes 
 (hints, LMR band, history re-sorts) costs depth that 300 ms cannot spare. The two positive
 leaners and `lmr` (the depth-for-coverage trade that grows with the clock) go to the fleet
 at 3 s; the rest stay off and are not re-tried without a changed premise.
+
+## Fleet campaign, runs 1-4 pooled (launched 2026-09-09 23:34 UTC, pooled 2026-09-16)
+
+Everything below is `launch.sh` on `main` (runs 1/3/4 cloned `abfe019`, run 2 `b284da0`),
+one VM per run, pooled from GAME / FLAG lines with `pool_shards.py` / `pool_drops.py` --
+never from a shard's own SPRT line. Eight VMs ran concurrently (714 vCPUs); the limit that
+bit was `CPUS_PER_VM_FAMILY` = 500 per family in us-central1, so three runs fell through
+to `c3-highcpu-88`. All eight self-terminated; `teardown.sh` ran 2026-09-16 15:10 UTC.
+
+### Run 1 -- pondering CONFIRMED at both controls (~$14)
+
+`ab_session.py <pairs> <ms> ponder`, honest ponder (the arm ponders the pre-move position
+for the opponent's think time and never sees their choice), colour-swapped, 45 shards:
+
+| control | games | arm% | 95% CI | Elo | mean plies |
+|---|---|---|---|---|---|
+| 3 s / 3 s (`20260909T233422Z`) | 2,250 | **53.51%** | [51.45, 55.56] | **+24 [+10, +39]** | 32.8 |
+| 10 s / 10 s (`20260909T233436Z`) | 540 | **54.44%** | [50.23, 58.60] | **+31 [+2, +60]** | 32.5 |
+
+Both lower bounds are above 50%: first row of the CAMPAIGN.md table. Pondering stays
+default-on for the >= 10 s tiers, no redeploy. The 300 ms local number (+40 [+3, +77])
+sits inside both intervals; the effect does not shrink with the clock at equal
+ponder/search time, which is the least favourable ratio a human ever gives it.
+
+### Run 2 -- search knobs at 3 s, 45 shards x 25 pairs each (~$8 each)
+
+| knob | local 300 ms | 3 s games | arm% | 95% CI | Elo | time ratio | decision |
+|---|---|---|---|---|---|---|---|
+| `aspiration_steps` | 51.5% | 2,250 | 50.18% | [48.11, 52.24] | +1 [-13, +16] | 1.000 | spans parity: **OFF**, recorded, not re-run |
+| `adopt_partial` | 51.0% | 2,250 | 51.69% | [49.62, 53.75] | +12 [-3, +26] | 1.000 | spans parity: **OFF**, recorded, not re-run |
+| **`elastic`** (2.0, 0.4, 2, 50) | untested | 2,250 | **54.62%** | [52.56, 56.67] | **+32 [+18, +47]** | 0.997 | clears -> 10 s confirmation `20260916T151012Z` |
+| **`lmr` 21** (band x2, R=1) | 46.8% | 2,250 | **53.02%** | [50.96, 55.08] | **+21 [+7, +35]** | 1.000 | clears -> 10 s confirmation `20260916T151027Z` |
+
+`elastic` spent 2.990 s/move against the base's 3.001 (ratio 0.997, inside the 1.05 gate),
+so its verdict stands at matched time. `lmr` is the `width_scale` pattern exactly: -23 at
+300 ms, +21 at 3 s -- the reduced band's subtrees cost depth a short search cannot spare
+and buy coverage a longer one can. Two knobs cleared individually, so per the runbook
+ONE bundle arm runs at 10 s before either default flips (`ab_search.py` knob `bundle`,
+value 21 = elastic DEFAULT + lmr 2/1; `arms/bundle_10s.txt`; `20260916T151519Z`).
+
+### Run 3 -- prior labels: 4,605 labels, and the sizing error (~$29, watchdog-killed)
+
+`selfplay_prior.py 800 <out> 7 5 3 4`, 90 shards. The runbook sized this at ~36 s/game
+(800 games in 8 h); the one shard that checkpointed early ran at **170 s/game**, and after
+9 h the fleet had **42 shards with a checkpoint, 520 distinct games, 4,605 labels** --
+not 70k / 700k. 48 shards never reached their first 10-game checkpoint, i.e. ran slower
+than 3,240 s/game at 90 processes on 45 physical cores. This is the E1 error again --
+"size it from a MEASURED games/hour, not an extrapolation" -- and the rule now has a
+number: a depth-7 label costs 90 shards ~15 s each under contention, so **20 labels per
+shard-hour** is the planning figure. Gate 0 needs a few thousand labels and has them;
+`prior_gate0.py` needs `sigil_engine`, so it runs on a build VM, not in Cloud Shell.
+
+### Run 4 -- Check A over the recorded human games, depth 6 (~$29, 88/90 shards)
+
+`eval_drop_audit.py --checks a --depths 6 --windows 2` over `hydrated_lines_v2.json`
+(2,403 games). 88 of 90 shards finished before the 9 h watchdog; two shards' positions
+are MISSING, so no rate is read off this. 2,884 flags, 1,488 games, **0 provable-mate
+announcements** (the mate guard holding on human lines), 566 with an UNPROVEN_MATE
+sentinel at one end. Restricted to HUMAN movers (`--identities`, `--mover human`):
+**537 flags**, 382 games, opponents mostly `ai_hard` (207), `rust` (122), `ai_medium` (80).
+
+| dropPerPly band (human to move) | n | with a mate sentinel at either end |
+|---|---|---|
+| 0.50-0.75 (envelope edge) | 311 | 0 (0%) |
+| 0.75-1.00 | 18 | 0 |
+| 1.00-2.00 | 34 | 0 |
+| 2.00-5.00 | 2 | 0 |
+| **5.00+** | **172** | **172 (100%)** |
+
+The same perfect separation as the self-play audit: every large drop is a mate
+announcement (98 from `+UNPRV` collapsing, 74 into `-UNPRV`), no small drop is. Spell
+composition of the >2 flags matches the <=2 flags to within 0.5 pp on every spell (largest
+deviation `Lurk` 1.4% vs 0.9%), and no game carries more than 5 human flags in 382. That
+is the runbook's second row -- **mostly UNPROVEN_MATE at one end: horizon effects, depth is
+the cure, nothing to change** -- with the third row's conclusion for the remainder: no
+spell or shape structure, so self-play stays a sufficient instrument.
+
+Filtered to movers rated **>= 1400** at game time (`redEloBefore`/`blueEloBefore` from
+`completed_games_raw.json`; 490 of the 537 human flags have a rating): **144 flags, 99
+games, 3 humans**, all ranked:
+
+| dropPerPly band (human >= 1400 to move) | n | mate sentinel at either end |
+|---|---|---|
+| 0.50-0.75 | 85 | 0 |
+| 0.75-1.00 | 4 | 0 |
+| 1.00-2.00 | 8 | 0 |
+| 2.00-5.00 | 0 | 0 |
+| **5.00+** | **47** | **47 (100%)** |
+
+Same separation, same verdict, and 83 of the 144 are one player's.
+
+One limit, stated so it is not read past: the run used ONE depth, so every flag is
+`UNTESTED` for a cure rate. Cure rates live in the depth-2/4/6 self-play run ("Check A
+re-run" above); this run answers the runbook's question -- structure, or horizon? -- and the
+answer is horizon.
+
+### Costs (list price, c3d-highcpu-90 ~$3.2/h, c3-highcpu-88 ~$3.6/h)
+
+Run 1 ~2.4 h + ~2.2 h = $14; Run 2 four VMs ~1.6-1.9 h = $24; Run 3 9 h = $29; Run 4
+9 h = $29. Campaign so far ~**$96**, plus the three 10 s runs in flight (~2.2 h each, ~$21).
