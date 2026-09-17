@@ -583,6 +583,10 @@ impl Search {
 
     pub fn set_force_hints(&mut self, on: bool) { self.force_hints = on; }
     pub fn set_root_resort(&mut self, on: bool) { self.root_resort = on; }
+    /// Per-root-move scores from the last COMPLETED iteration (filled only
+    /// while `root_resort` is on). The puzzle solver reads mate-scored root
+    /// moves off it as candidates to prove exhaustively.
+    pub fn root_scores(&self) -> &[(Turn, i32)] { &self.root_scores_out }
     pub fn set_aspiration_steps(&mut self, on: bool) { self.aspiration_steps = on; }
     pub fn set_adopt_partial(&mut self, on: bool) { self.adopt_partial = on; }
     pub fn set_elastic(&mut self, e: Option<Elastic>) { self.elastic = e; }

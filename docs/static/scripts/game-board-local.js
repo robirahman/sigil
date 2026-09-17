@@ -5,8 +5,17 @@ document.addEventListener('alpine:init', () => {
 
 	Alpine.data(
 		'gameBoard',
-		({ importSfn: initialImportSfn = '' }) => ({
+		({ importSfn: initialImportSfn = '', puzzle = null }) => ({
 			actionList: [],
+			// Puzzles page (puzzles.html): the position, the set of winning
+			// first turns (by resulting position) and, for mate-in-2, the
+			// scripted defence per winning first turn. See _puzzleOnTurn.
+			puzzle: puzzle,
+			puzzleStatus: puzzle ? 'playing' : '',   // playing | solved | failed | revealed
+			puzzleStep: 0,                           // solver turns completed
+			puzzleMessage: '',
+			puzzleDiagnostic: '',                    // engine/live-rules disagreement, if any
+			puzzleSolutionText: [],
 			activeSpell: '',
 			activeSpellIsCastable: false,
 			awaiting: '',
@@ -751,21 +760,28 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				// --- Local engine instead of WebSocket ---
-				let aiMode = new URLSearchParams(window.location.search).get('ai');
+				// Puzzle mode: no AI tier (so no rating, no completed_games
+				// record, no offline queue), no local save, the human plays
+				// the puzzle's mover and a scripted opponent plays the stored
+				// defence. `aiMode` stays null on purpose: every persistence
+				// path below is keyed on it.
+				let aiMode = puzzle ? null : new URLSearchParams(window.location.search).get('ai');
 				// Game-rule variant (separate concept from `aiMode`'s "model
 				// variant" naming below): 'standard' or 'competitive'.
-				const gameVariantParam = new URLSearchParams(window.location.search).get('variant');
+				const gameVariantParam = puzzle ? (puzzle.variant || 'standard')
+					: new URLSearchParams(window.location.search).get('variant');
 				let gameVariant = normalizeVariant(gameVariantParam);
 				let _engineRef = null;
+				if (puzzle) warnBeforeUnload = false;
 
 				// Persistence: pin a game-id to the URL (mint one if missing)
 				// so a reload returns to the same game. If a save exists for
 				// the id, hydrate aiMode / variant / humanColor / SFN from it
 				// — these win over the URL so resume works even if the user
 				// lands on /game.html?id=X without other params.
-				if (typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
-				let _gameId = new URLSearchParams(window.location.search).get('id');
-				if (!_gameId && typeof LocalSaveStore !== 'undefined') {
+				if (!puzzle && typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
+				let _gameId = puzzle ? null : new URLSearchParams(window.location.search).get('id');
+				if (!puzzle && !_gameId && typeof LocalSaveStore !== 'undefined') {
 					_gameId = LocalSaveStore.mintId();
 					try {
 						const u = new URL(window.location.href);
@@ -851,7 +867,7 @@ document.addEventListener('alpine:init', () => {
 
 				// Sync any games that were completed offline on a previous visit.
 				// Triggers on page load, on the `online` event, and when auth resolves.
-				if (typeof OfflineGameQueue !== 'undefined') {
+				if (!puzzle && typeof OfflineGameQueue !== 'undefined') {
 					OfflineGameQueue.installAutoflush({
 						onFlush: (result) => {
 							if (result.uploaded > 0) {
@@ -872,7 +888,8 @@ document.addEventListener('alpine:init', () => {
 						sessionStorage.removeItem('sigil_rematch_human_color');
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				const _humanColor = _forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red');
+				const _humanColor = puzzle ? puzzle.mover
+					: (_forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red'));
 				const _aiColor = _humanColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
 
@@ -896,6 +913,10 @@ document.addEventListener('alpine:init', () => {
 					if (_rematchSpells) options.spellNames = _rematchSpells;
 					options.variant = gameVariant;
 					_this.isDeathmatch = variantHasDeathmatch(gameVariant);
+					if (puzzle) {
+						options.aiColor = _aiColor;
+						options.ai = new PuzzleOpponent(puzzle, _this);
+					}
 
 					// Rust engine tiers (the wasm build in a Web Worker): per-move
 					// seconds and TT size. tt_bits is memory-bound in a tab (2^20
@@ -1108,6 +1129,10 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					const engine = new GameController(function emitEvent(eventObj) {
+						// A retried puzzle abandons its previous controller
+						// mid-loop (its scripted opponent never answers), so
+						// events from a superseded engine are dropped.
+						if (puzzle && _engineRef !== engine) return;
 						handleIncomingEvent(eventObj);
 					}, options);
 					_engineRef = engine;
@@ -1118,7 +1143,8 @@ document.addEventListener('alpine:init', () => {
 						_this.awaiting = null;
 					};
 
-					const sfnToLoad = _saveLoadedSfn || _this.importSfn || null;
+					const sfnToLoad = puzzle ? puzzleImportSfn(puzzle.sfn)
+						: (_saveLoadedSfn || _this.importSfn || null);
 					try {
 						await engine.startGame(sfnToLoad);
 					} catch (e) {
@@ -1220,11 +1246,13 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'whoseturndisplay') {
 						handleWhoseTurnEvent(rest);
+						if (puzzle) _puzzleOnWhoseTurn(rest);
 						return;
 					}
 
 					if (type === 'turn_complete') {
 						const t = rest.turn;
+						if (puzzle && t) _puzzleOnTurn(t);
 						if (t && t.color && t.color !== _this.myColor) {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
@@ -1286,6 +1314,7 @@ document.addEventListener('alpine:init', () => {
 							LocalSaveStore.remove(_gameId);
 						}
 						handleGameOverEvent(rest);
+						if (puzzle) _puzzleOnGameOver(rest);
 						return;
 					}
 
@@ -1317,6 +1346,162 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 				}
+
+				// ---------------------------------------------------------------
+				// Puzzles (puzzles.html). The live GameController is the rules
+				// oracle: the human's turn is legal because the engine accepted
+				// every click, and it is judged by the POSITION it produced
+				// (`puzzleSfnKey`), never by the tokens typed. Anything the
+				// precomputed solution promised that the live game does not
+				// deliver -- a "mate" that leaves the game running, a stored
+				// reply the replayer rejects -- is surfaced as a diagnostic,
+				// because it is evidence of a rules disagreement between the
+				// Rust solver and the browser engine.
+				// ---------------------------------------------------------------
+				let _puzzleExpectGameOver = false;
+
+				function _puzzleFail(msg) {
+					if (_this.puzzleStatus !== 'playing') return;
+					_this.puzzleStatus = 'failed';
+					_this.puzzleMessage = msg;
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.validMoves = {};
+					_this.showReset = false;
+					if (typeof soundManager !== 'undefined') { try { soundManager.play('crush'); } catch (e) { /* */ } }
+				}
+
+				function _puzzleSolve() {
+					if (_this.puzzleStatus !== 'playing') return;
+					_this.puzzleStatus = 'solved';
+					_this.puzzleMessage = 'Solved!';
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.validMoves = {};
+					try {
+						const raw = localStorage.getItem('sigil_puzzles_solved');
+						const solved = raw ? JSON.parse(raw) : {};
+						solved[puzzle.id] = Date.now();
+						localStorage.setItem('sigil_puzzles_solved', JSON.stringify(solved));
+					} catch (e) { /* storage blocked */ }
+				}
+
+				function _puzzleOnTurn(t) {
+					if (_this.puzzleStatus !== 'playing') return;
+					if (t.color !== puzzle.mover) {
+						// The scripted defence just replayed: it must land on the
+						// position the solver computed for it.
+						const want = _this._puzzleLastDefence && _this._puzzleLastDefence.after;
+						if (want && puzzleSfnKey(t.sfnAfter) !== puzzleSfnKey(want)) {
+							_this.puzzleDiagnostic = 'Replay mismatch: the browser engine applied the stored reply and reached a different position than the solver predicted. Expected ' + want + ' but got ' + t.sfnAfter;
+						}
+						return;
+					}
+					const key = puzzleSfnKey(t.sfnAfter);
+					if (_this.puzzleStep === 0) {
+						const hit = puzzle.solutionKeys.indexOf(key) >= 0;
+						_this.puzzleStep = 1;
+						if (!hit) {
+							if (_engineRef && _engineRef.board && _engineRef.board.gameover
+								&& _engineRef.board.winner === puzzle.mover) {
+								// The live rules ended the game in the mover's favour on
+								// a turn the exhaustive solver did NOT list as winning.
+								_this.puzzleDiagnostic = 'The game ended in your favour on a turn the solver did not consider a forced win. Position after your turn: ' + t.sfnAfter;
+								_puzzleSolve();
+								return;
+							}
+							_puzzleFail('That does not force a win. Retry, or show the solution.');
+							return;
+						}
+						if (puzzle.mate === 1) {
+							// The game_over event should follow this turn.
+							_puzzleExpectGameOver = true;
+							_this.puzzleMessage = '';
+						} else {
+							_this.puzzleMessage = 'Correct! Now find the finishing move.';
+						}
+						return;
+					}
+					// Second solver turn of a mate-in-2: the game must be over now.
+					if (!(_engineRef && _engineRef.board && _engineRef.board.gameover)) {
+						_puzzleFail('That was not the finishing move. Retry, or show the solution.');
+					} else {
+						_puzzleExpectGameOver = true;
+					}
+				}
+
+				function _puzzleOnWhoseTurn(payload) {
+					if (_this.puzzleStatus !== 'playing') return;
+					if (_puzzleExpectGameOver && payload.color !== puzzle.mover) {
+						_puzzleExpectGameOver = false;
+						_this.puzzleDiagnostic = 'The solver counted your turn as a win, but the live game continued. Position: ' + _this.currentSfn;
+						_puzzleFail('The engine believed that wins, but the game went on. Please report this position.');
+					}
+				}
+
+				function _puzzleOnGameOver(payload) {
+					if (_this.puzzleStatus !== 'playing') return;
+					_puzzleExpectGameOver = false;
+					if (payload.winner === puzzle.mover) _puzzleSolve();
+					else _puzzleFail('The opponent won. Retry, or show the solution.');
+				}
+
+				_this.puzzleRetry = function () {
+					_this.puzzleStatus = 'playing';
+					_this.puzzleStep = 0;
+					_this.puzzleMessage = '';
+					_this.puzzleSolutionText = [];
+					_this._puzzleLastDefence = null;
+					_puzzleExpectGameOver = false;
+					_this.winner = '';
+					_this.messageHistory = [];
+					_this.validMoves = {};
+					_this.pushSourceNode = '';
+					_this.lastPlay = '';
+					_this.nodesToRefill = {};
+					_this.playerToRefill = '';
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.showReset = false;
+					_this.currentSfn = '';
+					_this.whoseTurn = '';
+					_turnCount = 0;
+					initEngine();
+				};
+
+				_this.puzzleShowSolution = function () {
+					if (_this.puzzleStatus === 'solved') return;
+					_this.puzzleStatus = 'revealed';
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.showReset = false;
+					const lines = [];
+					const sols = puzzle.solutions || [];
+					const shown = sols.slice(0, 3);
+					shown.forEach((sol, i) => {
+						const prefix = shown.length > 1 ? ('Line ' + (i + 1) + ': ') : '';
+						let text = prefix + describePuzzleActions(sol.actions);
+						if (sol.defence) {
+							text += '  \u2192  ' + (puzzle.mover === 'red' ? 'Blue' : 'Red') + ' replies ' + describePuzzleActions(sol.defence.actions);
+						}
+						if (sol.finish) {
+							text += '  \u2192  ' + describePuzzleActions(sol.finish.actions);
+						}
+						lines.push(text);
+					});
+					const extra = puzzle.solutionKeys.length - shown.length;
+					if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
+					_this.puzzleSolutionText = lines;
+					// Glow the first line's target node(s) on the board.
+					const glow = {};
+					const first = sols[0];
+					if (first && Array.isArray(first.actions)) {
+						first.actions.forEach(a => {
+							if (a && a.node && (a.type === 'move' || a.type === 'hard_move' || a.type === 'blink')) glow[a.node] = puzzle.mover;
+						});
+					}
+					_this.validMoves = glow;
+				};
 
 				function handleAiThinkReportEvent(payload) {
 					if (!_aiAuthManager || !_aiAuthManager.showAiThinkReport) return;
@@ -1875,3 +2060,98 @@ document.addEventListener('alpine:init', () => {
 		})
 	);
 });
+
+
+// ---------------------------------------------------------------------------
+// Puzzles page helpers (docs/puzzles.html). Kept here because game-board-local.js
+// is the only place that knows the GameController's import contract.
+// ---------------------------------------------------------------------------
+
+/**
+ * Position identity used to match a player's turn against the precomputed
+ * winning set: stones + spells, spell counters, locks, springlocks. The turn
+ * counter and the side-to-move token are excluded because the browser records
+ * a turn's after-state with the mover still marked to move while the solver
+ * marks the opponent, and the counter differs by one between them.
+ */
+function puzzleSfnKey(sfn) {
+	const p = String(sfn || '').trim().split(/\s+/);
+	return [p[0], p[3], p[4], p[5]].join(' ');
+}
+
+/**
+ * The SFN to hand `GameController.startGame` so that the FIRST turn played is
+ * the puzzle's mover. The game loop increments the turn counter and derives
+ * the side to move from its parity BEFORE each turn, so the imported counter
+ * must be one less than the puzzle position's.
+ */
+function puzzleImportSfn(sfn) {
+	const p = String(sfn).trim().split(/\s+/);
+	const tc = parseInt(p[2], 10);
+	if (!isNaN(tc) && tc > 0) p[2] = String(tc - 1);
+	return p.join(' ');
+}
+
+/** Human-readable rendering of an applyAITurn action list. */
+function describePuzzleActions(actions) {
+	if (!Array.isArray(actions)) return '';
+	const disp = (n) => (typeof displaySpellName === 'function' ? displaySpellName(n) : String(n || '').replace(/_/g, ' '));
+	const out = [];
+	for (const a of actions) {
+		if (!a || a.type === 'pass') continue;
+		switch (a.type) {
+			case 'move': out.push('move to ' + a.node); break;
+			case 'blink': out.push('blink to ' + a.node); break;
+			case 'hard_move':
+				out.push('move to ' + a.node + (a.pushed_to ? ' pushing to ' + a.pushed_to : ' crushing'));
+				break;
+			case 'dash':
+			case 'dash_lightning':
+				out.push('dash sacrificing ' + (a.sacrificed || []).join(', '));
+				break;
+			case 'cast':
+				out.push('cast ' + disp(a.spell) + ((a.kept && a.kept.length) ? ' keeping ' + a.kept.join(', ') : ''));
+				break;
+			case 'sacrifice': out.push('sacrifice ' + a.node); break;
+			case 'bewitch': out.push('bewitch ' + a.node + (a.node2 ? ', ' + a.node2 : '')); break;
+			case 'corrupt': out.push('corrupt ' + (a.converted || []).join(', ')); break;
+			case 'starfall': out.push('starfall ' + [a.node, a.node2].filter(Boolean).join(', ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
+			case 'gust': out.push('gust' + ((a.kept && a.kept.length) ? ' placing at ' + a.kept.join(', ') : '') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : '')); break;
+			case 'meteor_destroy': out.push('destroy ' + a.node); break;
+			default:
+				out.push(String(a.type).replace(/_/g, ' ') + ((a.destroyed && a.destroyed.length) ? ' destroying ' + a.destroyed.join(', ') : (a.node ? ' ' + a.node : '')));
+		}
+	}
+	return out.join(', ');
+}
+
+/**
+ * The puzzle's opponent: plays the precomputed defence for whichever winning
+ * first turn the solver chose (looked up by the resulting position). Off the
+ * solution it never answers, which parks the abandoned controller's loop
+ * until the page retries with a fresh one.
+ */
+class PuzzleOpponent {
+	constructor(puzzle, component) {
+		this.puzzle = puzzle;
+		this.component = component;
+		this.lastMeta = null;
+		this._byKey = {};
+		for (const sol of (puzzle.solutions || [])) {
+			if (sol && sol.key && sol.defence) this._byKey[sol.key] = sol.defence;
+		}
+	}
+
+	pickTurn(board /* SigilBoard */) {
+		const key = puzzleSfnKey(boardToSfn(board));
+		const defence = this._byKey[key];
+		if (!defence) {
+			if (this.component && this.component.puzzleStatus === 'playing') {
+				this.component.puzzleDiagnostic = 'No stored reply for this position (solutions carry replies for the winning turns only). Position: ' + boardToSfn(board);
+			}
+			return new Promise(() => {});      // never resolves: the loop parks here
+		}
+		if (this.component) this.component._puzzleLastDefence = defence;
+		return Promise.resolve({ actions: defence.actions });
+	}
+}

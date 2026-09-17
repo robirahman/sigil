@@ -2504,3 +2504,83 @@ fn the_engine_refuses_to_fill_seal_of_destruction_when_the_burn_does_not_win() {
                               mask(&["a13", "a12", "b8", "b9"]));
     assert!(w.move_score(n("a6"), None, Color::Red) > 50_000, "ordering must flag the mate");
 }
+
+// ---------------------------------------------------------------------------
+// mate.rs: the puzzle solver
+// ---------------------------------------------------------------------------
+
+/// A recorded position (completed_games, blue to move at turn 16) in which the
+/// exhaustive root enumeration finds many immediate wins.
+const CORPUS_M1_SFN: &str = "rrrrr..bbbr..b...rr....br.b......b.b.../Flourish,Starfall,Carnage,Seal_of_Wind,Grow,Fireblast,Sprout,Surge,Seal_of_Summer b 16 1:0 Flourish:- -:- tied";
+
+#[test]
+fn mate_solver_lists_only_turns_that_end_the_game_in_the_movers_favour() {
+    let b = Board::from_sfn(CORPUS_M1_SFN).expect("sfn");
+    let sol = crate::mate::solve(&b, 200_000_000, 0, &[]).expect("solve");
+    assert!(!sol.mate1.is_empty(), "the corpus position has mates-in-1");
+    let c = b.to_move;
+    for l in &sol.mate1 {
+        assert!(matches!((l.after.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)),
+                "{:?} does not win", l.turn.slice());
+        // The emitted action list must reproduce the listed position, since the
+        // browser replays it through applyAITurn.
+        let (_, after) = b.emit_actions(&l.turn, c);
+        assert_eq!(after.stones, l.after.stones, "{:?}", l.turn.slice());
+    }
+    // Every winning successor is listed: re-derive the set independently.
+    let (turns, st) = b.enumerate_turns(c);
+    assert!(!st.truncated && !st.resolver_truncated);
+    let mut wins = std::collections::HashSet::new();
+    for t in &turns {
+        let n = crate::mate::child(&b, t, c);
+        if matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)) {
+            wins.insert((n.stones, n.spell_counter, n.lock, n.springlock));
+        }
+    }
+    assert_eq!(wins.len(), sol.mate1.len(), "solver lists one line per distinct winning position");
+    assert!(sol.mate2.is_empty(), "mate-in-2 is not searched when a mate-in-1 exists");
+}
+
+#[test]
+fn mate_solver_finds_nothing_in_the_opening() {
+    let b = std_board();
+    let sol = crate::mate::solve(&b, 50_000_000, 0, &[]).expect("solve");
+    assert!(sol.mate1.is_empty());
+    assert!(sol.mate2.is_empty());
+    assert!(sol.stats.root_successors > 0);
+}
+
+/// Independent brute-force check of every mate-in-2 line the solver reports for
+/// a position: no killers, no memo, no probe -- every reply, full enumeration.
+fn brute_force_check_mate2(b: &Board, sol: &crate::mate::Solution) {
+    let c = b.to_move;
+    let o = c.other();
+    let wins = |n: &Board| matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue));
+    let loses = |n: &Board| matches!((n.outcome, o), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue));
+    for l in &sol.mate2 {
+        let after = l.after;
+        assert_eq!(after.outcome, Outcome::Ongoing);
+        let replies = after.enumerate_turns_exhaustive(o).expect("complete");
+        for r in &replies {
+            let p2 = crate::mate::child(&after, r, o);
+            assert!(!loses(&p2), "reply {:?} refutes {:?}", r.slice(), l.turn.slice());
+            if wins(&p2) { continue; }
+            let mates = p2.enumerate_turns_exhaustive(c).expect("complete");
+            assert!(mates.iter().any(|m| wins(&crate::mate::child(&p2, m, c))),
+                    "no mate-in-1 after reply {:?} to {:?}", r.slice(), l.turn.slice());
+        }
+        let (_, d) = l.defence.expect("a defence is chosen");
+        assert_eq!(d.to_move, c);
+        let (_, f) = l.finish.expect("a finishing move is recorded");
+        assert!(wins(&f));
+    }
+}
+
+#[test]
+fn mate_solver_mate_in_two_lines_survive_brute_force() {
+    // The opening has none; the check must at least run end to end. Positions
+    // with a reported mate-in-2 are added here as the generator finds them.
+    let b = std_board();
+    let sol = crate::mate::solve(&b, 50_000_000, 0, &[]).expect("solve");
+    brute_force_check_mate2(&b, &sol);
+}

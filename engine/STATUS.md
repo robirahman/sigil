@@ -13,6 +13,20 @@ with this section, this section is right.
 | tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
 | browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
 
+**2026-09-17: puzzle solver (`mate.rs`, `solve_mates` in the Python binding).** Feeds
+`docs/puzzles.html`. Mate-in-1 enumerates the root in full (complete winning set, and "no
+mate-in-1" is a proof). Mate-in-2 cannot be three fully enumerated plies -- a midgame position
+has ~2e5 legal turns -- so candidate first turns are NOMINATED (the strength engine's mate-scored
+root moves at depth 3 via `Search::root_scores`, plus the turn actually played when the mover won
+within two turns) and each candidate is PROVEN: every legal reply enumerated, the mover's
+mate-in-1 after each reply established by the ordered generator's first 4,000 turns or else by a
+full enumeration. Nothing is inferred from a truncated enumeration; positions past the 1<<20 turn
+cap or `OUTCOME_CAP` are skipped (measured: ~10% of recorded midgame positions). Threefold
+repetition is ignored (puzzles start with no history, as does the page). The generator is
+`tools/gen_mate_puzzles.py`; `tools/puzzle-smoke.js` replays every stored solution through the
+browser engine and fails on any disagreement. The wasm build is untouched (nothing in the browser
+calls the solver), so `RUST_ENGINE_VERSION` stays at 5.
+
 **2026-09-17: Seal of Destruction is implemented.** The engine had NEITHER half of the
 Covenant ritual's rule ("filled at the end of your turn, destroy all enemy stones touching
 you; filled at the start of your turn, you lose") and `sigil_charged` paid it for filling

@@ -1186,6 +1186,15 @@ impl SearchSession {
     }
 }
 
+
+/// Exhaustive mate-in-1 / mate-in-2 solve for the Puzzles generator
+/// (`mate.rs`). Returns JSON; `budget` bounds `apply_turn` calls.
+#[pyfunction]
+#[pyo3(signature = (sfn, budget=50_000_000, time_ms=0, hint_after=vec![]))]
+fn solve_mates(sfn: &str, budget: u64, time_ms: u64, hint_after: Vec<String>) -> PyResult<String> {
+    Ok(crate::mate::solve_json(sfn, budget, time_ms, &hint_after))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
@@ -1197,6 +1206,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
     m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;
+    m.add_function(wrap_pyfunction!(solve_mates, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
