@@ -17,8 +17,8 @@
 //! enough to produce one turn.
 
 use std::collections::VecDeque;
-use crate::board::{Board, Color};
-use crate::spells_meta::GUST;
+use crate::board::{Board, Color, Outcome};
+use crate::spells_meta::{GUST, SEAL_OF_DESTRUCTION, SEAL_OF_WIND};
 use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP, KEY_DASH_MOVES};
 use crate::turn::{Action, Turn, OUTCOME_CAP};
 
@@ -289,6 +289,16 @@ impl<'a> TurnIter<'a> {
             }
         }
         it.build_key_dashes();
+        // Seal of Destruction: a turn that decides the game goes to the FRONT of
+        // the stream, ahead of every stage. Width cuts the stream after `w`
+        // turns and the stages put every cast under every first move before any
+        // dash, so a mate under the last-ranked first move -- the only soft move
+        // in a position full of tempting pushes -- sat 120+ turns deep and was
+        // never searched (the k=5 Gust case). The stages emit it again later;
+        // the duplicate costs a TT probe.
+        for t in board.decisive_destruction_turns(c).into_iter().rev() {
+            it.pending.push_front(t);
+        }
         it
     }
 
@@ -541,6 +551,89 @@ impl<'a> Iterator for TurnIter<'a> {
 }
 
 impl Board {
+    /// Turns that decide the game through Seal of Destruction, for the stream to
+    /// emit first (see `TurnIter::new`). Bounded: nothing runs unless the seal
+    /// is drawn and someone is within reach of it -- `c` at most two nodes short,
+    /// or the enemy fillable by a Gust `c` can cast -- and then it is one
+    /// resolution per (first move, castable spell) plus one dash probe per first
+    /// move. Each candidate is verified by simulating the turn through the seal's
+    /// own rules, so nothing here is a guess the search has to refute.
+    pub fn decisive_destruction_turns(&self, c: Color) -> Vec<Turn> {
+        let Some(pos) = self.position_of(SEAL_OF_DESTRUCTION) else { return Vec::new() };
+        let short = self.uncontrolled_count(pos, c);
+        let fill = self.destruction_fill_targets(c);
+        let gust_fill = fill != 0 && self.position_of(GUST).map_or(false, |g| self.is_charged(c, g))
+            && (self.theirs(c) & Board::dilate(self.mine(c))).count_ones() >= fill.count_ones();
+        if short > 2 && !gust_fill { return Vec::new(); }
+        let wins = |after: &Board| -> bool {
+            let mut t = *after;
+            t.update();
+            t.destruction_end_of_turn(c);
+            t.check_game_over(c);
+            t.destruction_start_of_turn(c.other());
+            matches!((c, t.outcome), (Color::Red, Outcome::RedWins) | (Color::Blue, Outcome::BlueWins))
+        };
+        let has_wind = self.holds_charged(c, SEAL_OF_WIND);
+        let seal = crate::topology::SIGIL[pos];
+        let mut out: Vec<Turn> = Vec::new();
+        for (n, p) in self.ordered_first_moves(c) {
+            let blink = has_wind && (crate::topology::ADJ[n as usize] & self.mine(c)) == 0;
+            let a = if blink { Action::Blink { node: n, push_to: p } }
+                    else { Action::Move { node: n, push_to: p } };
+            let mut b = *self;
+            b.do_move_with_pub(n, p, c);
+            // Decided by the move alone: `move_score` already ranks it first.
+            if b.outcome != Outcome::Ongoing || wins(&b) { continue; }
+            // Casts whose best resolution decides it (self-fill, or Gust onto theirs).
+            for id in b.castable(c, true, true, false) {
+                let Some(cp) = b.position_of(id) else { continue };
+                if id != GUST && b.uncontrolled_count(pos, c) > 2 { continue; }
+                let mut cl = b;
+                cl.cast_clear_and_keep(cp, c, 0);
+                let (ranked, _) = cl.resolve_outcomes_ranked(cp, c, 1);
+                if let Some((raw, ob)) = ranked.first() {
+                    if wins(ob) {
+                        out.push(Turn::single(a).push_pub(Action::Cast {
+                            pos: cp as u8, keep: 0, outcome: *raw as u16 }));
+                    }
+                }
+            }
+            // A dash landing the seal's last node, paid with the two cheapest
+            // stones that are not themselves on the seal.
+            if b.uncontrolled_count(pos, c) == 1 && b.can_dash(c) {
+                let mut cands: Vec<u8> = Vec::new();
+                let mut m = b.dash_sacrificeable(c) & !seal & !(1u64 << n);
+                while m != 0 { cands.push(m.trailing_zeros() as u8); m &= m - 1; }
+                cands.sort_by_cached_key(|&x| b.sacrifice_cost(x, c));
+                let cost = b.dash_cost(c) as usize;
+                if cands.len() >= cost {
+                    let mut sacs = [0u8; 2];
+                    sacs[..cost].copy_from_slice(&cands[..cost]);
+                    sacs[..cost].sort_unstable();
+                    let mut bd = b;
+                    for &x in &sacs[..cost] { bd.stones[c.idx()] &= !(1u64 << x); }
+                    bd.update();
+                    if bd.outcome == Outcome::Ongoing {
+                        let last = seal & !bd.mine(c);
+                        if last.count_ones() == 1 && bd.all_moveable(c) & last != 0 {
+                            let node = last.trailing_zeros() as u8;
+                            for (tn, tp) in bd.move_variants_pub(last, c) {
+                                let mut b2 = bd;
+                                b2.do_move_with_pub(tn, tp, c);
+                                if wins(&b2) {
+                                    out.push(Turn::single(a).push_pub(Action::Dash {
+                                        sacs, n_sacs: cost as u8, node, push_to: tp }));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Turns of the form `[first move, key dash]`, best-first, at most `cap`.
     ///
     /// Bounded work: `KEY_DASH_MOVES` post-move boards, each resolving push options
