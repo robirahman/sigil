@@ -223,7 +223,13 @@ impl Board {
                 Action::Pass => {}
             }
         }
+        // Seal of Destruction, in the live controller's order (`endTurn`, then
+        // the next turn's opening check): the mover's end-of-turn destruction,
+        // THEN the +/-3 lead check -- so a destruction that reaches the lead
+        // wins -- THEN the start-of-turn loss for the side about to move.
+        self.destruction_end_of_turn(c);
         self.check_game_over(c);
+        self.destruction_start_of_turn(c.other());
     }
 
     /// Stones `c` may sacrifice to dash, as an explicit list (Seal of Autumn aware).
@@ -540,6 +546,15 @@ impl Board {
                 Action::Pass => { acts.push(JsAct::list("pass", vec![])); }
             }
         }
+        // NO Seal of Destruction here, deliberately. `rust-ai.js pickTurn`
+        // replays these actions with `applyAITurn` -- which has no burn -- and
+        // compares that board's stones against `expected_sfn` BEFORE the
+        // controller's `endTurn` performs the burn and the next turn's opening
+        // check claims the loser. The board handed back must therefore be the
+        // pre-burn one, or every winning fill is refused as "did not reproduce
+        // its own position". The search's own path, `apply_turn`, applies the
+        // seal; `emit_actions_hands_back_the_pre_burn_board_the_client_replays`
+        // pins the two against each other.
         b.check_game_over(c);
         b.turn_counter += 1;
         b.to_move = c.other();
