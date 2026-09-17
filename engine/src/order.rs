@@ -129,11 +129,37 @@ impl Board {
         v
     }
 
+    /// What Seal of Destruction makes a RESULTING board worth, on top of any goal.
+    /// Three cases, each worth more than every other ordering term combined:
+    ///
+    ///   * the ENEMY holds it charged -> they lose when their turn starts: mate;
+    ///   * WE hold it and the end-of-turn destruction reaches the lead: mate;
+    ///   * WE hold it and it does not -> we lose when OUR next turn starts.
+    ///
+    /// Ordering must see all three, or the search never looks at the mate and
+    /// looks first at the suicide. Evaluated on a post-resolution board, before
+    /// `apply_turn`'s own end-of-turn step, which is why the destruction is
+    /// simulated here on a copy.
+    pub fn destruction_swing(&self, c: Color) -> i32 {
+        if self.position_of(SEAL_OF_DESTRUCTION).is_none() { return 0; }
+        if self.holds_charged(c.other(), SEAL_OF_DESTRUCTION) { return 100_000; }
+        if self.holds_charged(c, SEAL_OF_DESTRUCTION) {
+            let mut t = *self;
+            t.destruction_end_of_turn(c);
+            t.check_game_over(c);
+            let won = matches!((c, t.outcome),
+                (Color::Red, crate::board::Outcome::RedWins)
+                | (Color::Blue, crate::board::Outcome::BlueWins));
+            return if won { 100_000 } else { -100_000 };
+        }
+        0
+    }
+
     /// Exact objective on a RESULTING board — used to rank candidate outcomes after
     /// the additive proxy has narrowed them. Higher is better for `c`.
     pub fn configuration_value(&self, c: Color, goal: PlacementGoal) -> i32 {
         let theirs = self.theirs(c);
-        match goal {
+        self.destruction_swing(c) + match goal {
             PlacementGoal::Voids =>
                 40 * (theirs & VOID).count_ones() as i32
                     - 60 * (theirs & MANA).count_ones() as i32
@@ -180,6 +206,19 @@ impl Board {
                            goal: PlacementGoal) -> i32 {
         let bit = 1u64 << node;
         let mut v = 0i32;
+        // Seal of Destruction: a move that completes it (ours, by landing on its
+        // last node; theirs, by pushing their stone onto its last node) decides
+        // the game either way, so it is scored by simulating that one move.
+        // Guarded to the seal's own nodes, so the cost is paid almost never.
+        if let Some(pos) = self.position_of(SEAL_OF_DESTRUCTION) {
+            let m = SIGIL[pos];
+            let touches = m & bit != 0 || push_to.map_or(false, |d| m & (1u64 << d) != 0);
+            if touches {
+                let mut t = *self;
+                t.do_move_with_pub(node, push_to, c);
+                v += t.destruction_swing(c);
+            }
+        }
         if self.theirs(c) & bit != 0 {
             // A hard move: deporting value plus where we send them.
             v += self.deport_value(node, c);
@@ -235,6 +274,11 @@ impl Board {
         base.stones[c.other().idx()] &= !picked;
         base.update();
 
+        // Seal of Destruction: if the displaced stones can complete the ENEMY's
+        // copy, those nodes outrank every goal -- the placement is a mate in one.
+        let fill = base.destruction_fill_targets(c);
+        let fill = if fill != 0 && fill.count_ones() as usize <= n { fill } else { 0 };
+
         // Rank the empty nodes once.
         let mut ranked: Vec<(i32, u8)> = {
             let mut v = Vec::new();
@@ -242,7 +286,8 @@ impl Board {
             while m != 0 {
                 let node = m.trailing_zeros() as u8;
                 m &= m - 1;
-                v.push((base.destination_value(node, c, goal), node));
+                let bonus = if fill & (1u64 << node) != 0 { 100_000 } else { 0 };
+                v.push((base.destination_value(node, c, goal) + bonus, node));
             }
             v
         };
