@@ -166,6 +166,57 @@ impl Board {
         false
     }
 
+    /// Seal of Destruction, END of `c`'s turn. The live rule (`constants.js`):
+    /// "STATIC: If filled at the end of your turn, destroy all enemy stones
+    /// touching you. If filled at the start of your turn, you lose." Mirrors
+    /// `game-controller.js endTurn` / `sim-board.js destructionEndOfTurn`: every
+    /// enemy stone adjacent to one of `c`'s stones is removed, adjacency read off
+    /// the pre-destruction board (only enemy stones go, so one mask does it).
+    /// `update()` runs, so wiping the last enemy stone ends the game here exactly
+    /// as the client's `board.update()` does. Returns the destroyed mask.
+    ///
+    /// Until 2026-09-17 the engine had NO destruction logic at all -- the seal was
+    /// a `Resolve::None_` static like the others -- and `sigil_charged` paid it
+    /// for filling the sigil. It filled it, destroyed nothing worth the price,
+    /// and lost when its next turn started. That is the game Fakey_McFaker saw.
+    pub fn destruction_end_of_turn(&mut self, c: Color) -> u64 {
+        if !self.holds_charged(c, crate::spells_meta::SEAL_OF_DESTRUCTION) { return 0; }
+        let doomed = self.theirs(c) & Self::dilate(self.mine(c));
+        if doomed != 0 {
+            self.stones[c.other().idx()] &= !doomed;
+            self.update();
+        }
+        doomed
+    }
+
+    /// Seal of Destruction, START of `mover`'s turn: still holding it charged
+    /// loses on the spot (`destructionStartOfTurnLoss`; the controller's
+    /// "DESTRUCTION CLAIMS YOU!"). `apply_turn` applies this for `c.other()`
+    /// itself, because every caller hands the position to `c.other()` next and
+    /// nothing can happen in between. Returns whether the game is over.
+    pub fn destruction_start_of_turn(&mut self, mover: Color) -> bool {
+        if self.outcome != Outcome::Ongoing { return true; }
+        if self.holds_charged(mover, crate::spells_meta::SEAL_OF_DESTRUCTION) {
+            self.outcome = match mover { Color::Red => Outcome::BlueWins,
+                                         Color::Blue => Outcome::RedWins };
+            return true;
+        }
+        false
+    }
+
+    /// Nodes the ENEMY of `c` would have to occupy to hold Seal of Destruction
+    /// charged: the seal's empty nodes, or 0 when it is not drawn or one of
+    /// `c`'s own stones stands on it (then the enemy cannot fill it at all).
+    /// Relocating that many enemy stones onto them (Gust) or pushing the last
+    /// one on is a mate in one -- they lose when their turn starts.
+    pub fn destruction_fill_targets(&self, c: Color) -> u64 {
+        let Some(pos) = self.position_of(crate::spells_meta::SEAL_OF_DESTRUCTION)
+            else { return 0 };
+        let m = SIGIL[pos];
+        if m & self.mine(c) != 0 { return 0; }
+        m & !self.theirs(c)
+    }
+
     /// Every legal destination for the stone pushed out of `node` by `c`, in
     /// `_push_enemy` order. Empty result means the push crushes. Non-mutating.
     ///
