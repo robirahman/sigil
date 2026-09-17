@@ -2368,44 +2368,25 @@ fn emit_actions_hands_back_the_pre_burn_board_the_client_replays() {
 fn gust_blows_the_enemy_into_seal_of_destruction_for_a_mate_in_one() {
     use crate::turn::Action;
     use crate::search::UNPROVEN_MATE;
-    // Red holds Gust (slot 8, c7) and stones at c2, c11, c1; every blue stone in
-    // `picked` touches one of them. Blue already stands on 5-k seal nodes; Gust
-    // must drop the k it picks up onto the k empty ones -- blue then starts its
-    // turn holding the seal and loses. k = 1..5 covers one stone to the whole seal.
+    // Red holds Gust (slot 8, c7) and anchor stones at c2, c11, b8 (plus c1 for
+    // mana); every blue stone in `picked` touches an ANCHOR, never only c7:
+    // casting a charm clears its node and keeps nothing back, so a stone that
+    // touched red only through c7 is no longer picked up after the cast -- the
+    // first version of this fixture leaned on c7 and the k=5 mate did not exist.
+    // Blue already stands on 5-k seal nodes; Gust must drop the k it picks up
+    // onto the k empty ones -- blue then starts its turn holding the seal and
+    // loses. k = 1..5 covers one stone to the whole seal.
     let draw = destruction_draw(Some(GUST));
     let seal = ["a2", "a3", "a4", "a5", "a6"];
-    let picked = ["c3", "c6", "b10", "c8", "c4"];   // c2: c3 c6; c11: b10 c6; c7: c8 c4
+    let picked = ["c3", "c6", "b10", "b9", "b7"];   // c2: c3 c6; c11: b10 c6; b8: b9 b7 b10
     for k in 1..=5usize {
         let mut blue: Vec<&str> = seal[..5 - k].to_vec();
         blue.extend_from_slice(&picked[..k]);
-        let b = destruction_board(draw, mask(&["c7", "c2", "c11", "c1"]), mask(&blue));
+        let b = destruction_board(draw, mask(&["c7", "c2", "c11", "c1", "b8"]), mask(&blue));
         assert!(b.holds_charged(Color::Red, GUST));
         assert_eq!(b.destruction_fill_targets(Color::Red).count_ones() as usize, k,
                    "k={k}: the seal has exactly k empty nodes for blue to be blown onto");
         let (t, score, child) = search_from(&b, Color::Red, 2);
-        if !t.slice().iter().any(|a| matches!(a, Action::Cast { .. })) {
-            // DIAGNOSTICS (temporary): what did the generator see?
-            use crate::turn::Turn;
-            eprintln!("k={k} first moves: {:?}", b.ordered_first_moves(Color::Red));
-            let dec = b.decisive_destruction_turns(Color::Red);
-            eprintln!("k={k} decisive turns: {}", dec.len());
-            for d in &dec { eprintln!("   {:?}", d.slice()); }
-            let mut m = b; m.do_move_with_pub(n("a12"), None, Color::Red);
-            eprintln!("k={k} after a12: castable={:?} gust charged={}", m.castable(Color::Red, true, true, false), m.holds_charged(Color::Red, GUST));
-            let gp = m.position_of(GUST).unwrap();
-            let mut cl = m; cl.cast_clear_and_keep(gp, Color::Red, 0);
-            eprintln!("k={k} after clear+keep: red mask {:#x} mana {} fill {:#x} picked {}", cl.stones[0], cl.mana[0], cl.destruction_fill_targets(Color::Red), (cl.theirs(Color::Red) & Board::dilate(cl.mine(Color::Red))).count_ones());
-            let (outs, tr) = cl.resolve_outcomes(gp, Color::Red, crate::turn::OUTCOME_CAP);
-            eprintln!("k={k} outcomes {} truncated {} out0 blue {:#x} blue-holds-seal {}", outs.len(), tr, outs.first().map(|o| o.stones[1]).unwrap_or(0), outs.first().map(|o| o.holds_charged(Color::Blue, SEAL_OF_DESTRUCTION)).unwrap_or(false));
-            let (ranked, _) = cl.resolve_outcomes_ranked(gp, Color::Red, 2);
-            eprintln!("k={k} ranked: {:?}", ranked.iter().map(|(i, o)| (*i, o.outcome_score_pub(Color::Red))).collect::<Vec<_>>());
-            let mate = Turn::single(Action::Move { node: n("a12"), push_to: None }).push_pub(Action::Cast { pos: gp as u8, keep: 0, outcome: 0 });
-            let mut ch = b; ch.apply_turn(&mate, Color::Red);
-            eprintln!("k={k} manual mate turn -> outcome {:?} blue {:#x} red {:#x}", ch.outcome, ch.stones[1], ch.stones[0]);
-            let all: Vec<Turn> = b.turns_ordered(Color::Red).take(12).collect();
-            for (i, x) in all.iter().enumerate() { eprintln!("   stream[{i}] {:?}", x.slice()); }
-            eprintln!("k={k} search picked {:?} score {score} child outcome {:?}", t.slice(), child.outcome);
-        }
         assert!(t.slice().iter().any(|a| matches!(a, Action::Cast { .. })),
                 "k={k}: expected a Gust cast, got {:?}", t.slice());
         assert!(score >= UNPROVEN_MATE, "k={k}: the mate was not seen (score {score})");
