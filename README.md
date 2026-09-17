@@ -10,14 +10,15 @@ To work on the static build, serve `docs/` over any static file server (e.g. `py
 ## What's New (2026-09-17)
 
 - **Puzzles page.** `docs/puzzles.html` (main menu: *Puzzles*) shows a position from a real
-  recorded game and asks you to find the forced win, Lichess-style: mate-in-1 (win this turn)
-  and mate-in-2 (win next turn against any reply). The board is the real `GameController`
+  recorded game and asks you to find the forced win, Lichess-style: mate-in-1 (win this turn),
+  mate-in-2 (win next turn against any reply) and mate-in-3. The board is the real `GameController`
   driven from the puzzle SFN, so every click is validated by the live rules; your turn is
   judged by the position it produces, and for mate-in-2 a scripted opponent plays the stored
   best defence. The set is a static JSON (`docs/static/puzzles/mate_puzzles.json`) generated
   offline by `tools/gen_mate_puzzles.py` with the Rust engine's new solver (`engine/src/mate.rs`):
-  mate-in-1 fully exhaustive at the root; mate-in-2 nominated by the strength engine (and by the
-  recorded line) then proven against every legal reply. A puzzle the opponent can escape on the
+  mate-in-1 fully exhaustive at the root; mate-in-2 and mate-in-3 nominated by the strength engine
+  (and by the recorded line) then proven against every legal reply at each level. The set is
+  generated on a GCE VM by `engine/gcp/launch_puzzles.sh`. A puzzle the opponent can escape on the
   live page therefore points at a rules disagreement between the Rust engine and the browser
   engine -- the page shows a yellow "engine disagreement" box with the SFN when that happens.
   `node tools/puzzle-smoke.js` replays the whole set headlessly through the browser engine.

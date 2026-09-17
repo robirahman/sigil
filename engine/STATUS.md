@@ -20,7 +20,10 @@ has ~2e5 legal turns -- so candidate first turns are NOMINATED (the strength eng
 root moves at depth 3 via `Search::root_scores`, plus the turn actually played when the mover won
 within two turns) and each candidate is PROVEN: every legal reply enumerated, the mover's
 mate-in-1 after each reply established by the ordered generator's first 4,000 turns or else by a
-full enumeration. Nothing is inferred from a truncated enumeration; positions past the 1<<20 turn
+full enumeration. Mate-in-3 repeats the pattern one level down: every reply must leave a PROVEN mate in <= 2
+(mate-in-1 memo, else a 250 ms 3-ply nomination proven against every reply). Mate-in-3 is rare
+(~1% of positions four plies before a recorded win). The corpus pass runs on a Spot c3d-90 via
+`engine/gcp/launch_puzzles.sh` (0.09 s/position wall with 88 workers). Nothing is inferred from a truncated enumeration; positions past the 1<<20 turn
 cap or `OUTCOME_CAP` are skipped (measured: ~10% of recorded midgame positions). Threefold
 repetition is ignored (puzzles start with no history, as does the page). The generator is
 `tools/gen_mate_puzzles.py`; `tools/puzzle-smoke.js` replays every stored solution through the
