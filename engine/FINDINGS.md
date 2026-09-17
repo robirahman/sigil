@@ -1726,3 +1726,61 @@ the build falls back, as designed). `RUST_ENGINE_VERSION` 3 -> 4, `sw.js` v27 ->
 `?v=4` on the three engine assets. Human-facing consequence: the >= 10 s tiers now think
 for a variable time per move around the same average; the acceptance gate (Run 0) is the
 measurement that matters next, and it needs Fakey_McFaker / Futuresight on the top tier.
+
+## Seal of Destruction was never implemented (2026-09-17)
+
+Fakey_McFaker's game against the new tiers ended with the engine filling Seal of
+Destruction while touching almost nothing, then losing when its turn began. That is not a
+search or eval defect but a MISSING RULE: `spells_meta.rs` lists the seal as a
+`Resolve::None_` static like the other seven Seals, `charged` is computed for it, and
+nothing anywhere consumed that bit -- no end-of-turn burn, no start-of-turn loss --
+while `sigil_charged` (+80 in the older weights, +2 in `tfit`) paid for filling any
+sigil. Every other Seal has its trigger somewhere (`cast.rs`, `turn.rs`,
+`turn_iter.rs`); Destruction was the one orphan.
+
+The live rule (`constants.js`): "STATIC: If filled at the end of your turn, destroy all
+enemy stones touching you. If filled at the start of your turn, you lose." Order in the
+controller (`game-controller.js`): `applyAITurn` -> `endTurn` burn -> win checks ->
+next turn's opening check claims the loser.
+
+### The fix (branch `seal-of-destruction`, merged to main)
+
+| where | what |
+|---|---|
+| `board.rs` | `destruction_end_of_turn` (mask op: enemy & dilate(mine), adjacency off the pre-burn board), `destruction_start_of_turn`, `destruction_fill_targets` |
+| `turn.rs apply_turn` | burn -> `check_game_over` -> start-of-turn loss for `c.other()`, so a burn that reaches the +/-3 lead wins first |
+| `turn.rs emit_actions` | deliberately PRE-burn: `rust-ai.js` replays the actions with `applyAITurn` (no burn) and compares stones against `expected_sfn` before `endTurn` burns; a post-burn board would make every winning fill fail the replay gate |
+| `search.rs` | a side NOT to move that holds the seal is scored `WIN - ply - 1` for the mover (it never breaks the seal), in `negamax` and `quiesce`; without it a leaf priced the just-burned stones as a lead -- the horizon shape of the suicide |
+| `order.rs` | `destruction_swing`: +100k when the enemy holds the seal after a resolution, +100k when we hold it and the burn wins, -100k when we hold it and it does not; folded into `configuration_value` (so every outcome ranking sees it) and into `move_score` for moves whose target or push destination touches the seal; Gust placements rank the enemy's empty seal nodes first |
+| `cast_enum.rs` | seal-completing targets branch first in capped frontiers; Gust emits the enemy-filling placement as raw outcome 0 so no cap can hide it |
+| `turn_iter.rs` | `decisive_destruction_turns`: guarded to the seal being drawn and within reach, one resolution per (first move, castable spell) plus a dash probe, each verified through the seal's own rules; `TurnIter::new` pushes them to the FRONT of the stream |
+
+### What the tests caught while being written
+
+Three fixture/ordering findings, each a real property of the engine rather than a typo:
+
+1. **A mate under the last-ranked first move is invisible to width.** The stream is
+   staged (every first move, then every cast under every first move, then dashes); in a
+   position full of tempting pushes the only soft move ranks last and its Gust mate sat
+   ~126 turns deep, past the root width. Hence the decisive pre-pass.
+2. **Casting a charm clears its node and keeps nothing back.** A blue stone that touched
+   red only through the Gust node is no longer picked up after the cast -- the first k=5
+   fixture had no mate at all. Fixtures anchor the picked stones elsewhere now.
+3. **Blossom reaches the lead by placement alone** against three far stones; the 5-node
+   fixtures carry six so the burn is the only win.
+
+### Tests (101/101)
+
+`seal_of_destruction_burns_at_end_of_turn_and_claims_at_start_of_turn` (the rule, both
+branches), `emit_actions_hands_back_the_pre_burn_board_the_client_replays`,
+`gust_blows_the_enemy_into_seal_of_destruction_for_a_mate_in_one` (k = 1..5),
+`filling_seal_of_destruction_by_move_or_dash_is_found_when_the_burn_wins`,
+`every_cast_that_can_fill_seal_of_destruction_is_enumerated_ranked_first_and_found`
+(Sprout, Grow, Flourish, Scatter, Blossom, Eclipse, Torrent, Tsunami: enumerated,
+top-ranked inside the outcome window, and found by the search),
+`the_engine_refuses_to_fill_seal_of_destruction_when_the_burn_does_not_win` (search
+avoids it; blue reads the position as won; ordering flags the suicide and the mate).
+
+Not measured: Elo. This is a rules fix -- the engine could not previously see a whole
+class of forced wins and losses -- and ships on correctness, as the cast-keep fix did.
+The human acceptance gate (Run 0) is where its effect will show.
