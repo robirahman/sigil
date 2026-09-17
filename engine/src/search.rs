@@ -940,6 +940,14 @@ impl Search {
             return if c == Color::Blue { WIN - ply } else { -(WIN - ply) };
         }
         if b.outcome != Outcome::Ongoing { return Self::terminal_score(b, c, ply); }
+        // Seal of Destruction: the side NOT to move holds it charged, so it
+        // loses when its turn starts unless `c` breaks the seal -- which `c` will
+        // never choose. Scored as a win next ply instead of letting the leaf
+        // eval price the stones the seal just destroyed as a lead: that horizon
+        // shape is exactly how the shipped engine walked into the suicide.
+        if b.holds_charged(c.other(), crate::spells_meta::SEAL_OF_DESTRUCTION) {
+            return WIN - ply - 1;
+        }
         if depth <= 0 {
             return if self.q_depth > 0 {
                 self.quiesce(b, c, alpha, beta, ply, self.q_depth)
@@ -1086,6 +1094,9 @@ impl Search {
         self.stats.nodes += 1;
         self.stats.qnodes += 1;
         if b.outcome != Outcome::Ongoing { return Self::terminal_score(b, c, ply); }
+        if b.holds_charged(c.other(), crate::spells_meta::SEAL_OF_DESTRUCTION) {
+            return WIN - ply - 1;
+        }
         if (ply as usize) >= MAX_PLY - 1 || q <= 0 { return self.eval(b, c); }
         if self.out_of_time() { self.stats.timed_out = true; return self.eval(b, c); }
 
