@@ -71,11 +71,6 @@ impl Board {
         (outs, truncated)
     }
 
-    /// `outcome_score` under the position's own goal, for tests and diagnostics.
-    pub fn outcome_score_pub(&self, c: Color) -> i32 {
-        self.outcome_score(c, self.placement_goal(c))
-    }
-
     /// One cast's resolution score, the key both the ordered and ranked forms use.
     #[inline]
     fn outcome_score(&self, c: Color, goal: crate::order::PlacementGoal) -> i32 {
