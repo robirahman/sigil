@@ -113,7 +113,7 @@
 									x-text="'Puzzle ' + (puzzle.index + 1) + ' — Mate in ' + puzzle.mate + ', ' + (puzzle.mover === 'red' ? 'Red' : 'Blue') + ' to move'"></h2>
 								<p class="puzzle-panel__sub" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
-									x-text="puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : 'Find the turn that forces a win next turn, whatever the reply.'"></p>
+									x-text="puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.')"></p>
 
 								<div class="puzzle-panel__status"
 									x-bind:class="{ 'puzzle-panel__status--solved': puzzleStatus === 'solved', 'puzzle-panel__status--failed': puzzleStatus === 'failed' }"
@@ -342,7 +342,7 @@
 					return;
 				}
 				const all = data.puzzles || [];
-				const mateFilter = params.get('mate') === '1' ? 1 : (params.get('mate') === '2' ? 2 : null);
+				const mateFilter = ['1', '2', '3'].includes(params.get('mate')) ? parseInt(params.get('mate'), 10) : null;
 				const pool = mateFilter ? all.filter(p => p.mate === mateFilter) : all;
 				if (!pool.length) {
 					document.getElementById('puzzle-loading').textContent = 'No puzzles available yet.';
@@ -391,7 +391,7 @@
 					+ (data.generated ? ' · set generated ' + data.generated.slice(0, 10) : '');
 				const f = (m, label) => '<a href="puzzles.html' + (m ? '?mate=' + m : '') + '"'
 					+ (mateFilter === m ? ' class="is-active"' : '') + '>' + label + '</a>';
-				window.SIGIL_PUZZLE_FILTER_HTML = f(null, 'All') + f(1, 'Mate in 1') + f(2, 'Mate in 2');
+				window.SIGIL_PUZZLE_FILTER_HTML = f(null, 'All') + f(1, 'Mate in 1') + f(2, 'Mate in 2') + f(3, 'Mate in 3');
 
 				document.getElementById('puzzle-loading').style.display = 'none';
 				document.getElementById('puzzle-root').style.display = '';

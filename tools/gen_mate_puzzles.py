@@ -144,9 +144,9 @@ def sfn_key(sfn):
 
 
 def _solve_one(item):
-    key, sfn, budget, time_ms, hints = item
+    key, sfn, budget, time_ms, hints, max_mate = item
     import sigil_engine
-    r = json.loads(sigil_engine.solve_mates(sfn, budget, time_ms, hints))
+    r = json.loads(sigil_engine.solve_mates(sfn, budget, time_ms, hints, max_mate))
     return key, r
 
 
@@ -181,7 +181,7 @@ def iter_positions(hyd, min_turn):
                 continue
             hints = []
             if (g.get('winner') == t.get('color') and t.get('sfnAfter')
-                    and last - t['turnNumber'] <= 3):
+                    and last - t['turnNumber'] <= 5):
                 hints.append(t['sfnAfter'])
             yield gid, t, s, hints
 
@@ -197,6 +197,9 @@ def main():
     ap.add_argument('--out', default=os.path.join(REPO, 'docs', 'static', 'puzzles', 'mate_puzzles.json'))
     ap.add_argument('--budget', type=int, default=400_000_000, help='apply_turn calls (+ generated turns) per position')
     ap.add_argument('--time-ms', type=int, default=20_000, help='wall-clock cap per position (0 = none)')
+    ap.add_argument('--max-mate', type=int, default=3, choices=[1, 2, 3], help='deepest mate to look for')
+    ap.add_argument('--only-promising', action='store_true',
+                    help='solve only positions where the mover went on to win within 4 plies (fast route to mate-in-2/3 puzzles)')
     ap.add_argument('--min-turn', type=int, default=6)
     ap.add_argument('--workers', type=int, default=max(1, (os.cpu_count() or 2) - 1))
     ap.add_argument('--limit', type=int, default=0, help='solve at most this many new positions')
@@ -244,9 +247,15 @@ def main():
         seen_pos.add(pk)
         # Mates live at the ends of games: solve positions in order of distance
         # from the final turn so a partial run already holds most of the set.
-        order.append((last_turn.get(gid, 0) - t['turnNumber'], key, s, hints))
-    order.sort(key=lambda x: x[0])
-    todo = [(key, s, args.budget, args.time_ms, hints) for _d, key, s, hints in order]
+        # Positions where the MOVER went on to win 2 or 4 plies later come
+        # first of all -- that is where mate-in-2 / mate-in-3 puzzles are.
+        dist = last_turn.get(gid, 0) - t['turnNumber']
+        promising = bool(hints) and dist in (2, 4)
+        if args.only_promising and not (bool(hints) and dist <= 4):
+            continue
+        order.append((0 if promising else 1, dist, key, s, hints))
+    order.sort(key=lambda x: (x[0], x[1]))
+    todo = [(key, s, args.budget, args.time_ms, hints, args.max_mate) for _p, _d, key, s, hints in order]
     if args.limit:
         todo = todo[:args.limit]
     if args.no_solve:
@@ -300,7 +309,7 @@ def main():
         if not r.get('ok'):
             outcomes[r.get('error', 'error')] += 1
             continue
-        lines = r['mate1'] or r['mate2']
+        lines = r['mate1'] or r['mate2'] or r.get('mate3') or []
         g = hyd[gid]
         if not lines:
             outcomes['no mate'] += 1
@@ -311,7 +320,7 @@ def main():
                                      'fat_record': bool(t.get('fat')), 'sfnBefore': s,
                                      'sfnAfter': t.get('sfnAfter'), 'root_successors': r['root_successors']})
             continue
-        mate = 1 if r['mate1'] else 2
+        mate = 1 if r['mate1'] else (2 if r['mate2'] else 3)
         pk = (sfn_key(s), s.split()[1])
         if pk in seen_pos:
             outcomes['duplicate position'] += 1
@@ -335,15 +344,22 @@ def main():
         # the defence), so the page's "show solution" picks a real puzzle line.
         lines_sorted = sorted(lines, key=lambda l: (l.get('mates_after_defence', 0), len(l['actions'])))
         sols = []
-        keep_n = len(lines_sorted) if mate == 2 else args.max_solutions_stored
-        for l in lines_sorted[:keep_n]:
+        keep_n = len(lines_sorted) if mate >= 2 else args.max_solutions_stored
+
+        def pack(l):
             sol = {'actions': l['actions'], 'after': l['after'], 'key': sfn_key(l['after'])}
             if 'defence' in l:
                 sol['defence'] = l['defence']
                 sol['finish'] = l.get('finish')
                 sol['mates_after_defence'] = l.get('mates_after_defence')
                 sol['replies'] = l.get('replies')
-            sols.append(sol)
+            if l.get('continuations'):
+                # mate-in-3: the proven second turns against the defence, each
+                # with its own defence/finish, keyed by the position they reach.
+                sol['continuations'] = [pack(x) for x in l['continuations']]
+            return sol
+        for l in lines_sorted[:keep_n]:
+            sols.append(pack(l))
         ts = g.get('timestamp')
         date = None
         if isinstance(ts, (int, float)) and ts > 0:
@@ -383,9 +399,9 @@ def main():
                                           capture_output=True, text=True).stdout.strip()
     except Exception:  # noqa: BLE001
         pass
-    engine['solver'] = ('engine/src/mate.rs: mate-in-1 exhaustive at the root; mate-in-2 nominated by the '
-                        'engine / recorded line and proven against every reply; budget %d, %d ms per position'
-                        % (args.budget, args.time_ms))
+    engine['solver'] = ('engine/src/mate.rs: mate-in-1 exhaustive at the root; mate-in-2/3 nominated by the '
+                        'engine / recorded line and proven against every reply; budget %d, %d ms per position, max mate %d'
+                        % (args.budget, args.time_ms, args.max_mate))
     out = {'generated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
            'engine': engine, 'count': len(puzzles),
            'positions_examined': sum(outcomes.values()),

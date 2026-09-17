@@ -1190,9 +1190,9 @@ impl SearchSession {
 /// Exhaustive mate-in-1 / mate-in-2 solve for the Puzzles generator
 /// (`mate.rs`). Returns JSON; `budget` bounds `apply_turn` calls.
 #[pyfunction]
-#[pyo3(signature = (sfn, budget=50_000_000, time_ms=0, hint_after=vec![]))]
-fn solve_mates(sfn: &str, budget: u64, time_ms: u64, hint_after: Vec<String>) -> PyResult<String> {
-    Ok(crate::mate::solve_json(sfn, budget, time_ms, &hint_after))
+#[pyo3(signature = (sfn, budget=50_000_000, time_ms=0, hint_after=vec![], max_mate=2))]
+fn solve_mates(sfn: &str, budget: u64, time_ms: u64, hint_after: Vec<String>, max_mate: u8) -> PyResult<String> {
+    Ok(crate::mate::solve_json(sfn, budget, time_ms, &hint_after, max_mate))
 }
 
 #[pymodule]

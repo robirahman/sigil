@@ -1407,32 +1407,45 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 					const key = puzzleSfnKey(t.sfnAfter);
-					if (_this.puzzleStep === 0) {
-						const hit = puzzle.solutionKeys.indexOf(key) >= 0;
-						_this.puzzleStep = 1;
-						if (!hit) {
-							if (_engineRef && _engineRef.board && _engineRef.board.gameover
-								&& _engineRef.board.winner === puzzle.mover) {
+					const over = !!(_engineRef && _engineRef.board && _engineRef.board.gameover);
+					const step = _this.puzzleStep;
+					_this.puzzleStep = step + 1;
+					// Which turns are "correct" at this step: the puzzle's first
+					// turns, then the proven continuations of the line the
+					// player is on (mate-in-3). The last step is judged by the
+					// live rules alone: the game must be over.
+					const lastStep = puzzle.mate - 1;
+					if (step < lastStep) {
+						const accepted = step === 0 ? (puzzle.solutions || [])
+							: ((_this._puzzleLine && _this._puzzleLine.continuations) || []);
+						const hitLine = accepted.find(sol => sol.key === key)
+							|| (step === 0 && puzzle.solutionKeys.indexOf(key) >= 0 ? { key } : null);
+						if (!hitLine) {
+							if (over && _engineRef.board.winner === puzzle.mover) {
 								// The live rules ended the game in the mover's favour on
-								// a turn the exhaustive solver did NOT list as winning.
+								// a turn the solver did NOT list as winning.
 								_this.puzzleDiagnostic = 'The game ended in your favour on a turn the solver did not consider a forced win. Position after your turn: ' + t.sfnAfter;
 								_puzzleSolve();
 								return;
 							}
-							_puzzleFail('That does not force a win. Retry, or show the solution.');
+							_puzzleFail(step === 0
+								? 'That does not force a win. Retry, or show the solution.'
+								: 'That is not the stored continuation (the solver proved other second moves, not this one). Retry, or show the solution.');
 							return;
 						}
-						if (puzzle.mate === 1) {
-							// The game_over event should follow this turn.
+						_this._puzzleLine = hitLine;
+						_this._puzzleLastDefence = hitLine.defence || null;
+						if (over) {
+							// Won faster than the puzzle needed; the live rules decide.
 							_puzzleExpectGameOver = true;
-							_this.puzzleMessage = '';
-						} else {
-							_this.puzzleMessage = 'Correct! Now find the finishing move.';
+							return;
 						}
+						_this.puzzleMessage = step === 0 && puzzle.mate === 3
+							? 'Correct! Two more to go.' : 'Correct! Now find the finishing move.';
 						return;
 					}
-					// Second solver turn of a mate-in-2: the game must be over now.
-					if (!(_engineRef && _engineRef.board && _engineRef.board.gameover)) {
+					// Final solver turn: the game must be over now.
+					if (!over) {
 						_puzzleFail('That was not the finishing move. Retry, or show the solution.');
 					} else {
 						_puzzleExpectGameOver = true;
@@ -1461,6 +1474,7 @@ document.addEventListener('alpine:init', () => {
 					_this.puzzleMessage = '';
 					_this.puzzleSolutionText = [];
 					_this._puzzleLastDefence = null;
+					_this._puzzleLine = null;
 					_puzzleExpectGameOver = false;
 					_this.winner = '';
 					_this.messageHistory = [];
@@ -1487,16 +1501,20 @@ document.addEventListener('alpine:init', () => {
 					const lines = [];
 					const sols = puzzle.solutions || [];
 					const shown = sols.slice(0, 3);
-					shown.forEach((sol, i) => {
-						const prefix = shown.length > 1 ? ('Line ' + (i + 1) + ': ') : '';
-						let text = prefix + describePuzzleActions(sol.actions);
-						if (sol.defence) {
-							text += '  \u2192  ' + (puzzle.mover === 'red' ? 'Blue' : 'Red') + ' replies ' + describePuzzleActions(sol.defence.actions);
-						}
-						if (sol.finish) {
+					const them = puzzle.mover === 'red' ? 'Blue' : 'Red';
+					const render = (sol) => {
+						let text = describePuzzleActions(sol.actions);
+						if (sol.defence) text += '  \u2192  ' + them + ' replies ' + describePuzzleActions(sol.defence.actions);
+						if (sol.continuations && sol.continuations.length) {
+							text += '  \u2192  ' + render(sol.continuations[0]);
+						} else if (sol.finish) {
 							text += '  \u2192  ' + describePuzzleActions(sol.finish.actions);
 						}
-						lines.push(text);
+						return text;
+					};
+					shown.forEach((sol, i) => {
+						const prefix = shown.length > 1 ? ('Line ' + (i + 1) + ': ') : '';
+						lines.push(prefix + render(sol));
 					});
 					const extra = puzzle.solutionKeys.length - shown.length;
 					if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
@@ -2148,9 +2166,12 @@ class PuzzleOpponent {
 		this.component = component;
 		this.lastMeta = null;
 		this._byKey = {};
-		for (const sol of (puzzle.solutions || [])) {
-			if (sol && sol.key && sol.defence) this._byKey[sol.key] = sol.defence;
-		}
+		const index = (sol) => {
+			if (!sol) return;
+			if (sol.key && sol.defence) this._byKey[sol.key] = sol.defence;
+			for (const c of (sol.continuations || [])) index(c);
+		};
+		for (const sol of (puzzle.solutions || [])) index(sol);
 	}
 
 	pickTurn(board /* SigilBoard */) {

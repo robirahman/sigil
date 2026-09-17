@@ -90,17 +90,34 @@ function runPuzzle(puzzle) {
 	return new Promise((resolve) => {
 		const mover = puzzle.mover;
 		const opp = mover === 'red' ? 'blue' : 'red';
-		// Any stored solution that can be driven by tokens will do.
-		let sol = null, plan1 = null, plan2 = [];
+		// Any stored solution that can be driven by tokens will do. A line is the
+		// chain first turn -> defence -> (continuation -> defence ->) finish.
+		let chain = null;      // [{plan, sol}] per solver ply
+		const buildChain = (sol, depth) => {
+			const p = tokenPlan(sol.actions);
+			if (!p) return null;
+			if (depth === 1) return [{ plan: p, sol }];
+			if (!sol.defence) return null;
+			if (depth === 2) {
+				const pf = tokenPlan(sol.finish && sol.finish.actions);
+				return (sol.finish && pf) ? [{ plan: p, sol }, { plan: pf, sol: sol.finish }] : null;
+			}
+			for (const c of (sol.continuations || [])) {
+				const rest = buildChain(c, depth - 1);
+				if (rest) return [{ plan: p, sol }].concat(rest);
+			}
+			return null;
+		};
 		for (const cand of (puzzle.solutions || [])) {
-			const p1 = tokenPlan(cand.actions);
-			const p2 = puzzle.mate === 2 ? tokenPlan(cand.finish && cand.finish.actions) : [];
-			if (p1 && (puzzle.mate === 1 || (cand.finish && p2))) { sol = cand; plan1 = p1; plan2 = p2; break; }
+			chain = buildChain(cand, puzzle.mate);
+			if (chain) break;
 		}
-		if (!sol) {
+		if (!chain) {
 			return resolve({ status: 'skip', why: (puzzle.solutions || []).length ? 'solution needs spell prompts' : 'no stored solution' });
 		}
-		let plan = plan1.slice();
+		const sol = chain[0].sol;
+		let ply = 0;                          // index into chain
+		let plan = chain[0].plan.slice();
 		let stage = 'first';                 // first | defence | finish | done
 		let checkedStart = false;
 		const log = [];
@@ -138,16 +155,19 @@ function runPuzzle(puzzle) {
 			}
 			if (ev.type === 'turn_complete') {
 				const t = ev.turn;
-				if (t.color === mover && stage === 'first') {
+				if (t.color === mover) {
 					const key = puzzleSfnKey(t.sfnAfter);
-					if (!puzzle.solution_keys.includes(key)) return finish({ status: 'fail', why: 'played the stored solution but reached a position not in solution_keys: ' + t.sfnAfter });
-					stage = puzzle.mate === 1 ? 'done' : 'defence';
+					const cur = chain[ply];
+					if (ply === 0 && !puzzle.solution_keys.includes(key)) return finish({ status: 'fail', why: 'played the stored solution but reached a position not in solution_keys: ' + t.sfnAfter });
+					if (ply > 0 && ply < chain.length - 1 && key !== puzzleSfnKey(cur.sol.after)) return finish({ status: 'fail', why: 'continuation reached ' + t.sfnAfter + ' but solver predicted ' + cur.sol.after });
+					if (ply === chain.length - 1) { stage = 'done'; }
+					else { stage = 'defence'; }
 				} else if (t.color === opp && stage === 'defence') {
-					if (puzzleSfnKey(t.sfnAfter) !== puzzleSfnKey(sol.defence.after)) return finish({ status: 'fail', why: 'defence replayed to ' + t.sfnAfter + ' but solver predicted ' + sol.defence.after });
-					stage = 'finish';
-					plan = plan2.slice();
-				} else if (t.color === mover && stage === 'finish') {
-					stage = 'done';
+					const cur = chain[ply];
+					if (puzzleSfnKey(t.sfnAfter) !== puzzleSfnKey(cur.sol.defence.after)) return finish({ status: 'fail', why: 'defence replayed to ' + t.sfnAfter + ' but solver predicted ' + cur.sol.defence.after });
+					ply += 1;
+					plan = chain[ply].plan.slice();
+					stage = 'next';
 				}
 				return;
 			}
@@ -169,7 +189,7 @@ function runPuzzle(puzzle) {
 	let puzzles = data.puzzles || [];
 	if (LIMIT) puzzles = puzzles.slice(0, LIMIT);
 	const tally = { ok: 0, fail: 0, skip: 0 };
-	const byMate = { 1: { ok: 0, fail: 0, skip: 0 }, 2: { ok: 0, fail: 0, skip: 0 } };
+	const byMate = { 1: { ok: 0, fail: 0, skip: 0 }, 2: { ok: 0, fail: 0, skip: 0 }, 3: { ok: 0, fail: 0, skip: 0 } };
 	const fails = [];
 	for (const p of puzzles) {
 		const r = await runPuzzle(p);
@@ -179,7 +199,7 @@ function runPuzzle(puzzle) {
 		if (VERBOSE || r.status === 'fail') console.log(`${r.status.toUpperCase().padEnd(4)} ${p.id} mate-in-${p.mate} ${r.why || ''}`);
 	}
 	console.log(`\n${puzzles.length} puzzles: ${tally.ok} ok, ${tally.fail} FAIL, ${tally.skip} skipped (cast solutions need the spell prompts)`);
-	console.log(`  mate-in-1: ${JSON.stringify(byMate[1])}   mate-in-2: ${JSON.stringify(byMate[2])}`);
+	console.log(`  mate-in-1: ${JSON.stringify(byMate[1])}   mate-in-2: ${JSON.stringify(byMate[2])}   mate-in-3: ${JSON.stringify(byMate[3])}`);
 	for (const f of fails) {
 		console.log(`\nFAIL ${f.id} (mate-in-${f.mate}): ${f.why}\n  sfn: ${f.sfn}\n  last events: ${f.log.join(' | ')}`);
 	}

@@ -36,7 +36,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::board::{Board, Color, Outcome};
-use crate::turn::{Action, Turn};
+use crate::turn::Turn;
 
 /// Position key for deduplication among siblings (side to move and turn
 /// counter are constant across siblings, so they are left out).
@@ -89,16 +89,23 @@ pub struct Line {
     /// Mate-in-2 only: one mating turn against that defence (for "show solution").
     pub finish: Option<(Turn, Board)>,
     pub mates_after_defence: usize,
-    /// Mate-in-2 only: how many distinct replies the opponent had.
+    /// Mate-in-2/3: how many distinct replies the opponent had.
     pub replies: usize,
+    /// Mate-in-3 only: the PROVEN second turns against `defence`, each a
+    /// mate-in-2 line (or a mate-in-1 line when the defence allows one) relative
+    /// to the position after the defence.
+    pub continuations: Vec<Line>,
 }
 
 pub struct Solution {
     /// Distinct positions after a mate-in-1 turn (one representative turn each).
     pub mate1: Vec<Line>,
-    /// Distinct positions after a mate-in-2 turn. Only computed when `mate1`
-    /// is empty: a position with a mate-in-1 is a mate-in-1 puzzle.
+    /// Proven mate-in-2 first turns among the nominated ones. Only computed
+    /// when `mate1` is empty: a position with a mate-in-1 is a mate-in-1 puzzle.
     pub mate2: Vec<Line>,
+    /// Proven mate-in-3 first turns among the nominated ones; only computed
+    /// when `mate1` and `mate2` are both empty.
+    pub mate3: Vec<Line>,
     pub stats: MateStats,
 }
 
@@ -110,6 +117,10 @@ pub const TURN_CAP: usize = 1 << 20;
 pub const PROBE: usize = 4_000;
 /// Mate-in-1 lines emitted by `solve_json` (the count is reported separately).
 pub const MAX_LINES_EMITTED: usize = 512;
+/// Time the nominating search gets at an INNER node (after a reply, when a
+/// mate-in-2 must be found for the mover). Small on purpose: a mate-in-3
+/// proof visits every reply, so this multiplies.
+pub const INNER_NOMINATE_MS: u64 = 250;
 
 struct Solver {
     budget: u64,
@@ -119,13 +130,57 @@ struct Solver {
     m1_memo: HashMap<Key, bool>,
     /// Replies that refuted an earlier candidate; tried first on the next one.
     killers: Vec<Turn>,
+    /// The strength engine used ONLY to nominate candidate turns (one table
+    /// for the whole solve; nothing it says is trusted without proof).
+    se: crate::search::Search,
 }
 
 impl Solver {
     fn new(budget: u64, time_ms: u64) -> Self {
         let deadline = if time_ms > 0 { Some(crate::search::now_ms() + time_ms as f64) } else { None };
+        let mut se = crate::search::Search::new(18);
+        se.weights = crate::eval::weights_by_name("tfit").unwrap_or_default();
+        se.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+        let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+        se.set_adaptive(p, e, h);
+        se.set_elastic(None);
+        se.set_root_resort(true);
         Solver { budget, deadline, stats: MateStats::default(), m1_memo: HashMap::new(),
-                 killers: Vec::new() }
+                 killers: Vec::new(), se }
+    }
+
+    fn time_left_ms(&self) -> Option<f64> {
+        self.deadline.map(|d| d - crate::search::now_ms())
+    }
+
+    fn check_deadline(&self) -> Result<(), MateError> {
+        if let Some(left) = self.time_left_ms() {
+            if left <= 0.0 { return Err(MateError::Budget); }
+        }
+        Ok(())
+    }
+
+    /// Candidate first turns for `c` at `b` from the strength engine at
+    /// `depth` plies: every root move it scores as a mate (proven or not),
+    /// as position keys. A NOMINATION only -- the exhaustive check decides.
+    fn nominate(&mut self, b: &Board, c: Color, depth: i32, time_ms: u64) -> Result<Vec<Key>, MateError> {
+        self.check_deadline()?;
+        let cap = match self.time_left_ms() {
+            Some(left) => (left as u64).min(time_ms).max(50),
+            None => time_ms,
+        };
+        let (best, score, _) = self.se.go(b, c, depth, cap);
+        let mate_floor = crate::search::UNPROVEN_MATE;
+        let mut keys = Vec::new();
+        if score >= mate_floor {
+            if let Some(t) = best { keys.push(key(&child(b, &t, c))); }
+        }
+        for (t, v) in self.se.root_scores() {
+            if *v >= mate_floor { keys.push(key(&child(b, t, c))); }
+        }
+        keys.sort();
+        keys.dedup();
+        Ok(keys)
     }
 
     fn tick(&mut self) -> Result<(), MateError> {
@@ -268,12 +323,123 @@ impl Solver {
     }
 }
 
-/// Solve `b` for the side to move: mate-in-1 lines (complete), else mate-in-2
-/// lines for the nominated candidates (see the module doc). `budget` bounds
-/// `apply_turn` calls plus generated turns; `time_ms` is a wall-clock cap
-/// (0 = none). `extra_keys` are positions after first turns that the caller
-/// wants nominated too (e.g. the turn actually played in the recorded game).
-pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key]) -> Result<Solution, MateError> {
+impl Solver {
+    /// Proven mate-in-2 first turns for `c` at `b` among `cand_keys`. `want_all`
+    /// false returns at the first proof (inner nodes); `probe` is how many
+    /// replies `pick_defence` counts fully.
+    fn mate2_lines(&mut self, b: &Board, c: Color, cand_keys: &[Key], want_all: bool, probe: usize)
+        -> Result<Vec<Line>, MateError>
+    {
+        let mut out = Vec::new();
+        if cand_keys.is_empty() { return Ok(out); }
+        let root = self.successors(b, c)?;
+        for (t, n) in &root {
+            if n.outcome != Outcome::Ongoing { continue; }   // a suicide (or a mate-in-1)
+            if !cand_keys.contains(&key(n)) { continue; }
+            if let Some(replies) = self.forced_after(n, c)? {
+                let replies_n = replies.len();
+                let (defence, finish, mates) = match self.pick_defence(&replies, c, probe)? {
+                    Some((d, f, m)) => (Some(d), f, m),
+                    None => (None, None, 0),
+                };
+                out.push(Line { turn: *t, after: *n, defence, finish, mates_after_defence: mates,
+                                replies: replies_n, continuations: Vec::new() });
+                if !want_all { break; }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Mate-in-1 lines for `c` at `b` (all of them), as `Line`s.
+    fn mate1_lines(&mut self, b: &Board, c: Color) -> Result<Vec<Line>, MateError> {
+        Ok(self.mate_in_1_all(b, c)?.into_iter()
+            .map(|(t, n)| Line { turn: t, after: n, defence: None, finish: None,
+                                 mates_after_defence: 0, replies: 0, continuations: Vec::new() })
+            .collect())
+    }
+
+    /// Does `c` have a PROVEN mate in at most 2 at `b` (an inner node: after the
+    /// opponent's reply to the puzzle's first turn)? Mate-in-1 first (memoised),
+    /// then engine-nominated second turns, each proven against every reply.
+    fn has_mate_in_le2(&mut self, b: &Board, c: Color) -> Result<bool, MateError> {
+        if self.has_mate_in_1(b, c)? { return Ok(true); }
+        let cands = self.nominate(b, c, 3, INNER_NOMINATE_MS)?;
+        Ok(!self.mate2_lines(b, c, &cands, false, 1)?.is_empty())
+    }
+
+    /// Everything `c` is proven to have against the position `b` (c to move):
+    /// mate-in-1 lines if any, else all proven mate-in-2 lines. For the
+    /// puzzle's third ply.
+    fn continuations_at(&mut self, b: &Board, c: Color) -> Result<Vec<Line>, MateError> {
+        let m1 = self.mate1_lines(b, c)?;
+        if !m1.is_empty() { return Ok(m1); }
+        let cands = self.nominate(b, c, 3, INNER_NOMINATE_MS * 4)?;
+        self.mate2_lines(b, c, &cands, true, 3)
+    }
+
+    /// Proven mate-in-3 first turns for `c` at `b` among `cand_keys`: after every
+    /// legal reply the mover has a proven mate in at most 2.
+    fn mate3_lines(&mut self, b: &Board, c: Color, cand_keys: &[Key]) -> Result<Vec<Line>, MateError> {
+        let o = c.other();
+        let mut out = Vec::new();
+        if cand_keys.is_empty() { return Ok(out); }
+        let root = self.successors(b, c)?;
+        'cand: for (t, n) in &root {
+            if n.outcome != Outcome::Ongoing { continue; }
+            if !cand_keys.contains(&key(n)) { continue; }
+            let replies = self.successors(n, o)?;
+            let mut idx: Vec<usize> = (0..replies.len()).collect();
+            idx.sort_by_key(|&i| {
+                let rt = &replies[i].0;
+                let is_killer = self.killers.iter().any(|k| k.slice() == rt.slice());
+                let mat = replies[i].1.total[o.idx()] as i32 - replies[i].1.total[c.idx()] as i32;
+                (if is_killer { 0 } else { 1 }, -mat)
+            });
+            // Replies that needed a mate-in-2 (no mate-in-1 for the mover): the
+            // puzzle's defence is chosen among these, hardest first by material.
+            let mut needed_m2: Vec<usize> = Vec::new();
+            for &i in &idx {
+                let (rt, rb) = replies[i];
+                if won_by(rb.outcome, o) { self.remember_killer(rt); continue 'cand; }
+                if rb.outcome != Outcome::Ongoing { continue; }
+                if self.has_mate_in_1(&rb, c)? { continue; }
+                if !self.has_mate_in_le2(&rb, c)? { self.remember_killer(rt); continue 'cand; }
+                needed_m2.push(i);
+            }
+            // Proven. Choose the defence: the reply (needing a mate-in-2) that
+            // leaves the defender the best material; else any ongoing reply.
+            let pick = needed_m2.first().copied()
+                .or_else(|| idx.iter().copied().find(|&i| replies[i].1.outcome == Outcome::Ongoing))
+                .or_else(|| idx.first().copied());
+            let (defence, continuations) = match pick {
+                Some(i) => {
+                    let (rt, rb) = replies[i];
+                    let conts = if rb.outcome == Outcome::Ongoing { self.continuations_at(&rb, c)? } else { Vec::new() };
+                    (Some((rt, rb)), conts)
+                }
+                None => (None, Vec::new()),
+            };
+            let finish = continuations.first().and_then(|l| {
+                if l.defence.is_none() { Some((l.turn, l.after)) } else { l.finish }
+            });
+            let mates = continuations.len();
+            out.push(Line { turn: *t, after: *n, defence, finish, mates_after_defence: mates,
+                            replies: replies.len(), continuations });
+        }
+        Ok(out)
+    }
+}
+
+/// Solve `b` for the side to move: mate-in-1 lines (complete); else proven
+/// mate-in-2 lines among the nominated first turns; else, if `max_mate >= 3`,
+/// proven mate-in-3 lines (see the module doc). `budget` bounds `apply_turn`
+/// calls plus generated turns; `time_ms` is a wall-clock cap (0 = none, and
+/// the nominating searches then get 2 s each). `extra_keys` are positions
+/// after first turns the caller wants nominated too (e.g. the turn actually
+/// played in the recorded game).
+pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key], max_mate: u8)
+    -> Result<Solution, MateError>
+{
     let c = b.to_move;
     let mut s = Solver::new(budget, time_ms);
     let root = s.successors(b, c)?;
@@ -281,54 +447,31 @@ pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key]) -> Result
     let mate1: Vec<Line> = root.iter()
         .filter(|(_, n)| won_by(n.outcome, c))
         .map(|(t, n)| Line { turn: *t, after: *n, defence: None, finish: None,
-                             mates_after_defence: 0, replies: 0 })
+                             mates_after_defence: 0, replies: 0, continuations: Vec::new() })
         .collect();
-    if !mate1.is_empty() {
-        return Ok(Solution { mate1, mate2: Vec::new(), stats: s.stats });
-    }
+    let mut sol = Solution { mate1, mate2: Vec::new(), mate3: Vec::new(), stats: s.stats };
+    if !sol.mate1.is_empty() || max_mate < 2 { sol.stats = s.stats; return Ok(sol); }
 
-    // ---- nominate mate-in-2 candidates ----
-    let mut cand_keys: Vec<Key> = extra_keys.to_vec();
-    {
-        // The strength engine at a fixed shallow depth, full root scoring on.
-        // A mate score here -- proven or not -- is only a NOMINATION; the
-        // exhaustive check below is what decides.
-        let mut se = crate::search::Search::new(16);
-        se.weights = crate::eval::weights_by_name("tfit").unwrap_or_default();
-        se.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
-        let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
-        se.set_adaptive(p, e, h);
-        se.set_elastic(None);
-        se.set_root_resort(true);
-        let nominate_ms = if time_ms > 0 { (time_ms / 4).max(200) } else { 0 };
-        let (best, score, _) = se.go(b, c, 3, nominate_ms);
-        let mate_floor = crate::search::UNPROVEN_MATE;
-        if score >= mate_floor {
-            if let Some(t) = best { cand_keys.push(key(&child(b, &t, c))); }
-        }
-        for (t, v) in se.root_scores() {
-            if *v >= mate_floor { cand_keys.push(key(&child(b, t, c))); }
-        }
-        s.stats.nodes += 1; // the nomination is not charged; note it ran
-    }
-    cand_keys.sort();
-    cand_keys.dedup();
+    // Nomination budgets: a 3-ply search settles in a few seconds even on a
+    // wide position; the 5-ply one gets more but stays a fraction of the cap.
+    let root3_ms = if time_ms > 0 { (time_ms / 8).clamp(200, 4_000) } else { 2_000 };
+    let root5_ms = if time_ms > 0 { (time_ms / 4).clamp(500, 10_000) } else { 5_000 };
+    // ---- mate-in-2: nominated by a 3-ply search and by the caller's hints ----
+    let mut cand2 = s.nominate(b, c, 3, root3_ms)?;
+    cand2.extend_from_slice(extra_keys);
+    cand2.sort();
+    cand2.dedup();
+    sol.mate2 = s.mate2_lines(b, c, &cand2, true, 6)?;
+    if !sol.mate2.is_empty() || max_mate < 3 { sol.stats = s.stats; return Ok(sol); }
 
-    let mut mate2 = Vec::new();
-    for (t, n) in &root {
-        if n.outcome != Outcome::Ongoing { continue; }   // a suicide, never a mate
-        if !cand_keys.contains(&key(n)) { continue; }
-        if let Some(replies) = s.forced_after(n, c)? {
-            let replies_n = replies.len();
-            let (defence, finish, mates) = match s.pick_defence(&replies, c, 6)? {
-                Some((d, f, m)) => (Some(d), f, m),
-                None => (None, None, 0),
-            };
-            mate2.push(Line { turn: *t, after: *n, defence, finish, mates_after_defence: mates,
-                              replies: replies_n });
-        }
-    }
-    Ok(Solution { mate1, mate2, stats: s.stats })
+    // ---- mate-in-3: nominated by a 5-ply search and by the hints ----
+    let mut cand3 = s.nominate(b, c, 5, root5_ms)?;
+    cand3.extend_from_slice(extra_keys);
+    cand3.sort();
+    cand3.dedup();
+    sol.mate3 = s.mate3_lines(b, c, &cand3)?;
+    sol.stats = s.stats;
+    Ok(sol)
 }
 
 /// `Key` of the position an SFN describes, for nominating first turns by the
@@ -337,9 +480,36 @@ pub fn key_of_sfn(sfn: &str) -> Option<Key> {
     Board::from_sfn(sfn).ok().map(|b| key(&b))
 }
 
+/// One line as JSON, relative to `base` (the position `c` moves from).
+fn line_json(base: &Board, l: &Line, c: Color) -> String {
+    let (acts, after) = base.emit_actions(&l.turn, c);
+    debug_assert_eq!(key(&after), key(&l.after));
+    let mut s = format!("{{\"actions\":{},\"after\":{:?}",
+                        crate::actions::acts_to_json(&acts), l.after.to_sfn());
+    if let Some((dt, db)) = &l.defence {
+        let (dacts, dafter) = l.after.emit_actions(dt, c.other());
+        debug_assert_eq!(key(&dafter), key(db));
+        s.push_str(&format!(",\"defence\":{{\"actions\":{},\"after\":{:?}}},\"mates_after_defence\":{},\"replies\":{}",
+                            crate::actions::acts_to_json(&dacts), db.to_sfn(),
+                            l.mates_after_defence, l.replies));
+        if let Some((ft, fb)) = &l.finish {
+            let (facts, fafter) = db.emit_actions(ft, c);
+            debug_assert_eq!(key(&fafter), key(fb));
+            s.push_str(&format!(",\"finish\":{{\"actions\":{},\"after\":{:?}}}",
+                                crate::actions::acts_to_json(&facts), fb.to_sfn()));
+        }
+        if !l.continuations.is_empty() {
+            let cs: Vec<String> = l.continuations.iter().map(|x| line_json(db, x, c)).collect();
+            s.push_str(&format!(",\"continuations\":[{}]", cs.join(",")));
+        }
+    }
+    s.push('}');
+    s
+}
+
 /// JSON for the puzzle generator. Action lists are the browser's
 /// `applyAITurn` format (`actions.rs`), each with the SFN it must produce.
-pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String]) -> String {
+pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String], max_mate: u8) -> String {
     let b = match Board::from_sfn(sfn) {
         Ok(b) => b,
         Err(e) => return format!("{{\"ok\":false,\"error\":{:?}}}", e),
@@ -350,39 +520,19 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String]) -
     let c = b.to_move;
     let t0 = crate::search::now_ms();
     let hints: Vec<Key> = hint_after.iter().filter_map(|h| key_of_sfn(h)).collect();
-    let sol = match solve(&b, budget, time_ms, &hints) {
+    let sol = match solve(&b, budget, time_ms, &hints, max_mate) {
         Ok(s) => s,
         Err(MateError::Incomplete(t, r)) => return format!("{{\"ok\":false,\"error\":\"enumeration incomplete\",\"turn_cap\":{},\"resolver_cap\":{}}}", t, r),
         Err(MateError::Budget) => return format!("{{\"ok\":false,\"error\":\"budget exceeded\",\"budget\":{}}}", budget),
     };
-    let line_json = |l: &Line| -> String {
-        let (acts, after) = b.emit_actions(&l.turn, c);
-        debug_assert_eq!(key(&after), key(&l.after));
-        let mut s = format!("{{\"actions\":{},\"after\":{:?}",
-                            crate::actions::acts_to_json(&acts), l.after.to_sfn());
-        if let Some((dt, db)) = &l.defence {
-            let (dacts, dafter) = l.after.emit_actions(dt, c.other());
-            debug_assert_eq!(key(&dafter), key(db));
-            s.push_str(&format!(",\"defence\":{{\"actions\":{},\"after\":{:?}}},\"mates_after_defence\":{},\"replies\":{}",
-                                crate::actions::acts_to_json(&dacts), db.to_sfn(),
-                                l.mates_after_defence, l.replies));
-            if let Some((ft, fb)) = &l.finish {
-                let (facts, fafter) = db.emit_actions(ft, c);
-                debug_assert_eq!(key(&fafter), key(fb));
-                s.push_str(&format!(",\"finish\":{{\"actions\":{},\"after\":{:?}}}",
-                                    crate::actions::acts_to_json(&facts), fb.to_sfn()));
-            }
-        }
-        s.push('}');
-        s
-    };
     // A position with hundreds of distinct winning turns is not a puzzle, and
     // listing them all made one result tens of megabytes; `mate1_total` keeps
     // the count for the win-fraction statistic.
-    let m1: Vec<String> = sol.mate1.iter().take(MAX_LINES_EMITTED).map(line_json).collect();
-    let m2: Vec<String> = sol.mate2.iter().map(line_json).collect();
-    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
+    let m1: Vec<String> = sol.mate1.iter().take(MAX_LINES_EMITTED).map(|l| line_json(&b, l, c)).collect();
+    let m2: Vec<String> = sol.mate2.iter().map(|l| line_json(&b, l, c)).collect();
+    let m3: Vec<String> = sol.mate3.iter().map(|l| line_json(&b, l, c)).collect();
+    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"mate3\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
             if c == Color::Red { "red" } else { "blue" },
-            m1.join(","), sol.mate1.len(), m2.join(","), sol.stats.root_successors, sol.stats.nodes,
+            m1.join(","), sol.mate1.len(), m2.join(","), m3.join(","), sol.stats.root_successors, sol.stats.nodes,
             (crate::search::now_ms() - t0) / 1000.0)
 }

@@ -2516,7 +2516,7 @@ const CORPUS_M1_SFN: &str = "rrrrr..bbbr..b...rr....br.b......b.b.../Flourish,St
 #[test]
 fn mate_solver_lists_only_turns_that_end_the_game_in_the_movers_favour() {
     let b = Board::from_sfn(CORPUS_M1_SFN).expect("sfn");
-    let sol = crate::mate::solve(&b, 200_000_000, 0, &[]).expect("solve");
+    let sol = crate::mate::solve(&b, 200_000_000, 0, &[], 2).expect("solve");
     assert!(!sol.mate1.is_empty(), "the corpus position has mates-in-1");
     let c = b.to_move;
     for l in &sol.mate1 {
@@ -2544,7 +2544,7 @@ fn mate_solver_lists_only_turns_that_end_the_game_in_the_movers_favour() {
 #[test]
 fn mate_solver_finds_nothing_in_the_opening() {
     let b = std_board();
-    let sol = crate::mate::solve(&b, 50_000_000, 0, &[]).expect("solve");
+    let sol = crate::mate::solve(&b, 50_000_000, 0, &[], 2).expect("solve");
     assert!(sol.mate1.is_empty());
     assert!(sol.mate2.is_empty());
     assert!(sol.stats.root_successors > 0);
@@ -2585,13 +2585,13 @@ const CORPUS_M2_SFN: &str = "rrrrrr....rr.bbb....b.b..bb.....rbbrb../Seal_of_Lig
 #[test]
 fn mate_solver_mate_in_two_lines_survive_brute_force() {
     let b = Board::from_sfn(CORPUS_M2_SFN).expect("sfn");
-    let sol = crate::mate::solve(&b, 400_000_000, 0, &[]).expect("solve");
+    let sol = crate::mate::solve(&b, 400_000_000, 0, &[], 2).expect("solve");
     assert!(sol.mate1.is_empty(), "no mate-in-1 here");
     assert!(!sol.mate2.is_empty(), "the nominated mate-in-2 must be found");
     brute_force_check_mate2(&b, &sol);
     // And the opening, where there is nothing to find, still runs end to end.
     let o = std_board();
-    let sol = crate::mate::solve(&o, 50_000_000, 0, &[]).expect("solve");
+    let sol = crate::mate::solve(&o, 50_000_000, 0, &[], 2).expect("solve");
     assert!(sol.mate2.is_empty());
     brute_force_check_mate2(&o, &sol);
 }
