@@ -1,6 +1,6 @@
 # Engine status
 
-**Current as of 2026-09-16.** Everything below the "Phase 0 status" heading is
+**Current as of 2026-09-17.** Everything below the "Phase 0 status" heading is
 the original bitboard-port log and is kept for provenance; where it disagrees
 with this section, this section is right.
 
@@ -10,8 +10,20 @@ with this section, this section is right.
 |---|---|
 | strength vs the previously playtested engine | **+228 Elo @3s, +348 @60s** |
 | shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` (2.0, 0.4, 2, 50, predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2; `?ai=rust_anchor` pins elastic OFF / lmr 0 |
-| tests | **95/95** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
-| browser build | `RUST_ENGINE_VERSION` 4, cache `v28`, wasm 465,955 bytes (unoptimised; `wasm-opt` still fails the smoke) |
+| tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
+| browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
+
+**2026-09-17: Seal of Destruction is implemented.** The engine had NEITHER half of the
+Covenant ritual's rule ("filled at the end of your turn, destroy all enemy stones touching
+you; filled at the start of your turn, you lose") and `sigil_charged` paid it for filling
+the sigil, so it filled the seal, burned little, and lost when its next turn started.
+`apply_turn` now runs burn -> +/-3 check -> start-of-turn loss in the live controller's
+order; `emit_actions` stays pre-burn because `rust-ai.js` replays the actions without it.
+The search scores a side that holds the seal but is not to move as lost next ply, the
+ordering carries a +/-100k swing for anything that completes the seal (mate or suicide),
+Gust places onto the enemy's empty seal nodes first, and decisive seal turns go to the
+front of the turn stream. Six tests pin it, including Gust mates for 1..5 stones and
+fills by move, dash and eight casts. Every other Seal already had its trigger code.
 
 **2026-09-16: elastic time management and the LMR band ship ON.** Fleet arenas at
 10 s, matched average time: elastic +58 Elo [+29, +88], `lmr` 21 +47 [+17, +76], the
