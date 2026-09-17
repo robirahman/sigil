@@ -108,6 +108,8 @@ pub const TURN_CAP: usize = 1 << 20;
 /// Ordered turns tried before falling back to a full enumeration when
 /// looking for a mate-in-1 (the probe finds most mates in a few hundred).
 pub const PROBE: usize = 4_000;
+/// Mate-in-1 lines emitted by `solve_json` (the count is reported separately).
+pub const MAX_LINES_EMITTED: usize = 512;
 
 struct Solver {
     budget: u64,
@@ -374,10 +376,13 @@ pub fn solve_json(sfn: &str, budget: u64, time_ms: u64, hint_after: &[String]) -
         s.push('}');
         s
     };
-    let m1: Vec<String> = sol.mate1.iter().map(line_json).collect();
+    // A position with hundreds of distinct winning turns is not a puzzle, and
+    // listing them all made one result tens of megabytes; `mate1_total` keeps
+    // the count for the win-fraction statistic.
+    let m1: Vec<String> = sol.mate1.iter().take(MAX_LINES_EMITTED).map(line_json).collect();
     let m2: Vec<String> = sol.mate2.iter().map(line_json).collect();
-    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate2\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
+    format!("{{\"ok\":true,\"mover\":{:?},\"mate1\":[{}],\"mate1_total\":{},\"mate2\":[{}],\"root_successors\":{},\"nodes\":{},\"seconds\":{:.3}}}",
             if c == Color::Red { "red" } else { "blue" },
-            m1.join(","), m2.join(","), sol.stats.root_successors, sol.stats.nodes,
+            m1.join(","), sol.mate1.len(), m2.join(","), sol.stats.root_successors, sol.stats.nodes,
             (crate::search::now_ms() - t0) / 1000.0)
 }

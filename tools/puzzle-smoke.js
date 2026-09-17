@@ -56,7 +56,10 @@ const FILES = [
 for (const f of FILES) {
 	vm.runInContext(fs.readFileSync(f, 'utf8'), sandbox, { filename: f });
 }
-const { GameController, PuzzleOpponent, puzzleImportSfn, puzzleSfnKey, boardToSfn } = sandbox;
+// Top-level class/let/const declarations live in the context's lexical scope,
+// not on the global object, so read them back with an expression.
+const { GameController, PuzzleOpponent, puzzleImportSfn, puzzleSfnKey, boardToSfn } = vm.runInContext(
+	'({ GameController, PuzzleOpponent, puzzleImportSfn, puzzleSfnKey, boardToSfn })', sandbox);
 for (const [k, v] of Object.entries({ GameController, PuzzleOpponent, puzzleImportSfn, puzzleSfnKey, boardToSfn })) {
 	if (typeof v !== 'function') { console.error('missing global', k); process.exit(2); }
 }
@@ -87,12 +90,15 @@ function runPuzzle(puzzle) {
 	return new Promise((resolve) => {
 		const mover = puzzle.mover;
 		const opp = mover === 'red' ? 'blue' : 'red';
-		const sol = (puzzle.solutions || [])[0];
-		if (!sol) return resolve({ status: 'skip', why: 'no stored solution' });
-		const plan1 = tokenPlan(sol.actions);
-		const plan2 = puzzle.mate === 2 ? tokenPlan(sol.finish && sol.finish.actions) : [];
-		if (!plan1 || (puzzle.mate === 2 && (!sol.finish || !plan2))) {
-			return resolve({ status: 'skip', why: 'solution needs spell prompts' });
+		// Any stored solution that can be driven by tokens will do.
+		let sol = null, plan1 = null, plan2 = [];
+		for (const cand of (puzzle.solutions || [])) {
+			const p1 = tokenPlan(cand.actions);
+			const p2 = puzzle.mate === 2 ? tokenPlan(cand.finish && cand.finish.actions) : [];
+			if (p1 && (puzzle.mate === 1 || (cand.finish && p2))) { sol = cand; plan1 = p1; plan2 = p2; break; }
+		}
+		if (!sol) {
+			return resolve({ status: 'skip', why: (puzzle.solutions || []).length ? 'solution needs spell prompts' : 'no stored solution' });
 		}
 		let plan = plan1.slice();
 		let stage = 'first';                 // first | defence | finish | done
@@ -118,12 +124,14 @@ function runPuzzle(puzzle) {
 				}
 				if (gc.board.whoseTurn !== mover) return;   // opponent prompts (none expected)
 				// Feed the next planned token matching what the engine awaits.
+				// The controller accepts a node click while awaiting an 'action'
+				// (the "click a node to move" shortcut), so tokens are fed in plan
+				// order whatever it awaits. The one adaptive case is a push
+				// destination: prompted (awaiting 'node') only when the push has
+				// several options, otherwise the engine goes straight on.
 				let next = plan[0];
+				if (next && next.optional && ev.awaiting !== 'node') { plan.shift(); next = plan[0]; }
 				if (!next) return finish({ status: 'fail', why: 'engine asked for more input (' + ev.awaiting + ': ' + ev.message + ') after the plan ran out' });
-				if (next.kind !== ev.awaiting) {
-					if (next.optional && ev.awaiting === 'action') { plan.shift(); next = plan[0]; }
-					else return finish({ status: 'fail', why: 'engine awaits ' + ev.awaiting + ' (' + ev.message + ') but plan has ' + next.kind + ' ' + next.token });
-				}
 				plan.shift();
 				setTimeout(() => gc.handlePlayerAction(next.token), 0);
 				return;
@@ -161,14 +169,17 @@ function runPuzzle(puzzle) {
 	let puzzles = data.puzzles || [];
 	if (LIMIT) puzzles = puzzles.slice(0, LIMIT);
 	const tally = { ok: 0, fail: 0, skip: 0 };
+	const byMate = { 1: { ok: 0, fail: 0, skip: 0 }, 2: { ok: 0, fail: 0, skip: 0 } };
 	const fails = [];
 	for (const p of puzzles) {
 		const r = await runPuzzle(p);
 		tally[r.status]++;
+		if (byMate[p.mate]) byMate[p.mate][r.status]++;
 		if (r.status === 'fail') fails.push({ id: p.id, mate: p.mate, why: r.why, sfn: p.sfn, log: r.log.slice(-6) });
 		if (VERBOSE || r.status === 'fail') console.log(`${r.status.toUpperCase().padEnd(4)} ${p.id} mate-in-${p.mate} ${r.why || ''}`);
 	}
 	console.log(`\n${puzzles.length} puzzles: ${tally.ok} ok, ${tally.fail} FAIL, ${tally.skip} skipped (cast solutions need the spell prompts)`);
+	console.log(`  mate-in-1: ${JSON.stringify(byMate[1])}   mate-in-2: ${JSON.stringify(byMate[2])}`);
 	for (const f of fails) {
 		console.log(`\nFAIL ${f.id} (mate-in-${f.mate}): ${f.why}\n  sfn: ${f.sfn}\n  last events: ${f.log.join(' | ')}`);
 	}

@@ -1214,6 +1214,15 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'ping') return;
 
+					// A failed/revealed puzzle leaves the controller parked on
+					// the scripted opponent's turn (it never answers); do not
+					// show that as the AI thinking.
+					if (puzzle && _this.puzzleStatus !== 'playing'
+						&& (type === 'ai_thinking_start' || type === 'ai_thinking_progress'
+							|| (type === 'message' && rest.message === 'AI is thinking...'))) {
+						return;
+					}
+
 					if (type === 'message') {
 						handleMessageEvent(rest);
 						return;
@@ -2076,7 +2085,9 @@ document.addEventListener('alpine:init', () => {
  */
 function puzzleSfnKey(sfn) {
 	const p = String(sfn || '').trim().split(/\s+/);
-	return [p[0], p[3], p[4], p[5]].join(' ');
+	// The spell list after '/' is constant within a puzzle, so it is dropped
+	// to keep the stored key lists small (39 stone chars + counters + locks).
+	return [String(p[0]).split('/')[0], p[3], p[4], p[5]].join(' ');
 }
 
 /**

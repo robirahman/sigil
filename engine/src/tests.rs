@@ -2576,11 +2576,22 @@ fn brute_force_check_mate2(b: &Board, sol: &crate::mate::Solution) {
     }
 }
 
+/// A recorded position (blue to move, turn 20) where the generator found a
+/// mate-in-2 nominated by the engine: 15,202 distinct first turns, 4,483 replies
+/// to the winning one. (The recorded game "won" here with a Fireblast whose
+/// stored sacrifice was a no-op -- a transcript artefact, so no mate-in-1.)
+const CORPUS_M2_SFN: &str = "rrrrrr....rr.bbb....b.b..bb.....rbbrb../Seal_of_Lightning,Flourish,Starfall,Grow,Meteor,Fireblast,Comet,Slash,Sprout b 20 0:1 -:Meteor -:- b1";
+
 #[test]
 fn mate_solver_mate_in_two_lines_survive_brute_force() {
-    // The opening has none; the check must at least run end to end. Positions
-    // with a reported mate-in-2 are added here as the generator finds them.
-    let b = std_board();
-    let sol = crate::mate::solve(&b, 50_000_000, 0, &[]).expect("solve");
+    let b = Board::from_sfn(CORPUS_M2_SFN).expect("sfn");
+    let sol = crate::mate::solve(&b, 400_000_000, 0, &[]).expect("solve");
+    assert!(sol.mate1.is_empty(), "no mate-in-1 here");
+    assert!(!sol.mate2.is_empty(), "the nominated mate-in-2 must be found");
     brute_force_check_mate2(&b, &sol);
+    // And the opening, where there is nothing to find, still runs end to end.
+    let o = std_board();
+    let sol = crate::mate::solve(&o, 50_000_000, 0, &[]).expect("solve");
+    assert!(sol.mate2.is_empty());
+    brute_force_check_mate2(&o, &sol);
 }

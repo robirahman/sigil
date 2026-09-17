@@ -140,7 +140,7 @@ def sfn_key(sfn):
     token: the JS records a turn's after-state with the mover still marked
     to move, the engine with the side flipped; both share these tokens."""
     p = sfn.split()
-    return ' '.join([p[0], p[3], p[4], p[5]])
+    return ' '.join([p[0].split('/')[0], p[3], p[4], p[5]])   # spells dropped: constant per puzzle
 
 
 def _solve_one(item):
@@ -204,6 +204,8 @@ def main():
     ap.add_argument('--max-win-fraction', type=float, default=0.34,
                     help='drop mate-in-1 puzzles where more than this share of first turns win')
     ap.add_argument('--max-solutions-stored', type=int, default=12)
+    ap.add_argument('--max-winning', type=int, default=40,
+                    help='drop mate-in-1 puzzles with more distinct winning positions than this (not a puzzle)')
     args = ap.parse_args()
 
     # ---- corpus
@@ -232,13 +234,19 @@ def main():
                 except (ValueError, KeyError):
                     continue
     todo, seen_pos = [], set()
+    last_turn = {gid: (g['turns'][-1]['turnNumber'] if g['turns'] else 0) for gid, g in hyd.items()}
+    order = []
     for gid, t, s, hints in iter_positions(hyd, args.min_turn):
         key = f"{gid}:t{t['turnNumber']}"
         pk = (sfn_key(s), s.split()[1])
         if key in done or pk in seen_pos:
             continue
         seen_pos.add(pk)
-        todo.append((key, s, args.budget, args.time_ms, hints))
+        # Mates live at the ends of games: solve positions in order of distance
+        # from the final turn so a partial run already holds most of the set.
+        order.append((last_turn.get(gid, 0) - t['turnNumber'], key, s, hints))
+    order.sort(key=lambda x: x[0])
+    todo = [(key, s, args.budget, args.time_ms, hints) for _d, key, s, hints in order]
     if args.limit:
         todo = todo[:args.limit]
     if args.no_solve:
@@ -247,23 +255,43 @@ def main():
           flush=True)
     t0 = time.time()
     n = 0
+    # Results are streamed to --work and NOT kept in memory (an early version
+    # held them all and the main process reached 7.5 GB); the assembly below
+    # re-reads the file. Tasks are submitted in chunks so the executor's queue
+    # stays small too.
+    done = None
+    chunk = max(8, 16 * args.workers)
     with open(args.work, 'a', encoding='utf-8') as wf, \
             ProcessPoolExecutor(max_workers=args.workers) as ex:
-        futs = [ex.submit(_solve_one, it) for it in todo]
-        for f in as_completed(futs):
-            key, r = f.result()
-            done[key] = r
-            wf.write(json.dumps({'key': key, 'result': r}) + '\n')
-            n += 1
-            if n % 50 == 0:
-                wf.flush()
-                el = time.time() - t0
-                print(f'  {n}/{len(todo)} solved, {el:.0f}s, {el / n:.2f}s/pos', flush=True)
+        for start in range(0, len(todo), chunk):
+            futs = [ex.submit(_solve_one, it) for it in todo[start:start + chunk]]
+            for f in as_completed(futs):
+                key, r = f.result()
+                wf.write(json.dumps({'key': key, 'result': r}) + '\n')
+                n += 1
+                if n % 50 == 0:
+                    wf.flush()
+                    el = time.time() - t0
+                    print(f'  {n}/{len(todo)} solved, {el:.0f}s, {el / n:.2f}s/pos', flush=True)
+            wf.flush()
+    done = {}
+    with open(args.work, encoding='utf-8') as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+                done[rec['key']] = rec['result']
+            except (ValueError, KeyError):
+                continue
 
     # ---- assemble puzzles
     outcomes = Counter()
     puzzles = []
     seen_pos = set()
+    # Recorded game-winning turns the solver could NOT reproduce as a mate-in-1:
+    # either a rules disagreement between the Rust engine and the browser, or a
+    # corrupt transcript (the 2026-09 enumeration audit found 237 fat records and
+    # 134 no-op sacrifices that make an after-state illegal). Listed for review.
+    unreproduced = []
     for gid, t, s, _hints in iter_positions(hyd, args.min_turn):
         key = f"{gid}:t{t['turnNumber']}"
         r = done.get(key)
@@ -273,8 +301,15 @@ def main():
             outcomes[r.get('error', 'error')] += 1
             continue
         lines = r['mate1'] or r['mate2']
+        g = hyd[gid]
         if not lines:
             outcomes['no mate'] += 1
+            after = (t.get('sfnAfter') or '').split()
+            if (len(after) > 6 and after[6] in ('r3', 'b3') and g.get('winner') == t.get('color')
+                    and g['turns'] and g['turns'][-1]['turnNumber'] == t['turnNumber']):
+                unreproduced.append({'game': gid, 'turn': t['turnNumber'], 'mover': t.get('color'),
+                                     'fat_record': bool(t.get('fat')), 'sfnBefore': s,
+                                     'sfnAfter': t.get('sfnAfter'), 'root_successors': r['root_successors']})
             continue
         mate = 1 if r['mate1'] else 2
         pk = (sfn_key(s), s.split()[1])
@@ -282,11 +317,18 @@ def main():
             outcomes['duplicate position'] += 1
             continue
         seen_pos.add(pk)
-        frac = len(lines) / max(1, r['root_successors'])
-        if mate == 1 and frac > args.max_win_fraction:
+        total = r.get('mate1_total', len(lines)) if mate == 1 else len(lines)
+        frac = total / max(1, r['root_successors'])
+        score_tok = s.split()[6] if len(s.split()) > 6 else ''
+        if mate == 1 and score_tok == r['mover'][0] + '2':
+            # Already two ahead: placing any stone wins, so nothing to find.
             outcomes['mate-in-1 too easy'] += 1
             continue
-        g = hyd[gid]
+        if mate == 1 and (frac > args.max_win_fraction or total > len(lines) or total > args.max_winning):
+            # Too many winning turns to be a puzzle (or more than the solver
+            # emits, so the page could not judge every winning move).
+            outcomes['mate-in-1 too easy'] += 1
+            continue
         keys = [sfn_key(l['after']) for l in lines]
         played = sfn_key(t['sfnAfter']) in set(keys) if t.get('sfnAfter') else None
         # Store full lines for the hardest defences first (fewest mates after
@@ -347,12 +389,14 @@ def main():
     out = {'generated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
            'engine': engine, 'count': len(puzzles),
            'positions_examined': sum(outcomes.values()),
-           'outcomes': dict(outcomes), 'puzzles': puzzles}
+           'outcomes': dict(outcomes), 'unreproduced_wins': unreproduced, 'puzzles': puzzles}
     os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as fh:
         json.dump(out, fh, separators=(',', ':'))
     print(f'wrote {len(puzzles)} puzzles -> {args.out} ({os.path.getsize(args.out)} bytes)')
     print('outcomes:', dict(outcomes))
+    print(f'{len(unreproduced)} recorded game-winning turns not reproducible as a mate-in-1 '
+          f'(see "unreproduced_wins" in the output)')
 
 
 if __name__ == '__main__':
