@@ -119,47 +119,70 @@ impl<L: Log> Frontier<L> {
 impl Board {
     /// One move step, every legal way, recording a `move` / `hard_move` action.
     fn branch_move<L: Log>(&self, log: &L, targets: u64, c: Color, f: &mut Frontier<L>) {
-        let mut m = targets;
-        while m != 0 {
-            let node = m.trailing_zeros() as u8;
-            m &= m - 1;
-            let is_enemy = self.theirs(c) & (1u64 << node) != 0;
-            if is_enemy {
-                let (opts, k) = self.push_options(node, c);
-                if k == 0 {
-                    let mut b = *self;
-                    let bit = 1u64 << node;
-                    b.stones[c.other().idx()] &= !bit;
-                    b.stones[c.idx()] |= bit;
-                    f.push(b, log.plus(JsAct::mv(node, None, true, false)));
-                } else {
-                    for &d in &opts[..k] {
+        // Seal of Destruction first: a target that completes OUR copy, or a push
+        // that completes THEIRS, decides the game, and a capped frontier must
+        // never lose it behind lower-numbered nodes. Same outcomes, same dedupe;
+        // only the order in which the frontier meets them changes.
+        let first = targets & self.destruction_priority_targets(c);
+        let mut m = first;
+        for pass in 0..2 {
+            if pass == 1 { m = targets & !first; }
+            while m != 0 {
+                let node = m.trailing_zeros() as u8;
+                m &= m - 1;
+                let is_enemy = self.theirs(c) & (1u64 << node) != 0;
+                if is_enemy {
+                    let (opts, k) = self.push_options(node, c);
+                    if k == 0 {
                         let mut b = *self;
                         let bit = 1u64 << node;
                         b.stones[c.other().idx()] &= !bit;
                         b.stones[c.idx()] |= bit;
-                        b.stones[c.other().idx()] |= 1u64 << d;
-                        f.push(b, log.plus(JsAct::mv(node, Some(d), true, false)));
+                        f.push(b, log.plus(JsAct::mv(node, None, true, false)));
+                    } else {
+                        for &d in &opts[..k] {
+                            let mut b = *self;
+                            let bit = 1u64 << node;
+                            b.stones[c.other().idx()] &= !bit;
+                            b.stones[c.idx()] |= bit;
+                            b.stones[c.other().idx()] |= 1u64 << d;
+                            f.push(b, log.plus(JsAct::mv(node, Some(d), true, false)));
+                        }
                     }
+                } else {
+                    let mut b = *self;
+                    b.stones[c.idx()] |= 1u64 << node;
+                    f.push(b, log.plus(JsAct::mv(node, None, false, false)));
                 }
-            } else {
-                let mut b = *self;
-                b.stones[c.idx()] |= 1u64 << node;
-                f.push(b, log.plus(JsAct::mv(node, None, false, false)));
             }
         }
     }
 
     /// A soft BLINK (place on an empty node, no adjacency needed).
     fn branch_blink<L: Log>(&self, log: &L, targets: u64, c: Color, f: &mut Frontier<L>) {
-        let mut m = targets;
-        while m != 0 {
-            let node = m.trailing_zeros() as u8;
-            m &= m - 1;
-            let mut b = *self;
-            b.stones[c.idx()] |= 1u64 << node;
-            f.push(b, log.plus(JsAct::mv(node, None, false, true)));
+        // Seal of Destruction first, as in `branch_move`.
+        let first = targets & self.destruction_priority_targets(c);
+        for mask in [first, targets & !first] {
+            let mut m = mask;
+            while m != 0 {
+                let node = m.trailing_zeros() as u8;
+                m &= m - 1;
+                let mut b = *self;
+                b.stones[c.idx()] |= 1u64 << node;
+                f.push(b, log.plus(JsAct::mv(node, None, false, true)));
+            }
         }
+    }
+
+    /// Nodes of Seal of Destruction worth branching on FIRST for `c`: the whole
+    /// sigil when `c` is one node short of it (landing there completes it) or
+    /// when the enemy is one short (pushing their stone there completes theirs).
+    /// 0 when the seal is not drawn or nobody is that close.
+    fn destruction_priority_targets(&self, c: Color) -> u64 {
+        let Some(pos) = self.position_of(SEAL_OF_DESTRUCTION) else { return 0 };
+        if self.uncontrolled_count(pos, c) == 1 || self.uncontrolled_count(pos, c.other()) == 1 {
+            SIGIL[pos]
+        } else { 0 }
     }
 
     /// Repeat `branch_move` `count` times over a per-board target selector.
@@ -233,6 +256,26 @@ impl Board {
                 let empties = mask_vec(b0.empty());
                 let mut f = Frontier::new(cap);
                 if n <= empties.len() {
+                    // Seal of Destruction: if the displaced stones can complete
+                    // the ENEMY's copy they lose when their turn starts, so that
+                    // placement is a mate in one. Emit it FIRST -- with 20+ empty
+                    // nodes C(empties, n) exceeds the cap and the seal's nodes
+                    // sit in the b/c rows, i.e. late in node order, exactly where
+                    // a capped enumeration stops looking. The dedupe absorbs the
+                    // duplicate when the ordinary walk reaches the same set.
+                    let fill = b0.destruction_fill_targets(c);
+                    if fill != 0 && fill.count_ones() as usize <= n {
+                        let mut b = b0;
+                        let mut kept = mask_vec(fill);
+                        b.stones[c.other().idx()] |= fill;
+                        for &e in &empties {
+                            if kept.len() >= n { break; }
+                            if fill & (1u64 << e) != 0 { continue; }
+                            b.stones[c.other().idx()] |= 1u64 << e;
+                            kept.push(e);
+                        }
+                        f.push(b, L::default().plus(JsAct::gust(mask_vec(picked), kept)));
+                    }
                     let mut idx = vec![0usize; n];
                     fn rec<L: Log>(d: usize, s: usize, n: usize, e: &[u8], idx: &mut Vec<usize>,
                                    b0: &Board, picked: u64, c: Color, f: &mut Frontier<L>) {
