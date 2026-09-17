@@ -2430,9 +2430,16 @@ fn every_cast_that_can_fill_seal_of_destruction_is_enumerated_ranked_first_and_f
         let pos = draw.iter().position(|&x| x == spell).unwrap();
         let s = SIGIL[pos].count_ones();
         // red = 4 + s stones, blue = 4 + far. Undecided needs far <= 1 + s and
-        // far >= s - 3; the burn (red >= 7 after keep + two placements, blue = far)
-        // wins for far <= 3. far = min(1 + s, 3) satisfies all three for s in 1,3,5.
-        let far: &[&str] = if s == 1 { &["c13", "c12"] } else { &["c13", "c12", "b13"] };
+        // far >= s - 3. The burn must be the ONLY win: a 5-node spell places up
+        // to five stones (Blossom) or four (Flourish, Tsunami) and would reach the
+        // lead by placement alone against three far stones, so the 5-node fixtures
+        // carry six; the burn then wins (red >= 10 vs 6+1) and placement alone does
+        // not (10 or 11 vs 10+1). For 1- and 3-node spells two or three suffice.
+        let far: &[&str] = match s {
+            1 => &["c13", "c12"],
+            3 => &["c13", "c12", "b13"],
+            _ => &["c13", "c12", "b13", "c9", "c5", "b11"],
+        };
         let b = destruction_board(draw, mask(&["a2", "a3", "a4", "a1"]) | SIGIL[pos],
                                   mask(&["a13", "a7", "a11", "a12"]) | mask(far));
         assert!(b.holds_charged(Color::Red, spell), "{name}");
