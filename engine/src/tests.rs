@@ -2253,3 +2253,254 @@ fn the_mate_guard_defaults_on_and_leaves_ordinary_scores_alone() {
                t_off.map(|x| x.slice().to_vec()));
     let _ = st_off.unproven_mate;
 }
+
+// ============================================================================
+// Seal of Destruction (Covenant ritual). Rule text, `constants.js`:
+//   "STATIC: If filled at the end of your turn, destroy all enemy stones
+//    touching you. If filled at the start of your turn, you lose."
+// The shipped engine had neither half and paid `sigil_charged` for filling it.
+// ============================================================================
+
+/// A legal draw with Seal of Destruction in ritual slot 0 (sigil a2..a6) and,
+/// optionally, one more spell in the slot its role owns: ritual -> slot 1
+/// (b2..b6), sorcery -> slot 4 (b8..b10), charm -> slot 8 (c7).
+fn destruction_draw(extra: Option<u8>) -> [u8; 9] {
+    let mut draw = [SEAL_OF_DESTRUCTION, 1, 2, 5, 6, 9, 10, 11, 12];
+    if let Some(t) = extra {
+        let slot = match SPELLS[t as usize].role {
+            Role::Ritual => 1, Role::Sorcery => 4, Role::Charm => 8,
+        };
+        if let Some(dup) = draw.iter().position(|&x| x == t) { draw[dup] = draw[slot]; }
+        draw[slot] = t;
+    }
+    draw
+}
+
+fn mask(names: &[&str]) -> u64 { names.iter().fold(0u64, |m, x| m | (1u64 << n(x))) }
+
+fn destruction_board(draw: [u8; 9], red: u64, blue: u64) -> Board {
+    let mut b = Board::new(draw, Variant::Standard);
+    assert!(b.draw_is_legal(), "fixture draw must be legal: {:?}", draw);
+    b.stones[0] = red;
+    b.stones[1] = blue;
+    b.turn_counter = 10;
+    b.update();
+    assert_eq!(b.outcome, Outcome::Ongoing, "fixture must start ongoing");
+    let mut probe = b;
+    assert!(!probe.check_game_over(Color::Red), "fixture must not already hold the lead");
+    b
+}
+
+/// Shipped search at a fixed depth; returns the turn, its score and the position it
+/// hands the opponent (exactly what `search.rs` builds for a child).
+fn search_from(b: &Board, c: Color, depth: i32) -> (crate::turn::Turn, i32, Board) {
+    let mut s = crate::search::Search::new(16);
+    s.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    s.weights = crate::eval::weights_by_name("tfit").unwrap();
+    let (best, score, _) = s.go(b, c, depth, 0);
+    let t = best.expect("the search returned no turn");
+    let mut child = *b;
+    child.apply_turn(&t, c);
+    child.turn_counter += 1;
+    child.to_move = c.other();
+    (t, score, child)
+}
+
+#[test]
+fn seal_of_destruction_burns_at_end_of_turn_and_claims_at_start_of_turn() {
+    use crate::turn::{Action, Turn};
+    let draw = destruction_draw(None);
+    // Red holds a2..a5; a6 (touching a2 and a5) completes the seal. Blue touches
+    // red's seal stones at a13 (a3) and a12 (a5). Six blue stones: the burn of two
+    // leaves 4 -> score 5 against red's 6, nowhere near the +3 lead.
+    let b = destruction_board(draw, mask(&["a2", "a3", "a4", "a5", "a1"]),
+                              mask(&["a13", "a12", "b8", "b9", "b10", "c8"]));
+    let fill = Turn::single(Action::Move { node: n("a6"), push_to: None });
+    let mut after = b;
+    after.apply_turn(&fill, Color::Red);
+    assert!(after.holds_charged(Color::Red, SEAL_OF_DESTRUCTION));
+    assert_eq!(after.stones[1] & mask(&["a13", "a12"]), 0, "touching enemy stones burn");
+    assert_eq!(after.stones[1], mask(&["b8", "b9", "b10", "c8"]), "the rest survive");
+    assert_eq!(after.outcome, Outcome::Ongoing, "6 vs 4+1 is not the lead");
+    // Blue plays anything that leaves the seal alone. Red's turn then starts -- and ends.
+    after.turn_counter += 1;
+    after.to_move = Color::Blue;
+    let mut next = after;
+    next.apply_turn(&Turn::single(Action::Move { node: n("b7"), push_to: None }), Color::Blue);
+    assert_eq!(next.outcome, Outcome::BlueWins,
+               "holding Seal of Destruction when your turn starts loses on the spot");
+    // With two fewer blue stones the same burn reaches the lead and wins first.
+    let w = destruction_board(draw, mask(&["a2", "a3", "a4", "a5", "a1"]),
+                              mask(&["a13", "a12", "b8", "b9"]));
+    let mut won = w;
+    won.apply_turn(&fill, Color::Red);
+    assert_eq!(won.outcome, Outcome::RedWins, "6 vs 2+1 is the lead: the burn wins");
+}
+
+#[test]
+fn emit_actions_hands_back_the_pre_burn_board_the_client_replays() {
+    use crate::turn::{Action, Turn};
+    // `rust-ai.js` replays the emitted actions with `applyAITurn` (no burn) and
+    // compares stones against `expected_sfn` BEFORE `endTurn` burns, so the board
+    // `emit_actions` returns must be the pre-burn one; the client's own two steps
+    // then land exactly where `apply_turn` does.
+    let draw = destruction_draw(None);
+    let b = destruction_board(draw, mask(&["a2", "a3", "a4", "a5", "a1"]),
+                              mask(&["a13", "a12", "b8", "b9"]));
+    let fill = Turn::single(Action::Move { node: n("a6"), push_to: None });
+    let (_acts, emitted) = b.emit_actions(&fill, Color::Red);
+    assert_eq!(emitted.stones[1], b.stones[1], "no burn in the emitted board");
+    assert_eq!(emitted.outcome, Outcome::Ongoing);
+    let mut client = emitted;
+    client.destruction_end_of_turn(Color::Red);
+    client.check_game_over(Color::Red);
+    client.destruction_start_of_turn(Color::Blue);
+    let mut engine = b;
+    engine.apply_turn(&fill, Color::Red);
+    engine.turn_counter += 1;
+    engine.to_move = Color::Blue;
+    assert_eq!(client.stones, engine.stones);
+    assert_eq!(client.outcome, engine.outcome);
+    assert_eq!(client.outcome, Outcome::RedWins);
+}
+
+#[test]
+fn gust_blows_the_enemy_into_seal_of_destruction_for_a_mate_in_one() {
+    use crate::turn::Action;
+    use crate::search::UNPROVEN_MATE;
+    // Red holds Gust (slot 8, c7) and anchor stones at c2, c11, b8 (plus c1 for
+    // mana); every blue stone in `picked` touches an ANCHOR, never only c7:
+    // casting a charm clears its node and keeps nothing back, so a stone that
+    // touched red only through c7 is no longer picked up after the cast -- the
+    // first version of this fixture leaned on c7 and the k=5 mate did not exist.
+    // Blue already stands on 5-k seal nodes; Gust must drop the k it picks up
+    // onto the k empty ones -- blue then starts its turn holding the seal and
+    // loses. k = 1..5 covers one stone to the whole seal.
+    let draw = destruction_draw(Some(GUST));
+    let seal = ["a2", "a3", "a4", "a5", "a6"];
+    let picked = ["c3", "c6", "b10", "b9", "b7"];   // c2: c3 c6; c11: b10 c6; b8: b9 b7 b10
+    for k in 1..=5usize {
+        let mut blue: Vec<&str> = seal[..5 - k].to_vec();
+        blue.extend_from_slice(&picked[..k]);
+        let b = destruction_board(draw, mask(&["c7", "c2", "c11", "c1", "b8"]), mask(&blue));
+        assert!(b.holds_charged(Color::Red, GUST));
+        assert_eq!(b.destruction_fill_targets(Color::Red).count_ones() as usize, k,
+                   "k={k}: the seal has exactly k empty nodes for blue to be blown onto");
+        let (t, score, child) = search_from(&b, Color::Red, 2);
+        assert!(t.slice().iter().any(|a| matches!(a, Action::Cast { .. })),
+                "k={k}: expected a Gust cast, got {:?}", t.slice());
+        assert!(score >= UNPROVEN_MATE, "k={k}: the mate was not seen (score {score})");
+        assert_eq!(child.outcome, Outcome::RedWins,
+                   "k={k}: blue must start its turn holding the seal and lose");
+    }
+}
+
+#[test]
+fn filling_seal_of_destruction_by_move_or_dash_is_found_when_the_burn_wins() {
+    use crate::search::UNPROVEN_MATE;
+    let draw = destruction_draw(None);
+    // By a plain move: a6 completes the seal; a13 (a3) and a12 (a5) burn, 6 vs 2+1.
+    let b = destruction_board(draw, mask(&["a2", "a3", "a4", "a5", "a1"]),
+                              mask(&["a13", "a12", "b8", "b9"]));
+    let (t, score, child) = search_from(&b, Color::Red, 2);
+    assert!(score >= UNPROVEN_MATE, "move: score {score} for {:?}", t.slice());
+    assert_eq!(child.outcome, Outcome::RedWins, "move: {:?}", t.slice());
+    assert!(child.holds_charged(Color::Red, SEAL_OF_DESTRUCTION), "move: the win IS the burn");
+
+    // By dash: red holds a2, a3, a4 -- two placements short. One move (a5) plus a
+    // dash (sacrifice two of c1/c2/c11, land a6) fills it in one turn and burns
+    // a13 (a3), a7 (a4) and a1 (a2): 6 vs 1+1.
+    let d = destruction_board(draw, mask(&["a2", "a3", "a4", "c1", "c2", "c11"]),
+                              mask(&["a13", "a7", "a1", "b8"]));
+    let (t, score, child) = search_from(&d, Color::Red, 2);
+    assert!(score >= UNPROVEN_MATE, "dash: score {score} for {:?}", t.slice());
+    assert_eq!(child.outcome, Outcome::RedWins, "dash: {:?}", t.slice());
+    assert!(child.holds_charged(Color::Red, SEAL_OF_DESTRUCTION), "dash: the win IS the burn");
+}
+
+#[test]
+fn every_cast_that_can_fill_seal_of_destruction_is_enumerated_ranked_first_and_found() {
+    use crate::search::UNPROVEN_MATE;
+    use crate::turn::{Action, Turn};
+    const SPROUT: u8 = 10; const GROW: u8 = 5; const FLOURISH: u8 = 0;
+    const SCATTER: u8 = 16; const BLOSSOM: u8 = 15; const ECLIPSE: u8 = 19;
+    // Red holds a2, a3, a4 of the seal (two short), `spell` charged in its own
+    // slot, and a1 for mana. After the fill, a13 (a3), a7 (a4), a11 (a6) and a12
+    // (a5) all touch the seal and burn. `far` is sized per sigil so the fixture
+    // starts undecided and the burn reaches the lead: see the arithmetic below.
+    for &spell in &[SPROUT, GROW, FLOURISH, SCATTER, BLOSSOM, ECLIPSE, TORRENT, TSUNAMI] {
+        let name = SPELLS[spell as usize].name;
+        let draw = destruction_draw(Some(spell));
+        let pos = draw.iter().position(|&x| x == spell).unwrap();
+        let s = SIGIL[pos].count_ones();
+        // red = 4 + s stones, blue = 4 + far. Undecided needs far <= 1 + s and
+        // far >= s - 3. The burn must be the ONLY win: a 5-node spell places up
+        // to five stones (Blossom) or four (Flourish, Tsunami) and would reach the
+        // lead by placement alone against three far stones, so the 5-node fixtures
+        // carry six; the burn then wins (red >= 10 vs 6+1) and placement alone does
+        // not (10 or 11 vs 10+1). For 1- and 3-node spells two or three suffice.
+        let far: &[&str] = match s {
+            1 => &["c13", "c12"],
+            3 => &["c13", "c12", "b13"],
+            _ => &["c13", "c12", "b13", "c9", "c5", "b11"],
+        };
+        let b = destruction_board(draw, mask(&["a2", "a3", "a4", "a1"]) | SIGIL[pos],
+                                  mask(&["a13", "a7", "a11", "a12"]) | mask(far));
+        assert!(b.holds_charged(Color::Red, spell), "{name}");
+
+        // (1) ENUMERATION + RANKING: from the position after the turn's first move
+        // (a5 for the soft-move spells; b7 for Eclipse, which needs the seal to
+        // stay exactly two short), casting `spell` must offer a resolution that
+        // completes the seal, and it must be the top-ranked outcome the search
+        // will look at inside its 2-outcome window.
+        let first = if spell == ECLIPSE { "b7" } else { "a5" };
+        let mut mid = b;
+        mid.apply_turn(&Turn::single(Action::Move { node: n(first), push_to: None }), Color::Red);
+        assert_eq!(mid.outcome, Outcome::Ongoing, "{name}: first move alone decides nothing");
+        let mut cast = mid;
+        cast.cast_clear_and_keep(pos, Color::Red, 0);
+        let (ranked, _) = cast.resolve_outcomes_ranked(pos, Color::Red, 2);
+        assert!(!ranked.is_empty(), "{name}: no resolution at all");
+        assert!(ranked[0].1.holds_charged(Color::Red, SEAL_OF_DESTRUCTION),
+                "{name}: the top-ranked resolution does not complete the seal");
+
+        // (2) THE SEARCH finds a win from the root (this cast, or the equally legal
+        // move-plus-dash fill; either way the burn is the win).
+        let (t, score, child) = search_from(&b, Color::Red, 2);
+        assert!(score >= UNPROVEN_MATE, "{name}: score {score} for {:?}", t.slice());
+        assert_eq!(child.outcome, Outcome::RedWins, "{name}: {:?}", t.slice());
+        assert!(child.holds_charged(Color::Red, SEAL_OF_DESTRUCTION),
+                "{name}: the win must be the burn");
+    }
+}
+
+#[test]
+fn the_engine_refuses_to_fill_seal_of_destruction_when_the_burn_does_not_win() {
+    use crate::search::UNPROVEN_MATE;
+    use crate::turn::{Action, Turn};
+    let draw = destruction_draw(None);
+    // Filling a6 burns only a12: 6 vs 5+1, no lead -- and red loses when its next
+    // turn starts. Six blue stones keep the start position undecided (score 7 vs 5).
+    let b = destruction_board(draw, mask(&["a2", "a3", "a4", "a5", "a1"]),
+                              mask(&["a12", "b8", "b9", "b10", "c8", "c9"]));
+    let (t, _score, child) = search_from(&b, Color::Red, 2);
+    assert!(!child.holds_charged(Color::Red, SEAL_OF_DESTRUCTION),
+            "the search filled the seal without the lead: {:?}", t.slice());
+    assert_eq!(child.outcome, Outcome::Ongoing);
+    // And the suicide itself is scored as the loss it is: after the fill, blue to
+    // move sees a forced win (any move that leaves the seal alone).
+    let mut after = b;
+    after.apply_turn(&Turn::single(Action::Move { node: n("a6"), push_to: None }), Color::Red);
+    after.turn_counter += 1;
+    after.to_move = Color::Blue;
+    assert!(after.holds_charged(Color::Red, SEAL_OF_DESTRUCTION));
+    let (_t, blue_score, _c) = search_from(&after, Color::Blue, 1);
+    assert!(blue_score >= UNPROVEN_MATE,
+            "blue to move against a charged enemy seal must read as a win, got {blue_score}");
+    // The move-ordering proxy agrees without a search: the fill is scored as a loss,
+    // the same move on the winning board as a win.
+    assert!(b.move_score(n("a6"), None, Color::Red) < -50_000, "ordering must flag the suicide");
+    let w = destruction_board(draw, mask(&["a2", "a3", "a4", "a5", "a1"]),
+                              mask(&["a13", "a12", "b8", "b9"]));
+    assert!(w.move_score(n("a6"), None, Color::Red) > 50_000, "ordering must flag the mate");
+}
