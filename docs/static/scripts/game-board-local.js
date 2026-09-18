@@ -16,6 +16,7 @@ document.addEventListener('alpine:init', () => {
 			puzzleMessage: '',
 			puzzleDiagnostic: '',                    // engine/live-rules disagreement, if any
 			puzzleJudge: '',                         // last engine verdict on an off-line move
+			puzzleSolutionNodes: {},                 // nodes of the revealed solution's first turn (gold rings)
 			puzzleMoves: 0,                          // mover turns played so far
 			puzzleSolutionText: [],
 			activeSpell: '',
@@ -1477,6 +1478,7 @@ document.addEventListener('alpine:init', () => {
 					_this.puzzleStep = 0;
 					_this.puzzleMessage = '';
 					_this.puzzleSolutionText = [];
+					_this.puzzleSolutionNodes = {};
 					_this.puzzleJudge = '';
 					_this.puzzleMoves = 0;
 					_this._puzzleLastDefence = null;
@@ -1523,15 +1525,20 @@ document.addEventListener('alpine:init', () => {
 					const extra = puzzleKeys(puzzle).length - shown.length;
 					if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
 					_this.puzzleSolutionText = lines;
-					// Glow the first line's target node(s) on the board.
-					const glow = {};
+					// Also into the game log, which is always in view, and ring every
+					// node the first solution turn touches (gold, distinct from the
+					// game's own red/blue legal-move rings).
+					lines.forEach(l => _this.messageHistory.push('Solution: ' + l));
+					const ring = {};
 					const first = sols[0];
 					if (first && Array.isArray(first.actions)) {
 						first.actions.forEach(a => {
-							if (a && a.node && (a.type === 'move' || a.type === 'hard_move' || a.type === 'blink')) glow[a.node] = puzzle.mover;
+							if (!a) return;
+							['node', 'node2', 'pushed_to'].forEach(k => { if (a[k]) ring[a[k]] = true; });
+							['sacrificed', 'destroyed', 'kept', 'converted'].forEach(k => (a[k] || []).forEach(n => { ring[n] = true; }));
 						});
 					}
-					_this.validMoves = glow;
+					_this.puzzleSolutionNodes = ring;
 				};
 
 				function handleAiThinkReportEvent(payload) {

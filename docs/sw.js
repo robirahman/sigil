@@ -10,7 +10,7 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
  */
-const CACHE_VERSION = 'v32';
+const CACHE_VERSION = 'v33';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -39,6 +39,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/game-board-local.js',
+	'./static/scripts/game-board-local.js?v=8',
+	'./static/scripts/engine/rust-ai.js?v=8',
 	'./static/scripts/game-board-multiplayer.js',
 	'./static/scripts/help.js',
 	'./static/scripts/offline-queue.js',

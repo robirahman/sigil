@@ -55,7 +55,7 @@ function waitPort(port, ms) {
       await show.asElement().click();
       await new Promise(r => setTimeout(r, 800));
       console.log('after click:', JSON.stringify(await state()));
-      const panel = await page.evaluate(() => { const el = document.querySelector('.puzzle-panel__solution'); return el ? { display: getComputedStyle(el).display, text: el.innerText.slice(0, 300) } : null; });
+      const panel = await page.evaluate(() => { const el = document.querySelector('.puzzle-panel__solution'); const rings = [...document.querySelectorAll('.stone-node--solution')].map(n => n.getAttribute('aria-label')); const feed = [...document.querySelectorAll('.feed--history li')].map(li => li.textContent).filter(t => /Solution/.test(t)); return el ? { display: getComputedStyle(el).display, text: el.innerText.slice(0, 300), rings, feed } : null; });
       console.log('solution panel:', JSON.stringify(panel));
     } else {
       console.log('Show solution button not found');
