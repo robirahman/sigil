@@ -206,7 +206,12 @@ def main():
     ap.add_argument('--no-solve', action='store_true', help='assemble from --work only (a partial set while a run is in progress)')
     ap.add_argument('--max-win-fraction', type=float, default=0.34,
                     help='drop mate-in-1 puzzles where more than this share of first turns win')
-    ap.add_argument('--max-solutions-stored', type=int, default=12)
+    ap.add_argument('--max-solutions-stored', type=int, default=12, help='full mate-in-1 lines stored per puzzle')
+    ap.add_argument('--max-lines-stored', type=int, default=8, help='full mate-in-2/3 lines stored per puzzle (keys are kept for all)')
+    ap.add_argument('--max-continuations-stored', type=int, default=6, help='proven second turns stored per mate-in-3 line')
+    ap.add_argument('--retry', choices=['none', 'promising'], default='none',
+                    help="re-solve already-solved positions: 'promising' = mover won within 4 plies and the stored "
+                         "result was no mate / budget exceeded (a bigger --time-ms gives the nominator more room)")
     ap.add_argument('--max-winning', type=int, default=40,
                     help='drop mate-in-1 puzzles with more distinct winning positions than this (not a puzzle)')
     args = ap.parse_args()
@@ -239,9 +244,16 @@ def main():
     todo, seen_pos = [], set()
     last_turn = {gid: (g['turns'][-1]['turnNumber'] if g['turns'] else 0) for gid, g in hyd.items()}
     order = []
+    n_retry = 0
     for gid, t, s, hints in iter_positions(hyd, args.min_turn):
         key = f"{gid}:t{t['turnNumber']}"
         pk = (sfn_key(s), s.split()[1])
+        if key in done and args.retry == 'promising' and hints and last_turn.get(gid, 0) - t['turnNumber'] <= 4:
+            r = done[key]
+            empty = r.get('ok') and not (r.get('mate1') or r.get('mate2') or r.get('mate3'))
+            if empty or r.get('error') == 'budget exceeded':
+                del done[key]          # the later result wins at assembly
+                n_retry += 1
         if key in done or pk in seen_pos:
             continue
         seen_pos.add(pk)
@@ -260,8 +272,8 @@ def main():
         todo = todo[:args.limit]
     if args.no_solve:
         todo = []
-    print(f'{len(done)} positions already solved, {len(todo)} to solve with {args.workers} workers',
-          flush=True)
+    print(f'{len(done)} positions already solved, {len(todo)} to solve with {args.workers} workers'
+          + (f' ({n_retry} retried)' if n_retry else ''), flush=True)
     t0 = time.time()
     n = 0
     # Results are streamed to --work and NOT kept in memory (an early version
@@ -344,9 +356,12 @@ def main():
         # the defence), so the page's "show solution" picks a real puzzle line.
         lines_sorted = sorted(lines, key=lambda l: (l.get('mates_after_defence', 0), len(l['actions'])))
         sols = []
-        keep_n = len(lines_sorted) if mate >= 2 else args.max_solutions_stored
+        # Every winning first turn is kept as a KEY (the page must accept them
+        # all); full lines (actions, defence, finish, continuations) are stored
+        # for the hardest few only, to keep the set small.
+        keep_n = args.max_lines_stored if mate >= 2 else args.max_solutions_stored
 
-        def pack(l):
+        def pack(l, depth=0):
             sol = {'actions': l['actions'], 'after': l['after'], 'key': sfn_key(l['after'])}
             if 'defence' in l:
                 sol['defence'] = l['defence']
@@ -356,7 +371,9 @@ def main():
             if l.get('continuations'):
                 # mate-in-3: the proven second turns against the defence, each
                 # with its own defence/finish, keyed by the position they reach.
-                sol['continuations'] = [pack(x) for x in l['continuations']]
+                conts = sorted(l['continuations'], key=lambda x: (x.get('mates_after_defence', 0), len(x['actions'])))
+                sol['continuations'] = [pack(x, depth + 1) for x in conts[:args.max_continuations_stored]]
+                sol['continuations_total'] = len(l['continuations'])
             return sol
         for l in lines_sorted[:keep_n]:
             sols.append(pack(l))

@@ -454,8 +454,8 @@ pub fn solve(b: &Board, budget: u64, time_ms: u64, extra_keys: &[Key], max_mate:
 
     // Nomination budgets: a 3-ply search settles in a few seconds even on a
     // wide position; the 5-ply one gets more but stays a fraction of the cap.
-    let root3_ms = if time_ms > 0 { (time_ms / 8).clamp(200, 4_000) } else { 2_000 };
-    let root5_ms = if time_ms > 0 { (time_ms / 4).clamp(500, 10_000) } else { 5_000 };
+    let root3_ms = if time_ms > 0 { (time_ms / 8).clamp(200, 8_000) } else { 2_000 };
+    let root5_ms = if time_ms > 0 { (time_ms / 4).clamp(500, 45_000) } else { 5_000 };
     // ---- mate-in-2: nominated by a 3-ply search and by the caller's hints ----
     let mut cand2 = s.nominate(b, c, 3, root3_ms)?;
     cand2.extend_from_slice(extra_keys);
