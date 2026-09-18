@@ -1409,7 +1409,7 @@ document.addEventListener('alpine:init', () => {
 						const accepted = step === 0 ? (puzzle.solutions || [])
 							: ((_this._puzzleLine && _this._puzzleLine.continuations) || []);
 						const hitLine = accepted.find(sol => sol.key === key)
-							|| (step === 0 && puzzle.solutionKeys.indexOf(key) >= 0 ? { key } : null);
+							|| (step === 0 && puzzleKeys(puzzle).indexOf(key) >= 0 ? { key } : null);
 						if (!hitLine) {
 							if (over && _engineRef.board.winner === puzzle.mover) {
 								// The live rules ended the game in the mover's favour on
@@ -1520,7 +1520,7 @@ document.addEventListener('alpine:init', () => {
 						const prefix = shown.length > 1 ? ('Line ' + (i + 1) + ': ') : '';
 						lines.push(prefix + render(sol));
 					});
-					const extra = puzzle.solutionKeys.length - shown.length;
+					const extra = puzzleKeys(puzzle).length - shown.length;
 					if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
 					_this.puzzleSolutionText = lines;
 					// Glow the first line's target node(s) on the board.
@@ -2105,6 +2105,11 @@ document.addEventListener('alpine:init', () => {
  * a turn's after-state with the mover still marked to move while the solver
  * marks the opponent, and the counter differs by one between them.
  */
+/** The puzzle's winning-first-turn keys (the generator writes snake_case). */
+function puzzleKeys(puzzle) {
+	return (puzzle && (puzzle.solution_keys || puzzle.solutionKeys)) || [];
+}
+
 function puzzleSfnKey(sfn) {
 	const p = String(sfn || '').trim().split(/\s+/);
 	// The spell list after '/' is constant within a puzzle, so it is dropped
