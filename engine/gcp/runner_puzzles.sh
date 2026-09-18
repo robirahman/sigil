@@ -17,6 +17,9 @@
 #   time-ms-1   per-position wall-clock cap, phase 1 (promising positions, mate <= 3)
 #   time-ms-2   per-position cap, phase 2 (everything else)
 #   max-mate-2  deepest mate looked for in phase 2 (2 or 3)
+#   retry-ms    if > 0, a third phase re-solves the promising positions whose result
+#               was "no mate" or "budget exceeded" with this per-position cap
+#               (mate-in-3 nominations need a long 5-ply search on wide positions)
 #   resume      optional GCS object name of a prior run's work file: downloaded
 #               first, so already-solved positions are skipped (the first run
 #               was a Spot VM preempted 3.5 minutes into phase 2)
@@ -28,7 +31,8 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hours)
 CORPUS=$(md corpus); TMS1=$(md time-ms-1); TMS2=$(md time-ms-2); MM2=$(md max-mate-2)
-RESUME=$(md resume); : "${RESUME:=}" 
+RESUME=$(md resume); : "${RESUME:=}"
+TMS3=$(md retry-ms); : "${TMS3:=0}" 
 : "${RUN:=unknown}" "${BRANCH:=puzzles}" "${WORKERS:=$(nproc)}" "${MAXH:=5}" \
   "${CORPUS:=puzzles/hydrated_2026-09-17.json}" "${TMS1:=40000}" "${TMS2:=30000}" "${MM2:=3}"
 echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS tms1=$TMS1 tms2=$TMS2 mm2=$MM2"
@@ -100,6 +104,11 @@ tail -3 $WORK/out/phase1.log
 echo "=== phase 2: everything else, mate <= $MM2, ${TMS2} ms/position ==="
 $GEN --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/phase2.log 2>&1
 tail -3 $WORK/out/phase2.log
+if [ "$TMS3" -gt 0 ]; then
+  echo "=== phase 3: retry promising no-mate / budget-exceeded positions, mate <= 3, ${TMS3} ms/position ==="
+  $GEN --only-promising --max-mate 3 --time-ms "$TMS3" --retry promising > $WORK/out/phase3.log 2>&1
+  tail -3 $WORK/out/phase3.log
+fi
 
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done
 gcs_put /var/log/sigil-puzzles.log "runs/$RUN/live/runner.log" || true

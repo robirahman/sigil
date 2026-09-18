@@ -24,6 +24,7 @@ CORPUS=${CORPUS:-puzzles/hydrated_2026-09-17.json}
 TIME_MS_1=${TIME_MS_1:-40000}; TIME_MS_2=${TIME_MS_2:-30000}; MAX_MATE_2=${MAX_MATE_2:-3}
 SPOT=${SPOT:-1}
 RESUME=${RESUME:-}          # GCS object of a prior work file to continue from
+RETRY_MS=${RETRY_MS:-0}     # > 0 adds a phase-3 retry of promising empty/timed-out positions
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
 SPOT_FLAGS=()
@@ -38,7 +39,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=puzzles \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,time-ms-1=$TIME_MS_1,time-ms-2=$TIME_MS_2,max-mate-2=$MAX_MATE_2,resume=$RESUME" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,time-ms-1=$TIME_MS_1,time-ms-2=$TIME_MS_2,max-mate-2=$MAX_MATE_2,resume=$RESUME,retry-ms=$RETRY_MS" \
   --metadata-from-file="startup-script=$HERE/runner_puzzles.sh" \
   --format="value(name,status)"
 echo "$RUN"
