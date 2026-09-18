@@ -64,6 +64,17 @@ pub const WIN: i32 = 10_000_000;
 /// SPRT-able: the positions are ~4 in 3,665 starts, so gate it by counting
 /// the defect it removes (`eval_consistency.py --mate-guard on|off`).
 pub const UNPROVEN_MATE: i32 = 5_000;
+/// Exhaustive mate-in-1 "bookends" around the heuristic search (see
+/// `go_with_progress`): the root's full turn list is scanned for an immediate
+/// win before searching, and the chosen move's reply list for an immediate loss
+/// after. An enumeration wider than this many turns is skipped rather than paid
+/// for; below `BOOKEND_MIN_TIME_MS` per move the bookends stay off (the
+/// enumeration alone is ~0.1-0.5 s on a midgame position).
+pub const BOOKEND_TURN_CAP: usize = 250_000;
+pub const BOOKEND_MIN_TIME_MS: u64 = 2_000;
+/// How many root moves the back bookend may reject before it gives up and
+/// reports the proven loss.
+pub const BOOKEND_MAX_BANS: usize = 3;
 pub const MAX_PLY: usize = 64;
 
 /// Cast-outcome window the search offers the generator per node.
@@ -293,6 +304,10 @@ impl Elastic {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SearchStats {
     pub nodes: u64,
+    /// The front bookend found an immediate win exhaustively (no search ran).
+    pub bookend_win: bool,
+    /// Root moves the back bookend rejected because the reply had a mate-in-1.
+    pub bookend_banned: u8,
     /// Wall time this search used, ms (for matched-average-time gating).
     pub elapsed_ms: f64,
     /// Elastic: the deadline was extended for instability.
@@ -393,6 +408,10 @@ pub struct Search {
     /// A/B meaningful; on is the shipped default because announcing a win the
     /// search never established is a soundness bug, not a tuning choice.
     mate_guard: bool,
+    /// Exhaustive mate-in-1 bookends (default on; the frozen anchor turns them off).
+    mate_bookends: bool,
+    /// Root moves rejected by the back bookend in THIS search.
+    banned_root: Vec<Turn>,
     pub weights: crate::eval::Weights,
     /// A/B switch: true reproduces the pre-fix stage ordering — stages in order,
     /// no class merge AND no reserved key-dash slot. This is the baseline every
@@ -512,6 +531,8 @@ impl Search {
             width_scale: DEFAULT_WIDTH_SCALE,
             keep_window: crate::turn_iter::DEFAULT_KEEP_WINDOW,
             mate_guard: true,
+            mate_bookends: true,
+            banned_root: Vec::new(),
             weights: crate::eval::Weights::default(),
             legacy_order: false,
             width_shape: 0,
@@ -536,6 +557,8 @@ impl Search {
     /// false reproduces the pre-guard search: any mate score ends deepening
     /// and is reported as a proof.
     pub fn set_mate_guard(&mut self, on: bool) { self.mate_guard = on; }
+    pub fn set_mate_bookends(&mut self, on: bool) { self.mate_bookends = on; }
+    pub fn mate_bookends_get(&self) -> bool { self.mate_bookends }
     pub fn mate_guard_get(&self) -> bool { self.mate_guard }
     pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
@@ -730,6 +753,68 @@ impl Search {
         self.killers = [[None; 2]; MAX_PLY];
         if self.use_history { self.hist_decay(); }
 
+        self.banned_root.clear();
+        let t_start = now_ms();
+        let bookends = self.mate_bookends && (time_ms == 0 || time_ms >= BOOKEND_MIN_TIME_MS);
+
+        // ---- FRONT BOOKEND: an immediate win is found by enumeration, not by
+        // the ordered generator. Measured on recorded games (2026-09-18): a
+        // mate-in-1 needing a specific dash sacrifice pair plus a Harvest cast
+        // never appeared in the ordered stream at ANY widening scale, because
+        // dash branches per first move are capped by the cast-outcome window,
+        // cheapest sacrifices first, and only the survivors get a cast. Eleven
+        // such mates existed; the search saw none and announced -0.5.
+        if bookends {
+            if let Ok(Some(t)) = crate::mate::immediate_win(root, c, BOOKEND_TURN_CAP) {
+                self.stats.bookend_win = true;
+                self.stats.depth_completed = 1;
+                self.stats.elapsed_ms = now_ms() - t_start;
+                return (Some(t), WIN - 1, self.stats);
+            }
+        }
+
+        let (mut best, mut best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
+
+        // ---- BACK BOOKEND: the chosen move must not hand the opponent an
+        // immediate win. Same blind spot from the other side: the AI played a
+        // move whose reply was one of eleven mates and reported -0.5. Each
+        // rejected move is banned at the root and the search re-runs on the
+        // remaining time; if nothing survives, the proven loss is reported.
+        if bookends {
+            let mut bans = 0usize;
+            while let Some(t) = best {
+                if bans >= BOOKEND_MAX_BANS { break; }
+                let mut child = *root;
+                child.apply_turn(&t, c);
+                child.turn_counter += 1;
+                child.to_move = c.other();
+                if child.outcome != Outcome::Ongoing { break; }
+                match crate::mate::immediate_win(&child, c.other(), BOOKEND_TURN_CAP) {
+                    Ok(Some(_)) => {
+                        self.banned_root.push(t);
+                        bans += 1;
+                        self.stats.bookend_banned = bans as u8;
+                        let (b2, s2) = self.deepen(root, c, max_depth, time_ms, &mut progress);
+                        match b2 {
+                            Some(_) => { best = b2; best_score = s2; }
+                            None => { best_score = -(WIN - 2); break; }   // out of time: keep the move, report the loss
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        }
+        self.stats.elapsed_ms = now_ms() - t_start;
+        (best, best_score, self.stats)
+    }
+
+    /// Iterative deepening proper: the heuristic search between the bookends.
+    /// Returns the best COMPLETED move and its (mate-guarded) score.
+    fn deepen(&mut self, root: &Board, c: Color, max_depth: i32, time_ms: u64,
+              progress: &mut Option<&mut dyn FnMut(i32, i32, u64)>) -> (Option<Turn>, i32)
+    {
+        self.stats.timed_out = false;
+        let t_start = now_ms();
         // The best move is committed ONLY when an iteration completes. Accepting a
         // move from a timed-out iteration is a classic strength bug: the partial
         // search may have scored only a few successors, so its "best" can be worse
@@ -739,7 +824,6 @@ impl Search {
         let mut prev = 0i32;
         // §1.2 bookkeeping. `root_scores` is the previous completed iteration's
         // per-move scores (root_resort); the timing fields drive `elastic`.
-        let t_start = now_ms();
         let base_ms = time_ms as f64;
         let mut root_scores: Vec<(Turn, i32)> = Vec::new();
         let mut t_prev_iter = 0.0f64;
@@ -847,7 +931,6 @@ impl Search {
                 t_prev_iter = t_iter;
             }
         }
-        self.stats.elapsed_ms = now_ms() - t_start;
         // Report an UNPROVEN mate as large-but-finite. `ui_score` divides by
         // 3900 and the UI multiplies by 39, so UNPROVEN_MATE reaches the player
         // as +50 stones: unmistakably winning, past no mate threshold. The move
@@ -859,7 +942,7 @@ impl Search {
             let sign = if best_score > 0 { 1 } else { -1 };
             best_score = sign * UNPROVEN_MATE;
         }
-        (best, best_score, self.stats)
+        (best, best_score)
     }
 
     fn root_search(&mut self, b: &Board, c: Color, depth: i32,
@@ -891,6 +974,8 @@ impl Search {
         let mut i = 0usize;
         for t in turns {
             if self.out_of_time() { self.stats.timed_out = true; break; }
+            // Rejected by the back bookend: the reply to this move is a mate-in-1.
+            if self.banned_root.iter().any(|bt| bt.slice() == t.slice()) { continue; }
             let mut child = *b;
             child.apply_turn(&t, c);
             child.turn_counter += 1;

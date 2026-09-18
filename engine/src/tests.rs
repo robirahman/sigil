@@ -2595,3 +2595,67 @@ fn mate_solver_mate_in_two_lines_survive_brute_force() {
     assert!(sol.mate2.is_empty());
     brute_force_check_mate2(&o, &sol);
 }
+
+
+// ---------------------------------------------------------------------------
+// search.rs: exhaustive mate-in-1 bookends (recorded games of 2026-09-18)
+// ---------------------------------------------------------------------------
+
+/// Two recorded rust_hard games: the AI announced -0.5 and played into a
+/// mate-in-1 whose winning turns (dash + Harvest / dash + Erupt) the ordered
+/// generator never yields at any widening scale. (AI to move, then the position
+/// it handed the human.)
+const BOOKEND_CASES: [(&str, &str); 2] = [
+    ("rr...rbbbb..bb.bb...b..b.brrrrr..r.rrr./Hurricane,Flourish,Harvest,Scatter,Torrent,Fireblast,Lurk,Slash,Splash b 30 1:1 Fireblast:Scatter -:- tied competitive",
+     "rr...r.bbb...b.bb...b.bb..brrrrr.r.rbrr/Hurricane,Flourish,Harvest,Scatter,Torrent,Fireblast,Lurk,Slash,Splash r 31 1:1 Fireblast:Scatter -:- tied competitive"),
+    ("r.rrr.bbbb..rr..r......r..b....r.bbr.../Erupt,Corrupt,Tsunami,Seal_of_Wind,Grow,Meteor,Sprout,Lurk,Charge b 38 3:1 Corrupt:Meteor -:- r2 competitive",
+     "r.rrr..bbbb.rr..r......r..b....rbbbr.../Erupt,Corrupt,Tsunami,Seal_of_Wind,Grow,Meteor,Sprout,Lurk,Charge r 39 3:1 Corrupt:Meteor -:- r1 competitive"),
+];
+
+fn shipped_search() -> crate::search::Search {
+    let mut s = crate::search::Search::new(18);
+    s.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+    s.set_adaptive(p, e, h);
+    s.weights = crate::eval::weights_by_name("tfit").unwrap();
+    s
+}
+
+#[test]
+fn front_bookend_finds_a_mate_in_one_the_ordered_generator_never_yields() {
+    for (_, human) in BOOKEND_CASES {
+        let b = Board::from_sfn(human).expect("sfn");
+        let c = b.to_move;
+        // Without bookends the shipped search misses it (this is the recorded defect).
+        let mut s0 = shipped_search();
+        s0.set_mate_bookends(false);
+        let (_, sc0, _) = s0.go(&b, c, 2, 0);
+        assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the defect to reproduce without bookends, got {sc0}");
+        // With them (default) the mate is found and proven.
+        let mut s = shipped_search();
+        let (best, sc, st) = s.go(&b, c, 2, 0);
+        assert!(st.bookend_win, "the front bookend should have fired");
+        assert!(sc >= crate::search::WIN - crate::search::MAX_PLY as i32, "score {sc}");
+        let t = best.expect("a move");
+        let n = crate::mate::child(&b, &t, c);
+        assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)));
+    }
+}
+
+#[test]
+fn back_bookend_refuses_a_move_whose_reply_is_a_mate_in_one() {
+    for (ai, _) in BOOKEND_CASES {
+        let b = Board::from_sfn(ai).expect("sfn");
+        let c = b.to_move;
+        let mut s = shipped_search();
+        let (best, sc, st) = s.go(&b, c, 64, 4000);
+        let t = best.expect("a move");
+        let n = crate::mate::child(&b, &t, c);
+        let opp_mates = crate::mate::immediate_win(&n, c.other(), crate::search::BOOKEND_TURN_CAP)
+            .expect("enumerable").is_some();
+        // Either the move is safe from an immediate mate, or every move loses
+        // and the search says so honestly.
+        assert!(!opp_mates || sc <= -(crate::search::WIN - crate::search::MAX_PLY as i32),
+                "chosen move allows a mate-in-1 yet the score is {sc} (banned {})", st.bookend_banned);
+    }
+}

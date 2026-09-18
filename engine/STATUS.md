@@ -13,6 +13,25 @@ with this section, this section is right.
 | tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
 | browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
 
+**2026-09-18: exhaustive mate-in-1 BOOKENDS around the search (`search.rs`, default on,
+`set_mate_bookends`; the frozen `rust_anchor` keeps them off).** Found through the Puzzles work
+and a report from Fakey_McFaker: in two recorded competitive games (`-P1n0vvlpXcAf-u9Q7jd`,
+`-P1mxZ-Jq_g0-RJVjo8I`) rust_hard announced -0.5 and played into a mate-in-1. The exhaustive
+solver finds 11 and 1,185 mates-in-1 there; the shipped search finds NONE at depth 2 at any
+`width_scale` (833 nodes, identical at scale 1 and 256). Cause, by `layout_rank`: the ordered
+stream held 676 turns of 6,820 distinct successors and none of the mates; with the cast-outcome
+window raised to 4,096 they appear at rank ~21,000 of 21,466. `ordered_dash_branches` caps dash
+branches per first move at the window, cheapest sacrifices first, and only surviving branches get
+a cast -- so a mate needing a specific sacrifice pair plus a Harvest/Erupt cast is invisible at
+every widening scale. This is a WINDOW gap, not a width or eval gap. Fix: before searching, the
+root's full turn list is scanned for an immediate win (`mate::immediate_win`, enumeration cap
+250k turns); after searching, the chosen move's full reply list is scanned for an immediate loss
+and the move is banned at the root and the search re-run (up to 3 bans; if nothing survives the
+proven loss is reported). Off below 2 s/move. `SearchStats.bookend_win` / `bookend_banned`
+report it. Two regression tests from the recorded positions; the first asserts the defect
+reproduces with bookends off. Not yet SPRT'd for Elo (it can only convert announced -0.5s into
+avoided mates or honest -M scores). Ships as `RUST_ENGINE_VERSION` 6, cache v31.
+
 **2026-09-17: puzzle solver (`mate.rs`, `solve_mates` in the Python binding).** Feeds
 `docs/puzzles.html`. Mate-in-1 enumerates the root in full (complete winning set, and "no
 mate-in-1" is a proof). Mate-in-2 cannot be three fully enumerated plies -- a midgame position

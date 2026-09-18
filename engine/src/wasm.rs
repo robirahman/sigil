@@ -50,6 +50,7 @@ pub fn pick_move_actions(sfn: &str, time_ms: u32, tt_bits: u32, width_scale: u32
     // Restating a default is the trap everywhere else; here it is the point.
     s.set_elastic(None);
     s.set_lmr(0, 1);
+    s.set_mate_bookends(false);
     s.set_width_scale(width_scale.max(1) as usize);
     // MUST be set explicitly — same trap py.rs documents at its call site.
     s.weights = match crate::eval::weights_by_name(eval_name) {

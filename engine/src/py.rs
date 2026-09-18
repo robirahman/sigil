@@ -1018,6 +1018,7 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
     m.insert("force_hints".to_string(), s.force_hints_get() as u64);
+    m.insert("mate_bookends".to_string(), s.mate_bookends_get() as u64);
     m.insert("root_resort".to_string(), s.root_resort_get() as u64);
     m.insert("aspiration_steps".to_string(), s.aspiration_steps_get() as u64);
     m.insert("adopt_partial".to_string(), s.adopt_partial_get() as u64);
