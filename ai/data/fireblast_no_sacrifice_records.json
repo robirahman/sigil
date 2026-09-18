@@ -1,0 +1,447 @@
+{
+ "generated": "2026-09-18T20:47:24Z",
+ "what": "completed_games whose final turn is a Fireblast cast whose stored sacrifice was a no-op (an already-empty node), so the caster kept a stone and reached the +3 lead; with the sacrifice paid the lead is 2 and the game should have continued. Found via the Puzzles generator (unreproduced_wins) and re-counted from the SFNs.",
+ "records": [
+  {
+   "game": "-OpRBhY9MiZjO3Gfzaz_",
+   "date": "2026-04-05",
+   "turn": 32,
+   "kind": "snapshot",
+   "red": "ai_easy",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": null,
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "5LZYnfEixOeI4916t8bjywl0fn73"
+  },
+  {
+   "game": "-OpTUSzOx78P5QgVsM4x",
+   "date": "2026-04-05",
+   "turn": 23,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 10,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a8",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-OpZnUJ94B3i8YVJasjb",
+   "date": "2026-04-06",
+   "turn": 18,
+   "kind": "sim",
+   "red": "ai_medium",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_medium__",
+   "blueUid": "QW4hilS0sbXHzCkORQou4q14yRa2"
+  },
+  {
+   "game": "-Oq3ql_fgza_D7lBSseM",
+   "date": "2026-04-13",
+   "turn": 17,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 7,
+    "opponent": 3
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "2WydYsqpkFauQ3WgqS7E8q0Hzgo2",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-OqJbrXM_SHZgdAzvLlV",
+   "date": "2026-04-16",
+   "turn": 12,
+   "kind": "sim",
+   "red": "ai_easy",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 5,
+    "opponent": 3
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a8",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "2WydYsqpkFauQ3WgqS7E8q0Hzgo2"
+  },
+  {
+   "game": "-OqJhblAXJdp6akaUsO-",
+   "date": "2026-04-16",
+   "turn": 21,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 9,
+    "opponent": 5
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "2WydYsqpkFauQ3WgqS7E8q0Hzgo2",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-OrP-z3aHSjmz7sdEw-L",
+   "date": "2026-04-29",
+   "turn": 29,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 10,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-OrWGUeBJtOkJ-KoJSgV",
+   "date": "2026-05-01",
+   "turn": 14,
+   "kind": "sim",
+   "red": "ai_easy",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 6,
+    "opponent": 4
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "5LZYnfEixOeI4916t8bjywl0fn73"
+  },
+  {
+   "game": "-OrWWp_067gbwSZD_5C5",
+   "date": "2026-05-01",
+   "turn": 23,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 10,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-OrWiYvXE0yhg3JTJk-V",
+   "date": "2026-05-01",
+   "turn": 14,
+   "kind": "sim",
+   "red": "ai_easy",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 6,
+    "opponent": 4
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "5LZYnfEixOeI4916t8bjywl0fn73"
+  },
+  {
+   "game": "-OraR5PKMiAG5eCD5Uys",
+   "date": "2026-05-02",
+   "turn": 27,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_medium",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 13,
+    "opponent": 9
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c4",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+   "blueUid": "__ai_medium__"
+  },
+  {
+   "game": "-OrdMefAx3TNbkF_cm7F",
+   "date": "2026-05-02",
+   "turn": 14,
+   "kind": "sim",
+   "red": "ai_easy",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 6,
+    "opponent": 4
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a3",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "5LZYnfEixOeI4916t8bjywl0fn73"
+  },
+  {
+   "game": "-OriC5nEA75Bjpm2eDCK",
+   "date": "2026-05-03",
+   "turn": 19,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_aux",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 9,
+    "opponent": 5
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+   "blueUid": "__ai_aux__"
+  },
+  {
+   "game": "-OroUzIBYBj8cUA4-Pgk",
+   "date": "2026-05-04",
+   "turn": 22,
+   "kind": "sim",
+   "red": "ai_hard",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_hard__",
+   "blueUid": "QW4hilS0sbXHzCkORQou4q14yRa2"
+  },
+  {
+   "game": "-Orod8wArheH1cb0k1D_",
+   "date": "2026-05-04",
+   "turn": 20,
+   "kind": "sim",
+   "red": "ai_hard",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 9,
+    "opponent": 7
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a8",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_hard__",
+   "blueUid": "QW4hilS0sbXHzCkORQou4q14yRa2"
+  },
+  {
+   "game": "-Orp5UL8iVhBJKGkFsMk",
+   "date": "2026-05-04",
+   "turn": 18,
+   "kind": "sim",
+   "red": "ai_easy",
+   "blue": "human",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "a9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "QW4hilS0sbXHzCkORQou4q14yRa2"
+  },
+  {
+   "game": "-OrpKRKif3khoI93Rxn1",
+   "date": "2026-05-04",
+   "turn": 23,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 12,
+    "opponent": 8
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c13",
+   "ranked": true,
+   "eloProcessed": null,
+   "redUid": "QW4hilS0sbXHzCkORQou4q14yRa2",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-Orpngz94Azv6jji5_GE",
+   "date": "2026-05-05",
+   "turn": 23,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_easy",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 11,
+    "opponent": 7
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c10",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "QW4hilS0sbXHzCkORQou4q14yRa2",
+   "blueUid": "__ai_easy__"
+  },
+  {
+   "game": "-Orsktb6hNVUUQJvNWjr",
+   "date": "2026-05-05",
+   "turn": 28,
+   "kind": "sim",
+   "red": "ai_easy",
+   "blue": "ai_medium",
+   "recorded_winner": "blue",
+   "caster": "blue",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 6
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c8",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_easy__",
+   "blueUid": "__ai_medium__"
+  },
+  {
+   "game": "-Orv7HfMxX6XtAX72vdm",
+   "date": "2026-05-06",
+   "turn": 27,
+   "kind": "sim",
+   "red": "human",
+   "blue": "ai_very_hard",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 4
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "b9",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "5LZYnfEixOeI4916t8bjywl0fn73",
+   "blueUid": "__ai_very_hard__"
+  },
+  {
+   "game": "-Os-XARmxGXNBNrS32Nc",
+   "date": "2026-05-07",
+   "turn": 29,
+   "kind": "sim",
+   "red": "ai_hard",
+   "blue": "human",
+   "recorded_winner": "red",
+   "caster": "red",
+   "stones_after_as_recorded": {
+    "caster": 8,
+    "opponent": 4
+   },
+   "lead_after_paying_sacrifice": 2,
+   "still_a_win_after_paying": false,
+   "recorded_sacrifice_node": "c8",
+   "ranked": true,
+   "eloProcessed": true,
+   "redUid": "__ai_hard__",
+   "blueUid": "5LZYnfEixOeI4916t8bjywl0fn73"
+  }
+ ]
+}
