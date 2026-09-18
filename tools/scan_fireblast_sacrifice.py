@@ -89,7 +89,9 @@ def main():
     ap.add_argument('--raw', help='completed_games dump (json); omit with --delete to reuse --out')
     ap.add_argument('--out', required=True)
     ap.add_argument('--workers', type=int, default=max(1, (os.cpu_count() or 2) - 1))
-    ap.add_argument('--delete', action='store_true', help='delete the flagged games (needs --service-account)')
+    ap.add_argument('--delete', action='store_true', help='delete the non-repairable flagged games (needs --service-account)')
+    ap.add_argument('--fix', action='store_true', help='repair final-turn records whose win stands once the stone is paid')
+    ap.add_argument('--raw-for-fix', default=None)
     ap.add_argument('--service-account', default=None)
     a = ap.parse_args()
 
@@ -146,9 +148,21 @@ def main():
         print(f"  {gid} {time.strftime('%Y-%m-%d', time.gmtime((r['ts'] or 0) / 1000))} winner={r['winner']} turns={[x['turn'] for x in rs]} "
               f"{'FINAL' if any(x['final'] for x in rs) else 'mid-game'} fixes={r['fixes'][:3]}")
 
-    if a.delete:
+    # Classes. A final-turn unpaid sacrifice whose win stands whichever stone is
+    # paid is REPAIRED (the recorded no-op sacrifice gets a real stone, the
+    # final position loses it); everything else flagged is deleted.
+    to_fix, to_delete = {}, {}
+    for gid, rs in games.items():
+        final = [x for x in rs if x['final']]
+        if final and final[0]['still_win_after_paying'] and len(rs) == 1 and final[0]['fixes']:
+            to_fix[gid] = final[0]
+        else:
+            to_delete[gid] = rs
+    print(f'plan: repair {len(to_fix)} games, delete {len(to_delete)} games')
+
+    if a.fix or a.delete:
         if not a.service_account:
-            sys.exit('--delete needs --service-account')
+            sys.exit('--fix/--delete need --service-account')
         import requests, google.auth.transport.requests
         from google.oauth2 import service_account
         creds = service_account.Credentials.from_service_account_file(
@@ -156,8 +170,67 @@ def main():
                                        'https://www.googleapis.com/auth/userinfo.email'])
         creds.refresh(google.auth.transport.requests.Request())
         tok = {'access_token': creds.token}
+
+    if a.fix:
+        from ai.replay_bridge import hydrate_records, _normalize_turns
+        import sigil_engine as se
+        raw_all = json.load(open(a.raw_for_fix, encoding='utf-8')) if a.raw_for_fix else None
+        n_fixed = 0
+        for gid, r in to_fix.items():
+            g = requests.get(f'{DB}/completed_games/{gid}.json', params=tok, timeout=60).json()
+            if g is None:
+                print(f'  {gid}: absent'); continue
+            turns = _normalize_turns(g['turns'])
+            idx = next((i for i, t in enumerate(turns) if t.get('turnNumber') == r['turn']), None)
+            if idx is None or idx != len(turns) - 1:
+                print(f'  {gid}: final turn not found where expected; skipping'); continue
+            node = r['fixes'][0]
+            t = dict(turns[idx])
+            if t.get('kind') == 'sim' and isinstance(t.get('actions'), list):
+                acts = [dict(x) if isinstance(x, dict) else x for x in t['actions']]
+                sacs = [i for i, x in enumerate(acts) if isinstance(x, dict) and x.get('type') == 'sacrifice']
+                if sacs:
+                    acts[sacs[-1]]['node'] = node
+                else:
+                    ins = next((i for i, x in enumerate(acts) if isinstance(x, dict) and x.get('type') == 'pass'), len(acts))
+                    acts.insert(ins, {'type': 'sacrifice', 'node': node})
+                t['actions'] = acts
+            elif t.get('kind') == 'snapshot' or t.get('sfnAfter'):
+                pass   # snapshot records carry the position only; patched below
+            else:
+                print(f'  {gid}: unsupported turn kind {t.get("kind")}; skipping'); continue
+            # New final position: the recorded one minus the paid stone.
+            b = se.Board.from_sfn(r['sfnAfter'])
+            bit = 1 << se.NODE_NAMES.index(node)
+            me = 0 if r['mover'] == 'red' else 1
+            red, blue = b.stones
+            if me == 0: red &= ~bit
+            else: blue &= ~bit
+            nb = se.Board.from_sfn(r['sfnAfter']); nb.set_stones([i for i in range(39) if red >> i & 1], [i for i in range(39) if blue >> i & 1])
+            new_after = nb.to_sfn()
+            # The JS records the mover still to move and the same counter; keep those tokens.
+            toks_old = r['sfnAfter'].split(); toks_new = new_after.split()
+            toks_new[1], toks_new[2] = toks_old[1], toks_old[2]
+            new_after = ' '.join(toks_new[:len(toks_old)]) if len(toks_new) >= len(toks_old) else ' '.join(toks_new)
+            if t.get('sfnAfter'): t['sfnAfter'] = new_after
+            new_turns = turns[:idx] + [t]
+            rec = {'spellNames': g.get('spellNames') or [], 'variant': g.get('variant') or 'standard',
+                   'setupSfn': g.get('setupSfn'), 'finalSfn': new_after, 'turns': new_turns}
+            res = hydrate_records([rec])[0]
+            if not res.get('ok'):
+                print(f'  {gid}: patched record does not replay ({res.get("error", "")[:80]}); skipping'); continue
+            got = res['turns'][-1]['sfnAfter'].split()[0]
+            if got != new_after.split()[0]:
+                print(f'  {gid}: replay of patched record ends elsewhere; skipping'); continue
+            print(f"  {gid}: sacrifice {node} recorded on turn {r['turn']}; finalSfn updated")
+            requests.patch(f'{DB}/completed_games/{gid}.json', params=tok, timeout=60,
+                           data=json.dumps({'turns': new_turns, 'finalSfn': new_after})).raise_for_status()
+            n_fixed += 1
+        print(f'repaired {n_fixed} games')
+
+    if a.delete:
         n = 0
-        for gid, rs in games.items():
+        for gid, rs in to_delete.items():
             if requests.get(f'{DB}/completed_games/{gid}.json', params=dict(tok, shallow='true'), timeout=60).json() is None:
                 print(f'  {gid}: already absent'); continue
             requests.delete(f'{DB}/completed_games/{gid}.json', params=tok, timeout=60).raise_for_status()
