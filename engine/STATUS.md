@@ -13,6 +13,14 @@ with this section, this section is right.
 | tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
 | browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
 
+**2026-09-18: `judge_move` (wasm) for the Puzzles page.** A move off the stored solution is judged
+live: with only the finishing mate left, `mate::judge_forced_after` decides exhaustively (every
+reply, then every mover turn); otherwise the shipped search from the opponent's side to the depth
+the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `likely_mate` /
+`escape`, and the reply to play (the refutation when refuted, else the search's best). The page
+always plays on; a win within the count after an `escape` verdict is flagged as an engine
+misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
+
 **2026-09-18: exhaustive mate-in-1 BOOKENDS around the search (`search.rs`, default on,
 `set_mate_bookends`; the frozen `rust_anchor` keeps them off).** Found through the Puzzles work
 and a report from Fakey_McFaker: in two recorded competitive games (`-P1n0vvlpXcAf-u9Q7jd`,

@@ -168,6 +168,47 @@ let wasm_bindgen = (function(exports) {
     exports.engine_info = engine_info;
 
     /**
+     * Puzzles page: judge the position AFTER the puzzle's mover has played
+     * (`sfn` has the opponent to move). `plies` is how many half-moves the mover
+     * has left to force the win (2 when the next mover turn must mate, 4 for a
+     * mate-in-2 still to come, ...). Returns the verdict and the opponent's reply
+     * to play, in the `/api/move` shape:
+     *
+     * `{"ok":true,"verdict":"mate"|"likely_mate"|"mate_slow"|"escape",
+     *   "proven":bool,"mate_in":n|null,"score_ui":u,"depth":d,"nodes":n,
+     *   "exhaustive":bool,"actions":[...],"expected_sfn":"..."}`
+     *
+     * * `plies == 2`: an EXHAUSTIVE check first (every reply, then every mover
+     *   turn) with 40% of the time; `mate` / `escape` from it are proofs, and on
+     *   `escape` the refuting reply is the move returned.
+     * * Otherwise (or when the exhaustive check ran out of time) the shipped
+     *   search from the opponent's side to depth `plies`: a proven mate against
+     *   it within `plies` is `mate`; a proven mate that needs more is
+     *   `mate_slow`; an unproven mate score is `likely_mate`; anything else is
+     *   `escape`. The search's best move is the reply either way.
+     * @param {string} sfn
+     * @param {number} plies
+     * @param {number} time_ms
+     * @param {number} tt_bits
+     * @returns {string}
+     */
+    function judge_move(sfn, plies, time_ms, tt_bits) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ptr0 = passStringToWasm0(sfn, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.judge_move(ptr0, len0, plies, time_ms, tt_bits);
+            deferred2_0 = ret[0];
+            deferred2_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    exports.judge_move = judge_move;
+
+    /**
      * Search from `sfn` and return the `/api/move` response JSON:
      * `{"ok":true,"actions":[...],"expected_sfn":"...","depth":d,"nodes":n,
      *   "score":centistones,"score_ui":u,"seconds":s}` or `{"ok":false,"error":"..."}`.

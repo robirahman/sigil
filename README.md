@@ -21,6 +21,9 @@ To work on the static build, serve `docs/` over any static file server (e.g. `py
   generated on a GCE VM by `engine/gcp/launch_puzzles.sh`. A puzzle the opponent can escape on the
   live page therefore points at a rules disagreement between the Rust engine and the browser
   engine -- the page shows a yellow "engine disagreement" box with the SFN when that happens.
+  A move off the stored solution is judged live by the wasm engine (exhaustively when only the
+  finishing mate is left, else by a search to the puzzle's remaining depth), the AI always replies,
+  and play continues after a miss.
   `node tools/puzzle-smoke.js` replays the whole set headlessly through the browser engine.
   The former `puzzles.html` (community position labeling) is now `annotate.html`.
 

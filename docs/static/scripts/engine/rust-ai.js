@@ -38,7 +38,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 6;
+const RUST_ENGINE_VERSION = 7;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -114,6 +114,17 @@ class RustEngineWorker {
 			const id = this._nextId++;
 			this._pending.set(id, { resolve, reject, onProgress });
 			this._worker.postMessage(Object.assign({ type: 'search', id }, req));
+		});
+	}
+
+	/** Puzzles: judge the position after the mover's turn (opponent to move) and
+	 *  get the opponent's reply. See wasm.rs judge_move for the result shape. */
+	async judge(req) {
+		await this.init();
+		return new Promise((resolve, reject) => {
+			const id = this._nextId++;
+			this._pending.set(id, { resolve, reject });
+			this._worker.postMessage(Object.assign({ type: 'judge', id }, req));
 		});
 	}
 
@@ -274,30 +285,7 @@ class RustAI {
 				'engine does not implement (Tectonic / Providence / Aftershock / Ambush / Panda / Experimental).');
 		}
 
-		// Verify the actions reproduce the engine's position BEFORE playing them on
-		// the real board: replay on a throwaway copy and compare.
-		const probe = sim.copy();
-		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
-		probe.getBoardStatePayload = () => ({});
-		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
-		try {
-			await applyAITurn(probe, { actions: res.actions }, color, () => {});
-			probe.update();
-			probe.checkGameOver(color);
-			probe.turnCounter++;
-			probe.whoseTurn = (color === 'red') ? 'blue' : 'red';
-			probe.update();
-		} catch (e) {
-			throw new Error('Rust engine action replay threw: ' + e);
-		}
-		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
-		if (key(boardToSfn(probe)) !== key(res.expected_sfn)) {
-			throw new Error(
-				'Rust engine action list did not reproduce its own position — refusing ' +
-				'the move rather than corrupting the game record.\n' +
-				'  replayed: ' + key(boardToSfn(probe)) + '\n' +
-				'  expected: ' + key(res.expected_sfn));
-		}
+		const turn = await rustActionsToTurn(sim, color, res.actions, res.expected_sfn);
 
 		// `score_ui` is already in the units game-board-local.js renders (it
 		// multiplies by 39 and treats |s| >= 37 as a proven mate). Passing raw
@@ -311,12 +299,55 @@ class RustAI {
 		};
 		if (onProgress) onProgress(this.lastMeta);
 		this._historySfns.push(sfn);
-		return new SimTurn(res.actions.map((a) => {
-			const act = new SimAction(a.type, {});
-			Object.assign(act, a);
-			return act;
-		}));
+		return turn;
 	}
 }
+
+/**
+ * The replay gate, shared by every consumer of an engine action list: replay
+ * the actions on a throwaway copy of `sim` and refuse them unless they
+ * reproduce the position the engine said they would. Returns a SimTurn.
+ */
+async function rustActionsToTurn(sim, color, actions, expectedSfn) {
+	{
+		const probe = sim.copy();
+		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
+		probe.getBoardStatePayload = () => ({});
+		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
+		try {
+			await applyAITurn(probe, { actions: actions }, color, () => {});
+			probe.update();
+			probe.checkGameOver(color);
+			probe.turnCounter++;
+			probe.whoseTurn = (color === 'red') ? 'blue' : 'red';
+			probe.update();
+		} catch (e) {
+			throw new Error('Rust engine action replay threw: ' + e);
+		}
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+		if (key(boardToSfn(probe)) !== key(expectedSfn)) {
+			throw new Error(
+				'Rust engine action list did not reproduce its own position — refusing ' +
+				'the move rather than corrupting the game record.\n' +
+				'  replayed: ' + key(boardToSfn(probe)) + '\n' +
+				'  expected: ' + key(expectedSfn));
+		}
+	}
+	return new SimTurn(actions.map((a) => {
+		const act = new SimAction(a.type, {});
+		Object.assign(act, a);
+		return act;
+	}));
+}
+
+/** Puzzles: judge + reply. `board` is a SigilBoard with the opponent to move. */
+RustAI.judgeMove = async function (board, plies, timeMs) {
+	const sim = SimBoard.fromSigilBoard(board);
+	const sfn = boardToSfn(sim);
+	const res = await getRustEngineWorker().judge({ sfn, plies, timeMs, ttBits: 18 });
+	if (!res || !res.ok) throw new Error('Rust engine judge error: ' + ((res && res.error) || 'unknown'));
+	res.turn = await rustActionsToTurn(sim, board.whoseTurn, res.actions, res.expected_sfn);
+	return res;
+};
 
 if (typeof window !== 'undefined') window.RustAI = RustAI;

@@ -51,7 +51,7 @@ vm.createContext(sandbox);
 
 const FILES = [
 	'constants.js', 'notation.js', 'board.js', 'moves.js', 'spells.js', 'sim-board.js',
-	'features.js', 'enumerator.js', 'ai-player.js', 'game-controller.js', 'game-review.js',
+	'features.js', 'enumerator.js', 'ai-player.js', 'game-controller.js', 'game-review.js', 'rust-ai.js',
 ].map(f => path.join(ENGINE, f)).concat([path.join(REPO, 'docs', 'static', 'scripts', 'game-board-local.js')]);
 for (const f of FILES) {
 	vm.runInContext(fs.readFileSync(f, 'utf8'), sandbox, { filename: f });

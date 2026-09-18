@@ -114,10 +114,13 @@
 								<p class="puzzle-panel__sub" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
 									x-text="puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.')"></p>
+								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
 
 								<div class="puzzle-panel__status"
 									x-bind:class="{ 'puzzle-panel__status--solved': puzzleStatus === 'solved', 'puzzle-panel__status--failed': puzzleStatus === 'failed' }"
 									x-text="puzzleMessage"></div>
+
+								<p class="puzzle-panel__sub" x-show="puzzleJudge" x-text="puzzleJudge" x-cloak></p>
 
 								<div class="puzzle-panel__diag" x-show="puzzleDiagnostic" x-cloak>
 									<strong>Engine disagreement detected.</strong>

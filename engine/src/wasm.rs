@@ -238,6 +238,86 @@ impl Engine {
     pub fn tt_filled(&self) -> u32 { self.s.tt_filled() as u32 }
 }
 
+/// Puzzles page: judge the position AFTER the puzzle's mover has played
+/// (`sfn` has the opponent to move). `plies` is how many half-moves the mover
+/// has left to force the win (2 when the next mover turn must mate, 4 for a
+/// mate-in-2 still to come, ...). Returns the verdict and the opponent's reply
+/// to play, in the `/api/move` shape:
+///
+/// `{"ok":true,"verdict":"mate"|"likely_mate"|"mate_slow"|"escape",
+///   "proven":bool,"mate_in":n|null,"score_ui":u,"depth":d,"nodes":n,
+///   "exhaustive":bool,"actions":[...],"expected_sfn":"..."}`
+///
+/// * `plies == 2`: an EXHAUSTIVE check first (every reply, then every mover
+///   turn) with 40% of the time; `mate` / `escape` from it are proofs, and on
+///   `escape` the refuting reply is the move returned.
+/// * Otherwise (or when the exhaustive check ran out of time) the shipped
+///   search from the opponent's side to depth `plies`: a proven mate against
+///   it within `plies` is `mate`; a proven mate that needs more is
+///   `mate_slow`; an unproven mate score is `likely_mate`; anything else is
+///   `escape`. The search's best move is the reply either way.
+#[wasm_bindgen]
+pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
+    use crate::search::{WIN, MAX_PLY, UNPROVEN_MATE};
+    let b = match Board::from_sfn(sfn) {
+        Ok(b) => b,
+        Err(e) => return err_json(&e),
+    };
+    let o = b.to_move;                 // the opponent replies here
+    let m = o.other();                 // the puzzle's mover
+    let t0 = crate::search::now_ms();
+    if b.outcome != crate::board::Outcome::Ongoing {
+        return err_json("game already over");
+    }
+    let mut verdict: Option<(&str, bool, Option<i32>)> = None;
+    let mut forced_reply: Option<crate::turn::Turn> = None;
+    let mut exhaustive = false;
+    let mut budget_ms = time_ms as u64;
+    if plies <= 2 {
+        let ex_ms = (budget_ms * 2 / 5).max(300);
+        match crate::mate::judge_forced_after(&b, m, 400_000_000, ex_ms) {
+            crate::mate::Judge::Proven => { verdict = Some(("mate", true, Some(2))); exhaustive = true; }
+            crate::mate::Judge::Refuted(t) => {
+                verdict = Some(("escape", true, None)); forced_reply = Some(t); exhaustive = true;
+            }
+            crate::mate::Judge::Unknown => {}
+        }
+        let used = (crate::search::now_ms() - t0) as u64;
+        budget_ms = budget_ms.saturating_sub(used).max(500);
+    }
+    let mut s = Search::new(tt_bits.clamp(10, 22));
+    if let Err(e) = configure(&mut s, crate::search::DEFAULT_WIDTH_SCALE as u32, "tfit",
+                              crate::search::SHIPPED_ADAPTIVE.0, crate::search::SHIPPED_ADAPTIVE.1 as u32,
+                              crate::search::SHIPPED_ADAPTIVE.2 as u32) {
+        return err_json(&e);
+    }
+    s.set_elastic(None);
+    let depth = (plies.max(1) as i32).min(63);
+    let (best, score, st) = s.go(&b, o, depth, budget_ms);
+    if verdict.is_none() {
+        // Scores are from the OPPONENT's side: a mate against it is negative.
+        let mate_floor = WIN - MAX_PLY as i32;
+        verdict = Some(if score <= -mate_floor {
+            let dist = WIN - score.abs();
+            if dist <= plies as i32 { ("mate", true, Some(dist)) } else { ("mate_slow", true, Some(dist)) }
+        } else if score <= -UNPROVEN_MATE {
+            ("likely_mate", false, None)
+        } else {
+            ("escape", false, None)
+        });
+    }
+    let (v, proven, mate_in) = verdict.unwrap();
+    let reply = forced_reply.or(best).or_else(|| b.turns_ordered(o).next());
+    let Some(turn) = reply else { return err_json("no legal reply from this position"); };
+    let (acts, after) = b.emit_actions(&turn, o);
+    let dt = (crate::search::now_ms() - t0) / 1000.0;
+    format!(
+        "{{\"ok\":true,\"verdict\":{:?},\"proven\":{},\"mate_in\":{},\"score_ui\":{},\"depth\":{},\"nodes\":{},\"exhaustive\":{},\"actions\":{},\"expected_sfn\":{:?},\"seconds\":{:.2}}}",
+        v, proven, mate_in.map_or("null".to_string(), |d| d.to_string()),
+        crate::search::ui_score(score), st.depth_completed, st.nodes, exhaustive,
+        crate::actions::acts_to_json(&acts), after.to_sfn(), dt)
+}
+
 /// Sanity handle for the loader: confirms the module initialised.
 #[wasm_bindgen]
 pub fn engine_info() -> String {

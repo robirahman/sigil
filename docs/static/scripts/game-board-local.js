@@ -15,6 +15,8 @@ document.addEventListener('alpine:init', () => {
 			puzzleStep: 0,                           // solver turns completed
 			puzzleMessage: '',
 			puzzleDiagnostic: '',                    // engine/live-rules disagreement, if any
+			puzzleJudge: '',                         // last engine verdict on an off-line move
+			puzzleMoves: 0,                          // mover turns played so far
 			puzzleSolutionText: [],
 			activeSpell: '',
 			activeSpellIsCastable: false,
@@ -915,7 +917,8 @@ document.addEventListener('alpine:init', () => {
 					_this.isDeathmatch = variantHasDeathmatch(gameVariant);
 					if (puzzle) {
 						options.aiColor = _aiColor;
-						options.ai = new PuzzleOpponent(puzzle, _this);
+						options.ai = new PuzzleOpponent(puzzle, _this, { timeMs: 6000 });
+						if (typeof RustAI !== 'undefined' && RustAI.preload) RustAI.preload();
 					}
 
 					// Rust engine tiers (the wasm build in a Web Worker): per-move
@@ -1214,14 +1217,6 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'ping') return;
 
-					// A failed/revealed puzzle leaves the controller parked on
-					// the scripted opponent's turn (it never answers); do not
-					// show that as the AI thinking.
-					if (puzzle && _this.puzzleStatus !== 'playing'
-						&& (type === 'ai_thinking_start' || type === 'ai_thinking_progress'
-							|| (type === 'message' && rest.message === 'AI is thinking...'))) {
-						return;
-					}
 
 					if (type === 'message') {
 						handleMessageEvent(rest);
@@ -1373,20 +1368,14 @@ document.addEventListener('alpine:init', () => {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'failed';
 					_this.puzzleMessage = msg;
-					_this.actionList = [];
-					_this.awaiting = null;
-					_this.validMoves = {};
-					_this.showReset = false;
 					if (typeof soundManager !== 'undefined') { try { soundManager.play('crush'); } catch (e) { /* */ } }
 				}
+				_this._puzzleFail = _puzzleFail;
 
 				function _puzzleSolve() {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'solved';
 					_this.puzzleMessage = 'Solved!';
-					_this.actionList = [];
-					_this.awaiting = null;
-					_this.validMoves = {};
 					try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
@@ -1396,6 +1385,7 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function _puzzleOnTurn(t) {
+					if (t.color === puzzle.mover) _this.puzzleMoves += 1;
 					if (_this.puzzleStatus !== 'playing') return;
 					if (t.color !== puzzle.mover) {
 						// The scripted defence just replayed: it must land on the
@@ -1428,13 +1418,18 @@ document.addEventListener('alpine:init', () => {
 								_puzzleSolve();
 								return;
 							}
-							_puzzleFail(step === 0
-								? 'That does not force a win. Retry, or show the solution.'
-								: 'That is not the stored continuation (the solver proved other second moves, not this one). Retry, or show the solution.');
+							// Not a stored line: the engine judges it when it picks its
+							// reply (PuzzleOpponent.pickTurn), searching the position to
+							// the depth the puzzle still needs.
+							_this._puzzleLine = null;
+							_this._puzzleLastDefence = null;
+							_this._puzzleJudgePending = true;
+							_this.puzzleMessage = 'Not a stored solution — the engine is checking whether it still forces the win…';
 							return;
 						}
 						_this._puzzleLine = hitLine;
 						_this._puzzleLastDefence = hitLine.defence || null;
+						_this._puzzleJudgePending = false;
 						if (over) {
 							// Won faster than the puzzle needed; the live rules decide.
 							_puzzleExpectGameOver = true;
@@ -1446,7 +1441,7 @@ document.addEventListener('alpine:init', () => {
 					}
 					// Final solver turn: the game must be over now.
 					if (!over) {
-						_puzzleFail('That was not the finishing move. Retry, or show the solution.');
+						_puzzleFail('That was not the finishing move: the mate was in ' + puzzle.mate + ' and this is your turn ' + puzzle.mate + '. Play on, or Retry.');
 					} else {
 						_puzzleExpectGameOver = true;
 					}
@@ -1462,8 +1457,17 @@ document.addEventListener('alpine:init', () => {
 				}
 
 				function _puzzleOnGameOver(payload) {
-					if (_this.puzzleStatus !== 'playing') return;
 					_puzzleExpectGameOver = false;
+					if (_this.puzzleStatus === 'failed' && payload.winner === puzzle.mover
+						&& _this.puzzleMoves <= puzzle.mate) {
+						// The engine judged an earlier move as an escape, yet the mover
+						// won within the puzzle's count: the JUDGE was wrong. Worth a report.
+						_this.puzzleDiagnostic = 'Engine misjudgement: it ruled that a move let it escape, but you still won within ' + puzzle.mate + ' turns. ' + (_this.puzzleJudge || '');
+						_this.puzzleStatus = 'solved';
+						_this.puzzleMessage = 'Solved (despite the engine\'s verdict) — please report this position.';
+						return;
+					}
+					if (_this.puzzleStatus !== 'playing') return;
 					if (payload.winner === puzzle.mover) _puzzleSolve();
 					else _puzzleFail('The opponent won. Retry, or show the solution.');
 				}
@@ -1473,8 +1477,11 @@ document.addEventListener('alpine:init', () => {
 					_this.puzzleStep = 0;
 					_this.puzzleMessage = '';
 					_this.puzzleSolutionText = [];
+					_this.puzzleJudge = '';
+					_this.puzzleMoves = 0;
 					_this._puzzleLastDefence = null;
 					_this._puzzleLine = null;
+					_this._puzzleJudgePending = false;
 					_puzzleExpectGameOver = false;
 					_this.winner = '';
 					_this.messageHistory = [];
@@ -1494,10 +1501,7 @@ document.addEventListener('alpine:init', () => {
 
 				_this.puzzleShowSolution = function () {
 					if (_this.puzzleStatus === 'solved') return;
-					_this.puzzleStatus = 'revealed';
-					_this.actionList = [];
-					_this.awaiting = null;
-					_this.showReset = false;
+					if (_this.puzzleStatus === 'playing') _this.puzzleStatus = 'revealed';
 					const lines = [];
 					const sols = puzzle.solutions || [];
 					const shown = sols.slice(0, 3);
@@ -2155,15 +2159,18 @@ function describePuzzleActions(actions) {
 }
 
 /**
- * The puzzle's opponent: plays the precomputed defence for whichever winning
- * first turn the solver chose (looked up by the resulting position). Off the
- * solution it never answers, which parks the abandoned controller's loop
- * until the page retries with a fresh one.
+ * The puzzle's opponent. On a stored line it plays the precomputed defence.
+ * Off the stored lines it asks the engine (`RustAI.judgeMove`) to judge the
+ * position the mover just produced -- exhaustively when only the finishing
+ * mate is left, otherwise by a search to the depth the puzzle still needs --
+ * and plays the engine's best reply. After a failed puzzle it simply keeps
+ * playing the engine's replies so the game can be finished.
  */
 class PuzzleOpponent {
-	constructor(puzzle, component) {
+	constructor(puzzle, component, opts) {
 		this.puzzle = puzzle;
 		this.component = component;
+		this.timeMs = (opts && opts.timeMs) || 6000;
 		this.lastMeta = null;
 		this._byKey = {};
 		const index = (sol) => {
@@ -2174,16 +2181,44 @@ class PuzzleOpponent {
 		for (const sol of (puzzle.solutions || [])) index(sol);
 	}
 
-	pickTurn(board /* SigilBoard */) {
+	async pickTurn(board /* SigilBoard */, color, onProgress) {
+		const comp = this.component;
 		const key = puzzleSfnKey(boardToSfn(board));
-		const defence = this._byKey[key];
-		if (!defence) {
-			if (this.component && this.component.puzzleStatus === 'playing') {
-				this.component.puzzleDiagnostic = 'No stored reply for this position (solutions carry replies for the winning turns only). Position: ' + boardToSfn(board);
-			}
-			return new Promise(() => {});      // never resolves: the loop parks here
+		const stored = this._byKey[key];
+		if (stored && comp && comp.puzzleStatus === 'playing' && !comp._puzzleJudgePending) {
+			comp._puzzleLastDefence = stored;
+			const sim = SimBoard.fromSigilBoard(board);
+			return rustActionsToTurn(sim, color, stored.actions, stored.after);
 		}
-		if (this.component) this.component._puzzleLastDefence = defence;
-		return Promise.resolve({ actions: defence.actions });
+		if (typeof RustAI === 'undefined' || !RustAI.judgeMove) {
+			throw new Error('The engine is not available to judge this move.');
+		}
+		// How many half-moves the mover still has to force the win from here
+		// (the opponent is to move): 2 when the mover's next turn must mate.
+		const left = Math.max(1, this.puzzle.mate - ((comp && comp.puzzleMoves) || 0));
+		const plies = 2 * left;
+		const judging = comp && comp.puzzleStatus === 'playing' && comp._puzzleJudgePending;
+		const t0 = Date.now();
+		const res = await RustAI.judgeMove(board, plies, this.timeMs);
+		this.lastMeta = { depth: res.depth, nodes: res.nodes, score: res.score_ui, timeMs: Date.now() - t0 };
+		if (onProgress) onProgress(this.lastMeta);
+		if (judging) {
+			comp._puzzleJudgePending = false;
+			const how = res.exhaustive ? 'exhaustively' : ('at depth ' + res.depth);
+			if (res.verdict === 'mate') {
+				comp.puzzleJudge = 'Engine: your move still forces the win (' + how + (res.mate_in ? ', mate in ' + res.mate_in + ' plies' : '') + ').';
+				comp.puzzleMessage = 'Correct — not the stored line, but the engine confirms it still forces the win. Keep going.';
+			} else if (res.verdict === 'likely_mate') {
+				comp.puzzleJudge = 'Engine: sees a forced win but could not prove it within its budget (' + how + ').';
+				comp.puzzleMessage = 'Probably correct — the engine sees a forced win but could not prove it in time. Keep going.';
+			} else if (res.verdict === 'mate_slow') {
+				comp.puzzleJudge = 'Engine: a forced win exists but needs ' + res.mate_in + ' plies, more than the puzzle allows (' + how + ').';
+				comp._puzzleFail('That wins eventually, but not within ' + this.puzzle.mate + ' turns. The engine replies ' + describePuzzleActions(res.actions) + '. Play on, or Retry.');
+			} else {
+				comp.puzzleJudge = 'Engine: escapes the mate with ' + describePuzzleActions(res.actions) + ' (' + how + ', eval ' + (res.score_ui * 39).toFixed(1) + ' stones for it).';
+				comp._puzzleFail('That lets the AI escape: it replies ' + describePuzzleActions(res.actions) + '. Puzzle failed — play on, or Retry.');
+			}
+		}
+		return res.turn;
 	}
 }

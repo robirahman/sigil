@@ -2659,3 +2659,20 @@ fn back_bookend_refuses_a_move_whose_reply_is_a_mate_in_one() {
                 "chosen move allows a mate-in-1 yet the score is {sc} (banned {})", st.bookend_banned);
     }
 }
+
+
+#[test]
+fn judge_forced_after_proves_the_corpus_mate_in_two_and_refutes_a_random_move() {
+    use crate::mate::Judge;
+    let b = Board::from_sfn(CORPUS_M2_SFN).expect("sfn");
+    let c = b.to_move;
+    let sol = crate::mate::solve(&b, 400_000_000, 0, &[], 2).expect("solve");
+    let line = &sol.mate2[0];
+    assert!(matches!(crate::mate::judge_forced_after(&line.after, c, 400_000_000, 0), Judge::Proven));
+    // Some first turn that is NOT a winning one must be refuted (or at worst unknown).
+    let (turns, _) = b.enumerate_turns(c);
+    let win_keys: Vec<_> = sol.mate2.iter().map(|l| l.after.stones).collect();
+    let other = turns.iter().map(|t| crate::mate::child(&b, t, c))
+        .find(|n| n.outcome == Outcome::Ongoing && !win_keys.contains(&n.stones)).expect("a non-winning turn");
+    assert!(!matches!(crate::mate::judge_forced_after(&other, c, 400_000_000, 0), Judge::Proven));
+}

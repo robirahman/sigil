@@ -75,6 +75,28 @@ pub fn immediate_win(b: &Board, c: Color, cap: usize) -> Result<Option<Turn>, ()
     Ok(None)
 }
 
+/// Verdict of `judge_forced_after`.
+pub enum Judge {
+    /// Every reply leaves the mover a mate-in-1 (exhaustive).
+    Proven,
+    /// This reply leaves the mover no mate-in-1 (exhaustive).
+    Refuted(Turn),
+    /// Budget or enumeration cap hit before an answer.
+    Unknown,
+}
+
+/// For the Puzzles page: after the puzzle's mover has played (so `after` has
+/// the OPPONENT to move), is the mover's mate-in-1 forced against every
+/// reply? Exhaustive at both plies, bounded by `budget` / `time_ms`.
+pub fn judge_forced_after(after: &Board, mover: Color, budget: u64, time_ms: u64) -> Judge {
+    let mut s = Solver::new(budget, time_ms);
+    match s.forced_after(after, mover) {
+        Ok(Some(_)) => Judge::Proven,
+        Ok(None) => match s.killers.first() { Some(t) => Judge::Refuted(*t), None => Judge::Unknown },
+        Err(_) => Judge::Unknown,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MateError {
     /// Some enumeration hit a cap; nothing can be claimed about this position.

@@ -18,6 +18,7 @@
  *   in:  { type:'ponder', sfn, ttBits, widthScale, historySfns, evalName,
  *          adaptive, sliceMs, maxDepth }                // prime the TT while the human thinks
  *   in:  { type:'ponder_stop' }
+ *   in:  { type:'judge', id, sfn, plies, timeMs, ttBits }   // puzzles: verdict + reply
  *   out: { type:'ready',    id, info }
  *   out: { type:'progress', id, depth, score, nodes }   // per completed depth
  *   out: { type:'result',   id, res }                   // res = /api/move JSON
@@ -115,6 +116,20 @@ self.onmessage = async (e) => {
 			_ponder.maxDepth = (msg.maxDepth || 12) | 0;
 			_ponder.active = true;
 			setTimeout(ponderLoop, 0);
+			return;
+		}
+		if (msg.type === 'judge') {
+			if (_busy) { self.postMessage({ type: 'error', id, message: 'engine is already searching' }); return; }
+			_busy = true;
+			try {
+				await ensureInit();
+				_ponder.active = false;
+				const raw = wasm_bindgen.judge_move(msg.sfn, (msg.plies || 2) >>> 0,
+					(msg.timeMs || 4000) >>> 0, (msg.ttBits || 18) >>> 0);
+				self.postMessage({ type: 'result', id, res: JSON.parse(raw) });
+			} finally {
+				_busy = false;
+			}
 			return;
 		}
 		if (msg.type !== 'search') return;
