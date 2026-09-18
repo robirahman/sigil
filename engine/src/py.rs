@@ -657,6 +657,37 @@ impl PyBoard {
         Ok((-1, i, false))
     }
 
+    /// One enumeration, two questions: is `(red, blue)` reachable by one legal
+    /// turn of `c`, and if not, which single stone of `c` would have to be
+    /// removed from the recorded layout to make it reachable (the enemy stones
+    /// matching exactly)? That is the fingerprint of an unpaid sacrifice.
+    /// Returns (reachable, fixes, n_turns, truncated).
+    #[pyo3(signature = (c, red, blue, cap=1_000_000))]
+    fn layout_reachable_minus_one(&self, c: &str, red: u64, blue: u64, cap: usize)
+        -> PyResult<(bool, Vec<u8>, usize, bool)>
+    {
+        let col = color(c)?;
+        let me = col.idx();
+        let rec = [red, blue];
+        let (turns, st) = self.b.enumerate_turns_capped(col, cap);
+        let mut fixes: Vec<u8> = Vec::new();
+        for t in turns.iter() {
+            let mut b = self.b;
+            b.apply_turn(t, col);
+            if b.stones[0] == red && b.stones[1] == blue {
+                return Ok((true, Vec::new(), st.turns, st.truncated));
+            }
+            if b.stones[1 - me] == rec[1 - me] {
+                let missing = rec[me] & !b.stones[me];
+                if missing.count_ones() == 1 && (b.stones[me] & !rec[me]) == 0 {
+                    let n = missing.trailing_zeros() as u8;
+                    if !fixes.contains(&n) { fixes.push(n); }
+                }
+            }
+        }
+        Ok((false, fixes, st.turns, st.truncated))
+    }
+
     /// Is the stone layout `(red, blue)` reachable from here by ONE legal turn
     /// of `c`? Returns (reachable, n_turns_enumerated, truncated).
     ///
