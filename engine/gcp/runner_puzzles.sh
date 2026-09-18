@@ -17,6 +17,9 @@
 #   time-ms-1   per-position wall-clock cap, phase 1 (promising positions, mate <= 3)
 #   time-ms-2   per-position cap, phase 2 (everything else)
 #   max-mate-2  deepest mate looked for in phase 2 (2 or 3)
+#   resume      optional GCS object name of a prior run's work file: downloaded
+#               first, so already-solved positions are skipped (the first run
+#               was a Spot VM preempted 3.5 minutes into phase 2)
 set -uo pipefail
 exec > >(tee -a /var/log/sigil-puzzles.log) 2>&1
 echo "=== sigil puzzle runner bootstrap $(date -u +%FT%TZ) ==="
@@ -25,6 +28,7 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hours)
 CORPUS=$(md corpus); TMS1=$(md time-ms-1); TMS2=$(md time-ms-2); MM2=$(md max-mate-2)
+RESUME=$(md resume); : "${RESUME:=}" 
 : "${RUN:=unknown}" "${BRANCH:=puzzles}" "${WORKERS:=$(nproc)}" "${MAXH:=5}" \
   "${CORPUS:=puzzles/hydrated_2026-09-17.json}" "${TMS1:=40000}" "${TMS2:=30000}" "${MM2:=3}"
 echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS tms1=$TMS1 tms2=$TMS2 mm2=$MM2"
@@ -75,6 +79,10 @@ $WORK/venv/bin/python -c "import sigil_engine; print('engine import ok')" || { e
 
 gcs_get "$CORPUS" $WORK/hydrated.json || { echo "FATAL: corpus download"; shutdown -h now; exit 1; }
 echo "corpus: $(stat -c%s $WORK/hydrated.json) bytes"
+if [ -n "$RESUME" ]; then
+  gcs_get "$RESUME" $WORK/out/mates.jsonl && echo "resume: $(wc -l < $WORK/out/mates.jsonl) positions already solved" \
+    || { echo "WARNING: resume download failed; starting fresh"; rm -f $WORK/out/mates.jsonl; }
+fi
 
 # Continuous upload of the work file + log: a preemption or the watchdog then
 # loses at most two minutes of solving.
