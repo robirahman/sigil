@@ -1825,9 +1825,20 @@ the stone lead (or the sixth cast) NOW, emitted at the front of the ordered stre
 of Destruction pre-pass.** It walks the enumerator's grammar (move; dash and cast in either
 order; Summer second cast) with an optimistic per-spell material bound per branch, verifies
 candidates through `apply_turn`, examines at most `DECISIVE_LEAD_CAP` = 2,000 boards, and is
-memoised per position for iterative deepening. On the 151 blind spots checked during
-development it finds the mate in 110 (73%); the rest are Carnage/Surge dash mates beyond the
-cap. Cost: ~55 us when a mate exists, ~170 us for a fruitless scan inside the gate; measured
-node rate under load fell 1.5-1.8x in endgame positions before memoisation, and needs a clean
-arena at matched time before it ships (`tools/audit_mates.py` + `eval_new.py` are the corpus
-gates; the SPRT is the strength gate).
+memoised per position for iterative deepening.
+
+Re-running the corpus checks with it (all 1,533 solvable final positions):
+
+| | shipped v5 | v6 bookends | pre-pass alone | pre-pass + bookends |
+|---|---|---|---|---|
+| depth-1 search finds the recorded mate | 1,272 (83%) | -- | **1,457 (95%)** | -- |
+| depth-2 move from the loser's position walks into a mate while scoring ~0 | 333 | 206 | 116 | **52** |
+| ...rust_hard losses only (121) | 43 | 29 | 12 | **6** |
+
+Cost, idle machine, 20 positions x 1 s, `tfit`/scale 4/adaptive, bookends off: endgame
+313k -> 198k nodes/s (depth 4.6 -> 4.5), midgame 372k -> 230k nodes/s (depth 5.85 -> 5.55).
+~55 us when a mate exists, ~170 us for a fruitless scan inside the gate. The gate's per-spell
+bounds are generous (Erupt 16, Carnage 8), which is why midgame pays too; tightening them and
+`DECISIVE_LEAD_CAP` is the tuning space. Not gated by arena yet: the corpus gate is
+`tools/audit_mates.py` on a fresh hydrated dump, the strength gate is the fleet SPRT at
+matched average time (the depth loss must be bought back by the blunders removed).
