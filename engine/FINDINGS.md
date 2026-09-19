@@ -1784,3 +1784,50 @@ avoids it; blue reads the position as won; ordering flags the suicide and the ma
 Not measured: Elo. This is a rules fix -- the engine could not previously see a whole
 class of forced wins and losses -- and ships on correctness, as the cast-keep fix did.
 The human acceptance gate (Run 0) is where its effect will show.
+
+## Audit of every recorded game's final position: the mate-in-1 blind spot is CASTS, not Gust (2026-09-19)
+
+`tools/audit_mates.py` hydrated all 2,501 `completed_games` records, kept the 1,614 that ended
+by a board win with a consistent, engine-enumerable final position, and asked two questions of
+each: does the ordered search see the winning reply, and did the losing side's search know?
+
+| loser | games | depth-1 finds the mate | mate rank <24 | 24..4096 | not generated | depth-2 move allows a mate yet scores ~0 (v5 / v6) |
+|---|---|---|---|---|---|---|
+| js medium | 405 | 92% | 277 | 70 | 58 | 59 / 36 |
+| js hard | 352 | 74% | 123 | 141 | 88 | 97 / 59 |
+| js easy | 349 | 93% | 225 | 79 | 45 | 44 / 28 |
+| human | 139 | 83% | 67 | 50 | 22 | 42 / 25 |
+| js very_hard | 126 | 73% | 42 | 53 | 31 | 43 / 26 |
+| **rust_hard** | 121 | **59%** | 36 | 50 | 35 | **43 / 29** |
+
+* 261 of 1,533 solvable positions (17%) hold a mate-in-1 the depth-1 shipped search scores at
+  about +0.04. In 260 of them EVERY mate needs a cast (Fireblast 52, Surge 47, Carnage 38,
+  Slash 33, Starfall 22, Hurricane 17, Hail Storm 14...). The mate is either generated but ranked
+  24..4096 (66) or never generated within 200k stream turns (137): the stream puts casts under a
+  few first moves, and a cast under the wrong first move is out of reach of any width.
+* **Gust is not the mechanism.** Gust is charged by the winner in 0 of the 261 blind spots and no
+  mate anywhere needs it. Draws with Gust have a 26% blind rate (10/39) against 17% without, on
+  39 games -- noise, and the recorded games with Gust in the draw were lost to Meteor, Scatter
+  and Hail Storm mates.
+* The recorded rust_hard losses (121) are the worst tier because they are the most recent and
+  competitive-variant heavy, not because of the tier: 43 depth-2 positions where the AI's own
+  chosen move walks into a mate while scoring -0.01..-0.04.
+* Two Fireblast games from 2026-04 record a win the current rules do not allow (the sacrifice
+  was recorded on a node the cast had cleared): old rules, excluded. The Rust Fireblast never
+  enumerates the SACRIFICE choice (`sacrifice_pick` = highest node), so 54 recorded winning
+  layouts are unreachable by the enumerator; it does not change the win/loss of the turn.
+* The v6 bookends (`mate::immediate_win`) discarded the whole scan when the enumeration was
+  incomplete (580 of 2,194 final positions hit the turn or resolver cap). A win found in a
+  truncated list is still a win; the fallback ships in this commit.
+
+**Fix in this commit: `decisive_lead_turns`, a material-gated, pruned scan for turns that reach
+the stone lead (or the sixth cast) NOW, emitted at the front of the ordered stream like the Seal
+of Destruction pre-pass.** It walks the enumerator's grammar (move; dash and cast in either
+order; Summer second cast) with an optimistic per-spell material bound per branch, verifies
+candidates through `apply_turn`, examines at most `DECISIVE_LEAD_CAP` = 2,000 boards, and is
+memoised per position for iterative deepening. On the 151 blind spots checked during
+development it finds the mate in 110 (73%); the rest are Carnage/Surge dash mates beyond the
+cap. Cost: ~55 us when a mate exists, ~170 us for a fruitless scan inside the gate; measured
+node rate under load fell 1.5-1.8x in endgame positions before memoisation, and needs a clean
+arena at matched time before it ships (`tools/audit_mates.py` + `eval_new.py` are the corpus
+gates; the SPRT is the strength gate).
