@@ -42,7 +42,15 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # bundle: the two knobs that cleared individually at 3 s, together.
          # Knobs interact through node rate, so a default flip needs the pair
          # measured as one arm. Value = the lmr code (21); elastic is DEFAULT.
-         'bundle')
+         'bundle',
+         # 2026-09-19 mate-in-1 fixes. decisive_lead: the stone-lead pre-pass in
+         # the ordered stream (turn_iter.rs), 1 = on / 0 = off, set per move
+         # through se.set_decisive_lead (a per-thread switch; both arms share
+         # this thread, so it is set before EVERY move). mate_bookends: the
+         # exhaustive root/reply scans in search.rs (only active at >= 2 s).
+         # decisive_all: both on vs both off -- the whole change against the
+         # pre-v6 search that main still ships.
+         'decisive_lead', 'mate_bookends', 'decisive_all')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -50,6 +58,7 @@ BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
 # value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
 # one-knob-one-integer shape of this harness.
 ADAPTIVE_P = 0.10
+DECISIVE_LEAD_CAP = 2000   # turn_iter::DECISIVE_LEAD_CAP; the switch takes the cap too
 
 
 def play(b, ms, ev, hist, knob, val):
@@ -79,6 +88,10 @@ def play(b, ms, ev, hist, knob, val):
     if knob == 'bundle' and val:
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
         extra['lmr'] = (val // 10, val % 10)
+    if knob in ('decisive_lead', 'decisive_all'):
+        se.set_decisive_lead(bool(val), DECISIVE_LEAD_CAP)
+    if knob in ('mate_bookends', 'decisive_all'):
+        extra['mate_bookends'] = bool(val)
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
                        kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, **extra)
 
