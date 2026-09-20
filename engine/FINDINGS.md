@@ -1874,3 +1874,18 @@ Reading rule that would have caught this before the fleet: **look at `mean s/mov
 before the Elo.** A ratio far from 1.0 means the knob changed the clock, not just the tree, and
 the SPRT is then comparing budgets, not searches. `pool_shards.py --max-time-ratio 1.05` refuses
 such a verdict; it was not passed here.
+
+**Run 3 pooled (2026-09-20, 5 x c3d-highcpu-90, 225 shards x 5 pairs, 3 s, `decisive_lead_nb`
+= pre-pass ON vs OFF with bookends OFF on both sides):** 2,250 games, arm **49.1% [47.1, 51.2],
+Elo -6 [-21, +8]**, s/move 2.87 / 2.91 (ratio 0.98). NO measured difference: the pre-pass's
+node-rate cost and the blunders it removes cancel within +/-15 Elo at 3 s, while it lifts
+depth-1 detection of the recorded mates from 83% to 95% and cuts the "walked into a mate while
+scoring ~0" positions from 333 to 116. Run 1's -29 for the same knob was measured with the
+untimed bookends on both sides, i.e. under a distorted clock; run 3 is the number to use.
+
+Decision: the pre-pass is shippable on correctness grounds (Elo-neutral, fixes the reported
+class of blunder); the v6 exhaustive bookends are NOT in their current form (untimed, -50-ish
+Elo and 1.7x wall time) -- remove them or budget them inside `time_ms` before any merge to main.
+Fleet note: five VMs with distinct SHARD_BASEs finished the 2,250 games in ~35 minutes for the
+same vCPU-hours as one VM in 2.5 h; pool with a glob that spans per-run folders, because shard
+log names repeat across runs and a flat copy silently keeps one run.
