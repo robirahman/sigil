@@ -1842,3 +1842,35 @@ bounds are generous (Erupt 16, Carnage 8), which is why midgame pays too; tighte
 `DECISIVE_LEAD_CAP` is the tuning space. Not gated by arena yet: the corpus gate is
 `tools/audit_mates.py` on a fresh hydrated dump, the strength gate is the fleet SPRT at
 matched average time (the depth loss must be bought back by the blunders removed).
+
+## Arena: the mate-in-1 fixes cost Elo at 3 s, and the bookends are untimed (2026-09-19/20)
+
+Fleet `ab_search.py`, `tfit`, 45 shards x 25 colour-swapped pairs, 3 s/move, c3d-highcpu-90,
+pooled from GAME lines (`pool_shards.py`).
+
+| run | arm vs base | games | arm win rate | Elo | s/move arm / base |
+|---|---|---|---|---|---|
+| `20260919T200757Z` | `decisive_lead` pre-pass ON vs OFF, v6 bookends on BOTH sides | 1,952 (watchdog cut 15/45 shards) | 45.9% [43.6, 48.1] | **-29 [-45, -13]** | 4.75 / 4.81 (ratio 0.99) |
+| `20260919T200809Z` | pre-pass + bookends vs neither (the whole change against the v5 search on `main`) | 2,250 | 38.4% [36.5, 40.5] | **-82 [-97, -67]** | 4.99 / 2.87 (ratio 1.74) |
+
+Two findings, one of them about the clock:
+
+* **The v6 bookends (`mate::immediate_win`, up to 250k turns enumerated twice per move) run
+  OUTSIDE the time control.** `go_with_progress` sets the deadline, then runs the front scan
+  inside it (the search loses that time), then runs the back scan and any re-search after it
+  (the move overspends). With bookends on, a 3 s budget averaged 4.8 s per move and some games
+  averaged 50+ s per move. Run 2's arm therefore searched LESS than its base while using 1.7x
+  the wall time, and still lost 82 Elo. The shipped v6/v7 wasm has this on every rust_hard move.
+  Whatever their merit, the bookends cannot ship untimed: either budget the scans inside
+  `time_ms` and cap their cost (a 250k-turn enumeration is not a 10 ms check), or replace them
+  with the pre-pass, which finds 95% of the recorded mates for microseconds.
+* **The stone-lead pre-pass alone costs ~29 Elo at 3 s** (run 1, matched time): the 35% node-rate
+  cost measured in the previous section is not bought back by the mates it stops the engine
+  walking into, at least at this control and with the bookends' clock distortion on both sides.
+  Run 3 (`decisive_lead_nb`, pre-pass ON vs OFF with bookends OFF on both sides, matched time,
+  5-VM fleet `20260920T2056*`) is the clean measurement; result appended below when pooled.
+
+Reading rule that would have caught this before the fleet: **look at `mean s/move` per arm
+before the Elo.** A ratio far from 1.0 means the knob changed the clock, not just the tree, and
+the SPRT is then comparing budgets, not searches. `pool_shards.py --max-time-ratio 1.05` refuses
+such a verdict; it was not passed here.
