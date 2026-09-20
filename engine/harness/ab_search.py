@@ -43,18 +43,13 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # Knobs interact through node rate, so a default flip needs the pair
          # measured as one arm. Value = the lmr code (21); elastic is DEFAULT.
          'bundle',
-         # 2026-09-19 mate-in-1 fixes. decisive_lead: the stone-lead pre-pass in
-         # the ordered stream (turn_iter.rs), 1 = on / 0 = off, set per move
-         # through se.set_decisive_lead (a per-thread switch; both arms share
-         # this thread, so it is set before EVERY move). mate_bookends: the
-         # exhaustive root/reply scans in search.rs (only active at >= 2 s).
-         # decisive_all: both on vs both off -- the whole change against the
-         # pre-v6 search that main still ships.
-         'decisive_lead', 'mate_bookends', 'decisive_all',
-         # decisive_lead_nb: the pre-pass alone at matched time -- bookends OFF on
-         # both sides. The 2026-09-19 runs showed the bookends are untimed (4.8 s
-         # per move at a 3 s budget) and confound any arm they are on.
-         'decisive_lead_nb')
+         # decisive_lead: the stone-lead pre-pass in the ordered stream
+         # (turn_iter.rs), 1 = on / 0 = off, set per move through
+         # se.set_decisive_lead (a per-thread switch; both arms share this
+         # thread, so it is set before EVERY move). Measured Elo-neutral at 3 s
+         # (FINDINGS 2026-09-20); the bookend knobs that sat here were removed
+         # with the bookends.
+         'decisive_lead')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -92,12 +87,8 @@ def play(b, ms, ev, hist, knob, val):
     if knob == 'bundle' and val:
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
         extra['lmr'] = (val // 10, val % 10)
-    if knob in ('decisive_lead', 'decisive_all', 'decisive_lead_nb'):
+    if knob == 'decisive_lead':
         se.set_decisive_lead(bool(val), DECISIVE_LEAD_CAP)
-    if knob in ('mate_bookends', 'decisive_all'):
-        extra['mate_bookends'] = bool(val)
-    if knob == 'decisive_lead_nb':
-        extra['mate_bookends'] = False
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
                        kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, **extra)
 

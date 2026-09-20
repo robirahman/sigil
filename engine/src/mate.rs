@@ -61,25 +61,6 @@ pub fn child(b: &Board, t: &Turn, c: Color) -> Board {
     n
 }
 
-/// A turn of `c` that ends the game in `c`'s favour, found by FULL enumeration
-/// (never the ordered generator), or `Err(())` if the enumeration exceeded `cap`
-/// or a resolver cap -- the caller then proceeds without the answer. This is
-/// what the search's mate-in-1 bookends call (`search.rs`).
-pub fn immediate_win(b: &Board, c: Color, cap: usize) -> Result<Option<Turn>, ()> {
-    let (turns, st) = b.enumerate_turns_capped(c, cap);
-    // A win found in a TRUNCATED list is still a win: only "none" needs the
-    // list to be complete. The audit (2026-09-19) found the bookends silently
-    // skipping every Grow/Carnage/Seal-of-Wind position -- the resolver or
-    // turn cap bit, the whole scan was discarded, and the AI walked into
-    // hundreds of mates its own partial enumeration already contained.
-    for t in &turns {
-        let n = child(b, t, c);
-        if won_by(n.outcome, c) { return Ok(Some(*t)); }
-    }
-    if st.truncated || st.resolver_truncated { return Err(()); }
-    Ok(None)
-}
-
 /// Verdict of `judge_forced_after`.
 pub enum Judge {
     /// Every reply leaves the mover a mate-in-1 (exhaustive).

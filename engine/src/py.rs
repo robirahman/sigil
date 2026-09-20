@@ -449,7 +449,7 @@ impl PyBoard {
                         width_shape=None, keep_window=None, mate_guard=None,
                         force_hints=None, root_resort=None, aspiration_steps=None,
                         adopt_partial=None, elastic=None, pvs=None, lmr=None,
-                        use_history=None, mate_bookends=None))]
+                        use_history=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -469,7 +469,7 @@ impl PyBoard {
                  // (max_factor, min_factor, stable_iters, drop_cs, predict)
                  elastic: Option<(f32, f32, u8, i32, bool)>,
                  // §1.4: PVS on/off, LMR (ext, r) with 0 = off, history on/off
-                 pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>, mate_bookends: Option<bool>)
+                 pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -480,7 +480,7 @@ impl PyBoard {
                          key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
                          rank_oversample, width_shape, keep_window, mate_guard,
                          force_hints, root_resort, aspiration_steps, adopt_partial,
-                         elastic, pvs, lmr, use_history, mate_bookends)?;
+                         elastic, pvs, lmr, use_history)?;
         for k in history { s.add_history(k); }
         let t = Instant::now();
         let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);
@@ -876,14 +876,10 @@ fn pick_successor(sfns: Vec<String>, us: &str, time_ms: u64, max_depth: i32,
 /// is not limited by the browser's capped enumerator.
 #[pyfunction]
 #[pyo3(signature = (sfn, time_ms=60000, max_depth=64, tt_bits=21, width_scale=None,
-                    history_sfns=vec![], eval_name="material", adaptive=None,
-                    mate_bookends=None))]
+                    history_sfns=vec![], eval_name="material", adaptive=None))]
 fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
                      width_scale: Option<usize>, history_sfns: Vec<String>, eval_name: &str,
-                     adaptive: Option<(f32, usize, usize)>,
-                     // None leaves the engine default (on) alone; false reproduces the
-                     // pre-v6 search for audits of recorded games.
-                     mate_bookends: Option<bool>)
+                     adaptive: Option<(f32, usize, usize)>)
     -> PyResult<(String, String, i32, u64, i32, f64, f64)>
 {
     use std::time::Instant;
@@ -901,7 +897,6 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
     // errors rather than guessing.
     s.weights = weights_by_name(eval_name)?;
     if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
-    if let Some(m) = mate_bookends { s.set_mate_bookends(m); }
     for h in history_sfns {
         if let Ok(hb) = crate::board::Board::from_sfn(&h) {
             s.add_history(crate::zobrist::ZOBRIST.key_js(&hb));
@@ -1044,7 +1039,6 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
     m.insert("force_hints".to_string(), s.force_hints_get() as u64);
-    m.insert("mate_bookends".to_string(), s.mate_bookends_get() as u64);
     m.insert("root_resort".to_string(), s.root_resort_get() as u64);
     m.insert("aspiration_steps".to_string(), s.aspiration_steps_get() as u64);
     m.insert("adopt_partial".to_string(), s.adopt_partial_get() as u64);
@@ -1073,9 +1067,7 @@ fn configure_search(s: &mut crate::search::Search, window: usize, width_scale: O
                     adopt_partial: Option<bool>,
                     elastic: Option<(f32, f32, u8, i32, bool)>,
                     pvs: Option<bool>, lmr: Option<(usize, i32)>,
-                    history: Option<bool>, mate_bookends: Option<bool>) -> PyResult<()> {
-        // None leaves the engine default (on) alone; the arena's base arm passes false.
-        if let Some(v) = mate_bookends { s.set_mate_bookends(v); }
+                    history: Option<bool>) -> PyResult<()> {
         if let Some(v) = pvs { s.set_pvs(v); }
         if let Some((ext, r)) = lmr { s.set_lmr(ext, r); }
         if let Some(v) = history { s.set_history(v); }
@@ -1149,7 +1141,7 @@ impl SearchSession {
                         width_shape=None, keep_window=None, mate_guard=None,
                         force_hints=None, root_resort=None, aspiration_steps=None,
                         adopt_partial=None, elastic=None, pvs=None, lmr=None,
-                        use_history=None, mate_bookends=None))]
+                        use_history=None))]
     fn play_best(&mut self, mut board: PyRefMut<'_, PyBoard>, time_ms: u64, max_depth: i32,
                  window: usize, width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -1162,7 +1154,7 @@ impl SearchSession {
                  force_hints: Option<bool>, root_resort: Option<bool>,
                  aspiration_steps: Option<bool>, adopt_partial: Option<bool>,
                  elastic: Option<(f32, f32, u8, i32, bool)>,
-                 pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>, mate_bookends: Option<bool>)
+                 pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -1172,7 +1164,7 @@ impl SearchSession {
                          key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
                          rank_oversample, width_shape, keep_window, mate_guard,
                          force_hints, root_resort, aspiration_steps, adopt_partial,
-                         elastic, pvs, lmr, use_history, mate_bookends)?;
+                         elastic, pvs, lmr, use_history)?;
         self.s.clear_history();
         for k in history { self.s.add_history(k); }
         let t = Instant::now();
@@ -1207,7 +1199,7 @@ impl SearchSession {
         let history_knob = use_history;
         configure_search(&mut self.s, window, width_scale, eval_name, false, None, None, None,
                          None, None, None, None, adaptive, None, None, keep_window, mate_guard,
-                         None, None, None, None, None, pvs, lmr, history_knob, None)?;
+                         None, None, None, None, None, pvs, lmr, history_knob)?;
         self.s.clear_history();
         for k in history { self.s.add_history(k); }
         let (_, _, st) = self.s.go(&board.b, board.b.to_move, max_depth, time_ms);
