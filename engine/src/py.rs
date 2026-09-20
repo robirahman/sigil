@@ -639,6 +639,27 @@ impl PyBoard {
     ///
     /// Returns (rank, n_scanned, found). `rank` is the 0-based index of the
     /// first ordered turn whose application produces that layout.
+    /// The stone-lead pre-pass (`turn_iter.rs decisive_lead_turns`), as action tuples.
+    #[pyo3(signature = (c, cap=2000))]
+    fn decisive_lead_turns(&self, c: &str, cap: usize)
+        -> PyResult<Vec<Vec<(String, i32, i32, Vec<u8>, i32)>>>
+    {
+        let col = color(c)?;
+        Ok(self.b.decisive_lead_turns(col, cap).into_iter()
+            .map(|t| t.slice().iter().map(|a| match *a {
+                crate::turn::Action::Blink { node, push_to } =>
+                    ("blink".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Move { node, push_to } =>
+                    ("move".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                    ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
+                     sacs[..n_sacs as usize].to_vec(), -1),
+                crate::turn::Action::Cast { pos, keep, outcome } =>
+                    ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            }).collect()).collect())
+    }
+
     #[pyo3(signature = (c, red, blue, window=24, reasons=0, cap=4096))]
     fn layout_rank(&self, c: &str, red: u64, blue: u64, window: usize,
                    reasons: u8, cap: usize)
@@ -1049,7 +1070,6 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("aspiration".to_string(), s.aspiration_get() as u64);
     m.insert("legacy_order".to_string(), s.legacy_order_get() as u64);
     m.insert("force_hints".to_string(), s.force_hints_get() as u64);
-    m.insert("mate_bookends".to_string(), s.mate_bookends_get() as u64);
     m.insert("root_resort".to_string(), s.root_resort_get() as u64);
     m.insert("aspiration_steps".to_string(), s.aspiration_steps_get() as u64);
     m.insert("adopt_partial".to_string(), s.adopt_partial_get() as u64);
@@ -1221,6 +1241,11 @@ impl SearchSession {
 
 /// Exhaustive mate-in-1 / mate-in-2 solve for the Puzzles generator
 /// (`mate.rs`). Returns JSON; `budget` bounds `apply_turn` calls.
+/// A/B switch for the stone-lead pre-pass in the ordered stream (default on).
+#[pyfunction]
+#[pyo3(signature = (on, cap=crate::turn_iter::DECISIVE_LEAD_CAP))]
+fn set_decisive_lead(on: bool, cap: usize) { crate::turn_iter::set_decisive_lead(on, cap); }
+
 #[pyfunction]
 #[pyo3(signature = (sfn, budget=50_000_000, time_ms=0, hint_after=vec![], max_mate=2))]
 fn solve_mates(sfn: &str, budget: u64, time_ms: u64, hint_after: Vec<String>, max_mate: u8) -> PyResult<String> {
@@ -1239,6 +1264,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
     m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;
     m.add_function(wrap_pyfunction!(solve_mates, m)?)?;
+    m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
     // than restating 1. Every eval arena so far ran at scale 1 because the harness

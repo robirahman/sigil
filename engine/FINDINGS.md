@@ -1784,3 +1784,108 @@ avoids it; blue reads the position as won; ordering flags the suicide and the ma
 Not measured: Elo. This is a rules fix -- the engine could not previously see a whole
 class of forced wins and losses -- and ships on correctness, as the cast-keep fix did.
 The human acceptance gate (Run 0) is where its effect will show.
+
+## Audit of every recorded game's final position: the mate-in-1 blind spot is CASTS, not Gust (2026-09-19)
+
+`tools/audit_mates.py` hydrated all 2,501 `completed_games` records, kept the 1,614 that ended
+by a board win with a consistent, engine-enumerable final position, and asked two questions of
+each: does the ordered search see the winning reply, and did the losing side's search know?
+
+| loser | games | depth-1 finds the mate | mate rank <24 | 24..4096 | not generated | depth-2 move allows a mate yet scores ~0 (v5 / v6) |
+|---|---|---|---|---|---|---|
+| js medium | 405 | 92% | 277 | 70 | 58 | 59 / 36 |
+| js hard | 352 | 74% | 123 | 141 | 88 | 97 / 59 |
+| js easy | 349 | 93% | 225 | 79 | 45 | 44 / 28 |
+| human | 139 | 83% | 67 | 50 | 22 | 42 / 25 |
+| js very_hard | 126 | 73% | 42 | 53 | 31 | 43 / 26 |
+| **rust_hard** | 121 | **59%** | 36 | 50 | 35 | **43 / 29** |
+
+* 261 of 1,533 solvable positions (17%) hold a mate-in-1 the depth-1 shipped search scores at
+  about +0.04. In 260 of them EVERY mate needs a cast (Fireblast 52, Surge 47, Carnage 38,
+  Slash 33, Starfall 22, Hurricane 17, Hail Storm 14...). The mate is either generated but ranked
+  24..4096 (66) or never generated within 200k stream turns (137): the stream puts casts under a
+  few first moves, and a cast under the wrong first move is out of reach of any width.
+* **Gust is not the mechanism.** Gust is charged by the winner in 0 of the 261 blind spots and no
+  mate anywhere needs it. Draws with Gust have a 26% blind rate (10/39) against 17% without, on
+  39 games -- noise, and the recorded games with Gust in the draw were lost to Meteor, Scatter
+  and Hail Storm mates.
+* The recorded rust_hard losses (121) are the worst tier because they are the most recent and
+  competitive-variant heavy, not because of the tier: 43 depth-2 positions where the AI's own
+  chosen move walks into a mate while scoring -0.01..-0.04.
+* Two Fireblast games from 2026-04 record a win the current rules do not allow (the sacrifice
+  was recorded on a node the cast had cleared): old rules, excluded. The Rust Fireblast never
+  enumerates the SACRIFICE choice (`sacrifice_pick` = highest node), so 54 recorded winning
+  layouts are unreachable by the enumerator; it does not change the win/loss of the turn.
+* The v6 bookends (`mate::immediate_win`) discarded the whole scan when the enumeration was
+  incomplete (580 of 2,194 final positions hit the turn or resolver cap). A win found in a
+  truncated list is still a win; the fallback ships in this commit.
+
+**Fix in this commit: `decisive_lead_turns`, a material-gated, pruned scan for turns that reach
+the stone lead (or the sixth cast) NOW, emitted at the front of the ordered stream like the Seal
+of Destruction pre-pass.** It walks the enumerator's grammar (move; dash and cast in either
+order; Summer second cast) with an optimistic per-spell material bound per branch, verifies
+candidates through `apply_turn`, examines at most `DECISIVE_LEAD_CAP` = 2,000 boards, and is
+memoised per position for iterative deepening.
+
+Re-running the corpus checks with it (all 1,533 solvable final positions):
+
+| | shipped v5 | v6 bookends | pre-pass alone | pre-pass + bookends |
+|---|---|---|---|---|
+| depth-1 search finds the recorded mate | 1,272 (83%) | -- | **1,457 (95%)** | -- |
+| depth-2 move from the loser's position walks into a mate while scoring ~0 | 333 | 206 | 116 | **52** |
+| ...rust_hard losses only (121) | 43 | 29 | 12 | **6** |
+
+Cost, idle machine, 20 positions x 1 s, `tfit`/scale 4/adaptive, bookends off: endgame
+313k -> 198k nodes/s (depth 4.6 -> 4.5), midgame 372k -> 230k nodes/s (depth 5.85 -> 5.55).
+~55 us when a mate exists, ~170 us for a fruitless scan inside the gate. The gate's per-spell
+bounds are generous (Erupt 16, Carnage 8), which is why midgame pays too; tightening them and
+`DECISIVE_LEAD_CAP` is the tuning space. Not gated by arena yet: the corpus gate is
+`tools/audit_mates.py` on a fresh hydrated dump, the strength gate is the fleet SPRT at
+matched average time (the depth loss must be bought back by the blunders removed).
+
+## Arena: the mate-in-1 fixes cost Elo at 3 s, and the bookends are untimed (2026-09-19/20)
+
+Fleet `ab_search.py`, `tfit`, 45 shards x 25 colour-swapped pairs, 3 s/move, c3d-highcpu-90,
+pooled from GAME lines (`pool_shards.py`).
+
+| run | arm vs base | games | arm win rate | Elo | s/move arm / base |
+|---|---|---|---|---|---|
+| `20260919T200757Z` | `decisive_lead` pre-pass ON vs OFF, v6 bookends on BOTH sides | 1,952 (watchdog cut 15/45 shards) | 45.9% [43.6, 48.1] | **-29 [-45, -13]** | 4.75 / 4.81 (ratio 0.99) |
+| `20260919T200809Z` | pre-pass + bookends vs neither (the whole change against the v5 search on `main`) | 2,250 | 38.4% [36.5, 40.5] | **-82 [-97, -67]** | 4.99 / 2.87 (ratio 1.74) |
+
+Two findings, one of them about the clock:
+
+* **The v6 bookends (`mate::immediate_win`, up to 250k turns enumerated twice per move) run
+  OUTSIDE the time control.** `go_with_progress` sets the deadline, then runs the front scan
+  inside it (the search loses that time), then runs the back scan and any re-search after it
+  (the move overspends). With bookends on, a 3 s budget averaged 4.8 s per move and some games
+  averaged 50+ s per move. Run 2's arm therefore searched LESS than its base while using 1.7x
+  the wall time, and still lost 82 Elo. The shipped v6/v7 wasm has this on every rust_hard move.
+  Whatever their merit, the bookends cannot ship untimed: either budget the scans inside
+  `time_ms` and cap their cost (a 250k-turn enumeration is not a 10 ms check), or replace them
+  with the pre-pass, which finds 95% of the recorded mates for microseconds.
+* **The stone-lead pre-pass alone costs ~29 Elo at 3 s** (run 1, matched time): the 35% node-rate
+  cost measured in the previous section is not bought back by the mates it stops the engine
+  walking into, at least at this control and with the bookends' clock distortion on both sides.
+  Run 3 (`decisive_lead_nb`, pre-pass ON vs OFF with bookends OFF on both sides, matched time,
+  5-VM fleet `20260920T2056*`) is the clean measurement; result appended below when pooled.
+
+Reading rule that would have caught this before the fleet: **look at `mean s/move` per arm
+before the Elo.** A ratio far from 1.0 means the knob changed the clock, not just the tree, and
+the SPRT is then comparing budgets, not searches. `pool_shards.py --max-time-ratio 1.05` refuses
+such a verdict; it was not passed here.
+
+**Run 3 pooled (2026-09-20, 5 x c3d-highcpu-90, 225 shards x 5 pairs, 3 s, `decisive_lead_nb`
+= pre-pass ON vs OFF with bookends OFF on both sides):** 2,250 games, arm **49.1% [47.1, 51.2],
+Elo -6 [-21, +8]**, s/move 2.87 / 2.91 (ratio 0.98). NO measured difference: the pre-pass's
+node-rate cost and the blunders it removes cancel within +/-15 Elo at 3 s, while it lifts
+depth-1 detection of the recorded mates from 83% to 95% and cuts the "walked into a mate while
+scoring ~0" positions from 333 to 116. Run 1's -29 for the same knob was measured with the
+untimed bookends on both sides, i.e. under a distorted clock; run 3 is the number to use.
+
+Decision: the pre-pass is shippable on correctness grounds (Elo-neutral, fixes the reported
+class of blunder); the v6 exhaustive bookends are NOT in their current form (untimed, -50-ish
+Elo and 1.7x wall time) -- remove them or budget them inside `time_ms` before any merge to main.
+Fleet note: five VMs with distinct SHARD_BASEs finished the 2,250 games in ~35 minutes for the
+same vCPU-hours as one VM in 2.5 h; pool with a glob that spans per-run folders, because shard
+log names repeat across runs and a flat copy silently keeps one run.

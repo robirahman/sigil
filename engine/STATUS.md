@@ -21,24 +21,30 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
-**2026-09-18: exhaustive mate-in-1 BOOKENDS around the search (`search.rs`, default on,
-`set_mate_bookends`; the frozen `rust_anchor` keeps them off).** Found through the Puzzles work
-and a report from Fakey_McFaker: in two recorded competitive games (`-P1n0vvlpXcAf-u9Q7jd`,
-`-P1mxZ-Jq_g0-RJVjo8I`) rust_hard announced -0.5 and played into a mate-in-1. The exhaustive
-solver finds 11 and 1,185 mates-in-1 there; the shipped search finds NONE at depth 2 at any
-`width_scale` (833 nodes, identical at scale 1 and 256). Cause, by `layout_rank`: the ordered
-stream held 676 turns of 6,820 distinct successors and none of the mates; with the cast-outcome
-window raised to 4,096 they appear at rank ~21,000 of 21,466. `ordered_dash_branches` caps dash
-branches per first move at the window, cheapest sacrifices first, and only surviving branches get
-a cast -- so a mate needing a specific sacrifice pair plus a Harvest/Erupt cast is invisible at
-every widening scale. This is a WINDOW gap, not a width or eval gap. Fix: before searching, the
-root's full turn list is scanned for an immediate win (`mate::immediate_win`, enumeration cap
-250k turns); after searching, the chosen move's full reply list is scanned for an immediate loss
-and the move is banned at the root and the search re-run (up to 3 bans; if nothing survives the
-proven loss is reported). Off below 2 s/move. `SearchStats.bookend_win` / `bookend_banned`
-report it. Two regression tests from the recorded positions; the first asserts the defect
-reproduces with bookends off. Not yet SPRT'd for Elo (it can only convert announced -0.5s into
-avoided mates or honest -M scores). Ships as `RUST_ENGINE_VERSION` 6, cache v31.
+**2026-09-20: stone-lead pre-pass SHIPPED (engine v8, cache v34); exhaustive bookends DISCARDED.**
+Fakey_McFaker's report (rust_hard announced -0.5, then was mated in one) traced to a WINDOW gap in
+the ordered generator: dash branches per first move are capped at the cast-outcome window,
+cheapest sacrifices first, and only survivors get a cast, so a mate needing a specific sacrifice
+pair plus a Harvest/Erupt cast was invisible at every `width_scale`. Two fixes were built:
+
+* **Exhaustive mate-in-1 bookends** (v6/v7): scan the root's full enumeration for an immediate win
+  before searching, and the chosen move's full reply list for an immediate loss after, banning the
+  move and re-searching. Fixed the recorded games; DISCARDED after the 3 s fleet arena. The scans
+  (up to 250k turns, twice per move) ran outside the time control -- a 3 s budget averaged 4.8 s
+  per move, the search itself got less time -- and pre-pass + bookends measured **38.4% (-82 Elo
+  [-97, -67])** against the v5 search. Nothing of them remains but the note in `search.rs`.
+* **Stone-lead pre-pass** (`turn_iter.rs decisive_lead_turns`): a material-gated, `apply_turn`-
+  verified, memoised scan (<= 2,000 boards per node) that puts every turn reaching the lead NOW at
+  the front of the ordered stream, like the Seal of Destruction pre-pass. Corpus: depth-1 detection
+  of recorded mates 83% -> 95%, "walked into a mate while scoring ~0" 333 -> 116. Arena, 3 s,
+  matched time, 2,250 games (5-VM fleet): **49.1% [47.1, 51.2], -6 Elo [-21, +8]** -- the node-rate
+  cost and the blunders removed cancel, so it ships on correctness. The frozen `rust_anchor` plays
+  with it OFF (`set_decisive_lead`, per thread) so its ratings stay comparable. Coverage is not
+  total: of the two recorded games behind the report, the dash + Erupt mate is found at the
+  shipped cap, the hard-move + dash + Harvest mate (five resolver moves) needs ~50,000 boards
+  (~40 ms) and is pinned as a known gap in `tests.rs` so any cap change is measured against it. A/B knob:
+  `ab_search.py ... decisive_lead 1 0`. FINDINGS "Audit of every recorded game's final position"
+  and "Arena: the mate-in-1 fixes cost Elo at 3 s".
 
 **2026-09-17: puzzle solver (`mate.rs`, `solve_mates` in the Python binding).** Feeds
 `docs/puzzles.html`. Mate-in-1 enumerates the root in full (complete winning set, and "no

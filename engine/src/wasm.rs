@@ -50,7 +50,9 @@ pub fn pick_move_actions(sfn: &str, time_ms: u32, tt_bits: u32, width_scale: u32
     // Restating a default is the trap everywhere else; here it is the point.
     s.set_elastic(None);
     s.set_lmr(0, 1);
-    s.set_mate_bookends(false);
+    // The stone-lead pre-pass (v8) is a generator change; the anchor plays
+    // without it. Per-thread switch, restored below.
+    crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
     s.set_width_scale(width_scale.max(1) as usize);
     // MUST be set explicitly — same trap py.rs documents at its call site.
     s.weights = match crate::eval::weights_by_name(eval_name) {
@@ -76,6 +78,7 @@ pub fn pick_move_actions(sfn: &str, time_ms: u32, tt_bits: u32, width_scale: u32
     let (best, score, st) = s.go_with_progress(
         &b, c, 64, time_ms as u64,
         cb.as_mut().map(|f| f as &mut dyn FnMut(i32, i32, u64)));
+    crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
     let dt = (crate::search::now_ms() - t0) / 1000.0;
     move_json(&b, best, score, &st, dt)
 }

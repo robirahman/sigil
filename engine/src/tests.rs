@@ -2598,14 +2598,15 @@ fn mate_solver_mate_in_two_lines_survive_brute_force() {
 
 
 // ---------------------------------------------------------------------------
-// search.rs: exhaustive mate-in-1 bookends (recorded games of 2026-09-18)
+// The two recorded rust_hard games behind the 2026-09-18 report ("-0.5, then
+// mated in one"). The exhaustive bookends that first fixed them were discarded
+// after the arena (search.rs, BOOKEND note); the stone-lead pre-pass must
+// cover them instead.
 // ---------------------------------------------------------------------------
 
-/// Two recorded rust_hard games: the AI announced -0.5 and played into a
-/// mate-in-1 whose winning turns (dash + Harvest / dash + Erupt) the ordered
-/// generator never yields at any widening scale. (AI to move, then the position
-/// it handed the human.)
-const BOOKEND_CASES: [(&str, &str); 2] = [
+/// (AI to move, then the position it handed the human) x 2. The winning turns
+/// need a dash + Harvest / dash + Erupt cast the ordered stream never yielded.
+const RECORDED_BLINDSPOT_CASES: [(&str, &str); 2] = [
     ("rr...rbbbb..bb.bb...b..b.brrrrr..r.rrr./Hurricane,Flourish,Harvest,Scatter,Torrent,Fireblast,Lurk,Slash,Splash b 30 1:1 Fireblast:Scatter -:- tied competitive",
      "rr...r.bbb...b.bb...b.bb..brrrrr.r.rbrr/Hurricane,Flourish,Harvest,Scatter,Torrent,Fireblast,Lurk,Slash,Splash r 31 1:1 Fireblast:Scatter -:- tied competitive"),
     ("r.rrr.bbbb..rr..r......r..b....r.bbr.../Erupt,Corrupt,Tsunami,Seal_of_Wind,Grow,Meteor,Sprout,Lurk,Charge b 38 3:1 Corrupt:Meteor -:- r2 competitive",
@@ -2622,44 +2623,64 @@ fn shipped_search() -> crate::search::Search {
 }
 
 #[test]
-fn front_bookend_finds_a_mate_in_one_the_ordered_generator_never_yields() {
-    for (_, human) in BOOKEND_CASES {
-        let b = Board::from_sfn(human).expect("sfn");
-        let c = b.to_move;
-        // Without bookends the shipped search misses it (this is the recorded defect).
-        let mut s0 = shipped_search();
-        s0.set_mate_bookends(false);
-        let (_, sc0, _) = s0.go(&b, c, 2, 0);
-        assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the defect to reproduce without bookends, got {sc0}");
-        // With them (default) the mate is found and proven.
-        let mut s = shipped_search();
-        let (best, sc, st) = s.go(&b, c, 2, 0);
-        assert!(st.bookend_win, "the front bookend should have fired");
-        assert!(sc >= crate::search::WIN - crate::search::MAX_PLY as i32, "score {sc}");
-        let t = best.expect("a move");
-        let n = crate::mate::child(&b, &t, c);
+fn pre_pass_finds_the_recorded_erupt_mate_at_the_shipped_cap() {
+    // Game 2 (dash + Erupt): covered at DECISIVE_LEAD_CAP.
+    let (_, human) = RECORDED_BLINDSPOT_CASES[1];
+    let b = Board::from_sfn(human).expect("sfn");
+    let c = b.to_move;
+    // The recorded defect: without the pre-pass a depth-2 search sees no mate.
+    crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
+    let (_, sc0, _) = shipped_search().go(&b, c, 2, 0);
+    crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
+    assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the defect to reproduce without the pre-pass, got {sc0}");
+    assert!(!b.decisive_lead_turns(c, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty());
+    let (best, sc, _) = shipped_search().go(&b, c, 2, 0);
+    assert!(sc >= crate::search::UNPROVEN_MATE, "score {sc}");
+    let n = crate::mate::child(&b, &best.expect("a move"), c);
+    assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)));
+}
+
+#[test]
+fn pre_pass_needs_a_25x_cap_for_the_recorded_harvest_mate() {
+    // Game 1 (hard move, dash, hard move, Harvest with five resolver moves): the
+    // winning turn sits past the shipped board budget -- one of the ~5% of
+    // recorded mates the pre-pass does not reach (FINDINGS 2026-09-19 audit).
+    // Pinned so a cap change is measured against it: 2,000 boards miss it,
+    // 50,000 (~40 ms) find it. The exhaustive bookends that did find it were
+    // discarded after the arena (search.rs, BOOKEND note).
+    let (_, human) = RECORDED_BLINDSPOT_CASES[0];
+    let b = Board::from_sfn(human).expect("sfn");
+    let c = b.to_move;
+    assert!(b.decisive_lead_turns(c, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty(),
+            "the shipped cap now reaches this mate: update this test and FINDINGS");
+    let found = b.decisive_lead_turns(c, 50_000);
+    assert!(!found.is_empty(), "50,000 boards no longer reach the Harvest mate");
+    for t in &found {
+        let n = crate::mate::child(&b, &t.push_pub(Action::Pass), c);
         assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)));
     }
 }
 
 #[test]
-fn back_bookend_refuses_a_move_whose_reply_is_a_mate_in_one() {
-    for (ai, _) in BOOKEND_CASES {
-        let b = Board::from_sfn(ai).expect("sfn");
-        let c = b.to_move;
-        let mut s = shipped_search();
-        let (best, sc, st) = s.go(&b, c, 64, 4000);
-        let t = best.expect("a move");
-        let n = crate::mate::child(&b, &t, c);
-        let opp_mates = crate::mate::immediate_win(&n, c.other(), crate::search::BOOKEND_TURN_CAP)
-            .expect("enumerable").is_some();
-        // Either the move is safe from an immediate mate, or every move loses
-        // and the search says so honestly.
-        assert!(!opp_mates || sc <= -(crate::search::WIN - crate::search::MAX_PLY as i32),
-                "chosen move allows a mate-in-1 yet the score is {sc} (banned {})", st.bookend_banned);
-    }
+fn pre_pass_lets_the_search_see_the_reply_mate_from_the_ai_side_in_the_erupt_game() {
+    // From the AI's position in game 2 a search must now see that the recorded
+    // move walks into a mate: either it picks a move whose reply has no
+    // immediate win, or it reports the loss honestly. (Game 1's mate is past the
+    // shipped cap, see above, so it is not asserted here.)
+    let (ai, _) = RECORDED_BLINDSPOT_CASES[1];
+    let b = Board::from_sfn(ai).expect("sfn");
+    let c = b.to_move;
+    let (best, sc, _) = shipped_search().go(&b, c, 64, 3000);
+    let t = best.expect("a move");
+    let n = crate::mate::child(&b, &t, c);
+    let (replies, _) = n.enumerate_turns(c.other());
+    let opp_mates = replies.iter().any(|r| {
+        let m = crate::mate::child(&n, r, c.other());
+        matches!((m.outcome, c.other()), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue))
+    });
+    assert!(!opp_mates || sc <= -crate::search::UNPROVEN_MATE,
+            "chosen move allows a mate-in-1 yet the score is {sc}");
 }
-
 
 #[test]
 fn judge_forced_after_proves_the_corpus_mate_in_two_and_refutes_a_random_move() {
@@ -2675,4 +2696,69 @@ fn judge_forced_after_proves_the_corpus_mate_in_two_and_refutes_a_random_move() 
     let other = turns.iter().map(|t| crate::mate::child(&b, t, c))
         .find(|n| n.outcome == Outcome::Ongoing && !win_keys.contains(&n.stones)).expect("a non-winning turn");
     assert!(!matches!(crate::mate::judge_forced_after(&other, c, 400_000_000, 0), Judge::Proven));
+}
+
+
+// ---------------------------------------------------------------------------
+// turn_iter.rs: stone-lead decisive pre-pass (audit of recorded games, 2026-09-19)
+// ---------------------------------------------------------------------------
+
+/// Final positions of four recorded games (winner to move). Each holds a
+/// mate-in-1 the exhaustive solver confirms (11 / 20 / 3,150 / 2,124 winning
+/// turns) that the ordered stream ranked in the hundreds or never generated
+/// within 4,096 turns, so a depth-1 search scored them at about +0.04 stones.
+/// The mates need a cast (Fireblast, Starfall, Carnage, Meteor) under a specific
+/// first move -- the shape the audit found in 12% of all recorded mates.
+const LEAD_CASES: [&str; 4] = [
+    "rrrrrb.bb.r.rb..brr....bb............../Flourish,Carnage,Seal_of_Lightning,Fireblast,Grow,Seal_of_Wind,Sprout,Comet,Surge b 16 1:1 Flourish:Carnage -:- r1",
+    "rrrrrrr..rr..bbbb.b.b.b..bb.r.......b../Seal_of_Lightning,Starfall,Bewitch,Meteor,Hail_Storm,Grow,Seal_of_Summer,Comet,Surge b 24 1:1 Meteor:Hail_Storm -:- b1",
+    "rrrrbbb.bbrb.bb.....rr.b..r......rrr.../Carnage,Starfall,Flourish,Grow,Hail_Storm,Seal_of_Wind,Slash,Comet,Sprout r 23 1:0 Hail_Storm:- -:- r1",
+    "rrrrrr...b...bb.bbbbbbrb..rr.....r.rr../Seal_of_Lightning,Carnage,Flourish,Fireblast,Meteor,Grow,Comet,Slash,Sprout r 25 1:0 Grow:- -:- r1",
+];
+
+#[test]
+fn lead_prepass_finds_recorded_mates_and_every_turn_it_returns_wins() {
+    for sfn in LEAD_CASES {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        let c = b.to_move;
+        let found = b.decisive_lead_turns(c, crate::turn_iter::DECISIVE_LEAD_CAP);
+        assert!(!found.is_empty(), "no decisive turn found in {sfn}");
+        for t in &found {
+            let n = crate::mate::child(&b, &t.push_pub(Action::Pass), c);
+            assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)),
+                    "pre-pass returned a non-winning turn {:?} in {sfn}", t.slice());
+        }
+        // The stream now yields a winning turn first.
+        let first = b.turns_ordered_window(c, crate::turn_iter::CAST_OUTCOME_WINDOW).next().expect("a turn");
+        let n = crate::mate::child(&b, &first, c);
+        assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)),
+                "first streamed turn is not the mate in {sfn}");
+    }
+}
+
+#[test]
+fn lead_prepass_is_what_lets_a_depth_one_search_see_the_mate() {
+    for sfn in LEAD_CASES {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        let c = b.to_move;
+        crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
+        let mut s0 = shipped_search();
+        let (_, sc0, _) = s0.go(&b, c, 1, 0);
+        crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
+        assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the recorded blindness without the pre-pass, got {sc0} in {sfn}");
+        let mut s = shipped_search();
+        let (best, sc, _) = s.go(&b, c, 1, 0);
+        assert!(sc >= crate::search::UNPROVEN_MATE, "depth-1 search still blind with the pre-pass: {sc} in {sfn}");
+        let n = crate::mate::child(&b, &best.expect("a move"), c);
+        assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)));
+    }
+}
+
+#[test]
+fn lead_prepass_stays_quiet_far_from_the_lead() {
+    // Opening position: nobody is within reach, so the scan must return nothing
+    // (and cost nothing -- the gate closes before any board is examined).
+    let b = Board::from_sfn("r............b........................./Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge r 1 0:0 -:- -:- b1").expect("sfn");
+    assert!(b.decisive_lead_turns(Color::Red, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty());
+    assert!(b.decisive_lead_turns(Color::Blue, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty());
 }
