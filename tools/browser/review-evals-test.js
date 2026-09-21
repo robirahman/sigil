@@ -13,7 +13,7 @@ const BASE = process.argv[2] || 'https://sigilbattle.com', CODE = process.argv[3
 if (!CODE) { console.error('usage: node review-evals-test.js <base-url> <roomCode>'); process.exit(2); }
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] });
+  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-proxy-server'] });
   const page = await browser.newPage();
   const logs = [];
   page.on('console', m => { if (['error', 'warning'].includes(m.type())) logs.push(m.type() + ': ' + m.text().slice(0, 300)); });

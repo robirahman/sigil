@@ -241,6 +241,7 @@ def eval_report(raw, lines, rows, out, cases, max_list=25, recheck_map=None):
                    'best': row.get('best'), 'next_sfn': g['positions'][i + 1] if i + 1 < len(g['positions']) else None,
                    'red': tier(rg.get('redUid')), 'blue': tier(rg.get('blueUid')),
                    'about': about, 'about_ai': (about == ai_side) if (about and ai_side) else None,
+                   'about_rust': bool(about and ai_side and about == ai_side and is_rust(rg.get('redUid' if about == 'red' else 'blueUid'))),
                    'recheck': (recheck_map or {}).get((kind, gid, i), '')}
             rec_list.append(rec); cases.append(rec)
 
@@ -338,13 +339,15 @@ def eval_report(raw, lines, rows, out, cases, max_list=25, recheck_map=None):
         if not items:
             return
         items = sorted(items, key=key) if key else items
-        # The AI's own failures first: a human missing a mate is not an engine weakness.
-        items = sorted(items, key=lambda c: 0 if c['about_ai'] else 1)
-        n_ai = sum(1 for c in items if c['about_ai'])
-        out.append(f'{n_ai} of these concern the AI\'s own side (listed first); the rest are humans failing to convert or defend.\n')
+        # The AI's own failures first -- the Rust engine's before the old JS tiers' --
+        # since a human missing a mate is not an engine weakness.
+        items = sorted(items, key=lambda c: 0 if c['about_rust'] else 1 if c['about_ai'] else 2)
+        n_ai = sum(1 for c in items if c['about_ai']); n_rust = sum(1 for c in items if c['about_rust'])
+        out.append(f'{n_ai} of these concern the AI\'s own side ({n_rust} the Rust engine, listed first, then the JS tiers); '
+                   f'the rest are humans failing to convert or defend.\n')
         out.append('| game | turn | mover | red / blue | about | engine said | result | recheck | review |\n|---|---|---|---|---|---|---|---|---|')
         for c in items[:n_max]:
-            who = ('AI' if c['about_ai'] else ('human' if c['about_ai'] is False else '–'))
+            who = ('Rust AI' if c['about_rust'] else 'JS AI' if c['about_ai'] else ('human' if c['about_ai'] is False else '–'))
             out.append(f'| `{c["game"]}` | {c["turn"]} | {c["mover"]} | {c["red"]} / {c["blue"]} | {who} | {c["detail"]} | '
                        f'{c["winner"] or "no winner"} | {c.get("recheck", "")} | {c["link"]} |')
         if len(items) > n_max:
@@ -396,7 +399,7 @@ def recheck(cases, time_ms, kinds=('A', 'B')):
     historical live-search miss, one it still gets wrong is an open weakness."""
     import sigil_engine as se
     kw = dict(width_scale=se.DEFAULT_WIDTH_SCALE, adaptive=se.SHIPPED_ADAPTIVE)
-    todo = [c for c in cases if c['about_ai'] and c['kind'] in kinds and c['mover'] == c['about']]
+    todo = [c for c in cases if c['about_rust'] and c['kind'] in kinds and c['mover'] == c['about']]
     for c in todo:
         r = se.analyze(c['sfn'], 'tfit', max_depth=64, time_ms=time_ms, history_sfns=c['history'], **kw)
         m = r['mate_in_turns']

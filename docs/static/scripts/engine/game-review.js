@@ -266,8 +266,15 @@ function _reviewSfnKey(sfn) {
 function rustEvalsToReview(doc, gameLog) {
 	if (!doc || !Array.isArray(gameLog) || gameLog.length === 0) return null;
 	const n = gameLog.length;
-	const evals = doc.evalPerPly, mates = doc.matePerPly || [], movers = doc.moverPerPly;
-	if (!Array.isArray(evals) || !Array.isArray(movers) || evals.length !== n + 1 || movers.length !== n + 1) return null;
+	// Firebase drops trailing nulls from arrays (the terminal position's eval and
+	// mate are null), and can hand back a sparse array as an object, so every
+	// per-ply array is normalised to exactly n + 1 entries with null holes.
+	const pad = (src) => Array.from({ length: n + 1 }, (_, i) => (src && src[i] !== undefined) ? src[i] : null);
+	const rawMovers = doc.moverPerPly;
+	const rawLen = (x) => Array.isArray(x) ? x.length : (x && typeof x === 'object') ? Object.keys(x).length : 0;
+	if (!doc.evalPerPly || !rawMovers || rawLen(rawMovers) !== n + 1 || rawLen(doc.evalPerPly) < n) return null;
+	const evals = pad(doc.evalPerPly), mates = pad(doc.matePerPly), movers = pad(rawMovers);
+	const provenSrc = pad(doc.provenPerPly);
 	if (_reviewSfnKey(doc.finalSfn) !== _reviewSfnKey(gameLog[n - 1].sfnAfter)) return null;
 	const floor = REVIEW_DEFAULTS.forcedWinFloor;
 	const sfnPerPly = new Array(n + 1);
@@ -282,7 +289,7 @@ function rustEvalsToReview(doc, gameLog) {
 		const e = (typeof evals[i] === 'number') ? evals[i] * sign : null;
 		matePerPly[i] = m;
 		stonesPerPly[i] = (typeof evals[i] === 'number') ? evals[i] : null;
-		provenPerPly[i] = Array.isArray(doc.provenPerPly) ? !!doc.provenPerPly[i] : true;
+		provenPerPly[i] = provenSrc[i] === null ? true : !!provenSrc[i];
 		let s;
 		if (i === n && doc.terminal && doc.terminal.winner !== undefined) {
 			const w = doc.terminal.winner;
@@ -315,7 +322,7 @@ function rustEvalsToReview(doc, gameLog) {
 		provenPerPly,
 		stonesPerPly,
 		bestTurnPerPly: new Array(n + 1).fill(null),
-		bestActionsPerPly: Array.isArray(doc.bestPerPly) ? doc.bestPerPly : null,
+		bestActionsPerPly: doc.bestPerPly ? pad(doc.bestPerPly) : null,
 		moverPerPly: movers.slice(),
 		playedTurnPerPly: gameLog.map(t => t.turnNotation || null),
 		terminalWinner: (doc.terminal && doc.terminal.winner) || null,
