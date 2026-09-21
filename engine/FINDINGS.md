@@ -1999,8 +1999,18 @@ designer's rule about neutral casts still stands -- the placement ORDERING fix, 
 change, is what actually removed the refill behaviour and it gained Elo. Next step if the eval is
 revisited: one term at a time, and fit the magnitude on the labelled corpus before any arena.
 
-The competitive-opening arm (`opening_book`, `SIGIL_VARIANT=competitive`) was relaunched after its
-smoke refused the knob (the runner had not exported the variant to the smoke run). Its verdict is
-recorded below when in -- but the selector shipped regardless (`742e3c4a`), by design: the designer
-expects its benefit to be long-term positional against humans in long games, and a possible AI-vs-AI
-loss from the changed first move is not the quantity that matters. The human playtest is the test.
+The competitive-opening arm (`opening_book`, `SIGIL_VARIANT=competitive`, run 20260921T191932Z, relaunched
+after its smoke refused the knob because the runner had not exported the variant to the smoke run):
+
+| change | knob | arm wins | win rate | Elo [95%] | verdict |
+|---|---|---|---|---|---|
+| opening selector, competitive self-play | `opening_book` | 1,822 / 3,811 (interim, 87% of the run) | 47.8% [46.2, 49.4] | **−15.2 [−26.3, −4.2]** | shipped anyway for a human playtest |
+
+**Reading it.** In 3 s self-play the base engine's spell-blind opening -- `move_score_goal` grabs a mana
+node (+90) or a charm (+70) -- beats the table-driven sigil pick by about 15 Elo. Two things this does
+NOT settle: (1) whether the pick is worth more against humans over a long game, which is what the
+designer expects and what the selector was built for, so it shipped (`742e3c4a`) and the recorded
+human-vs-`rust_hard` games from 2026-09-21 on are the measurement (rerun `weakness_report.py` Part 1
+by week); (2) the selector never considers the mana node itself as an opening, while the base's +90
+grab is exactly what it loses to -- adding "the zone's mana" as a candidate valued by the tempo it
+buys the zone-mates is the obvious next iteration if the human numbers are flat.
