@@ -1200,6 +1200,12 @@ self-play does not produce them.
 (`ui_score` divides by 3900, the UI multiplies by 39): unmistakably winning,
 past no mate threshold.
 
+> Superseded 2026-09-21 (engine v10): the clamp is now internal only. The mate
+> distance is recorded before it (`SearchStats::mate_plies` / `mate_proven`) and
+> the interface prints `search::report` -- "win in N" in the winner's turns,
+> "likely win in N" when width-limited -- never the sentinel's 50 stones.
+> STATUS.md, 2026-09-21.
+
 The smoke test no longer samples and hopes. It **constructs** the condition —
 mate-bearing positions with the cast-outcome window starved so the search is
 certainly budget-limited — requires the guard to clamp every mate it finds,

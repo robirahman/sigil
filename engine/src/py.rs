@@ -946,6 +946,113 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
         crate::search::ui_score(score)))
 }
 
+/// One fixed-depth (or timed) search of `sfn` with the SHIPPED configuration,
+/// returning the display report the interface prints plus the raw stats, as a
+/// dict. Built for the per-position game backfill (`engine/harness/eval_games.py`).
+///
+/// * `eval_name` is REQUIRED: a `'tfit'` default here would be a restated engine
+///   default, the trap that has bitten twice (`Search::new` falls back to the
+///   structural set). `width_scale=None` / `adaptive=None` = the engine's own
+///   defaults; a harness that wants the shipped search passes
+///   `se.DEFAULT_WIDTH_SCALE` / `se.SHIPPED_ADAPTIVE`.
+/// * `time_ms=0` = untimed, deepen to exactly `max_depth`.
+/// * A fresh table per call, so results do not depend on the walk order.
+/// * A finished position is NOT searched (`over=True`): a terminal root would
+///   score every child as a mate and report "win in 1".
+///
+/// Keys: mover, over, winner, score (centistones, post-clamp), stones (mover POV,
+/// `even_offset` applied; None when no iteration completed), mate_in_turns
+/// (winner's own turns, signed mover POV, None if no mate), mate_plies, proven,
+/// unproven_mate, widened, windowed, depth, nodes, seconds, actions_json,
+/// expected_sfn.
+#[pyfunction]
+#[pyo3(signature = (sfn, eval_name, max_depth=6, time_ms=0, tt_bits=20,
+                    history_sfns=vec![], width_scale=None, adaptive=None))]
+#[allow(clippy::too_many_arguments)]
+fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, time_ms: u64,
+                tt_bits: u32, history_sfns: Vec<String>, width_scale: Option<usize>,
+                adaptive: Option<(f32, usize, usize)>) -> PyResult<Bound<'py, pyo3::types::PyDict>>
+{
+    use std::time::Instant;
+    use pyo3::types::PyDict;
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let d = PyDict::new_bound(py);
+    let color = |c: Color| if c == Color::Red { "red" } else { "blue" };
+    d.set_item("mover", color(c))?;
+    let w = weights_by_name(eval_name)?;
+    if b.outcome != Outcome::Ongoing {
+        d.set_item("over", true)?;
+        d.set_item("winner", match b.outcome {
+            Outcome::RedWins => Some("red"), Outcome::BlueWins => Some("blue"), _ => None })?;
+        for k in ["score", "stones", "mate_in_turns", "actions_json", "expected_sfn"] {
+            d.set_item(k, py.None())?;
+        }
+        d.set_item("mate_plies", 0)?;
+        for k in ["proven", "unproven_mate", "widened", "windowed"] { d.set_item(k, false)?; }
+        d.set_item("depth", 0)?; d.set_item("nodes", 0u64)?; d.set_item("seconds", 0.0)?;
+        return Ok(d);
+    }
+    let mut s = crate::search::Search::new(tt_bits);
+    if let Some(ws) = width_scale { s.set_width_scale(ws); }
+    s.weights = w;
+    if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+    for h in history_sfns {
+        if let Ok(hb) = crate::board::Board::from_sfn(&h) {
+            s.add_history(ZOBRIST.key_js(&hb));
+        }
+    }
+    let t = Instant::now();
+    let (best, score, st) = s.go(&b, c, max_depth, time_ms);
+    let dt = t.elapsed().as_secs_f64();
+    d.set_item("over", false)?;
+    d.set_item("winner", py.None())?;
+    d.set_item("score", score)?;
+    if st.depth_completed > 0 {
+        let r = crate::search::report(score, &st, c, &s.weights);
+        d.set_item("stones", r.stones)?;
+        d.set_item("mate_in_turns", r.mate_in)?;
+        d.set_item("proven", r.proven)?;
+    } else {
+        d.set_item("stones", py.None())?;
+        d.set_item("mate_in_turns", py.None())?;
+        d.set_item("proven", false)?;
+    }
+    d.set_item("mate_plies", st.mate_plies)?;
+    d.set_item("unproven_mate", st.unproven_mate)?;
+    d.set_item("widened", st.widened)?;
+    d.set_item("windowed", st.windowed)?;
+    d.set_item("depth", st.depth_completed)?;
+    d.set_item("nodes", st.nodes)?;
+    d.set_item("seconds", dt)?;
+    match best {
+        Some(t) => {
+            let (acts, after) = b.emit_actions(&t, c);
+            d.set_item("actions_json", crate::actions::acts_to_json(&acts))?;
+            d.set_item("expected_sfn", after.to_sfn())?;
+        }
+        None => {
+            d.set_item("actions_json", py.None())?;
+            d.set_item("expected_sfn", py.None())?;
+        }
+    }
+    Ok(d)
+}
+
+/// `search::even_offset` for a colour name and eval preset, in centistones:
+/// lets a caller normalise an already-recorded raw score without re-searching.
+#[pyfunction]
+fn even_offset(color: &str, eval_name: &str) -> PyResult<i32> {
+    let c = match color {
+        "red" | "r" => Color::Red,
+        "blue" | "b" => Color::Blue,
+        other => return Err(pyo3::exceptions::PyValueError::new_err(
+            format!("unknown colour {other:?}: expected 'red' or 'blue'"))),
+    };
+    Ok(crate::search::even_offset(c, &weights_by_name(eval_name)?))
+}
+
 /// The search knobs a `Search` starts with, read off a real instance rather than
 /// restated. Arena harnesses print this into their log header so a result can
 /// never again be ambiguous about which engine produced it — a Python-side default
@@ -1259,6 +1366,8 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
+    m.add_function(wrap_pyfunction!(analyze, m)?)?;
+    m.add_function(wrap_pyfunction!(even_offset, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
@@ -1283,6 +1392,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
     m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
     m.add("UNPROVEN_MATE", crate::search::UNPROVEN_MATE)?;
+    m.add("MATE_STONES", crate::search::MATE_STONES)?;
     // Exported so a harness never restates them. REASONS_ALL is the full
     // key-dash interest mask; OUTCOME_CAP is how a caller detects that a
     // resolver enumeration was TRUNCATED rather than complete.

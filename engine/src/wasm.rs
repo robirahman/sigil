@@ -24,9 +24,22 @@ fn err_json(msg: &str) -> String {
     format!("{{\"ok\":false,\"error\":{:?}}}", msg)
 }
 
+/// `"stones":x|null,"mate_in":n|null,"mate_proven":b` from a `Report`, or the
+/// null shape when no iteration completed (nothing honest to print).
+fn report_json(rep: Option<crate::search::Report>) -> String {
+    match rep {
+        Some(r) => format!("\"stones\":{},\"mate_in\":{},\"mate_proven\":{}",
+                           r.stones, r.mate_in.map_or("null".to_string(), |n| n.to_string()),
+                           r.proven),
+        None => "\"stones\":null,\"mate_in\":null,\"mate_proven\":false".to_string(),
+    }
+}
+
 /// Response formatter for `Engine::search` (the browser's replay gate parses this).
+/// `rep` is `None` when `st.depth_completed == 0`.
 fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
-             st: &crate::search::SearchStats, dt: f64) -> String {
+             st: &crate::search::SearchStats, dt: f64,
+             rep: Option<crate::search::Report>) -> String {
     let c = b.to_move;
     let turn = match best {
         Some(t) => t,
@@ -42,10 +55,10 @@ fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
     let (acts, after) = b.emit_actions(&turn, c);
     format!(
         "{{\"ok\":true,\"actions\":{},\"expected_sfn\":{:?},\"depth\":{},\
-          \"nodes\":{},\"score\":{},\"score_ui\":{},\"seconds\":{:.2}}}",
+          \"nodes\":{},\"score\":{},\"score_ui\":{},{},\"seconds\":{:.2}}}",
         crate::actions::acts_to_json(&acts), after.to_sfn(),
         st.depth_completed, st.nodes, score,
-        crate::search::ui_score(score), dt)
+        crate::search::ui_score(score), report_json(rep), dt)
 }
 
 fn configure(s: &mut Search, width_scale: u32, eval_name: &str,
@@ -131,7 +144,9 @@ impl Engine {
             &b, b.to_move, 64, time_ms as u64,
             cb.as_mut().map(|f| f as &mut dyn FnMut(i32, i32, u64)));
         let dt = (crate::search::now_ms() - t0) / 1000.0;
-        move_json(&b, best, score, &st, dt)
+        let rep = (st.depth_completed > 0)
+            .then(|| crate::search::report(score, &st, b.to_move, &self.s.weights));
+        move_json(&b, best, score, &st, dt, rep)
     }
 
     /// Begin pondering `sfn` (the position the OPPONENT is thinking about).
@@ -188,8 +203,14 @@ impl Engine {
 /// to play, in the `/api/move` shape:
 ///
 /// `{"ok":true,"verdict":"mate"|"likely_mate"|"mate_slow"|"escape",
-///   "proven":bool,"mate_in":n|null,"score_ui":u,"depth":d,"nodes":n,
+///   "proven":bool,"mate_in":plies|null,"mate_in_turns":turns|null,
+///   "score_ui":u,"stones":x|null,"depth":d,"nodes":n,
 ///   "exhaustive":bool,"actions":[...],"expected_sfn":"..."}`
+///
+/// `mate_in` counts plies from this root; `mate_in_turns` the mover's own
+/// remaining turns (`plies_to_turns`). `stones` is the opponent-POV
+/// `Report::stones` (even offset applied) so the escape text prints the same
+/// number the think report would.
 ///
 /// * `plies == 2`: an EXHAUSTIVE check first (every reply, then every mover
 ///   turn) with 40% of the time; `mate` / `escape` from it are proofs, and on
@@ -254,10 +275,15 @@ pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
     let Some(turn) = reply else { return err_json("no legal reply from this position"); };
     let (acts, after) = b.emit_actions(&turn, o);
     let dt = (crate::search::now_ms() - t0) / 1000.0;
+    let null = || "null".to_string();
+    let stones = if st.depth_completed > 0 {
+        crate::search::report(score, &st, o, &s.weights).stones.to_string()
+    } else { null() };
     format!(
-        "{{\"ok\":true,\"verdict\":{:?},\"proven\":{},\"mate_in\":{},\"score_ui\":{},\"depth\":{},\"nodes\":{},\"exhaustive\":{},\"actions\":{},\"expected_sfn\":{:?},\"seconds\":{:.2}}}",
-        v, proven, mate_in.map_or("null".to_string(), |d| d.to_string()),
-        crate::search::ui_score(score), st.depth_completed, st.nodes, exhaustive,
+        "{{\"ok\":true,\"verdict\":{:?},\"proven\":{},\"mate_in\":{},\"mate_in_turns\":{},\"score_ui\":{},\"stones\":{},\"depth\":{},\"nodes\":{},\"exhaustive\":{},\"actions\":{},\"expected_sfn\":{:?},\"seconds\":{:.2}}}",
+        v, proven, mate_in.map_or_else(null, |d| d.to_string()),
+        mate_in.map_or_else(null, |d| crate::search::plies_to_turns(d).to_string()),
+        crate::search::ui_score(score), stones, st.depth_completed, st.nodes, exhaustive,
         crate::actions::acts_to_json(&acts), after.to_sfn(), dt)
 }
 

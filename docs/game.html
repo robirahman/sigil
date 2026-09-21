@@ -760,6 +760,9 @@
 
 				<div class="ai-review-panel" x-show="reviewMode && aiReview" x-cloak>
 					<div class="ai-review-eval" x-text="aiReviewCurrentEvalText()"></div>
+					<div class="ai-review-stats" x-show="aiReview && aiReview.source === 'rust'" x-cloak>
+						<span>Rust engine, depth <strong x-text="aiReview && aiReview.engineDepth"></strong> at every position</span>
+					</div>
 					<svg class="ai-review-graph" viewBox="0 0 480 80" preserveAspectRatio="none">
 						<line x1="0" y1="40" x2="480" y2="40" class="ai-review-graph__zero" />
 						<rect x="0" y="0" width="480" height="40" class="ai-review-graph__bg-red" />

@@ -38,7 +38,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 9;
+const RUST_ENGINE_VERSION = 10;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -282,14 +282,19 @@ class RustAI {
 
 		const turn = await rustActionsToTurn(sim, color, res.actions, res.expected_sfn);
 
-		// `score_ui` is already in the units game-board-local.js renders (it
-		// multiplies by 39 and treats |s| >= 37 as a proven mate). Passing raw
-		// centistones inflated the display 3900x and made ordinary positions
-		// print as forced wins, e.g. "win in -94".
+		// `stones` / `mateIn` / `mateProven` are the engine's display report
+		// (search::report): stones from the AI's POV with the even-game offset
+		// applied (an even game reads 0.0, not ±0.5), mateIn in the WINNER's
+		// own turns, signed (+ the AI wins), mateProven false when the search
+		// was width- or window-limited ("likely win in N"). `score_ui` is the
+		// legacy Caveman-unit field, kept for the fallback formatter.
 		this.lastMeta = {
 			depth: res.depth, nodes: res.nodes,
 			score: (res.score_ui !== undefined ? res.score_ui : res.score),
 			scoreCentistones: res.score,
+			stones: (typeof res.stones === 'number') ? res.stones : null,
+			mateIn: (typeof res.mate_in === 'number') ? res.mate_in : null,
+			mateProven: !!res.mate_proven,
 			timeMs: Math.round((res.seconds || 0) * 1000),
 		};
 		if (onProgress) onProgress(this.lastMeta);

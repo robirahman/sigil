@@ -96,15 +96,24 @@ class Handler(SimpleHTTPRequestHandler):
                 sfn, budget, 64, 21, ARGS.width_scale, hist, ARGS.eval,
                 ADAPTIVE)
             acts = json.loads(aj)
+            # The display report (search::report), on the wire exactly as wasm.rs
+            # emits it: a field this handler shapes differently from the browser
+            # build is a bug. Re-searching is cheap only relative to the budget,
+            # so the report comes from a fixed-depth pass at the depth reached.
+            rep = se.analyze(sfn, ARGS.eval, max_depth=max(1, depth), time_ms=0, tt_bits=21,
+                             history_sfns=hist, width_scale=ARGS.width_scale, adaptive=ADAPTIVE)
             STATS['moves'] += 1; STATS['nodes'] += nodes; STATS['seconds'] += secs
             kinds = ','.join(a['type'] for a in acts)
             print(f"  move {STATS['moves']:3d}  depth {depth:2d}  {nodes:>10,} nodes  "
                   f"{secs:5.1f}s  eval {score/100:+.2f}  [{kinds}]", flush=True)
-            # `score` stays in centistones for our own logs; `score_ui` is in the
-            # units game-board-local.js renders (see search::ui_score).
+            # `score` stays in centistones for our own logs; `score_ui` is the legacy
+            # Caveman-unit field; `stones` / `mate_in` / `mate_proven` are what the
+            # interface prints (see search::report and formatEngineEval).
             self._json({'ok': True, 'actions': acts, 'expected_sfn': expected,
                         'depth': depth, 'nodes': nodes, 'score': score,
-                        'score_ui': score_ui, 'seconds': round(secs, 2)})
+                        'score_ui': score_ui, 'stones': rep['stones'],
+                        'mate_in': rep['mate_in_turns'], 'mate_proven': bool(rep['proven'] and rep['mate_in_turns'] is not None),
+                        'seconds': round(secs, 2)})
         except Exception as e:
             import traceback; traceback.print_exc()
             self._json({'ok': False, 'error': f'{type(e).__name__}: {e}'}, code=500)

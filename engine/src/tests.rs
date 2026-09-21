@@ -2158,18 +2158,7 @@ fn an_unproven_mate_is_not_announced_as_a_mate_through_go() {
     // announces a mate from a budget-limited search at window 2 / depth 4.
     // Reading the recorded `score0` would not have found them -- only 1 of the
     // 145 cases has a mate as its FROM-score; the rest flip into one.
-    const MATE_POSITIONS: [&str; 10] = [
-        "b........brb.b...r........rrrr..rrbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 32 4:4 Carnage:Meteor -:Meteor r2 competitive",
-        "r........bbb.b...r........rrrrr.bbbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring r 33 4:5 Carnage:Fury -:- b1 competitive",
-        "r...bb...brb.b............r.r.r.rrrr..b/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 34 5:5 Carnage:Fury Carnage:- r2 competitive",
-        "r.....r......rrrrr..r.....bbbbbb....br./Tsunami,Harvest,Erupt,Gather,Fury,Storm_Front,Seal_of_Summer,Lurk,Slash b 20 2:1 Fury:Fury -:- r1 competitive",
-        "b......rbr..rbrr.rr....r..b.......bb.../Blossom,Seal_of_Lightning,Corrupt,Meteor,Hail_Storm,Seal_of_Wind,Lurk,Surge,Seal_of_Spring b 16 0:0 -:- -:- r1 competitive",
-        "r.....rbrrr..r......b...rbbb.b.bb....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout b 24 0:1 -:Hail_Storm -:- b1 competitive",
-        "r.....rbrrr..r......b...rbbbbbbb.....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout r 25 0:1 -:Hail_Storm -:- b2 competitive",
-        "rrrb.rbrr.b.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge r 67 3:4 Corrupt:Hail_Storm -:- b1 competitive",
-        "rrrrrrbr.rb.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge b 68 4:4 Gather:Hail_Storm -:- r2 competitive",
-        "r...r..rrr...bb...b.rrrr.rbrbbbb...bbb./Bewitch,Carnage,Harvest,Grow,Seal_of_Wind,Scatter,Surge,Splash,Slash r 27 1:3 Grow:Scatter -:- b1 competitive",
-    ];
+    const MATE_POSITIONS: [&str; 10] = UNPROVEN_MATE_POSITIONS;
 
     fn search(window: usize, guard: bool) -> crate::search::Search {
         let mut s = crate::search::Search::new(18);
@@ -2761,4 +2750,146 @@ fn lead_prepass_stays_quiet_far_from_the_lead() {
     let b = Board::from_sfn("r............b........................./Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge r 1 0:0 -:- -:- b1").expect("sfn");
     assert!(b.decisive_lead_turns(Color::Red, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty());
     assert!(b.decisive_lead_turns(Color::Blue, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty());
+}
+
+/// Real positions where a window-2 / depth-4 search announces a mate it cannot
+/// prove (harvested from `mateflip_cases.json` by `smoke_guardfires`); shared by
+/// the unproven-mate guard test and the `report()` tests.
+const UNPROVEN_MATE_POSITIONS: [&str; 10] = [
+    "b........brb.b...r........rrrr..rrbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 32 4:4 Carnage:Meteor -:Meteor r2 competitive",
+    "r........bbb.b...r........rrrrr.bbbb..r/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring r 33 4:5 Carnage:Fury -:- b1 competitive",
+    "r...bb...brb.b............r.r.r.rrrr..b/Blossom,Erupt,Carnage,Meteor,Scatter,Fury,Lurk,Azimuth,Seal_of_Spring b 34 5:5 Carnage:Fury Carnage:- r2 competitive",
+    "r.....r......rrrrr..r.....bbbbbb....br./Tsunami,Harvest,Erupt,Gather,Fury,Storm_Front,Seal_of_Summer,Lurk,Slash b 20 2:1 Fury:Fury -:- r1 competitive",
+    "b......rbr..rbrr.rr....r..b.......bb.../Blossom,Seal_of_Lightning,Corrupt,Meteor,Hail_Storm,Seal_of_Wind,Lurk,Surge,Seal_of_Spring b 16 0:0 -:- -:- r1 competitive",
+    "r.....rbrrr..r......b...rbbb.b.bb....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout b 24 0:1 -:Hail_Storm -:- b1 competitive",
+    "r.....rbrrr..r......b...rbbbbbbb.....r./Flourish,Bewitch,Harvest,Seal_of_Wind,Hail_Storm,Seal_of_Stone,Seal_of_Spring,Gust,Sprout r 25 0:1 -:Hail_Storm -:- b2 competitive",
+    "rrrb.rbrr.b.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge r 67 3:4 Corrupt:Hail_Storm -:- b1 competitive",
+    "rrrrrrbr.rb.rr..........b.b......bbb.../Corrupt,Starfall,Harvest,Gather,Fireblast,Hail_Storm,Gust,Comet,Charge b 68 4:4 Gather:Hail_Storm -:- r2 competitive",
+    "r...r..rrr...bb...b.rrrr.rbrbbbb...bbb./Bewitch,Carnage,Harvest,Grow,Seal_of_Wind,Scatter,Surge,Splash,Slash r 27 1:3 Grow:Scatter -:- b1 competitive",
+];
+
+const START_SFN: &str = "r............b........................./Hurricane,Tsunami,Erupt,Scatter,Eclipse,Seal_of_Stone,Charge,Seal_of_Summer,Seal_of_Spring r 0 0:0 -:- -:- b1";
+/// The start after red's first placement: red 2, blue 1, blue to move. Real stones
+/// differ by one, score is tied (blue's +1 token), nobody has gained anything.
+const AFTER_FIRST_PLACEMENT_SFN: &str = "rr...........b........................./Hurricane,Tsunami,Erupt,Scatter,Eclipse,Seal_of_Stone,Charge,Seal_of_Summer,Seal_of_Spring b 1 0:0 -:- -:- tied";
+
+fn tfit_search() -> crate::search::Search {
+    let mut s = crate::search::Search::new(18);
+    s.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+    s.set_adaptive(p, e, h);
+    s
+}
+
+#[test]
+fn even_offset_zeroes_an_even_game() {
+    // The eval reads an even game as -0.5 for red / +0.5 for blue: blue's +1
+    // win-rule token (one stone of material) and the mover's tempo half-stone.
+    // The display offset cancels exactly those two, so a game where nobody has
+    // gained anything reads 0.0 from EITHER side, whoever is to move.
+    use crate::search::{even_offset, report, SearchStats};
+    // Exact on the static eval with material + tempo only.
+    let w = crate::eval::weights_by_name("mtempo").expect("mtempo");
+    for (sfn, who) in [(START_SFN, Color::Red), (AFTER_FIRST_PLACEMENT_SFN, Color::Blue)] {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        assert_eq!(b.to_move, who);
+        let raw = b.evaluate(who, &w);
+        assert_ne!(raw, 0, "the raw eval is NOT zero in an even game (that is the bug)");
+        assert_eq!(raw + even_offset(who, &w), 0, "{sfn}: static eval + offset");
+    }
+    assert_eq!(even_offset(Color::Red, &w), -even_offset(Color::Blue, &w));
+    // Within the positional residue on the shipped eval, through the real search.
+    for (sfn, who) in [(START_SFN, Color::Red), (AFTER_FIRST_PLACEMENT_SFN, Color::Blue)] {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        let mut s = tfit_search();
+        let (_t, score, st) = s.go(&b, who, 4, 0);
+        let r = report(score, &st, who, &s.weights);
+        assert!(r.mate_in.is_none());
+        assert!(r.stones.abs() < 0.15,
+                "{sfn}: reported {} stones for {:?} (raw {score} cs)", r.stones, who);
+        // And the un-offset number is the old ±0.5, so the test cannot pass vacuously.
+        let old = score as f64 / 100.0;
+        assert!((old.abs() - 0.5).abs() < 0.15, "raw eval {old} should sit near ±0.5");
+    }
+    // A non-mate report never touches MATE_STONES and is always "proven".
+    let st = SearchStats { depth_completed: 1, ..SearchStats::default() };
+    let r = report(0, &st, Color::Red, &w);
+    assert!(r.proven && r.mate_in.is_none());
+}
+
+#[test]
+fn plies_to_turns_table() {
+    use crate::search::plies_to_turns;
+    for (plies, turns) in [(0, 0), (1, 1), (2, 1), (3, 2), (4, 2), (5, 3), (63, 32),
+                           (-1, -1), (-2, -1), (-3, -2), (-4, -2)] {
+        assert_eq!(plies_to_turns(plies), turns, "plies {plies}");
+    }
+}
+
+#[test]
+fn report_on_a_non_mate_ignores_the_sentinel() {
+    // Defensive: a caller passing a clamped ±5,000 with CLEARED stats must not
+    // get a mate; it gets the (absurd) 50-stone number, which is at least honest
+    // about what it was given.
+    use crate::search::{report, SearchStats, UNPROVEN_MATE};
+    let w = crate::eval::weights_by_name("tfit").expect("tfit");
+    let st = SearchStats { depth_completed: 3, ..SearchStats::default() };
+    let r = report(UNPROVEN_MATE, &st, Color::Red, &w);
+    assert!(r.mate_in.is_none());
+    assert!((r.stones - (UNPROVEN_MATE + 50) as f64 / 100.0).abs() < 1e-9);
+}
+
+#[test]
+fn report_keeps_the_distance_of_an_unproven_mate() {
+    // The user-facing bug: the guard clamped a width-limited mate to ±5,000 and
+    // the interface printed "+50" -- the ply count was gone. It now survives in
+    // `mate_plies`, `report()` turns it into the winner's turns and marks it
+    // unproven, and the clamped score is still the sentinel the legacy readers
+    // expect.
+    use crate::search::{report, plies_to_turns, MATE_STONES, UNPROVEN_MATE, WIN};
+    let mut checked = 0;
+    for sfn in UNPROVEN_MATE_POSITIONS.iter() {
+        let b = Board::from_sfn(sfn).expect("case SFN parses");
+        let c = b.to_move;
+        let mut on = crate::search::Search::new(18);
+        on.set_window(2); on.set_adaptive(0.10, 2, 6); on.set_mate_guard(true);
+        on.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+        let (_t, s_on, st) = on.go(&b, c, 4, 0);
+        if !st.unproven_mate { continue; }
+        checked += 1;
+        assert_eq!(s_on.abs(), UNPROVEN_MATE, "{sfn}: the legacy sentinel must still be returned");
+        assert_ne!(st.mate_plies, 0, "{sfn}: the distance was lost");
+        assert!((1..64).contains(&st.mate_plies.abs()));
+        assert_eq!((st.mate_plies > 0), (s_on > 0), "{sfn}: sign");
+        let r = report(s_on, &st, c, &on.weights);
+        assert_eq!(r.mate_in, Some(plies_to_turns(st.mate_plies)), "{sfn}");
+        assert_eq!(r.stones.abs(), MATE_STONES);
+        assert!(!r.proven || (st.mate_plies == 1),
+                "{sfn}: a width-limited mate deeper than one ply must read as 'likely'");
+        // The distance is exactly what the guard-off search announces.
+        let mut off = crate::search::Search::new(18);
+        off.set_window(2); off.set_adaptive(0.10, 2, 6); off.set_mate_guard(false);
+        off.weights = on.weights;
+        let (_t, s_off, st_off) = off.go(&b, c, 4, 0);
+        let sign = if st.mate_plies > 0 { 1 } else { -1 };
+        assert_eq!(s_off, sign * (WIN - st.mate_plies.abs()), "{sfn}: guard-off score");
+        assert_eq!(st_off.mate_plies, st.mate_plies);
+    }
+    assert!(checked >= 3, "only {checked} harvested positions still announce an unproven mate");
+}
+
+#[test]
+fn a_mate_in_one_is_proven_even_when_widened() {
+    // The root's ~300 legal turns are always width-cut, so `widened` is set on
+    // every real search. A positive mate-in-1 has no opponent reply to prune
+    // and is a proof by construction: it must print "win in 1", not "likely".
+    use crate::search::report;
+    let b = Board::from_sfn(CORPUS_M1_SFN).expect("sfn");
+    let mut s = tfit_search();
+    let (_t, score, st) = s.go(&b, b.to_move, 2, 0);
+    assert!(st.widened, "premise: the root was width-limited");
+    assert_eq!(st.mate_plies, 1, "score {score}");
+    assert!(st.mate_proven);
+    let r = report(score, &st, b.to_move, &s.weights);
+    assert_eq!(r, crate::search::Report { stones: crate::search::MATE_STONES, mate_in: Some(1), proven: true });
 }

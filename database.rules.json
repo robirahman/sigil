@@ -96,6 +96,18 @@
         }
       }
     },
+    "game_reviews": {
+      "$gameId": {
+        ".read": true,
+        ".write": "auth !== null && newData.child('aiTrainingExempt').val() === true"
+      }
+    },
+    "game_evals": {
+      "$gameId": {
+        ".read": true,
+        ".write": false
+      }
+    },
     "user_games": {
       "$uid": {
         ".read": true,

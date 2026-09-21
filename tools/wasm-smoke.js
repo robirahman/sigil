@@ -107,6 +107,32 @@ async function driver() {
 	}
 	if (progressTicks === 0) throw new Error('on_depth progress callback never fired');
 
+	// The display report (search::report): present on every completed search,
+	// and an even opening reads ~0 stones, not the raw eval's -0.5 (blue's +1
+	// token plus the mover's tempo). Pins the 2026-09-21 refactor.
+	{
+		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
+		b.setupInitial();
+		const res = pick(boardToSfn(b), [], 200);
+		if (typeof res.stones !== 'number') throw new Error('search result lacks numeric "stones": ' + JSON.stringify(res));
+		if (!(res.mate_in === null || Number.isInteger(res.mate_in))) throw new Error('mate_in must be null or an integer');
+		if (typeof res.mate_proven !== 'boolean') throw new Error('mate_proven must be a boolean');
+		if (Math.abs(res.stones) >= 0.5) throw new Error('even opening reads ' + res.stones + ' stones; expected ~0 (the raw eval is -0.5)');
+		if (res.mate_in !== null) throw new Error('the opening is not a mate: ' + JSON.stringify(res));
+	}
+	// judge_move: the turns field is the ply count in the mover's own turns.
+	{
+		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
+		b.setupInitial();
+		const first = pick(boardToSfn(b), [], 50);
+		const j = JSON.parse(wasm_bindgen.judge_move(first.expected_sfn, 4, 300, 18));
+		if (!j.ok) throw new Error('judge_move failed: ' + j.error);
+		if (!('mate_in_turns' in j) || !('stones' in j)) throw new Error('judge_move lacks mate_in_turns/stones: ' + JSON.stringify(j));
+		if (j.mate_in !== null && j.mate_in_turns !== Math.ceil(Math.abs(j.mate_in) / 2) * Math.sign(j.mate_in)) {
+			throw new Error('mate_in_turns ' + j.mate_in_turns + ' does not match plies ' + j.mate_in);
+		}
+	}
+
 	// Edge: a 1 ms budget must still return a playable turn.
 	{
 		const spells = generateSpellList(OFFICIAL);

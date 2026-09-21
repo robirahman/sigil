@@ -209,9 +209,28 @@ anything but `material` as representative.
 
 ### Score units
 
-The engine works in centistones (100 = 1 stone). `game-board-local.js` speaks
-Caveman units, where one stone is `1/39` and `|score| >= 37` means a proven mate,
-so scores are converted by `search::ui_score` before display. Feeding raw
-centistones through inflated the readout 3900x and tripped the mate branch on
-almost every position — a −0.18-stone position showed as `eval -702.0`, and a
-+1.94-stone one as `win in -94`.
+The engine works in centistones (100 = 1 stone) from the mover's point of view.
+What the interface prints is `search::report` (wire fields `stones`, `mate_in`,
+`mate_proven`; formatter `formatEngineEval` in `game-board-local.js`):
+
+* **`stones`** = `(score + even_offset) / 100`. The raw eval reads an even game
+  as −0.5 for red / +0.5 for blue, because blue's +1 win-rule token is folded into
+  material (`red − (blue + 1)`) and the side to move gets a 50-centistone tempo
+  bonus. `even_offset` (red `+(lead − tempo)`, blue the negative) cancels exactly
+  those two, so a game where nobody has gained anything reads **0.0 from either
+  side**. Display only: the search never sees the offset.
+* **`mate_in`** = the WINNING side's own turns (`plies_to_turns`, ceil of half
+  the plies), signed from the mover's view; the Puzzles page's "mate-in-N" counts
+  the same way. The line reads `win in 2` / `loss in 1`.
+* **`mate_proven`** false = some node was width- or window-limited, and the line
+  reads `likely win in 2`. The root's ~300 legal turns are always width-cut, so
+  expect the tag on nearly every mate deeper than one turn; a mover's mate-in-1
+  is proven by construction. Internally such a score is still clamped to
+  `UNPROVEN_MATE` (±5,000) for the solver, the ponderer and the harnesses; only
+  the distance now survives alongside it (`SearchStats::mate_plies`). The
+  interface never prints the sentinel's "50 stones" again.
+
+`score_ui` (`search::ui_score`, Caveman units where one stone is `1/39` and
+`|score| >= 37` is a mate) stays on the wire for the JS tiers' formatter.
+Stored per-position evaluations of recorded games (`game_evals/<roomCode>`,
+`engine/harness/eval_games.py`) use the same numbers in red's frame.

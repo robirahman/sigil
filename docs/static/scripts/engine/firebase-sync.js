@@ -822,6 +822,19 @@ async function loadGameReview(db, gameId) {
 }
 
 /**
+ * Load the Rust engine's stored per-position evaluation of a recorded game
+ * (`game_evals/<roomCode>`, written offline by engine/harness/eval_games.py;
+ * clients cannot write it). Room codes are not unique across the whole
+ * history, so callers must check the document's `finalSfn` against the game
+ * they are showing before trusting it. Returns null if not present.
+ */
+async function loadGameEvals(db, roomCode) {
+	if (!db || !roomCode) return null;
+	const snap = await db.ref('game_evals/' + roomCode).once('value');
+	return snap.exists() ? snap.val() : null;
+}
+
+/**
  * Write a single community annotation under
  * /community_annotations/{gameId}/{turnNumber}/{kind}/{uid}. This keeps the
  * post-hoc contributions separate from the game-owner's live-game marks

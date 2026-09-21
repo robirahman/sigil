@@ -1541,33 +1541,11 @@ document.addEventListener('alpine:init', () => {
 					if (!_aiAuthManager || !_aiAuthManager.showAiThinkReport) return;
 					const c = payload.color ? payload.color[0].toUpperCase() + payload.color.slice(1) : 'AI';
 					const seconds = ((payload.timeMs || 0) / 1000).toFixed(1);
-					// The search returns its evaluation from the moving AI's
-					// perspective (positive = the AI is favored). Mate scores
-					// are distance-encoded (±(100 − plies to mate)); anything
-					// at or beyond ±CAVEMAN_PROVEN_MIN is proven. The leaf
-					// eval is (stone difference + sub-stone positional
-					// terms)/39, so multiplying by 39 recovers the lead in
-					// stone equivalents (fractional part = mana/void/
-					// map-control terms), matching the game-review scale.
-					let evalStr = '';
-					if (typeof payload.score === 'number' && isFinite(payload.score)) {
-						const s = payload.score;
-						const proven = (typeof CAVEMAN_PROVEN_MIN === 'number')
-							? CAVEMAN_PROVEN_MIN : 37;
-						let shown;
-						if (s >= proven) {
-							shown = `win in ${Math.round(100 - s)}`;
-						} else if (s <= -proven) {
-							shown = `loss in ${Math.round(100 + s)}`;
-						} else {
-							// One decimal: with positional leaf terms the eval
-							// is no longer an integer stone count (matches the
-							// game-review display scale).
-							const stones = s * 39;
-							shown = (stones > 0 ? '+' : '') + stones.toFixed(1);
-						}
-						evalStr = `, eval ${shown}`;
-					}
+					// The evaluation is from the moving AI's perspective
+					// (positive = the AI is favored); see formatEngineEval for
+					// the units and the "win in N" / "likely win in N" forms.
+					const shown = formatEngineEval(payload);
+					const evalStr = shown ? `, eval ${shown}` : '';
 					// Trappiness pass ran (proven loss): show how deep it got
 					// and what fraction of opponent replies dodge the win.
 					let trapStr = '';
@@ -2108,6 +2086,41 @@ document.addEventListener('alpine:init', () => {
  * marks the opponent, and the counter differs by one between them.
  */
 /** The puzzle's winning-first-turn keys (the generator writes snake_case). */
+/**
+ * The one place an engine evaluation becomes text. Returns null when the
+ * payload carries nothing printable.
+ *
+ * Rust engine (`stones` / `mateIn` / `mateProven` from search::report):
+ *   * a forced result prints in the WINNER's own turns -- "win in 2" / "loss
+ *     in 1" -- prefixed "likely " when the search was width- or window-limited
+ *     (mateProven false), so the number is never hidden behind a ±50;
+ *   * otherwise `stones`, already offset so an even game reads 0.0 for either
+ *     side (the raw eval carries blue's +1 token and the mover's tempo).
+ * Caveman-unit fallback (JS tiers, whose lastMeta.score flows through the same
+ * event): mate scores are ±(100 − plies) with |s| >= CAVEMAN_PROVEN_MIN proven;
+ * plies are converted to turns the same way. Its stones are `s * 39`, left
+ * un-normalised: the Caveman leaf has neither the +1 token nor a tempo term.
+ */
+function formatEngineEval(meta) {
+	if (!meta) return null;
+	if (typeof meta.mateIn === 'number' && isFinite(meta.mateIn) && meta.mateIn !== 0) {
+		return (meta.mateProven === false ? 'likely ' : '')
+			+ (meta.mateIn > 0 ? 'win' : 'loss') + ' in ' + Math.abs(meta.mateIn);
+	}
+	if (typeof meta.stones === 'number' && isFinite(meta.stones)) {
+		return (meta.stones > 0 ? '+' : '') + meta.stones.toFixed(1);
+	}
+	const s = meta.score;
+	if (typeof s !== 'number' || !isFinite(s)) return null;
+	const proven = (typeof CAVEMAN_PROVEN_MIN === 'number') ? CAVEMAN_PROVEN_MIN : 37;
+	if (Math.abs(s) >= proven) {
+		const plies = Math.max(1, Math.round(100 - Math.abs(s)));
+		return (s > 0 ? 'win' : 'loss') + ' in ' + Math.ceil(plies / 2);
+	}
+	const stones = s * 39;
+	return (stones > 0 ? '+' : '') + stones.toFixed(1);
+}
+
 function puzzleKeys(puzzle) {
 	return (puzzle && (puzzle.solution_keys || puzzle.solutionKeys)) || [];
 }
@@ -2207,22 +2220,29 @@ class PuzzleOpponent {
 		const judging = comp && comp.puzzleStatus === 'playing' && comp._puzzleJudgePending;
 		const t0 = Date.now();
 		const res = await RustAI.judgeMove(board, plies, this.timeMs);
-		this.lastMeta = { depth: res.depth, nodes: res.nodes, score: res.score_ui, timeMs: Date.now() - t0 };
+		this.lastMeta = { depth: res.depth, nodes: res.nodes, score: res.score_ui,
+			stones: (typeof res.stones === 'number') ? res.stones : null, timeMs: Date.now() - t0 };
 		if (onProgress) onProgress(this.lastMeta);
 		if (judging) {
 			comp._puzzleJudgePending = false;
 			const how = res.exhaustive ? 'exhaustively' : ('at depth ' + res.depth);
+			// The judge reports plies from ITS root (the opponent to move);
+			// players count the mover's own turns, as the puzzle titles do.
+			const turns = (typeof res.mate_in_turns === 'number') ? res.mate_in_turns
+				: (typeof res.mate_in === 'number' ? Math.ceil(res.mate_in / 2) : null);
+			const turnsText = (n) => n + ' more turn' + (n === 1 ? '' : 's');
 			if (res.verdict === 'mate') {
-				comp.puzzleJudge = 'Engine: your move still forces the win (' + how + (res.mate_in ? ', mate in ' + res.mate_in + ' plies' : '') + ').';
+				comp.puzzleJudge = 'Engine: your move still forces the win (' + how + (turns ? ', mate in ' + turnsText(turns) : '') + ').';
 				comp.puzzleMessage = 'Correct — not the stored line, but the engine confirms it still forces the win. Keep going.';
 			} else if (res.verdict === 'likely_mate') {
 				comp.puzzleJudge = 'Engine: sees a forced win but could not prove it within its budget (' + how + ').';
 				comp.puzzleMessage = 'Probably correct — the engine sees a forced win but could not prove it in time. Keep going.';
 			} else if (res.verdict === 'mate_slow') {
-				comp.puzzleJudge = 'Engine: a forced win exists but needs ' + res.mate_in + ' plies, more than the puzzle allows (' + how + ').';
+				comp.puzzleJudge = 'Engine: a forced win exists but needs ' + (turns ? turnsText(turns) : res.mate_in + ' plies') + ', more than the puzzle allows (' + how + ').';
 				comp._puzzleFail('That wins eventually, but not within ' + this.puzzle.mate + ' turns. The engine replies ' + describePuzzleActions(res.actions) + '. Play on, or Retry.');
 			} else {
-				comp.puzzleJudge = 'Engine: escapes the mate with ' + describePuzzleActions(res.actions) + ' (' + how + ', eval ' + (res.score_ui * 39).toFixed(1) + ' stones for it).';
+				const evalStones = (typeof res.stones === 'number') ? res.stones : res.score_ui * 39;
+				comp.puzzleJudge = 'Engine: escapes the mate with ' + describePuzzleActions(res.actions) + ' (' + how + ', eval ' + evalStones.toFixed(1) + ' stones for it).';
 				comp._puzzleFail('That lets the AI escape: it replies ' + describePuzzleActions(res.actions) + '. Puzzle failed — play on, or Retry.');
 			}
 		}

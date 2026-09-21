@@ -183,11 +183,33 @@ async function reviewGame(gameLog, opts, onProgress) {
 		if (i % 2 === 0) await _sleep(0);
 	}
 
+	return Object.assign({
+		modelVersion: opts.modelVersion,
+		mode: opts.mode,
+		sigmoidK: opts.sigmoidK,
+		forcedWinFloor: opts.forcedWinFloor,
+		timeLimitPerPly: Number.isFinite(opts.timeLimitPerPly) ? opts.timeLimitPerPly : null,
+		maxDepth: Number.isFinite(opts.maxDepth) ? opts.maxDepth : null,
+		sfnPerPly,
+		evalPerPly,
+		winPctPerPly,
+		bestTurnPerPly,
+		moverPerPly,
+		playedTurnPerPly: gameLog.map(t => t.turnNotation || null),
+		aiTrainingExempt: true,
+		computedAt: Date.now(),
+	}, _classifyMoves(n, moverPerPly, winPctPerPly));
+}
+
+/**
+ * Move classification + per-player accuracy from the per-position win%
+ * (shared by the Caveman review and the stored Rust review).
+ */
+function _classifyMoves(n, moverPerPly, winPctPerPly) {
 	// Classify each move (one per gameLog entry).
 	const classificationPerPly = new Array(n);
 	const dWpPerPly = new Array(n);
 	for (let i = 0; i < n; i++) {
-		const mover = moverPerPly[i];
 		const bestWp = winPctPerPly[i];
 		// After the played move, position i+1's mover is the opponent.
 		// So opponent's win% there = winPctPerPly[i+1]; mover's actual = 100 - that.
@@ -213,29 +235,93 @@ async function reviewGame(gameLog, opts, onProgress) {
 		if (!deltas.length) return 0;
 		return deltas.reduce((a, b) => a + b, 0) / deltas.length;
 	}
-
 	return {
-		modelVersion: opts.modelVersion,
-		mode: opts.mode,
-		sigmoidK: opts.sigmoidK,
-		forcedWinFloor: opts.forcedWinFloor,
-		timeLimitPerPly: Number.isFinite(opts.timeLimitPerPly) ? opts.timeLimitPerPly : null,
-		maxDepth: Number.isFinite(opts.maxDepth) ? opts.maxDepth : null,
-		sfnPerPly,
-		evalPerPly,
-		winPctPerPly,
-		bestTurnPerPly,
-		moverPerPly,
 		classificationPerPly,
 		dWpPerPly,
-		playedTurnPerPly: gameLog.map(t => t.turnNotation || null),
 		redAccuracy: meanAccuracy(redDeltas),
 		blueAccuracy: meanAccuracy(blueDeltas),
 		redAcpl: meanDelta(redDeltas),
 		blueAcpl: meanDelta(blueDeltas),
-		aiTrainingExempt: true,
-		computedAt: Date.now(),
 	};
+}
+
+/** Position identity without the side-to-move and turn-counter tokens. */
+function _reviewSfnKey(sfn) {
+	const p = String(sfn || '').trim().split(/\s+/);
+	return [p[0], p[3], p[4], p[5]].join(' ');
+}
+
+/**
+ * Adapt a stored Rust-engine evaluation document (`game_evals/<roomCode>`,
+ * see engine/harness/eval_games.py) into the review shape the panel renders.
+ * Returns null unless the document describes exactly this game: same number
+ * of positions and the same final position (room codes are reused).
+ *
+ * Stored numbers are RED-POV stones with the even-game offset applied, and
+ * mates in the winner's own turns (+ red wins). The graph/classification code
+ * consumes mover-POV Caveman units (stones/39, mates past forcedWinFloor), so
+ * they are converted here and the originals kept in `matePerPly` /
+ * `provenPerPly` / `stonesPerPly` for the readout.
+ */
+function rustEvalsToReview(doc, gameLog) {
+	if (!doc || !Array.isArray(gameLog) || gameLog.length === 0) return null;
+	const n = gameLog.length;
+	const evals = doc.evalPerPly, mates = doc.matePerPly || [], movers = doc.moverPerPly;
+	if (!Array.isArray(evals) || !Array.isArray(movers) || evals.length !== n + 1 || movers.length !== n + 1) return null;
+	if (_reviewSfnKey(doc.finalSfn) !== _reviewSfnKey(gameLog[n - 1].sfnAfter)) return null;
+	const floor = REVIEW_DEFAULTS.forcedWinFloor;
+	const sfnPerPly = new Array(n + 1);
+	sfnPerPly[0] = gameLog[0].sfnBefore;
+	for (let i = 0; i < n; i++) sfnPerPly[i + 1] = gameLog[i].sfnAfter;
+	const evalPerPly = new Array(n + 1), winPctPerPly = new Array(n + 1);
+	const matePerPly = new Array(n + 1), stonesPerPly = new Array(n + 1);
+	const provenPerPly = new Array(n + 1);
+	for (let i = 0; i <= n; i++) {
+		const sign = movers[i] === 'red' ? 1 : -1;      // red POV -> mover POV
+		const m = (typeof mates[i] === 'number' && mates[i] !== 0) ? mates[i] * sign : null;
+		const e = (typeof evals[i] === 'number') ? evals[i] * sign : null;
+		matePerPly[i] = m;
+		stonesPerPly[i] = (typeof evals[i] === 'number') ? evals[i] : null;
+		provenPerPly[i] = Array.isArray(doc.provenPerPly) ? !!doc.provenPerPly[i] : true;
+		let s;
+		if (i === n && doc.terminal && doc.terminal.winner !== undefined) {
+			const w = doc.terminal.winner;
+			s = w === movers[i] ? 100 : (w === null ? 0 : -100);
+		} else if (m !== null) {
+			// A mate reads as a full win/loss; keep the distance ordering.
+			s = (m > 0 ? 1 : -1) * (100 - Math.min(63, 2 * Math.abs(m)));
+		} else if (e !== null) {
+			s = Math.max(-(floor - 1), Math.min(floor - 1, e / 39));
+		} else {
+			s = 0;
+		}
+		evalPerPly[i] = s;
+		winPctPerPly[i] = scoreToWinPct(s, REVIEW_DEFAULTS.sigmoidK, floor);
+	}
+	return Object.assign({
+		source: 'rust',
+		modelVersion: (doc.engine || 'rust') + '-d' + (doc.depth || '?'),
+		engineDepth: doc.depth || null,
+		// Complete by construction: the panel's mode buttons offer no recompute.
+		mode: 'deep',
+		sigmoidK: REVIEW_DEFAULTS.sigmoidK,
+		forcedWinFloor: floor,
+		timeLimitPerPly: null,
+		maxDepth: doc.depth || null,
+		sfnPerPly,
+		evalPerPly,
+		winPctPerPly,
+		matePerPly,
+		provenPerPly,
+		stonesPerPly,
+		bestTurnPerPly: new Array(n + 1).fill(null),
+		bestActionsPerPly: Array.isArray(doc.bestPerPly) ? doc.bestPerPly : null,
+		moverPerPly: movers.slice(),
+		playedTurnPerPly: gameLog.map(t => t.turnNotation || null),
+		terminalWinner: (doc.terminal && doc.terminal.winner) || null,
+		aiTrainingExempt: true,
+		computedAt: doc.computedAt || null,
+	}, _classifyMoves(n, movers, winPctPerPly));
 }
 
 function _emptyReview(opts) {
@@ -282,6 +368,12 @@ function aiReviewMixin() {
 			if (!gameLog || gameLog.length === 0) return;
 			mode = (mode === 'deep') ? 'deep' : 'quick';
 
+			// A stored Rust-engine review is complete: always just open it.
+			if (this.aiReview && this.aiReview.source === 'rust') {
+				if (!this.reviewMode) this.startReview();
+				this.reviewFirst();
+				return;
+			}
 			// In-memory hit: already loaded a review good enough for the
 			// requested mode → just open it, skip cache RTT and compute.
 			// Stale-version reviews (different modelVersion) are never reused.
@@ -301,6 +393,20 @@ function aiReviewMixin() {
 			//     overwriting the cached entry
 			const gameId = this._roomCodeForReview;
 			const db = (typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
+			// The Rust engine's stored depth-6 evaluation (game_evals/<roomCode>)
+			// beats any Caveman review, quick or deep, when it describes this game.
+			if (db && gameId && typeof loadGameEvals === 'function') {
+				try {
+					const doc = await loadGameEvals(db, gameId);
+					const adapted = doc ? rustEvalsToReview(doc, gameLog) : null;
+					if (adapted) {
+						this.aiReview = adapted;
+						if (!this.reviewMode) this.startReview();
+						this.reviewFirst();
+						return;
+					}
+				} catch (e) { /* fall through to the Caveman review */ }
+			}
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
 					const cached = await loadGameReview(db, gameId);
@@ -350,6 +456,26 @@ function aiReviewMixin() {
 		aiReviewCurrentEvalText() {
 			if (!this.aiReview || !this.aiReview.evalPerPly.length) return '';
 			const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
+			if (this.aiReview.source === 'rust') {
+				// Stored Rust evals: forced results in the winner's own turns
+				// ("likely" when the search was width-limited), else red-POV
+				// stones with the even-game offset already applied.
+				const m = this.aiReview.matePerPly[idx];
+				const mover = this.aiReview.moverPerPly[idx];
+				if (idx === this.aiReview.evalPerPly.length - 1 && this.aiReview.terminalWinner) {
+					return (this.aiReview.terminalWinner === 'red' ? 'Red' : 'Blue') + ' won';
+				}
+				if (typeof m === 'number' && m !== 0) {
+					const redWins = (m > 0) === (mover === 'red');
+					const likely = this.aiReview.provenPerPly[idx] === false ? ' (likely)' : '';
+					return (redWins ? 'Red' : 'Blue') + ' wins in ' + Math.abs(m) + likely;
+				}
+				const st = this.aiReview.stonesPerPly[idx];
+				if (typeof st === 'number') {
+					if (Math.abs(st) < 0.05) return '0';
+					return (st > 0 ? '+' : '') + st.toFixed(1);
+				}
+			}
 			const redScore = this._aiReviewRedScore(idx);
 			const floor = this.aiReview.forcedWinFloor || 36;
 			if (redScore >= floor) return '+M';

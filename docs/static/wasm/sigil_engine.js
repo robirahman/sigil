@@ -175,8 +175,14 @@ let wasm_bindgen = (function(exports) {
      * to play, in the `/api/move` shape:
      *
      * `{"ok":true,"verdict":"mate"|"likely_mate"|"mate_slow"|"escape",
-     *   "proven":bool,"mate_in":n|null,"score_ui":u,"depth":d,"nodes":n,
+     *   "proven":bool,"mate_in":plies|null,"mate_in_turns":turns|null,
+     *   "score_ui":u,"stones":x|null,"depth":d,"nodes":n,
      *   "exhaustive":bool,"actions":[...],"expected_sfn":"..."}`
+     *
+     * `mate_in` counts plies from this root; `mate_in_turns` the mover's own
+     * remaining turns (`plies_to_turns`). `stones` is the opponent-POV
+     * `Report::stones` (even offset applied) so the escape text prints the same
+     * number the think report would.
      *
      * * `plies == 2`: an EXHAUSTIVE check first (every reply, then every mover
      *   turn) with 40% of the time; `mate` / `escape` from it are proofs, and on

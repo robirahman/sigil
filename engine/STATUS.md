@@ -1,6 +1,6 @@
 # Engine status
 
-**Current as of 2026-09-17.** Everything below the "Phase 0 status" heading is
+**Current as of 2026-09-21.** Everything below the "Phase 0 status" heading is
 the original bitboard-port log and is kept for provenance; where it disagrees
 with this section, this section is right.
 
@@ -20,6 +20,36 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 `escape`, and the reply to play (the refutation when refuted, else the search's best). The page
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
+
+**2026-09-21: eval display re-zeroed, "win in N" replaces ±50, stored game evals (engine v10, cache v36).**
+Three reporting changes, no playing change (`cargo test` covers each; the search and move choice are
+byte-identical):
+
+* **0.0 in an even game.** The raw eval folds blue's +1 win-rule token into material and adds the
+  mover's 50-centistone tempo, so an even game read −0.5 for red / +0.5 for blue at every depth
+  (measured with the v9 wasm). `search::even_offset` (red `+(lead − tempo)`, blue the negative,
+  computed from the weights the search ran with) is added for display only; `report().stones`.
+* **Mate distance survives the guard.** `SearchStats::mate_plies` / `mate_proven` are recorded
+  before the `UNPROVEN_MATE` clamp (`note_mate`), which stays as the internal sentinel that
+  `mate.rs`, `ponder_step`, `judge_move` and the harnesses read. `report().mate_in` is the winner's
+  own turns (`plies_to_turns`), and the line reads `win in 2` / `loss in 1`, or `likely win in 2`
+  when the search was width- or window-limited. **Known limitation:** `widened` is set at the root of
+  every real search (~300 legal turns), so nearly every mate deeper than one turn carries the
+  "likely" tag; a mover's mate-in-1 is proven by construction. Making short mates plain "win in N"
+  would need the exhaustive solver (`mate::judge_forced_after`, as the Puzzles judge does) after the
+  search -- declined for now.
+* **Wire:** `Engine::search` / `serve.py` add `stones`, `mate_in`, `mate_proven` (`score_ui` stays);
+  `judge_move` adds `mate_in_turns` and `stones`; py `analyze(sfn, eval_name, ...)` returns the
+  report as a dict (eval name REQUIRED, a fresh table per call, a finished root is not searched).
+  `formatEngineEval` in `game-board-local.js` is the one formatter (JS tiers keep their Caveman
+  units, converted to turns). Puzzle judge text counts turns.
+* **Stored evaluations.** `engine/harness/eval_games.py` replays every recorded game since
+  2026-08-26 (351 games / 10,859 turns; Rust tiers went live 2026-08-30) and writes
+  `game_evals/<roomCode>` (red-POV stones, mate turns, proven flag, best turn, depth per position;
+  the document carries `finalSfn` because room codes are reused). New rules: `game_evals` public
+  read / no client write; `game_reviews` (the Caveman review cache) finally has a rule -- it had
+  none, so every cache write since 2026-05 was silently denied (0 records). The review panel shows
+  the stored Rust evals when they describe the game (`rustEvalsToReview`), else the Caveman review.
 
 **2026-09-21: `rust_anchor` REMOVED (engine v9, cache v35).** The unlisted frozen reference tier
 (`?ai=rust_anchor`: fresh table per move, no pondering, elastic/LMR/pre-pass off, its own
@@ -104,7 +134,7 @@ priority order; `Action::Cast` carries `keep`. Elo-neutral in self-play
 opponent model; it ships on correctness.
 
 **2. A mate score is a proof only if the search that found it saw every move.**
-`UNPROVEN_MATE` (5,000 centistones, +50 stones as the UI renders it) is
+`UNPROVEN_MATE` (5,000 centistones; until v10 the UI rendered it as +50 stones, now `report()` prints the surviving distance) is
 reported instead when `widened` or `windowed` is set, and iterative deepening
 no longer breaks early on such a score. An EXHAUSTIVE mate is untouched.
 **The guard must live in every root loop:** it was written only into

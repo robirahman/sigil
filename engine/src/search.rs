@@ -55,6 +55,13 @@ pub const WIN: i32 = 10_000_000;
 /// finished and after `prev` has already seeded the next aspiration window, so
 /// the CLAMP cannot affect move choice or alpha-beta bounds.
 ///
+/// Since 2026-09-21 the clamp is an INTERNAL sentinel only: `mate.rs`
+/// nomination, `ponder_step`, `judge_move`, the Python harnesses and a dozen
+/// tests detect "unproven mate" by this literal, so it stays. The distance it
+/// used to discard now survives in `SearchStats::mate_plies` /
+/// `mate_proven` (`note_mate`), and the interface prints `report()` -- "win in
+/// N" / "likely win in N" -- never the sentinel's 50 stones.
+///
 /// The GUARD AS A WHOLE CAN change the move played, and saying otherwise was
 /// wrong. Suppressing the early break makes iterative deepening continue in a
 /// position where it used to stop, and a deeper iteration may pick a different
@@ -332,6 +339,18 @@ pub struct SearchStats {
     /// because some node was width- or window-limited. The score is reported as
     /// `UNPROVEN_MATE` in that case rather than as a proof.
     pub unproven_mate: bool,
+    /// Signed plies-to-mate of the returned root score from the mover's POV
+    /// (+: the mover mates, -: the mover is mated), read BEFORE the
+    /// `UNPROVEN_MATE` clamp so the distance survives it. 0 = not a mate.
+    pub mate_plies: i32,
+    /// `mate_plies != 0` and either no node was width- or window-limited, or
+    /// the mate is the mover's own mate-in-1 (no opponent reply exists to be
+    /// pruned, so it is a proof by construction). The root's ~300 legal turns
+    /// are always width-cut, so without that exception the engine's immediate
+    /// win would read as "likely win in 1". Note `score == ±UNPROVEN_MATE`
+    /// with `mate_proven == true` is therefore an intended combination:
+    /// legacy consumers read the sentinel, the display reads these fields.
+    pub mate_proven: bool,
     /// Successors actually expanded, summed — lets a caller see the effective
     /// branching factor (`expanded / nodes`).
     pub expanded: u64,
@@ -876,6 +895,7 @@ impl Search {
         // 3900 and the UI multiplies by 39, so UNPROVEN_MATE reaches the player
         // as +50 stones: unmistakably winning, past no mate threshold. The move
         // choice is untouched -- only the number the engine announces.
+        self.note_mate(best_score);
         let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
         if self.mate_guard && mate_score
            && (self.stats.widened || self.stats.windowed) {
@@ -884,6 +904,19 @@ impl Search {
             best_score = sign * UNPROVEN_MATE;
         }
         (best, best_score)
+    }
+
+    /// Record the mate distance of a root score before the `UNPROVEN_MATE`
+    /// clamp discards it (`SearchStats::mate_plies` / `mate_proven`). Runs
+    /// whether or not the guard is on: the fields are the honest record, the
+    /// clamp is the legacy sentinel.
+    fn note_mate(&mut self, score: i32) {
+        if score.abs() >= WIN - MAX_PLY as i32 {
+            let plies = (WIN - score.abs()).max(1);
+            self.stats.mate_plies = if score > 0 { plies } else { -plies };
+            self.stats.mate_proven = (!self.stats.widened && !self.stats.windowed)
+                                     || (score > 0 && plies == 1);
+        }
     }
 
     fn root_search(&mut self, b: &Board, c: Color, depth: i32,
@@ -1359,6 +1392,7 @@ impl Search {
         // state a certainty the search never established. This CLAMP leaves the
         // chosen move alone; the guard's other half, not breaking out of
         // iterative deepening, can and does change it.
+        self.note_mate(best_score);
         let mate_score = best_score.abs() >= WIN - MAX_PLY as i32;
         if self.mate_guard && mate_score
            && (self.stats.widened || self.stats.windowed) {
@@ -1372,7 +1406,7 @@ impl Search {
 
 /// Convert an engine score (centistones) into the units the web UI renders.
 ///
-/// The UI (`game-board-local.js:1140-1158`) speaks Caveman units, where the leaf
+/// The UI (`game-board-local.js`, `handleAiThinkReportEvent`) speaks Caveman units, where the leaf
 /// eval is `(stoneDiff + positional) / 39`, so one stone is `1/39 ≈ 0.0256`; it
 /// then displays `score * 39` as stones. Our centistones put one stone at 100, a
 /// **3900x** difference — feeding raw centistones in reported a −0.18 stone
@@ -1387,6 +1421,10 @@ impl Search {
 /// `CAVEMAN_WIN = 100`), and everything else scales by 1/3900. A scaled non-mate
 /// score cannot reach 37 (that would need ~1,443 stones), so it can never be
 /// misread as a mate.
+///
+/// LEGACY (2026-09-21): kept as the `score_ui` wire field for compatibility.
+/// The display path is now `report()` (`stones`, `mate_in`, `mate_proven`);
+/// the think-report formatter is `formatEngineEval` in game-board-local.js.
 pub fn ui_score(centistones: i32) -> f64 {
     const CAVEMAN_WIN: f64 = 100.0;
     let mate_floor = WIN - MAX_PLY as i32;
@@ -1397,4 +1435,64 @@ pub fn ui_score(centistones: i32) -> f64 {
         return if centistones >= 0 { s } else { -s };
     }
     centistones as f64 / 3900.0
+}
+
+/// The `stones` a `Report` carries for a mate: finite (JSON cannot carry NaN),
+/// sortable, and physically unreachable on a 39-node board, so it can never be
+/// mistaken for a material count. The UI branches on `mate_in` first anyway.
+pub const MATE_STONES: f64 = 100.0;
+
+/// Centistones ADDED to a root score so that an even game -- alternating
+/// placements, no captures or sacrifices -- reads 0 from both sides.
+///
+/// Two eval terms make an even game read ±0.5 stones otherwise: blue's +1
+/// win-rule token folded into material (`red - (blue + 1)`, worth `w.lead`)
+/// and the mover's tempo bonus (`w.tempo`). Red to move sees `-lead + tempo`;
+/// blue to move (after red placed one more stone) sees `+lead - lead + tempo`
+/// from its side, i.e. `-(−lead + tempo)` in red's frame. So one constant per
+/// mover cancels both: red `+(lead - tempo)`, blue `-(lead - tempo)`. Display
+/// only -- the search's evaluation and move choice never see it. Computed from
+/// the weights the search ran with, never a hardcoded 50.
+pub fn even_offset(mover: Color, w: &crate::eval::Weights) -> i32 {
+    let k = w.lead - w.tempo;
+    if mover == Color::Red { k } else { -k }
+}
+
+/// Plies (half-moves from the root) to the WINNING side's own turns, sign
+/// preserved: 1 -> 1, 2 -> 1, 3 -> 2, 4 -> 2. The Puzzles page's "mate-in-N"
+/// counts the same way.
+pub fn plies_to_turns(plies: i32) -> i32 {
+    let t = (plies.abs() + 1) / 2;
+    if plies < 0 { -t } else { t }
+}
+
+/// What the interface prints about a root score, from the mover's POV.
+///
+/// * `mate_in = Some(n)`: a forced win (`n > 0`) or loss (`n < 0`) in `|n|` of
+///   the winner's own turns; `proven` false means some node was width- or
+///   window-limited, so the line reads "likely win in n". A forced threefold
+///   repetition is scored as a blue win (see `alpha_beta`), so blue reading
+///   "win in 2" for a repetition is correct by the ruling, not a bug.
+/// * otherwise `stones` is the material-equivalent lead after `even_offset`,
+///   so an even game reads 0.0 for either side.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Report {
+    pub stones: f64,
+    pub mate_in: Option<i32>,
+    pub proven: bool,
+}
+
+/// Build the display report. `score` is the (possibly clamped) score the
+/// caller already holds; the mate branch reads `st.mate_plies`, so the
+/// `UNPROVEN_MATE` sentinel never reaches the stones arithmetic. Callers must
+/// not report anything when `st.depth_completed == 0` (the score is then 0 and
+/// `(0 + offset)` would be a fabricated ±0.5).
+pub fn report(score: i32, st: &SearchStats, mover: Color, w: &crate::eval::Weights) -> Report {
+    if st.mate_plies != 0 {
+        let t = plies_to_turns(st.mate_plies);
+        return Report { stones: if t > 0 { MATE_STONES } else { -MATE_STONES },
+                        mate_in: Some(t), proven: st.mate_proven };
+    }
+    Report { stones: (score + even_offset(mover, w)) as f64 / w.lead.max(1) as f64,
+             mate_in: None, proven: true }
 }
