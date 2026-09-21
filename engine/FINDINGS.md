@@ -2004,7 +2004,7 @@ after its smoke refused the knob because the runner had not exported the variant
 
 | change | knob | arm wins | win rate | Elo [95%] | verdict |
 |---|---|---|---|---|---|
-| opening selector, competitive self-play | `opening_book` | 1,822 / 3,811 (interim, 87% of the run) | 47.8% [46.2, 49.4] | **−15.2 [−26.3, −4.2]** | shipped anyway for a human playtest |
+| opening selector, competitive self-play | `opening_book` | 2,101 / 4,400 | 47.8% [46.3, 49.2] | **−15.6 [−25.9, −5.4]** | shipped anyway for a human playtest |
 
 **Reading it.** In 3 s self-play the base engine's spell-blind opening -- `move_score_goal` grabs a mana
 node (+90) or a charm (+70) -- beats the table-driven sigil pick by about 15 Elo. Two things this does
@@ -2014,3 +2014,38 @@ human-vs-`rust_hard` games from 2026-09-21 on are the measurement (rerun `weakne
 by week); (2) the selector never considers the mana node itself as an opening, while the base's +90
 grab is exactly what it loses to -- adding "the zone's mana" as a candidate valued by the tempo it
 buys the zone-mates is the obvious next iteration if the human numbers are flat.
+
+
+## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
+
+Robi (red, 1477) beat rust_hard (blue) after the AI cast Slash on its turns 7 and 8 reading +1.0 both
+times, and lost two stones to the same reply: move b7, dash whose move crushes on b8, Slash whose hard
+move crushes on b9 -- a single-ply, +2-stone refutation. Offline the shipped engine reproduces it:
+at fixed depth 4-6 blue picks the same Slash line at about 0.0; from red's side the refutation reads
++2.08 only from iteration 5 (root width 288) and +1.08 / +0.08 at depths 1-4.
+
+**Not a depth problem: the turn does not exist in the candidate stream.** At the shipped window the
+ordered stream for that position holds 216 turns; the first turn that both dashes and casts is #124,
+and red's actual line is not there at any rank -- the dash stage caps sacrifice pairs per first move
+and only the survivors get a cast, so `[move, dash(crush), Slash(crush)]` is never built. The search
+at iteration 5 finds a sibling with a different sacrifice pair once the root is wide enough; blue's
+inner nodes get 24-40 candidates and never see either. The opening selector was in use in this game
+(blue's first stone on b7, the Slash charm in red's Erupt zone, is its pick) and is unrelated.
+
+**Fix: a material-swing pre-pass at the shallow plies** (`Board::swing_turns`, knob
+`turn_iter::set_swing_prepass`, default on). The stone-lead scanner run with the criterion "gains
+SWING_MIN = 2 stones now" instead of "reaches the lead", 1,500-board cap, up to 3 turns, verified
+through `apply_turn`; `Search::ordered_turns_action_hint` puts what it finds at the front of the
+candidate list at plies 0 and 1 (root and the replies to it), where nodes are few and a hidden
+one-ply refutation costs a game. Measured on the game: red's depth-1 search +1.08 -> +2.08 and it
+picks the refutation; blue at turns 7 and 8 reads −1.04 from depth 4 and no longer plays the line.
+Cost: ~0.1 ms per scan; fixed depth 6 over the game's 16 positions 69.1 s -> 66.4 s (4% fewer nodes:
+the promoted turns also improve ordering). Regression tests
+`swing_prepass_finds_the_recorded_one_ply_refutation` and
+`the_ai_no_longer_walks_into_the_recorded_slash_refutation` pin both sides of the position and
+assert the defect reproduces with the pass off. Arena verdict below when in.
+
+Why the browser said +1.0 where the fixed-depth replay says 0.0: the live search runs with a
+persistent table, pondering and the elastic budget, and the browser had just crushed a red stone the
+ply before; the sign is the same story -- the AI believed its Slash line was safe because the reply
+that punishes it was not in its move list.

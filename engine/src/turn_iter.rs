@@ -923,6 +923,28 @@ thread_local! {
 /// those casts as bad (weakness audit, 2026-09-21).
 pub fn set_outcome_order_v2(on: bool) { OUTCOME_ORDER_V2.with(|c| c.set(on)); }
 pub fn outcome_order_v2() -> bool { OUTCOME_ORDER_V2.with(|c| c.get()) }
+
+thread_local! {
+    static SWING_PREPASS: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch (default on) for the material-SWING pre-pass at the search's
+/// shallow plies (`Search::ordered_turns_action_hint`): the lead scanner run
+/// with the criterion "gains `SWING_MIN` stones now" instead of "reaches the
+/// winning lead". Motivated by a recorded rust_hard game (2026-09-21, room
+/// DSJZ2B): the human's refutation -- move, dash whose move crushes, Slash
+/// whose hard move crushes again, +2 stones in ONE ply -- was not in the
+/// ordered stream at all (216 turns at the shipped window; dash branches are
+/// capped per first move and only survivors get a cast), so the AI evaluated
+/// its own losing move at +1.0 twice and only saw the loss once the root had
+/// widened to ~300 candidates.
+pub fn set_swing_prepass(on: bool) { SWING_PREPASS.with(|c| c.set(on)); }
+pub fn swing_prepass_enabled() -> bool { SWING_PREPASS.with(|c| c.get()) }
+/// Stones a turn must gain (mover's diff after minus before) to count as a swing.
+pub const SWING_MIN: i32 = 2;
+/// Boards the swing scan may examine per position.
+pub const SWING_CAP: usize = 1_500;
+/// Swing turns collected before the scan stops (distinct first actions preferred by the caller).
+pub const SWING_MAX_FOUND: usize = 3;
 /// A/B switch (default on) for the 2026-09-22 bound corrections in the lead
 /// pre-pass. The audit of every recorded game-ending position found the
 /// pre-pass gated out of all 61 wins the depth-2 search missed, for five
@@ -1018,8 +1040,10 @@ impl Board {
             sixth: self.spell_counter[c.idx()] >= 5,
             six_req: if c == Color::Red { 2 } else { 0 },
             root: *self, examined: 0, cap, out: Vec::new(),
+            swing: None, root_diff: 0, max_found: LEAD_MAX_FOUND,
         };
         let diff = st.diff(self);
+        st.root_diff = diff;
         if diff >= st.lead_req { return out; }   // already decided; the caller sees `outcome`
         // GATE: first move (+ one crush) plus the best of what dash/cast can add.
         // The first move is a placement that can fill a sigil, hence `1 +`.
@@ -1039,7 +1063,7 @@ impl Board {
         for &(can_dash, dash_only, phase_cap) in phases {
             st.cap = phase_cap.min(cap);
             for &(n, p) in first_moves {
-                if st.examined >= st.cap || st.out.len() >= LEAD_MAX_FOUND { break; }
+                if st.examined >= st.cap || st.out.len() >= st.max_found { break; }
                 let blink = has_wind && (crate::topology::ADJ[n as usize] & self.mine(c)) == 0;
                 let a = if blink { Action::Blink { node: n, push_to: p } }
                         else { Action::Move { node: n, push_to: p } };
@@ -1053,7 +1077,51 @@ impl Board {
                 }
                 st.post_move_from(&b1, Turn::single(a), can_dash, true, true, false, false, dash_only);
             }
-            if st.out.len() >= LEAD_MAX_FOUND { break; }
+            if st.out.len() >= st.max_found { break; }
+        }
+        std::mem::swap(&mut out, &mut st.out);
+        out
+    }
+
+    /// Turns of `c` that gain at least `min_gain` stones on the current diff
+    /// NOW (placements and crushes net of sacrifices and clearing), best-effort
+    /// and bounded like `decisive_lead_turns`, for the search to put at the
+    /// front of its candidate list at shallow plies. Not gated by lead
+    /// proximity -- it exists precisely for swings that do not end the game --
+    /// so it is only worth running where nodes are few (see `swing_prepass`).
+    pub fn swing_turns(&self, c: Color, min_gain: i32, cap: usize) -> Vec<Turn> {
+        let mut out: Vec<Turn> = Vec::new();
+        if self.outcome != Outcome::Ongoing { return out; }
+        if self.variant.has_competitive() && self.turn_counter <= 2 { return out; }
+        let fm = self.ordered_first_moves(c);
+        let mut st = LeadScan {
+            c, me: c.idx(), them: c.other().idx(),
+            lead_req: i32::MAX, sixth: false, six_req: i32::MAX,
+            root: *self, examined: 0, cap, out: Vec::new(),
+            swing: Some(min_gain), root_diff: 0, max_found: SWING_MAX_FOUND,
+        };
+        st.root_diff = st.diff(self);
+        // GATE: first move (+ one crush) plus the best of what dash/cast can add.
+        if 2 + self.lead_potential(c, true, true, 1) < min_gain { return out; }
+        let has_wind = self.holds_charged(c, SEAL_OF_WIND);
+        let phases: &[(bool, bool, usize)] = &[(false, false, (cap * 2 / 5).max(300)), (true, true, cap)];
+        for &(can_dash, dash_only, phase_cap) in phases {
+            st.cap = phase_cap.min(cap);
+            for &(n, p) in &fm {
+                if st.examined >= st.cap || st.out.len() >= st.max_found { break; }
+                let blink = has_wind && (crate::topology::ADJ[n as usize] & self.mine(c)) == 0;
+                let a = if blink { Action::Blink { node: n, push_to: p } }
+                        else { Action::Move { node: n, push_to: p } };
+                let mut b1 = *self;
+                b1.do_move_with_pub(n, p, c);
+                st.examined += 1;
+                if b1.outcome != Outcome::Ongoing {
+                    if !dash_only && st.won(&b1) { st.verify(Turn::single(a)); }
+                    continue;
+                }
+                st.post_move_from(&b1, Turn::single(a), can_dash, true, true, false, false, dash_only);
+            }
+            if st.out.len() >= st.max_found { break; }
         }
         std::mem::swap(&mut out, &mut st.out);
         out
@@ -1135,17 +1203,24 @@ struct LeadScan {
     c: Color, me: usize, them: usize,
     lead_req: i32, sixth: bool, six_req: i32,
     root: Board, examined: usize, cap: usize, out: Vec<Turn>,
+    /// `Some(g)`: a SWING scan -- a turn decides when it gains `g` stones on the
+    /// root's diff (the lead rule is ignored); `None`: the lead scan.
+    swing: Option<i32>,
+    root_diff: i32,
+    max_found: usize,
 }
 
 impl LeadScan {
     #[inline] fn diff(&self, b: &Board) -> i32 { b.total[self.me] as i32 - b.total[self.them] as i32 }
     #[inline] fn decides(&self, b: &Board, casted: bool) -> bool {
+        if let Some(g) = self.swing { return self.diff(b) - self.root_diff >= g; }
         // B: wiping the enemy off the board wins whatever the count says.
         if lead_bounds_v2() && b.total[self.them] == 0 && b.total[self.me] > 0 { return true; }
         let d = self.diff(b);
         d >= self.lead_req || (casted && self.sixth && d >= self.six_req)
     }
     #[inline] fn reachable(&self, b: &Board, potential: i32, casts_possible: bool) -> bool {
+        if let Some(g) = self.swing { return self.diff(b) + potential - self.root_diff >= g; }
         // B: a swing that can remove every enemy stone reaches a win too.
         if lead_bounds_v2() && casts_possible && potential >= b.total[self.them] as i32 && b.total[self.them] > 0 { return true; }
         let d = self.diff(b) + potential;
@@ -1157,10 +1232,15 @@ impl LeadScan {
     fn verify(&mut self, t: Turn) {
         let mut b = self.root;
         b.apply_turn(&t.push_pub(Action::Pass), self.c);
-        let won = matches!((self.c, b.outcome), (Color::Red, Outcome::RedWins) | (Color::Blue, Outcome::BlueWins));
-        if won && !self.out.iter().any(|x| x.slice() == t.slice()) { self.out.push(t); }
+        let ok = match self.swing {
+            // A swing must really land the stones AND not lose the game doing it.
+            Some(g) => self.diff(&b) - self.root_diff >= g
+                       && !matches!((self.c, b.outcome), (Color::Red, Outcome::BlueWins) | (Color::Blue, Outcome::RedWins)),
+            None => matches!((self.c, b.outcome), (Color::Red, Outcome::RedWins) | (Color::Blue, Outcome::BlueWins)),
+        };
+        if ok && !self.out.iter().any(|x| x.slice() == t.slice()) { self.out.push(t); }
     }
-    fn done(&self) -> bool { self.examined >= self.cap || self.out.len() >= LEAD_MAX_FOUND }
+    fn done(&self) -> bool { self.examined >= self.cap || self.out.len() >= self.max_found }
 
     /// Mirrors `enumerate_post_move`: the turn may still dash and/or cast.
     fn post_move(&mut self, b: &Board, so_far: Turn, can_dash: bool, can_spell: bool,

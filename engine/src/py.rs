@@ -660,6 +660,27 @@ impl PyBoard {
             }).collect()).collect())
     }
 
+    /// The material-swing pre-pass (`turn_iter.rs swing_turns`), as action tuples.
+    #[pyo3(signature = (c, min_gain=2, cap=1500))]
+    fn swing_turns(&self, c: &str, min_gain: i32, cap: usize)
+        -> PyResult<Vec<Vec<(String, i32, i32, Vec<u8>, i32)>>>
+    {
+        let col = color(c)?;
+        Ok(self.b.swing_turns(col, min_gain, cap).into_iter()
+            .map(|t| t.slice().iter().map(|a| match *a {
+                crate::turn::Action::Blink { node, push_to } =>
+                    ("blink".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Move { node, push_to } =>
+                    ("move".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Dash { sacs, n_sacs, node, push_to } =>
+                    ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32),
+                     sacs[..n_sacs as usize].to_vec(), -1),
+                crate::turn::Action::Cast { pos, keep, outcome } =>
+                    ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            }).collect()).collect())
+    }
+
     #[pyo3(signature = (c, red, blue, window=24, reasons=0, cap=4096))]
     fn layout_rank(&self, c: &str, red: u64, blue: u64, window: usize,
                    reasons: u8, cap: usize)
@@ -1063,6 +1084,10 @@ fn set_lead_bounds_v2(on: bool) { crate::turn_iter::set_lead_bounds_v2(on); }
 #[pyfunction]
 fn set_outcome_order_v2(on: bool) { crate::turn_iter::set_outcome_order_v2(on); }
 
+/// A/B switch for the material-swing pre-pass (`turn_iter::set_swing_prepass`); default on.
+#[pyfunction]
+fn set_swing_prepass(on: bool) { crate::turn_iter::set_swing_prepass(on); }
+
 /// A/B switch for the competitive opening selector (`opening::set_opening_book`);
 /// default on, per thread.
 #[pyfunction]
@@ -1418,6 +1443,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
     m.add_function(wrap_pyfunction!(set_outcome_order_v2, m)?)?;
+    m.add_function(wrap_pyfunction!(set_swing_prepass, m)?)?;
     m.add_function(wrap_pyfunction!(opening_pick, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather

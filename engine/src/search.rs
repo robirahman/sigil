@@ -83,6 +83,8 @@ pub const UNPROVEN_MATE: i32 = 5_000;
 // microseconds and is Elo-neutral (-6 [-21, +8]), so it stays and the
 // bookends went. FINDINGS "Arena: the mate-in-1 fixes cost Elo at 3 s".
 pub const MAX_PLY: usize = 64;
+/// Deepest ply at which the material-swing pre-pass runs (root = 0).
+pub const SWING_PLY_MAX: usize = 1;
 
 /// Cast-outcome window the search offers the generator per node.
 pub const DEFAULT_WINDOW: usize = 16;
@@ -351,6 +353,8 @@ pub struct SearchStats {
     /// with `mate_proven == true` is therefore an intended combination:
     /// legacy consumers read the sentinel, the display reads these fields.
     pub mate_proven: bool,
+    /// Turns the material-swing pre-pass added at the front of a candidate list.
+    pub swing_hits: u64,
     /// Successors actually expanded, summed — lets a caller see the effective
     /// branching factor (`expanded / nodes`).
     pub expanded: u64,
@@ -1258,6 +1262,21 @@ impl Search {
             v = it.by_ref().take(width).collect();
             if it.next().is_some() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }
+        }
+        // Material-swing pre-pass at the shallow plies: turns that gain SWING_MIN
+        // stones now go to the front, whether or not the stream generated them.
+        // Root and its replies only -- few nodes, and this is where a
+        // one-ply refutation the stream hides costs a game (turn_iter.rs
+        // `set_swing_prepass`).
+        if ply <= SWING_PLY_MAX && crate::turn_iter::swing_prepass_enabled() {
+            let found = b.swing_turns(c, crate::turn_iter::SWING_MIN, crate::turn_iter::SWING_CAP);
+            for t in found.into_iter().rev() {
+                let t = t.push_pub(Action::Pass);
+                if !v.iter().any(|x| x.slice() == t.slice()) {
+                    v.insert(0, t);
+                    self.stats.swing_hits += 1;
+                }
+            }
         }
         self.stats.expanded += v.len() as u64;
         // Promote the TT move, then the two killers, by matching first action.

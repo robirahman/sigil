@@ -21,6 +21,14 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-22: swing pre-pass (engine v12 candidate).** A recorded rust_hard game (room DSJZ2B) lost two
+stones to a one-ply refutation -- move, dash whose move crushes, Slash whose hard move crushes -- that
+the ordered stream never generates (dash branches capped per first move, casts only on survivors), so
+the AI read its own losing Slash line at +1.0 twice. `Board::swing_turns` (the lead scanner with a
+"+2 stones now" criterion) runs at plies 0-1 and puts what it finds at the front of the candidate list
+(knob `swing_prepass`, arm `engine/gcp/arms/swing_prepass_3s.txt`). Pinned by two regression tests.
+FINDINGS "A one-ply refutation the stream never generates".
+
 **2026-09-22: engine v11 -- opening selector, pre-pass v2 bounds, placement-cast ordering; `tfit2` measured and NOT shipped.**
 Four changes from the weakness audit, each behind a per-move knob for the arena (`opening_book`,
 `lead_bounds_v2`, `outcome_order_v2`, eval `tfit2`; arm files `engine/gcp/arms/*_3s.txt`). Arena at
@@ -28,7 +36,7 @@ Four changes from the weakness audit, each behind a per-move knob for the arena 
 [+6.5, +27.0]**, pre-pass v2 −0.9 [−11.2, +9.3] (ships: Elo-neutral and closes recorded misses),
 `tfit2` **−39.7 [−50.0, −29.3]** (stays a preset; the shipped eval is still `tfit`). The opening
 selector SHIPPED for a human playtest (`742e3c4a`, cache v38) although its competitive self-play arena
-reads **−15.2 Elo [−26.3, −4.2]** (interim, 3,811 games): its value is long-term positional against
+reads **−15.6 Elo [−25.9, −5.4]** (4,400 games): its value is long-term positional against
 humans in long games, which a 3 s self-play arena cannot measure; the base's mana/charm grab is what
 it loses to in self-play (FINDINGS "Arena: the v11 changes"). Judge it on the recorded human games.
 

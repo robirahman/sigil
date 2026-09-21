@@ -3190,3 +3190,69 @@ fn cast_pace_and_mobility_features_have_the_designer_signs() {
     assert!(w2.cast_pace > 0 && w2.mobility > 0 && w2.control > w1.control);
     assert_eq!((w1.lead, w1.tempo, w1.mana), (w2.lead, w2.tempo, w2.mana));
 }
+
+/// Robi vs rust_hard, 2026-09-21 (room DSJZ2B). Blue (the AI) cast Slash on
+/// its turns 7 and 8 reading +1.0; red's one-ply refutation -- move b7, dash
+/// whose move crushes on b8, Slash whose hard move crushes on b9, +2 stones --
+/// was not in the ordered stream at all (216 turns at the shipped window), so
+/// the AI never saw it. Positions BEFORE blue's turn 7, before red's reply to
+/// turn 8 (red to move, the refutation available), and blue's turn 8.
+const DSJZ2B_BLUE_T7: &str = "..............rrrr..br...r.....b....bb./Hurricane,Erupt,Seal_of_Destruction,Hail_Storm,Eclipse,Decay,Splash,Slash,Comet b 14 0:0 -:- -:- r1 competitive";
+const DSJZ2B_BLUE_T8: &str = "................rr.brrr..r.....b....bb./Hurricane,Erupt,Seal_of_Destruction,Hail_Storm,Eclipse,Decay,Splash,Slash,Comet b 16 0:0 -:- -:- r1 competitive";
+const DSJZ2B_RED_T9: &str = "..............rrrr..bbr..r.....b....bb./Hurricane,Erupt,Seal_of_Destruction,Hail_Storm,Eclipse,Decay,Splash,Slash,Comet r 17 0:0 -:- -:- tied competitive";
+
+/// The AI's played line at turn 7: move b7, cast Slash, Slash's hard move b9 -> b10.
+fn is_the_played_slash_line(t: &Turn) -> bool {
+    let s = t.slice();
+    s.len() >= 2 && matches!(s[0], Action::Move { node, .. } if node == n("b7"))
+        && matches!(s[1], Action::Cast { pos: 7, .. })
+}
+
+#[test]
+fn swing_prepass_finds_the_recorded_one_ply_refutation() {
+    // Red to move after blue's turn 8: the +2 refutation exists and is found.
+    let b = Board::from_sfn(DSJZ2B_RED_T9).expect("sfn");
+    let found = b.swing_turns(Color::Red, crate::turn_iter::SWING_MIN, crate::turn_iter::SWING_CAP);
+    assert!(!found.is_empty(), "the swing scan must find red's move-dash-Slash refutation");
+    let before = b.total[0] as i32 - b.total[1] as i32;
+    for t in &found {
+        let after = crate::mate::child(&b, &t.push_pub(Action::Pass), Color::Red);
+        let gain = (after.total[0] as i32 - after.total[1] as i32) - before;
+        assert!(gain >= crate::turn_iter::SWING_MIN, "returned turn gains only {gain}: {:?}", t.slice());
+        assert!(t.slice().iter().any(|a| matches!(a, Action::Dash { .. })), "the refutation dashes: {:?}", t.slice());
+        assert!(t.slice().iter().any(|a| matches!(a, Action::Cast { pos: 7, .. })), "and casts Slash: {:?}", t.slice());
+    }
+    // The depth-1 search sees it with the pre-pass, and not without (the
+    // stream never generates the turn -- this is the defect being pinned).
+    crate::turn_iter::set_swing_prepass(false);
+    let (_, off, _) = shipped_search().go(&b, Color::Red, 1, 0);
+    crate::turn_iter::set_swing_prepass(true);
+    let (best, on, _) = shipped_search().go(&b, Color::Red, 1, 0);
+    assert!(off < 150, "without the pass the depth-1 search should NOT see +2 stones (got {off} cs)");
+    assert!(on >= 150, "with the pass the depth-1 search must see about +2 stones (got {on} cs)");
+    let bt = best.expect("a move");
+    assert!(bt.slice().iter().any(|a| matches!(a, Action::Dash { .. })) && bt.slice().iter().any(|a| matches!(a, Action::Cast { pos: 7, .. })),
+            "the chosen turn is the dash-then-Slash refutation: {:?}", bt.slice());
+}
+
+#[test]
+fn the_ai_no_longer_walks_into_the_recorded_slash_refutation() {
+    for (sfn, label) in [(DSJZ2B_BLUE_T7, "turn 7"), (DSJZ2B_BLUE_T8, "turn 8")] {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        // Without the pre-pass the engine plays into it at depth 4-6 reading ~0.
+        crate::turn_iter::set_swing_prepass(false);
+        let (t_off, sc_off, _) = shipped_search().go(&b, Color::Blue, 4, 0);
+        crate::turn_iter::set_swing_prepass(true);
+        assert!(sc_off > -50, "{label}: premise -- without the pass the AI reads the position as roughly even (got {sc_off} cs)");
+        if label == "turn 7" {
+            assert!(is_the_played_slash_line(&t_off.expect("a move")), "{label}: premise -- without the pass the AI plays the recorded Slash line");
+        }
+        // With it, from depth 4 on, the AI sees the reply and plays something else.
+        for depth in [4, 5] {
+            let (t_on, sc_on, _) = shipped_search().go(&b, Color::Blue, depth, 0);
+            assert!(sc_on <= -50, "{label} depth {depth}: the AI must see the refutation (got {sc_on} cs)");
+            let t = t_on.expect("a move");
+            assert!(!is_the_played_slash_line(&t), "{label} depth {depth}: still plays the refuted Slash line {:?}", t.slice());
+        }
+    }
+}
