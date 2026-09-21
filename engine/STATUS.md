@@ -9,7 +9,7 @@ with this section, this section is right.
 | | |
 |---|---|
 | strength vs the previously playtested engine | **+228 Elo @3s, +348 @60s** |
-| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` (2.0, 0.4, 2, 50, predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2; `?ai=rust_anchor` pins elastic OFF / lmr 0 |
+| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` (2.0, 0.4, 2, 50, predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2 |
 | tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
 | browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
 
@@ -20,6 +20,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 `escape`, and the reply to play (the refutation when refuted, else the search's best). The page
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
+
+**2026-09-21: `rust_anchor` REMOVED (engine v9, cache v35).** The unlisted frozen reference tier
+(`?ai=rust_anchor`: fresh table per move, no pondering, elastic/LMR/pre-pass off, its own
+`__ai_rust_anchor__` rating record) existed so human ratings would keep one fixed comparison point
+across engine releases. It was never played (0 games, Elo still at the starting 1300), and every
+engine change needed an "anchor keeps the old behaviour" clause -- the `wasm.rs pick_move_actions`
+entry point and the worker's `fresh` branch existed only for it. Gone with its Firebase records;
+`tools/wasm-smoke.js` now drives the persistent `Engine` like the worker does. Version comparisons
+belong to the arena against a pinned commit.
 
 **2026-09-20: stone-lead pre-pass SHIPPED (engine v8, cache v34); exhaustive bookends DISCARDED.**
 Fakey_McFaker's report (rust_hard announced -0.5, then was mated in one) traced to a WINDOW gap in
@@ -38,8 +47,7 @@ pair plus a Harvest/Erupt cast was invisible at every `width_scale`. Two fixes w
   the front of the ordered stream, like the Seal of Destruction pre-pass. Corpus: depth-1 detection
   of recorded mates 83% -> 95%, "walked into a mate while scoring ~0" 333 -> 116. Arena, 3 s,
   matched time, 2,250 games (5-VM fleet): **49.1% [47.1, 51.2], -6 Elo [-21, +8]** -- the node-rate
-  cost and the blunders removed cancel, so it ships on correctness. The frozen `rust_anchor` plays
-  with it OFF (`set_decisive_lead`, per thread) so its ratings stay comparable. Coverage is not
+  cost and the blunders removed cancel, so it ships on correctness. Coverage is not
   total: of the two recorded games behind the report, the dash + Erupt mate is found at the
   shipped cap, the hard-move + dash + Harvest mate (five resolver moves) needs ~50,000 boards
   (~40 ms) and is pinned as a known gap in `tests.rs` so any cap change is measured against it. A/B knob:
@@ -78,8 +86,7 @@ fills by move, dash and eight casts. Every other Seal already had its trigger co
 **2026-09-16: elastic time management and the LMR band ship ON.** Fleet arenas at
 10 s, matched average time: elastic +58 Elo [+29, +88], `lmr` 21 +47 [+17, +76], the
 pair +81 [+51, +111] (FINDINGS "Run 2 at 10 s"). Both live in `Search::new`, so every
-binding inherits them; the frozen anchor tier turns them off in `wasm.rs
-pick_move_actions`. Elastic matches the AVERAGE budget, not each move: a single move may
+binding inherits them. Elastic matches the AVERAGE budget, not each move: a single move may
 run to 2x the tier time once when the answer is unstable and stop at 0.4x when stable.
 Pondering (default-on for >= 10 s tiers) confirmed at +24 [+10, +39] (3 s) and +31
 [+2, +60] (10 s).

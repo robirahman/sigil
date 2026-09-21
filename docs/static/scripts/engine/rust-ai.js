@@ -38,7 +38,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 8;
+const RUST_ENGINE_VERSION = 9;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -161,10 +161,6 @@ class RustAI {
 		// explicitly turned it off (anonymous players have no profile).
 		this.pondering = false;
 		this.ponderPolicy = options.ponderPolicy || 'setting';
-		// `fresh`: search on a throwaway table every move (the pre-persistence
-		// engine). The unlisted ?ai=rust_anchor tier uses it so human ratings
-		// keep one fixed reference across engine releases (§0.3).
-		this.fresh = !!options.fresh;
 		this.ponderSliceMs = options.ponderSliceMs || 250;
 		this.ponderMaxDepth = options.ponderMaxDepth || 12;
 		this.lastMeta = null;
@@ -252,7 +248,6 @@ class RustAI {
 		const t0 = Date.now();
 		return getRustEngineWorker().search({
 			sfn: sfn,
-			fresh: this.fresh,
 			timeMs: this.timeMs,
 			ttBits: this.ttBits,
 			widthScale: this.widthScale,

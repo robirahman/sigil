@@ -8,7 +8,7 @@ let wasm_bindgen = (function(exports) {
      * A PERSISTENT engine: one `Search` (one transposition table) that lives for a
      * whole game inside the worker, instead of a fresh table per move.
      *
-     * Two things this buys that `pick_move_actions` cannot:
+     * Two things this buys that a fresh table per move cannot:
      *
      * * **TT persistence.** The previous move's tree is largely this move's tree
      *   two plies down, so the first iterations of every search come almost free.
@@ -107,7 +107,7 @@ let wasm_bindgen = (function(exports) {
             }
         }
         /**
-         * Same contract and JSON as `pick_move_actions`, on the persistent table.
+         * The `/api/move` contract and JSON, on the persistent table.
          * @param {string} sfn
          * @param {number} time_ms
          * @param {number} width_scale
@@ -207,52 +207,6 @@ let wasm_bindgen = (function(exports) {
         }
     }
     exports.judge_move = judge_move;
-
-    /**
-     * Search from `sfn` and return the `/api/move` response JSON:
-     * `{"ok":true,"actions":[...],"expected_sfn":"...","depth":d,"nodes":n,
-     *   "score":centistones,"score_ui":u,"seconds":s}` or `{"ok":false,"error":"..."}`.
-     *
-     * * `history_sfns` — prior positions INCLUDING the current root, for threefold
-     *   repetition (a blue win); unparseable entries are skipped, as in py.rs.
-     * * `eval_name` — resolved via `eval::weights_by_name`; an unknown name is an
-     *   error, never a silent fall-through to `Weights::default()` (the structural
-     *   set that measured 22.5% against material-only).
-     * * `adaptive_p <= 0` disables adaptive widening; otherwise
-     *   `(adaptive_p, adaptive_easy, adaptive_hard)` as in `Search::set_adaptive`.
-     * * `on_depth(depth, score_ui, nodes)` fires once per COMPLETED iteration so the
-     *   page can show live progress; pass `undefined` for none.
-     * @param {string} sfn
-     * @param {number} time_ms
-     * @param {number} tt_bits
-     * @param {number} width_scale
-     * @param {string[]} history_sfns
-     * @param {string} eval_name
-     * @param {number} adaptive_p
-     * @param {number} adaptive_easy
-     * @param {number} adaptive_hard
-     * @param {Function | null} [on_depth]
-     * @returns {string}
-     */
-    function pick_move_actions(sfn, time_ms, tt_bits, width_scale, history_sfns, eval_name, adaptive_p, adaptive_easy, adaptive_hard, on_depth) {
-        let deferred4_0;
-        let deferred4_1;
-        try {
-            const ptr0 = passStringToWasm0(sfn, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len0 = WASM_VECTOR_LEN;
-            const ptr1 = passArrayJsValueToWasm0(history_sfns, wasm.__wbindgen_malloc);
-            const len1 = WASM_VECTOR_LEN;
-            const ptr2 = passStringToWasm0(eval_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-            const len2 = WASM_VECTOR_LEN;
-            const ret = wasm.pick_move_actions(ptr0, len0, time_ms, tt_bits, width_scale, ptr1, len1, ptr2, len2, adaptive_p, adaptive_easy, adaptive_hard, isLikeNone(on_depth) ? 0 : addToExternrefTable0(on_depth));
-            deferred4_0 = ret[0];
-            deferred4_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-        }
-    }
-    exports.pick_move_actions = pick_move_actions;
     function __wbg_get_imports() {
         const import0 = {
             __proto__: null,

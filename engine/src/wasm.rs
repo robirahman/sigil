@@ -4,10 +4,17 @@
 //! reaching `?ai=rust` means shipping this engine as WebAssembly — there is no
 //! server to call.
 //!
-//! `pick_move_actions` mirrors `serve.py`'s `/api/move` response byte-for-byte so
+//! `Engine::search` mirrors `serve.py`'s `/api/move` response byte-for-byte so
 //! `rust-ai.js` parses both transports (localhost fetch, wasm worker) through the
 //! same code, replay-verification gate included. Keep the two in lockstep: a field
 //! this emits differently from `py.rs::pick_move_actions` is a bug in one of them.
+//!
+//! REMOVED (2026-09-21): `pick_move_actions`, the fresh-table-per-move entry point
+//! that served the unlisted `?ai=rust_anchor` tier -- a search frozen at the
+//! 2026-09-09 configuration so human ratings would keep one fixed reference. It
+//! was never played (0 games), and every engine change needed an "anchor keeps
+//! the old behaviour" clause; the arena against a pinned commit is the
+//! reference now.
 
 use wasm_bindgen::prelude::*;
 use crate::board::Board;
@@ -17,74 +24,7 @@ fn err_json(msg: &str) -> String {
     format!("{{\"ok\":false,\"error\":{:?}}}", msg)
 }
 
-/// Search from `sfn` and return the `/api/move` response JSON:
-/// `{"ok":true,"actions":[...],"expected_sfn":"...","depth":d,"nodes":n,
-///   "score":centistones,"score_ui":u,"seconds":s}` or `{"ok":false,"error":"..."}`.
-///
-/// * `history_sfns` — prior positions INCLUDING the current root, for threefold
-///   repetition (a blue win); unparseable entries are skipped, as in py.rs.
-/// * `eval_name` — resolved via `eval::weights_by_name`; an unknown name is an
-///   error, never a silent fall-through to `Weights::default()` (the structural
-///   set that measured 22.5% against material-only).
-/// * `adaptive_p <= 0` disables adaptive widening; otherwise
-///   `(adaptive_p, adaptive_easy, adaptive_hard)` as in `Search::set_adaptive`.
-/// * `on_depth(depth, score_ui, nodes)` fires once per COMPLETED iteration so the
-///   page can show live progress; pass `undefined` for none.
-#[wasm_bindgen]
-#[allow(clippy::too_many_arguments)]
-pub fn pick_move_actions(sfn: &str, time_ms: u32, tt_bits: u32, width_scale: u32,
-                         history_sfns: Vec<String>, eval_name: &str,
-                         adaptive_p: f32, adaptive_easy: u32, adaptive_hard: u32,
-                         on_depth: Option<js_sys::Function>) -> String {
-    let b = match Board::from_sfn(sfn) {
-        Ok(b) => b,
-        Err(e) => return err_json(&e),
-    };
-    let c = b.to_move;
-    let mut s = Search::new(tt_bits.clamp(10, 22));
-    // This entry point serves ONLY the frozen `?ai=rust_anchor` tier (a fresh
-    // table every move; every listed tier goes through `Engine`). The anchor
-    // exists so human ratings against it stay comparable over time, so it is
-    // pinned to the 2026-09 shipped search: `Search::new` now turns elastic
-    // time and the LMR band on by default, and the anchor turns them back off.
-    // Restating a default is the trap everywhere else; here it is the point.
-    s.set_elastic(None);
-    s.set_lmr(0, 1);
-    // The stone-lead pre-pass (v8) is a generator change; the anchor plays
-    // without it. Per-thread switch, restored below.
-    crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
-    s.set_width_scale(width_scale.max(1) as usize);
-    // MUST be set explicitly — same trap py.rs documents at its call site.
-    s.weights = match crate::eval::weights_by_name(eval_name) {
-        Ok(w) => w,
-        Err(e) => return err_json(&e),
-    };
-    if adaptive_p > 0.0 {
-        s.set_adaptive(adaptive_p, adaptive_easy.max(1) as usize,
-                       adaptive_hard.max(1) as usize);
-    }
-    for h in &history_sfns {
-        if let Ok(hb) = Board::from_sfn(h) {
-            s.add_history(crate::zobrist::ZOBRIST.key_js(&hb));
-        }
-    }
-    let t0 = crate::search::now_ms();
-    let mut cb = on_depth.map(|f| move |depth: i32, score: i32, nodes: u64| {
-        let _ = f.call3(&JsValue::NULL,
-                        &JsValue::from(depth),
-                        &JsValue::from(crate::search::ui_score(score)),
-                        &JsValue::from(nodes as f64));
-    });
-    let (best, score, st) = s.go_with_progress(
-        &b, c, 64, time_ms as u64,
-        cb.as_mut().map(|f| f as &mut dyn FnMut(i32, i32, u64)));
-    crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
-    let dt = (crate::search::now_ms() - t0) / 1000.0;
-    move_json(&b, best, score, &st, dt)
-}
-
-/// Shared response formatter for `pick_move_actions` and `Engine::search`, so the
-/// two cannot drift (the browser's replay gate parses this).
+/// Response formatter for `Engine::search` (the browser's replay gate parses this).
 fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
              st: &crate::search::SearchStats, dt: f64) -> String {
     let c = b.to_move;
@@ -131,7 +71,7 @@ fn load_history(s: &mut Search, history_sfns: &[String]) {
 /// A PERSISTENT engine: one `Search` (one transposition table) that lives for a
 /// whole game inside the worker, instead of a fresh table per move.
 ///
-/// Two things this buys that `pick_move_actions` cannot:
+/// Two things this buys that a fresh table per move cannot:
 ///
 /// * **TT persistence.** The previous move's tree is largely this move's tree
 ///   two plies down, so the first iterations of every search come almost free.
@@ -165,7 +105,7 @@ impl Engine {
         self.ponder = None;
     }
 
-    /// Same contract and JSON as `pick_move_actions`, on the persistent table.
+    /// The `/api/move` contract and JSON, on the persistent table.
     #[allow(clippy::too_many_arguments)]
     pub fn search(&mut self, sfn: &str, time_ms: u32, width_scale: u32,
                   history_sfns: Vec<String>, eval_name: &str,

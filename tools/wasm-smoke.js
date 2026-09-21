@@ -2,7 +2,7 @@
 //
 // Loads the committed no-modules glue + .wasm from docs/static/wasm/ alongside
 // the browser engine files (the ai/replay_bridge.py concatenation pattern) and
-// plays scripted games: every pick_move_actions result is replayed through the
+// plays scripted games: every Engine.search result is replayed through the
 // SAME applyAITurn + partial-SFN comparison rust-ai.js uses as its gate, so a
 // pass here means the wasm engine's action lists reproduce its own positions
 // under the browser's rules.
@@ -75,9 +75,11 @@ async function driver() {
 		return probe.gameover;
 	}
 
+	// One persistent Engine for the scripted games, as the worker uses.
+	const smokeEngine = new wasm_bindgen.Engine(18);
 	function pick(sfn, history, budgetMs, onDepth) {
-		return JSON.parse(wasm_bindgen.pick_move_actions(
-			sfn, budgetMs, 18, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6,
+		return JSON.parse(smokeEngine.search(
+			sfn, budgetMs, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6,
 			onDepth || undefined));
 	}
 
@@ -119,8 +121,8 @@ async function driver() {
 	{
 		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
 		b.setupInitial();
-		const bad = JSON.parse(wasm_bindgen.pick_move_actions(
-			boardToSfn(b), 50, 18, 4, [], 'no-such-eval', 0, 0, 0, undefined));
+		const bad = JSON.parse(smokeEngine.search(
+			boardToSfn(b), 50, 4, [], 'no-such-eval', 0, 0, 0, undefined));
 		if (bad.ok || !/unknown eval name/.test(bad.error || '')) {
 			throw new Error('unknown eval name was not refused: ' + JSON.stringify(bad));
 		}
@@ -130,8 +132,8 @@ async function driver() {
 		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
 		b.setupInitial();
 		const sfn = boardToSfn(b).replace(b.spellNames[0], 'Lifesap');
-		const bad = JSON.parse(wasm_bindgen.pick_move_actions(
-			sfn, 50, 18, 4, [], 'tfit', 0, 0, 0, undefined));
+		const bad = JSON.parse(smokeEngine.search(
+			sfn, 50, 4, [], 'tfit', 0, 0, 0, undefined));
 		if (bad.ok) throw new Error('out-of-scope spell was not refused');
 	}
 	// Persistent Engine: the table survives a move, a ponder primes it, and the
