@@ -17,9 +17,10 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hours)
 CORPUS=$(md corpus); DEPTH=$(md depth); TMS=$(md time-ms); RESUME=$(md resume); : "${RESUME:=}"
+SHARD=$(md shard); : "${SHARD:=}"
 : "${RUN:=unknown}" "${BRANCH:=main}" "${WORKERS:=$(nproc)}" "${MAXH:=4}" \
   "${CORPUS:=data/eval_lines_2026-09-21.json}" "${DEPTH:=6}" "${TMS:=300000}"
-echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS depth=$DEPTH time_ms=$TMS"
+echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS depth=$DEPTH time_ms=$TMS shard=${SHARD:-all}"
 
 # WATCHDOG: nothing below is trusted to terminate (see runner.sh for why).
 ( sleep $((MAXH * 3600)); echo "WATCHDOG: ${MAXH}h cap hit, shutting down"; \
@@ -83,7 +84,7 @@ fi
 cd $WORK/repo
 echo "=== eval: depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
 $WORK/venv/bin/python -u engine/harness/eval_games.py eval --lines $WORK/lines.json \
-  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" > $WORK/out/eval.log 2>&1
+  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
 tail -3 $WORK/out/eval.log
 
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done

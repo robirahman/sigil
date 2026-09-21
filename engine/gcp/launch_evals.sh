@@ -16,7 +16,8 @@
 #
 # The corpus must already be at gs://<bucket>/<CORPUS> (eval_games.py hydrate
 # output). Environment overrides: PROJECT, BRANCH, CORPUS, DEPTH, TIME_MS
-# (per-position cap; 0 = untimed), SPOT (1/0), RESUME (prior work file object).
+# (per-position cap; 0 = untimed), SPOT (1/0), RESUME (prior work file object),
+# SHARD=k/n (one VM per k; every VM must get a different k).
 set -euo pipefail
 NAME=${1:-sigil-evals-$(date -u +%m%d%H%M)}
 MACHINE=${2:-c3d-highcpu-90}; ZONE=${3:-us-central1-f}; MAXH=${4:-4}; WORKERS=${5:-88}
@@ -26,6 +27,7 @@ CORPUS=${CORPUS:-data/eval_lines_2026-09-21.json}
 DEPTH=${DEPTH:-6}; TIME_MS=${TIME_MS:-300000}
 SPOT=${SPOT:-1}
 RESUME=${RESUME:-}
+SHARD=${SHARD:-}            # k/n to split the corpus across VMs (distinct k per VM!)
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
 SPOT_FLAGS=()
@@ -40,7 +42,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=evals \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,depth=$DEPTH,time-ms=$TIME_MS,resume=$RESUME" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,depth=$DEPTH,time-ms=$TIME_MS,resume=$RESUME,shard=$SHARD" \
   --metadata-from-file="startup-script=$HERE/runner_evals.sh" \
   --format="value(name,status)"
 echo "$RUN"

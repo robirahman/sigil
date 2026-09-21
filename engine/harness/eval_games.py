@@ -112,9 +112,9 @@ def cmd_hydrate(a):
             skipped['no turns'] += 1; continue
         if 'duplicates' in (g.get('variant') or ''):
             skipped['duplicates variant'] += 1; continue
-        if g.get('autoArena') or g.get('isAiArena'):
+        if not a.analysis and (g.get('autoArena') or g.get('isAiArena')):
             skipped['arena flag'] += 1; continue
-        if not g.get('roomCode'):
+        if not a.analysis and not g.get('roomCode'):
             skipped['no roomCode'] += 1; continue
         t = _normalize_turns(g['turns'])
         if not t:
@@ -231,6 +231,16 @@ def cmd_eval(a):
     unsupported = [k for k, g in items if not _engine_supports(se, g)]
     items = [(k, g) for k, g in items if k not in set(unsupported)]
     print(f'{len(unsupported)} games use spells the engine does not model; skipped', flush=True)
+    if a.exclude:
+        done_elsewhere = set()
+        for path in a.exclude:
+            done_elsewhere |= set(json.load(open(path, encoding='utf-8')).keys())
+        items = [(k, g) for k, g in items if k not in done_elsewhere]
+        print(f'{len(done_elsewhere)} games excluded (covered by another corpus); {len(items)} remain', flush=True)
+    if a.shard:
+        k, n = (int(x) for x in a.shard.split('/'))
+        items = [it for i, it in enumerate(items) if i % n == k]
+        print(f'shard {k}/{n}: {len(items)} games', flush=True)
     if a.limit_games:
         items = items[:a.limit_games]
     if a.time_only:
@@ -271,17 +281,25 @@ def cmd_eval(a):
 
 # ------------------------------------------------------------------ upload ---
 
-def build_docs(lines, evals_path):
-    rows = {}
-    errors = Counter()
-    with open(evals_path, encoding='utf-8') as fh:
-        for line in fh:
-            d = json.loads(line)
-            if 'error' in d:
-                errors[d['g']] += 1; continue
-            rows[(d['g'], d['i'])] = d
+def load_rows(evals_paths):
+    """Pool one or more evals.jsonl files (shards / resumed runs) -> {(gid, i): row}."""
+    rows, errors = {}, Counter()
+    for path in ([evals_paths] if isinstance(evals_paths, str) else evals_paths):
+        with open(path, encoding='utf-8') as fh:
+            for line in fh:
+                d = json.loads(line)
+                if 'error' in d:
+                    errors[d['g']] += 1; continue
+                rows[(d['g'], d['i'])] = d
+    return rows, errors
+
+
+def build_docs(lines, evals_paths):
+    rows, errors = load_rows(evals_paths)
     docs, incomplete = {}, []
     for gid, g in lines.items():
+        if not g.get('roomCode'):
+            continue                      # analysis-only corpus entry; nothing to key the document by
         n = len(g['positions']) - 1
         got = [rows.get((gid, i)) for i in range(n)]
         if any(r is None for r in got):
@@ -347,11 +365,14 @@ def main():
     sub = p.add_subparsers(dest='cmd', required=True)
     d = sub.add_parser('download'); d.add_argument('--since', default='2026-08-26'); d.add_argument('--service-account', required=True); d.add_argument('--out', required=True)
     h = sub.add_parser('hydrate'); h.add_argument('--raw', required=True); h.add_argument('--out', required=True); h.add_argument('--batch', type=int, default=150)
+    h.add_argument('--analysis', action='store_true', help='keep AI-arena games and games without a roomCode (for offline analysis; upload skips them)')
     e = sub.add_parser('eval'); e.add_argument('--lines', required=True); e.add_argument('--out', required=True)
     e.add_argument('--depth', type=int, default=6); e.add_argument('--time-ms', type=int, default=0, help='0 = untimed fixed depth')
     e.add_argument('--workers', type=int, default=os.cpu_count() or 2); e.add_argument('--limit-games', type=int, default=0)
     e.add_argument('--time-only', action='store_true'); e.add_argument('--sample', type=int, default=50)
-    u = sub.add_parser('upload'); u.add_argument('--lines', required=True); u.add_argument('--evals', required=True)
+    e.add_argument('--shard', default='', help='k/n: evaluate every n-th game starting at k (games sorted by timestamp)')
+    e.add_argument('--exclude', action='append', default=[], help='lines.json of a corpus already evaluated; its games are skipped')
+    u = sub.add_parser('upload'); u.add_argument('--lines', required=True); u.add_argument('--evals', required=True, action='append')
     u.add_argument('--service-account', required=True); u.add_argument('--apply', action='store_true'); u.add_argument('--overwrite', action='store_true')
     a = p.parse_args()
     {'download': cmd_download, 'hydrate': cmd_hydrate, 'eval': cmd_eval, 'upload': cmd_upload}[a.cmd](a)
