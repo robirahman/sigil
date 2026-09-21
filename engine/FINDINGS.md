@@ -1976,3 +1976,29 @@ plain hard moves (315) and Carnage casts (11% flagged).
    players and the depth-6 re-evaluation both say the cast is often a stone too generous.
 3. The long-game decline (87% lost at 40–49 turns): the per-ply evals of those games are in
    `game_evals` and the cases file; the collapse listings (C1) are where to start reading.
+
+## Arena: the v11 changes at 3 s (2026-09-21, one c3d-highcpu-90 per arm, 88 shards x 25 pairs)
+
+Each arm against the same engine with its knob off, `tfit`, 3,000 ms per move, colour-swapped seeds,
+pooled from GAME lines by `pool_shards.py` (4,400 decided games per arm; runs 20260921T164801Z /
+164813Z / 164825Z).
+
+| change | knob | arm wins | win rate | Elo [95%] | verdict |
+|---|---|---|---|---|---|
+| placement-cast ordering (`Board::placement_bonus`) | `outcome_order_v2` | 2,306 / 4,400 | 52.4% [50.9, 53.9] | **+16.8 [+6.5, +27.0]** | ships |
+| pre-pass v2 bounds + two-phase scan, cap 2,500 | `lead_bounds_v2` | 2,194 / 4,400 | 49.9% [48.4, 51.3] | −0.9 [−11.2, +9.3] | ships (Elo-neutral, closes 26 of the 61 recorded final-blow misses); s/move ratio 0.990 |
+| `tfit2` = tfit + cast_pace 15 + mobility 4 + control 40 | eval `tfit2` vs `tfit` | 1,950 / 4,400 | 44.3% [42.9, 45.8] | **−39.7 [−50.0, −29.3]** | does NOT ship |
+
+**What the tfit2 result says.** Three hand-weighted terms were added at once and the package lost
+40 Elo, so at least one of them is badly priced; the arena cannot say which. Candidates, in the order
+I would test them: `control` at 40 raw (~2 cs/node, an 80 cs swing across the board) is 13x the fitted
+value and competes with `mana`/`sigil_stone` inside the same scaled sum; `cast_pace` at 15 cs per unit
+reaches ±75 cs with the counters at 5 and flips sign on a one-stone lead change, which is a large
+discontinuity for alpha-beta; `mobility` at 4 cs per net target is probably the least harmful. The
+designer's rule about neutral casts still stands -- the placement ORDERING fix, which needs no eval
+change, is what actually removed the refill behaviour and it gained Elo. Next step if the eval is
+revisited: one term at a time, and fit the magnitude on the labelled corpus before any arena.
+
+The competitive-opening arm (`opening_book`, `SIGIL_VARIANT=competitive`) was relaunched after its
+smoke refused the knob (the runner had not exported the variant to the smoke run); its verdict is
+recorded below when in.
