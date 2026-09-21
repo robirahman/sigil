@@ -2000,5 +2000,7 @@ change, is what actually removed the refill behaviour and it gained Elo. Next st
 revisited: one term at a time, and fit the magnitude on the labelled corpus before any arena.
 
 The competitive-opening arm (`opening_book`, `SIGIL_VARIANT=competitive`) was relaunched after its
-smoke refused the knob (the runner had not exported the variant to the smoke run); its verdict is
-recorded below when in.
+smoke refused the knob (the runner had not exported the variant to the smoke run). Its verdict is
+recorded below when in -- but the selector shipped regardless (`742e3c4a`), by design: the designer
+expects its benefit to be long-term positional against humans in long games, and a possible AI-vs-AI
+loss from the changed first move is not the quantity that matters. The human playtest is the test.
