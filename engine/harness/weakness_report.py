@@ -181,7 +181,7 @@ def outcome_report(raw, out):
     table('By game length', length_bucket)
 
     def week(x):
-        return [datetime.utcfromtimestamp(x['ts'] / 1000).strftime('%Y-W%V')]
+        return [datetime.fromtimestamp(x['ts'] / 1000).strftime('%Y-W%V')]
     table('By week', week)
 
     spell_rows = table('By spell present in the draw (9 of the pool per game)', lambda x: x['spells'], min_n=8)
@@ -194,7 +194,7 @@ def outcome_report(raw, out):
 
 # ------------------------------------------------------------- part 2 ---
 
-def eval_report(raw, lines, rows, out, cases, max_list=25):
+def eval_report(raw, lines, rows, out, cases, max_list=25, recheck_map=None):
     out.append('\n## Part 2 — evaluation failures (every game with stored evals)\n')
     covered = [gid for gid in lines if gid in rows and rows[gid]]
     n_pos = sum(len(rows[gid]) for gid in covered)
@@ -230,15 +230,18 @@ def eval_report(raw, lines, rows, out, cases, max_list=25):
             pos_by_side[r[i]['mover']] += 1; pos_by_era[e] += 1
             for s in spells: pos_by_spell[s] += 1
 
-        def flag(kind, i, detail, rec_list):
+        def flag(kind, i, detail, rec_list, about=None):
             row = r[i]
             per_side[(kind, row['mover'])] += 1; per_era[(kind, e)] += 1
             for s in spells: per_spell[kind][s] += 1
             rec = {'kind': kind, 'game': gid, 'i': i, 'turn': (g.get('turnNumbers') or [None] * n)[i] if i < n else None,
                    'mover': row['mover'], 'stones_red': row['stones'], 'mate_red': row['mate'], 'proven': row['proven'],
                    'depth': row['depth'], 'winner': winner, 'ai_side': ai_side, 'era': e, 'link': link,
-                   'sfn': g['positions'][i], 'detail': detail,
-                   'red': tier(rg.get('redUid')), 'blue': tier(rg.get('blueUid'))}
+                   'sfn': g['positions'][i], 'detail': detail, 'history': g['positions'][:i],
+                   'best': row.get('best'), 'next_sfn': g['positions'][i + 1] if i + 1 < len(g['positions']) else None,
+                   'red': tier(rg.get('redUid')), 'blue': tier(rg.get('blueUid')),
+                   'about': about, 'about_ai': (about == ai_side) if (about and ai_side) else None,
+                   'recheck': (recheck_map or {}).get((kind, gid, i), '')}
             rec_list.append(rec); cases.append(rec)
 
         # A / B: forced or decisive claims vs the result
@@ -268,14 +271,15 @@ def eval_report(raw, lines, rows, out, cases, max_list=25):
                 claimed = 'red' if st > 0 else 'blue'
             if claimed and winner and claimed != winner:
                 flag('A', i, f'engine: {"mate in %d" % abs(m) if m else "%+.1f stones" % st} for {claimed}'
-                             f'{"" if row["proven"] else " (unproven)"}; game won by {winner}', A)
+                             f'{"" if row["proven"] else " (unproven)"}; game won by {winner}', A, about=claimed)
             elif claimed and not winner:
-                flag('A', i, f'engine: {"mate in %d" % abs(m) if m else "%+.1f stones" % st} for {claimed}; game had no winner', A)
+                flag('A', i, f'engine: {"mate in %d" % abs(m) if m else "%+.1f stones" % st} for {claimed}; game had no winner', A, about=claimed)
             if m and winner and claimed == winner:
                 actual = winner_turns_left.get(i)
                 if actual is not None and actual < abs(m):
+                    loser = 'blue' if winner == 'red' else 'red'
                     flag('B', i, f'engine: {winner} wins in {abs(m)}{"" if row["proven"] else " (unproven)"}; '
-                                 f'the game ended after {actual} more {winner} turn(s)', B)
+                                 f'the game ended after {actual} more {winner} turn(s)', B, about=loser)
                 elif actual is not None and actual > abs(m):
                     B_slow.append((gid, i, abs(m), actual))
         # C: collapses of non-decisive evals over two plies
@@ -299,7 +303,7 @@ def eval_report(raw, lines, rows, out, cases, max_list=25):
                 else:
                     bucket, kind = C_opp, 'C-opp-move'
                 flag(kind, i, f'{mover} to move: {a["stones"] * sign:+.1f} -> {b["stones"] * sign:+.1f} for {mover} two plies later '
-                              f'(drop {drop:.1f}); AI is {ai_side or "neither side"}', bucket)
+                              f'(drop {drop:.1f}); AI is {ai_side or "neither side"}', bucket, about=mover)
 
     def rate_table(title, kind_prefix):
         out.append(f'\n### {title}\n\n| split | positions | cases | per 1,000 |\n|---|---|---|---|')
@@ -334,10 +338,15 @@ def eval_report(raw, lines, rows, out, cases, max_list=25):
         if not items:
             return
         items = sorted(items, key=key) if key else items
-        out.append('| game | turn | mover | red / blue | engine said | result | depth | review |\n|---|---|---|---|---|---|---|---|')
+        # The AI's own failures first: a human missing a mate is not an engine weakness.
+        items = sorted(items, key=lambda c: 0 if c['about_ai'] else 1)
+        n_ai = sum(1 for c in items if c['about_ai'])
+        out.append(f'{n_ai} of these concern the AI\'s own side (listed first); the rest are humans failing to convert or defend.\n')
+        out.append('| game | turn | mover | red / blue | about | engine said | result | recheck | review |\n|---|---|---|---|---|---|---|---|---|')
         for c in items[:n_max]:
-            out.append(f'| `{c["game"]}` | {c["turn"]} | {c["mover"]} | {c["red"]} / {c["blue"]} | {c["detail"]} | '
-                       f'{c["winner"] or "no winner"} | {c["depth"]} | {c["link"]} |')
+            who = ('AI' if c['about_ai'] else ('human' if c['about_ai'] is False else '–'))
+            out.append(f'| `{c["game"]}` | {c["turn"]} | {c["mover"]} | {c["red"]} / {c["blue"]} | {who} | {c["detail"]} | '
+                       f'{c["winner"] or "no winner"} | {c.get("recheck", "")} | {c["link"]} |')
         if len(items) > n_max:
             out.append(f'\n… {len(items) - n_max} more in the cases file.')
 
@@ -380,28 +389,278 @@ def eval_report(raw, lines, rows, out, cases, max_list=25):
             key=lambda c: -float(c['detail'].split('drop ')[1].split(')')[0]), n_max=10)
 
 
+def recheck(cases, time_ms, kinds=('A', 'B')):
+    """Replay every AI-side A/B case through the CURRENT engine at a live time
+    budget (fresh table, shipped config) and record whether it now finds the
+    claimed win / the faster loss: a case the current engine gets right is a
+    historical live-search miss, one it still gets wrong is an open weakness."""
+    import sigil_engine as se
+    kw = dict(width_scale=se.DEFAULT_WIDTH_SCALE, adaptive=se.SHIPPED_ADAPTIVE)
+    todo = [c for c in cases if c['about_ai'] and c['kind'] in kinds and c['mover'] == c['about']]
+    for c in todo:
+        r = se.analyze(c['sfn'], 'tfit', max_depth=64, time_ms=time_ms, history_sfns=c['history'], **kw)
+        m = r['mate_in_turns']
+        c['recheck'] = (f'{time_ms // 1000}s live search: ' +
+                        (f'mate in {abs(m)} {"for" if m > 0 else "against"} mover{"" if r["proven"] else " (unproven)"}'
+                         if m else f'{r["stones"]:+.1f} stones, depth {r["depth"]}'))
+        if r.get('expected_sfn') and c.get('next_sfn'):
+            same = r['expected_sfn'].split()[0] == c['next_sfn'].split()[0]
+            c['recheck'] += '; same move as played' if same else '; different move from the one played'
+        # Generator-gap probe for a loss that arrived in ONE opponent turn: after
+        # the move actually played, did the opponent have a mate-in-1 that the
+        # exhaustive solver finds but a depth-2 search does not? That is the
+        # ordered generator hiding a turn (the WINDOW gap class), not an eval issue.
+        if c['kind'] == 'B' and c.get('next_sfn') and 'after 1 more' in c['detail']:
+            try:
+                sol = json.loads(se.solve_mates(c['next_sfn'], 50_000_000, 15000, [], 1))
+                n1 = sol.get('mate1_total') or len(sol.get('mate1') or [])
+                d2 = se.analyze(c['next_sfn'], 'tfit', max_depth=2, time_ms=0, history_sfns=c['history'] + [c['sfn']], **kw)
+                sees = d2['mate_in_turns'] is not None and d2['mate_in_turns'] > 0
+                c['recheck'] += (f'; after the played move: solver finds {n1} mate-in-1 line(s), '
+                                 f'depth-2 search {"sees" if sees else "MISSES"} it' if n1 else
+                                 '; after the played move: solver finds no mate-in-1 (opponent won another way, e.g. Seal/repetition)')
+            except Exception as e:  # noqa: BLE001
+                c['recheck'] += f'; solver probe failed: {type(e).__name__}'
+    return len(todo)
+
+
+# ------------------------------------------------------------- part 3 ---
+
+def final_blow_report(raw, lines, probe_path, out, max_list=25):
+    """Fold in final_blow_probe.py: at the position before the winner's last
+    turn, how many of the mover's turns won on the spot (exhaustive solver), and
+    did the shipped search see a forced win at depth 1 / depth 2?"""
+    probes = []
+    with open(probe_path, encoding='utf-8') as fh:
+        for line in fh:
+            d = json.loads(line)
+            if 'error' in d or not d.get('solver_ok', True):
+                continue
+            probes.append(d)
+    out.append('\n## Part 3 — did the search see the game-ending blow?\n')
+    if not probes:
+        out.append('No probe data.\n'); return
+    out.append(f'{len(probes)} games whose last recorded turn was the winner\'s. At the position before it (winner to move) '
+               f'the exhaustive solver counts the mover\'s immediately winning turns; the shipped search is asked, untimed, '
+               f'at depth 1 and depth 2 whether it reports a forced win for the mover. A position with many winning turns '
+               f'that the search cannot see is an ORDERING / WINDOW failure of the turn generator (the win exists but never '
+               f'enters the candidate list), not a deep tactic.\n')
+    with_mate = [d for d in probes if d['mate1_total']]
+    out.append(f'- winner had an immediate win available: **{len(with_mate)}** of {len(probes)} '
+               f'({pct(len(with_mate) / len(probes))}); the rest won by a path the solver does not count as mate-in-1 '
+               f'(Seal of Destruction start-of-turn losses, sixth cast, repetition, or a win the JS rules accept and the engine does not)')
+    for d_ in (1, 2):
+        seen = sum(1 for d in with_mate if d[f'd{d_}_sees'])
+        out.append(f'- depth-{d_} search saw the forced win in **{seen}** of {len(with_mate)} ({pct(seen / max(1, len(with_mate)))})')
+    if any('prepass2k' in d for d in with_mate):
+        pp = [d for d in with_mate if 'prepass2k' in d]
+        miss = [d for d in pp if not d['d2_sees']]
+        out.append(f'- the stone-lead pre-pass (`decisive_lead_turns`, shipped cap 2,000 boards) surfaces a winning turn in '
+                   f'**{sum(1 for d in pp if d["prepass2k"])}** of {len(pp)} ({pct(sum(1 for d in pp if d["prepass2k"]) / len(pp))}); '
+                   f'at a 50,000-board cap in {sum(1 for d in pp if d["prepass50k"])} ({pct(sum(1 for d in pp if d["prepass50k"]) / len(pp))})')
+        out.append(f'- of the **{len(miss)}** wins the depth-2 search missed, the pre-pass at 2,000 finds **{sum(1 for d in miss if d["prepass2k"])}**, '
+                   f'at 50,000 **{sum(1 for d in miss if d["prepass50k"])}**: the remainder are outside the shapes/bounds the pre-pass '
+                   f'covers ([move], [move, cast], [move, dash, cast] with optimistic material bounds), not outside its budget')
+
+    def bucket(n):
+        return ('1 winning turn' if n == 1 else '2–5' if n <= 5 else '6–20' if n <= 20 else '21–100' if n <= 100 else '> 100')
+    out.append('\n### Detection at depth 2 by how many of the mover\'s turns won\n\n| winning turns | positions | seen at d1 | seen at d2 | missed at d2 |\n|---|---|---|---|---|')
+    order = ['1 winning turn', '2–5', '6–20', '21–100', '> 100']
+    groups = defaultdict(list)
+    for d in with_mate:
+        groups[bucket(d['mate1_total'])].append(d)
+    for b in order:
+        xs = groups.get(b, [])
+        if not xs:
+            continue
+        s1 = sum(1 for d in xs if d['d1_sees']); s2 = sum(1 for d in xs if d['d2_sees'])
+        out.append(f'| {b} | {len(xs)} | {s1} ({pct(s1 / len(xs))}) | {s2} ({pct(s2 / len(xs))}) | {len(xs) - s2} |')
+
+    def split_table(title, key_fn):
+        groups = defaultdict(list)
+        for d in with_mate:
+            for k_ in key_fn(d):
+                groups[k_].append(d)
+        out.append(f'\n### {title}\n\n| split | positions | missed at d2 | miss rate | z vs rest |\n|---|---|---|---|---|')
+        tot = len(with_mate); tot_miss = sum(1 for d in with_mate if not d['d2_sees'])
+        rows_ = []
+        for k_, xs in groups.items():
+            if len(xs) < 8:
+                continue
+            miss = sum(1 for d in xs if not d['d2_sees'])
+            rows_.append((ztest(miss, len(xs), tot_miss - miss, tot - len(xs)), k_, miss, len(xs)))
+        rows_.sort(key=lambda t: -t[0])
+        for z, k_, miss, n_ in rows_:
+            out.append(f'| {k_} | {n_} | {miss} | {pct(miss / n_)} | {z:+.1f} |')
+    split_table('By mover (the winner)', lambda d: [d['mover']])
+    split_table('By era', lambda d: ['rust era (>= 2026-08-30)' if (raw.get(d['g'], {}).get('timestamp') or 0) >= RUST_LIVE else 'pre-rust era'])
+    split_table('By who the winner was', lambda d: [tier(raw.get(d['g'], {}).get('redUid' if d['mover'] == 'r' else 'blueUid'))])
+    split_table('By spell present in the draw', lambda d: spells_of(raw.get(d['g'], {})))
+    missed = sorted([d for d in with_mate if not d['d2_sees']], key=lambda d: -d['mate1_total'])
+    out.append(f'\n**Worst misses: {len(missed)} winning positions the depth-2 search did not see (most winning turns first).**\n')
+    out.append('| game | ply | mover | winning turns / legal | d2 eval | pre-pass 2k / 50k | red / blue | review |\n|---|---|---|---|---|---|---|---|')
+    for d in missed[:max_list]:
+        rg = raw.get(d['g'], {})
+        out.append(f'| `{d["g"]}` | {d["i"]} | {d["mover"]} | {d["mate1_total"]} / {d["root_successors"]} | '
+                   f'{d["d2_stones"]:+.1f} | {d.get("prepass2k", "?")} / {d.get("prepass50k", "?")} | {tier(rg.get("redUid"))} / {tier(rg.get("blueUid"))} | {review_link(rg, d["g"])} |')
+    if len(missed) > max_list:
+        out.append(f'\n… {len(missed) - max_list} more in the probe file.')
+
+
+# ------------------------------------------------------------- part 4 ---
+
+def _ann_items(x):
+    if isinstance(x, dict):
+        out = []
+        for k, v in x.items():
+            try:
+                out.append((int(k), v))
+            except (TypeError, ValueError):
+                pass
+        return out
+    if isinstance(x, list):
+        return [(i, v) for i, v in enumerate(x) if v]
+    return []
+
+
+def _turn_shape(turn):
+    """What the mover did, from the stored transcript: 'hard move' / 'dash' / 'cast <Spell>'
+    tokens, joined. AI (sim) turns carry typed actions."""
+    acts = turn.get('actions') or []
+    parts = []
+    for a in acts:
+        if isinstance(a, dict):
+            t = a.get('type')
+            if t == 'cast':
+                parts.append('cast ' + str(a.get('spell')))
+            elif t in ('dash', 'dash_lightning'):
+                parts.append('dash')
+            elif t == 'hard_move':
+                parts.append('hard move')
+    return ', '.join(parts) if parts else 'plain move'
+
+
+def annotation_report(raw, lines, rows, out, max_list=25):
+    out.append('\n## Part 4 — moves players flagged as bad\n')
+    flagged, all_ai_turns = [], []
+    for gid, g in raw.items():
+        t = g.get('turns') or []
+        t = t if isinstance(t, list) else [v for _k, v in sorted(t.items(), key=lambda kv: int(kv[0]))]
+        flags = dict(_ann_items(g.get('annotations')))
+        L = lines.get(gid); R = rows.get(gid, {})
+        for k, x in enumerate(t):
+            if not isinstance(x, dict):
+                continue
+            uid = g.get('redUid') if x.get('color') == 'red' else g.get('blueUid')
+            if not is_ai(uid):
+                continue
+            tn = x.get('turnNumber')
+            rec = {'g': gid, 'k': k, 'turn': tn, 'color': x.get('color'), 'tier': tier(uid), 'rust': is_rust(uid),
+                   'shape': _turn_shape(x), 'phase': 'opening (t<=10)' if (tn or 0) <= 10 else 'middle (t 11-25)' if (tn or 0) <= 25 else 'late (t>25)',
+                   'flag': flags.get(tn), 'spells': spells_of(g), 'link': review_link(g, gid), 'winner': g.get('winner'),
+                   'won': g.get('winner') == x.get('color')}
+            if L and R and k in R and (k + 2) in R and R[k]['stones'] is not None and R[k + 2]['stones'] is not None:
+                sign = 1 if x.get('color') == 'red' else -1
+                rec['eval_before'] = R[k]['stones'] * sign
+                rec['drop'] = (R[k]['stones'] - R[k + 2]['stones']) * sign
+            all_ai_turns.append(rec)
+            if flags.get(tn) in ('bad', 'good'):
+                flagged.append(rec)
+    bad = [r for r in flagged if r['flag'] == 'bad']
+    good = [r for r in flagged if r['flag'] == 'good']
+    out.append(f'{len(bad)} AI turns flagged **bad** and {len(good)} flagged **good** by players, out of {len(all_ai_turns)} recorded AI turns '
+               f'({sum(1 for r in bad if r["rust"])} bad / {sum(1 for r in good if r["rust"])} good on Rust tiers; the rest on the older JS tiers). '
+               f'Flags are volunteered, so rates below compare flagged turns with ALL AI turns of the same cohort, not with an unbiased sample.\n')
+
+    def cohort_tables(cohort_name, sel):
+        ai = [r for r in all_ai_turns if sel(r)]
+        bd = [r for r in bad if sel(r)]
+        if not bd:
+            return
+        out.append(f'\n### {cohort_name}: {len(bd)} bad flags over {len(ai)} AI turns\n')
+
+        def table(title, key_fn, min_n=5):
+            base = Counter(); fl = Counter()
+            for r in ai:
+                for k_ in key_fn(r): base[k_] += 1
+            for r in bd:
+                for k_ in key_fn(r): fl[k_] += 1
+            tot_b, tot_f = len(ai), len(bd)
+            rows_ = []
+            for k_, nb in base.items():
+                if nb < min_n:
+                    continue
+                nf = fl.get(k_, 0)
+                z = ztest(nf, tot_f, nb, tot_b)   # enrichment: share of flags vs share of turns
+                rows_.append((z, k_, nf, nb))
+            rows_.sort(key=lambda t: -t[0])
+            out.append(f'\n**{title}**\n\n| split | AI turns | bad flags | flags per 100 turns | z (enrichment) |\n|---|---|---|---|---|')
+            for z, k_, nf, nb in rows_[:14]:
+                out.append(f'| {k_} | {nb} | {nf} | {100 * nf / nb:.1f} | {z:+.1f} |')
+        table('What the AI did on the flagged turn', lambda r: [r['shape']])
+        table('Cast spell (any turn with a cast)', lambda r: [p for p in r['shape'].split(', ') if p.startswith('cast ')], min_n=3)
+        table('Game phase', lambda r: [r['phase']])
+        table('AI colour', lambda r: [r['color']])
+        table('Tier', lambda r: [r['tier']])
+        table('Spell present in the draw', lambda r: r['spells'], min_n=10)
+        table('Game result for the AI', lambda r: ['AI won' if r['won'] else 'AI did not win'])
+        ev = [r for r in bd if 'drop' in r]
+        if ev:
+            drops = sorted(r['drop'] for r in ev)
+            med = drops[len(drops) // 2]
+            big = sum(1 for d in drops if d > DROP)
+            base_ev = [r for r in ai if 'drop' in r]
+            base_big = sum(1 for r in base_ev if r['drop'] > DROP)
+            out.append(f'\n**Engine\'s own verdict on the flagged turns** ({len(ev)} with depth evals): median eval change two plies later '
+                       f'{-med:+.1f} stones for the AI; {big} of {len(ev)} ({pct(big / len(ev))}) collapsed by more than {DROP:.0f} stone, '
+                       f'against {pct(base_big / max(1, len(base_ev)))} of all evaluated AI turns in this cohort. '
+                       f'{sum(1 for r in ev if r["drop"] <= 0.3)} flagged turns lost nothing by the engine\'s own account (the player disagreed with the engine, or the flag is about style).')
+            out.append('\n| game | turn | AI | did | eval before (AI POV) | change 2 plies later | result | review |\n|---|---|---|---|---|---|---|---|')
+            for r in sorted(ev, key=lambda r: -r['drop'])[:max_list]:
+                out.append(f'| `{r["g"]}` | {r["turn"]} | {r["tier"]} ({r["color"]}) | {r["shape"]} | {r["eval_before"]:+.1f} | {-r["drop"]:+.1f} | '
+                           f'{"won" if r["won"] else "lost/other"} | {r["link"]} |')
+    cohort_tables('Rust tiers', lambda r: r['rust'])
+    cohort_tables('JS tiers (earlier engine, for contrast)', lambda r: not r['rust'])
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--raw', required=True); ap.add_argument('--lines', required=True)
     ap.add_argument('--evals', action='append', required=True)
     ap.add_argument('--out', required=True); ap.add_argument('--cases', default='')
     ap.add_argument('--max-list', type=int, default=25)
+    ap.add_argument('--final-probe', default='', help='final_blow_probe.py output (adds Part 3)')
+    ap.add_argument('--recheck-ms', type=int, default=0,
+                    help='re-run the current engine at this live budget on every AI-side A/B case (needs sigil_engine)')
     a = ap.parse_args()
     raw = json.load(open(a.raw, encoding='utf-8'))
     lines = json.load(open(a.lines, encoding='utf-8'))
     rows = load_rows(a.evals)
-    out = [f'# Rust engine weakness report — {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}\n',
+    out = [f'# Rust engine weakness report — {datetime.now().strftime("%Y-%m-%d %H:%M")}\n',
            f'Sources: {len(raw)} completed_games records, {len(lines)} hydrated games, '
            f'{sum(len(v) for v in rows.values())} evaluated positions from {len(a.evals)} evals file(s).\n']
     cases = []
     outcome_report(raw, out)
-    eval_report(raw, lines, rows, out, cases, max_list=a.max_list)
+    recheck_map = None
+    if a.recheck_ms:
+        # Two passes: the first collects the cases, the recheck annotates them,
+        # the second renders the listings with the annotation.
+        scratch = []
+        eval_report(raw, lines, rows, [], scratch, max_list=a.max_list)
+        n_re = recheck(scratch, a.recheck_ms)
+        recheck_map = {(c['kind'], c['game'], c['i']): c.get('recheck', '') for c in scratch if c.get('recheck')}
+        out.append(f'\n(Recheck: {n_re} AI-side A/B positions re-searched by the current engine at {a.recheck_ms} ms.)\n')
+    eval_report(raw, lines, rows, out, cases, max_list=a.max_list, recheck_map=recheck_map)
+    if a.final_probe and os.path.exists(a.final_probe):
+        final_blow_report(raw, lines, a.final_probe, out, max_list=a.max_list)
+    annotation_report(raw, lines, rows, out, max_list=a.max_list)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or '.', exist_ok=True)
     with open(a.out, 'w', encoding='utf-8') as fh:
         fh.write('\n'.join(out) + '\n')
     if a.cases:
+        slim = [{k: v for k, v in c.items() if k != 'history'} for c in cases]
         with open(a.cases, 'w', encoding='utf-8') as fh:
-            json.dump(cases, fh, indent=1)
+            json.dump(slim, fh, indent=1)
     print(f'wrote {a.out} ({len(cases)} cases)')
 
 
