@@ -24,6 +24,7 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
 RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
 VARIANT=$(md variant); : "${VARIANT:=standard}"   # SIGIL_VARIANT for the harness (competitive opening arenas)
+export SIGIL_VARIANT="$VARIANT"   # the smoke arm reads it too, not only the shards
 SHARD_BASE=$(md shard-base)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=main}" \
   "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \
