@@ -2617,10 +2617,14 @@ fn pre_pass_finds_the_recorded_erupt_mate_at_the_shipped_cap() {
     let (_, human) = RECORDED_BLINDSPOT_CASES[1];
     let b = Board::from_sfn(human).expect("sfn");
     let c = b.to_move;
-    // The recorded defect: without the pre-pass a depth-2 search sees no mate.
+    // The recorded defect: without the pre-passes a depth-2 search sees no mate.
+    // (The material-swing pass would promote the mate too -- it is a +swing --
+    // so both are off for the premise.)
     crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
+    crate::turn_iter::set_swing_prepass(false);
     let (_, sc0, _) = shipped_search().go(&b, c, 2, 0);
     crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
+    crate::turn_iter::set_swing_prepass(true);
     assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the defect to reproduce without the pre-pass, got {sc0}");
     assert!(!b.decisive_lead_turns(c, crate::turn_iter::DECISIVE_LEAD_CAP).is_empty());
     let (best, sc, _) = shipped_search().go(&b, c, 2, 0);
@@ -2731,9 +2735,11 @@ fn lead_prepass_is_what_lets_a_depth_one_search_see_the_mate() {
         let b = Board::from_sfn(sfn).expect("sfn");
         let c = b.to_move;
         crate::turn_iter::set_decisive_lead(false, crate::turn_iter::DECISIVE_LEAD_CAP);
+        crate::turn_iter::set_swing_prepass(false);   // a mate is a +swing too
         let mut s0 = shipped_search();
         let (_, sc0, _) = s0.go(&b, c, 1, 0);
         crate::turn_iter::set_decisive_lead(true, crate::turn_iter::DECISIVE_LEAD_CAP);
+        crate::turn_iter::set_swing_prepass(true);
         assert!(sc0 < crate::search::UNPROVEN_MATE, "expected the recorded blindness without the pre-pass, got {sc0} in {sfn}");
         let mut s = shipped_search();
         let (best, sc, _) = s.go(&b, c, 1, 0);
