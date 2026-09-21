@@ -742,7 +742,7 @@ class MultiplayerController {
 	async _doDash(color, lightning) {
 		const board = this.board;
 		const enemy = board.enemy(color);
-		this.emit({ type: 'message', message: color === this.myColor ? 'Dashing!' : 'Opponent dashes!', awaiting: null });
+		this.emit({ type: 'message', message: (color === 'red' ? 'Red' : 'Blue') + ' dashes!', awaiting: null });
 
 		// Seal of Autumn (held by the enemy) bars sacrificing stones on a spell
 		// sigil; highlight only eligible stones when restricted.

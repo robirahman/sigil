@@ -463,7 +463,7 @@ async function applyAITurn(board, turn, color, emit) {
 				}
 				board.update();
 				emit(board.getBoardStatePayload());
-				emit({ type: 'message', message: 'Opponent dashes!', awaiting: null });
+				emit({ type: 'message', message: (color === 'red' ? 'Red' : 'Blue') + ' dashes!', awaiting: null });
 				await _aiDelay(500);
 			}
 		}

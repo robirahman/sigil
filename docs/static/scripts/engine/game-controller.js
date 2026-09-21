@@ -607,7 +607,7 @@ class GameController {
 		const board = this.board;
 		const enemy = board.enemy(color);
 
-		this.emit({ type: 'message', message: 'Opponent dashes!', awaiting: null });
+		this.emit({ type: 'message', message: (color === 'red' ? 'Red' : 'Blue') + ' dashes!', awaiting: null });
 
 		// Seal of Autumn (held by the enemy) bars sacrificing stones that sit
 		// on a spell sigil. Highlight only the eligible stones when restricted;
