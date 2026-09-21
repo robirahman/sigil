@@ -18,6 +18,8 @@ pub mod sfn;
 pub mod eval;
 pub mod features;
 pub mod search;
+pub mod opening_data;
+pub mod opening;
 pub mod prior;
 pub mod mate;
 #[cfg(feature = "python")]

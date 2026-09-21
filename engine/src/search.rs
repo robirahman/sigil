@@ -404,6 +404,9 @@ pub struct Search {
     hist_dash: [i32; 2],
     /// Scratch: this iteration's per-root-move scores (root_resort).
     root_scores_out: Vec<(Turn, i32)>,
+    /// The competitive opening selector's pick for the last `go`, when it
+    /// applied (`opening.rs`; switch `opening::set_opening_book`).
+    opening_pick: Option<crate::opening::OpeningPick>,
     /// Repetition counts for positions already played in the real game.
     base_history: std::collections::HashMap<u64, u8>,
     /// Zobrist keys along the current search path.
@@ -527,6 +530,7 @@ impl Search {
             // `rust_anchor` tier turns them back off in wasm.rs.
             elastic: Some(Elastic::DEFAULT),
             root_scores_out: Vec::new(),
+            opening_pick: None,
             pvs: false,
             lmr_ext: 2,
             lmr_r: 1,
@@ -566,6 +570,23 @@ impl Search {
     /// false reproduces the pre-guard search: any mate score ends deepening
     /// and is reported as a proof.
     pub fn set_mate_guard(&mut self, on: bool) { self.mate_guard = on; }
+    /// The opening selector's pick for the last search, if it applied.
+    pub fn opening_pick(&self) -> Option<crate::opening::OpeningPick> { self.opening_pick }
+
+    /// Competitive opening book: when it applies, the root candidates are the
+    /// empty nodes of the sigil `opening::choose_opening` picked, in generator
+    /// order. Only the ROOT is restricted -- replies deeper in the tree still
+    /// see every blink -- so the search keeps judging the node inside the sigil.
+    fn opening_root_turns(&mut self, b: &Board, c: Color) -> Option<Vec<Turn>> {
+        if !crate::opening::opening_book_enabled() { return None; }
+        let pick = crate::opening::choose_opening(b, c)?;
+        let mask = pick.node_mask;
+        let v: Vec<Turn> = b.turns_ordered(c).filter(|t| matches!(t.slice()[0],
+            Action::Blink { node, .. } if mask & (1u64 << node) != 0)).collect();
+        if v.is_empty() { return None; }
+        self.opening_pick = Some(pick);
+        Some(v)
+    }
     pub fn mate_guard_get(&self) -> bool { self.mate_guard }
     pub fn set_legacy_order(&mut self, v: bool) { self.legacy_order = v; }
     pub fn set_merge_min_width(&mut self, w: usize) { self.merge_min_width = w; }
@@ -750,6 +771,7 @@ impl Search {
         self.deadline = if time_ms > 0 { Some(now_ms() + time_ms as f64) } else { None };
         self.stats = SearchStats::default();
         self.path.clear();
+        self.opening_pick = None;
         // One generation per search. A fresh `Search` therefore writes every
         // entry with age 1 and the aging rule never fires, which keeps the
         // single-search tree identical to the pre-persistence engine; only a
@@ -927,7 +949,10 @@ impl Search {
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
         let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape) * 3;
-        let mut turns = self.ordered_turns(b, c, 0, best_local, w);
+        let mut turns = match self.opening_root_turns(b, c) {
+            Some(v) => v,
+            None => self.ordered_turns(b, c, 0, best_local, w),
+        };
         if self.root_resort && !prev_scores.is_empty() {
             // PV first (already promoted), then the previous iteration's scores
             // descending; moves it never scored keep generator order after them.

@@ -83,6 +83,19 @@ pub struct Weights {
     /// square wave that "every move places a stone" produces. See the module docs;
     /// 50 is the derived value, 0 reproduces the old behaviour for A/B.
     pub tempo: i32,
+    /// Centistones per unit of `sign(my score lead) x max(casts so far)`,
+    /// UNSCALED. The sixth cast ends the game and awards it on the count, so
+    /// every cast -- mine or theirs -- brings the end nearer: good while I lead,
+    /// bad while I trail, more so the closer the counters are to six. This is
+    /// the designer's rule; `sixth_spell_danger` is its step-function
+    /// predecessor at counter >= 5 (kept for the older presets).
+    pub cast_pace: i32,
+    /// Centistones per net soft-placement target (empty node next to one of my
+    /// stones minus the same for the enemy, clamped +-8), UNSCALED: a group with
+    /// no room to place is a group about to be surrounded, and the players'
+    /// flagged Flourish casts were exactly the ones that packed stones back in
+    /// instead of walking out.
+    pub mobility: i32,
 }
 
 impl Weights {
@@ -105,7 +118,8 @@ impl Weights {
             pos_num: 1,
             pos_den: 1,
             tempo: 50,
-        }
+    cast_pace: 0, mobility: 0,
+}
     }
 }
 
@@ -125,6 +139,7 @@ pub const CLASSIC: Weights = Weights {
     sigil_stone: 0, sigil_charged: 0,
     mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0,
     pos_num: 1, pos_den: 1, tempo: 50,
+    cast_pace: 0, mobility: 0,
 };
 
 /// Mana term only, to separate the two contributions.
@@ -139,6 +154,7 @@ pub const MATERIAL_ONLY: Weights = Weights {
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0, mana: 0, sixth_spell_danger: 0, control: 0,
     void_penalty: 0, pos_num: 1, pos_den: 1, tempo: 0,
+    cast_pace: 0, mobility: 0,
 };
 
 /// Material only PLUS the tempo correction: the minimal change that removes the
@@ -195,7 +211,8 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
         sigil_stone: 0, sigil_charged: 0,
         mana: m, sixth_spell_danger: 0, control: c, void_penalty: v,
         pos_num: 1, pos_den: 1, tempo: 50,
-    }
+    cast_pace: 0, mobility: 0,
+}
 }
 
 /// Worst-case |positional contribution| of a weight set, in centistones, using the
@@ -288,6 +305,7 @@ pub const FIT_SHAPE: Weights = Weights {
     mana: 82, sixth_spell_danger: 64,
     control: 3, void_penalty: -22,
     pos_num: 1, pos_den: 1, tempo: 50,
+    cast_pace: 0, mobility: 0,
 };
 
 /// The hand shape with only the four disputed SIGNS flipped, magnitudes untouched.
@@ -302,6 +320,14 @@ pub const FLIP_SHAPE: Weights = Weights {
 /// favoured, since everything at or just inside it won and everything above ~2x lost.
 pub const HAND_AT_BUDGET: Weights = at_budget(Weights::default_const());
 pub const FIT_AT_BUDGET: Weights = at_budget(FIT_SHAPE);
+/// `tfit` plus the two designer-rule terms and map control worth about a stone
+/// across the board (2026-09-22, for the Flourish/placement fix). `control` sits
+/// inside the scaled positional sum (x96/1887): 40 raw is ~2 cs per node, so a
+/// 39-node swing is ~0.8 stone against 0.06 in `tfit`. `cast_pace` and
+/// `mobility` are unscaled like `lead` and `tempo`: 15 cs per cast-count unit
+/// (five casts while a stone behind is -0.75 stone), 4 cs per net placement
+/// target (+-0.32 stone at the clamp). Arena-gated against `tfit`.
+pub const FIT2_AT_BUDGET: Weights = Weights { control: 40, cast_pace: 15, mobility: 4, ..FIT_AT_BUDGET };
 pub const FLIP_AT_BUDGET: Weights = at_budget(FLIP_SHAPE);
 
 pub const STRUCT_01: Weights = scaled_structural(1, 100);
@@ -470,7 +496,33 @@ impl Board {
         if w.tempo != 0 {
             mat += if self.to_move == c { w.tempo } else { -w.tempo };
         }
+        if w.cast_pace != 0 {
+            mat += w.cast_pace * self.cast_pace_feature(c);
+        }
+        if w.mobility != 0 {
+            mat += w.mobility * self.mobility_feature(c);
+        }
         mat
+    }
+
+    /// `sign(my score lead) x max(my casts, their casts)`: how much the approach
+    /// of the sixth cast favours me. Zero when tied or before anyone has cast.
+    #[inline]
+    pub fn cast_pace_feature(&self, c: Color) -> i32 {
+        let red = self.total[0] as i32;
+        let blue = self.total[1] as i32;
+        let red_score_lead = red - (blue + 1);
+        let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
+        let casts = (self.spell_counter[0] as i32).max(self.spell_counter[1] as i32);
+        my_lead.signum() * casts
+    }
+
+    /// Net soft-placement targets (mine minus theirs), clamped to +-8.
+    #[inline]
+    pub fn mobility_feature(&self, c: Color) -> i32 {
+        let mine = self.soft_moveable(c).count_ones() as i32;
+        let theirs = self.soft_moveable(c.other()).count_ones() as i32;
+        (mine - theirs).clamp(-8, 8)
     }
 }
 
@@ -479,10 +531,10 @@ impl Board {
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 18] = [
+pub const EVAL_NAMES: [&str; 19] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
-    "hand", "tfit", "tflip",
+    "hand", "tfit", "tflip", "tfit2",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -502,6 +554,7 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "snotempo" => STRUCTURAL_NO_TEMPO,
         "hand" => HAND_AT_BUDGET,
         "tfit" => FIT_AT_BUDGET,
+        "tfit2" => FIT2_AT_BUDGET,
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
         "s02" => STRUCT_02,

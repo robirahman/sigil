@@ -23,6 +23,7 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
+VARIANT=$(md variant); : "${VARIANT:=standard}"   # SIGIL_VARIANT for the harness (competitive opening arenas)
 SHARD_BASE=$(md shard-base)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=main}" \
   "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \
@@ -135,7 +136,7 @@ for arm in $ARMS; do
     # 3-VM run then audits a third of the corpus three times and two thirds
     # never, while the logs look complete. This has bitten twice -- two runs
     # in the bucket are byte-identical because of it.
-    ( SIGIL_SHARD_OFF=$(( (SHARD_BASE + w) * 1000 )) \
+    ( SIGIL_SHARD_OFF=$(( (SHARD_BASE + w) * 1000 )) SIGIL_VARIANT="$VARIANT" \
       $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
         $(echo "$arm" | tr ',' ' ') \
         > "$WORK/out/arm${ai}_${tag}_w${w}.log" 2>&1 ) &

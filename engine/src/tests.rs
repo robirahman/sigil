@@ -2893,3 +2893,300 @@ fn a_mate_in_one_is_proven_even_when_widened() {
     let r = report(score, &st, b.to_move, &s.weights);
     assert_eq!(r, crate::search::Report { stones: crate::search::MATE_STONES, mate_in: Some(1), proven: true });
 }
+
+// ---------------------------------------------------------------- opening book
+
+/// A competitive board with the given draw (slot order: rituals, sorceries,
+/// charms), red to move on the free-placement turn (the browser's counter is
+/// 1 there: it pre-increments).
+fn competitive_board(draw: [u8; 9]) -> Board {
+    let mut b = Board::new(draw, Variant::Competitive);
+    b.setup_initial();
+    b.turn_counter = 1;
+    b
+}
+
+/// Red has blinked onto `node`; blue to move at counter 2.
+fn after_red_opening(draw: [u8; 9], node: &str) -> Board {
+    let mut b = competitive_board(draw);
+    b.stones[0] |= 1 << n(node);
+    b.update();
+    b.turn_counter = 2;
+    b.to_move = Color::Blue;
+    b
+}
+
+#[test]
+fn opening_data_pins_the_survey() {
+    use crate::opening_data::{MATCHUP, SYNERGY, STRENGTH, BOARD_PREF};
+    // Hail Storm ++ Blossom, Gust ++ Seal of Destruction, Slash ++ Hurricane;
+    // Fireblast + Seal of Wind is a ++ synergy; the Bradley-Terry extremes.
+    assert_eq!(MATCHUP[7][15], 2); assert_eq!(MATCHUP[15][7], -2);
+    assert_eq!(MATCHUP[26][36], 2); assert_eq!(MATCHUP[11][24], 2);
+    assert_eq!(SYNERGY[6][9], 2); assert_eq!(SYNERGY[9][6], 2);
+    assert!((STRENGTH[6] - 1.68).abs() < 1e-3, "Fireblast");
+    assert!((STRENGTH[28] + 1.97).abs() < 1e-3, "Torrent");
+    assert_eq!(BOARD_PREF[15], 1, "Blossom likes an empty board");
+    assert_eq!(BOARD_PREF[6], -1, "Fireblast likes a crowded one");
+    for a in 0..39 { for b in 0..39 {
+        assert_eq!(MATCHUP[a][b], -MATCHUP[b][a], "matchup antisymmetry {a} {b}");
+        assert_eq!(SYNERGY[a][b], SYNERGY[b][a], "synergy symmetry {a} {b}");
+    } }
+}
+
+#[test]
+fn opening_red_avoids_blossom_when_hail_storm_is_drawn() {
+    // Blossom (15) is the strongest ritual here, but Hail Storm (7) is a ++
+    // counter: the designer's rule is never to start on it in that draw.
+    let b = competitive_board([15, 0, 27, 7, 5, 28, 10, 38, 26]);
+    let p = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+    assert_ne!(p.spell, 15, "Blossom must not be chosen: {p:?}");
+    assert!(p.vetoed & 1 != 0, "Blossom's slot vetoed: {p:?}");
+    assert_eq!(p.spell, 7, "Hail Storm is the pick: {p:?}");
+}
+
+#[test]
+fn opening_red_prefers_seal_of_wind_over_hurricane() {
+    // Charms chosen outside Hurricane's seven ++ counters, so the strength rule
+    // alone decides: Seal of Wind (+0.78, empty board) over Hurricane (+0.28).
+    let b = competitive_board([24, 0, 27, 9, 5, 28, 13, 38, 26]);
+    let p = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+    assert_eq!(p.spell, 9, "{p:?}");
+}
+
+#[test]
+fn opening_red_avoids_seal_of_destruction_when_gust_is_drawn() {
+    let b = competitive_board([36, 0, 27, 5, 28, 34, 26, 38, 13]);
+    let p = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+    assert_ne!(p.spell, 36, "{p:?}");
+    assert!(p.vetoed & 1 != 0, "Seal of Destruction vetoed by Gust: {p:?}");
+    let b2 = competitive_board([36, 0, 27, 5, 28, 34, 14, 38, 13]);   // Gust -> Seal of Summer
+    let p2 = crate::opening::choose_opening(&b2, Color::Red).expect("applies");
+    assert!(p2.vetoed & 1 == 0, "no Gust, no veto: {p2:?}");
+}
+
+#[test]
+fn opening_blue_replies_with_the_counter() {
+    // Red started on Blossom (a2): blue takes Hail Storm.
+    let b = after_red_opening([15, 0, 27, 7, 5, 28, 10, 38, 26], "a2");
+    let p = crate::opening::choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!(p.spell, 7, "{p:?}");
+    assert_eq!(p.reply, Some(15));
+    // Red on Hurricane (a2): a movement charm (Slash, ++ counter, charges at
+    // once) is the reply, on its single node.
+    let b = after_red_opening([24, 0, 27, 5, 28, 34, 11, 38, 13], "a2");
+    let p = crate::opening::choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!(p.spell, 11, "{p:?}");
+    assert_eq!(p.node_mask, 1u64 << n("a7"));
+}
+
+#[test]
+fn opening_push_charm_leverage_in_a_shared_zone() {
+    use crate::opening::{pair_value, PUSH};
+    // Zone a: Fireblast-class strength on the ritual (Corrupt 33), a Slash (11) charm.
+    let spells = [33u8, 0, 27, 5, 28, 34, 11, 38, 13];
+    let base_other_zone = pair_value(&spells, 0, 1);      // blue in zone b: no push term
+    let contested = pair_value(&spells, 0, 3);            // blue contests zone a on its sorcery
+    // The contested value carries red's +PUSH beyond what the spells alone say.
+    let spells_no_push = [33u8, 0, 27, 5, 28, 34, 14, 38, 13];  // Slash -> Seal of Summer
+    let contested_no_push = pair_value(&spells_no_push, 0, 3);
+    let _ = base_other_zone;
+    assert!(contested - contested_no_push > PUSH * 0.5, "push leverage credited to red: {contested} vs {contested_no_push}");
+    // If blue takes the Slash itself, the leverage flips to blue.
+    let blue_holds = pair_value(&spells, 0, 6);
+    let blue_holds_no_push = pair_value(&spells_no_push, 0, 6);
+    assert!(blue_holds - blue_holds_no_push < -PUSH * 0.5, "push leverage credited to blue: {blue_holds} vs {blue_holds_no_push}");
+}
+
+#[test]
+fn opening_choice_is_zone_invariant() {
+    for seed in 1..=30u64 {
+        let draw = Board::legal_draw(seed);
+        let b = competitive_board(draw);
+        let p = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+        for k in 1..3usize {
+            let mut rot = [0u8; 9];
+            for s in 0..9 { rot[3 * (s / 3) + (s % 3 + k) % 3] = draw[s]; }
+            let br = competitive_board(rot);
+            let pr = crate::opening::choose_opening(&br, Color::Red).expect("applies");
+            assert_eq!(pr.spell, p.spell, "seed {seed} rotation {k}: {p:?} vs {pr:?}");
+            assert_eq!(pr.pos, 3 * (p.pos / 3) + (p.pos % 3 + k) % 3);
+            let mut mask = 0u64;
+            let mut m = p.node_mask;
+            while m != 0 { let i = m.trailing_zeros() as usize; m &= m - 1; mask |= 1u64 << ((i + 13 * k) % 39); }
+            assert_eq!(pr.node_mask, mask, "seed {seed} rotation {k}");
+        }
+    }
+}
+
+#[test]
+fn opening_book_is_a_noop_outside_the_competitive_opening() {
+    assert!(crate::opening::choose_opening(&std_board(), Color::Red).is_none(), "standard variant");
+    let mut d = Board::new(Board::legal_draw(3), Variant::Deathmatch);
+    d.setup_initial();
+    assert!(crate::opening::choose_opening(&d, Color::Red).is_none(), "deathmatch");
+    let mut late = competitive_board(Board::legal_draw(3));
+    late.stones[0] |= 1 << n("a2"); late.stones[1] |= 1 << n("b2"); late.update();
+    late.turn_counter = 3;
+    assert!(crate::opening::choose_opening(&late, Color::Red).is_none(), "turn 3");
+    let mut own = competitive_board(Board::legal_draw(3));
+    own.stones[0] |= 1 << n("a2"); own.update();
+    assert!(crate::opening::choose_opening(&own, Color::Red).is_none(), "mover already has a stone");
+    // Every pick, red or blue, names a sigil with an empty node.
+    for seed in 1..=10u64 {
+        let b = competitive_board(Board::legal_draw(seed));
+        let p = crate::opening::choose_opening(&b, Color::Red).unwrap();
+        assert!(p.node_mask != 0 && p.node_mask & !crate::topology::SIGIL[p.pos] == 0);
+        assert_eq!(b.spells[p.pos], p.spell);
+    }
+}
+
+#[test]
+fn opening_book_restricts_the_root_to_the_chosen_sigil() {
+    let b = competitive_board(Board::legal_draw(3));
+    let pick = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+    let mut s = crate::search::Search::new(16);
+    s.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    let (best, _sc, _st) = s.go(&b, Color::Red, 2, 0);
+    let t = best.expect("a move");
+    match t.slice()[0] {
+        Action::Blink { node, .. } => assert!(pick.node_mask & (1u64 << node) != 0,
+            "root blink {node} outside the chosen sigil {:?}", pick),
+        other => panic!("opening turn should be a blink, got {other:?}"),
+    }
+    assert_eq!(s.opening_pick().map(|p| p.spell), Some(pick.spell));
+    // Book off: the plain search still moves, and reports no pick.
+    let mut s2 = crate::search::Search::new(16);
+    s2.weights = crate::eval::weights_by_name("tfit").expect("tfit");
+    crate::opening::set_opening_book(false);
+    let (best2, _, _) = s2.go(&b, Color::Red, 2, 0);
+    crate::opening::set_opening_book(true);
+    assert!(best2.is_some());
+    assert!(s2.opening_pick().is_none());
+    // Blue's reply goes through the book too.
+    let mut nb = b;
+    if let Action::Blink { node, .. } = t.slice()[0] { nb.stones[0] |= 1 << node; }
+    nb.update(); nb.turn_counter = 2; nb.to_move = Color::Blue;
+    let bp = crate::opening::choose_opening(&nb, Color::Blue).expect("blue applies");
+    let (bbest, _, _) = s.go(&nb, Color::Blue, 2, 0);
+    match bbest.expect("a move").slice()[0] {
+        Action::Blink { node, .. } => assert!(bp.node_mask & (1u64 << node) != 0),
+        other => panic!("blue's opening should be a blink, got {other:?}"),
+    }
+}
+
+#[test]
+fn opening_book_leaves_the_standard_search_alone() {
+    // Byte-identical search with the book on and off outside the opening.
+    let b = std_board();
+    let mut on = shipped_search(); let (t1, s1, st1) = on.go(&b, Color::Red, 3, 0);
+    crate::opening::set_opening_book(false);
+    let mut off = shipped_search(); let (t2, s2, st2) = off.go(&b, Color::Red, 3, 0);
+    crate::opening::set_opening_book(true);
+    assert_eq!(t1.map(|t| t.slice().to_vec()), t2.map(|t| t.slice().to_vec()));
+    assert_eq!((s1, st1.nodes), (s2, st2.nodes));
+    assert!(on.opening_pick().is_none());
+}
+
+/// Recorded game-ending positions the v10 pre-pass returned NOTHING for at any
+/// cap (weakness audit, 2026-09-21): the winner had hundreds or thousands of
+/// immediate wins, all of the shape crushing hard move, dash, second hard move,
+/// placement cast. `lead_fill_targets` charged the dash's move as a bare
+/// placement and never admitted the crush.
+const DASH_FILL_CRUSH_CASES: [&str; 4] = [
+    // P2: 12,143 of 88,674 turns win (game 4CWERJ)
+    "r......brr...rrbbrrbbrbrbrr...b.....bb./Starfall,Flourish,Seal_of_Lightning,Seal_of_Wind,Meteor,Grow,Slash,Sprout,Comet r 31 0:1 -:Flourish -:- tied competitive",
+    // P1: 2,518 of 16,178 (game 98MCXZ)
+    "rrrrrrrrbr..bb....b.bbbb..b............/Seal_of_Lightning,Tsunami,Bewitch,Scatter,Torrent,Fury,Seal_of_Summer,Seal_of_Winter,Azimuth b 18 0:2 -:Torrent -:- b1",
+    // 3,280 of 5,931 (game W784B4)
+    "rrrrrrrrrrrrrbbbbbbb...bb.bb..bb...r.b./Flourish,Seal_of_Lightning,Bewitch,Grow,Fireblast,Hail_Storm,Seal_of_Summer,Slash,Sprout b 30 0:1 -:Grow -:- b1 competitive",
+    // 2,861 of 54,946 (game 7WSA89)
+    "rbbbbr....rrbbbrrrbr.rbbrrbbbb...rrr..r/Syzygy,Bewitch,Seal_of_Lightning,Fireblast,Seal_of_Wind,Scatter,Azimuth,Seal_of_Summer,Sprout b 32 1:0 Scatter:- -:- tied competitive",
+];
+
+#[test]
+fn pre_pass_finds_the_dash_fill_crush_wins_at_the_shipped_cap() {
+    for sfn in DASH_FILL_CRUSH_CASES {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        let c = b.to_move;
+        // (The v10 bounds returned nothing here at 2,000 boards; at the new
+        // 2,500 cap they occasionally do, so only the v2 result is asserted.)
+        crate::turn_iter::set_lead_bounds_v2(true);
+        let found = b.decisive_lead_turns(c, crate::turn_iter::DECISIVE_LEAD_CAP);
+        assert!(!found.is_empty(), "v2 bounds still miss {sfn}");
+        for t in &found {
+            let n = crate::mate::child(&b, &t.push_pub(Action::Pass), c);
+            assert!(matches!((n.outcome, c), (Outcome::RedWins, Color::Red) | (Outcome::BlueWins, Color::Blue)),
+                    "pre-pass returned a non-winning turn {:?} in {sfn}", t.slice());
+        }
+        // And the search sees it at depth 1 now.
+        let mut s = shipped_search();
+        let (_best, sc, _) = s.go(&b, c, 1, 0);
+        assert!(sc >= crate::search::UNPROVEN_MATE, "depth-1 search still blind in {sfn}: {sc}");
+    }
+}
+
+/// Positions where the Rust AI cast Flourish (slot 0) and players flagged the
+/// move bad: it kept one stone, sacrificed the rest of the sigil and put the
+/// four placements straight back (weakness audit, 2026-09-21).
+const FLAGGED_FLOURISH_CASES: [&str; 4] = [
+    "bbbbbb.....b..............rrrrr.rr.r.../Flourish,Starfall,Syzygy,Fireblast,Decay,Seal_of_Stone,Seal_of_Spring,Azimuth,Seal_of_Autumn b 16 0:0 -:- -:- tied competitive",
+    "rrrrr......r...bb..b.......bbbbbrrr...b/Flourish,Starfall,Seal_of_Lightning,Torrent,Grow,Storm_Front,Comet,Seal_of_Winter,Splash r 25 2:0 Storm_Front:- -:- b1 competitive",
+    "rr.rrr....rr..bbb...bbb....bbbbbrrrr.../Flourish,Corrupt,Seal_of_Lightning,Fireblast,Torrent,Storm_Front,Seal_of_Autumn,Azimuth,Sprout r 27 1:0 Storm_Front:- -:- b1 competitive",
+    ".rrrrr.b.....b.........b...b.....b...../Flourish,Hurricane,Starfall,Scatter,Seal_of_Stone,Meteor,Seal_of_Spring,Seal_of_Winter,Splash r 11 0:1 -:Scatter -:- b1 competitive",
+];
+
+/// Stones the mover has on the Flourish sigil after the FIRST streamed turn
+/// that casts it, or None when no such turn is streamed within `limit`.
+fn first_flourish_refill(b: &Board, limit: usize) -> Option<u32> {
+    let c = b.to_move;
+    for t in b.turns_ordered(c).take(limit) {
+        if t.slice().iter().any(|a| matches!(a, Action::Cast { pos: 0, .. })) {
+            let after = crate::mate::child(b, &t, c);
+            return Some((after.mine(c) & SIGIL[0]).count_ones());
+        }
+    }
+    None
+}
+
+#[test]
+fn placement_ordering_stops_flourish_from_refilling_its_own_sigil() {
+    let mut checked = 0;
+    for sfn in FLAGGED_FLOURISH_CASES {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        crate::turn_iter::set_outcome_order_v2(false);
+        let old = first_flourish_refill(&b, 600);
+        crate::turn_iter::set_outcome_order_v2(true);
+        let new = first_flourish_refill(&b, 600);
+        let (Some(old), Some(new)) = (old, new) else { continue };
+        checked += 1;
+        // Old stream: the first Flourish candidate puts (nearly) the whole sigil back.
+        assert!(old >= 4, "{sfn}: expected the old first Flourish outcome to refill the sigil, got {old} stones on it");
+        // New stream: the placements go elsewhere (the kept stone may remain).
+        assert!(new <= 2, "{sfn}: first Flourish outcome still refills the sigil ({new} stones on it)");
+    }
+    assert!(checked >= 3, "only {checked} of the flagged positions streamed a Flourish cast");
+}
+
+#[test]
+fn cast_pace_and_mobility_features_have_the_designer_signs() {
+    use crate::eval::weights_by_name;
+    // Red leads 3 real stones (red 6, blue 3 -> score lead +2); both sides have cast.
+    let mut b = Board::from_sfn("rrrrrr.......bbb......................./Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge r 12 3:2 -:- -:- r2").expect("sfn");
+    assert_eq!(b.cast_pace_feature(Color::Red), 3, "ahead: the approach of the sixth cast favours red");
+    assert_eq!(b.cast_pace_feature(Color::Blue), -3, "behind: and hurts blue");
+    b.spell_counter = [0, 0];
+    assert_eq!(b.cast_pace_feature(Color::Red), 0, "no casts yet: nothing to hurry");
+    // Tied on score (red 4 vs blue 3 + token): zero whatever the counters.
+    let t = Board::from_sfn("rrrr.........bbb......................./Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge r 12 5:1 -:- -:- tied").expect("sfn");
+    assert_eq!(t.cast_pace_feature(Color::Red), 0);
+    // Mobility: a lone red stone boxed in by blue has no placement targets.
+    let boxed = Board::from_sfn("rbb..........bb......................../Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge r 5 0:0 -:- -:- b1").expect("sfn");
+    assert!(boxed.mobility_feature(Color::Red) < 0, "boxed in: {}", boxed.mobility_feature(Color::Red));
+    assert!(boxed.mobility_feature(Color::Blue) > 0);
+    // tfit2 = tfit plus the new terms; the older presets carry zero weight on them.
+    let (w1, w2) = (weights_by_name("tfit").unwrap(), weights_by_name("tfit2").unwrap());
+    assert_eq!((w1.cast_pace, w1.mobility), (0, 0));
+    assert!(w2.cast_pace > 0 && w2.mobility > 0 && w2.control > w1.control);
+    assert_eq!((w1.lead, w1.tempo, w1.mana), (w2.lead, w2.tempo, w2.mana));
+}

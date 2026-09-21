@@ -38,7 +38,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 10;
+const RUST_ENGINE_VERSION = 11;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -295,6 +295,9 @@ class RustAI {
 			stones: (typeof res.stones === 'number') ? res.stones : null,
 			mateIn: (typeof res.mate_in === 'number') ? res.mate_in : null,
 			mateProven: !!res.mate_proven,
+			// Competitive opening selector: {spell, node, reply, value} on the
+			// free-placement turn, else null.
+			opening: res.opening || null,
 			timeMs: Math.round((res.seconds || 0) * 1000),
 		};
 		if (onProgress) onProgress(this.lastMeta);

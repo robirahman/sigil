@@ -120,6 +120,30 @@ async function driver() {
 		if (Math.abs(res.stones) >= 0.5) throw new Error('even opening reads ' + res.stones + ' stones; expected ~0 (the raw eval is -0.5)');
 		if (res.mate_in !== null) throw new Error('the opening is not a mate: ' + JSON.stringify(res));
 	}
+	// Competitive opening book: red's and blue's free placements are blinks on
+	// the sigil the selector picked (reported in `opening`), replay-verified; the
+	// third turn is an ordinary move with no opening report.
+	{
+		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'competitive');
+		b.setupInitial();
+		b.turnCounter = 1; b.whoseTurn = 'red';
+		let sfn = boardToSfn(b);
+		const history = [];
+		for (let ply = 0; ply < 3; ply++) {
+			const res = pick(sfn, history, 200);
+			if (!res.ok) throw new Error('competitive ply ' + ply + ': ' + res.error);
+			if (ply < 2) {
+				if (res.actions[0].type !== 'blink') throw new Error('competitive opening should be a blink: ' + JSON.stringify(res.actions));
+				if (!res.opening || res.opening.node !== res.actions[0].node) throw new Error('opening report missing or mismatched: ' + JSON.stringify(res.opening));
+				if (!b.spellNames.includes(res.opening.spell)) throw new Error('opening names a spell not in the draw: ' + res.opening.spell);
+			} else if (res.opening !== null) {
+				throw new Error('turn 3 must carry no opening report: ' + JSON.stringify(res.opening));
+			}
+			await verify(sfn, res);
+			history.push(sfn);
+			sfn = res.expected_sfn;
+		}
+	}
 	// judge_move: the turns field is the ply count in the mover's own turns.
 	{
 		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');

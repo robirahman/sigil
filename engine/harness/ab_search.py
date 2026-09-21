@@ -49,7 +49,17 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # thread, so it is set before EVERY move). Measured Elo-neutral at 3 s
          # (FINDINGS 2026-09-20); the bookend knobs that sat here were removed
          # with the bookends.
-         'decisive_lead')
+         'decisive_lead',
+         # lead_bounds_v2: the 2026-09-22 bound corrections + two-phase scan in
+         # the same pre-pass (turn_iter::set_lead_bounds_v2), 1 = on / 0 = off,
+         # set per move like decisive_lead.
+         'lead_bounds_v2',
+         # opening_book: the competitive opening selector (opening.rs), 1/0;
+         # only meaningful with SIGIL_VARIANT=competitive.
+         'opening_book',
+         # outcome_order_v2: score a cast's resolutions by what the placed
+         # stones achieve (turn_iter::set_outcome_order_v2), 1/0 per move.
+         'outcome_order_v2')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -57,7 +67,7 @@ BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
 # value as easy*100 + hard, with the threshold fixed at ADAPTIVE_P. Keeps the
 # one-knob-one-integer shape of this harness.
 ADAPTIVE_P = 0.10
-DECISIVE_LEAD_CAP = 2000   # turn_iter::DECISIVE_LEAD_CAP; the switch takes the cap too
+DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the switch takes the cap too
 
 
 def play(b, ms, ev, hist, knob, val):
@@ -89,13 +99,31 @@ def play(b, ms, ev, hist, knob, val):
         extra['lmr'] = (val // 10, val % 10)
     if knob == 'decisive_lead':
         se.set_decisive_lead(bool(val), DECISIVE_LEAD_CAP)
+    if knob == 'lead_bounds_v2':
+        se.set_lead_bounds_v2(bool(val))
+    if knob == 'opening_book':
+        se.set_opening_book(bool(val))
+    if knob == 'outcome_order_v2':
+        se.set_outcome_order_v2(bool(val))
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
                        kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, **extra)
 
 
+# SIGIL_VARIANT=competitive plays the empty-board opening. The browser counts
+# turns from 1 (it pre-increments before each turn: red's free blink is turn 1,
+# blue's turn 2, and the engine's `turn_counter <= 2` guards mirror that). A
+# harness board starts at 0 and `play_best` increments AFTER the move, so it
+# must start at 1 or red gets a SECOND free blink at counter 2.
+VARIANT = os.environ.get('SIGIL_VARIANT', 'standard')
+if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] == 'opening_book':
+    sys.exit('the opening_book knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
+
+
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
-    b = se.Board(se.Board.legal_draw(seed), "standard")
+    b = se.Board(se.Board.legal_draw(seed), VARIANT)
     b.setup_initial()
+    if 'competitive' in VARIANT:
+        b.turn_counter = 1
     hist = []
     dep = {'arm': [], 'base': []}
     secs = {'arm': [], 'base': []}
@@ -119,7 +147,7 @@ if __name__ == "__main__":
     off = shard_offset()
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  variant={VARIANT} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "

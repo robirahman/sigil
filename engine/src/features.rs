@@ -27,13 +27,14 @@ use crate::eval::Weights;
 use crate::topology::{MANA, SIGIL, VOID};
 
 /// Number of entries in `hand_features`, one per `Weights` field.
-pub const N_HAND: usize = 13;
+pub const N_HAND: usize = 15;
 
 /// Names in the same order as `hand_features`, for labelling a fit's output.
 pub const HAND_NAMES: [&str; N_HAND] = [
     "lead", "near_threshold", "own_zero_liberty", "own_one_liberty",
     "enemy_zero_liberty", "enemy_one_liberty", "sigil_stone", "sigil_charged",
     "mana", "sixth_spell_danger", "control", "void_penalty", "tempo",
+    "cast_pace", "mobility",
 ];
 
 impl Board {
@@ -85,7 +86,8 @@ impl Board {
 
         let tempo = if self.to_move == c { 1 } else { -1 };
         [my_lead, near, own0, own1, en0, en1, sigil_stone, sigil_charged,
-         mana, sixth, self.control_diff(c), -void, tempo]
+         mana, sixth, self.control_diff(c), -void, tempo,
+         self.cast_pace_feature(c), self.mobility_feature(c)]
     }
 
     /// Dot product of `hand_features` with `w`, in the same order as
@@ -93,7 +95,8 @@ impl Board {
     pub fn hand_weight_vec(w: &Weights) -> [i32; N_HAND] {
         [w.lead, w.near_threshold, w.own_zero_liberty, w.own_one_liberty,
          w.enemy_zero_liberty, w.enemy_one_liberty, w.sigil_stone, w.sigil_charged,
-         w.mana, w.sixth_spell_danger, w.control, w.void_penalty, w.tempo]
+         w.mana, w.sixth_spell_danger, w.control, w.void_penalty, w.tempo,
+         w.cast_pace, w.mobility]
     }
 
     /// Rich, close-to-the-board features for the offline learnability test and as

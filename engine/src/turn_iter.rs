@@ -78,6 +78,37 @@ impl Board {
             - 30 * self.total[c.other().idx()] as i32
     }
 
+    /// What a resolution's PLACED stones achieve for the caster, scored like a
+    /// first move (`move_score_goal`'s soft branch): a mana node +90, a node of
+    /// another sigil +70 when it charges it / +30 one short / +5 otherwise, a
+    /// void node -10 -- and **-40 for every stone put back onto the sigil just
+    /// cleared** (`cleared`), the refill the players flag. Plus 5 per empty
+    /// neighbour the caster's stones gain, so walking out of an encirclement
+    /// ranks above packing in. `self` is the board the keep left, before the
+    /// resolution; `after` is the resolved board.
+    pub fn placement_bonus(&self, after: &Board, c: Color, cleared: u64) -> i32 {
+        use crate::topology::{MANA, SIGIL, VOID};
+        let placed = after.mine(c) & !self.mine(c);
+        if placed == 0 { return 0; }
+        let mut v = 0i32;
+        let mut m = placed;
+        while m != 0 {
+            let n = m.trailing_zeros() as usize;
+            m &= m - 1;
+            let bit = 1u64 << n;
+            if MANA & bit != 0 { v += 90; }
+            if cleared & bit != 0 { v -= 40; continue; }
+            if VOID & bit != 0 { v -= 10; }
+            for p in 0..9 {
+                if SIGIL[p] & bit == 0 || SIGIL[p] == cleared { continue; }
+                v += match self.uncontrolled_count(p, c) { 1 => 70, 2 => 30, _ => 5 };
+            }
+        }
+        let lib_before = (Board::dilate(self.mine(c)) & self.empty()).count_ones() as i32;
+        let lib_after = (Board::dilate(after.mine(c)) & after.empty()).count_ones() as i32;
+        v + 5 * (lib_after - lib_before)
+    }
+
     /// Outcomes of casting at `pos`, best-first for `c`, at most `limit`, each
     /// paired with its index in the RAW `resolve_outcomes` list.
     ///
@@ -424,8 +455,11 @@ impl<'a> TurnIter<'a> {
                     cl.cast_clear_and_keep(pos, self.c, ki);
                     let (outs, trunc) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
                     if trunc { self.windowed = true; }
+                    let cleared = crate::topology::SIGIL[pos];
+                    let v2 = outcome_order_v2();
                     let mut v: Vec<(i32, usize, usize)> = outs.iter().enumerate()
-                        .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, raw))
+                        .map(|(raw, ob)| (ob.outcome_score(self.c, goal)
+                                          + if v2 { cl.placement_bonus(ob, self.c, cleared) } else { 0 }, ki, raw))
                         .collect();
                     v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
                     v.truncate(self.window);
@@ -872,7 +906,38 @@ pub fn set_decisive_lead(on: bool, cap: usize) { DECISIVE_LEAD.with(|c| c.set((o
 pub fn decisive_lead_enabled() -> bool { DECISIVE_LEAD.with(|c| c.get().0) }
 pub fn decisive_lead_cap() -> usize { DECISIVE_LEAD.with(|c| c.get().1) }
 /// Boards the lead pre-pass may examine per node before giving up (best effort).
-pub const DECISIVE_LEAD_CAP: usize = 2_000;
+pub const DECISIVE_LEAD_CAP: usize = 2_500;
+
+thread_local! {
+    static LEAD_BOUNDS_V2: std::cell::Cell<bool> = std::cell::Cell::new(true);
+    static OUTCOME_ORDER_V2: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch (default on) for scoring a cast's resolutions by what the
+/// caster's PLACED stones achieve (`Board::placement_bonus`). Without it every
+/// resolution of a placement ritual (Flourish, Grow, Sprout, Harvest, Gather,
+/// Tsunami, Blossom, Scatter) scores the same -- `outcome_score` reads only
+/// the enemy configuration and the totals -- so the window filled in raw
+/// enumeration order, i.e. ascending node index, and for the first ritual slot
+/// that is the very sigil just cleared: the AI kept one stone, sacrificed the
+/// rest and put the four placements straight back. Players flagged 30% of
+/// those casts as bad (weakness audit, 2026-09-21).
+pub fn set_outcome_order_v2(on: bool) { OUTCOME_ORDER_V2.with(|c| c.set(on)); }
+pub fn outcome_order_v2() -> bool { OUTCOME_ORDER_V2.with(|c| c.get()) }
+/// A/B switch (default on) for the 2026-09-22 bound corrections in the lead
+/// pre-pass. The audit of every recorded game-ending position found the
+/// pre-pass gated out of all 61 wins the depth-2 search missed, for five
+/// reasons, each a bound that under-counted what the turn could still do:
+///   A. `lead_fill_targets` charged the dash's move as a bare placement (+1)
+///      when the node it fills holds an ENEMY stone and the move is a crush
+///      (+2) -- 49 of the 57 dash-branch misses died at that comparison;
+///   B. eliminating every enemy stone is a win the ±3 arithmetic never saw;
+///   C. the turn's own placement can charge Seal of Lightning and halve the
+///      dash's cost;
+///   D. a mana node taken during the turn lowers the sigil-clearing cost;
+///   E. Hail Storm's "exact" count ignored the enemy stone a push deposits.
+/// Off reproduces the shipped v10 bounds for the arena.
+pub fn set_lead_bounds_v2(on: bool) { LEAD_BOUNDS_V2.with(|c| c.set(on)); }
+pub fn lead_bounds_v2() -> bool { LEAD_BOUNDS_V2.with(|c| c.get()) }
 
 impl Board {
     /// Optimistic bound on how many stones casting `id` can swing in the
@@ -895,8 +960,10 @@ impl Board {
                 let adj = (self.theirs(c) & Board::dilate(self.mine(c))).count_ones() as i32;
                 (adj + 4 * placements as i32).min(theirs) - 1
             }
-            // One stone per 3- or 5-node sigil that holds an enemy stone: exact.
-            Resolve::HailStorm => (0..6).filter(|&p| crate::topology::SIGIL[p] & self.theirs(c) != 0).count() as i32,
+            // One stone per 3- or 5-node sigil that holds an enemy stone -- plus
+            // one per stone the turn can still PUSH into an empty sigil (E).
+            Resolve::HailStorm => (0..6).filter(|&p| crate::topology::SIGIL[p] & self.theirs(c) != 0).count() as i32
+                                  + if lead_bounds_v2() { placements as i32 } else { 0 },
             Resolve::Meteor => 2,
             Resolve::Bewitch => 4,
             Resolve::Starfall => 2 + theirs.min(6),
@@ -911,11 +978,19 @@ impl Board {
         }
     }
 
-    /// Stones lost to clearing the sigil at `pos` when `c` casts it.
-    fn clear_loss(&self, pos: usize, c: Color) -> i32 {
+    /// Stones lost to clearing the sigil at `pos` when `c` casts it, when the turn can still place `placements` stones before
+    /// the cast: each may take a mana node, and every mana held refunds one
+    /// sigil stone (D). Optimistic, like every bound here.
+    fn clear_loss_p(&self, pos: usize, c: Color, placements: u32) -> i32 {
         let size = crate::topology::SIGIL[pos].count_ones() as i32;
         let info = &crate::spells_meta::SPELLS[self.spells[pos] as usize];
-        if info.is_charm { size } else { (size - self.mana[c.idx()] as i32).max(0) }
+        if info.is_charm { return size; }
+        let mut mana = self.mana[c.idx()] as i32;
+        if lead_bounds_v2() {
+            let open_mana = (crate::topology::MANA & !self.mine(c)).count_ones();
+            mana += placements.min(open_mana) as i32;
+        }
+        (size - mana).max(0)
     }
 
     /// Turns of `c` that end the game NOW on the stone lead (or by the sixth
@@ -951,16 +1026,34 @@ impl Board {
         let pot = 2 + self.lead_potential(c, true, true, 1);
         if diff + pot < st.lead_req && !(st.sixth && diff + pot >= st.six_req) { return out; }
         let has_wind = self.holds_charged(c, SEAL_OF_WIND);
-        for &(n, p) in first_moves {
-            if st.examined >= cap || st.out.len() >= LEAD_MAX_FOUND { break; }
-            let blink = has_wind && (crate::topology::ADJ[n as usize] & self.mine(c)) == 0;
-            let a = if blink { Action::Blink { node: n, push_to: p } }
-                    else { Action::Move { node: n, push_to: p } };
-            let mut b1 = *self;
-            b1.do_move_with_pub(n, p, c);
-            st.examined += 1;
-            if b1.outcome != Outcome::Ongoing { continue; }
-            st.post_move(&b1, Turn::single(a), true, true, true, false, false);
+        // Two phases (v2): every first move with a direct cast first, then the
+        // dash branches. A dash branch can cost hundreds of boards (sacrifice
+        // pairs x fill targets x keeps), and letting the first few first moves
+        // spend the budget there starved a plain [move, cast] mate later in the
+        // list -- the shipped cap missed a recorded mate it used to find.
+        // Phase 1 gets two fifths of the budget: in a wide position its casts
+        // alone can eat the whole cap, and the dash-fill mates (the shape the
+        // pre-pass exists for) would never be reached.
+        let phases: &[(bool, bool, usize)] = if lead_bounds_v2() { &[(false, false, (cap * 2 / 5).max(400)), (true, true, cap)] }
+                                             else { &[(true, false, cap)] };
+        for &(can_dash, dash_only, phase_cap) in phases {
+            st.cap = phase_cap.min(cap);
+            for &(n, p) in first_moves {
+                if st.examined >= st.cap || st.out.len() >= LEAD_MAX_FOUND { break; }
+                let blink = has_wind && (crate::topology::ADJ[n as usize] & self.mine(c)) == 0;
+                let a = if blink { Action::Blink { node: n, push_to: p } }
+                        else { Action::Move { node: n, push_to: p } };
+                let mut b1 = *self;
+                b1.do_move_with_pub(n, p, c);
+                st.examined += 1;
+                if b1.outcome != Outcome::Ongoing {
+                    // B: the move alone may have wiped the enemy (or reached the lead).
+                    if lead_bounds_v2() && !dash_only && st.won(&b1) { st.verify(Turn::single(a)); }
+                    continue;
+                }
+                st.post_move_from(&b1, Turn::single(a), can_dash, true, true, false, false, dash_only);
+            }
+            if st.out.len() >= LEAD_MAX_FOUND { break; }
         }
         std::mem::swap(&mut out, &mut st.out);
         out
@@ -975,7 +1068,14 @@ impl Board {
     fn lead_potential(&self, c: Color, can_dash: bool, can_spell: bool, placements: u32) -> i32 {
         use crate::spells_meta::{SPELLS, NUM_OFFICIAL_SPELLS};
         let dash_ok = can_dash && can_spell && self.total[c.idx()] > 2 && self.can_dash(c);
-        let dash_gain = if dash_ok { 2 - self.dash_cost(c) as i32 } else { 0 };
+        let mut dash_cost = self.dash_cost(c) as i32;
+        // C: a placement can charge Seal of Lightning first, halving the dash.
+        if lead_bounds_v2() && dash_cost > 1 {
+            if let Some(pos) = self.position_of(crate::spells_meta::SEAL_OF_LIGHTNING) {
+                if self.uncontrolled_count(pos, c) <= placements { dash_cost = 1; }
+            }
+        }
+        let dash_gain = if dash_ok { 2 - dash_cost } else { 0 };
         let mut best_cast = 0i32;
         if can_spell {
             let reach = placements + if dash_ok { 1 } else { 0 };
@@ -983,7 +1083,7 @@ impl Board {
                 let id = self.spells[pos];
                 if id as usize >= NUM_OFFICIAL_SPELLS || SPELLS[id as usize].is_static { continue; }
                 if self.uncontrolled_count(pos, c) > reach { continue; }
-                best_cast = best_cast.max(self.cast_swing_bound(id, c, reach) - self.clear_loss(pos, c));
+                best_cast = best_cast.max(self.cast_swing_bound(id, c, reach) - self.clear_loss_p(pos, c, reach));
             }
         }
         dash_gain + best_cast
@@ -1001,9 +1101,15 @@ impl Board {
             let id = self.spells[pos];
             if id as usize >= NUM_OFFICIAL_SPELLS || SPELLS[id as usize].is_static { continue; }
             if self.uncontrolled_count(pos, c) != 1 { continue; }
-            let pot = 1 + self.cast_swing_bound(id, c, 1) - self.clear_loss(pos, c);
-            if !st.reachable(self, pot, true) { continue; }
-            m |= crate::topology::SIGIL[pos] & !self.mine(c);
+            let gap = crate::topology::SIGIL[pos] & !self.mine(c);   // the single missing node
+            let net = self.cast_swing_bound(id, c, 1) - self.clear_loss_p(pos, c, 1);
+            // A: when an ENEMY stone stands on that node the filling move is a
+            // hard move -- one placed, one crushed -- worth the same 2 that
+            // `lead_potential` and the dash branch's `bare` already charge.
+            if lead_bounds_v2() && (gap & self.theirs(c)) != 0 && st.reachable(self, 2 + net, true) {
+                m |= gap & self.theirs(c);
+            }
+            if st.reachable(self, 1 + net, true) { m |= gap; }
         }
         m
     }
@@ -1021,6 +1127,9 @@ thread_local! {
 /// How many decisive turns the lead pre-pass collects before stopping: the
 /// stream needs one to score the node as a win; a few give the TT/killers choice.
 pub const LEAD_MAX_FOUND: usize = 1;
+/// Resolutions examined per keep in the pre-pass (v2 bounds): the largest-lead
+/// ones, since only they can decide on the stone count.
+pub const LEAD_OUTCOMES_PER_KEEP: usize = 3;
 
 struct LeadScan {
     c: Color, me: usize, them: usize,
@@ -1031,12 +1140,19 @@ struct LeadScan {
 impl LeadScan {
     #[inline] fn diff(&self, b: &Board) -> i32 { b.total[self.me] as i32 - b.total[self.them] as i32 }
     #[inline] fn decides(&self, b: &Board, casted: bool) -> bool {
+        // B: wiping the enemy off the board wins whatever the count says.
+        if lead_bounds_v2() && b.total[self.them] == 0 && b.total[self.me] > 0 { return true; }
         let d = self.diff(b);
         d >= self.lead_req || (casted && self.sixth && d >= self.six_req)
     }
     #[inline] fn reachable(&self, b: &Board, potential: i32, casts_possible: bool) -> bool {
+        // B: a swing that can remove every enemy stone reaches a win too.
+        if lead_bounds_v2() && casts_possible && potential >= b.total[self.them] as i32 && b.total[self.them] > 0 { return true; }
         let d = self.diff(b) + potential;
         d >= self.lead_req || (casts_possible && self.sixth && d >= self.six_req)
+    }
+    #[inline] fn won(&self, b: &Board) -> bool {
+        matches!((self.c, b.outcome), (Color::Red, Outcome::RedWins) | (Color::Blue, Outcome::BlueWins))
     }
     fn verify(&mut self, t: Turn) {
         let mut b = self.root;
@@ -1049,26 +1165,54 @@ impl LeadScan {
     /// Mirrors `enumerate_post_move`: the turn may still dash and/or cast.
     fn post_move(&mut self, b: &Board, so_far: Turn, can_dash: bool, can_spell: bool,
                  can_summer: bool, post_dash: bool, casted: bool) {
+        self.post_move_from(b, so_far, can_dash, can_spell, can_summer, post_dash, casted, false)
+    }
+
+    /// `post_move` with `dash_only`: skip the direct cast branch at THIS level
+    /// (the two-phase root scan has already tried it) and go straight to the
+    /// dash branch; casts after the dash are still explored.
+    #[allow(clippy::too_many_arguments)]
+    fn post_move_from(&mut self, b: &Board, so_far: Turn, can_dash: bool, can_spell: bool,
+                      can_summer: bool, post_dash: bool, casted: bool, dash_only: bool) {
         if self.done() { return; }
-        if self.decides(b, casted) { self.verify(so_far); return; }
+        if self.decides(b, casted) { if !dash_only { self.verify(so_far); } return; }
         let c = self.c;
         if !self.reachable(b, b.lead_potential(c, can_dash, can_spell || (can_summer && b.holds_charged(c, crate::spells_meta::SEAL_OF_SUMMER)), 0), true) { return; }
 
         // --- casts first: cheap, and the audit's commonest mate shape ---
-        if can_spell || (can_summer && b.holds_charged(c, crate::spells_meta::SEAL_OF_SUMMER)) {
+        if !dash_only && (can_spell || (can_summer && b.holds_charged(c, crate::spells_meta::SEAL_OF_SUMMER))) {
             for id in b.castable(c, can_spell, can_summer, post_dash) {
                 if self.done() { return; }
                 let Some(pos) = b.position_of(id) else { continue };
                 // What this cast can add, plus a dash afterwards if one is still allowed.
                 let after_dash = if can_dash && can_spell { 2 - b.dash_cost(c) as i32 } else { 0 };
-                let pot = b.cast_swing_bound(id, c, 0) - b.clear_loss(pos, c) + after_dash.max(0);
+                let pot = b.cast_swing_bound(id, c, 0) - b.clear_loss_p(pos, c, 0) + after_dash.max(0);
                 if !self.reachable(b, pot, true) { continue; }
                 let next_summer = if can_spell { can_summer } else { false };
                 for ki in 0..b.keep_count(pos, c) {
                     let mut cl = *b;
                     cl.cast_clear_and_keep(pos, c, ki);
                     let (outs, _) = cl.resolve_outcomes(pos, c, crate::turn::OUTCOME_CAP);
-                    for (i, ob) in outs.iter().enumerate() {
+                    // The lead criterion depends on the stone counts alone, so
+                    // among a cast's resolutions only the ones with the largest
+                    // lead (or the fewest enemy stones left) can decide, and a
+                    // continuation is worth following only from those. Walking
+                    // every resolution -- Flourish has hundreds, Scatter ~100 --
+                    // spent the whole 2,000-board budget on one sacrifice pair,
+                    // which is how a position with 2,895 winning turns came back
+                    // empty at a 50,000 cap.
+                    let mut order: Vec<usize> = (0..outs.len()).collect();
+                    if lead_bounds_v2() {
+                        order.sort_by_key(|&i| (-self.diff(&outs[i]), outs[i].total[self.them] as i32, i));
+                        order.truncate(LEAD_OUTCOMES_PER_KEEP);
+                        // The budget counts boards GENERATED, not boards inspected:
+                        // the resolver built every outcome whether or not it is
+                        // looked at, so charging only the inspected ones let the
+                        // scan run far past its cap (midgame mean cost doubled).
+                        self.examined += outs.len().saturating_sub(order.len());
+                    }
+                    for &i in &order {
+                        let ob = &outs[i];
                         self.examined += 1;
                         if self.done() { return; }
                         let t = so_far.push_pub(Action::Cast { pos: pos as u8, keep: ki as u8, outcome: i as u16 });
@@ -1079,7 +1223,10 @@ impl LeadScan {
                         bs.update();
                         bs.finish_cast(id, c);
                         bs.update();
-                        if bs.outcome != Outcome::Ongoing { continue; }
+                        if bs.outcome != Outcome::Ongoing {
+                            if lead_bounds_v2() && self.won(&bs) { self.verify(t); }
+                            continue;
+                        }
                         self.post_move(&bs, t, can_dash, false, next_summer, post_dash, true);
                     }
                 }
@@ -1096,7 +1243,7 @@ impl LeadScan {
                 && b.lead_fill_targets(c, self, can_spell || can_summer) == 0
                 && !b.castable(c, can_spell, can_summer, true).iter().any(|&id|
                     b.position_of(id).map_or(false, |pos|
-                        self.reachable(b, 2 - cost as i32 + b.cast_swing_bound(id, c, 1) - b.clear_loss(pos, c), true)))
+                        self.reachable(b, 2 - cost as i32 + b.cast_swing_bound(id, c, 1) - b.clear_loss_p(pos, c, 1), true)))
             { return; }
             let mut cands: Vec<u8> = Vec::new();
             let mut m = b.dash_sacrificeable(c);
@@ -1127,7 +1274,7 @@ impl LeadScan {
                     let mut best = i32::MIN;
                     for id in bd.castable(c, can_spell, can_summer, true) {
                         if let Some(pos) = bd.position_of(id) {
-                            best = best.max(bd.cast_swing_bound(id, c, 1) - bd.clear_loss(pos, c));
+                            best = best.max(bd.cast_swing_bound(id, c, 1) - bd.clear_loss_p(pos, c, 1));
                         }
                     }
                     best > i32::MIN && self.reachable(&bd, 2 + best, true)
@@ -1141,8 +1288,11 @@ impl LeadScan {
                     if self.done() { return; }
                     let mut b2 = bd;
                     b2.do_move_with_pub(node, push_to, c);
-                    if b2.outcome != Outcome::Ongoing { continue; }
                     let t = so_far.push_pub(Action::Dash { sacs, n_sacs: cost as u8, node, push_to });
+                    if b2.outcome != Outcome::Ongoing {
+                        if lead_bounds_v2() && self.won(&b2) { self.verify(t); }
+                        continue;
+                    }
                     self.post_move(&b2, t, false, can_spell, can_summer, true, casted);
                 }
             }

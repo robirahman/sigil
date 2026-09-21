@@ -39,7 +39,8 @@ fn report_json(rep: Option<crate::search::Report>) -> String {
 /// `rep` is `None` when `st.depth_completed == 0`.
 fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
              st: &crate::search::SearchStats, dt: f64,
-             rep: Option<crate::search::Report>) -> String {
+             rep: Option<crate::search::Report>,
+             opening: Option<crate::opening::OpeningPick>) -> String {
     let c = b.to_move;
     let turn = match best {
         Some(t) => t,
@@ -53,12 +54,26 @@ fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
         },
     };
     let (acts, after) = b.emit_actions(&turn, c);
+    // The competitive opening selector's verdict, for the think report.
+    let opening_json = match opening {
+        Some(p) => {
+            let node = match turn.slice()[0] {
+                crate::turn::Action::Blink { node, .. } | crate::turn::Action::Move { node, .. } => node,
+                _ => 0,
+            };
+            format!("{{\"spell\":{:?},\"node\":{:?},\"reply\":{},\"value\":{:.2}}}",
+                    crate::spells_meta::SPELLS[p.spell as usize].name, crate::topology::NAMES[node as usize],
+                    p.reply.map_or("null".to_string(), |r| format!("{:?}", crate::spells_meta::SPELLS[r as usize].name)),
+                    p.value)
+        }
+        None => "null".to_string(),
+    };
     format!(
         "{{\"ok\":true,\"actions\":{},\"expected_sfn\":{:?},\"depth\":{},\
-          \"nodes\":{},\"score\":{},\"score_ui\":{},{},\"seconds\":{:.2}}}",
+          \"nodes\":{},\"score\":{},\"score_ui\":{},{},\"opening\":{},\"seconds\":{:.2}}}",
         crate::actions::acts_to_json(&acts), after.to_sfn(),
         st.depth_completed, st.nodes, score,
-        crate::search::ui_score(score), report_json(rep), dt)
+        crate::search::ui_score(score), report_json(rep), opening_json, dt)
 }
 
 fn configure(s: &mut Search, width_scale: u32, eval_name: &str,
@@ -146,7 +161,7 @@ impl Engine {
         let dt = (crate::search::now_ms() - t0) / 1000.0;
         let rep = (st.depth_completed > 0)
             .then(|| crate::search::report(score, &st, b.to_move, &self.s.weights));
-        move_json(&b, best, score, &st, dt, rep)
+        move_json(&b, best, score, &st, dt, rep, self.s.opening_pick())
     }
 
     /// Begin pondering `sfn` (the position the OPPONENT is thinking about).

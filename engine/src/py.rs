@@ -1020,6 +1020,7 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
         d.set_item("proven", false)?;
     }
     d.set_item("mate_plies", st.mate_plies)?;
+    d.set_item("opening", match s.opening_pick() { Some(p) => opening_dict(py, &p)?.into_any(), None => py.None().into_bound(py) })?;
     d.set_item("unproven_mate", st.unproven_mate)?;
     d.set_item("widened", st.widened)?;
     d.set_item("windowed", st.windowed)?;
@@ -1051,6 +1052,46 @@ fn even_offset(color: &str, eval_name: &str) -> PyResult<i32> {
             format!("unknown colour {other:?}: expected 'red' or 'blue'"))),
     };
     Ok(crate::search::even_offset(c, &weights_by_name(eval_name)?))
+}
+
+/// A/B switch for the 2026-09-22 lead pre-pass bound corrections (see
+/// `turn_iter::set_lead_bounds_v2`); default on, per thread.
+#[pyfunction]
+fn set_lead_bounds_v2(on: bool) { crate::turn_iter::set_lead_bounds_v2(on); }
+
+/// A/B switch for placement-outcome ordering (`turn_iter::set_outcome_order_v2`); default on.
+#[pyfunction]
+fn set_outcome_order_v2(on: bool) { crate::turn_iter::set_outcome_order_v2(on); }
+
+/// A/B switch for the competitive opening selector (`opening::set_opening_book`);
+/// default on, per thread.
+#[pyfunction]
+fn set_opening_book(on: bool) { crate::opening::set_opening_book(on); }
+
+/// The opening selector's verdict for `sfn` without searching: None when it
+/// does not apply, else {spell, pos, nodes, value, reply, vetoed}.
+#[pyfunction]
+fn opening_pick<'py>(py: Python<'py>, sfn: &str) -> PyResult<PyObject> {
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    match crate::opening::choose_opening(&b, b.to_move) {
+        None => Ok(py.None()),
+        Some(p) => Ok(opening_dict(py, &p)?.into_any().unbind()),
+    }
+}
+
+fn opening_dict<'py>(py: Python<'py>, p: &crate::opening::OpeningPick) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    use pyo3::types::PyDict;
+    let d = PyDict::new_bound(py);
+    d.set_item("spell", crate::spells_meta::SPELLS[p.spell as usize].name)?;
+    d.set_item("pos", p.pos)?;
+    let mut nodes = Vec::new();
+    let mut m = p.node_mask;
+    while m != 0 { nodes.push(crate::topology::NAMES[m.trailing_zeros() as usize]); m &= m - 1; }
+    d.set_item("nodes", nodes)?;
+    d.set_item("value", p.value)?;
+    d.set_item("reply", p.reply.map(|r| crate::spells_meta::SPELLS[r as usize].name))?;
+    d.set_item("vetoed_slots", (0..9).filter(|&s| p.vetoed & (1 << s) != 0).collect::<Vec<usize>>())?;
+    Ok(d)
 }
 
 /// The search knobs a `Search` starts with, read off a real instance rather than
@@ -1374,6 +1415,10 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;
     m.add_function(wrap_pyfunction!(solve_mates, m)?)?;
     m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;
+    m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
+    m.add_function(wrap_pyfunction!(set_outcome_order_v2, m)?)?;
+    m.add_function(wrap_pyfunction!(opening_pick, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
@@ -1392,6 +1437,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
     m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
     m.add("UNPROVEN_MATE", crate::search::UNPROVEN_MATE)?;
+    m.add("DECISIVE_LEAD_CAP", crate::turn_iter::DECISIVE_LEAD_CAP)?;
     m.add("MATE_STONES", crate::search::MATE_STONES)?;
     // Exported so a harness never restates them. REASONS_ALL is the full
     // key-dash interest mask; OUTCOME_CAP is how a caller detects that a
