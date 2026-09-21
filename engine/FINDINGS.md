@@ -1895,3 +1895,84 @@ Elo and 1.7x wall time) -- remove them or budget them inside `time_ms` before an
 Fleet note: five VMs with distinct SHARD_BASEs finished the 2,250 games in ~35 minutes for the
 same vCPU-hours as one VM in 2.5 h; pool with a glob that spans per-run folders, because shard
 log names repeat across runs and a flat copy silently keeps one run.
+
+## Weakness audit of the recorded games (2026-09-21)
+
+Every recorded game (2,599 `completed_games` records; 2,485 replayed; 2,354 with spells the engine
+models) was scored position by position with the SHIPPED search at untimed depth 6
+(`engine/harness/eval_games.py`, 63,193 positions, four c3d-highcpu-90 Spot VMs, ~12 VM-hours), and
+the position before every game-ending turn was put to the exhaustive mate-in-1 solver
+(`engine/harness/final_blow_probe.py`). `engine/harness/weakness_report.py` turns the three artefacts
+into `engine/harness/reports/weakness_2026-09-21.md`; the numbers below are from that report.
+
+### Where the Rust AI loses (347 human-vs-Rust games, 60.2% lost)
+
+* **Long games.** 87% of games lasting 40–49 turns are lost (34/39, z +3.6) against 40% of games under
+  20 turns (z −3.1) and 0/7 under 10. The AI wins the games it wins early; whatever it lacks shows
+  after move 30. Colour, tier, variant and opponent Elo bucket are all within noise.
+* **Spells in the draw.** Hurricane (42% lost, z −4.0) and Lurk (46%, z −3.2) make the AI win more;
+  Blossom (78%, z +3.0), Storm Front and Corrupt (~68–70%, z +2) make it lose more. Nine spells per
+  draw over 347 games: only |z| ≥ 3 is believable, so Hurricane/Lurk/Blossom are the leads.
+* **By week** the loss rate wanders 50–68% with no trend; the corpus is too small per week to see
+  engine releases.
+
+### Where the evaluation fails (all 63,193 positions)
+
+Class A, "winning but did not win": 1,767 positions (28 per 1,000) where one side had a proven or
+"likely" mate or a ≥ 3-stone lead and did not win the game. Most are humans failing to convert;
+**15 are the Rust engine sitting on a PROVEN mate-in-1 and losing the game**, 46 more on a "likely"
+mate. Class B, "loss arrived sooner than the mate distance": 938 positions, **70 with the Rust engine
+as the loser**. Class C, a non-decisive eval collapsing by > 1 stone within two plies: 1,339 across the
+AI's own move (194 Rust), 556 across the opponent's move. Rates are lower in the Rust era (A 10 vs 31
+per 1,000; C 37 vs 47) -- the Rust engine's positions are less chaotic than the JS tiers' -- and blue
+claims fail twice as often as red's (A 39 vs 18 per 1,000), which is blue's +1 token making "decisive"
+reachable one stone earlier.
+
+### The game-ending blow (1,489 games whose last turn was the winner's)
+
+The winner had an immediate win in 1,364 of them (the rest ended by Seal of Destruction, the sixth
+cast, repetition, or a JS-only win). **The depth-2 shipped search reports a forced win in 95.5%;
+in 61 positions (4.5%) it does not, and 32 of those 61 had more than 100 winning turns available** --
+an ordering failure, not a tactic. The miss rate is 7.9% in the Rust era against 3.9% before, and
+14–16% when Torrent, Syzygy, Azimuth or Lurk are in the draw (z +4 to +5): the newer packs' turn
+shapes are the ones the ordered generator hides. The stone-lead pre-pass (`decisive_lead_turns`,
+cap 2,000) surfaces a win in 92% of the 1,364 -- and in **none** of the 61 misses; at cap 50,000 it
+recovers 29 of them. On the worst miss (12,143 of 88,674 turns win) it returns nothing in 0.00 s: the
+winning shape is a crushing hard move, a dash, a second hard move and a placement ritual (Flourish /
+Scatter), whose optimistic material bound never clears `lead_req`. This is the engine's most concrete
+weakness: about one game in twenty ends with a win the engine would not have seen coming one ply
+earlier, and the pre-pass built for exactly this is gated out of every one of them.
+
+### Rechecking the Rust engine's own failures with today's engine
+
+Every Rust-side A/B position (89) was re-searched by the CURRENT engine at a 3 s budget (on a shared
+4-core shell, so it reached depth 3–5 where the browser reaches ~8; "not seen" is therefore weak
+evidence, "seen" is strong). **All 15 proven mate-in-1s the live engine failed to play are found now,
+with a different move from the one played** -- they date from 2026-09-02..09-10, before the v8
+stone-lead pre-pass, and are closed. Of the 43 class-A positions 30 are found; of the 46 class-B
+positions today's engine sees the loss coming in 15. **Four class-B positions are open generator gaps:
+after the move the AI played, the opponent had 315–2,518 immediate wins that the exhaustive solver
+lists and a depth-2 search reports as +1.0 stones** (games 98MCXZ, ABNA29, QFJ939, NNMACJ in the
+report). These are the same shape as the final-blow misses above and are the positions to fix the
+pre-pass against.
+
+### Moves players flagged as bad (1,063 flags, 106 on Rust turns)
+
+Flags are volunteered, so each split is compared with all AI turns of the same tier. On Rust tiers:
+**cast Flourish is flagged 8 times in 27 casts (30%, z +9)** -- every flagged cast kept a single stone
+(`a4`) and sacrificed the rest of the sigil for four placements, today's engine still chooses the same
+cast in 7 of 8, and by its own depth-6 account two of them lost about a stone. Gust (2/13) and Splash
+(3/30) follow at z +3. The middle game (turns 11–25) carries 2.9 flags per 100 turns against 0.3 in the
+opening. The engine's own verdict agrees with the players more often than not: 28% of the flagged Rust
+turns collapsed by more than a stone two plies later against 9.6% of all its turns, while 52 of 82 lost
+nothing by its account (style, or a disagreement with the eval). On the JS tiers the flags were about
+plain hard moves (315) and Carnage casts (11% flagged).
+
+### What to fix first
+
+1. The final-blow gap: make the pre-pass cover the dash-then-ritual shapes (or bound them honestly),
+   and confirm on the 61 probe positions before an arena.
+2. Flourish: look at what the four placements are worth against the sigil stones sacrificed; the
+   players and the depth-6 re-evaluation both say the cast is often a stone too generous.
+3. The long-game decline (87% lost at 40–49 turns): the per-ply evals of those games are in
+   `game_evals` and the cases file; the collapse listings (C1) are where to start reading.

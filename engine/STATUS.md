@@ -21,6 +21,17 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-21 (later): weakness audit of every recorded game.** Depth-6 evals of 63,193 positions
+(`game_evals/` holds the 315 games since 2026-08-26; the rest live in the run artefacts), the mate-in-1
+solver on 1,489 game-ending positions, and the players' good/bad flags, folded into
+`engine/harness/reports/weakness_2026-09-21.md` by `engine/harness/weakness_report.py`. Headlines: the
+Rust AI loses 87% of 40–49-turn games and 40% of sub-20-turn games; the depth-2 search misses 4.5% of
+actual game-ending wins (7.9% in the Rust era, 14–16% with Torrent/Syzygy/Azimuth/Lurk) and the stone-lead
+pre-pass is gated out of all 61 misses (29 recoverable at cap 50k, 32 need a shape change); Flourish casts
+are flagged bad 30% of the time and the engine still plays them. FINDINGS "Weakness audit of the recorded
+games". The review panel shows the stored evals when a game has them (cache v37: Firebase drops trailing
+nulls from arrays, so the adapter pads).
+
 **2026-09-21: eval display re-zeroed, "win in N" replaces ±50, stored game evals (engine v10, cache v36).**
 Three reporting changes, no playing change (`cargo test` covers each; the search and move choice are
 byte-identical):
