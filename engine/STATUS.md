@@ -21,6 +21,18 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-22: engine v13 (cache v40) -- the U4TL2D fixes; swing arena final +40.6 Elo.** A recorded
+rust_hard game (room U4TL2D) lost two stones to a one-ply reply -- move, dash charging Tsunami, Tsunami,
+then Meteor by Seal of Summer -- that the stream could not produce (the dash-cast stage had no Summer
+second cast) and the swing scan could not reach (Meteor's swing bound was 2 where the effect is 3; the
+budget went on 55 sacrifice pairs re-resolving one hopeless cast). Knob `dash_summer` (default on, arm
+`engine/gcp/arms/dash_summer_3s.txt`): `push_summer_casts` in both cast stages, Meteor 3 in the swing scan
+only, continuation-aware outcome order, `SWING_PAIRS_PER_CAST` 3, swing cap 6,000 (mean scan 0.19 -> 0.25
+ms). Red's depth-1 read of the position +0.08 -> +1.03. Three regression tests. The swing pre-pass arena
+(run 20260921T211851Z) closed at **+40.6 Elo [+30.2, +51.0]** over 4,343 games. The "Red dashes!" /
+"Blue dashes!" log message (d06ccc6) deploys with this cache bump. FINDINGS "A one-ply +2 reply behind a
+Seal-of-Summer second cast".
+
 **2026-09-22: swing pre-pass SHIPPED (engine v12, cache v39).** A recorded rust_hard game (room DSJZ2B) lost two
 stones to a one-ply refutation -- move, dash whose move crushes, Slash whose hard move crushes -- that
 the ordered stream never generates (dash branches capped per first move, casts only on survivors), so
