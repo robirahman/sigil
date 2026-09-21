@@ -21,7 +21,7 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
-**2026-09-22: swing pre-pass (engine v12 candidate).** A recorded rust_hard game (room DSJZ2B) lost two
+**2026-09-22: swing pre-pass SHIPPED (engine v12, cache v39).** A recorded rust_hard game (room DSJZ2B) lost two
 stones to a one-ply refutation -- move, dash whose move crushes, Slash whose hard move crushes -- that
 the ordered stream never generates (dash branches capped per first move, casts only on survivors), so
 the AI read its own losing Slash line at +1.0 twice. `Board::swing_turns` (the lead scanner with a
