@@ -61,7 +61,10 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # stones achieve (turn_iter::set_outcome_order_v2), 1/0 per move.
          'outcome_order_v2',
          # swing_prepass: material-swing pre-pass at plies 0-1 (turn_iter::set_swing_prepass), 1/0.
-         'swing_prepass')
+         'swing_prepass',
+         # dash_summer: the U4TL2D bundle -- Summer second cast after a dash-cast in the
+         # stream, swing cap 6000, sacrifice-pair limit, Meteor bound (turn_iter::set_dash_summer), 1/0.
+         'dash_summer')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -109,6 +112,8 @@ def play(b, ms, ev, hist, knob, val):
         se.set_outcome_order_v2(bool(val))
     if knob == 'swing_prepass':
         se.set_swing_prepass(bool(val))
+    if knob == 'dash_summer':
+        se.set_dash_summer(bool(val))
     return b.play_best(ms, 64, 20, 16, ws, hist, ev, False, merge,
                        kdr, kdmw, kdx, qd, None, asp, adaptive, ros, wsh, **extra)
 

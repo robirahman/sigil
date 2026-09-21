@@ -1254,7 +1254,6 @@ fn ui_score_matches_what_the_web_ui_renders() {
     assert!(ui_score(WIN - MAX_PLY as i32 + 1).abs() >= 37.0);
 }
 
-
 #[test]
 fn a_key_dash_is_reachable_inside_a_narrow_width_budget() {
     // The regression this whole filter exists for: dashes used to sit at median
@@ -1385,7 +1384,6 @@ fn the_tempo_term_cancels_the_one_stone_per_ply_parity_wave() {
         assert!(diff == 50 || diff == -50, "tempo is a +/-50 offset, got {diff}");
     }
 }
-
 
 #[test]
 fn the_structural_set_is_wildly_over_the_positional_budget() {
@@ -2585,7 +2583,6 @@ fn mate_solver_mate_in_two_lines_survive_brute_force() {
     brute_force_check_mate2(&o, &sol);
 }
 
-
 // ---------------------------------------------------------------------------
 // The two recorded rust_hard games behind the 2026-09-18 report ("-0.5, then
 // mated in one"). The exhaustive bookends that first fixed them were discarded
@@ -2690,7 +2687,6 @@ fn judge_forced_after_proves_the_corpus_mate_in_two_and_refutes_a_random_move() 
         .find(|n| n.outcome == Outcome::Ongoing && !win_keys.contains(&n.stones)).expect("a non-winning turn");
     assert!(!matches!(crate::mate::judge_forced_after(&other, c, 400_000_000, 0), Judge::Proven));
 }
-
 
 // ---------------------------------------------------------------------------
 // turn_iter.rs: stone-lead decisive pre-pass (audit of recorded games, 2026-09-19)
@@ -3261,4 +3257,86 @@ fn the_ai_no_longer_walks_into_the_recorded_slash_refutation() {
             assert!(!is_the_played_slash_line(&t), "{label} depth {depth}: still plays the refuted Slash line {:?}", t.slice());
         }
     }
+}
+
+
+// ---- game U4TL2D (2026-09-21): a one-ply +2 reply needing a Seal-of-Summer second cast after a dash-cast ----
+
+/// Red to move after blue's turn 11 (ply 22). Red's recorded reply -- hard move a4 pushing to b5,
+/// dash (two sacrifices) to a6 charging Tsunami, cast Tsunami, then Meteor as the Seal of Summer
+/// second cast -- swings the count by +2 (10:10 -> 9:7). Blue's engine read the position at +0.9.
+const U4TL2D_RED_T23: &str = "rrrbr.bbbb.rrbbb..b....rb.......rr.r.../Tsunami,Harvest,Starfall,Gather,Seal_of_Stone,Meteor,Sprout,Seal_of_Autumn,Seal_of_Summer r 23 2:2 Gather:Harvest -:- b1 competitive";
+
+fn is_dash_then_two_casts(t: &Turn) -> bool {
+    t.slice().iter().any(|a| matches!(a, Action::Dash { .. }))
+        && t.slice().iter().filter(|a| matches!(a, Action::Cast { .. })).count() == 2
+}
+
+#[test]
+fn meteor_swing_bound_counts_the_placement_the_crush_and_the_kill() {
+    // Meteor places or pushes (a push crushes) and THEN destroys an adjacent enemy: 3 stones.
+    // Bounded at 2, the second cast that won U4TL2D netted 0 after the sigil's clear loss and
+    // the scan pruned it.
+    // The swing scan reads 3 (`swing_scan_active`); the lead scan keeps the v12 value 2,
+    // which is loose in the wrong direction but is what its 2,500-board cap was tuned to.
+    let b = Board::from_sfn(U4TL2D_RED_T23).expect("sfn");
+    let meteor = SPELLS.iter().position(|s| s.name == "Meteor").unwrap() as u8;
+    assert_eq!(b.cast_swing_bound(meteor, Color::Red, 0), 2, "outside a swing scan");
+    assert!(!crate::turn_iter::swing_scan_active());
+    // Drive the scan on a board where Meteor is the mover's only charged spell and the swing
+    // criterion is unreachable without the 3: the pass finding anything at all proves the bound.
+    // (Pinned indirectly by `swing_scan_finds_the_recorded_dash_tsunami_meteor_reply`, whose
+    // premise shows the same scan empty with the bundle off.)
+    let _ = b.swing_turns(Color::Red, crate::turn_iter::SWING_MIN, 10);
+    assert!(!crate::turn_iter::swing_scan_active(), "the guard resets the flag");
+}
+
+#[test]
+fn swing_scan_finds_the_recorded_dash_tsunami_meteor_reply() {
+    let b = Board::from_sfn(U4TL2D_RED_T23).expect("sfn");
+    let before = b.total[0] as i32 - b.total[1] as i32;
+    let found = b.swing_turns(Color::Red, crate::turn_iter::SWING_MIN, crate::turn_iter::swing_cap());
+    assert!(!found.is_empty(), "the swing scan must find red's move-dash-Tsunami-Meteor reply at the shipped cap");
+    for t in &found {
+        let after = crate::mate::child(&b, &t.push_pub(Action::Pass), Color::Red);
+        let gain = (after.total[0] as i32 - after.total[1] as i32) - before;
+        assert!(gain >= crate::turn_iter::SWING_MIN, "returned turn gains only {gain}: {:?}", t.slice());
+        assert!(is_dash_then_two_casts(t), "the reply dashes and casts twice: {:?}", t.slice());
+    }
+    // The v12 scan misses it even with the larger budget: Meteor's bound made the second cast
+    // worth 0, so the continuation was pruned before any outcome was looked at.
+    crate::turn_iter::set_dash_summer(false);
+    let old = b.swing_turns(Color::Red, crate::turn_iter::SWING_MIN, crate::turn_iter::SWING_CAP_V2);
+    crate::turn_iter::set_dash_summer(true);
+    assert!(old.is_empty(), "premise: the v12 scan does not find it at cap {}", crate::turn_iter::SWING_CAP_V2);
+    // The depth-1 search sees the swing with the bundle and reads the position as even without.
+    crate::turn_iter::set_dash_summer(false);
+    let (_, off, _) = shipped_search().go(&b, Color::Red, 1, 0);
+    crate::turn_iter::set_dash_summer(true);
+    let (best, on, _) = shipped_search().go(&b, Color::Red, 1, 0);
+    assert!(off < 0, "premise: without the bundle the depth-1 search reads about even (got {off} cs)");
+    assert!(on >= 40, "with it the depth-1 search must see the gain (got {on} cs)");
+    assert!(is_dash_then_two_casts(&best.expect("a move")), "and choose the dash-then-two-casts reply");
+}
+
+#[test]
+fn the_stream_offers_a_summer_second_cast_after_a_dash_cast() {
+    let b = Board::from_sfn(U4TL2D_RED_T23).expect("sfn");
+    let turns: Vec<Turn> = b.turns_ordered(Color::Red).collect();
+    let two: Vec<&Turn> = turns.iter().filter(|t| is_dash_then_two_casts(t)).collect();
+    assert!(!two.is_empty(), "the stream must contain [move, dash, cast, cast] turns ({} turns, none with a dash and two casts)", turns.len());
+    // Every one of them is a turn the exhaustive enumerator also produces.
+    let (all, _) = b.enumerate_turns(Color::Red);
+    let set: std::collections::HashSet<Vec<Action>> = all.iter().map(|t| t.slice().to_vec()).collect();
+    for t in two.iter().take(40) {
+        let mut v = t.slice().to_vec();
+        if v.last() == Some(&Action::Pass) { v.pop(); }
+        let mut with_pass = v.clone(); with_pass.push(Action::Pass);
+        assert!(set.contains(&v) || set.contains(&with_pass), "stream turn not in the exhaustive enumeration: {:?}", t.slice());
+    }
+    // Premise: v12's dash-cast stage had no Summer continuation at all.
+    crate::turn_iter::set_dash_summer(false);
+    let none = b.turns_ordered(Color::Red).filter(is_dash_then_two_casts).count();
+    crate::turn_iter::set_dash_summer(true);
+    assert_eq!(none, 0, "premise: without the bundle the stream has no dash-then-two-casts turn");
 }

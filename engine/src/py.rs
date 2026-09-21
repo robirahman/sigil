@@ -661,11 +661,12 @@ impl PyBoard {
     }
 
     /// The material-swing pre-pass (`turn_iter.rs swing_turns`), as action tuples.
-    #[pyo3(signature = (c, min_gain=2, cap=1500))]
-    fn swing_turns(&self, c: &str, min_gain: i32, cap: usize)
+    #[pyo3(signature = (c, min_gain=2, cap=None))]
+    fn swing_turns(&self, c: &str, min_gain: i32, cap: Option<usize>)
         -> PyResult<Vec<Vec<(String, i32, i32, Vec<u8>, i32)>>>
     {
         let col = color(c)?;
+        let cap = cap.unwrap_or_else(crate::turn_iter::swing_cap);
         Ok(self.b.swing_turns(col, min_gain, cap).into_iter()
             .map(|t| t.slice().iter().map(|a| match *a {
                 crate::turn::Action::Blink { node, push_to } =>
@@ -1088,6 +1089,10 @@ fn set_outcome_order_v2(on: bool) { crate::turn_iter::set_outcome_order_v2(on); 
 #[pyfunction]
 fn set_swing_prepass(on: bool) { crate::turn_iter::set_swing_prepass(on); }
 
+/// A/B switch for the U4TL2D dash/Summer bundle (`turn_iter::set_dash_summer`); default on.
+#[pyfunction]
+fn set_dash_summer(on: bool) { crate::turn_iter::set_dash_summer(on); }
+
 /// A/B switch for the competitive opening selector (`opening::set_opening_book`);
 /// default on, per thread.
 #[pyfunction]
@@ -1444,6 +1449,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
     m.add_function(wrap_pyfunction!(set_outcome_order_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_swing_prepass, m)?)?;
+    m.add_function(wrap_pyfunction!(set_dash_summer, m)?)?;
     m.add_function(wrap_pyfunction!(opening_pick, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather

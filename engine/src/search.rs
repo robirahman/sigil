@@ -1269,7 +1269,7 @@ impl Search {
         // one-ply refutation the stream hides costs a game (turn_iter.rs
         // `set_swing_prepass`).
         if ply <= SWING_PLY_MAX && crate::turn_iter::swing_prepass_enabled() {
-            let found = b.swing_turns(c, crate::turn_iter::SWING_MIN, crate::turn_iter::SWING_CAP);
+            let found = b.swing_turns(c, crate::turn_iter::SWING_MIN, crate::turn_iter::swing_cap());
             for t in found.into_iter().rev() {
                 let t = t.push_pub(Action::Pass);
                 if !v.iter().any(|x| x.slice() == t.slice()) {

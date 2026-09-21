@@ -16,7 +16,7 @@
 //! unreachable. `next()` does bounded work: it advances the state machine only far
 //! enough to produce one turn.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use crate::board::{Board, Color, Outcome};
 use crate::spells_meta::{GUST, SEAL_OF_DESTRUCTION, SEAL_OF_WIND};
 use crate::key_dash::{KEY_DASH_EVERY, KEY_DASH_KEEP, KEY_DASH_MOVES};
@@ -381,6 +381,35 @@ impl<'a> TurnIter<'a> {
         b
     }
 
+    /// Seal of Summer: a SECOND cast may follow the first, as in
+    /// `enumerate_post_move`'s recursion (can_spell=false, can_summer=true,
+    /// gated on the POST-cast board holding Summer charged). `bs` is the board
+    /// after the first cast (outcome applied, `finish_cast` done) and `prefix`
+    /// the turn so far. Without this the stream never contains `[.., cast, cast]`
+    /// and no width budget can recover it. Shared by the move-cast and
+    /// dash-cast stages.
+    fn push_summer_casts(&mut self, prefix: Turn, bs: &Board, post_dash: bool) {
+        if !bs.holds_charged(self.c, crate::spells_meta::SEAL_OF_SUMMER) { return; }
+        for id2 in bs.castable(self.c, false, true, post_dash) {
+            let Some(pos2) = bs.position_of(id2) else { continue };
+            let (kis2, tr0) =
+                bs.keep_indices_ordered(pos2, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
+            if tr0 { self.windowed = true; }
+            for &ki2 in &kis2 {
+                let mut cl2 = *bs;
+                cl2.cast_clear_and_keep(pos2, self.c, ki2);
+                let (ranked2, tr2) =
+                    cl2.resolve_outcomes_ranked(pos2, self.c, self.window);
+                if tr2 { self.windowed = true; }
+                for (raw2, _ob2) in ranked2 {
+                    self.pending.push_back(prefix.push_pub(Action::Cast {
+                        pos: pos2 as u8, keep: ki2 as u8, outcome: raw2 as u16,
+                    }));
+                }
+            }
+        }
+    }
+
     /// Advance one step, possibly pushing turns onto `pending`. Returns false when
     /// there is nothing left to do.
     fn step(&mut self) -> bool {
@@ -474,13 +503,9 @@ impl<'a> TurnIter<'a> {
                     }));
                 }
 
-                // Seal of Summer: a SECOND cast may follow the first, as in
-                // `enumerate_post_move`'s recursion (can_spell=false, can_summer=true,
-                // gated on the POST-cast board holding Summer charged). Without this
-                // the stream never contains `[move, cast, cast]` and no width budget
-                // can recover it. The first cast's own board is rebuilt from its
-                // (keep, raw outcome) pair, so the continuation starts exactly where
-                // `apply_turn` will put it.
+                // Seal of Summer: a SECOND cast may follow the first. The first
+                // cast's own board is rebuilt from its (keep, raw outcome) pair,
+                // so the continuation starts exactly where `apply_turn` will put it.
                 let id = b.spells[pos];
                 for &(_, ki, raw) in &cands {
                     let Some((_, cl, outs)) =
@@ -491,32 +516,10 @@ impl<'a> TurnIter<'a> {
                     bs.update();
                     bs.finish_cast(id, self.c);
                     bs.update();
-                    if !bs.holds_charged(self.c, crate::spells_meta::SEAL_OF_SUMMER) { continue; }
-                    for id2 in bs.castable(self.c, false, true, false) {
-                        let Some(pos2) = bs.position_of(id2) else { continue };
-                        let (kis2, tr0) =
-                            bs.keep_indices_ordered(pos2, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
-                        if tr0 { self.windowed = true; }
-                        for &ki2 in &kis2 {
-                            let mut cl2 = bs;
-                            cl2.cast_clear_and_keep(pos2, self.c, ki2);
-                            let (ranked2, tr2) =
-                                cl2.resolve_outcomes_ranked(pos2, self.c, self.window);
-                            if tr2 { self.windowed = true; }
-                            for (raw2, _ob2) in ranked2 {
-                                self.pending.push_back(
-                                    Turn::single(a)
-                                        .push_pub(Action::Cast {
-                                            pos: pos as u8, keep: ki as u8,
-                                            outcome: raw as u16,
-                                        })
-                                        .push_pub(Action::Cast {
-                                            pos: pos2 as u8, keep: ki2 as u8,
-                                            outcome: raw2 as u16,
-                                        }));
-                            }
-                        }
-                    }
+                    let prefix = Turn::single(a).push_pub(Action::Cast {
+                        pos: pos as u8, keep: ki as u8, outcome: raw as u16,
+                    });
+                    self.push_summer_casts(prefix, &bs, false);
                 }
                 true
             }
@@ -548,17 +551,20 @@ impl<'a> TurnIter<'a> {
                             bd.keep_indices_ordered(pos, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
                         if ktr { self.windowed = true; }
                         let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
+                        let mut resolved: Vec<(usize, Board, Vec<(usize, Board)>)> =
+                            Vec::with_capacity(kis.len());
                         for &ki in &kis {
                             let mut cl = bd;
                             cl.cast_clear_and_keep(pos, self.c, ki);
                             let (ranked, trunc) =
                                 cl.resolve_outcomes_ranked(pos, self.c, self.window);
                             if trunc { self.windowed = true; }
-                            let mut v: Vec<(i32, usize, usize)> = ranked.into_iter()
-                                .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, raw))
+                            let mut v: Vec<(i32, usize, usize)> = ranked.iter()
+                                .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, *raw))
                                 .collect();
                             v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
                             if !v.is_empty() { per_keep.push(v); }
+                            resolved.push((ki, cl, ranked));
                         }
                         let (cands, more) = stratify_by_keep(per_keep, self.window);
                         if more { self.windowed = true; }
@@ -569,6 +575,21 @@ impl<'a> TurnIter<'a> {
                                 pos: pos as u8, keep: ki as u8, outcome: raw as u16,
                             });
                             self.pending.push_back(full);
+                            if !dash_summer_enabled() { continue; }
+                            // Seal of Summer second cast after a dash-then-cast.
+                            // Missing until 2026-09-21: the stream had no
+                            // `[move, dash, cast, cast]` at all, and red's +2
+                            // Tsunami-then-Meteor reply in U4TL2D was invisible
+                            // to the search at any width.
+                            let Some((_, cl, ranked)) =
+                                resolved.iter().find(|(k, _, _)| *k == ki) else { continue };
+                            let Some((_, ob)) = ranked.iter().find(|(r, _)| *r == raw) else { continue };
+                            let mut bs = *cl;
+                            bs.stones = ob.stones;
+                            bs.update();
+                            bs.finish_cast(id, self.c);
+                            bs.update();
+                            self.push_summer_casts(full, &bs, true);
                         }
                     }
                 }
@@ -941,10 +962,45 @@ pub fn set_swing_prepass(on: bool) { SWING_PREPASS.with(|c| c.set(on)); }
 pub fn swing_prepass_enabled() -> bool { SWING_PREPASS.with(|c| c.get()) }
 /// Stones a turn must gain (mover's diff after minus before) to count as a swing.
 pub const SWING_MIN: i32 = 2;
-/// Boards the swing scan may examine per position.
+/// Boards the swing scan may examine per position (the v12 value; see `swing_cap`).
 pub const SWING_CAP: usize = 1_500;
+/// The swing budget with `dash_summer` on. U4TL2D's dash-Tsunami-Meteor reply
+/// sits behind four cheaper first moves and one 632-outcome Tsunami resolution:
+/// found at 4,036 boards, never at 1,500. Measured over 50 recorded scans the
+/// mean cost went 0.19 -> 0.25 ms (max 1.1 -> 3.2 ms), at plies 0-1 only.
+pub const SWING_CAP_V2: usize = 6_000;
+pub fn swing_cap() -> usize { if dash_summer_enabled() { SWING_CAP_V2 } else { SWING_CAP } }
+
+thread_local! {
+    static DASH_SUMMER: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch (default on) for the 2026-09-22 bundle from game U4TL2D, where
+/// the AI walked into a one-ply +2 reply (move, dash, Tsunami, then Meteor by
+/// Seal of Summer) that neither the stream nor the swing scan could produce:
+/// the dash-cast stage's Summer second cast (`push_summer_casts`), the swing
+/// scan's larger budget (`swing_cap`), its per-move sacrifice-pair limit
+/// (`SWING_COMBOS_PER_MOVE`), its continuation-aware outcome ordering, and
+/// Meteor's corrected swing bound (3).
+pub fn set_dash_summer(on: bool) { DASH_SUMMER.with(|c| c.set(on)); }
+pub fn dash_summer_enabled() -> bool { DASH_SUMMER.with(|c| c.get()) }
+
+thread_local! {
+    static SWING_SCAN_ACTIVE: std::cell::Cell<bool> = std::cell::Cell::new(false);
+}
+/// True while `swing_turns` runs: the bounds it shares with the lead scan may
+/// read it (Meteor in `cast_swing_bound`).
+pub fn swing_scan_active() -> bool { SWING_SCAN_ACTIVE.with(|c| c.get()) }
+struct SwingScanGuard;
+impl SwingScanGuard {
+    fn enter() -> SwingScanGuard { SWING_SCAN_ACTIVE.with(|c| c.set(true)); SwingScanGuard }
+}
+impl Drop for SwingScanGuard {
+    fn drop(&mut self) { SWING_SCAN_ACTIVE.with(|c| c.set(false)); }
+}
 /// Swing turns collected before the scan stops (distinct first actions preferred by the caller).
 pub const SWING_MAX_FOUND: usize = 3;
+/// Sacrifice pairs that may resolve the same post-dash cast (see `LeadScan::cast_tries`).
+pub const SWING_PAIRS_PER_CAST: u8 = 3;
 /// A/B switch (default on) for the 2026-09-22 bound corrections in the lead
 /// pre-pass. The audit of every recorded game-ending position found the
 /// pre-pass gated out of all 61 wins the depth-2 search missed, for five
@@ -986,7 +1042,12 @@ impl Board {
             // one per stone the turn can still PUSH into an empty sigil (E).
             Resolve::HailStorm => (0..6).filter(|&p| crate::topology::SIGIL[p] & self.theirs(c) != 0).count() as i32
                                   + if lead_bounds_v2() { placements as i32 } else { 0 },
-            Resolve::Meteor => 2,
+            // Meteor places (or pushes: +1 crush) a stone, THEN destroys an
+            // adjacent enemy: 3. The SWING scan uses that -- at 2 the Summer
+            // second cast that won U4TL2D bounded to a net 0 and was pruned.
+            // The LEAD scan keeps 2: at 3 it starves at the 2,500 cap and loses
+            // the recorded P2 and Erupt mates (`pre_pass_finds_*_at_the_shipped_cap`).
+            Resolve::Meteor => if swing_scan_active() && dash_summer_enabled() { 3 } else { 2 },
             Resolve::Bewitch => 4,
             Resolve::Starfall => 2 + theirs.min(6),
             Resolve::SurgeMove | Resolve::RestrictedMove | Resolve::Charge | Resolve::Azimuth => 2,
@@ -1003,7 +1064,7 @@ impl Board {
     /// Stones lost to clearing the sigil at `pos` when `c` casts it, when the turn can still place `placements` stones before
     /// the cast: each may take a mana node, and every mana held refunds one
     /// sigil stone (D). Optimistic, like every bound here.
-    fn clear_loss_p(&self, pos: usize, c: Color, placements: u32) -> i32 {
+    pub(crate) fn clear_loss_p(&self, pos: usize, c: Color, placements: u32) -> i32 {
         let size = crate::topology::SIGIL[pos].count_ones() as i32;
         let info = &crate::spells_meta::SPELLS[self.spells[pos] as usize];
         if info.is_charm { return size; }
@@ -1040,7 +1101,7 @@ impl Board {
             sixth: self.spell_counter[c.idx()] >= 5,
             six_req: if c == Color::Red { 2 } else { 0 },
             root: *self, examined: 0, cap, out: Vec::new(),
-            swing: None, root_diff: 0, max_found: LEAD_MAX_FOUND,
+            swing: None, root_diff: 0, max_found: LEAD_MAX_FOUND, cast_tries: HashMap::new(),
         };
         let diff = st.diff(self);
         st.root_diff = diff;
@@ -1093,17 +1154,33 @@ impl Board {
         let mut out: Vec<Turn> = Vec::new();
         if self.outcome != Outcome::Ongoing { return out; }
         if self.variant.has_competitive() && self.turn_counter <= 2 { return out; }
+        let _active = SwingScanGuard::enter();
         let fm = self.ordered_first_moves(c);
         let mut st = LeadScan {
             c, me: c.idx(), them: c.other().idx(),
             lead_req: i32::MAX, sixth: false, six_req: i32::MAX,
             root: *self, examined: 0, cap, out: Vec::new(),
-            swing: Some(min_gain), root_diff: 0, max_found: SWING_MAX_FOUND,
+            swing: Some(min_gain), root_diff: 0, max_found: SWING_MAX_FOUND, cast_tries: HashMap::new(),
         };
         st.root_diff = st.diff(self);
         // GATE: first move (+ one crush) plus the best of what dash/cast can add.
         if 2 + self.lead_potential(c, true, true, 1) < min_gain { return out; }
         let has_wind = self.holds_charged(c, SEAL_OF_WIND);
+        // Best-first over the first moves: the ones that already crush (+1) and
+        // leave the most on the table go first. The generic move order is
+        // mana/charm-centric; in U4TL2D it ranked the winning a4 push fifth,
+        // behind four moves whose 55 sacrifice pairs each re-resolved a hopeless
+        // Meteor cast, and the budget was gone before the push was tried.
+        let fm: Vec<(u8, Option<u8>)> = if dash_summer_enabled() {
+            let mut scored: Vec<(i32, i32, usize, (u8, Option<u8>))> = fm.iter().enumerate().map(|(i, &(n, p))| {
+                let mut b1 = *self;
+                b1.do_move_with_pub(n, p, c);
+                let gain = st.diff(&b1) - st.root_diff;
+                (-gain, -b1.lead_potential(c, true, true, 0), i, (n, p))
+            }).collect();
+            scored.sort();
+            scored.into_iter().map(|x| x.3).collect()
+        } else { fm };
         let phases: &[(bool, bool, usize)] = &[(false, false, (cap * 2 / 5).max(300)), (true, true, cap)];
         for &(can_dash, dash_only, phase_cap) in phases {
             st.cap = phase_cap.min(cap);
@@ -1133,7 +1210,7 @@ impl Board {
     /// `placements` is how many stones the rest of the turn can still place
     /// before a cast (the pending first move, a dash's move), each of which
     /// may fill one sigil node.
-    fn lead_potential(&self, c: Color, can_dash: bool, can_spell: bool, placements: u32) -> i32 {
+    pub(crate) fn lead_potential(&self, c: Color, can_dash: bool, can_spell: bool, placements: u32) -> i32 {
         use crate::spells_meta::{SPELLS, NUM_OFFICIAL_SPELLS};
         let dash_ok = can_dash && can_spell && self.total[c.idx()] > 2 && self.can_dash(c);
         let mut dash_cost = self.dash_cost(c) as i32;
@@ -1208,6 +1285,15 @@ struct LeadScan {
     swing: Option<i32>,
     root_diff: i32,
     max_found: usize,
+    /// Swing scan only: how many sacrifice pairs have already tried one exact
+    /// cast (post-dash board with the sacrificed stones put back, sigil, keep).
+    /// Which two stones a dash gives up rarely changes what the cast after it
+    /// does, and a witness search needs one pair that works: after
+    /// `SWING_PAIRS_PER_CAST` pairs the same cast is not resolved again. Left
+    /// unbounded, one first move's 55 pairs re-resolved the same hopeless Meteor
+    /// (~50 outcomes x 3 keeps) and U4TL2D's winning push, fifth in line, was
+    /// never reached inside a 6,000 budget.
+    cast_tries: HashMap<(u64, u64, u8, u8), u8>,
 }
 
 impl LeadScan {
@@ -1241,6 +1327,14 @@ impl LeadScan {
         if ok && !self.out.iter().any(|x| x.slice() == t.slice()) { self.out.push(t); }
     }
     fn done(&self) -> bool { self.examined >= self.cap || self.out.len() >= self.max_found }
+    /// Swing scan: what a Seal-of-Summer second cast could still add after
+    /// this cast's outcome `ob` (0 when none is possible).
+    #[inline] fn continuation(&self, ob: &Board, c: Color, next_summer: bool) -> i32 {
+        if self.swing.is_some() && dash_summer_enabled() && next_summer
+            && ob.holds_charged(c, crate::spells_meta::SEAL_OF_SUMMER) {
+            ob.lead_potential(c, false, true, 0)
+        } else { 0 }
+    }
 
     /// Mirrors `enumerate_post_move`: the turn may still dash and/or cast.
     fn post_move(&mut self, b: &Board, so_far: Turn, can_dash: bool, can_spell: bool,
@@ -1269,7 +1363,24 @@ impl LeadScan {
                 let pot = b.cast_swing_bound(id, c, 0) - b.clear_loss_p(pos, c, 0) + after_dash.max(0);
                 if !self.reachable(b, pot, true) { continue; }
                 let next_summer = if can_spell { can_summer } else { false };
+                // Swing scan, cast after a dash: the stones that dash gave up.
+                let dash_sacs: Option<u64> = if self.swing.is_some() && dash_summer_enabled() {
+                    so_far.slice().iter().find_map(|a| match *a {
+                        Action::Dash { sacs, n_sacs, .. } => {
+                            let mut m = 0u64;
+                            for &sx in &sacs[..n_sacs as usize] { m |= 1u64 << sx; }
+                            Some(m)
+                        }
+                        _ => None,
+                    })
+                } else { None };
                 for ki in 0..b.keep_count(pos, c) {
+                    if let Some(m) = dash_sacs {
+                        let key = (b.stones[self.me] | m, b.stones[self.them], pos as u8, ki as u8);
+                        let tries = self.cast_tries.entry(key).or_insert(0);
+                        if *tries >= SWING_PAIRS_PER_CAST { self.examined += 1; continue; }
+                        *tries += 1;
+                    }
                     let mut cl = *b;
                     cl.cast_clear_and_keep(pos, c, ki);
                     let (outs, _) = cl.resolve_outcomes(pos, c, crate::turn::OUTCOME_CAP);
@@ -1283,7 +1394,12 @@ impl LeadScan {
                     // empty at a 50,000 cap.
                     let mut order: Vec<usize> = (0..outs.len()).collect();
                     if lead_bounds_v2() {
-                        order.sort_by_key(|&i| (-self.diff(&outs[i]), outs[i].total[self.them] as i32, i));
+                        // Among equal leads, prefer the resolutions that leave
+                        // the best Seal-of-Summer second cast charged: the
+                        // Tsunami that set up U4TL2D's winning Meteor tied 65
+                        // other outcomes on the count and ranked 60th.
+                        let follow = |i: usize| -> i32 { self.continuation(&outs[i], c, next_summer) };
+                        order.sort_by_key(|&i| (-self.diff(&outs[i]), -follow(i), outs[i].total[self.them] as i32, i));
                         order.truncate(LEAD_OUTCOMES_PER_KEEP);
                         // The budget counts boards GENERATED, not boards inspected:
                         // the resolver built every outcome whether or not it is

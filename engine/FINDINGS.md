@@ -2043,9 +2043,67 @@ Cost: ~0.1 ms per scan; fixed depth 6 over the game's 16 positions 69.1 s -> 66.
 the promoted turns also improve ordering). Regression tests
 `swing_prepass_finds_the_recorded_one_ply_refutation` and
 `the_ai_no_longer_walks_into_the_recorded_slash_refutation` pin both sides of the position and
-assert the defect reproduces with the pass off. Arena verdict below when in.
+assert the defect reproduces with the pass off.
+
+**Arena verdict (run 20260921T211851Z, 3 s, one c3d-highcpu-90, 88 shards x 25 pairs, 4,343 games, mean 31.8
+plies):** arm 2,424 : base 1,919, win rate 55.81% [54.33, 57.29], **Elo +40.6 [+30.2, +51.0]**, s/move ratio
+0.994. The largest single gain of the campaign, from a 0.1 ms scan at two plies. Shipped as engine v12.
 
 Why the browser said +1.0 where the fixed-depth replay says 0.0: the live search runs with a
 persistent table, pondering and the elastic budget, and the browser had just crushed a red stone the
 ply before; the sign is the same story -- the AI believed its Slash line was safe because the reply
 that punishes it was not in its move list.
+
+## A one-ply +2 reply behind a Seal-of-Summer second cast (2026-09-21, room U4TL2D)
+
+Robi (red) vs Hard AI (blue), competitive, draw Tsunami, Harvest, Starfall, Gather, Seal of Stone, Meteor,
+Sprout, Seal of Autumn, Seal of Summer (record `-P25022Z0YamsS7g9B9X`). Blue's turn 11 (ply 22) searched
+depth 4 in 9.2 s (94,070 nodes -- 10k nodes/s, a cast-heavy position), read **+0.9**, and played hard move
+a7->a8, dash (b11, b13) a4->a12, Harvest. Red's reply: hard move a4 pushing to b5, dash (a12, c7) to a6
+charging Tsunami, cast Tsunami, then **Meteor as the Seal of Summer second cast** -- 10:10 -> 9:7, a +2
+swing in one ply. Blue's turn 12 read "likely loss in 1".
+
+Position after blue's turn (red to move, `U4TL2D_RED_T23` in tests.rs):
+`rrrbr.bbbb.rrbbb..b....rb.......rr.r.../Tsunami,Harvest,Starfall,Gather,Seal_of_Stone,Meteor,Sprout,Seal_of_Autumn,Seal_of_Summer r 23 2:2 Gather:Harvest -:- b1 competitive`.
+The v12 engine reads it **+0.08** at depth 1 and −1.00 at depth 2: the reply is not in its move list at any
+width, and the swing pre-pass shipped for DSJZ2B does not find it either. Three defects, all one ply deep:
+
+1. **The stream had no `[move, dash, cast, cast]`.** The move-cast stage has had a Seal-of-Summer
+   continuation since the keep fix; the dash-cast stage never got one. The exhaustive enumerator produces
+   725,544 turns here, 563,910 of them dash-then-two-casts (376,444 dash + Tsunami + Meteor); the ordered
+   stream produced 832 turns and **0** with a dash and two casts, at window 16, 32 or 64.
+2. **The swing scan's Meteor bound was 2.** `resolve_meteor` places (or pushes, crushing) a stone and THEN
+   destroys an adjacent enemy: 3. After the Tsunami (gain 1) the Meteor second cast bounded to 2 − 2 (clear
+   loss) = 0 and `reachable(1 + 0 >= 2)` pruned the continuation before an outcome was looked at. The
+   bound is not merely loose, it is wrong in the pessimistic direction. The scan also followed only the 3
+   outcomes with the largest count: the Tsunami resolution that leaves Meteor charged tied 65 others at
+   gain 1 and ranked 60th.
+3. **Budget.** With 1 and 2 fixed the reply was found at a cap of ~80,000 boards (25 ms), never at 1,500:
+   the winning push ranks fifth among 11 first moves, and each of the four before it has 55 sacrifice
+   pairs x 3 keeps re-resolving the same hopeless Meteor (~50 outcomes) -- ~3,300 boards per first move.
+
+**Fix (knob `turn_iter::set_dash_summer`, default on; arm `engine/gcp/arms/dash_summer_3s.txt`):**
+`TurnIter::push_summer_casts`, the Summer continuation shared by the move-cast and dash-cast stages (the
+stream here becomes 1,241 turns, 409 with a dash and two casts, each verified against the exhaustive
+enumeration); Meteor's swing bound 3 **in the swing scan only** (`swing_scan_active`: at 3 the lead scan
+starves at its 2,500 cap and loses the recorded P2 and Erupt mates, so it keeps 2); among equal counts the
+swing scan follows the outcomes with the best Summer continuation (`LeadScan::continuation`); at most
+`SWING_PAIRS_PER_CAST` = 3 sacrifice pairs resolve the same post-dash cast (`cast_tries`, keyed by the
+post-dash board with the sacrificed stones put back); first moves in best-first order (gain, then
+potential); swing cap 1,500 -> **6,000** (`SWING_CAP_V2`; the reply is found at 3,000, in 2.3 ms). Cost over
+50 recorded scans (both sides of 25 positions): mean 0.19 -> 0.25 ms, max 1.1 -> 3.2 ms, at plies 0-1
+only. Measured on the game: red's depth-1 search **+0.08 -> +1.03** stones and it plays the
+dash-Tsunami-Meteor reply; blue's recorded turn is therefore worth about −1 for blue. (The fixed-depth
+replay of blue's turn never chooses the recorded turn with either engine -- it picks the same shape with
+b12 in place of b13 as the second sacrifice, which red cannot punish; the live search's persistent table,
+pondering and elastic budget are not reproduced offline.) Regression tests
+`meteor_swing_bound_counts_the_placement_the_crush_and_the_kill`,
+`swing_scan_finds_the_recorded_dash_tsunami_meteor_reply` (asserts the v12 scan misses it even at 6,000)
+and `the_stream_offers_a_summer_second_cast_after_a_dash_cast` (asserts v12's stream has none). Arena
+verdict below when in.
+
+Two things worth remembering from the diagnosis. The dash-then-cast shape multiplies every cast by the
+sacrifice pairs, and a pre-pass that charges boards generated pays for the same resolution 55 times; any
+future scan over dash lines needs a per-cast bound on pairs. And a "bound" that is smaller than the real
+effect silently deletes lines: `cast_swing_bound` is used as an upper bound everywhere, so each entry
+should be checked against the resolver (Comet is 1 -- place + crush − sacrifice -- and correct).
