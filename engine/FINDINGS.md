@@ -2171,7 +2171,14 @@ away now run and change the answer; a Hard move can take 20 s. If that is too lo
 
 The arena for this MUST be gated at FIXED per-move time, not matched time: the browser's budget is
 fixed, and the arm using more of it is the point. Arms `full_budget` 1 vs 0 at 10 s, 8 pairs x 88
-shards. Verdict below when in.
+shards.
+
+**Arena verdict (run `20260922T010321Z`, `full_budget` 1 vs 0 at a FIXED 10 s per move, one c3d-highcpu-90, 88
+shards x 8 pairs, 1,406 of 1,408 games when recorded): arm 765 - base 641, 54.41% [51.80, 57.00], +30.7 Elo
+[+12.5, +48.9]; s/move arm 16.04 vs base 9.67 (ratio 1.66).** The interval excludes parity. Note what the
+time ratio says: even in self-play the old policy gave back only ~3% of a 10 s budget on average (9.67 s), so
+most of the arm's extra time is the instability extension running more often, not the predictor alone; the
+human game X4TNAS (71% used) was a worse case than the self-play mean. Shipped as engine v14 (cache v41).
 
 Two smaller notes. First, `deepen`'s "decisive" break also fires on a proven LOSS; that is sound
 (a proof that every move loses within d plies bounds any deeper search, and the score already

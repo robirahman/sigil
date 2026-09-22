@@ -9,7 +9,7 @@ with this section, this section is right.
 | | |
 |---|---|
 | strength vs the previously playtested engine | **+228 Elo @3s, +348 @60s** |
-| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` (2.0, 0.4, 2, 50, predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2 |
+| shipped config | eval `tfit`, `width_scale` 4, adaptive (0.10, 2, 6), aspiration 60, **`elastic` FULL (2.0, 1.0, 2, 50, no predict) + `adopt_partial` (since v14, 2026-09-22; was DEFAULT 2.0/0.4/2/50/predict)**, **`lmr` band x2 R=1**, pondering on for >= 10 s tiers, `merge_min_width` OFF, `key_dash` OFF, `keep_window` 2 |
 | tests | **101/101** `cargo test --release`, plus 4,000-position differential parity and the emit gate |
 | browser build | `RUST_ENGINE_VERSION` 5, cache `v29`, wasm 479,949 bytes (unoptimised; `wasm-opt` still fails the smoke) |
 
@@ -21,15 +21,16 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
-**2026-09-22: the Hard AI spent 71% of its clock -- full-budget time policy (engine default; wasm on the
-arena verdict).** Game X4TNAS: the Hard tier moved at depth 3 after 3 s of its 10 s, not because it was lost
+**2026-09-22: engine v14 (cache v41) -- the Hard AI spent 71% of its clock; full-budget time policy, arena
++30.7 Elo at fixed 10 s.** Game X4TNAS: the Hard tier moved at depth 3 after 3 s of its 10 s, not because it was lost
 (-2 stones, no mate) but because `Elastic::DEFAULT`'s predictor (next iteration = 6x the last, the clamp
 Sigil's 7-10x depth ratios always hit) refused to start depth 4 and partial iterations were discarded. The
 policy shipped from MATCHED-average-time arenas, where early stops fund extensions; a browser tier has no pool,
 so the saved time was simply forfeited (18 turns: 127.9 of 180 s). New default `Elastic::FULL` (2.0, 1.0, 2,
 50, no predict) + `adopt_partial` ON: every move runs to its deadline (7 of 18 extended to 20 s), turns
 30/32/34 reach depth 4 instead of 3. Knob `full_budget` (0 = old policy), arm
-`engine/gcp/arms/full_budget_10s.txt`, gated at FIXED per-move time. FINDINGS "The Hard AI spent 71% of its
+`engine/gcp/arms/full_budget_10s.txt`, gated at FIXED per-move time: run 20260922T010321Z, 1,406 games, **+30.7 Elo
+[+12.5, +48.9]**, 54.41% [51.80, 57.00], s/move 16.04 vs 9.67 (a Hard move now averages ~16 s, up to 20 s). FINDINGS "The Hard AI spent 71% of its
 clock".
 
 **2026-09-22: engine v13 (cache v40) -- the U4TL2D fixes; swing arena final +40.6 Elo.** A recorded
