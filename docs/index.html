@@ -269,6 +269,17 @@
 					Very Hard
 					<small>60s per turn</small>
 				</a>
+				<!-- Game clocks: the AI gets a whole-game clock (minutes + seconds
+				     back per move) and allocates it itself (rust-ai.js
+				     moveBudgetMs). Any tier accepts ?clock=M+S. -->
+				<a class="mode-button" href="game.html?ai=rust_hard&amp;clock=5+0">
+					Hard 5+0
+					<small>5 min for the game</small>
+				</a>
+				<a class="mode-button" href="game.html?ai=rust_hard&amp;clock=10+1">
+					Hard 10+1
+					<small>10 min + 1s per move</small>
+				</a>
 			</div>
 			<script>
 				(function() {

@@ -148,6 +148,18 @@ class RustAI {
 		this.transport = options.transport || 'worker';
 		this.endpoint = options.endpoint || '/api/move';
 		this.timeMs = (options.timeLimit !== undefined ? options.timeLimit : 60) * 1000;
+		// Game clock (v15): `{ baseMs, incMs }` gives the AI a whole-game clock
+		// instead of a fixed per-move budget. Each move gets
+		// RustAI.moveBudgetMs(remaining, inc, movesPlayed) -- the engine's
+		// `search::move_budget_ms`, mirrored here so the browser needs no
+		// round trip -- and the exact-clock search spends exactly that. The
+		// clock is charged with the WALL time of the move (search plus
+		// messaging) and credited the increment afterwards; it never goes
+		// below zero and never stops the AI (Sigil has no time forfeit).
+		this.clock = options.clock ? { baseMs: options.clock.baseMs | 0, incMs: options.clock.incMs | 0 } : null;
+		this.clockMs = this.clock ? this.clock.baseMs : null;
+		this.movesPlayed = 0;
+		this.lastBudgetMs = null;
 		// Engine config, mirroring serve.py's shipped defaults. Deviating from
 		// these is a measured strength loss (see py.rs's warnings on eval).
 		this.ttBits = options.ttBits || 20;
@@ -173,6 +185,33 @@ class RustAI {
 		}
 	}
 
+	/** Per-move budget from a game clock: `search::move_budget_ms`, same
+	 * constants (18-move horizon, floor of 6 moves, 2% reserve of at least
+	 * 150 ms, 50 ms floor). Keep in step with the Rust; wasm-smoke checks. */
+	static moveBudgetMs(remainingMs, incMs, movesPlayed) {
+		remainingMs = Math.max(0, Math.floor(remainingMs));
+		incMs = Math.max(0, Math.floor(incMs));
+		const reserve = Math.max(Math.floor(remainingMs / 50), 150);
+		const avail = Math.max(0, remainingMs - reserve);
+		const movesLeft = Math.max(18 - movesPlayed, 6);
+		const share = incMs + Math.floor(avail / movesLeft);
+		return Math.max(Math.min(share, avail), 50);
+	}
+	/** Parse "5+0" / "10+1" (minutes + seconds per move) into { baseMs, incMs }; null if malformed. */
+	static parseClock(text) {
+		if (!text) return null;
+		const m = /^\s*(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)\s*$/.exec(String(text));
+		if (!m) return null;
+		const baseMs = Math.round(parseFloat(m[1]) * 60000);
+		const incMs = Math.round(parseFloat(m[2]) * 1000);
+		if (!(baseMs > 0) || !(incMs >= 0)) return null;
+		return { baseMs, incMs };
+	}
+	/** The budget the next search gets: the clock share, or the fixed per-move time. */
+	nextBudgetMs() {
+		if (!this.clock) return this.timeMs;
+		return RustAI.moveBudgetMs(this.clockMs, this.clock.incMs, this.movesPlayed);
+	}
 	/** Whether pondering should be on for this AI given the auth manager's
 	 *  profile. 'default-on' policy: on unless explicitly disabled. */
 	ponderEnabledFor(auth) {
@@ -220,6 +259,8 @@ class RustAI {
 	}
 
 	async _send(sfn, onProgress) {
+		const budgetMs = this.nextBudgetMs();
+		this.lastBudgetMs = budgetMs;
 		// The CURRENT position is itself an occurrence for threefold counting
 		// (the engine's search path does not include its root), so send it along
 		// with the saved history. `_historySfns` only gains `sfn` after this
@@ -232,7 +273,7 @@ class RustAI {
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						sfn: sfn,
-						time_ms: this.timeMs,
+						time_ms: budgetMs,
 						history_sfns: history,
 					}),
 				});
@@ -248,7 +289,7 @@ class RustAI {
 		const t0 = Date.now();
 		return getRustEngineWorker().search({
 			sfn: sfn,
-			timeMs: this.timeMs,
+			timeMs: budgetMs,
 			ttBits: this.ttBits,
 			widthScale: this.widthScale,
 			historySfns: history,
@@ -259,6 +300,8 @@ class RustAI {
 			if (onProgress) onProgress({
 				depth: msg.depth, score: msg.score, nodes: msg.nodes,
 				timeMs: Date.now() - t0,
+				budgetMs: budgetMs,
+				clockMs: this.clockMs,
 			});
 		});
 	}
@@ -272,8 +315,13 @@ class RustAI {
 		}
 		const sim = SimBoard.fromSigilBoard(board);
 		const sfn = boardToSfn(sim);
-
+		const tMove0 = Date.now();
 		const res = await this._send(sfn, onProgress);
+		// Game clock: charge the wall time of the whole move, credit the increment.
+		if (this.clock) {
+			this.clockMs = Math.max(0, this.clockMs - (Date.now() - tMove0)) + this.clock.incMs;
+			this.movesPlayed += 1;
+		}
 		if (!res || !res.ok) {
 			throw new Error('Rust engine error: ' + ((res && res.error) || 'unknown') +
 				'\nIf this mentions an out-of-scope spell, the draw includes a pack the ' +
@@ -304,6 +352,10 @@ class RustAI {
 			// free-placement turn, else null.
 			opening: res.opening || null,
 			timeMs: Math.round((res.seconds || 0) * 1000),
+			// Game clock: this move's budget and what is left (after the increment).
+			budgetMs: this.lastBudgetMs,
+			clockMs: this.clockMs,
+			clock: this.clock,
 		};
 		if (onProgress) onProgress(this.lastMeta);
 		this._historySfns.push(sfn);

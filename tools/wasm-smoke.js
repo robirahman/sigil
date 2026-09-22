@@ -28,6 +28,7 @@ const FILES = [
 	'constants.js', 'notation.js', 'board.js', 'moves.js', 'spells.js',
 	'sim-board.js', 'features.js', 'enumerator.js',
 	'ai-player.js', 'game-controller.js', 'game-review.js',
+	'rust-ai.js',   // RustAI.moveBudgetMs / parseClock, checked against the wasm
 ];
 
 let src = FILES.map((f) => fs.readFileSync(path.join(ENGINE, f), 'utf8')).join('\n;\n');
@@ -48,6 +49,24 @@ async function driver() {
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
 	const info = JSON.parse(wasm_bindgen.engine_info());
 	if (info.nodes !== 39) throw new Error('engine_info nodes != 39');
+	// Game clock: the JS allocation must equal the engine's for every input.
+	if (typeof wasm_bindgen.move_budget_ms === 'function') {
+		let checked = 0;
+		for (const rem of [0, 40, 149, 150, 151, 1000, 9999, 30000, 300000, 600000, 3600000]) {
+			for (const inc of [0, 1000, 5000]) {
+				for (const mv of [0, 5, 12, 18, 25, 60]) {
+					const js = RustAI.moveBudgetMs(rem, inc, mv);
+					const rs = wasm_bindgen.move_budget_ms(rem, inc, mv);
+					if (js !== rs) throw new Error(`moveBudgetMs(${rem}, ${inc}, ${mv}) js ${js} != wasm ${rs}`);
+					checked++;
+				}
+			}
+		}
+		const c = RustAI.parseClock('10+1');
+		if (!c || c.baseMs !== 600000 || c.incMs !== 1000) throw new Error('parseClock 10+1');
+		if (RustAI.parseClock('nonsense') !== null || RustAI.parseClock('0+1') !== null) throw new Error('parseClock rejects');
+		console.log('game clock: ' + checked + ' allocations agree with the wasm');
+	}
 
 	// rust-ai.js's partial-SFN key: everything except the turn counter.
 	const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };

@@ -1454,6 +1454,14 @@ fn solve_mates(sfn: &str, budget: u64, time_ms: u64, hint_after: Vec<String>, ma
     Ok(crate::mate::solve_json(sfn, budget, time_ms, &hint_after, max_mate))
 }
 
+/// Game clock allocation (`search::move_budget_ms`): the per-move budget for a
+/// side with `remaining_ms` on its clock, `inc_ms` back per move, having made
+/// `my_moves_played` moves. Lets a harness play base+increment games.
+#[pyfunction]
+fn move_budget_ms(remaining_ms: u64, inc_ms: u64, my_moves_played: u32) -> u64 {
+    crate::search::move_budget_ms(remaining_ms, inc_ms, my_moves_played)
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
@@ -1464,6 +1472,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
     m.add_function(wrap_pyfunction!(even_offset, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
+    m.add_function(wrap_pyfunction!(move_budget_ms, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
     m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;

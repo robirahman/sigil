@@ -251,7 +251,7 @@
 							<span class="ai-thinking__text">
 								<strong x-text="aiThinkingColor ? (aiThinkingColor[0].toUpperCase() + aiThinkingColor.slice(1) + ' AI thinking') : 'AI thinking'"></strong>
 								<span x-show="aiThinkingDepth > 0"
-									x-text="' — depth ' + aiThinkingDepth + ', ' + (aiThinkingTimeMs/1000).toFixed(1) + 's, ' + aiThinkingNodes.toLocaleString() + ' nodes'"></span>
+									x-text="' — depth ' + aiThinkingDepth + ', ' + (aiThinkingTimeMs/1000).toFixed(1) + 's' + (aiThinkingBudgetMs ? ' of ' + (aiThinkingBudgetMs/1000).toFixed(1) + 's' : '') + (aiClockMs !== null ? ' (clock ' + formatTimer(Math.round(aiClockMs/1000)) + ')' : '') + ', ' + aiThinkingNodes.toLocaleString() + ' nodes'"></span>
 							</span>
 						</div>
 

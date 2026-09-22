@@ -30,7 +30,10 @@ a read-out root spends the rest of the clock on the reply position (`spend_remai
 table); think report shows `depth D/S` and "reply read to depth N". Knob `exact_clock`, arm
 `engine/gcp/arms/exact_clock_10s.txt`. (3) Selective depth, four knobs measured one at a time at fixed 10 s:
 `nmp` (pass as null move), `lmr_quiet` (in-window late-quiet reductions), `tact_ext` (tactical
-extensions), `singular` (TT-move extension). FINDINGS "The deadline is the budget" and "Selective depth".
+extensions), `singular` (TT-move extension). (4) Game clocks: `?clock=5+0` / `?clock=10+1` on any Rust tier
+(menu: Hard 5+0, Hard 10+1); `search::move_budget_ms` allocates each move (18-move horizon, floor 6, 2%
+reserve), `RustAI` mirrors it, charges wall time and credits the increment; meter and think report show the
+clock. FINDINGS "The deadline is the budget", "Selective depth", "Game clocks".
 
 **2026-09-22: engine v14 (cache v41) -- the Hard AI spent 71% of its clock; full-budget time policy, arena
 +30.7 Elo at fixed 10 s.** Game X4TNAS: the Hard tier moved at depth 3 after 3 s of its 10 s, not because it was lost

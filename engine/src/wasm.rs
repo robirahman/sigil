@@ -304,6 +304,14 @@ pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
 }
 
 /// Sanity handle for the loader: confirms the module initialised.
+/// Game clock allocation, see `search::move_budget_ms`. Exported for the
+/// smoke test's parity check against rust-ai.js's mirror and for callers that
+/// prefer the engine's number.
+#[wasm_bindgen]
+pub fn move_budget_ms(remaining_ms: u32, inc_ms: u32, my_moves_played: u32) -> u32 {
+    crate::search::move_budget_ms(remaining_ms as u64, inc_ms as u64, my_moves_played) as u32
+}
+
 #[wasm_bindgen]
 pub fn engine_info() -> String {
     format!("{{\"spells\":{},\"nodes\":{}}}",

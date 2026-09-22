@@ -35,6 +35,8 @@ document.addEventListener('alpine:init', () => {
 			aiThinkingDepth: 0,
 			aiThinkingTimeMs: 0,
 			aiThinkingNodes: 0,
+			aiThinkingBudgetMs: 0,
+			aiClockMs: null,
 
 			nodes: {
 				...['a', 'b', 'c'].reduce((acc, curr) => {
@@ -1058,11 +1060,16 @@ document.addEventListener('alpine:init', () => {
 							options.ai = new RustAI({ transport: 'fetch', timeLimit: 60 });
 						} else {
 							const t = _RUST_TIERS[aiMode];
+							// ?clock=5+0 / ?clock=10+1 (minutes + seconds per move):
+							// the AI plays on a whole-game clock instead of the
+							// tier's per-move budget (rust-ai.js allocates each move).
+							const clock = RustAI.parseClock(new URLSearchParams(window.location.search).get('clock'));
 							options.ai = new RustAI({
 								transport: 'worker', timeLimit: t.time, ttBits: t.ttBits,
+								clock: clock,
 								// The two top tiers ponder unless the account setting
 								// is explicitly off; the quick tiers follow the setting.
-								ponderPolicy: (t.time >= 10) ? 'default-on' : 'setting',
+								ponderPolicy: (t.time >= 10 || clock) ? 'default-on' : 'setting',
 							});
 							// Fetch+compile the wasm during the human's first think,
 							// not the AI's.
@@ -1330,6 +1337,8 @@ document.addEventListener('alpine:init', () => {
 						_this.aiThinkingDepth = 0;
 						_this.aiThinkingTimeMs = 0;
 						_this.aiThinkingNodes = 0;
+						_this.aiThinkingBudgetMs = 0;
+						_this.aiClockMs = null;
 						return;
 					}
 
@@ -1339,6 +1348,9 @@ document.addEventListener('alpine:init', () => {
 						if (typeof rest.depth === 'number') _this.aiThinkingDepth = rest.depth;
 						if (typeof rest.timeMs === 'number') _this.aiThinkingTimeMs = rest.timeMs;
 						if (typeof rest.nodes === 'number') _this.aiThinkingNodes = rest.nodes;
+						// Game clock (rust-ai.js): this move's budget and the clock it came from.
+						if (typeof rest.budgetMs === 'number') _this.aiThinkingBudgetMs = rest.budgetMs;
+						if (typeof rest.clockMs === 'number') _this.aiClockMs = rest.clockMs;
 						return;
 					}
 
@@ -1565,7 +1577,10 @@ document.addEventListener('alpine:init', () => {
 					const selStr = (payload.seldepth && payload.seldepth > (payload.depth || 0))
 						? `/${payload.seldepth}` : '';
 					const overStr = payload.overflowDepth ? `, reply read to depth ${payload.overflowDepth}` : '';
-					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}${selStr}, ${seconds}s, ${payload.nodes || 0} nodes${overStr}${evalStr}${trapStr}`);
+					// Game clock: what is left after this move (increment included).
+					const clockStr = (payload.clock && typeof payload.clockMs === 'number')
+						? `, ${_this.formatTimer(Math.round(payload.clockMs / 1000))} left` : '';
+					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}${selStr}, ${seconds}s${clockStr}, ${payload.nodes || 0} nodes${overStr}${evalStr}${trapStr}`);
 				}
 
 				// Shared by live messages and animated replay narration.

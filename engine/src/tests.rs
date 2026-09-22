@@ -978,6 +978,51 @@ fn a_single_legal_turn_reads_ahead_instead_of_returning() {
     assert!(s.tt_filled() > 0, "nothing cached for the next search");
 }
 
+// ------------------------------------------------------------------ game clocks
+
+/// A 5+0 clock played out over 40 of the side's own moves (far past the
+/// 18-move horizon): the allocation never asks for more than the clock holds,
+/// has spent at least 85% of the five minutes by the 18th move, and still has
+/// something left at move 40. 10+1 starts near 33 s a move and the increment
+/// keeps the budget above one second however long the game runs.
+#[test]
+fn a_game_clock_is_spent_across_the_game_and_never_flags() {
+    use crate::search::move_budget_ms;
+    let mut remaining: u64 = 5 * 60_000;
+    let mut spent_by_18 = 0u64;
+    for m in 0..40u32 {
+        let b = move_budget_ms(remaining, 0, m);
+        assert!(b <= remaining, "move {m}: budget {b} > clock {remaining}");
+        assert!(b >= 50 || remaining < 50, "move {m}: budget {b} below the floor");
+        remaining -= b;
+        if m < 18 { spent_by_18 += b; }
+    }
+    // The taper: 1/18, 1/17, ... of what is left, then a sixth of it from
+    // move 12 on, so ~88% of the five minutes is gone by the 18th move and a
+    // long game keeps a tail (~30 s at move 18, ~8 s at move 25).
+    assert!(spent_by_18 >= 255_000, "only {spent_by_18} ms of 5 minutes spent by move 18");
+    assert!(remaining > 0, "the 5+0 clock flagged");
+    let first = move_budget_ms(10 * 60_000, 1_000, 0);
+    assert!(first >= 30_000 && first <= 36_000, "10+1 first move {first} ms");
+    let mut r: u64 = 10 * 60_000;
+    for m in 0..60u32 {
+        let b = move_budget_ms(r, 1_000, m);
+        assert!(b <= r);
+        assert!(b >= 1_000 || r < 1_200, "10+1 move {m}: budget {b} with {r} left");
+        r -= b;
+        r += 1_000;
+    }
+    // More time on the clock never means a smaller budget.
+    let mut prev = 0;
+    for rem in (1_000..=600_000u64).step_by(7_000) {
+        let b = move_budget_ms(rem, 0, 5);
+        assert!(b >= prev, "budget fell from {prev} to {b} at {rem} ms");
+        prev = b;
+    }
+    // An exhausted clock still yields the floor: 0 ms would mean "no deadline".
+    assert_eq!(move_budget_ms(0, 0, 3), 50);
+}
+
 // ------------------------------------------------------------- selective depth
 
 /// Every selective-depth knob is off by default and a default search does no

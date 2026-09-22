@@ -2307,3 +2307,28 @@ one of them cuts, 73k -> 59k nodes; mode 0 (zero-window nodes only) 29 probes, 7
 mate-in-2 no probe fires at all: every window under a mating line is mate-bound.
 
 Verdicts below when in.
+
+## Game clocks: base + increment for the AI (2026-09-22)
+
+The site's tiers were per-move budgets only. `search::move_budget_ms(remaining, inc, my_moves_played)`
+turns a whole-game clock ("5+0": five minutes for the game; "10+1": ten minutes plus a second back per
+move) into the per-move budget the exact-clock search then spends to the millisecond: the increment
+plus an equal share of what is left after a reserve (2% of the remainder, at least 150 ms, for the
+browser's messaging around a search), over the moves the side is still expected to make. Sigil
+self-play averages ~31 plies and human games run longer, so the horizon starts at 18 of the side's
+moves and floors at 6: 1/18, 1/17, ... of the remainder, then a sixth of it from the 12th move on, a
+geometric taper that cannot flag. Simulated 5+0: 16.3 s a move at the start, ~88% of the clock gone by
+the 18th move, ~30 s left there, ~8 s at move 25, 0.8 s at move 40. 10+1 opens at 33.7 s a move and the
+increment keeps every later move above a second. The floor is 50 ms even on an exhausted clock (0 ms
+would mean "no deadline"): Sigil has no time forfeit, so a flagged side keeps playing at the floor and
+its clock reads 0:00.
+
+Browser: `RustAI` takes `clock: { baseMs, incMs }` (from `?clock=M+S` on any Rust tier; the menu offers
+Hard 5+0 and Hard 10+1), mirrors the allocation in `RustAI.moveBudgetMs` so no worker round trip is
+needed, charges the clock with the WALL time of each move and credits the increment after it, and
+reports budget and clock in the thinking meter ("3.2s of 16.3s (clock 4:12)") and the think report
+("..., 4:12 left"). Pondering defaults on for clock games. `tools/wasm-smoke.js` checks 198 allocations
+of the JS mirror against the wasm export `move_budget_ms` and the `parseClock` grammar. Python:
+`se.move_budget_ms` for a clock-driven harness (not yet written; the arenas remain fixed per-move
+time, which is what the tiers and the browser's clock allocation both reduce to). Test
+`a_game_clock_is_spent_across_the_game_and_never_flags`.

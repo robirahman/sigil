@@ -283,6 +283,36 @@ fn score_from_tt(score: i32, ply: i32) -> i32 {
     else { score }
 }
 
+/// Game clocks (v15). The site's tiers are per-move budgets; a game clock
+/// ("5+0": five minutes for the whole game, "10+1": ten minutes plus one
+/// second back after every move) needs a per-move allocation, which the
+/// exact-clock search then spends to the millisecond.
+///
+/// `move_budget_ms(remaining, inc, my_moves_played)`: the increment plus an
+/// equal share of what is left after a small reserve, over the moves the side
+/// is still expected to make. Sigil self-play averages ~31 plies (15-16 moves a
+/// side) and human games run longer, so the horizon starts at 18 of the side's
+/// moves and never drops below 6: when a game runs long, each move gets a sixth
+/// of the remainder, a geometric taper that cannot flag. The reserve (2% of the
+/// remainder, at least 150 ms) covers the browser's messaging overhead around
+/// each search; the budget is capped by what is left and floored at 50 ms even
+/// when the clock is exhausted -- Sigil has no time forfeit, so a flagged side
+/// keeps playing at the floor and the display shows 0:00.
+/// `rust-ai.js` carries the same formula for the browser (the wasm export is
+/// there for the smoke test's parity check and the Python harness).
+pub const CLOCK_EXPECTED_MOVES: u32 = 18;
+pub const CLOCK_MIN_MOVES_LEFT: u32 = 6;
+pub const CLOCK_RESERVE_MIN_MS: u64 = 150;
+pub const CLOCK_FLOOR_MS: u64 = 50;
+
+pub fn move_budget_ms(remaining_ms: u64, inc_ms: u64, my_moves_played: u32) -> u64 {
+    let reserve = (remaining_ms / 50).max(CLOCK_RESERVE_MIN_MS);
+    let avail = remaining_ms.saturating_sub(reserve);
+    let moves_left = CLOCK_EXPECTED_MOVES.saturating_sub(my_moves_played).max(CLOCK_MIN_MOVES_LEFT) as u64;
+    let share = inc_ms + avail / moves_left;
+    share.min(avail).max(CLOCK_FLOOR_MS)
+}
+
 /// Time-budget elasticity (§1.2). The base budget is `time_ms`; the search may
 /// stop early or run over it under these rules, all measured against the
 /// AVERAGE time actually used (the harness calibrates `base` so the arm's mean
