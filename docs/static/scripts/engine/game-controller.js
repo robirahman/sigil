@@ -416,10 +416,16 @@ class GameController {
 		if (canmove) {
 			actions.push('move');
 			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
-			// If no moves available, must pass (any remaining granted moves
-			// are forfeited — the EOT triggers zero the counters).
+			// No legal move. Any remaining granted moves are forfeited (the
+			// EOT triggers zero the counters), but the turn is NOT over: a
+			// turn is move + optional dash + optional cast (ruling
+			// 2026-08-26, mirrored by the engine's enumerator), so a
+			// surrounded player may still dash, cast, or pass. This used to
+			// `return` here and silently skip the whole turn.
 			if (Object.keys(moveoptions).length === 0) {
-				return;
+				this.emit({ type: 'message', awaiting: null,
+					message: 'No legal stone placement: dash, cast a spell, or pass.' });
+				return this._takeTurn(color, false, candash, canspell, cansummer, extracast);
 			}
 		} else {
 			// Post-move options

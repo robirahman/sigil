@@ -783,7 +783,10 @@ function _enumerateMoveRootExhaustive(board, color, prefix, caps, out) {
 	else if (hasSeal) moveTargets = board._blinkable(color);
 	else moveTargets = board._allMoveable(color);
 	if (!moveTargets.length) {
-		out.push(new SimTurn(prefix.concat([new SimAction('pass')])));
+		// No legal first move only invalidates the MOVE (ruling 2026-08-26,
+		// engine `enumerate_turns_capped`): dash, casts and the bare pass
+		// remain, and the pass is the first turn pushed below.
+		_enumeratePostMoveExhaustive(board, color, prefix, caps, true, true, true, out);
 		return;
 	}
 	// Cross-branch dedup for Providence multi-move prefixes: two orders of

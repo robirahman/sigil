@@ -1891,7 +1891,11 @@ class SimBoard {
 			: (hasWind ? base._blinkable(color) : base._allMoveable(color));
 
 		if (!moveTargets.length) {
-			yield new SimTurn(burnActions.concat([new SimAction('pass')]));
+			// No legal first move only invalidates the MOVE of move + dash +
+			// cast (ruling 2026-08-26, engine `enumerate_turns_capped`): the
+			// dash, the casts and the bare pass remain. `_enumeratePostMove`
+			// yields the pass first, then the rest.
+			yield* base._enumeratePostMove(color, burnActions, true, true, true);
 			return;
 		}
 

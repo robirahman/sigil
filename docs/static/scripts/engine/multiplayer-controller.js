@@ -543,8 +543,15 @@ class MultiplayerController {
 		if (canmove) {
 			actions.push('move');
 			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
-			// No legal moves: remaining granted moves forfeit at EOT.
-			if (Object.keys(moveoptions).length === 0) return;
+			// No legal move: remaining granted moves forfeit at EOT, but the
+			// dash / cast / pass options remain (a turn is move + optional
+			// dash + optional cast; ruling 2026-08-26). Mirrors
+			// game-controller.js, which used to skip the whole turn here.
+			if (Object.keys(moveoptions).length === 0) {
+				this.emit({ type: 'message', awaiting: null,
+					message: 'No legal stone placement: dash, cast a spell, or pass.' });
+				return this._takeTurn(color, false, candash, canspell, cansummer, extracast);
+			}
 		} else {
 			// canDash() folds in Seal of Autumn: when the enemy holds it, only
 			// stones outside the spell sigils may be sacrificed for a dash.
