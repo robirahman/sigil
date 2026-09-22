@@ -473,10 +473,11 @@ pub struct Search {
     /// of extensions already spent on the current line (the budget guard), and
     /// `iter_depth - ply` is the NOMINAL depth the width is taken from.
     iter_depth: i32,
-    /// Selective depth, v15 (FINDINGS "Selective depth"), every knob OFF by
-    /// default and measured on its own at a fixed 10 s:
+    /// Selective depth, v15 (FINDINGS "Selective depth"), each knob measured
+    /// on its own at a fixed 10 s:
     /// `nmp`: pass as null move -- `nmp_r` plies of reduction (0 = off),
     /// `nmp_mode` 0 = zero-window nodes only, 1 = every node at ply >= 2.
+    /// Ships ON as (2, 1): +20.8 Elo [+2.6, +38.9] over 1,408 games at 10 s.
     nmp_r: i32,
     nmp_mode: u8,
     /// `lmr_quiet`: in-window reductions of late quiet turns from this index (0 = off).
@@ -634,8 +635,8 @@ impl Search {
             exact_clock: true,
             ignore_decisive: false,
             iter_depth: 0,
-            nmp_r: 0,
-            nmp_mode: 0,
+            nmp_r: 2,
+            nmp_mode: 1,
             lmr_quiet: 0,
             tact_mask: 0,
             ext_cap: 0,

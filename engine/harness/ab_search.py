@@ -114,7 +114,8 @@ def play(b, ms, ev, hist, knob, val):
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
     if knob == 'lmr' and val:
         extra['lmr'] = (val // 10, val % 10)
-    if knob == 'nmp' and val:
+    if knob == 'nmp':
+        # 0 must switch the shipped default (2, 1) OFF explicitly.
         extra['nmp'] = (val // 10, val % 10)
     if knob == 'lmr_quiet' and val:
         extra['lmr_quiet'] = val

@@ -842,8 +842,10 @@ fn the_shipped_search_knobs_are_pinned_and_the_default_tree_is_sane() {
     // `exact_clock` is on and only describes the fallback when it is off.
     assert!(s.exact_clock_get());
     assert_eq!(s.lmr_get(), (2, 1));
-    // Selective depth (v15) ships OFF until its arenas say otherwise.
-    assert_eq!(s.nmp_get(), (0, 0));
+    // Selective depth (v15): each knob measured alone at fixed 10 s. Pass as
+    // null move ships ON (R 2, every node from ply 2: +20.8 Elo [+2.6, +38.9],
+    // run 20260922T181612Z); the others stay OFF until their arenas are in.
+    assert_eq!(s.nmp_get(), (2, 1));
     assert_eq!(s.lmr_quiet_get(), 0);
     assert_eq!(s.tact_ext_get(), (0, 0));
     assert_eq!(s.singular_get(), 0);
@@ -1025,23 +1027,30 @@ fn a_game_clock_is_spent_across_the_game_and_never_flags() {
 
 // ------------------------------------------------------------- selective depth
 
-/// Every selective-depth knob is off by default and a default search does no
-/// probing, extending or in-window reducing at all: the v14 tree, byte for byte.
+/// With every selective-depth knob at its OFF value the tree is the v14 tree:
+/// no probing, extending or in-window reducing, and setting the OFF values
+/// explicitly changes nothing. (Pass-as-null-move ships ON, so the default
+/// search is compared separately: only its probe counter may be non-zero.)
 #[test]
 fn selective_depth_is_off_by_default_and_touches_nothing() {
     let mut b = Board::new(Board::legal_draw(17), Variant::Standard);
     b.setup_initial();
     let mut s = crate::search::Search::new(16);
+    s.set_nmp(0, 0);
     let (_, _, st) = s.go(&b, b.to_move, 4, 0);
     assert_eq!(st.nmp_tries, 0);
     assert_eq!(st.ext_tactical, 0);
     assert_eq!(st.lmr_in_probes, 0);
     assert_eq!(st.se_tries, 0);
-    // Setting the knobs to their OFF values explicitly changes nothing either.
     let mut s2 = crate::search::Search::new(16);
     s2.set_nmp(0, 0); s2.set_lmr_quiet(0); s2.set_tact_ext(7, 0); s2.set_singular(0);
     let (_, _, st2) = s2.go(&b, b.to_move, 4, 0);
     assert_eq!(st2.nodes, st.nodes);
+    let mut s3 = crate::search::Search::new(16);
+    let (_, _, st3) = s3.go(&b, b.to_move, 4, 0);
+    assert_eq!(st3.ext_tactical, 0);
+    assert_eq!(st3.lmr_in_probes, 0);
+    assert_eq!(st3.se_tries, 0);
 }
 
 /// Pass as null move on a quiet midgame position (X4TNAS turn 32): the probe
@@ -1053,6 +1062,7 @@ fn nmp_cuts_quiet_nodes_and_leaves_the_mates_alone() {
     use crate::search::{WIN, MAX_PLY};
     let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
     let mut off = tfit_search();
+    off.set_nmp(0, 0);          // the knob ships ON; the baseline switches it off
     let (_, s_off, st_off) = off.go(&b, b.to_move, 4, 0);
     let mut on = tfit_search();
     on.set_nmp(2, 1);

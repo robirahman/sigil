@@ -2306,7 +2306,17 @@ Measured on X4TNAS turn 32 at fixed depth 4 (`tfit`, native): `nmp` mode 1 fires
 one of them cuts, 73k -> 59k nodes; mode 0 (zero-window nodes only) 29 probes, 73k -> 73k. On the corpus
 mate-in-2 no probe fires at all: every window under a mating line is mate-bound.
 
-Verdicts below when in.
+**Verdicts (fixed 10 s per move, one c3d-highcpu-90, 88 shards x 8 pairs each, base = the then-current
+default):**
+
+| knob | run | games | win rate | Elo | s/move |
+|---|---|---|---|---|---|
+| `nmp` (2, 1) vs off | `20260922T181612Z` | 1,408 | 52.98% [50.37, 55.58] | **+20.8 [+2.6, +38.9]** | 1.000 |
+| `lmr_quiet` 4 vs 0 | pending | | | | |
+| `tact_ext` 72 vs 0 | pending | | | | |
+| `singular` 150 vs 0 | pending | | | | |
+
+`nmp` clears parity and **ships ON as (R 2, every node from ply 2)**; the later knobs are measured on top of it.
 
 ## Game clocks: base + increment for the AI (2026-09-22)
 
