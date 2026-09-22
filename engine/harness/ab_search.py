@@ -37,6 +37,11 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # elastic: arm value 1 = Elastic::DEFAULT; the GAME lines carry each
          # arm's mean seconds per move so pool_shards can check matched time.
          'elastic',
+         # full_budget: 1 = the shipped fixed-budget policy (Elastic::FULL +
+         # adopt_partial, the engine default since 2026-09-22); 0 = the
+         # matched-time policy it replaced (Elastic::DEFAULT, adopt_partial
+         # off). Gate this one at FIXED per-move time: the browser has no pool.
+         'full_budget',
          # §1.4: pvs 1/0; history 1/0; lmr = ext*10 + r (e.g. 21 = band x2, R 1)
          'pvs', 'history', 'lmr',
          # bundle: the two knobs that cleared individually at 3 s, together.
@@ -99,6 +104,9 @@ def play(b, ms, ev, hist, knob, val):
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
     if knob == 'lmr' and val:
         extra['lmr'] = (val // 10, val % 10)
+    if knob == 'full_budget' and not val:
+        extra['elastic'] = (2.0, 0.4, 2, 50, True)
+        extra['adopt_partial'] = False
     if knob == 'bundle' and val:
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
         extra['lmr'] = (val // 10, val % 10)

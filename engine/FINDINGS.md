@@ -2107,3 +2107,74 @@ sacrifice pairs, and a pre-pass that charges boards generated pays for the same 
 future scan over dash lines needs a per-cast bound on pairs. And a "bound" that is smaller than the real
 effect silently deletes lines: `cast_swing_bound` is used as an upper bound everywhere, so each entry
 should be checked against the resolver (Comet is 1 -- place + crush − sacrifice -- and correct).
+
+## The Hard AI spent 71% of its clock: a matched-time policy in a fixed-budget browser (2026-09-22, room X4TNAS)
+
+Game X4TNAS (record `-P25Tzrrd-K9lf99exYX`, Robi red vs Hard AI blue, 2026-09-22 00:20 UTC, red
+1490 -> 1501). The player watched the AI think for a few seconds, reach depth 3 on a small node
+count, and move with most of its 10 s unspent, in a position where it was losing. The hypothesis
+was "it saw every move losing and gave up". It had not: replayed natively at 10 s, none of blue's
+positions before turn 36 is a mate score (turn 18 reads -0.04 stones, turn 32 -1.96), and the only
+mate-driven exit in `deepen` needs a PROVEN mate (no widening anywhere in the tree), which a
+midgame search never satisfies. The clock was given back by the elastic time manager.
+
+**The mechanism.** `Elastic::DEFAULT` (2.0 / 0.4 / 2 / 50 / predict) carries three rules: extend
+to 2x the budget once when the best move changes or the score drops at depth >= 3; stop when the
+answer has been stable for two iterations past 40% of the budget; and `predict`: after each
+completed depth, estimate the next iteration as `t_last x clamp(t_last / t_prev, 2, 6)` and do not
+start it if that exceeds the remaining clock x 1.15. In Sigil the per-depth cost ratio is 7-10
+(turn 18: depth 3 63 ms, depth 4 445 ms, depth 5 4,392 ms), so the estimate sits at its clamp of
+6x, and the rule refuses depth d+1 whenever depth d took more than about a sixth of what is left.
+Partial iterations were then discarded (`adopt_partial` off), so nothing could be gained by
+continuing, and the search returned. Blue's 18 turns of X4TNAS at 10 s natively:
+
+| turn | used | depth | nodes | score |
+|---|---|---|---|---|
+| 8 | 2.8 s (28%) | 5 | 82,336 | -0.02 |
+| 18 | 4.5 s (45%) | 5 | 140,923 | -0.04 |
+| 32 | **3.2 s (32%)** | **3** | **14,603** | -1.96 |
+| 34 | 7.3 s (73%) | 3 | 18,038 | -1.99 |
+| all 18 | **127.9 of 180 s (71%)** | | | |
+
+Turn 32 is the turn the player described: depth 3 completed at 3.2 s and was predicted to need 6 x
+3 s for depth 4 against 6.8 s remaining. The wasm build is slower than native, so in the browser
+the same rule lands at a lower depth on more turns.
+
+**Why the arenas liked it.** `elastic` shipped from matched-AVERAGE-time arenas (FINDINGS "Run 2
+at 10 s": +58 Elo [+29, +88]): the harness scales the arm's base budget so its mean seconds per
+move equals the fixed arm's, so every early stop funds an extension elsewhere. The browser has no
+pool. A tier budget is a per-move ceiling; a move that stops at 3 s of 10 forfeits 7 s. The Hard
+tier therefore inherited a policy whose gain came from redistribution it cannot do, and was
+running a ~7 s mean search under a 10 s label. That comparison (elastic at base 10 s vs fixed
+10 s) was never made.
+
+**Fix (engine default; arm `engine/gcp/arms/full_budget_10s.txt`, knob `full_budget` in
+`ab_search.py`, 0 = the old policy).** `Elastic::FULL` = (2.0, 1.0, 2, 50, no predict): the
+instability extension stays, the predictor is gone, and the stability stop can fire only past the
+base budget, i.e. only inside an extension. `adopt_partial` ships ON so the iteration the deadline
+cuts is not wasted: the previous best is searched first, and a later root move whose subtree
+COMPLETED and beat it is adopted (measured +12 [-3, +26] alone at 3 s). The same 18 turns:
+
+| | old policy | `FULL` + `adopt_partial` |
+|---|---|---|
+| clock used | 127.9 s (71%) | 250.2 s (139%: every move to its deadline, 7 of 18 extended to 20 s) |
+| turns 30 / 32 / 34 depth | 3 / 3 / 3 | 4 / 4 / 4 |
+| turn 32 nodes | 14,603 | 96,576 |
+| turn 32 move | c8, pass | c7, Storm Front (kept c10), ... |
+
+The extension now fires on 7 turns instead of 1, because the iterations that used to be predicted
+away now run and change the answer; a Hard move can take 20 s. If that is too long a wait,
+`max_factor` is the dial (1.5 would cap it at 15 s) and is worth an arena of its own.
+
+The arena for this MUST be gated at FIXED per-move time, not matched time: the browser's budget is
+fixed, and the arm using more of it is the point. Arms `full_budget` 1 vs 0 at 10 s, 8 pairs x 88
+shards. Verdict below when in.
+
+Two smaller notes. First, `deepen`'s "decisive" break also fires on a proven LOSS; that is sound
+(a proof that every move loses within d plies bounds any deeper search, and the score already
+prefers the longest resistance), but a "most challenging line" tie-break among equally lost moves,
+by how few of the opponent's replies win, would be the next lever for the situation the player
+described, and it now has the clock to run in. Second, pondering was checked as a cause and
+cleared: a session that pondered red's turn-17 position for 30 s then searched turn 18 used 8.5 s
+of 10, not less. Tests: `the_shipped_policy_spends_the_whole_budget_on_a_midgame_position`
+(position `X4TNAS_BLUE_T32`) and the defaults pin.

@@ -833,8 +833,11 @@ fn the_shipped_search_knobs_are_pinned_and_the_default_tree_is_sane() {
     // binding that restates one is caught here, and checks a single position.
     let s = crate::search::Search::new(12);
     assert!(!s.force_hints_get() && !s.root_resort_get() && !s.aspiration_steps_get()
-            && !s.adopt_partial_get() && !s.pvs_get() && !s.history_get());
-    assert_eq!(s.elastic_get(), Some(crate::search::Elastic::DEFAULT));
+            && !s.pvs_get() && !s.history_get());
+    // 2026-09-22: the browser has a fixed per-move budget, so the shipped
+    // policy spends it (`Elastic::FULL`) and uses the partial last iteration.
+    assert!(s.adopt_partial_get());
+    assert_eq!(s.elastic_get(), Some(crate::search::Elastic::FULL));
     assert_eq!(s.lmr_get(), (2, 1));
     let mut b = Board::new(Board::legal_draw(23), Variant::Standard);
     b.setup_initial();
@@ -860,6 +863,33 @@ fn the_shipped_search_knobs_are_pinned_and_the_default_tree_is_sane() {
     assert!(bs.abs() < 1000 && os.abs() < 1000, "{bs} {os}");
 }
 
+
+/// Game X4TNAS (2026-09-22), blue's turn 32: the Hard AI stopped after depth 3
+/// at 3.2 s of its 10 s (14,603 nodes) because `Elastic::DEFAULT`'s predictor
+/// refused to start an iteration it estimated at six times the last one. The
+/// shipped policy has no such stop: a timed midgame search runs to its deadline
+/// (a proven mate is the only early exit, and this position is -2 stones, not
+/// a mate), and the iteration that the deadline cuts off is not just discarded.
+pub const X4TNAS_BLUE_T32: &str = "b......rrrb..rrrbr.b.r...br...r..bbbrb./Flourish,Bewitch,Starfall,Seal_of_Stone,Grow,Storm_Front,Lurk,Comet,Gust b 32 2:1 Grow:Grow -:- r1 competitive";
+
+#[test]
+fn the_shipped_policy_spends_the_whole_budget_on_a_midgame_position() {
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let mut s = crate::search::Search::new(16);
+    let (best, score, st) = s.go(&b, b.to_move, 64, 600);
+    assert!(best.is_some());
+    assert!(score.abs() < crate::search::WIN - crate::search::MAX_PLY as i32, "not a mate: {score}");
+    assert!(!st.stopped_early, "the fixed-budget policy must not stop early");
+    assert!(st.elapsed_ms >= 540.0, "used only {:.0} of 600 ms", st.elapsed_ms);
+    assert!(st.timed_out, "the last iteration should be the one the deadline cut");
+    // The matched-time policy on the same clock gives time back: this is the
+    // behaviour the browser inherited and X4TNAS exposed.
+    let mut s2 = crate::search::Search::new(16);
+    s2.set_elastic(Some(crate::search::Elastic::DEFAULT));
+    s2.set_adopt_partial(false);
+    let (_, _, st2) = s2.go(&b, b.to_move, 64, 600);
+    assert!(st2.stopped_early || st2.elapsed_ms >= 540.0);
+}
 #[test]
 fn first_action_is_legal_agrees_with_the_generator() {
     for seed in 1..40u64 {

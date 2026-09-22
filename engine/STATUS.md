@@ -21,6 +21,17 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-22: the Hard AI spent 71% of its clock -- full-budget time policy (engine default; wasm on the
+arena verdict).** Game X4TNAS: the Hard tier moved at depth 3 after 3 s of its 10 s, not because it was lost
+(-2 stones, no mate) but because `Elastic::DEFAULT`'s predictor (next iteration = 6x the last, the clamp
+Sigil's 7-10x depth ratios always hit) refused to start depth 4 and partial iterations were discarded. The
+policy shipped from MATCHED-average-time arenas, where early stops fund extensions; a browser tier has no pool,
+so the saved time was simply forfeited (18 turns: 127.9 of 180 s). New default `Elastic::FULL` (2.0, 1.0, 2,
+50, no predict) + `adopt_partial` ON: every move runs to its deadline (7 of 18 extended to 20 s), turns
+30/32/34 reach depth 4 instead of 3. Knob `full_budget` (0 = old policy), arm
+`engine/gcp/arms/full_budget_10s.txt`, gated at FIXED per-move time. FINDINGS "The Hard AI spent 71% of its
+clock".
+
 **2026-09-22: engine v13 (cache v40) -- the U4TL2D fixes; swing arena final +40.6 Elo.** A recorded
 rust_hard game (room U4TL2D) lost two stones to a one-ply reply -- move, dash charging Tsunami, Tsunami,
 then Meteor by Seal of Summer -- that the stream could not produce (the dash-cast stage had no Summer

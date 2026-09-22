@@ -306,8 +306,23 @@ pub struct Elastic {
 }
 
 impl Elastic {
+    /// The matched-average-time policy the 2026-09-16 arenas measured (+58 Elo
+    /// at 10 s): early stops on stability and on the branching-factor
+    /// prediction FUND the instability extensions, because the harness scales
+    /// the base budget so the arm's MEAN time equals the fixed arm's.
     pub const DEFAULT: Elastic = Elastic { max_factor: 2.0, min_factor: 0.4, stable_iters: 2,
                                            drop_cs: 50, predict: true };
+    /// The fixed-budget policy the browser ships (2026-09-22). A browser tier
+    /// has no pool to redistribute into: a move that stops at 3 s of its 10 s
+    /// simply forfeits 7 s. Game X4TNAS turn 32 (FINDINGS "The Hard AI spent
+    /// 71% of its clock") stopped after depth 3 at 3.2 s with 14,603 nodes
+    /// because depth 3 had taken more than a sixth of the remaining time and
+    /// `predict` refused to start depth 4. This policy keeps the instability
+    /// extension, never predicts, and can stop on stability only past the base
+    /// budget (i.e. only inside an extension); the partial last iteration is
+    /// used through `adopt_partial`.
+    pub const FULL: Elastic = Elastic { max_factor: 2.0, min_factor: 1.0, stable_iters: 2,
+                                        drop_cs: 50, predict: false };
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -386,9 +401,13 @@ pub struct Search {
     /// `adopt_partial`: when an iteration times out, adopt a LATER root move
     /// whose subtree completed and beat the fully-searched previous best. The
     /// previous best is searched first, so that comparison is sound; the old
-    /// rule discarded the whole iteration.
+    /// rule discarded the whole iteration. Ships ON since 2026-09-22: with
+    /// `Elastic::FULL` every move ends in a timed-out iteration, so this is
+    /// what the last few seconds of the budget buy (+12 [-3, +26] alone at 3 s).
     adopt_partial: bool,
-    /// Time-budget elasticity; `None` = fixed budget. Ships as `Some(DEFAULT)`.
+    /// Time-budget elasticity; `None` = fixed budget. Ships as `Some(FULL)`
+    /// (fixed per-move budget, spent); the arenas' `DEFAULT` is the matched-time
+    /// policy, see `Elastic`.
     elastic: Option<Elastic>,
     /// §1.4a Principal-variation search: first child full window, the rest
     /// zero-window with a full re-search on `alpha < v < beta`.
@@ -526,13 +545,13 @@ impl Search {
             force_hints: false,
             root_resort: false,
             aspiration_steps: false,
-            adopt_partial: false,
+            adopt_partial: true,
             // SHIPPED ON since 2026-09-16: elastic time management and the LMR
             // band (x2, R=1) measured +58 [+29, +88] and +47 [+17, +76] Elo at
             // 10 s alone and +81 [+51, +111] together, at matched average time
             // (FINDINGS "Run 2 at 10 s"). Both grow with the clock. The frozen
             // `rust_anchor` tier turns them back off in wasm.rs.
-            elastic: Some(Elastic::DEFAULT),
+            elastic: Some(Elastic::FULL),
             root_scores_out: Vec::new(),
             opening_pick: None,
             pvs: false,
