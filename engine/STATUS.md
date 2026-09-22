@@ -40,7 +40,9 @@ budget went on 55 sacrifice pairs re-resolving one hopeless cast). Knob `dash_su
 `engine/gcp/arms/dash_summer_3s.txt`): `push_summer_casts` in both cast stages, Meteor 3 in the swing scan
 only, continuation-aware outcome order, `SWING_PAIRS_PER_CAST` 3, swing cap 6,000 (mean scan 0.19 -> 0.25
 ms). Red's depth-1 read of the position +0.08 -> +1.03. Three regression tests. The swing pre-pass arena
-(run 20260921T211851Z) closed at **+40.6 Elo [+30.2, +51.0]** over 4,343 games. The "Red dashes!" /
+(run 20260921T211851Z) closed at **+40.6 Elo [+30.2, +51.0]** over 4,343 games. The dash_summer arena (run
+20260921T231344Z, 4,400 games at 3 s) closed at **+16.3 Elo [+6.0, +26.6]**, 52.34% [50.86, 53.81], s/move ratio
+0.999: better, at no time cost. The "Red dashes!" /
 "Blue dashes!" log message (d06ccc6) deploys with this cache bump. FINDINGS "A one-ply +2 reply behind a
 Seal-of-Summer second cast".
 

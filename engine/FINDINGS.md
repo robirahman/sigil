@@ -2099,8 +2099,11 @@ b12 in place of b13 as the second sacrifice, which red cannot punish; the live s
 pondering and elastic budget are not reproduced offline.) Regression tests
 `meteor_swing_bound_counts_the_placement_the_crush_and_the_kill`,
 `swing_scan_finds_the_recorded_dash_tsunami_meteor_reply` (asserts the v12 scan misses it even at 6,000)
-and `the_stream_offers_a_summer_second_cast_after_a_dash_cast` (asserts v12's stream has none). Arena
-verdict below when in.
+and `the_stream_offers_a_summer_second_cast_after_a_dash_cast` (asserts v12's stream has none).
+
+**Arena verdict (run `20260921T231344Z`, `dash_summer` 1 vs 0 at 3 s, one c3d-highcpu-90, 88 shards x 25
+pairs, 4,400 games): arm 2,303 - base 2,097, 52.34% [50.86, 53.81], +16.3 Elo [+6.0, +26.6], s/move ratio
+0.999.** The interval excludes parity: the bundle is better, and at no time cost; it stays ON.
 
 Two things worth remembering from the diagnosis. The dash-then-cast shape multiplies every cast by the
 sacrifice pairs, and a pre-pass that charges boards generated pays for the same resolution 55 times; any
