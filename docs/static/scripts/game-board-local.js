@@ -1559,7 +1559,13 @@ document.addEventListener('alpine:init', () => {
 							trapStr += ` (${Math.round(payload.trapFrac * 100)}% slip)`;
 						}
 					}
-					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}, ${seconds}s, ${payload.nodes || 0} nodes${evalStr}${trapStr}`);
+					// "depth 5/9": 5 plies completed everywhere, 9 the deepest
+					// line; "reply read to depth N" when a decided root spent
+					// the rest of its clock on the opponent's position.
+					const selStr = (payload.seldepth && payload.seldepth > (payload.depth || 0))
+						? `/${payload.seldepth}` : '';
+					const overStr = payload.overflowDepth ? `, reply read to depth ${payload.overflowDepth}` : '';
+					_this.messageHistory.push(`${c} AI: depth ${payload.depth || 0}${selStr}, ${seconds}s, ${payload.nodes || 0} nodes${overStr}${evalStr}${trapStr}`);
 				}
 
 				// Shared by live messages and animated replay narration.

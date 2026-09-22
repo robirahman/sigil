@@ -290,6 +290,11 @@ class RustAI {
 		// legacy Caveman-unit field, kept for the fallback formatter.
 		this.lastMeta = {
 			depth: res.depth, nodes: res.nodes,
+			// Selective depth (deepest ply the search reached) and, when the
+			// root finished early, how deep the reply position was read with
+			// the rest of the clock (v15 `exact_clock`).
+			seldepth: (typeof res.seldepth === 'number') ? res.seldepth : null,
+			overflowDepth: (typeof res.overflow_depth === 'number') ? res.overflow_depth : 0,
 			score: (res.score_ui !== undefined ? res.score_ui : res.score),
 			scoreCentistones: res.score,
 			stones: (typeof res.stones === 'number') ? res.stones : null,

@@ -2188,3 +2188,122 @@ described, and it now has the clock to run in. Second, pondering was checked as 
 cleared: a session that pondered red's turn-17 position for 30 s then searched turn 18 used 8.5 s
 of 10, not less. Tests: `the_shipped_policy_spends_the_whole_budget_on_a_midgame_position`
 (position `X4TNAS_BLUE_T32`) and the defaults pin.
+
+## A turn with no legal placement was skipped by the site (2026-09-22)
+
+The ruling of 2026-08-26 is that a turn is move + optional dash + optional cast, and a missing first
+move (a surrounded player facing Seal of Stone, so every reachable node is occupied and pushes are
+barred) invalidates only the MOVE: the dash, the casts and the bare pass remain. The engine has
+followed it since (`Board::enumerate_turns_capped`, the lazy stream's fallback in `TurnIter::new`,
+tests `no_first_move_still_offers_dash_cast_and_pass` and
+`lazy_iterator_matches_the_enumerator_when_no_first_move_exists`). The site did not:
+
+- `GameController._takeTurn` and `MultiplayerController._takeTurn` computed the first-move targets
+  and, finding none, `return`ed -- the turn ended before the post-move menu was ever offered. A human
+  who could still dash or cast lost the turn. (The AI path never hit it: `_takeAITurn` applies the
+  engine's action list through `applyAITurn`, so the Hard AI already dashed and cast in that spot.)
+- `SimBoard.getLegalTurns` and `getLegalTurnsExhaustive` (the puzzles page, the review flags, the JS
+  AIs) collapsed the same position to a bare `[pass]`.
+
+Fix: both controllers fall through to the post-move menu (`_takeTurn(color, false, ...)`) with a
+message ("No legal stone placement: dash, cast a spell, or pass."); both enumerators call their
+post-move enumerator with an empty prefix, which yields the pass first and then the dash and cast
+turns. The review replayer shares `_takeTurn`, so recorded human turns that start with `dash`
+replay. `tools/no-placement-smoke.js` builds the engine's fixture (red b4 b7 b8 walled in, blue on
+the Seal of Stone sigil, red's Sprout charged), asserts both JS enumerators offer a dash and a cast
+and no first move, and replays the transcript `dash, b4, b7, b7, pass` to the position the engine
+reaches for the same turn; it fails on the previous code with "getLegalTurns: no dash turn (pass)".
+
+## The deadline is the budget: `exact_clock` and the overflow read-ahead (2026-09-22)
+
+v14 (`Elastic::FULL`) made every move run to its deadline but kept the 2x instability extension, so
+a Hard move averaged 16 s and could take 20 s. The user's requirement is stricter: spend exactly the
+allotted time on every turn, with no exits -- not for a proven mate, not for a single legal turn --
+and, when the root has nothing left to learn, spend the remainder reading the future and keep it.
+
+`Search::exact_clock` (ships ON; knob `exact_clock`, 0 = v14's policy) does three things:
+
+1. The deadline is `t_start + budget`, never moved: the elastic block in `deepen` is skipped, so
+   there is no extension and no stability stop. `adopt_partial` stays on, because the last
+   iteration is always the one the clock cuts.
+2. A proven decisive score still ends the ROOT's deepening (nothing deeper can change a proof, and
+   the score already prefers the shortest win and the longest resistance), but not the move: the
+   remaining clock goes to `spend_remaining`.
+3. `spend_remaining` deepens the position the opponent will face after the chosen move, from their
+   side, until the deadline -- the same work `ponder_step` does between moves, but inside the move
+   and in the same persistent table, so the next search starts from that tree. If that position is
+   terminal (the move mates), the root itself is deepened further without the decisive exit. The
+   root's move, score and depth are untouched; `overflow_ms` / `overflow_depth` record the extra
+   work, and the think report prints "reply read to depth N". A single legal turn needs no special
+   case: the one root child gets the whole budget, which is the read-ahead the user asked for.
+
+The think report also gained the selective depth (`max_ply_seen`, printed as `depth 5/9`) so the
+extensions and reductions of the next section are visible to the player.
+
+Tests: `the_exact_clock_spends_the_whole_budget_and_never_extends` (X4TNAS turn 32, 600 ms:
+no extension, no early stop, the deadline cuts the last iteration), `a_proven_mate_still_spends_the_clock`
+(the corpus mate-in-1 at 300 ms: proof found, clock spent in the overflow; with the knob off the
+v14 policy exits on the proof), `a_single_legal_turn_reads_ahead_instead_of_returning` (a walled-in
+single stone with one legal turn: the search runs its budget and completes at least the depth a full
+root reaches). Arena at FIXED 10 s (`engine/gcp/arms/exact_clock_10s.txt`): the arm uses ~10.0 s/move
+against the v14 base's ~16 s, so this measures what the extension was worth; the policy is the
+user's decision either way. Verdict below when in.
+
+## Selective depth: four Stockfish-style mechanisms, each measured alone (2026-09-22)
+
+Until v15 every child of a node was searched at `depth - 1`; the only exception was the LMR band
+beyond the width (`lmr_ext 2, lmr_r 1`, +47 Elo at 10 s). Forcing lines stopped at the same horizon
+as quiet ones, and quiet late turns inside the window cost the same as the principal variation.
+Four mechanisms now exist in `negamax`, each behind its own knob (default OFF), each with a fixed-10 s
+arena of its own against the then-current default. Shared plumbing, byte-identical with the knobs off:
+`iter_depth` (the iteration's root depth; `depth + ply - iter_depth` is the number of extensions spent
+on the line, `iter_depth - ply` the nominal depth the width is taken from, so an extended child does
+not also jump a width bucket), the TT probe keeps the entry's score/bound/depth for the singular test,
+and every probe or re-search carries the band's `!timed_out` guard so a cut-off probe never cuts or
+re-searches. The TT stores the depth a node was CALLED with (an extended child stores the deeper
+depth, a reduced one the shallower), so the `e.depth >= depth` cutoff stays sound.
+
+One premise: a bare `[pass]` is legal only when no first move exists, so pass-as-null-move is a
+probe on an illegal move exactly as in chess. Sigil is otherwise unusually null-move friendly: every
+legal move adds a stone, a pass is a strict sacrifice, there is no zugzwang.
+
+**1. `nmp` (pass as null move).** At a node with `ply >= 1`, `depth >= 2`, a non-mate window, outside
+the competitive opening, with no stone of either side on Seal of Destruction's sigil, and static eval
+already `>= beta`: search the pass at `depth - 1 - R` with the window `(beta - 1, beta)`; if it still
+beats beta (and is not a mate score) return it without generating a single turn -- which is where
+the saving is, since `ordered_turns` is nearly the whole cost of a node. Mode 0 fires only at
+zero-window nodes (with PVS off, the LMR-band subtrees), mode 1 at every node from ply 2. Arms
+`nmp_10s.txt` (R 2, mode 0) and `nmp_all_10s.txt` (R 2, mode 1). Tests
+`nmp_finds_the_corpus_mate_in_two_with_fewer_nodes`, `nmp_never_fires_in_the_opening_or_around_the_seal`,
+`selective_depth_is_off_by_default_and_touches_nothing`.
+
+**2. `lmr_quiet` (in-window late-quiet reductions).** Inside the width, a turn at index `>= lmr_quiet`
+that is a plain move (`[move, pass]`, no stone-count change) is searched one ply shallower (two past
+half the width) with a zero window and re-searched in full on a fail-high; the TT move, killers and
+the first generator picks keep full depth, the band beyond the width is unchanged, and nothing fires
+under a mate-bound alpha. Risk: the stream is class-staged (all `[move, pass]` first, then casts, then
+dashes), so "late quiet" means "low-ranked first move" while every cast sits behind them at full depth,
+the inverse of chess LMR's premise. Arm `lmr_quiet_10s.txt` (from index 4). Test
+`lmr_quiet_reduces_late_quiet_turns_and_keeps_the_mate`.
+
+**3. `tact_ext` (tactical extensions).** A child whose turn casts (1), dashes (2), crushes (4) or lands
+one crush from the +/-3 lead (8) is searched at `depth` instead of `depth - 1` while the line's budget
+(`ext_cap`) lasts; never on a band child, never together with a reduction, and the width is taken from
+the nominal depth so an extension does not also widen. Risk: this is quiescence by another name
+(`q_depth` measured -13 Elo: every move places a stone, so the "quiet position" the technique assumes
+does not exist, and casts are a large share of the deep stream). Arms `tact_ext_10s.txt` (cast|dash|crush,
+cap 2) and `tact_ext_crush_10s.txt` (crush only, cap 1). Test `tactical_extensions_see_deeper_on_the_corpus_mate`.
+
+**4. `singular` (singular extension of the TT move).** At a PV node of depth >= 4 whose TT move has an
+Exact/Lower score from a search at most two plies shallower, every alternative inside the width is
+probed at half depth against `tt_score - margin`; if all fail low, the TT move is the only move and is
+searched one ply deeper. Exclusion probes run over the list already pulled, so no second generation.
+At 10 s this qualifies a few dozen nodes per move (the root's children); it is a 60 s-clock feature and
+a null verdict at 10 s is expected. Arm `singular_10s.txt` (150 cs). Test
+`singular_extension_tests_the_tt_move_at_pv_nodes`.
+
+Measured on X4TNAS turn 32 at fixed depth 4 (`tfit`, native): `nmp` mode 1 fires 156 probes, every
+one of them cuts, 73k -> 59k nodes; mode 0 (zero-window nodes only) 29 probes, 73k -> 73k. On the corpus
+mate-in-2 no probe fires at all: every window under a mating line is mate-bound.
+
+Verdicts below when in.

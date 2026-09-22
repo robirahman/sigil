@@ -1,0 +1,1 @@
+8,10000,tfit,exact_clock,1,0

@@ -370,6 +370,22 @@ pub struct SearchStats {
     pub mate_proven: bool,
     /// Turns the material-swing pre-pass added at the front of a candidate list.
     pub swing_hits: u64,
+    /// `exact_clock` overflow: milliseconds the search spent on the position
+    /// the opponent will face after the root finished early (proven decisive
+    /// score or `max_depth` reached), and the depth it completed there. That
+    /// work lives in the transposition table for the next search.
+    pub overflow_ms: f64,
+    pub overflow_depth: i32,
+    /// Selective depth (v15): pass-as-null-move probes and cutoffs, tactical
+    /// extensions granted, in-window late-quiet reduction probes and their
+    /// re-searches, singular-extension tests and the extensions they granted.
+    pub nmp_tries: u64,
+    pub nmp_cutoffs: u64,
+    pub ext_tactical: u64,
+    pub lmr_in_probes: u64,
+    pub lmr_in_researches: u64,
+    pub se_tries: u64,
+    pub se_extensions: u64,
     /// Successors actually expanded, summed — lets a caller see the effective
     /// branching factor (`expanded / nodes`).
     pub expanded: u64,
@@ -405,10 +421,43 @@ pub struct Search {
     /// `Elastic::FULL` every move ends in a timed-out iteration, so this is
     /// what the last few seconds of the budget buy (+12 [-3, +26] alone at 3 s).
     adopt_partial: bool,
-    /// Time-budget elasticity; `None` = fixed budget. Ships as `Some(FULL)`
-    /// (fixed per-move budget, spent); the arenas' `DEFAULT` is the matched-time
-    /// policy, see `Elastic`.
+    /// Time-budget elasticity; `None` = fixed budget. `Some(FULL)` was the v14
+    /// browser policy; since v15 `exact_clock` (below) makes the deadline the
+    /// budget and this field is consulted only when that is off. The arenas'
+    /// `DEFAULT` is the matched-time policy, see `Elastic`.
     elastic: Option<Elastic>,
+    /// `exact_clock` (2026-09-22, ships ON): the search spends EXACTLY the
+    /// budget on every move. No extension, no stability stop, no exit on a
+    /// proven mate and none for a single legal turn (the one child then gets
+    /// the whole budget, which is the read-ahead the persistent table keeps
+    /// for the next move). When the root has nothing left to learn -- a
+    /// proven decisive score, or `max_depth` completed -- the remaining clock
+    /// goes into the position the opponent will face (`spend_remaining`), so
+    /// the analysis is in the table when that position is searched for real.
+    exact_clock: bool,
+    /// Internal: `spend_remaining` re-deepens the root without the decisive
+    /// exit when the reply position is terminal.
+    ignore_decisive: bool,
+    /// Root depth of the current iteration. With no extension `depth + ply ==
+    /// iter_depth` at every node, so `depth + ply - iter_depth` is the number
+    /// of extensions already spent on the current line (the budget guard), and
+    /// `iter_depth - ply` is the NOMINAL depth the width is taken from.
+    iter_depth: i32,
+    /// Selective depth, v15 (FINDINGS "Selective depth"), every knob OFF by
+    /// default and measured on its own at a fixed 10 s:
+    /// `nmp`: pass as null move -- `nmp_r` plies of reduction (0 = off),
+    /// `nmp_mode` 0 = zero-window nodes only, 1 = every node at ply >= 2.
+    nmp_r: i32,
+    nmp_mode: u8,
+    /// `lmr_quiet`: in-window reductions of late quiet turns from this index (0 = off).
+    lmr_quiet: usize,
+    /// `tact_ext`: extend a child by one ply when its turn matches the mask
+    /// (1 cast, 2 dash, 4 crush, 8 terminal-adjacent), at most `ext_cap` per line.
+    tact_mask: u8,
+    ext_cap: i32,
+    /// `singular`: extend the TT move when every alternative fails low by this
+    /// many centistones at half depth (0 = off).
+    se_margin: i32,
     /// §1.4a Principal-variation search: first child full window, the rest
     /// zero-window with a full re-search on `alpha < v < beta`.
     pvs: bool,
@@ -552,6 +601,15 @@ impl Search {
             // (FINDINGS "Run 2 at 10 s"). Both grow with the clock. The frozen
             // `rust_anchor` tier turns them back off in wasm.rs.
             elastic: Some(Elastic::FULL),
+            exact_clock: true,
+            ignore_decisive: false,
+            iter_depth: 0,
+            nmp_r: 0,
+            nmp_mode: 0,
+            lmr_quiet: 0,
+            tact_mask: 0,
+            ext_cap: 0,
+            se_margin: 0,
             root_scores_out: Vec::new(),
             opening_pick: None,
             pvs: false,
@@ -664,6 +722,25 @@ impl Search {
     pub fn set_aspiration_steps(&mut self, on: bool) { self.aspiration_steps = on; }
     pub fn set_adopt_partial(&mut self, on: bool) { self.adopt_partial = on; }
     pub fn set_elastic(&mut self, e: Option<Elastic>) { self.elastic = e; }
+    pub fn set_exact_clock(&mut self, on: bool) { self.exact_clock = on; }
+    pub fn exact_clock_get(&self) -> bool { self.exact_clock }
+    pub fn set_nmp(&mut self, r: i32, mode: u8) { self.nmp_r = r.max(0); self.nmp_mode = mode.min(1); }
+    pub fn nmp_get(&self) -> (i32, u8) { (self.nmp_r, self.nmp_mode) }
+    pub fn set_lmr_quiet(&mut self, from_idx: usize) { self.lmr_quiet = from_idx; }
+    pub fn lmr_quiet_get(&self) -> usize { self.lmr_quiet }
+    pub fn set_tact_ext(&mut self, mask: u8, cap: i32) { self.tact_mask = mask; self.ext_cap = cap.max(0); }
+    pub fn tact_ext_get(&self) -> (u8, i32) { (self.tact_mask, self.ext_cap) }
+    pub fn set_singular(&mut self, margin_cs: i32) { self.se_margin = margin_cs.max(0); }
+    pub fn singular_get(&self) -> i32 { self.se_margin }
+    /// Pass-as-null-move guard: Seal of Destruction is not drawn, or nobody has
+    /// a stone on its sigil. (A charged ENEMY seal has already returned a win
+    /// before the move loop; a charged own seal is the mover's business.)
+    fn seal_quiet(&self, b: &Board) -> bool {
+        match b.position_of(crate::spells_meta::SEAL_OF_DESTRUCTION) {
+            None => true,
+            Some(pos) => crate::topology::SIGIL[pos] & (b.stones[0] | b.stones[1]) == 0,
+        }
+    }
     pub fn set_pvs(&mut self, on: bool) { self.pvs = on; }
     pub fn set_lmr(&mut self, ext: usize, r: i32) { self.lmr_ext = ext; self.lmr_r = r.max(1); }
     pub fn set_history(&mut self, on: bool) { self.use_history = on; }
@@ -809,8 +886,60 @@ impl Search {
         // The exhaustive mate-in-1 bookends that wrapped this call in v6/v7 were
         // discarded after the arena (see the note at BOOKEND in the module head).
         let (best, best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
+        if self.exact_clock {
+            if let (Some(d), Some(t)) = (self.deadline, best) {
+                if now_ms() < d { self.spend_remaining(root, c, &t, d); }
+            }
+        }
         self.stats.elapsed_ms = now_ms() - t_start;
         (best, best_score, self.stats)
+    }
+
+    /// `exact_clock`: the root finished before the deadline (a proven decisive
+    /// score, or `max_depth` completed, which a single-legal-turn root can
+    /// reach). Spend what is left on the position the opponent will face after
+    /// `best`, from their side, so the table holds that tree when the next
+    /// search starts there. If that position is already terminal, the root
+    /// itself is deepened further instead (without the decisive exit). The
+    /// root's move, score and depth are untouched: only the node counters
+    /// accumulate and `overflow_ms` / `overflow_depth` record the extra work.
+    fn spend_remaining(&mut self, root: &Board, c: Color, best: &Turn, deadline: f64) {
+        let t0 = now_ms();
+        let saved = self.stats;
+        let mut child = *root;
+        child.apply_turn(best, c);
+        child.turn_counter += 1;
+        child.to_move = c.other();
+        let remaining_ms = (deadline - t0).max(1.0) as u64;
+        let mut none: Option<&mut dyn FnMut(i32, i32, u64)> = None;
+        let root_key = crate::zobrist::ZOBRIST.key_js(root);
+        let ov_depth;
+        if child.outcome == Outcome::Ongoing {
+            // The root is the child's parent: it counts toward repetition.
+            self.path.push(root_key);
+            let _ = self.deepen(&child, c.other(), (MAX_PLY as i32 - 1).min(63), remaining_ms, &mut none);
+            self.path.pop();
+            ov_depth = self.stats.depth_completed;
+        } else {
+            self.ignore_decisive = true;
+            let _ = self.deepen(root, c, 64, remaining_ms, &mut none);
+            self.ignore_decisive = false;
+            ov_depth = self.stats.depth_completed;
+        }
+        let ov = self.stats;
+        self.stats = saved;
+        self.stats.nodes = ov.nodes;
+        self.stats.tt_hits = ov.tt_hits;
+        self.stats.cutoffs = ov.cutoffs;
+        self.stats.lmr_probes = ov.lmr_probes;
+        self.stats.lmr_researches = ov.lmr_researches;
+        self.stats.pvs_researches = ov.pvs_researches;
+        self.stats.max_ply_seen = saved.max_ply_seen.max(ov.max_ply_seen);
+        self.stats.overflow_ms = now_ms() - t0;
+        self.stats.overflow_depth = ov_depth;
+        // `deepen` resets `timed_out` at its start; the root's own flag is what
+        // `adopt_partial` bookkeeping and the tests read.
+        self.stats.timed_out = saved.timed_out;
     }
 
     /// Iterative deepening proper.
@@ -903,10 +1032,13 @@ impl Search {
             // byte-identical scores, with it ON.
             let proven = !self.mate_guard
                          || (!self.stats.widened && !self.stats.windowed);
-            if score.abs() >= WIN - MAX_PLY as i32 && proven { break; }   // decisive
+            // `exact_clock`: the proof still ends the root's deepening (nothing
+            // deeper can change a proven decisive answer), and `go_with_progress`
+            // then spends the rest of the clock on the reply position instead.
+            if score.abs() >= WIN - MAX_PLY as i32 && proven && !self.ignore_decisive { break; }   // decisive
 
-            // ---- elastic time management (off => nothing below runs) ----
-            if let (Some(e), Some(_)) = (self.elastic, self.deadline) {
+            // ---- elastic time management (off, or exact_clock => nothing below runs) ----
+            if let (Some(e), Some(_), false) = (self.elastic, self.deadline, self.exact_clock) {
                 let now = now_ms();
                 let elapsed = now - t_start;
                 let t_iter = now - t_iter0;
@@ -968,6 +1100,7 @@ impl Search {
                    mut alpha: i32, beta: i32, best: &mut Option<Turn>,
                    prev_scores: &[(Turn, i32)]) -> i32
     {
+        self.iter_depth = depth;
         let mut best_local = *best;
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
@@ -1070,11 +1203,14 @@ impl Search {
         let slot = (key as usize) & self.mask;
         let key_hi = (key >> 32) as u32;
         let mut tt_move: Option<Action> = None;
+        // (score, bound, depth) of the entry, for the singular-extension test.
+        let mut tt_hit: Option<(i32, Bound, i32)> = None;
         {
             let e = self.tt[slot];
             if e.depth != TT_EMPTY && e.key_hi == key_hi {
                 self.stats.tt_hits += 1;
                 tt_move = unpack_action(e.best);
+                tt_hit = Some((score_from_tt(e.score, ply), Bound::from_u8(e.bound), e.depth as i32));
                 if e.depth as i32 >= depth {
                     let sc = score_from_tt(e.score, ply);
                     match Bound::from_u8(e.bound) {
@@ -1092,12 +1228,92 @@ impl Search {
         let mut saw_repetition = false;
 
         self.path.push(key);
-        let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape);
+
+        // ---- pass as null move (v15 `nmp`) ----
+        // A bare pass is legal only when no first move exists, so this is a
+        // probe on an illegal move exactly as in chess; every legal turn adds
+        // a stone, so a pass is a strict sacrifice and there is no zugzwang.
+        // Never at the root, never near a mate bound (the probe must not
+        // yield or remove a mate score), never in the competitive opening or
+        // with a stone on Seal of Destruction's sigil, and only when the
+        // static eval already stands above beta.
+        if self.nmp_r > 0 && ply >= 1 && depth >= 2
+           && (beta - alpha <= 1 || (self.nmp_mode == 1 && ply >= 2))
+           && beta.abs() < WIN - MAX_PLY as i32
+           && !(b.variant.has_competitive() && b.turn_counter <= 2)
+           && self.seal_quiet(b)
+           && self.eval(b, c) >= beta
+        {
+            let mut child = *b;
+            child.apply_turn(&Turn::single(Action::Pass), c);
+            child.turn_counter += 1;
+            child.to_move = c.other();
+            if child.outcome == Outcome::Ongoing {
+                self.stats.nmp_tries += 1;
+                let ckey = crate::zobrist::ZOBRIST.key_js(&child);
+                let d_null = (depth - 1 - self.nmp_r).max(0);
+                let mut null_rep = false;
+                let v = -self.negamax(&child, c.other(), d_null, -beta, -beta + 1, ply + 1,
+                                      ckey, &mut null_rep);
+                if null_rep { saw_repetition = true; }
+                if v >= beta && v < WIN - MAX_PLY as i32 && !self.stats.timed_out {
+                    // Fail-soft cut, no TT store (as Stockfish does).
+                    self.stats.nmp_cutoffs += 1;
+                    self.path.pop();
+                    if saw_repetition { *rep_out = true; }
+                    return v;
+                }
+            }
+        }
+
+        // Width from the NOMINAL depth: an extended child (`tact_ext`,
+        // `singular`) must not also jump a width bucket. Identical to `depth`
+        // when nothing has extended the line.
+        let w_depth = depth.min((self.iter_depth - ply).max(1));
+        let w = width_for_depth_shaped(w_depth, self.scale_for(b, c), self.width_shape);
+
         // §1.4b: with an LMR band the generator is pulled for `w * lmr_ext`
         // successors; the first `w` are searched as before, the band beyond
         // them at reduced depth instead of being dropped.
         let pull = if self.lmr_ext > 1 { w * self.lmr_ext } else { w };
         let turns = self.ordered_turns_action_hint(b, c, ply as usize, tt_move, pull);
+
+        // ---- singular extension of the TT move (v15 `singular`) ----
+        // PV nodes only. If the table's best move (promoted to index 0) has an
+        // Exact/Lower score from a search at most two plies shallower, and
+        // every alternative inside the width fails low against
+        // `tt_score - se_margin` at half depth, the TT move is the only move
+        // and is searched one ply deeper. Exclusion probes over the list
+        // already pulled: no second generation.
+        let mut singular_ext = 0i32;
+        if self.se_margin > 0 && beta - alpha > 1 && depth >= 4
+           && depth + ply - self.iter_depth < self.ext_cap.max(1)
+        {
+            if let (Some(hint), Some((tt_sc, tt_bound, tt_depth))) = (tt_move, tt_hit) {
+                if tt_bound != Bound::Upper && tt_depth >= depth - 2
+                   && tt_sc.abs() < WIN - MAX_PLY as i32
+                   && turns.first().map_or(false, |t| t.slice()[0] == hint)
+                {
+                    self.stats.se_tries += 1;
+                    let se_beta = tt_sc - self.se_margin;
+                    let d_se = (depth - 1) / 2;
+                    let mut singular = true;
+                    for t in turns.iter().skip(1).take(w.saturating_sub(1)) {
+                        if self.out_of_time() { self.stats.timed_out = true; singular = false; break; }
+                        let mut child = *b;
+                        child.apply_turn(t, c);
+                        child.turn_counter += 1;
+                        child.to_move = c.other();
+                        let ckey = crate::zobrist::ZOBRIST.key_js(&child);
+                        let v = -self.negamax(&child, c.other(), d_se, -se_beta, -se_beta + 1, ply + 1,
+                                              ckey, &mut saw_repetition);
+                        if self.stats.timed_out || v >= se_beta { singular = false; break; }
+                    }
+                    if singular { singular_ext = 1; self.stats.se_extensions += 1; }
+                }
+            }
+        }
+
         let mut idx = 0usize;
         for t in turns.iter() {
             let t = *t;
@@ -1110,6 +1326,36 @@ impl Search {
             // The child reports repetition anywhere in ITS subtree — including
             // itself being the third occurrence — into our accumulator.
             let in_band = idx >= w;                 // LMR band member
+            let them = c.other().idx();
+            // ---- tactical extension (v15 `tact_ext`), or the singular one ----
+            // One ply deeper for a turn that casts, dashes, crushes, or lands
+            // one crush from the +/-3 lead, while the line's extension budget
+            // (`ext_cap`) lasts. Never on a band child, never with a reduction.
+            let mut ext = if idx == 0 { singular_ext } else { 0 };
+            if ext == 0 && !in_band && self.tact_mask != 0 && depth >= 2
+               && depth + ply - self.iter_depth < self.ext_cap
+            {
+                let acts = t.slice();
+                let mut m = 0u8;
+                if acts.iter().any(|a| matches!(a, Action::Cast { .. })) { m |= 1; }
+                if acts.iter().any(|a| matches!(a, Action::Dash { .. })) { m |= 2; }
+                if child.total[them] < b.total[them] { m |= 4; }
+                if child.outcome == Outcome::Ongoing && !child.variant.has_deathmatch() {
+                    let lead = child.total[0] as i32 - (child.total[1] as i32 + 1);
+                    if lead.abs() == 2 { m |= 8; }
+                }
+                if m & self.tact_mask != 0 { ext = 1; self.stats.ext_tactical += 1; }
+            }
+            // ---- in-window late-quiet reduction (v15 `lmr_quiet`) ----
+            // A late plain move that changes no stone count: reduced,
+            // zero-window, re-searched in full on a fail-high. The TT move, the
+            // killers and the first generator picks (below `lmr_quiet`) keep
+            // full depth; the band beyond the width is untouched.
+            let quiet = t.len == 2
+                && matches!(t.slice()[0], Action::Move { .. } | Action::Blink { .. })
+                && child.total[them] == b.total[them];
+            let reduce_quiet = self.lmr_quiet > 0 && !in_band && ext == 0 && idx >= self.lmr_quiet
+                && depth >= 3 && quiet && alpha.abs() < WIN - MAX_PLY as i32;
             let v = if in_band {
                 // Reduced, zero-window probe; a fail-high earns the full search.
                 let r = if self.lmr_ext >= 3 && idx >= 2 * w { self.lmr_r + 1 } else { self.lmr_r };
@@ -1123,17 +1369,29 @@ impl Search {
                                       ckey, &mut saw_repetition);
                 }
                 v
-            } else if self.pvs && idx > 0 {
-                let mut v = -self.negamax(&child, c.other(), depth - 1, -alpha - 1, -alpha, ply + 1,
+            } else if reduce_quiet {
+                let r = 1 + (idx >= w / 2) as i32;
+                let d_red = (depth - 1 - r).max(0);
+                self.stats.lmr_in_probes += 1;
+                let mut v = -self.negamax(&child, c.other(), d_red, -alpha - 1, -alpha, ply + 1,
                                           ckey, &mut saw_repetition);
-                if v > alpha && v < beta && !self.stats.timed_out {
-                    self.stats.pvs_researches += 1;
+                if v > alpha && !self.stats.timed_out {
+                    self.stats.lmr_in_researches += 1;
                     v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
                                       ckey, &mut saw_repetition);
                 }
                 v
+            } else if self.pvs && idx > 0 {
+                let mut v = -self.negamax(&child, c.other(), depth - 1 + ext, -alpha - 1, -alpha, ply + 1,
+                                          ckey, &mut saw_repetition);
+                if v > alpha && v < beta && !self.stats.timed_out {
+                    self.stats.pvs_researches += 1;
+                    v = -self.negamax(&child, c.other(), depth - 1 + ext, -beta, -alpha, ply + 1,
+                                      ckey, &mut saw_repetition);
+                }
+                v
             } else {
-                -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, ply + 1,
+                -self.negamax(&child, c.other(), depth - 1 + ext, -beta, -alpha, ply + 1,
                               ckey, &mut saw_repetition)
             };
             if v > best_val {
@@ -1401,6 +1659,7 @@ impl Search {
         let mut order: Vec<usize> = (0..positions.len()).collect();
 
         for depth in 1..=max_depth {
+            self.iter_depth = depth;
             let mut alpha = -WIN;
             let mut iter_best = best_idx;
             let mut iter_score = -WIN * 2;

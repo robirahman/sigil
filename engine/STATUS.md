@@ -21,6 +21,17 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-22 (in progress, engine v15 / cache v42 on the arena verdicts): exact clock, selective depth, and
+the skipped no-placement turn.** (1) Site: a player with no legal stone placement had the turn ended at once
+by both controllers and collapsed to `[pass]` by both JS enumerators; the ruling (move + optional dash +
+optional cast; a missing move invalidates only the move) is now followed, `tools/no-placement-smoke.js`.
+(2) `Search::exact_clock` (ON): the deadline is the budget -- no extension, no early stop; a proven mate or
+a read-out root spends the rest of the clock on the reply position (`spend_remaining`, kept in the persistent
+table); think report shows `depth D/S` and "reply read to depth N". Knob `exact_clock`, arm
+`engine/gcp/arms/exact_clock_10s.txt`. (3) Selective depth, four knobs measured one at a time at fixed 10 s:
+`nmp` (pass as null move), `lmr_quiet` (in-window late-quiet reductions), `tact_ext` (tactical
+extensions), `singular` (TT-move extension). FINDINGS "The deadline is the budget" and "Selective depth".
+
 **2026-09-22: engine v14 (cache v41) -- the Hard AI spent 71% of its clock; full-budget time policy, arena
 +30.7 Elo at fixed 10 s.** Game X4TNAS: the Hard tier moved at depth 3 after 3 s of its 10 s, not because it was lost
 (-2 stones, no mate) but because `Elastic::DEFAULT`'s predictor (next iteration = 6x the last, the clamp

@@ -42,6 +42,16 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # matched-time policy it replaced (Elastic::DEFAULT, adopt_partial
          # off). Gate this one at FIXED per-move time: the browser has no pool.
          'full_budget',
+         # exact_clock: 1 = the deadline is the budget (engine default since
+         # v15: no extension, no early stop, overflow into the reply position);
+         # 0 = v14's Elastic::FULL (2x instability extension). FIXED time gate.
+         'exact_clock',
+         # Selective depth (v15), each measured alone at fixed 10 s, base 0:
+         #   nmp      = R*10 + mode  (20 = R 2 at zero-window nodes, 21 = every node)
+         #   lmr_quiet = first reduced index (4)
+         #   tact_ext = mask*10 + cap (72 = cast|dash|crush, cap 2; 41 = crush, cap 1)
+         #   singular = margin in centistones (150)
+         'nmp', 'lmr_quiet', 'tact_ext', 'singular',
          # §1.4: pvs 1/0; history 1/0; lmr = ext*10 + r (e.g. 21 = band x2, R 1)
          'pvs', 'history', 'lmr',
          # bundle: the two knobs that cleared individually at 3 s, together.
@@ -104,6 +114,16 @@ def play(b, ms, ev, hist, knob, val):
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
     if knob == 'lmr' and val:
         extra['lmr'] = (val // 10, val % 10)
+    if knob == 'nmp' and val:
+        extra['nmp'] = (val // 10, val % 10)
+    if knob == 'lmr_quiet' and val:
+        extra['lmr_quiet'] = val
+    if knob == 'tact_ext' and val:
+        extra['tact_ext'] = (val // 10, val % 10)
+    if knob == 'singular' and val:
+        extra['singular'] = val
+    if knob == 'exact_clock' and not val:
+        extra['exact_clock'] = False
     if knob == 'full_budget' and not val:
         extra['elastic'] = (2.0, 0.4, 2, 50, True)
         extra['adopt_partial'] = False

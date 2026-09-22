@@ -838,7 +838,15 @@ fn the_shipped_search_knobs_are_pinned_and_the_default_tree_is_sane() {
     // policy spends it (`Elastic::FULL`) and uses the partial last iteration.
     assert!(s.adopt_partial_get());
     assert_eq!(s.elastic_get(), Some(crate::search::Elastic::FULL));
+    // 2026-09-22 (v15): the deadline IS the budget; `elastic` is inert while
+    // `exact_clock` is on and only describes the fallback when it is off.
+    assert!(s.exact_clock_get());
     assert_eq!(s.lmr_get(), (2, 1));
+    // Selective depth (v15) ships OFF until its arenas say otherwise.
+    assert_eq!(s.nmp_get(), (0, 0));
+    assert_eq!(s.lmr_quiet_get(), 0);
+    assert_eq!(s.tact_ext_get(), (0, 0));
+    assert_eq!(s.singular_get(), 0);
     let mut b = Board::new(Board::legal_draw(23), Variant::Standard);
     b.setup_initial();
     let mut base = crate::search::Search::new(16);
@@ -889,6 +897,208 @@ fn the_shipped_policy_spends_the_whole_budget_on_a_midgame_position() {
     s2.set_adopt_partial(false);
     let (_, _, st2) = s2.go(&b, b.to_move, 64, 600);
     assert!(st2.stopped_early || st2.elapsed_ms >= 540.0);
+}
+
+/// v15 `exact_clock`: no extension and no early stop on any position. The
+/// same X4TNAS fixture, 600 ms: the search ends within a few ms of its
+/// deadline, never extends, and the last iteration is the one the clock cut.
+#[test]
+fn the_exact_clock_spends_the_whole_budget_and_never_extends() {
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let mut s = crate::search::Search::new(16);
+    let (best, _score, st) = s.go(&b, b.to_move, 64, 600);
+    assert!(best.is_some());
+    assert!(!st.stopped_early && !st.extended);
+    assert!(st.elapsed_ms >= 560.0 && st.elapsed_ms <= 760.0, "used {:.0} of 600 ms", st.elapsed_ms);
+    assert!(st.timed_out, "the last iteration should be the one the deadline cut");
+    assert_eq!(st.overflow_ms, 0.0, "a midgame root never finishes early");
+}
+
+/// A mate-in-1 is found at depth 1 and never changes, but the clock is spent
+/// anyway (the root is width-cut, so the loop's proof test does not fire and
+/// the iterations simply run to the deadline).
+#[test]
+fn a_proven_mate_still_spends_the_clock() {
+    let b = Board::from_sfn(CORPUS_M1_SFN).expect("sfn");
+    let mut s = tfit_search();
+    let (best, _score, st) = s.go(&b, b.to_move, 64, 300);
+    assert!(best.is_some());
+    assert_eq!(st.mate_plies, 1);
+    assert!(st.mate_proven);
+    assert!(!st.stopped_early && !st.extended);
+    assert!(st.elapsed_ms >= 280.0, "used only {:.0} of 300 ms", st.elapsed_ms);
+}
+
+/// When the root reads out before the deadline (here: `max_depth` 2), the rest
+/// of the clock goes into the reply position -- the opponent's side of the
+/// chosen move -- and stays in the table. The root's answer is untouched.
+#[test]
+fn a_root_that_finishes_early_reads_the_reply_position_until_the_deadline() {
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let mut s = crate::search::Search::new(16);
+    // 800 ms: the reply position has ten red stones and charged spells, so
+    // its depth-2 iteration alone (pre-passes at plies 0-1) can take ~400 ms.
+    let (best, score, st) = s.go(&b, b.to_move, 2, 800);
+    assert!(best.is_some());
+    assert_eq!(st.depth_completed, 2, "the root itself stops at max_depth");
+    assert!(st.elapsed_ms >= 780.0, "used only {:.0} of 800 ms", st.elapsed_ms);
+    assert!(st.overflow_ms >= 400.0, "overflow {:.0} ms", st.overflow_ms);
+    assert!(st.overflow_depth >= 1, "reply position read only to depth {}", st.overflow_depth);
+    assert!(!st.stopped_early && !st.extended);
+    // Same move and score as a plain depth-2 search without the overflow.
+    let mut s2 = crate::search::Search::new(16);
+    s2.set_exact_clock(false);
+    let (best2, score2, st2) = s2.go(&b, b.to_move, 2, 800);
+    assert_eq!(best.unwrap().slice(), best2.unwrap().slice());
+    assert_eq!(score, score2);
+    assert_eq!(st2.overflow_ms, 0.0);
+    assert!(st2.elapsed_ms < 600.0, "v14 policy returns when max_depth completes: {:.0} ms", st2.elapsed_ms);
+    assert!(s.tt_filled() > s2.tt_filled(), "the overflow should leave more in the table");
+}
+#[test]
+fn a_single_legal_turn_reads_ahead_instead_of_returning() {
+    let mut b = Board::new([0, 1, 2, SEAL_OF_STONE, 6, 7, 14, 10, 11], Variant::Deathmatch);
+    // Red: one stone on a void node (charges nothing). Blue: the Seal of Stone
+    // sigil plus a wall on every empty neighbour of the red stone.
+    let red = crate::topology::VOID.trailing_zeros() as usize;
+    b.stones[0] = 1u64 << red;
+    b.stones[1] = SIGIL[b.position_of(SEAL_OF_STONE).unwrap()];
+    b.stones[1] |= ADJ[red] & !(b.stones[0] | b.stones[1]);
+    b.update();
+    assert_eq!(b.outcome, Outcome::Ongoing);
+    assert_eq!(b.first_move_targets(Color::Red).0, 0);
+    let (turns, _) = b.enumerate_turns(Color::Red);
+    assert_eq!(turns.len(), 1, "expected exactly one legal turn, got {:?}", turns.iter().map(|t| t.slice().to_vec()).collect::<Vec<_>>());
+    let mut s = crate::search::Search::new(16);
+    let (best, _score, st) = s.go(&b, Color::Red, 64, 300);
+    assert!(matches!(best.unwrap().slice()[0], Action::Pass));
+    assert!(st.elapsed_ms >= 280.0, "returned early on a single legal turn: {:.0} ms", st.elapsed_ms);
+    assert!(st.depth_completed >= 3, "one child and 300 ms should read past depth 3, got {}", st.depth_completed);
+    assert!(!st.stopped_early && !st.extended);
+    assert!(s.tt_filled() > 0, "nothing cached for the next search");
+}
+
+// ------------------------------------------------------------- selective depth
+
+/// Every selective-depth knob is off by default and a default search does no
+/// probing, extending or in-window reducing at all: the v14 tree, byte for byte.
+#[test]
+fn selective_depth_is_off_by_default_and_touches_nothing() {
+    let mut b = Board::new(Board::legal_draw(17), Variant::Standard);
+    b.setup_initial();
+    let mut s = crate::search::Search::new(16);
+    let (_, _, st) = s.go(&b, b.to_move, 4, 0);
+    assert_eq!(st.nmp_tries, 0);
+    assert_eq!(st.ext_tactical, 0);
+    assert_eq!(st.lmr_in_probes, 0);
+    assert_eq!(st.se_tries, 0);
+    // Setting the knobs to their OFF values explicitly changes nothing either.
+    let mut s2 = crate::search::Search::new(16);
+    s2.set_nmp(0, 0); s2.set_lmr_quiet(0); s2.set_tact_ext(7, 0); s2.set_singular(0);
+    let (_, _, st2) = s2.go(&b, b.to_move, 4, 0);
+    assert_eq!(st2.nodes, st.nodes);
+}
+
+/// Pass as null move on a quiet midgame position (X4TNAS turn 32): the probe
+/// fires, every firing cuts (the static eval already stood above beta), and
+/// the depth-4 tree shrinks. On the corpus mate-in-2 it never fires -- every
+/// window under a mating line is mate-bound -- and the proof is untouched.
+#[test]
+fn nmp_cuts_quiet_nodes_and_leaves_the_mates_alone() {
+    use crate::search::{WIN, MAX_PLY};
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let mut off = tfit_search();
+    let (_, s_off, st_off) = off.go(&b, b.to_move, 4, 0);
+    let mut on = tfit_search();
+    on.set_nmp(2, 1);
+    let (_, s_on, st_on) = on.go(&b, b.to_move, 4, 0);
+    assert!(st_on.nmp_tries > 0, "the null probe never fired");
+    assert!(st_on.nmp_cutoffs > 0, "the null probe never cut");
+    assert!(st_on.nodes < st_off.nodes, "nmp {} nodes vs {} without", st_on.nodes, st_off.nodes);
+    assert!((s_on - s_off).abs() < 100, "nmp moved the score a full stone: {s_on} vs {s_off}");
+    let m = Board::from_sfn(CORPUS_M2_SFN).expect("sfn");
+    let mut on2 = tfit_search();
+    on2.set_nmp(2, 1);
+    let (_, s_m, _) = on2.go(&m, m.to_move, 4, 0);
+    assert!(s_m >= WIN - MAX_PLY as i32 || s_m == crate::search::UNPROVEN_MATE, "nmp lost the mate ({s_m})");
+}
+
+/// The null probe stays out of the competitive opening (a free blink is not
+/// a pass) and away from a Seal of Destruction that anyone is building.
+#[test]
+fn nmp_never_fires_in_the_opening_or_around_the_seal() {
+    let b = competitive_board([15, 0, 27, 7, 5, 28, 10, 38, 26]);
+    let mut s = crate::search::Search::new(16);
+    s.set_nmp(2, 1);
+    let (_, _, st) = s.go(&b, Color::Red, 3, 0);
+    assert_eq!(st.nmp_tries, 0, "null probe in the competitive opening");
+    let mut d = Board::new(destruction_draw(None), Variant::Standard);
+    d.setup_initial();
+    let pos = d.position_of(SEAL_OF_DESTRUCTION).unwrap();
+    d.stones[1] |= 1u64 << SIGIL[pos].trailing_zeros();   // one blue stone on the seal
+    d.update();
+    assert_eq!(d.outcome, Outcome::Ongoing);
+    let mut s2 = crate::search::Search::new(16);
+    s2.set_nmp(2, 1);
+    let (_, _, st2) = s2.go(&d, d.to_move, 3, 0);
+    assert_eq!(st2.nmp_tries, 0, "null probe with a stone on Seal of Destruction's sigil");
+}
+
+/// In-window late-quiet reductions fire on a quiet midgame position and cost
+/// nodes there; on the corpus mate-in-2 they never touch the proof (a reduced
+/// probe can miss a mate, never invent one, and every window under a mating
+/// line is mate-bound, which switches the reduction off).
+#[test]
+fn lmr_quiet_reduces_late_quiet_turns_and_keeps_the_mate() {
+    use crate::search::{WIN, MAX_PLY, UNPROVEN_MATE};
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let mut off = tfit_search();
+    let (_, _, st_off) = off.go(&b, b.to_move, 4, 0);
+    let mut on = tfit_search();
+    on.set_lmr_quiet(4);
+    let (_, _, st_on) = on.go(&b, b.to_move, 4, 0);
+    assert!(st_on.lmr_in_probes > 0, "no in-window reduction fired");
+    assert!(st_on.lmr_in_researches <= st_on.lmr_in_probes);
+    assert!(st_on.nodes < st_off.nodes, "reductions {} nodes vs {} without", st_on.nodes, st_off.nodes);
+    let m = Board::from_sfn(CORPUS_M2_SFN).expect("sfn");
+    let mut on2 = tfit_search();
+    on2.set_lmr_quiet(4);
+    let (_, score, _) = on2.go(&m, m.to_move, 4, 0);
+    assert!(score >= WIN - MAX_PLY as i32 || score == UNPROVEN_MATE, "lmr_quiet lost the mate ({score})");
+}
+
+/// Tactical extensions read forcing lines past the nominal horizon: on the
+/// corpus mate-in-2 the deepest ply reached grows, the mate is kept, and the
+/// per-line cap bounds the extra work.
+#[test]
+fn tactical_extensions_see_deeper_on_the_corpus_mate() {
+    use crate::search::{WIN, MAX_PLY};
+    let b = Board::from_sfn(CORPUS_M2_SFN).expect("sfn");
+    let mut off = tfit_search();
+    let (_, s_off, st_off) = off.go(&b, b.to_move, 4, 0);
+    let mut on = tfit_search();
+    on.set_tact_ext(7, 2);
+    let (_, s_on, st_on) = on.go(&b, b.to_move, 4, 0);
+    assert!(st_on.ext_tactical > 0, "no tactical extension fired");
+    assert!(st_on.max_ply_seen > st_off.max_ply_seen,
+            "extensions did not deepen any line: {} vs {}", st_on.max_ply_seen, st_off.max_ply_seen);
+    assert!(st_on.max_ply_seen <= st_off.max_ply_seen + 2, "the per-line cap of 2 was exceeded");
+    let mate = |x: i32| x >= WIN - MAX_PLY as i32 || x == crate::search::UNPROVEN_MATE;
+    assert!(mate(s_off) && mate(s_on), "{s_off} / {s_on}");
+}
+
+/// The singular test runs at PV nodes of depth >= 4 whose TT move came from a
+/// search at most two plies shallower; at depth 5 on the X4TNAS position those
+/// are the root's children, primed by the depth-4 iteration.
+#[test]
+fn singular_extension_tests_the_tt_move_at_pv_nodes() {
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let mut s = crate::search::Search::new(16);
+    s.set_singular(150);
+    let (best, _score, st) = s.go(&b, b.to_move, 5, 0);
+    assert!(best.is_some());
+    assert!(st.se_tries > 0, "the singular test never ran");
+    assert!(st.se_extensions <= st.se_tries);
 }
 #[test]
 fn first_action_is_legal_agrees_with_the_generator() {

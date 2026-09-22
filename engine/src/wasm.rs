@@ -69,10 +69,11 @@ fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
         None => "null".to_string(),
     };
     format!(
-        "{{\"ok\":true,\"actions\":{},\"expected_sfn\":{:?},\"depth\":{},\
+        "{{\"ok\":true,\"actions\":{},\"expected_sfn\":{:?},\"depth\":{},\"seldepth\":{},\
+          \"overflow_depth\":{},\"overflow_ms\":{:.0},\
           \"nodes\":{},\"score\":{},\"score_ui\":{},{},\"opening\":{},\"seconds\":{:.2}}}",
         crate::actions::acts_to_json(&acts), after.to_sfn(),
-        st.depth_completed, st.nodes, score,
+        st.depth_completed, st.max_ply_seen, st.overflow_depth, st.overflow_ms, st.nodes, score,
         crate::search::ui_score(score), report_json(rep), opening_json, dt)
 }
 
