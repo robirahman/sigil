@@ -1593,7 +1593,9 @@ document.addEventListener('alpine:init', () => {
 					let evalStr = shown ? `, eval ${shown}` : '';
 					if (payload.opening && payload.opening.spell) {
 						evalStr += `, opening: ${payload.opening.spell} (${payload.opening.node})`
-							+ (payload.opening.reply ? ` vs ${payload.opening.reply}` : '');
+							+ (payload.opening.reply
+								? (payload.opening.syzygy_threat ? ` crushing the ${payload.opening.reply} start` : ` vs ${payload.opening.reply}`)
+								: '');
 					}
 					// Trappiness pass ran (proven loss): show how deep it got
 					// and what fraction of opponent replies dodge the win.

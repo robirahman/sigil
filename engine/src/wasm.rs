@@ -61,10 +61,10 @@ fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
                 crate::turn::Action::Blink { node, .. } | crate::turn::Action::Move { node, .. } => node,
                 _ => 0,
             };
-            format!("{{\"spell\":{:?},\"node\":{:?},\"reply\":{},\"value\":{:.2}}}",
+            format!("{{\"spell\":{:?},\"node\":{:?},\"reply\":{},\"value\":{:.2},\"syzygy_threat\":{}}}",
                     crate::spells_meta::SPELLS[p.spell as usize].name, crate::topology::NAMES[node as usize],
                     p.reply.map_or("null".to_string(), |r| format!("{:?}", crate::spells_meta::SPELLS[r as usize].name)),
-                    p.value)
+                    p.value, p.syzygy_threat)
         }
         None => "null".to_string(),
     };

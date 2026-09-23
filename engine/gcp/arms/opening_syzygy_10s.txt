@@ -1,0 +1,1 @@
+4,10000,tfit,opening_syzygy,1,0

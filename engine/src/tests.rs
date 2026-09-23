@@ -3316,6 +3316,105 @@ fn opening_choice_is_zone_invariant() {
     }
 }
 
+/// Red has blinked onto the first node of sigil `slot`; blue to move at counter 2.
+fn after_red_opening_slot(draw: [u8; 9], slot: usize) -> Board {
+    let mut b = competitive_board(draw);
+    b.stones[0] |= 1 << crate::topology::SIGIL[slot].trailing_zeros();
+    b.update();
+    b.turn_counter = 2;
+    b.to_move = Color::Blue;
+    b
+}
+
+/// Syzygy (18) in ritual slot 0 crushes zone b: sorcery slot 4 and charm slot 7.
+/// Fireblast (6), the strongest spell in the survey, sits on that sorcery and
+/// Slash (11) on that charm; the rest of the draw is weak and has no `++`
+/// against either.
+const SYZYGY_DRAW: [u8; 9] = [18, 0, 27, 5, 6, 28, 10, 11, 26];
+
+#[test]
+fn opening_never_starts_opposite_syzygy() {
+    use crate::opening::{choose_opening, set_opening_syzygy, opening_syzygy_enabled, syzygy_exposed, SYZYGY_SAFE_CHARMS};
+    assert!(opening_syzygy_enabled(), "the Syzygy rules ship ON");
+    assert_eq!(SYZYGY_SAFE_CHARMS, [10, 29, 23], "Sprout, Splash, Charge");
+    assert!(syzygy_exposed(&SYZYGY_DRAW, 4) && syzygy_exposed(&SYZYGY_DRAW, 7));
+    assert!(!syzygy_exposed(&SYZYGY_DRAW, 3) && !syzygy_exposed(&SYZYGY_DRAW, 6) && !syzygy_exposed(&SYZYGY_DRAW, 0));
+    // Red: Fireblast is the strongest spell drawn, but it is opposite Syzygy.
+    let b = competitive_board(SYZYGY_DRAW);
+    let p = choose_opening(&b, Color::Red).expect("applies");
+    assert!(p.pos != 4 && p.pos != 7, "red must not start opposite Syzygy: {p:?}");
+    assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "both exposed slots vetoed: {p:?}");
+    // Blue, after red started somewhere harmless (the Grow sorcery, slot 3).
+    let bb = after_red_opening_slot(SYZYGY_DRAW, 3);
+    let pb = choose_opening(&bb, Color::Blue).expect("applies");
+    assert!(pb.pos != 4 && pb.pos != 7, "blue must not start opposite Syzygy: {pb:?}");
+    assert!(!pb.syzygy_threat);
+    // A safe charm opposite Syzygy (Sprout for Slash) is allowed again.
+    let mut safe = SYZYGY_DRAW; safe[7] = 10; safe[6] = 11;
+    assert!(!syzygy_exposed(&safe, 7), "Sprout's cast moves the stone away");
+    let ps = choose_opening(&competitive_board(safe), Color::Red).expect("applies");
+    assert_eq!(ps.vetoed & (1 << 7), 0, "no veto on the safe charm: {ps:?}");
+    // Knob off: the v16 selector takes Fireblast.
+    set_opening_syzygy(false);
+    let p0 = choose_opening(&b, Color::Red).expect("applies");
+    set_opening_syzygy(true);
+    assert_eq!(p0.spell, 6, "without the rule Fireblast is the pick: {p0:?}");
+    assert_eq!(p0.vetoed, 0);
+}
+
+#[test]
+fn opening_blue_takes_syzygy_against_an_exposed_start() {
+    use crate::opening::{choose_opening, set_opening_syzygy};
+    // Red on the sorcery opposite Syzygy (Fireblast, slot 4).
+    let b = after_red_opening_slot(SYZYGY_DRAW, 4);
+    let p = choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!(p.spell, 18, "Syzygy is forced: {p:?}");
+    assert_eq!(p.pos, 0);
+    assert!(p.syzygy_threat);
+    assert_eq!(p.reply, Some(6));
+    assert_eq!(p.node_mask, crate::topology::SIGIL[0]);
+    assert!(crate::opening::report_line(&p, p.node_mask.trailing_zeros() as u8).contains("crushes the Fireblast start"));
+    // Red on the charm opposite Syzygy (Slash, slot 7): it cannot leave without a dash.
+    let b7 = after_red_opening_slot(SYZYGY_DRAW, 7);
+    let p7 = choose_opening(&b7, Color::Blue).expect("applies");
+    assert_eq!(p7.spell, 18, "Syzygy is forced against a stuck charm: {p7:?}");
+    assert!(p7.syzygy_threat);
+    // Red on a safe charm opposite Syzygy (Charge): no forced reply.
+    let mut safe = SYZYGY_DRAW; safe[7] = 23; safe[6] = 11;
+    let pc = choose_opening(&after_red_opening_slot(safe, 7), Color::Blue).expect("applies");
+    assert!(!pc.syzygy_threat, "Charge moves away: {pc:?}");
+    // Red elsewhere: not forced.
+    let pe = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 3), Color::Blue).expect("applies");
+    assert!(!pe.syzygy_threat);
+    // Knob off: the tables decide and Syzygy (-1.19) is not the reply to Fireblast.
+    set_opening_syzygy(false);
+    let p0 = choose_opening(&b, Color::Blue).expect("applies");
+    set_opening_syzygy(true);
+    assert_ne!(p0.spell, 18, "{p0:?}");
+}
+
+#[test]
+fn opening_blue_values_syzygy_by_the_spells_across_from_it() {
+    use crate::opening::{own_value, set_opening_syzygy};
+    use crate::opening_data::STRENGTH;
+    // Same zone-mates for Syzygy either way (the opposite sigils are in another
+    // zone), so swapping the opposite sorcery from Fireblast to Grow changes
+    // blue's value by exactly the strength substitution.
+    let strong = SYZYGY_DRAW;                       // Fireblast (6) opposite
+    let mut weak = SYZYGY_DRAW; weak[4] = 28; weak[5] = 6;  // Torrent (28) opposite, Fireblast moved to zone c
+    let v_strong = own_value(&strong, 0, None, Color::Blue);
+    let v_weak = own_value(&weak, 0, None, Color::Blue);
+    let expect = STRENGTH[6].max(STRENGTH[11]).max(STRENGTH[18]) - STRENGTH[28].max(STRENGTH[11]).max(STRENGTH[18]);
+    assert!((v_strong - v_weak - expect).abs() < 1e-5, "{v_strong} - {v_weak} vs {expect}");
+    assert!(v_strong - own_value(&strong, 0, None, Color::Red) > 2.5, "blue credits Fireblast's strength, red does not");
+    // Knob off: no substitution for either side.
+    set_opening_syzygy(false);
+    let v_off = own_value(&strong, 0, None, Color::Blue);
+    set_opening_syzygy(true);
+    assert!((v_off - own_value(&strong, 0, None, Color::Red)).abs() < 1e-6, "{v_off}");
+    assert!(v_strong > v_off);
+}
+
 #[test]
 fn opening_book_is_a_noop_outside_the_competitive_opening() {
     assert!(crate::opening::choose_opening(&std_board(), Color::Red).is_none(), "standard variant");

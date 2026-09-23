@@ -72,6 +72,10 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # opening_book: the competitive opening selector (opening.rs), 1/0;
          # only meaningful with SIGIL_VARIANT=competitive.
          'opening_book',
+         # opening_syzygy: the selector's Syzygy rules (opening::set_opening_syzygy:
+         # never start opposite Syzygy, take Syzygy when the enemy did, blue values
+         # Syzygy by the spells across from it), 1/0; competitive only.
+         'opening_syzygy',
          # outcome_order_v2: score a cast's resolutions by what the placed
          # stones achieve (turn_iter::set_outcome_order_v2), 1/0 per move.
          'outcome_order_v2',
@@ -137,6 +141,8 @@ def play(b, ms, ev, hist, knob, val):
         se.set_lead_bounds_v2(bool(val))
     if knob == 'opening_book':
         se.set_opening_book(bool(val))
+    if knob == 'opening_syzygy':
+        se.set_opening_syzygy(bool(val))
     if knob == 'outcome_order_v2':
         se.set_outcome_order_v2(bool(val))
     if knob == 'swing_prepass':
@@ -186,12 +192,27 @@ def play(b, ms, ev, hist, knob, val):
 # harness board starts at 0 and `play_best` increments AFTER the move, so it
 # must start at 1 or red gets a SECOND free blink at counter 2.
 VARIANT = os.environ.get('SIGIL_VARIANT', 'standard')
-if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] == 'opening_book':
-    sys.exit('the opening_book knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
+if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_syzygy'):
+    sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
+# SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
+# (the seed is stepped deterministically until its draw does), so a knob that
+# acts in one spell's draws is measured where it acts.
+REQUIRE_SPELL = int(os.environ['SIGIL_REQUIRE_SPELL']) if os.environ.get('SIGIL_REQUIRE_SPELL') else None
+
+
+def draw_for(seed):
+    d = se.Board.legal_draw(seed)
+    if REQUIRE_SPELL is None:
+        return d
+    k = 0
+    while REQUIRE_SPELL not in d:
+        k += 1
+        d = se.Board.legal_draw(seed + 10_000_000 * k)
+    return d
 
 
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
-    b = se.Board(se.Board.legal_draw(seed), VARIANT)
+    b = se.Board(draw_for(seed), VARIANT)
     b.setup_initial()
     if 'competitive' in VARIANT:
         b.turn_counter = 1
@@ -218,7 +239,7 @@ if __name__ == "__main__":
     off = shard_offset()
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  variant={VARIANT} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "

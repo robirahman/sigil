@@ -2016,6 +2016,40 @@ grab is exactly what it loses to -- adding "the zone's mana" as a candidate valu
 buys the zone-mates is the obvious next iteration if the human numbers are flat.
 
 
+### Syzygy and the opposite sigils (2026-09-23, engine v17)
+
+Designer's rule, added on top of the Bradley-Terry selector. Casting Syzygy blinks into the 1-node sigil
+opposite it and then up to three times into the opposite 3-node sigil (`resolvers::syzygy_opposite`:
+zone a's ritual hits zone b's charm and sorcery, and so on round), pushing or crushing whatever stands
+there. A stone STARTED in either of those sigils is therefore a target the moment the ritual charges,
+and it can only leave by dashing -- unless the charm's own cast moves it away (Sprout, Splash, Charge:
+`opening::SYZYGY_SAFE_CHARMS`). Three consequences, all behind one per-thread switch
+(`opening::set_opening_syzygy`, harness knob `opening_syzygy`, default ON):
+
+* neither side ever starts on the 3-node spell opposite Syzygy, nor on the 1-node spell opposite it
+  unless it is a safe charm (a veto alongside the `++` veto, with the same "unless that drops
+  everything" fallback);
+* when red has started on an exposed slot, blue takes Syzygy whatever the tables say
+  (`OpeningPick::syzygy_threat`, reported as "crushes the Fireblast start" in the think line);
+* for blue, Syzygy's strength in `own_value` is the greatest of its own and the two spells across from
+  it, because casting it effectively grants those spells. Red's minimax uses the same blue-side value
+  when it prices blue's replies.
+
+How much of the opening this touches, over 4,000 `legal_draw` seeds:
+
+| | count |
+|---|---|
+| draws holding Syzygy | 906 / 4,000 (22.6%) |
+| red's pick changed by the veto | 245 / 906 Syzygy draws (27%); mostly Gather, Fireblast, Scatter given up for Charge, Seal of Lightning, Meteor, Fireblast in another zone |
+| blue forced to Syzygy, over the 9 possible red starts per draw | 1,606 / 8,154 (19.7%): every opposite-sorcery start plus 700 of 906 opposite-charm starts |
+| blue's pick changed otherwise (veto or the strength substitution) | 1,694 / 8,154 (20.8%) |
+
+Tests: `opening_never_starts_opposite_syzygy`, `opening_blue_takes_syzygy_against_an_exposed_start`,
+`opening_blue_values_syzygy_by_the_spells_across_from_it` (152 pass). Shipped as engine v17 / cache v44 on the
+designer's authority; the arena (`opening_syzygy` 1 vs 0, competitive, FIXED 10 s, draws restricted to those
+holding Syzygy via `SIGIL_REQUIRE_SPELL=18`, two-VM fleet) is informational and its verdict goes here when in.
+
+
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
 
 Robi (red, 1477) beat rust_hard (blue) after the AI cast Slash on its turns 7 and 8 reading +1.0 both

@@ -1188,6 +1188,12 @@ fn rank_of_landing(sfn: &str, result_sfn: &str, cap: usize, enum_cap: usize,
 #[pyfunction]
 fn set_opening_book(on: bool) { crate::opening::set_opening_book(on); }
 
+/// A/B switch for the selector's Syzygy rules (`opening::set_opening_syzygy`:
+/// veto of the exposed opposite slots, forced Syzygy reply, blue's strength
+/// substitution); default on, per thread.
+#[pyfunction]
+fn set_opening_syzygy(on: bool) { crate::opening::set_opening_syzygy(on); }
+
 /// The opening selector's verdict for `sfn` without searching: None when it
 /// does not apply, else {spell, pos, nodes, value, reply, vetoed}.
 #[pyfunction]
@@ -1211,6 +1217,7 @@ fn opening_dict<'py>(py: Python<'py>, p: &crate::opening::OpeningPick) -> PyResu
     d.set_item("value", p.value)?;
     d.set_item("reply", p.reply.map(|r| crate::spells_meta::SPELLS[r as usize].name))?;
     d.set_item("vetoed_slots", (0..9).filter(|&s| p.vetoed & (1 << s) != 0).collect::<Vec<usize>>())?;
+    d.set_item("syzygy_threat", p.syzygy_threat)?;
     Ok(d)
 }
 
@@ -1386,6 +1393,7 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("history".to_string(), s.history_get() as u64);
     m.insert("exact_clock".to_string(), s.exact_clock_get() as u64);
     m.insert("dash_gen_mode".to_string(), crate::turn_iter::dash_gen().0 as u64);
+    m.insert("opening_syzygy".to_string(), crate::opening::opening_syzygy_enabled() as u64);
     m.insert("dash_gen_width".to_string(), crate::turn_iter::dash_gen().1 as u64);
     m.insert("dash_gen_per_target".to_string(), crate::turn_iter::dash_gen().2 as u64);
     m.insert("key_dash_moves".to_string(), crate::key_dash::key_dash_scan().0 as u64);
@@ -1772,6 +1780,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;
     m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_syzygy, m)?)?;
     m.add_function(wrap_pyfunction!(set_outcome_order_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_swing_prepass, m)?)?;
     m.add_function(wrap_pyfunction!(set_dash_summer, m)?)?;

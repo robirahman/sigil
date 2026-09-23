@@ -34,6 +34,20 @@
 //! Blossom if Hail Storm is available"): a spell with a `++` counter in the
 //! draw is dropped, unless that drops everything. Ties break on strength then
 //! spell id, never on slot, so the choice is zone-invariant.
+//!
+//! **Syzygy (designer's rule, 2026-09-23).** Casting Syzygy blinks into the
+//! opposite 1-node sigil and then into the opposite 3-node sigil
+//! (`resolvers::syzygy_opposite`), pushing or crushing whatever stands there,
+//! so a stone started in either is a target the moment the ritual charges.
+//! Three consequences, switchable together with `set_opening_syzygy`:
+//!
+//! * never start on the 3-node spell opposite Syzygy, nor on the 1-node spell
+//!   opposite it unless that charm's cast moves the stone away before the
+//!   ritual can fire (`SYZYGY_SAFE_CHARMS`: Sprout, Splash, Charge);
+//! * when the enemy has started on one of those exposed slots, take Syzygy,
+//!   whatever the Bradley-Terry tables say (`OpeningPick::syzygy_threat`);
+//! * for blue, Syzygy is worth the strongest of itself and the two spells
+//!   across from it, because casting it effectively grants those spells.
 
 use crate::board::{Board, Color, Outcome};
 
@@ -44,9 +58,36 @@ thread_local! {
 /// pre-pass switches: the arena sets it before every move.
 pub fn set_opening_book(on: bool) { OPENING_BOOK.with(|c| c.set(on)); }
 pub fn opening_book_enabled() -> bool { OPENING_BOOK.with(|c| c.get()) }
+thread_local! {
+    static OPENING_SYZYGY: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch for the Syzygy rules (veto, forced reply, blue's strength
+/// substitution); default on, per thread like `set_opening_book`.
+pub fn set_opening_syzygy(on: bool) { OPENING_SYZYGY.with(|c| c.set(on)); }
+pub fn opening_syzygy_enabled() -> bool { OPENING_SYZYGY.with(|c| c.get()) }
 use crate::opening_data::{BOARD_PREF, MATCHUP, PUSH_CHARMS, STRENGTH, SYNERGY};
-use crate::spells_meta::{HURRICANE, NUM_OFFICIAL_SPELLS, SEAL_OF_DESTRUCTION, SPELLS};
+use crate::spells_meta::{CHARGE, HURRICANE, NUM_OFFICIAL_SPELLS, SEAL_OF_DESTRUCTION, SPELLS, SPLASH, SPROUT, SYZYGY};
 use crate::topology::SIGIL;
+use crate::resolvers::syzygy_opposite;
+
+/// Charms whose cast moves the stone off the charm node before Syzygy can
+/// crush it (designer's list, 2026-09-23): a stone started on any other
+/// 1-node sigil opposite Syzygy can only leave by dashing.
+pub const SYZYGY_SAFE_CHARMS: [u8; 3] = [SPROUT, SPLASH, CHARGE];
+
+/// The ritual slot Syzygy was drawn in, if any (it does nothing elsewhere).
+pub fn syzygy_slot(spells: &[u8; 9]) -> Option<usize> {
+    (0..3).find(|&p| spells[p] == SYZYGY && syzygy_opposite(p).is_some())
+}
+
+/// Is a stone started on `slot` a Syzygy target: the 3-node sigil opposite
+/// it, or the 1-node sigil opposite it when that charm cannot move its stone
+/// away.
+pub fn syzygy_exposed(spells: &[u8; 9], slot: usize) -> bool {
+    let Some(z) = syzygy_slot(spells) else { return false };
+    let Some((charm, sorcery)) = syzygy_opposite(z) else { return false };
+    slot == sorcery || (slot == charm && !SYZYGY_SAFE_CHARMS.contains(&spells[charm]))
+}
 
 /// One matchup pip (`+`) in Bradley-Terry units; `++` is two.
 pub const W_MATCHUP_PIP: f32 = 0.5;
@@ -82,8 +123,10 @@ pub struct OpeningPick {
     pub value: f32,
     /// Red: the blue reply that minimised; blue: red's spell being answered.
     pub reply: Option<u8>,
-    /// Bit `p` set: slot `p` was dropped by the `++` veto.
+    /// Bit `p` set: slot `p` was dropped by the `++` veto or the Syzygy veto.
     pub vetoed: u16,
+    /// The pick is Syzygy forced by an enemy stone on an exposed opposite slot.
+    pub syzygy_threat: bool,
 }
 
 #[inline] pub fn zone(pos: usize) -> usize { pos % 3 }
@@ -100,7 +143,15 @@ fn colour_bonus(spell: u8, side: Color) -> f32 {
 /// `enemy` (a slot, or none yet).
 pub fn own_value(spells: &[u8; 9], x: usize, enemy: Option<usize>, side: Color) -> f32 {
     let sx = spells[x] as usize;
-    let mut v = STRENGTH[sx] + W_BOARD_PREF * BOARD_PREF[sx] as f32 + TEMPO[role(x)]
+    let mut strength = STRENGTH[sx];
+    // Blue's Syzygy is worth the best of itself and the two spells across from
+    // it: casting it plays into their sigils, so it effectively grants them.
+    if opening_syzygy_enabled() && side == Color::Blue && spells[x] == SYZYGY {
+        if let Some((charm, sorcery)) = syzygy_opposite(x) {
+            strength = strength.max(STRENGTH[spells[charm] as usize]).max(STRENGTH[spells[sorcery] as usize]);
+        }
+    }
+    let mut v = strength + W_BOARD_PREF * BOARD_PREF[sx] as f32 + TEMPO[role(x)]
               + colour_bonus(spells[x], side);
     for m in 0..9 {
         if m == x || zone(m) != zone(x) || Some(m) == enemy { continue; }
@@ -165,7 +216,11 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
     if c == Color::Red {
         // Red's candidates: every slot; drop the hard-countered ones.
         let mut vetoed = 0u16;
-        for &s in &slots { if hard_countered(spells, s, &slots) { vetoed |= 1 << s; } }
+        for &s in &slots {
+            if hard_countered(spells, s, &slots) || (opening_syzygy_enabled() && syzygy_exposed(spells, s)) {
+                vetoed |= 1 << s;
+            }
+        }
         let cands: Vec<usize> = slots.iter().copied().filter(|&s| vetoed & (1 << s) == 0).collect();
         let cands = if cands.is_empty() { vetoed = 0; slots.clone() } else { cands };
         let mut best: Option<(f32, usize, usize)> = None;   // (worst-case value, slot, minimising reply)
@@ -183,24 +238,44 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         }
         let (value, pos, reply) = best?;
         Some(OpeningPick { pos, spell: spells[pos], node_mask: SIGIL[pos] & b.empty(), value,
-                           reply: Some(spells[reply]), vetoed })
+                           reply: Some(spells[reply]), vetoed, syzygy_threat: false })
     } else {
         let red = b.theirs(c);
         let s_red = (0..9).find(|&p| SIGIL[p] & red != 0);
+        let syz = opening_syzygy_enabled();
         let Some(s) = s_red else {
             // Red opened on a mana or void node: no matchup to answer, take the
-            // best sigil on its own merits.
+            // best sigil on its own merits (never an exposed one).
+            let mut vetoed = 0u16;
+            for &t in &slots { if syz && syzygy_exposed(spells, t) { vetoed |= 1 << t; } }
+            let cands: Vec<usize> = slots.iter().copied().filter(|&t| vetoed & (1 << t) == 0).collect();
+            let cands = if cands.is_empty() { vetoed = 0; slots.clone() } else { cands };
             let mut best: Option<(f32, usize)> = None;
-            for &t in &slots {
+            for &t in &cands {
                 let v = own_value(spells, t, None, Color::Blue);
                 if best.map_or(true, |bt| better((v, t), bt)) { best = Some((v, t)); }
             }
             let (value, pos) = best?;
             return Some(OpeningPick { pos, spell: spells[pos], node_mask: SIGIL[pos] & b.empty(), value,
-                                      reply: None, vetoed: 0 });
+                                      reply: None, vetoed, syzygy_threat: false });
         };
+        // Red started on a slot Syzygy crushes: take Syzygy, whatever the
+        // tables say about it in general.
+        if syz && syzygy_exposed(spells, s) {
+            if let Some(z) = syzygy_slot(spells) {
+                if SIGIL[z] & b.empty() != 0 {
+                    return Some(OpeningPick { pos: z, spell: SYZYGY, node_mask: SIGIL[z] & b.empty(),
+                                              value: pair_value(spells, s, z), reply: Some(spells[s]),
+                                              vetoed: 0, syzygy_threat: true });
+                }
+            }
+        }
         let mut vetoed = 0u16;
-        for &t in &slots { if t != s && MATCHUP[spells[s] as usize][spells[t] as usize] >= 2 { vetoed |= 1 << t; } }
+        for &t in &slots {
+            if (t != s && MATCHUP[spells[s] as usize][spells[t] as usize] >= 2) || (syz && syzygy_exposed(spells, t)) {
+                vetoed |= 1 << t;
+            }
+        }
         let cands: Vec<usize> = slots.iter().copied().filter(|&t| vetoed & (1 << t) == 0).collect();
         let cands = if cands.is_empty() { vetoed = 0; slots.clone() } else { cands };
         // Blue minimises red's value: compare on -V so the tie-breaks favour blue's stronger spell.
@@ -212,7 +287,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         }
         let (neg, pos) = best?;
         Some(OpeningPick { pos, spell: spells[pos], node_mask: SIGIL[pos] & b.empty(), value: -neg,
-                           reply: Some(spells[s]), vetoed })
+                           reply: Some(spells[s]), vetoed, syzygy_threat: false })
     }
 }
 
@@ -221,6 +296,7 @@ pub fn report_line(p: &OpeningPick, node: u8) -> String {
     let name = SPELLS[p.spell as usize].name;
     let node_name = crate::topology::NAMES[node as usize];
     match p.reply {
+        Some(r) if p.syzygy_threat => format!("opening: {} ({}) -- crushes the {} start", name, node_name, SPELLS[r as usize].name),
         Some(r) => format!("opening: {} ({}) -- worst case {}", name, node_name, SPELLS[r as usize].name),
         None => format!("opening: {} ({})", name, node_name),
     }

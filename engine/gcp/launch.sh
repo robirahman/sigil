@@ -40,7 +40,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE,smoke-timeout=$SMOKE_TIMEOUT,variant=${SIGIL_VARIANT:-standard}" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE,smoke-timeout=$SMOKE_TIMEOUT,variant=${SIGIL_VARIANT:-standard},require-spell=${SIGIL_REQUIRE_SPELL:-}" \
   --metadata-from-file="startup-script=$HERE/runner.sh,arms=$ARMS_FILE,smoke=$SMOKE_FILE" \
   --format="value(name,status)"
 rm -f "$SMOKE_FILE"
