@@ -2525,3 +2525,45 @@ human gain).
 3. **Arena design.** A dash-generation arm cannot be judged by self-play alone; add the human-turn
    coverage and the 120 confirmed cases (does the arm's search now see the human's turn from the
    position BEFORE the AI's previous move?) as gates.
+
+
+### Placement-first dash generation: coverage and arena (2026-09-23, engine v16)
+
+Robi's steer: widen dash generation, and choose dashes by WHERE the stone lands (a crush, a sigil, a
+group sealed for a charged hard-move spell), not by which stones are cheapest to spend.
+`Board::dash_branches_by_landing` (turn_iter.rs, knob `turn_iter::set_dash_gen(mode, width, pairs)`)
+ranks every reachable landing by `move_score_goal` and pays each with its cheapest COMPATIBLE
+sacrifice pairs (a pair that turns a crush into a push does not count). It replaces the cheapest-pair
+generator in both the dash and dash-then-cast stages. Instrument: `sigil_engine.human_move_dash_turn`
++ `reach_of_turn` over the 932 cast-free human dashes of the audit above (473 crush with the dash's
+own move, 191 push, 268 place); full table in `ai/data/dash_coverage_nocast_2026-09-23.txt`.
+
+| generator | exact turn | same landing | crushing dashes, same landing |
+|---|---|---|---|
+| v15 (cheapest pairs, cap 24) | 47.0% | 69.7% | 44.7% |
+| placement-first, cap 24, 2 pairs | 59.5% | 95.6% | 98.5% |
+| placement-first, cap 40, 3 pairs | 71.6% | 97.7% | 98.5% |
+
+Node rate unchanged (depth-4 bench, 16 positions). Generated is not seen, though: the dash stage still
+follows every move and move-cast, the median stream rank of a human landing is 95, and only 166 of 932
+sit inside a width-40 window. So the key-dash reserved-slot machinery was re-based on the new generator
+(`key_dash_branches_by_landing`: the interest filter now only selects and ranks among landing-first
+candidates; one entry per landing; a per-first-move quota). Human dash first moves rank median 2 in the
+move ordering (82% within the top 8), so a scan of the top 8 first moves with ONE crushing key dash each
+holds 78% of the crushing dashes humans played (94% with 3 per move over 12 moves); the v15 scan held 0.
+
+Arenas, fixed 10 s per move, 1,408 games each, 10.0 s/move both sides. The two composed arms ran as
+two-VM fleets (4 pairs per shard each, pooled), per Robi's instruction to use wider fleets.
+
+| arm | runs | win rate | Elo | verdict |
+|---|---|---|---|---|
+| `dash_gen` 242: placement-first stream only | `20260923T175303Z` | 49.64% [47.04, 52.25] | -2.5 [-20.6, +15.7] | no difference: generated, not seen |
+| `dash_v2` 84: stream + composed key dashes, 4 appended, no quota | `20260923T185813Z` + `185824Z` | 48.22% [45.62, 50.84] | -12.3 [-30.5, +5.8] | no difference (the pool is large, 4 slots catch ~10% of human crush dashes) |
+| `dash_v3` 824: stream + one CRUSH key dash per top-8 first move, appended at width >= 24 | `20260923T190622Z` + `190633Z` | 52.67% [50.05, 55.26] | **+18.5 [+0.4, +36.7]** | **BETTER, ships** |
+
+**Shipped (v16 / cache v43):** `dash_gen` mode 1 (the stream's 24-turn window, 2 pairs); key-dash scan (8 first moves, 1 per move);
+`Search::new` key_dash_reasons CRUSH, key_dash_extra 8, key_dash_min_width 24. This is the first dash
+construction in the project to clear parity (attempts 1-4 above: -228, -285, -17, +4), and it did so on
+the coverage instrument first: the arm was chosen for holding 78% of the human crushing dashes, not
+tuned on the arena. Not yet measured: the 488 human dashes that carried a cast (the exhaustive
+enumerator needs a direct move+dash+cast finder), and the 120 confirmed cases re-searched under v16.

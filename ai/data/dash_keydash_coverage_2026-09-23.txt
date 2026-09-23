@@ -1,0 +1,13 @@
+Key-dash coverage of the 932 cast-free human dashes (473 crush with the dash's own move, 191 push, 268 place),
+composed from the placement-first generator (dash_gen mode 1, width 24, 2 pairs). key-landing = the human's first
+move + dash landing is among key_dash_turns(reasons, extra). Shipped v16 = q1_m8_x8_r1.
+config            reasons  first moves  per move  extra   key-exact  key-landing  crush dashes held
+v15 scan (4,5,3)        7        4          -        4        49         71         (0 of the 806 missed)
+composed, no quota      7        8          -        4        61         99
+composed, no quota      7       12          -        6        72        118
+composed, no quota      7        8          -       12       115        191
+composed, no quota      7        8          -       24       203        322
+composed, no quota      1        8          -       24       234        382
+q1_m8_x8_r1             1        8          1        8       157        371        371/473 (78%)
+q2_m8_x12_r7            7        8          2       12       155        355
+q3_m12_x16_r1           1       12          3       16       189        445        445/473 (94%)

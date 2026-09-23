@@ -75,12 +75,15 @@ pub const KEY_DASH_KEEP: usize = 4;
 pub const KEY_DASH_EVERY: usize = 4;
 
 thread_local! {
-    /// Scan breadth: (first moves scanned, sacrifice stones considered, sacrifice
-    /// pairs tried). Defaults reproduce the shipped constants exactly; the
-    /// 2026-09-23 human-turn audit found the scan too narrow to reach the dashes
-    /// humans play, so it is a knob (`set_key_dash_scan`).
+    /// Scan breadth: (first moves scanned, sacrifice stones considered OR -- in
+    /// placement-first mode -- key dashes kept per first move, sacrifice pairs
+    /// tried). The v15 constants were (KEY_DASH_MOVES 4, SAC_CANDS 5, SAC_COMBOS 3)
+    /// and the 2026-09-23 human-turn audit found that scan reached 0 of the 806
+    /// human dashes the stream missed. Shipped (v16): 8 first moves, 1 key dash
+    /// per move (one CRUSH landing each, 78% of the crushing dashes humans played),
+    /// pairs unused in mode 1. `set_key_dash_scan` is the knob.
     static KEY_DASH_SCAN: std::cell::Cell<(usize, usize, usize)> =
-        std::cell::Cell::new((KEY_DASH_MOVES, SAC_CANDS, SAC_COMBOS));
+        std::cell::Cell::new((8, 1, SAC_COMBOS));
 }
 pub fn set_key_dash_scan(moves: usize, cands: usize, combos: usize) {
     KEY_DASH_SCAN.with(|c| c.set((moves.max(1), cands.max(2), combos.max(1))));

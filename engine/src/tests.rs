@@ -3540,9 +3540,16 @@ fn the_ai_no_longer_walks_into_the_recorded_slash_refutation() {
         crate::turn_iter::set_swing_prepass(false);
         let (t_off, sc_off, _) = shipped_search().go(&b, Color::Blue, 4, 0);
         crate::turn_iter::set_swing_prepass(true);
-        assert!(sc_off > -50, "{label}: premise -- without the pass the AI reads the position as roughly even (got {sc_off} cs)");
+        // v16's crush key dashes see a little of the refutation (-54 cs at turn 7);
+        // the premise is only that the plain search does not read it as lost.
+        assert!(sc_off > -100, "{label}: premise -- without the pass the AI reads the position as roughly even (got {sc_off} cs)");
         if label == "turn 7" {
-            assert!(is_the_played_slash_line(&t_off.expect("a move")), "{label}: premise -- without the pass the AI plays the recorded Slash line");
+            // v13 premise: without the pass the AI played the recorded Slash line.
+            // Since v16 the crush key dashes let the plain search see enough of
+            // the refutation to avoid it; either way the pre-pass below must.
+            let t = t_off.expect("a move");
+            assert!(is_the_played_slash_line(&t) || sc_off <= -50,
+                    "{label}: premise -- without the pass the AI plays the recorded Slash line or already sees the refutation (got {sc_off} cs, {:?})", t.slice());
         }
         // With it, from depth 4 on, the AI sees the reply and plays something else.
         for depth in [4, 5] {
@@ -3650,20 +3657,27 @@ fn position_key(s: &str) -> String {
 }
 
 #[test]
-fn dash_generation_knobs_are_pinned_and_mode_zero_is_the_shipped_generator() {
-    assert_eq!(crate::turn_iter::dash_gen(), (0, 0, 2));
-    assert_eq!(crate::key_dash::key_dash_scan(), (4, 5, 3));
+fn dash_generation_knobs_are_pinned_and_mode_zero_is_the_v15_generator() {
+    // v16 defaults: placement-first stream (width 24, 2 pairs per landing) and
+    // composed CRUSH key dashes, one per first move over 8 first moves, appended
+    // at nodes of width >= 24 (arena dash_v3 +18.5 Elo [+0.4, +36.7]).
+    assert_eq!(crate::turn_iter::dash_gen(), (1, 0, 2));
+    assert_eq!(crate::key_dash::key_dash_scan(), (8, 1, 3));
+    let s = crate::search::Search::new(16);
+    assert_eq!(s.key_dash_reasons_get(), crate::key_dash::REASON_CRUSH);
+    assert_eq!(s.key_dash_min_width_get(), 24);
+    assert_eq!(s.key_dash_extra_get(), 8);
     let b = Board::from_sfn(TQGFVJ_BLUE_T42).unwrap();
-    let before: Vec<String> = b.turns_ordered(Color::Blue).take(400)
-        .map(|t| format!("{:?}", t.slice())).collect();
-    crate::turn_iter::set_dash_gen(1, 0, 2);
-    let alt: Vec<String> = b.turns_ordered(Color::Blue).take(400)
-        .map(|t| format!("{:?}", t.slice())).collect();
-    crate::turn_iter::set_dash_gen(0, 0, 2);
-    let after: Vec<String> = b.turns_ordered(Color::Blue).take(400)
-        .map(|t| format!("{:?}", t.slice())).collect();
-    assert_eq!(before, after, "mode 0 must reproduce the shipped stream exactly");
-    assert_ne!(before, alt, "mode 1 must change the dash stage");
+    let stream = |mode: u8| -> Vec<String> {
+        crate::turn_iter::set_dash_gen(mode, 0, 2);
+        let v = b.turns_ordered(Color::Blue).take(400).map(|t| format!("{:?}", t.slice())).collect();
+        crate::turn_iter::set_dash_gen(1, 0, 2);
+        v
+    };
+    let (m0a, m1, m0b) = (stream(0), stream(1), stream(0));
+    assert_eq!(m0a, m0b, "mode 0 must reproduce the v15 stream exactly");
+    assert_ne!(m0a, m1, "mode 1 must change the dash stage");
+    assert_eq!(crate::turn_iter::dash_gen(), (1, 0, 2));
 }
 
 #[test]
@@ -3690,20 +3704,17 @@ fn placement_first_dashes_reach_the_human_crush_dash_of_tqgfvj() {
         }
         (exact, landing)
     };
-    let (e0, l0) = reaches(5000);
-    assert!(!e0 && !l0, "the shipped generator was not supposed to reach this dash any more");
-    crate::turn_iter::set_dash_gen(1, 0, 2);
-    let (e1, l1) = reaches(5000);
     crate::turn_iter::set_dash_gen(0, 0, 2);
+    let (e0, l0) = reaches(5000);
+    assert!(!e0 && !l0, "the v15 generator was not supposed to reach this dash any more");
+    crate::turn_iter::set_dash_gen(1, 0, 2);
+    let (_e1, l1) = reaches(5000);
     assert!(l1, "placement-first generation must produce the crushing landing under the same first move");
     // Every mode-1 turn is legal: it appears in the exhaustive enumeration.
-    crate::turn_iter::set_dash_gen(1, 0, 2);
     let legal: std::collections::HashSet<String> = all.iter().map(|t| format!("{:?}", t.slice())).collect();
     for t in b.turns_ordered(Color::Blue).take(3000) {
         assert!(legal.contains(&format!("{:?}", t.slice())), "mode 1 invented a turn: {:?}", t.slice());
     }
-    crate::turn_iter::set_dash_gen(0, 0, 2);
-    let _ = e1;
 }
 
 #[test]
@@ -3721,15 +3732,17 @@ fn placement_first_key_dashes_promote_the_tqgfvj_crush() {
         let s = t.slice();
         s[0] == first && s.iter().any(|a| matches!(*a, Action::Dash { node, push_to, .. } if (node, push_to) == land))
     });
-    // Shipped scan (cheapest combos): the crush is not among the key dashes.
-    let k0 = b.key_dash_turns(Color::Blue, crate::key_dash::REASON_CRUSH, 8);
-    crate::turn_iter::set_dash_gen(1, 0, 2);
-    crate::key_dash::set_key_dash_scan(8, 5, 3);
-    let k1 = b.key_dash_turns(Color::Blue, crate::key_dash::REASON_CRUSH, 8);
+    // v15 scan (cheapest combos): the crush is not among the key dashes.
     crate::turn_iter::set_dash_gen(0, 0, 2);
     crate::key_dash::set_key_dash_scan(4, 5, 3);
-    assert!(!has_landing(&k0), "the shipped key-dash scan was not supposed to find this crush");
+    let k0 = b.key_dash_turns(Color::Blue, crate::key_dash::REASON_CRUSH, 8);
+    // Shipped v16 composition: it is.
+    crate::turn_iter::set_dash_gen(1, 0, 2);
+    crate::key_dash::set_key_dash_scan(8, 1, 3);
+    let k1 = b.key_dash_turns(Color::Blue, crate::key_dash::REASON_CRUSH, 8);
+    assert!(!has_landing(&k0), "the v15 key-dash scan was not supposed to find this crush");
     assert!(has_landing(&k1), "composed key dashes must promote the crushing landing: {:?}",
             k1.iter().map(|t| format!("{:?}", t.slice())).collect::<Vec<_>>());
-    for t in &k1 { assert!(matches!(t.slice().iter().find(|a| matches!(a, Action::Dash { .. })), Some(_))); }
+    assert!(k1.len() <= 8);
+    for t in &k1 { assert!(t.slice().iter().any(|a| matches!(a, Action::Dash { .. }))); }
 }

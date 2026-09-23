@@ -1094,7 +1094,12 @@ thread_local! {
     /// v15 cheapest-sacrifice-first generator; mode 1 is `dash_branches_by_landing`.
     /// Width 0 means the caller's window (`CAST_OUTCOME_WINDOW`). Thread-local like
     /// `DASH_SUMMER` because `TurnIter` is built from a `Board`, not a `Search`.
-    static DASH_GEN: std::cell::Cell<(u8, usize, usize)> = std::cell::Cell::new((0, 0, 2));
+    /// Shipped (engine v16, 2026-09-23): mode 1, the caller's window (24 in the
+    /// search; a `set_window(2)` search keeps 2), 2 pairs -- arena `dash_v3`
+    /// +18.5 Elo [+0.4, +36.7] at fixed 10 s together with the composed key
+    /// dashes (`key_dash::KEY_DASH_SCAN`, `Search::new` reasons 1 / extra 8 /
+    /// min width 24); the stream change alone measured -2.5 [-20.6, +15.7].
+    static DASH_GEN: std::cell::Cell<(u8, usize, usize)> = std::cell::Cell::new((1, 0, 2));
 }
 pub fn set_dash_gen(mode: u8, width: usize, per_target: usize) {
     DASH_GEN.with(|c| c.set((mode, width, per_target.max(1))));

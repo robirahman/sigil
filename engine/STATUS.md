@@ -21,6 +21,17 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-23: engine v16 (cache v43) -- placement-first dash generation and composed CRUSH key dashes, arena
++18.5 Elo [+0.4, +36.7].** Follows the human-turn audit below. `Board::dash_branches_by_landing` picks the landing
+first (crush, fill, mana, positional) and pays it with compatible sacrifice pairs: coverage of the 932 cast-free
+human dashes rose from 70% to 96% by landing (crushing dashes 45% -> 98.5%), node rate unchanged. Alone that
+measured -2.5 Elo [-20.6, +15.7] (the dash stage is still past the width), so the key-dash slots were re-based on
+it: one crushing key dash per top-8 first move, appended at nodes of width >= 24, holds 78% of the human crushing
+dashes and measured **+18.5 [+0.4, +36.7]** over 1,408 games (two-VM fleet); the 4-slot unquota'd composition
+measured -12.3 [-30.5, +5.8]. Shipped defaults: `dash_gen` mode 1 (the stream's 24-turn window, 2 pairs), key-dash scan (8, 1, 3), `Search::new`
+key_dash_reasons 1 / extra 8 / min_width 24; knobs `dash_gen`, `dash_v2`, `dash_v3` in ab_search; instrument
+`human_move_dash_turn` + `reach_of_turn`. FINDINGS "Placement-first dash generation: coverage and arena".
+
 **2026-09-23: what humans find that the engine does not -- the human-turn evaluation drops (FINDINGS, same title).**
 346 Rust-AI-vs-human games since 2026-08-30 (AI won 41.3%), depth-6 evals on both sides of every turn, every
 human-turn drop > 1.0 stone re-searched by the current engine at depth 8 / 150 s and the human's turn located

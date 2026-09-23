@@ -666,9 +666,12 @@ impl Search {
             aspiration: 60,
             q_depth: 0,
             q_cast_moves: 2,
-            key_dash_reasons: 0,
-            key_dash_min_width: 0,
-            key_dash_extra: 0,
+            // v16 (2026-09-23): CRUSH key dashes from the placement-first
+            // generator, appended (additive path) at nodes of width >= 24, up to
+            // 8 (one per scanned first move). Arena dash_v3 +18.5 [+0.4, +36.7].
+            key_dash_reasons: 1,
+            key_dash_min_width: 24,
+            key_dash_extra: 8,
             merge_min_width: usize::MAX,
         }
     }
