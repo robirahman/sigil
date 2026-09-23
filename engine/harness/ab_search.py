@@ -79,7 +79,7 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          'swing_prepass',
          # dash_summer: the U4TL2D bundle -- Summer second cast after a dash-cast in the
          # stream, swing cap 6000, sacrifice-pair limit, Meteor bound (turn_iter::set_dash_summer), 1/0.
-         'dash_summer', 'dash_gen', 'key_dash_v2', 'dash_v2')
+         'dash_summer', 'dash_gen', 'key_dash_v2', 'dash_v2', 'dash_v3')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -155,6 +155,17 @@ def play(b, ms, ev, hist, knob, val):
         if val:
             kdr = 7; kdx = val % 10
             se.set_dash_gen(1, 24, 2); se.set_key_dash_scan(val // 10, 5, 3)
+        else:
+            se.set_dash_gen(0, 0, 2); se.set_key_dash_scan(4, 5, 3)
+    if knob == 'dash_v3':
+        # Tuned composition (coverage instrument 2026-09-23): placement-first
+        # stream, key dashes = the best CRUSHING dash under each of the top
+        # `moves` first moves (one per move, deduped by landing), appended on the
+        # additive path only at nodes of width >= min_width. val = moves*100 +
+        # min_width (824 = 8 moves, width >= 24); extra = moves. 0 = shipped.
+        if val:
+            kdr = 1; kdx = val // 100; kdmw = val % 100
+            se.set_dash_gen(1, 24, 2); se.set_key_dash_scan(val // 100, 1, 3)
         else:
             se.set_dash_gen(0, 0, 2); se.set_key_dash_scan(4, 5, 3)
     if knob == 'key_dash_v2':

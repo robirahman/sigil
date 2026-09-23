@@ -734,7 +734,11 @@ impl Board {
             // Ranked across first moves as well as within one, so a strong dash
             // under the second-best move can outrank a weak one under the best.
             // `turn_score` already scores the leading move.
-            for (t, _bd, _why) in b.key_dash_branches(c, reasons, cap) {
+            // Placement-first mode: a per-first-move quota (`key_dash_scan().1`,
+            // the sacrifice-stone count in mode 0, unused there) so the kept set
+            // spreads over first moves instead of stacking under the best one.
+            let quota = if dash_gen().0 == 1 { crate::key_dash::key_dash_scan().1 } else { usize::MAX };
+            for (t, _bd, _why) in b.key_dash_branches(c, reasons, cap.min(quota)) {
                 let mut full = Turn::single(a);
                 for act in t.slice() { full = full.push_pub(*act); }
                 all.push((self.turn_score(&full, c), full));

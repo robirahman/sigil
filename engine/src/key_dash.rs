@@ -213,6 +213,16 @@ impl Board {
             out.push((score, t, b2, why));
         }
         out.sort_by(|a, b| b.0.cmp(&a.0));
+        // One entry per landing: the search sees the threat through any
+        // sacrifice pair, and a second pair for the same landing would only
+        // displace a different landing from the reserved slots.
+        let mut seen: Vec<(u8, Option<u8>)> = Vec::new();
+        out.retain(|(_, t, _, _)| match t.slice()[0] {
+            Action::Dash { node, push_to, .. } => {
+                if seen.contains(&(node, push_to)) { false } else { seen.push((node, push_to)); true }
+            }
+            _ => true,
+        });
         out.truncate(cap);
         out.into_iter().map(|(_, t, b, w)| (t, b, w)).collect()
     }
