@@ -21,6 +21,20 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-23: what humans find that the engine does not -- the human-turn evaluation drops (FINDINGS, same title).**
+346 Rust-AI-vs-human games since 2026-08-30 (AI won 41.3%), depth-6 evals on both sides of every turn, every
+human-turn drop > 1.0 stone re-searched by the current engine at depth 8 / 150 s and the human's turn located
+in the engine's ordered stream (`sigil_engine.rank_of_result`, new). 120 of 290 drops survive the deeper search;
+the human won 100 of those 120 games, and the AI's win rate is 18% in games with one vs 50% without. 77 of the
+120 are turns the search NEVER generates: 56.7% of all human dashes (72% of dashes that crush) are not among the
+first 5,000 turns of the stream, because `ordered_dash_branches` spends its 24-branch cap on the placements of
+the one or two cheapest sacrifice pairs; casts likewise beyond the 24-outcome / 2-keep windows (Storm_Front 84%,
+Flourish 85%, Scatter 75%, Fury 87% of human casts uncovered). The `key_dash` interest stream reaches 0 of the 806
+uncovered dashes. Self-play arenas cannot see this class (neither side plays those dashes). Nothing shipped;
+harness: `eval_games.py --split`, `analyze(time_ms)` is now a cap (exact clock off), the verified cases in
+`ai/data/human_turn_drops_2026-09-23.json`. Next lever: dash generation breadth over sacrifice pairs, measured
+by human-dash coverage before any arena.
+
 **2026-09-22 (in progress, engine v15 / cache v42 on the arena verdicts): exact clock, selective depth, and
 the skipped no-placement turn.** (1) Site: a player with no legal stone placement had the turn ended at once
 by both controllers and collapsed to `[pass]` by both JS enumerators; the ruling (move + optional dash +

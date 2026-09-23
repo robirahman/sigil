@@ -1194,6 +1194,45 @@ fn best_turn_rank(sfn: &str, max_depth: i32, time_ms: u64, eval_name: &str,
     Ok((rank, generated, st.depth_completed, st.nodes))
 }
 
+/// Where a turn that leads to `result_sfn` sits in the ordered turn stream of
+/// `sfn`, for auditing what the search skipped: the position a human actually
+/// produced is matched against every ordered turn's result (side-to-move token
+/// ignored, as `position_key` in eval_games.py). Returns
+/// (rank, generated, actions_json): rank -1 when nothing within `cap` reaches
+/// the position, and `generated` is the total the stream produced within `cap`.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, cap=2000, width_scale=None))]
+fn rank_of_result(sfn: &str, result_sfn: &str, cap: usize, width_scale: Option<usize>)
+    -> PyResult<(i64, usize, String)>
+{
+    let _ = width_scale;
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    // Board + draw (token 0) and the mana token (3): the browser's position
+    // carries the next turn number and a recomputed lead token that a child
+    // produced by `apply_turn` does not, and the side token is the mover's.
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let mut rank: i64 = -1; let mut generated = 0usize; let mut acts_json = String::new();
+    for (i, t) in b.turns_ordered(c).take(cap).enumerate() {
+        generated = i + 1;
+        if rank < 0 {
+            let mut child = b; child.apply_turn(&t, c);
+            if key(&child.to_sfn()) == want {
+                rank = i as i64;
+                let (acts, _after) = b.emit_actions(&t, c);
+                acts_json = crate::actions::acts_to_json(&acts);
+            }
+        }
+    }
+    Ok((rank, generated, acts_json))
+}
+
 /// Candidate-turn features for a position, plus which candidate the search chose.
 ///
 /// This is what training a re-ranker needs and what `best_rank` could not provide:
@@ -1481,6 +1520,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(move_budget_ms, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
     m.add_function(wrap_pyfunction!(best_turn_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_of_result, m)?)?;
     m.add_function(wrap_pyfunction!(turn_candidates, m)?)?;
     m.add_function(wrap_pyfunction!(solve_mates, m)?)?;
     m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;

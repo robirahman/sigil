@@ -2392,3 +2392,133 @@ mirrors the timer and announces the room's result on finish; game records carry 
 `endReason` ('play' | 'forfeit' | 'time'). The lobby's presets are the ladder plus a custom entry, and a
 rematch restores a custom control. Per-move clock readings in the record (`slimGameLog` would need a
 new field) are a follow-up.
+
+
+## What humans find that the engine does not: the human-turn evaluation drops (2026-09-23)
+
+Question (Robi): over the games since the Rust AI went live, where did the evaluation fall on the
+HUMAN's turn, and what did the engine overlook? Data: every `completed_games` record since
+2026-08-30 with a Rust AI on one side (372 games, 346 hydrate; 356 of them `rust_hard`, the AI
+won 143 of 346 = 41.3%). Evaluations: the stored depth-6 `game_evals` documents for 310 games
+(rust-v10, `eval_games.py`), plus a fresh depth-6 run for the 36 games without one (VM
+`sigil-evals-hb`, run 20260923T014449Z, 1,295 positions, 1,099 of them at depth 6). A "drop" is
+the AI-POV change between the position the human faced and the position the human produced,
+mates scored beyond the stone scale. Every drop > 1.0 stone was then re-searched by the CURRENT
+engine at depth 8 capped at 150 s per position (VM `sigil-evals-verify`, run 20260923T015046Z;
+71 pairs reached 8/8, the rest 6-7), and the human's actual turn was located in the engine's
+ordered turn stream (`sigil_engine.rank_of_result`, cap 5,000). Scripts: `engine/harness/eval_games.py`
+(new `--split`), the verified cases in `ai/data/human_turn_drops_2026-09-23.json`.
+
+### Headline numbers
+
+| | human turns | AI turns |
+|---|---|---|
+| positions with a stored eval on both sides of the turn | 5,232 | 5,239 |
+| eval fell > 1.0 stone across the turn (depth 6) | 340 (6.5%) | 438 (8.4%) |
+| ... > 2.0 stones | 134 | 313 |
+
+Of the 290 human-turn drops in the 310 stored-eval games, **120 survive the depth-8 / 150 s
+re-search** (drop still > 1.0). The rest is depth-6 noise: the stone-loss class (both evals
+inside +/-3) shrank from 169 cases to 50, median verified drop 0.09. The mate classes are real:
+
+| stored class | cases | confirmed by the deeper search | of which the human's turn is NOT in the engine's stream |
+|---|---|---|---|
+| missed attack: quiet eval, then a forced human win | 80 | 46 (human mate at the new position confirmed in 67 of 80; in 28 the deeper search already sees the loss BEFORE the human moved) | 28 / 46 |
+| false mate: engine claimed an AI mate, the human defused it | 16 | 10 (the mate claim itself is confirmed in 13 of 16 by the deeper search, so these are defences the deeper search still misses) | 10 / 10 |
+| stone loss (both evals inside +/-3) | 169 | 50 | 29 / 50 |
+| other (mate faster, mixed) | 25 | 14 | 10 / 14 |
+
+The confirmed drops are game-deciding: the human went on to win 100 of the 120, and the AI won
+16 of the 91 games containing one (18%) against 127 of 255 (50%) without. They cluster in turns
+10-39 (101 of 120). The median rating of the humans who found them is 1,407.
+
+### What the human played
+
+| human turn class (first action) | turns | confirmed drops | not in the engine's stream (all turns of the class) |
+|---|---|---|---|
+| plain move | 3,419 | 19 (0.6%) | 0 (0.0%) |
+| dash | 1,421 | 74 (5.2%) | 806 (56.7%) |
+| dash that crushed an AI stone | 834 | 57 (6.8%) | 603 (72.3%) |
+| dash without a crush | 587 | 17 | 203 (34.6%) |
+| Storm_Front cast | 31 | 6 (19.4%) | 26 (83.9%) |
+| Flourish cast | 27 | 4 (14.8%) | 23 (85.2%) |
+| Scatter cast | 65 | 5 (7.7%) | 49 (75.4%) |
+| Fury cast | 30 | 2 | 26 (86.7%) |
+
+Humans dash on 26.2% of their turns; the AI on 9.8% of its own.
+
+### The mechanism: the search never generates most human dashes
+
+"Not in the stream" means: no turn among the first 5,000 the ordered generator produces reaches
+the position the human produced. It is not the widening (that is the 2026-08-27 finding above,
+"the first dash sat at median index 40"), it is generation. `Board::ordered_dash_branches(c, limit)`
+is called per first move with `limit = CAST_OUTCOME_WINDOW = 24`: it sorts the sacrifice combos by
+`sacrifice_cost` (cheapest two stones first), then emits the move variants of the FIRST combo,
+then the second, ..., and returns at 24 branches total. A post-dash board has 10-20 placements,
+so one or two sacrifice pairs consume the whole cap and every other pair is never built. A human
+who dashes to crush picks the sacrifice that opens the crush, which is rarely the cheapest pair.
+All 12 uncovered dashes checked against `enumerate_turns` (exhaustive) exist there and are legal;
+the `key_dash` interest stream (all five reasons, cap 5,000) reaches **0 of the 806** uncovered
+human dashes because it draws from the same generator.
+
+Casts have the same shape: the stream emits the first `CAST_OUTCOME_WINDOW = 24` outcome variants
+and `DEFAULT_KEEP_WINDOW = 2` keep choices per (first move, spell). The uncovered Flourish, Fury,
+Storm_Front and Carnage casts sit at outcome indices 26, 82, 146, 299, 343, 345, 370 in the
+exhaustive enumeration (one Fury position exceeded the 1,048,576-turn enumeration cap).
+
+Why the arenas never showed this: self-play measures an arm against a base that plays the same
+generator's dashes. Neither side ever plays the 57% of dashes humans play, so the base never
+punishes the arm for not defending against them, and the earlier dash constructions (attempts
+1-4 above) were scored on positions where the opponent's dashes were the engine's own. The
+human record is the first instrument that sees this class.
+
+### The 19 confirmed plain-move cases
+
+All in the stream at rank 0-9. Eight are "-1.0 -> human mate in 3" (unproven, width-limited)
+after the human's top-ranked move at depth 6/7: the forced win needs 7 plies from the position
+before the move, one beyond what 150 s reached, so they are horizon cases against the oracle, not
+generation gaps. The other 11 are 1.0-stone drops at depth 8 (correct evals, a real but small
+human gain).
+
+### Top confirmed cases (deep = the depth-8 / 150 s re-search, AI point of view)
+
+| room | turn | human | turn played | AI eval before → after (deep) | in stream? | result |
+|---|---|---|---|---|---|---|
+| [W5GKQ9](https://sigilbattle.com/multiplayer.html?id=W5GKQ9) | 36 | blue | `c3 c9 dash b12 b11 a4 Surge c7 pass` | +2.0 → mate for human | yes, rank 3864 | human won |
+| [TQGFVJ](https://sigilbattle.com/multiplayer.html?id=TQGFVJ) | 42 | blue | `b11 dash b7 b4 b1 pass` | mate for AI → -0.0 | NO | human won |
+| [EUBBWU](https://sigilbattle.com/multiplayer.html?id=EUBBWU) | 24 | blue | `a4 a13 dash c4 c6 a3 Carnage a6 c9 c8 c10 a11 pass` | +1.0 → mate for human | NO | human won |
+| [QPA47U](https://sigilbattle.com/multiplayer.html?id=QPA47U) | 37 | red | `a11 dash a12 a13 a1 pass` | mate for AI → +1.0 | NO | human won |
+| [THX7QF](https://sigilbattle.com/multiplayer.html?id=THX7QF) | 14 | blue | `b11 dash b12 b5 b1 pass` | -1.0 → mate for human | NO | human won |
+| [92DGS5](https://sigilbattle.com/multiplayer.html?id=92DGS5) | 22 | blue | `c7 dash c12 c8 pass` | -0.0 → mate for human | yes, rank 108 | AI won |
+| [TZTTLU](https://sigilbattle.com/multiplayer.html?id=TZTTLU) | 28 | blue | `c3 dash c7 c12 c2 pass` | -1.0 → mate for human | NO | human won |
+| [R7SZL4](https://sigilbattle.com/multiplayer.html?id=R7SZL4) | 20 | blue | `b8 dash b4 b5 b9 Slash b10 pass` | -1.1 → mate for human | NO | human won |
+| [WZT8AG](https://sigilbattle.com/multiplayer.html?id=WZT8AG) | 24 | blue | `a11 dash b12 a1 pass` | -0.9 → mate for human | yes, rank 328 | human won |
+| [CC9DD3](https://sigilbattle.com/multiplayer.html?id=CC9DD3) | 28 | blue | `a8 dash b13 b11 a9 Grow a8 b8 b10 pass` | -0.9 → mate for human | NO | AI won |
+| [22AMM4](https://sigilbattle.com/multiplayer.html?id=22AMM4) | 27 | red | `b11 a8 dash c12 b8 b1 pass` | mate for AI → -0.1 | NO | AI won |
+| [DDUD24](https://sigilbattle.com/multiplayer.html?id=DDUD24) | 42 | blue | `b8 a8 dash c12 b9 Azimuth b10 pass` | -1.0 → mate for human | yes, rank 4331 | human won |
+| [XYZ85N](https://sigilbattle.com/multiplayer.html?id=XYZ85N) | 19 | red | `b4 dash b9 b12 b3 Syzygy b4 c7 c9 c8 c10 pass` | mate for AI → +1.0 | NO | AI won |
+| [C4S6DN](https://sigilbattle.com/multiplayer.html?id=C4S6DN) | 31 | red | `c6 dash c9 c8 c11 Harvest c6 c2 c5 c4 c3 c8 c9 pass` | -2.0 → mate for human | NO | human won |
+| [A5UKAE](https://sigilbattle.com/multiplayer.html?id=A5UKAE) | 60 | blue | `c5 pass` | -1.0 → mate for human | yes, rank 9 | human won |
+| [9DVYE4](https://sigilbattle.com/multiplayer.html?id=9DVYE4) | 32 | blue | `a3 dash a11 a12 c4 c13 Corrupt a3 a13 c5 c3 a3 pass` | -1.0 → mate for human | NO | human won |
+| [E8H8N7](https://sigilbattle.com/multiplayer.html?id=E8H8N7) | 22 | blue | `c10 b5 dash b4 c11 c8 Azimuth c10 Gather c10 c8 b9 b10 pass` | -1.1 → mate for human | yes, rank 488 | human won |
+| [ZZFZFD](https://sigilbattle.com/multiplayer.html?id=ZZFZFD) | 19 | red | `c9 dash a10 a11 c8 Eclipse c8 c9 a9 a10 pass` | -1.1 → mate for human | NO | human won |
+| [64JNKD](https://sigilbattle.com/multiplayer.html?id=64JNKD) | 19 | red | `b7 dash b2 b1 b8 b9 pass` | mate for AI → +0.1 | NO | AI won |
+| [HLX8GV](https://sigilbattle.com/multiplayer.html?id=HLX8GV) | 27 | red | `c2 c9 dash b8 c5 c1 pass` | -1.1 → mate for human | NO | human won |
+| [W2U7CD](https://sigilbattle.com/multiplayer.html?id=W2U7CD) | 52 | blue | `c11 b13 dash b2 b1 c1 pass` | mate for AI → +2.1 | NO | AI won |
+| [9MAVKV](https://sigilbattle.com/multiplayer.html?id=9MAVKV) | 31 | red | `b9 dash a13 a9 b10 Gather b8 b9 b10 a10 a9 pass` | -2.1 → mate for human | NO | human won |
+| [GZTXU6](https://sigilbattle.com/multiplayer.html?id=GZTXU6) | 30 | blue | `c2 dash c8 a12 c1 pass` | mate for AI → +2.1 | NO | human won |
+| [WQQSFR](https://sigilbattle.com/multiplayer.html?id=WQQSFR) | 42 | blue | `c3 pass` | -1.0 → mate for human | yes, rank 7 | human won |
+
+### Where this points
+
+1. **Dash generation breadth before dash ordering.** Any fix must make the 24-branch cap cover
+   sacrifice PAIRS, not placements: e.g. the best one or two placements per combo (round-robin
+   over combos) before the third placement of the cheapest combo, and the crush-making
+   placements of every combo first. Measure with the new instrument before any arena: share of
+   the 806 uncovered human dashes (603 with a crush) that a candidate generator reaches, at what
+   node cost. `rank_of_result` and `ai/data/human_turn_drops_2026-09-23.json` are the harness.
+2. **Cast windows.** 24 outcomes / 2 keeps miss most Flourish, Fury, Storm_Front, Scatter and
+   Carnage casts humans play; the same coverage measurement applies per spell.
+3. **Arena design.** A dash-generation arm cannot be judged by self-play alone; add the human-turn
+   coverage and the 120 confirmed cases (does the arm's search now see the human's turn from the
+   position BEFORE the AI's previous move?) as gates.
