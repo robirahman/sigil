@@ -3635,3 +3635,73 @@ fn the_stream_offers_a_summer_second_cast_after_a_dash_cast() {
     crate::turn_iter::set_dash_summer(true);
     assert_eq!(none, 0, "premise: without the bundle the stream has no dash-then-two-casts turn");
 }
+
+
+/// Game TQGFVJ, turn 42 (2026-09-23 human-turn audit): blue, one stone down and
+/// facing a claimed red mate, played `b11, dash (b7, b4), b1` -- a crushing dash
+/// no turn of the ordered stream reached, because the cheapest-sacrifice
+/// generator spent its cap on other pairs. The exhaustive enumerator has it.
+pub const TQGFVJ_BLUE_T42: &str = "r..r....rr...rb.b.bb...r..b............/Bewitch,Corrupt,Carnage,Grow,Fireblast,Torrent,Surge,Seal_of_Winter,Seal_of_Spring b 42 5:2 Bewitch:Fireblast -:- tied competitive";
+pub const TQGFVJ_BLUE_T42_AFTER: &str = "r..r...rrr...bb...b....b..b............/Bewitch,Corrupt,Carnage,Grow,Fireblast,Torrent,Surge,Seal_of_Winter,Seal_of_Spring r 43 5:2 Bewitch:Fireblast -:- b1 competitive";
+
+fn position_key(s: &str) -> String {
+    let p: Vec<&str> = s.split_whitespace().collect();
+    format!("{} {}", p[0], p[3])
+}
+
+#[test]
+fn dash_generation_knobs_are_pinned_and_mode_zero_is_the_shipped_generator() {
+    assert_eq!(crate::turn_iter::dash_gen(), (0, 0, 2));
+    assert_eq!(crate::key_dash::key_dash_scan(), (4, 5, 3));
+    let b = Board::from_sfn(TQGFVJ_BLUE_T42).unwrap();
+    let before: Vec<String> = b.turns_ordered(Color::Blue).take(400)
+        .map(|t| format!("{:?}", t.slice())).collect();
+    crate::turn_iter::set_dash_gen(1, 0, 2);
+    let alt: Vec<String> = b.turns_ordered(Color::Blue).take(400)
+        .map(|t| format!("{:?}", t.slice())).collect();
+    crate::turn_iter::set_dash_gen(0, 0, 2);
+    let after: Vec<String> = b.turns_ordered(Color::Blue).take(400)
+        .map(|t| format!("{:?}", t.slice())).collect();
+    assert_eq!(before, after, "mode 0 must reproduce the shipped stream exactly");
+    assert_ne!(before, alt, "mode 1 must change the dash stage");
+}
+
+#[test]
+fn placement_first_dashes_reach_the_human_crush_dash_of_tqgfvj() {
+    use crate::turn::Action;
+    let b = Board::from_sfn(TQGFVJ_BLUE_T42).unwrap();
+    let want = position_key(TQGFVJ_BLUE_T42_AFTER);
+    // The exhaustive enumerator has the turn.
+    let (all, _) = b.enumerate_turns(Color::Blue);
+    let human = all.iter().find(|t| { let mut c = b; c.apply_turn(t, Color::Blue);
+                                       position_key(&c.to_sfn()) == want })
+        .expect("the human turn is legal and enumerable");
+    let first = human.slice()[0];
+    let land = human.slice().iter().find_map(|a| match *a {
+        Action::Dash { node, push_to, .. } => Some((node, push_to)), _ => None }).unwrap();
+    let reaches = |cap: usize| -> (bool, bool) {
+        let (mut exact, mut landing) = (false, false);
+        for t in b.turns_ordered(Color::Blue).take(cap) {
+            let s = t.slice();
+            if s[0] == first && s.iter().any(|a| matches!(*a, Action::Dash { node, push_to, .. }
+                                                  if (node, push_to) == land)) { landing = true; }
+            let mut c = b; c.apply_turn(&t, Color::Blue);
+            if position_key(&c.to_sfn()) == want { exact = true; }
+        }
+        (exact, landing)
+    };
+    let (e0, l0) = reaches(5000);
+    assert!(!e0 && !l0, "the shipped generator was not supposed to reach this dash any more");
+    crate::turn_iter::set_dash_gen(1, 0, 2);
+    let (e1, l1) = reaches(5000);
+    crate::turn_iter::set_dash_gen(0, 0, 2);
+    assert!(l1, "placement-first generation must produce the crushing landing under the same first move");
+    // Every mode-1 turn is legal: it appears in the exhaustive enumeration.
+    crate::turn_iter::set_dash_gen(1, 0, 2);
+    let legal: std::collections::HashSet<String> = all.iter().map(|t| format!("{:?}", t.slice())).collect();
+    for t in b.turns_ordered(Color::Blue).take(3000) {
+        assert!(legal.contains(&format!("{:?}", t.slice())), "mode 1 invented a turn: {:?}", t.slice());
+    }
+    crate::turn_iter::set_dash_gen(0, 0, 2);
+    let _ = e1;
+}

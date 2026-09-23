@@ -74,6 +74,19 @@ pub const KEY_DASH_KEEP: usize = 4;
 /// budget. The failed merge handed dashes up to two thirds of it.
 pub const KEY_DASH_EVERY: usize = 4;
 
+thread_local! {
+    /// Scan breadth: (first moves scanned, sacrifice stones considered, sacrifice
+    /// pairs tried). Defaults reproduce the shipped constants exactly; the
+    /// 2026-09-23 human-turn audit found the scan too narrow to reach the dashes
+    /// humans play, so it is a knob (`set_key_dash_scan`).
+    static KEY_DASH_SCAN: std::cell::Cell<(usize, usize, usize)> =
+        std::cell::Cell::new((KEY_DASH_MOVES, SAC_CANDS, SAC_COMBOS));
+}
+pub fn set_key_dash_scan(moves: usize, cands: usize, combos: usize) {
+    KEY_DASH_SCAN.with(|c| c.set((moves.max(1), cands.max(2), combos.max(1))));
+}
+pub fn key_dash_scan() -> (usize, usize, usize) { KEY_DASH_SCAN.with(|c| c.get()) }
+
 
 
 impl Board {
@@ -165,16 +178,17 @@ impl Board {
         cands.sort_by_key(|&n| {
             self.sacrifice_cost(n, c) - if self.is_doomed(n, c) { 80 } else { 0 }
         });
-        cands.truncate(SAC_CANDS.max(cost));
+        let (_, scan_cands, scan_combos) = key_dash_scan();
+        cands.truncate(scan_cands.max(cost));
 
         let combos: Vec<Vec<u8>> = if cost == 1 {
-            cands.iter().take(SAC_COMBOS).map(|&s| vec![s]).collect()
+            cands.iter().take(scan_combos).map(|&s| vec![s]).collect()
         } else {
             let mut v = Vec::new();
             'outer: for i in 0..cands.len() {
                 for j in (i + 1)..cands.len() {
                     v.push(vec![cands[i], cands[j]]);
-                    if v.len() >= SAC_COMBOS { break 'outer; }
+                    if v.len() >= scan_combos { break 'outer; }
                 }
             }
             v

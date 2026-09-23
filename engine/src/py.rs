@@ -1103,6 +1103,86 @@ fn set_swing_prepass(on: bool) { crate::turn_iter::set_swing_prepass(on); }
 #[pyfunction]
 fn set_dash_summer(on: bool) { crate::turn_iter::set_dash_summer(on); }
 
+/// Dash generation mode for the ordered stream (`turn_iter::set_dash_gen`):
+/// mode 0 = cheapest sacrifice first (v15), 1 = placement-first; width 0 = the
+/// stream's window; `per_target` sacrifice pairs per landing.
+#[pyfunction]
+#[pyo3(signature = (mode, width=0, per_target=2))]
+fn set_dash_gen(mode: u8, width: usize, per_target: usize) {
+    crate::turn_iter::set_dash_gen(mode, width, per_target);
+}
+
+/// Key-dash scan breadth (`key_dash::set_key_dash_scan`): first moves scanned,
+/// sacrifice stones considered, sacrifice pairs tried. Shipped (4, 5, 3).
+#[pyfunction]
+#[pyo3(signature = (moves=4, cands=5, combos=3))]
+fn set_key_dash_scan(moves: usize, cands: usize, combos: usize) {
+    crate::key_dash::set_key_dash_scan(moves, cands, combos);
+}
+
+/// The human-turn coverage instrument. Finds the turn that produced `result_sfn`
+/// in the EXHAUSTIVE enumeration of `sfn`, then reports where the ordered stream
+/// (cap `cap`) first reaches (a) the exact position and (b) the same first move
+/// plus the same dash landing (node, push destination) with ANY sacrifice --
+/// the search sees the threat either way. With `key_reasons`/`key_extra` it also
+/// says whether `key_dash_turns` contains the exact turn / the landing.
+/// Returns (rank_exact, rank_landing, generated, human_actions_json, key_exact,
+/// key_landing); ranks are -1 when not reached, and the json is empty when the
+/// exhaustive enumeration (cap `enum_cap`) does not contain the turn.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, cap=5000, enum_cap=2_000_000, key_reasons=0, key_extra=0))]
+fn rank_of_landing(sfn: &str, result_sfn: &str, cap: usize, enum_cap: usize,
+                   key_reasons: u8, key_extra: usize)
+    -> PyResult<(i64, i64, usize, String, bool, bool)>
+{
+    use crate::turn::{Action, Turn};
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let (turns, _st) = b.enumerate_turns_capped(c, enum_cap);
+    let mut human: Option<Turn> = None;
+    for t in &turns {
+        let mut ch = b; ch.apply_turn(t, c);
+        if key(&ch.to_sfn()) == want { human = Some(*t); break; }
+    }
+    let Some(h) = human else { return Ok((-1, -1, 0, String::new(), false, false)); };
+    let first = h.slice()[0];
+    let land = h.slice().iter().find_map(|a| match *a {
+        Action::Dash { node, push_to, .. } => Some((node, push_to)), _ => None });
+    let same_landing = |t: &Turn| -> bool {
+        let s = t.slice();
+        land.is_some() && s.first() == Some(&first)
+            && s.iter().any(|a| matches!(*a, Action::Dash { node, push_to, .. }
+                                          if Some((node, push_to)) == land))
+    };
+    let (mut rx, mut rl, mut generated) = (-1i64, -1i64, 0usize);
+    for (i, t) in b.turns_ordered(c).take(cap).enumerate() {
+        generated = i + 1;
+        if rx < 0 {
+            let mut ch = b; ch.apply_turn(&t, c);
+            if key(&ch.to_sfn()) == want { rx = i as i64; }
+        }
+        if rl < 0 && same_landing(&t) { rl = i as i64; }
+        if rx >= 0 && (rl >= 0 || land.is_none()) { break; }
+    }
+    let (mut kx, mut kl) = (false, false);
+    if key_reasons != 0 && key_extra > 0 {
+        for t in b.key_dash_turns(c, key_reasons, key_extra) {
+            let mut ch = b; ch.apply_turn(&t, c);
+            if key(&ch.to_sfn()) == want { kx = true; }
+            if same_landing(&t) { kl = true; }
+        }
+    }
+    let (acts, _after) = b.emit_actions(&h, c);
+    Ok((rx, rl, generated, crate::actions::acts_to_json(&acts), kx, kl))
+}
+
 /// A/B switch for the competitive opening selector (`opening::set_opening_book`);
 /// default on, per thread.
 #[pyfunction]
@@ -1305,6 +1385,12 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("lmr_ext".to_string(), s.lmr_get().0 as u64);
     m.insert("history".to_string(), s.history_get() as u64);
     m.insert("exact_clock".to_string(), s.exact_clock_get() as u64);
+    m.insert("dash_gen_mode".to_string(), crate::turn_iter::dash_gen().0 as u64);
+    m.insert("dash_gen_width".to_string(), crate::turn_iter::dash_gen().1 as u64);
+    m.insert("dash_gen_per_target".to_string(), crate::turn_iter::dash_gen().2 as u64);
+    m.insert("key_dash_moves".to_string(), crate::key_dash::key_dash_scan().0 as u64);
+    m.insert("key_dash_cands".to_string(), crate::key_dash::key_dash_scan().1 as u64);
+    m.insert("key_dash_combos".to_string(), crate::key_dash::key_dash_scan().2 as u64);
     m.insert("nmp_r".to_string(), s.nmp_get().0 as u64);
     m.insert("lmr_quiet".to_string(), s.lmr_quiet_get() as u64);
     m.insert("tact_mask".to_string(), s.tact_ext_get().0 as u64);
@@ -1529,6 +1615,9 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_outcome_order_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_swing_prepass, m)?)?;
     m.add_function(wrap_pyfunction!(set_dash_summer, m)?)?;
+    m.add_function(wrap_pyfunction!(set_dash_gen, m)?)?;
+    m.add_function(wrap_pyfunction!(set_key_dash_scan, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_of_landing, m)?)?;
     m.add_function(wrap_pyfunction!(opening_pick, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather

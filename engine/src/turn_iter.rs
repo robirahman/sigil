@@ -724,7 +724,7 @@ impl Board {
         let moves: Vec<(u8, Option<u8>)> = self.ordered_first_moves(c);
         let has_wind = self.holds_charged(c, crate::spells_meta::SEAL_OF_WIND);
         let mut all: Vec<(i32, Turn)> = Vec::new();
-        for &(n, p) in moves.iter().take(KEY_DASH_MOVES) {
+        for &(n, p) in moves.iter().take(crate::key_dash::key_dash_scan().0) {
             let mut b = *self;
             b.do_move_with_pub(n, p, c);
             if b.outcome != crate::board::Outcome::Ongoing { continue; }
@@ -748,6 +748,9 @@ impl Board {
     /// Dash branches from a post-move board, best-first, capped at `limit`.
     /// Sacrifice choice is ordered by giving up our least valuable stones.
     pub fn ordered_dash_branches(&self, c: Color, limit: usize) -> Vec<(Turn, Board)> {
+        let (mode, w, per) = dash_gen();
+        let limit = if w > 0 { w } else { limit };
+        if mode == 1 { return self.dash_branches_by_landing(c, limit, per); }
         if self.total[c.idx()] <= 2 { return Vec::new(); }
         let cost = self.dash_cost(c) as usize;
         let mut cands: Vec<u8> = Vec::new();
@@ -803,6 +806,104 @@ impl Board {
                     sacs, n_sacs: combo.len() as u8, node, push_to,
                 }), b2));
                 if out.len() >= limit { return out; }
+            }
+        }
+        out
+    }
+
+    /// Placement-first dash branches (FINDINGS "What humans find that the engine
+    /// does not", 2026-09-23). The cheapest-sacrifice order above spends the whole
+    /// cap on the placements of one or two sacrifice pairs, so 57% of the dashes
+    /// humans played (72% of those that crushed) were never generated at all.
+    /// Here the LANDING is chosen first -- every reachable node ranked by
+    /// `move_score_goal`, crushes and sigil fills at the top, as a player picks a
+    /// dash for what it does rather than for the stones it spends -- and each
+    /// landing is paid for with its `per_target` cheapest COMPATIBLE sacrifice
+    /// pairs: pairs that leave the landing legal (adjacency kept, game not ended).
+    /// A vacated node counts as a landing when another of our stones touches it.
+    /// Reached through `ordered_dash_branches` when `dash_gen` mode is 1, so the
+    /// dash-then-cast stage inherits it and a dash that seals a group for a
+    /// charged Carnage, Fury, Slash, Tsunami or Surge is generated too.
+    pub fn dash_branches_by_landing(&self, c: Color, limit: usize, per_target: usize)
+        -> Vec<(Turn, Board)>
+    {
+        if limit == 0 || self.total[c.idx()] <= 2 { return Vec::new(); }
+        let cost = self.dash_cost(c) as usize;
+        let mut cands: Vec<u8> = Vec::new();
+        let mut m = self.dash_sacrificeable(c);
+        while m != 0 { cands.push(m.trailing_zeros() as u8); m &= m - 1; }
+        if cands.len() < cost { return Vec::new(); }
+        let costs: Vec<i32> = cands.iter().map(|&n| self.sacrifice_cost(n, c)).collect();
+        // Sacrifice pairs, cheapest total first; `sacs` ascending (canonical order).
+        let mut combos: Vec<([u8; 2], u8, i32)> = Vec::new();
+        if cost == 1 {
+            for (i, &s) in cands.iter().enumerate() { combos.push(([s, 0], 1, costs[i])); }
+        } else {
+            for i in 0..cands.len() {
+                for j in (i + 1)..cands.len() {
+                    let (a, b) = (cands[i].min(cands[j]), cands[i].max(cands[j]));
+                    combos.push(([a, b], 2, costs[i] + costs[j]));
+                }
+            }
+        }
+        combos.sort_by_key(|x| x.2);
+        // Landings: everything reachable before the sacrifice, plus the sacrificed
+        // nodes another of our stones touches.
+        let mine = self.mine(c);
+        let mut targets = self.all_moveable(c);
+        for &s in &cands {
+            if crate::topology::ADJ[s as usize] & mine & !(1u64 << s) != 0 { targets |= 1u64 << s; }
+        }
+        let goal = self.placement_goal(c);
+        let mut nodes: Vec<(i32, u8)> = Vec::new();
+        let mut t = targets;
+        while t != 0 {
+            let n = t.trailing_zeros() as u8; t &= t - 1;
+            // Best variant of the landing on the pre-sacrifice board; a vacated
+            // node is scored as the soft placement it becomes.
+            let sc = if mine & (1u64 << n) != 0 { self.move_score_goal(n, None, c, goal) }
+                     else {
+                         self.move_variants_pub(1u64 << n, c).into_iter()
+                             .map(|(nd, p)| self.move_score_goal(nd, p, c, goal))
+                             .max().unwrap_or(i32::MIN)
+                     };
+            nodes.push((sc, n));
+        }
+        nodes.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        // Post-sacrifice boards, built once per pair on first use.
+        let mut boards: Vec<Option<Option<Board>>> = vec![None; combos.len()];
+        let mut out: Vec<(Turn, Board)> = Vec::new();
+        let theirs = self.theirs(c);
+        for (_, node) in nodes {
+            let bit = 1u64 << node;
+            // A crush is the landing's point. Sacrificing our stones can only open
+            // escapes for the enemy stone, so a pair that turns the crush into a
+            // push is not paying for THIS landing: skip it and keep looking.
+            let pre_crush = theirs & bit != 0 && self.push_options(node, c).1 == 0;
+            let mut found = 0usize;
+            let mut tried = 0usize;
+            for (ci, &(sacs, n_sacs, _)) in combos.iter().enumerate() {
+                if tried >= DASH_COMBOS_TRIED { break; }
+                tried += 1;
+                if boards[ci].is_none() {
+                    let mut bd = *self;
+                    for &s in &sacs[..n_sacs as usize] { bd.stones[c.idx()] &= !(1u64 << s); }
+                    bd.update();
+                    boards[ci] = Some(if bd.outcome == Outcome::Ongoing { Some(bd) } else { None });
+                }
+                let Some(Some(bd)) = boards[ci] else { continue };
+                if bd.all_moveable(c) & bit == 0 { continue; }
+                if pre_crush && bd.push_options(node, c).1 != 0 { continue; }
+                let mut vars = bd.move_variants_pub(bit, c);
+                vars.sort_by_cached_key(|&(nd, p)| -bd.move_score_goal(nd, p, c, goal));
+                for (nd, p) in vars {
+                    let mut b2 = bd;
+                    b2.do_move_with_pub(nd, p, c);
+                    out.push((Turn::single(Action::Dash { sacs, n_sacs, node: nd, push_to: p }), b2));
+                    if out.len() >= limit { return out; }
+                }
+                found += 1;
+                if found >= per_target { break; }
             }
         }
         out
@@ -983,6 +1084,21 @@ thread_local! {
 /// Meteor's corrected swing bound (3).
 pub fn set_dash_summer(on: bool) { DASH_SUMMER.with(|c| c.set(on)); }
 pub fn dash_summer_enabled() -> bool { DASH_SUMMER.with(|c| c.get()) }
+
+thread_local! {
+    /// Dash generation: (mode, width, sacrifice pairs per landing). Mode 0 is the
+    /// v15 cheapest-sacrifice-first generator; mode 1 is `dash_branches_by_landing`.
+    /// Width 0 means the caller's window (`CAST_OUTCOME_WINDOW`). Thread-local like
+    /// `DASH_SUMMER` because `TurnIter` is built from a `Board`, not a `Search`.
+    static DASH_GEN: std::cell::Cell<(u8, usize, usize)> = std::cell::Cell::new((0, 0, 2));
+}
+pub fn set_dash_gen(mode: u8, width: usize, per_target: usize) {
+    DASH_GEN.with(|c| c.set((mode, width, per_target.max(1))));
+}
+pub fn dash_gen() -> (u8, usize, usize) { DASH_GEN.with(|c| c.get()) }
+/// Sacrifice pairs examined per landing before giving up on it (bounds the
+/// board copies a landing can cost when every cheap pair breaks its crush).
+pub const DASH_COMBOS_TRIED: usize = 16;
 
 thread_local! {
     static SWING_SCAN_ACTIVE: std::cell::Cell<bool> = std::cell::Cell::new(false);
