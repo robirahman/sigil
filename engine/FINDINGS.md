@@ -2247,7 +2247,17 @@ v14 policy exits on the proof), `a_single_legal_turn_reads_ahead_instead_of_retu
 single stone with one legal turn: the search runs its budget and completes at least the depth a full
 root reaches). Arena at FIXED 10 s (`engine/gcp/arms/exact_clock_10s.txt`): the arm uses ~10.0 s/move
 against the v14 base's ~16 s, so this measures what the extension was worth; the policy is the
-user's decision either way. Verdict below when in.
+user's decision either way.
+
+**Arena verdict (run `20260922T181548Z`, `exact_clock` 1 vs 0 at a FIXED 10 s nominal budget, 88 shards x 8
+pairs, 1,408 games): arm 614 - base 794, 43.61% [41.04, 46.21], -44.7 Elo [-63.0, -26.4]; s/move arm
+10.00 vs base 16.13 (ratio 0.62).** Read it plainly: the v14 base stretches to 20 s whenever its answer
+wobbles and averages 16 s a move, so "exactly 10 s" is 38% less thinking, and self-play prices that at
+about 45 Elo. That is the cost of the extension going away, not of the policy being wrong; a 10 s exact
+budget against a 10 s exact budget is by construction a tie. The policy stays ON by the user's decision
+(a player who picks a 10 s tier gets 10 s a move, every move). If the strength matters more than the
+predictability, the dial is the tier's NOMINAL budget: 15 s exact thinks about as much as v14 did on
+average.
 
 ## Selective depth: four Stockfish-style mechanisms, each measured alone (2026-09-22)
 
@@ -2312,11 +2322,13 @@ default):**
 | knob | run | games | win rate | Elo | s/move |
 |---|---|---|---|---|---|
 | `nmp` (2, 1) vs off | `20260922T181612Z` | 1,408 | 52.98% [50.37, 55.58] | **+20.8 [+2.6, +38.9]** | 1.000 |
-| `lmr_quiet` 4 vs 0 | pending | | | | |
+| `lmr_quiet` 4 vs 0 (base with `nmp`) | `20260922T203629Z` | 1,408 | 47.30% [44.70, 49.91] | **-18.8 [-36.9, -0.6]** | 1.000 |
 | `tact_ext` 72 vs 0 | pending | | | | |
 | `singular` 150 vs 0 | pending | | | | |
 
 `nmp` clears parity and **ships ON as (R 2, every node from ply 2)**; the later knobs are measured on top of it.
+`lmr_quiet` loses, as the class-staged stream predicted ("late quiet" is a low-ranked first move, not a late
+move): **stays OFF**.
 
 ## Game clocks: base + increment for the AI (2026-09-22)
 

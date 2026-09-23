@@ -25,12 +25,14 @@ misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 the skipped no-placement turn.** (1) Site: a player with no legal stone placement had the turn ended at once
 by both controllers and collapsed to `[pass]` by both JS enumerators; the ruling (move + optional dash +
 optional cast; a missing move invalidates only the move) is now followed, `tools/no-placement-smoke.js`.
-(2) `Search::exact_clock` (ON): the deadline is the budget -- no extension, no early stop; a proven mate or
+(2) `Search::exact_clock` (ON): the deadline is the budget -- no extension, no early stop (arena vs v14's
+16 s/move policy: **-44.7 Elo [-63.0, -26.4]** over 1,408 games at a 10 s nominal budget, the price of the
+extension; kept by the user's decision); a proven mate or
 a read-out root spends the rest of the clock on the reply position (`spend_remaining`, kept in the persistent
 table); think report shows `depth D/S` and "reply read to depth N". Knob `exact_clock`, arm
 `engine/gcp/arms/exact_clock_10s.txt`. (3) Selective depth, four knobs measured one at a time at fixed 10 s:
 `nmp` (pass as null move: **+20.8 Elo [+2.6, +38.9]** over 1,408 games, ships ON as (2, 1)), `lmr_quiet`
-(in-window late-quiet reductions), `tact_ext` (tactical extensions), `singular` (TT-move extension). (4) Game clocks: `?clock=5+0` / `?clock=10+1` on any Rust tier
+(in-window late-quiet reductions: **-18.8 [-36.9, -0.6]**, stays OFF), `tact_ext` (tactical extensions), `singular` (TT-move extension). (4) Game clocks: `?clock=5+0` / `?clock=10+1` on any Rust tier
 (menu: Hard 5+0, Hard 10+1); `search::move_budget_ms` allocates each move (18-move horizon, floor 6, 2%
 reserve), `RustAI` mirrors it, charges wall time and credits the increment; meter and think report show the
 clock. FINDINGS "The deadline is the budget", "Selective depth", "Game clocks".
