@@ -79,7 +79,7 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          'swing_prepass',
          # dash_summer: the U4TL2D bundle -- Summer second cast after a dash-cast in the
          # stream, swing cap 6000, sacrifice-pair limit, Meteor bound (turn_iter::set_dash_summer), 1/0.
-         'dash_summer', 'dash_gen', 'key_dash_v2')
+         'dash_summer', 'dash_gen', 'key_dash_v2', 'dash_v2')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -147,6 +147,16 @@ def play(b, ms, ev, hist, knob, val):
         # val = width*10 + sacrifice pairs per landing (242 = width 24, 2 pairs);
         # 0 restores the v15 generator for the base side.
         se.set_dash_gen(1 if val else 0, val // 10, (val % 10) or 2)
+    if knob == 'dash_v2':
+        # The composed arm: placement-first stream (width 24, 2 pairs per landing)
+        # AND key dashes built from it, promoted through the additive path with
+        # reasons CRUSH|SPELL_CRUSH|FILLS. val = moves*10 + extra (84 = 8 first
+        # moves scanned, 4 key dashes appended); 0 restores the shipped engine.
+        if val:
+            kdr = 7; kdx = val % 10
+            se.set_dash_gen(1, 24, 2); se.set_key_dash_scan(val // 10, 5, 3)
+        else:
+            se.set_dash_gen(0, 0, 2); se.set_key_dash_scan(4, 5, 3)
     if knob == 'key_dash_v2':
         # val = moves*100 + combos*10 + extra: a wider key-dash scan (8 sacrifice
         # stones) feeding the additive path with reasons CRUSH|SPELL_CRUSH|FILLS.

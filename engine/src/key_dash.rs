@@ -160,6 +160,63 @@ impl Board {
         out
     }
 
+    /// `key_dash_branches` composed from the placement-first generator (dash_gen
+    /// mode 1): the candidates are `dash_branches_by_landing`'s -- every reachable
+    /// landing, cheapest compatible sacrifice pairs -- and the interest filter
+    /// only decides which of them qualify (CRUSH, SPELL_CRUSH, FILLS, MANA,
+    /// DOOMED) and how they rank. The 2026-09-23 human-turn audit found the
+    /// cheapest-combos scan above reached 0 of the 806 human dashes the stream
+    /// missed; the landing-first candidates reach 98% of the crushing ones.
+    pub fn key_dash_branches_by_landing(&self, c: Color, reasons: u8, cap: usize)
+        -> Vec<(Turn, Board, u8)>
+    {
+        let (_, w, per) = crate::turn_iter::dash_gen();
+        let limit = if w > 0 { w } else { crate::turn_iter::CAST_OUTCOME_WINDOW };
+        let crush_reach = if reasons & REASON_SPELL_CRUSH != 0 { self.spell_crush_reach(c) } else { 0 };
+        let base_crushable = if crush_reach == 0 { 0 } else { self.spell_crushable_now(c).count_ones() };
+        let goal = self.placement_goal(c);
+        let theirs = self.theirs(c);
+        let mut out: Vec<(i32, Turn, Board, u8)> = Vec::new();
+        for (t, b2) in self.dash_branches_by_landing(c, limit, per) {
+            let Action::Dash { sacs, n_sacs, node, push_to } = t.slice()[0] else { continue };
+            let sac = &sacs[..n_sacs as usize];
+            let bit = 1u64 << node;
+            let hard = theirs & bit != 0;
+            // The post-sacrifice, pre-landing board, for FILLS and the move score.
+            let mut bd = *self;
+            for &s in sac { bd.stones[c.idx()] &= !(1u64 << s); }
+            bd.update();
+            let mut why = 0u8;
+            if reasons & REASON_CRUSH != 0 && hard && push_to.is_none() { why |= REASON_CRUSH; }
+            if reasons & REASON_MANA != 0 && MANA & bit != 0 { why |= REASON_MANA; }
+            if reasons & REASON_FILLS != 0 {
+                for p in 0..9 {
+                    if SIGIL[p] & bit != 0 && bd.uncontrolled_count(p, c) == 1 { why |= REASON_FILLS; break; }
+                }
+            }
+            if reasons & REASON_DOOMED != 0 && sac.iter().all(|&s| self.is_doomed(s, c)) { why |= REASON_DOOMED; }
+            if crush_reach != 0 && why & REASON_CRUSH == 0
+                && b2.spell_crushable_now(c).count_ones() > base_crushable {
+                why |= REASON_SPELL_CRUSH;
+            }
+            if why == 0 { continue; }
+            if b2.outcome != Outcome::Ongoing && b2.total[c.idx()] == 0 { continue; }
+            let sac_cost: i32 = sac.iter()
+                .map(|&s| self.sacrifice_cost(s, c) - if self.is_doomed(s, c) { 80 } else { 0 }).sum();
+            let mut score = bd.move_score(node, push_to, c) - sac_cost;
+            if why & REASON_CRUSH != 0 { score += 200; }
+            if why & REASON_SPELL_CRUSH != 0 { score += 160; }
+            if why & REASON_FILLS != 0 { score += 120; }
+            if why & REASON_MANA != 0 { score += 90; }
+            if why & REASON_DOOMED != 0 { score += 60; }
+            if hard { if let Some(d) = push_to { score += b2.destination_value(d, c, goal) / 4; } }
+            out.push((score, t, b2, why));
+        }
+        out.sort_by(|a, b| b.0.cmp(&a.0));
+        out.truncate(cap);
+        out.into_iter().map(|(_, t, b, w)| (t, b, w)).collect()
+    }
+
     /// Key dash branches from a POST-MOVE board, best-first, at most `cap`.
     /// Returns the dash action, the board after it, and why it qualified.
     pub fn key_dash_branches(&self, c: Color, reasons: u8, cap: usize)
@@ -167,6 +224,9 @@ impl Board {
     {
         if cap == 0 || reasons == 0 { return Vec::new(); }
         if self.total[c.idx()] <= 2 { return Vec::new(); }
+        if crate::turn_iter::dash_gen().0 == 1 {
+            return self.key_dash_branches_by_landing(c, reasons, cap);
+        }
         let cost = self.dash_cost(c) as usize;
 
         let mut cands: Vec<u8> = Vec::new();

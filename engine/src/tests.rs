@@ -3705,3 +3705,31 @@ fn placement_first_dashes_reach_the_human_crush_dash_of_tqgfvj() {
     crate::turn_iter::set_dash_gen(0, 0, 2);
     let _ = e1;
 }
+
+#[test]
+fn placement_first_key_dashes_promote_the_tqgfvj_crush() {
+    use crate::turn::Action;
+    let b = Board::from_sfn(TQGFVJ_BLUE_T42).unwrap();
+    let want = position_key(TQGFVJ_BLUE_T42_AFTER);
+    let (all, _) = b.enumerate_turns(Color::Blue);
+    let human = all.iter().find(|t| { let mut c = b; c.apply_turn(t, Color::Blue);
+                                       position_key(&c.to_sfn()) == want }).unwrap();
+    let first = human.slice()[0];
+    let land = human.slice().iter().find_map(|a| match *a {
+        Action::Dash { node, push_to, .. } => Some((node, push_to)), _ => None }).unwrap();
+    let has_landing = |v: &Vec<crate::turn::Turn>| v.iter().any(|t| {
+        let s = t.slice();
+        s[0] == first && s.iter().any(|a| matches!(*a, Action::Dash { node, push_to, .. } if (node, push_to) == land))
+    });
+    // Shipped scan (cheapest combos): the crush is not among the key dashes.
+    let k0 = b.key_dash_turns(Color::Blue, crate::key_dash::REASON_CRUSH, 8);
+    crate::turn_iter::set_dash_gen(1, 0, 2);
+    crate::key_dash::set_key_dash_scan(8, 5, 3);
+    let k1 = b.key_dash_turns(Color::Blue, crate::key_dash::REASON_CRUSH, 8);
+    crate::turn_iter::set_dash_gen(0, 0, 2);
+    crate::key_dash::set_key_dash_scan(4, 5, 3);
+    assert!(!has_landing(&k0), "the shipped key-dash scan was not supposed to find this crush");
+    assert!(has_landing(&k1), "composed key dashes must promote the crushing landing: {:?}",
+            k1.iter().map(|t| format!("{:?}", t.slice())).collect::<Vec<_>>());
+    for t in &k1 { assert!(matches!(t.slice().iter().find(|a| matches!(a, Action::Dash { .. })), Some(_))); }
+}
