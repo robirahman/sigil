@@ -1593,6 +1593,113 @@ fn move_budget_ms(remaining_ms: u64, inc_ms: u64, my_moves_played: u32) -> u64 {
     crate::search::move_budget_ms(remaining_ms, inc_ms, my_moves_played)
 }
 
+/// Parse (kind, node, push_to, sacs, pos) tuples into a Turn (the coverage
+/// instrument's input format, the one `enumerate_turns` emits).
+fn turn_from_tuples(acts: &[(String, i32, i32, Vec<u8>, i32)]) -> crate::turn::Turn {
+    use crate::turn::{Action, Turn};
+    let mut t = Turn { actions: [Action::Pass; crate::turn::MAX_ACTIONS], len: 0, greedy_casts: 0 };
+    for (kind, node, push, sacs, pos) in acts {
+        let pt = if *push < 0 { None } else { Some(*push as u8) };
+        let a = match kind.as_str() {
+            "blink" => Action::Blink { node: *node as u8, push_to: pt },
+            "move"  => Action::Move { node: *node as u8, push_to: pt },
+            "dash"  => {
+                let mut s = [0u8; 2];
+                for (i, v) in sacs.iter().enumerate().take(2) { s[i] = *v; }
+                Action::Dash { sacs: s, n_sacs: sacs.len().min(2) as u8, node: *node as u8, push_to: pt }
+            }
+            "cast"  => Action::Cast { pos: *pos as u8, keep: (*push).max(0) as u8, outcome: (*node).max(0) as u16 },
+            _ => Action::Pass,
+        };
+        if (t.len as usize) < crate::turn::MAX_ACTIONS { t.actions[t.len as usize] = a; t.len += 1; }
+    }
+    t
+}
+
+fn turn_to_tuples(t: &crate::turn::Turn) -> Vec<(String, i32, i32, Vec<u8>, i32)> {
+    use crate::turn::Action;
+    t.slice().iter().map(|a| match *a {
+        Action::Blink { node, push_to } => ("blink".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+        Action::Move { node, push_to } => ("move".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+        Action::Dash { sacs, n_sacs, node, push_to } =>
+            ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), sacs[..n_sacs as usize].to_vec(), -1),
+        Action::Cast { pos, keep, outcome } => ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+        Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+    }).collect()
+}
+
+/// The turn (as tuples) that takes `sfn` to `result_sfn`, from the exhaustive
+/// enumeration (cap `enum_cap`); empty when none does. Computed ONCE per human
+/// turn so `reach_of_turn` can be asked cheaply under many generator settings.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, enum_cap=2_000_000))]
+fn human_turn(sfn: &str, result_sfn: &str, enum_cap: usize)
+    -> PyResult<Vec<(String, i32, i32, Vec<u8>, i32)>>
+{
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let (turns, _st) = b.enumerate_turns_capped(c, enum_cap);
+    for t in &turns {
+        let mut ch = b; ch.apply_turn(t, c);
+        if key(&ch.to_sfn()) == want { return Ok(turn_to_tuples(t)); }
+    }
+    Ok(Vec::new())
+}
+
+/// Where the ordered stream (cap `cap`) under the CURRENT generator knobs first
+/// reaches `turn`: exactly (same actions, trailing pass ignored) and by landing
+/// (same first action and the same dash node/push destination, any sacrifice);
+/// plus whether `key_dash_turns(key_reasons, key_extra)` holds either.
+/// Returns (rank_exact, rank_landing, generated, key_exact, key_landing).
+#[pyfunction]
+#[pyo3(signature = (sfn, turn, cap=5000, key_reasons=0, key_extra=0))]
+fn reach_of_turn(sfn: &str, turn: Vec<(String, i32, i32, Vec<u8>, i32)>, cap: usize,
+                 key_reasons: u8, key_extra: usize)
+    -> PyResult<(i64, i64, usize, bool, bool)>
+{
+    use crate::turn::{Action, Turn};
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    let h = turn_from_tuples(&turn);
+    let strip = |t: &Turn| -> Vec<Action> {
+        t.slice().iter().copied().filter(|a| !matches!(a, Action::Pass)).collect()
+    };
+    let want = strip(&h);
+    if want.is_empty() { return Ok((-1, -1, 0, false, false)); }
+    let first = want[0];
+    let land = want.iter().find_map(|a| match *a {
+        Action::Dash { node, push_to, .. } => Some((node, push_to)), _ => None });
+    let same_landing = |t: &Turn| -> bool {
+        let s = t.slice();
+        land.is_some() && s.first() == Some(&first)
+            && s.iter().any(|a| matches!(*a, Action::Dash { node, push_to, .. }
+                                          if Some((node, push_to)) == land))
+    };
+    let (mut rx, mut rl, mut generated) = (-1i64, -1i64, 0usize);
+    for (i, t) in b.turns_ordered(c).take(cap).enumerate() {
+        generated = i + 1;
+        if rx < 0 && strip(&t) == want { rx = i as i64; }
+        if rl < 0 && same_landing(&t) { rl = i as i64; }
+        if rx >= 0 && (rl >= 0 || land.is_none()) { break; }
+    }
+    let (mut kx, mut kl) = (false, false);
+    if key_reasons != 0 && key_extra > 0 {
+        for t in b.key_dash_turns(c, key_reasons, key_extra) {
+            if strip(&t) == want { kx = true; }
+            if same_landing(&t) { kl = true; }
+        }
+    }
+    Ok((rx, rl, generated, kx, kl))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
@@ -1618,6 +1725,8 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_dash_gen, m)?)?;
     m.add_function(wrap_pyfunction!(set_key_dash_scan, m)?)?;
     m.add_function(wrap_pyfunction!(rank_of_landing, m)?)?;
+    m.add_function(wrap_pyfunction!(human_turn, m)?)?;
+    m.add_function(wrap_pyfunction!(reach_of_turn, m)?)?;
     m.add_function(wrap_pyfunction!(opening_pick, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
