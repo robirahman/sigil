@@ -272,16 +272,19 @@
 				</div>
 			</div>
 
-			<!-- Real-time presets -->
+			<!-- Real-time presets: the chess ladder (minutes + seconds per move)
+			     plus a custom entry. Loss on the flag for either side. -->
 			<div class="time-control" x-show="tcType === 'realtime'">
-				<div class="time-control__label">Time Preset</div>
+				<div class="time-control__label">Time Preset (minutes + seconds per move)</div>
 				<div class="time-control__options">
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '3+0' }" x-on:click="setTimePreset('3+0')">3+0</button>
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '5+0' }" x-on:click="setTimePreset('5+0')">5+0</button>
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '5+5' }" x-on:click="setTimePreset('5+5')">5+5</button>
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '10+0' }" x-on:click="setTimePreset('10+0')">10+0</button>
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '10+5' }" x-on:click="setTimePreset('10+5')">10+5</button>
-					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === '15+10' }" x-on:click="setTimePreset('15+10')">15+10</button>
+					<template x-for="p in tcLadder" :key="p">
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === p }" x-on:click="setTimePreset(p)" x-text="p"></button>
+					</template>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcPreset === 'custom' }" x-on:click="setTimePreset('custom')">Custom</button>
+				</div>
+				<div class="time-control__options" x-show="tcPreset === 'custom'" style="gap: 0.75em; align-items: center;">
+					<label>Minutes <input type="number" min="0.5" step="0.5" x-model.number="tcCustomMin" style="width: 4.5em;"></label>
+					<label>+ seconds per move <input type="number" min="0" step="1" x-model.number="tcCustomInc" style="width: 4.5em;"></label>
 				</div>
 			</div>
 
@@ -696,6 +699,9 @@
 				// Time control
 				tcType: 'none',
 				tcPreset: '5+0',
+				tcLadder: ['1+0', '2+1', '3+0', '3+2', '5+0', '5+3', '10+0', '10+5', '15+10', '30+0'],
+				tcCustomMin: 5,
+				tcCustomInc: 0,
 				tcCorr: '24h',
 
 				// Allow spectators (for created games)
@@ -760,9 +766,14 @@
 							if (rematchTc && rematchTc.type) {
 								this.tcType = rematchTc.type;
 								if (rematchTc.type === 'realtime' && rematchTc.initialTime) {
-									const min = Math.round(rematchTc.initialTime / 60000);
+									const min = rematchTc.initialTime / 60000;
 									const inc = Math.round((rematchTc.increment || 0) / 1000);
-									this.tcPreset = min + '+' + inc;
+									const label = min + '+' + inc;
+									if (this.tcLadder.includes(label)) {
+										this.tcPreset = label;
+									} else {
+										this.tcPreset = 'custom'; this.tcCustomMin = min; this.tcCustomInc = inc;
+									}
 								} else if (rematchTc.type === 'correspondence' && rematchTc.moveTimeout) {
 									const m = rematchTc.moveTimeout;
 									this.tcCorr = m >= 3*24*60*60*1000 ? '3d' : (m >= 24*60*60*1000 ? '24h' : '12h');
@@ -920,11 +931,18 @@
 				_getTimeControl() {
 					if (this.tcType === 'none') return { type: 'none' };
 					if (this.tcType === 'realtime') {
-						const [min, inc] = this.tcPreset.split('+').map(Number);
+						let min, inc;
+						if (this.tcPreset === 'custom') {
+							min = Number(this.tcCustomMin); inc = Number(this.tcCustomInc);
+						} else {
+							[min, inc] = this.tcPreset.split('+').map(Number);
+						}
+						if (!(min > 0)) min = 5;
+						if (!(inc >= 0)) inc = 0;
 						return {
 							type: 'realtime',
-							initialTime: min * 60 * 1000,
-							increment: inc * 1000,
+							initialTime: Math.round(min * 60 * 1000),
+							increment: Math.round(inc * 1000),
 						};
 					}
 					if (this.tcType === 'correspondence') {

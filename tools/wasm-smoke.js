@@ -29,6 +29,7 @@ const FILES = [
 	'sim-board.js', 'features.js', 'enumerator.js',
 	'ai-player.js', 'game-controller.js', 'game-review.js',
 	'rust-ai.js',   // RustAI.moveBudgetMs / parseClock, checked against the wasm
+	'game-clock.js',
 ];
 
 let src = FILES.map((f) => fs.readFileSync(path.join(ENGINE, f), 'utf8')).join('\n;\n');

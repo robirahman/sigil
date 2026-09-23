@@ -38,6 +38,13 @@ document.addEventListener('alpine:init', () => {
 			aiThinkingBudgetMs: 0,
 			aiClockMs: null,
 
+			// Game clock (GameClock): both sides' remaining ms, the running side.
+			hasClock: false,
+			clockLabel: '',
+			redClockMs: 0,
+			blueClockMs: 0,
+			clockActive: '',
+
 			nodes: {
 				...['a', 'b', 'c'].reduce((acc, curr) => {
 					new Array(13).fill(true).forEach((node, index) => {
@@ -771,6 +778,11 @@ document.addEventListener('alpine:init', () => {
 				// defence. `aiMode` stays null on purpose: every persistence
 				// path below is keyed on it.
 				let aiMode = puzzle ? null : new URLSearchParams(window.location.search).get('ai');
+				// Game clock, any mode: ?clock=M+S (minutes + seconds per move).
+				// A saved clocked game restores its remaining times below.
+				let clockOpt = (puzzle || typeof GameClock === 'undefined') ? null
+					: GameClock.parse(new URLSearchParams(window.location.search).get('clock'));
+				let _savedClockState = null;
 				// Game-rule variant (separate concept from `aiMode`'s "model
 				// variant" naming below): 'standard' or 'competitive'.
 				const gameVariantParam = puzzle ? (puzzle.variant || 'standard')
@@ -828,6 +840,10 @@ document.addEventListener('alpine:init', () => {
 											: (typeof a === 'string' ? normalizeSpellName(a) : a))
 										: t.actions,
 								}));
+							}
+							if (_save.clock && _save.clock.baseMs > 0 && typeof GameClock !== 'undefined') {
+								clockOpt = { baseMs: _save.clock.baseMs, incMs: _save.clock.incMs | 0 };
+								_savedClockState = { red: _save.clock.red, blue: _save.clock.blue };
 							}
 							if (_save.setupSfn) {
 								_savedSetupSfn = _save.setupSfn;
@@ -1063,7 +1079,7 @@ document.addEventListener('alpine:init', () => {
 							// ?clock=5+0 / ?clock=10+1 (minutes + seconds per move):
 							// the AI plays on a whole-game clock instead of the
 							// tier's per-move budget (rust-ai.js allocates each move).
-							const clock = RustAI.parseClock(new URLSearchParams(window.location.search).get('clock'));
+							const clock = clockOpt;
 							options.ai = new RustAI({
 								transport: 'worker', timeLimit: t.time, ttBits: t.ttBits,
 								clock: clock,
@@ -1135,6 +1151,8 @@ document.addEventListener('alpine:init', () => {
 						}
 					}
 
+					options.clock = clockOpt;
+					options.clockState = _savedClockState;
 					const engine = new GameController(function emitEvent(eventObj) {
 						// A retried puzzle abandons its previous controller
 						// mid-loop (its scripted opponent never answers), so
@@ -1143,6 +1161,10 @@ document.addEventListener('alpine:init', () => {
 						handleIncomingEvent(eventObj);
 					}, options);
 					_engineRef = engine;
+					// The controller's clock is the authority; the AI only allocates from it.
+					if (engine.clock && options.ai) {
+						options.ai.clockSource = () => engine.clock.remainingOf(_aiColor, Date.now());
+					}
 					_this._engine = engine;
 
 					_this.sendEvent = function sendEvent(message) {
@@ -1197,6 +1219,8 @@ document.addEventListener('alpine:init', () => {
 						humanColor: aiMode ? _humanColor : null,
 						gameLog: _persistedGameLog,
 						setupSfn: _setupSfn,
+						// Game clock: remaining ms per side at this turn boundary.
+						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
 				}
 
@@ -1328,6 +1352,15 @@ document.addEventListener('alpine:init', () => {
 
 					if (type === 'ai_think_report') {
 						handleAiThinkReportEvent(rest);
+						return;
+					}
+
+					if (type === 'clock_tick') {
+						_this.hasClock = true;
+						_this.redClockMs = rest.red;
+						_this.blueClockMs = rest.blue;
+						_this.clockActive = rest.active || '';
+						if (rest.label) _this.clockLabel = rest.label;
 						return;
 					}
 
@@ -1836,8 +1869,9 @@ document.addEventListener('alpine:init', () => {
 
 				function handleGameOverEvent(payload) {
 					if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
+					_this._lastEndReason = payload.endReason || null;
 					_this.messageHistory.push(
-						`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins`
+						`Game over! ${payload.winner === 'blue' ? 'Blue' : 'Red'} wins${payload.endReason === 'time' ? ' on time' : ''}`
 					);
 					_this.showReset = false;
 					_this.winner = payload.winner;
@@ -1980,7 +2014,7 @@ document.addEventListener('alpine:init', () => {
 							finalSfn: finalSfnForRecord,
 							setupSfn: _setupSfn,
 							allowSpectators: true,
-							timeControl: { type: 'none' },
+							timeControl: (typeof GameClock !== 'undefined') ? GameClock.toTimeControl(clockOpt) : { type: 'none' },
 							variant: recordVariant,
 						};
 
@@ -1996,6 +2030,10 @@ document.addEventListener('alpine:init', () => {
 							blueUid: _humanColor === 'blue' ? humanUid : aiUid,
 							ranked: !_unrated,
 							variant: recordVariant,
+							// Clock games rate in the same pool; the control and the way
+							// the game ended are recorded so pools can be split later.
+							timeControl: (typeof GameClock !== 'undefined') ? GameClock.toTimeControl(clockOpt) : { type: 'none' },
+							endReason: _this._lastEndReason || 'play',
 						};
 
 						// Attach any annotations the human made during the game.

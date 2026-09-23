@@ -160,6 +160,10 @@ class RustAI {
 		this.clockMs = this.clock ? this.clock.baseMs : null;
 		this.movesPlayed = 0;
 		this.lastBudgetMs = null;
+		// When the game controller owns the clock (GameClock), it hands the
+		// AI a `clockSource()` returning its remaining ms; the AI then only
+		// allocates and never charges itself.
+		this.clockSource = options.clockSource || null;
 		// Engine config, mirroring serve.py's shipped defaults. Deviating from
 		// these is a measured strength loss (see py.rs's warnings on eval).
 		this.ttBits = options.ttBits || 20;
@@ -210,6 +214,7 @@ class RustAI {
 	/** The budget the next search gets: the clock share, or the fixed per-move time. */
 	nextBudgetMs() {
 		if (!this.clock) return this.timeMs;
+		if (this.clockSource) this.clockMs = Math.max(0, this.clockSource() | 0);
 		return RustAI.moveBudgetMs(this.clockMs, this.clock.incMs, this.movesPlayed);
 	}
 	/** Whether pondering should be on for this AI given the auth manager's
@@ -319,7 +324,8 @@ class RustAI {
 		const res = await this._send(sfn, onProgress);
 		// Game clock: charge the wall time of the whole move, credit the increment.
 		if (this.clock) {
-			this.clockMs = Math.max(0, this.clockMs - (Date.now() - tMove0)) + this.clock.incMs;
+			if (this.clockSource) this.clockMs = Math.max(0, this.clockSource() | 0);
+			else this.clockMs = Math.max(0, this.clockMs - (Date.now() - tMove0)) + this.clock.incMs;
 			this.movesPlayed += 1;
 		}
 		if (!res || !res.ok) {

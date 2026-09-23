@@ -127,6 +127,8 @@ class MultiplayerController {
 	/** Flush buffered actions to Firebase. Called when a turn completes successfully. */
 	async _flushTurnBuffer() {
 		console.log('[Controller] Flushing turn buffer:', this._turnBuffer);
+		// A turn finished after the flag never reaches the wire.
+		if (this._timedOut) { this._turnBuffer = []; return; }
 		if (this._turnBuffer.length > 0) {
 			const timerUpdate = this._computeTimerUpdate();
 			await this.sync.sendTurn(this._turnBuffer, timerUpdate);
@@ -199,21 +201,10 @@ class MultiplayerController {
 				blue: ts.activeColor === 'blue' ? activeRemaining : ts.blue,
 			});
 
-			// Check timeout
+			// The running side flagged: loss on time (see _endByTimeout).
 			if (activeRemaining <= 0 && !this._timedOut) {
-				this._timedOut = true;
-				const winner = inactiveColor;
-				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
-				this.sync.writeTimeout(winner);
-				if (this.myColor === 'red') {
-					this.sync.writeRoomFinalState(
-						winner,
-						this._gameLog,
-						this.board ? boardToSfn(this.board) : null,
-						this._gameLog.length ? this._gameLog[0].sfnBefore : null,
-					);
-				}
-				this._stopTimer();
+				void inactiveColor;
+				this._endByTimeout(ts.activeColor, true);
 			}
 		} else if (this._timeControl.type === 'correspondence') {
 			// Show deadlines as absolute timestamps
@@ -226,19 +217,7 @@ class MultiplayerController {
 			// Check if active player's deadline has passed
 			const deadline = ts[ts.activeColor];
 			if (deadline > 0 && now > deadline && !this._timedOut) {
-				this._timedOut = true;
-				const winner = ts.activeColor === 'red' ? 'blue' : 'red';
-				this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
-				this.sync.writeTimeout(winner);
-				if (this.myColor === 'red') {
-					this.sync.writeRoomFinalState(
-						winner,
-						this._gameLog,
-						this.board ? boardToSfn(this.board) : null,
-						this._gameLog.length ? this._gameLog[0].sfnBefore : null,
-					);
-				}
-				this._stopTimer();
+				this._endByTimeout(ts.activeColor, true);
 			}
 		}
 	}
@@ -294,6 +273,13 @@ class MultiplayerController {
 		// A forfeit by either player ends the game on this client too. Fires
 		// immediately on reconnect into a forfeited room.
 		this.sync.listenForForfeit((color) => this._endByForfeit(color));
+		// A flag the OTHER client saw first (ours may have been asleep or
+		// behind): end the game here too, without writing anything.
+		this.sync.listenForFinish((winner, reason) => {
+			if (reason === 'time' && (winner === 'red' || winner === 'blue')) {
+				this._endByTimeout(winner === 'red' ? 'blue' : 'red', false);
+			}
+		});
 
 		// Send spell setup
 		const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
@@ -650,12 +636,45 @@ class MultiplayerController {
 		this.emit(board.getBoardStatePayload());
 		this.emit({ type: 'message', awaiting: null,
 			message: (loser === 'red' ? 'Red' : 'Blue') + ' forfeits.' });
-		this.emit({ type: 'game_over', winner, gameLog: this._gameLog });
-		this._saveGameRecord(winner);
+		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: 'forfeit' });
+		this._saveGameRecord(winner, 'forfeit');
 		this._stopTimer();
 	}
 
-	_saveGameRecord(winner) {
+	/**
+	 * A clock ran out: `loser` is the side whose time expired. Both clients
+	 * watch both clocks, so either may see it first. The client whose
+	 * status transaction commits (playing -> finished) records the game --
+	 * normally red's, but blue's when red's tab is gone -- and the other
+	 * ends its own game through listenForFinish without writing. The
+	 * loser's half-made turn is rewound so the final position is the clean
+	 * start of the turn; the board is closed so no further click can act.
+	 */
+	async _endByTimeout(loser, writeResult) {
+		if (this._timedOut || this._forfeitHandled || (this.board && this.board.gameover)) return;
+		this._timedOut = true;
+		this._stopTimer();
+		const board = this.board;
+		const winner = loser === 'red' ? 'blue' : 'red';
+		if (board) {
+			if (loser === this.myColor && board.whoseTurn === this.myColor && !board.gameover) {
+				board.restoreSnapshot();
+			}
+			board.gameover = true;
+			board.winner = winner;
+			board.update();
+			this.emit(board.getBoardStatePayload());
+		}
+		this._turnBuffer = [];
+		this.emit({ type: 'message', awaiting: null,
+			message: (loser === 'red' ? 'Red' : 'Blue') + ' ran out of time.' });
+		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: 'time' });
+		if (!writeResult) return;
+		const committed = await this.sync.writeTimeout(winner);
+		if (committed) this._saveGameRecord(winner, 'time', true);
+	}
+
+	_saveGameRecord(winner, endReason, force) {
 		if (!this.sync) return;
 		// Stored records carry the SLIM transcript (marginal moves) plus
 		// the setup/final SFN anchors; positions are rebuilt by replaying
@@ -672,11 +691,17 @@ class MultiplayerController {
 			// to sync.variant (creator's choice persisted in the room
 			// metadata) when board.variant is missing for any reason.
 			variant: normalizeVariant((this.board && this.board.variant) || (this.sync && this.sync.variant)),
+			// The room's clock and how the game ended ('play', 'forfeit', 'time'):
+			// clock games rate in the same pool, the control is kept for later.
+			timeControl: this._timeControl || { type: 'none' },
+			endReason: endReason || 'play',
 		};
-		this.sync.saveCompletedGame(record);
+		// `force`: the client that won the time-forfeit transaction records the
+		// game even when it is blue (red's tab may be gone).
+		this.sync.saveCompletedGame(record, { force: !!force });
 		// Mark the room finished so the same `?id=CODE` URL serves review mode.
 		// Either player calls this — it's an idempotent update.
-		if (this.myColor === 'red') {
+		if (this.myColor === 'red' || force) {
 			this.sync.writeRoomFinalState(
 				winner,
 				this._gameLog,

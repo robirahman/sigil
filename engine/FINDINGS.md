@@ -2354,3 +2354,41 @@ of the JS mirror against the wasm export `move_budget_ms` and the `parseClock` g
 `se.move_budget_ms` for a clock-driven harness (not yet written; the arenas remain fixed per-move
 time, which is what the tiers and the browser's clock allocation both reduce to). Test
 `a_game_clock_is_spent_across_the_game_and_never_flags`.
+
+### Clocks for both sides, local and online (2026-09-23)
+
+The user's second ask: challenge the AI and other humans to games at chess-style time controls, with
+the clock binding on everyone. Decisions: loss on the flag for either side (the AI too); the ladder
+1+0, 2+1, 3+0, 3+2, 5+0, 5+3, 10+0, 10+5, 15+10, 30+0 plus a custom base + increment; clock games rate
+in the same Elo pool with the control recorded on the game; online, clocks derive from Firebase server
+timestamps and either client may write the time forfeit.
+
+**Local (`docs/static/scripts/engine/game-clock.js`, `GameController`).** `GameClock` is one small class:
+`start(color, now)` (idempotent for the running side, so a reset inside a turn does not restart it),
+`stop(now)` charges the wall time and credits the increment, `flagged(now)` names the side at zero. The
+controller starts the mover's clock at `whoseturndisplay`, stops it when the turn's actions are done
+(before the end-of-turn triggers), ticks every 250 ms (`clock_tick` events), and on a flag ends the game
+the way a forfeit does: the loser's half-made turn is rewound, `game_over` carries `endReason: 'time'`.
+A human mid-prompt is unwound through the pending input (`TimeoutError`, the `ForfeitError` shape); an
+AI that thought past its clock is caught when `pickTurn` returns and its move is never applied. The AI
+allocates from the controller's clock (`RustAI.clockSource`) and no longer charges itself. `?clock=M+S`
+now applies to every mode (the menu has a picker that rewrites the AI links and remembers the choice);
+the page shows both clocks with the running side highlighted; saved games keep the remaining times;
+the AI game record carries `timeControl` and `endReason`. `tools/clock-smoke.js`: arithmetic, parse
+parity with `RustAI.parseClock`, a human who never moves loses on time at the right moment with a clean
+final position, an AI that overruns its clock loses without its move being applied.
+
+**Online (what was already there, and what was missing).** The lobby already had real-time clocks
+(server-stamped `timer/{red,blue,activeColor,lastUpdated}`, Fischer increment at end of turn, both
+clients checking both clocks), but a flag only set `status`/`winner`: no `completed_games` record and no
+Elo, the board and loop kept running, the other client was never told, and spectators saw `0:00` on both
+sides and no result. Fixes: `MultiplayerController._endByTimeout(loser, writeResult)` mirrors
+`_endByForfeit` (rewind, close the board, announce, `game_over` with `endReason: 'time'`); `writeTimeout`
+returns whether its `playing -> finished` transaction committed and only then writes `winner` and
+`endReason`, and only that client records the game (`saveCompletedGame(record, {force})`, so blue can
+record when red's tab is gone); `listenForFinish` ends the game on the other client from the room's
+status; a flagged turn is never flushed to the wire; turn timestamps are server time; the spectator
+mirrors the timer and announces the room's result on finish; game records carry `timeControl` and
+`endReason` ('play' | 'forfeit' | 'time'). The lobby's presets are the ladder plus a custom entry, and a
+rematch restores a custom control. Per-move clock readings in the record (`slimGameLog` would need a
+new field) are a follow-up.

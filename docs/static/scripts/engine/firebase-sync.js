@@ -366,7 +366,7 @@ class FirebaseSync {
 				updates['turns/' + turnKey] = {
 					color: this.myColor,
 					actions: actions,
-					timestamp: Date.now(),
+					timestamp: firebase.database.ServerValue.TIMESTAMP,
 				};
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
@@ -377,7 +377,7 @@ class FirebaseSync {
 				await this.roomRef.child('turns').push({
 					color: this.myColor,
 					actions: actions,
-					timestamp: Date.now(),
+					timestamp: firebase.database.ServerValue.TIMESTAMP,
 				});
 			}
 			console.log('[Sync] sendTurn succeeded');
@@ -473,13 +473,43 @@ class FirebaseSync {
 	 * @param {string} winner - 'red' or 'blue'
 	 */
 	async writeTimeout(winner) {
-		if (!this.roomRef) return;
-		await this.roomRef.child('status').transaction((current) => {
-			if (current === 'playing') return 'finished';
-			return; // abort if already finished
-		});
-		await this.roomRef.child('winner').set(winner);
+		if (!this.roomRef) return false;
+		let committed = false;
+		try {
+			const res = await this.roomRef.child('status').transaction((current) => {
+				if (current === 'playing') return 'finished';
+				return; // abort if already finished
+			});
+			committed = !!(res && res.committed);
+			// Only the client whose transaction closed the room writes the
+			// result (and records the game): the other one is a witness.
+			if (committed) await this.roomRef.update({ winner: winner, endReason: 'time' });
+		} catch (e) {
+			console.error('[Sync] writeTimeout FAILED:', e.code, e.message);
+		}
 		this._removeActiveGameIndex();
+		return committed;
+	}
+
+	/**
+	 * Listen for the room finishing by any route (timeout, forfeit, or a
+	 * natural end written by the other client). Fires with (winner, reason)
+	 * where reason is 'forfeit', 'time' or 'finished'; fires immediately on
+	 * subscribe if the room is already finished (reconnect).
+	 */
+	listenForFinish(callback) {
+		if (!this.roomRef) return;
+		this.roomRef.child('status').on('value', async (snap) => {
+			if (snap.val() !== 'finished') return;
+			try {
+				const s = await this.roomRef.once('value');
+				const d = s.val() || {};
+				const reason = d.forfeitedBy ? 'forfeit' : (d.endReason || 'finished');
+				callback(d.winner || null, reason);
+			} catch (e) {
+				console.error('[Sync] listenForFinish read failed:', e);
+			}
+		});
 	}
 
 	/**
@@ -643,8 +673,12 @@ class FirebaseSync {
 		});
 	}
 
-	async saveCompletedGame(gameRecord) {
-		if (!this.db || this.myColor !== 'red') return;
+	async saveCompletedGame(gameRecord, opts) {
+		if (!this.db) return;
+		// Red records by convention; `force` lets the client that won a
+		// time-forfeit transaction record when red's tab is gone.
+		if (this.myColor !== 'red' && !(opts && opts.force)) return;
+		if (!gameRecord.timeControl) gameRecord.timeControl = this.timeControl || { type: 'none' };
 		// Enrich with auth info
 		gameRecord.redUid = this.redUid || null;
 		gameRecord.blueUid = this.blueUid || null;

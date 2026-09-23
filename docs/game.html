@@ -49,6 +49,14 @@
 		/>
 		<title>Local 1v1 - Sigil Online</title>
 		<style>
+		.game-clock { display: flex; justify-content: center; align-items: center; gap: 0.75em; margin: 0.35em auto; font-variant-numeric: tabular-nums; font-size: 1.05em; }
+		.game-clock__side { padding: 0.15em 0.6em; border-radius: 0.4em; opacity: 0.7; border: 1px solid transparent; }
+		.game-clock__side--red { color: #fa3f32; }
+		.game-clock__side--blue { color: #295ccd; }
+		.game-clock__side--active { opacity: 1; font-weight: 700; border-color: currentColor; }
+		.game-clock__side--low.game-clock__side--active { animation: game-clock-pulse 1s ease-in-out infinite; }
+		.game-clock__label { opacity: 0.6; font-size: 0.85em; }
+		@keyframes game-clock-pulse { 50% { opacity: 0.4; } }
 			header {
 				position: absolute;
 			}
@@ -253,6 +261,18 @@
 								<span x-show="aiThinkingDepth > 0"
 									x-text="' — depth ' + aiThinkingDepth + ', ' + (aiThinkingTimeMs/1000).toFixed(1) + 's' + (aiThinkingBudgetMs ? ' of ' + (aiThinkingBudgetMs/1000).toFixed(1) + 's' : '') + (aiClockMs !== null ? ' (clock ' + formatTimer(Math.round(aiClockMs/1000)) + ')' : '') + ', ' + aiThinkingNodes.toLocaleString() + ' nodes'"></span>
 							</span>
+						</div>
+
+						<!-- Game clock: both sides' remaining time, the running side
+						     highlighted. Only in clocked games (?clock=M+S). -->
+						<div class="game-clock" x-show="hasClock" x-cloak>
+							<span class="game-clock__side game-clock__side--red"
+								x-bind:class="{ 'game-clock__side--active': clockActive === 'red', 'game-clock__side--low': redClockMs < 10000 }"
+								x-text="'Red ' + formatTimer(Math.ceil(Math.max(redClockMs, 0) / 1000))"></span>
+							<span class="game-clock__label" x-text="clockLabel"></span>
+							<span class="game-clock__side game-clock__side--blue"
+								x-bind:class="{ 'game-clock__side--active': clockActive === 'blue', 'game-clock__side--low': blueClockMs < 10000 }"
+								x-text="'Blue ' + formatTimer(Math.ceil(Math.max(blueClockMs, 0) / 1000))"></span>
 						</div>
 
 						<div class="dev-eval-panel" x-show="canSeeAiEval" x-cloak>
@@ -832,6 +852,7 @@
 		<script src="static/scripts/engine/caveman-ai.js"></script>
 		<script src="static/scripts/engine/rust-ai.js"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
+		<script src="static/scripts/engine/game-clock.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
 		<script src="static/scripts/engine/game-review.js"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>

@@ -12,6 +12,9 @@ class SpectatorController {
 		this.board = null;
 		this.spellNames = spellNames;
 		this._gameLog = [];
+		// Clocks: read-only mirror of the players' timer (no flag writes).
+		this._timerInterval = null;
+		this._timerState = null;
 	}
 
 	/** No-op — spectators cannot act. */
@@ -56,8 +59,53 @@ class SpectatorController {
 		this.emit({ type: 'message', message: 'Spectating.', awaiting: null });
 
 		this._emitSfn();
+		const tc = (this.sync && this.sync.timeControl) || { type: 'none' };
+		if (tc.type !== 'none' && typeof this.sync.listenToTimer === 'function') {
+			this.sync.listenToTimer((data) => { this._timerState = data; });
+			this._timerInterval = setInterval(() => this._tickTimer(tc), 250);
+		}
 		await this._delay(500);
 		this._runGameLoop();
+	}
+
+	/** Same arithmetic as MultiplayerController._tickTimer, display only. */
+	_tickTimer(tc) {
+		const ts = this._timerState;
+		if (!ts || !ts.activeColor || !ts.lastUpdated) return;
+		if (this.board && this.board.gameover) { this._stopTimer(); return; }
+		const now = this.sync.serverNow();
+		if (tc.type === 'realtime') {
+			const elapsed = now - ts.lastUpdated;
+			const activeRemaining = ts[ts.activeColor] - elapsed;
+			this.emit({ type: 'timer_tick',
+				red: ts.activeColor === 'red' ? activeRemaining : ts.red,
+				blue: ts.activeColor === 'blue' ? activeRemaining : ts.blue });
+		} else {
+			this.emit({ type: 'timer_tick', red: ts.red, blue: ts.blue });
+		}
+	}
+	_stopTimer() {
+		if (this._timerInterval) { clearInterval(this._timerInterval); this._timerInterval = null; }
+	}
+	/** The room finished by a route the turn stream cannot show (a flag or a
+	 * forfeit): read the result the players wrote and announce it. */
+	async _finishFromRoom() {
+		this._stopTimer();
+		try {
+			const s = await this.sync.roomRef.once('value');
+			const d = s.val() || {};
+			if (d.winner === 'red' || d.winner === 'blue') {
+				if (this.board) { this.board.gameover = true; this.board.winner = d.winner; }
+				const reason = d.forfeitedBy ? 'forfeit' : (d.endReason || 'finished');
+				const loserName = d.winner === 'red' ? 'Blue' : 'Red';
+				this.emit({ type: 'message', awaiting: null,
+					message: reason === 'time' ? loserName + ' ran out of time.'
+						: reason === 'forfeit' ? loserName + ' forfeits.' : 'Game finished.' });
+				this.emit({ type: 'game_over', winner: d.winner, endReason: reason });
+			}
+		} catch (e) {
+			console.error('[Spectator] could not read the room result:', e);
+		}
 	}
 
 	_emitSfn() {
@@ -160,7 +208,7 @@ class SpectatorController {
 					return;
 				}
 			} catch (e) {
-				if (e && e.message === '__game_finished__') return;
+				if (e && e.message === '__game_finished__') { await this._finishFromRoom(); return; }
 				throw e;
 			}
 		}

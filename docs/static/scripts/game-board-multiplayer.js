@@ -784,7 +784,7 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'game_over') {
 						if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
-						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins`);
+						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);
 						_this.showReset = false;
 						_this.winner = rest.winner;
 						if (rest.gameLog && rest.gameLog.length > 0) {

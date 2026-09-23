@@ -12,6 +12,11 @@
 	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
 	<title>Sigil Online</title>
 	<style>
+		.clock-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35em; width: 100%; margin: 0.4em 0 0.2em; font-size: 0.9em; }
+		.clock-picker__label { opacity: 0.7; margin-right: 0.25em; }
+		.clock-option { font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 0.4em; padding: 0.2em 0.55em; cursor: pointer; opacity: 0.7; }
+		.clock-option.is-active { opacity: 1; font-weight: 700; }
+		.clock-option--custom input { width: 3.6em; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 0.3em; padding: 0.1em 0.3em; }
 		body > .main { padding-top: 80px; }
 		.mode-menu {
 			max-width: 400px;
@@ -269,18 +274,78 @@
 					Very Hard
 					<small>60s per turn</small>
 				</a>
-				<!-- Game clocks: the AI gets a whole-game clock (minutes + seconds
-				     back per move) and allocates it itself (rust-ai.js
-				     moveBudgetMs). Any tier accepts ?clock=M+S. -->
-				<a class="mode-button" href="game.html?ai=rust_hard&amp;clock=5+0">
-					Hard 5+0
-					<small>5 min for the game</small>
-				</a>
-				<a class="mode-button" href="game.html?ai=rust_hard&amp;clock=10+1">
-					Hard 10+1
-					<small>10 min + 1s per move</small>
-				</a>
+				<!-- Game clock: chess-style base + increment for BOTH sides (loss on
+				     the flag). Picking one appends ?clock=M+S to the AI links above;
+				     the AI allocates its own clock move by move (rust-ai.js
+				     moveBudgetMs) and the tier's per-move budget no longer applies. -->
+				<div class="clock-picker" id="clock-picker">
+					<span class="clock-picker__label">Clock</span>
+					<button type="button" class="clock-option" data-clock="">None</button>
+					<button type="button" class="clock-option" data-clock="1+0">1+0</button>
+					<button type="button" class="clock-option" data-clock="2+1">2+1</button>
+					<button type="button" class="clock-option" data-clock="3+0">3+0</button>
+					<button type="button" class="clock-option" data-clock="3+2">3+2</button>
+					<button type="button" class="clock-option" data-clock="5+0">5+0</button>
+					<button type="button" class="clock-option" data-clock="5+3">5+3</button>
+					<button type="button" class="clock-option" data-clock="10+0">10+0</button>
+					<button type="button" class="clock-option" data-clock="10+5">10+5</button>
+					<button type="button" class="clock-option" data-clock="15+10">15+10</button>
+					<button type="button" class="clock-option" data-clock="30+0">30+0</button>
+					<label class="clock-option clock-option--custom" id="clock-custom">Custom
+						<input id="clock-min" type="number" min="0.5" step="0.5" placeholder="min" inputmode="decimal" aria-label="minutes">
+						+ <input id="clock-inc" type="number" min="0" step="1" placeholder="sec" inputmode="numeric" aria-label="seconds per move">
+					</label>
+				</div>
 			</div>
+			<script>
+				(function() {
+					// Clock picker: rewrites the AI links' ?clock= param and remembers
+					// the choice. Composes with the variant rewriter below (each
+					// strips and re-adds only its own param).
+					var KEY = 'sigilClock';
+					var picker = document.getElementById('clock-picker');
+					if (!picker) return;
+					var buttons = picker.querySelectorAll('button.clock-option');
+					var custom = document.getElementById('clock-custom');
+					var minIn = document.getElementById('clock-min');
+					var incIn = document.getElementById('clock-inc');
+					function valid(text) { return /^\d+(\.\d+)?\+\d+(\.\d+)?$/.test(text) && parseFloat(text) > 0; }
+					function applyClock(clock) {
+						var links = document.querySelectorAll('a.mode-button');
+						links.forEach(function(a) {
+							var href = a.getAttribute('href') || '';
+							if (href.indexOf('game.html?ai=') !== 0) return;
+							href = href.replace(/([?&])clock=[^&]*(&|$)/, function(_m, pre, post) {
+								return post === '&' ? pre : '';
+							});
+							if (clock) href += (href.indexOf('?') >= 0 ? '&' : '?') + 'clock=' + encodeURIComponent(clock);
+							a.setAttribute('href', href);
+						});
+						buttons.forEach(function(b) { b.classList.toggle('is-active', (b.getAttribute('data-clock') || '') === (clock || '')); });
+						var isCustom = !!clock && !Array.prototype.some.call(buttons, function(b) { return b.getAttribute('data-clock') === clock; });
+						custom.classList.toggle('is-active', isCustom);
+						try { if (clock) localStorage.setItem(KEY, clock); else localStorage.removeItem(KEY); } catch (e) {}
+					}
+					buttons.forEach(function(b) {
+						b.addEventListener('click', function() { applyClock(b.getAttribute('data-clock') || ''); });
+					});
+					function onCustom() {
+						var text = (minIn.value || '') + '+' + (incIn.value || '0');
+						if (valid(text)) applyClock(text);
+					}
+					minIn.addEventListener('change', onCustom);
+					incIn.addEventListener('change', onCustom);
+					var saved = '';
+					try { saved = localStorage.getItem(KEY) || ''; } catch (e) {}
+					if (saved && !valid(saved)) saved = '';
+					if (saved) {
+						var parts = saved.split('+');
+						var known = Array.prototype.some.call(buttons, function(b) { return b.getAttribute('data-clock') === saved; });
+						if (!known) { minIn.value = parts[0]; incIn.value = parts[1]; }
+					}
+					applyClock(saved);
+				})();
+			</script>
 			<script>
 				(function() {
 					var btn = document.getElementById('vs-ai-btn');

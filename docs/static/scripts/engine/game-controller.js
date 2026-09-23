@@ -29,6 +29,15 @@ class GameController {
 		this._currentTurnActions = [];
 		this._lastTurnKind = 'input';
 		this._lastSimActions = null;
+		// Game clock (GameClock): `options.clock` = { baseMs, incMs }, with
+		// `options.clockState` = { red, blue } remaining ms when resuming a
+		// saved game. Ticks every 250 ms while the game runs; the side to move
+		// is charged wall time, credited the increment when its turn ends, and
+		// LOSES when its clock reaches zero -- human or AI alike.
+		this.clock = (options && options.clock && typeof GameClock !== 'undefined')
+			? new GameClock(options.clock, options.clockState || null) : null;
+		this._clockInterval = null;
+		this._timeoutColor = null;
 	}
 
 	/** Called by UI when the player clicks a node, spell, dash, pass, or reset. */
@@ -74,8 +83,10 @@ class GameController {
 		// Checked BEFORE the wait too, so a forfeit clicked while no input was
 		// pending (during the opponent's turn) fires at the next prompt instead
 		// of requiring one more click from the player who already gave up.
+		if (this._timeoutColor) throw new TimeoutError(this._timeoutColor);
 		if (this._forfeitRequested) throw new ForfeitError();
 		const resp = await this._waitForInput(payload);
+		if (this._timeoutColor) throw new TimeoutError(this._timeoutColor);
 		if (this._forfeitRequested) throw new ForfeitError();
 		if (this._resetRequested) {
 			throw new ResetError();
@@ -163,6 +174,7 @@ class GameController {
 	async _runGameLoop() {
 		const board = this.board;
 		let resetThisTurn = false;
+		this._startClockTicks();
 
 		while (true) {
 			try {
@@ -177,6 +189,7 @@ class GameController {
 						this.emit({ type: 'message', message: 'Threefold repetition — Blue wins.', awaiting: null });
 						board.gameover = true;
 						board.winner = 'blue';
+						this._stopClockTicks();
 						this.emit({ type: 'game_over', winner: 'blue', gameLog: this._gameLog });
 						return;
 					}
@@ -197,6 +210,9 @@ class GameController {
 					turnMsg = 'Blue Turn ' + Math.floor(board.turnCounter / 2);
 				}
 				this.emit({ type: 'whoseturndisplay', color, message: turnMsg });
+				// The mover's clock runs from here (a reset within the turn does
+				// not restart it: GameClock.start is idempotent for the running side).
+				if (this.clock) { this.clock.start(color, Date.now()); this._emitClockTick(); }
 
 				// Beginning-of-turn trigger: holding the Seal of Destruction loses.
 				if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
@@ -291,6 +307,8 @@ class GameController {
 				} else {
 					await this._takeTurn(color, true, true, true, true);
 				}
+				// Turn over: stop the mover's clock and credit the increment.
+				if (this.clock) { this.clock.stop(Date.now()); this._emitClockTick(); }
 
 				// EOT triggers
 				this._eotTriggers(color);
@@ -324,11 +342,33 @@ class GameController {
 					if (this.ai && typeof this.ai.cancelPonder === 'function') {
 						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
 					}
+					this._stopClockTicks();
 					this.emit({ type: 'game_over', winner: board.winner, gameLog: this._gameLog });
 					return;
 				}
 
 			} catch (e) {
+				if (e instanceof TimeoutError) {
+					// The side to move ran out of time: their opponent wins. Same
+					// shape as a forfeit: the loser's half-made turn is rewound so
+					// the recorded final position is the clean start of the turn.
+					const loser = e.color || board.whoseTurn;
+					const victor = board.enemy(loser);
+					if (board.whoseTurn === loser) board.restoreSnapshot();
+					board.gameover = true;
+					board.winner = victor;
+					this._stopClockTicks();
+					this._emitClockTick();
+					this.emit(board.getBoardStatePayload());
+					this._emitSfn();
+					this.emit({ type: 'message', awaiting: null,
+						message: (loser === 'red' ? 'Red' : 'Blue') + ' ran out of time.' });
+					if (this.ai && typeof this.ai.cancelPonder === 'function') {
+						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
+					}
+					this.emit({ type: 'game_over', winner: victor, gameLog: this._gameLog, endReason: 'time' });
+					return;
+				}
 				if (e instanceof ResetError) {
 					this.emit({ type: 'message', message: 'Resetting Turn', awaiting: null });
 					board.restoreSnapshot();
@@ -356,7 +396,8 @@ class GameController {
 					if (this.ai && typeof this.ai.cancelPonder === 'function') {
 						try { this.ai.cancelPonder(); } catch (_) { /* non-fatal */ }
 					}
-					this.emit({ type: 'game_over', winner: victor, gameLog: this._gameLog });
+					this._stopClockTicks();
+					this.emit({ type: 'game_over', winner: victor, gameLog: this._gameLog, endReason: 'forfeit' });
 					return;
 				}
 				throw e;
@@ -778,6 +819,9 @@ class GameController {
 
 		const turn = await this.ai.pickTurn(board, color, onProgress);
 		this.emit({ type: 'ai_thinking_end', color });
+		// An AI that thought past its clock loses on time like anyone else;
+		// its move is never applied.
+		if (this._timeoutColor) throw new TimeoutError(this._timeoutColor);
 		if (this.ai.lastMeta) {
 			this.emit({ type: 'ai_think_report', color, ...this.ai.lastMeta });
 		}
@@ -841,3 +885,40 @@ class ResetError extends Error {
 class ForfeitError extends Error {
 	constructor() { super('forfeit'); }
 }
+
+/** A clock ran out: `color` is the side that flagged. */
+class TimeoutError extends Error {
+	constructor(color) { super('timeout'); this.color = color; }
+}
+
+// ---- GameController: game clock helpers ----
+GameController.prototype._startClockTicks = function () {
+	if (!this.clock || this._clockInterval) return;
+	this._clockInterval = setInterval(() => this._tickClock(), 250);
+};
+GameController.prototype._stopClockTicks = function () {
+	if (this._clockInterval) { clearInterval(this._clockInterval); this._clockInterval = null; }
+};
+GameController.prototype._emitClockTick = function () {
+	if (!this.clock) return;
+	const snap = this.clock.snapshot(Date.now());
+	this.emit({ type: 'clock_tick', red: snap.red, blue: snap.blue, active: snap.active,
+	            label: GameClock.label(this.clock), flagged: this._timeoutColor });
+};
+GameController.prototype._tickClock = function () {
+	if (!this.clock) return;
+	if (this.board && this.board.gameover) { this._stopClockTicks(); return; }
+	this._emitClockTick();
+	const f = this.clock.flagged(Date.now());
+	if (f && !this._timeoutColor) {
+		this._timeoutColor = f;
+		// A human mid-prompt: unwind the pending input so the loop can end
+		// the game (getInput throws TimeoutError). An AI mid-search is caught
+		// when pickTurn returns.
+		if (this._inputResolve) {
+			const resolve = this._inputResolve;
+			this._inputResolve = null;
+			resolve('__timeout__');
+		}
+	}
+};
