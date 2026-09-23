@@ -1029,6 +1029,12 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
             s.add_history(ZOBRIST.key_js(&hb));
         }
     }
+    // `analyze` is the offline evaluator: `time_ms` is a CAP on a fixed-depth
+    // search, not a clock to be spent. The exact clock's overflow phase
+    // (`spend_remaining`) and the elastic extension are both play-time
+    // policies; with either active a capped depth-6 evaluation would sit in
+    // the reply position until the cap expired.
+    if time_ms > 0 { s.set_exact_clock(false); s.set_elastic(None); }
     let t = Instant::now();
     let (best, score, st) = s.go(&b, c, max_depth, time_ms);
     let dt = t.elapsed().as_secs_f64();

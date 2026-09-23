@@ -84,7 +84,7 @@ fi
 cd $WORK/repo
 echo "=== eval: depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
 $WORK/venv/bin/python -u engine/harness/eval_games.py eval --lines $WORK/lines.json \
-  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
+  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
 tail -3 $WORK/out/eval.log
 
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done

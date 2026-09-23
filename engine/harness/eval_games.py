@@ -176,12 +176,15 @@ def _red_pov(mover, v):
 
 def eval_game(item):
     """Evaluate every non-final position of one game; returns the rows."""
-    gid, game, depth, time_ms = item
+    gid, game, depth, time_ms = item[:4]
+    lo, hi = (item[4], item[5]) if len(item) > 4 else (0, None)
     import sigil_engine as se
     kw = _analyze_kwargs(se, depth, time_ms)
     rows = []
     positions = game['positions']
     for i, sfn in enumerate(positions[:-1]):
+        if i < lo or (hi is not None and i >= hi):
+            continue
         t0 = time.time()
         try:
             r = se.analyze(sfn, EVAL_NAME, history_sfns=positions[:i], **kw)
@@ -262,7 +265,14 @@ def cmd_eval(a):
         n = len(g['positions']) - 1
         if all((gid, i) in done for i in range(n)):
             continue
-        todo.append((gid, g, a.depth, a.time_ms))
+        if a.split > 0:
+            # Position-level work items: a 117-position game no longer pins one
+            # worker for two hours while the other 87 sit idle.
+            for lo in range(0, n, a.split):
+                if not all((gid, i) in done for i in range(lo, min(n, lo + a.split))):
+                    todo.append((gid, g, a.depth, a.time_ms, lo, min(n, lo + a.split)))
+        else:
+            todo.append((gid, g, a.depth, a.time_ms))
     print(f'{len(items)} games, {len(done)} positions already done, {len(todo)} games to evaluate', flush=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or '.', exist_ok=True)
     t_start = time.time(); n_rows = 0
@@ -369,6 +379,7 @@ def main():
     e = sub.add_parser('eval'); e.add_argument('--lines', required=True); e.add_argument('--out', required=True)
     e.add_argument('--depth', type=int, default=6); e.add_argument('--time-ms', type=int, default=0, help='0 = untimed fixed depth')
     e.add_argument('--workers', type=int, default=os.cpu_count() or 2); e.add_argument('--limit-games', type=int, default=0)
+    e.add_argument('--split', type=int, default=0, help='work items of this many positions instead of whole games (0 = whole games)')
     e.add_argument('--time-only', action='store_true'); e.add_argument('--sample', type=int, default=50)
     e.add_argument('--shard', default='', help='k/n: evaluate every n-th game starting at k (games sorted by timestamp)')
     e.add_argument('--exclude', action='append', default=[], help='lines.json of a corpus already evaluated; its games are skipped')
