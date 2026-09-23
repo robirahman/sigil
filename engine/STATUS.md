@@ -46,7 +46,7 @@ a read-out root spends the rest of the clock on the reply position (`spend_remai
 table); think report shows `depth D/S` and "reply read to depth N". Knob `exact_clock`, arm
 `engine/gcp/arms/exact_clock_10s.txt`. (3) Selective depth, four knobs measured one at a time at fixed 10 s:
 `nmp` (pass as null move: **+20.8 Elo [+2.6, +38.9]** over 1,408 games, ships ON as (2, 1)), `lmr_quiet`
-(in-window late-quiet reductions: **-18.8 [-36.9, -0.6]**, stays OFF), `tact_ext` (tactical extensions), `singular` (TT-move extension). (4) Game clocks for both sides (2026-09-23): local `GameClock` + `GameController` (loss on the flag, human
+(in-window late-quiet reductions: **-18.8 [-36.9, -0.6]**, stays OFF), `tact_ext` (tactical extensions: mask 72 **-82.5 [-101.1, -63.8]**, stays OFF; crush-only 41 running), `singular` (TT-move extension, running: +11.0 [-8.4, +30.5] at 1,229). (4) Game clocks for both sides (2026-09-23): local `GameClock` + `GameController` (loss on the flag, human
 or AI; `?clock=M+S` in any mode; menu picker with the chess ladder and custom; saves keep the clock; records
 carry `timeControl`/`endReason`), `search::move_budget_ms` allocates the AI's moves (18-move horizon, floor 6,
 2% reserve); online, a flag now records the game and Elo (`_endByTimeout`, transaction-gated `writeTimeout`,
