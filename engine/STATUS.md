@@ -30,7 +30,10 @@ it: one crushing key dash per top-8 first move, appended at nodes of width >= 24
 dashes and measured **+18.5 [+0.4, +36.7]** over 1,408 games (two-VM fleet); the 4-slot unquota'd composition
 measured -12.3 [-30.5, +5.8]. Shipped defaults: `dash_gen` mode 1 (the stream's 24-turn window, 2 pairs), key-dash scan (8, 1, 3), `Search::new`
 key_dash_reasons 1 / extra 8 / min_width 24; knobs `dash_gen`, `dash_v2`, `dash_v3` in ab_search; instrument
-`human_move_dash_turn` + `reach_of_turn`. FINDINGS "Placement-first dash generation: coverage and arena".
+`human_move_dash_turn` + `reach_of_turn`. On the 120 confirmed human cases at a live budget, v16 reproduces the
+human's effect in 69/120 (v15 43; dashes 39/74 vs 14) and repeats the AI's recorded losing move in 31/120 (v15 56);
+its score of the position before the AI's move barely changes. FINDINGS "Placement-first dash generation:
+coverage and arena".
 
 **2026-09-23: what humans find that the engine does not -- the human-turn evaluation drops (FINDINGS, same title).**
 346 Rust-AI-vs-human games since 2026-08-30 (AI won 41.3%), depth-6 evals on both sides of every turn, every

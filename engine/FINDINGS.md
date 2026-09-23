@@ -2567,3 +2567,28 @@ construction in the project to clear parity (attempts 1-4 above: -228, -285, -17
 the coverage instrument first: the arm was chosen for holding 78% of the human crushing dashes, not
 tuned on the arena. Not yet measured: the 488 human dashes that carried a cast (the exhaustive
 enumerator needs a direct move+dash+cast finder), and the 120 confirmed cases re-searched under v16.
+
+
+#### The 120 confirmed human-turn cases re-searched under v16 (2026-09-23, 15-20 s native per position)
+
+Two positions per case, engine at a live budget, v15 configuration (cheapest-pair dashes, no key dashes)
+against v16 defaults. "Same effect" = the engine's turn removes and pushes the same AI stones as the
+human's and leaves the same number of its own, i.e. the same landing with any sacrifice pair; "sees the
+loss" = its AI-point-of-view score is within 3 stones of the depth-8 / 150 s truth after the human's move.
+
+| | v15 | v16 |
+|---|---|---|
+| human's position, engine playing the human: exact human turn chosen | 17 / 120 | 27 / 120 |
+| ... same effect as the human's turn | 43 / 120 | **69 / 120** |
+| ... dash cases only: exact / same effect (of 74) | 3 / 14 | **13 / 39** |
+| ... score sees the loss | 57 / 120 | 62 / 120 |
+| AI's preceding position, engine playing the AI: repeats the recorded (losing) move | 56 / 120 | **31 / 120** |
+| ... score already sees the coming loss | 55 / 120 | 58 / 120 |
+
+So v16 produces the human's crushing effect in more than half the dash cases (39 of 74, from 14) and
+walks into the recorded move in a quarter of the cases instead of half. Its evaluation of the position
+before the AI's move hardly changes, though: the gain is in what the search considers and picks, not in
+what a 15 s search can prove; in the false-mate cases (GZTXU6 T30, HLX8GV T19) v16 no longer announces
+the mate the human defused. Not checked: whether v16's alternative moves in those 89 positions are
+better than the recorded ones by the deep oracle (the recorded ones lost 100 of the 120 games).
+Per-case results: `ai/data/human_turn_drops_v15_vs_v16_2026-09-23.json`.
