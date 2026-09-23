@@ -35,7 +35,7 @@ harness: `eval_games.py --split`, `analyze(time_ms)` is now a cap (exact clock o
 `ai/data/human_turn_drops_2026-09-23.json`. Next lever: dash generation breadth over sacrifice pairs, measured
 by human-dash coverage before any arena.
 
-**2026-09-22 (in progress, engine v15 / cache v42 on the arena verdicts): exact clock, selective depth, and
+**2026-09-23: engine v15 (cache v42) SHIPPED -- exact clock, selective depth (pass-as-null-move ON), and
 the skipped no-placement turn.** (1) Site: a player with no legal stone placement had the turn ended at once
 by both controllers and collapsed to `[pass]` by both JS enumerators; the ruling (move + optional dash +
 optional cast; a missing move invalidates only the move) is now followed, `tools/no-placement-smoke.js`.
@@ -46,11 +46,11 @@ a read-out root spends the rest of the clock on the reply position (`spend_remai
 table); think report shows `depth D/S` and "reply read to depth N". Knob `exact_clock`, arm
 `engine/gcp/arms/exact_clock_10s.txt`. (3) Selective depth, four knobs measured one at a time at fixed 10 s:
 `nmp` (pass as null move: **+20.8 Elo [+2.6, +38.9]** over 1,408 games, ships ON as (2, 1)), `lmr_quiet`
-(in-window late-quiet reductions: **-18.8 [-36.9, -0.6]**, stays OFF), `tact_ext` (tactical extensions: mask 72 **-82.5 [-101.1, -63.8]**, stays OFF; crush-only 41 running), `singular` (TT-move extension, running: +11.0 [-8.4, +30.5] at 1,229). (4) Game clocks for both sides (2026-09-23): local `GameClock` + `GameController` (loss on the flag, human
+(in-window late-quiet reductions: **-18.8 [-36.9, -0.6]**, stays OFF), `tact_ext` (tactical extensions: mask 72 **-82.5 [-101.1, -63.8]**, crush-only 41 **-31.7 [-49.9, -13.5]**, stays OFF), `singular` (TT-move extension: **+7.9 [-10.2, +26.0]** over 1,408 games, no measured difference, stays OFF). (4) Game clocks for both sides (2026-09-23): local `GameClock` + `GameController` (loss on the flag, human
 or AI; `?clock=M+S` in any mode; menu picker with the chess ladder and custom; saves keep the clock; records
 carry `timeControl`/`endReason`), `search::move_budget_ms` allocates the AI's moves (18-move horizon, floor 6,
 2% reserve); online, a flag now records the game and Elo (`_endByTimeout`, transaction-gated `writeTimeout`,
-`listenForFinish`), spectators see the clocks, presets are the ladder plus custom. `tools/clock-smoke.js`. FINDINGS "The deadline is the budget", "Selective depth", "Game clocks".
+`listenForFinish`), spectators see the clocks, presets are the ladder plus custom. `tools/clock-smoke.js`. FINDINGS "The deadline is the budget", "Selective depth", "Game clocks". **Shipped config (v15):** `exact_clock` on (elastic inert, `adopt_partial` on), `nmp` (2, 1) on, `lmr_quiet` 0, `tact_ext` (0, 0), `singular` 0; 146 Rust tests, wasm/no-placement/clock smokes green; every arena at fixed 10 s per move, 1,408 games, 88 shards.
 
 **2026-09-22: engine v14 (cache v41) -- the Hard AI spent 71% of its clock; full-budget time policy, arena
 +30.7 Elo at fixed 10 s.** Game X4TNAS: the Hard tier moved at depth 3 after 3 s of its 10 s, not because it was lost

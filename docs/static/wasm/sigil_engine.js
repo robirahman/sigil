@@ -150,7 +150,6 @@ let wasm_bindgen = (function(exports) {
     exports.Engine = Engine;
 
     /**
-     * Sanity handle for the loader: confirms the module initialised.
      * @returns {string}
      */
     function engine_info() {
@@ -213,6 +212,22 @@ let wasm_bindgen = (function(exports) {
         }
     }
     exports.judge_move = judge_move;
+
+    /**
+     * Sanity handle for the loader: confirms the module initialised.
+     * Game clock allocation, see `search::move_budget_ms`. Exported for the
+     * smoke test's parity check against rust-ai.js's mirror and for callers that
+     * prefer the engine's number.
+     * @param {number} remaining_ms
+     * @param {number} inc_ms
+     * @param {number} my_moves_played
+     * @returns {number}
+     */
+    function move_budget_ms(remaining_ms, inc_ms, my_moves_played) {
+        const ret = wasm.move_budget_ms(remaining_ms, inc_ms, my_moves_played);
+        return ret >>> 0;
+    }
+    exports.move_budget_ms = move_budget_ms;
     function __wbg_get_imports() {
         const import0 = {
             __proto__: null,

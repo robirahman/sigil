@@ -2324,12 +2324,13 @@ default):**
 | `nmp` (2, 1) vs off | `20260922T181612Z` | 1,408 | 52.98% [50.37, 55.58] | **+20.8 [+2.6, +38.9]** | 1.000 |
 | `lmr_quiet` 4 vs 0 (base with `nmp`) | `20260922T203629Z` | 1,408 | 47.30% [44.70, 49.91] | **-18.8 [-36.9, -0.6]** | 1.000 |
 | `tact_ext` 72 (cast, dash, crush; cap 2) vs 0 | `20260923T005403Z` | 1,408 | 38.35% [35.85, 40.92] | **-82.5 [-101.1, -63.8]** | 1.000 |
-| `tact_ext` 41 (crush only; cap 1) vs 0 | `20260923T014810Z` | pending (713: 45.30%, -32.7 [-58.3, -7.2]) | | | |
-| `singular` 150 vs 0 | `20260923T005416Z` | pending (1,229: 51.59%, +11.0 [-8.4, +30.5]) | | | |
+| `tact_ext` 41 (crush only; cap 1) vs 0 | `20260923T014810Z` | 1,408 | 45.45% [42.87, 48.06] | **-31.7 [-49.9, -13.5]** | 1.000 |
+| `singular` 150 vs 0 | `20260923T005416Z` | 1,408 | 51.14% [48.53, 53.74] | **+7.9 [-10.2, +26.0]** | 1.000 |
 
 `nmp` clears parity and **ships ON as (R 2, every node from ply 2)**; the later knobs are measured on top of it.
 `tact_ext` 72 is the predicted loser (quiescence by another name at a 7-10x per-ply cost: -82.5 Elo); the crush-only
-fallback is running. `lmr_quiet` loses, as the class-staged stream predicted ("late quiet" is a low-ranked first move, not a late
+fallback loses too (-31.7): extending even one ply on a crush costs more than the horizon it buys. `singular` reads +7.9 with a lower bound of -10.2: no measured difference at 10 s (as expected for a
+feature that touches only depth >= 4 PV nodes), stays OFF pending a longer-clock arena. `lmr_quiet` loses, as the class-staged stream predicted ("late quiet" is a low-ranked first move, not a late
 move): **stays OFF**.
 
 ## Game clocks: base + increment for the AI (2026-09-22)
