@@ -1700,6 +1700,59 @@ fn reach_of_turn(sfn: &str, turn: Vec<(String, i32, i32, Vec<u8>, i32)>, cap: us
     Ok((rx, rl, generated, kx, kl))
 }
 
+/// `human_turn` restricted to `[first move, dash]` turns, built directly instead
+/// of through the exhaustive enumerator (whose cast resolutions make a
+/// midgame position cost seconds). Empty when no move+dash reaches the position.
+#[pyfunction]
+fn human_move_dash_turn(sfn: &str, result_sfn: &str)
+    -> PyResult<Vec<(String, i32, i32, Vec<u8>, i32)>>
+{
+    use crate::turn::{Action, Turn};
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let has_wind = b.holds_charged(c, crate::spells_meta::SEAL_OF_WIND);
+    for (n, p) in b.ordered_first_moves(c) {
+        let mut pm = b;
+        pm.do_move_with_pub(n, p, c);
+        if pm.outcome != crate::board::Outcome::Ongoing { continue; }
+        let blink = has_wind && (crate::topology::ADJ[n as usize] & b.mine(c)) == 0;
+        let first = if blink { Action::Blink { node: n, push_to: p } } else { Action::Move { node: n, push_to: p } };
+        if pm.total[c.idx()] <= 2 { continue; }
+        let cost = pm.dash_cost(c) as usize;
+        let mut cands: Vec<u8> = Vec::new();
+        let mut m = pm.dash_sacrificeable(c);
+        while m != 0 { cands.push(m.trailing_zeros() as u8); m &= m - 1; }
+        if cands.len() < cost { continue; }
+        let mut combos: Vec<([u8; 2], u8)> = Vec::new();
+        if cost == 1 { for &s in &cands { combos.push(([s, 0], 1)); } }
+        else { for i in 0..cands.len() { for j in (i + 1)..cands.len() { combos.push(([cands[i], cands[j]], 2)); } } }
+        for (sacs, n_sacs) in combos {
+            let mut bd = pm;
+            for &s in &sacs[..n_sacs as usize] { bd.stones[c.idx()] &= !(1u64 << s); }
+            bd.update();
+            if bd.outcome != crate::board::Outcome::Ongoing { continue; }
+            let dt = bd.all_moveable(c);
+            if dt == 0 { continue; }
+            for (nd, pt) in bd.move_variants_pub(dt, c) {
+                let mut b2 = bd;
+                b2.do_move_with_pub(nd, pt, c);
+                if key(&b2.to_sfn()) == want {
+                    let t = Turn::single(first).push_pub(Action::Dash { sacs, n_sacs, node: nd, push_to: pt });
+                    return Ok(turn_to_tuples(&t));
+                }
+            }
+        }
+    }
+    Ok(Vec::new())
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
@@ -1726,6 +1779,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_key_dash_scan, m)?)?;
     m.add_function(wrap_pyfunction!(rank_of_landing, m)?)?;
     m.add_function(wrap_pyfunction!(human_turn, m)?)?;
+    m.add_function(wrap_pyfunction!(human_move_dash_turn, m)?)?;
     m.add_function(wrap_pyfunction!(reach_of_turn, m)?)?;
     m.add_function(wrap_pyfunction!(opening_pick, m)?)?;
     m.add("EVAL_NAMES", EVAL_NAMES.to_vec())?;
