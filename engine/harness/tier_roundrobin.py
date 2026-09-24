@@ -40,7 +40,8 @@ def _names(b):
 def main():
     red_t, blue_t, seed = sys.argv[1], sys.argv[2], int(sys.argv[3])
     max_plies = int(sys.argv[4]) if len(sys.argv) > 4 else 160
-    assert se.DEFAULT_WIDTH_SCALE == WIDTH and tuple(se.SHIPPED_ADAPTIVE) == ADAPTIVE, \
+    sa = tuple(se.SHIPPED_ADAPTIVE)   # f32 in the engine: 0.1 comes back as 0.100000001
+    assert se.DEFAULT_WIDTH_SCALE == WIDTH and abs(sa[0] - ADAPTIVE[0]) < 1e-6 and sa[1:] == ADAPTIVE[1:], \
         (se.DEFAULT_WIDTH_SCALE, se.SHIPPED_ADAPTIVE)
     tiers = {'red': red_t, 'blue': blue_t}
     sess = {c: se.SearchSession(TIERS[t]['tt']) for c, t in tiers.items()}
