@@ -26,7 +26,8 @@ never start on the 3-node spell opposite Syzygy, nor on the 1-node spell opposit
 stone away (Sprout, Splash, Charge); take Syzygy when the enemy started on one of those slots, over the tables;
 as blue, value Syzygy at the strongest of itself and the two spells across from it. Knob `opening_syzygy`
 (default ON), 3 tests, wasm smoke green. Changes red's pick in 27% of the Syzygy draws (23% of all draws) and
-forces blue's reply in 20% of red starts there (FINDINGS "Syzygy and the opposite sigils"). Arena informational.
+forces blue's reply in 20% of red starts there (FINDINGS "Syzygy and the opposite sigils"). Arena on Syzygy draws at fixed
+10 s: **+43.2 Elo [+24.9, +61.4]** over 1,408 games.
 
 **2026-09-23: engine v16 (cache v43) -- placement-first dash generation and composed CRUSH key dashes, arena
 +18.5 Elo [+0.4, +36.7].** Follows the human-turn audit below. `Board::dash_branches_by_landing` picks the landing

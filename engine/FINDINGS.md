@@ -2046,8 +2046,16 @@ How much of the opening this touches, over 4,000 `legal_draw` seeds:
 
 Tests: `opening_never_starts_opposite_syzygy`, `opening_blue_takes_syzygy_against_an_exposed_start`,
 `opening_blue_values_syzygy_by_the_spells_across_from_it` (152 pass). Shipped as engine v17 / cache v44 on the
-designer's authority; the arena (`opening_syzygy` 1 vs 0, competitive, FIXED 10 s, draws restricted to those
-holding Syzygy via `SIGIL_REQUIRE_SPELL=18`, two-VM fleet) is informational and its verdict goes here when in.
+designer's authority, then measured (`opening_syzygy` 1 vs 0, competitive, FIXED 10 s, draws restricted to those
+holding Syzygy via `SIGIL_REQUIRE_SPELL=18`, two c3d-highcpu-90 VMs, runs 20260924T152103Z and 20260924T152116Z):
+
+| change | knob | arm wins | win rate | Elo [95%] | verdict |
+|---|---|---|---|---|---|
+| Syzygy rules in the opening selector, Syzygy draws only | `opening_syzygy` | 791 / 1,408 | 56.18% [53.57, 58.75] | **+43.2 [+24.9, +61.4]** | BETTER, stays ON |
+
+704 distinct seeds, colour-swapped, none unfinished, 10.004 s/move both arms, mean 34.3 plies. The draws are
+filtered to the 22.6% that hold Syzygy, so the effect over all competitive games is roughly a quarter of this.
+The first opening-selector change to measure positive in self-play (the v11 selector itself was -15.6).
 
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
