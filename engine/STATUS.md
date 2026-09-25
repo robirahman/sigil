@@ -21,6 +21,11 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-24: Rust AI tier ratings re-anchored; vs-AI menu layout fixed (cache v45).** Hard = 1411, its
+performance against the developer over the last 20 games (8-12). Easy 786, Medium 1087, Very Hard 1439 from a
+60-game round-robin fit with Hard pinned (FINDINGS "Rust AI tier ratings"). The index page's clock picker now
+wraps onto its own line instead of squeezing the four tier buttons to 16 px.
+
 **2026-09-23: engine v17 (cache v44) -- Syzygy rules in the competitive opening selector.** Designer's rule:
 never start on the 3-node spell opposite Syzygy, nor on the 1-node spell opposite it unless its cast moves the
 stone away (Sprout, Splash, Charge); take Syzygy when the enemy started on one of those slots, over the tables;

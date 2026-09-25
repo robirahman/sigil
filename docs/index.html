@@ -64,8 +64,15 @@
 		   four equal-width buttons in the space of one. */
 		.ai-difficulty-row {
 			display: none;
+			flex-wrap: wrap;
 			gap: 8px;
 			margin: 12px 0;
+		}
+		/* The clock picker lives in the same row: it must take a line of its own,
+		   or it shares the row's width and squeezes the four tier buttons. */
+		.ai-difficulty-row .clock-picker {
+			flex: 0 0 100%;
+			margin: 0;
 		}
 		.ai-difficulty-row.is-open {
 			display: flex;

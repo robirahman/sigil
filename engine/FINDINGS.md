@@ -2634,3 +2634,36 @@ what a 15 s search can prove; in the false-mate cases (GZTXU6 T30, HLX8GV T19) v
 the mate the human defused. Not checked: whether v16's alternative moves in those 89 positions are
 better than the recorded ones by the deep oracle (the recorded ones lost 100 of the 120 games).
 Per-case results: `ai/data/human_turn_drops_v15_vs_v16_2026-09-23.json`.
+
+
+## Rust AI tier ratings (2026-09-24)
+
+The four Rust tiers' leaderboard ratings were re-anchored. **Hard** is pinned at its performance rating against
+the developer account (1481) over their last 20 games (2026-09-22 to 2026-09-24, all competitive, ranked): the
+human won 12, lost 8, so 1481 + 400 log10(8/12) = **1411**. The other three come from a 60-game round-robin
+(`engine/harness/tier_roundrobin.py`, arms `engine/gcp/arms/tier_roundrobin.txt`, run 20260924T225711Z): each
+pair of tiers played 5 draws twice with colours swapped, competitive variant, each tier configured as the site
+plays it (0.1 / 1 / 10 / 60 s per move, table 2^16 / 2^18 / 2^20 / 2^21, one table per game, pondering for Hard
+and Very Hard during the other side's think). No game was drawn or unfinished.
+
+| winner \ loser | Easy | Medium | Hard | Very Hard | total |
+|---|---|---|---|---|---|
+| Easy | | 1 | 0 | 1 | 2-28 |
+| Medium | 9 | | 1 | 1 | 11-19 |
+| Hard | 10 | 9 | | 4 | 23-7 |
+| Very Hard | 9 | 9 | 6 | | 24-6 |
+
+Ratings are the maximum-likelihood Elo fit over all 60 games with Hard fixed at 1411 (every game counts, not
+only the games against Hard), 95% intervals from the Fisher information:
+
+| tier | old | new | 95% |
+|---|---|---|---|
+| Easy | 1020 | **786** | +-313 |
+| Medium | 1121 | **1087** | +-232 |
+| Hard | 1360 | **1411** | pinned |
+| Very Hard | 1292 | **1439** | +-192 |
+
+Written to `users/` and `leaderboard/` for `__ai_rust_{easy,medium,hard,very_hard}__` with the service
+account. Very Hard beat Hard 6-4 but scored the same 9-1 as Hard against the two weak tiers, so the fit puts it
+only 28 above Hard; ten games per pair cannot separate them. Reading only the games against Hard would have
+given Very Hard 1481, Medium 1029 and Easy about 900 (0-10 clamped to 0.5).
