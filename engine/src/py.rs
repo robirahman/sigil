@@ -84,6 +84,8 @@ impl PyBoard {
         Ok(mask_to_vec(self.b.dash_sacrificeable(color(c)?)))
     }
     fn dash_cost(&self, c: &str) -> PyResult<u32> { Ok(self.b.dash_cost(color(c)?)) }
+    /// The static cost the dash generator orders sacrifice stones by (turn_iter.rs).
+    fn sacrifice_cost(&self, node: u8, c: &str) -> PyResult<i32> { Ok(self.b.sacrifice_cost(node, color(c)?)) }
     fn castable(&self, c: &str, can_spell: bool, can_summer: bool, post_dash: bool) -> PyResult<Vec<u8>> {
         Ok(self.b.castable(color(c)?, can_spell, can_summer, post_dash))
     }
@@ -1378,6 +1380,34 @@ fn rank_of_result(sfn: &str, result_sfn: &str, cap: usize, width_scale: Option<u
     Ok((rank, generated, acts_json))
 }
 
+/// `rank_of_result` with the generator budgets explicit: cast-outcome
+/// `window` and `keep_window` (the dash knob is `set_dash_gen`). For
+/// coverage sweeps: returns (rank or -1, turns generated within `cap`).
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, window, keep_window, cap=5000))]
+fn rank_of_result_budget(sfn: &str, result_sfn: &str, window: usize, keep_window: usize, cap: usize)
+    -> PyResult<(i64, usize)>
+{
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let (mut rank, mut generated) = (-1i64, 0usize);
+    for (i, t) in b.turns_ordered_keeps(c, window, 0, keep_window).take(cap).enumerate() {
+        generated = i + 1;
+        if rank < 0 {
+            let mut ch = b; ch.apply_turn(&t, c);
+            if key(&ch.to_sfn()) == want { rank = i as i64; }
+        }
+    }
+    Ok((rank, generated))
+}
+
 /// Candidate-turn features for a position, plus which candidate the search chose.
 ///
 /// This is what training a re-ranker needs and what `best_rank` could not provide:
@@ -1830,6 +1860,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(even_offset, m)?)?;
     m.add_function(wrap_pyfunction!(adaptive_scale, m)?)?;
     m.add_function(wrap_pyfunction!(node_list_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(rank_of_result_budget, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(move_budget_ms, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;

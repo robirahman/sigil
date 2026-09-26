@@ -21,6 +21,19 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-26: surprise audit -- where the eval falls against the Rust AI.** All 360 hydratable Rust-AI games
+since 08-26 at depth 4, re-searched with the current engine (`engine/harness/surprise_audit.py`, VM
+`launch_surprise.sh`; FINDINGS "Where the engine is surprised"). 284 confirmed falls across the human's turn
+(120 into a forced loss): depth 5 sees 61%, depth 6 63%, depth 4 at double width 14%, a leaf-width floor 2%.
+152 are the engine's OWN predicted reply misjudged by about one ply (horizon); 102 are turns the generator
+never produces (dash sacrifice pair 47, cast resolution 38 -- Storm Front first --, dash landing 8, 9 past the
+enumeration cap); only 26 sit in the stream beyond the width. Width at low depth is not the lever; generator
+budgets (sacrifice pairs per landing, cast outcomes/keeps) and depth are. 336 falls across the AI's own turn are
+old-engine moves the current engine mostly avoids (depth 4 repeats 25). Engine hooks, off by default:
+`WIDTH_SHAPES[6]`, `analyze(width_shape=, probe_sfn=)`, `adaptive_scale`, `node_list_rank`,
+`rank_of_result_budget`, `Board.sacrifice_cost`. Tests 153/153 (two clock tests flake under a loaded 4-core box,
+pass alone).
+
 **2026-09-26: a reload no longer drops a turn from vs-AI records (cache v47).** The local save was written on
 `sfn_update`, which fires before `turn_complete`, so every save held the newest position without the newest
 turn. A reload resumed from it and the finished record lacked the last turn before the reload: 18 of 439

@@ -2667,3 +2667,128 @@ Written to `users/` and `leaderboard/` for `__ai_rust_{easy,medium,hard,very_har
 account. Very Hard beat Hard 6-4 but scored the same 9-1 as Hard against the two weak tiers, so the fit puts it
 only 28 above Hard; ten games per pair cannot separate them. Reading only the games against Hard would have
 given Very Hard 1481, Medium 1029 and Easy about 900 (0-10 clamped to 0.5).
+
+## Where the engine is surprised: evaluation falls against the Rust AI (2026-09-26)
+
+Question (Robi): in every game the Rust AI played, find the turns where the evaluation declines against it in a
+way that surprises the engine; re-search the position before the opponent's move deeper -- does the deeper
+search see the opponent's good move, or is the engine systematically unable to see certain moves? Would more
+width at low depth help instead of the current progressive widening?
+
+Data: every `completed_games` record since 2026-08-26 with a Rust tier on exactly one side (389; 360 hydrate,
+11,269 positions, all opponents human). Only 9 games postdate engine v16, but everything below is the CURRENT
+engine (v17) re-searching the recorded positions, so the old engines only chose which positions arose. Harness:
+`engine/harness/surprise_audit.py` (flag / probe / report / gaps), VMs `launch_surprise.sh`, runs
+20260926T181653Z (opponent turns) and 20260926T180559Z (own turns), depth-4 scan from 20260926T175110Z. Rows in
+`ai/data/surprise_audit_2026-09-26.json`.
+
+Method. Every position at depth 4 (shipped search: width scale 4, adaptive (0.10, 2, 6), untimed). Values are
+AI-point-of-view stones, a forced result counted as 20. A turn is FLAGGED when the value fell by more than 1
+stone across it, and CONFIRMED when depth 6 of the resulting position agrees (so it is not depth 4 misjudging
+the new position). A probe "sees" the fall when its value of the position before the move is within 0.5 of
+that depth-6 target. Depth 6 also widens (the root is 3 x `width_for_depth`: 72 x scale at depth 4, 120 x
+scale at depth 6), so two depth-4 width probes separate the axes: twice the width everywhere (`d4 x2`), and a
+leaf floor (`WIDTH_SHAPES[6]`: the two narrowest buckets raised from 6 and 10 to 16 x scale). The engine
+gained audit hooks, all off by default: `analyze(probe_sfn=)` reports where a given turn sat in the root list
+and what it scored, `node_list_rank` does the same for an interior node's list (ply 1 of the AI's own search),
+`adaptive_scale`, `rank_of_result_budget`, `Board.sacrifice_cost`.
+
+### Falls across the opponent's turn
+
+5,663 opponent turns; 328 flagged (5.8%), **284 confirmed**: 151 of 1-3 stones, 13 larger, **120 into a
+forced loss**. What re-searching the opponent's position sees:
+
+| search of the position before the reply | sees it | median nodes | mean s |
+|---|---|---|---|
+| depth 4 (by construction) | 0% | 31,143 | 2.3 |
+| depth 4, leaf floor | 2% (6) | 56,868 (1.8x) | 6.1 |
+| depth 4, twice the width | 14% (40) | 74,708 (2.4x) | 8.9 |
+| depth 5 | **61% (173)** | 173,236 (5.6x) | 18.4 |
+| depth 6 | **63% (180)** | 771,950 (25x) | 72.3 |
+
+Depth 6 and double width overlap: 144 seen only by depth 6, 36 by both, 4 only by double width, 100 by neither.
+
+Why depth 4 missed the reply (from the root probe of the depth-4 search and the ordered stream):
+
+| class | cases | d5 sees | d6 sees | x2 width sees |
+|---|---|---|---|---|
+| **predicted**: the reply WAS the root's own first choice for the opponent (or within 0.25 stones of it) | **152** | 115 | 109 | 15 |
+| misjudged: searched at the root, scored clearly below its best | 4 | 3 | 4 | 0 |
+| **unseen**: the depth-4 root never searched the reply | **128** | 55 | 67 | 25 |
+
+So the answer to "did it overlook a move" is mostly NO. In 152 of 284 cases the engine's depth-4 search of
+the opponent's position had already picked exactly the move the human played as the opponent's best, and
+valued the consequences 1.07 stones (median) too well; one more ply fixes it (depth 5 lands on the target,
+median error +0.02). That is a horizon, not blindness. The eval's odd/even bias is not the cause: on 250 random
+positions, odd depths score the mover 0.10-0.13 stones higher than even ones, a tenth of these falls.
+
+The unseen 128 break down by what the stream lacks (`surprise_audit.py gaps`):
+
+| gap | cases | depth 6 still blind |
+|---|---|---|
+| **dash sacrifice pair**: the same first move and dash landing are generated, never with the human's two sacrificed stones | **47** | 20 |
+| **cast resolution**: the same first move and spell are generated, never with the human's outcome / keep / follow-up (Storm Front 9, Flourish 3, Gather 3, Scatter 3, Fury 2, Carnage 2) | **25** | 13 |
+| cast resolution after the dash (move, landing and sacrifice all generated) | 13 | 6 |
+| dash landing never generated after that first move | 8 | 7 |
+| **ranked past the root width** (stream ranks 46-4,272) | **26** | 11 |
+| not in a 500k-turn enumeration | 9 | 4 |
+
+Only the 26 "past the root width" are a width problem; the other 102 are turns the generator never produces,
+which no widening reaches. Of 54 human sacrifice pairs whose landing the stream generates, 16 are tied for the
+cheapest by `sacrifice_cost` and in 47 neither stone was one the AI could crush, so the static ordering is not
+simply "wrong stones first"; raising the per-landing cap (`DASH_GEN` per_target 2) to 4 recovers 11 of the 47,
+so the cap is part of it.
+
+Wider generator budgets, exact reply reached within the first 5,000 turns of the stream (of 128):
+
+| budget (cast window, keep window, pairs per landing) | reached | stream length (median) |
+|---|---|---|
+| search's own (16, 2, 2) | 23 | 1,014 |
+| pairs 4 / 8 / 16 | 35 / 34 / 35 | ~950 |
+| cast window 64 / 256 | 32 / 33 | 2,832 / 3,056 |
+| keep 8 | 31 | 1,074 |
+| pairs 8 + window 64 + keep 8 | **66** | 5,000 (cap) |
+
+No single budget recovers more than a dozen; together they reach half, at five times the stream or more. The
+cheap one is sacrifice pairs per landing 2 -> 4 (+11 dash-sacrifice cases, stream no longer, but it pushes 5
+of the past-the-width turns further back).
+
+**Inside the AI's own search.** Position i is ply 1 of the AI's search of the move before it. There the reply
+was in the list at full width in 133 of 284 cases, in the LMR band (reduced depth) in 10, and **absent in 141**
+(3 plies left; 4 plies left: 136 / 15 / 133). The split follows the classes: 132 of the 152 predicted replies
+are inside the ply-1 width, and all 128 unseen ones are absent there too.
+
+### Falls across the AI's own turn
+
+The larger set: 5,606 AI turns, 351 flagged, **336 confirmed**, 229 of them into a forced loss -- the AI's move
+let the opponent in, and a depth-4 search of the resulting position finds the killing reply that the AI's own
+search of the move did not. These are the old engines' moves (330 of 336 predate v16), and the current engine
+does not repeat them: at depth 4 it keeps the played move in 25 cases and picks another in 311 (depth 5: 15 /
+321, depth 6: 19 / 317; depth 6 keeps it AND sees the fall -- no escape -- in 16). Depth 6's alternative,
+re-searched at depth 6 from the other side, is better than the played move by > 1 stone in 191 of 317
+(median +2.96). Of the 25 the current depth 4 would repeat, the opponent's best reply was inside its ply-1
+list in 8. The opponent's best reply (depth 6) at the AI's ply 1: full width 216 of 336, LMR band 26, absent 94
+(3 plies left); stream rank < 100 in 124, 100-999 in 135, never in the stream in 62; kinds dash+cast 175,
+cast 63, dash 59, plain move 39.
+
+### Answers
+
+1. **Does a deeper search see what the opponent had?** Mostly yes: depth 5 sees 61% of the opponent-turn
+   falls and depth 6 63%. The biggest class (152 of 284) is not an overlooked move at all -- depth 4 already
+   predicted the exact reply and misjudged what follows by about a ply.
+2. **Is it systematically blind to some moves?** Yes, for a specific 36% (102 of 284): turns the generator
+   never produces -- a dash with a particular sacrifice pair (47), a cast resolved a particular way (38,
+   Storm Front the most common), a dash landing (8), plus 9 beyond the enumeration cap. Depth 6 still misses 50
+   of these. These are the same families the 2026-09-23 human-turn study found (dash sacrifice combos, cast
+   outcome/keep windows), now measured on the current engine after v16's dash fix.
+3. **More width at low depth?** No. Raising the leaf widths (6 and 10 -> 16 x scale) sees 2% at 1.8x the
+   nodes; doubling every width sees 14% at 2.4x; one more ply sees 61% at 5.6x. Only 26 of 284 replies sit in
+   the stream beyond the width, and the root already expands 3 x 24 x scale at depth 4. The width that matters
+   is not the progressive-widening count but the GENERATOR's budgets -- sacrifice pairs per landing and cast
+   outcomes/keeps -- which decide whether the move exists at all.
+
+What this points at, in order: (a) sacrifice-pair generation per dash landing (per_target 2 -> 4 is free in
+stream length; gate on these 47 cases and the 2026-09-23 human dashes, then an arena), (b) cast resolution
+for the many-outcome spells (Storm Front first), where a blanket window increase triples the stream, so a
+targeted outcome selector is needed, (c) depth: the predicted class is a one-ply horizon, so node rate and the
+selective-depth work pay directly.

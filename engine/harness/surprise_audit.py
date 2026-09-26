@@ -556,6 +556,103 @@ def turn_kind(acts):
     return '+'.join(tag)
 
 
+# -------------------------------------------------------------------- gaps ---
+
+BUDGETS = {   # (cast-outcome window, keep window, dash sacrifice pairs per landing)
+    'search budgets (16, 2, 2)': (16, 2, 2),
+    'dash pairs 4': (16, 2, 4), 'dash pairs 8': (16, 2, 8), 'dash pairs 16': (16, 2, 16),
+    'cast window 64': (64, 2, 2), 'cast window 256': (256, 2, 2), 'keep 8': (16, 8, 2),
+    'pairs 8 + window 64 + keep 8': (64, 8, 8),
+}
+
+
+def _gap_one(item):
+    """For one confirmed reply the depth-4 root never searched: what part of it
+    the ordered stream lacks, and whether wider generator budgets reach it."""
+    r, positions, acts = item
+    import sigil_engine as se
+    names = list(se.NODE_NAMES)
+    ix = {n: k for k, n in enumerate(names)}
+    sfn, after = positions[r['i']], positions[r['i'] + 1]
+    b = se.Board.from_sfn(sfn)
+    c = 'red' if sfn.split()[1] == 'r' else 'blue'
+    out = {'g': r['g'], 'i': r['i'], 'cls': r['cls'], 'kind': r['kind'], 'd6_sees': bool(r.get('sees_d6_i'))}
+    gap = None
+    if acts and 'past the root' not in r['cls']:
+        f = acts[0]
+        first = (ix[f['node']], ix[f['pushed_to']] if f.get('pushed_to') else -1)
+        dk = [k for k, a in enumerate(acts) if a['type'].startswith('dash')]
+        casts = [a for a in acts if a['type'] == 'cast']
+        stream = b.turns_ordered_reasons(c, 16, 0, 5000)
+        if dk:
+            k = dk[0]
+            land_a = acts[k + 1]
+            land = (ix[land_a['node']], ix[land_a['pushed_to']] if land_a.get('pushed_to') else -1)
+            sacs = sorted(ix[x] for x in acts[k].get('sacrificed', []))
+            same_land = same_sac = False
+            for t in stream:
+                if (t[0][1], t[0][2]) != first:
+                    continue
+                d = [a for a in t if a[0] == 'dash']
+                if d and (d[0][1], d[0][2]) == land:
+                    same_land = True
+                    same_sac = same_sac or sorted(d[0][3]) == sacs
+            gap = ('cast resolution after the dash' if same_sac else 'dash sacrifice pair' if same_land
+                   else 'dash landing')
+        elif casts:
+            spell = casts[0]['spell']
+            same = any((t[0][1], t[0][2]) == first and any(a[0] == 'cast' and 0 <= a[4] < 9
+                                                         and b.spell_names[a[4]] == spell for a in t)
+                       for t in stream)
+            gap = 'cast resolution' if same else 'cast (spell never cast after this move)'
+        else:
+            gap = 'plain move'
+    elif 'past the root' in r['cls']:
+        gap = 'ranked past the root width'
+    else:
+        gap = 'not in the capped enumeration'
+    out['gap'] = gap
+    ranks = {}
+    d = se.search_defaults()   # read BEFORE the sweep changes the thread-local knob
+    for name, (w, kw, pt) in BUDGETS.items():
+        se.set_dash_gen(1, 0, pt)
+        ranks[name] = list(se.rank_of_result_budget(sfn, after, w, kw, 5000))
+    se.set_dash_gen(d['dash_gen_mode'], d['dash_gen_width'], d['dash_gen_per_target'])
+    out['budgets'] = ranks
+    return out
+
+
+def cmd_gaps(a):
+    lines = json.load(open(a.lines, encoding='utf-8'))
+    rows = json.load(open(a.rows, encoding='utf-8'))
+    probes = {}
+    for ln in open(a.probes, encoding='utf-8'):
+        d = json.loads(ln)
+        probes[(d['g'], d['i'])] = d
+    todo = []
+    for r in rows:
+        if not r.get('confirmed') or not r['cls'].startswith('unseen'):
+            continue
+        p = probes[(r['g'], r['i'])]
+        acts = (p.get('landing') or {}).get('acts') or p.get('acts')
+        todo.append((r, lines[r['g']]['positions'], acts))
+    res = []
+    with ProcessPoolExecutor(max_workers=a.workers) as ex:
+        for f in as_completed([ex.submit(_gap_one, it) for it in todo]):
+            res.append(f.result())
+    print(f'{len(res)} confirmed replies the depth-4 root never searched')
+    for g, n in Counter(x['gap'] for x in res).most_common():
+        print(f'  {g:42s} {n:4d}   depth 6 still blind in {sum(1 for x in res if x["gap"] == g and not x["d6_sees"])}')
+    print('\nexact reply reached by the ordered stream (cap 5000) under wider generator budgets:')
+    for name in BUDGETS:
+        got = [x for x in res if x['budgets'][name][0] >= 0]
+        by = Counter(x['gap'] for x in got)
+        print(f'  {name:30s} {len(got):4d}/{len(res)}  stream median {statistics.median(x["budgets"][name][1] for x in res):5.0f}  '
+              + ', '.join(f'{k}: {v}' for k, v in by.most_common()))
+    if a.json:
+        json.dump(res, open(a.json, 'w', encoding='utf-8'))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='cmd', required=True)
@@ -570,8 +667,10 @@ def main():
     r = sub.add_parser('report'); r.add_argument('--cases', required=True); r.add_argument('--probes', required=True, action='append')
     r.add_argument('--threshold', type=float, default=1.0); r.add_argument('--tolerance', type=float, default=0.5)
     r.add_argument('--json'); r.add_argument('--md')
+    g = sub.add_parser('gaps'); g.add_argument('--lines', required=True); g.add_argument('--rows', required=True, help='report --json output (opponent side)')
+    g.add_argument('--probes', required=True); g.add_argument('--workers', type=int, default=os.cpu_count() or 2); g.add_argument('--json')
     a = p.parse_args()
-    {'flag': cmd_flag, 'probe': cmd_probe, 'report': cmd_report}[a.cmd](a)
+    {'flag': cmd_flag, 'probe': cmd_probe, 'report': cmd_report, 'gaps': cmd_gaps}[a.cmd](a)
 
 
 if __name__ == '__main__':
