@@ -21,6 +21,16 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-26: a reload no longer drops a turn from vs-AI records (cache v47).** The local save was written on
+`sfn_update`, which fires before `turn_complete`, so every save held the newest position without the newest
+turn. A reload resumed from it and the finished record lacked the last turn before the reload: 18 of 439
+transcript records (2026-08-14 to 09-26; 12 AI turns, 6 human) have one missing turn.
+`turn_complete` now saves again; `tools/browser/resume-log-test.js` fails before and passes after.
+Reconstruction (engine/examples/children.rs lists every position one turn away; each is replayed through the
+rest of the transcript against `finalSfn`): the first action of the missing turn is determined in all 18 games,
+and the whole turn in 5 (B4YSV7, R2NQ2D, TYDX4B, DSJZ2B, TT2PAE; the last two by the AI reproducing its
+recorded reply). The others keep 2 to 50 candidates that differ only in stones later play erased.
+
 **2026-09-26: Reset Turn rewinds the Seal-of-Spring springlock (cache v46).** `SigilBoard.takeSnapshot` saved
 each player's lock but not the springlock, so Reset Turn kept the cancelled turn's value. Resetting a second cast
 of a locked spell left it springlocked, and the spell could not be cast again. Resetting a cast of another spell
