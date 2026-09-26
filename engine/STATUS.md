@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-26: Reset Turn rewinds the Seal-of-Spring springlock (cache v46).** `SigilBoard.takeSnapshot` saved
+each player's lock but not the springlock, so Reset Turn kept the cancelled turn's value. Resetting a second cast
+of a locked spell left it springlocked, and the spell could not be cast again. Resetting a cast of another spell
+cleared an existing springlock, and the springlocked spell could be cast a third time. The stale value was also
+written into the SFN and the threefold-repetition key, so the positions that followed were keyed wrong until the
+player's next sorcery or ritual. The snapshot now saves and restores the springlock. This affected local and
+multiplayer games, which share `board.js`; the Cataclysm board already saved it. Regression test:
+`node tools/springlock-reset-smoke.js`.
+
 **2026-09-24: Rust AI tier ratings re-anchored; vs-AI menu layout fixed (cache v45).** Hard = 1411, its
 performance against the developer over the last 20 games (8-12). Easy 786, Medium 1087, Very Hard 1439 from a
 60-game round-robin fit with Hard pinned (FINDINGS "Rust AI tier ratings"). The index page's clock picker now

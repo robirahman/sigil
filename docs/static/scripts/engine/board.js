@@ -197,6 +197,11 @@ class SigilBoard {
 			blueSpellCounter: this.spellCounter.blue,
 			redLock: this.lock.red,
 			blueLock: this.lock.blue,
+			// Reset Turn must rewind Seal-of-Spring state with the lock: a
+			// reset second cast would otherwise leave the spell springlocked,
+			// and a reset cast of another spell would un-springlock it.
+			redSpringlock: this.springlock.red,
+			blueSpringlock: this.springlock.blue,
 			lastPlay: this.lastPlay,
 			lastPlayer: this.lastPlayer,
 			pendingRed: [...this.pendingMoves.red],
@@ -265,6 +270,8 @@ class SigilBoard {
 		this.spellCounter.blue = snap.blueSpellCounter;
 		this.lock.red = snap.redLock;
 		this.lock.blue = snap.blueLock;
+		this.springlock.red = snap.redSpringlock;
+		this.springlock.blue = snap.blueSpringlock;
 		this.lastPlay = snap.lastPlay;
 		this.lastPlayer = snap.lastPlayer;
 		// Restore the pre-turn schedules and zero the turn-scoped counters;
