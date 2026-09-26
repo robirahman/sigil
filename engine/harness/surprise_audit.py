@@ -120,9 +120,9 @@ def cmd_flag(a):
         for i in range(n):
             mover = pos[i].split()[1]
             mover = 'red' if mover == 'r' else 'blue'
-            if mover == ai:
-                continue                      # the AI's own turn
-            stats['opponent turns'] += 1
+            if (mover == ai) != (a.side == 'own'):
+                continue
+            stats['own turns' if a.side == 'own' else 'opponent turns'] += 1
             v_i = value_red(rows.get((gid, i)))
             if i + 1 < n:
                 v_j = value_red(rows.get((gid, i + 1)))
@@ -135,7 +135,7 @@ def cmd_flag(a):
             drop = v_i - v_j
             if drop > a.threshold:
                 stats['flagged'] += 1
-                cases.append({'g': gid, 'i': i, 'ai': ai, 'v4_i': v_i, 'v4_j': v_j, 'drop4': round(drop, 3),
+                cases.append({'g': gid, 'i': i, 'ai': ai, 'side': a.side, 'v4_i': v_i, 'v4_j': v_j, 'drop4': round(drop, 3),
                               'terminal': i + 1 == n, 'room': g.get('roomCode'),
                               'opp_uid': g.get('blueUid') if ai == 'red' else g.get('redUid'),
                               'ai_uid': g.get('redUid') if ai == 'red' else g.get('blueUid'),
@@ -168,7 +168,58 @@ def _summ(r, dt, pov):
     return out
 
 
+def probe_own(item):
+    """A fall across the AI's OWN turn: position i is the AI's decision, i+1
+    the position its move produced (opponent to move), and the depth-4 value
+    of i+1 is below that of i -- the search of i+1 finds an opponent reply the
+    AI's search of i did not. Probes of i (the AI's position), each with the
+    PLAYED move as the root probe: value, chosen move, the played move's root
+    index and score. The killer reply is depth 6's choice at i+1; where it sits
+    in the ply-1 list the AI's own search expanded (position i+1, 3 / 4 plies
+    left) is the width question."""
+    case, positions, time_ms, _enum_cap, which = item
+    import sigil_engine as se
+    i, ai = case['i'], case['ai']
+    pos_i, hist_i, played = positions[i], positions[:i], positions[i + 1]
+    out = {'g': case['g'], 'i': i, 'side': 'own'}
+    try:
+        out['scale_i'] = se.adaptive_scale(pos_i)
+        out['scale_j'] = se.adaptive_scale(played)
+        r, dt = _analyze(se, played, positions[:i + 1], 6, time_ms)
+        out['d6_j'] = _summ(r, dt, ai)
+        out['reply_acts'] = json.loads(r['actions_json']) if r.get('actions_json') else None
+        reply = r.get('expected_sfn')
+        if reply:
+            out['ply1'] = {str(rem): list(se.node_list_rank(played, reply, rem, 1)) for rem in (3, 4)}
+            rank, gen, _ = se.rank_of_result(played, reply, cap=5000)
+            out['reply_rank'] = {'rank': rank, 'generated': gen}
+            r4, dt4 = _analyze(se, played, positions[:i + 1], 4, time_ms, probe_sfn=reply)
+            out['d4_j'] = _summ(r4, dt4, ai)
+        runs = [('d4_i', 4, {}), ('d5_i', 5, {}), ('d6_i', 6, {}),
+                ('d4w2_i', 4, dict(width_scale=se.DEFAULT_WIDTH_SCALE * 2,
+                                   adaptive=(se.SHIPPED_ADAPTIVE[0], se.SHIPPED_ADAPTIVE[1] * 2,
+                                             se.SHIPPED_ADAPTIVE[2] * 2))),
+                ('d4leaf_i', 4, dict(width_shape=LEAF_SHAPE))]
+        for key, d, over in runs:
+            r, dt = _analyze(se, pos_i, hist_i, d, time_ms, probe_sfn=played, **over)
+            sm = _summ(r, dt, ai)
+            sm['same_move'] = (r.get('expected_sfn') is not None
+                               and position_key(r['expected_sfn']) == position_key(played))
+            out[key] = sm
+            if not sm['same_move'] and r.get('expected_sfn') and d == 6:
+                # What depth 6 thinks of ITS alternative, checked from the
+                # other side at depth 6 (the alternative's own position).
+                alt = r['expected_sfn']
+                ra, dta = _analyze(se, alt, positions[:i + 1], 6, time_ms)
+                out['d6_alt'] = _summ(ra, dta, ai)
+    except Exception as e:  # noqa: BLE001
+        out['error'] = f'{type(e).__name__}: {e}'
+    return out
+
+
 def probe_case(item):
+    if item[0].get('side') == 'own':
+        return probe_own(item)
     case, positions, time_ms, enum_cap, which = item
     import sigil_engine as se
     i, ai = case['i'], case['ai']
@@ -286,6 +337,96 @@ def classify(r):
     return 'unseen: not found in the capped enumeration'
 
 
+def report_own(a, cases, probes):
+    T, tol = a.threshold, a.tolerance
+    rows = []
+    for key, c in cases.items():
+        p = probes.get(key)
+        if not p or (p.get('d6_j') or {}).get('v') is None:
+            continue
+        r = dict(c)
+        tgt = p['d6_j']['v']
+        r['target'] = tgt
+        r['confirmed'] = c['v4_i'] - tgt > T
+        for k in ('d4_i', 'd5_i', 'd6_i', 'd4w2_i', 'd4leaf_i'):
+            q = p.get(k) or {}
+            r[k] = q.get('v')
+            r['same_' + k] = q.get('same_move')
+            # sees the danger and keeps the move (no escape it can find), or avoids it
+            r['sees_' + k] = None if q.get('v') is None else (q.get('same_move') and q['v'] - tgt <= tol)
+            r['avoids_' + k] = None if q.get('same_move') is None else (not q['same_move'])
+            r['probe_' + k] = q.get('probe')
+        alt = p.get('d6_alt') or {}
+        r['alt6_v'] = alt.get('v')
+        r['ply1'] = p.get('ply1')
+        r['reply_rank'] = (p.get('reply_rank') or {}).get('rank')
+        r['kind'] = turn_kind(p.get('reply_acts'))
+        r['scale_j'] = p.get('scale_j')
+        pr = r['probe_d4_i']
+        r['played_d4'] = None if pr is None else ('chosen' if pr[1] == 0 or r['same_d4_i'] else 'searched, not chosen')
+        if pr is None:
+            r['played_d4'] = 'not in the depth-4 root list'
+        r['nodes'] = {k: (p.get(k) or {}).get('nodes') for k in ('d4_i', 'd4w2_i', 'd4leaf_i', 'd5_i', 'd6_i')}
+        rows.append(r)
+    conf = [r for r in rows if r['confirmed']]
+    out = []
+    say = out.append
+
+    def pct(n, d):
+        return f'{n}/{d} ({100 * n / d:.0f}%)' if d else '0/0'
+    say(f'OWN-TURN falls: {len(rows)} probed; {len(conf)} CONFIRMED (depth 6 of the position the AI\'s move '
+        f'produced is > {T} stones below depth 4\'s value of the AI\'s position)')
+    bands = Counter('mate' if r['target'] <= -MATE_V + 1e-9 else '>3' if r['v4_i'] - r['target'] > 3 else '1-3'
+                    for r in conf)
+    say(f'  by size: {dict(bands)}')
+    say(f'  the played move at depth 4: ' + ', '.join(f'{k}: {v}' for k, v in Counter(r['played_d4'] for r in conf).most_common()))
+    say('\nWhat each search of the AI\'s position does (confirmed): keeps the played move and SEES the fall '
+        '(no escape) / keeps it and does not see it / picks another move')
+    for k in ('d4_i', 'd5_i', 'd6_i', 'd4w2_i', 'd4leaf_i'):
+        s_ = [r for r in conf if r['same_' + k] is not None]
+        sees = sum(bool(r['sees_' + k]) for r in s_)
+        blind = sum(1 for r in s_ if r['same_' + k] and not r['sees_' + k])
+        other = sum(1 for r in s_ if not r['same_' + k])
+        say(f'  {k:9s} sees {sees:4d}   blind {blind:4d}   other move {other:4d}   of {len(s_)}')
+    alts = [r for r in conf if r['alt6_v'] is not None]
+    better = [r for r in alts if r['alt6_v'] - r['target'] > T]
+    say(f'  depth 6\'s alternative, re-searched at depth 6: better than the played move by > {T} in '
+        f'{pct(len(better), len(alts))}; median gain {statistics.median([r["alt6_v"] - r["target"] for r in alts]) if alts else 0:+.2f}')
+    say('\nThe opponent\'s best reply (depth 6 at i+1) inside the AI\'s ply-1 list?')
+    for rem in ('3', '4'):
+        c_ = Counter()
+        for r in conf:
+            p1 = (r['ply1'] or {}).get(rem)
+            if not p1:
+                c_['no reply'] += 1
+                continue
+            ix, w, pull, _n = p1
+            c_['full width' if 0 <= ix < w else 'LMR band (reduced depth)' if 0 <= ix < pull else 'not in the list'] += 1
+        say(f'  {rem} plies left: {dict(c_)}')
+    rk = Counter('not in stream (cap 5000)' if r['reply_rank'] is not None and r['reply_rank'] < 0
+                 else 'n/a' if r['reply_rank'] is None else f'stream rank < 100' if r['reply_rank'] < 100
+                 else 'stream rank 100-999' if r['reply_rank'] < 1000 else 'stream rank >= 1000' for r in conf)
+    say(f'  stream rank of that reply: {dict(rk)}')
+    say('  kind of reply: ' + ', '.join(f'{k}: {v}' for k, v in Counter(r['kind'] for r in conf).most_common()))
+    # cross: blind at d4 but the reply was inside ply-1 width -> misjudged below, not unseen
+    blind4 = [r for r in conf if r['same_d4_i'] and not r['sees_d4_i']]
+    inw = sum(1 for r in blind4 if (r['ply1'] or {}).get('3') and 0 <= r['ply1']['3'][0] < r['ply1']['3'][2])
+    say(f'\nDepth 4 keeps the move and misses the fall in {len(blind4)} cases; the reply was inside its ply-1 '
+        f'list (full or LMR band) in {inw} of them.')
+    cost = defaultdict(list)
+    for r in rows:
+        for k, v in r['nodes'].items():
+            if v:
+                cost[k].append(v)
+    say('median nodes: ' + ', '.join(f'{k} {statistics.median(v):,.0f}' for k, v in cost.items()))
+    text = '\n'.join(out)
+    print(text)
+    if a.md:
+        open(a.md, 'w', encoding='utf-8').write(text + '\n')
+    if a.json:
+        json.dump(rows, open(a.json, 'w', encoding='utf-8'))
+
+
 def cmd_report(a):
     cases = {(c['g'], c['i']): c for c in json.load(open(a.cases, encoding='utf-8'))}
     probes = {}
@@ -296,6 +437,8 @@ def cmd_report(a):
                 print('error', d['g'], d['i'], d['error'][:120])
                 continue
             probes.setdefault((d['g'], d['i']), {}).update(d)
+    if any(c.get('side') == 'own' for c in cases.values()):
+        return report_own(a, cases, probes)
     T, tol = a.threshold, a.tolerance
     rows = []
     for key, c in cases.items():
@@ -418,6 +561,8 @@ def main():
     sub = p.add_subparsers(dest='cmd', required=True)
     f = sub.add_parser('flag'); f.add_argument('--lines', required=True); f.add_argument('--evals', required=True, action='append')
     f.add_argument('--threshold', type=float, default=1.0); f.add_argument('--out', required=True)
+    f.add_argument('--side', choices=('opp', 'own'), default='opp',
+                   help="opp: the fall is across the opponent's turn; own: across the AI's own turn")
     q = sub.add_parser('probe'); q.add_argument('--lines', required=True); q.add_argument('--cases', required=True)
     q.add_argument('--out', required=True); q.add_argument('--workers', type=int, default=os.cpu_count() or 2)
     q.add_argument('--time-ms', type=int, default=300000); q.add_argument('--enum-cap', type=int, default=500000)

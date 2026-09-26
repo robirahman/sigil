@@ -20,9 +20,10 @@ RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hour
 CORPUS=$(md corpus); DEPTH=$(md depth); TMS=$(md time-ms); RESUME=$(md resume); : "${RESUME:=}"
 SHARD=$(md shard); : "${SHARD:=}"
 PTMS=$(md probe-time-ms); : "${PTMS:=300000}"
+SIDE=$(md side); : "${SIDE:=opp}"
 : "${RUN:=unknown}" "${BRANCH:=main}" "${WORKERS:=$(nproc)}" "${MAXH:=4}" \
   "${CORPUS:=data/eval_lines_2026-09-21.json}" "${DEPTH:=6}" "${TMS:=300000}"
-echo "probe_time_ms=$PTMS"
+echo "probe_time_ms=$PTMS side=$SIDE"
 echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS depth=$DEPTH time_ms=$TMS shard=${SHARD:-all}"
 
 # WATCHDOG: nothing below is trusted to terminate (see runner.sh for why).
@@ -91,7 +92,7 @@ $WORK/venv/bin/python -u $H/eval_games.py eval --lines $WORK/lines.json \
   --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 > $WORK/out/eval.log 2>&1
 tail -2 $WORK/out/eval.log
 echo "=== 2. flag ==="
-$WORK/venv/bin/python -u $H/surprise_audit.py flag --lines $WORK/lines.json --evals $WORK/out/evals.jsonl \
+$WORK/venv/bin/python -u $H/surprise_audit.py flag --side "$SIDE" --lines $WORK/lines.json --evals $WORK/out/evals.jsonl \
   --out $WORK/out/cases.json > $WORK/out/flag.log 2>&1
 cat $WORK/out/flag.log
 echo "=== 3. probe ==="

@@ -2,7 +2,8 @@
 # Launch one surprise-audit VM (startup script: runner_surprise.sh): every
 # position of a pre-hydrated corpus at DEPTH, then surprise_audit.py flag /
 # probe / report (see its docstring). Same knobs as launch_evals.sh plus
-# PROBE_TIME_MS (per-analysis cap for the probes).
+# PROBE_TIME_MS (per-analysis cap for the probes) and SIDE (opp: falls across
+# the opponent's turn, own: across the AI's own turn).
 #
 #   launch_surprise.sh [name] [machine-type] [zone] [max-hours] [workers]
 #
@@ -25,7 +26,7 @@ MACHINE=${2:-c3d-highcpu-90}; ZONE=${3:-us-central1-f}; MAXH=${4:-4}; WORKERS=${
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
 BRANCH=${BRANCH:-main}
 CORPUS=${CORPUS:-data/eval_lines_2026-09-21.json}
-DEPTH=${DEPTH:-4}; TIME_MS=${TIME_MS:-300000}; PROBE_TIME_MS=${PROBE_TIME_MS:-300000}
+DEPTH=${DEPTH:-4}; TIME_MS=${TIME_MS:-300000}; PROBE_TIME_MS=${PROBE_TIME_MS:-300000}; SIDE=${SIDE:-opp}
 SPOT=${SPOT:-1}
 RESUME=${RESUME:-}
 SHARD=${SHARD:-}            # k/n to split the corpus across VMs (distinct k per VM!)
@@ -43,7 +44,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=surprise \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,depth=$DEPTH,time-ms=$TIME_MS,resume=$RESUME,shard=$SHARD,probe-time-ms=$PROBE_TIME_MS" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,depth=$DEPTH,time-ms=$TIME_MS,resume=$RESUME,shard=$SHARD,probe-time-ms=$PROBE_TIME_MS,side=$SIDE" \
   --metadata-from-file="startup-script=$HERE/runner_surprise.sh" \
   --format="value(name,status)"
 echo "$RUN"
