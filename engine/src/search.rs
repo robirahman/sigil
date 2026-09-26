@@ -160,13 +160,15 @@ pub fn width_for_depth(depth: i32, scale: usize) -> usize {
 /// Shape 5 inverts the ramp outright. It should be bad on cost grounds and good on
 /// coverage grounds, so it is the cleanest discriminator between those two stories,
 /// and worth running precisely because it is expected to lose.
-pub const WIDTH_SHAPES: [[usize; 6]; 6] = [
+pub const WIDTH_SHAPES: [[usize; 6]; 7] = [
     [6, 10, 16, 24, 32, 40],   // 0 RAMP     (shipped)
     [10, 10, 10, 10, 10, 10],  // 1 FLAT10
     [16, 16, 16, 16, 16, 16],  // 2 FLAT16
     [4, 6, 12, 24, 40, 64],    // 3 STEEP    narrower leaves, wider deep
     [10, 14, 18, 22, 26, 30],  // 4 SHALLOW
     [40, 32, 24, 16, 10, 6],   // 5 INVERTED wide leaves, narrow deep
+    [16, 16, 16, 24, 32, 40],  // 6 LEAF-FLOOR the ramp with its two narrowest
+                               //   buckets raised to 16 (surprise_audit.py)
 ];
 
 #[inline]
@@ -507,6 +509,14 @@ pub struct Search {
     hist_dash: [i32; 2],
     /// Scratch: this iteration's per-root-move scores (root_resort).
     root_scores_out: Vec<(Turn, i32)>,
+    /// Audit hook (`surprise_audit.py`, py `analyze(probe_sfn=)`): the board +
+    /// mana key of a position one root turn might produce. `root_search`
+    /// records where that turn sat in the root list and what it scored.
+    pub root_probe: Option<String>,
+    /// (iteration depth, index in the root list, root list length, score from
+    /// the root mover's side, alpha when it was searched) for the last
+    /// iteration that searched it; `None` if no root turn produced it.
+    pub root_probe_hit: Option<(i32, usize, usize, i32, i32)>,
     /// The competitive opening selector's pick for the last `go`, when it
     /// applied (`opening.rs`; switch `opening::set_opening_book`).
     opening_pick: Option<crate::opening::OpeningPick>,
@@ -642,6 +652,8 @@ impl Search {
             ext_cap: 0,
             se_margin: 0,
             root_scores_out: Vec::new(),
+            root_probe: None,
+            root_probe_hit: None,
             opening_pick: None,
             pvs: false,
             lmr_ext: 2,
@@ -719,6 +731,18 @@ impl Search {
     pub fn width_shape_get(&self) -> usize { self.width_shape }
     pub fn set_rank_oversample(&mut self, n: usize) { self.rank_oversample = n.max(1); }
     pub fn rank_oversample_get(&self) -> usize { self.rank_oversample }
+    /// Audit hook: the successor list an interior node `ply` plies below the
+    /// root with `remaining` plies left would expand (no TT or killer hint),
+    /// with its full-depth width `w` and the LMR-band pull. Same code path as
+    /// `negamax`, so an audit can ask whether a turn was inside the width.
+    pub fn probe_node_list(&mut self, b: &Board, c: Color, ply: usize, remaining: i32)
+        -> (Vec<Turn>, usize, usize)
+    {
+        self.iter_depth = remaining + ply as i32;
+        let w = width_for_depth_shaped(remaining.max(1), self.scale_for(b, c), self.width_shape);
+        let pull = if self.lmr_ext > 1 { w * self.lmr_ext } else { w };
+        (self.ordered_turns_action_hint(b, c, ply, None, pull), w, pull)
+    }
     /// The widening scale to use for THIS position.
     #[inline]
     fn scale_for(&self, b: &Board, c: Color) -> usize {
@@ -1158,6 +1182,7 @@ impl Search {
         // `adopt_partial` bookkeeping: did a move whose subtree COMPLETED beat
         // the seed (which is searched first and therefore completes first)?
         let seed = best_local;
+        let n_root = turns.len();
         let mut seed_completed = false;
         let mut completed_beat_seed = false;
         let mut i = 0usize;
@@ -1172,6 +1197,13 @@ impl Search {
             let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, 1, key,
                                   &mut rep);
             let completed = !self.stats.timed_out;
+            if completed && self.root_probe.is_some() {
+                let sfn = child.to_sfn();
+                let p: Vec<&str> = sfn.split_whitespace().collect();
+                if p.len() >= 4 && self.root_probe.as_deref() == Some(format!("{} {}", p[0], p[3]).as_str()) {
+                    self.root_probe_hit = Some((depth, i, n_root, v, alpha));
+                }
+            }
             if completed {
                 if i == 0 { seed_completed = true; }
                 if self.root_resort { self.root_scores_out.push((t, v)); }

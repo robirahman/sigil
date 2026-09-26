@@ -993,11 +993,14 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 /// expected_sfn.
 #[pyfunction]
 #[pyo3(signature = (sfn, eval_name, max_depth=6, time_ms=0, tt_bits=20,
-                    history_sfns=vec![], width_scale=None, adaptive=None))]
+                    history_sfns=vec![], width_scale=None, adaptive=None, width_shape=None,
+                    probe_sfn=None))]
 #[allow(clippy::too_many_arguments)]
 fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, time_ms: u64,
                 tt_bits: u32, history_sfns: Vec<String>, width_scale: Option<usize>,
-                adaptive: Option<(f32, usize, usize)>) -> PyResult<Bound<'py, pyo3::types::PyDict>>
+                adaptive: Option<(f32, usize, usize)>, width_shape: Option<usize>,
+                probe_sfn: Option<String>)
+    -> PyResult<Bound<'py, pyo3::types::PyDict>>
 {
     use std::time::Instant;
     use pyo3::types::PyDict;
@@ -1024,6 +1027,13 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
     if let Some(ws) = width_scale { s.set_width_scale(ws); }
     s.weights = w;
     if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+    if let Some(w) = width_shape { s.set_width_shape(w); }
+    // Board + mana key, as `rank_of_result`: the recorded after-position's
+    // turn number and side token differ from a root child's.
+    s.root_probe = probe_sfn.as_deref().map(|ps| {
+        let p: Vec<&str> = ps.split_whitespace().collect();
+        if p.len() < 4 { ps.to_string() } else { format!("{} {}", p[0], p[3]) }
+    });
     for h in history_sfns {
         if let Ok(hb) = crate::board::Board::from_sfn(&h) {
             s.add_history(ZOBRIST.key_js(&hb));
@@ -1051,6 +1061,10 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
         d.set_item("mate_in_turns", py.None())?;
         d.set_item("proven", false)?;
     }
+    d.set_item("probe", match s.root_probe_hit {
+        Some((pd, ix, n, v, al)) => (pd, ix, n, v, al).into_py(py),
+        None => py.None(),
+    })?;
     d.set_item("mate_plies", st.mate_plies)?;
     d.set_item("opening", match s.opening_pick() { Some(p) => opening_dict(py, &p)?.into_any(), None => py.None().into_bound(py) })?;
     d.set_item("unproven_mate", st.unproven_mate)?;
@@ -1071,6 +1085,50 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
         }
     }
     Ok(d)
+}
+
+/// The widening scale the SHIPPED adaptive search (`SHIPPED_ADAPTIVE`) gives
+/// the side to move in `sfn`: the easy or the hard scale by `hard_logit`. Lets
+/// an audit say whether a turn at stream rank r was inside the width a node
+/// actually expanded (`width_for_depth(d) x scale`).
+#[pyfunction]
+fn adaptive_scale(sfn: &str) -> PyResult<usize> {
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let (p, easy, hard) = crate::search::SHIPPED_ADAPTIVE;
+    let t = (p / (1.0 - p)).ln();
+    Ok(if b.hard_logit(b.to_move) >= t { hard } else { easy })
+}
+
+/// Where the turn producing `result_sfn` sits in the list an interior node of
+/// the SHIPPED search expands at `sfn` (`Search::probe_node_list`), `ply`
+/// plies below the root with `remaining` plies left: returns (index or -1,
+/// full-depth width, LMR-band pull, list length). Matching on board + mana,
+/// as `rank_of_result`.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, remaining, ply=1))]
+fn node_list_rank(sfn: &str, result_sfn: &str, remaining: i32, ply: usize)
+    -> PyResult<(i64, usize, usize, usize)>
+{
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let mut s = crate::search::Search::new(16);
+    let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+    s.set_adaptive(p, e, h);
+    let (list, w, pull) = s.probe_node_list(&b, c, ply, remaining);
+    let mut ix = -1i64;
+    for (i, t) in list.iter().enumerate() {
+        let mut ch = b; ch.apply_turn(t, c);
+        if key(&ch.to_sfn()) == want { ix = i as i64; break; }
+    }
+    Ok((ix, w, pull, list.len()))
 }
 
 /// `search::even_offset` for a colour name and eval preset, in centistones:
@@ -1770,6 +1828,8 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pick_move_actions, m)?)?;
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
     m.add_function(wrap_pyfunction!(even_offset, m)?)?;
+    m.add_function(wrap_pyfunction!(adaptive_scale, m)?)?;
+    m.add_function(wrap_pyfunction!(node_list_rank, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(move_budget_ms, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
