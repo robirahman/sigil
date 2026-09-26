@@ -1300,12 +1300,16 @@ document.addEventListener('alpine:init', () => {
 						}
 						// First human turn unlocks persistence. In local 1v1
 						// both colors are human; vs AI only the human's color
-						// counts. sfn_update fires before turn_complete, so the
-						// human's own move wasn't saved yet — persist it now.
+						// counts.
 						if (t && !_humanHasMoved && (!aiMode || t.color === _this.myColor)) {
 							_humanHasMoved = true;
-							_persistCurrentGame(_this.currentSfn);
 						}
+						// sfn_update fires before turn_complete, so the save it
+						// wrote holds this turn's position but not this turn:
+						// write it again with the turn. Without this, a reload
+						// resumed from that save and the finished record lost
+						// the last turn before the reload.
+						if (t) _persistCurrentGame(_this.currentSfn);
 						return;
 					}
 

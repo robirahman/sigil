@@ -27,3 +27,11 @@ from `game_evals/<roomCode>` (source `rust`) rather than the Caveman search.
 Two Cloud Shell gotchas (2026-09-21): Chrome refuses to launch when `TMPDIR`
 points under the scratchpad -- unset it and let it use `/tmp`; and it needs
 `--disable-dev-shm-usage` (all three scripts pass it).
+
+```sh
+node <repo>/tools/browser/resume-log-test.js http://localhost:8765   # reload mid-game: no turn lost
+```
+
+`resume-log-test.js` plays three turns against the Easy AI, reloads, plays
+one more and checks that the turn log has no gap (the 2026-09 missing-turn
+records). Any Chrome works: `PUPPETEER_EXECUTABLE_PATH=<chrome>`.
