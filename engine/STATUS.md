@@ -28,7 +28,15 @@ cleared an existing springlock, and the springlocked spell could be cast a third
 written into the SFN and the threefold-repetition key, so the positions that followed were keyed wrong until the
 player's next sorcery or ritual. The snapshot now saves and restores the springlock. This affected local and
 multiplayer games, which share `board.js`; the Cataclysm board already saved it. Regression test:
-`node tools/springlock-reset-smoke.js`.
+`node tools/springlock-reset-smoke.js`. It also plays the reset turn against the Rust AI (the committed wasm)
+and checks that the AI is never handed the stale value to search, ponder or count toward repetition. Before the fix,
+three such positions reached the AI, and the reset turn entered its repetition history twice. The Rust generator
+already applied the rule correctly; `seal_of_spring_allows_exactly_one_recast_of_the_locked_spell` now pins it.
+Firebase audit of the 258 recorded games with Seal of Spring in the draw: 148 (2026-05-07 to 08-02) record every
+turn's live position, and two of them show the glitch. In 6FJDEN (05-29) red's Grow and in YM8VZM (06-08) red's
+Carnage became springlocked at a turn start with no second cast; in YM8VZM Carnage stayed barred for two red
+turns. Neither game repeated a position. The 110 transcript-only games from 08-14 on can show the glitch only
+in `finalSfn`, and none does.
 
 **2026-09-24: Rust AI tier ratings re-anchored; vs-AI menu layout fixed (cache v45).** Hard = 1411, its
 performance against the developer over the last 20 games (8-12). Easy 786, Medium 1087, Very Hard 1439 from a

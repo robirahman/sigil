@@ -9,6 +9,9 @@
 //      without the reset (the stale springlock sat in both).
 //   2. Grow is already springlocked: red casts Flourish (which clears the
 //      springlock), then resets. Grow must stay uncastable.
+//   3. Case 1 against the Rust AI (the committed wasm behind a stand-in
+//      worker): no position the AI is given to search, ponder or count
+//      toward threefold repetition carries the cancelled turn's springlock.
 // Drives the real GameController loop with scripted clicks.
 //
 //   node tools/springlock-reset-smoke.js
@@ -17,15 +20,17 @@ const fs = require('fs');
 const path = require('path');
 const REPO = path.dirname(__dirname);
 const ENGINE = path.join(REPO, 'docs', 'static', 'scripts', 'engine');
+const WASM_DIR = path.join(REPO, 'docs', 'static', 'wasm');
 const FILES = [
 	'constants.js', 'notation.js', 'board.js', 'moves.js', 'spells.js',
 	'sim-board.js', 'features.js', 'enumerator.js',
-	'ai-player.js', 'game-controller.js',
+	'ai-player.js', 'game-controller.js', 'rust-ai.js', 'game-clock.js',
 ];
 globalThis.localStorage = { getItem() { return null; }, setItem() {} };
 let src = FILES.map((f) => fs.readFileSync(path.join(ENGINE, f), 'utf8')).join('\n;\n');
+src += '\n;\n' + fs.readFileSync(path.join(WASM_DIR, 'sigil_engine.js'), 'utf8');
 src += `\n;\n(${driver.toString()})().catch((e) => { console.error(e); process.exit(1); });\n`;
-new Function('require', src)(require);
+new Function('require', 'WASM_DIR', src)(require, WASM_DIR);
 
 async function driver() {
 	// Grow at sorcery1 (a8-a10), Flourish at ritual1 (a2-a6), Seal of Spring
@@ -42,7 +47,7 @@ async function driver() {
 
 	// Plays `script` (clicks; '?' = the first offered move target) until it
 	// runs out. Returns the action lists offered and the final board.
-	async function play(startSfn, script) {
+	async function play(startSfn, script, opts) {
 		script = script.slice();
 		const offered = [];
 		let gc;
@@ -56,7 +61,7 @@ async function driver() {
 			let tok = script.shift();
 			if (tok === '?') tok = Object.keys(p.moveoptions || {})[0];
 			setImmediate(() => gc.handlePlayerAction(tok));
-		}, { variant: 'standard' });
+		}, Object.assign({ variant: 'standard' }, opts || {}));
 		gc._delay = () => Promise.resolve();
 		await gc.startGame(startSfn);
 		await finished;
@@ -85,6 +90,32 @@ async function driver() {
 	const last = rev.offered[rev.offered.length - 1];
 	if (last.includes('Grow')) {
 		throw new Error('after Reset Turn, a springlocked Grow became castable a third time');
+	}
+	// 3. The Rust AI plays blue after case 1's reset turn.
+	const fs = require('fs');
+	const path = require('path');
+	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
+	const eng = new wasm_bindgen.Engine(18);
+	const given = [];
+	getRustEngineWorker = () => ({
+		init: async () => ({}),
+		post(msg) { if (msg.type === 'ponder') given.push(msg.sfn, ...msg.historySfns); },
+		async search(req) {
+			given.push(req.sfn, ...req.historySfns);
+			const a = req.adaptive || [0, 0, 0];
+			return JSON.parse(eng.search(req.sfn, req.timeMs, req.widthScale || 4, req.historySfns,
+				req.evalName || 'tfit', a[0], a[1], a[2], undefined));
+		},
+	});
+	const ai = new RustAI({ timeLimit: 0.2, ttBits: 18 });
+	ai.pondering = true;
+	const vsAi = await play(start1, ['?', 'Grow', 'a8', '?', '?', 'reset', '?', 'pass', '?'],
+		{ aiColor: 'blue', ai });
+	if (!given.some((s) => s.split(' ')[1] === 'b')) throw new Error('the AI never searched');
+	const stale = given.filter((s) => s.split(' ')[5] !== '-:-');
+	if (stale.length) throw new Error('the AI was given the stale springlock:\n  ' + stale.join('\n  '));
+	if (!vsAi.offered[vsAi.offered.length - 1].includes('Grow')) {
+		throw new Error('after the AI move, red can no longer recast Grow');
 	}
 	console.log('springlock reset smoke OK');
 	process.exit(0);

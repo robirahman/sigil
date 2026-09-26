@@ -3845,3 +3845,42 @@ fn placement_first_key_dashes_promote_the_tqgfvj_crush() {
     assert!(k1.len() <= 8);
     for t in &k1 { assert!(t.slice().iter().any(|a| matches!(a, Action::Dash { .. }))); }
 }
+
+// Seal of Spring: the locked spell may be cast once more, then it is
+// springlocked. The positions are the site's springlock-reset smoke fixture
+// (tools/springlock-reset-smoke.js): Grow in sorcery slot 0 (pos 3), Flourish
+// in ritual slot 0 (pos 0), Seal of Spring on a7; red locked into Grow.
+const SPRING_GROW_OPEN: &str = "r.....rrrr...bbb..........bb.........../Flourish,Carnage,Bewitch,Grow,Hail_Storm,Meteor,Seal_of_Spring,Sprout,Slash r 3 1:0 Grow:- -:- b0";
+const SPRING_GROW_SPENT: &str = "r.....rrrr...bbb..........bb.........../Flourish,Carnage,Bewitch,Grow,Hail_Storm,Meteor,Seal_of_Spring,Sprout,Slash r 3 1:0 Grow:- Grow:- b0";
+
+fn casts_pos(b: &Board, pos: u8) -> bool {
+    b.enumerate_turns(Color::Red).0.iter()
+        .any(|t| t.actions[..t.len as usize].iter().any(|a| matches!(a, Action::Cast { pos: p, .. } if *p == pos)))
+}
+
+#[test]
+fn seal_of_spring_allows_exactly_one_recast_of_the_locked_spell() {
+    let open = Board::from_sfn(SPRING_GROW_OPEN).unwrap();
+    let spent = Board::from_sfn(SPRING_GROW_SPENT).unwrap();
+    let grow = open.spell_ids()[3];
+    assert_eq!(open.lock[0], grow);
+    assert_eq!(spent.springlock[0], grow, "the SFN springlock field is read");
+    assert!(open.castable(Color::Red, true, true, false).contains(&grow), "second cast allowed");
+    assert!(!spent.castable(Color::Red, true, true, false).contains(&grow), "third cast refused");
+    assert!(casts_pos(&open, 3), "the generator offers the second Grow");
+    assert!(!casts_pos(&spent, 3), "the generator never offers a third Grow");
+    assert_ne!(ZOBRIST.key_js(&open), ZOBRIST.key_js(&spent),
+               "springlock is part of the repetition and table key");
+    // Without Seal of Spring the locked spell is not castable at all.
+    let mut bare = open.clone();
+    bare.stones[0] &= !(1u64 << n("a7")); bare.update();
+    assert!(!bare.castable(Color::Red, true, true, false).contains(&grow));
+    // The second cast springlocks it; another spell's cast releases it.
+    let mut b = open.clone();
+    b.finish_cast(grow, Color::Red);
+    assert_eq!((b.lock[0], b.springlock[0]), (grow, grow));
+    let flourish = b.spell_ids()[0];
+    b.finish_cast(flourish, Color::Red);
+    assert_eq!((b.lock[0], b.springlock[0]), (flourish, NO_SPELL));
+    assert!(b.castable(Color::Red, true, true, false).contains(&grow), "no longer locked");
+}
