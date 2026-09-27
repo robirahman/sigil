@@ -129,10 +129,16 @@ impl Board {
     {
         let goal = self.placement_goal(c);
         let (outs, trunc) = self.resolve_outcomes(pos, c, OUTCOME_CAP);
-        let mut v: Vec<(usize, Board)> = outs.into_iter().enumerate().collect();
-        v.sort_by_key(|(i, b)| (-b.outcome_score(c, goal), *i));
-        let truncated = trunc || v.len() > limit;
-        v.truncate(limit);
+        // Score each outcome ONCE and sort (score, index) pairs: `sort_by_key`
+        // on the (index, Board) list recomputed `outcome_score` (a
+        // configuration scan) at every comparison and moved whole boards
+        // around -- 9% of the depth-4 profile. Same total order (-score, raw).
+        let mut keys: Vec<(i32, usize)> = outs.iter().enumerate()
+            .map(|(i, b)| (-b.outcome_score(c, goal), i)).collect();
+        keys.sort_unstable();
+        let truncated = trunc || keys.len() > limit;
+        keys.truncate(limit);
+        let v: Vec<(usize, Board)> = keys.into_iter().map(|(_, i)| (i, outs[i])).collect();
         (v, truncated)
     }
 
@@ -333,12 +339,12 @@ impl<'a> TurnIter<'a> {
         // Stone-lead mates (the ordinary way a game ends) get the same treatment:
         // a material-gated scan puts every turn that reaches the lead now at the
         // front of the stream. See `decisive_lead_turns`.
-        if decisive_lead_enabled() {
+        if decisive_lead_enabled() && lead_prepass_here() {
             // Iterative deepening regenerates every node's stream once per
             // iteration, so the scan's answer is memoised per position.
             let key = crate::zobrist::ZOBRIST.key_js(&b) ^ if c == Color::Red { 0 } else { 0x9E37_79B9_7F4A_7C15 };
             let cached = LEAD_CACHE.with(|cache| {
-                let e = &cache.borrow()[(key as usize) & (LEAD_CACHE_SIZE - 1)];
+                let e = &cache.borrow()[(key as usize) & lead_cache_mask()];
                 if e.key == key { Some(e.turn) } else { None }
             });
             let found: Option<Turn> = match cached {
@@ -347,7 +353,7 @@ impl<'a> TurnIter<'a> {
                     let fm: Vec<(u8, Option<u8>)> = it.moves.iter().map(|&(n, p, _)| (n, p)).collect();
                     let t = board.decisive_lead_turns_from(c, decisive_lead_cap(), &fm).into_iter().next();
                     LEAD_CACHE.with(|cache| {
-                        cache.borrow_mut()[(key as usize) & (LEAD_CACHE_SIZE - 1)] = LeadEntry { key, turn: t };
+                        cache.borrow_mut()[(key as usize) & lead_cache_mask()] = LeadEntry { key, turn: t };
                     });
                     t
                 }
@@ -355,6 +361,27 @@ impl<'a> TurnIter<'a> {
             if let Some(t) = found { it.pending.push_front(t); }
         }
         it
+    }
+
+    /// (selector mode, outcome window, keep window) for a cast of spell `id`:
+    /// the caller's budgets unless the outcome selector targets the spell.
+    /// Mode 6 is the per-spell selector the 2026-09-27 cast audit picked
+    /// (653 recorded human casts): the tfit evaluation for Fury, Flourish and
+    /// Corrupt, evaluation + placement bonus for Carnage and Torrent, the
+    /// shipped key elsewhere. `targeted` routes the cast through the selector
+    /// path even when the effective mode is the shipped key.
+    fn sel_for(&self, id: u8) -> (u8, usize, usize, bool) {
+        let (mode, w, k, mask) = outcome_sel();
+        if mode != 0 && (id as usize) < 64 && mask & (1u64 << id) != 0 {
+            let eff = if mode != 6 { mode } else {
+                match crate::spells_meta::SPELLS.get(id as usize).map(|s| s.name) {
+                    Some("Fury") | Some("Flourish") | Some("Corrupt") => 2,
+                    Some("Carnage") | Some("Torrent") => 5,
+                    _ => 0,
+                }
+            };
+            (eff, w.max(self.window), k.max(self.keep_window), true)
+        } else { (0, self.window, self.keep_window, false) }
     }
 
     fn build_key_dashes(&mut self) {
@@ -392,16 +419,22 @@ impl<'a> TurnIter<'a> {
         if !bs.holds_charged(self.c, crate::spells_meta::SEAL_OF_SUMMER) { return; }
         for id2 in bs.castable(self.c, false, true, post_dash) {
             let Some(pos2) = bs.position_of(id2) else { continue };
+            let (sel_mode, sel_win, sel_keep, sel_on) = self.sel_for(id2);
             let (kis2, tr0) =
-                bs.keep_indices_ordered(pos2, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
+                bs.keep_indices_ordered(pos2, self.c, sel_keep.clamp(1, MAX_KEEP_WINDOW));
             if tr0 { self.windowed = true; }
             for &ki2 in &kis2 {
                 let mut cl2 = *bs;
                 cl2.cast_clear_and_keep(pos2, self.c, ki2);
-                let (ranked2, tr2) =
-                    cl2.resolve_outcomes_ranked(pos2, self.c, self.window);
+                let (raws, tr2): (Vec<usize>, bool) = if !sel_on {
+                    let (r, t) = cl2.resolve_outcomes_ranked(pos2, self.c, self.window);
+                    (r.into_iter().map(|(raw, _)| raw).collect(), t)
+                } else {
+                    let (r, t) = cl2.resolve_outcomes_sel(pos2, self.c, sel_win, sel_mode);
+                    (r.into_iter().map(|(_, raw, _)| raw).collect(), t)
+                };
                 if tr2 { self.windowed = true; }
-                for (raw2, _ob2) in ranked2 {
+                for raw2 in raws {
                     self.pending.push_back(prefix.push_pub(Action::Cast {
                         pos: pos2 as u8, keep: ki2 as u8, outcome: raw2 as u16,
                     }));
@@ -467,7 +500,8 @@ impl<'a> TurnIter<'a> {
                 // at `window`, the same as before this dimension existed, so
                 // the search's view improves without the stream paying for
                 // options progressive widening would discard anyway.
-                let (kis, ktr) = b.keep_indices_ordered(pos, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
+                let (sel_mode, sel_win, sel_keep, _sel_on) = self.sel_for(b.spells[pos]);
+                let (kis, ktr) = b.keep_indices_ordered(pos, self.c, sel_keep.clamp(1, MAX_KEEP_WINDOW));
                 if ktr { self.windowed = true; }
                 // Resolve once per KEEP and hold the raw list. The Summer
                 // continuation below needs to index outcomes by RAW index, and
@@ -485,17 +519,17 @@ impl<'a> TurnIter<'a> {
                     let (outs, trunc) = cl.resolve_outcomes(pos, self.c, OUTCOME_CAP);
                     if trunc { self.windowed = true; }
                     let cleared = crate::topology::SIGIL[pos];
-                    let v2 = outcome_order_v2();
+                    // Mode 0 is exactly the shipped key (outcome_score, plus
+                    // placement_bonus under outcome_order_v2).
                     let mut v: Vec<(i32, usize, usize)> = outs.iter().enumerate()
-                        .map(|(raw, ob)| (ob.outcome_score(self.c, goal)
-                                          + if v2 { cl.placement_bonus(ob, self.c, cleared) } else { 0 }, ki, raw))
+                        .map(|(raw, ob)| (cl.sel_score(ob, self.c, goal, cleared, sel_mode), ki, raw))
                         .collect();
                     v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
-                    v.truncate(self.window);
+                    v.truncate(sel_win);
                     if !v.is_empty() { per_keep.push(v); }
                     resolved.push((ki, cl, outs));
                 }
-                let (cands, more) = stratify_by_keep(per_keep, self.window);
+                let (cands, more) = stratify_by_keep(per_keep, sel_win);
                 if more { self.windowed = true; }
                 for &(_, ki, raw) in &cands {
                     self.pending.push_back(Turn::single(a).push_pub(Action::Cast {
@@ -547,8 +581,9 @@ impl<'a> TurnIter<'a> {
                     let goal = bd.placement_goal(self.c);
                     for id in bd.castable(self.c, true, true, true) {
                         let Some(pos) = bd.position_of(id) else { continue };
+                        let (sel_mode, sel_win, sel_keep, sel_on) = self.sel_for(id);
                         let (kis, ktr) =
-                            bd.keep_indices_ordered(pos, self.c, self.keep_window.clamp(1, MAX_KEEP_WINDOW));
+                            bd.keep_indices_ordered(pos, self.c, sel_keep.clamp(1, MAX_KEEP_WINDOW));
                         if ktr { self.windowed = true; }
                         let mut per_keep: Vec<Vec<(i32, usize, usize)>> = Vec::new();
                         let mut resolved: Vec<(usize, Board, Vec<(usize, Board)>)> =
@@ -556,17 +591,22 @@ impl<'a> TurnIter<'a> {
                         for &ki in &kis {
                             let mut cl = bd;
                             cl.cast_clear_and_keep(pos, self.c, ki);
-                            let (ranked, trunc) =
-                                cl.resolve_outcomes_ranked(pos, self.c, self.window);
-                            if trunc { self.windowed = true; }
-                            let mut v: Vec<(i32, usize, usize)> = ranked.iter()
-                                .map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, *raw))
-                                .collect();
+                            let (mut v, ranked): (Vec<(i32, usize, usize)>, Vec<(usize, Board)>) = if !sel_on {
+                                let (ranked, trunc) =
+                                    cl.resolve_outcomes_ranked(pos, self.c, self.window);
+                                if trunc { self.windowed = true; }
+                                (ranked.iter().map(|(raw, ob)| (ob.outcome_score(self.c, goal), ki, *raw)).collect(), ranked)
+                            } else {
+                                let (sel, trunc) = cl.resolve_outcomes_sel(pos, self.c, sel_win, sel_mode);
+                                if trunc { self.windowed = true; }
+                                (sel.iter().map(|&(sc, raw, _)| (sc, ki, raw)).collect(),
+                                 sel.into_iter().map(|(_, raw, ob)| (raw, ob)).collect())
+                            };
                             v.sort_by_key(|&(sc, _, raw)| (-sc, raw));
                             if !v.is_empty() { per_keep.push(v); }
                             resolved.push((ki, cl, ranked));
                         }
-                        let (cands, more) = stratify_by_keep(per_keep, self.window);
+                        let (cands, more) = stratify_by_keep(per_keep, sel_win);
                         if more { self.windowed = true; }
                         for &(_, ki, raw) in &cands {
                             let mut full = Turn::single(a);
@@ -1051,6 +1091,76 @@ pub fn set_outcome_order_v2(on: bool) { OUTCOME_ORDER_V2.with(|c| c.set(on)); }
 pub fn outcome_order_v2() -> bool { OUTCOME_ORDER_V2.with(|c| c.get()) }
 
 thread_local! {
+    /// Remaining plies at the node whose stream is being built, set by the
+    /// search just before it pulls the stream (`Search::negamax`/`root_search`);
+    /// `i32::MAX` outside a search. And the minimum at which the lead pre-pass
+    /// runs: 0 = everywhere (shipped).
+    static NODE_REMAINING: std::cell::Cell<i32> = std::cell::Cell::new(i32::MAX);
+    static LEAD_MIN_REMAINING: std::cell::Cell<i32> = std::cell::Cell::new(0);
+}
+pub fn set_node_remaining(d: i32) { NODE_REMAINING.with(|c| c.set(d)); }
+/// Skip the stone-lead pre-pass at nodes with fewer than `d` plies left (0 =
+/// never skip, the shipped engine). The pre-pass is ~30% of a depth-4 search's
+/// time and most of it is spent at the last ply (2026-09-27 profile).
+pub fn set_lead_min_remaining(d: i32) { LEAD_MIN_REMAINING.with(|c| c.set(d)); }
+pub fn lead_min_remaining() -> i32 { LEAD_MIN_REMAINING.with(|c| c.get()) }
+fn lead_prepass_here() -> bool {
+    NODE_REMAINING.with(|c| c.get()) >= LEAD_MIN_REMAINING.with(|c| c.get())
+}
+
+thread_local! {
+    static SPEED_V1: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch (default on) for the 2026-09-27 node-rate work that is NOT
+/// tree-identical to switch off in one place: the CRUSH-only key-dash early
+/// exit (`key_dash_branches_by_landing`) and the lead pre-pass memo at 2^16
+/// slots instead of 2^14. Both leave every search's tree byte-identical (the
+/// bench hash); the switch exists so an arena can price the speed alone.
+pub fn set_speed_v1(on: bool) { SPEED_V1.with(|c| c.set(on)); }
+pub fn speed_v1() -> bool { SPEED_V1.with(|c| c.get()) }
+/// The lead memo's index mask under `speed_v1` (2^16) or without it (2^14).
+#[inline]
+fn lead_cache_mask() -> usize { if speed_v1() { LEAD_CACHE_SIZE - 1 } else { (1 << 14) - 1 } }
+
+thread_local! {
+    /// Outcome selector (2026-09-27 cast audit): (mode, window, keep window,
+    /// spell mask). For a cast of a spell in the mask, resolutions are ranked by
+    /// `Board::sel_score(mode)` instead of the shipped key, and the stream
+    /// surfaces up to `window` of them from up to `keep` keep choices (each at
+    /// least the caller's). Default (0, 0, 0, 0) = off, the shipped stream.
+    static OUTCOME_SEL: std::cell::Cell<(u8, usize, usize, u64)> = std::cell::Cell::new((0, 0, 0, 0));
+}
+pub fn set_outcome_sel(mode: u8, window: usize, keep: usize, mask: u64) {
+    OUTCOME_SEL.with(|c| c.set((mode, window, keep, mask)));
+}
+pub fn outcome_sel() -> (u8, usize, usize, u64) { OUTCOME_SEL.with(|c| c.get()) }
+/// Spells the selector applies to by default: all of them. The cast audit
+/// (653 recorded human casts) found the KEEP choice was the larger gap and it
+/// is spread across spells (Gather, Harvest, Fireblast, Starfall ...), while the
+/// per-spell RE-ORDERING only helps the many-outcome movement spells; mode 6
+/// scopes the re-ordering, and this mask the wider windows.
+pub const SEL_SPELLS_DEFAULT: u64 = (1u64 << crate::spells_meta::NUM_OFFICIAL_SPELLS) - 1;
+
+impl Board {
+    /// A cast's resolutions under selector `mode`, best first, at most
+    /// `limit`, as (score, raw index, board); `self` is the board the keep
+    /// left. The raw index stays the witness `apply_turn` replays.
+    pub fn resolve_outcomes_sel(&self, pos: usize, c: Color, limit: usize, mode: u8)
+        -> (Vec<(i32, usize, Board)>, bool)
+    {
+        let goal = self.placement_goal(c);
+        let cleared = crate::topology::SIGIL[pos];
+        let (outs, trunc) = self.resolve_outcomes(pos, c, OUTCOME_CAP);
+        let mut keys: Vec<(i32, usize)> = outs.iter().enumerate()
+            .map(|(i, o)| (-self.sel_score(o, c, goal, cleared, mode), i)).collect();
+        keys.sort_unstable();
+        let truncated = trunc || keys.len() > limit;
+        keys.truncate(limit);
+        (keys.into_iter().map(|(k, i)| (-k, i, outs[i])).collect(), truncated)
+    }
+}
+
+thread_local! {
     static SWING_PREPASS: std::cell::Cell<bool> = std::cell::Cell::new(true);
 }
 /// A/B switch (default on) for the material-SWING pre-pass at the search's
@@ -1387,8 +1497,11 @@ impl Board {
 
 #[derive(Clone, Copy)]
 struct LeadEntry { key: u64, turn: Option<Turn> }
-/// Direct-mapped memo of the pre-pass per (position, side): 2^14 entries.
-pub const LEAD_CACHE_SIZE: usize = 1 << 14;
+/// Direct-mapped memo of the pre-pass per (position, side).
+pub const LEAD_CACHE_SIZE: usize = 1 << LEAD_CACHE_BITS;
+/// 2^14 thrashed: a depth-4 search visits ~30k distinct positions and the
+/// pre-pass was 29% of its profile even memoised.
+pub const LEAD_CACHE_BITS: usize = 16;
 thread_local! {
     static LEAD_CACHE: std::cell::RefCell<Vec<LeadEntry>> =
         std::cell::RefCell::new(vec![LeadEntry { key: 0, turn: None }; LEAD_CACHE_SIZE]);
@@ -1621,3 +1734,107 @@ impl LeadScan {
     }
 }
 
+
+/// Number of outcome-selector scorings `Board::sel_score` knows (mode 0 = shipped).
+pub const SEL_MODES: usize = 6;
+
+impl Board {
+    /// Enemy sigils `c` has un-charged or set back going from `self` (the board
+    /// the keep left) to `o` (a resolution): +1 per enemy sigil charged before
+    /// and not after, and the count of enemy sigils that were one short before
+    /// and are further after. What a human destroys with Storm Front: the
+    /// stone that holds the enemy's charged seal, which the static orderings
+    /// rank last (2026-09-27 cast audit).
+    pub fn enemy_charge_damage(&self, o: &Board, c: Color) -> (i32, i32) {
+        let them = c.other();
+        let (mut broken, mut set_back) = (0, 0);
+        for p in 0..9 {
+            let before = self.uncontrolled_count(p, them);
+            let after = o.uncontrolled_count(p, them);
+            if before == 0 && after > 0 { broken += 1; }
+            else if before == 1 && after > 1 { set_back += 1; }
+        }
+        (broken, set_back)
+    }
+
+    /// Resolution score under outcome-selector `mode`, higher first. `self` is
+    /// the board the keep left, `o` the resolved board, `cleared` the cast's
+    /// sigil. 0 is the shipped key (`outcome_score` + `placement_bonus` when
+    /// outcome_order_v2 is on, as it is by default).
+    pub fn sel_score(&self, o: &Board, c: Color, goal: crate::order::PlacementGoal,
+                     cleared: u64, mode: u8) -> i32 {
+        let base = || o.outcome_score(c, goal) + self.placement_bonus(o, c, cleared);
+        let dmg = || { let (b, s) = self.enemy_charge_damage(o, c); 150 * b + 40 * s };
+        let ev = || o.evaluate(c, &crate::eval::FIT_AT_BUDGET);
+        match mode {
+            1 => base() + dmg(),
+            2 => ev(),
+            3 => ev() + dmg(),
+            4 => base() + ev() / 2 + dmg(),
+            5 => ev() + self.placement_bonus(o, c, cleared) + dmg(),
+            _ => if outcome_order_v2() { base() } else { o.outcome_score(c, goal) },
+        }
+    }
+}
+
+/// One cast of a recorded turn, as `Board::cast_resolution_ranks` reports it.
+#[derive(Clone, Debug)]
+pub struct CastRank {
+    pub spell: u8,
+    /// Resolutions of this cast under the recorded keep, and keeps offered.
+    pub n_outcomes: usize,
+    pub n_keeps: usize,
+    /// Where the recorded keep sits in `keep_indices_ordered` (-1 = beyond it).
+    pub keep_rank: i64,
+    /// Rank of the recorded resolution (first board equal to it) under each
+    /// `sel_score` mode, 0..SEL_MODES.
+    pub ranks: Vec<i64>,
+}
+
+impl Board {
+    /// Audit (`surprise_audit.py casts`): replay `t` for `c` and, at every
+    /// cast, rank the resolution the turn chose among all resolutions under
+    /// each outcome-selector mode, so a selector can be chosen on coverage
+    /// before any arena.
+    pub fn cast_resolution_ranks(&self, t: &Turn, c: Color) -> Vec<CastRank> {
+        let mut b = *self;
+        let mut out = Vec::new();
+        for a in t.slice() {
+            match *a {
+                Action::Blink { node, push_to } | Action::Move { node, push_to } => {
+                    b.do_move_with_pub(node, push_to, c);
+                }
+                Action::Dash { sacs, n_sacs, node, push_to } => {
+                    for i in 0..n_sacs as usize { b.stones[c.idx()] &= !(1u64 << sacs[i]); }
+                    b.update();
+                    b.do_move_with_pub(node, push_to, c);
+                }
+                Action::Cast { pos, keep, outcome } => {
+                    let p = pos as usize;
+                    let id = b.spells[p];
+                    let (_, n_keeps) = b.keep_options(p, c);
+                    let (kis, _) = b.keep_indices_ordered(p, c, MAX_KEEP_WINDOW);
+                    let keep_rank = kis.iter().position(|&k| k == keep as usize).map_or(-1, |x| x as i64);
+                    let goal = b.placement_goal(c);
+                    let mut cl = b;
+                    cl.cast_clear_and_keep(p, c, keep as usize);
+                    let (outs, _) = cl.resolve_outcomes(p, c, OUTCOME_CAP);
+                    let Some(chosen) = outs.get(outcome as usize).copied() else { break };
+                    let cleared = crate::topology::SIGIL[p];
+                    let ranks = (0..SEL_MODES as u8).map(|mode| {
+                        let mut v: Vec<(i32, usize)> = outs.iter().enumerate()
+                            .map(|(i, o)| (-cl.sel_score(o, c, goal, cleared, mode), i)).collect();
+                        v.sort_unstable();
+                        v.iter().position(|&(_, i)| outs[i].stones == chosen.stones)
+                            .map_or(-1, |x| x as i64)
+                    }).collect();
+                    out.push(CastRank { spell: id, n_outcomes: outs.len(), n_keeps, keep_rank, ranks });
+                    let mut f = cl; f.stones = chosen.stones; f.update(); f.finish_cast(id, c); f.update();
+                    b = f;
+                }
+                Action::Pass => {}
+            }
+        }
+        out
+    }
+}

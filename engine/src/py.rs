@@ -1166,6 +1166,32 @@ fn set_dash_summer(on: bool) { crate::turn_iter::set_dash_summer(on); }
 /// Dash generation mode for the ordered stream (`turn_iter::set_dash_gen`):
 /// mode 0 = cheapest sacrifice first (v15), 1 = placement-first; width 0 = the
 /// stream's window; `per_target` sacrifice pairs per landing.
+/// Outcome selector (turn_iter::set_outcome_sel): mode 0 = off (shipped).
+/// `mask` = spell-id bitmask; None = `SEL_SPELLS_DEFAULT`.
+#[pyfunction]
+#[pyo3(signature = (mode, window=0, keep=0, mask=None))]
+fn set_outcome_sel(mode: u8, window: usize, keep: usize, mask: Option<u64>) {
+    crate::turn_iter::set_outcome_sel(mode, window, keep, mask.unwrap_or(crate::turn_iter::SEL_SPELLS_DEFAULT));
+}
+
+/// Named candidate presets (`candidates.rs`) for thread-local knobs; the
+/// Search-level ones (nmp) are applied by `play_best`'s caller. Returns the
+/// (nmp_r, nmp_mode) the preset wants.
+#[pyfunction]
+fn apply_candidate(name: &str) -> PyResult<(i32, u8)> {
+    let mut s = crate::search::Search::new(10);
+    crate::candidates::apply_candidate(name, &mut s).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    Ok(s.nmp_get())
+}
+
+/// Lead pre-pass only at nodes with >= `d` plies left (0 = everywhere, shipped).
+#[pyfunction]
+fn set_lead_min_remaining(d: i32) { crate::turn_iter::set_lead_min_remaining(d); }
+
+/// Node-rate switch (turn_iter::set_speed_v1), default on; tree-identical.
+#[pyfunction]
+fn set_speed_v1(on: bool) { crate::turn_iter::set_speed_v1(on); }
+
 #[pyfunction]
 #[pyo3(signature = (mode, width=0, per_target=2))]
 fn set_dash_gen(mode: u8, width: usize, per_target: usize) {
@@ -1408,6 +1434,41 @@ fn rank_of_result_budget(sfn: &str, result_sfn: &str, window: usize, keep_window
     Ok((rank, generated))
 }
 
+/// For the recorded turn from `sfn` to `result_sfn` (found in the fully
+/// windowed ordered stream, at most `enum_cap` turns): at each cast, the spell name, resolution and
+/// keep counts, the keep's rank, and the recorded resolution's rank under
+/// each outcome-selector mode (`Board::cast_resolution_ranks`). Empty if not found.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, enum_cap=2_000_000))]
+fn cast_resolution_ranks(sfn: &str, result_sfn: &str, enum_cap: usize)
+    -> PyResult<Vec<(String, usize, usize, i64, Vec<i64>)>>
+{
+    let b = crate::board::Board::from_sfn(sfn)
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    // The ordered stream with every outcome and keep surfaced (window
+    // OUTCOME_CAP, all keeps) reaches any cast resolution far faster than the
+    // exhaustive enumerator, which expands every dash first; it is what finds
+    // the recorded turn. `enum_cap` bounds how many streamed turns are tried.
+    let it = b.turns_ordered_keeps(c, crate::turn::OUTCOME_CAP, 0, crate::turn_iter::MAX_KEEP_WINDOW);
+    for t in it.take(enum_cap) {
+        let t = &t;
+        let mut ch = b; ch.apply_turn(t, c);
+        if key(&ch.to_sfn()) == want {
+            return Ok(b.cast_resolution_ranks(t, c).into_iter().map(|r| (
+                crate::spells_meta::SPELLS[r.spell as usize].name.to_string(),
+                r.n_outcomes, r.n_keeps, r.keep_rank, r.ranks)).collect());
+        }
+    }
+    Ok(Vec::new())
+}
+
 /// Candidate-turn features for a position, plus which candidate the search chose.
 ///
 /// This is what training a re-ranker needs and what `best_rank` could not provide:
@@ -1491,6 +1552,9 @@ fn search_defaults() -> PyResult<std::collections::HashMap<String, u64>> {
     m.insert("lmr_quiet".to_string(), s.lmr_quiet_get() as u64);
     m.insert("tact_mask".to_string(), s.tact_ext_get().0 as u64);
     m.insert("singular".to_string(), s.singular_get() as u64);
+    m.insert("outcome_sel_mode".to_string(), crate::turn_iter::outcome_sel().0 as u64);
+    m.insert("speed_v1".to_string(), crate::turn_iter::speed_v1() as u64);
+    m.insert("lead_min_remaining".to_string(), crate::turn_iter::lead_min_remaining() as u64);
     Ok(m)
 }
 
@@ -1860,7 +1924,12 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(even_offset, m)?)?;
     m.add_function(wrap_pyfunction!(adaptive_scale, m)?)?;
     m.add_function(wrap_pyfunction!(node_list_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(set_outcome_sel, m)?)?;
+    m.add_function(wrap_pyfunction!(set_speed_v1, m)?)?;
+    m.add_function(wrap_pyfunction!(set_lead_min_remaining, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_candidate, m)?)?;
     m.add_function(wrap_pyfunction!(rank_of_result_budget, m)?)?;
+    m.add_function(wrap_pyfunction!(cast_resolution_ranks, m)?)?;
     m.add_function(wrap_pyfunction!(search_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(move_budget_ms, m)?)?;
     m.add_function(wrap_pyfunction!(eval_weights, m)?)?;
@@ -1900,6 +1969,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DEFAULT_KEEP_WINDOW", crate::turn_iter::DEFAULT_KEEP_WINDOW)?;
     m.add("MAX_KEEP_WINDOW", crate::turn_iter::MAX_KEEP_WINDOW)?;
     m.add("UNPROVEN_MATE", crate::search::UNPROVEN_MATE)?;
+    m.add("SEL_SPELLS_DEFAULT", crate::turn_iter::SEL_SPELLS_DEFAULT)?;
     m.add("DECISIVE_LEAD_CAP", crate::turn_iter::DECISIVE_LEAD_CAP)?;
     m.add("MATE_STONES", crate::search::MATE_STONES)?;
     // Exported so a harness never restates them. REASONS_ALL is the full

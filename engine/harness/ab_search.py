@@ -83,7 +83,13 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          'swing_prepass',
          # dash_summer: the U4TL2D bundle -- Summer second cast after a dash-cast in the
          # stream, swing cap 6000, sacrifice-pair limit, Meteor bound (turn_iter::set_dash_summer), 1/0.
-         'dash_summer', 'dash_gen', 'key_dash_v2', 'dash_v2', 'dash_v3')
+         'dash_summer', 'dash_gen', 'key_dash_v2', 'dash_v2', 'dash_v3',
+         # 2026-09-27 (surprise audit follow-ups):
+         # outcome_sel = mode*10000 + window*100 + keep (32404 = sel_score mode 3,
+         #   24 resolutions, 4 keeps, for the SEL_SPELLS_DEFAULT spells); 0 = off.
+         # speed = 1/0: the tree-identical node-rate switch (turn_iter::set_speed_v1).
+         # lead_min = skip the stone-lead pre-pass below this many plies left (0 = shipped).
+         'outcome_sel', 'speed', 'lead_min')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -174,6 +180,12 @@ def play(b, ms, ev, hist, knob, val):
             se.set_dash_gen(1, 24, 2); se.set_key_dash_scan(val // 100, 1, 3)
         else:
             se.set_dash_gen(0, 0, 2); se.set_key_dash_scan(4, 5, 3)
+    if knob == 'outcome_sel':
+        se.set_outcome_sel(val // 10000, (val // 100) % 100, val % 100)
+    if knob == 'speed':
+        se.set_speed_v1(bool(val))
+    if knob == 'lead_min':
+        se.set_lead_min_remaining(val)
     if knob == 'key_dash_v2':
         # val = moves*100 + combos*10 + extra: a wider key-dash scan (8 sacrifice
         # stones) feeding the additive path with reasons CRUSH|SPELL_CRUSH|FILLS.

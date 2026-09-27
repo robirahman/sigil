@@ -173,6 +173,22 @@ impl Board {
     pub fn key_dash_branches_by_landing(&self, c: Color, reasons: u8, cap: usize)
         -> Vec<(Turn, Board, u8)>
     {
+        // CRUSH-only (the shipped reason set): a key dash must land, unpushed,
+        // on an enemy stone. Landings are a subset of the pre-sacrifice
+        // `all_moveable` plus our own sacrificed nodes, and sacrificing our
+        // stones can only OPEN escapes (`dash_branches_by_landing` relies on the
+        // same monotonicity), so if no reachable enemy stone is crushable now,
+        // no branch can qualify and the whole landing generation -- 28% of the
+        // depth-4 profile -- is skipped. Exact: the output is empty either way.
+        if reasons == REASON_CRUSH && crate::turn_iter::speed_v1() {
+            let mut t = self.all_moveable(c) & self.theirs(c);
+            let mut any = false;
+            while t != 0 {
+                let n = t.trailing_zeros() as u8; t &= t - 1;
+                if self.push_options(n, c).1 == 0 { any = true; break; }
+            }
+            if !any { return Vec::new(); }
+        }
         let (_, w, per) = crate::turn_iter::dash_gen();
         let limit = if w > 0 { w } else { crate::turn_iter::CAST_OUTCOME_WINDOW };
         let crush_reach = if reasons & REASON_SPELL_CRUSH != 0 { self.spell_crush_reach(c) } else { 0 };

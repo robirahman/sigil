@@ -1163,10 +1163,12 @@ impl Search {
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
         let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape) * 3;
+        crate::turn_iter::set_node_remaining(depth);
         let mut turns = match self.opening_root_turns(b, c) {
             Some(v) => v,
             None => self.ordered_turns(b, c, 0, best_local, w),
         };
+        crate::turn_iter::set_node_remaining(i32::MAX);
         if self.root_resort && !prev_scores.is_empty() {
             // PV first (already promoted), then the previous iteration's scores
             // descending; moves it never scored keep generator order after them.
@@ -1342,7 +1344,9 @@ impl Search {
         // successors; the first `w` are searched as before, the band beyond
         // them at reduced depth instead of being dropped.
         let pull = if self.lmr_ext > 1 { w * self.lmr_ext } else { w };
+        crate::turn_iter::set_node_remaining(depth);
         let turns = self.ordered_turns_action_hint(b, c, ply as usize, tt_move, pull);
+        crate::turn_iter::set_node_remaining(i32::MAX);
 
         // ---- singular extension of the TT move (v15 `singular`) ----
         // PV nodes only. If the table's best move (promoted to index 0) has an

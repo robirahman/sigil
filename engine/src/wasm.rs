@@ -210,6 +210,17 @@ impl Engine {
 
     /// Slots in use, for the smoke test's "the table survived the move" check.
     pub fn tt_filled(&self) -> u32 { self.s.tt_filled() as u32 }
+
+    /// Select a named engine candidate (`candidates.rs`) for the searches and
+    /// ponders that follow; "" or "shipped" is the live engine. The worker
+    /// calls this before every search and ponder, so a candidate never leaks
+    /// into another game. Returns `{"ok":true}` or an error JSON.
+    pub fn set_candidate(&mut self, name: &str) -> String {
+        match crate::candidates::apply_candidate(name, &mut self.s) {
+            Ok(()) => "{\"ok\":true}".to_string(),
+            Err(e) => err_json(&e),
+        }
+    }
 }
 
 /// Puzzles page: judge the position AFTER the puzzle's mover has played
@@ -314,6 +325,7 @@ pub fn move_budget_ms(remaining_ms: u32, inc_ms: u32, my_moves_played: u32) -> u
 
 #[wasm_bindgen]
 pub fn engine_info() -> String {
-    format!("{{\"spells\":{},\"nodes\":{}}}",
-            crate::spells_meta::NUM_OFFICIAL_SPELLS, crate::topology::N)
+    format!("{{\"spells\":{},\"nodes\":{},\"candidates\":{:?}}}",
+            crate::spells_meta::NUM_OFFICIAL_SPELLS, crate::topology::N,
+            crate::candidates::CANDIDATES)
 }
