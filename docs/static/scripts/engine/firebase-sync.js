@@ -148,7 +148,8 @@ class FirebaseSync {
 			const hasUnrated = (data.spellNames || []).some(s => isUnratedSpell(s));
 			const isDeathmatch = variantHasDeathmatch(data.variant);
 			const isDuplicates = variantHasDuplicates(data.variant);
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates) {
+			const isPentagon = variantHasPentagon(data.variant);
+			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isPentagon) {
 				this.ranked = true;
 				await roomRef.child('ranked').set(true);
 			}

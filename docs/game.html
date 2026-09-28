@@ -535,9 +535,14 @@
 						class="container__inner game-board-container"
 						x-ref="gameBoardContainer"
 					>
-						<div class="position:relative">
+						<div class="position:relative"
+							x-bind:class="{ 'board--drawn': !!boardGeo, [`board--${boardLayout}`]: true }"
+							x-bind:style="boardGeo ? `--board-ref: ${boardGeo.ref}` : ''">
 							<div class="spell-fx-overlay" x-ref="spellFxOverlay"></div>
-							<picture>
+							<!-- Layouts other than the printed core board draw their own
+							     background (board-geometry.js); positions come inline. -->
+							<div class="board-svg-host" x-show="!!boardGeo" x-html="boardGeo ? boardGeo.svg : ''"></div>
+							<picture x-show="!boardGeo">
 								<source
 									type="image/webp"
 									srcset="static/images/game-board.webp"
@@ -549,9 +554,10 @@
 								/>
 							</picture>
 							<div class="spells">
-								<template x-for="i in 3">
+								<template x-for="i in perType">
 									<div>
 										<div
+											x-bind:style="slotStyle('charm', i)"
 											class="spell spell--tooltip-anchor charm-spell"
 											x-bind:class="{
 											[`charm-spell--${i}`] : true,
@@ -564,6 +570,7 @@
 												x-bind:srcset="getSpellImgWebp('charm' + i)"
 											/>
 											<img
+												x-bind:style="slotStyle('charm', i)"
 												class="spell charm-spell"
 												alt=""
 												src="static/images/spacer.gif"
@@ -581,13 +588,14 @@
 												x-on:mouseover="handleSpellMouseOver(`charm${i}`)"
 											/>
 										</picture>
-										<div class="spell-spots charm-spell" x-bind:class="`charm-spell--${i}`" x-show="useArtOnlySpells && spells.images['charm' + i]"><template x-for="pos in spellSpotTemplate('charm')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
+										<div class="spell-spots charm-spell" x-bind:style="slotStyle('charm', i)" x-bind:class="`charm-spell--${i}`" x-show="useArtOnlySpells && spells.images['charm' + i]"><template x-for="pos in spellSpotTemplate('charm')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
 									</div>
 								</template>
 								
-								<template x-for="i in 3">
+								<template x-for="i in perType">
 									<div>
 										<div
+											x-bind:style="slotStyle('ritual', i)"
 											class="spell spell--tooltip-anchor ritual-spell"
 											x-bind:class="{
 									  [`ritual-spell--${i}`] : true,
@@ -600,6 +608,7 @@
 												x-bind:srcset="getSpellImgWebp('ritual' + i)"
 											/>
 											<img
+												x-bind:style="slotStyle('ritual', i)"
 												class="spell ritual-spell"
 												alt=""
 												src="static/images/spacer.gif"
@@ -617,13 +626,14 @@
 												x-on:mouseover="handleSpellMouseOver(`ritual${i}`)"
 											/>
 										</picture>
-										<div class="spell-spots ritual-spell" x-bind:class="`ritual-spell--${i}`" x-show="useArtOnlySpells && spells.images['ritual' + i]"><template x-for="pos in spellSpotTemplate('ritual')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
+										<div class="spell-spots ritual-spell" x-bind:style="slotStyle('ritual', i)" x-bind:class="`ritual-spell--${i}`" x-show="useArtOnlySpells && spells.images['ritual' + i]"><template x-for="pos in spellSpotTemplate('ritual')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
 									</div>
 								</template>
 								
-								<template x-for="i in 3">
+								<template x-for="i in perType">
 									<div>
 										<div
+											x-bind:style="slotStyle('sorcery', i)"
 											class="spell spell--tooltip-anchor sorcery-spell"
 											x-bind:class="{
 									  [`sorcery-spell--${i}`] : true,
@@ -636,6 +646,7 @@
 												x-bind:srcset="getSpellImgWebp('sorcery' + i)"
 											/>
 											<img
+												x-bind:style="slotStyle('sorcery', i)"
 												class="spell sorcery-spell"
 												alt=""
 												src="static/images/spacer.gif"
@@ -653,7 +664,7 @@
 												x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 											/>
 										</picture>
-										<div class="spell-spots sorcery-spell" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
+										<div class="spell-spots sorcery-spell" x-bind:style="slotStyle('sorcery', i)" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
 									</div>
 								</template>
 							</div>
@@ -664,6 +675,7 @@
 								<div
 									class="stone-node stone-node--blue stone-node--score"
 									x-bind:class="{ [`stone-node--score-${score}`]: true }"
+									x-bind:style="scoreStyle()"
 								></div>
 								<template
 									x-bind:key="node"
@@ -683,6 +695,7 @@
 												'stone-node--destroyed': nodes[node] === 'X',
 											}"
 										x-bind:id="`stone-node--${node}`"
+										x-bind:style="nodeStyle(node)"
 										x-on:click="handleNodeClick(node)"
 									></button>
 								</template>
@@ -739,10 +752,10 @@
 						<a class="win-modal__btn" href="./" x-show="rematchStage !== 'rematch'">Main Menu</a>
 						<button class="win-modal__btn"
 							x-on:click="playAgainSameLayout()"
-							x-show="rematchStage === 'rematch' && _spellNamesForExport && _spellNamesForExport.length === 9">Same Sides</button>
+							x-show="rematchStage === 'rematch' && _spellNamesForExport && _spellNamesForExport.length === perType * 3">Same Sides</button>
 						<button class="win-modal__btn"
 							x-on:click="playAgainSameLayoutSwap()"
-							x-show="rematchStage === 'rematch' && _spellNamesForExport && _spellNamesForExport.length === 9 && isAiGame">Swap Colors</button>
+							x-show="rematchStage === 'rematch' && _spellNamesForExport && _spellNamesForExport.length === perType * 3 && isAiGame">Swap Colors</button>
 						<button class="win-modal__btn" x-on:click="playAgain()" x-show="rematchStage === 'rematch'">New Board</button>
 						<button class="win-modal__btn"
 							x-on:click="rematchStage = 'idle'"
@@ -860,6 +873,7 @@
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
+		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-board-local.js"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>

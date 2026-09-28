@@ -168,6 +168,8 @@ def iter_positions(hyd, min_turn):
     for gid, g in hyd.items():
         if 'duplicates' in (g.get('variant') or ''):
             continue                      # draw variant the engine does not model
+        if 'pentagon' in (g.get('variant') or ''):
+            continue                      # 65-node Cataclysm board: engine is core-only
         turns = g['turns']
         last = turns[-1]['turnNumber'] if turns else 0
         for t in turns:

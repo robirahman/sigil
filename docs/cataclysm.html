@@ -57,24 +57,30 @@
 			color: var(--color-text-muted);
 			margin-top: 4px;
 		}
-		.mode-button .player-tags {
-			display: flex;
-			gap: 6px;
-			justify-content: center;
-			margin-top: 8px;
+		.cata-option {
+			display: block;
+			text-align: left;
+			margin: 10px 0;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
 		}
-		.mode-button .player-tag {
-			display: inline-block;
-			width: 14px;
-			height: 14px;
-			border-radius: 50%;
-			border: 1px solid rgba(255, 255, 255, 0.2);
+		.cata-option small {
+			display: block;
+			margin-left: 26px;
+			color: var(--color-text-muted);
 		}
-		.player-tag.tag-red { background: #e84c3c; }
-		.player-tag.tag-blue { background: #3250ba; }
-		.player-tag.tag-green { background: #2ecc71; }
-		.player-tag.tag-yellow { background: #f1c40f; }
-		.player-tag.tag-neutral { background: #888; }
+		.ai-row {
+			display: grid;
+			gap: 0 10px;
+			grid-template-columns: 1fr 1fr;
+		}
+		.ai-row .mode-button { margin: 6px 0; }
+		.cata-note {
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-muted);
+			font-size: 0.9em;
+			margin-top: 14px;
+		}
 		.back-link {
 			display: inline-block;
 			margin-top: 24px;
@@ -107,42 +113,72 @@
 	<div class="main">
 		<div class="mode-menu">
 			<h2>Sigil: Cataclysm</h2>
-			<p class="subtitle">New maps, new battles</p>
+			<p class="subtitle">The expanded 1v1 board: five zones, 65 nodes, five spells of each size</p>
 
-			<a class="mode-button" href="cataclysm-game.html?map=rectangular-1v1">
-				Rectangular Arena
-				<small>1v1 on a grid — fight over the center</small>
-				<div class="player-tags">
-					<span class="player-tag tag-red"></span>
-					<span class="player-tag tag-neutral"></span>
-					<span class="player-tag tag-blue"></span>
-				</div>
-			</a>
+			<label class="cata-option">
+				<input type="checkbox" id="cata-competitive" />
+				<span>Competitive start</span>
+				<small>Empty board: both players open by placing a stone anywhere.</small>
+			</label>
+			<label class="cata-option">
+				<input type="checkbox" id="cata-deathmatch" />
+				<span>Deathmatch</span>
+				<small>Win only by eliminating every enemy stone.</small>
+			</label>
 
-			<a class="mode-button" href="cataclysm-game.html?map=hexagonal-2v2">
-				Hexagonal Arena
-				<small>2v2 teams on a hexagonal battlefield</small>
-				<div class="player-tags">
-					<span class="player-tag tag-red"></span>
-					<span class="player-tag tag-green"></span>
-					<span class="player-tag tag-neutral"></span>
-					<span class="player-tag tag-blue"></span>
-					<span class="player-tag tag-yellow"></span>
-				</div>
+			<a class="mode-button" data-ai="" href="game.html?variant=pentagon">
+				Local 1v1
+				<small>Play on the same screen with a friend</small>
 			</a>
-
-			<a class="mode-button" href="cataclysm-game.html?map=triangular-3p">
-				Triangular Arena
-				<small>3-player free-for-all</small>
-				<div class="player-tags">
-					<span class="player-tag tag-red"></span>
-					<span class="player-tag tag-blue"></span>
-					<span class="player-tag tag-green"></span>
-				</div>
+			<div class="ai-row">
+				<a class="mode-button" data-ai="easy" href="game.html?variant=pentagon&amp;ai=easy">Easy<small>vs AI, 0.1s per turn</small></a>
+				<a class="mode-button" data-ai="medium" href="game.html?variant=pentagon&amp;ai=medium">Medium<small>vs AI, 1s per turn</small></a>
+				<a class="mode-button" data-ai="hard" href="game.html?variant=pentagon&amp;ai=hard">Hard<small>vs AI, 5s per turn</small></a>
+				<a class="mode-button" data-ai="very_hard" href="game.html?variant=pentagon&amp;ai=very_hard">Very Hard<small>vs AI, 60s per turn</small></a>
+			</div>
+			<a class="mode-button" href="multiplayer.html">
+				Online Multiplayer
+				<small>Create a room with &ldquo;Cataclysm board&rdquo; ticked</small>
 			</a>
+			<p class="cata-note" id="cata-packs"></p>
+			<p class="cata-note">Playtest board: games are unrated, and the AI is the JS engine
+				(stone-count alpha-beta). Win by a 4-stone lead or when a player has cast 8 spells.</p>
 
 			<a class="back-link" href="./">&larr; Back to main menu</a>
 		</div>
 	</div>
+	<script src="static/scripts/engine/constants.js"></script>
+	<script>
+		(function() {
+			var comp = document.getElementById('cata-competitive');
+			var dm = document.getElementById('cata-deathmatch');
+			var stored = localStorage.getItem('sigilCataclysmVariant');
+			// Most Cataclysm playtests use the competitive start: default it on.
+			comp.checked = stored === null ? true : stored.indexOf('competitive') !== -1;
+			dm.checked = !!stored && stored.indexOf('deathmatch') !== -1;
+			setBoardLayout('pentagon');
+			var packs = readStoredExpansions();
+			var ok = true;
+			try { generateSpellList(packs); } catch (e) { ok = false; }
+			document.getElementById('cata-packs').textContent = ok
+				? 'Spells drawn from: ' + packs.map(packDisplayName).join(', ') + ' (change packs in Game options on the main menu).'
+				: 'Your selected spell packs have fewer than 5 spells of some size; pick more packs in Game options on the main menu (Core alone is exactly enough).';
+			function update() {
+				var variant = composeVariant(comp.checked, dm.checked, false, true);
+				try { localStorage.setItem('sigilCataclysmVariant', variant); } catch (e) { /* ignore */ }
+				document.querySelectorAll('a.mode-button[data-ai]').forEach(function(a) {
+					var ai = a.getAttribute('data-ai');
+					a.setAttribute('href', 'game.html?variant=' + variant + (ai ? '&ai=' + ai : ''));
+					if (!ok) a.addEventListener('click', function(e) {
+						e.preventDefault();
+						alert('Not enough spells selected to fill the Cataclysm board. Please select more spell packs.');
+					});
+				});
+			}
+			comp.addEventListener('change', update);
+			dm.addEventListener('change', update);
+			update();
+		})();
+	</script>
 </body>
 </html>

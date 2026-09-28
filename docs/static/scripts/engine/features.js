@@ -38,6 +38,16 @@ const SPELL_TO_ID = {
 	Dividend: 42, Annuity: 43, Endowment: 44,
 };
 
+// SigilNet's input layout is defined on the CORE board (39 nodes, 9 slots);
+// these tables are built from it at load (constants.js activates 'core'
+// first). The NN tiers are core-only — boardToTensor / encodeTurn refuse
+// any other active layout rather than feed the network garbage.
+function _assertCoreLayoutForNet() {
+	if (BOARD.id !== 'core') {
+		throw new Error('SigilNet features are defined for the core board only (active layout: ' + BOARD.id + ')');
+	}
+}
+
 const _NODE_TO_IDX = {};
 NODE_ORDER.forEach((n, i) => _NODE_TO_IDX[n] = i);
 
@@ -224,13 +234,22 @@ function mapControl(stones) {
 // module-level preallocated scratch (no per-call allocation). Safe
 // because each JS realm (page, worker, arena worker_thread) is
 // single-threaded and the leaf eval is not reentrant. Max hop distance
-// on the 39-node board is 10, so Int8 with a 127 sentinel is ample.
-const _MC_N = NODE_ORDER.length;
-const _MC_ADJ = NODE_ORDER.map(n => ADJACENCY[n].map(m => NODE_ORDER.indexOf(m)));
+// on the 39-node board is 10 (65-node pentagon: 16), so Int8 with a 127
+// sentinel is ample. Rebuilt for the active board layout; the queue holds
+// node indices, so it is an Int16Array (no 127-node limit).
+let _MC_N = 0;
+let _MC_ADJ = [];
 const _MC_UNREACHED = 127;
-const _MC_DR = new Int8Array(_MC_N);
-const _MC_DB = new Int8Array(_MC_N);
-const _MC_QUEUE = new Int8Array(_MC_N);
+let _MC_DR = null;
+let _MC_DB = null;
+let _MC_QUEUE = null;
+onBoardLayoutChange(() => {
+	_MC_N = NODE_ORDER.length;
+	_MC_ADJ = NODE_ORDER.map(n => ADJACENCY[n].map(m => NODE_ORDER.indexOf(m)));
+	_MC_DR = new Int8Array(_MC_N);
+	_MC_DB = new Int8Array(_MC_N);
+	_MC_QUEUE = new Int16Array(_MC_N);
+});
 
 function _mcBfsFast(stones, color, dist) {
 	dist.fill(_MC_UNREACHED);
@@ -332,6 +351,7 @@ function _tempoScalarFeatures(board, sideToMove, enemy,
  * Returns { raw: Float32Array(450), spellIds: Int32Array(9) }
  */
 function boardToTensor(board, sideToMove) {
+	_assertCoreLayoutForNet();
 	if (!sideToMove) sideToMove = board.whoseTurn;
 	const enemy = sideToMove === 'red' ? 'blue' : 'red';
 	const features = new Float32Array(RAW_FEATURE_DIM);
@@ -555,6 +575,7 @@ function _maxThreatOfActivation(board, color, enemy) {
  * Returns Float32Array(84). Layout matches ai/features.py:encode_turn.
  */
 function encodeTurn(turn, board, color) {
+	_assertCoreLayoutForNet();
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const features = new Float32Array(TURN_FEATURE_DIM);
 	let moveTarget = null;

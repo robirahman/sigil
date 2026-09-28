@@ -328,6 +328,14 @@
 			</small>
 
 			<label class="allow-spec">
+				<input type="checkbox" x-model="pentagonVariant" />
+				<span>Cataclysm board (playtest)</span>
+			</label>
+			<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
+				The expanded 5-zone board: 65 nodes, five spells of each size. Unrated. Joiners inherit the creator's choice.
+			</small>
+
+			<label class="allow-spec">
 				<input type="checkbox" x-model="useArtOnlySpells" x-on:change="localStorage.setItem('sigilArtOnlySpellCircles', useArtOnlySpells ? 'true' : 'false')" />
 				<span>Art-only spell circles</span>
 			</label>
@@ -366,7 +374,7 @@
 				<span class="share-link__url" x-text="shareUrl"></span>
 				<button class="share-link__btn" x-on:click="copyShareLink" x-text="shareCopied ? 'Copied!' : 'Copy link'"></button>
 			</div>
-			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant || duplicatesVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null, duplicatesVariant ? 'Duplicates' : null].filter(Boolean).join(' + ')"></strong></p>
+			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant || duplicatesVariant || pentagonVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null, duplicatesVariant ? 'Duplicates' : null, pentagonVariant ? 'Cataclysm board' : null].filter(Boolean).join(' + ')"></strong></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
 		</div>
 
@@ -544,17 +552,17 @@
 					</div>
 				</div></div>
 				<div class="container" style="overflow: auto"><div class="container__inner game-board-container" x-ref="gameBoardContainer">
-					<div class="position:relative">
+					<div class="position:relative" x-bind:class="{ 'board--drawn': !!boardGeo, [`board--${boardLayout}`]: true }" x-bind:style="boardGeo ? `--board-ref: ${boardGeo.ref}` : ''">
 						<div class="spell-fx-overlay" x-ref="spellFxOverlay"></div>
-						<picture><source type="image/webp" srcset="static/images/game-board.webp" /><img class="game-board max-width:100%" src="static/images/game-board.jpg" alt="" /></picture>
-							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor charm-spell" x-bind:class="{ [`charm-spell--${i}`]: true, [`spell--tooltip-anchor-charm${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('charm' + i)" /><img class="spell charm-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`charm${i}`]), 'spell--blue-lock': blueLock === spellDict[`charm${i}`], 'spell--red-lock': redLock === spellDict[`charm${i}`], 'spell--visible': spells.images[`charm${i}`], [`charm-spell--${i}`]: true }" x-bind:src="getSpellImg('charm' + i)" x-on:click.stop="handleCharmClick(`charm${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`charm${i}`)" /></picture><div class="spell-spots charm-spell" x-bind:class="`charm-spell--${i}`" x-show="useArtOnlySpells && spells.images['charm' + i]"><template x-for="pos in spellSpotTemplate('charm')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
-							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor ritual-spell" x-bind:class="{ [`ritual-spell--${i}`]: true, [`spell--tooltip-anchor-ritual${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('ritual' + i)" /><img class="spell ritual-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`ritual${i}`]), 'spell--blue-lock': blueLock === spellDict[`ritual${i}`], 'spell--red-lock': redLock === spellDict[`ritual${i}`], 'spell--visible': spells.images[`ritual${i}`], [`ritual-spell--${i}`]: true }" x-bind:src="getSpellImg('ritual' + i)" x-on:click.stop="handleSpellClick(`ritual${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`ritual${i}`)" /></picture><div class="spell-spots ritual-spell" x-bind:class="`ritual-spell--${i}`" x-show="useArtOnlySpells && spells.images['ritual' + i]"><template x-for="pos in spellSpotTemplate('ritual')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
-							<template x-for="i in 3"><div><div class="spell spell--tooltip-anchor sorcery-spell" x-bind:class="{ [`sorcery-spell--${i}`]: true, [`spell--tooltip-anchor-sorcery${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('sorcery' + i)" /><img class="spell sorcery-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`sorcery${i}`]), 'spell--blue-lock': blueLock === spellDict[`sorcery${i}`], 'spell--red-lock': redLock === spellDict[`sorcery${i}`], 'spell--visible': spells.images[`sorcery${i}`], [`sorcery-spell--${i}`]: true }" x-bind:src="getSpellImg('sorcery' + i)" x-on:click.stop="handleSpellClick(`sorcery${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)" /></picture><div class="spell-spots sorcery-spell" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
+						<div class="board-svg-host" x-show="!!boardGeo" x-html="boardGeo ? boardGeo.svg : ''"></div><picture x-show="!boardGeo"><source type="image/webp" srcset="static/images/game-board.webp" /><img class="game-board max-width:100%" src="static/images/game-board.jpg" alt="" /></picture>
+							<template x-for="i in perType"><div><div x-bind:style="slotStyle('charm', i)" class="spell spell--tooltip-anchor charm-spell" x-bind:class="{ [`charm-spell--${i}`]: true, [`spell--tooltip-anchor-charm${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('charm' + i)" /><img x-bind:style="slotStyle('charm', i)" class="spell charm-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`charm${i}`]), 'spell--blue-lock': blueLock === spellDict[`charm${i}`], 'spell--red-lock': redLock === spellDict[`charm${i}`], 'spell--visible': spells.images[`charm${i}`], [`charm-spell--${i}`]: true }" x-bind:src="getSpellImg('charm' + i)" x-on:click.stop="handleCharmClick(`charm${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`charm${i}`)" /></picture><div class="spell-spots charm-spell" x-bind:style="slotStyle('charm', i)" x-bind:class="`charm-spell--${i}`" x-show="useArtOnlySpells && spells.images['charm' + i]"><template x-for="pos in spellSpotTemplate('charm')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
+							<template x-for="i in perType"><div><div x-bind:style="slotStyle('ritual', i)" class="spell spell--tooltip-anchor ritual-spell" x-bind:class="{ [`ritual-spell--${i}`]: true, [`spell--tooltip-anchor-ritual${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('ritual' + i)" /><img x-bind:style="slotStyle('ritual', i)" class="spell ritual-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`ritual${i}`]), 'spell--blue-lock': blueLock === spellDict[`ritual${i}`], 'spell--red-lock': redLock === spellDict[`ritual${i}`], 'spell--visible': spells.images[`ritual${i}`], [`ritual-spell--${i}`]: true }" x-bind:src="getSpellImg('ritual' + i)" x-on:click.stop="handleSpellClick(`ritual${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`ritual${i}`)" /></picture><div class="spell-spots ritual-spell" x-bind:style="slotStyle('ritual', i)" x-bind:class="`ritual-spell--${i}`" x-show="useArtOnlySpells && spells.images['ritual' + i]"><template x-for="pos in spellSpotTemplate('ritual')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
+							<template x-for="i in perType"><div><div x-bind:style="slotStyle('sorcery', i)" class="spell spell--tooltip-anchor sorcery-spell" x-bind:class="{ [`sorcery-spell--${i}`]: true, [`spell--tooltip-anchor-sorcery${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('sorcery' + i)" /><img x-bind:style="slotStyle('sorcery', i)" class="spell sorcery-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`sorcery${i}`]), 'spell--blue-lock': blueLock === spellDict[`sorcery${i}`], 'spell--red-lock': redLock === spellDict[`sorcery${i}`], 'spell--visible': spells.images[`sorcery${i}`], [`sorcery-spell--${i}`]: true }" x-bind:src="getSpellImg('sorcery' + i)" x-on:click.stop="handleSpellClick(`sorcery${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)" /></picture><div class="spell-spots sorcery-spell" x-bind:style="slotStyle('sorcery', i)" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
 						</div>
 						<div class="stone-nodes" x-cloak>
-							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }"></div>
+							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }" x-bind:style="scoreStyle()"></div>
 							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
-								<button class="stone-node" x-bind:aria-label="node" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-on:click="handleNodeClick(node)"></button>
+								<button class="stone-node" x-bind:aria-label="node" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>
 							</template>
 						</div>
 					</div>
@@ -569,7 +577,7 @@
 					</div>
 					<div class="win-modal__actions">
 						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator">Play Again</button>
-						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === 9">Play Again (Same Layout)</button>
+						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === perType * 3">Play Again (Same Layout)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('quick')"
@@ -713,6 +721,7 @@
 				competitiveVariant: (localStorage.getItem('sigilVariant') || '').indexOf('competitive') !== -1,
 				deathmatchVariant: (localStorage.getItem('sigilVariant') || '').indexOf('deathmatch') !== -1,
 				duplicatesVariant: (localStorage.getItem('sigilVariant') || '').indexOf('duplicates') !== -1,
+				pentagonVariant: (localStorage.getItem('sigilVariant') || '').indexOf('pentagon') !== -1,
 				useArtOnlySpells: localStorage.getItem('sigilArtOnlySpellCircles') === 'true',
 
 				// Active correspondence games
@@ -756,7 +765,7 @@
 							if (spellsRaw) {
 								try {
 									const parsed = JSON.parse(spellsRaw);
-									if (Array.isArray(parsed) && parsed.length === 9) rematchSpells = parsed;
+									if (Array.isArray(parsed) && (parsed.length === 9 || parsed.length === 15)) rematchSpells = parsed;
 								} catch (e) {}
 							}
 							let rematchTc = null;
@@ -792,6 +801,7 @@
 							if (rematchVariant.indexOf('duplicates') !== -1) {
 								this.duplicatesVariant = true;
 							}
+							this.pentagonVariant = rematchVariant.indexOf('pentagon') !== -1;
 							rematchHandled = true;
 							this._waitForAuth().then(() => {
 								this.createRoom({ spellNames: rematchSpells });
@@ -959,7 +969,10 @@
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
-						let spellNames = (opts && Array.isArray(opts.spellNames) && opts.spellNames.length === 9)
+						// The draw fills the chosen board layout (5 of each size on
+						// the Cataclysm board).
+						setBoardLayout(this.pentagonVariant ? 'pentagon' : 'core');
+						let spellNames = (opts && Array.isArray(opts.spellNames) && opts.spellNames.length === BOARD.positionCount)
 							? opts.spellNames.slice()
 							: null;
 						if (!spellNames) {
@@ -967,7 +980,7 @@
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
-						const variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant);
+						const variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.pentagonVariant);
 						// Persist the lobby choice across visits (mirrors the
 						// localStorage key used by the static index page).
 						try {
@@ -1121,6 +1134,7 @@
 	<script src="static/scripts/engine/spectator-controller.js"></script>
 	<script src="static/scripts/sound-manager.js"></script>
 	<script src="static/scripts/spell-effects.js"></script>
+	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-board-multiplayer.js"></script>
 	<script src="static/scripts/help.js"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>

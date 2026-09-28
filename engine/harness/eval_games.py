@@ -112,6 +112,8 @@ def cmd_hydrate(a):
             skipped['no turns'] += 1; continue
         if 'duplicates' in (g.get('variant') or ''):
             skipped['duplicates variant'] += 1; continue
+        if 'pentagon' in (g.get('variant') or ''):
+            skipped['pentagon board (65 nodes; engine is core-only)'] += 1; continue
         if not a.analysis and (g.get('autoArena') or g.get('isAiArena')):
             skipped['arena flag'] += 1; continue
         if not a.analysis and not g.get('roomCode'):

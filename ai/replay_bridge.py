@@ -103,13 +103,27 @@ def is_slim_record(rec):
         not (t.get('sfnBefore') and t.get('sfnAfter')) for t in turns)
 
 
-def hydrate_games_in_place(games, log=print):
+def is_core_board_record(rec):
+    """False for games on another board layout (the Cataclysm 'pentagon'
+    variant token: 65 nodes). Every Python consumer (SimBoard, features,
+    training) models the 39-node core board only."""
+    return 'pentagon' not in (rec.get('variant') or '')
+
+
+def hydrate_games_in_place(games, log=print, core_only=True):
     """Given a list of raw completed_games record dicts, replace each
     slim record's `turns` with hydrated fat turns (sfnBefore/sfnAfter).
     Records that fail replay keep their turns and gain
     `_hydration_error`; callers' existing missing-SFN hygiene then drops
-    them. Returns (n_hydrated, n_failed)."""
-    slim_idx = [i for i, g in enumerate(games) if is_slim_record(g)]
+    them. With `core_only` (the default), games on other board layouts
+    are not replayed and are marked the same way. Returns
+    (n_hydrated, n_failed)."""
+    if core_only:
+        for g in games:
+            if not is_core_board_record(g):
+                g['_hydration_error'] = 'not the core board (variant %r)' % g.get('variant')
+    slim_idx = [i for i, g in enumerate(games)
+                if is_slim_record(g) and (not core_only or is_core_board_record(g))]
     if not slim_idx:
         return 0, 0
     payload = [{

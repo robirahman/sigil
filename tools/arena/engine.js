@@ -52,7 +52,8 @@ function loadEngine() {
 	SimBoard, SimTurn, SimAction,
 	cavemanSearch, _minimaxApplyTurn,
 	generateSpellList, getLegalTurnsExhaustive, ENUM_CAPS,
-	NODE_ORDER, boardToSfn,
+	NODE_ORDER, boardToSfn, BOARD,
+	setBoardLayout, variantBoardLayout, variantHasCompetitive, normalizeVariant,
 	CAVEMAN_EVAL_WEIGHTS, cavemanCapWeights,
 };`);
 	vm.runInThisContext(parts.join('\n;\n'), { filename: 'sigil-engine-bundle.js' });

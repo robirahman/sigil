@@ -3,16 +3,21 @@
 // moves and push chains; a spell whose position includes it can never charge.
 const DESTROYED = 'X';
 
-// Canonical node order for SFN strings (39 nodes)
-const NODE_ORDER = [];
-for (const zone of ['a', 'b', 'c']) {
-	for (let num = 1; num <= 13; num++) {
-		NODE_ORDER.push(zone + num);
-	}
-}
-
-// Spell position mapping: position_index -> [node_names]
-const POSITIONS = {
+// ---- Board layouts ----
+// A layout is a ring of identical 13-node zones. Per zone X (next zone Y):
+//   X1 mana; X2-X6 5-node sigil (ritual); X7 1-node sigil (charm);
+//   X8-X10 3-node sigil (sorcery); X11-X13 void.
+//   Internal edges: X1-X2 X1-X11 X2-X3 X3-X4 X4-X5 X5-X6 X6-X2 X3-X13 X4-X7
+//   X5-X12 X6-X11 X7-X8 X8-X9 X9-X10 X10-X8 X9-X13; ring edges X7-Y12, X10-Y11.
+// Spell positions run rituals, then sorceries, then charms, each in zone
+// order, so spellNames[i] sits at position i + 1 and generateSpellList's
+// [rituals..., sorceries..., charms...] lines up for any zone count.
+//   core      3 zones, 39 nodes, 3/3/3 spells (the printed board)
+//   pentagon  5 zones, 65 nodes, 5/5/5 spells (Cataclysm expanded 1v1)
+// The core tables below are the canonical literals (topology.rs and
+// notation.py are generated from the same data); the ring builder must
+// reproduce them exactly for 3 zones (tools/board-layout-smoke.js).
+const _CORE_POSITIONS = {
 	1: ['a2', 'a3', 'a4', 'a5', 'a6'],
 	2: ['b2', 'b3', 'b4', 'b5', 'b6'],
 	3: ['c2', 'c3', 'c4', 'c5', 'c6'],
@@ -24,7 +29,7 @@ const POSITIONS = {
 	9: ['c7'],
 };
 
-const ADJACENCY = {
+const _CORE_ADJACENCY = {
 	a1: ['a2', 'a11'], a2: ['a1', 'a3', 'a6'], a3: ['a2', 'a4', 'a13'],
 	a4: ['a3', 'a5', 'a7'], a5: ['a4', 'a6', 'a12'], a6: ['a2', 'a5', 'a11'],
 	a7: ['a4', 'a8', 'b12'], a8: ['a7', 'a9', 'a10'], a9: ['a8', 'a10', 'a13'],
@@ -42,34 +47,192 @@ const ADJACENCY = {
 	c13: ['c3', 'c9'],
 };
 
-const MANA_NODES = ['a1', 'b1', 'c1'];
+const _ZONE_LETTERS = 'abcdefgh';
 
-// Nodes that sit on a spell sigil (positions 1..9). Seal of Autumn forbids the
-// opponent from sacrificing any of these to pay for a dash.
+function buildRingLayout(zoneCount) {
+	const zones = _ZONE_LETTERS.slice(0, zoneCount).split('');
+	const nodeOrder = [];
+	for (const z of zones) for (let k = 1; k <= 13; k++) nodeOrder.push(z + k);
+	const index = {};
+	nodeOrder.forEach((n, i) => { index[n] = i; });
+	const adj = {};
+	for (const n of nodeOrder) adj[n] = [];
+	const link = (u, v) => { adj[u].push(v); adj[v].push(u); };
+	const INTERNAL = [[1, 2], [1, 11], [2, 3], [3, 4], [4, 5], [5, 6], [6, 2], [3, 13],
+		[4, 7], [5, 12], [6, 11], [7, 8], [8, 9], [9, 10], [10, 8], [9, 13]];
+	zones.forEach((z, zi) => {
+		for (const [u, v] of INTERNAL) link(z + u, z + v);
+		const y = zones[(zi + 1) % zoneCount];
+		link(z + 7, y + 12);
+		link(z + 10, y + 11);
+	});
+	// Index-ascending neighbour lists, like the core literal.
+	for (const n of nodeOrder) adj[n].sort((u, v) => index[u] - index[v]);
+	const positions = {};
+	zones.forEach((z, zi) => {
+		positions[1 + zi] = [2, 3, 4, 5, 6].map(k => z + k);
+		positions[1 + zoneCount + zi] = [8, 9, 10].map(k => z + k);
+		positions[1 + 2 * zoneCount + zi] = [z + 7];
+	});
+	return { zones, nodeOrder, positions, adjacency: adj, manaNodes: zones.map(z => z + 1) };
+}
+
+// Per-layout rules. `spellTarget`: casting this many spells ends the game
+// (the stone leader wins). `winLead`: a real-stone lead of this much over the
+// opponent's total (blue's +1 phantom and Providence pendings included) wins
+// outright. Pentagon values are first guesses pending self-play calibration.
+const BOARD_LAYOUT_RULES = {
+	core:     { zones: 3, spellTarget: 6, winLead: 3, name: 'Core' },
+	pentagon: { zones: 5, spellTarget: 8, winLead: 4, name: 'Pentagon' },
+};
+const BOARD_LAYOUT_IDS = Object.keys(BOARD_LAYOUT_RULES);
+// The layout a board of `n` spells fills (9 -> core, 15 -> pentagon), for
+// records that carry a spell list but no SFN.
+function boardLayoutForSpellCount(n) {
+	for (const id of BOARD_LAYOUT_IDS) {
+		if (3 * BOARD_LAYOUT_RULES[id].zones === n) return id;
+	}
+	return 'core';
+}
+
+const _BOARD_LAYOUT_CACHE = {};
+function boardLayoutDef(id) {
+	if (!BOARD_LAYOUT_RULES[id]) id = 'core';
+	if (_BOARD_LAYOUT_CACHE[id]) return _BOARD_LAYOUT_CACHE[id];
+	const rules = BOARD_LAYOUT_RULES[id];
+	const Z = rules.zones;
+	const ring = buildRingLayout(Z);
+	if (id === 'core') {
+		ring.positions = _CORE_POSITIONS;
+		ring.adjacency = _CORE_ADJACENCY;
+	}
+	const range = (a, b) => { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; };
+	// Syzygy's "opposite" spells: the ritual in zone k faces the charm and
+	// the sorcery of zone k+1 (core: 1 -> {charm 8, sorcery 5}, ...).
+	const syzygyOpposite = {};
+	for (let k = 0; k < Z; k++) {
+		const nxt = (k + 1) % Z;
+		syzygyOpposite[1 + k] = { charm: 1 + 2 * Z + nxt, sorcery: 1 + Z + nxt };
+	}
+	const def = Object.freeze({
+		id,
+		name: rules.name,
+		zones: ring.zones,
+		perType: Z,
+		positionCount: 3 * Z,
+		ritualPositions: range(1, Z),
+		sorceryPositions: range(Z + 1, 2 * Z),
+		charmPositions: range(2 * Z + 1, 3 * Z),
+		bigPositions: range(1, 2 * Z),
+		nodeOrder: ring.nodeOrder,
+		positions: ring.positions,
+		adjacency: ring.adjacency,
+		manaNodes: ring.manaNodes,
+		startStones: { red: 'a1', blue: 'b1' },
+		spellTarget: rules.spellTarget,
+		winLead: rules.winLead,
+		syzygyOpposite,
+	});
+	_BOARD_LAYOUT_CACHE[id] = def;
+	return def;
+}
+
+// ---- The active layout ----
+// Every engine module reads topology through these bindings. They describe
+// ONE layout per JS realm (page or worker) and are rewritten IN PLACE by
+// setBoardLayout, so references held elsewhere stay valid. Board / SimBoard
+// constructors activate the layout their variant names (variantBoardLayout);
+// a page never runs two layouts at once.
+const NODE_ORDER = [];       // canonical node order (SFN stone field)
+const POSITIONS = {};        // spell position index (1-based) -> [node names]
+const ADJACENCY = {};        // node -> [neighbour nodes], index-ascending
+const MANA_NODES = [];
+// Nodes that sit on a spell sigil. Seal of Autumn forbids the opponent from
+// sacrificing any of these to pay for a dash.
 const SPELL_NODES = new Set();
-for (let _spellPos = 1; _spellPos <= 9; _spellPos++) {
-	for (const _spellNode of POSITIONS[_spellPos]) SPELL_NODES.add(_spellNode);
-}
-function isSpellNode(name) {
-	return SPELL_NODES.has(name);
-}
-
-// Nodes on no spell sigil and not mana nodes: a11-13, b11-13, c11-13.
+// Nodes on no spell sigil and not mana nodes (core: a11-13, b11-13, c11-13).
 // A stone parked here charges nothing and holds no mana ("void" nodes).
 // Mirrors ai/minimax_ai.py _VOID_NODES.
-const VOID_NODES = NODE_ORDER.filter(
-	n => !SPELL_NODES.has(n) && !MANA_NODES.includes(n));
-
-// Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil — positions 1..6.
-// Lurk (Gloom charm) may move onto any node EXCEPT these; 1-node spells (charms)
-// and non-spell nodes remain valid targets.
+const VOID_NODES = [];
+// Nodes that sit on a 3-node (sorcery) or 5-node (ritual) sigil. Lurk (Gloom
+// charm) may move onto any node EXCEPT these; 1-node spells (charms) and
+// non-spell nodes remain valid targets.
 const BIG_SPELL_NODES = new Set();
-for (let _bigPos = 1; _bigPos <= 6; _bigPos++) {
-	for (const _bigNode of POSITIONS[_bigPos]) BIG_SPELL_NODES.add(_bigNode);
+// Scalar facts about the active layout (see boardLayoutDef): id, perType,
+// positionCount, ritual/sorcery/charm/bigPositions, spellTarget, winLead,
+// startStones, syzygyOpposite, zones.
+const BOARD = {};
+const _boardLayoutListeners = [];
+
+function setBoardLayout(id) {
+	const def = boardLayoutDef(id);
+	if (BOARD.id === def.id) return def;
+	NODE_ORDER.length = 0;
+	NODE_ORDER.push(...def.nodeOrder);
+	for (const k of Object.keys(POSITIONS)) delete POSITIONS[k];
+	for (const [k, v] of Object.entries(def.positions)) POSITIONS[k] = v;
+	for (const k of Object.keys(ADJACENCY)) delete ADJACENCY[k];
+	for (const [k, v] of Object.entries(def.adjacency)) ADJACENCY[k] = v;
+	MANA_NODES.length = 0;
+	MANA_NODES.push(...def.manaNodes);
+	SPELL_NODES.clear();
+	for (let p = 1; p <= def.positionCount; p++) {
+		for (const n of def.positions[p]) SPELL_NODES.add(n);
+	}
+	VOID_NODES.length = 0;
+	VOID_NODES.push(...NODE_ORDER.filter(n => !SPELL_NODES.has(n) && !MANA_NODES.includes(n)));
+	BIG_SPELL_NODES.clear();
+	for (const p of def.bigPositions) {
+		for (const n of def.positions[p]) BIG_SPELL_NODES.add(n);
+	}
+	for (const k of Object.keys(BOARD)) delete BOARD[k];
+	for (const k of ['id', 'name', 'zones', 'perType', 'positionCount', 'ritualPositions',
+		'sorceryPositions', 'charmPositions', 'bigPositions', 'startStones',
+		'spellTarget', 'winLead', 'syzygyOpposite']) {
+		BOARD[k] = def[k];
+	}
+	for (const fn of _boardLayoutListeners) fn(def);
+	return def;
+}
+
+// Modules that precompute from the topology (index tables, typed arrays)
+// register here; the callback runs now and after every layout switch.
+function onBoardLayoutChange(fn) {
+	_boardLayoutListeners.push(fn);
+	if (BOARD.id) fn(boardLayoutDef(BOARD.id));
+}
+
+function isSpellNode(name) {
+	return SPELL_NODES.has(name);
 }
 function isBigSpellNode(name) {
 	return BIG_SPELL_NODES.has(name);
 }
+// 'ritual' | 'sorcery' | 'charm' for a 1-based position of the active layout.
+function spellTypeAtPosition(pos) {
+	if (pos >= 1 && pos <= BOARD.perType) return 'ritual';
+	if (pos > BOARD.perType && pos <= 2 * BOARD.perType) return 'sorcery';
+	if (pos > 2 * BOARD.perType && pos <= BOARD.positionCount) return 'charm';
+	return null;
+}
+// UI slot keys in position order: ritual1..N, sorcery1..N, charm1..N
+// (spellNames[i] is slot i). The page keys spell art and text by these.
+function spellSlotNames() {
+	const out = [];
+	for (const type of ['ritual', 'sorcery', 'charm']) {
+		for (let k = 1; k <= BOARD.perType; k++) out.push(type + k);
+	}
+	return out;
+}
+// 1-based index of the position holding `node`, or null.
+function positionOfNode(node) {
+	for (let p = 1; p <= BOARD.positionCount; p++) {
+		if (POSITIONS[p].includes(node)) return p;
+	}
+	return null;
+}
+
+setBoardLayout('core');
 
 // Core spells metadata
 const CORE_SPELLS = {
@@ -189,9 +352,9 @@ const SPELL_TEXTS = {
 	Itch:              'Make 1 move, then advance the enemy lock by 1.',
 	Free_Spirit:       'If your lock is 0 or 1, make 1 soft move.',
 	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1.',
-	Stampede:          'Make hard moves equal to your lock value (0–5).',
+	Stampede:          'Make hard moves equal to your lock value.',
 	Choke:             'Choose an enemy stone; place your stones on all of its empty adjacent nodes.',
-	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all three.',
+	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all of them.',
 	Moth_Plague:       'Make 3 hard blink moves (push any enemy stone, no adjacency required).',
 	Ripples:           'Choose two charged 1-node spells in play and apply each of their effects twice.',
 	Lifesap:           'STATIC: You refill 2 stones when you cast a 5-node spell (ritual).',
@@ -371,32 +534,37 @@ function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
 }
 
-// Game variants. Two orthogonal dimensions encoded in a single string:
+// Game variants. Orthogonal dimensions encoded in a single string:
 //   competitive — empty-board opening (both players blink onto any node for
 //                 their first move) instead of the classic a1/b1 stones.
-//   deathmatch  — win ONLY by eliminating all opponent stones; the +3-lead and
-//                 6th-spell terminal conditions are disabled (threefold board
-//                 repetition still ends the game as a Blue win, to guarantee
-//                 termination). Spell counters are removed in this mode.
+//   deathmatch  — win ONLY by eliminating all opponent stones; the stone-lead
+//                 and spell-count terminal conditions are disabled (threefold
+//                 board repetition still ends the game as a Blue win, to
+//                 guarantee termination). Spell counters are removed in this mode.
 //   duplicates  — the spell draw may repeat a spell (up to three copies):
 //                 the pool holds every spell as X, X~2, X~3 (see
 //                 DUPLICATE_SUFFIXES) and the draw stays without
 //                 replacement. A setup-only rule: play is otherwise
 //                 standard. Unrated.
-// They combine, tokens in this fixed order: 'competitive_deathmatch_duplicates'.
-// Kept as one string so it rides the existing variant plumbing (SFN,
-// Firebase, URL, localStorage) unchanged.
-const VARIANT_TOKENS = ['competitive', 'deathmatch', 'duplicates'];
-function composeVariant(competitive, deathmatch, duplicates) {
+//   pentagon    — the Cataclysm expanded 1v1 board: 5 zones, 65 nodes,
+//                 5 spells of each size (see BOARD_LAYOUT_RULES). Absent
+//                 means the core board. Unrated.
+// They combine, tokens in this fixed order:
+// 'competitive_deathmatch_duplicates_pentagon'. Kept as one string so it
+// rides the existing variant plumbing (SFN, Firebase, URL, localStorage)
+// unchanged.
+const VARIANT_TOKENS = ['competitive', 'deathmatch', 'duplicates', 'pentagon'];
+function composeVariant(competitive, deathmatch, duplicates, pentagon) {
 	const parts = [];
 	if (competitive) parts.push('competitive');
 	if (deathmatch) parts.push('deathmatch');
 	if (duplicates) parts.push('duplicates');
+	if (pentagon) parts.push('pentagon');
 	return parts.length ? parts.join('_') : 'standard';
 }
 const SIGIL_VARIANTS = [];
-for (let mask = 0; mask < 8; mask++) {
-	SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4));
+for (let mask = 0; mask < 16; mask++) {
+	SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4, mask & 8));
 }
 function variantHasCompetitive(v) {
 	return typeof v === 'string' && v.indexOf('competitive') !== -1;
@@ -407,10 +575,18 @@ function variantHasDeathmatch(v) {
 function variantHasDuplicates(v) {
 	return typeof v === 'string' && v.indexOf('duplicates') !== -1;
 }
+function variantHasPentagon(v) {
+	return typeof v === 'string' && v.indexOf('pentagon') !== -1;
+}
+// The board layout id a variant plays on ('core' | 'pentagon').
+function variantBoardLayout(v) {
+	return variantHasPentagon(v) ? 'pentagon' : 'core';
+}
 // Canonicalize any input (handles legacy strings, wrong order, junk) to one of
-// the eight SIGIL_VARIANTS values.
+// the SIGIL_VARIANTS values.
 function normalizeVariant(v) {
-	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v), variantHasDuplicates(v));
+	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v),
+		variantHasDuplicates(v), variantHasPentagon(v));
 }
 
 // Stone-spot positions (fractions of the square spell image), measured from the
@@ -559,10 +735,12 @@ function generateSpellList(selection, allowDuplicates = false) {
 		}
 	}
 
-	if (poolByCat[0].length < 3 || poolByCat[1].length < 3 || poolByCat[2].length < 3) {
+	// One spell per sigil of each size on the active layout (3 on core).
+	const perType = BOARD.perType;
+	if (poolByCat[0].length < perType || poolByCat[1].length < perType || poolByCat[2].length < perType) {
 		throw new Error("Not enough spells selected to fill the board. Please select more spell packs.");
 	}
 
-	const picks = poolByCat.map(cat => shuffleArray(cat).slice(0, 3));
+	const picks = poolByCat.map(cat => shuffleArray(cat).slice(0, perType));
 	return [...picks[0], ...picks[1], ...picks[2]];
 }

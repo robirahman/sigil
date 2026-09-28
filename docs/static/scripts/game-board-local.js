@@ -45,14 +45,10 @@ document.addEventListener('alpine:init', () => {
 			blueClockMs: 0,
 			clockActive: '',
 
-			nodes: {
-				...['a', 'b', 'c'].reduce((acc, curr) => {
-					new Array(13).fill(true).forEach((node, index) => {
-						acc[`${curr}${index + 1}`] = null;
-					});
-					return acc;
-				}, {}),
-			},
+			nodes: Object.fromEntries(boardLayoutDef('core').nodeOrder.map(n => [n, null])),
+			// Board layout state + applyBoardLayout / nodeStyle / slotStyle /
+			// scoreStyle (board-geometry.js).
+			...boardLayoutMixin(),
 			nodesToRefill: {},
 			playerToRefill: '',
 			previousBoardState: {},
@@ -193,11 +189,16 @@ document.addEventListener('alpine:init', () => {
 
 			_loadReviewFromPayload(payload) {
 				const spellNames = payload.spellNames || [];
-				const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
+				// The board layout follows the recorded position (a pentagon
+				// SFN names its layout), else the spell count.
+				let layout = boardLayoutForSpellCount(spellNames.length);
+				try { if (payload.sfns && payload.sfns[0]) layout = sfnToDict(payload.sfns[0]).layout; } catch (e) { /* keep */ }
+				this.applyBoardLayout(layout);
+				const posNames = spellSlotNames();
 				const dict = {};
 				const images = {};
 				const text = {};
-				for (let i = 0; i < 9 && i < spellNames.length; i++) {
+				for (let i = 0; i < posNames.length && i < spellNames.length; i++) {
 					const name = spellNames[i];
 					dict[posNames[i]] = name;
 					images[posNames[i]] = 'static/images/spells/' + baseSpellName(name) + '.png';
@@ -487,7 +488,7 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* sessionStorage blocked */ }
 				}
 				const spells = this._spellNamesForExport;
-				if (spells && spells.length === 9) {
+				if (spells && spells.length === BOARD.positionCount) {
 					try {
 						sessionStorage.setItem('sigil_rematch_spells', JSON.stringify(spells));
 					} catch (e) { /* sessionStorage blocked */ }
@@ -796,6 +797,14 @@ document.addEventListener('alpine:init', () => {
 				const gameVariantParam = puzzle ? (puzzle.variant || 'standard')
 					: new URLSearchParams(window.location.search).get('variant');
 				let gameVariant = normalizeVariant(gameVariantParam);
+				// An imported SFN names its own layout (a pentagon stone field).
+				if (_this.importSfn) {
+					try {
+						if (sfnToDict(_this.importSfn).layout === 'pentagon' && !variantHasPentagon(gameVariant)) {
+							gameVariant = normalizeVariant(gameVariant + '_pentagon');
+						}
+					} catch (e) { /* bad SFN: the engine reports it */ }
+				}
 				let _engineRef = null;
 				if (puzzle) warnBeforeUnload = false;
 
@@ -931,11 +940,15 @@ document.addEventListener('alpine:init', () => {
 					if (raw) {
 						sessionStorage.removeItem('sigil_rematch_spells');
 						const parsed = JSON.parse(raw);
-						if (Array.isArray(parsed) && parsed.length === 9) {
+						if (Array.isArray(parsed) && parsed.length === boardLayoutDef(variantBoardLayout(gameVariant)).positionCount) {
 							_rematchSpells = parsed;
 						}
 					}
 				} catch (e) { /* sessionStorage blocked or bad payload */ }
+
+				// Activate the variant's board layout before anything draws or
+				// generates spells (a resumed save's variant has been read).
+				_this.applyBoardLayout(variantBoardLayout(gameVariant));
 
 				async function initEngine() {
 					let options = {};
@@ -1008,6 +1021,18 @@ document.addEventListener('alpine:init', () => {
 					};
 					const _RUST_PACKS = ['core', ...CORE_SUBPACK_KEYS, 'springtime', 'celestial', 'fury',
 					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+					// The Cataclysm pentagon board (65 nodes) is JS-engine only: the
+					// Rust engine's bitboards are 64-bit and the NN models are
+					// trained on the 39-node core board. Hand its Rust / NN tiers to
+					// the Caveman tier with the same time budget.
+					if (variantHasPentagon(gameVariant)) {
+						const jsTier = _RUST_TO_JS_TIER[aiMode] || (aiMode === 'minimax' ? 'hard' : null);
+						if (jsTier) {
+							_this.messageHistory.push('The Cataclysm board is played by the JS engine; using the '
+								+ jsTier.replace('_', ' ') + ' JS engine tier (same time budget).');
+							aiMode = jsTier;
+						}
+					}
 					if (_RUST_TO_JS_TIER[aiMode]) {
 						const jsTier = _RUST_TO_JS_TIER[aiMode];
 						const jsLabel = jsTier.replace('_', ' ');
@@ -1658,7 +1683,7 @@ document.addEventListener('alpine:init', () => {
 					if (!t || !sfnBefore || !Array.isArray(t.actions)) return false;
 					if (typeof reconstructGameLog !== 'function') return false;
 					const spellNames = (_this._spellNamesForExport || []).slice();
-					if (spellNames.length !== 9) return false;
+					if (spellNames.length !== BOARD.positionCount) return false;
 					let variant = 'standard';
 					try { variant = sfnToDict(sfnBefore).variant || 'standard'; } catch (e) { /* default */ }
 					// The boardstate diff baseline belongs to the live game; reset
@@ -1857,6 +1882,7 @@ document.addEventListener('alpine:init', () => {
 						'class',
 						`stone-node stone-node--crushed stone-node--${node} stone-node--${crushed_color}`
 					);
+					crushStone.style.cssText = nodeElem.style.cssText;
 					crushStone.addEventListener('animationend', () => {
 						crushStone.remove();
 					});
@@ -2006,7 +2032,8 @@ document.addEventListener('alpine:init', () => {
 						const recordVariant = normalizeVariant(_engineRef && _engineRef.board && _engineRef.board.variant);
 						const _isDeathmatch = variantHasDeathmatch(recordVariant);
 						const _isDuplicates = variantHasDuplicates(recordVariant);
-						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates;
+						const _isPentagon = variantHasPentagon(recordVariant);
+						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates || _isPentagon;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2071,6 +2098,8 @@ document.addEventListener('alpine:init', () => {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
 						} else if (_isDuplicates) {
 							_this.messageHistory.push('Unrated: Allow Duplicates games do not affect rating.');
+						} else if (_isPentagon) {
+							_this.messageHistory.push('Unrated: Cataclysm board games do not affect rating.');
 						} else if (_isUnratedPack) {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}

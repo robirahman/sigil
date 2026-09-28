@@ -19,10 +19,11 @@ class GameController {
 		this._resetRequested = false;
 		this.aiColor = (options && options.aiColor) || null;
 		this.ai = (options && options.ai) || null;
-		this.spellNamesOverride = (options && Array.isArray(options.spellNames) && options.spellNames.length === 9)
+		this.variant = normalizeVariant(options && options.variant);
+		const slotCount = boardLayoutDef(variantBoardLayout(this.variant)).positionCount;
+		this.spellNamesOverride = (options && Array.isArray(options.spellNames) && options.spellNames.length === slotCount)
 			? options.spellNames.slice()
 			: null;
-		this.variant = normalizeVariant(options && options.variant);
 		this._gameLog = [];
 		// Per-turn input transcript (SGN-T): every resolved getInput token
 		// for the current turn, in prompt order. Reset in the turn preamble.
@@ -128,8 +129,8 @@ class GameController {
 		// Send spell setup
 		const spellSetup = { type: 'spellsetup' };
 		const spellTextSetup = { type: 'spelltextsetup' };
-		const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
-		for (let i = 0; i < 9; i++) {
+		const posNames = spellSlotNames();
+		for (let i = 0; i < posNames.length; i++) {
 			const name = this.board.spellNames[i];
 			spellSetup[posNames[i]] = name;
 			spellTextSetup[posNames[i]] = {

@@ -47,9 +47,20 @@ function sfnToDict(sfnStr) {
 	const parts = sfnStr.split(' ');
 	const [stonesStr, spellsStr] = parts[0].split('/');
 
+	// The board layout comes from the variant token (read below); a bare
+	// stone field of another layout's length is recognized too. Stones are
+	// keyed by THAT layout's node order, which need not be the active one.
+	let layout = 'core';
+	for (const token of parts.slice(7)) {
+		if (token && !token.startsWith('pm:')) layout = variantBoardLayout(token);
+	}
+	if (layout === 'core' && stonesStr.length === boardLayoutDef('pentagon').nodeOrder.length) {
+		layout = 'pentagon';
+	}
+	const nodeOrder = boardLayoutDef(layout).nodeOrder;
 	const stones = {};
-	for (let i = 0; i < NODE_ORDER.length; i++) {
-		stones[NODE_ORDER[i]] = charToStone(stonesStr[i]);
+	for (let i = 0; i < nodeOrder.length; i++) {
+		stones[nodeOrder[i]] = charToStone(stonesStr[i]);
 	}
 
 	const spellNames = normalizeSpellNames(spellsStr.split(','));
@@ -87,12 +98,18 @@ function sfnToDict(sfnStr) {
 		}
 	}
 
+	// A pentagon stone field without its variant token still names the
+	// layout, so board constructors fed this variant activate the right one.
+	if (layout === 'pentagon' && !variantHasPentagon(variant)) {
+		variant = normalizeVariant(variant + '_pentagon');
+	}
+
 	return {
 		stones, spell_names: spellNames, turn, turncounter,
 		red_spellcounter: redSc, blue_spellcounter: blueSc,
 		red_lock: redLock, blue_lock: blueLock,
 		red_springlock: redSpring, blue_springlock: blueSpring,
-		score, variant,
+		score, variant, layout,
 		red_pending: redPending, blue_pending: bluePending,
 	};
 }

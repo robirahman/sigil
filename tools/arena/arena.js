@@ -18,6 +18,8 @@
  *   --swap           alternate which AI plays red each game (fairness) (default on)
  *   --no-swap        keep colors fixed
  *   --pack KEY       spell pack for layout generation      (default core)
+ *   --variant V      game variant, e.g. pentagon or competitive_pentagon
+ *                    (the Cataclysm board)                 (default standard)
  *   --seed N         RNG seed for reproducible spell layouts (default time-based)
  *   --max-depth N    ply cap per search                    (default 64)
  *   --max-turns N    ply cap per game                       (default 300)
@@ -52,6 +54,7 @@ function parseArgs(argv) {
 			case '--swap': a.swap = true; break;
 			case '--no-swap': a.swap = false; break;
 			case '--pack': a.pack = next(); break;
+			case '--variant': a.variant = next(); break;
 			case '--seed': a.seed = parseInt(next(), 10); break;
 			case '--max-depth': a.maxDepth = parseInt(next(), 10); break;
 			case '--max-turns': a.maxTurns = parseInt(next(), 10); break;
@@ -83,6 +86,9 @@ function buildGameSpecs(args, engine) {
 	const realRandom = Math.random;
 	Math.random = rng;
 	const layouts = [];
+	const variant = engine.normalizeVariant(args.variant || 'standard');
+	// The draw fills the variant's board layout (5 per size on the pentagon).
+	engine.setBoardLayout(engine.variantBoardLayout(variant));
 	try {
 		for (let i = 0; i < args.games; i++) {
 			let layout = engine.generateSpellList(args.pack);
@@ -106,6 +112,7 @@ function buildGameSpecs(args, engine) {
 		specs.push({
 			gameId: i,
 			spellNames: layouts[i],
+			variant,
 			redCfg: swapped ? cfgB : cfgA,
 			blueCfg: swapped ? cfgA : cfgB,
 			timeLimit: args.time,

@@ -17,14 +17,9 @@ document.addEventListener('alpine:init', () => {
 			lastPlay: '',
 			message: '',
 			messageHistory: [],
-			nodes: {
-				...['a', 'b', 'c'].reduce((acc, curr) => {
-					new Array(13).fill(true).forEach((_, index) => {
-						acc[`${curr}${index + 1}`] = null;
-					});
-					return acc;
-				}, {}),
-			},
+			nodes: Object.fromEntries(boardLayoutDef('core').nodeOrder.map(n => [n, null])),
+			// Board layout state + position helpers (board-geometry.js).
+			...boardLayoutMixin(),
 			nodesToRefill: {},
 			playerToRefill: '',
 			previousBoardState: {},
@@ -127,7 +122,7 @@ document.addEventListener('alpine:init', () => {
 					} else {
 						sessionStorage.removeItem('sigil_rematch_variant');
 					}
-					if (this._rematchSpells && this._rematchSpells.length === 9) {
+					if (this._rematchSpells && this._rematchSpells.length === BOARD.positionCount) {
 						sessionStorage.setItem('sigil_rematch_spells', JSON.stringify(this._rematchSpells));
 					}
 				} catch (e) { /* sessionStorage blocked */ }
@@ -312,11 +307,11 @@ document.addEventListener('alpine:init', () => {
 			},
 			// Populate spell setup from spellNames (same mapping as engine).
 			_applyReviewSpellSetup(spellNames) {
-				const posNames = ['ritual1', 'ritual2', 'ritual3', 'sorcery1', 'sorcery2', 'sorcery3', 'charm1', 'charm2', 'charm3'];
+				const posNames = spellSlotNames();
 				const dict = {};
 				const images = {};
 				const text = {};
-				for (let i = 0; i < 9 && i < spellNames.length; i++) {
+				for (let i = 0; i < posNames.length && i < spellNames.length; i++) {
 					const name = spellNames[i];
 					dict[posNames[i]] = name;
 					images[posNames[i]] = 'static/images/spells/' + baseSpellName(name) + '.png';
@@ -586,6 +581,9 @@ document.addEventListener('alpine:init', () => {
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
 					_this._rematchVariant = normalizeVariant(variant);
 				_this.isDeathmatch = variantHasDeathmatch(variant);
+					// The room's variant names its board layout; switch before
+					// the engine or the review draws anything.
+					_this.applyBoardLayout(variantBoardLayout(variant));
 					// AI-review wiring: roomCode is the gameId used for the shared
 					// Firebase review cache, and authManager exposes the uid for
 					// community-annotation writes.
@@ -674,7 +672,7 @@ document.addEventListener('alpine:init', () => {
 					if (!t || !sfnBefore || !Array.isArray(t.actions)) return false;
 					if (typeof reconstructGameLog !== 'function') return false;
 					const spellNames = (_this._spellNamesForExport || []).slice();
-					if (spellNames.length !== 9) return false;
+					if (spellNames.length !== BOARD.positionCount) return false;
 					let variant = 'standard';
 					try { variant = sfnToDict(sfnBefore).variant || 'standard'; } catch (e) { /* default */ }
 					// The boardstate diff baseline belongs to the live game; reset it
@@ -759,7 +757,7 @@ document.addEventListener('alpine:init', () => {
 						const s = document.querySelector(`#stone-node--${rest.starting_node}`), e = document.querySelector(`#stone-node--${rest.ending_node}`);
 						if (s && e) { const sr = s.getBoundingClientRect(), er = e.getBoundingClientRect(); e.style.transition = 'transform 0s'; e.style.transform = `translate(${sr.x-er.x}px, ${sr.y-er.y}px)`; setTimeout(() => { e.style.transition = 'transform 750ms ease-in-out'; e.style.transform = ''; }, 50); }
 					}
-					else if (type === 'crush_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stoneCrushed'); const ne = document.querySelector(`#stone-node--${rest.node}`); if (ne) { const cs = document.createElement('button'); cs.setAttribute('class', `stone-node stone-node--crushed stone-node--${rest.node} stone-node--${rest.crushed_color}`); cs.addEventListener('animationend', () => cs.remove()); ne.parentNode.insertBefore(cs, ne); } }
+					else if (type === 'crush_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stoneCrushed'); const ne = document.querySelector(`#stone-node--${rest.node}`); if (ne) { const cs = document.createElement('button'); cs.setAttribute('class', `stone-node stone-node--crushed stone-node--${rest.node} stone-node--${rest.crushed_color}`); cs.style.cssText = ne.style.cssText; cs.addEventListener('animationend', () => cs.remove()); ne.parentNode.insertBefore(cs, ne); } }
 					else if (type === 'chooserefills') { const { playercolor, ...n } = rest; _this.nodesToRefill = n; _this.playerToRefill = playercolor; }
 					else if (type === 'donerefilling') { _this.nodesToRefill = {}; _this.playerToRefill = ''; }
 					else if (type === 'pushingoptions') { const { sourceNode, ...targets } = rest; _this.pushSourceNode = sourceNode || ''; _this.validMoves = targets; }
