@@ -10,6 +10,7 @@
 	body { margin:0; font:15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink); background:var(--bg); }
 	header { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; padding:12px 18px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
 	header h1 { font-size:18px; margin:0 12px 0 0; }
+	.charts-link { font-size:13px; color:var(--accent); text-decoration:none; }
 	.tabs button { padding:6px 14px; border:1px solid var(--line); background:#f2f2f2; cursor:pointer; border-radius:6px; }
 	.tabs button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 	.controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; }
@@ -51,6 +52,7 @@
 <body>
 <header>
 	<h1>Spell Survey</h1>
+	<a class="charts-link" href="spell-charts.html">Charts →</a>
 	<div class="tabs">
 		<button id="tab-single" class="active">Single spell</button>
 		<button id="tab-pair">Two spells</button>
@@ -66,6 +68,7 @@
 			<b>A</b> <select id="pack-a"><option value="">any pack</option></select> <select id="spell-a"><option value="">any spell</option></select>
 		</span>
 		<span class="slot" id="slot-b"><b>B</b> <select id="pack-b"><option value="">any pack</option></select> <select id="spell-b"><option value="">any spell</option></select></span>
+		<button id="save-repo" title="Only works on the local dev server (tools/survey_server.py)">Save to repo</button>
 		<button id="export">Download JSON</button>
 		<button id="import">Import JSON…</button>
 		<input type="file" id="import-file" accept="application/json" hidden>
@@ -297,6 +300,13 @@
 		document.body.appendChild(a); a.click(); a.remove();
 		setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 		toast('JSON downloaded');
+	};
+	el('save-repo').onclick = async () => {
+		try {
+			const r = await fetch('/dev/save-survey', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(exportObject()) });
+			if (!r.ok) throw new Error(r.status === 501 || r.status === 404 ? 'no save endpoint (run tools/survey_server.py)' : `HTTP ${r.status}`);
+			toast('Saved ' + (await r.json()).path.split('/').pop());
+		} catch (e) { toast('Save failed: ' + e.message); }
 	};
 	el('import').onclick = () => el('import-file').click();
 	el('import-file').onchange = ev => {
