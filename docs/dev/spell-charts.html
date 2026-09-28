@@ -143,17 +143,19 @@
 (() => {
 	// Newest export: the dev server's /dev/latest-survey (tools/survey_server.py) when available,
 	// otherwise the newest archived copy. ?src=<url> overrides both.
-	const ARCHIVED = '../strategy/survey_exports/spell-survey-20260928T050106.json';
+	const ARCHIVED = '../strategy/survey_exports/spell-survey-20260928T060447.json';
 
-	// Tier sizes follow the article's grouping of the Bradley-Terry order (2026-09-07); the order
-	// itself is refitted from whatever export is loaded.
+	// Tiers are cut at the largest gaps between neighbours in the Bradley-Terry order (refitted
+	// from whatever export is loaded), skipping any cut that would leave a tier under MIN_TIER
+	// spells: the spread-out tails otherwise take most of the cuts as one-spell tiers.
+	const MIN_TIER = 3;
 	const TIERS = [
-		{ k: 'S', name: 'Top',      n: 4,        color: '#ff7f7f' },
-		{ k: 'A', name: 'Strong',   n: 10,       color: '#ffbf7f' },
-		{ k: 'B', name: 'Solid',    n: 5,        color: '#ffdf7f' },
-		{ k: 'C', name: 'Middling', n: 5,        color: '#ffff7f' },
-		{ k: 'D', name: 'Weak',     n: 9,        color: '#bfff7f' },
-		{ k: 'F', name: 'Bottom',   n: Infinity, color: '#7fff7f' },
+		{ k: 'S', name: 'Top',      color: '#ff7f7f' },
+		{ k: 'A', name: 'Strong',   color: '#ffbf7f' },
+		{ k: 'B', name: 'Solid',    color: '#ffdf7f' },
+		{ k: 'C', name: 'Middling', color: '#ffff7f' },
+		{ k: 'D', name: 'Weak',     color: '#bfff7f' },
+		{ k: 'F', name: 'Bottom',   color: '#7fff7f' },
 	];
 	const UNRANKED = { k: '?', name: 'Not compared', color: '#bbbbbb' };
 
@@ -231,12 +233,15 @@
 		for (const k of Object.keys(pairs)) for (const n of k.split('|')) if (!spells[n] && !names.includes(n)) names.push(n);
 		const bt = bradleyTerry(names, pairs);
 		const order = names.filter(n => bt.ranked.has(n)).sort((a, b) => bt.strength[b] - bt.strength[a]);
+		// cuts[k] = index of the first spell below the k-th tier break, with the gap it breaks at.
+		let cuts = [];
+		for (const c of order.slice(1).map((n, i) => ({ at: i + 1, gap: bt.strength[order[i]] - bt.strength[n] })).sort((a, b) => b.gap - a.gap)) {
+			if (cuts.length === TIERS.length - 1) break;
+			const next = [...cuts, c].sort((a, b) => a.at - b.at), bounds = [0, ...next.map(x => x.at), order.length];
+			if (bounds.every((b, k) => k === 0 || b - bounds[k - 1] >= MIN_TIER)) cuts = next;
+		}
 		const tierOf = {}, rankOf = {};
-		let t = 0, left = TIERS[0].n;
-		order.forEach((n, i) => {
-			while (left <= 0 && t < TIERS.length - 1) { t++; left = TIERS[t].n; }
-			tierOf[n] = TIERS[t]; rankOf[n] = i + 1; left--;
-		});
+		order.forEach((n, i) => { tierOf[n] = TIERS[cuts.filter(c => c.at <= i).length]; rankOf[n] = i + 1; });
 		for (const n of names) if (!tierOf[n]) tierOf[n] = UNRANKED;
 		// Pair lookups, keyed both ways.
 		const match = {}, syn = {}, better = {};
@@ -256,7 +261,7 @@
 			}
 			if (v.better) { better[a + '|' + b] = v.better; better[b + '|' + a] = v.better; }
 		}
-		return { data, spells, names, bt, order, tierOf, rankOf, match, syn, better, nPairs: Object.keys(pairs).length };
+		return { data, spells, names, bt, order, cuts, tierOf, rankOf, match, syn, better, nPairs: Object.keys(pairs).length };
 	}
 
 	function chartOrder() {
@@ -293,7 +298,7 @@
 					</button>`).join('')}</div>
 			</div>`).join('') + '</div>';
 		const unranked = M.names.length - M.order.length;
-		el('tier-note').textContent = `Ranked by a Bradley-Terry fit over ${M.bt.comps} "which is better?" answers; within a tier, spells run best to worst from left to right. Tier sizes follow the article (${TIERS.slice(0, -1).map(t => t.n).join(' / ')} / rest).` + (unranked ? ` ${unranked} spell${unranked > 1 ? 's have' : ' has'} no comparisons yet.` : '') + ' Hover a card for details; click one to highlight it in the charts.';
+		el('tier-note').textContent = `Ranked by a Bradley-Terry fit over ${M.bt.comps} "which is better?" answers; within a tier, spells run best to worst from left to right. Tiers break at the largest gaps in strength that leave every tier at least ${MIN_TIER} spells: ${M.cuts.map(c => `${pretty(M.order[c.at - 1])} → ${pretty(M.order[c.at])} (${c.gap.toFixed(2)})`).join(', ')}.` + (unranked ? ` ${unranked} spell${unranked > 1 ? 's have' : ' has'} no comparisons yet.` : '') + ' Hover a card for details; click one to highlight it in the charts.';
 	}
 
 	// ---- Matrices ----

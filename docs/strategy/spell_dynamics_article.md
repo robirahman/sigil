@@ -10,34 +10,34 @@ A reminder on two rules that come up repeatedly below. Casting a spell locks it 
 
 ## The tier list
 
-We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 179 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers are our own grouping of that order.
+We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 194 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers break that order at its largest gaps in strength, keeping every tier to at least three spells.
 
 | Tier | Spells |
 |---|---|
-| Top | Fireblast, Gather, Scatter, Blossom |
-| Strong | Corrupt, Charge, Bewitch, Carnage, Seal of Lightning, Seal of Wind, Slash, Harvest, Starfall, Fury |
-| Solid | Hail Storm, Meteor, Storm Front, Erupt, Hurricane |
-| Middling | Azimuth, Surge, Seal of Stone, Comet, Splash |
-| Weak | Seal of Winter, Sprout, Seal of Spring, Seal of Autumn, Flourish, Lurk, Seal of Destruction, Tsunami, Seal of Summer |
-| Bottom | Decay, Eclipse, Syzygy, Grow, Gust, Torrent |
+| Top | Gather, Fireblast, Scatter, Blossom |
+| Strong | Corrupt, Seal of Lightning, Charge, Carnage, Bewitch, Seal of Wind, Slash, Harvest, Fury, Hail Storm, Starfall, Meteor |
+| Solid | Erupt, Storm Front, Hurricane, Surge, Azimuth, Seal of Stone |
+| Middling | Comet, Splash, Sprout, Seal of Winter, Seal of Autumn, Seal of Spring, Decay |
+| Weak | Flourish, Lurk, Seal of Destruction, Tsunami, Syzygy, Seal of Summer, Eclipse |
+| Bottom | Grow, Gust, Torrent |
 
 Full order, best to worst:
 
 | # | Spell | Type | # | Spell | Type | # | Spell | Type |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Fireblast | sorcery | 14 | Fury | sorcery | 27 | Seal of Spring | charm |
-| 2 | Gather | sorcery | 15 | Hail Storm | sorcery | 28 | Seal of Autumn | charm |
-| 3 | Scatter | sorcery | 16 | Meteor | sorcery | 29 | Flourish | ritual |
-| 4 | Blossom | ritual | 17 | Storm Front | sorcery | 30 | Lurk | charm |
-| 5 | Corrupt | ritual | 18 | Erupt | ritual | 31 | Seal of Destruction | ritual |
-| 6 | Charge | charm | 19 | Hurricane | ritual | 32 | Tsunami | ritual |
-| 7 | Bewitch | ritual | 20 | Azimuth | charm | 33 | Seal of Summer | charm |
-| 8 | Carnage | ritual | 21 | Surge | charm | 34 | Decay | sorcery |
-| 9 | Seal of Lightning | ritual | 22 | Seal of Stone | sorcery | 35 | Eclipse | sorcery |
-| 10 | Seal of Wind | sorcery | 23 | Comet | charm | 36 | Syzygy | ritual |
+| 1 | Gather | sorcery | 14 | Hail Storm | sorcery | 27 | Seal of Autumn | charm |
+| 2 | Fireblast | sorcery | 15 | Starfall | ritual | 28 | Seal of Spring | charm |
+| 3 | Scatter | sorcery | 16 | Meteor | sorcery | 29 | Decay | sorcery |
+| 4 | Blossom | ritual | 17 | Erupt | ritual | 30 | Flourish | ritual |
+| 5 | Corrupt | ritual | 18 | Storm Front | sorcery | 31 | Lurk | charm |
+| 6 | Seal of Lightning | ritual | 19 | Hurricane | ritual | 32 | Seal of Destruction | ritual |
+| 7 | Charge | charm | 20 | Surge | charm | 33 | Tsunami | ritual |
+| 8 | Carnage | ritual | 21 | Azimuth | charm | 34 | Syzygy | ritual |
+| 9 | Bewitch | ritual | 22 | Seal of Stone | sorcery | 35 | Seal of Summer | charm |
+| 10 | Seal of Wind | sorcery | 23 | Comet | charm | 36 | Eclipse | sorcery |
 | 11 | Slash | charm | 24 | Splash | charm | 37 | Grow | sorcery |
-| 12 | Harvest | ritual | 25 | Seal of Winter | charm | 38 | Gust | charm |
-| 13 | Starfall | ritual | 26 | Sprout | charm | 39 | Torrent | sorcery |
+| 12 | Harvest | ritual | 25 | Sprout | charm | 38 | Gust | charm |
+| 13 | Fury | sorcery | 26 | Seal of Winter | charm | 39 | Torrent | sorcery |
 
 A few notes on the placements that tend to surprise people.
 
@@ -51,7 +51,7 @@ A few notes on the placements that tend to surprise people.
 
 **Grow is near the bottom, despite being a fine partner.** Two soft moves for a three-node investment does not net stones. Grow is good in one situation only: next to Harvest, where the pair refill each other. Torrent, one soft move then one hard move, is the weakest spell in the game.
 
-**The static seals are mostly weak.** Seal of Wind is the exception and sits in the strong tier: a blink for your first move every turn is real mobility. Seal of Lightning (dash for one sacrifice instead of two) is solid. Seal of Summer looks powerful on paper, but two casts a turn only matters on a board crowded enough to have several spells filled at once, or when one spell fills another. With one or no spells filled it does nothing. Seal of Destruction is a special case: it destroys everything touching you at the end of your turn, but if it is still filled at the start of your next turn you lose, and only your opponent moves in between. It is a finisher, not a spell you develop toward, and it is much stronger for blue, who can win from a two-stone lead by bordering two enemy stones and filling the seal. The way to land it is with a spell that fills it in one cast, such as Tsunami, Grow, Flourish, or Eclipse, at a moment when you already border many enemy stones elsewhere: the seal fills and fires in the same turn, before your opponent can react. The way to lose with it is to build it slowly while Gust is on the board. Gust picks up every enemy stone touching the caster and drops them anywhere, including the five nodes of your half-built seal, and a seal that is full at the start of your turn ends the game against you.
+**The static seals are mostly weak.** Seal of Lightning and Seal of Wind are the exceptions and both sit in the strong tier: Lightning makes a dash cost one sacrifice instead of two, and a blink for your first move every turn is real mobility. Seal of Summer looks powerful on paper, but two casts a turn only matters on a board crowded enough to have several spells filled at once, or when one spell fills another. With one or no spells filled it does nothing. Seal of Destruction is a special case: it destroys everything touching you at the end of your turn, but if it is still filled at the start of your next turn you lose, and only your opponent moves in between. It is a finisher, not a spell you develop toward, and it is much stronger for blue, who can win from a two-stone lead by bordering two enemy stones and filling the seal. The way to land it is with a spell that fills it in one cast, such as Tsunami, Grow, Flourish, or Eclipse, at a moment when you already border many enemy stones elsewhere: the seal fills and fires in the same turn, before your opponent can react. The way to lose with it is to build it slowly while Gust is on the board. Gust picks up every enemy stone touching the caster and drops them anywhere, including the five nodes of your half-built seal, and a seal that is full at the start of your turn ends the game against you.
 
 ## Open board or crowded board?
 
@@ -267,4 +267,4 @@ Nine turns, no opponent blunder required beyond leaving the engine alone. As far
 
 ---
 
-*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 179 pairwise comparisons, with all 39 spells connected and no preference cycles. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
+*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 194 pairwise comparisons, with all 39 spells connected and no preference cycles. Tiers are cut at the largest gaps between neighbouring strengths, skipping any cut that would leave a tier with fewer than three spells. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
