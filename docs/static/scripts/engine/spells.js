@@ -30,8 +30,8 @@ function spellPositionOfNode(nodeName) {
 }
 
 // A 5-node ritual position's "opposite" charm (1-node) and sorcery (3-node)
-// positions live in BOARD.syzygyOpposite: the next zone round the ring
-// (core: A→B→C→A).
+// positions live in BOARD.syzygyOpposite: the pair straight across the
+// ring (core: from A, the pair between B and C).
 
 // BFS flood-fill: return contiguous groups of stones of `targetColor`.
 // Each group is an array of node names.

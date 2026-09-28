@@ -54,6 +54,12 @@ async function driver(argv) {
 	assert(eq(ring3.manaNodes, ['a1', 'b1', 'c1']), 'core mana');
 	assert(eq(core.syzygyOpposite, { 1: { charm: 8, sorcery: 5 }, 2: { charm: 9, sorcery: 6 }, 3: { charm: 7, sorcery: 4 } }),
 		'core syzygy opposites');
+	// Pentagon: from ritual A, the charm/sorcery between rituals C and D
+	// (zone C's pair: charm c7 = position 13, sorcery c8-c10 = position 8).
+	const pentSyz = boardLayoutDef('pentagon').syzygyOpposite;
+	assert(eq(pentSyz[1], { charm: 13, sorcery: 8 }) && eq(pentSyz[4], { charm: 11, sorcery: 6 }),
+		'pentagon syzygy opposites');
+	assert(eq(boardLayoutDef('pentagon').positions[13], ['c7']), 'position 13 is c7');
 
 	// 2. Pentagon well-formedness.
 	const pent = boardLayoutDef('pentagon');

@@ -107,12 +107,16 @@ function boardLayoutDef(id) {
 		ring.adjacency = _CORE_ADJACENCY;
 	}
 	const range = (a, b) => { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; };
-	// Syzygy's "opposite" spells: the ritual in zone k faces the charm and
-	// the sorcery of zone k+1 (core: 1 -> {charm 8, sorcery 5}, ...).
+	// Syzygy's "opposite" spells: the charm and sorcery straight across the
+	// ring, half the ring (Z/2 zones) away from Syzygy's ritual. Zone j's charm
+	// and sorcery sit between rituals j and j+1, so from ritual k the
+	// opposite pair is zone k + floor(Z/2)'s:
+	//   core (A-B-C):         A -> between B and C = zone B's (1 -> {8, 5})
+	//   pentagon (A-B-C-D-E): A -> between C and D = zone C's (1 -> {13, 8})
 	const syzygyOpposite = {};
 	for (let k = 0; k < Z; k++) {
-		const nxt = (k + 1) % Z;
-		syzygyOpposite[1 + k] = { charm: 1 + 2 * Z + nxt, sorcery: 1 + Z + nxt };
+		const opp = (k + Math.floor(Z / 2)) % Z;
+		syzygyOpposite[1 + k] = { charm: 1 + 2 * Z + opp, sorcery: 1 + Z + opp };
 	}
 	const def = Object.freeze({
 		id,
