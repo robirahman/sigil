@@ -10,7 +10,7 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
  */
-const CACHE_VERSION = 'v48';
+const CACHE_VERSION = 'v49';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [

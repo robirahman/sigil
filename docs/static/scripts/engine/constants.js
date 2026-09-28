@@ -244,6 +244,18 @@ const CORE_RITUALS = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lig
 const CORE_SORCERIES = ['Grow', 'Fireblast', 'Hail_Storm', 'Meteor', 'Seal_of_Wind'];
 const CORE_CHARMS = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer'];
 
+// Core sub-packs: Core split into five one-ritual/one-sorcery/one-charm trios,
+// shaped like an expansion, so a player can draw from part of Core. The key
+// 'core' still means all fifteen; a selection may hold either form (or both).
+const CORE_SUBPACKS = {
+	core_growth: { name: 'Growth', rituals: ['Flourish'],          sorceries: ['Grow'],         charms: ['Sprout'] },
+	core_havoc:  { name: 'Havoc',  rituals: ['Carnage'],           sorceries: ['Fireblast'],    charms: ['Slash'] },
+	core_impact: { name: 'Impact', rituals: ['Starfall'],          sorceries: ['Meteor'],       charms: ['Comet'] },
+	core_tempo:  { name: 'Tempo',  rituals: ['Seal_of_Lightning'], sorceries: ['Seal_of_Wind'], charms: ['Seal_of_Summer'] },
+	core_hex:    { name: 'Hex',    rituals: ['Bewitch'],           sorceries: ['Hail_Storm'],   charms: ['Surge'] },
+};
+const CORE_SUBPACK_KEYS = Object.keys(CORE_SUBPACKS);
+
 const SPRINGTIME_RITUALS = ['Blossom'];
 const SPRINGTIME_SORCERIES = ['Scatter'];
 const SPRINGTIME_CHARMS = ['Seal_of_Spring'];
@@ -466,9 +478,19 @@ function normalizeSfnString(sfn) {
 // (localStorage, env vars) may still carry the old key.
 const LEGACY_PACK_KEYS = { tsunami: 'flood' };
 
+// A pack key's spell lists: an expansion (including 'core') or a Core sub-pack.
+function packDefinition(key) {
+	return EXPANSIONS[key] || CORE_SUBPACKS[key] || null;
+}
+// Display name; sub-packs read "Core: Growth".
+function packDisplayName(key) {
+	if (CORE_SUBPACKS[key]) return 'Core: ' + CORE_SUBPACKS[key].name;
+	return (EXPANSIONS[key] && EXPANSIONS[key].name) || key;
+}
+
 function normalizeExpansionSelection(selection) {
 	if (Array.isArray(selection)) {
-		return selection.map(k => LEGACY_PACK_KEYS[k] || k).filter(k => EXPANSIONS[k]);
+		return selection.map(k => LEGACY_PACK_KEYS[k] || k).filter(k => packDefinition(k));
 	}
 	if (typeof selection === 'string') {
 		if (selection === 'all') return ['core', ...EXPANSION_KEYS];
@@ -519,15 +541,17 @@ function generateSpellList(selection, allowDuplicates = false) {
 		}
 	}
 
-	const poolByCat = [[], [], []];
+	// Sets: 'core' plus a Core sub-pack must not put a spell in the pool twice.
+	const poolSets = [new Set(), new Set(), new Set()];
 	for (const key of selectedKeys) {
-		const pack = EXPANSIONS[key];
+		const pack = packDefinition(key);
 		if (pack) {
-			poolByCat[0].push(...pack.rituals);
-			poolByCat[1].push(...pack.sorceries);
-			poolByCat[2].push(...pack.charms);
+			pack.rituals.forEach(n => poolSets[0].add(n));
+			pack.sorceries.forEach(n => poolSets[1].add(n));
+			pack.charms.forEach(n => poolSets[2].add(n));
 		}
 	}
+	const poolByCat = poolSets.map(set => [...set]);
 
 	if (allowDuplicates) {
 		for (let c = 0; c < 3; c++) {

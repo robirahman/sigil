@@ -402,6 +402,13 @@
 				<summary class="theme-label" style="cursor: pointer; color: var(--color-text-muted);">Spell packs</summary>
 				<div id="spell-pack-checkboxes" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px; color: var(--color-text);">
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="core" /> <span>Core</span></label>
+					<div id="core-subpacks" style="display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 2px 26px; font-size: 0.92em;">
+						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Sprout, Grow, Flourish"><input type="checkbox" data-core-sub value="core_growth" /> <span>Growth</span></label>
+						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Slash, Fireblast, Carnage"><input type="checkbox" data-core-sub value="core_havoc" /> <span>Havoc</span></label>
+						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_impact" /> <span>Impact</span></label>
+						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Seal of Summer, Seal of Wind, Seal of Lightning"><input type="checkbox" data-core-sub value="core_tempo" /> <span>Tempo</span></label>
+						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Surge, Hail Storm, Bewitch"><input type="checkbox" data-core-sub value="core_hex" /> <span>Hex</span></label>
+					</div>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
 					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
@@ -421,6 +428,12 @@
 					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'experimental'];
 					var PACK_SPELL_COUNTS = {
 						core:      { rituals: 5, sorceries: 5, charms: 5 },
+						// Core sub-packs (CORE_SUBPACKS in constants.js): one of each type.
+						core_growth: { rituals: 1, sorceries: 1, charms: 1 },
+						core_havoc:  { rituals: 1, sorceries: 1, charms: 1 },
+						core_impact: { rituals: 1, sorceries: 1, charms: 1 },
+						core_tempo:  { rituals: 1, sorceries: 1, charms: 1 },
+						core_hex:    { rituals: 1, sorceries: 1, charms: 1 },
 						springtime:{ rituals: 1, sorceries: 1, charms: 1 },
 						celestial: { rituals: 1, sorceries: 1, charms: 1 },
 						fury:      { rituals: 1, sorceries: 1, charms: 1 },
@@ -483,14 +496,36 @@
 						localStorage.setItem('sigilSpellPacksVersion', 'v3');
 					}
 
+					// Core is a parent box over its five sub-packs. All five checked is
+					// stored as 'core' (what older pages and clients understand);
+					// otherwise the checked sub-pack keys are stored.
+					var coreBox = document.querySelector('#spell-pack-checkboxes input[value=core]');
+					var subBoxes = document.querySelectorAll('#spell-pack-checkboxes input[data-core-sub]');
+					function syncCoreBox() {
+						var n = 0;
+						subBoxes.forEach(function(b) { if (b.checked) n++; });
+						coreBox.checked = n === subBoxes.length;
+						coreBox.indeterminate = n > 0 && n < subBoxes.length;
+					}
+					function currentSelection() {
+						var current = [], subs = [];
+						boxes.forEach(function(b) {
+							if (!b.checked || b === coreBox) return;
+							if (b.hasAttribute('data-core-sub')) subs.push(b.value); else current.push(b.value);
+						});
+						return (subs.length === subBoxes.length ? ['core'] : subs).concat(current);
+					}
+
 					boxes.forEach(function(box) {
-						box.checked = selected.indexOf(box.value) !== -1;
+						box.checked = selected.indexOf(box.value) !== -1
+							|| (box.hasAttribute('data-core-sub') && selected.indexOf('core') !== -1);
 						box.addEventListener('change', function() {
-							var current = [];
-							boxes.forEach(function(b) { if (b.checked) current.push(b.value); });
-							localStorage.setItem('sigilSpellPacks', JSON.stringify(current));
+							if (box === coreBox) subBoxes.forEach(function(b) { b.checked = coreBox.checked; });
+							syncCoreBox();
+							localStorage.setItem('sigilSpellPacks', JSON.stringify(currentSelection()));
 						});
 					});
+					syncCoreBox();
 
 					// Validate when starting a local game from this page
 					var playLinks = document.querySelectorAll('a.mode-button');
@@ -498,9 +533,7 @@
 						var href = link.getAttribute('href') || '';
 						if (href.indexOf('game.html') === 0) {
 							link.addEventListener('click', function(e) {
-								var current = [];
-								boxes.forEach(function(b) { if (b.checked) current.push(b.value); });
-								if (!isValidSelection(current)) {
+								if (!isValidSelection(currentSelection())) {
 									e.preventDefault();
 									alert("Not enough spells selected to fill the board. Please select more spell packs.");
 								}

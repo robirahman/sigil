@@ -1006,12 +1006,12 @@ document.addEventListener('alpine:init', () => {
 						rust_very_hard: 'very_hard', rust_quick: 'medium', rust: 'hard',
 						rust_deep: 'very_hard', rust_native: 'very_hard',
 					};
-					const _RUST_PACKS = ['core', 'springtime', 'celestial', 'fury',
+					const _RUST_PACKS = ['core', ...CORE_SUBPACK_KEYS, 'springtime', 'celestial', 'fury',
 					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
 					if (_RUST_TO_JS_TIER[aiMode]) {
 						const jsTier = _RUST_TO_JS_TIER[aiMode];
 						const jsLabel = jsTier.replace('_', ' ');
-						const packName = k => (EXPANSIONS[k] && EXPANSIONS[k].name) || k;
+						const packName = packDisplayName;
 						if (variantHasDuplicates(gameVariant)) {
 							_this.messageHistory.push('The Rust engine does not support the Allow Duplicates variant yet; '
 								+ 'playing the ' + jsLabel + ' JS engine tier (same time budget) instead.');
