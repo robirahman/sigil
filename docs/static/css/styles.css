@@ -2382,10 +2382,13 @@ html[data-theme="volcanic"] .stone-nodes {
 /* ---- Drawn board layouts (board-geometry.js), e.g. the Cataclysm pentagon ----
    Positions come inline from the geometry; sizes scale by the layout's square
    reference frame (--board-ref) instead of the printed board's 1480. */
+/* The drawn board fills its square frame edge to edge (the printed board
+   has wide margins), so it must fit the 1100px container's content width
+   as well as the viewport height, or its outer ring is clipped. */
 .game-board--svg {
 	aspect-ratio: 1;
 	display: block;
-	height: calc(100vh - 40px);
+	height: min(calc(100vh - 40px), 1070px, calc(100vw - 30px));
 	width: auto;
 }
 

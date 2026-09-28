@@ -35,17 +35,42 @@ const _ZONE_A_SLOTS = {
 const SPELL_SLOT_SIZES = { ritual: 322, sorcery: 258.9, charm: 148 };
 const STONE_NODE_SIZE = 56;
 
+// Exit points of the white connector stubs printed on the spell art, as
+// angles (degrees, image frame: 0 = right, 90 = down) on the card rim,
+// measured on every core card of each type (0.96 of the radius). A link
+// that leaves a spell node leaves the disc at its stub, so the board's
+// lines continue the art's lines as on the printed board.
+const SPELL_STUB_ANGLES = {
+	ritual: [5.8, 107.4, 174.2, 235.9, 304.1],
+	sorcery: [81.2, 190.3, 349.7],
+	charm: [-0.4, 70.2, 180.4],
+};
+
 // Fitted (see the Cataclysm plan) so neighbouring zones keep >= 70 units of
 // clearance between every stone and spell disc while the ring stays compact.
 const ZONE_TILT = 28;
 const ZONE_PUSH = 300;
+// Mana nodes sit this much further out from the board centre than their
+// core-zone position, clear of the neighbouring zone and the lead counter.
+const MANA_PUSH = 120;
 const _ZONE_BISECTOR = 120;   // direction of zone A's centre from the board centre
 
 const _boardGeometryCache = {};
 
 function boardGeometry(layoutId) {
 	if (!layoutId || layoutId === 'core') return null;
-	if (_boardGeometryCache[layoutId]) return _boardGeometryCache[layoutId];
+	if (!_boardGeometryCache[layoutId]) {
+		_boardGeometryCache[layoutId] = _buildBoardGeometry(layoutId, {
+			tilt: ZONE_TILT, push: ZONE_PUSH, manaPush: MANA_PUSH, frame: true,
+		});
+	}
+	return _boardGeometryCache[layoutId];
+}
+
+// `opts` = { tilt, push, manaPush, frame }. With tilt/push/manaPush 0 and no
+// frame, a 3-zone build lands exactly on the printed core board (1480
+// frame) — how the stub routing is checked against game-board.jpg.
+function _buildBoardGeometry(layoutId, opts) {
 	const def = boardLayoutDef(layoutId);
 	const Z = def.perType;
 	const C = 740;
@@ -56,39 +81,127 @@ function boardGeometry(layoutId) {
 	};
 	const u = [Math.cos(_ZONE_BISECTOR * Math.PI / 180), Math.sin(_ZONE_BISECTOR * Math.PI / 180)];
 	const place = (p, k) => {
-		const q = rotAbout(p, ZONE_TILT);
-		return rotAbout([q[0] + ZONE_PUSH * u[0], q[1] + ZONE_PUSH * u[1]], -360 / Z * k);
+		const q = rotAbout(p, opts.tilt);
+		return rotAbout([q[0] + opts.push * u[0], q[1] + opts.push * u[1]], -360 / Z * k);
 	};
 
 	const nodes = {};
 	const slots = {};
 	def.zones.forEach((z, k) => {
 		for (let n = 1; n <= 13; n++) {
-			const [x, y] = place(_ZONE_A_NODES[n], k);
+			let [x, y] = place(_ZONE_A_NODES[n], k);
+			if (n === 1 && opts.manaPush) {
+				const d = Math.hypot(x - C, y - C) || 1;
+				x += (x - C) / d * opts.manaPush;
+				y += (y - C) / d * opts.manaPush;
+			}
 			nodes[z + n] = { x, y };
 		}
 		for (const type of ['ritual', 'sorcery', 'charm']) {
 			const [sx, sy, srot] = _ZONE_A_SLOTS[type];
 			const [x, y] = place([sx, sy], k);
-			slots[type + (k + 1)] = { x, y, rot: srot + ZONE_TILT - 360 / Z * k, type };
+			slots[type + (k + 1)] = { x, y, rot: srot + opts.tilt - 360 / Z * k, type };
 		}
 	});
 
-	// Square frame round everything, with a margin; shift to the origin.
-	let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-	const grow = (x, y, r) => {
-		minX = Math.min(minX, x - r); maxX = Math.max(maxX, x + r);
-		minY = Math.min(minY, y - r); maxY = Math.max(maxY, y + r);
+	let side = 1480, cx = C, cy = C;
+	if (opts.frame) {
+		// Square frame round everything, with a margin; shift to the origin.
+		let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+		const grow = (x, y, r) => {
+			minX = Math.min(minX, x - r); maxX = Math.max(maxX, x + r);
+			minY = Math.min(minY, y - r); maxY = Math.max(maxY, y + r);
+		};
+		for (const p of Object.values(nodes)) grow(p.x, p.y, STONE_NODE_SIZE / 2 + 40);
+		for (const s of Object.values(slots)) grow(s.x, s.y, SPELL_SLOT_SIZES[s.type] / 2);
+		const margin = 40;
+		side = Math.max(maxX - minX, maxY - minY) + 2 * margin;
+		const dx = (side - (maxX - minX)) / 2 - minX;
+		const dy = (side - (maxY - minY)) / 2 - minY;
+		for (const p of Object.values(nodes)) { p.x += dx; p.y += dy; }
+		for (const s of Object.values(slots)) { s.x += dx; s.y += dy; }
+		cx = C + dx; cy = C + dy;
+	}
+
+	// Which slot each spell node sits in (spellNames[i] is slot i).
+	const slotNames = [];
+	for (const type of ['ritual', 'sorcery', 'charm']) {
+		for (let k = 1; k <= Z; k++) slotNames.push(type + k);
+	}
+	const slotOf = {};
+	for (let p = 1; p <= def.positionCount; p++) {
+		for (const n of def.positions[p]) slotOf[n] = slotNames[p - 1];
+	}
+	// Stub rim points of a slot, in board coordinates.
+	const stubsOf = (key) => {
+		const s = slots[key];
+		const R = SPELL_SLOT_SIZES[s.type] / 2 * 0.96;
+		return SPELL_STUB_ANGLES[s.type].map((a) => {
+			const t = (a + s.rot) * Math.PI / 180;
+			return { x: s.x + R * Math.cos(t), y: s.y + R * Math.sin(t) };
+		});
 	};
-	for (const p of Object.values(nodes)) grow(p.x, p.y, STONE_NODE_SIZE / 2);
-	for (const s of Object.values(slots)) grow(s.x, s.y, SPELL_SLOT_SIZES[s.type] / 2);
-	const margin = 60;
-	const side = Math.max(maxX - minX, maxY - minY) + 2 * margin;
-	const dx = (side - (maxX - minX)) / 2 - minX;
-	const dy = (side - (maxY - minY)) / 2 - minY;
-	for (const p of Object.values(nodes)) { p.x += dx; p.y += dy; }
-	for (const s of Object.values(slots)) { s.x += dx; s.y += dy; }
-	const cx = C + dx, cy = C + dy;
+	// Each link end on a spell leaves by a stub: a ritual/sorcery node owns
+	// the stub nearest to it; a charm's single node spreads its links over
+	// the three stubs, choosing the assignment that best points each stub
+	// at its neighbour.
+	const exitFor = {};   // `${node}>${neighbour}` -> {x, y, tx, ty}
+	const unit = (x, y) => { const d = Math.hypot(x, y) || 1; return [x / d, y / d]; };
+	for (const n of def.nodeOrder) {
+		const key = slotOf[n];
+		if (!key) continue;
+		const out = def.adjacency[n].filter((m) => slotOf[m] !== key);
+		const stubs = stubsOf(key);
+		const p = nodes[n];
+		const exit = (st, m) => {
+			const [tx, ty] = unit(st.x - p.x, st.y - p.y);
+			exitFor[n + '>' + m] = { x: st.x, y: st.y, tx, ty };
+		};
+		if (slots[key].type !== 'charm') {
+			let best = stubs[0], bd = Infinity;
+			for (const st of stubs) {
+				const d = Math.hypot(st.x - p.x, st.y - p.y);
+				if (d < bd) { bd = d; best = st; }
+			}
+			for (const m of out) exit(best, m);
+		} else {
+			// Brute-force the (at most 3! = 6) stub permutations.
+			let bestPerm = null, bestScore = -Infinity;
+			const perms = (arr) => arr.length <= 1 ? [arr] : arr.flatMap((x, i) =>
+				perms([...arr.slice(0, i), ...arr.slice(i + 1)]).map((r) => [x, ...r]));
+			for (const perm of perms(stubs.map((_, i) => i))) {
+				let score = 0;
+				out.forEach((m, j) => {
+					const st = stubs[perm[j]];
+					const [ax, ay] = unit(st.x - p.x, st.y - p.y);
+					const [bx, by] = unit(nodes[m].x - st.x, nodes[m].y - st.y);
+					score += ax * bx + ay * by;
+				});
+				if (score > bestScore) { bestScore = score; bestPerm = perm; }
+			}
+			out.forEach((m, j) => exit(stubs[bestPerm[j]], m));
+		}
+	}
+
+	// Links: a cubic from end to end, leaving each spell end along its stub
+	// so the line continues the art's connector; plain nodes are met at
+	// their centre. Links inside one spell are the art's own business.
+	const links = [];
+	const seen = new Set();
+	for (const n of def.nodeOrder) {
+		for (const m of def.adjacency[n]) {
+			const key = n < m ? n + '|' + m : m + '|' + n;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			if (slotOf[n] && slotOf[n] === slotOf[m]) continue;
+			const a = exitFor[n + '>' + m] || { x: nodes[n].x, y: nodes[n].y };
+			const b = exitFor[m + '>' + n] || { x: nodes[m].x, y: nodes[m].y };
+			const L = Math.hypot(b.x - a.x, b.y - a.y) * 0.4;
+			const c1 = a.tx !== undefined ? [a.x + a.tx * L, a.y + a.ty * L] : [a.x, a.y];
+			const c2 = b.tx !== undefined ? [b.x + b.tx * L, b.y + b.ty * L] : [b.x, b.y];
+			links.push({ a: n, b: m, cross: n[0] !== m[0], d: [a.x, a.y, c1[0], c1[1], c2[0], c2[1], b.x, b.y] });
+		}
+	}
 
 	// Score track: a ring of spots round the centre, 'tied' at the top,
 	// red steps clockwise and blue counter-clockwise up to the win lead.
@@ -108,32 +221,26 @@ function boardGeometry(layoutId) {
 	parts.push(`<svg xmlns="http://www.w3.org/2000/svg" class="game-board game-board--svg" viewBox="0 0 ${f(side)} ${f(side)}" aria-hidden="true">`);
 	parts.push(`<defs><radialGradient id="bg-glow" cx="50%" cy="50%" r="60%"><stop offset="0%" stop-color="#2d2a45"/><stop offset="100%" stop-color="#12111c"/></radialGradient></defs>`);
 	parts.push(`<rect width="${f(side)}" height="${f(side)}" fill="url(#bg-glow)"/>`);
-	// Zone sectors: a faint wedge per zone.
 	parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(side / 2 - 20)}" fill="none" stroke="#3b3656" stroke-width="3"/>`);
-	// Links: intra-zone in one tone, ring links (between zones) dashed.
-	const seen = new Set();
-	for (const n of def.nodeOrder) {
-		for (const m of def.adjacency[n]) {
-			const key = n < m ? n + m : m + n;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			const p = nodes[n], q = nodes[m];
-			const cross = n[0] !== m[0];
-			parts.push(`<line x1="${f(p.x)}" y1="${f(p.y)}" x2="${f(q.x)}" y2="${f(q.y)}" stroke="${cross ? '#b9a8e6' : '#ece6f5'}" stroke-width="${cross ? 6 : 5}"${cross ? ' stroke-dasharray="16 10"' : ''} stroke-linecap="round"/>`);
-		}
+	// Links: within a zone solid, between zones dashed.
+	for (const l of links) {
+		const d = l.d.map(f);
+		parts.push(`<path d="M${d[0]} ${d[1]}C${d[2]} ${d[3]} ${d[4]} ${d[5]} ${d[6]} ${d[7]}" fill="none" stroke="${l.cross ? '#b9a8e6' : '#ece6f5'}" stroke-width="${l.cross ? 6 : 5}"${l.cross ? ' stroke-dasharray="16 10"' : ''} stroke-linecap="round"/>`);
 	}
 	// Spell-slot backdrops (the art sits on top as <img> elements).
 	for (const s of Object.values(slots)) {
 		parts.push(`<circle cx="${f(s.x)}" cy="${f(s.y)}" r="${f(SPELL_SLOT_SIZES[s.type] / 2 + 6)}" fill="#1c1a2b" stroke="#6d6390" stroke-width="4"/>`);
 	}
-	// Node rings; mana nodes get a gold ring.
+	// Node discs for the nodes off the spells; mana nodes get a gold ring.
+	// (Spell nodes are the white spots printed on the art.)
 	for (const n of def.nodeOrder) {
+		if (slotOf[n]) continue;
 		const p = nodes[n];
 		const mana = def.manaNodes.includes(n);
 		// Empty nodes read as white discs, like the printed board's.
 		parts.push(`<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${mana ? 33 : 28}" fill="#f6f3ec" stroke="${mana ? '#e8c35a' : '#cfc6de'}" stroke-width="${mana ? 9 : 3}"/>`);
 	}
-	// Zone letters near each mana node.
+	// Zone letters just outside each mana node.
 	def.zones.forEach((z) => {
 		const p = nodes[z + '1'];
 		const vx = p.x - cx, vy = p.y - cy, len = Math.hypot(vx, vy) || 1;
@@ -150,9 +257,7 @@ function boardGeometry(layoutId) {
 	}
 	parts.push('</svg>');
 
-	const geo = { id: layoutId, ref: side, nodes, slots, score, center: { x: cx, y: cy }, svg: parts.join('') };
-	_boardGeometryCache[layoutId] = geo;
-	return geo;
+	return { id: layoutId, ref: side, nodes, slots, score, links, center: { x: cx, y: cy }, svg: parts.join('') };
 }
 
 // Alpine component mixin shared by the local and multiplayer boards: the
