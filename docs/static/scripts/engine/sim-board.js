@@ -15,7 +15,7 @@ class SimAction {
 		this.node2 = opts.node2 || null;
 		this.destroyed = opts.destroyed || null;
 		// Panda expansion fields.
-		this.target = opts.target || null;   // lock_bump: which color's counter
+		this.target = opts.target || null;   // lock_bump: which color's counter (bumpEnemySpellCounter)
 		this.val = opts.val || null;         // shiver: post-swap value at node
 		this.val2 = opts.val2 || null;       // shiver: post-swap value at node2
 		this.placed = opts.placed || null;   // perfect_heist: occupied nodes
@@ -1362,7 +1362,7 @@ class SimBoard {
 				actions.push(this._doMove(color, chosen, false));
 				this.update();
 			}
-			if (!variantHasDeathmatch(this.variant)) this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
+			bumpEnemySpellCounter(this, enemy);
 			actions.push(new SimAction('lock_bump', { target: enemy }));
 			this.update();
 		} else if (rt === 'free_spirit') {
@@ -1386,7 +1386,7 @@ class SimBoard {
 					actions.push(new SimAction('bewitch', { node: target }));
 					this.update();
 				}
-				if (!variantHasDeathmatch(this.variant)) this.spellCounter[enemy] = Math.min(6, this.spellCounter[enemy] + 1);
+				bumpEnemySpellCounter(this, enemy);
 				actions.push(new SimAction('lock_bump', { target: enemy }));
 				this.update();
 			}
@@ -1803,7 +1803,7 @@ function applySimTurn(board, turn, color) {
 			if (action.node2) board.stones[action.node2] = action.val2;
 		}
 		else if (action.type === 'lock_bump') {
-			if (action.target && !variantHasDeathmatch(board.variant)) board.spellCounter[action.target] = Math.min(6, board.spellCounter[action.target] + 1);
+			if (action.target) bumpEnemySpellCounter(board, action.target);
 		}
 		else if (action.type === 'bewitch') {
 			if (action.node) board.stones[action.node] = color;

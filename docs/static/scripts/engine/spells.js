@@ -1340,11 +1340,11 @@ const SpellResolvers = {
 		} else {
 			emit({ type: 'message', message: 'No legal moves.', awaiting: null });
 		}
-		// Advance the enemy lock (spell counter). Safe to push to 6: the
-		// counter-based loss only fires via checkGameOver(enemy) on the
-		// enemy's own turn, never on the caster's.
-		if (!variantHasDeathmatch(board.variant)) board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
-		emit({ type: 'message', message: 'Enemy lock advanced by 1.', awaiting: null });
+		// Advance the enemy lock (spell counter; reversed in Scramble). Safe
+		// to push to 6: the counter-based end only fires via
+		// checkGameOver(enemy) on the enemy's own turn, never on the caster's.
+		bumpEnemySpellCounter(board, enemy);
+		emit({ type: 'message', message: enemySpellCounterMessage(board.variant), awaiting: null });
 		board.update();
 		emit(board.getBoardStatePayload());
 	},
@@ -1403,8 +1403,8 @@ const SpellResolvers = {
 		} else {
 			emit({ type: 'message', message: 'No enemy stones to convert.', awaiting: null });
 		}
-		if (!variantHasDeathmatch(board.variant)) board.spellCounter[enemy] = Math.min(6, board.spellCounter[enemy] + 1);
-		emit({ type: 'message', message: 'Enemy lock advanced by 1.', awaiting: null });
+		bumpEnemySpellCounter(board, enemy);
+		emit({ type: 'message', message: enemySpellCounterMessage(board.variant), awaiting: null });
 		board.update();
 		emit(board.getBoardStatePayload());
 	},

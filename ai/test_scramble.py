@@ -6,7 +6,8 @@ repetition still end the game. It shares the end-condition slot with
 Deathmatch (mutually exclusive; Deathmatch wins a composed string that
 asks for both). These tests pin the variant string plumbing (Python + JS),
 the terminal rule in all three boards (simboard.py, sim-board.js,
-board.js), the Caveman leaf term, and full self-play games to the finish.
+board.js), the reversed Itch / Residue Mixture counter effect, the
+Caveman leaf term, and full self-play games to the finish.
 
 Run: python -m ai.test_scramble
 """
@@ -198,6 +199,59 @@ console.log('JS_RESULT ' + JSON.stringify(out));
     print("  PASS")
 
 
+def test_panda_counter_reversal():
+    print("Testing Itch / Residue Mixture: enemy counter goes BACK in Scramble...")
+    js = _engine(('constants.js', 'notation.js', 'spells.js', 'moves.js',
+                  'board.js', 'sim-board.js', 'minimax-ai.js'))
+    js.append(r"""
+const SP = ['Flourish', 'Carnage', 'Bewitch', 'Grow', 'Hail_Storm', 'Meteor', 'Itch', 'Residue_Mixture', 'Slash'];
+function setup(b) {
+  b.stones.a1 = 'red'; b.stones.b1 = 'blue'; b.stones.b5 = 'blue';
+  b.spellCounter.red = 3; b.spellCounter.blue = 2;
+  b.update();
+}
+(async () => {
+  const out = {};
+  for (const v of ['standard', 'scramble', 'deathmatch']) {
+    const r = {};
+    for (const spell of ['Itch', 'Residue_Mixture']) {
+      // Live resolver (spells.js), auto-answering every prompt.
+      const live = new SigilBoard(SP, v); setup(live);
+      const msgs = [];
+      const getInput = async (p) => { const k = Object.keys(p.moveoptions || {}); return k[0] || NODE_ORDER.find(n => live.stones[n] === 'blue'); };
+      await SpellResolvers[spell === 'Itch' ? 'itch' : 'residue_mixture'](live, 'red', spell, getInput, (e) => { if (e && e.message) msgs.push(e.message); });
+      // Sim resolver, then replay its recorded actions with both replayers.
+      const sim = new SimBoard(SP, v); setup(sim);
+      const idx = SP.indexOf(spell) + 1;
+      const acts = sim._resolveSpell(spell, 'red', POSITIONS[idx] || [], {}) || [];
+      const bump = acts.find(a => a.type === 'lock_bump');
+      const rep = new SimBoard(SP, v); setup(rep);
+      applySimTurn(rep, new SimTurn([bump]), 'red');
+      const rep2 = new SimBoard(SP, v); setup(rep2);
+      const rep2b = _minimaxApplyTurn(rep2, new SimTurn([bump, new SimAction('pass')]), 'red');
+      r[spell] = { live: live.spellCounter.blue, sim: sim.spellCounter.blue, replay: rep.spellCounter.blue,
+                   minimax: rep2b.spellCounter.blue, msg: msgs[msgs.length - 1] };
+    }
+    // Floor at zero in Scramble.
+    const z = new SimBoard(SP, v); setup(z); z.spellCounter.blue = 0;
+    bumpEnemySpellCounter(z, 'blue'); r.floor = z.spellCounter.blue;
+    out[v] = r;
+  }
+  console.log('JS_RESULT ' + JSON.stringify(out));
+})().catch(e => { console.error(e && e.stack || e); process.exit(1); });
+""")
+    res = _run_node(js, 'JS_RESULT')
+    want = {'standard': 3, 'scramble': 1, 'deathmatch': 2}
+    for v, n in want.items():
+        for spell in ('Itch', 'Residue_Mixture'):
+            r = res[v][spell]
+            assert r['live'] == r['sim'] == r['replay'] == r['minimax'] == n, (v, spell, r)
+        assert res[v]['floor'] == (1 if v == 'standard' else 0), (v, res[v])
+    assert 'reduced' in res['scramble']['Itch']['msg'], res['scramble']
+    assert 'advanced' in res['standard']['Itch']['msg'], res['standard']
+    print("  PASS")
+
+
 def test_caveman_selfplay():
     print("Testing the Caveman leaf + self-play under Scramble (JS, short budget)...")
     js = [r"""
@@ -254,6 +308,7 @@ def main():
     test_python_terminal()
     test_python_playouts()
     test_js()
+    test_panda_counter_reversal()
     test_caveman_selfplay()
     print("All Scramble tests passed.")
 

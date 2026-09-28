@@ -186,9 +186,9 @@ const SPELL_TEXTS = {
 	Bear_Trap:         'Destroy all enemy stones in 1-node spells.',
 	Shiver:            'Swap the positions of any two stones on the board.',
 	Blood_Saplings:    'If you crushed an enemy stone this turn, make 2 soft moves.',
-	Itch:              'Make 1 move, then advance the enemy lock by 1.',
+	Itch:              'Make 1 move, then advance the enemy lock by 1. (Scramble: reduce it by 1 instead.)',
 	Free_Spirit:       'If your lock is 0 or 1, make 1 soft move.',
-	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1.',
+	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1. (Scramble: reduce it by 1 instead.)',
 	Stampede:          'Make hard moves equal to your lock value (0–5).',
 	Choke:             'Choose an enemy stone; place your stones on all of its empty adjacent nodes.',
 	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all three.',
@@ -420,6 +420,21 @@ function variantHasScramble(v) {
 }
 function variantHasDuplicates(v) {
 	return typeof v === 'string' && v.indexOf('duplicates') !== -1;
+}
+// Itch / Residue Mixture (Panda): "advance the enemy lock by 1". Deathmatch
+// has no counters; in Scramble (where the counter is the race to six) the
+// effect is reversed -- the enemy counter goes BACK by 1, floored at 0.
+// Every resolver and replayer goes through here.
+function bumpEnemySpellCounter(board, target) {
+	if (variantHasDeathmatch(board.variant)) return;
+	if (variantHasScramble(board.variant)) {
+		board.spellCounter[target] = Math.max(0, board.spellCounter[target] - 1);
+	} else {
+		board.spellCounter[target] = Math.min(6, board.spellCounter[target] + 1);
+	}
+}
+function enemySpellCounterMessage(variant) {
+	return variantHasScramble(variant) ? 'Enemy lock reduced by 1 (Scramble).' : 'Enemy lock advanced by 1.';
 }
 // Canonicalize any input (handles legacy strings, wrong order, junk) to one of
 // the SIGIL_VARIANTS values.
