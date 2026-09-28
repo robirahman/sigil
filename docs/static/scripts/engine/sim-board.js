@@ -238,6 +238,14 @@ class SimBoard {
 		// +3-lead and 6th-spell conditions below are disabled.
 		if (variantHasDeathmatch(this.variant)) return false;
 
+		// Scramble: no stone-lead win; casting your sixth spell wins outright.
+		if (variantHasScramble(this.variant)) {
+			if (this.spellCounter[activeColor] >= 6) {
+				this.gameover = true; this.winner = activeColor; return true;
+			}
+			return false;
+		}
+
 		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
 		// only) — a player's win claim uses their real placed stones,
 		// checked against the opponent's real+pending total. In the

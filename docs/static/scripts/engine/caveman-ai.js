@@ -51,6 +51,12 @@ const _HAILSTORM_ORDER_TIEBREAK = 0.5 / 39.0;
 // p=.40), prior-informed full scale (37.0%, p=.0002), mana+void only
 // (44.5%, p=.12). None beat baseline; weights stay zero. If you're
 // tempted to hand-set these, read that file first.
+// Scramble variant (first to cast six spells wins; no stone-lead win):
+// each spell of spell-counter lead is worth this many stones at the leaf.
+// Stones still matter (they fill spell slots), so material stays in the
+// eval as the tiebreaker. A first guess, not arena-tuned.
+const CAVEMAN_SCRAMBLE_SPELL_WEIGHT = 3.0;
+
 const CAVEMAN_EVAL_WEIGHTS = Object.freeze({
 	mana: 0.0,
 	voidPenalty: 0.0,
@@ -79,6 +85,8 @@ function _cavemanResolveWeights(w) {
 			? w.voidPenalty : CAVEMAN_EVAL_WEIGHTS.voidPenalty,
 		mapControl: Number.isFinite(w.mapControl)
 			? w.mapControl : CAVEMAN_EVAL_WEIGHTS.mapControl,
+		scrambleSpell: Number.isFinite(w.scrambleSpell)
+			? w.scrambleSpell : CAVEMAN_SCRAMBLE_SPELL_WEIGHT,
 	});
 }
 
@@ -148,6 +156,10 @@ function _cavemanLeaf(board, color, w, ply) {
 	// payoffs land beyond its horizon. The exact win semantics live in
 	// checkGameOver, which the search hits directly.
 	let score = board.effectiveStones(color) - board.effectiveStones(enemy);
+	if (variantHasScramble(board.variant)) {
+		const k = Number.isFinite(w.scrambleSpell) ? w.scrambleSpell : CAVEMAN_SCRAMBLE_SPELL_WEIGHT;
+		score += k * (board.spellCounter[color] - board.spellCounter[enemy]);
+	}
 	if (w.mana !== 0) {
 		// board.mana is maintained by SimBoard.update() — free to read.
 		score += w.mana * (board.mana[color] - board.mana[enemy]);

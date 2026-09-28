@@ -371,32 +371,43 @@ function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
 }
 
-// Game variants. Two orthogonal dimensions encoded in a single string:
+// Game variants. Orthogonal dimensions encoded in a single string:
 //   competitive — empty-board opening (both players blink onto any node for
 //                 their first move) instead of the classic a1/b1 stones.
 //   deathmatch  — win ONLY by eliminating all opponent stones; the +3-lead and
 //                 6th-spell terminal conditions are disabled (threefold board
 //                 repetition still ends the game as a Blue win, to guarantee
 //                 termination). Spell counters are removed in this mode.
+//   scramble    — the +3-lead win is disabled; the first player to cast their
+//                 sixth spell WINS outright (no stone comparison). Elimination
+//                 and threefold repetition (Blue win) still apply. Unrated.
 //   duplicates  — the spell draw may repeat a spell (up to three copies):
 //                 the pool holds every spell as X, X~2, X~3 (see
 //                 DUPLICATE_SUFFIXES) and the draw stays without
 //                 replacement. A setup-only rule: play is otherwise
 //                 standard. Unrated.
-// They combine, tokens in this fixed order: 'competitive_deathmatch_duplicates'.
-// Kept as one string so it rides the existing variant plumbing (SFN,
-// Firebase, URL, localStorage) unchanged.
-const VARIANT_TOKENS = ['competitive', 'deathmatch', 'duplicates'];
-function composeVariant(competitive, deathmatch, duplicates) {
+// Deathmatch and Scramble are both end-condition rules and are mutually
+// exclusive: they share one slot, and Deathmatch wins if both are asked for.
+// Tokens combine in this fixed order: 'competitive_deathmatch_duplicates',
+// 'competitive_scramble_duplicates'. Kept as one string so it rides the
+// existing variant plumbing (SFN, Firebase, URL, localStorage) unchanged.
+const VARIANT_TOKENS = ['competitive', 'deathmatch', 'scramble', 'duplicates'];
+function composeVariant(competitive, deathmatch, duplicates, scramble) {
 	const parts = [];
 	if (competitive) parts.push('competitive');
 	if (deathmatch) parts.push('deathmatch');
+	else if (scramble) parts.push('scramble');
 	if (duplicates) parts.push('duplicates');
 	return parts.length ? parts.join('_') : 'standard';
 }
+// 2 (competitive) x 3 (end condition: standard / deathmatch / scramble)
+// x 2 (duplicates) = 12 strings.
 const SIGIL_VARIANTS = [];
 for (let mask = 0; mask < 8; mask++) {
 	SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4));
+}
+for (let mask = 0; mask < 8; mask++) {
+	if (!(mask & 2)) SIGIL_VARIANTS.push(composeVariant(mask & 1, false, mask & 4, true));
 }
 function variantHasCompetitive(v) {
 	return typeof v === 'string' && v.indexOf('competitive') !== -1;
@@ -404,15 +415,18 @@ function variantHasCompetitive(v) {
 function variantHasDeathmatch(v) {
 	return typeof v === 'string' && v.indexOf('deathmatch') !== -1;
 }
+function variantHasScramble(v) {
+	return typeof v === 'string' && v.indexOf('scramble') !== -1 && !variantHasDeathmatch(v);
+}
 function variantHasDuplicates(v) {
 	return typeof v === 'string' && v.indexOf('duplicates') !== -1;
 }
 // Canonicalize any input (handles legacy strings, wrong order, junk) to one of
-// the eight SIGIL_VARIANTS values.
+// the SIGIL_VARIANTS values.
 function normalizeVariant(v) {
-	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v), variantHasDuplicates(v));
+	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v),
+		variantHasDuplicates(v), variantHasScramble(v));
 }
-
 // Stone-spot positions (fractions of the square spell image), measured from the
 // core spell cards which bake white circles at these spots. Expansion spell art
 // is full-bleed with no spots, so the game overlays white circles here instead.

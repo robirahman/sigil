@@ -20,6 +20,7 @@ const { specToOpts } = require('./engine.js');
 async function playGame(engine, spec) {
 	const { SimBoard, cavemanSearch, _minimaxApplyTurn, ENUM_CAPS } = engine;
 	const { spellNames, redCfg, blueCfg, timeLimit, maxDepth, maxTurns } = spec;
+	const variant = spec.variant || 'standard';
 	const redMode = redCfg.label, blueMode = blueCfg.label;
 
 	const budget = { timeLimit, maxDepth };
@@ -28,8 +29,9 @@ async function playGame(engine, spec) {
 		blue: specToOpts(blueCfg, budget, ENUM_CAPS),
 	};
 
-	// Standard opening.
-	let board = new SimBoard(spellNames, 'standard');
+	// Standard opening (the variant may change the end conditions; a
+	// competitive opening is not supported here).
+	let board = new SimBoard(spellNames, variant);
 	board.stones.a1 = 'red';
 	board.stones.b1 = 'blue';
 	board.update();
@@ -92,6 +94,8 @@ async function playGame(engine, spec) {
 		plies,
 		endReason,
 		finalStones: { red: board.totalStones.red, blue: board.totalStones.blue },
+		finalSpells: { red: board.spellCounter.red, blue: board.spellCounter.blue },
+		variant,
 		durationMs: Date.now() - t0,
 		stats,
 		spellNames,

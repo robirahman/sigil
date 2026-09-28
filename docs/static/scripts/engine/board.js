@@ -252,6 +252,17 @@ class SigilBoard {
 		// threefold repetition is enforced by the controllers.
 		if (variantHasDeathmatch(this.variant)) return false;
 
+		// Scramble: no stone-lead win; casting your sixth spell wins outright.
+		// Checked at the end of the caster's turn, like the standard trigger.
+		if (variantHasScramble(this.variant)) {
+			if (this.spellCounter[activeColor] >= 6) {
+				this.gameover = true;
+				this.winner = activeColor;
+				return true;
+			}
+			return false;
+		}
+
 		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
 		// only) — a player's win claim uses their real placed stones,
 		// checked against the opponent's real+pending total. In the
