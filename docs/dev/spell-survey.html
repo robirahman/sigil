@@ -98,7 +98,17 @@
 		push(e.rituals, k, 'ritual'); push(e.sorceries, k, 'sorcery'); push(e.charms, k, 'charm');
 	}
 	const INDEX = Object.fromEntries(SPELLS.map((s, i) => [s.name, i]));
-	const packName = k => k === 'core' ? 'Core' : EXPANSIONS[k].name;
+	// Core sub-packs (CORE_SUBPACKS in constants.js on main; inlined for older checkouts).
+	const SUBPACKS = typeof CORE_SUBPACKS !== 'undefined' ? CORE_SUBPACKS : {
+		core_growth: { name: 'Growth', rituals: ['Flourish'],          sorceries: ['Grow'],         charms: ['Sprout'] },
+		core_havoc:  { name: 'Havoc',  rituals: ['Carnage'],           sorceries: ['Fireblast'],    charms: ['Slash'] },
+		core_impact: { name: 'Impact', rituals: ['Starfall'],          sorceries: ['Meteor'],       charms: ['Comet'] },
+		core_tempo:  { name: 'Tempo',  rituals: ['Seal_of_Lightning'], sorceries: ['Seal_of_Wind'], charms: ['Seal_of_Summer'] },
+		core_hex:    { name: 'Hex',    rituals: ['Bewitch'],           sorceries: ['Hail_Storm'],   charms: ['Surge'] },
+	};
+	const packName = k => k === 'core' ? 'Core' : SUBPACKS[k] ? 'Core: ' + SUBPACKS[k].name : EXPANSIONS[k].name;
+	const inPack = (name, pack) => !pack || SPELLS[INDEX[name]].pack === pack
+		|| (!!SUBPACKS[pack] && [...SUBPACKS[pack].rituals, ...SUBPACKS[pack].sorceries, ...SUBPACKS[pack].charms].includes(name));
 	const pretty = n => n.replace(/_/g, ' ');
 	const isStatic = n => /^STATIC:/.test(SPELL_TEXTS[n] || '');
 	const sizeOf = t => t === 'ritual' ? '5-node' : t === 'sorcery' ? '3-node' : '1-node';
@@ -175,7 +185,7 @@
 	// Slot filters: each slot is (pack, spell); a spell fits a slot if it matches both constraints.
 	function fits(name, slot) {
 		const pack = el('pack-' + slot).value, spell = el('spell-' + slot).value;
-		return (!pack || SPELLS[INDEX[name]].pack === pack) && (!spell || name === spell);
+		return inPack(name, pack) && (!spell || name === spell);
 	}
 	function queue() {
 		const mode = state.mode;
@@ -340,13 +350,13 @@
 	function fillSpellSelect(slot) {
 		const sel = el('spell-' + slot), pack = el('pack-' + slot).value, keep = sel.value;
 		sel.innerHTML = '<option value="">any spell</option>';
-		for (const sp of SPELLS.filter(s => !pack || s.pack === pack).map(s => s.name)) {
+		for (const sp of SPELLS.filter(s => inPack(s.name, pack)).map(s => s.name)) {
 			const o = document.createElement('option'); o.value = sp; o.textContent = pretty(sp); sel.appendChild(o);
 		}
 		sel.value = [...sel.options].some(o => o.value === keep) ? keep : '';
 	}
 	for (const slot of ['a', 'b']) {
-		for (const k of OFFICIAL_PACKS) { const o = document.createElement('option'); o.value = k; o.textContent = packName(k); el('pack-' + slot).appendChild(o); }
+		for (const k of ['core', ...Object.keys(SUBPACKS), ...OFFICIAL_PACKS.slice(1)]) { const o = document.createElement('option'); o.value = k; o.textContent = packName(k); el('pack-' + slot).appendChild(o); }
 		fillSpellSelect(slot);
 	}
 	document.addEventListener('keydown', ev => {
