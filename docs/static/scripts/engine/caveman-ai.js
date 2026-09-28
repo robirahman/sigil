@@ -54,8 +54,10 @@ const _HAILSTORM_ORDER_TIEBREAK = 0.5 / 39.0;
 // Scramble variant (first to cast six spells wins; no stone-lead win):
 // each spell of spell-counter lead is worth this many stones at the leaf.
 // Stones still matter (they fill spell slots), so material stays in the
-// eval as the tiebreaker. A first guess, not arena-tuned.
-const CAVEMAN_SCRAMBLE_SPELL_WEIGHT = 3.0;
+// eval. 2026-09-28 arena (40 games, 1s/move, core): ssw=3 vs ssw=0 went
+// 16-24 (40%, p=.21) -- no evidence it helps, so it stays zero; the search
+// still sees the sixth-spell win as a terminal. Tune via arena `ssw=`.
+const CAVEMAN_SCRAMBLE_SPELL_WEIGHT = 0.0;
 
 const CAVEMAN_EVAL_WEIGHTS = Object.freeze({
 	mana: 0.0,

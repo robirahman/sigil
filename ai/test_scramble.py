@@ -208,14 +208,15 @@ const { playGame } = require(path.join(%s, 'tools', 'arena', 'play-game.js'));
 const { parseModeSpec } = require(path.join(%s, 'tools', 'arena', 'engine.js'));
 (async () => {
   const E = loadEngine();
-  // Leaf: a spell-counter lead is worth CAVEMAN_SCRAMBLE_SPELL_WEIGHT stones
-  // per spell in Scramble only (function declarations are vm globals).
+  // Leaf: a spell-counter lead is worth evalWeights.scrambleSpell stones per
+  // spell in Scramble only (function declarations are vm globals).
   const leaf = {};
   for (const v of ['standard', 'scramble']) {
     const b = new E.SimBoard(E.generateSpellList(['core']), v);
     b.stones.a1 = 'red'; b.stones.b1 = 'blue'; b.update();
     b.spellCounter = { red: 3, blue: 1 };
     leaf[v] = _cavemanLeaf(b, 'red', _cavemanResolveWeights(null), 0) * 39;
+    leaf[v + '_ssw3'] = _cavemanLeaf(b, 'red', _cavemanResolveWeights({ scrambleSpell: 3 }), 0) * 39;
     leaf[v + '_ssw0'] = _cavemanLeaf(b, 'red', _cavemanResolveWeights({ scrambleSpell: 0 }), 0) * 39;
   }
   const results = [leaf];
@@ -230,8 +231,9 @@ const { parseModeSpec } = require(path.join(%s, 'tools', 'arena', 'engine.js'));
 """ % tuple([json.dumps(REPO)] * 4)]
     res = _run_node(js, 'JS_RESULT')
     leaf, res = res[0], res[1:]
-    assert abs(leaf['scramble'] - leaf['standard'] - 6.0) < 1e-9, leaf  # 2 spells x 3
-    assert abs(leaf['scramble_ssw0'] - leaf['standard']) < 1e-9, leaf
+    assert abs(leaf['scramble'] - leaf['standard']) < 1e-9, leaf  # default weight 0
+    assert abs(leaf['scramble_ssw3'] - leaf['standard'] - 6.0) < 1e-9, leaf  # 2 spells x 3
+    assert abs(leaf['standard_ssw3'] - leaf['standard']) < 1e-9, leaf
     assert abs(leaf['standard_ssw0'] - leaf['standard']) < 1e-9, leaf
     decided = 0
     for r in res:
