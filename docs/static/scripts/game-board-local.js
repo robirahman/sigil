@@ -463,11 +463,31 @@ document.addEventListener('alpine:init', () => {
 				const params = new URLSearchParams(window.location.search);
 				params.delete('sfn');
 				params.delete('review');
+				// Each rematch is a new game: drop the persistence id so it
+				// mints a fresh one instead of reusing the finished game's slot.
+				params.delete('id');
 				const qs = params.toString();
 				window.location.href = window.location.pathname + (qs ? '?' + qs : '');
 			},
 
 			playAgainSameLayout() {
+				this._rematchWithHumanColor(this.myColor);
+			},
+
+			playAgainSameLayoutSwap() {
+				// Same spell layout, but human swaps sides with the AI.
+				this._rematchWithHumanColor(this.myColor === 'red' ? 'blue' : 'red');
+			},
+
+			// Pin the human's side for the next game (relative to the game
+			// just finished — otherwise it falls back to a random draw) and
+			// reload with the same nine spells.
+			_rematchWithHumanColor(color) {
+				if (this.isAiGame && (color === 'red' || color === 'blue')) {
+					try {
+						sessionStorage.setItem('sigil_rematch_human_color', color);
+					} catch (e) { /* sessionStorage blocked */ }
+				}
 				const spells = this._spellNamesForExport;
 				if (spells && spells.length === 9) {
 					try {
@@ -475,15 +495,6 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* sessionStorage blocked */ }
 				}
 				this.playAgain();
-			},
-
-			playAgainSameLayoutSwap() {
-				// Same spell layout, but human swaps sides with the AI.
-				const swapped = this.myColor === 'red' ? 'blue' : 'red';
-				try {
-					sessionStorage.setItem('sigil_rematch_human_color', swapped);
-				} catch (e) { /* sessionStorage blocked */ }
-				this.playAgainSameLayout();
 			},
 
 			rematchStage: 'idle',  // 'idle' | 'rematch'
