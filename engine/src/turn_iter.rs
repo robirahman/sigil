@@ -1092,16 +1092,18 @@ pub fn outcome_order_v2() -> bool { OUTCOME_ORDER_V2.with(|c| c.get()) }
 
 thread_local! {
     /// Remaining plies at the node whose stream is being built, set by the
-    /// search just before it pulls the stream (`Search::negamax`/`root_search`);
-    /// `i32::MAX` outside a search. And the minimum at which the lead pre-pass
-    /// runs: 0 = everywhere (shipped).
+    /// search just before it pulls the stream (`Search::negamax`; the root
+    /// leaves it unset so it always runs the pre-pass); `i32::MAX` outside. And the minimum at which the lead pre-pass
+    /// runs: 2 (shipped since v18; 0 = everywhere, the v17 engine).
     static NODE_REMAINING: std::cell::Cell<i32> = std::cell::Cell::new(i32::MAX);
-    static LEAD_MIN_REMAINING: std::cell::Cell<i32> = std::cell::Cell::new(0);
+    static LEAD_MIN_REMAINING: std::cell::Cell<i32> = std::cell::Cell::new(2);
 }
 pub fn set_node_remaining(d: i32) { NODE_REMAINING.with(|c| c.set(d)); }
 /// Skip the stone-lead pre-pass at nodes with fewer than `d` plies left (0 =
-/// never skip, the shipped engine). The pre-pass is ~30% of a depth-4 search's
-/// time and most of it is spent at the last ply (2026-09-27 profile).
+/// never skip, the v17 engine; 2 ships in v18). The pre-pass is ~30% of a
+/// depth-4 search's time and most of it is spent at the last ply (2026-09-27
+/// profile). Fixed 10 s arenas: 2 vs 0 +46.8 Elo [+29.6, +64.2], 3 vs 2 -3.9
+/// [-21.1, +13.2] (2026-09-28).
 pub fn set_lead_min_remaining(d: i32) { LEAD_MIN_REMAINING.with(|c| c.set(d)); }
 pub fn lead_min_remaining() -> i32 { LEAD_MIN_REMAINING.with(|c| c.get()) }
 fn lead_prepass_here() -> bool {

@@ -1163,12 +1163,13 @@ impl Search {
         let mut best_val = -WIN * 2;
         // The root gets the widest look: a mistake here is unrecoverable.
         let w = width_for_depth_shaped(depth, self.scale_for(b, c), self.width_shape) * 3;
-        crate::turn_iter::set_node_remaining(depth);
+        // No `set_node_remaining` here: the root always runs the lead pre-pass,
+        // whatever `lead_min_remaining`, so an immediate win never depends on
+        // the iteration depth (a depth-1 iteration would otherwise skip it).
         let mut turns = match self.opening_root_turns(b, c) {
             Some(v) => v,
             None => self.ordered_turns(b, c, 0, best_local, w),
         };
-        crate::turn_iter::set_node_remaining(i32::MAX);
         if self.root_resort && !prev_scores.is_empty() {
             // PV first (already promoted), then the previous iteration's scores
             // descending; moves it never scored keep generator order after them.

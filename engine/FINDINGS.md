@@ -2817,7 +2817,16 @@ per-shard means over each arm's games.
 **`lead_min` 2 is depth, bought where the pre-pass is cheapest to lose.** The stone-lead pre-pass was ~30% of a
 depth-4 search's time and most of it ran at the last ply (2026-09-27 profile); skipping it with fewer than two
 plies left adds a quarter ply of average depth at 10 s (6.73 vs 6.48). The pre-pass still runs at every node
-with two or more plies left. Follow-up arena: `lead_min` 3 vs 2 (below, when it lands).
+with two or more plies left.
+
+**`lead_min` 3 vs 2: no difference, 2 ships.** Nine c3d-highcpu-90 across the three regions, 792 shards x 1
+pair (arms `leadmin3_vs2_10s_fleet9.txt`, `SHARD_BASE` 4000-4800; runs `20260928T211444Z` to `…211623Z`, ~25
+minutes of play): 1,584 games, 783-801, 49.43% [46.97, 51.89], **-3.9 Elo [-21.1, +13.2]**, depth 7.05 / 7.01.
+Skipping the pre-pass one ply higher buys almost no depth; 2 is the value with an arena win over the old
+engine behind it. **Shipped in v18 (cache v51)** with one change from the arena arm: the root always runs the
+pre-pass, whatever `lead_min`, so a depth-1 iteration still sees an immediate win (`root_search` no longer sets
+`NODE_REMAINING`). From iteration 2 on the root had >= 2 plies left anyway, so the tree is the arena's except in
+iteration 1. Test `lead_prepass_skips_the_last_ply_by_default_but_never_the_root`.
 
 **`speed_v1` is the tree-identical node-rate work** (CRUSH-only key-dash early exit, lead pre-pass memo, lazy
 logs, outcomes scored once): +0.15 ply of depth and +15.4 Elo whose interval just touches zero. It is already the

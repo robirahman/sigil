@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-28: engine v18 (cache v51) -- `lead_min` 2 and `speed_v1` in the browser.** The stone-lead pre-pass
+now runs only at nodes with >= 2 plies left (default `LEAD_MIN_REMAINING` 2), except at the root, which always
+runs it so a depth-1 iteration still sees an immediate win. First wasm since v17, so it also carries the
+2026-09-27 node-rate work (`speed_v1`, +15.4 at 10 s) and the `candidates.rs` presets (`shipped` = v17). Tests
+154/154 (`cargo test --release`), `wasm-smoke.js` green, as are the springlock, clock and no-placement smokes;
+wasm 626,149 bytes. `tools/puzzle-smoke.js` fails on a Storm Front replay (the Rust action list does not reproduce
+its own position in one puzzle) -- identically on the v17 wasm at 383bd009 and 23ba2efc, so it predates v18 and is
+still open.
+
 **2026-09-28: the surprise-audit candidates at 10 s.** Five arms from `0fe63f0`, fixed 10 s per move against
 the then-current default (FINDINGS "The surprise-audit candidates at 10 s"): **`lead_min` 2 +46.8 Elo [+29.6,
 +64.2]** over 1,584 games (the stone-lead pre-pass skipped with < 2 plies left; depth 6.73 vs 6.48); `speed_v1`
@@ -28,7 +37,7 @@ the then-current default (FINDINGS "The surprise-audit candidates at 10 s"): **`
 -0.4 [-17.6, +16.7], stays (2, 1); `dash_gen` 4 pairs -6.9 [-32.7, +18.8] over 704, stays 2; `outcome_sel` 62404
 -34.2 [-60.2, -8.5] over 704, stays OFF. Three of the arenas ran as a 9-VM fleet across us-central1 / us-east1 /
 us-east4 (the C3 quota is 300 vCPUs per region), arms `engine/gcp/arms/*_10s_fleet3.txt`. Follow-up `lead_min` 3
-vs 2 decides the value that ships.
+vs 2: **-3.9 [-21.1, +13.2]** over 1,584 games (9-VM fleet, 1 pair per shard), so 2 ships.
 
 **2026-09-26: surprise audit -- where the eval falls against the Rust AI.** All 360 hydratable Rust-AI games
 since 08-26 at depth 4, re-searched with the current engine (`engine/harness/surprise_audit.py`, VM

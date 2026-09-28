@@ -138,6 +138,28 @@ let wasm_bindgen = (function(exports) {
             }
         }
         /**
+         * Select a named engine candidate (`candidates.rs`) for the searches and
+         * ponders that follow; "" or "shipped" is the live engine. The worker
+         * calls this before every search and ponder, so a candidate never leaks
+         * into another game. Returns `{"ok":true}` or an error JSON.
+         * @param {string} name
+         * @returns {string}
+         */
+        set_candidate(name) {
+            let deferred2_0;
+            let deferred2_1;
+            try {
+                const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+                const len0 = WASM_VECTOR_LEN;
+                const ret = wasm.engine_set_candidate(this.__wbg_ptr, ptr0, len0);
+                deferred2_0 = ret[0];
+                deferred2_1 = ret[1];
+                return getStringFromWasm0(ret[0], ret[1]);
+            } finally {
+                wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+            }
+        }
+        /**
          * Slots in use, for the smoke test's "the table survived the move" check.
          * @returns {number}
          */

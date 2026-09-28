@@ -3041,6 +3041,20 @@ fn lead_prepass_is_what_lets_a_depth_one_search_see_the_mate() {
 }
 
 #[test]
+fn lead_prepass_skips_the_last_ply_by_default_but_never_the_root() {
+    // v18 default (2026-09-28 arenas: 2 vs 0 +46.8 Elo, 3 vs 2 -3.9).
+    assert_eq!(crate::turn_iter::lead_min_remaining(), 2);
+    // The root keeps it even in a depth-1 iteration: the recorded mates are
+    // still found at depth 1 with the shipped default (see the test above).
+    for sfn in LEAD_CASES {
+        let b = Board::from_sfn(sfn).expect("sfn");
+        let mut s = shipped_search();
+        let (_, sc, _) = s.go(&b, b.to_move, 1, 0);
+        assert!(sc >= crate::search::UNPROVEN_MATE, "root skipped the pre-pass in {sfn}: {sc}");
+    }
+}
+
+#[test]
 fn lead_prepass_stays_quiet_far_from_the_lead() {
     // Opening position: nobody is within reach, so the scan must return nothing
     // (and cost nothing -- the gate closes before any board is examined).
