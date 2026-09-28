@@ -201,14 +201,26 @@
 			margin: 12px 0 6px;
 		}
 		.game-options__packs {
-			display: grid;
-			grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-			gap: 6px 12px;
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
 			color: var(--color-text);
 			font-family: 'Overlock', sans-serif;
 		}
-		.game-options__packs > label:first-child,
-		.game-options__packs > #core-subpacks { grid-column: 1 / -1; }
+		.game-options__packs label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+		.pack-group__children {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+			gap: 6px 12px;
+			margin: 6px 0 0 26px;
+			font-size: 0.95em;
+		}
+		.pack-group__children--compact {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 4px 14px;
+		}
+		.pack-group__children--compact label { gap: 6px; }
 		.game-options__check {
 			display: flex;
 			align-items: center;
@@ -486,26 +498,38 @@
 					<div class="game-options__body">
 						<div class="game-options__heading">Spell packs</div>
 						<div id="spell-pack-checkboxes" class="game-options__packs">
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="core" /> <span>Core</span></label>
-							<div id="core-subpacks" style="display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 2px 26px; font-size: 0.92em;">
-								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Sprout, Grow, Flourish"><input type="checkbox" data-core-sub value="core_growth" /> <span>Growth</span></label>
-								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Slash, Fireblast, Carnage"><input type="checkbox" data-core-sub value="core_havoc" /> <span>Havoc</span></label>
-								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_impact" /> <span>Impact</span></label>
-								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Seal of Summer, Seal of Wind, Seal of Lightning"><input type="checkbox" data-core-sub value="core_tempo" /> <span>Tempo</span></label>
-								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Surge, Hail Storm, Bewitch"><input type="checkbox" data-core-sub value="core_hex" /> <span>Hex</span></label>
+							<div class="pack-group">
+								<label class="pack-group__parent"><input type="checkbox" data-group-parent value="core" /> <span>Core</span></label>
+								<div class="pack-group__children pack-group__children--compact" id="core-subpacks">
+									<label title="Sprout, Grow, Flourish"><input type="checkbox" data-core-sub value="core_growth" /> <span>Growth</span></label>
+									<label title="Slash, Fireblast, Carnage"><input type="checkbox" data-core-sub value="core_havoc" /> <span>Havoc</span></label>
+									<label title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_impact" /> <span>Impact</span></label>
+									<label title="Seal of Summer, Seal of Wind, Seal of Lightning"><input type="checkbox" data-core-sub value="core_tempo" /> <span>Tempo</span></label>
+									<label title="Surge, Hail Storm, Bewitch"><input type="checkbox" data-core-sub value="core_hex" /> <span>Hex</span></label>
+								</div>
 							</div>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="flood" /> <span>Flood</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="autumn" /> <span>Autumn</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="gloom" /> <span>Gloom</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="covenant" /> <span>Covenant</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="panda" /> <span>Panda (unrated)</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tectonic" /> <span>Tectonic</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="providence" /> <span>Providence</span></label>
-							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="experimental" /> <span>Experimental (unrated)</span></label>
+							<div class="pack-group">
+								<label class="pack-group__parent"><input type="checkbox" data-group-parent /> <span>Official Expansions</span></label>
+								<div class="pack-group__children">
+									<label><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
+									<label><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
+									<label><input type="checkbox" value="fury" /> <span>Inferno</span></label>
+									<label><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
+									<label><input type="checkbox" value="flood" /> <span>Flood</span></label>
+									<label><input type="checkbox" value="autumn" /> <span>Autumn</span></label>
+									<label><input type="checkbox" value="gloom" /> <span>Gloom</span></label>
+									<label><input type="checkbox" value="covenant" /> <span>Covenant</span></label>
+								</div>
+							</div>
+							<div class="pack-group">
+								<label class="pack-group__parent"><input type="checkbox" data-group-parent /> <span>Unofficial Expansions</span></label>
+								<div class="pack-group__children">
+									<label><input type="checkbox" value="panda" /> <span>Panda (unrated)</span></label>
+									<label><input type="checkbox" value="tectonic" /> <span>Tectonic</span></label>
+									<label><input type="checkbox" value="providence" /> <span>Providence</span></label>
+									<label><input type="checkbox" value="experimental" /> <span>Experimental (unrated)</span></label>
+								</div>
+							</div>
 						</div>
 						<div class="game-options__heading">Variants</div>
 						<label class="game-options__check">
@@ -598,36 +622,47 @@
 						localStorage.setItem('sigilSpellPacksVersion', 'v3');
 					}
 
-					// Core is a parent box over its five sub-packs. All five checked is
-					// stored as 'core' (what older pages and clients understand);
-					// otherwise the checked sub-pack keys are stored.
-					var coreBox = document.querySelector('#spell-pack-checkboxes input[value=core]');
+					// Each pack group (Core, Official Expansions, Unofficial Expansions)
+					// has a parent box that ticks or clears its children and shows
+					// half-ticked when only some are on. Only Core's parent is itself
+					// a pack key: all five Core sub-packs are stored as 'core' (what
+					// older pages and clients understand), a partial Core selection as
+					// the sub-pack keys. The expansion parents store nothing.
+					var groups = document.querySelectorAll('#spell-pack-checkboxes .pack-group');
 					var subBoxes = document.querySelectorAll('#spell-pack-checkboxes input[data-core-sub]');
-					function syncCoreBox() {
-						var n = 0;
-						subBoxes.forEach(function(b) { if (b.checked) n++; });
-						coreBox.checked = n === subBoxes.length;
-						coreBox.indeterminate = n > 0 && n < subBoxes.length;
+					function syncParents() {
+						groups.forEach(function(g) {
+							var parent = g.querySelector('input[data-group-parent]');
+							var kids = g.querySelectorAll('.pack-group__children input');
+							var n = 0;
+							kids.forEach(function(b) { if (b.checked) n++; });
+							parent.checked = n === kids.length;
+							parent.indeterminate = n > 0 && n < kids.length;
+						});
 					}
 					function currentSelection() {
 						var current = [], subs = [];
 						boxes.forEach(function(b) {
-							if (!b.checked || b === coreBox) return;
+							if (!b.checked || b.hasAttribute('data-group-parent')) return;
 							if (b.hasAttribute('data-core-sub')) subs.push(b.value); else current.push(b.value);
 						});
 						return (subs.length === subBoxes.length ? ['core'] : subs).concat(current);
 					}
 
 					boxes.forEach(function(box) {
-						box.checked = selected.indexOf(box.value) !== -1
-							|| (box.hasAttribute('data-core-sub') && selected.indexOf('core') !== -1);
+						if (!box.hasAttribute('data-group-parent')) {
+							box.checked = selected.indexOf(box.value) !== -1
+								|| (box.hasAttribute('data-core-sub') && selected.indexOf('core') !== -1);
+						}
 						box.addEventListener('change', function() {
-							if (box === coreBox) subBoxes.forEach(function(b) { b.checked = coreBox.checked; });
-							syncCoreBox();
+							if (box.hasAttribute('data-group-parent')) {
+								box.closest('.pack-group').querySelectorAll('.pack-group__children input').forEach(function(b) { b.checked = box.checked; });
+							}
+							syncParents();
 							localStorage.setItem('sigilSpellPacks', JSON.stringify(currentSelection()));
 						});
 					});
-					syncCoreBox();
+					syncParents();
 
 					// Validate when starting a local game from this page
 					var playLinks = document.querySelectorAll('a.mode-button');
@@ -695,18 +730,20 @@
 				<script>
 					(function() {
 						// One-line summary of the closed Game options panel, e.g.
-						// "Core: Growth, Hex + Gloom · Competitive".
+						// "Core: Growth, Hex + Official Expansions · Competitive".
 						var panel = document.getElementById('game-options');
 						var out = document.getElementById('game-options-summary');
 						function label(input) { return input.parentNode.querySelector('span').textContent.replace(/ \(unrated\)$/, ''); }
 						function update() {
-							var core = panel.querySelector('input[value=core]');
-							var subs = Array.prototype.filter.call(panel.querySelectorAll('input[data-core-sub]'), function(b) { return b.checked; });
+							// A fully ticked group reads as its name; a partial Core as
+							// "Core: Growth, Hex"; a partial expansion group lists its packs.
 							var packs = [];
-							if (core.checked) packs.push('Core');
-							else if (subs.length) packs.push('Core: ' + subs.map(label).join(', '));
-							panel.querySelectorAll('#spell-pack-checkboxes input:not([data-core-sub]):not([value=core])').forEach(function(b) {
-								if (b.checked) packs.push(label(b));
+							panel.querySelectorAll('#spell-pack-checkboxes .pack-group').forEach(function(g) {
+								var parent = g.querySelector('input[data-group-parent]');
+								var on = Array.prototype.filter.call(g.querySelectorAll('.pack-group__children input'), function(b) { return b.checked; });
+								if (parent.checked) packs.push(label(parent));
+								else if (on.length && parent.value === 'core') packs.push('Core: ' + on.map(label).join(', '));
+								else on.forEach(function(b) { packs.push(label(b)); });
 							});
 							var variants = [];
 							['variant-competitive', 'variant-deathmatch', 'variant-duplicates'].forEach(function(id) {
