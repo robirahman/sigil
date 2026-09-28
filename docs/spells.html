@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Spells - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		/* Cell colours read on every theme: saturated ends, translucent middles. */
+		.spells-page {
+			--syn-pp: #2e9e5b; --syn-p: rgba(46, 158, 91, 0.45); --syn-e: rgba(128, 128, 128, 0.28);
+			--syn-n: rgba(210, 70, 60, 0.45); --syn-nn: #c0392b;
+			max-width: 1120px;
+			width: 100%;
+			min-width: 0; /* .main is a flex column: without this the wide charts stretch the page */
+			margin: 0 auto;
+			padding: 20px 16px 60px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text);
+		}
+		.spells-page h2 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			font-size: 1.5em;
+			margin: 0 0 6px;
+			text-align: center;
+		}
+		.spells-page .intro {
+			max-width: 64ch;
+			margin: 0 auto 18px;
+			text-align: center;
+			color: var(--color-text-muted);
+		}
+		.jump {
+			display: flex;
+			justify-content: center;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-bottom: 24px;
+		}
+		.jump a {
+			padding: 6px 14px;
+			border: 2px solid var(--color-border);
+			border-radius: 6px;
+			background: var(--color-surface-raised);
+			color: var(--color-text-warm);
+			font-family: 'Arvo', serif;
+			font-size: 0.95em;
+			text-decoration: none;
+		}
+		.jump a:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.chart-section {
+			background: var(--color-surface);
+			border: 2px solid var(--color-border);
+			border-radius: 10px;
+			padding: 18px 18px 20px;
+			margin-bottom: 24px;
+			scroll-margin-top: 90px;
+		}
+		.chart-section h3 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			font-size: 1.25em;
+			margin: 0 0 2px;
+		}
+		.sec-links { font-size: 0.85em; color: var(--color-text-muted); margin-bottom: 10px; }
+		.sec-links a { color: var(--color-accent); text-decoration: none; }
+		.sec-links a:hover { text-decoration: underline; }
+		.note { color: var(--color-text-muted); font-size: 0.9em; margin: 4px 0 10px; max-width: 75ch; }
+		.msg { padding: 30px; text-align: center; color: var(--color-text-muted); }
+
+		/* Tier list, Tiermaker style */
+		.tiers { background: var(--color-bg-dark); border: 2px solid #000; }
+		.tier { display: flex; min-height: 112px; border-bottom: 2px solid #000; }
+		.tier:last-child { border-bottom: 0; }
+		.tier-label {
+			flex: 0 0 90px;
+			display: flex; flex-direction: column; align-items: center; justify-content: center;
+			color: #111; text-align: center; padding: 4px;
+		}
+		.tier-label b { font-family: 'Arvo', serif; font-size: 34px; line-height: 1; }
+		.tier-label small { font-size: 12px; margin-top: 4px; opacity: 0.75; }
+		.tier-items { flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; }
+		.tile {
+			width: 96px; padding: 4px 2px 3px; margin: 0;
+			background: none; border: 0; border-right: 1px solid #000; border-bottom: 1px solid #000;
+			cursor: pointer; color: var(--color-text-light, #eee); font: 11px/1.2 'Overlock', sans-serif;
+			display: flex; flex-direction: column; align-items: center; gap: 2px;
+		}
+		.tile img { width: 84px; height: 84px; display: block; }
+		.tile:hover { background: var(--color-surface-hover); }
+		.tile.focused { background: var(--color-btn-menu, #34506e); }
+		.tile span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		@media (max-width: 600px) {
+			.tier-label { flex-basis: 52px; } .tier-label b { font-size: 24px; } .tier-label small { display: none; }
+			.tile { width: 72px; } .tile img { width: 62px; height: 62px; } .tile span { font-size: 10px; max-width: 68px; }
+			.tier { min-height: 86px; }
+		}
+
+		/* Matrices */
+		.chart-controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 0.9em; color: var(--color-text-muted); margin-bottom: 8px; }
+		.chart-controls select {
+			font: inherit; color: var(--color-text-warm); background: var(--color-surface-raised);
+			border: 1px solid var(--color-border); border-radius: 6px; padding: 3px 8px;
+		}
+		.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8em; color: var(--color-text-muted); align-items: center; margin-bottom: 10px; }
+		.legend i { display: inline-block; width: 14px; height: 14px; vertical-align: -3px; margin-right: 4px; border: 1px solid rgba(128, 128, 128, 0.4); }
+		.mx-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+		table.mx { border-collapse: collapse; font-size: 11px; }
+		.mx th, .mx td { padding: 0; }
+		.mx td.c {
+			width: 20px; min-width: 20px; height: 20px; text-align: center;
+			border: 1px solid var(--color-surface); font-size: 9px; font-weight: 700; color: var(--color-text);
+		}
+		.mx td.c.pp { background: var(--syn-pp); color: #fff; } .mx td.c.p { background: var(--syn-p); }
+		.mx td.c.e { background: var(--syn-e); } .mx td.c.n { background: var(--syn-n); } .mx td.c.nn { background: var(--syn-nn); color: #fff; }
+		.mx td.c.d { background: var(--color-bg-dark); }
+		.mx th.rh {
+			text-align: left; white-space: nowrap; padding: 0 8px 0 0; font-weight: normal;
+			position: sticky; left: 0; background: var(--color-surface); z-index: 1; cursor: pointer;
+			border-left: 5px solid transparent; color: var(--color-text-warm);
+		}
+		.mx th.rh img, .mx th.ch img { width: 18px; height: 18px; vertical-align: middle; border-radius: 50%; }
+		.mx th.rh img { margin: 0 5px 0 4px; }
+		.mx th.ch { vertical-align: bottom; padding: 4px 0 3px; width: 20px; font-weight: normal; cursor: pointer; border-bottom: 5px solid transparent; color: var(--color-text-warm); }
+		.mx th.ch .vt { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; margin: 0 auto; line-height: 20px; }
+		.mx th.ch img { display: block; margin: 0 auto 3px; }
+		.mx th.corner { position: sticky; left: 0; background: var(--color-surface); z-index: 2; text-align: left; vertical-align: bottom; padding: 0 8px 6px 4px; color: var(--color-text-muted); font-weight: normal; }
+		.mx td.sum { white-space: nowrap; padding: 0 8px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+		.mx th.sumh { vertical-align: bottom; padding: 0 8px 6px; color: var(--color-text-muted); font-weight: normal; white-space: nowrap; }
+		.info {
+			min-height: 2.8em; margin-top: 10px; padding: 8px 12px; font-size: 0.95em;
+			background: var(--color-surface-raised); border: 1px solid var(--color-border); border-radius: 8px;
+		}
+		.info .t { color: var(--color-text-muted); font-size: 0.85em; }
+		.method { color: var(--color-text-muted); font-size: 0.85em; text-align: center; max-width: 70ch; margin: 0 auto; }
+		.back-link { display: block; text-align: center; margin-top: 18px; color: var(--color-accent); text-decoration: none; }
+		.back-link:hover { text-decoration: underline; }
+	</style>
+	<style id="hover-style"></style>
+	<style id="focus-style"></style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="spells-page">
+			<h2>Spells</h2>
+			<p class="intro">How the 39 official spells stack up: a tier list, which spells beat which head to head, and which work well together. These are the developers' judgements from play, not statistics.</p>
+			<nav class="jump" aria-label="Sections">
+				<a href="#tiers">Tier list</a>
+				<a href="#matchups">Matchups</a>
+				<a href="#synergies">Synergies</a>
+			</nav>
+
+			<section class="chart-section" id="tiers">
+				<h3>Tier list</h3>
+				<div class="sec-links">Also: <a href="#matchups">Matchups</a> · <a href="#synergies">Synergies</a></div>
+				<p class="note">Within a tier, spells run best to worst from left to right. Hover a card for its text; click one to highlight it in the charts below.</p>
+				<div id="tier-list"><div class="msg">Loading…</div></div>
+			</section>
+
+			<section class="chart-section" id="matchups">
+				<h3>Matchups</h3>
+				<div class="sec-links">Also: <a href="#tiers">Tier list</a> · <a href="#synergies">Synergies</a></div>
+				<p class="note">Read each row against each column: if you build toward the row spell and your opponent toward the column spell, who is favoured? Blank cells are pairs we have not rated yet.</p>
+				<div class="chart-controls"><label>Order <select class="order">
+					<option value="rank">tier rank</option>
+					<option value="type">type, then rank</option>
+					<option value="pack">pack</option>
+					<option value="alpha">alphabetical</option>
+				</select></label></div>
+				<div class="legend">
+					<span><i style="background:var(--syn-pp)"></i>row strongly favoured (++)</span>
+					<span><i style="background:var(--syn-p)"></i>row favoured (+)</span>
+					<span><i style="background:var(--syn-e)"></i>even</span>
+					<span><i style="background:var(--syn-n)"></i>column favoured (−)</span>
+					<span><i style="background:var(--syn-nn)"></i>column strongly favoured (−−)</span>
+				</div>
+				<div class="mx-wrap"><div id="matchup-chart" class="msg">Loading…</div></div>
+				<div class="info" id="matchup-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it.</span></div>
+			</section>
+
+			<section class="chart-section" id="synergies">
+				<h3>Synergies</h3>
+				<div class="sec-links">Also: <a href="#tiers">Tier list</a> · <a href="#matchups">Matchups</a></div>
+				<p class="note">Does holding both spells let you do something neither does alone? The chart is symmetric. Blank cells are pairs we have not rated yet.</p>
+				<div class="chart-controls"><label>Order <select class="order">
+					<option value="rank">tier rank</option>
+					<option value="type">type, then rank</option>
+					<option value="pack">pack</option>
+					<option value="alpha">alphabetical</option>
+				</select></label></div>
+				<div class="legend">
+					<span><i style="background:var(--syn-pp)"></i>strong synergy (++)</span>
+					<span><i style="background:var(--syn-p)"></i>synergy (+)</span>
+					<span><i style="background:var(--syn-e)"></i>none</span>
+					<span><i style="background:var(--syn-n)"></i>anti-synergy (−)</span>
+					<span><i style="background:var(--syn-nn)"></i>strong anti-synergy (−−)</span>
+				</div>
+				<div class="mx-wrap"><div id="synergy-chart" class="msg">Loading…</div></div>
+				<div class="info" id="synergy-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it.</span></div>
+			</section>
+
+			<p class="method" id="method"></p>
+			<a class="back-link" href="./">&larr; Back to menu</a>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script>
+	(() => {
+		// Data: tools/export_spell_charts_data.py writes this from the spell survey.
+		const DATA_URL = 'static/data/spell-charts.json';
+		const TIER_COLORS = { S: '#ff7f7f', A: '#ffbf7f', B: '#ffdf7f', C: '#ffff7f', D: '#bfff7f', F: '#7fff7f', '?': '#bbbbbb' };
+		const TYPE_ORDER = ['ritual', 'sorcery', 'charm'];
+		const PACK_ORDER = [...CORE_SUBPACK_KEYS, 'core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+		const SUBPACK_OF = {};
+		for (const [k, v] of Object.entries(CORE_SUBPACKS)) for (const n of [...v.rituals, ...v.sorceries, ...v.charms]) SUBPACK_OF[n] = k;
+		const MATCH_CLS = { 2: 'pp', 1: 'p', 0: 'e', '-1': 'n', '-2': 'nn' };
+		const SYM = { pp: '++', p: '+', e: '=', n: '−', nn: '−−' };
+		const SYN_WORDS = { 2: 'strong synergy', 1: 'synergy', 0: 'no synergy', '-1': 'anti-synergy', '-2': 'strong anti-synergy' };
+		const el = id => document.getElementById(id);
+		const pretty = n => n.replace(/_/g, ' ');
+		const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+		const card = n => `static/images/spells/${n}.webp`;
+		const art = n => `static/images/spells/art_only/${n}.webp`;
+		const BOARD = { empty: 'Better on an emptier board.', crowded: 'Better on a crowded board.' };
+
+		let D = null, names = [], tierOf = {}, match = {}, syn = {}, focus = null;
+
+		function describe(n) {
+			const s = D.spells[n] || {};
+			const lines = [`${s.rank ? '#' + s.rank + ' ' : ''}${pretty(n)} · ${s.type || ''} · ${packDisplayName(SUBPACK_OF[n] || s.pack)}`];
+			if (SPELL_TEXTS[n]) lines.push(SPELL_TEXTS[n]);
+			if (BOARD[s.board]) lines.push(BOARD[s.board]);
+			return lines.join('\n');
+		}
+
+		function renderTiers() {
+			el('tier-list').innerHTML = '<div class="tiers">' + D.tiers.map(t => `
+				<div class="tier">
+					<div class="tier-label" style="background:${TIER_COLORS[t.key] || '#bbb'}"><b>${t.key}</b><small>${t.name}</small></div>
+					<div class="tier-items">${t.spells.map(n => `
+						<button class="tile" data-spell="${n}" title="${esc(describe(n))}">
+							<img src="${card(n)}" alt="" loading="lazy" width="84" height="84"><span>${pretty(n)}</span>
+						</button>`).join('')}</div>
+				</div>`).join('') + '</div>';
+		}
+
+		function ordered(how) {
+			const s = n => D.spells[n] || {}, rank = n => s(n).rank || 999;
+			const by = {
+				rank: (a, b) => rank(a) - rank(b),
+				type: (a, b) => TYPE_ORDER.indexOf(s(a).type) - TYPE_ORDER.indexOf(s(b).type) || rank(a) - rank(b),
+				pack: (a, b) => PACK_ORDER.indexOf(SUBPACK_OF[a] || s(a).pack) - PACK_ORDER.indexOf(SUBPACK_OF[b] || s(b).pack)
+					|| TYPE_ORDER.indexOf(s(a).type) - TYPE_ORDER.indexOf(s(b).type),
+				alpha: (a, b) => a.localeCompare(b),
+			}[how];
+			return names.slice().sort(by);
+		}
+
+		function renderMatrix(target, lookup, kind, how) {
+			const list = ordered(how), idx = n => names.indexOf(n), col = n => TIER_COLORS[tierOf[n]] || 'transparent';
+			let h = `<table class="mx"><thead><tr><th class="corner">${kind === 'match' ? 'row vs column' : ''}</th>`;
+			for (const n of list) h += `<th class="ch" data-o="${idx(n)}" data-spell="${n}" style="border-bottom-color:${col(n)}" title="${esc(describe(n))}"><img src="${art(n)}" alt="" loading="lazy"><div class="vt">${pretty(n)}</div></th>`;
+			h += `<th class="sumh">${kind === 'match' ? 'fav · even · unfav' : 'syn · anti'}</th></tr></thead><tbody>`;
+			for (const r of list) {
+				let up = 0, even = 0, down = 0;
+				h += `<tr data-s="${idx(r)}"><th class="rh" data-spell="${r}" style="border-left-color:${col(r)}" title="${esc(describe(r))}"><img src="${art(r)}" alt="" loading="lazy">${pretty(r)}</th>`;
+				for (const c of list) {
+					if (r === c) { h += `<td class="c d" data-s="${idx(r)}" data-o="${idx(c)}"></td>`; continue; }
+					const v = lookup[r + '|' + c], cls = v === undefined ? '' : MATCH_CLS[v];
+					if (v > 0) up++; else if (v < 0) down++; else if (v === 0) even++;
+					h += `<td class="c ${cls}" data-s="${idx(r)}" data-o="${idx(c)}">${cls ? SYM[cls] : ''}</td>`;
+				}
+				h += `<td class="sum">${kind === 'match' ? `${up} · ${even} · ${down}` : `${up} · ${down}`}</td></tr>`;
+			}
+			el(target).className = '';
+			el(target).innerHTML = h + '</tbody></table>';
+			applyFocus();
+		}
+
+		function cellInfo(kind, r, c) {
+			if (r === c) return `<b>${pretty(r)}</b>`;
+			const k = r + '|' + c, m = match[k], s = syn[k];
+			const mTxt = m === undefined ? 'matchup not rated yet' : m === 0 ? 'even matchup'
+				: m > 0 ? `<b>${pretty(r)}</b> favoured (${m > 1 ? '++' : '+'})` : `<b>${pretty(c)}</b> favoured (${m < -1 ? '++' : '+'})`;
+			const sTxt = s === undefined ? 'synergy not rated yet' : SYN_WORDS[s] + (s ? ` (${SYM[MATCH_CLS[s]]})` : '');
+			return kind === 'match'
+				? `<b>${pretty(r)}</b> vs <b>${pretty(c)}</b>: ${mTxt}<div class="t">Held together: ${sTxt}.</div>`
+				: `<b>${pretty(r)}</b> + <b>${pretty(c)}</b>: ${sTxt}<div class="t">Head to head: ${mTxt.replace(/<\/?b>/g, '')}.</div>`;
+		}
+
+		function wire(target, infoId, kind) {
+			const root = el(target);
+			const onCell = e => {
+				const td = e.target.closest('td.c');
+				if (!td) return;
+				el(infoId).innerHTML = cellInfo(kind, names[+td.dataset.s], names[+td.dataset.o]);
+				el('hover-style').textContent = `#${target} tr[data-s="${td.dataset.s}"] > th.rh, #${target} th.ch[data-o="${td.dataset.o}"] { background: var(--color-surface-hover); }
+					#${target} td.c[data-o="${td.dataset.o}"], #${target} tr[data-s="${td.dataset.s}"] > td.c { box-shadow: inset 0 0 0 1px var(--color-accent); }`;
+			};
+			root.addEventListener('mouseover', onCell);
+			root.addEventListener('click', e => {
+				if (e.target.closest('td.c')) return onCell(e);
+				const h = e.target.closest('[data-spell]');
+				if (h) setFocus(h.dataset.spell);
+			});
+			root.addEventListener('mouseleave', () => { el('hover-style').textContent = ''; });
+		}
+
+		function applyFocus() {
+			const i = focus ? names.indexOf(focus) : -1;
+			document.querySelectorAll('.tile').forEach(t => t.classList.toggle('focused', t.dataset.spell === focus));
+			el('focus-style').textContent = i < 0 ? '' : `
+				.mx tr[data-s="${i}"] > th.rh, .mx th.ch[data-o="${i}"] { background: var(--color-surface-hover) !important; font-weight: 700; }
+				.mx tr[data-s="${i}"] > td.c, .mx td.c[data-o="${i}"] { outline: 2px solid var(--color-accent); outline-offset: -2px; }`;
+		}
+		function setFocus(n) { focus = focus === n ? null : n; applyFocus(); }
+
+		fetch(DATA_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(data => {
+			D = data;
+			names = Object.keys(D.spells);
+			for (const t of D.tiers) for (const n of t.spells) tierOf[n] = t.key;
+			for (const [a, b, v] of D.matchups) { match[a + '|' + b] = v; match[b + '|' + a] = -v; }
+			for (const [a, b, v] of D.synergies) { syn[a + '|' + b] = v; syn[b + '|' + a] = v; }
+			renderTiers();
+			const selects = document.querySelectorAll('select.order');
+			const draw = () => {
+				renderMatrix('matchup-chart', match, 'match', selects[0].value);
+				renderMatrix('synergy-chart', syn, 'syn', selects[1].value);
+			};
+			selects.forEach(s => s.addEventListener('change', draw));
+			draw();
+			el('tier-list').addEventListener('click', e => { const t = e.target.closest('.tile'); if (t) setFocus(t.dataset.spell); });
+			wire('matchup-chart', 'matchup-info', 'match');
+			wire('synergy-chart', 'synergy-info', 'syn');
+			const pairs = names.length * (names.length - 1) / 2;
+			el('method').textContent = `The order comes from ${D.comparisons} head-to-head "which spell is better?" judgements, fitted with a Bradley-Terry model. `
+				+ `${D.matchups.length} of the ${pairs} spell pairs have a matchup rating and ${D.synergies.length} have a synergy rating so far. `
+				+ `Last updated ${(D.surveyExportedAt || '').slice(0, 10)}.`;
+		}).catch(err => {
+			for (const id of ['tier-list', 'matchup-chart', 'synergy-chart']) el(id).innerHTML = `<div class="msg">Could not load the spell charts (${esc(err.message)}).</div>`;
+		});
+	})();
+	</script>
+
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Strategy Guide - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.guide {
+			max-width: 640px;
+			margin: 0 auto;
+			padding: 24px 16px 60px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text);
+			text-align: center;
+		}
+		.guide h2 { font-family: 'Arvo', serif; color: var(--color-text-warm); font-size: 1.5em; margin: 0 0 12px; }
+		.guide p { color: var(--color-text-muted); line-height: 1.5; }
+		.guide .soon {
+			margin: 24px 0;
+			padding: 18px 20px;
+			background: var(--color-surface);
+			border: 2px dashed var(--color-border);
+			border-radius: 10px;
+		}
+		.guide ul { list-style: none; padding: 0; margin: 18px 0 0; }
+		.guide li { margin: 8px 0; }
+		.guide a { color: var(--color-accent); text-decoration: none; }
+		.guide a:hover { text-decoration: underline; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="guide">
+			<h2>Strategy Guide</h2>
+			<div class="soon">
+				<p>The strategy guide is being written: openings, tempo, when to fill a spell and when to fight for one, and how the spells on the board change your plan.</p>
+			</div>
+			<p>In the meantime:</p>
+			<ul>
+				<li><a href="spells.html">Spells</a>: tier list, matchups and synergies</li>
+				<li><a href="puzzles.html">Puzzles</a>: find the forced win in positions from real games</li>
+				<li><a href="static/Sigil_Rulebook.pdf" target="_blank" rel="noopener">Rulebook</a>: the official rules (PDF)</li>
+			</ul>
+			<p><a href="./">&larr; Back to menu</a></p>
+		</div>
+	</div>
+
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+</body>
+</html>

@@ -19,7 +19,7 @@
 		.clock-option--custom input { width: 3.6em; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 0.3em; padding: 0.1em 0.3em; }
 		body > .main { padding-top: 80px; }
 		.mode-menu {
-			max-width: 400px;
+			max-width: 760px;
 			margin: 0 auto;
 			text-align: center;
 			padding: 20px;
@@ -148,6 +148,108 @@
 			font-size: 1em;
 			cursor: pointer;
 		}
+		/* Menu groups: Play on top (big buttons + Game options), then Learn,
+		   Community and Settings as three columns of links (stacked on phones). */
+		.menu-group { text-align: left; }
+		.menu-group--play { margin-bottom: 32px; color: var(--color-text); }
+		.menu-group__title {
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			font-weight: normal;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			color: var(--color-text-muted);
+			margin: 0 0 10px;
+		}
+		.play-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 12px;
+		}
+		.play-grid .mode-button {
+			margin: 0;
+			text-align: center;
+			padding: 16px 12px;
+		}
+		.mode-button.is-active {
+			background: var(--color-surface-hover);
+			border-color: var(--color-border-hover);
+		}
+		.game-options {
+			margin-top: 14px;
+			border: 2px solid var(--color-border);
+			border-radius: 8px;
+			background: var(--color-surface);
+		}
+		.game-options > summary {
+			cursor: pointer;
+			padding: 10px 14px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.game-options__summary {
+			color: var(--color-text-muted);
+			font-size: 0.9em;
+		}
+		.game-options__body { padding: 0 16px 14px; }
+		.game-options__heading {
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.8em;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			color: var(--color-text-muted);
+			margin: 12px 0 6px;
+		}
+		.game-options__packs {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+			gap: 6px 12px;
+			color: var(--color-text);
+			font-family: 'Overlock', sans-serif;
+		}
+		.game-options__packs > label:first-child,
+		.game-options__packs > #core-subpacks { grid-column: 1 / -1; }
+		.game-options__check {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-top: 8px;
+			cursor: pointer;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text);
+		}
+		.game-options__hint {
+			display: block;
+			margin: 2px 0 0 26px;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.85em;
+			color: var(--color-text-muted);
+		}
+		.menu-columns {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 28px;
+		}
+		@media (max-width: 640px) {
+			.menu-columns { grid-template-columns: 1fr; gap: 22px; }
+		}
+		.menu-link {
+			display: block;
+			padding: 8px 10px;
+			margin: 0 -10px;
+			border-radius: 6px;
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			text-decoration: none;
+		}
+		.menu-link:hover { background: var(--color-surface-hover); }
+		.menu-link small {
+			display: block;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.8em;
+			color: var(--color-text-muted);
+		}
+		.menu-setting { margin-top: 16px; }
 		.theme-label {
 			font-family: 'Overlock', sans-serif;
 			color: var(--color-text-muted);
@@ -180,7 +282,6 @@
 
 	<div class="main">
 		<div class="mode-menu">
-			<h2>Choose a game mode</h2>
 			<div id="resume-section" class="resume-section" style="display: none;">
 				<div class="resume-section__title">In progress</div>
 				<div id="resume-list"></div>
@@ -250,14 +351,26 @@
 					section.style.display = '';
 				})();
 			</script>
-			<a class="mode-button" href="game.html">
-				Local 1v1
-				<small>Play on the same screen with a friend</small>
-			</a>
-			<a class="mode-button" id="vs-ai-btn" href="#">
-				vs AI
-				<small>Play against the computer</small>
-			</a>
+			<section class="menu-group menu-group--play" aria-labelledby="menu-play">
+				<h3 class="menu-group__title" id="menu-play">Play</h3>
+				<div class="play-grid">
+				<a class="mode-button" id="vs-ai-btn" href="#" aria-expanded="false" aria-controls="ai-difficulty-row">
+					vs AI
+					<small>Play against the computer</small>
+				</a>
+					<a class="mode-button" href="multiplayer.html">
+					Online Multiplayer
+					<small>Play with a friend over the internet</small>
+				</a>
+				<a class="mode-button" href="game.html">
+					Local 1v1
+					<small>Play on the same screen with a friend</small>
+				</a>
+				<a class="mode-button" href="active-games.html">
+					Active Games
+					<small>Resume your ongoing online games</small>
+				</a>
+				</div>
 			<div class="ai-difficulty-row" id="ai-difficulty-row">
 				<!-- All four tiers are the Rust engine (WebAssembly, in-browser),
 				     which replaced the retired JS Caveman tiers at the same time
@@ -361,68 +474,57 @@
 						// href-rewriter and the spell-pack validator, which
 						// both target a.mode-button[href^="game.html"].
 						e.preventDefault();
-						btn.style.display = 'none';
-						document.getElementById('ai-difficulty-row').classList.add('is-open');
+						var open = document.getElementById('ai-difficulty-row').classList.toggle('is-open');
+						btn.classList.toggle('is-active', open);
+						btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 					});
 				})();
 			</script>
-<a class="mode-button" href="multiplayer.html">
-				Online Multiplayer
-				<small>Play with a friend over the internet</small>
-			</a>
-			<a class="mode-button" href="active-games.html">
-				Active Games
-				<small>Resume your ongoing online games</small>
-			</a>
-			<a class="mode-button" href="leaderboard.html">
-				Leaderboard
-				<small>Top rated players</small>
-			</a>
-			<a class="mode-button" href="puzzles.html">
-				Puzzles
-				<small>Find the forced win in positions from real games</small>
-			</a>
-			<a class="mode-button" href="annotate.html">
-				Annotate Positions
-				<small>Help train Sigil's AI by labeling ambiguous positions</small>
-			</a>
-			<a class="mode-button" href="account.html">
-				Account
-				<small>Sign in for ranked play and ratings</small>
-			</a>
-			<a class="mode-button" href="static/Sigil_Rulebook.pdf" target="_blank" rel="noopener">
-				Rulebook
-				<small>Official rules (PDF)</small>
-			</a>
-			<a class="mode-button" href="https://discord.gg/a6tr43CeP" target="_blank" rel="noopener">
-				Discord
-				<small>Join the community to chat and find opponents</small>
-			</a>
-			<details style="margin-top: 20px;">
-				<summary class="theme-label" style="cursor: pointer; color: var(--color-text-muted);">Spell packs</summary>
-				<div id="spell-pack-checkboxes" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px; color: var(--color-text);">
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="core" /> <span>Core</span></label>
-					<div id="core-subpacks" style="display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 2px 26px; font-size: 0.92em;">
-						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Sprout, Grow, Flourish"><input type="checkbox" data-core-sub value="core_growth" /> <span>Growth</span></label>
-						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Slash, Fireblast, Carnage"><input type="checkbox" data-core-sub value="core_havoc" /> <span>Havoc</span></label>
-						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_impact" /> <span>Impact</span></label>
-						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Seal of Summer, Seal of Wind, Seal of Lightning"><input type="checkbox" data-core-sub value="core_tempo" /> <span>Tempo</span></label>
-						<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Surge, Hail Storm, Bewitch"><input type="checkbox" data-core-sub value="core_hex" /> <span>Hex</span></label>
+
+				<details class="game-options" id="game-options">
+					<summary><span class="game-options__label">Game options</span> <span class="game-options__summary" id="game-options-summary"></span></summary>
+					<div class="game-options__body">
+						<div class="game-options__heading">Spell packs</div>
+						<div id="spell-pack-checkboxes" class="game-options__packs">
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="core" /> <span>Core</span></label>
+							<div id="core-subpacks" style="display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -2px 0 2px 26px; font-size: 0.92em;">
+								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Sprout, Grow, Flourish"><input type="checkbox" data-core-sub value="core_growth" /> <span>Growth</span></label>
+								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Slash, Fireblast, Carnage"><input type="checkbox" data-core-sub value="core_havoc" /> <span>Havoc</span></label>
+								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_impact" /> <span>Impact</span></label>
+								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Seal of Summer, Seal of Wind, Seal of Lightning"><input type="checkbox" data-core-sub value="core_tempo" /> <span>Tempo</span></label>
+								<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;" title="Surge, Hail Storm, Bewitch"><input type="checkbox" data-core-sub value="core_hex" /> <span>Hex</span></label>
+							</div>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="flood" /> <span>Flood</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="autumn" /> <span>Autumn</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="gloom" /> <span>Gloom</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="covenant" /> <span>Covenant</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="panda" /> <span>Panda (unrated)</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tectonic" /> <span>Tectonic</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="providence" /> <span>Providence</span></label>
+							<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="experimental" /> <span>Experimental (unrated)</span></label>
+						</div>
+						<div class="game-options__heading">Variants</div>
+						<label class="game-options__check">
+							<input type="checkbox" id="variant-competitive" />
+							<span>Competitive</span>
+						</label>
+						<small class="game-options__hint">Empty board start; both players blink onto any node for their first move.</small>
+						<label class="game-options__check">
+							<input type="checkbox" id="variant-deathmatch" />
+							<span>Deathmatch</span>
+						</label>
+						<small class="game-options__hint">Win only by eliminating all of your opponent's stones. Unrated.</small>
+						<label class="game-options__check">
+							<input type="checkbox" id="variant-duplicates" />
+							<span>Allow duplicates</span>
+						</label>
+						<small class="game-options__hint">The spell draw may repeat a spell (up to three copies), as if drawn with replacement. Unrated.</small>
 					</div>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="springtime" /> <span>Springtime</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="celestial" /> <span>Celestial</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="fury" /> <span>Inferno</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tempest" /> <span>Tempest</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="flood" /> <span>Flood</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="autumn" /> <span>Autumn</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="gloom" /> <span>Gloom</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="covenant" /> <span>Covenant</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="panda" /> <span>Panda (unrated)</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="tectonic" /> <span>Tectonic</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="providence" /> <span>Providence</span></label>
-					<label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" value="experimental" /> <span>Experimental (unrated)</span></label>
-				</div>
-			</details>
+				</details>
 			<script>
 				(function() {
 					var KEYS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'experimental'];
@@ -542,45 +644,6 @@
 					});
 				})();
 			</script>
-			<div style="margin-top: 20px;">
-				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-					<input type="checkbox" id="variant-competitive" />
-					<span>Competitive variant</span>
-				</label>
-				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
-					Empty board start; both players blink onto any node for their first move.
-				</small>
-				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
-					<input type="checkbox" id="variant-deathmatch" />
-					<span>Deathmatch variant</span>
-				</label>
-				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
-					Win only by eliminating all of your opponent's stones. Unrated.
-				</small>
-				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
-					<input type="checkbox" id="variant-duplicates" />
-					<span>Allow duplicates variant</span>
-				</label>
-				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
-					The spell draw may repeat a spell (up to three copies), as if drawn with replacement. Unrated.
-				</small>
-				<label class="theme-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
-					<input type="checkbox" id="setting-art-only" />
-					<span>Art-only spell circles</span>
-				</label>
-				<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin-top: 4px;">
-					Hide spell names and descriptions on the board circles (art only).
-				</small>
-			</div>
-			<script>
-				(function() {
-					var checkbox = document.getElementById('setting-art-only');
-					checkbox.checked = localStorage.getItem('sigilArtOnlySpellCircles') === 'true';
-					checkbox.addEventListener('change', function() {
-						localStorage.setItem('sigilArtOnlySpellCircles', checkbox.checked ? 'true' : 'false');
-					});
-				})();
-			</script>
 			<script>
 				(function() {
 					var comp = document.getElementById('variant-competitive');
@@ -629,23 +692,85 @@
 					dup.addEventListener('change', onChange);
 				})();
 			</script>
-			<div style="margin-top: 20px;">
-				<label class="theme-label">Theme</label>
-				<select id="theme-select" class="theme-select" onchange="themeManager.apply(this.value)">
-				</select>
+				<script>
+					(function() {
+						// One-line summary of the closed Game options panel, e.g.
+						// "Core: Growth, Hex + Gloom · Competitive".
+						var panel = document.getElementById('game-options');
+						var out = document.getElementById('game-options-summary');
+						function label(input) { return input.parentNode.querySelector('span').textContent.replace(/ \(unrated\)$/, ''); }
+						function update() {
+							var core = panel.querySelector('input[value=core]');
+							var subs = Array.prototype.filter.call(panel.querySelectorAll('input[data-core-sub]'), function(b) { return b.checked; });
+							var packs = [];
+							if (core.checked) packs.push('Core');
+							else if (subs.length) packs.push('Core: ' + subs.map(label).join(', '));
+							panel.querySelectorAll('#spell-pack-checkboxes input:not([data-core-sub]):not([value=core])').forEach(function(b) {
+								if (b.checked) packs.push(label(b));
+							});
+							var variants = [];
+							['variant-competitive', 'variant-deathmatch', 'variant-duplicates'].forEach(function(id) {
+								var b = document.getElementById(id);
+								if (b.checked) variants.push(label(b));
+							});
+							out.textContent = (packs.length ? packs.join(' + ') : 'no packs') + ' · ' + (variants.length ? variants.join(', ') : 'Standard');
+						}
+						panel.addEventListener('change', update);
+						update();
+					})();
+				</script>
+			</section>
+
+			<div class="menu-columns">
+				<section class="menu-group" aria-labelledby="menu-learn">
+					<h3 class="menu-group__title" id="menu-learn">Learn</h3>
+					<a class="menu-link" href="static/Sigil_Rulebook.pdf" target="_blank" rel="noopener">Rulebook<small>Official rules (PDF)</small></a>
+					<a class="menu-link" href="strategy-guide.html">Strategy Guide<small>How to think about the game</small></a>
+					<a class="menu-link" href="spells.html">Spells<small>Tier list, matchups and synergies</small></a>
+					<a class="menu-link" href="puzzles.html">Puzzles<small>Find the forced win in real positions</small></a>
+				</section>
+				<section class="menu-group" aria-labelledby="menu-community">
+					<h3 class="menu-group__title" id="menu-community">Community</h3>
+					<a class="menu-link" href="leaderboard.html">Leaderboard<small>Top rated players</small></a>
+					<a class="menu-link" href="https://discord.gg/a6tr43CeP" target="_blank" rel="noopener">Discord<small>Chat and find opponents</small></a>
+					<a class="menu-link" href="annotate.html">Annotate Positions<small>Help train Sigil's AI</small></a>
+				</section>
+				<section class="menu-group" aria-labelledby="menu-settings">
+					<h3 class="menu-group__title" id="menu-settings">Settings</h3>
+					<div>
+						<label class="theme-label" for="theme-select">Theme</label>
+						<select id="theme-select" class="theme-select" onchange="themeManager.apply(this.value)">
+						</select>
+					</div>
+					<script>
+						(function() {
+							const sel = document.getElementById('theme-select');
+							themeManager.getThemeList().forEach(t => {
+								const opt = document.createElement('option');
+								opt.value = t.id;
+								opt.textContent = t.name;
+								if (t.id === themeManager.current) opt.selected = true;
+								sel.appendChild(opt);
+							});
+						})();
+					</script>
+					<label class="game-options__check menu-setting">
+						<input type="checkbox" id="setting-art-only" />
+						<span>Art-only spell circles</span>
+					</label>
+					<small class="game-options__hint">Hide spell names and descriptions on the board circles.</small>
+					<script>
+						(function() {
+							var checkbox = document.getElementById('setting-art-only');
+							checkbox.checked = localStorage.getItem('sigilArtOnlySpellCircles') === 'true';
+							checkbox.addEventListener('change', function() {
+								localStorage.setItem('sigilArtOnlySpellCircles', checkbox.checked ? 'true' : 'false');
+							});
+						})();
+					</script>
+					<a class="menu-link" href="account.html">Account<small>Sign in for ranked play and ratings</small></a>
+				</section>
 			</div>
-			<script>
-				(function() {
-					const sel = document.getElementById('theme-select');
-					themeManager.getThemeList().forEach(t => {
-						const opt = document.createElement('option');
-						opt.value = t.id;
-						opt.textContent = t.name;
-						if (t.id === themeManager.current) opt.selected = true;
-						sel.appendChild(opt);
-					});
-				})();
-			</script>
 		</div>
 	</div>
 
