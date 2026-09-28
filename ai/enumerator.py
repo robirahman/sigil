@@ -51,8 +51,6 @@ DEFAULT_SOFT_HARD_SAC_CAP = 3   # Spring Tide trailing-sacrifice SET variants (b
 DEFAULT_SPLASH_CAP = 6          # Splash move-target variants
 DEFAULT_FISSURE_CAP = 4         # Fissure wall-target variants
 DEFAULT_EXTRA_MOVE_CAP = 3      # Providence extra-move targets per step
-DEFAULT_BURN_CAP = 3            # Aftershock burn targets per burn
-DEFAULT_SNARE_CAP = 3           # Ambush placement-SET variants (beyond greedy)
 
 # Every cap key with its package default. get_legal_turns_exhaustive merges
 # caller overrides on top of this dict, so a key only needs to be added here
@@ -79,8 +77,6 @@ DEFAULT_CAPS = {
     'splash': DEFAULT_SPLASH_CAP,
     'fissure': DEFAULT_FISSURE_CAP,
     'extra_move': DEFAULT_EXTRA_MOVE_CAP,
-    'burn': DEFAULT_BURN_CAP,
-    'snare': DEFAULT_SNARE_CAP,
 }
 
 
@@ -105,8 +101,6 @@ BALANCED_CAPS = {
     'soft_hard_hard': 2,
     'splash': 3,
     'extra_move': 2,
-    'burn': 2,
-    'snare': 2,
 }
 
 # Surgical caps: only expand the choice points that empirically matter
@@ -136,8 +130,6 @@ NARROW_CAPS = {
     'splash': 2,
     'fissure': 2,
     'extra_move': 1,
-    'burn': 2,
-    'snare': 1,
 }
 
 
@@ -168,8 +160,6 @@ OPPONENT_CAPS = {
     'splash': 2,
     'fissure': 3,
     'extra_move': 1,
-    'burn': 2,
-    'snare': 1,
 }
 
 
@@ -394,19 +384,6 @@ def _spell_overrides(board, color, spell_name, caps):
         scored.sort(key=lambda s: -s[0])
         for _, t in scored[:caps['fissure']]:
             out.append({'fissure_target': t})
-    elif rt == 'place_snares':
-        # Ambush: branch over top-K placement SETS (sliding windows over
-        # the shared ranked candidate list), not a per-node cross product.
-        # The greedy {} covers window 0; window i shifts the whole set down
-        # by i so the search sees genuinely different zonings for one extra
-        # branch each.
-        count = info.get('count', 1)
-        ranked = [n for _s, n in board._snare_candidates(color)]
-        for i in range(1, caps['snare'] + 1):
-            window = ranked[i:i + count]
-            if not window:
-                break
-            out.append({'snare_targets': window})
     elif rt == 'surge_move' and base_spell_name(spell_name) == 'Splash':
         # Splash: 1 move (only castable when not dashed — see castability).
         # Plain Surge stays greedy (post-dash only, fewer options).
@@ -490,47 +467,11 @@ def get_legal_turns_exhaustive(board, color, caps=None):
             ])
         return
 
-    # Aftershock burn phase fronts the move root; with burns_this_turn == 0
-    # it falls straight through (pre-Aftershock flow).
-    yield from _exhaustive_burn_phase(board, color, [], caps,
-                                      board.burns_this_turn, set())
-
-
-def _exhaustive_burn_phase(board, color, prefix, caps, burns_left, seen):
-    """Aftershock burn phase: burns are mandatory (the choice is which
-    stone), so there is no "stop here" variant — branch over the
-    top-`burn`-cap ranked targets per burn with stone-map dedup across
-    orderings (burning {x, y} in either order yields one continuation).
-    Once the eligible set runs dry it stays dry within the turn (burning
-    only shrinks the set); the unfired leftover BANKS at advance_turn
-    (2026-08 buff), so the enumerator just proceeds to the move root."""
-    if burns_left <= 0 or board.gameover:
-        yield from _exhaustive_move_root(board, color, prefix, caps)
-        return
-    targets = board._burn_targets(color)
-    if not targets:
-        # Out of contact — remaining burns stay unfired (banked later).
-        yield from _exhaustive_move_root(board, color, prefix, caps)
-        return
-    for t in targets[:caps['burn']]:
-        b = board.copy()
-        b.stones[t] = None
-        b.update()
-        key = tuple(b.stones[n] for n in NODE_ORDER)
-        if key in seen:
-            continue
-        seen.add(key)
-        act = Action('burn', node=t)
-        if b.gameover:
-            # Burned the enemy's last stone.
-            yield CompleteTurn(prefix + [act, Action('pass')])
-            continue
-        yield from _exhaustive_burn_phase(b, color, prefix + [act], caps,
-                                          burns_left - 1, seen)
+    yield from _exhaustive_move_root(board, color, [], caps)
 
 
 def _exhaustive_move_root(board, color, prefix, caps):
-    """The pre-Aftershock move root: enumerate first-move targets, then the
+    """The move root: enumerate first-move targets, then the
     Providence move-phase chain and everything downstream."""
     has_seal_of_wind = 'Seal_of_Wind' in board.charged_spells.get(color, [])
     # Seal of Stone (enemy-held) forces a SOFT opening move — no pushes.

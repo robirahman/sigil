@@ -64,8 +64,6 @@ function sfnToSimBoard(sfnStr) {
 	// Cross-turn scheduled state must survive into review evals, or the
 	// search misjudges positions with schedules in flight.
 	sb.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
-	sb.pendingBurns = { red: state.red_burns || [], blue: state.blue_burns || [] };
-	sb.snares = { ...(state.snares || {}) };
 	sb.update();
 	return sb;
 }
@@ -715,7 +713,7 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 			// the move sequence for this turn is unknown — adopt the stored
 			// after-state wholesale and continue replaying from it. The SFN
 			// carries the complete position (stones, locks, counters,
-			// schedules, snares), and it was captured pre-advance, so the
+			// schedules), and it was captured pre-advance, so the
 			// next iteration's turnNumber-derived preamble lines up.
 			if (t.kind === 'snapshot') {
 				if (!t.sfnAfter) throw new Error(
@@ -742,16 +740,6 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 			board.movesLeftThisTurn = 1 + extraMoves;
 			board.movesGrantedThisTurn = 1 + extraMoves;
 
-			// Aftershock pop (mirrors _runGameLoop). Unconditional so the
-			// schedule stays in sync for BOTH turn kinds; resolution
-			// differs: input turns replay burn clicks through the shared
-			// resolver, sim turns carry recorded 'burn' actions replayed by
-			// applyAITurn.
-			const burnsNow = board.pendingBurns[t.color].length
-				? board.pendingBurns[t.color].shift() : 0;
-			board.burnsThisTurn = burnsNow;
-
-			let sotBurnEnd = false;
 			const simActions = t.kind === 'sim'
 				? (t.actions || []).map(normAction) : null;
 			const inputTokens = t.kind === 'sim'
@@ -765,19 +753,10 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 					if (paceMs) await _sleep(paceMs);
 					return queue.shift();
 				};
-				if (burnsNow > 0) {
-					await resolveBurnsAtTurnStart(board, t.color, burnsNow, gc.getInput, emit);
-					board.burnsThisTurn = 0;
-					// A live partial turn (burn-elimination) recorded only
-					// its burn clicks and skipped the move phase.
-					sotBurnEnd = board.gameover;
-				}
-				if (!sotBurnEnd) {
-					await gc._takeTurn(t.color, true, true, true, true);
-				}
+				await gc._takeTurn(t.color, true, true, true, true);
 			}
 
-			if (!sotBurnEnd) gc._eotTriggers(t.color);
+			gc._eotTriggers(t.color);
 			board.update();
 			rebuilt.push({
 				color: t.color,

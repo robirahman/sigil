@@ -96,32 +96,18 @@ class SPBoard():
 		self.moves_left_this_turn = 0
 		self.moves_granted_this_turn = 0
 
-		### Aftershock: scheduled burns; resolved inline at turn start.
-		self.pending_burns = {'red': [], 'blue': []}
-
-		### Ambush: snare markers {node: owner}. Consumed ONLY by an
-		### enemy-of-owner stone resting on the node (resolved in update())
-		### or a Fissure blast; count fully toward the owner's stone total
-		### (2026-08 buff).
-		self.snares = {}
-
 		self.recorder = None
 
 	def pending_stones(self, color):
-		### Phantom stones for `color`: Providence scheduled extras plus,
+		### Providence phantom stones for `color`: scheduled extras plus,
 		### for the side to move, extras granted this turn but not yet
-		### placed (before any move this turn, one remaining move is the
-		### ordinary turn move — never a phantom; after that, every
-		### remaining move is an extra — hence min(left, granted - 1)),
-		### plus Ambush snares and pending Aftershock burns owned by
-		### `color` (both count fully toward the owner's stone total,
-		### 2026-08 buff).
+		### placed. Before any move this turn, one remaining move is the
+		### ordinary turn move (never a phantom); after that, every
+		### remaining move is an extra — hence min(left, granted - 1).
 		p = sum(self.pending_moves[color])
 		if self.whoseturn == color:
 			p += max(0, min(self.moves_left_this_turn,
 			                self.moves_granted_this_turn - 1))
-		p += sum(1 for owner in self.snares.values() if owner == color)
-		p += sum(self.pending_burns[color])
 		return p
 
 	def record(self, action_type, **kwargs):
@@ -167,9 +153,6 @@ class SPBoard():
 
 		snapshot["red_pending"] = list(self.pending_moves['red'])
 		snapshot["blue_pending"] = list(self.pending_moves['blue'])
-		snapshot["red_burns"] = list(self.pending_burns['red'])
-		snapshot["blue_burns"] = list(self.pending_burns['blue'])
-		snapshot["snares"] = dict(self.snares)
 
 		self.snapshot = snapshot
 
@@ -188,23 +171,6 @@ class SPBoard():
 
 		### board.update() MUST BE CALLED WHENEVER
 		### ANY STONE CHANGES POSITION!
-
-		### Ambush: a snare consumes exactly the enemy-of-owner stone that
-		### comes to rest on it (stone destroyed, snare spent). The owner's
-		### own stones — and walls — coexist with the snare; nothing else
-		### ever removes it. Resolved here, the universal choke point,
-		### BEFORE the stone totals so elimination sees the kill.
-		if self.snares:
-			for name in list(self.snares):
-				stone = self.nodes[name].stone
-				if stone is None or stone == 'X':
-					continue
-				if stone != self.snares[name]:
-					self.nodes[name].stone = None
-					del self.snares[name]
-					if self.last_play == name:
-						self.last_play = None
-						self.last_player = None
 
 		redtotalstones = 0
 		bluetotalstones = 0
@@ -300,8 +266,6 @@ class SPBoard():
 
 		jboard["last_player"] = self.last_player
 		jboard["last_play"] = self.last_play
-
-		jboard["snares"] = dict(self.snares)
 
 		self.humanplayer.ws.send(json.dumps(jboard))
 
@@ -587,48 +551,6 @@ class AIPlayer():
 				self.opp.jmessage("{} gets {} extra move{} this turn (Providence).".format(
 					self.color.capitalize(), extra, plural))
 
-			### Aftershock: resolve scheduled burns greedily via the bot's
-			### priority_order (mana nodes first, matching its move
-			### heuristics). The easy bot never CASTS Aftershock spells
-			### (its priority chain predates them) but must still resolve
-			### burns, e.g. from imported/resumed positions. Out-of-contact
-			### burns are SAVED, not lost (2026-08 buff): the leftover
-			### banks back into the head of the schedule.
-			burns = 0
-			bsched = self.board.pending_burns[self.color]
-			if bsched:
-				burns = bsched.pop(0)
-			for burn_i in range(burns):
-				target = None
-				for name in self.priority_order:
-					node = self.board.nodes[name]
-					if node.stone == self.enemy and any(
-							nb.stone == self.color for nb in node.neighbors):
-						target = name
-						break
-				if target is None:
-					left = burns - burn_i
-					if bsched:
-						bsched[0] += left
-					else:
-						bsched.append(left)
-					self.board.update()
-					break
-				self.board.nodes[target].stone = None
-				if self.board.last_play == target:
-					self.board.last_play = None
-					self.board.last_player = None
-				self.board.record('burn', node=target)
-				if self.opp.ishuman:
-					self.opp.ws.send(json.dumps({"type": "crush_animation",
-					                             "crushed_color": self.enemy,
-					                             "node": target}))
-					self.opp.jmessage("{}'s burn destroys your stone at {} (Aftershock).".format(
-						self.color.capitalize(), target))
-				self.board.update()
-				if self.board.gameover:
-					return None
-
 		### Competitive variant opening (red: turncounter==1, blue: turncounter==2):
 		### the bot plays a free blink onto its preferred mana node, mirroring
 		### the standard game's opening positions for sane heuristic play.
@@ -820,36 +742,25 @@ class AIPlayer():
 
 		### ±3-lead check: Providence phantoms count ASYMMETRICALLY
 		### (defense only) — each win claim uses real placed stones,
-		### checked against the opponent's real+pending total. Ambush
-		### snares and pending Aftershock burns count SYMMETRICALLY
-		### everywhere (2026-08 buff): they add to the owner's total in
-		### both the ±3-lead claim and the sixth-spell count (where
-		### Providence phantoms are symmetric too, 2026-08 playtest
-		### ruling).
+		### checked against the opponent's real+pending total. In the
+		### sixth-spell count they are symmetric (2026-08 playtest ruling).
 		redprov = sum(self.board.pending_moves['red'])
 		blueprov = sum(self.board.pending_moves['blue'])
-		redamb = sum(self.board.pending_burns['red'])
-		blueamb = sum(self.board.pending_burns['blue'])
-		for owner in self.board.snares.values():
-			if owner == 'red':
-				redamb += 1
-			else:
-				blueamb += 1
 
-		if redtotal + redamb > bluetotal + blueprov + blueamb + 2:
+		if redtotal > bluetotal + blueprov + 2:
 			self.board.gameover = True
 			self.board.winner = 'red'
 
-		elif bluetotal + blueamb > redtotal + redprov + redamb + 2:
+		elif bluetotal > redtotal + redprov + 2:
 			self.board.gameover = True
 			self.board.winner = 'blue'
 
 		else:
 			if self.spellcounter >= 6:
 				self.board.gameover = True
-				if redtotal + redprov + redamb > bluetotal + blueprov + blueamb:
+				if redtotal + redprov > bluetotal + blueprov:
 					self.board.winner = 'red'
-				elif bluetotal + blueprov + blueamb > redtotal + redprov + redamb:
+				elif bluetotal + blueprov > redtotal + redprov:
 					self.board.winner = 'blue'
 				else:
 					a = ['red', 'blue']
@@ -1136,19 +1047,6 @@ class AIPlayer():
 
 
 	def pushenemy(self, node):
-		### Ambush: a snare beneath the occupant intercepts the incoming
-		### stone FIRST (2026-08 playtest ruling): the arriving stone is
-		### consumed together with the snare before any push resolves —
-		### the occupant is neither displaced nor crushed.
-		if self.board.snares.get(node.name) == self.enemy:
-			del self.board.snares[node.name]
-			for egress in ({"type": "new_stone_animation", "color": self.color, "node": node.name},
-			               {"type": "crush_animation", "crushed_color": self.color, "node": node.name}):
-				self.opp.ws.send(json.dumps(egress))
-			self.opp.jmessage("An enemy stone is destroyed by your snare!")
-			self.board.update()
-			return None
-
 		node.stone = self.color
 
 		egress =  {"type": "new_stone_animation", "color": self.color, "node": node.name}

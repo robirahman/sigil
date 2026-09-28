@@ -15,8 +15,8 @@ NUM_SPELL_SLOTS = 9
 # IDs 0-14 are the original core spells and MUST keep these values so older
 # checkpoints' first 15 embedding rows stay aligned when the table is grown
 # (see ai/migrate_checkpoint.py). IDs 15-44 are the official expansion
-# spells; IDs 45-50 are the Aftershock + Ambush playtest packs. Panda and
-# Experimental spells are deliberately absent (they fall back to ID 0 via
+# spells; IDs 45-50 are reserved (retired spells — never reassign them).
+# Panda and Experimental spells are deliberately absent (they fall back to ID 0 via
 # .get(name, 0)) — an Experimental design only earns an embedding row, and
 # the checkpoint migration that comes with it, once it graduates.
 NUM_POSSIBLE_SPELLS = 51
@@ -50,10 +50,8 @@ SPELL_TO_ID = {
     'Fissure': 39, 'Rock_Slide': 40, 'Bulwark': 41,
     # --- Providence ---
     'Dividend': 42, 'Annuity': 43, 'Endowment': 44,
-    # --- Aftershock ---
-    'Ember': 45, 'Smolder': 46, 'Conflagration': 47,
-    # --- Ambush ---
-    'Tripwire': 48, 'Deadfall': 49, 'Minefield': 50,
+    # IDs 45-50: reserved for retired spells (embedding rows stay in the
+    # checkpoint; do not reassign).
 }
 
 # ---- Network architecture (medium) ----
@@ -72,11 +70,9 @@ SPELL_EMBED_DIM = 16        # Embedding dimension per spell
 #    10 — Providence pending-move block (own/enemy schedule slots 0-3, each
 #         min(x,3)/3, plus own/enemy extras-granted-this-turn). Appended last,
 #         same migration convention as the destroyed-node channel.
-#    10 — Aftershock pending-burn block [505:515] (own/enemy burn schedule
-#         slots 0-3, each min(x,3)/3, plus own/enemy burns-this-turn).
-#    78 — Ambush snare channels: own snares [515:554], enemy snares
-#         [554:593] (1.0 per snared node, from the side to move's view).
-#         All append-only, same migration convention.
+#    10 — reserved block [505:515] (retired spells; always zero).
+#    78 — reserved channels [515:593] (retired spells; always zero).
+#         Kept so trained checkpoints' raw_proj columns stay aligned.
 RAW_FEATURE_DIM = 250 + 156 + 18 + 18 + 6 + 8 + 39 + 10 + 10 + 78  # 593
 TRUNK_DIM = 400             # ResNet trunk width
 NUM_RES_BLOCKS = 6          # Residual blocks in trunk
@@ -88,11 +84,9 @@ VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
 #     previously overflowed into the tactical columns)
 #   + 2 Providence scalars ([114] extra base moves used, [115] turns
 #     scheduled by this turn's cast)
-#   + 6 spell-ID one-hot extension for IDs 45-50 at [116:122] (Aftershock
-#     + Ambush; the cast write is three-range: id<15 -> 43+id,
-#     id<45 -> 84+(id-15), else -> 116+(id-45))
-#   + 2 pack scalars ([122] burns resolved this turn /4, [123] snares
-#     placed this turn /4) = 124
+#   + 6 spell-ID one-hot extension for reserved IDs 45-50 at [116:122]
+#     (retired spells; always zero)
+#   + 2 reserved scalars [122], [123] (retired spells; always zero) = 124
 TURN_FEATURE_DIM = 124
 
 # ---- Network architecture (hard — ~44M params, NNUE-style shallow+wide) ----

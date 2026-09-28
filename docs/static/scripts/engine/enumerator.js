@@ -59,11 +59,6 @@ const ENUM_CAPS = {
 	// move (the chain also always offers "stop here", so branching per
 	// extra is extra_move + 1).
 	extra_move: 2,
-	// Aftershock expansion caps: burn targets branched per scheduled burn
-	// (burns are mandatory — no "skip" variant).
-	burn: 2,
-	// Ambush expansion caps: placement-SET variants beyond the greedy set.
-	snare: 3,
 	// Panda expansion caps.
 	shiver: 8,
 	choke: 6,
@@ -494,17 +489,6 @@ function _spellOverrides(board, color, spellName, caps) {
 		for (let i = 0; i < scored.length && i < caps.fissure; i++) {
 			out.push({ fissure_target: scored[i][1] });
 		}
-	} else if (rt === 'place_snares') {
-		// Ambush: branch over top-K placement SETS (sliding windows over
-		// the shared ranked candidate list), not a per-node cross product.
-		// The greedy {} covers window 0.
-		const count = info.count || 1;
-		const ranked = board._snareCandidates(color).map(t => t[1]);
-		for (let i = 1; i <= caps.snare; i++) {
-			const window = ranked.slice(i, i + count);
-			if (!window.length) break;
-			out.push({ snare_targets: window });
-		}
 	} else if (rt === 'surge_move' && baseSpellName(spellName) === 'Splash') {
 		// Splash enumerates each possible move destination. (Surge — the
 		// other surge_move user — only runs post-dash and is currently
@@ -716,56 +700,12 @@ function getLegalTurnsExhaustive(board, color, caps) {
 	}
 
 	const out = [];
-	// Aftershock burn phase fronts the move root; with burnsThisTurn === 0
-	// it falls straight through (pre-Aftershock flow).
-	_enumerateBurnPhaseExhaustive(board, color, [], caps,
-		board.burnsThisTurn, new Set(), out);
+	_enumerateMoveRootExhaustive(board, color, [], caps, out);
 	return out;
 }
 
 /**
- * Aftershock burn phase: burns are mandatory (the choice is which stone),
- * so there is no "stop here" variant — branch over the top-`caps.burn`
- * ranked targets per burn with stone-map dedup across orderings. Once the
- * eligible set runs dry it stays dry within the turn (burning only shrinks
- * the set); the unfired leftover BANKS at advanceTurn (2026-08 buff), so
- * the enumerator just proceeds to the move root.
- */
-function _enumerateBurnPhaseExhaustive(board, color, prefix, caps, burnsLeft, seen, out) {
-	if (burnsLeft <= 0 || board.gameover) {
-		_enumerateMoveRootExhaustive(board, color, prefix, caps, out);
-		return;
-	}
-	const targets = board._burnTargets(color);
-	if (!targets.length) {
-		// Out of contact — remaining burns stay unfired (banked later).
-		_enumerateMoveRootExhaustive(board, color, prefix, caps, out);
-		return;
-	}
-	for (const t of targets.slice(0, caps.burn)) {
-		const b = board.copy();
-		b.stones[t] = null;
-		b.update();
-		let key = '';
-		for (const n of NODE_ORDER) {
-			const s = b.stones[n];
-			key += s === null ? '-' : s[0] === 'r' ? 'r' : s[0] === 'b' ? 'b' : 'X';
-		}
-		if (seen.has(key)) continue;
-		seen.add(key);
-		const act = new SimAction('burn', { node: t });
-		if (b.gameover) {
-			// Burned the enemy's last stone.
-			out.push(new SimTurn(prefix.concat([act, new SimAction('pass')])));
-			continue;
-		}
-		_enumerateBurnPhaseExhaustive(b, color, prefix.concat([act]), caps,
-			burnsLeft - 1, seen, out);
-	}
-}
-
-/**
- * The pre-Aftershock move root: enumerate first-move targets (with push
+ * The move root: enumerate first-move targets (with push
  * destination branching), then the Providence move-phase chain and
  * everything downstream.
  */

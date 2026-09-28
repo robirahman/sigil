@@ -33,7 +33,6 @@ document.addEventListener('alpine:init', () => {
 			redLock: '',
 			score: 'unset',
 			showReset: false,
-			snares: {},
 			spellDict: {},
 			spells: {
 				images: {},
@@ -421,7 +420,6 @@ document.addEventListener('alpine:init', () => {
 						redlock,
 						redspellcounter,
 						score,
-						snares,
 						...nodes
 					} = changedBoardState;
 
@@ -443,9 +441,6 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (isValidStateKey(score)) {
 						_this.score = score;
-					}
-					if (snares !== undefined) {
-						_this.snares = snares || {};
 					}
 
 					_this.previousBoardState = payload;

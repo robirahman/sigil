@@ -48,12 +48,11 @@ function boardFromSfn(sfn){
   const [rs,bs]=rest[4].split(':'); b.springlock={red:nn(rs),blue:nn(bs)};
   // applyAITurn is written against the LIVE Board, which has a few members
   // SimBoard lacks. Shim exactly what it touches; everything else it uses
-  // (stones, lock, springlock, spellCounter, snares, update) SimBoard already has.
+  // (stones, lock, springlock, spellCounter, update) SimBoard already has.
   b.enemy = (col) => (col === 'red' ? 'blue' : 'red');
   b.getBoardStatePayload = () => ({});
   if (b.movesLeftThisTurn === undefined) b.movesLeftThisTurn = 1;
   if (b.movesGrantedThisTurn === undefined) b.movesGrantedThisTurn = 0;
-  if (!b.snares) b.snares = {};
   b.update();
   return b;
 }

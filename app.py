@@ -342,8 +342,8 @@ def record_elo(winner, loser):
 	if winner.board.elo_recorded:
 		return
 
-	### Aftershock/Ambush playtest gate: a game whose spell set includes an
-	### unrated-pack spell never touches elo. Still mark it recorded and
+	### Unrated gate: a game whose spell set includes an unrated-pack
+	### spell (Experimental) never touches elo. Still mark it recorded and
 	### release the ladder slot so the in-progress counter stays balanced.
 	from spellgenerator import UNRATED_SPELLS
 	if any(spell.name in UNRATED_SPELLS for spell in winner.board.spells):
@@ -686,16 +686,12 @@ def playgame(ws):
 					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
-					### Providence/Aftershock: restore the pre-turn schedules and
-					### zero the turn-scoped counters; the re-run turn re-shifts
-					### (and re-prompts burns).
+					### Providence: restore the pre-turn schedules and zero the
+					### turn-scoped counters; the re-run turn re-shifts.
 					board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
 					                       'blue': list(snapshot.get("blue_pending", []))}
 					board.moves_left_this_turn = 0
 					board.moves_granted_this_turn = 0
-					board.pending_burns = {'red': list(snapshot.get("red_burns", [])),
-					                       'blue': list(snapshot.get("blue_burns", []))}
-					board.snares = dict(snapshot.get("snares", {}))
 
 					board.update(True)
 					reset_this_turn = True
@@ -908,16 +904,12 @@ def playprivategame(ws, privategamename):
 					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
-					### Providence/Aftershock: restore the pre-turn schedules and
-					### zero the turn-scoped counters; the re-run turn re-shifts
-					### (and re-prompts burns).
+					### Providence: restore the pre-turn schedules and zero the
+					### turn-scoped counters; the re-run turn re-shifts.
 					board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
 					                       'blue': list(snapshot.get("blue_pending", []))}
 					board.moves_left_this_turn = 0
 					board.moves_granted_this_turn = 0
-					board.pending_burns = {'red': list(snapshot.get("red_burns", [])),
-					                       'blue': list(snapshot.get("blue_burns", []))}
-					board.snares = dict(snapshot.get("snares", {}))
 
 					board.update(True)
 					reset_this_turn = True
@@ -1108,9 +1100,6 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 			blue.springlock = board.spelldict[state['blue_springlock']]
 		board.pending_moves = {'red': list(state.get('red_pending') or []),
 		                       'blue': list(state.get('blue_pending') or [])}
-		board.pending_burns = {'red': list(state.get('red_burns') or []),
-		                       'blue': list(state.get('blue_burns') or [])}
-		board.snares = dict(state.get('snares') or {})
 		next_turn = 'Red' if state['turncounter'] % 2 == 0 else 'Blue'
 		red.jmessage("Imported position — " + next_turn + "'s turn.")
 	else:
@@ -1225,16 +1214,12 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
-					### Providence/Aftershock: restore the pre-turn schedules and
-					### zero the turn-scoped counters; the re-run turn re-shifts
-					### (and re-prompts burns).
+					### Providence: restore the pre-turn schedules and zero the
+					### turn-scoped counters; the re-run turn re-shifts.
 					board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
 					                       'blue': list(snapshot.get("blue_pending", []))}
 					board.moves_left_this_turn = 0
 					board.moves_granted_this_turn = 0
-					board.pending_burns = {'red': list(snapshot.get("red_burns", [])),
-					                       'blue': list(snapshot.get("blue_burns", []))}
-					board.snares = dict(snapshot.get("snares", {}))
 
 					board.update(True)
 					send_sfn()
@@ -1372,9 +1357,6 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 			blue.springlock = board.spelldict[state['blue_springlock']]
 		board.pending_moves = {'red': list(state.get('red_pending') or []),
 		                       'blue': list(state.get('blue_pending') or [])}
-		board.pending_burns = {'red': list(state.get('red_burns') or []),
-		                       'blue': list(state.get('blue_burns') or [])}
-		board.snares = dict(state.get('snares') or {})
 		board.update()
 		human.jmessage("Resuming saved game...")
 
@@ -1519,16 +1501,12 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 				blue.spellcounter = snapshot["bluespellcounter"]
 				board.last_play = snapshot["last_play"]
 				board.last_player = snapshot["last_player"]
-				### Providence/Aftershock: restore the pre-turn schedules and
-				### zero the turn-scoped counters; the re-run turn re-shifts
-				### (and re-prompts burns).
+				### Providence: restore the pre-turn schedules and zero the
+				### turn-scoped counters; the re-run turn re-shifts.
 				board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
 				                       'blue': list(snapshot.get("blue_pending", []))}
 				board.moves_left_this_turn = 0
 				board.moves_granted_this_turn = 0
-				board.pending_burns = {'red': list(snapshot.get("red_burns", [])),
-				                       'blue': list(snapshot.get("blue_burns", []))}
-				board.snares = dict(snapshot.get("snares", {}))
 
 				board.update(True)
 				reset_this_turn = True

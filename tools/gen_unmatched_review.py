@@ -370,13 +370,12 @@ for (const n of NODE_ORDER) {
   liveBtns[n].addEventListener('click', () => nodeClicked(n));
 }
 
-function renderNodes(btns, stones, snares, opts) {
+function renderNodes(btns, stones, opts) {
   for (const n of NODE_ORDER) {
     let cls = 'stone-node stone-node--' + n;
     const s = stones[n];
     if (s === 'red' || s === 'blue') cls += ' stone-node--' + s;
     if (s === 'X') cls += ' stone-node--destroyed';
-    if (snares && snares[n]) cls += ' stone-node--snare-' + snares[n];
     if (opts) {
       if (validMoves[n]) cls += ' stone-node--valid-move-' + validMoves[n];
       if (pushOptions[n]) cls += ' stone-node--valid-move-' + pushOptions[n];
@@ -388,7 +387,7 @@ function renderNodes(btns, stones, snares, opts) {
 
 function renderLive() {
   if (!liveBoard) return;
-  renderNodes(liveBtns, liveBoard.stones, liveBoard.snares, true);
+  renderNodes(liveBtns, liveBoard.stones, true);
 }
 
 function sfnStones(sfn) {
@@ -398,7 +397,7 @@ function sfnStones(sfn) {
 
 function renderTarget(c) {
   const d = sfnToDict(c.sfnAfter);
-  renderNodes(targetBtns, d.stones, d.snares || {}, false);
+  renderNodes(targetBtns, d.stones, false);
   const b = sfnToDict(c.sfnBefore);
   const diffs = [];
   for (const n of NODE_ORDER) {
@@ -495,18 +494,11 @@ async function playCase(c) {
 
   gc._currentTurnActions = [];
   // Start-of-turn preamble (mirrors reconstructGameLog): Providence
-  // shift, then Aftershock burns through the real prompt flow.
+  // shift.
   const extra = board.pendingMoves[c.color].length ? board.pendingMoves[c.color].shift() : 0;
   board.movesLeftThisTurn = 1 + extra;
   board.movesGrantedThisTurn = 1 + extra;
-  const burnsNow = board.pendingBurns[c.color].length ? board.pendingBurns[c.color].shift() : 0;
-  board.burnsThisTurn = burnsNow;
   try {
-    if (burnsNow > 0 && !board.gameover) {
-      await resolveBurnsAtTurnStart(board, c.color, burnsNow,
-        gc.getInput.bind(gc), gc.emit);
-      board.burnsThisTurn = 0;
-    }
     if (!board.gameover) {
       await gc._takeTurn(c.color, true, true, true, true);
       gc._eotTriggers(c.color);

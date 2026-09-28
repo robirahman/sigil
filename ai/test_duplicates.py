@@ -46,7 +46,7 @@ def _board():
 
 def test_aliases_and_helpers():
     print("Testing alias registration + name helpers...")
-    for base in ('Grow', 'Seal_of_Wind', 'Spring_Tide', 'Minefield'):
+    for base in ('Grow', 'Seal_of_Wind', 'Spring_Tide', 'Endowment'):
         for sfx in DUPLICATE_SUFFIXES:
             assert CORE_SPELLS[base + sfx] is CORE_SPELLS[base], base + sfx
     assert base_spell_name('Storm_Front~3') == 'Storm_Front'

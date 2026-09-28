@@ -46,16 +46,10 @@ def _live_board_to_simboard(board):
     # track this field; getattr guard keeps the conversion safe.
     sim.all_looping_snapshot_counts = dict(getattr(board, 'all_looping_snapshot_counts', {}))
 
-    # Providence/Aftershock schedules (and any future cross-turn scheduled
+    # Providence schedules (and any future cross-turn scheduled
     # state) must reach the sim or the search neither values nor grants them.
     pending = getattr(board, 'pending_moves', None) or {'red': [], 'blue': []}
     sim.pending_moves = {'red': list(pending['red']), 'blue': list(pending['blue'])}
-    burns = getattr(board, 'pending_burns', None) or {'red': [], 'blue': []}
-    sim.pending_burns = {'red': list(burns['red']), 'blue': list(burns['blue'])}
-
-    # Ambush snares are position state (defensive stone count + kill
-    # threats) — the search is blind to them unless they reach the sim.
-    sim.snares = dict(getattr(board, 'snares', None) or {})
 
     sim.update()
     return sim
@@ -112,13 +106,10 @@ class NNAIPlayer:
         # both use and value the extra moves.
         sched = getattr(self.board, 'pending_moves', {}).get(self.color)
         extra_moves = sched.pop(0) if sched else 0
-        bsched = getattr(self.board, 'pending_burns', {}).get(self.color)
-        burns_now = bsched.pop(0) if bsched else 0
 
         # Convert live board to SimBoard
         sim = _live_board_to_simboard(self.board)
         sim.extra_moves_this_turn = extra_moves
-        sim.burns_this_turn = burns_now
 
         best_turn = None
 
@@ -162,16 +153,6 @@ class NNAIPlayer:
         # Execute the chosen turn on the live board
         self._execute_turn(best_turn)
 
-        # Aftershock: unfired burns BANK instead of forfeiting (2026-08
-        # buff) — return the leftover to the head of the live schedule.
-        fired = sum(1 for a in best_turn.actions if a.type == 'burn')
-        leftover = burns_now - fired
-        if leftover > 0 and not self.board.gameover:
-            if bsched:
-                bsched[0] += leftover
-            else:
-                bsched.append(leftover)
-
     def _execute_turn(self, turn):
         """Translate CompleteTurn actions into live game engine calls."""
         for action in turn.actions:
@@ -190,21 +171,6 @@ class NNAIPlayer:
                     self._execute_push(action.node)
                 else:
                     self._execute_blink_soft(action.node)
-
-            elif action.type == 'burn':
-                # Aftershock: the search chose the burn target.
-                self.board.nodes[action.node].stone = None
-                if self.board.last_play == action.node:
-                    self.board.last_play = None
-                    self.board.last_player = None
-                self.board.record('burn', node=action.node)
-                if self.opp is not None and getattr(self.opp, 'ishuman', False):
-                    self.opp.ws.send(json.dumps(
-                        {"type": "crush_animation",
-                         "crushed_color": self.enemy, "node": action.node}))
-                self.board.update()
-                if self.board.gameover:
-                    return
 
             elif action.type == 'cast':
                 spell_name = action.spell
@@ -251,22 +217,6 @@ class NNAIPlayer:
     def _execute_push(self, node_name):
         """Push an enemy stone at node_name."""
         node = self.board.nodes[node_name]
-
-        # Ambush: a snare beneath the occupant intercepts the incoming
-        # stone FIRST (2026-08 playtest ruling): the arriving stone is
-        # consumed together with the snare before any push resolves —
-        # the occupant is neither displaced nor crushed. Mirrors
-        # SimBoard._push_enemy's 'S' outcome, so the search's model of
-        # this move matches what the live board does here.
-        if self.board.snares.get(node_name) == self.enemy:
-            del self.board.snares[node_name]
-            for egress in ({"type": "new_stone_animation", "color": self.color,
-                            "node": node_name},
-                           {"type": "crush_animation", "crushed_color": self.color,
-                            "node": node_name}):
-                self.opp.ws.send(json.dumps(egress))
-            self.board.update()
-            return
 
         node.stone = self.color
 

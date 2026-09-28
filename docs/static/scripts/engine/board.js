@@ -35,15 +35,6 @@ class SigilBoard {
 		this.pendingMoves = { red: [], blue: [] };
 		this.movesLeftThisTurn = 0;
 		this.movesGrantedThisTurn = 0;
-		// Aftershock: burn schedules; burnsThisTurn is turn-scoped and only
-		// non-zero on the AI's turns (humans resolve burns via prompts
-		// before it matters) — it rides into pickTurn/the worker.
-		this.pendingBurns = { red: [], blue: [] };
-		this.burnsThisTurn = 0;
-		// Ambush: snare markers {node: owner}. Consumed ONLY by an
-		// enemy-of-owner stone resting on the node (resolved in update())
-		// or a Fissure blast; count defensively like Providence phantoms.
-		this.snares = {};
 		this.snapshot = null;
 		this.allLoopingSnapshotCounts = {};
 		this.variant = normalizeVariant(variant);
@@ -53,18 +44,13 @@ class SigilBoard {
 	// the side to move, extras granted this turn but not yet placed
 	// (before any move this turn, one of the remaining moves is the
 	// ordinary turn move — never a phantom; once a move has been made,
-	// every remaining move is an extra — hence min(left, granted - 1)),
-	// plus Ambush snares and pending Aftershock burns owned by `color`
-	// (both count fully toward the owner's stone total, 2026-08 buff).
+	// every remaining move is an extra — hence min(left, granted - 1)).
 	pendingStones(color) {
 		let p = 0;
 		for (const v of this.pendingMoves[color]) p += v;
 		if (this.whoseTurn === color) {
 			p += Math.max(0, Math.min(this.movesLeftThisTurn, this.movesGrantedThisTurn - 1));
-			p += this.burnsThisTurn || 0;
 		}
-		for (const n in this.snares) if (this.snares[n] === color) p++;
-		for (const v of this.pendingBurns[color]) p += v;
 		return p;
 	}
 
@@ -83,19 +69,6 @@ class SigilBoard {
 	}
 
 	update() {
-		// Ambush: resolve snares FIRST so the totals/elimination/score/
-		// charge math below sees the post-consumption board. Enemy-of-owner
-		// stone on a snared node -> stone destroyed + snare consumed;
-		// owner's stone or a wall coexists.
-		for (const n of Object.keys(this.snares)) {
-			const s = this.stones[n];
-			if (s === null || s === undefined || s === DESTROYED) continue;
-			if (s !== this.snares[n]) {
-				this.stones[n] = null;
-				delete this.snares[n];
-				if (this.lastPlay === n) { this.lastPlay = null; this.lastPlayer = null; }
-			}
-		}
 		let redCount = 0, blueCount = 0;
 		for (const n of NODE_ORDER) {
 			if (this.stones[n] === 'red') redCount++;
@@ -179,11 +152,9 @@ class SigilBoard {
 		payload.score = this.score;
 		payload.last_player = this.lastPlayer;
 		payload.last_play = this.lastPlay;
-		// Providence/Ambush phantom-stone totals (0 unless a pack is in play).
+		// Providence phantom-stone totals (0 unless the pack is in play).
 		payload.redpending = this.pendingStones('red');
 		payload.bluepending = this.pendingStones('blue');
-		// Ambush snares for rendering.
-		payload.snares = { ...this.snares };
 		return payload;
 	}
 
@@ -206,9 +177,6 @@ class SigilBoard {
 			lastPlayer: this.lastPlayer,
 			pendingRed: [...this.pendingMoves.red],
 			pendingBlue: [...this.pendingMoves.blue],
-			burnsRed: [...this.pendingBurns.red],
-			burnsBlue: [...this.pendingBurns.blue],
-			snares: { ...this.snares },
 			stones: {},
 		};
 		for (const n of NODE_ORDER) {
@@ -240,16 +208,6 @@ class SigilBoard {
 			loopKey += '|P' + this.pendingMoves.red.join(',')
 				+ '/' + this.pendingMoves.blue.join(',');
 		}
-		if (this.pendingBurns.red.length || this.pendingBurns.blue.length) {
-			loopKey += '|B' + this.pendingBurns.red.join(',')
-				+ '/' + this.pendingBurns.blue.join(',');
-		}
-		if (Object.keys(this.snares).length) {
-			loopKey += '|S';
-			for (const n of NODE_ORDER) {
-				if (this.snares[n]) loopKey += n + ':' + this.snares[n][0] + ',';
-			}
-		}
 
 		if (this.allLoopingSnapshotCounts[loopKey]) {
 			this.allLoopingSnapshotCounts[loopKey]++;
@@ -274,15 +232,11 @@ class SigilBoard {
 		this.springlock.blue = snap.blueSpringlock;
 		this.lastPlay = snap.lastPlay;
 		this.lastPlayer = snap.lastPlayer;
-		// Restore the pre-turn schedules and zero the turn-scoped counters;
-		// the re-run turn re-shifts (and re-prompts burns) from the
-		// restored schedules.
+		// Restore the pre-turn schedule and zero the turn-scoped counters;
+		// the re-run turn re-shifts from the restored schedule.
 		this.pendingMoves = { red: [...snap.pendingRed || []], blue: [...snap.pendingBlue || []] };
 		this.movesLeftThisTurn = 0;
 		this.movesGrantedThisTurn = 0;
-		this.pendingBurns = { red: [...snap.burnsRed || []], blue: [...snap.burnsBlue || []] };
-		this.burnsThisTurn = 0;
-		this.snares = { ...(snap.snares || {}) };
 		for (const n of NODE_ORDER) {
 			this.stones[n] = snap.stones[n];
 		}
@@ -300,32 +254,22 @@ class SigilBoard {
 
 		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
 		// only) — a player's win claim uses their real placed stones,
-		// checked against the opponent's real+pending total. Ambush snares
-		// and pending Aftershock burns count SYMMETRICALLY everywhere
-		// (2026-08 buff): they add to the owner's total in both the
-		// ±3-lead claim and the sixth-spell count (where Providence
-		// phantoms are symmetric too, 2026-08 playtest ruling).
-		// Controllers bank unfired burns and zero the turn-scoped counters
-		// at EOT before calling this, so only the schedules and snares
-		// matter here.
+		// checked against the opponent's real+pending total. In the
+		// sixth-spell count they are symmetric (2026-08 playtest ruling).
+		// Controllers zero the turn-scoped counters at EOT before calling
+		// this, so only the schedules matter here.
 		const redTotal = this.totalStones.red;
 		const blueTotal = this.totalStones.blue + 1; // phantom stone
-		let redProv = 0, blueProv = 0, redAmb = 0, blueAmb = 0;
+		let redProv = 0, blueProv = 0;
 		for (const v of this.pendingMoves.red) redProv += v;
 		for (const v of this.pendingMoves.blue) blueProv += v;
-		for (const n in this.snares) {
-			if (this.snares[n] === 'red') redAmb++;
-			else blueAmb++;
-		}
-		for (const v of this.pendingBurns.red) redAmb += v;
-		for (const v of this.pendingBurns.blue) blueAmb += v;
 
-		if (redTotal + redAmb > blueTotal + blueProv + blueAmb + 2) {
+		if (redTotal > blueTotal + blueProv + 2) {
 			this.gameover = true;
 			this.winner = 'red';
 			return true;
 		}
-		if (blueTotal + blueAmb > redTotal + redProv + redAmb + 2) {
+		if (blueTotal > redTotal + redProv + 2) {
 			this.gameover = true;
 			this.winner = 'blue';
 			return true;
@@ -333,8 +277,8 @@ class SigilBoard {
 
 		if (this.spellCounter[activeColor] >= 6) {
 			this.gameover = true;
-			if (redTotal + redProv + redAmb > blueTotal + blueProv + blueAmb) this.winner = 'red';
-			else if (blueTotal + blueProv + blueAmb > redTotal + redProv + redAmb) this.winner = 'blue';
+			if (redTotal + redProv > blueTotal + blueProv) this.winner = 'red';
+			else if (blueTotal + blueProv > redTotal + redProv) this.winner = 'blue';
 			else this.winner = this.enemy(activeColor);
 			return true;
 		}
@@ -360,9 +304,6 @@ class SigilBoard {
 		this.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
 		this.movesLeftThisTurn = 0;
 		this.movesGrantedThisTurn = 0;
-		this.pendingBurns = { red: state.red_burns || [], blue: state.blue_burns || [] };
-		this.burnsThisTurn = 0;
-		this.snares = { ...(state.snares || {}) };
 		this.update();
 	}
 }

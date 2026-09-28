@@ -30,9 +30,8 @@
  * offers on the order of 4,000x fewer turns per position.
  *
  * Only the 39 official spells are supported: the engine does not implement
- * Tectonic, Providence, Aftershock, Ambush, the fan-made Panda pack or the
- * Experimental playtest pack and rejects positions containing them rather
- * than mis-resolving.
+ * Tectonic, Providence, the fan-made Panda pack or the Experimental playtest
+ * pack and rejects positions containing them rather than mis-resolving.
  */
 
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
@@ -331,7 +330,7 @@ class RustAI {
 		if (!res || !res.ok) {
 			throw new Error('Rust engine error: ' + ((res && res.error) || 'unknown') +
 				'\nIf this mentions an out-of-scope spell, the draw includes a pack the ' +
-				'engine does not implement (Tectonic / Providence / Aftershock / Ambush / Panda / Experimental).');
+				'engine does not implement (Tectonic / Providence / Panda / Experimental).');
 		}
 
 		const turn = await rustActionsToTurn(sim, color, res.actions, res.expected_sfn);

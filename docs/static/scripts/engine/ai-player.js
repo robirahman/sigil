@@ -403,46 +403,34 @@ async function applyAITurn(board, turn, color, emit) {
 		}
 
 		else if (action.type === 'hard_move' || (action.type === 'blink' && board.stones[action.node] === enemy)) {
-			// Ambush: a snare beneath the occupant intercepts the incoming
-			// stone FIRST — consumed with the snare, no push resolves.
-			// Mirrors doPushEnemy / SimBoard._pushEnemy's 'S' outcome.
-			if (board.snares[action.node] === enemy) {
-				delete board.snares[action.node];
-				emit({ type: 'new_stone_animation', color, node: action.node });
-				emit({ type: 'crush_animation', crushed_color: color, node: action.node });
-				board.update();
-				emit(board.getBoardStatePayload());
-				await _aiDelay(600);
-			} else {
-				// Resolve the push outcome BEFORE mutating, so the intermediate
-				// state (enemy stone overwritten at fromNode but not yet placed
-				// at dest) never triggers update()'s zero-stones immediate-loss
-				// rule. Same fix as doPushEnemy in spells.js — applyAITurn had
-				// its own copy of the buggy push logic.
-				const pushResult = findPushOptions(board, action.node, color);
+			// Resolve the push outcome BEFORE mutating, so the intermediate
+			// state (enemy stone overwritten at fromNode but not yet placed
+			// at dest) never triggers update()'s zero-stones immediate-loss
+			// rule. Same fix as doPushEnemy in spells.js — applyAITurn had
+			// its own copy of the buggy push logic.
+			const pushResult = findPushOptions(board, action.node, color);
 
-				board.stones[action.node] = color;
-				board.lastPlay = action.node;
-				board.lastPlayer = color;
-				emit({ type: 'new_stone_animation', color, node: action.node });
+			board.stones[action.node] = color;
+			board.lastPlay = action.node;
+			board.lastPlayer = color;
+			emit({ type: 'new_stone_animation', color, node: action.node });
 
-				if (pushResult.crushed) {
-					emit({ type: 'crush_animation', crushed_color: enemy, node: action.node });
-				} else if (pushResult.options.length > 0) {
-					// Honor the destination the search chose (action.pushed_to);
-					// fall back to the default nearest-empty cell otherwise. The
-					// AI deliberately picks a push target (e.g. into a gap to
-					// merge enemy groups), so replaying options[0] would discard
-					// the very tactic the search found.
-					const dest = (action.pushed_to && pushResult.options.includes(action.pushed_to))
-						? action.pushed_to : pushResult.options[0];
-					board.stones[dest] = enemy;
-					emit({ type: 'push_animation', pushed_color: enemy, starting_node: action.node, ending_node: dest });
-				}
-				board.update();
-				emit(board.getBoardStatePayload());
-				await _aiDelay(600);
+			if (pushResult.crushed) {
+				emit({ type: 'crush_animation', crushed_color: enemy, node: action.node });
+			} else if (pushResult.options.length > 0) {
+				// Honor the destination the search chose (action.pushed_to);
+				// fall back to the default nearest-empty cell otherwise. The
+				// AI deliberately picks a push target (e.g. into a gap to
+				// merge enemy groups), so replaying options[0] would discard
+				// the very tactic the search found.
+				const dest = (action.pushed_to && pushResult.options.includes(action.pushed_to))
+					? action.pushed_to : pushResult.options[0];
+				board.stones[dest] = enemy;
+				emit({ type: 'push_animation', pushed_color: enemy, starting_node: action.node, ending_node: dest });
 			}
+			board.update();
+			emit(board.getBoardStatePayload());
+			await _aiDelay(600);
 		}
 
 		else if (action.type === 'blink') {
@@ -559,10 +547,6 @@ async function applyAITurn(board, turn, color, emit) {
 			if (action.wall) {
 				board.stones[action.wall] = DESTROYED;
 				if (board.lastPlay === action.wall) { board.lastPlay = null; board.lastPlayer = null; }
-			}
-			// Ambush: the blast also cleared these enemy snares.
-			if (action.nodes) {
-				for (const n of action.nodes) delete board.snares[n];
 			}
 			board.update();
 			emit(board.getBoardStatePayload());
@@ -714,50 +698,6 @@ async function applyAITurn(board, turn, color, emit) {
 			emit({ type: 'message', message: pname + ' will make 1 extra move ' + when + '.', awaiting: null });
 			board.update();
 			emit(board.getBoardStatePayload());
-		}
-
-		else if (action.type === 'burn') {
-			// Aftershock: the AI's start-of-turn burn (target chosen by the
-			// search, recorded as a leading action of its turn).
-			if (action.node) {
-				emit({ type: 'crush_animation', crushed_color: enemy, node: action.node });
-				board.stones[action.node] = null;
-				if (board.lastPlay === action.node) { board.lastPlay = null; board.lastPlayer = null; }
-				if (board.burnsThisTurn > 0) board.burnsThisTurn--;
-				board.update();
-				emit(board.getBoardStatePayload());
-				await _aiDelay(400);
-			}
-		}
-
-		else if (action.type === 'schedule_burns') {
-			// Aftershock: replay the scheduled burns onto the live board.
-			const sched = board.pendingBurns[color];
-			const n = action.turns || 0;
-			while (sched.length < n) sched.push(0);
-			for (let i = 0; i < n; i++) sched[i] += 1;
-			const pname = color === 'red' ? 'Red' : 'Blue';
-			const when = n === 1
-				? 'at the beginning of their next turn'
-				: 'at the beginning of each of their next ' + n + ' turns';
-			emit({ type: 'message', message: pname + ' will destroy 1 enemy stone touching their stones ' + when + '.', awaiting: null });
-			board.update();
-			emit(board.getBoardStatePayload());
-		}
-
-		else if (action.type === 'place_snares') {
-			// Ambush: replay the AI's snare placements onto the live board.
-			if (action.nodes && action.nodes.length) {
-				const pname = color === 'red' ? 'Red' : 'Blue';
-				emit({ type: 'message', message: pname + ' sets ' + action.nodes.length
-					+ ' snare' + (action.nodes.length === 1 ? '' : 's') + '.', awaiting: null });
-				for (const n of action.nodes) {
-					board.snares[n] = color;
-					board.update();
-					emit(board.getBoardStatePayload());
-					await _aiDelay(300);
-				}
-			}
 		}
 	}
 }

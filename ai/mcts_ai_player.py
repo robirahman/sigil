@@ -95,13 +95,10 @@ class MCTSAIPlayer(NNAIPlayer):
         # both use and value the extra moves.
         sched = getattr(self.board, 'pending_moves', {}).get(self.color)
         extra_moves = sched.pop(0) if sched else 0
-        bsched = getattr(self.board, 'pending_burns', {}).get(self.color)
-        burns_now = bsched.pop(0) if bsched else 0
 
         # Convert live board to SimBoard
         sim = _live_board_to_simboard(self.board)
         sim.extra_moves_this_turn = extra_moves
-        sim.burns_this_turn = burns_now
 
         # Run MCTS
         best_turn, policy, value = mcts_search(
@@ -136,13 +133,3 @@ class MCTSAIPlayer(NNAIPlayer):
         # Execute the chosen turn on the live board
         # (inherited from NNAIPlayer)
         self._execute_turn(best_turn)
-
-        # Aftershock: unfired burns BANK instead of forfeiting (2026-08
-        # buff) — return the leftover to the head of the live schedule.
-        fired = sum(1 for a in best_turn.actions if a.type == 'burn')
-        leftover = burns_now - fired
-        if leftover > 0 and not self.board.gameover:
-            if bsched:
-                bsched[0] += leftover
-            else:
-                bsched.append(leftover)

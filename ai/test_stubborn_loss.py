@@ -138,8 +138,6 @@ function sfnBoard(sfn) {
 	sb.springlock = { red: state.red_springlock, blue: state.blue_springlock };
 	sb.score = state.score;
 	sb.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
-	sb.pendingBurns = { red: state.red_burns || [], blue: state.blue_burns || [] };
-	sb.snares = { ...(state.snares || {}) };
 	sb.update();
 	return sb;
 }

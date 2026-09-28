@@ -71,19 +71,6 @@ function isBigSpellNode(name) {
 	return BIG_SPELL_NODES.has(name);
 }
 
-// Every node belonging to any spell position (1-9). Used by the Aftershock
-// burn-target ranking (stones in sigils are the juicier kills).
-const SPELL_POSITION_NODES = new Set();
-for (let _anyPos = 1; _anyPos <= 9; _anyPos++) {
-	for (const _posNode of POSITIONS[_anyPos]) SPELL_POSITION_NODES.add(_posNode);
-}
-
-// node -> its spell position index (1-9), for the Ambush placement heuristic.
-const POSITION_OF_NODE = {};
-for (let _anyPos2 = 1; _anyPos2 <= 9; _anyPos2++) {
-	for (const _posNode2 of POSITIONS[_anyPos2]) POSITION_OF_NODE[_posNode2] = _anyPos2;
-}
-
 // Core spells metadata
 const CORE_SPELLS = {
 	Flourish:          { resolve: 'soft_moves', count: 4, static: false, ischarm: false },
@@ -154,14 +141,6 @@ const CORE_SPELLS = {
 	Dividend:          { resolve: 'schedule_moves', turns: 1, static: false, ischarm: true },
 	Annuity:           { resolve: 'schedule_moves', turns: 2, static: false, ischarm: false },
 	Endowment:         { resolve: 'schedule_moves', turns: 4, static: false, ischarm: false },
-	// Aftershock expansion (scheduled burns)
-	Ember:             { resolve: 'schedule_burns', turns: 1, static: false, ischarm: true },
-	Smolder:           { resolve: 'schedule_burns', turns: 2, static: false, ischarm: false },
-	Conflagration:     { resolve: 'schedule_burns', turns: 4, static: false, ischarm: false },
-	// Ambush expansion (snare markers)
-	Tripwire:          { resolve: 'place_snares', count: 1, static: false, ischarm: true },
-	Deadfall:          { resolve: 'place_snares', count: 2, static: false, ischarm: false },
-	Minefield:         { resolve: 'place_snares', count: 4, static: false, ischarm: false },
 	// Experimental expansion (unofficial, unrated: unreleased spells under
 	// playtest). Spring Tide rides the Flood soft_hard_chain resolver with
 	// `hard_first` (pushes before placements) and an optional trailing
@@ -231,12 +210,6 @@ const SPELL_TEXTS = {
 	Dividend:          'Make 1 extra move at the beginning of your next turn.',
 	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
 	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
-	Ember:             'Destroy 1 enemy stone touching your stones at the beginning of your next turn. If no enemy stone touches yours, the burn is saved until one does. Pending burns count toward your stone total.',
-	Smolder:           'Destroy 1 enemy stone touching your stones at the beginning of each of your next 2 turns. If no enemy stone touches yours, the burn is saved until one does. Pending burns count toward your stone total.',
-	Conflagration:     'Destroy 1 enemy stone touching your stones at the beginning of each of your next 4 turns. If no enemy stone touches yours, the burn is saved until one does. Pending burns count toward your stone total.',
-	Tripwire:          'Place a snare on 1 empty node. The first enemy stone that stops there is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
-	Deadfall:          'Place snares on up to 2 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
-	Minefield:         'Place snares on up to 4 empty nodes. The first enemy stone that stops on a snare is destroyed. Snares count toward your stone total, and only enemy stones (or an enemy Fissure) remove them.',
 	Spring_Tide:       'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.',
 	Rapids:            'Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn.',
 };
@@ -311,14 +284,6 @@ const PROVIDENCE_RITUALS = ['Endowment'];
 const PROVIDENCE_SORCERIES = ['Annuity'];
 const PROVIDENCE_CHARMS = ['Dividend'];
 
-const AFTERSHOCK_RITUALS = ['Conflagration'];
-const AFTERSHOCK_SORCERIES = ['Smolder'];
-const AFTERSHOCK_CHARMS = ['Ember'];
-
-const AMBUSH_RITUALS = ['Minefield'];
-const AMBUSH_SORCERIES = ['Deadfall'];
-const AMBUSH_CHARMS = ['Tripwire'];
-
 // Experimental: the unofficial, permanently unrated home for spells that are
 // still being playtested before release. Unlike the official packs it need
 // not fill all three slots — the pool check only requires core + selected
@@ -347,11 +312,9 @@ const EXPANSIONS = {
 	panda:      { name: 'Panda',      rituals: PANDA_RITUALS,      sorceries: PANDA_SORCERIES,      charms: PANDA_CHARMS },
 	tectonic:   { name: 'Tectonic',   rituals: TECTONIC_RITUALS,   sorceries: TECTONIC_SORCERIES,   charms: TECTONIC_CHARMS },
 	providence: { name: 'Providence', rituals: PROVIDENCE_RITUALS, sorceries: PROVIDENCE_SORCERIES, charms: PROVIDENCE_CHARMS },
-	aftershock: { name: 'Aftershock', rituals: AFTERSHOCK_RITUALS, sorceries: AFTERSHOCK_SORCERIES, charms: AFTERSHOCK_CHARMS },
-	ambush:     { name: 'Ambush',     rituals: AMBUSH_RITUALS,     sorceries: AMBUSH_SORCERIES,     charms: AMBUSH_CHARMS },
 	experimental: { name: 'Experimental', rituals: EXPERIMENTAL_RITUALS, sorceries: EXPERIMENTAL_SORCERIES, charms: EXPERIMENTAL_CHARMS },
 };
-const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'aftershock', 'ambush', 'experimental'];
+const EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'panda', 'tectonic', 'providence', 'experimental'];
 
 // Flat set of every expansion spell name (across all packs), derived from the
 // EXPANSIONS map so it stays in sync. Use isExpansionSpell() to test a name.
@@ -381,20 +344,6 @@ function isProvidenceSpell(name) {
 	return PROVIDENCE_SPELL_NAMES.has(baseSpellName(name));
 }
 
-// Aftershock + Ambush are in their unrated playtest window (launched
-// 2026-08, Providence precedent). Derived from the EXPANSIONS map.
-const AFTERSHOCK_SPELL_NAMES = new Set(
-	[...EXPANSIONS.aftershock.rituals, ...EXPANSIONS.aftershock.sorceries, ...EXPANSIONS.aftershock.charms]
-);
-function isAftershockSpell(name) {
-	return AFTERSHOCK_SPELL_NAMES.has(baseSpellName(name));
-}
-const AMBUSH_SPELL_NAMES = new Set(
-	[...EXPANSIONS.ambush.rituals, ...EXPANSIONS.ambush.sorceries, ...EXPANSIONS.ambush.charms]
-);
-function isAmbushSpell(name) {
-	return AMBUSH_SPELL_NAMES.has(baseSpellName(name));
-}
 // Experimental is permanently unrated: it holds unreleased designs under
 // playtest, which graduate into a real pack (or get cut) rather than rate.
 const EXPERIMENTAL_SPELL_NAMES = new Set(
@@ -405,10 +354,9 @@ function isExperimentalSpell(name) {
 }
 
 // One switch for every "does this spell set stay unrated?" consumer.
-// Panda and Experimental are permanently unrated (unofficial); Aftershock
-// and Ambush stay here while they playtest.
+// Panda and Experimental are permanently unrated (unofficial).
 function isUnratedSpell(name) {
-	return isPandaSpell(name) || isAftershockSpell(name) || isAmbushSpell(name) || isExperimentalSpell(name);
+	return isPandaSpell(name) || isExperimentalSpell(name);
 }
 
 // Game variants. Two orthogonal dimensions encoded in a single string:

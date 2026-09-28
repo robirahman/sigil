@@ -3,7 +3,7 @@
 Experimental spells are unreleased designs that may be cut or reworked, so
 they get self-contained procedural art (no AI-generated rune, no external
 texture) in the Flood palette, built with the same card geometry, fonts and
-arc-text renderer as generate_aftershock_and_ambush_cards.py. When a spell
+arc-text renderer as generate_providence_cards.py. When a spell
 graduates into a real pack, regenerate its card through the full pipeline
 described in README.md.
 
@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from generate_aftershock_and_ambush_cards import (  # noqa: E402
+from generate_providence_cards import (  # noqa: E402
     apply_circular_mask, render_centered_arc_text, font_bold_path, font_reg_path,
 )
 
@@ -214,7 +214,7 @@ def build_card(cfg):
 
 CARDS = [
     {
-        # Sorcery geometry: identical to Smolder/Torrent (260px, 3 spots).
+        # Sorcery geometry: identical to Torrent (260px, 3 spots).
         'name': 'Spring_Tide',
         'size': 260,
         'inner_r': 56,

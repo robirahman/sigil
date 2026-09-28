@@ -26,8 +26,6 @@ document.addEventListener('alpine:init', () => {
 				}, {}),
 			},
 			nodesToRefill: {},
-			// Ambush snare markers {node: owner}, rendered as a ring overlay.
-			snares: {},
 			playerToRefill: '',
 			previousBoardState: {},
 			redSpellCounter: 0,
@@ -474,7 +472,6 @@ document.addEventListener('alpine:init', () => {
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
 				this.score = state.score || 'unset';
-				this.snares = state.snares || {};
 				this.validMoves = {};
 				this.pushSourceNode = '';
 				this.lastPlay = '';
@@ -722,8 +719,7 @@ document.addEventListener('alpine:init', () => {
 						const changed = Object.keys(rest).reduce((acc, c) => { if (rest[c] !== _this.previousBoardState[c]) acc[c] = rest[c]; return acc; }, {});
 						// Non-node payload fields must be destructured out or the
 					// ...nodes rest treats them as node names.
-					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redpending, bluepending, snares, ...nodes } = changed;
-					if (snares !== undefined) _this.snares = snares || {};
+					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redpending, bluepending, ...nodes } = changed;
 						Object.keys(nodes).forEach(n => { _this.nodes[n] = nodes[n]; });
 						if (bluelock !== undefined) _this.blueLock = bluelock;
 						if (bluespellcounter !== undefined) _this.blueSpellCounter = bluespellcounter;

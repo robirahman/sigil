@@ -62,18 +62,6 @@ PROVIDENCE_RITUALS = ['Endowment']
 PROVIDENCE_SORCERIES = ['Annuity']
 PROVIDENCE_CHARMS = ['Dividend']
 
-# Aftershock expansion (scheduled burns).
-AFTERSHOCK_RITUALS = ['Conflagration']
-AFTERSHOCK_SORCERIES = ['Smolder']
-AFTERSHOCK_CHARMS = ['Ember']
-AFTERSHOCK_SPELLS = set(AFTERSHOCK_RITUALS + AFTERSHOCK_SORCERIES + AFTERSHOCK_CHARMS)
-
-# Ambush expansion (snare markers).
-AMBUSH_RITUALS = ['Minefield']
-AMBUSH_SORCERIES = ['Deadfall']
-AMBUSH_CHARMS = ['Tripwire']
-AMBUSH_SPELLS = set(AMBUSH_RITUALS + AMBUSH_SORCERIES + AMBUSH_CHARMS)
-
 # Experimental expansion: the unofficial, permanently unrated home for spells
 # still being playtested before release. It need not fill all three slots.
 EXPERIMENTAL_RITUALS = []
@@ -81,10 +69,10 @@ EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids']
 EXPERIMENTAL_CHARMS = []
 EXPERIMENTAL_SPELLS = set(EXPERIMENTAL_RITUALS + EXPERIMENTAL_SORCERIES + EXPERIMENTAL_CHARMS)
 
-# Spells whose games stay unrated while their packs are in playtest (or, for
-# Experimental, permanently); app.py's record_elo consults this (mirrors
-# isUnratedSpell in constants.js, which also covers the JS-only Panda pack).
-UNRATED_SPELLS = AFTERSHOCK_SPELLS | AMBUSH_SPELLS | EXPERIMENTAL_SPELLS
+# Spells whose games stay unrated (Experimental, permanently); app.py's
+# record_elo consults this (mirrors isUnratedSpell in constants.js, which
+# also covers the JS-only Panda pack).
+UNRATED_SPELLS = set(EXPERIMENTAL_SPELLS)
 
 PROVIDENCE_SPELLS = set(PROVIDENCE_RITUALS + PROVIDENCE_SORCERIES + PROVIDENCE_CHARMS)
 
@@ -101,11 +89,9 @@ EXPANSIONS = {
 	'covenant':   {'rituals': COVENANT_RITUALS,   'sorceries': COVENANT_SORCERIES,   'charms': COVENANT_CHARMS},
 	'tectonic':   {'rituals': TECTONIC_RITUALS,   'sorceries': TECTONIC_SORCERIES,   'charms': TECTONIC_CHARMS},
 	'providence': {'rituals': PROVIDENCE_RITUALS, 'sorceries': PROVIDENCE_SORCERIES, 'charms': PROVIDENCE_CHARMS},
-	'aftershock': {'rituals': AFTERSHOCK_RITUALS, 'sorceries': AFTERSHOCK_SORCERIES, 'charms': AFTERSHOCK_CHARMS},
-	'ambush':     {'rituals': AMBUSH_RITUALS,     'sorceries': AMBUSH_SORCERIES,     'charms': AMBUSH_CHARMS},
 	'experimental': {'rituals': EXPERIMENTAL_RITUALS, 'sorceries': EXPERIMENTAL_SORCERIES, 'charms': EXPERIMENTAL_CHARMS},
 }
-EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'gloom', 'covenant', 'tectonic', 'providence', 'aftershock', 'ambush', 'experimental']
+EXPANSION_KEYS = ['springtime', 'celestial', 'fury', 'tempest', 'flood', 'gloom', 'covenant', 'tectonic', 'providence', 'experimental']
 
 # Accepted aliases for expansion keys. 'tsunami' was the Flood pack's key
 # until the 2026-08 name swap (pack Tsunami -> Flood, spell Flood -> Tsunami).

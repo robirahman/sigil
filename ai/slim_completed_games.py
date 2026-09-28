@@ -15,7 +15,7 @@ Every converted game is then verified END-TO-END through the node
 replay bridge (ai/replay_bridge.py -> reconstructGameLog): the replayed
 transcript must reproduce every stored sfnBefore/sfnAfter byte-for-byte,
 including the start-of-turn preamble (Destruction check, Providence
-shift, Aftershock pop). Only fully-verified records are rewritten;
+shift). Only fully-verified records are rewritten;
 everything else stays fat and is listed in the report.
 
 Ambiguity is fine: if two different action sequences produce the same
@@ -114,14 +114,12 @@ def _action_to_dict(a):
 
 def _prepare_turn_start(board, color, turn_number):
     """Mirror the reconstructGameLog start-of-turn preamble on a sim:
-    the schedules pop BEFORE the move phase, so enumeration sees this
-    turn's extra moves and burns."""
+    the schedule pops BEFORE the move phase, so enumeration sees this
+    turn's extra moves."""
     board.turn_counter = turn_number
     board.whose_turn = color
     sched = board.pending_moves[color]
     board.extra_moves_this_turn = sched.pop(0) if sched else 0
-    bsched = board.pending_burns[color]
-    board.burns_this_turn = bsched.pop(0) if bsched else 0
     board.update()
 
 
@@ -1177,7 +1175,7 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
     refill_pool = []
     for i, a in enumerate(cand.actions):
         if a.type in ('hard_move', 'blink'):
-            if a.pushed_to not in (None, 'X', 'S') and arrived_enemy:
+            if a.pushed_to not in (None, 'X') and arrived_enemy:
                 axes.append([{(i, 'pushed_to'): n} for n in arrived_enemy])
             if cast_seen and a.type == 'hard_move':
                 # Resolver-granted hard move (Slash, Fury ...): the
@@ -1186,7 +1184,7 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
                 # enemy and end the turn dead or taken.
                 trans = [p.pushed_to for p in cand.actions[:i]
                          if p.type in ('hard_move', 'blink')
-                         and p.pushed_to not in (None, 'X', 'S')]
+                         and p.pushed_to not in (None, 'X')]
                 tpool = [n for n in dict.fromkeys(
                     vacated_enemy
                     + [m for m in NODE_ORDER
@@ -1280,7 +1278,7 @@ def _choice_variants(base, color, cand, sfn_after, cap=2500):
                    if before[n] == enemy and after.get(n) == color]
                 + [p.pushed_to for p in cand.actions[:i]
                    if p.type in ('hard_move', 'blink')
-                   and p.pushed_to not in (None, 'X', 'S')]))
+                   and p.pushed_to not in (None, 'X')]))
             vals = []
             for k in range(1, min(6, len(kill_pool) + 1)):
                 vals.extend(list(c) for c in combinations(kill_pool, k))
