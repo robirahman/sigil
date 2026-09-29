@@ -4,7 +4,8 @@
 //!
 //! Every preset sets EVERY knob it touches from scratch, so switching candidates
 //! inside one worker never leaks a setting from the previous game. `shipped` is
-//! the live engine exactly as it played before these knobs existed.
+//! the v17 engine exactly as it played before these knobs existed (v18 ships
+//! `leadmin2`, which includes `speed`; 2026-09-28).
 use crate::search::Search;
 use crate::turn_iter::{set_dash_gen, set_lead_min_remaining, set_outcome_sel, set_speed_v1,
                        SEL_SPELLS_DEFAULT};

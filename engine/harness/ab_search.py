@@ -88,7 +88,7 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # outcome_sel = mode*10000 + window*100 + keep (32404 = sel_score mode 3,
          #   24 resolutions, 4 keeps, for the SEL_SPELLS_DEFAULT spells); 0 = off.
          # speed = 1/0: the tree-identical node-rate switch (turn_iter::set_speed_v1).
-         # lead_min = skip the stone-lead pre-pass below this many plies left (0 = shipped).
+         # lead_min = skip the stone-lead pre-pass below this many plies left (2 = shipped since v18, 0 = v17).
          'outcome_sel', 'speed', 'lead_min')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')

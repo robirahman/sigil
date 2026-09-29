@@ -2792,3 +2792,49 @@ stream length; gate on these 47 cases and the 2026-09-23 human dashes, then an a
 for the many-outcome spells (Storm Front first), where a blanket window increase triples the stream, so a
 targeted outcome selector is needed, (c) depth: the predicted class is a one-ply horizon, so node rate and the
 selective-depth work pay directly.
+
+## The surprise-audit candidates at 10 s: `lead_min` 2 wins, the coverage knobs do not (2026-09-27/28)
+
+Five arms from `0fe63f0` (`candidates.rs` presets `speed`, `dash4`, `outsel`, `leadmin2`, `nmp3`), each at fixed
+10 s per move against the then-current default. `dash4` and `outsel` ran first on one c3d-highcpu-90 each (88
+shards x 4 pairs); the other three on three VMs each, one arena per region because the C3 quota is 300 vCPUs per
+region (264 shards x 3 pairs, arms `*_10s_fleet3.txt`, `SHARD_BASE` 3000-3800, every shard offset distinct).
+Those three VMs cloned `7bc0bbd`, four site/Python commits past the arms' own commit (the Aftershock/Ambush
+retirement and menu work); no Rust source or `ab_search.py` changed in between. Depth and s/move are the
+per-shard means over each arm's games.
+
+| knob | runs | games | W-L(-U) | win rate | Elo | depth arm / base |
+|---|---|---|---|---|---|---|
+| `lead_min` 2 vs 0 | `20260928T194153Z`, `…194319Z`, `…194215Z` | 1,584 | 898-686 | 56.69% [54.25, 59.13] | **+46.8 [+29.6, +64.2]** | 6.73 / 6.48 |
+| `speed` 1 vs 0 | `20260928T194110Z`, `…194124Z`, `…194139Z` | 1,584 | 827-757 | 52.21% [49.75, 54.67] | **+15.4 [-1.7, +32.5]** | 6.55 / 6.40 |
+| `nmp` (3, 1) vs (2, 1) | `20260928T194228Z`, `…194243Z`, `…194257Z` | 1,584 | 791-793 | 49.94% [47.47, 52.40] | **-0.4 [-17.6, +16.7]** | 6.68 / 6.62 |
+| `dash_gen` 4 pairs vs 2 | `20260927T015849Z` | 704 | 345-359 | 49.01% [45.31, 52.70] | **-6.9 [-32.7, +18.8]** | 6.40 / 6.50 |
+| `outcome_sel` 62404 vs 0 | `20260927T015922Z` | 704 | 317-386-1 | 45.10% [41.42, 48.78] | **-34.2 [-60.2, -8.5]** | 6.42 / 6.50 |
+
+(Elo from the pooled score, an unfinished game counted as a draw; normal-approximation 95% interval. s/move
+10.00 on both sides of every arm.)
+
+**`lead_min` 2 is depth, bought where the pre-pass is cheapest to lose.** The stone-lead pre-pass was ~30% of a
+depth-4 search's time and most of it ran at the last ply (2026-09-27 profile); skipping it with fewer than two
+plies left adds a quarter ply of average depth at 10 s (6.73 vs 6.48). The pre-pass still runs at every node
+with two or more plies left.
+
+**`lead_min` 3 vs 2: no difference, 2 ships.** Nine c3d-highcpu-90 across the three regions, 792 shards x 1
+pair (arms `leadmin3_vs2_10s_fleet9.txt`, `SHARD_BASE` 4000-4800; runs `20260928T211444Z` to `…211623Z`, ~25
+minutes of play): 1,584 games, 783-801, 49.43% [46.97, 51.89], **-3.9 Elo [-21.1, +13.2]**, depth 7.05 / 7.01.
+Skipping the pre-pass one ply higher buys almost no depth; 2 is the value with an arena win over the old
+engine behind it. **Shipped in v18 (cache v51)** with one change from the arena arm: the root always runs the
+pre-pass, whatever `lead_min`, so a depth-1 iteration still sees an immediate win (`root_search` no longer sets
+`NODE_REMAINING`). From iteration 2 on the root had >= 2 plies left anyway, so the tree is the arena's except in
+iteration 1. Test `lead_prepass_skips_the_last_ply_by_default_but_never_the_root`.
+
+**`speed_v1` is the tree-identical node-rate work** (CRUSH-only key-dash early exit, lead pre-pass memo, lazy
+logs, outcomes scored once): +0.15 ply of depth and +15.4 Elo whose interval just touches zero. It is already the
+default in the native engine and ships with the next wasm.
+
+**The two coverage knobs lose at 10 s, as v16's placement-first generator alone did.** Four sacrifice pairs per
+landing (`dash4`) and the per-spell outcome selector (`outsel`, 78% of recorded human casts in the window vs 47%)
+widen what the generator can produce, and each costs about 0.1 ply: `dash4` measures no difference, `outsel`
+loses 34 Elo. The surprise audit's generator-gap class (102 of 284 falls) is real, but a blanket budget increase
+pays for it at every node; the v16 lesson repeats -- coverage has to arrive as a few targeted key moves, not as a
+wider stream. **`nmp` (3, 1)**: no difference from (2, 1); stays (2, 1).
