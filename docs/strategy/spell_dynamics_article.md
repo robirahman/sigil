@@ -10,14 +10,14 @@ A reminder on two rules that come up repeatedly below. Casting a spell locks it 
 
 ## The tier list
 
-We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 205 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers break that order at its largest gaps in strength, keeping every tier to at least three spells.
+We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 212 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers break that order at its largest gaps in strength, keeping every tier to at least three spells.
 
 | Tier | Spells |
 |---|---|
 | Top | Gather, Fireblast, Scatter |
 | Strong | Blossom, Charge, Corrupt, Seal of Lightning, Carnage, Bewitch, Fury, Slash, Seal of Wind, Harvest, Storm Front, Hail Storm, Starfall, Meteor, Erupt, Seal of Stone, Surge |
-| Solid | Hurricane, Azimuth, Comet |
-| Middling | Splash, Sprout, Seal of Autumn, Seal of Spring, Seal of Winter, Decay |
+| Solid | Azimuth, Comet, Hurricane, Sprout, Splash |
+| Middling | Seal of Autumn, Seal of Spring, Seal of Winter, Decay |
 | Weak | Flourish, Lurk, Tsunami, Seal of Destruction, Syzygy, Seal of Summer, Eclipse |
 | Bottom | Grow, Gust, Torrent |
 
@@ -32,11 +32,11 @@ Full order, best to worst:
 | 5 | Charge | charm | 18 | Erupt | ritual | 31 | Lurk | charm |
 | 6 | Corrupt | ritual | 19 | Seal of Stone | sorcery | 32 | Tsunami | ritual |
 | 7 | Seal of Lightning | ritual | 20 | Surge | charm | 33 | Seal of Destruction | ritual |
-| 8 | Carnage | ritual | 21 | Hurricane | ritual | 34 | Syzygy | ritual |
-| 9 | Bewitch | ritual | 22 | Azimuth | charm | 35 | Seal of Summer | charm |
-| 10 | Fury | sorcery | 23 | Comet | charm | 36 | Eclipse | sorcery |
-| 11 | Slash | charm | 24 | Splash | charm | 37 | Grow | sorcery |
-| 12 | Seal of Wind | sorcery | 25 | Sprout | charm | 38 | Gust | charm |
+| 8 | Carnage | ritual | 21 | Azimuth | charm | 34 | Syzygy | ritual |
+| 9 | Bewitch | ritual | 22 | Comet | charm | 35 | Seal of Summer | charm |
+| 10 | Fury | sorcery | 23 | Hurricane | ritual | 36 | Eclipse | sorcery |
+| 11 | Slash | charm | 24 | Sprout | charm | 37 | Grow | sorcery |
+| 12 | Seal of Wind | sorcery | 25 | Splash | charm | 38 | Gust | charm |
 | 13 | Harvest | ritual | 26 | Seal of Autumn | charm | 39 | Torrent | sorcery |
 
 A few notes on the placements that tend to surprise people.
@@ -115,7 +115,7 @@ There is also a small, universal anti-synergy: with one cast per turn, any two s
 | + | Fury + Seal of Wind |
 | + | Grow + Seal of Destruction, Seal of Spring |
 | + | Harvest + Seal of Summer |
-| + | Hurricane + Storm Front |
+| + | Hurricane + Storm Front, Torrent, Tsunami |
 | + | Lurk + Seal of Lightning, Seal of Wind |
 | + | Meteor + Seal of Spring |
 | + | Seal of Destruction + Seal of Lightning, Seal of Wind, Slash, Sprout, Storm Front, Surge |
@@ -158,6 +158,7 @@ Some of the entries worth explaining:
 | - | Seal of Spring + Syzygy |
 | - | Slash + Torrent |
 | - | Splash + Torrent, Tsunami |
+| - | Storm Front + Torrent, Tsunami |
 | - | Surge + Syzygy |
 
 Carnage, Slash, and Surge all trap and destroy cornered enemy stones, and there are only so many enemy stones you can corner. Carnage and Hail Storm both want a crowded board, then thin it out for each other.
@@ -202,7 +203,8 @@ The matchup question is different from the synergy question: if you are building
 | + | Storm Front | Gust, Hurricane, Seal of Stone |
 | + | Surge | Seal of Destruction |
 | + | Syzygy | Blossom, Flourish, Grow, Slash |
-| + | Tsunami | Torrent |
+| + | Torrent | Hurricane |
+| + | Tsunami | Hurricane, Torrent |
 
 The stories behind the strongest entries:
 
@@ -273,4 +275,4 @@ Nine turns, no opponent blunder required beyond leaving the engine alone. As far
 
 ---
 
-*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 205 pairwise comparisons, with all 39 spells connected and no preference cycles. Tiers are cut at the largest gaps between neighbouring strengths, skipping any cut that would leave a tier with fewer than three spells. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
+*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 212 pairwise comparisons, with all 39 spells connected and no preference cycles. Tiers are cut at the largest gaps between neighbouring strengths, skipping any cut that would leave a tier with fewer than three spells. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
