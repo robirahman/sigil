@@ -10,34 +10,34 @@ A reminder on two rules that come up repeatedly below. Casting a spell locks it 
 
 ## The tier list
 
-We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 231 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers break that order at its largest gaps in strength, keeping every tier to at least three spells.
+We ranked all 39 spells by direct comparison, answering "which of these two is better?" for 241 pairs and fitting a Bradley-Terry model to the answers. The order below is the result. The tiers break that order at its largest gaps in strength, keeping every tier to at least three spells.
 
 | Tier | Spells |
 |---|---|
-| Top | Fireblast, Gather, Scatter |
-| Strong | Blossom, Corrupt, Charge, Seal of Lightning, Carnage, Bewitch, Fury, Slash, Seal of Wind, Harvest, Hail Storm, Starfall, Storm Front, Meteor |
-| Solid | Erupt, Seal of Stone, Surge |
-| Middling | Azimuth, Comet, Sprout, Hurricane, Splash |
-| Weak | Seal of Winter, Seal of Autumn, Lurk, Seal of Spring, Decay, Flourish, Seal of Summer, Tsunami, Seal of Destruction, Syzygy |
+| Top | Gather, Fireblast, Scatter |
+| Strong | Blossom, Corrupt, Seal of Lightning, Charge, Carnage, Harvest, Slash, Fury, Bewitch, Seal of Wind |
+| Solid | Hail Storm, Storm Front, Starfall, Meteor, Erupt |
+| Middling | Surge, Seal of Stone, Azimuth, Comet, Sprout, Hurricane, Splash |
+| Weak | Seal of Winter, Seal of Autumn, Lurk, Seal of Spring, Decay, Flourish, Seal of Summer, Seal of Destruction, Tsunami, Syzygy |
 | Bottom | Eclipse, Grow, Gust, Torrent |
 
 Full order, best to worst:
 
 | # | Spell | Type | # | Spell | Type | # | Spell | Type |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Fireblast | sorcery | 14 | Hail Storm | sorcery | 27 | Seal of Autumn | charm |
-| 2 | Gather | sorcery | 15 | Starfall | ritual | 28 | Lurk | charm |
-| 3 | Scatter | sorcery | 16 | Storm Front | sorcery | 29 | Seal of Spring | charm |
+| 1 | Gather | sorcery | 14 | Hail Storm | sorcery | 27 | Seal of Autumn | charm |
+| 2 | Fireblast | sorcery | 15 | Storm Front | sorcery | 28 | Lurk | charm |
+| 3 | Scatter | sorcery | 16 | Starfall | ritual | 29 | Seal of Spring | charm |
 | 4 | Blossom | ritual | 17 | Meteor | sorcery | 30 | Decay | sorcery |
 | 5 | Corrupt | ritual | 18 | Erupt | ritual | 31 | Flourish | ritual |
-| 6 | Charge | charm | 19 | Seal of Stone | sorcery | 32 | Seal of Summer | charm |
-| 7 | Seal of Lightning | ritual | 20 | Surge | charm | 33 | Tsunami | ritual |
-| 8 | Carnage | ritual | 21 | Azimuth | charm | 34 | Seal of Destruction | ritual |
-| 9 | Bewitch | ritual | 22 | Comet | charm | 35 | Syzygy | ritual |
-| 10 | Fury | sorcery | 23 | Sprout | charm | 36 | Eclipse | sorcery |
-| 11 | Slash | charm | 24 | Hurricane | ritual | 37 | Grow | sorcery |
-| 12 | Seal of Wind | sorcery | 25 | Splash | charm | 38 | Gust | charm |
-| 13 | Harvest | ritual | 26 | Seal of Winter | charm | 39 | Torrent | sorcery |
+| 6 | Seal of Lightning | ritual | 19 | Surge | charm | 32 | Seal of Summer | charm |
+| 7 | Charge | charm | 20 | Seal of Stone | sorcery | 33 | Seal of Destruction | ritual |
+| 8 | Carnage | ritual | 21 | Azimuth | charm | 34 | Tsunami | ritual |
+| 9 | Harvest | ritual | 22 | Comet | charm | 35 | Syzygy | ritual |
+| 10 | Slash | charm | 23 | Sprout | charm | 36 | Eclipse | sorcery |
+| 11 | Fury | sorcery | 24 | Hurricane | ritual | 37 | Grow | sorcery |
+| 12 | Bewitch | ritual | 25 | Splash | charm | 38 | Gust | charm |
+| 13 | Seal of Wind | sorcery | 26 | Seal of Winter | charm | 39 | Torrent | sorcery |
 
 A few notes on the placements that tend to surprise people.
 
@@ -102,27 +102,28 @@ There is also a small, universal anti-synergy: with one cast per turn, any two s
 |---|---|
 | ++ | Blossom + Erupt, Fireblast + Seal of Wind, Flourish + Gather, Grow + Harvest, Gust + Decay, Gust + Seal of Destruction, Scatter + Erupt, Seal of Lightning + Surge, Seal of Wind + Corrupt |
 | + | Azimuth + Flourish, Seal of Wind |
-| + | Bewitch + Comet, Fireblast, Seal of Destruction, Tsunami |
+| + | Bewitch + Comet, Fireblast, Seal of Destruction, Seal of Stone, Tsunami |
 | + | Blossom + Corrupt, Seal of Autumn |
-| + | Carnage + Seal of Destruction, Seal of Summer, Seal of Wind, Syzygy |
+| + | Carnage + Seal of Destruction, Seal of Stone, Seal of Summer, Seal of Wind, Syzygy |
 | + | Charge + Flourish, Seal of Lightning, Seal of Wind |
 | + | Comet + Corrupt, Eclipse, Erupt, Flourish, Gather, Seal of Destruction, Seal of Stone, Syzygy, Torrent, Tsunami |
 | + | Corrupt + Eclipse, Fireblast, Flourish, Fury, Grow, Harvest |
 | + | Decay + Hail Storm, Hurricane, Seal of Lightning, Storm Front |
 | + | Eclipse + Flourish, Seal of Destruction |
 | + | Erupt + Flourish, Grow, Seal of Wind |
-| + | Fireblast + Flourish |
+| + | Fireblast + Flourish, Seal of Stone |
 | + | Flourish + Fury, Grow, Gust, Harvest, Seal of Destruction, Seal of Stone, Seal of Summer, Torrent |
 | + | Fury + Seal of Wind |
 | + | Gather + Scatter |
-| + | Grow + Seal of Destruction, Seal of Spring |
+| + | Grow + Seal of Destruction, Seal of Spring, Seal of Stone |
 | + | Gust + Seal of Summer |
 | + | Harvest + Scatter, Seal of Summer |
 | + | Hurricane + Seal of Summer, Storm Front, Torrent, Tsunami |
 | + | Lurk + Seal of Lightning, Seal of Wind |
-| + | Meteor + Seal of Spring |
+| + | Meteor + Seal of Spring, Seal of Stone |
 | + | Scatter + Seal of Summer |
 | + | Seal of Destruction + Seal of Lightning, Seal of Wind, Slash, Sprout, Storm Front, Surge |
+| + | Seal of Lightning + Seal of Stone |
 | + | Seal of Spring + Seal of Summer, Seal of Wind, Torrent |
 | + | Seal of Stone + Storm Front, Torrent, Tsunami |
 | + | Slash + Syzygy |
@@ -153,11 +154,11 @@ Some of the entries worth explaining:
 | - | Fireblast + Seal of Destruction |
 | - | Flourish + Seal of Wind, Splash, Syzygy |
 | - | Fury + Slash |
-| - | Gather + Hail Storm, Harvest, Seal of Spring |
+| - | Gather + Hail Storm, Harvest, Seal of Spring, Seal of Stone |
 | - | Grow + Splash, Syzygy |
 | - | Gust + Storm Front |
 | - | Hail Storm + Scatter, Torrent |
-| - | Harvest + Seal of Spring, Surge |
+| - | Harvest + Seal of Spring, Seal of Stone, Surge |
 | - | Seal of Lightning + Syzygy |
 | - | Seal of Spring + Syzygy |
 | - | Slash + Torrent |
@@ -180,18 +181,18 @@ The matchup question is different from the synergy question: if you are building
 | + | Azimuth | Torrent |
 | + | Bewitch | Grow, Seal of Destruction, Seal of Spring, Seal of Summer, Sprout |
 | + | Blossom | Bewitch, Comet, Flourish, Grow, Seal of Autumn, Seal of Summer |
-| + | Carnage | Fireblast, Grow, Seal of Destruction, Seal of Lightning, Seal of Summer, Syzygy |
+| + | Carnage | Fireblast, Grow, Seal of Destruction, Seal of Lightning, Seal of Stone, Seal of Summer, Syzygy |
 | + | Charge | Azimuth, Flourish, Grow, Torrent |
 | + | Comet | Bewitch, Carnage, Flourish, Fury, Syzygy, Torrent, Tsunami |
 | + | Corrupt | Blossom, Eclipse, Flourish, Lurk |
 | + | Decay | Comet, Seal of Wind, Starfall |
 | + | Erupt | Flourish, Grow |
-| + | Fireblast | Azimuth, Corrupt, Flourish, Lurk, Seal of Destruction, Seal of Spring |
+| + | Fireblast | Azimuth, Corrupt, Flourish, Lurk, Seal of Destruction, Seal of Spring, Seal of Stone |
 | + | Flourish | Eclipse, Grow, Gust, Hurricane, Seal of Destruction, Seal of Summer, Seal of Winter, Torrent, Tsunami |
 | + | Fury | Azimuth, Flourish, Slash |
-| + | Gather | Comet, Decay, Flourish, Hail Storm, Harvest, Scatter, Seal of Spring |
-| + | Hail Storm | Decay, Scatter, Seal of Destruction |
-| + | Harvest | Comet, Flourish, Grow, Seal of Spring, Seal of Summer |
+| + | Gather | Comet, Decay, Flourish, Hail Storm, Harvest, Scatter, Seal of Spring, Seal of Stone |
+| + | Hail Storm | Decay, Scatter, Seal of Destruction, Seal of Stone |
+| + | Harvest | Comet, Flourish, Grow, Seal of Spring, Seal of Stone, Seal of Summer |
 | + | Meteor | Bewitch, Flourish |
 | + | Scatter | Comet, Flourish, Seal of Autumn, Seal of Summer |
 | + | Seal of Autumn | Fireblast, Seal of Winter, Syzygy |
@@ -280,4 +281,4 @@ Nine turns, no opponent blunder required beyond leaving the engine alone. As far
 
 ---
 
-*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 231 pairwise comparisons, with all 39 spells connected and no preference cycles. Tiers are cut at the largest gaps between neighbouring strengths, skipping any cut that would leave a tier with fewer than three spells. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
+*Method notes. Spell ratings and pairwise comparisons were entered by the author; the ranking is a Bradley-Terry fit over 241 pairwise comparisons, with all 39 spells connected and no preference cycles. Tiers are cut at the largest gaps between neighbouring strengths, skipping any cut that would leave a tier with fewer than three spells. Game statistics cover every completed game recorded on Sigil Online as of 5 September 2026, replayed through the site's own engine to recover board positions. Win rates are unadjusted; a version controlling for player strength and Elo gives the same qualitative picture.*
