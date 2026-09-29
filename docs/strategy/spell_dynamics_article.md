@@ -66,11 +66,12 @@ Some spells want empty space and some want contact. Where a spell falls on this 
 | Flourish | Fireblast | Hurricane |
 | Grow | Fury | Lurk |
 | Gust | Hail Storm | Seal of Autumn |
-| Meteor | Seal of Spring | Seal of Destruction |
-| Scatter | Seal of Stone | Seal of Lightning |
-| Seal of Wind | Seal of Summer | Storm Front |
-| Sprout | Seal of Winter | |
-| Starfall | Slash | |
+| Meteor | Seal of Destruction | Seal of Lightning |
+| Scatter | Seal of Spring | Storm Front |
+| Seal of Wind | Seal of Stone | |
+| Sprout | Seal of Summer | |
+| Starfall | Seal of Winter | |
+| | Slash | |
 | | Splash | |
 | | Surge | |
 | | Syzygy | |
@@ -102,11 +103,11 @@ There is also a small, universal anti-synergy: with one cast per turn, any two s
 | ++ | Blossom + Erupt, Fireblast + Seal of Wind, Flourish + Gather, Grow + Harvest, Gust + Decay, Gust + Seal of Destruction, Scatter + Erupt, Seal of Lightning + Surge, Seal of Wind + Corrupt |
 | + | Azimuth + Flourish, Seal of Wind |
 | + | Bewitch + Comet, Fireblast, Seal of Destruction, Tsunami |
-| + | Carnage + Seal of Destruction, Seal of Summer |
+| + | Carnage + Seal of Destruction, Seal of Summer, Seal of Wind, Syzygy |
 | + | Charge + Flourish, Seal of Wind |
 | + | Comet + Corrupt, Eclipse, Erupt, Flourish, Gather, Seal of Destruction, Seal of Stone, Syzygy, Torrent, Tsunami |
 | + | Corrupt + Fireblast, Flourish, Fury, Grow, Harvest |
-| + | Decay + Hail Storm, Seal of Lightning |
+| + | Decay + Hail Storm, Hurricane, Seal of Lightning, Storm Front |
 | + | Eclipse + Flourish, Seal of Destruction |
 | + | Erupt + Flourish, Grow |
 | + | Fireblast + Flourish |
@@ -138,7 +139,7 @@ Some of the entries worth explaining:
 | -- | Seal of Lightning + Splash (Splash needs you not to have dashed; Lightning makes you want to dash every turn) |
 | - | Azimuth + Bewitch, Fireblast |
 | - | Bewitch + Hail Storm, Meteor, Seal of Spring, Syzygy |
-| - | Blossom + Comet, Meteor, Surge |
+| - | Blossom + Comet, Meteor, Seal of Wind, Surge, Syzygy |
 | - | Carnage + Hail Storm, Slash, Surge |
 | - | Comet + Decay, Fury, Scatter |
 | - | Decay + Gather, Slash |
@@ -150,6 +151,7 @@ Some of the entries worth explaining:
 | - | Grow + Splash, Syzygy |
 | - | Hail Storm + Scatter, Torrent |
 | - | Harvest + Surge |
+| - | Seal of Lightning + Syzygy |
 | - | Seal of Spring + Syzygy |
 | - | Slash + Torrent |
 | - | Splash + Torrent, Tsunami |
@@ -168,9 +170,9 @@ The matchup question is different from the synergy question: if you are building
 | ++ | Decay, Hail Storm | Blossom |
 | ++ | Gust | Seal of Destruction |
 | + | Azimuth | Torrent |
-| + | Bewitch | Grow, Seal of Destruction, Seal of Spring, Seal of Summer, Sprout, Syzygy |
+| + | Bewitch | Grow, Seal of Destruction, Seal of Spring, Seal of Summer, Sprout |
 | + | Blossom | Bewitch, Comet, Flourish, Grow |
-| + | Carnage | Fireblast, Grow, Seal of Destruction, Seal of Lightning, Seal of Summer |
+| + | Carnage | Fireblast, Grow, Seal of Destruction, Seal of Lightning, Seal of Summer, Syzygy |
 | + | Charge | Flourish, Grow, Torrent |
 | + | Comet | Bewitch, Carnage, Flourish, Fury, Syzygy, Torrent, Tsunami |
 | + | Corrupt | Flourish, Lurk |
@@ -186,16 +188,16 @@ The matchup question is different from the synergy question: if you are building
 | + | Scatter | Comet, Flourish |
 | + | Seal of Autumn | Fireblast, Seal of Winter, Syzygy |
 | + | Seal of Destruction | Comet, Eclipse |
-| + | Seal of Lightning | Decay, Lurk, Seal of Destruction, Seal of Stone, Starfall |
+| + | Seal of Lightning | Decay, Lurk, Seal of Destruction, Seal of Stone, Starfall, Syzygy |
 | + | Seal of Spring | Seal of Winter, Syzygy, Torrent |
 | + | Seal of Stone | Flourish, Torrent |
-| + | Seal of Wind | Azimuth, Bewitch, Corrupt, Flourish, Lurk, Seal of Autumn, Seal of Destruction, Seal of Winter, Splash |
-| + | Seal of Winter | Azimuth, Charge, Splash |
+| + | Seal of Wind | Azimuth, Bewitch, Blossom, Corrupt, Flourish, Lurk, Seal of Autumn, Seal of Destruction, Seal of Winter, Splash |
+| + | Seal of Winter | Azimuth, Charge, Scatter, Splash |
 | + | Slash | Decay, Seal of Destruction, Torrent |
 | + | Splash | Torrent |
 | + | Starfall | Grow |
 | + | Surge | Seal of Destruction |
-| + | Syzygy | Flourish, Grow, Slash |
+| + | Syzygy | Blossom, Flourish, Grow, Slash |
 | + | Tsunami | Torrent |
 
 The stories behind the strongest entries:
