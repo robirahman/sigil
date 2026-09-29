@@ -5,7 +5,8 @@
  * positions in styles.css. Every other layout (constants.js BOARD_LAYOUT_RULES)
  * is drawn here: each zone is a rigid copy of core zone A — the same node
  * coordinates and spell-slot centres/rotations as styles.css, so the spell
- * art's baked node spots stay under their stones — tilted by ZONE_TILT,
+ * art's baked node spots stay under their stones — spun in place by
+ * ZONE_SPIN, tilted by ZONE_TILT,
  * pushed ZONE_PUSH units out from the centre, then rotated round the ring
  * (360/zones degrees per zone, counter-clockwise like core A -> B -> C).
  *
@@ -49,7 +50,11 @@ const SPELL_STUB_ANGLES = {
 // Fitted (see the Cataclysm plan) so neighbouring zones keep >= 70 units of
 // clearance between every stone and spell disc while the ring stays compact.
 const ZONE_TILT = 28;
-const ZONE_PUSH = 300;
+// Each zone turned rigidly about its own centre (degrees; negative is
+// counter-clockwise on screen). Straightens the dashed zone-to-zone links
+// and swings the mana nodes away from the lead counter.
+const ZONE_SPIN = -30;
+const ZONE_PUSH = 360;
 // Mana nodes sit this much further out from the board centre than their
 // core-zone position, clear of the neighbouring zone and the lead counter.
 const MANA_PUSH = 120;
@@ -61,7 +66,7 @@ function boardGeometry(layoutId) {
 	if (!layoutId || layoutId === 'core') return null;
 	if (!_boardGeometryCache[layoutId]) {
 		_boardGeometryCache[layoutId] = _buildBoardGeometry(layoutId, {
-			tilt: ZONE_TILT, push: ZONE_PUSH, manaPush: MANA_PUSH, frame: true,
+			spin: ZONE_SPIN, tilt: ZONE_TILT, push: ZONE_PUSH, manaPush: MANA_PUSH, frame: true,
 		});
 	}
 	return _boardGeometryCache[layoutId];
@@ -80,8 +85,17 @@ function _buildBoardGeometry(layoutId, opts) {
 		return [C + x * Math.cos(a) - y * Math.sin(a), C + x * Math.sin(a) + y * Math.cos(a)];
 	};
 	const u = [Math.cos(_ZONE_BISECTOR * Math.PI / 180), Math.sin(_ZONE_BISECTOR * Math.PI / 180)];
+	// Spin: rotate the zone rigidly about its own centroid (the mean of its
+	// 13 nodes) before tilting and pushing it out, so the zone turns in place.
+	const zc = [0, 0];
+	for (let n = 1; n <= 13; n++) { zc[0] += _ZONE_A_NODES[n][0] / 13; zc[1] += _ZONE_A_NODES[n][1] / 13; }
+	const spin = (p) => {
+		const a = (opts.spin || 0) * Math.PI / 180;
+		const x = p[0] - zc[0], y = p[1] - zc[1];
+		return [zc[0] + x * Math.cos(a) - y * Math.sin(a), zc[1] + x * Math.sin(a) + y * Math.cos(a)];
+	};
 	const place = (p, k) => {
-		const q = rotAbout(p, opts.tilt);
+		const q = rotAbout(spin(p), opts.tilt);
 		return rotAbout([q[0] + opts.push * u[0], q[1] + opts.push * u[1]], -360 / Z * k);
 	};
 
@@ -100,7 +114,7 @@ function _buildBoardGeometry(layoutId, opts) {
 		for (const type of ['ritual', 'sorcery', 'charm']) {
 			const [sx, sy, srot] = _ZONE_A_SLOTS[type];
 			const [x, y] = place([sx, sy], k);
-			slots[type + (k + 1)] = { x, y, rot: srot + opts.tilt - 360 / Z * k, type };
+			slots[type + (k + 1)] = { x, y, rot: srot + (opts.spin || 0) + opts.tilt - 360 / Z * k, type };
 		}
 	});
 
