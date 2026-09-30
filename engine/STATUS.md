@@ -21,6 +21,20 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-30: engine v20 (cache v53) -- Syzygy rules revised.** Charm targets: Slash, Surge, Gust, static seals
+always; Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of Autumn is the charm touching Syzygy. Blue avoids and
+devalues the targets only when red started in or next to Syzygy; blue's Syzygy rating is plain (forced reply
+unchanged, now also against the Autumn-exposed charms); red's Syzygy is worth the greater of itself and the
+sorcery across. Not arena-tested (designer's call). Tests 162/162, `wasm-smoke.js` green. FINDINGS "the Syzygy rules revised".
+
+**2026-09-30: engine v19 (cache v52) -- competitive opening selector on the 2026-09-29 survey, contest rules.**
+Tables from 241 comparisons; free ritual contests, push credit to the side the Slash/Charge is behind (red and
+blue root masks pick that node), blue takes a `++` counter first. Switch `opening_contest` (default on); arena arm
+`opening_contest_30s10.txt`: -0.5 Elo [-18.7, +17.7], no measurable effect. Also: a ritual's far-side charm counts
+(two push charms cancel); Carnage, either colour, is worth the best of itself and the sorceries beside it + 0.01
+(switch `opening_carnage`, arm `opening_carnage_30s10.txt`: **+34.7 [+16.5, +53.0]** in Carnage draws); blue's Syzygy + 0.01. Tests 162/162, `wasm-smoke.js` green, wasm 629,018
+bytes. FINDINGS "survey refresh and the contest rules".
+
 **2026-09-28: engine v18 (cache v51) -- `lead_min` 2 and `speed_v1` in the browser.** The stone-lead pre-pass
 now runs only at nodes with >= 2 plies left (default `LEAD_MIN_REMAINING` 2), except at the root, which always
 runs it so a depth-1 iteration still sees an immediate win. First wasm since v17, so it also carries the

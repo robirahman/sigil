@@ -107,6 +107,22 @@ async function driver(argv) {
 	assert(BOARD.id === 'pentagon' && cb.stones.b1 === 'blue' && variantHasPentagon(cb.variant), 'loadFromSfn switch');
 	assert(eq(spellSlotNames().slice(4, 6), ['ritual5', 'sorcery1']), 'slot names');
 
+	// Scramble on the pentagon: the race is to BOARD.spellTarget (8), and
+	// Itch's reversed bump still floors at 0.
+	assert(normalizeVariant('pentagon_scramble_competitive') === 'competitive_scramble_pentagon', 'scramble+pentagon order');
+	assert(SIGIL_VARIANTS.length === 24 && new Set(SIGIL_VARIANTS).size === 24, '24 variants');
+	for (const Cls of [SigilBoard, SimBoard]) {
+		const sb = new Cls(generateSpellListFor('pentagon', ['core']), 'scramble_pentagon');
+		sb.stones.a1 = 'red'; sb.stones.b1 = 'blue'; sb.update();
+		sb.spellCounter.red = 7;
+		assert(!sb.checkGameOver('red'), Cls.name + ': 7 spells is not a pentagon Scramble win');
+		sb.spellCounter.red = 8;
+		assert(sb.checkGameOver('red') && sb.winner === 'red', Cls.name + ': 8 spells wins pentagon Scramble');
+		const zb = new Cls(generateSpellListFor('pentagon', ['core']), 'pentagon');
+		zb.spellCounter.blue = 7; bumpEnemySpellCounter(zb, 'blue');
+		assert(zb.spellCounter.blue === 8, Cls.name + ': standard bump caps at the pentagon target');
+	}
+
 	// 4. Fuzz.
 	const fuzzGames = parseInt(argv[2] || '24', 10);
 	const allPacks = ['core', ...EXPANSION_KEYS];

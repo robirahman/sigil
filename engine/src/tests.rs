@@ -3235,8 +3235,8 @@ fn opening_data_pins_the_survey() {
     assert_eq!(MATCHUP[7][15], 2); assert_eq!(MATCHUP[15][7], -2);
     assert_eq!(MATCHUP[26][36], 2); assert_eq!(MATCHUP[11][24], 2);
     assert_eq!(SYNERGY[6][9], 2); assert_eq!(SYNERGY[9][6], 2);
-    assert!((STRENGTH[6] - 1.68).abs() < 1e-3, "Fireblast");
-    assert!((STRENGTH[28] + 1.97).abs() < 1e-3, "Torrent");
+    assert!((STRENGTH[6] - 1.77).abs() < 1e-3, "Fireblast");
+    assert!((STRENGTH[28] + 2.26).abs() < 1e-3, "Torrent");
     assert_eq!(BOARD_PREF[15], 1, "Blossom likes an empty board");
     assert_eq!(BOARD_PREF[6], -1, "Fireblast likes a crowded one");
     for a in 0..39 { for b in 0..39 {
@@ -3296,16 +3296,16 @@ fn opening_push_charm_leverage_in_a_shared_zone() {
     use crate::opening::{pair_value, PUSH};
     // Zone a: Fireblast-class strength on the ritual (Corrupt 33), a Slash (11) charm.
     let spells = [33u8, 0, 27, 5, 28, 34, 11, 38, 13];
-    let base_other_zone = pair_value(&spells, 0, 1);      // blue in zone b: no push term
-    let contested = pair_value(&spells, 0, 3);            // blue contests zone a on its sorcery
+    let base_other_zone = pair_value(&spells, 0, 1, true);      // blue in zone b: no push term
+    let contested = pair_value(&spells, 0, 3, true);            // blue contests zone a on its sorcery
     // The contested value carries red's +PUSH beyond what the spells alone say.
     let spells_no_push = [33u8, 0, 27, 5, 28, 34, 14, 38, 13];  // Slash -> Seal of Summer
-    let contested_no_push = pair_value(&spells_no_push, 0, 3);
+    let contested_no_push = pair_value(&spells_no_push, 0, 3, true);
     let _ = base_other_zone;
     assert!(contested - contested_no_push > PUSH * 0.5, "push leverage credited to red: {contested} vs {contested_no_push}");
     // If blue takes the Slash itself, the leverage flips to blue.
-    let blue_holds = pair_value(&spells, 0, 6);
-    let blue_holds_no_push = pair_value(&spells_no_push, 0, 6);
+    let blue_holds = pair_value(&spells, 0, 6, true);
+    let blue_holds_no_push = pair_value(&spells_no_push, 0, 6, true);
     assert!(blue_holds - blue_holds_no_push < -PUSH * 0.5, "push leverage credited to blue: {blue_holds} vs {blue_holds_no_push}");
 }
 
@@ -3348,26 +3348,27 @@ const SYZYGY_DRAW: [u8; 9] = [18, 0, 27, 5, 6, 28, 10, 11, 26];
 
 #[test]
 fn opening_never_starts_opposite_syzygy() {
-    use crate::opening::{choose_opening, set_opening_syzygy, opening_syzygy_enabled, syzygy_exposed, SYZYGY_SAFE_CHARMS};
+    use crate::opening::{choose_opening, set_opening_syzygy, opening_syzygy_enabled, syzygy_exposed,
+                         SYZYGY_ALWAYS_EXPOSED, SYZYGY_AUTUMN_EXPOSED};
     assert!(opening_syzygy_enabled(), "the Syzygy rules ship ON");
-    assert_eq!(SYZYGY_SAFE_CHARMS, [10, 29, 23], "Sprout, Splash, Charge");
-    assert!(syzygy_exposed(&SYZYGY_DRAW, 4) && syzygy_exposed(&SYZYGY_DRAW, 7));
-    assert!(!syzygy_exposed(&SYZYGY_DRAW, 3) && !syzygy_exposed(&SYZYGY_DRAW, 6) && !syzygy_exposed(&SYZYGY_DRAW, 0));
+    // Every official charm is in exactly one list.
+    for c in CHARMS { assert!(SYZYGY_ALWAYS_EXPOSED.contains(&c) ^ SYZYGY_AUTUMN_EXPOSED.contains(&c), "charm {c}"); }
+    assert!(syzygy_exposed(&SYZYGY_DRAW, 4, false) && syzygy_exposed(&SYZYGY_DRAW, 7, false), "Fireblast; Slash always");
+    assert!(!syzygy_exposed(&SYZYGY_DRAW, 3, true) && !syzygy_exposed(&SYZYGY_DRAW, 6, true) && !syzygy_exposed(&SYZYGY_DRAW, 0, true));
     // Red: Fireblast is the strongest spell drawn, but it is opposite Syzygy.
     let b = competitive_board(SYZYGY_DRAW);
     let p = choose_opening(&b, Color::Red).expect("applies");
     assert!(p.pos != 4 && p.pos != 7, "red must not start opposite Syzygy: {p:?}");
     assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "both exposed slots vetoed: {p:?}");
-    // Blue, after red started somewhere harmless (the Grow sorcery, slot 3).
-    let bb = after_red_opening_slot(SYZYGY_DRAW, 3);
-    let pb = choose_opening(&bb, Color::Blue).expect("applies");
-    assert!(pb.pos != 4 && pb.pos != 7, "blue must not start opposite Syzygy: {pb:?}");
-    assert!(!pb.syzygy_threat);
-    // A safe charm opposite Syzygy (Sprout for Slash) is allowed again.
-    let mut safe = SYZYGY_DRAW; safe[7] = 10; safe[6] = 11;
-    assert!(!syzygy_exposed(&safe, 7), "Sprout's cast moves the stone away");
-    let ps = choose_opening(&competitive_board(safe), Color::Red).expect("applies");
-    assert_eq!(ps.vetoed & (1 << 7), 0, "no veto on the safe charm: {ps:?}");
+    // Sprout opposite (Slash moved to a7): exposed only with Seal of Autumn near Syzygy.
+    let mut sprout = SYZYGY_DRAW; sprout[7] = 10; sprout[6] = 11;
+    assert!(!syzygy_exposed(&sprout, 7, false) && syzygy_exposed(&sprout, 7, true));
+    let ps = choose_opening(&competitive_board(sprout), Color::Red).expect("applies");
+    assert_eq!(ps.vetoed & (1 << 7), 0, "no seal, no veto on Sprout: {ps:?}");
+    // Seal of Autumn on a7, which touches Syzygy's a4: now Sprout is vetoed too.
+    let mut autumn = sprout; autumn[6] = 32;
+    let pa = choose_opening(&competitive_board(autumn), Color::Red).expect("applies");
+    assert_ne!(pa.vetoed & (1 << 7), 0, "Autumn next to Syzygy exposes Sprout: {pa:?}");
     // Knob off: the v16 selector takes Fireblast.
     set_opening_syzygy(false);
     let p0 = choose_opening(&b, Color::Red).expect("applies");
@@ -3388,19 +3389,26 @@ fn opening_blue_takes_syzygy_against_an_exposed_start() {
     assert_eq!(p.reply, Some(6));
     assert_eq!(p.node_mask, crate::topology::SIGIL[0]);
     assert!(crate::opening::report_line(&p, p.node_mask.trailing_zeros() as u8).contains("crushes the Fireblast start"));
-    // Red on the charm opposite Syzygy (Slash, slot 7): it cannot leave without a dash.
-    let b7 = after_red_opening_slot(SYZYGY_DRAW, 7);
-    let p7 = choose_opening(&b7, Color::Blue).expect("applies");
-    assert_eq!(p7.spell, 18, "Syzygy is forced against a stuck charm: {p7:?}");
-    assert!(p7.syzygy_threat);
-    // Red on a safe charm opposite Syzygy (Charge): no forced reply.
-    let mut safe = SYZYGY_DRAW; safe[7] = 23; safe[6] = 11;
-    let pc = choose_opening(&after_red_opening_slot(safe, 7), Color::Blue).expect("applies");
-    assert!(!pc.syzygy_threat, "Charge moves away: {pc:?}");
+    // Red on the charm opposite Syzygy, Slash: always a target.
+    let p7 = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 7), Color::Blue).expect("applies");
+    assert!(p7.syzygy_threat && p7.spell == 18, "{p7:?}");
+    // A static seal there (Seal of Winter) too.
+    let mut seal = SYZYGY_DRAW; seal[7] = 38; seal[8] = 11;
+    let pw = choose_opening(&after_red_opening_slot(seal, 7), Color::Blue).expect("applies");
+    assert!(pw.syzygy_threat, "{pw:?}");
+    // Charge there: not a target without Seal of Autumn near Syzygy...
+    let mut charge = SYZYGY_DRAW; charge[7] = 23; charge[6] = 11;
+    let pc = choose_opening(&after_red_opening_slot(charge, 7), Color::Blue).expect("applies");
+    assert!(!pc.syzygy_threat, "Charge gets away: {pc:?}");
+    // ...but with the seal on a7 blue takes Syzygy on a4, the node next to it.
+    let mut autumn = charge; autumn[6] = 32;
+    let pa = choose_opening(&after_red_opening_slot(autumn, 7), Color::Blue).expect("applies");
+    assert!(pa.syzygy_threat && pa.spell == 18, "{pa:?}");
+    assert_eq!(pa.node_mask, 1u64 << n("a4"), "{pa:?}");
     // Red elsewhere: not forced.
     let pe = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 3), Color::Blue).expect("applies");
     assert!(!pe.syzygy_threat);
-    // Knob off: the tables decide and Syzygy (-1.19) is not the reply to Fireblast.
+    // Knob off: the tables decide and Syzygy is not the reply to Fireblast.
     set_opening_syzygy(false);
     let p0 = choose_opening(&b, Color::Blue).expect("applies");
     set_opening_syzygy(true);
@@ -3408,25 +3416,49 @@ fn opening_blue_takes_syzygy_against_an_exposed_start() {
 }
 
 #[test]
-fn opening_blue_values_syzygy_by_the_spells_across_from_it() {
+fn opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy() {
+    use crate::opening::choose_opening;
+    // Red on the Grow sorcery (a8-a10), which does not touch Syzygy (a2-a6): Fireblast,
+    // the strongest spell, is fair game for blue.
+    let pe = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 3), Color::Blue).expect("applies");
+    assert_eq!(pe.vetoed & (1 << 4 | 1 << 7), 0, "{pe:?}");
+    assert_eq!(pe.spell, 6, "{pe:?}");
+    // Red in Syzygy, or on a node next to it (mana a1, void a13): blue keeps off both targets.
+    for node in ["a2", "a1", "a13"] {
+        let p = choose_opening(&after_red_opening(SYZYGY_DRAW, node), Color::Blue).expect("applies");
+        assert!(p.pos != 4 && p.pos != 7, "red on {node}: {p:?}");
+        assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "red on {node}: {p:?}");
+    }
+    // Sprout opposite, Seal of Autumn on a7 (the charm touching Syzygy): Sprout is a
+    // target for blue too, although red's a2 is not next to the seal.
+    let mut autumn = SYZYGY_DRAW; autumn[7] = 10; autumn[6] = 32; autumn[8] = 11;
+    let pa = choose_opening(&after_red_opening(autumn, "a2"), Color::Blue).expect("applies");
+    assert_ne!(pa.vetoed & (1 << 7), 0, "{pa:?}");
+    // Seal of Autumn elsewhere (c7, not touching Syzygy): Sprout is an ordinary spell.
+    let mut away = SYZYGY_DRAW; away[7] = 10; away[8] = 32; away[6] = 11;
+    let pw = choose_opening(&after_red_opening(away, "a2"), Color::Blue).expect("applies");
+    assert_eq!(pw.vetoed & (1 << 7), 0, "{pw:?}");
+}
+
+#[test]
+fn opening_syzygy_values_by_colour() {
     use crate::opening::{own_value, set_opening_syzygy};
     use crate::opening_data::STRENGTH;
-    // Same zone-mates for Syzygy either way (the opposite sigils are in another
-    // zone), so swapping the opposite sorcery from Fireblast to Grow changes
-    // blue's value by exactly the strength substitution.
-    let strong = SYZYGY_DRAW;                       // Fireblast (6) opposite
-    let mut weak = SYZYGY_DRAW; weak[4] = 28; weak[5] = 6;  // Torrent (28) opposite, Fireblast moved to zone c
-    let v_strong = own_value(&strong, 0, None, Color::Blue);
-    let v_weak = own_value(&weak, 0, None, Color::Blue);
-    let expect = STRENGTH[6].max(STRENGTH[11]).max(STRENGTH[18]) - STRENGTH[28].max(STRENGTH[11]).max(STRENGTH[18]);
-    assert!((v_strong - v_weak - expect).abs() < 1e-5, "{v_strong} - {v_weak} vs {expect}");
-    assert!(v_strong - own_value(&strong, 0, None, Color::Red) > 2.5, "blue credits Fireblast's strength, red does not");
-    // Knob off: no substitution for either side.
+    // Red's Syzygy is worth the greater of itself and Fireblast across from it;
+    // blue's Syzygy has its own rating.
+    let red = own_value(&SYZYGY_DRAW, 0, None, Color::Red);
+    let blue = own_value(&SYZYGY_DRAW, 0, None, Color::Blue);
+    assert!((red - blue - (STRENGTH[6] - STRENGTH[18])).abs() < 1e-5, "{red} {blue}");
+    // Blue on Fireblast is worth only Syzygy's strength when red started in Syzygy
+    // (slot 0), and its own when red started on Grow (slot 3, zone a like Syzygy).
+    let near = own_value(&SYZYGY_DRAW, 4, Some(0), Color::Blue);
+    let far = own_value(&SYZYGY_DRAW, 4, Some(3), Color::Blue);
+    assert!((far - near - (STRENGTH[6] - STRENGTH[18])).abs() < 1e-5, "{near} {far}");
+    // Knob off: no adjustments.
     set_opening_syzygy(false);
-    let v_off = own_value(&strong, 0, None, Color::Blue);
+    let (r0, b0) = (own_value(&SYZYGY_DRAW, 0, None, Color::Red), own_value(&SYZYGY_DRAW, 4, Some(0), Color::Blue));
     set_opening_syzygy(true);
-    assert!((v_off - own_value(&strong, 0, None, Color::Red)).abs() < 1e-6, "{v_off}");
-    assert!(v_strong > v_off);
+    assert!((r0 - blue).abs() < 1e-6 && (b0 - far).abs() < 1e-6, "{r0} {b0}");
 }
 
 #[test]
@@ -3897,4 +3929,126 @@ fn seal_of_spring_allows_exactly_one_recast_of_the_locked_spell() {
     b.finish_cast(flourish, Color::Red);
     assert_eq!((b.lock[0], b.springlock[0]), (flourish, NO_SPELL));
     assert!(b.castable(Color::Red, true, true, false).contains(&grow), "no longer locked");
+}
+
+// ------------------------------------------- opening contests (2026-09-30)
+
+#[test]
+fn opening_red_avoids_blossom_when_decay_is_drawn() {
+    // Decay (34) is a ++ counter to Blossom (15) like Hail Storm; Fireblast (6)
+    // is in the draw too, so red has a strong alternative.
+    let b = competitive_board([15, 0, 27, 34, 6, 28, 10, 38, 26]);
+    let p = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+    assert_ne!(p.spell, 15, "{p:?}");
+    assert!(p.vetoed & 1 != 0, "Blossom vetoed by Decay: {p:?}");
+}
+
+#[test]
+fn opening_blue_counters_blossom_with_low_rated_decay() {
+    use crate::opening_data::STRENGTH;
+    // Red started on Blossom anyway: blue answers with Decay, although Decay is
+    // rated below Fireblast, which is also open, and a free ritual contest.
+    let b = after_red_opening([15, 0, 27, 34, 6, 28, 10, 38, 26], "a2");
+    assert!(STRENGTH[34] < STRENGTH[6] && STRENGTH[34] < STRENGTH[15]);
+    let p = crate::opening::choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!(p.spell, 34, "{p:?}");
+    assert_eq!(p.reply, Some(15));
+}
+
+/// Blossom (15) on ritual a with no counter in the draw, no push charm in
+/// corner a, and a weak rest: nothing blue can take elsewhere matches it.
+const CONTEST_DRAW: [u8; 9] = [15, 0, 27, 5, 28, 19, 10, 38, 14];
+
+#[test]
+fn opening_blue_contests_the_strongest_ritual() {
+    use crate::opening::{choose_opening, pair_value, set_opening_contest};
+    let b = after_red_opening(CONTEST_DRAW, "a2");
+    let p = choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!((p.pos, p.spell), (0, 15), "blue fights for Blossom: {p:?}");
+    assert_eq!(p.node_mask, SIGIL[0] & !(1u64 << n("a2")), "no push charm: any free Blossom node");
+    // Switch off: the flat v17 head start is back on the contest.
+    let on = pair_value(&CONTEST_DRAW, 0, 0, true);
+    set_opening_contest(false);
+    let off = pair_value(&CONTEST_DRAW, 0, 0, true);
+    set_opening_contest(true);
+    assert!((off - on - crate::opening::SAME_SIGIL_TEMPO_V17).abs() < 1e-6, "{on} {off}");
+}
+
+#[test]
+fn opening_contest_credits_the_side_the_charm_is_behind() {
+    use crate::opening::{behind_node, choose_opening, pair_value, side_node, PUSH};
+    let names: Vec<&str> = (0..6).map(|s| crate::topology::NAMES[side_node(s, 6 + s % 3).unwrap() as usize]).collect();
+    assert_eq!(names, ["a4", "b4", "c4", "a8", "b8", "c8"]);
+    // The previous corner's charm, through the void node: a5 -- a12 -- c7 and rotations.
+    let far: Vec<&str> = (0..3).map(|s| crate::topology::NAMES[side_node(s, 6 + (s + 2) % 3).unwrap() as usize]).collect();
+    assert_eq!(far, ["a5", "b5", "c5"]);
+    assert_eq!(side_node(6, 6), None);
+    assert_eq!(behind_node(&[15u8, 0, 27, 5, 28, 19, 11, 38, 14], 0), Some(n("a4") as u8));
+    // Slash (11) behind ritual a: the contest swings by two pushes on who holds a4.
+    let draw = [15u8, 0, 27, 5, 28, 19, 11, 38, 14];
+    let red_behind = pair_value(&draw, 0, 0, true);
+    let blue_behind = pair_value(&draw, 0, 0, false);
+    assert!((red_behind - blue_behind - 2.0 * PUSH).abs() < 1e-6, "{red_behind} {blue_behind}");
+    // Red on a2 left a4 open: blue contests there.
+    let p = choose_opening(&after_red_opening(draw, "a2"), Color::Blue).expect("applies");
+    assert_eq!(p.pos, 0, "{p:?}");
+    assert_eq!(p.node_mask, 1u64 << n("a4"), "blue takes the node the Slash is behind: {p:?}");
+    // Red on a4: the charm is behind red, so a contest costs blue the push.
+    let p4 = choose_opening(&after_red_opening(draw, "a4"), Color::Blue).expect("applies");
+    if p4.pos == 0 { assert_eq!(p4.node_mask, SIGIL[0] & !(1u64 << n("a4"))); }
+    assert!(-p4.value <= -p.value + 1e-6, "blue is no better off against a4 than a2: {p:?} {p4:?}");
+}
+
+#[test]
+fn opening_red_takes_the_behind_node_in_a_push_corner() {
+    use crate::opening::{behind_node, choose_opening};
+    for seed in 1..=200u64 {
+        let b = competitive_board(Board::legal_draw(seed));
+        let p = choose_opening(&b, Color::Red).expect("applies");
+        if let Some(bn) = behind_node(&b.spells, p.pos) {
+            assert_eq!(p.node_mask, 1u64 << bn, "seed {seed}: {p:?}");
+        } else {
+            assert_eq!(p.node_mask, SIGIL[p.pos], "seed {seed}: {p:?}");
+        }
+    }
+}
+
+#[test]
+fn opening_ritual_contest_credits_the_far_charm_and_two_push_charms_cancel() {
+    use crate::opening::{behind_node, choose_opening, pair_value};
+    // Ritual a (Blossom) with Slash on c7, the charm on its OTHER side (a5 -- a12 -- c7),
+    // and no push charm on a7: the behind node is a5.
+    let far = [15u8, 0, 27, 5, 28, 19, 38, 14, 11];
+    assert_eq!(behind_node(&far, 0), Some(n("a5") as u8));
+    let p = choose_opening(&after_red_opening(far, "a2"), Color::Blue).expect("applies");
+    assert_eq!(p.pos, 0, "{p:?}");
+    assert_eq!(p.node_mask, 1u64 << n("a5"), "blue contests from the Slash side: {p:?}");
+    // Charge on a7 AND Slash on c7: each side has one, no credit either way.
+    let both = [15u8, 0, 27, 5, 28, 19, 23, 14, 11];
+    assert_eq!(behind_node(&both, 0), None);
+    assert!((pair_value(&both, 0, 0, true) - pair_value(&both, 0, 0, false)).abs() < 1e-6);
+}
+
+#[test]
+fn opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides() {
+    use crate::opening::{own_value, set_opening_carnage, CARNAGE, NEIGHBOUR_EDGE};
+    use crate::opening_data::STRENGTH;
+    assert_eq!(SPELLS[CARNAGE as usize].name, "Carnage");
+    // Carnage on ritual a; Fireblast (6) on sorcery c, the previous corner's, beside it via a11.
+    let draw = [1u8, 0, 27, 5, 28, 6, 10, 38, 14];
+    for side in [Color::Red, Color::Blue] {
+        let on = own_value(&draw, 0, None, side);
+        set_opening_carnage(false);
+        let off = own_value(&draw, 0, None, side);
+        set_opening_carnage(true);
+        let want = STRENGTH[6] + NEIGHBOUR_EDGE - STRENGTH[1];
+        assert!((on - off - want).abs() < 1e-5, "{side:?}: {on} {off}");
+    }
+    // Fireblast on sorcery b (neither side of ritual a): no substitution.
+    let away = [1u8, 0, 27, 5, 6, 28, 10, 38, 14];
+    let on = own_value(&away, 0, None, Color::Red);
+    set_opening_carnage(false);
+    let off = own_value(&away, 0, None, Color::Red);
+    set_opening_carnage(true);
+    assert!((on - off - NEIGHBOUR_EDGE).abs() < 1e-5, "only the edge: {on} {off}");
 }

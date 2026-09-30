@@ -113,14 +113,6 @@
 "robi"
 ],
 [
-"Starfall",
-"core",
-"ritual",
-"good",
-"empty",
-"robi"
-],
-[
 "Azimuth",
 "celestial",
 "charm",
@@ -132,6 +124,14 @@
 "Comet",
 "core",
 "charm",
+"medium",
+"empty",
+"robi"
+],
+[
+"Decay",
+"gloom",
+"sorcery",
 "medium",
 "empty",
 "robi"
@@ -193,14 +193,6 @@
 "robi"
 ],
 [
-"Seal of Destruction",
-"covenant",
-"ritual",
-"medium",
-"neither",
-"robi"
-],
-[
 "Seal of Spring",
 "springtime",
 "charm",
@@ -225,6 +217,14 @@
 "robi"
 ],
 [
+"Seal of Winter",
+"covenant",
+"charm",
+"medium",
+"crowded",
+"robi"
+],
+[
 "Splash",
 "flood",
 "charm",
@@ -236,6 +236,14 @@
 "Sprout",
 "core",
 "charm",
+"medium",
+"empty",
+"robi"
+],
+[
+"Starfall",
+"core",
+"ritual",
 "medium",
 "empty",
 "robi"
@@ -265,11 +273,11 @@
 "robi"
 ],
 [
-"Decay",
-"gloom",
-"sorcery",
-"bad",
-"empty",
+"Tsunami",
+"flood",
+"ritual",
+"medium",
+"crowded",
 "robi"
 ],
 [
@@ -297,9 +305,9 @@
 "robi"
 ],
 [
-"Seal of Winter",
+"Seal of Destruction",
 "covenant",
-"charm",
+"ritual",
 "bad",
 "crowded",
 "robi"
@@ -308,14 +316,6 @@
 "Torrent",
 "flood",
 "sorcery",
-"bad",
-"crowded",
-"robi"
-],
-[
-"Tsunami",
-"flood",
-"ritual",
 "bad",
 "crowded",
 "robi"
@@ -350,7 +350,7 @@
 [
 "Gust + Decay",
 "++",
-"prefill"
+"robi"
 ],
 [
 "Gust + Seal of Destruction",
@@ -388,7 +388,22 @@
 "robi"
 ],
 [
+"Bewitch + Seal of Stone",
+"+",
+"robi"
+],
+[
 "Bewitch + Tsunami",
+"+",
+"robi"
+],
+[
+"Blossom + Corrupt",
+"+",
+"robi"
+],
+[
+"Blossom + Seal of Autumn",
 "+",
 "robi"
 ],
@@ -398,7 +413,22 @@
 "robi"
 ],
 [
+"Carnage + Seal of Stone",
+"+",
+"robi"
+],
+[
 "Carnage + Seal of Summer",
+"+",
+"robi"
+],
+[
+"Carnage + Seal of Wind",
+"+",
+"robi"
+],
+[
+"Carnage + Syzygy",
 "+",
 "robi"
 ],
@@ -448,12 +478,22 @@
 "robi"
 ],
 [
+"Eclipse + Corrupt",
+"+",
+"robi"
+],
+[
 "Eclipse + Seal of Destruction",
 "+",
 "robi"
 ],
 [
 "Fireblast + Corrupt",
+"+",
+"robi"
+],
+[
+"Fireblast + Seal of Stone",
 "+",
 "robi"
 ],
@@ -558,6 +598,11 @@
 "robi"
 ],
 [
+"Grow + Seal of Stone",
+"+",
+"robi"
+],
+[
 "Hail Storm + Decay",
 "+",
 "robi"
@@ -568,7 +613,47 @@
 "robi"
 ],
 [
+"Hurricane + Decay",
+"+",
+"robi"
+],
+[
+"Hurricane + Storm Front",
+"+",
+"robi"
+],
+[
+"Hurricane + Torrent",
+"+",
+"robi"
+],
+[
+"Hurricane + Tsunami",
+"+",
+"robi"
+],
+[
 "Meteor + Seal of Spring",
+"+",
+"robi"
+],
+[
+"Meteor + Seal of Stone",
+"+",
+"robi"
+],
+[
+"Scatter + Gather",
+"+",
+"robi"
+],
+[
+"Scatter + Harvest",
+"+",
+"robi"
+],
+[
+"Seal of Lightning + Charge",
 "+",
 "robi"
 ],
@@ -588,12 +673,37 @@
 "robi"
 ],
 [
+"Seal of Lightning + Seal of Stone",
+"+",
+"robi"
+],
+[
 "Seal of Spring + Torrent",
 "+",
 "robi"
 ],
 [
+"Seal of Summer + Gust",
+"+",
+"robi"
+],
+[
 "Seal of Summer + Harvest",
+"+",
+"robi"
+],
+[
+"Seal of Summer + Hurricane",
+"+",
+"robi"
+],
+[
+"Seal of Summer + Scatter",
+"+",
+"robi"
+],
+[
+"Seal of Summer + Seal of Spring",
 "+",
 "robi"
 ],
@@ -604,6 +714,16 @@
 ],
 [
 "Seal of Wind + Charge",
+"+",
+"robi"
+],
+[
+"Seal of Wind + Erupt",
+"+",
+"robi"
+],
+[
+"Seal of Wind + Fury",
 "+",
 "robi"
 ],
@@ -634,6 +754,21 @@
 ],
 [
 "Sprout + Seal of Destruction",
+"+",
+"robi"
+],
+[
+"Storm Front + Decay",
+"+",
+"robi"
+],
+[
+"Storm Front + Seal of Destruction",
+"+",
+"robi"
+],
+[
+"Storm Front + Seal of Stone",
 "+",
 "robi"
 ],
@@ -728,6 +863,16 @@
 "robi"
 ],
 [
+"Blossom + Decay",
+"=",
+"robi"
+],
+[
+"Blossom + Gather",
+"=",
+"robi"
+],
+[
 "Blossom + Harvest",
 "=",
 "robi"
@@ -789,6 +934,11 @@
 ],
 [
 "Corrupt + Lurk",
+"=",
+"robi"
+],
+[
+"Eclipse + Decay",
 "=",
 "robi"
 ],
@@ -958,12 +1108,22 @@
 "robi"
 ],
 [
+"Hail Storm + Blossom",
+"=",
+"robi"
+],
+[
 "Hail Storm + Fury",
 "=",
 "robi"
 ],
 [
 "Hail Storm + Seal of Destruction",
+"=",
+"robi"
+],
+[
+"Hail Storm + Seal of Stone",
 "=",
 "robi"
 ],
@@ -978,6 +1138,11 @@
 "robi"
 ],
 [
+"Hurricane + Splash",
+"=",
+"robi"
+],
+[
 "Meteor + Seal of Autumn",
 "=",
 "robi"
@@ -988,7 +1153,22 @@
 "robi"
 ],
 [
+"Scatter + Seal of Autumn",
+"=",
+"robi"
+],
+[
+"Scatter + Seal of Winter",
+"=",
+"robi"
+],
+[
 "Seal of Autumn + Seal of Winter",
+"=",
+"robi"
+],
+[
+"Seal of Spring + Seal of Autumn",
 "=",
 "robi"
 ],
@@ -998,7 +1178,17 @@
 "robi"
 ],
 [
+"Seal of Summer + Blossom",
+"=",
+"robi"
+],
+[
 "Seal of Summer + Lurk",
+"=",
+"robi"
+],
+[
+"Seal of Summer + Storm Front",
 "=",
 "robi"
 ],
@@ -1033,7 +1223,22 @@
 "robi"
 ],
 [
+"Splash + Decay",
+"=",
+"robi"
+],
+[
 "Splash + Seal of Winter",
+"=",
+"robi"
+],
+[
+"Sprout + Hurricane",
+"=",
+"robi"
+],
+[
+"Sprout + Storm Front",
 "=",
 "robi"
 ],
@@ -1053,6 +1258,21 @@
 "robi"
 ],
 [
+"Starfall + Seal of Stone",
+"=",
+"robi"
+],
+[
+"Starfall + Syzygy",
+"=",
+"robi"
+],
+[
+"Storm Front + Seal of Winter",
+"=",
+"robi"
+],
+[
 "Surge + Erupt",
 "=",
 "robi"
@@ -1065,6 +1285,31 @@
 [
 "Syzygy + Seal of Autumn",
 "=",
+"robi"
+],
+[
+"Torrent + Decay",
+"=",
+"robi"
+],
+[
+"Tsunami + Decay",
+"=",
+"robi"
+],
+[
+"Azimuth + Charge",
+"-",
+"robi"
+],
+[
+"Azimuth + Erupt",
+"-",
+"robi"
+],
+[
+"Azimuth + Fury",
+"-",
 "robi"
 ],
 [
@@ -1089,6 +1334,11 @@
 ],
 [
 "Bewitch + Syzygy",
+"-",
+"robi"
+],
+[
+"Blossom + Syzygy",
 "-",
 "robi"
 ],
@@ -1128,6 +1378,11 @@
 "robi"
 ],
 [
+"Eclipse + Lurk",
+"-",
+"robi"
+],
+[
 "Fireblast + Azimuth",
 "-",
 "robi"
@@ -1154,6 +1409,11 @@
 ],
 [
 "Gather + Decay",
+"-",
+"robi"
+],
+[
+"Gather + Seal of Stone",
 "-",
 "robi"
 ],
@@ -1193,12 +1453,37 @@
 "robi"
 ],
 [
+"Harvest + Seal of Stone",
+"-",
+"robi"
+],
+[
 "Meteor + Blossom",
 "-",
 "robi"
 ],
 [
+"Seal of Lightning + Syzygy",
+"-",
+"robi"
+],
+[
+"Seal of Spring + Gather",
+"-",
+"robi"
+],
+[
+"Seal of Spring + Harvest",
+"-",
+"robi"
+],
+[
 "Seal of Spring + Syzygy",
+"-",
+"robi"
+],
+[
+"Seal of Wind + Blossom",
 "-",
 "robi"
 ],
@@ -1219,6 +1504,26 @@
 ],
 [
 "Slash + Torrent",
+"-",
+"robi"
+],
+[
+"Sprout + Eclipse",
+"-",
+"robi"
+],
+[
+"Storm Front + Gust",
+"-",
+"robi"
+],
+[
+"Storm Front + Torrent",
+"-",
+"robi"
+],
+[
+"Storm Front + Tsunami",
 "-",
 "robi"
 ],
@@ -1276,7 +1581,7 @@
 "Decay",
 "Blossom",
 "++",
-"prefill"
+"robi"
 ],
 [
 "Decay",
@@ -1294,7 +1599,7 @@
 "Hail Storm",
 "Blossom",
 "++",
-"prefill"
+"robi"
 ],
 [
 "Lurk",
@@ -1312,13 +1617,13 @@
 "Splash",
 "Hurricane",
 "++",
-"prefill"
+"robi"
 ],
 [
 "Sprout",
 "Hurricane",
 "++",
-"prefill"
+"robi"
 ],
 [
 "Surge",
@@ -1363,12 +1668,6 @@
 "robi"
 ],
 [
-"Bewitch",
-"Syzygy",
-"+",
-"robi"
-],
-[
 "Blossom",
 "Bewitch",
 "+",
@@ -1389,6 +1688,18 @@
 [
 "Blossom",
 "Grow",
+"+",
+"robi"
+],
+[
+"Blossom",
+"Seal of Autumn",
+"+",
+"robi"
+],
+[
+"Blossom",
+"Seal of Summer",
 "+",
 "robi"
 ],
@@ -1418,7 +1729,25 @@
 ],
 [
 "Carnage",
+"Seal of Stone",
+"+",
+"robi"
+],
+[
+"Carnage",
 "Seal of Summer",
+"+",
+"robi"
+],
+[
+"Carnage",
+"Syzygy",
+"+",
+"robi"
+],
+[
+"Charge",
+"Azimuth",
 "+",
 "robi"
 ],
@@ -1479,6 +1808,18 @@
 [
 "Comet",
 "Tsunami",
+"+",
+"robi"
+],
+[
+"Corrupt",
+"Blossom",
+"+",
+"robi"
+],
+[
+"Corrupt",
+"Eclipse",
 "+",
 "robi"
 ],
@@ -1561,6 +1902,12 @@
 "robi"
 ],
 [
+"Fireblast",
+"Seal of Stone",
+"+",
+"robi"
+],
+[
 "Flourish",
 "Eclipse",
 "+",
@@ -1616,6 +1963,12 @@
 ],
 [
 "Fury",
+"Azimuth",
+"+",
+"robi"
+],
+[
+"Fury",
 "Flourish",
 "+",
 "robi"
@@ -1657,6 +2010,24 @@
 "robi"
 ],
 [
+"Gather",
+"Scatter",
+"+",
+"robi"
+],
+[
+"Gather",
+"Seal of Spring",
+"+",
+"robi"
+],
+[
+"Gather",
+"Seal of Stone",
+"+",
+"robi"
+],
+[
 "Hail Storm",
 "Decay",
 "+",
@@ -1675,6 +2046,12 @@
 "robi"
 ],
 [
+"Hail Storm",
+"Seal of Stone",
+"+",
+"robi"
+],
+[
 "Harvest",
 "Comet",
 "+",
@@ -1689,6 +2066,18 @@
 [
 "Harvest",
 "Grow",
+"+",
+"robi"
+],
+[
+"Harvest",
+"Seal of Spring",
+"+",
+"robi"
+],
+[
+"Harvest",
+"Seal of Stone",
 "+",
 "robi"
 ],
@@ -1719,6 +2108,18 @@
 [
 "Scatter",
 "Flourish",
+"+",
+"robi"
+],
+[
+"Scatter",
+"Seal of Autumn",
+"+",
+"robi"
+],
+[
+"Scatter",
+"Seal of Summer",
 "+",
 "robi"
 ],
@@ -1774,11 +2175,17 @@
 "Seal of Lightning",
 "Seal of Stone",
 "+",
-"prefill"
+"robi"
 ],
 [
 "Seal of Lightning",
 "Starfall",
+"+",
+"robi"
+],
+[
+"Seal of Lightning",
+"Syzygy",
 "+",
 "robi"
 ],
@@ -1821,6 +2228,12 @@
 [
 "Seal of Wind",
 "Bewitch",
+"+",
+"robi"
+],
+[
+"Seal of Wind",
+"Blossom",
 "+",
 "robi"
 ],
@@ -1880,6 +2293,12 @@
 ],
 [
 "Seal of Winter",
+"Scatter",
+"+",
+"robi"
+],
+[
+"Seal of Winter",
 "Splash",
 "+",
 "robi"
@@ -1909,14 +2328,44 @@
 "robi"
 ],
 [
+"Sprout",
+"Eclipse",
+"+",
+"robi"
+],
+[
 "Starfall",
 "Grow",
 "+",
 "robi"
 ],
 [
+"Storm Front",
+"Gust",
+"+",
+"robi"
+],
+[
+"Storm Front",
+"Hurricane",
+"+",
+"robi"
+],
+[
+"Storm Front",
+"Seal of Stone",
+"+",
+"robi"
+],
+[
 "Surge",
 "Seal of Destruction",
+"+",
+"robi"
+],
+[
+"Syzygy",
+"Blossom",
 "+",
 "robi"
 ],
@@ -1939,9 +2388,27 @@
 "robi"
 ],
 [
+"Torrent",
+"Hurricane",
+"+",
+"robi"
+],
+[
+"Tsunami",
+"Hurricane",
+"+",
+"robi"
+],
+[
 "Tsunami",
 "Torrent",
 "+",
+"robi"
+],
+[
+"Azimuth",
+"Erupt",
+"=",
 "robi"
 ],
 [
@@ -1988,6 +2455,12 @@
 ],
 [
 "Bewitch",
+"Seal of Stone",
+"=",
+"robi"
+],
+[
+"Bewitch",
 "Slash",
 "=",
 "robi"
@@ -2006,7 +2479,19 @@
 ],
 [
 "Bewitch",
+"Syzygy",
+"=",
+"robi"
+],
+[
+"Bewitch",
 "Tsunami",
+"=",
+"robi"
+],
+[
+"Blossom",
+"Gather",
 "=",
 "robi"
 ],
@@ -2042,9 +2527,9 @@
 ],
 [
 "Carnage",
-"Seal of Stone",
+"Seal of Wind",
 "=",
-"prefill"
+"robi"
 ],
 [
 "Carnage",
@@ -2085,6 +2570,18 @@
 [
 "Comet",
 "Seal of Stone",
+"=",
+"robi"
+],
+[
+"Eclipse",
+"Decay",
+"=",
+"robi"
+],
+[
+"Eclipse",
+"Lurk",
 "=",
 "robi"
 ],
@@ -2258,6 +2755,12 @@
 ],
 [
 "Grow",
+"Seal of Stone",
+"=",
+"robi"
+],
+[
+"Grow",
 "Splash",
 "=",
 "robi"
@@ -2265,6 +2768,12 @@
 [
 "Grow",
 "Tsunami",
+"=",
+"robi"
+],
+[
+"Gust",
+"Decay",
 "=",
 "robi"
 ],
@@ -2317,6 +2826,12 @@
 "robi"
 ],
 [
+"Hurricane",
+"Decay",
+"=",
+"robi"
+],
+[
 "Meteor",
 "Blossom",
 "=",
@@ -2344,7 +2859,7 @@
 "Meteor",
 "Seal of Stone",
 "=",
-"prefill"
+"robi"
 ],
 [
 "Meteor",
@@ -2365,6 +2880,18 @@
 "prefill"
 ],
 [
+"Scatter",
+"Harvest",
+"=",
+"robi"
+],
+[
+"Seal of Lightning",
+"Charge",
+"=",
+"robi"
+],
+[
 "Seal of Lightning",
 "Meteor",
 "=",
@@ -2378,9 +2905,27 @@
 ],
 [
 "Seal of Spring",
+"Seal of Autumn",
+"=",
+"robi"
+],
+[
+"Seal of Spring",
 "Storm Front",
 "=",
 "prefill"
+],
+[
+"Seal of Summer",
+"Gust",
+"=",
+"robi"
+],
+[
+"Seal of Summer",
+"Hurricane",
+"=",
+"robi"
 ],
 [
 "Seal of Summer",
@@ -2390,13 +2935,31 @@
 ],
 [
 "Seal of Summer",
+"Seal of Spring",
+"=",
+"robi"
+],
+[
+"Seal of Summer",
 "Storm Front",
 "=",
-"prefill"
+"robi"
 ],
 [
 "Seal of Wind",
 "Charge",
+"=",
+"robi"
+],
+[
+"Seal of Wind",
+"Erupt",
+"=",
+"robi"
+],
+[
+"Seal of Wind",
+"Fury",
 "=",
 "robi"
 ],
@@ -2437,14 +3000,44 @@
 "prefill"
 ],
 [
+"Splash",
+"Decay",
+"=",
+"robi"
+],
+[
 "Sprout",
 "Seal of Destruction",
 "=",
 "robi"
 ],
 [
+"Sprout",
+"Storm Front",
+"=",
+"robi"
+],
+[
 "Starfall",
 "Seal of Destruction",
+"=",
+"robi"
+],
+[
+"Starfall",
+"Seal of Stone",
+"=",
+"robi"
+],
+[
+"Starfall",
+"Syzygy",
+"=",
+"robi"
+],
+[
+"Storm Front",
+"Decay",
 "=",
 "robi"
 ],
@@ -2458,19 +3051,25 @@
 "Storm Front",
 "Seal of Destruction",
 "=",
-"prefill"
-],
-[
-"Storm Front",
-"Seal of Stone",
-"=",
-"prefill"
+"robi"
 ],
 [
 "Storm Front",
 "Seal of Winter",
 "=",
-"prefill"
+"robi"
+],
+[
+"Storm Front",
+"Torrent",
+"=",
+"robi"
+],
+[
+"Storm Front",
+"Tsunami",
+"=",
+"robi"
 ],
 [
 "Surge",
@@ -2493,6 +3092,18 @@
 [
 "Surge",
 "Syzygy",
+"=",
+"robi"
+],
+[
+"Torrent",
+"Decay",
+"=",
+"robi"
+],
+[
+"Tsunami",
+"Decay",
 "=",
 "robi"
 ],
@@ -2519,276 +3130,277 @@
 ],
 [
 "1",
-"Fireblast",
-"+1.68",
-"12",
+"Gather",
+"+1.77",
+"11",
 "good"
 ],
 [
 "2",
-"Gather",
-"+1.66",
-"7",
+"Fireblast",
+"+1.77",
+"13",
 "good"
 ],
 [
 "3",
 "Scatter",
-"+1.28",
-"5",
+"+1.71",
+"10",
 "good"
 ],
 [
 "4",
 "Blossom",
-"+1.14",
-"8",
+"+1.28",
+"16",
 "good"
 ],
 [
 "5",
 "Corrupt",
-"+0.90",
-"8",
+"+1.02",
+"10",
 "good"
 ],
 [
 "6",
-"Charge",
-"+0.87",
-"7",
+"Seal of Lightning",
+"+0.99",
+"10",
 "good"
 ],
 [
 "7",
-"Bewitch",
-"+0.84",
-"22",
+"Charge",
+"+0.99",
+"9",
 "good"
 ],
 [
 "8",
 "Carnage",
-"+0.81",
-"13",
+"+0.93",
+"16",
 "good"
 ],
 [
 "9",
-"Seal of Lightning",
-"+0.78",
-"7",
-"good"
-],
-[
-"10",
-"Seal of Wind",
-"+0.78",
+"Harvest",
+"+0.85",
 "13",
 "good"
 ],
 [
-"11",
+"10",
 "Slash",
-"+0.77",
+"+0.85",
 "11",
+"good"
+],
+[
+"11",
+"Fury",
+"+0.85",
+"7",
 "good"
 ],
 [
 "12",
-"Harvest",
-"+0.76",
-"10",
+"Bewitch",
+"+0.82",
+"23",
 "good"
 ],
 [
 "13",
-"Starfall",
-"+0.69",
-"6",
+"Seal of Wind",
+"+0.79",
+"17",
 "good"
 ],
 [
 "14",
-"Fury",
-"+0.67",
-"5",
-"good"
+"Hail Storm",
+"+0.59",
+"13",
+"medium"
 ],
 [
 "15",
-"Hail Storm",
-"+0.51",
-"11",
+"Storm Front",
+"+0.50",
+"12",
 "medium"
 ],
 [
 "16",
-"Meteor",
-"+0.43",
-"7",
+"Starfall",
+"+0.48",
+"8",
 "medium"
 ],
 [
 "17",
-"Storm Front",
-"+0.36",
-"2",
+"Meteor",
+"+0.37",
+"8",
 "medium"
 ],
 [
 "18",
 "Erupt",
 "+0.29",
-"4",
+"6",
 "medium"
 ],
 [
 "19",
-"Hurricane",
-"+0.28",
-"2",
+"Surge",
+"+0.09",
+"9",
 "medium"
 ],
 [
 "20",
-"Azimuth",
-"+0.11",
-"7",
+"Seal of Stone",
+"-0.05",
+"15",
 "medium"
 ],
 [
 "21",
-"Surge",
-"+0.11",
-"9",
-"medium"
-],
-[
-"22",
-"Seal of Stone",
-"+0.11",
-"4",
-"medium"
-],
-[
-"23",
-"Comet",
-"-0.21",
-"17",
-"medium"
-],
-[
-"24",
-"Splash",
-"-0.33",
-"7",
-"medium"
-],
-[
-"25",
-"Seal of Winter",
-"-0.47",
-"7",
-"bad"
-],
-[
-"26",
-"Sprout",
-"-0.48",
-"3",
-"medium"
-],
-[
-"27",
-"Seal of Spring",
-"-0.57",
-"9",
-"medium"
-],
-[
-"28",
-"Seal of Autumn",
-"-0.57",
+"Azimuth",
+"-0.14",
 "10",
 "medium"
 ],
 [
-"29",
-"Flourish",
-"-0.80",
-"38",
+"22",
+"Comet",
+"-0.18",
+"17",
 "medium"
 ],
 [
-"30",
-"Lurk",
-"-0.89",
-"7",
-"medium"
-],
-[
-"31",
-"Seal of Destruction",
-"-0.92",
-"16",
-"medium"
-],
-[
-"32",
-"Tsunami",
-"-0.96",
+"23",
+"Sprout",
+"-0.25",
 "6",
-"bad"
-],
-[
-"33",
-"Seal of Summer",
-"-1.04",
-"5",
 "medium"
 ],
 [
-"34",
-"Decay",
-"-1.10",
-"7",
-"bad"
+"24",
+"Hurricane",
+"-0.28",
+"9",
+"medium"
 ],
 [
-"35",
-"Eclipse",
-"-1.18",
-"5",
-"bad"
+"25",
+"Splash",
+"-0.42",
+"9",
+"medium"
 ],
 [
-"36",
-"Syzygy",
-"-1.19",
+"26",
+"Seal of Winter",
+"-0.68",
+"9",
+"medium"
+],
+[
+"27",
+"Seal of Autumn",
+"-0.68",
+"13",
+"medium"
+],
+[
+"28",
+"Lurk",
+"-0.71",
 "8",
 "medium"
 ],
 [
+"29",
+"Seal of Spring",
+"-0.74",
+"13",
+"medium"
+],
+[
+"30",
+"Decay",
+"-0.76",
+"15",
+"medium"
+],
+[
+"31",
+"Flourish",
+"-0.89",
+"38",
+"medium"
+],
+[
+"32",
+"Seal of Summer",
+"-0.94",
+"11",
+"medium"
+],
+[
+"33",
+"Seal of Destruction",
+"-1.00",
+"17",
+"bad"
+],
+[
+"34",
+"Tsunami",
+"-1.01",
+"9",
+"medium"
+],
+[
+"35",
+"Syzygy",
+"-1.02",
+"12",
+"medium"
+],
+[
+"36",
+"Eclipse",
+"-1.50",
+"9",
+"bad"
+],
+[
 "37",
 "Grow",
-"-1.50",
-"18",
+"-1.59",
+"19",
 "bad"
 ],
 [
 "38",
 "Gust",
-"-1.64",
-"4",
+"-1.84",
+"7",
 "bad"
 ],
 [
 "39",
 "Torrent",
-"-1.97",
-"11",
+"-2.26",
+"14",
 "bad"
 ]
-]
+],
+"export": "2026-09-29"
 }

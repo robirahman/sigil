@@ -255,6 +255,18 @@ class SigilBoard {
 		// threefold repetition is enforced by the controllers.
 		if (variantHasDeathmatch(this.variant)) return false;
 
+		// Scramble: no stone-lead win; casting your BOARD.spellTarget-th spell
+		// (the sixth on core) wins outright. Checked at the end of the
+		// caster's turn, like the standard trigger.
+		if (variantHasScramble(this.variant)) {
+			if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
+				this.gameover = true;
+				this.winner = activeColor;
+				return true;
+			}
+			return false;
+		}
+
 		// Stone-lead check (±BOARD.winLead: 3 on core): Providence phantoms count ASYMMETRICALLY (defense
 		// only) — a player's win claim uses their real placed stones,
 		// checked against the opponent's real+pending total. In the
@@ -297,7 +309,7 @@ class SigilBoard {
 			setBoardLayout(state.layout);
 			this.variant = composeVariant(variantHasCompetitive(this.variant),
 				variantHasDeathmatch(this.variant), variantHasDuplicates(this.variant),
-				state.layout === 'pentagon');
+				variantHasScramble(this.variant), state.layout === 'pentagon');
 			this.stones = {};
 		}
 		this.spellNames = state.spell_names;

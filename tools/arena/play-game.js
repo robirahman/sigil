@@ -21,6 +21,7 @@ const { specToOpts } = require('./engine.js');
 async function playGame(engine, spec) {
 	const { SimBoard, cavemanSearch, _minimaxApplyTurn, ENUM_CAPS, BOARD } = engine;
 	const { spellNames, redCfg, blueCfg, timeLimit, maxDepth, maxTurns } = spec;
+	const variant = spec.variant || 'standard';
 	const redMode = redCfg.label, blueMode = blueCfg.label;
 
 	const budget = { timeLimit, maxDepth };
@@ -29,7 +30,6 @@ async function playGame(engine, spec) {
 		blue: specToOpts(blueCfg, budget, ENUM_CAPS),
 	};
 
-	const variant = spec.variant || 'standard';
 	let board = new SimBoard(spellNames, variant);
 	if (!engine.variantHasCompetitive(variant)) {
 		board.stones[BOARD.startStones.red] = 'red';
@@ -100,7 +100,8 @@ async function playGame(engine, spec) {
 		plies,
 		endReason,
 		finalStones: { red: board.totalStones.red, blue: board.totalStones.blue },
-		spellCounter: { red: board.spellCounter.red, blue: board.spellCounter.blue },
+		finalSpells: { red: board.spellCounter.red, blue: board.spellCounter.blue },
+		variant,
 		durationMs: Date.now() - t0,
 		stats,
 		spellNames,

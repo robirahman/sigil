@@ -584,6 +584,9 @@ document.addEventListener('alpine:init', () => {
 					// The room's variant names its board layout; switch before
 					// the engine or the review draws anything.
 					_this.applyBoardLayout(variantBoardLayout(variant));
+					if (variantHasScramble(variant) && !reviewMode) {
+						_this.messageHistory.push('Scramble: there is no stone-lead win. The first player to cast ' + BOARD.spellTarget + ' spells wins.');
+					}
 					// AI-review wiring: roomCode is the gameId used for the shared
 					// Firebase review cache, and authManager exposes the uid for
 					// community-annotation writes.

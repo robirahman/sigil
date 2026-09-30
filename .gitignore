@@ -57,3 +57,5 @@ _arena_tournament.log
 # engine/harness/human_vs_rust_report.py)
 ai/data/users_cache_*.json
 ai/data/human_vs_ai_*.json
+# raw survey downloads (archived copies live in docs/strategy/survey_exports)
+/spell-survey-*.json

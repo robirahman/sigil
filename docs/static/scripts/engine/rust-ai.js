@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 18;
+const RUST_ENGINE_VERSION = 20;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -245,7 +245,7 @@ class RustAI {
 		if (this.transport !== 'worker') return;
 		let sfn;
 		try {
-			if (variantHasDuplicates(board.variant)) return;
+			if (variantHasDuplicates(board.variant) || variantHasScramble(board.variant)) return;
 			sfn = boardToSfn(SimBoard.fromSigilBoard(board));
 		} catch (e) { return; }
 		if (this._historySfns[this._historySfns.length - 1] !== sfn) this._historySfns.push(sfn);
@@ -316,6 +316,11 @@ class RustAI {
 		// variant token to standard). Refuse up front with a clear message.
 		if (variantHasDuplicates(board.variant)) {
 			throw new Error('Rust engine error: the Allow Duplicates variant is not supported by this engine tier.');
+		}
+		// Scramble changes the terminal rules, which the engine does not model
+		// (its SFN reader would fold the token to standard). Refuse likewise.
+		if (variantHasScramble(board.variant)) {
+			throw new Error('Rust engine error: the Scramble variant is not supported by this engine tier.');
 		}
 		const sim = SimBoard.fromSigilBoard(board);
 		const sfn = boardToSfn(sim);

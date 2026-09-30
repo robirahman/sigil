@@ -334,6 +334,7 @@
 						var _vparts = [];
 						if (_vs.indexOf('competitive') !== -1) _vparts.push('Competitive');
 						if (_vs.indexOf('deathmatch') !== -1) _vparts.push('Deathmatch');
+						else if (_vs.indexOf('scramble') !== -1) _vparts.push('Scramble');
 						if (_vs.indexOf('duplicates') !== -1) _vparts.push('Duplicates');
 						var variantTag = _vparts.length ? (' · ' + _vparts.join(' + ')) : '';
 						var card = document.createElement('div');
@@ -547,6 +548,11 @@
 						</label>
 						<small class="game-options__hint">Win only by eliminating all of your opponent's stones. Unrated.</small>
 						<label class="game-options__check">
+							<input type="checkbox" id="variant-scramble" />
+							<span>Scramble</span>
+						</label>
+						<small class="game-options__hint">No stone-lead win: the first player to cast their sixth spell wins. Can't be combined with Deathmatch. Unrated.</small>
+						<label class="game-options__check">
 							<input type="checkbox" id="variant-duplicates" />
 							<span>Allow duplicates</span>
 						</label>
@@ -687,19 +693,23 @@
 				(function() {
 					var comp = document.getElementById('variant-competitive');
 					var dm = document.getElementById('variant-deathmatch');
+					var sc = document.getElementById('variant-scramble');
 					var dup = document.getElementById('variant-duplicates');
-					// Competitive (start), Deathmatch (end) and Duplicates (setup)
-					// are orthogonal and combine into one stored string in that
-					// fixed token order, e.g. 'competitive_deathmatch_duplicates'
-					// (mirrors composeVariant in engine/constants.js).
+					// Competitive (start), Deathmatch or Scramble (end) and
+					// Duplicates (setup) combine into one stored string in that
+					// fixed token order, e.g. 'competitive_scramble_duplicates'
+					// (mirrors composeVariant in engine/constants.js). Deathmatch
+					// and Scramble are exclusive: ticking one clears the other.
 					var stored = localStorage.getItem('sigilVariant') || 'standard';
 					comp.checked = stored.indexOf('competitive') !== -1;
 					dm.checked = stored.indexOf('deathmatch') !== -1;
+					sc.checked = !dm.checked && stored.indexOf('scramble') !== -1;
 					dup.checked = stored.indexOf('duplicates') !== -1;
 					function compose() {
 						var parts = [];
 						if (comp.checked) parts.push('competitive');
 						if (dm.checked) parts.push('deathmatch');
+						else if (sc.checked) parts.push('scramble');
 						if (dup.checked) parts.push('duplicates');
 						return parts.length ? parts.join('_') : 'standard';
 					}
@@ -727,7 +737,14 @@
 					}
 					applyVariant(compose());
 					comp.addEventListener('change', onChange);
-					dm.addEventListener('change', onChange);
+					dm.addEventListener('change', function() {
+						if (dm.checked) sc.checked = false;
+						onChange();
+					});
+					sc.addEventListener('change', function() {
+						if (sc.checked) dm.checked = false;
+						onChange();
+					});
 					dup.addEventListener('change', onChange);
 				})();
 			</script>
@@ -750,7 +767,7 @@
 								else on.forEach(function(b) { packs.push(label(b)); });
 							});
 							var variants = [];
-							['variant-competitive', 'variant-deathmatch', 'variant-duplicates'].forEach(function(id) {
+							['variant-competitive', 'variant-deathmatch', 'variant-scramble', 'variant-duplicates'].forEach(function(id) {
 								var b = document.getElementById(id);
 								if (b.checked) variants.push(label(b));
 							});

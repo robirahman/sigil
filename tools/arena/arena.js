@@ -18,8 +18,8 @@
  *   --swap           alternate which AI plays red each game (fairness) (default on)
  *   --no-swap        keep colors fixed
  *   --pack KEY       spell pack for layout generation      (default core)
- *   --variant V      game variant, e.g. pentagon or competitive_pentagon
- *                    (the Cataclysm board)                 (default standard)
+ *   --variant V      game variant, e.g. scramble, pentagon or
+ *                    competitive_pentagon (not duplicates)  (default standard)
  *   --seed N         RNG seed for reproducible spell layouts (default time-based)
  *   --max-depth N    ply cap per search                    (default 64)
  *   --max-turns N    ply cap per game                       (default 300)
@@ -41,7 +41,7 @@ function parseArgs(argv) {
 	const a = {
 		games: 10, time: 10, red: 'caveman', blue: 'prune',
 		swap: true, pack: 'core', seed: null, maxDepth: 64, maxTurns: 300,
-		threads: os.cpus().length, json: null, requireSpell: null,
+		threads: os.cpus().length, json: null, requireSpell: null, variant: 'standard',
 	};
 	for (let i = 2; i < argv.length; i++) {
 		const k = argv[i];
@@ -54,15 +54,21 @@ function parseArgs(argv) {
 			case '--swap': a.swap = true; break;
 			case '--no-swap': a.swap = false; break;
 			case '--pack': a.pack = next(); break;
-			case '--variant': a.variant = next(); break;
 			case '--seed': a.seed = parseInt(next(), 10); break;
 			case '--max-depth': a.maxDepth = parseInt(next(), 10); break;
 			case '--max-turns': a.maxTurns = parseInt(next(), 10); break;
 			case '--threads': a.threads = parseInt(next(), 10); break;
 			case '--require-spell': a.requireSpell = next(); break;
 			case '--json': a.json = next(); break;
+			case '--variant': a.variant = next(); break;
 			default: throw new Error(`Unknown option: ${k}`);
 		}
+	}
+	// play-game.js seeds each opening (standard or competitive) on the
+	// variant's board but draws no duplicate aliases, so a duplicates run
+	// would be mislabeled.
+	if (a.variant.indexOf('duplicates') !== -1) {
+		throw new Error(`--variant ${a.variant}: the arena does not draw duplicate spells`);
 	}
 	return a;
 }

@@ -955,6 +955,9 @@ document.addEventListener('alpine:init', () => {
 					if (_rematchSpells) options.spellNames = _rematchSpells;
 					options.variant = gameVariant;
 					_this.isDeathmatch = variantHasDeathmatch(gameVariant);
+					if (variantHasScramble(gameVariant) && !puzzle) {
+						_this.messageHistory.push('Scramble: there is no stone-lead win. The first player to cast ' + BOARD.spellTarget + ' spells wins.');
+					}
 					if (puzzle) {
 						options.aiColor = _aiColor;
 						options.ai = new PuzzleOpponent(puzzle, _this, { timeMs: 6000 });
@@ -1037,8 +1040,9 @@ document.addEventListener('alpine:init', () => {
 						const jsTier = _RUST_TO_JS_TIER[aiMode];
 						const jsLabel = jsTier.replace('_', ' ');
 						const packName = packDisplayName;
-						if (variantHasDuplicates(gameVariant)) {
-							_this.messageHistory.push('The Rust engine does not support the Allow Duplicates variant yet; '
+						if (variantHasDuplicates(gameVariant) || variantHasScramble(gameVariant)) {
+							const vName = variantHasDuplicates(gameVariant) ? 'Allow Duplicates' : 'Scramble';
+							_this.messageHistory.push('The Rust engine does not support the ' + vName + ' variant yet; '
 								+ 'playing the ' + jsLabel + ' JS engine tier (same time budget) instead.');
 							aiMode = jsTier;
 						} else if (!_rematchSpells && typeof generateSpellList === 'function') {
@@ -2032,8 +2036,9 @@ document.addEventListener('alpine:init', () => {
 						const recordVariant = normalizeVariant(_engineRef && _engineRef.board && _engineRef.board.variant);
 						const _isDeathmatch = variantHasDeathmatch(recordVariant);
 						const _isDuplicates = variantHasDuplicates(recordVariant);
+						const _isScramble = variantHasScramble(recordVariant);
 						const _isPentagon = variantHasPentagon(recordVariant);
-						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates || _isPentagon;
+						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2096,6 +2101,8 @@ document.addEventListener('alpine:init', () => {
 
 						if (_isDeathmatch) {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
+						} else if (_isScramble) {
+							_this.messageHistory.push('Unrated: Scramble games do not affect rating.');
 						} else if (_isDuplicates) {
 							_this.messageHistory.push('Unrated: Allow Duplicates games do not affect rating.');
 						} else if (_isPentagon) {

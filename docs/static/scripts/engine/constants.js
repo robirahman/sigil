@@ -77,6 +77,11 @@ function buildRingLayout(zoneCount) {
 	return { zones, nodeOrder, positions, adjacency: adj, manaNodes: zones.map(z => z + 1) };
 }
 
+// Bump when a deploy changes a script API that the (network-first) HTML
+// pages call, and raise the number in the pages' stale-asset guards to match
+// (the inline script after each page's constants.js tag).
+const SIGIL_ASSET_EPOCH = 1;
+
 // Per-layout rules. `spellTarget`: casting this many spells ends the game
 // (the stone leader wins). `winLead`: a real-stone lead of this much over the
 // opponent's total (blue's +1 phantom and Providence pendings included) wins
@@ -353,9 +358,9 @@ const SPELL_TEXTS = {
 	Bear_Trap:         'Destroy all enemy stones in 1-node spells.',
 	Shiver:            'Swap the positions of any two stones on the board.',
 	Blood_Saplings:    'If you crushed an enemy stone this turn, make 2 soft moves.',
-	Itch:              'Make 1 move, then advance the enemy lock by 1.',
+	Itch:              'Make 1 move, then advance the enemy lock by 1. (Scramble: reduce it by 1 instead.)',
 	Free_Spirit:       'If your lock is 0 or 1, make 1 soft move.',
-	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1.',
+	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1. (Scramble: reduce it by 1 instead.)',
 	Stampede:          'Make hard moves equal to your lock value.',
 	Choke:             'Choose an enemy stone; place your stones on all of its empty adjacent nodes.',
 	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all of them.',
@@ -545,6 +550,10 @@ function isUnratedSpell(name) {
 //                 and spell-count terminal conditions are disabled (threefold
 //                 board repetition still ends the game as a Blue win, to
 //                 guarantee termination). Spell counters are removed in this mode.
+//   scramble    — the stone-lead win is disabled; the first player to cast
+//                 BOARD.spellTarget spells (6 on core) WINS outright (no stone
+//                 comparison). Elimination and threefold repetition (Blue win)
+//                 still apply. Unrated.
 //   duplicates  — the spell draw may repeat a spell (up to three copies):
 //                 the pool holds every spell as X, X~2, X~3 (see
 //                 DUPLICATE_SUFFIXES) and the draw stays without
@@ -553,28 +562,42 @@ function isUnratedSpell(name) {
 //   pentagon    — the Cataclysm expanded 1v1 board: 5 zones, 65 nodes,
 //                 5 spells of each size (see BOARD_LAYOUT_RULES). Absent
 //                 means the core board. Unrated.
-// They combine, tokens in this fixed order:
-// 'competitive_deathmatch_duplicates_pentagon'. Kept as one string so it
-// rides the existing variant plumbing (SFN, Firebase, URL, localStorage)
-// unchanged.
-const VARIANT_TOKENS = ['competitive', 'deathmatch', 'duplicates', 'pentagon'];
-function composeVariant(competitive, deathmatch, duplicates, pentagon) {
+// Deathmatch and Scramble are both end-condition rules and are mutually
+// exclusive: they share one slot, and Deathmatch wins if both are asked for.
+// Tokens combine in this fixed order:
+// 'competitive_deathmatch_duplicates_pentagon',
+// 'competitive_scramble_duplicates_pentagon'. Kept as one string so it rides
+// the existing variant plumbing (SFN, Firebase, URL, localStorage) unchanged.
+const VARIANT_TOKENS = ['competitive', 'deathmatch', 'scramble', 'duplicates', 'pentagon'];
+function composeVariant(competitive, deathmatch, duplicates, scramble, pentagon) {
 	const parts = [];
 	if (competitive) parts.push('competitive');
 	if (deathmatch) parts.push('deathmatch');
+	else if (scramble) parts.push('scramble');
 	if (duplicates) parts.push('duplicates');
 	if (pentagon) parts.push('pentagon');
 	return parts.length ? parts.join('_') : 'standard';
 }
+// 2 (competitive) x 3 (end condition: standard / deathmatch / scramble)
+// x 2 (duplicates) x 2 (board: core / pentagon) = 24 strings. The first 12
+// are the core-board ones, in the order Python's SimBoard.VARIANTS lists them.
 const SIGIL_VARIANTS = [];
-for (let mask = 0; mask < 16; mask++) {
-	SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4, mask & 8));
+for (const pentagon of [false, true]) {
+	for (let mask = 0; mask < 8; mask++) {
+		SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4, false, pentagon));
+	}
+	for (let mask = 0; mask < 8; mask++) {
+		if (!(mask & 2)) SIGIL_VARIANTS.push(composeVariant(mask & 1, false, mask & 4, true, pentagon));
+	}
 }
 function variantHasCompetitive(v) {
 	return typeof v === 'string' && v.indexOf('competitive') !== -1;
 }
 function variantHasDeathmatch(v) {
 	return typeof v === 'string' && v.indexOf('deathmatch') !== -1;
+}
+function variantHasScramble(v) {
+	return typeof v === 'string' && v.indexOf('scramble') !== -1 && !variantHasDeathmatch(v);
 }
 function variantHasDuplicates(v) {
 	return typeof v === 'string' && v.indexOf('duplicates') !== -1;
@@ -586,13 +609,27 @@ function variantHasPentagon(v) {
 function variantBoardLayout(v) {
 	return variantHasPentagon(v) ? 'pentagon' : 'core';
 }
+// Itch / Residue Mixture (Panda): "advance the enemy lock by 1". Deathmatch
+// has no counters; in Scramble (where the counter is the race to
+// BOARD.spellTarget) the effect is reversed -- the enemy counter goes BACK
+// by 1, floored at 0. Every resolver and replayer goes through here.
+function bumpEnemySpellCounter(board, target) {
+	if (variantHasDeathmatch(board.variant)) return;
+	if (variantHasScramble(board.variant)) {
+		board.spellCounter[target] = Math.max(0, board.spellCounter[target] - 1);
+	} else {
+		board.spellCounter[target] = Math.min(BOARD.spellTarget, board.spellCounter[target] + 1);
+	}
+}
+function enemySpellCounterMessage(variant) {
+	return variantHasScramble(variant) ? 'Enemy lock reduced by 1 (Scramble).' : 'Enemy lock advanced by 1.';
+}
 // Canonicalize any input (handles legacy strings, wrong order, junk) to one of
 // the SIGIL_VARIANTS values.
 function normalizeVariant(v) {
 	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v),
-		variantHasDuplicates(v), variantHasPentagon(v));
+		variantHasDuplicates(v), variantHasScramble(v), variantHasPentagon(v));
 }
-
 // Stone-spot positions (fractions of the square spell image), measured from the
 // core spell cards which bake white circles at these spots. Expansion spell art
 // is full-bleed with no spots, so the game overlays white circles here instead.

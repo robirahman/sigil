@@ -312,11 +312,19 @@
 			</small>
 
 			<label class="allow-spec">
-				<input type="checkbox" x-model="deathmatchVariant" />
+				<input type="checkbox" x-model="deathmatchVariant" @change="if (deathmatchVariant) scrambleVariant = false" />
 				<span>Deathmatch variant</span>
 			</label>
 			<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
 				Win only by eliminating all of your opponent's stones. Unrated. Joiners inherit the creator's choice.
+			</small>
+
+			<label class="allow-spec">
+				<input type="checkbox" x-model="scrambleVariant" @change="if (scrambleVariant) deathmatchVariant = false" />
+				<span>Scramble variant</span>
+			</label>
+			<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
+				No stone-lead win: the first player to cast their sixth spell wins. Can't be combined with Deathmatch. Unrated. Joiners inherit the creator's choice.
 			</small>
 
 			<label class="allow-spec">
@@ -374,7 +382,7 @@
 				<span class="share-link__url" x-text="shareUrl"></span>
 				<button class="share-link__btn" x-on:click="copyShareLink" x-text="shareCopied ? 'Copied!' : 'Copy link'"></button>
 			</div>
-			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant || duplicatesVariant || pentagonVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null, duplicatesVariant ? 'Duplicates' : null, pentagonVariant ? 'Cataclysm board' : null].filter(Boolean).join(' + ')"></strong></p>
+			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant || scrambleVariant || duplicatesVariant || pentagonVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null, scrambleVariant ? 'Scramble' : null, duplicatesVariant ? 'Duplicates' : null, pentagonVariant ? 'Cataclysm board' : null].filter(Boolean).join(' + ')"></strong></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
 		</div>
 
@@ -716,10 +724,11 @@
 				allowSpectators: true,
 
 				// Variant flags (creator-side; joiners inherit from the room
-				// metadata via FirebaseSync). Competitive (start) and Deathmatch
-				// (end) are orthogonal and combine.
+				// metadata via FirebaseSync). Competitive (start), Deathmatch or
+				// Scramble (end, mutually exclusive) and Duplicates (setup) combine.
 				competitiveVariant: (localStorage.getItem('sigilVariant') || '').indexOf('competitive') !== -1,
 				deathmatchVariant: (localStorage.getItem('sigilVariant') || '').indexOf('deathmatch') !== -1,
+				scrambleVariant: /scramble/.test(localStorage.getItem('sigilVariant') || '') && !/deathmatch/.test(localStorage.getItem('sigilVariant') || ''),
 				duplicatesVariant: (localStorage.getItem('sigilVariant') || '').indexOf('duplicates') !== -1,
 				pentagonVariant: (localStorage.getItem('sigilVariant') || '').indexOf('pentagon') !== -1,
 				useArtOnlySpells: localStorage.getItem('sigilArtOnlySpellCircles') === 'true',
@@ -797,6 +806,9 @@
 							}
 							if (rematchVariant.indexOf('deathmatch') !== -1) {
 								this.deathmatchVariant = true;
+								this.scrambleVariant = false;
+							} else if (rematchVariant.indexOf('scramble') !== -1) {
+								this.scrambleVariant = true;
 							}
 							if (rematchVariant.indexOf('duplicates') !== -1) {
 								this.duplicatesVariant = true;
@@ -980,7 +992,7 @@
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
-						const variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.pentagonVariant);
+						const variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
 						// Persist the lobby choice across visits (mirrors the
 						// localStorage key used by the static index page).
 						try {
@@ -1111,6 +1123,36 @@
 
 	<!-- Engine scripts -->
 	<script src="static/scripts/engine/constants.js"></script>
+	<script>
+		// Stale-asset guard. On the first load after a deploy, a returning
+		// visitor's old service worker serves its cached scripts with this fresh
+		// page. If they predate the page (SIGIL_ASSET_EPOCH in constants.js),
+		// drop the caches, refetch the page's scripts past the HTTP cache, and
+		// reload once. The new worker deletes the stale cache when it activates.
+		(function () {
+			if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 1) return;
+			if (!window.caches || !window.fetch) return;
+			try {
+				if (sessionStorage.getItem('sigilStaleAssetReload') === '1') return;
+				sessionStorage.setItem('sigilStaleAssetReload', '1');
+			} catch (e) { return; }
+			document.addEventListener('DOMContentLoaded', function () {
+				var urls = ['static/scripts/engine/ai-worker.js'];
+				Array.prototype.forEach.call(document.scripts, function (s) {
+					if (s.src && s.src.indexOf(location.origin) === 0) urls.push(s.src);
+				});
+				caches.keys()
+					.then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+					.then(function () {
+						return Promise.all(urls.map(function (u) {
+							return fetch(u, { cache: 'reload' }).catch(function () {});
+						}));
+					})
+					.catch(function () {})
+					.then(function () { location.reload(); });
+			});
+		})();
+	</script>
 	<script src="static/scripts/engine/notation.js"></script>
 	<script src="static/scripts/engine/board.js"></script>
 	<script src="static/scripts/engine/moves.js"></script>

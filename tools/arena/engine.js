@@ -85,6 +85,8 @@ function loadEngine() {
  *   cap=B        scale the three weights so 3*mana+9*voidp+39*mc <= B stones
  *                (tiebreaker mode; mirrors cavemanCapWeights)
  *   omc=0|1      include mapControl in move ordering (default 1)
+ *   ssw=F        Scramble variant: stones per spell of spell-counter lead
+ *                (CAVEMAN_SCRAMBLE_SPELL_WEIGHT)
  *
  * Examples: "caveman", "caveman:mana=0.1,voidp=0.03,mc=0.0246",
  *           "caveman:mc=0.128,cap=0.96", "caveman:mc=0.0246,omc=0".
@@ -115,6 +117,10 @@ function parseModeSpec(str) {
 				cfg.evalWeights[key] = parseFloat(v);
 			}
 			else if (k === 'cap') cfg.capBudget = parseFloat(v);
+			else if (k === 'ssw') {
+				cfg.evalWeights = cfg.evalWeights || {};
+				cfg.evalWeights.scrambleSpell = parseFloat(v);
+			}
 			else if (k === 'omc') cfg.orderMc = (v === undefined || v === '1' || v === 'true');
 			else throw new Error(`Unknown spec key "${k}" in "${str}"`);
 		}
@@ -165,6 +171,7 @@ function specToOpts(cfg, { timeLimit, maxDepth }, baseCaps) {
 				      mapControl: w.mapControl * k };
 			}
 		}
+		if (cfg.evalWeights.scrambleSpell !== undefined) w.scrambleSpell = cfg.evalWeights.scrambleSpell;
 		opts.evalWeights = w;
 	}
 	if (cfg.orderMc !== null) opts.orderMapControl = cfg.orderMc;
