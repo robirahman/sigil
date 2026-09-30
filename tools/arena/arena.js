@@ -24,7 +24,7 @@
  *   --threads N      worker threads                         (default = CPU count)
  *   --require-spell S regenerate layouts until they contain spell S
  *   --json PATH      also write full per-game results as JSON
- *   --variant V      rules variant, e.g. scramble          (default standard)
+ *   --variant V      standard | deathmatch | scramble       (default standard)
  *
  * See engine.js parseModeSpec for the `mode:key=val` spec syntax
  * (caveman | prune, with optional pure / capabs / caps / lp / refill keys).
@@ -62,6 +62,12 @@ function parseArgs(argv) {
 			case '--variant': a.variant = next(); break;
 			default: throw new Error(`Unknown option: ${k}`);
 		}
+	}
+	// play-game.js always uses the standard opening and the given spell list,
+	// so only end-condition variants are measured faithfully.
+	if (a.variant !== 'standard' && !['deathmatch', 'scramble'].includes(a.variant)) {
+		throw new Error(`--variant ${a.variant}: arena supports only standard, deathmatch or scramble `
+			+ '(competitive openings and duplicate draws are not implemented here)');
 	}
 	return a;
 }

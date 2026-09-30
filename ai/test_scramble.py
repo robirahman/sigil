@@ -274,11 +274,16 @@ const { parseModeSpec } = require(path.join(%s, 'tools', 'arena', 'engine.js'));
     leaf[v + '_ssw0'] = _cavemanLeaf(b, 'red', _cavemanResolveWeights({ scrambleSpell: 0 }), 0) * 39;
   }
   const results = [leaf];
-  for (let g = 0; g < 4; g++) {
+  // Layouts and timed search are random, and repetition is a legal Scramble
+  // ending (most short-budget games end that way), so play until one game
+  // ends by the spell counter (up to 40).
+  for (let g = 0; g < 40; g++) {
     const spellNames = E.generateSpellList(['core']);
     const r = await playGame(E, { gameId: g, spellNames, redCfg: parseModeSpec('caveman'),
       blueCfg: parseModeSpec('caveman'), timeLimit: 0.05, maxDepth: 64, maxTurns: 300, variant: 'scramble' });
     results.push({ winner: r.winner, endReason: r.endReason, finalStones: r.finalStones, finalSpells: r.finalSpells, plies: r.plies });
+    const loser = r.winner === 'red' ? 'blue' : 'red';
+    if (r.endReason === 'normal' && r.winner && r.finalStones[loser] > 0) break;
   }
   console.log('JS_RESULT ' + JSON.stringify(results));
 })().catch(e => { console.error(e && e.stack || e); process.exit(1); });
