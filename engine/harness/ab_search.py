@@ -2,6 +2,10 @@
 
     ab_search.py <pairs> <ms> <eval> <knob> <arm_value> <base_value>
 
+    ms = a fixed per-move budget in milliseconds, or a schedule
+         <open_ms>@<n>/<ms>: open_ms for each side's first n moves, then ms
+         (e.g. 30000@10/10000 -- 30 s for moves 1-10 of each side, 10 s after).
+
     knob = q_depth      plies of quiescence at the horizon (0 = off)
          = aspiration   half-width of the aspiration window, centistones
          = width_scale  multiplier on the progressive-widening schedule
@@ -234,6 +238,21 @@ def draw_for(seed):
     return d
 
 
+def parse_ms(spec):
+    """'10000' -> (10000, 0, 10000); '30000@10/10000' -> (30000, 10, 10000)."""
+    if '@' not in spec:
+        return int(spec), 0, int(spec)
+    head, tail = spec.split('/', 1)
+    open_ms, n = head.split('@', 1)
+    return int(open_ms), int(n), int(tail)
+
+
+def ms_for(sched, ply):
+    """Budget for the move at game ply `ply` (0-based; each side's k-th move is ply 2k or 2k+1)."""
+    open_ms, n, ms = sched
+    return open_ms if ply // 2 < n else ms
+
+
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
     b = se.Board(draw_for(seed), VARIANT)
     b.setup_initial()
@@ -246,7 +265,7 @@ def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
         side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
         is_arm = (side == arm_color)
         hist.append(b.key_js)
-        r = play(b, ms, ev, hist, knob, arm_val if is_arm else base_val)
+        r = play(b, ms_for(ms, ply), ev, hist, knob, arm_val if is_arm else base_val)
         dep['arm' if is_arm else 'base'].append(r[0])
         secs['arm' if is_arm else 'base'].append(r[2])
         if r[3]:
@@ -255,7 +274,7 @@ def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
 
 
 if __name__ == "__main__":
-    pairs = int(sys.argv[1]); ms = int(sys.argv[2]); ev = sys.argv[3]
+    pairs = int(sys.argv[1]); ms_spec = sys.argv[2]; ms = parse_ms(ms_spec); ev = sys.argv[3]
     knob = sys.argv[4]; arm_val = int(sys.argv[5]); base_val = int(sys.argv[6])
     if knob not in KNOBS:
         sys.exit(f"unknown knob {knob!r}; expected one of {KNOBS}")
@@ -264,7 +283,7 @@ if __name__ == "__main__":
     cfg = se.search_defaults()
     print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
-          f"ms={ms} merge_min_width="
+          f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "
           f"defaults(q_depth={cfg['q_depth']}, aspiration={cfg['aspiration']})",
           flush=True)
@@ -286,9 +305,9 @@ if __name__ == "__main__":
                   f"arm_s={ma:.3f} base_s={mb:.3f}", flush=True)
         if s.verdict != 'continue':
             break
-    print(f"SHARD knob={knob} arm={arm_val} base={base_val} eval={ev} ms={ms} "
+    print(f"SHARD knob={knob} arm={arm_val} base={base_val} eval={ev} ms={ms_spec} "
           f"off={off} n={s.n} armwins={s.wins} basewins={s.losses} unf={s.unfinished}")
-    print(s.line(f"{knob}={arm_val} vs {base_val} (eval={ev}, {ms}ms)"))
+    print(s.line(f"{knob}={arm_val} vs {base_val} (eval={ev}, {ms_spec}ms)"))
     print(f"  mean plies {statistics.mean(plies):.1f}")
     if dep['arm']:
         print(f"  depth: arm {statistics.mean(dep['arm']):.2f}  "

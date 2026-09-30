@@ -2076,7 +2076,7 @@ contest rules change it in none, but put red's root on the behind node in 42; bl
 changes in 72 and blue contests red's sigil in 224 (was 152). Tests `opening_red_avoids_blossom_when_decay_is_drawn`,
 `opening_blue_counters_blossom_with_low_rated_decay`, `opening_blue_contests_the_strongest_ritual`,
 `opening_contest_credits_the_side_the_charm_is_behind`, `opening_red_takes_the_behind_node_in_a_push_corner`
-(159 pass). Arena arm `gcp/arms/opening_contest_10s.txt` (competitive, 10 s) is ready and not run.
+(159 pass). Arena arm `gcp/arms/opening_contest_30s10.txt` (competitive; 30 s for each side's first 10 moves, then 10 s, the new `ab_search.py` ms schedule `30000@10/10000`).
 
 Same day, three more designer's rulings (still v19):
 
@@ -2086,7 +2086,7 @@ Same day, three more designer's rulings (still v19):
   part of `opening_contest`).
 - **Carnage, either colour,** is worth the strongest of itself and the sorceries on both sides of it (its own
   corner's and the previous corner's, reached through a11), + 0.01 (`NEIGHBOUR_EDGE`). New switch
-  `opening_carnage`, arm `opening_carnage_10s.txt`. Over 500 draws, 124 hold Carnage: red's pick changes in 14 and
+  `opening_carnage`, arm `opening_carnage_30s10.txt`. Over 500 draws, 124 hold Carnage: red's pick changes in 14 and
   red opens on Carnage in 22 (was 8); blue's reply changes to or from Carnage in 102 of the 992 red starts.
 - **Blue's Syzygy** gets the same + 0.01 over the best of the spells across from it; the forced Syzygy reply
   and red's veto stay as they were.
