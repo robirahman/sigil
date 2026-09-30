@@ -24,9 +24,9 @@ misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 **2026-09-30: engine v19 (cache v52) -- competitive opening selector on the 2026-09-29 survey, contest rules.**
 Tables from 241 comparisons; free ritual contests, push credit to the side the Slash/Charge is behind (red and
 blue root masks pick that node), blue takes a `++` counter first. Switch `opening_contest` (default on); arena arm
-`opening_contest_30s10.txt` not yet run. Also: a ritual's far-side charm counts (two push charms cancel); Carnage,
-either colour, is worth the best of itself and the sorceries beside it + 0.01 (switch `opening_carnage`, arm
-`opening_carnage_30s10.txt`, not run); blue's Syzygy + 0.01. Tests 162/162, `wasm-smoke.js` green, wasm 629,018
+`opening_contest_30s10.txt`: -0.5 Elo [-18.7, +17.7], no measurable effect. Also: a ritual's far-side charm counts
+(two push charms cancel); Carnage, either colour, is worth the best of itself and the sorceries beside it + 0.01
+(switch `opening_carnage`, arm `opening_carnage_30s10.txt`: **+34.7 [+16.5, +53.0]** in Carnage draws); blue's Syzygy + 0.01. Tests 162/162, `wasm-smoke.js` green, wasm 629,018
 bytes. FINDINGS "survey refresh and the contest rules".
 
 **2026-09-28: engine v18 (cache v51) -- `lead_min` 2 and `speed_v1` in the browser.** The stone-lead pre-pass

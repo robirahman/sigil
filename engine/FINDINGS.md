@@ -2095,6 +2095,20 @@ Tests `opening_ritual_contest_credits_the_far_charm_and_two_push_charms_cancel`,
 `opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides`,
 `opening_blue_syzygy_edges_past_the_spell_across_from_it` (162 pass).
 
+**Arenas (2026-09-30), competitive, 30 s for each side's first 10 moves then 10 s (`ms` schedule
+`30000@10/10000`), branch `opening-selector-arena` at `181d5d8`, four c3d-highcpu-90 (2 per arm, 88 shards x 4
+pairs each), 704 colour-swapped seeds per arm, none unfinished:**
+
+| change | knob | draws | arm wins | win rate | Elo [95%] | verdict |
+|---|---|---|---|---|---|---|
+| contest rules (free ritual contest, charm-behind push, blue's `++` counter first) | `opening_contest` | all | 703 / 1,408 | 49.93% [47.32, 52.54] | **-0.5 [-18.7, +17.7]** | no measurable effect; ships on the designer's authority |
+| Carnage worth the sorceries beside it + 0.01, both colours | `opening_carnage` | holding Carnage (`SIGIL_REQUIRE_SPELL=1`) | 774 / 1,408 | 54.97% [52.37, 57.57] | **+34.7 [+16.5, +53.0]** | BETTER, stays ON |
+
+Runs `20260930T151840Z`, `…151851Z` (contest, us-central1-f) and `20260930T152000Z`, `…152014Z` (Carnage,
+us-east1-d). Depth 6.93 / 6.93 and 7.06 / 7.08, 21.8-22.3 s/move on average, 33-35 plies. The Carnage draws are about a
+quarter of all competitive draws (124 / 500), so across all games the effect is roughly a quarter of +34.7.
+The Carnage arm won 420-284 as red and 354-350 as blue.
+
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
 
