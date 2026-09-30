@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sigil Spell Charts</title>
+<style>
+	:root { --bg:#f6f4ee; --card:#fff; --ink:#222; --muted:#6b6b6b; --line:#ddd; --accent:#3b6ea5;
+		--pp:#1f8a4c; --p:#8fd0a8; --e:#dcdcd4; --n:#f1a9a2; --nn:#c0392b; }
+	* { box-sizing:border-box; }
+	html { scroll-behavior:smooth; }
+	body { margin:0; font:15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+	header { display:flex; flex-wrap:wrap; gap:8px 18px; align-items:center; padding:10px 18px; background:#fff; border-bottom:1px solid var(--line); z-index:5; }
+	@media (min-width:760px) { header { position:sticky; top:0; } }
+	header h1 { font-size:18px; margin:0; }
+	nav.jump { display:flex; gap:4px; flex-wrap:wrap; }
+	nav.jump a { padding:5px 12px; border:1px solid var(--line); border-radius:6px; background:#f2f2f2; color:var(--ink); text-decoration:none; font-size:14px; }
+	nav.jump a:hover { background:#e8f0fa; border-color:var(--accent); }
+	.controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; font-size:13px; }
+	.controls button, .controls select { font-size:13px; padding:4px 9px; border:1px solid var(--line); background:#fafafa; border-radius:6px; cursor:pointer; }
+	.controls a { color:var(--accent); text-decoration:none; }
+	.src { color:var(--muted); font-size:12px; }
+	.focus-chip { display:none; background:#e8f0fa; border:1px solid var(--accent); border-radius:12px; padding:2px 4px 2px 10px; }
+	.focus-chip.on { display:inline-flex; gap:6px; align-items:center; }
+	.focus-chip button { border:0; background:none; padding:0 6px; cursor:pointer; font-size:14px; }
+	main { max-width:1180px; margin:18px auto 60px; padding:0 16px; }
+	section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px 20px; margin-bottom:22px; box-shadow:0 1px 3px rgba(0,0,0,.05); scroll-margin-top:70px; }
+	section > h2 { margin:0 0 4px; font-size:22px; }
+	.sec-links { font-size:13px; color:var(--muted); margin-bottom:10px; }
+	.sec-links a { color:var(--accent); text-decoration:none; }
+	.note { color:var(--muted); font-size:13px; margin:10px 0 0; max-width:75ch; }
+	.msg { padding:30px; text-align:center; color:var(--muted); }
+
+	/* ---- Tier list (Tiermaker look) ---- */
+	.tiers { background:#1a1a17; border:1px solid #000; }
+	.tier { display:flex; min-height:112px; border-bottom:2px solid #000; }
+	.tier:last-child { border-bottom:0; }
+	.tier-label { flex:0 0 96px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#111; text-align:center; padding:4px; }
+	.tier-label b { font-size:34px; line-height:1; font-weight:700; }
+	.tier-label small { font-size:12px; margin-top:4px; opacity:.75; }
+	.tier-items { flex:1; display:flex; flex-wrap:wrap; align-content:flex-start; }
+	.tile { width:96px; padding:4px 2px 3px; margin:0; background:none; border:0; border-right:1px solid #000; border-bottom:1px solid #000; cursor:pointer; color:#eee; font:11px/1.2 system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; gap:2px; }
+	.tile img { width:84px; height:84px; display:block; }
+	.tile:hover { background:#2c2c27; }
+	.tile.focused { background:#34506e; }
+	.tile span { max-width:92px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	@media (max-width:600px) {
+		.tier-label { flex-basis:56px; } .tier-label b { font-size:24px; } .tier-label small { display:none; }
+		.tile { width:74px; } .tile img { width:64px; height:64px; } .tile span { font-size:10px; max-width:70px; }
+		.tier { min-height:88px; }
+	}
+
+	/* ---- Matrices ---- */
+	.mx-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:8px; }
+	table.mx { border-collapse:collapse; font-size:11px; }
+	.mx th, .mx td { padding:0; }
+	.mx td.c { width:20px; min-width:20px; height:20px; text-align:center; border:1px solid #fff; cursor:default; font-size:9px; font-weight:600; color:rgba(0,0,0,.6); }
+	.mx td.c.pp { background:var(--pp); color:#fff; } .mx td.c.p { background:var(--p); }
+	.mx td.c.e { background:var(--e); } .mx td.c.n { background:var(--n); } .mx td.c.nn { background:var(--nn); color:#fff; }
+	.mx td.c.x { background:#fafaf7; } .mx td.c.d { background:#444; }
+	.mx th.rh { text-align:left; white-space:nowrap; padding:0 8px 0 0; font-weight:500; position:sticky; left:0; background:#fff; z-index:1; cursor:pointer; border-left:5px solid transparent; }
+	.mx th.rh img, .mx th.ch img { width:18px; height:18px; vertical-align:middle; border-radius:50%; }
+	.mx th.rh img { margin:0 5px 0 4px; }
+	.mx th.ch { vertical-align:bottom; padding:4px 0 3px; width:20px; font-weight:500; cursor:pointer; border-bottom:5px solid transparent; }
+	.mx th.ch .vt { writing-mode:vertical-rl; transform:rotate(180deg); white-space:nowrap; margin:0 auto; line-height:20px; }
+	.mx th.ch img { display:block; margin:0 auto 3px; }
+	.mx th.corner { position:sticky; left:0; background:#fff; z-index:2; text-align:left; vertical-align:bottom; padding:0 8px 6px 4px; color:var(--muted); font-weight:400; font-size:11px; }
+	.mx td.sum { white-space:nowrap; padding:0 8px; color:var(--muted); font-variant-numeric:tabular-nums; }
+	.mx th.sumh { vertical-align:bottom; padding:0 8px 6px; color:var(--muted); font-weight:400; white-space:nowrap; }
+	.info { min-height:2.8em; margin-top:10px; font-size:14px; padding:8px 12px; background:#f7f7f3; border:1px solid var(--line); border-radius:8px; }
+	.info .t { color:var(--muted); font-size:12px; }
+	.legend { display:flex; flex-wrap:wrap; gap:6px 14px; margin:8px 0 10px; font-size:12px; color:var(--muted); align-items:center; }
+	.legend i { display:inline-block; width:14px; height:14px; vertical-align:-3px; margin-right:4px; border:1px solid rgba(0,0,0,.08); }
+</style>
+<style id="hover-style"></style>
+<style id="focus-style"></style>
+</head>
+<body>
+<header>
+	<h1>Spell Charts</h1>
+	<nav class="jump">
+		<a href="#tiers">Tier list</a>
+		<a href="#matchups">Matchups</a>
+		<a href="#synergies">Synergies</a>
+	</nav>
+	<span class="focus-chip" id="focus-chip"><span id="focus-name"></span><button id="focus-clear" title="Clear">✕</button></span>
+	<div class="controls">
+		<label>Chart order <select id="order">
+			<option value="rank">tier rank</option>
+			<option value="type">type, then rank</option>
+			<option value="pack">pack (Core by sub-pack)</option>
+			<option value="alpha">alphabetical</option>
+		</select></label>
+		<button id="load">Load JSON…</button>
+		<input type="file" id="load-file" accept="application/json" hidden>
+		<a href="spell-survey.html">Survey →</a>
+	</div>
+	<div class="src" id="src">Loading survey…</div>
+</header>
+<main>
+	<section id="tiers">
+		<h2>Tier list</h2>
+		<div class="sec-links">Also: <a href="#matchups">Matchups</a> · <a href="#synergies">Synergies</a></div>
+		<div id="tier-list"><div class="msg">Loading…</div></div>
+		<p class="note" id="tier-note"></p>
+	</section>
+
+	<section id="matchups">
+		<h2>Matchup chart</h2>
+		<div class="sec-links">Also: <a href="#tiers">Tier list</a> · <a href="#synergies">Synergies</a></div>
+		<p class="note" style="margin-top:0">Each row is read against each column: if you are building toward the row spell and your opponent toward the column spell, who is favoured? Blank cells have not been surveyed yet.</p>
+		<div class="legend">
+			<span><i style="background:var(--pp)"></i>row strongly favoured (++)</span>
+			<span><i style="background:var(--p)"></i>row favoured (+)</span>
+			<span><i style="background:var(--e)"></i>even</span>
+			<span><i style="background:var(--n)"></i>column favoured (−)</span>
+			<span><i style="background:var(--nn)"></i>column strongly favoured (−−)</span>
+			<span><i style="background:#fafaf7"></i>not surveyed</span>
+		</div>
+		<div class="mx-wrap"><div id="matchup-chart" class="msg">Loading…</div></div>
+		<div class="info" id="matchup-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it in both charts.</span></div>
+	</section>
+
+	<section id="synergies">
+		<h2>Synergy chart</h2>
+		<div class="sec-links">Also: <a href="#tiers">Tier list</a> · <a href="#matchups">Matchups</a></div>
+		<p class="note" style="margin-top:0">Does holding both spells let the same player do something neither does alone? The chart is symmetric. Blank cells have not been surveyed yet.</p>
+		<div class="legend">
+			<span><i style="background:var(--pp)"></i>strong synergy (++)</span>
+			<span><i style="background:var(--p)"></i>synergy (+)</span>
+			<span><i style="background:var(--e)"></i>none</span>
+			<span><i style="background:var(--n)"></i>anti-synergy (−)</span>
+			<span><i style="background:var(--nn)"></i>strong anti-synergy (−−)</span>
+			<span><i style="background:#fafaf7"></i>not surveyed</span>
+		</div>
+		<div class="mx-wrap"><div id="synergy-chart" class="msg">Loading…</div></div>
+		<div class="info" id="synergy-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it in both charts.</span></div>
+	</section>
+</main>
+
+<script src="../static/scripts/engine/constants.js"></script>
+<script>
+(() => {
+	// Newest export: the dev server's /dev/latest-survey (tools/survey_server.py) when available,
+	// otherwise the newest archived copy. ?src=<url> overrides both.
+	const ARCHIVED = '../strategy/survey_exports/spell-survey-20260929T225948.json';
+
+	// Tiers are cut at the largest gaps between neighbours in the Bradley-Terry order (refitted
+	// from whatever export is loaded), skipping any cut that would leave a tier under MIN_TIER
+	// spells: the spread-out tails otherwise take most of the cuts as one-spell tiers.
+	const MIN_TIER = 3;
+	const TIERS = [
+		{ k: 'S', name: 'Top',      color: '#ff7f7f' },
+		{ k: 'A', name: 'Strong',   color: '#ffbf7f' },
+		{ k: 'B', name: 'Solid',    color: '#ffdf7f' },
+		{ k: 'C', name: 'Middling', color: '#ffff7f' },
+		{ k: 'D', name: 'Weak',     color: '#bfff7f' },
+		{ k: 'F', name: 'Bottom',   color: '#7fff7f' },
+	];
+	const UNRANKED = { k: '?', name: 'Not compared', color: '#bbbbbb' };
+
+	// Extreme ratings Robi gave in chat; the survey's 3-level scale maps to +/−, these keep ++/−−.
+	// Mirror of STRONG_SYN / STRONG_ADV in tools/ingest_spell_survey.py; keep the two in sync.
+	const STRONG_SYN = {
+		'Grow|Harvest': '++', 'Flourish|Gather': '++', 'Blossom|Erupt': '++', 'Scatter|Erupt': '++',
+		'Seal_of_Lightning|Surge': '++', 'Seal_of_Lightning|Splash': '--', 'Gust|Decay': '++',
+		'Seal_of_Wind|Fireblast': '++', 'Seal_of_Wind|Corrupt': '++', 'Gust|Seal_of_Destruction': '++',
+	};
+	const STRONG_ADV = new Set(['Hail_Storm>Blossom', 'Decay>Blossom', 'Decay>Scatter', 'Gust>Seal_of_Destruction',
+		...['Sprout', 'Slash', 'Surge', 'Splash', 'Charge', 'Azimuth', 'Lurk'].map(c => c + '>Hurricane')]);
+
+	// Core sorts by sub-pack (CORE_SUBPACKS in constants.js on main; the fallback mirrors it).
+	const SUBPACK_OF = {};
+	const SUBPACK_DEF = typeof CORE_SUBPACKS !== 'undefined' ? CORE_SUBPACKS : {
+		core_growth: ['Flourish', 'Grow', 'Sprout'], core_havoc: ['Carnage', 'Fireblast', 'Slash'],
+		core_impact: ['Starfall', 'Meteor', 'Comet'], core_tempo: ['Seal_of_Lightning', 'Seal_of_Wind', 'Seal_of_Summer'],
+		core_hex: ['Bewitch', 'Hail_Storm', 'Surge'] };
+	for (const [k, v] of Object.entries(SUBPACK_DEF)) for (const n of Array.isArray(v) ? v : [...v.rituals, ...v.sorceries, ...v.charms]) SUBPACK_OF[n] = k;
+	const PACK_ORDER = [...Object.keys(SUBPACK_DEF), 'core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+	const TYPE_ORDER = ['ritual', 'sorcery', 'charm'];
+	const el = id => document.getElementById(id);
+	const pretty = n => n.replace(/_/g, ' ');
+	const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+	const packName = k => (typeof EXPANSIONS !== 'undefined' && EXPANSIONS[k]) ? EXPANSIONS[k].name : k;
+	const spellText = n => (typeof SPELL_TEXTS !== 'undefined' && SPELL_TEXTS[n]) || '';
+	const card = n => `../static/images/spells/${n}.webp`;
+	const art = n => `../static/images/spells/art_only/${n}.webp`;
+	const SYM = { pp: '++', p: '+', e: '=', n: '−', nn: '−−' };
+
+	let M = null;        // model built from the loaded export
+	let focus = null;    // spell name highlighted across the charts
+
+	// ---- Bradley-Terry over the "which is better" answers (ties count half a win each). Same fit
+	// as tools/ingest_spell_survey.py: a virtual tie of weight EPS between every pair keeps a spell
+	// with only wins finite; MM updates (Hunter 2004), centred so the mean strength is 0.
+	function bradleyTerry(names, pairs) {
+		const idx = new Map(names.map((n, i) => [n, i]));
+		const N = names.length, W = names.map(() => new Float64Array(N)), games = new Float64Array(N);
+		let comps = 0;
+		for (const [k, v] of Object.entries(pairs)) {
+			if (!v.better) continue;
+			const [a, b] = k.split('|'), i = idx.get(a), j = idx.get(b);
+			if (i === undefined || j === undefined) continue;
+			if (v.better === 'equal') { W[i][j] += .5; W[j][i] += .5; }
+			else if (v.better === a) W[i][j] += 1;
+			else if (v.better === b) W[j][i] += 1;
+			else continue;
+			games[i]++; games[j]++; comps++;
+		}
+		const R = [...names.keys()].filter(i => games[i] > 0);
+		const EPS = 0.1;
+		for (const i of R) for (const j of R) if (i !== j) W[i][j] += EPS / 2;
+		let th = new Float64Array(N);
+		for (let it = 0; it < 2000; it++) {
+			const nw = new Float64Array(N);
+			for (const i of R) {
+				let wi = 0, den = 0;
+				for (const j of R) if (j !== i) { wi += W[i][j]; den += (W[i][j] + W[j][i]) / (Math.exp(th[i]) + Math.exp(th[j])); }
+				nw[i] = Math.log(wi / den);
+			}
+			const mean = R.reduce((s, i) => s + nw[i], 0) / (R.length || 1);
+			let delta = 0;
+			for (const i of R) { nw[i] -= mean; delta = Math.max(delta, Math.abs(nw[i] - th[i])); }
+			th = nw;
+			if (delta < 1e-9) break;
+		}
+		return { strength: Object.fromEntries(names.map((n, i) => [n, th[i]])), games: Object.fromEntries(names.map((n, i) => [n, games[i]])), ranked: new Set(R.map(i => names[i])), comps };
+	}
+
+	function build(data) {
+		const spells = data.spells || {}, pairs = data.pairs || {};
+		const names = Object.keys(spells);
+		for (const k of Object.keys(pairs)) for (const n of k.split('|')) if (!spells[n] && !names.includes(n)) names.push(n);
+		const bt = bradleyTerry(names, pairs);
+		const order = names.filter(n => bt.ranked.has(n)).sort((a, b) => bt.strength[b] - bt.strength[a]);
+		// cuts[k] = index of the first spell below the k-th tier break, with the gap it breaks at.
+		let cuts = [];
+		for (const c of order.slice(1).map((n, i) => ({ at: i + 1, gap: bt.strength[order[i]] - bt.strength[n] })).sort((a, b) => b.gap - a.gap)) {
+			if (cuts.length === TIERS.length - 1) break;
+			const next = [...cuts, c].sort((a, b) => a.at - b.at), bounds = [0, ...next.map(x => x.at), order.length];
+			if (bounds.every((b, k) => k === 0 || b - bounds[k - 1] >= MIN_TIER)) cuts = next;
+		}
+		const tierOf = {}, rankOf = {};
+		order.forEach((n, i) => { tierOf[n] = TIERS[cuts.filter(c => c.at <= i).length]; rankOf[n] = i + 1; });
+		for (const n of names) if (!tierOf[n]) tierOf[n] = UNRANKED;
+		// Pair lookups, keyed both ways.
+		const match = {}, syn = {}, better = {};
+		for (const [k, v] of Object.entries(pairs)) {
+			const [a, b] = k.split('|');
+			if (v.advantage) {
+				if (v.advantage === 'even') { match[a + '|' + b] = 'e'; match[b + '|' + a] = 'e'; }
+				else if (v.advantage === a || v.advantage === b) {
+					const w = v.advantage, l = w === a ? b : a, strong = STRONG_ADV.has(w + '>' + l);
+					match[w + '|' + l] = strong ? 'pp' : 'p'; match[l + '|' + w] = strong ? 'nn' : 'n';
+				}
+			}
+			if (v.synergy) {
+				const s = STRONG_SYN[a + '|' + b] || STRONG_SYN[b + '|' + a];
+				const c = s === '++' ? 'pp' : s === '--' ? 'nn' : { positive: 'p', none: 'e', negative: 'n' }[v.synergy];
+				if (c) { syn[a + '|' + b] = c; syn[b + '|' + a] = c; }
+			}
+			if (v.better) { better[a + '|' + b] = v.better; better[b + '|' + a] = v.better; }
+		}
+		return { data, spells, names, bt, order, cuts, tierOf, rankOf, match, syn, better, nPairs: Object.keys(pairs).length };
+	}
+
+	function chartOrder() {
+		const how = el('order').value, rank = n => M.rankOf[n] || 999;
+		const meta = n => M.spells[n] || {};
+		const by = {
+			rank: (a, b) => rank(a) - rank(b),
+			type: (a, b) => TYPE_ORDER.indexOf(meta(a).type) - TYPE_ORDER.indexOf(meta(b).type) || rank(a) - rank(b),
+			pack: (a, b) => PACK_ORDER.indexOf(SUBPACK_OF[a] || meta(a).pack) - PACK_ORDER.indexOf(SUBPACK_OF[b] || meta(b).pack) || TYPE_ORDER.indexOf(meta(a).type) - TYPE_ORDER.indexOf(meta(b).type),
+			alpha: (a, b) => a.localeCompare(b),
+		}[how];
+		return M.names.slice().sort(by);
+	}
+
+	function describe(n) {
+		const s = M.spells[n] || {}, lines = [];
+		lines.push(`${M.rankOf[n] ? '#' + M.rankOf[n] + ' ' : ''}${pretty(n)} · ${s.type || '?'} · ${packName(s.pack)}`);
+		if (M.bt.ranked.has(n)) lines.push(`Strength ${M.bt.strength[n] >= 0 ? '+' : ''}${M.bt.strength[n].toFixed(2)} over ${M.bt.games[n]} comparisons`);
+		if (s.quality || s.board) lines.push(`Rated ${s.quality || '?'}; better on ${s.board === 'neither' ? 'either kind of' : (s.board === 'empty' ? 'an emptier' : 'a crowded')} board`);
+		if (spellText(n)) lines.push(spellText(n));
+		return lines.join('\n');
+	}
+
+	// ---- Tier list ----
+	function renderTiers() {
+		const rows = [...TIERS, UNRANKED].map(t => ({ t, items: M.order.filter(n => M.tierOf[n] === t) }));
+		rows[rows.length - 1].items = M.names.filter(n => M.tierOf[n] === UNRANKED);
+		el('tier-list').innerHTML = '<div class="tiers">' + rows.filter(r => r.items.length || r.t !== UNRANKED).map(({ t, items }) => `
+			<div class="tier">
+				<div class="tier-label" style="background:${t.color}"><b>${t.k}</b><small>${t.name}</small></div>
+				<div class="tier-items">${items.map(n => `
+					<button class="tile${n === focus ? ' focused' : ''}" data-spell="${n}" title="${esc(describe(n))}">
+						<img src="${card(n)}" alt="" loading="lazy" width="84" height="84"><span>${pretty(n)}</span>
+					</button>`).join('')}</div>
+			</div>`).join('') + '</div>';
+		const unranked = M.names.length - M.order.length;
+		el('tier-note').textContent = `Ranked by a Bradley-Terry fit over ${M.bt.comps} "which is better?" answers; within a tier, spells run best to worst from left to right. Tiers break at the largest gaps in strength that leave every tier at least ${MIN_TIER} spells: ${M.cuts.map(c => `${pretty(M.order[c.at - 1])} → ${pretty(M.order[c.at])} (${c.gap.toFixed(2)})`).join(', ')}.` + (unranked ? ` ${unranked} spell${unranked > 1 ? 's have' : ' has'} no comparisons yet.` : '') + ' Hover a card for details; click one to highlight it in the charts.';
+	}
+
+	// ---- Matrices ----
+	function renderMatrix(target, lookup, kind) {
+		const names = chartOrder(), idx = n => M.names.indexOf(n);
+		const tierBorder = n => M.tierOf[n].color;
+		let h = '<table class="mx"><thead><tr><th class="corner">' + (kind === 'match' ? 'row vs column' : '') + '</th>';
+		for (const n of names) h += `<th class="ch" data-o="${idx(n)}" data-spell="${n}" style="border-bottom-color:${tierBorder(n)}" title="${esc(describe(n))}"><img src="${art(n)}" alt="" loading="lazy"><div class="vt">${pretty(n)}</div></th>`;
+		h += `<th class="sumh">${kind === 'match' ? 'fav · even · unfav' : 'syn · anti'}</th></tr></thead><tbody>`;
+		for (const r of names) {
+			const cnt = { pp: 0, p: 0, e: 0, n: 0, nn: 0 };
+			h += `<tr data-s="${idx(r)}"><th class="rh" data-spell="${r}" style="border-left-color:${tierBorder(r)}" title="${esc(describe(r))}"><img src="${art(r)}" alt="" loading="lazy">${pretty(r)}</th>`;
+			for (const c of names) {
+				if (r === c) { h += `<td class="c d" data-s="${idx(r)}" data-o="${idx(c)}"></td>`; continue; }
+				const v = lookup[r + '|' + c];
+				if (v) cnt[v]++;
+				h += `<td class="c ${v || 'x'}" data-s="${idx(r)}" data-o="${idx(c)}">${v ? SYM[v] : ''}</td>`;
+			}
+			h += `<td class="sum">${kind === 'match' ? `${cnt.pp + cnt.p} · ${cnt.e} · ${cnt.n + cnt.nn}` : `${cnt.pp + cnt.p} · ${cnt.n + cnt.nn}`}</td></tr>`;
+		}
+		el(target).className = '';
+		el(target).innerHTML = h + '</tbody></table>';
+	}
+
+	function cellInfo(kind, r, c) {
+		if (r === c) return `<b>${pretty(r)}</b>`;
+		const k = r + '|' + c, v = (kind === 'match' ? M.match : M.syn)[k], b = M.better[k];
+		const betterTxt = b ? (b === 'equal' ? 'rated about equal overall' : `${pretty(b)} rated better overall`) : '';
+		let main;
+		if (kind === 'match') {
+			main = !v ? 'not surveyed yet'
+				: v === 'e' ? 'even matchup'
+				: (v === 'pp' || v === 'p') ? `<b>${pretty(r)}</b> favoured (${SYM[v]})` : `<b>${pretty(c)}</b> favoured (${SYM[v === 'nn' ? 'pp' : 'p']})`;
+			main = `<b>${pretty(r)}</b> vs <b>${pretty(c)}</b>: ${main}`;
+		} else {
+			const words = { pp: 'strong synergy', p: 'synergy', e: 'no synergy', n: 'anti-synergy', nn: 'strong anti-synergy' };
+			main = `<b>${pretty(r)}</b> + <b>${pretty(c)}</b>: ${v ? words[v] + (v !== 'e' ? ` (${SYM[v]})` : '') : 'not surveyed yet'}`;
+		}
+		const other = kind === 'match' ? M.syn[k] : M.match[k];
+		const otherTxt = !other ? '' : kind === 'match'
+			? { pp: 'strong synergy', p: 'synergy', e: 'no synergy', n: 'anti-synergy', nn: 'strong anti-synergy' }[other]
+			: other === 'e' ? 'even matchup' : `${pretty((other === 'pp' || other === 'p') ? r : c)} favoured head to head`;
+		const extra = [otherTxt, betterTxt].filter(Boolean).join('; ');
+		return main + (extra ? `<div class="t">Also: ${extra}.</div>` : '');
+	}
+
+	function wireMatrix(target, infoId, kind) {
+		const root = el(target);
+		const onCell = e => {
+			const td = e.target.closest('td.c');
+			if (!td) return;
+			const r = M.names[+td.dataset.s], c = M.names[+td.dataset.o];
+			el(infoId).innerHTML = cellInfo(kind, r, c);
+			el('hover-style').textContent = `#${target} [data-s="${td.dataset.s}"] > th.rh, #${target} th.ch[data-o="${td.dataset.o}"] { background:#e8f0fa; }
+				#${target} td.c[data-o="${td.dataset.o}"], #${target} tr[data-s="${td.dataset.s}"] > td.c { box-shadow: inset 0 0 0 1px rgba(59,110,165,.55); }`;
+		};
+		root.addEventListener('mouseover', onCell);
+		root.addEventListener('click', e => {
+			if (e.target.closest('td.c')) return onCell(e);
+			const h = e.target.closest('[data-spell]');
+			if (h) setFocus(h.dataset.spell);
+		});
+		root.addEventListener('mouseleave', () => { el('hover-style').textContent = ''; });
+	}
+
+	function setFocus(n) {
+		focus = focus === n ? null : n;
+		el('focus-chip').classList.toggle('on', !!focus);
+		el('focus-name').textContent = focus ? 'Highlighted: ' + pretty(focus) : '';
+		document.querySelectorAll('.tile').forEach(t => t.classList.toggle('focused', t.dataset.spell === focus));
+		const i = focus ? M.names.indexOf(focus) : -1;
+		el('focus-style').textContent = i < 0 ? '' : `
+			.mx tr[data-s="${i}"] > th.rh, .mx th.ch[data-o="${i}"] { background:#d5e3f3 !important; font-weight:700; }
+			.mx tr[data-s="${i}"] > td.c, .mx td.c[data-o="${i}"] { outline:2px solid #3b6ea5; outline-offset:-2px; }`;
+	}
+
+	function renderAll() {
+		renderTiers();
+		renderMatrix('matchup-chart', M.match, 'match');
+		renderMatrix('synergy-chart', M.syn, 'syn');
+	}
+
+	function useData(data, label) {
+		if (!data || typeof data !== 'object' || !data.spells || !data.pairs) throw new Error('not a spell-survey export');
+		M = build(data);
+		el('src').textContent = `Data: ${label} · exported ${(data.exportedAt || '?').slice(0, 16).replace('T', ' ')} UTC · ${M.names.length} spells · ${M.nPairs} pairs`;
+		if (focus && !M.names.includes(focus)) focus = null;
+		renderAll();
+		if (focus) { const f = focus; focus = null; setFocus(f); }
+	}
+
+	async function loadDefault() {
+		const src = new URLSearchParams(location.search).get('src');
+		const tries = src ? [[src, src.split('/').pop()]] : [['/dev/latest-survey', null], [ARCHIVED, ARCHIVED.split('/').pop() + ' (archived copy)']];
+		for (const [url, label] of tries) {
+			try {
+				const r = await fetch(url, { cache: 'no-store' });
+				if (!r.ok) continue;
+				const data = await r.json();
+				return useData(data, label || (r.headers.get('X-Survey-File') || 'latest export') + ' (dev server)');
+			} catch (e) { /* try the next source */ }
+		}
+		el('src').textContent = 'Could not load a survey export. Use "Load JSON…".';
+		for (const id of ['tier-list', 'matchup-chart', 'synergy-chart']) el(id).innerHTML = '<div class="msg">No data loaded.</div>';
+	}
+
+	el('order').onchange = () => { if (M) { renderMatrix('matchup-chart', M.match, 'match'); renderMatrix('synergy-chart', M.syn, 'syn'); } };
+	el('focus-clear').onclick = () => setFocus(focus);
+	el('tier-list').addEventListener('click', e => { const t = e.target.closest('.tile'); if (t) setFocus(t.dataset.spell); });
+	el('load').onclick = () => el('load-file').click();
+	el('load-file').onchange = async e => {
+		const f = e.target.files[0]; if (!f) return;
+		try { useData(JSON.parse(await f.text()), f.name + ' (loaded file)'); }
+		catch (err) { alert('Could not load ' + f.name + ': ' + err.message); }
+		e.target.value = '';
+	};
+	wireMatrix('matchup-chart', 'matchup-info', 'match');
+	wireMatrix('synergy-chart', 'synergy-info', 'syn');
+	loadDefault();
+})();
+</script>
+</body>
+</html>
