@@ -25,6 +25,13 @@ def variant_has_deathmatch(v):
     return isinstance(v, str) and 'deathmatch' in v
 
 
+def variant_has_scramble(v):
+    """Mirror of JS variantHasScramble: no stone-lead win; the first to
+    cast their sixth spell wins. Shares the end-condition slot with
+    Deathmatch, which takes precedence."""
+    return isinstance(v, str) and 'scramble' in v and 'deathmatch' not in v
+
+
 def variant_has_duplicates(v):
     """Mirror of JS variantHasDuplicates: the spell draw may repeat a
     spell (X, X~2, X~3 aliases). Setup-only; play is otherwise standard."""
@@ -175,11 +182,16 @@ class SimBoard:
     # blue's turn-1 is a free soft-blink to any of the remaining 38 empty
     # nodes; play proceeds normally from turn 2.
     # Tokens compose in this fixed order (mirrors JS composeVariant):
-    # competitive, deathmatch, duplicates -> 8 strings.
+    # competitive, deathmatch|scramble, duplicates -> 12 strings (the same
+    # order as JS SIGIL_VARIANTS). Deathmatch and Scramble are mutually
+    # exclusive end conditions.
     VARIANTS = tuple(
         '_'.join(p for p, on in (('competitive', m & 1), ('deathmatch', m & 2),
                                  ('duplicates', m & 4)) if on) or 'standard'
-        for m in range(8))
+        for m in range(8)) + tuple(
+        '_'.join(p for p, on in (('competitive', m & 1), ('scramble', True),
+                                 ('duplicates', m & 4)) if on)
+        for m in range(8) if not m & 2)
 
     __slots__ = ('stones', 'spell_names', 'turn_counter', 'whose_turn',
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
@@ -421,6 +433,15 @@ class SimBoard:
         # ±3-lead and sixth-spell conditions are disabled. Mirrors JS
         # sim-board checkGameOver.
         if variant_has_deathmatch(self.variant):
+            return False
+
+        # Scramble: no stone-lead win; casting your sixth spell wins
+        # outright. Mirrors JS sim-board checkGameOver.
+        if variant_has_scramble(self.variant):
+            if self.spell_counter[active_color] >= 6:
+                self.gameover = True
+                self.winner = active_color
+                return True
             return False
 
         red_real = self.totalstones['red']

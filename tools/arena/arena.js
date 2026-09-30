@@ -24,6 +24,7 @@
  *   --threads N      worker threads                         (default = CPU count)
  *   --require-spell S regenerate layouts until they contain spell S
  *   --json PATH      also write full per-game results as JSON
+ *   --variant V      standard | deathmatch | scramble       (default standard)
  *
  * See engine.js parseModeSpec for the `mode:key=val` spec syntax
  * (caveman | prune, with optional pure / capabs / caps / lp / refill keys).
@@ -39,7 +40,7 @@ function parseArgs(argv) {
 	const a = {
 		games: 10, time: 10, red: 'caveman', blue: 'prune',
 		swap: true, pack: 'core', seed: null, maxDepth: 64, maxTurns: 300,
-		threads: os.cpus().length, json: null, requireSpell: null,
+		threads: os.cpus().length, json: null, requireSpell: null, variant: 'standard',
 	};
 	for (let i = 2; i < argv.length; i++) {
 		const k = argv[i];
@@ -58,8 +59,15 @@ function parseArgs(argv) {
 			case '--threads': a.threads = parseInt(next(), 10); break;
 			case '--require-spell': a.requireSpell = next(); break;
 			case '--json': a.json = next(); break;
+			case '--variant': a.variant = next(); break;
 			default: throw new Error(`Unknown option: ${k}`);
 		}
+	}
+	// play-game.js always uses the standard opening and the given spell list,
+	// so only end-condition variants are measured faithfully.
+	if (a.variant !== 'standard' && !['deathmatch', 'scramble'].includes(a.variant)) {
+		throw new Error(`--variant ${a.variant}: arena supports only standard, deathmatch or scramble `
+			+ '(competitive openings and duplicate draws are not implemented here)');
 	}
 	return a;
 }
@@ -111,6 +119,7 @@ function buildGameSpecs(args, engine) {
 			timeLimit: args.time,
 			maxDepth: args.maxDepth,
 			maxTurns: args.maxTurns,
+			variant: args.variant,
 		});
 	}
 	return { specs, seed, labelA: cfgA.label, labelB: cfgB.label };

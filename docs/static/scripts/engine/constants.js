@@ -186,9 +186,9 @@ const SPELL_TEXTS = {
 	Bear_Trap:         'Destroy all enemy stones in 1-node spells.',
 	Shiver:            'Swap the positions of any two stones on the board.',
 	Blood_Saplings:    'If you crushed an enemy stone this turn, make 2 soft moves.',
-	Itch:              'Make 1 move, then advance the enemy lock by 1.',
+	Itch:              'Make 1 move, then advance the enemy lock by 1. (Scramble: reduce it by 1 instead.)',
 	Free_Spirit:       'If your lock is 0 or 1, make 1 soft move.',
-	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1.',
+	Residue_Mixture:   'If your lock is higher than the enemy lock, convert 1 enemy stone to your color and advance the enemy lock by 1. (Scramble: reduce it by 1 instead.)',
 	Stampede:          'Make hard moves equal to your lock value (0–5).',
 	Choke:             'Choose an enemy stone; place your stones on all of its empty adjacent nodes.',
 	Perfect_Heist:     'Destroy every stone on the mana nodes, then occupy all three.',
@@ -371,32 +371,43 @@ function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
 }
 
-// Game variants. Two orthogonal dimensions encoded in a single string:
+// Game variants. Orthogonal dimensions encoded in a single string:
 //   competitive — empty-board opening (both players blink onto any node for
 //                 their first move) instead of the classic a1/b1 stones.
 //   deathmatch  — win ONLY by eliminating all opponent stones; the +3-lead and
 //                 6th-spell terminal conditions are disabled (threefold board
 //                 repetition still ends the game as a Blue win, to guarantee
 //                 termination). Spell counters are removed in this mode.
+//   scramble    — the +3-lead win is disabled; the first player to cast their
+//                 sixth spell WINS outright (no stone comparison). Elimination
+//                 and threefold repetition (Blue win) still apply. Unrated.
 //   duplicates  — the spell draw may repeat a spell (up to three copies):
 //                 the pool holds every spell as X, X~2, X~3 (see
 //                 DUPLICATE_SUFFIXES) and the draw stays without
 //                 replacement. A setup-only rule: play is otherwise
 //                 standard. Unrated.
-// They combine, tokens in this fixed order: 'competitive_deathmatch_duplicates'.
-// Kept as one string so it rides the existing variant plumbing (SFN,
-// Firebase, URL, localStorage) unchanged.
-const VARIANT_TOKENS = ['competitive', 'deathmatch', 'duplicates'];
-function composeVariant(competitive, deathmatch, duplicates) {
+// Deathmatch and Scramble are both end-condition rules and are mutually
+// exclusive: they share one slot, and Deathmatch wins if both are asked for.
+// Tokens combine in this fixed order: 'competitive_deathmatch_duplicates',
+// 'competitive_scramble_duplicates'. Kept as one string so it rides the
+// existing variant plumbing (SFN, Firebase, URL, localStorage) unchanged.
+const VARIANT_TOKENS = ['competitive', 'deathmatch', 'scramble', 'duplicates'];
+function composeVariant(competitive, deathmatch, duplicates, scramble) {
 	const parts = [];
 	if (competitive) parts.push('competitive');
 	if (deathmatch) parts.push('deathmatch');
+	else if (scramble) parts.push('scramble');
 	if (duplicates) parts.push('duplicates');
 	return parts.length ? parts.join('_') : 'standard';
 }
+// 2 (competitive) x 3 (end condition: standard / deathmatch / scramble)
+// x 2 (duplicates) = 12 strings.
 const SIGIL_VARIANTS = [];
 for (let mask = 0; mask < 8; mask++) {
 	SIGIL_VARIANTS.push(composeVariant(mask & 1, mask & 2, mask & 4));
+}
+for (let mask = 0; mask < 8; mask++) {
+	if (!(mask & 2)) SIGIL_VARIANTS.push(composeVariant(mask & 1, false, mask & 4, true));
 }
 function variantHasCompetitive(v) {
 	return typeof v === 'string' && v.indexOf('competitive') !== -1;
@@ -404,15 +415,33 @@ function variantHasCompetitive(v) {
 function variantHasDeathmatch(v) {
 	return typeof v === 'string' && v.indexOf('deathmatch') !== -1;
 }
+function variantHasScramble(v) {
+	return typeof v === 'string' && v.indexOf('scramble') !== -1 && !variantHasDeathmatch(v);
+}
 function variantHasDuplicates(v) {
 	return typeof v === 'string' && v.indexOf('duplicates') !== -1;
 }
-// Canonicalize any input (handles legacy strings, wrong order, junk) to one of
-// the eight SIGIL_VARIANTS values.
-function normalizeVariant(v) {
-	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v), variantHasDuplicates(v));
+// Itch / Residue Mixture (Panda): "advance the enemy lock by 1". Deathmatch
+// has no counters; in Scramble (where the counter is the race to six) the
+// effect is reversed -- the enemy counter goes BACK by 1, floored at 0.
+// Every resolver and replayer goes through here.
+function bumpEnemySpellCounter(board, target) {
+	if (variantHasDeathmatch(board.variant)) return;
+	if (variantHasScramble(board.variant)) {
+		board.spellCounter[target] = Math.max(0, board.spellCounter[target] - 1);
+	} else {
+		board.spellCounter[target] = Math.min(6, board.spellCounter[target] + 1);
+	}
 }
-
+function enemySpellCounterMessage(variant) {
+	return variantHasScramble(variant) ? 'Enemy lock reduced by 1 (Scramble).' : 'Enemy lock advanced by 1.';
+}
+// Canonicalize any input (handles legacy strings, wrong order, junk) to one of
+// the SIGIL_VARIANTS values.
+function normalizeVariant(v) {
+	return composeVariant(variantHasCompetitive(v), variantHasDeathmatch(v),
+		variantHasDuplicates(v), variantHasScramble(v));
+}
 // Stone-spot positions (fractions of the square spell image), measured from the
 // core spell cards which bake white circles at these spots. Expansion spell art
 // is full-bleed with no spots, so the game overlays white circles here instead.

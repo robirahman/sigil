@@ -586,6 +586,9 @@ document.addEventListener('alpine:init', () => {
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
 					_this._rematchVariant = normalizeVariant(variant);
 				_this.isDeathmatch = variantHasDeathmatch(variant);
+					if (variantHasScramble(variant) && !reviewMode) {
+						_this.messageHistory.push('Scramble: there is no stone-lead win. The first player to cast their sixth spell wins.');
+					}
 					// AI-review wiring: roomCode is the gameId used for the shared
 					// Firebase review cache, and authManager exposes the uid for
 					// community-annotation writes.

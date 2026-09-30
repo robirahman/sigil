@@ -252,7 +252,7 @@ function _minimaxApplyTurn(board, turn, color) {
 			if (action.node2) sim.stones[action.node2] = action.val2;
 		}
 		else if (t === 'lock_bump') {
-			if (action.target && !variantHasDeathmatch(sim.variant)) sim.spellCounter[action.target] = Math.min(6, sim.spellCounter[action.target] + 1);
+			if (action.target) bumpEnemySpellCounter(sim, action.target);
 		}
 		else if (t === 'bewitch') {
 			if (action.node) sim.stones[action.node] = color;
