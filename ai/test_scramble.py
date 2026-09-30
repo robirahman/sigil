@@ -167,7 +167,8 @@ function lead(Cls, variant, extra) {
   b.update();
   return b;
 }
-const out = { variants: SIGIL_VARIANTS,
+// Python lists only the core-board variants (the pentagon board is JS-only).
+const out = { variants: SIGIL_VARIANTS.filter(v => !variantHasPentagon(v)),
   norm: ['scramble_competitive', 'deathmatch_scramble', 'duplicates_scramble', 'junk', 'scramble'].map(normalizeVariant),
   compose: composeVariant(true, false, true, true),
   composeBoth: composeVariant(false, true, false, true),

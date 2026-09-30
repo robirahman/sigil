@@ -4,11 +4,11 @@
 // getInput(payload) sends a message/event to the UI and returns a Promise
 // that resolves with the player's response (a node name, etc.).
 
-// Returns position indices (1..9) where `color` controls all but exactly `n` nodes.
+// Returns position indices (1..BOARD.positionCount) where `color` controls all but exactly `n` nodes.
 // `opts.size`, if set, restricts to spells with that many nodes.
 function spellsWhereControlAllButN(board, color, n, opts = {}) {
 	const result = [];
-	for (let i = 1; i <= 9; i++) {
+	for (let i = 1; i <= BOARD.positionCount; i++) {
 		const nodes = POSITIONS[i];
 		if (!nodes) continue;
 		if (opts.size && nodes.length !== opts.size) continue;
@@ -21,21 +21,17 @@ function spellsWhereControlAllButN(board, color, n, opts = {}) {
 	return result;
 }
 
-// Returns the position index (1..9) that contains `nodeName`, or null.
+// Returns the position index (1..BOARD.positionCount) that contains `nodeName`, or null.
 function spellPositionOfNode(nodeName) {
-	for (let i = 1; i <= 9; i++) {
+	for (let i = 1; i <= BOARD.positionCount; i++) {
 		if (POSITIONS[i] && POSITIONS[i].includes(nodeName)) return i;
 	}
 	return null;
 }
 
-// Maps a 5-node ritual position to its "opposite" charm (1-node) and sorcery (3-node)
-// positions, rotating zones A→B→C→A.
-const SYZYGY_OPPOSITE = {
-	1: { charm: 8, sorcery: 5 },
-	2: { charm: 9, sorcery: 6 },
-	3: { charm: 7, sorcery: 4 },
-};
+// A 5-node ritual position's "opposite" charm (1-node) and sorcery (3-node)
+// positions live in BOARD.syzygyOpposite: the pair straight across the
+// ring (core: from A, the pair between B and C).
 
 // BFS flood-fill: return contiguous groups of stones of `targetColor`.
 // Each group is an array of node names.
@@ -174,7 +170,7 @@ const SpellResolvers = {
 		const enemy = board.enemy(color);
 		// Find which of the 6 non-charm spell positions have enemy stones
 		const hailableSpells = [];
-		for (let i = 1; i <= 6; i++) {
+		for (let i = 1; i <= 2 * BOARD.perType; i++) {
 			const nodes = POSITIONS[i];
 			for (const n of nodes) {
 				if (board.stones[n] === enemy) {
@@ -571,7 +567,7 @@ const SpellResolvers = {
 		const usedSpells = new Set();
 		for (let move = 0; move < 2; move++) {
 			const targets = {};
-			for (let i = 1; i <= 9; i++) {
+			for (let i = 1; i <= BOARD.positionCount; i++) {
 				if (usedSpells.has(i)) continue;
 				for (const n of POSITIONS[i]) {
 					if (board.stones[n] === null) targets[n] = color;
@@ -606,11 +602,11 @@ const SpellResolvers = {
 	async blossom(board, color, spellName, getInput, emit) {
 		const selfIdx = board.spellNames.indexOf(spellName) + 1;
 		const usedSpells = new Set([selfIdx]);
-		// Target: each other 3-node and 5-node spell (positions 1..6 minus self)
-		const required = [1, 2, 3, 4, 5, 6].filter(i => i !== selfIdx).length;
+		// Target: each other 3-node and 5-node spell (BOARD.bigPositions minus self)
+		const required = BOARD.bigPositions.filter(i => i !== selfIdx).length;
 		for (let move = 0; move < required; move++) {
 			const targets = {};
-			for (let i = 1; i <= 6; i++) {
+			for (let i = 1; i <= 2 * BOARD.perType; i++) {
 				if (usedSpells.has(i)) continue;
 				for (const n of POSITIONS[i]) {
 					if (board.stones[n] === null) targets[n] = color;
@@ -645,7 +641,7 @@ const SpellResolvers = {
 	async syzygy(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
 		const spellIdx = board.spellNames.indexOf(spellName) + 1;
-		const opp = SYZYGY_OPPOSITE[spellIdx];
+		const opp = BOARD.syzygyOpposite[spellIdx];
 		if (!opp) return;
 
 		// Step 1: 1 blink move into the 1-node opposite spell
@@ -762,7 +758,7 @@ const SpellResolvers = {
 		const targets = {};
 		for (const node of Object.keys(allMoves)) {
 			const idx = spellPositionOfNode(node);
-			if (idx !== null && idx <= 6) targets[node] = color;
+			if (idx !== null && idx <= 2 * BOARD.perType) targets[node] = color;
 		}
 		if (Object.keys(targets).length === 0) {
 			emit({ type: 'message', message: 'No legal move into a 3- or 5-node spell.', awaiting: null });
@@ -800,7 +796,7 @@ const SpellResolvers = {
 		// may be made in any order.
 		const ownIdx = board.spellNames.indexOf(spellName) + 1;
 		const eligible = [];
-		for (let i = 1; i <= 6; i++) {
+		for (let i = 1; i <= 2 * BOARD.perType; i++) {
 			if (i === ownIdx) continue;
 			if (POSITIONS[i].some(n => board.stones[n] === color)) eligible.push(i);
 		}
@@ -1242,7 +1238,7 @@ const SpellResolvers = {
 	async bear_trap(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
 		let any = false;
-		for (const pos of [7, 8, 9]) {
+		for (const pos of BOARD.charmPositions) {
 			for (const n of POSITIONS[pos]) {
 				if (board.stones[n] === enemy) {
 					board.stones[n] = null;
@@ -1341,7 +1337,7 @@ const SpellResolvers = {
 			emit({ type: 'message', message: 'No legal moves.', awaiting: null });
 		}
 		// Advance the enemy lock (spell counter; reversed in Scramble). Safe
-		// to push to 6: the counter-based end only fires via
+		// to push to BOARD.spellTarget: the counter-based end only fires via
 		// checkGameOver(enemy) on the enemy's own turn, never on the caster's.
 		bumpEnemySpellCounter(board, enemy);
 		emit({ type: 'message', message: enemySpellCounterMessage(board.variant), awaiting: null });
@@ -1413,7 +1409,7 @@ const SpellResolvers = {
 	async stampede(board, color, spellName, getInput, emit) {
 		// Lock value = current spell counter (this sorcery's own increment
 		// happens after resolution, so this reads the pre-cast value 0–5).
-		const count = Math.min(5, board.spellCounter[color]);
+		const count = Math.min(BOARD.spellTarget - 1, board.spellCounter[color]);
 		if (count === 0) {
 			emit({ type: 'message', message: 'Your lock is 0; Stampede does nothing.', awaiting: null });
 			return;
@@ -1468,7 +1464,7 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Panda: Perfect Heist (clear the mana nodes, then occupy all three) ---
+	// --- Panda: Perfect Heist (clear the mana nodes, then occupy all of them) ---
 	async perfect_heist(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
 		for (const n of MANA_NODES) {
@@ -1513,7 +1509,7 @@ const SpellResolvers = {
 	// --- Panda: Ripples (apply two charged 1-node spells' effects twice) ---
 	async ripples(board, color, spellName, getInput, emit) {
 		const candidates = [];
-		for (const pos of [7, 8, 9]) {
+		for (const pos of BOARD.charmPositions) {
 			const sn = board.spellNames[pos - 1];
 			const info = CORE_SPELLS[sn];
 			if (!info || info.static || !info.resolve) continue;

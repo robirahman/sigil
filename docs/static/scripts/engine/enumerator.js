@@ -394,7 +394,7 @@ function _spellOverrides(board, color, spellName, caps) {
 		// Each all-moveable target that lands in a 3- or 5-node spell
 		// (positions 1..6). Greedy ordering — defer heuristics.
 		const inSmallSpell = (n) => {
-			for (let i = 1; i <= 6; i++) if (POSITIONS[i].includes(n)) return true;
+			for (let i = 1; i <= 2 * BOARD.perType; i++) if (POSITIONS[i].includes(n)) return true;
 			return false;
 		};
 		const targets = board._allMoveable(color).filter(inSmallSpell);

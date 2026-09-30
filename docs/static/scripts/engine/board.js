@@ -5,6 +5,9 @@
 
 class SigilBoard {
 	constructor(spellNames, variant = 'standard') {
+		// The variant names the board layout; activate it before anything
+		// reads NODE_ORDER / POSITIONS (see setBoardLayout in constants.js).
+		setBoardLayout(variantBoardLayout(variant));
 		this.stones = {};
 		for (const n of NODE_ORDER) {
 			this.stones[n] = null;
@@ -55,11 +58,11 @@ class SigilBoard {
 	}
 
 	setupInitial() {
-		// Standard: red on a1, blue on b1.
+		// Standard: red on a1, blue on b1 (BOARD.startStones).
 		// Competitive: empty board; first two turns place stones via blink.
 		if (!variantHasCompetitive(this.variant)) {
-			this.stones.a1 = 'red';
-			this.stones.b1 = 'blue';
+			this.stones[BOARD.startStones.red] = 'red';
+			this.stones[BOARD.startStones.blue] = 'blue';
 		}
 		this.update();
 	}
@@ -106,9 +109,9 @@ class SigilBoard {
 		if (redscore === bluescore) {
 			this.score = 'tied';
 		} else if (redscore > bluescore) {
-			this.score = 'r' + Math.min(3, redscore - bluescore);
+			this.score = 'r' + Math.min(BOARD.winLead, redscore - bluescore);
 		} else {
-			this.score = 'b' + Math.min(3, bluescore - redscore);
+			this.score = 'b' + Math.min(BOARD.winLead, bluescore - redscore);
 		}
 
 		// Mana
@@ -252,10 +255,11 @@ class SigilBoard {
 		// threefold repetition is enforced by the controllers.
 		if (variantHasDeathmatch(this.variant)) return false;
 
-		// Scramble: no stone-lead win; casting your sixth spell wins outright.
-		// Checked at the end of the caster's turn, like the standard trigger.
+		// Scramble: no stone-lead win; casting your BOARD.spellTarget-th spell
+		// (the sixth on core) wins outright. Checked at the end of the
+		// caster's turn, like the standard trigger.
 		if (variantHasScramble(this.variant)) {
-			if (this.spellCounter[activeColor] >= 6) {
+			if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
 				this.gameover = true;
 				this.winner = activeColor;
 				return true;
@@ -263,7 +267,7 @@ class SigilBoard {
 			return false;
 		}
 
-		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
+		// Stone-lead check (±BOARD.winLead: 3 on core): Providence phantoms count ASYMMETRICALLY (defense
 		// only) — a player's win claim uses their real placed stones,
 		// checked against the opponent's real+pending total. In the
 		// sixth-spell count they are symmetric (2026-08 playtest ruling).
@@ -275,18 +279,18 @@ class SigilBoard {
 		for (const v of this.pendingMoves.red) redProv += v;
 		for (const v of this.pendingMoves.blue) blueProv += v;
 
-		if (redTotal > blueTotal + blueProv + 2) {
+		if (redTotal > blueTotal + blueProv + BOARD.winLead - 1) {
 			this.gameover = true;
 			this.winner = 'red';
 			return true;
 		}
-		if (blueTotal > redTotal + redProv + 2) {
+		if (blueTotal > redTotal + redProv + BOARD.winLead - 1) {
 			this.gameover = true;
 			this.winner = 'blue';
 			return true;
 		}
 
-		if (this.spellCounter[activeColor] >= 6) {
+		if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
 			this.gameover = true;
 			if (redTotal + redProv > blueTotal + blueProv) this.winner = 'red';
 			else if (blueTotal + blueProv > redTotal + redProv) this.winner = 'blue';
@@ -299,6 +303,15 @@ class SigilBoard {
 
 	loadFromSfn(sfnStr) {
 		const state = sfnToDict(sfnStr);
+		// The SFN's layout wins: activate it and keep this.variant's board
+		// token in step (the rest of the variant stays as constructed).
+		if (state.layout !== BOARD.id) {
+			setBoardLayout(state.layout);
+			this.variant = composeVariant(variantHasCompetitive(this.variant),
+				variantHasDeathmatch(this.variant), variantHasDuplicates(this.variant),
+				variantHasScramble(this.variant), state.layout === 'pentagon');
+			this.stones = {};
+		}
 		this.spellNames = state.spell_names;
 		for (const n of NODE_ORDER) {
 			this.stones[n] = state.stones[n];

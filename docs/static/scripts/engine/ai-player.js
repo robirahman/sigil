@@ -74,7 +74,7 @@ class GreedyAI {
 		let score = 0;
 
 		// Mana nodes are very valuable
-		if (nodeName === 'a1' || nodeName === 'b1' || nodeName === 'c1') {
+		if (MANA_NODES.includes(nodeName)) {
 			score += 10;
 		}
 
@@ -82,7 +82,7 @@ class GreedyAI {
 		if (board.stones[nodeName] === null) {
 			score += 3;
 		} else {
-			if (nodeName === 'a1' || nodeName === 'b1' || nodeName === 'c1') {
+			if (MANA_NODES.includes(nodeName)) {
 				score += 5;
 			} else {
 				score += 1;
@@ -237,7 +237,7 @@ class GreedyAI {
 	_hailableSpellCount(board, color) {
 		const enemy = color === 'red' ? 'blue' : 'red';
 		let count = 0;
-		for (let i = 1; i <= 6; i++) {
+		for (let i = 1; i <= 2 * BOARD.perType; i++) {
 			const nodes = POSITIONS[i];
 			for (const n of nodes) {
 				if (board.stones[n] === enemy) { count++; break; }

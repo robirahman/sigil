@@ -297,6 +297,36 @@
 
 		<!-- Engine scripts (same order as game.html) -->
 		<script src="static/scripts/engine/constants.js"></script>
+		<script>
+			// Stale-asset guard. On the first load after a deploy, a returning
+			// visitor's old service worker serves its cached scripts with this fresh
+			// page. If they predate the page (SIGIL_ASSET_EPOCH in constants.js),
+			// drop the caches, refetch the page's scripts past the HTTP cache, and
+			// reload once. The new worker deletes the stale cache when it activates.
+			(function () {
+				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 1) return;
+				if (!window.caches || !window.fetch) return;
+				try {
+					if (sessionStorage.getItem('sigilStaleAssetReload') === '1') return;
+					sessionStorage.setItem('sigilStaleAssetReload', '1');
+				} catch (e) { return; }
+				document.addEventListener('DOMContentLoaded', function () {
+					var urls = ['static/scripts/engine/ai-worker.js'];
+					Array.prototype.forEach.call(document.scripts, function (s) {
+						if (s.src && s.src.indexOf(location.origin) === 0) urls.push(s.src);
+					});
+					caches.keys()
+						.then(function (keys) { return Promise.all(keys.map(function (k) { return caches.delete(k); })); })
+						.then(function () {
+							return Promise.all(urls.map(function (u) {
+								return fetch(u, { cache: 'reload' }).catch(function () {});
+							}));
+						})
+						.catch(function () {})
+						.then(function () { location.reload(); });
+				});
+			})();
+		</script>
 		<script src="static/scripts/engine/notation.js"></script>
 		<script src="static/scripts/engine/board.js"></script>
 		<script src="static/scripts/engine/moves.js"></script>
@@ -320,6 +350,7 @@
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
+		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-board-local.js?v=17"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

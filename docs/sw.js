@@ -10,7 +10,7 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
  */
-const CACHE_VERSION = 'v54';
+const CACHE_VERSION = 'v55';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -28,7 +28,6 @@ const SAME_ORIGIN_PRECACHE = [
 	'./strategy-guide.html',
 	'./static/data/spell-charts.json',
 	'./cataclysm.html',
-	'./cataclysm-game.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',
 	'./static/css/layout.css',
@@ -36,11 +35,11 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/help.css',
 	'./static/css/ladder.css',
 	'./static/css/form.css',
-	'./static/css/cataclysm.css',
 	'./static/scripts/theme-manager.js',
 	'./static/scripts/auth-status.js',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
+	'./static/scripts/board-geometry.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/game-board-local.js?v=17',
 	'./static/scripts/engine/rust-ai.js?v=20',

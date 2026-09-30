@@ -291,7 +291,9 @@ console.log('JS_RESULT ' + JSON.stringify({ sfn, charged, hist, before4, after4,
     assert res['before4'] == res['after4'] and res['slot5'] == 2
     assert res['lock'] == 'Grow~2' and res['variant'] == 'duplicates'
     assert res['uniq'] == 9 and res['bases'] == 3 and res['ex']
-    assert res['variants'] == 12 and res['norm'] == 'competitive_duplicates'
+    # JS has a fifth dimension (the 'pentagon' board layout, JS-only),
+    # so 24 variant strings there vs Python's 12.
+    assert res['variants'] == 24 and res['norm'] == 'competitive_duplicates', res
     assert res['windRed'] and res['windBlue'] and not res['windBlueAfter'], res
     print("  PASS")
 

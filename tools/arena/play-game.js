@@ -4,7 +4,8 @@
  *
  * Mirrors the live game-controller loop (docs/.../game-controller.js) without
  * any DOM/event plumbing:
- *   - standard variant opening: red on a1, blue on b1
+ *   - standard variant opening: red on a1, blue on b1 (BOARD.startStones);
+ *     competitive: empty board, both sides' first turns are free blinks
  *   - per-turn repetition tracking (3rd occurrence of a snapshot => blue wins)
  *   - Inferno charged at a player's turn start => that player loses
  *   - move application + game-over check via the engine's own
@@ -18,7 +19,7 @@
 const { specToOpts } = require('./engine.js');
 
 async function playGame(engine, spec) {
-	const { SimBoard, cavemanSearch, _minimaxApplyTurn, ENUM_CAPS } = engine;
+	const { SimBoard, cavemanSearch, _minimaxApplyTurn, ENUM_CAPS, BOARD } = engine;
 	const { spellNames, redCfg, blueCfg, timeLimit, maxDepth, maxTurns } = spec;
 	const variant = spec.variant || 'standard';
 	const redMode = redCfg.label, blueMode = blueCfg.label;
@@ -29,11 +30,16 @@ async function playGame(engine, spec) {
 		blue: specToOpts(blueCfg, budget, ENUM_CAPS),
 	};
 
-	// Standard opening (the variant may change the end conditions; a
-	// competitive opening is not supported here).
 	let board = new SimBoard(spellNames, variant);
-	board.stones.a1 = 'red';
-	board.stones.b1 = 'blue';
+	if (!engine.variantHasCompetitive(variant)) {
+		board.stones[BOARD.startStones.red] = 'red';
+		board.stones[BOARD.startStones.blue] = 'blue';
+	} else {
+		// Live convention (red's opening is turn 1, blue's turn 2), so the
+		// competitive free-blink window (turnCounter <= 2) covers exactly
+		// one opening turn per side.
+		board.turnCounter = 1;
+	}
 	board.update();
 
 	const loopCounts = {};

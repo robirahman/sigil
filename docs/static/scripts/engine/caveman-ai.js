@@ -134,7 +134,7 @@ function _hailStormPrepKills(board, side, enemyOfSide) {
 	if (!board.chargedSpells || !board.chargedSpells[side]) return 0;
 	if (!board.chargedSpells[side].includes('Hail_Storm')) return 0;
 	let slots = 0;
-	for (let i = 1; i <= 6; i++) {
+	for (let i = 1; i <= 2 * BOARD.perType; i++) {
 		const nodes = POSITIONS[i];
 		if (!nodes) continue;
 		for (const n of nodes) {

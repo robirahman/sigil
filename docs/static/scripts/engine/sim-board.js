@@ -34,6 +34,9 @@ class SimTurn {
 
 class SimBoard {
 	constructor(spellNames, variant = 'standard') {
+		// Activate the variant's board layout (a no-op compare when it is
+		// already active, which is every copy() in a search).
+		setBoardLayout(variantBoardLayout(variant));
 		this.stones = {};
 		for (const n of NODE_ORDER) this.stones[n] = null;
 		this.spellNames = spellNames || [];
@@ -162,8 +165,8 @@ class SimBoard {
 		const rs = rc + this.pendingStones('red');
 		const bs = bc + 1 + this.pendingStones('blue');
 		if (rs === bs) this.score = 'tied';
-		else if (rs > bs) this.score = 'r' + Math.min(3, rs - bs);
-		else this.score = 'b' + Math.min(3, bs - rs);
+		else if (rs > bs) this.score = 'r' + Math.min(BOARD.winLead, rs - bs);
+		else this.score = 'b' + Math.min(BOARD.winLead, bs - rs);
 
 		for (const color of ['red', 'blue'])
 			this.mana[color] = MANA_NODES.filter(n => this.stones[n] === color).length;
@@ -238,9 +241,10 @@ class SimBoard {
 		// +3-lead and 6th-spell conditions below are disabled.
 		if (variantHasDeathmatch(this.variant)) return false;
 
-		// Scramble: no stone-lead win; casting your sixth spell wins outright.
+		// Scramble: no stone-lead win; casting your BOARD.spellTarget-th spell
+		// (the sixth on core) wins outright.
 		if (variantHasScramble(this.variant)) {
-			if (this.spellCounter[activeColor] >= 6) {
+			if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
 				this.gameover = true; this.winner = activeColor; return true;
 			}
 			return false;
@@ -254,9 +258,10 @@ class SimBoard {
 		// are already real, unused ones forfeit at end of turn.
 		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
 		const rProv = this.pendingSum('red'), bProv = this.pendingSum('blue');
-		if (rt > bt + bProv + 2) { this.gameover = true; this.winner = 'red'; return true; }
-		if (bt > rt + rProv + 2) { this.gameover = true; this.winner = 'blue'; return true; }
-		if (this.spellCounter[activeColor] >= 6) {
+		const margin = BOARD.winLead - 1;
+		if (rt > bt + bProv + margin) { this.gameover = true; this.winner = 'red'; return true; }
+		if (bt > rt + rProv + margin) { this.gameover = true; this.winner = 'blue'; return true; }
+		if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
 			this.gameover = true;
 			if (rt + rProv > bt + bProv) this.winner = 'red';
 			else if (bt + bProv > rt + rProv) this.winner = 'blue';
@@ -388,7 +393,8 @@ class SimBoard {
 	isCrushable(nodeName, attackerColor) {
 		const defender = attackerColor === 'red' ? 'blue' : 'red';
 		if (this.stones[nodeName] !== defender) return false;
-		return this.escapeDistance(nodeName, defender, 39) >= 39;
+		const n = NODE_ORDER.length;
+		return this.escapeDistance(nodeName, defender, n) >= n;
 	}
 
 	/**
@@ -622,7 +628,7 @@ class SimBoard {
 			this.update();
 		} else if (rt === 'hail_storm') {
 			const destroyed = [];
-			for (let pos = 1; pos <= 6; pos++) {
+			for (let pos = 1; pos <= 2 * BOARD.perType; pos++) {
 				for (const n of POSITIONS[pos]) {
 					if (this.stones[n] === enemy) {
 						this.stones[n] = null;
@@ -1077,7 +1083,7 @@ class SimBoard {
 		} else if (rt === 'azimuth') {
 			// 1 move into a spell where this color controls all but 1 node.
 			const qualifying = [];
-			for (let i = 1; i <= 9; i++) {
+			for (let i = 1; i <= BOARD.positionCount; i++) {
 				let unc = 0;
 				for (const n of POSITIONS[i]) if (this.stones[n] !== color) unc++;
 				if (unc === 1) qualifying.push(i);
@@ -1097,7 +1103,7 @@ class SimBoard {
 		} else if (rt === 'eclipse') {
 			// 2 moves into a spell where this color controls all but 2 nodes.
 			const candidates = [];
-			for (let i = 1; i <= 9; i++) {
+			for (let i = 1; i <= BOARD.positionCount; i++) {
 				let unc = 0;
 				for (const n of POSITIONS[i]) if (this.stones[n] !== color) unc++;
 				if (unc === 2) candidates.push(i);
@@ -1128,16 +1134,16 @@ class SimBoard {
 			// lives in spells.js, which the worker doesn't load, so inline the
 			// position lookups like the Eclipse/Azimuth branches do.)
 			const _posOf = (node) => {
-				for (let i = 1; i <= 9; i++) if (POSITIONS[i].includes(node)) return i;
+				for (let i = 1; i <= BOARD.positionCount; i++) if (POSITIONS[i].includes(node)) return i;
 				return null;
 			};
 			const moves = this._allMoveable(color);
 			let chosen = null;
 			const ovr = overrides.charge_target;
-			if (ovr && moves.includes(ovr) && _posOf(ovr) !== null && _posOf(ovr) <= 6) {
+			if (ovr && moves.includes(ovr) && _posOf(ovr) !== null && _posOf(ovr) <= 2 * BOARD.perType) {
 				chosen = ovr;
 			} else {
-				for (let i = 1; i <= 6; i++) {
+				for (let i = 1; i <= 2 * BOARD.perType; i++) {
 					for (const n of POSITIONS[i]) {
 						if (moves.includes(n)) { chosen = n; break; }
 					}
@@ -1154,7 +1160,7 @@ class SimBoard {
 			// slot. A spell where you hold k of N nodes allows min(2, N-k)
 			// moves, further limited by reachability. Greedy target choice.
 			const own = new Set(posNodes);
-			for (let i = 1; i <= 6; i++) {
+			for (let i = 1; i <= 2 * BOARD.perType; i++) {
 				const nodesI = POSITIONS[i];
 				if (nodesI.length === own.size && nodesI.every(n => own.has(n))) continue; // skip Erupt's own slot
 				if (!nodesI.some(n => this.stones[n] === color)) continue; // need an existing stone
@@ -1191,7 +1197,7 @@ class SimBoard {
 			const usedSpells = new Set();
 			for (let move = 0; move < 2; move++) {
 				let placed = null;
-				for (let i = 1; i <= 9; i++) {
+				for (let i = 1; i <= BOARD.positionCount; i++) {
 					if (usedSpells.has(i)) continue;
 					for (const n of POSITIONS[i]) {
 						if (this.stones[n] === null) { placed = { n, idx: i }; break; }
@@ -1211,7 +1217,7 @@ class SimBoard {
 			// (the old `break` made the whole spread fizzle whenever the
 			// first other sigil happened to be full).
 			const selfIdx = this.spellNames.indexOf(spellName) + 1;
-			for (let i = 1; i <= 6; i++) {
+			for (let i = 1; i <= 2 * BOARD.perType; i++) {
 				if (i === selfIdx) continue;
 				let placed = null;
 				for (const n of POSITIONS[i]) {
@@ -1224,9 +1230,8 @@ class SimBoard {
 			}
 		} else if (rt === 'syzygy') {
 			// 1 blink into the opposite 1-node spell, then up to 3 into the opposite 3-node spell.
-			const SYZ_OPP = { 1: { charm: 8, sorcery: 5 }, 2: { charm: 9, sorcery: 6 }, 3: { charm: 7, sorcery: 4 } };
 			const spellIdx = this.spellNames.indexOf(spellName) + 1;
-			const opp = SYZ_OPP[spellIdx];
+			const opp = BOARD.syzygyOpposite[spellIdx];
 			if (opp) {
 				const charmNode = POSITIONS[opp.charm][0];
 				if (this.stones[charmNode] !== color && this.stones[charmNode] !== DESTROYED) {
@@ -1317,7 +1322,7 @@ class SimBoard {
 		// --- Panda expansion (greedy default; overrides for choice points) ---
 		if (rt === 'bear_trap') {
 			const destroyed = [];
-			for (const pos of [7, 8, 9]) {
+			for (const pos of BOARD.charmPositions) {
 				for (const n of POSITIONS[pos]) {
 					if (this.stones[n] === enemy) { this.stones[n] = null; destroyed.push(n); }
 				}
@@ -1391,7 +1396,7 @@ class SimBoard {
 				this.update();
 			}
 		} else if (rt === 'stampede') {
-			const count = Math.min(5, this.spellCounter[color]);
+			const count = Math.min(BOARD.spellTarget - 1, this.spellCounter[color]);
 			const overrideTargets = (overrides.hard_move_targets || []).slice();
 			for (let i = 0; i < count; i++) {
 				const targets = this._hardMoveable(color);
@@ -1448,7 +1453,7 @@ class SimBoard {
 			// Apply the first (up to) two charged 1-node spells' effects twice
 			// each. Sub-resolvers emit standard actions, so replay needs nothing new.
 			const cands = [];
-			for (const pos of [7, 8, 9]) {
+			for (const pos of BOARD.charmPositions) {
 				const sn = this.spellNames[pos - 1];
 				const sinfo = CORE_SPELLS[sn];
 				if (!sinfo || sinfo.static || !sinfo.resolve) continue;

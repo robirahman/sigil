@@ -18,13 +18,14 @@
  *   --swap           alternate which AI plays red each game (fairness) (default on)
  *   --no-swap        keep colors fixed
  *   --pack KEY       spell pack for layout generation      (default core)
+ *   --variant V      game variant, e.g. scramble, pentagon or
+ *                    competitive_pentagon (not duplicates)  (default standard)
  *   --seed N         RNG seed for reproducible spell layouts (default time-based)
  *   --max-depth N    ply cap per search                    (default 64)
  *   --max-turns N    ply cap per game                       (default 300)
  *   --threads N      worker threads                         (default = CPU count)
  *   --require-spell S regenerate layouts until they contain spell S
  *   --json PATH      also write full per-game results as JSON
- *   --variant V      standard | deathmatch | scramble       (default standard)
  *
  * See engine.js parseModeSpec for the `mode:key=val` spec syntax
  * (caveman | prune, with optional pure / capabs / caps / lp / refill keys).
@@ -63,11 +64,11 @@ function parseArgs(argv) {
 			default: throw new Error(`Unknown option: ${k}`);
 		}
 	}
-	// play-game.js always uses the standard opening and the given spell list,
-	// so only end-condition variants are measured faithfully.
-	if (a.variant !== 'standard' && !['deathmatch', 'scramble'].includes(a.variant)) {
-		throw new Error(`--variant ${a.variant}: arena supports only standard, deathmatch or scramble `
-			+ '(competitive openings and duplicate draws are not implemented here)');
+	// play-game.js seeds each opening (standard or competitive) on the
+	// variant's board but draws no duplicate aliases, so a duplicates run
+	// would be mislabeled.
+	if (a.variant.indexOf('duplicates') !== -1) {
+		throw new Error(`--variant ${a.variant}: the arena does not draw duplicate spells`);
 	}
 	return a;
 }
@@ -91,6 +92,9 @@ function buildGameSpecs(args, engine) {
 	const realRandom = Math.random;
 	Math.random = rng;
 	const layouts = [];
+	const variant = engine.normalizeVariant(args.variant || 'standard');
+	// The draw fills the variant's board layout (5 per size on the pentagon).
+	engine.setBoardLayout(engine.variantBoardLayout(variant));
 	try {
 		for (let i = 0; i < args.games; i++) {
 			let layout = engine.generateSpellList(args.pack);
@@ -114,12 +118,12 @@ function buildGameSpecs(args, engine) {
 		specs.push({
 			gameId: i,
 			spellNames: layouts[i],
+			variant,
 			redCfg: swapped ? cfgB : cfgA,
 			blueCfg: swapped ? cfgA : cfgB,
 			timeLimit: args.time,
 			maxDepth: args.maxDepth,
 			maxTurns: args.maxTurns,
-			variant: args.variant,
 		});
 	}
 	return { specs, seed, labelA: cfgA.label, labelB: cfgB.label };
