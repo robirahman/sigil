@@ -3235,8 +3235,8 @@ fn opening_data_pins_the_survey() {
     assert_eq!(MATCHUP[7][15], 2); assert_eq!(MATCHUP[15][7], -2);
     assert_eq!(MATCHUP[26][36], 2); assert_eq!(MATCHUP[11][24], 2);
     assert_eq!(SYNERGY[6][9], 2); assert_eq!(SYNERGY[9][6], 2);
-    assert!((STRENGTH[6] - 1.68).abs() < 1e-3, "Fireblast");
-    assert!((STRENGTH[28] + 1.97).abs() < 1e-3, "Torrent");
+    assert!((STRENGTH[6] - 1.77).abs() < 1e-3, "Fireblast");
+    assert!((STRENGTH[28] + 2.26).abs() < 1e-3, "Torrent");
     assert_eq!(BOARD_PREF[15], 1, "Blossom likes an empty board");
     assert_eq!(BOARD_PREF[6], -1, "Fireblast likes a crowded one");
     for a in 0..39 { for b in 0..39 {
@@ -3296,16 +3296,16 @@ fn opening_push_charm_leverage_in_a_shared_zone() {
     use crate::opening::{pair_value, PUSH};
     // Zone a: Fireblast-class strength on the ritual (Corrupt 33), a Slash (11) charm.
     let spells = [33u8, 0, 27, 5, 28, 34, 11, 38, 13];
-    let base_other_zone = pair_value(&spells, 0, 1);      // blue in zone b: no push term
-    let contested = pair_value(&spells, 0, 3);            // blue contests zone a on its sorcery
+    let base_other_zone = pair_value(&spells, 0, 1, true);      // blue in zone b: no push term
+    let contested = pair_value(&spells, 0, 3, true);            // blue contests zone a on its sorcery
     // The contested value carries red's +PUSH beyond what the spells alone say.
     let spells_no_push = [33u8, 0, 27, 5, 28, 34, 14, 38, 13];  // Slash -> Seal of Summer
-    let contested_no_push = pair_value(&spells_no_push, 0, 3);
+    let contested_no_push = pair_value(&spells_no_push, 0, 3, true);
     let _ = base_other_zone;
     assert!(contested - contested_no_push > PUSH * 0.5, "push leverage credited to red: {contested} vs {contested_no_push}");
     // If blue takes the Slash itself, the leverage flips to blue.
-    let blue_holds = pair_value(&spells, 0, 6);
-    let blue_holds_no_push = pair_value(&spells_no_push, 0, 6);
+    let blue_holds = pair_value(&spells, 0, 6, true);
+    let blue_holds_no_push = pair_value(&spells_no_push, 0, 6, true);
     assert!(blue_holds - blue_holds_no_push < -PUSH * 0.5, "push leverage credited to blue: {blue_holds} vs {blue_holds_no_push}");
 }
 
@@ -3897,4 +3897,83 @@ fn seal_of_spring_allows_exactly_one_recast_of_the_locked_spell() {
     b.finish_cast(flourish, Color::Red);
     assert_eq!((b.lock[0], b.springlock[0]), (flourish, NO_SPELL));
     assert!(b.castable(Color::Red, true, true, false).contains(&grow), "no longer locked");
+}
+
+// ------------------------------------------- opening contests (2026-09-30)
+
+#[test]
+fn opening_red_avoids_blossom_when_decay_is_drawn() {
+    // Decay (34) is a ++ counter to Blossom (15) like Hail Storm; Fireblast (6)
+    // is in the draw too, so red has a strong alternative.
+    let b = competitive_board([15, 0, 27, 34, 6, 28, 10, 38, 26]);
+    let p = crate::opening::choose_opening(&b, Color::Red).expect("applies");
+    assert_ne!(p.spell, 15, "{p:?}");
+    assert!(p.vetoed & 1 != 0, "Blossom vetoed by Decay: {p:?}");
+}
+
+#[test]
+fn opening_blue_counters_blossom_with_low_rated_decay() {
+    use crate::opening_data::STRENGTH;
+    // Red started on Blossom anyway: blue answers with Decay, although Decay is
+    // rated below Fireblast, which is also open, and a free ritual contest.
+    let b = after_red_opening([15, 0, 27, 34, 6, 28, 10, 38, 26], "a2");
+    assert!(STRENGTH[34] < STRENGTH[6] && STRENGTH[34] < STRENGTH[15]);
+    let p = crate::opening::choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!(p.spell, 34, "{p:?}");
+    assert_eq!(p.reply, Some(15));
+}
+
+/// Blossom (15) on ritual a with no counter in the draw, no push charm in
+/// corner a, and a weak rest: nothing blue can take elsewhere matches it.
+const CONTEST_DRAW: [u8; 9] = [15, 0, 27, 5, 28, 19, 10, 38, 14];
+
+#[test]
+fn opening_blue_contests_the_strongest_ritual() {
+    use crate::opening::{choose_opening, pair_value, set_opening_contest};
+    let b = after_red_opening(CONTEST_DRAW, "a2");
+    let p = choose_opening(&b, Color::Blue).expect("applies");
+    assert_eq!((p.pos, p.spell), (0, 15), "blue fights for Blossom: {p:?}");
+    assert_eq!(p.node_mask, SIGIL[0] & !(1u64 << n("a2")), "no push charm: any free Blossom node");
+    // Switch off: the flat v17 head start is back on the contest.
+    let on = pair_value(&CONTEST_DRAW, 0, 0, true);
+    set_opening_contest(false);
+    let off = pair_value(&CONTEST_DRAW, 0, 0, true);
+    set_opening_contest(true);
+    assert!((off - on - crate::opening::SAME_SIGIL_TEMPO_V17).abs() < 1e-6, "{on} {off}");
+}
+
+#[test]
+fn opening_contest_credits_the_side_the_charm_is_behind() {
+    use crate::opening::{behind_node, choose_opening, pair_value, PUSH};
+    let names: Vec<&str> = (0..6).map(|s| crate::topology::NAMES[behind_node(s).unwrap() as usize]).collect();
+    assert_eq!(names, ["a4", "b4", "c4", "a8", "b8", "c8"]);
+    assert_eq!(behind_node(6), None);
+    // Slash (11) behind ritual a: the contest swings by two pushes on who holds a4.
+    let draw = [15u8, 0, 27, 5, 28, 19, 11, 38, 14];
+    let red_behind = pair_value(&draw, 0, 0, true);
+    let blue_behind = pair_value(&draw, 0, 0, false);
+    assert!((red_behind - blue_behind - 2.0 * PUSH).abs() < 1e-6, "{red_behind} {blue_behind}");
+    // Red on a2 left a4 open: blue contests there.
+    let p = choose_opening(&after_red_opening(draw, "a2"), Color::Blue).expect("applies");
+    assert_eq!(p.pos, 0, "{p:?}");
+    assert_eq!(p.node_mask, 1u64 << n("a4"), "blue takes the node the Slash is behind: {p:?}");
+    // Red on a4: the charm is behind red, so a contest costs blue the push.
+    let p4 = choose_opening(&after_red_opening(draw, "a4"), Color::Blue).expect("applies");
+    if p4.pos == 0 { assert_eq!(p4.node_mask, SIGIL[0] & !(1u64 << n("a4"))); }
+    assert!(-p4.value <= -p.value + 1e-6, "blue is no better off against a4 than a2: {p:?} {p4:?}");
+}
+
+#[test]
+fn opening_red_takes_the_behind_node_in_a_push_corner() {
+    use crate::opening::{behind_node, choose_opening};
+    for seed in 1..=200u64 {
+        let b = competitive_board(Board::legal_draw(seed));
+        let p = choose_opening(&b, Color::Red).expect("applies");
+        let push = [11u8, 23].contains(&b.spells[6 + p.pos % 3]);
+        if p.pos < 6 && push {
+            assert_eq!(p.node_mask, 1u64 << behind_node(p.pos).unwrap(), "seed {seed}: {p:?}");
+        } else {
+            assert_eq!(p.node_mask, SIGIL[p.pos], "seed {seed}: {p:?}");
+        }
+    }
 }

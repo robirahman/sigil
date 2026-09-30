@@ -10,7 +10,7 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
  */
-const CACHE_VERSION = 'v51';
+const CACHE_VERSION = 'v52';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -43,7 +43,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/game-board-local.js?v=17',
-	'./static/scripts/engine/rust-ai.js?v=18',
+	'./static/scripts/engine/rust-ai.js?v=19',
 	'./static/scripts/game-board-multiplayer.js',
 	'./static/scripts/help.js',
 	'./static/scripts/offline-queue.js',
@@ -68,9 +68,9 @@ const SAME_ORIGIN_PRECACHE = [
 	// ?v=<RUST_ENGINE_VERSION> (rust-ai.js), so the versioned URLs are what
 	// must be precached — bump the ?v= here in lockstep with rust-ai.js and
 	// CACHE_VERSION on every engine rebuild (engine/build-wasm.sh reminds).
-	'./static/scripts/engine/rust-worker.js?v=18',
-	'./static/wasm/sigil_engine.js?v=18',
-	'./static/wasm/sigil_engine_bg.wasm?v=18',
+	'./static/scripts/engine/rust-worker.js?v=19',
+	'./static/wasm/sigil_engine.js?v=19',
+	'./static/wasm/sigil_engine_bg.wasm?v=19',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-controller.js',
 	'./static/scripts/engine/game-review.js',

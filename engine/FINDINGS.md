@@ -2057,6 +2057,27 @@ holding Syzygy via `SIGIL_REQUIRE_SPELL=18`, two c3d-highcpu-90 VMs, runs 202609
 filtered to the 22.6% that hold Syzygy, so the effect over all competitive games is roughly a quarter of this.
 The first opening-selector change to measure positive in self-play (the v11 selector itself was -15.6).
 
+**2026-09-30: survey refresh and the contest rules (engine v19, cache v52; not yet arena-tested).** The
+tables were regenerated from the 2026-09-29 survey export (241 comparisons, 263 pairs; `gen_opening_table.py`
+now stores the export date in `opening_survey.json`). Designer's rulings, behind a new switch
+`opening_contest` (default on; off = the v18 rules on the new tables):
+
+- a **ritual contest costs no head start** (`SAME_SIGIL_TEMPO` = [0, 0.5, -] by role, was a flat 0.5);
+- inside a contested sigil the **push credit goes to the side the charm is behind** -- the stone on the node
+  touching the corner's Slash/Charge (a4/a8 and rotations, `behind_node`), which a push drops onto the
+  charm. Red, moving first, takes that node (its root mask becomes that one node in a push corner); blue
+  takes it when contesting a red stone that is elsewhere in the sigil. Other shared-zone cases keep red's
+  turn-3 credit;
+- blue answers with a **`++` counter to red's spell whenever the draw has one** (the mirror of red's veto),
+  so a free ritual contest never outranks Hail Storm or Decay against Blossom.
+
+Over 500 `legal_draw` seeds: the new tables change red's sigil in 65 draws (v18 rules both sides); the
+contest rules change it in none, but put red's root on the behind node in 42; blue's reply to red's pick
+changes in 72 and blue contests red's sigil in 224 (was 152). Tests `opening_red_avoids_blossom_when_decay_is_drawn`,
+`opening_blue_counters_blossom_with_low_rated_decay`, `opening_blue_contests_the_strongest_ritual`,
+`opening_contest_credits_the_side_the_charm_is_behind`, `opening_red_takes_the_behind_node_in_a_push_corner`
+(159 pass). Arena arm `gcp/arms/opening_contest_10s.txt` (competitive, 10 s) is ready and not run.
+
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
 

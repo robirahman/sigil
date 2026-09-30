@@ -27,8 +27,16 @@
 //! * push leverage in a shared zone: the movement charms (Slash, Charge)
 //!   evict a contesting stone, so the side holding one gets a bonus; if
 //!   neither picked it, red does -- it moves at turn 3, before blue's turn 4.
-//!   Contesting the very same sigil is allowed too (no penalty), but red is a
-//!   stone ahead in that race, so it carries a tempo term for red.
+//! * contesting the very same sigil (2026-09-30, designer's rulings, switch
+//!   `set_opening_contest`): a stone in the enemy's ritual denies its cast and
+//!   may seize it, so a ritual contest carries no head-start cost for red
+//!   (a sorcery contest keeps one, `SAME_SIGIL_TEMPO`). Inside a contested
+//!   sigil the push bonus goes to the side the charm is BEHIND: the stone on
+//!   the node touching the charm (`behind_node`), because pushing it back
+//!   drops it onto the charm, which then pushes on its owner's turn. Red,
+//!   moving first, takes that node; blue takes it when red did not. A `++`
+//!   counter to red's spell still comes first: blue only contests (or picks
+//!   anything else) when the draw has no hard counter to red's start.
 //!
 //! A hard veto mirrors the designer's absolute phrasing ("never start on
 //! Blossom if Hail Storm is available"): a spell with a `++` counter in the
@@ -65,9 +73,17 @@ thread_local! {
 /// substitution); default on, per thread like `set_opening_book`.
 pub fn set_opening_syzygy(on: bool) { OPENING_SYZYGY.with(|c| c.set(on)); }
 pub fn opening_syzygy_enabled() -> bool { OPENING_SYZYGY.with(|c| c.get()) }
+thread_local! {
+    static OPENING_CONTEST: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch for the same-sigil contest rules (no ritual head-start cost, the
+/// charm-behind push credit and node choice); off restores the flat
+/// `SAME_SIGIL_TEMPO_V17` and red's push credit. Default on, per thread.
+pub fn set_opening_contest(on: bool) { OPENING_CONTEST.with(|c| c.set(on)); }
+pub fn opening_contest_enabled() -> bool { OPENING_CONTEST.with(|c| c.get()) }
 use crate::opening_data::{BOARD_PREF, MATCHUP, PUSH_CHARMS, STRENGTH, SYNERGY};
 use crate::spells_meta::{CHARGE, HURRICANE, NUM_OFFICIAL_SPELLS, SEAL_OF_DESTRUCTION, SPELLS, SPLASH, SPROUT, SYZYGY};
-use crate::topology::SIGIL;
+use crate::topology::{ADJ, SIGIL};
 use crate::resolvers::syzygy_opposite;
 
 /// Charms whose cast moves the stone off the charm node before Syzygy can
@@ -107,10 +123,14 @@ pub const ACCESS: [f32; 3] = [0.35, 0.6, 1.0];
 pub const COLOUR_BONUS: f32 = 0.3;
 /// Push leverage of a movement charm in a shared zone.
 pub const PUSH: f32 = 0.4;
-/// Red's head start when blue contests the SAME sigil: red placed first, so
-/// in a race to charge it red is a stone ahead. Without this V(s, s) is
-/// exactly 0 and blue's best reply to any strong pick is to mirror it.
-pub const SAME_SIGIL_TEMPO: f32 = 0.5;
+/// Red's head start when blue contests the SAME sigil, by role: red placed
+/// first, so in a race to charge a sorcery red is a stone ahead. A ritual
+/// contest costs nothing (designer, 2026-09-30): one stone matters less in a
+/// five-node race and the blocker denies the cast, so blue mirrors a strong
+/// ritual whenever every other reply leaves red ahead. (Charms cannot be shared.)
+pub const SAME_SIGIL_TEMPO: [f32; 3] = [0.0, 0.5, 0.0];
+/// The pre-2026-09-30 flat head start, used when `set_opening_contest(false)`.
+pub const SAME_SIGIL_TEMPO_V17: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OpeningPick {
@@ -161,23 +181,51 @@ pub fn own_value(spells: &[u8; 9], x: usize, enemy: Option<usize>, side: Color) 
     v
 }
 
-/// Push leverage in a shared zone, red POV.
-fn push_term(spells: &[u8; 9], s: usize, t: usize) -> f32 {
-    if zone(s) != zone(t) { return 0.0; }
+/// The node of 3/5-node sigil `slot` that touches its corner's charm (a4 or
+/// a8 in corner a): a stone there, pushed back, lands on the charm. `None`
+/// for a charm slot.
+pub fn behind_node(slot: usize) -> Option<u8> {
+    if role(slot) == 2 { return None; }
+    let charm = SIGIL[6 + zone(slot)].trailing_zeros() as usize;
+    let m = ADJ[charm] & SIGIL[slot];
+    (m != 0).then(|| m.trailing_zeros() as u8)
+}
+
+/// Does the corner of `slot` hold a push charm (Slash, Charge)?
+fn push_corner(spells: &[u8; 9], slot: usize) -> bool { PUSH_CHARMS.contains(&spells[6 + zone(slot)]) }
+
+/// Push leverage in a shared zone, red POV. `red_behind`: in a same-sigil
+/// contest, red's stone is on the node the charm is behind.
+fn push_term(spells: &[u8; 9], s: usize, t: usize, red_behind: bool) -> f32 {
+    if zone(s) != zone(t) || !push_corner(spells, s) { return 0.0; }
     let charm_slot = 6 + zone(s);
-    let charm = spells[charm_slot];
-    if !PUSH_CHARMS.contains(&charm) { return 0.0; }
-    if t == charm_slot { -PUSH }            // blue holds it
+    if t == charm_slot { -PUSH }                                  // blue holds it
+    else if s == t && opening_contest_enabled() { if red_behind { PUSH } else { -PUSH } }
     else { PUSH }                            // red holds it, or takes it first (turn 3)
 }
 
 /// V(s, t): red opens on slot `s`, blue answers on slot `t`. Red POV.
-pub fn pair_value(spells: &[u8; 9], s: usize, t: usize) -> f32 {
+/// `red_behind` only matters when `s == t` (see `push_term`).
+pub fn pair_value(spells: &[u8; 9], s: usize, t: usize, red_behind: bool) -> f32 {
     let (ss, st) = (spells[s] as usize, spells[t] as usize);
+    let tempo = if s != t { 0.0 }
+        else if opening_contest_enabled() { SAME_SIGIL_TEMPO[role(s)] } else { SAME_SIGIL_TEMPO_V17 };
     own_value(spells, s, Some(t), Color::Red) - own_value(spells, t, Some(s), Color::Blue)
         + W_MATCHUP_PIP * MATCHUP[ss][st] as f32
-        + push_term(spells, s, t)
-        + if s == t { SAME_SIGIL_TEMPO } else { 0.0 }
+        + push_term(spells, s, t, red_behind)
+        + tempo
+}
+
+/// Root nodes for a pick on `slot`: the behind node when the contest rules
+/// want it (and it is empty), otherwise every empty node of the sigil.
+fn pick_mask(b: &Board, spells: &[u8; 9], slot: usize, want_behind: bool) -> u64 {
+    let all = SIGIL[slot] & b.empty();
+    if want_behind && opening_contest_enabled() && push_corner(spells, slot) {
+        if let Some(n) = behind_node(slot) {
+            if all & (1u64 << n) != 0 { return 1u64 << n; }
+        }
+    }
+    all
 }
 
 /// Slots blue can still answer on given red's stone: every slot with an
@@ -230,14 +278,14 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
             let mut worst: Option<(f32, usize)> = None;
             for &t in &slots {
                 if t == s && SIGIL[s].count_ones() == 1 { continue; }
-                let v = pair_value(spells, s, t);
+                let v = pair_value(spells, s, t, true);   // red moves first: it takes the behind node
                 if worst.map_or(true, |(w, _)| v < w) { worst = Some((v, t)); }
             }
             let (w, t) = worst?;
             if best.map_or(true, |(bv, bs, _)| better((w, s), (bv, bs))) { best = Some((w, s, t)); }
         }
         let (value, pos, reply) = best?;
-        Some(OpeningPick { pos, spell: spells[pos], node_mask: SIGIL[pos] & b.empty(), value,
+        Some(OpeningPick { pos, spell: spells[pos], node_mask: pick_mask(b, spells, pos, true), value,
                            reply: Some(spells[reply]), vetoed, syzygy_threat: false })
     } else {
         let red = b.theirs(c);
@@ -265,7 +313,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
             if let Some(z) = syzygy_slot(spells) {
                 if SIGIL[z] & b.empty() != 0 {
                     return Some(OpeningPick { pos: z, spell: SYZYGY, node_mask: SIGIL[z] & b.empty(),
-                                              value: pair_value(spells, s, z), reply: Some(spells[s]),
+                                              value: pair_value(spells, s, z, false), reply: Some(spells[s]),
                                               vetoed: 0, syzygy_threat: true });
                 }
             }
@@ -278,15 +326,22 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         }
         let cands: Vec<usize> = slots.iter().copied().filter(|&t| vetoed & (1 << t) == 0).collect();
         let cands = if cands.is_empty() { vetoed = 0; slots.clone() } else { cands };
+        // A `++` counter to red's spell is THE answer (designer: "if red picked
+        // Blossom, blue should counter with Hail Storm or Decay"), the mirror of
+        // red's veto. Needed since a free ritual contest would otherwise tie it.
+        let counters: Vec<usize> = cands.iter().copied()
+            .filter(|&t| t != s && MATCHUP[spells[t] as usize][spells[s] as usize] >= 2).collect();
+        let cands = if opening_contest_enabled() && !counters.is_empty() { counters } else { cands };
         // Blue minimises red's value: compare on -V so the tie-breaks favour blue's stronger spell.
+        let red_behind = behind_node(s).map_or(false, |n| red & (1u64 << n) != 0);
         let mut best: Option<(f32, usize)> = None;
         for &t in &cands {
             if t == s && SIGIL[s].count_ones() == 1 { continue; }
-            let v = -pair_value(spells, s, t);
+            let v = -pair_value(spells, s, t, red_behind);
             if best.map_or(true, |bt| better((v, t), bt)) { best = Some((v, t)); }
         }
         let (neg, pos) = best?;
-        Some(OpeningPick { pos, spell: spells[pos], node_mask: SIGIL[pos] & b.empty(), value: -neg,
+        Some(OpeningPick { pos, spell: spells[pos], node_mask: pick_mask(b, spells, pos, pos == s && !red_behind), value: -neg,
                            reply: Some(spells[s]), vetoed, syzygy_threat: false })
     }
 }

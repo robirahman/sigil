@@ -21,6 +21,12 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-30: engine v19 (cache v52) -- competitive opening selector on the 2026-09-29 survey, contest rules.**
+Tables from 241 comparisons; free ritual contests, push credit to the side the Slash/Charge is behind (red and
+blue root masks pick that node), blue takes a `++` counter first. Switch `opening_contest` (default on); arena arm
+`opening_contest_10s.txt` not yet run. Tests 159/159, `wasm-smoke.js` green, wasm 628,152 bytes. FINDINGS
+"survey refresh and the contest rules".
+
 **2026-09-28: engine v18 (cache v51) -- `lead_min` 2 and `speed_v1` in the browser.** The stone-lead pre-pass
 now runs only at nodes with >= 2 plies left (default `LEAD_MIN_REMAINING` 2), except at the root, which always
 runs it so a depth-1 iteration still sees an immediate win. First wasm since v17, so it also carries the

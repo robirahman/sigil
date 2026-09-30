@@ -130,15 +130,16 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--from-draft', default='')
     ap.add_argument('--check', action='store_true')
-    ap.add_argument('--export', default='2026-09-07')
+    ap.add_argument('--export', default=None, help='survey export date (stored in the JSON by --from-draft)')
     a = ap.parse_args()
     if a.from_draft:
         data = parse_draft(a.from_draft)
+        data['export'] = a.export or '?'
         json.dump(data, open(JSON_PATH, 'w', encoding='utf-8'), indent=0)
         print(f'wrote {JSON_PATH}')
     data = json.load(open(JSON_PATH, encoding='utf-8'))
     names = engine_spells()
-    text = render(*build(data, names), names, a.export)
+    text = render(*build(data, names), names, a.export or data.get('export', '2026-09-07'))
     if a.check:
         cur = open(RS_PATH, encoding='utf-8').read() if os.path.exists(RS_PATH) else ''
         if cur != text:
