@@ -52,10 +52,11 @@
 //! stands there. The 3-node spell opposite is always a target; the 1-node
 //! spell opposite is one if it is Slash, Surge, Gust or a static seal
 //! (`SYZYGY_ALWAYS_EXPOSED`), or -- for Splash, Charge, Lurk, Azimuth, Sprout,
-//! Comet -- only when the Syzygy side also starts near Seal of Autumn, which
-//! stops the dash that would otherwise get the stone out ("near" = in the
-//! sigil or on a node next to it). Switchable together with
-//! `set_opening_syzygy`:
+//! Comet -- only when Seal of Autumn is the charm touching Syzygy (its own
+//! corner's), which stops the dash that would otherwise get the stone out.
+//! That is a property of the draw, the same for both colours. "Next to
+//! Syzygy" below = in the sigil or on a node touching it. Switchable together
+//! with `set_opening_syzygy`:
 //!
 //! * red never starts on an exposed slot;
 //! * blue always takes Syzygy when red started on one (`syzygy_threat`),
@@ -116,8 +117,8 @@ use crate::resolvers::syzygy_opposite;
 
 /// Charms opposite Syzygy that are always its target (designer, 2026-09-30).
 pub const SYZYGY_ALWAYS_EXPOSED: [u8; 7] = [SLASH, SURGE, GUST, SEAL_OF_SPRING, SEAL_OF_SUMMER, SEAL_OF_AUTUMN, SEAL_OF_WINTER];
-/// Charms opposite Syzygy that are its target only when the Syzygy side also
-/// starts near Seal of Autumn (no dashing out with a stone in a spell).
+/// Charms opposite Syzygy that are its target only when Seal of Autumn is the
+/// charm touching Syzygy (no dashing out with a stone in a spell).
 pub const SYZYGY_AUTUMN_EXPOSED: [u8; 6] = [SPLASH, CHARGE, LURK, AZIMUTH, SPROUT, COMET];
 
 /// The ritual slot Syzygy was drawn in, if any (it does nothing elsewhere).
@@ -140,8 +141,7 @@ fn autumn_slot(spells: &[u8; 9]) -> Option<usize> { (6..9).find(|&p| spells[p] =
 
 /// Is a stone started on `slot` a Syzygy target: the 3-node sigil opposite
 /// Syzygy, or the 1-node sigil opposite it when that charm is always exposed,
-/// or is Autumn-exposed and `near_autumn` (the Syzygy side is near Seal of
-/// Autumn as well as Syzygy).
+/// or is Autumn-exposed and `near_autumn` (`syzygy_touches_autumn`).
 pub fn syzygy_exposed(spells: &[u8; 9], slot: usize, near_autumn: bool) -> bool {
     let Some(z) = syzygy_slot(spells) else { return false };
     let Some((charm, sorcery)) = syzygy_opposite(z) else { return false };
@@ -149,8 +149,9 @@ pub fn syzygy_exposed(spells: &[u8; 9], slot: usize, near_autumn: bool) -> bool 
         || (near_autumn && SYZYGY_AUTUMN_EXPOSED.contains(&spells[charm]))))
 }
 
-/// Can a stone started in Syzygy also be near Seal of Autumn (one of Syzygy's
-/// nodes touches the seal)? What blue has when it answers red's start with Syzygy.
+/// Is Seal of Autumn the charm touching Syzygy (one of Syzygy's nodes is next
+/// to the seal)? Then the Autumn-exposed charms opposite are targets too.
+pub fn syzygy_targets(spells: &[u8; 9], slot: usize) -> bool { syzygy_exposed(spells, slot, syzygy_touches_autumn(spells)) }
 fn syzygy_touches_autumn(spells: &[u8; 9]) -> bool {
     match (syzygy_slot(spells), autumn_slot(spells)) {
         (Some(z), Some(a)) => slot_near(z, a),
@@ -158,25 +159,22 @@ fn syzygy_touches_autumn(spells: &[u8; 9]) -> bool {
     }
 }
 
-/// Red's start as the Syzygy side: is it in or next to Syzygy, and (for the
-/// Autumn-exposed charms) also near Seal of Autumn?
+/// Red's start as the Syzygy side: is it in or next to Syzygy?
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct SyzygyThreat { pub near_syzygy: bool, pub near_autumn: bool }
+pub struct SyzygyThreat { pub near_syzygy: bool }
 
 impl SyzygyThreat {
     /// From red's actual stone.
     pub fn of_stones(spells: &[u8; 9], red: u64) -> Self {
-        let Some(z) = syzygy_slot(spells) else { return Self::default() };
-        Self { near_syzygy: stones_near(red, z), near_autumn: autumn_slot(spells).map_or(false, |a| stones_near(red, a)) }
+        Self { near_syzygy: syzygy_slot(spells).map_or(false, |z| stones_near(red, z)) }
     }
-    /// From the sigil red starts in, assuming red picks the node that serves it.
+    /// From the sigil red starts in.
     pub fn of_slot(spells: &[u8; 9], s: usize) -> Self {
-        let Some(z) = syzygy_slot(spells) else { return Self::default() };
-        Self { near_syzygy: slot_near(s, z), near_autumn: autumn_slot(spells).map_or(false, |a| slot_near(s, a)) }
+        Self { near_syzygy: syzygy_slot(spells).map_or(false, |z| slot_near(s, z)) }
     }
-    /// Is blue's start on `slot` exposed to this red start?
+    /// Is blue's start on `slot` a target this red start threatens?
     pub fn exposes(&self, spells: &[u8; 9], slot: usize) -> bool {
-        opening_syzygy_enabled() && self.near_syzygy && syzygy_exposed(spells, slot, self.near_autumn)
+        opening_syzygy_enabled() && self.near_syzygy && syzygy_targets(spells, slot)
     }
 }
 
@@ -386,9 +384,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         // Red's candidates: every slot; drop the hard-countered ones.
         let mut vetoed = 0u16;
         for &s in &slots {
-            // Exposed to blue's Syzygy reply (which can sit next to Seal of Autumn if the seal touches Syzygy).
-            if hard_countered(spells, s, &slots)
-                || (opening_syzygy_enabled() && syzygy_exposed(spells, s, syzygy_touches_autumn(spells))) {
+            if hard_countered(spells, s, &slots) || (opening_syzygy_enabled() && syzygy_targets(spells, s)) {
                 vetoed |= 1 << s;
             }
         }
@@ -433,9 +429,8 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         };
         // Red started on a slot Syzygy crushes: take Syzygy, whatever the
         // tables say about it in general. If only Seal of Autumn makes red's
-        // charm a target, start on a Syzygy node next to the seal.
-        let near_autumn = syzygy_touches_autumn(spells);
-        if syz && syzygy_exposed(spells, s, near_autumn) {
+        // charm a target, start on the Syzygy node next to the seal.
+        if syz && syzygy_targets(spells, s) {
             if let Some(z) = syzygy_slot(spells) {
                 let free = SIGIL[z] & b.empty();
                 if free != 0 {

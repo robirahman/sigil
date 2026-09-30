@@ -3429,6 +3429,15 @@ fn opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy() {
         assert!(p.pos != 4 && p.pos != 7, "red on {node}: {p:?}");
         assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "red on {node}: {p:?}");
     }
+    // Sprout opposite, Seal of Autumn on a7 (the charm touching Syzygy): Sprout is a
+    // target for blue too, although red's a2 is not next to the seal.
+    let mut autumn = SYZYGY_DRAW; autumn[7] = 10; autumn[6] = 32; autumn[8] = 11;
+    let pa = choose_opening(&after_red_opening(autumn, "a2"), Color::Blue).expect("applies");
+    assert_ne!(pa.vetoed & (1 << 7), 0, "{pa:?}");
+    // Seal of Autumn elsewhere (c7, not touching Syzygy): Sprout is an ordinary spell.
+    let mut away = SYZYGY_DRAW; away[7] = 10; away[8] = 32; away[6] = 11;
+    let pw = choose_opening(&after_red_opening(away, "a2"), Color::Blue).expect("applies");
+    assert_eq!(pw.vetoed & (1 << 7), 0, "{pw:?}");
 }
 
 #[test]

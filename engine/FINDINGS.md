@@ -2112,14 +2112,14 @@ The Carnage arm won 420-284 as red and 354-350 as blue.
 **2026-09-30, engine v20 (cache v53): the Syzygy rules revised (designer's rulings; not arena-tested).**
 
 - **Which charms opposite Syzygy are targets:** Slash, Surge, Gust and the static seals always
-  (`SYZYGY_ALWAYS_EXPOSED`); Splash, Charge, Lurk, Azimuth, Sprout, Comet only when the Syzygy side also starts
-  near Seal of Autumn, which forbids dashing out with a stone that sits in a spell (`SYZYGY_AUTUMN_EXPOSED`).
-  "Near" = in the sigil or on a node next to it. This replaces the 2026-09-23 "safe" list (Sprout, Splash, Charge).
-- **Red** still never starts on a target; an Autumn-exposed charm counts when the seal touches Syzygy (blue's
-  Syzygy reply can then sit next to it).
-- **Blue** always takes Syzygy when red started on a target, on a Syzygy node next to Seal of Autumn when only
-  the seal makes red's charm a target. Otherwise blue's Syzygy has its plain rating (the v17 "best of itself and
-  both spells across, + 0.01" is gone).
+  (`SYZYGY_ALWAYS_EXPOSED`); Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of Autumn is the charm
+  touching Syzygy (its own corner's), which forbids dashing out with a stone that sits in a spell
+  (`SYZYGY_AUTUMN_EXPOSED`, `syzygy_targets`). A property of the draw, the same for both colours. This replaces the
+  2026-09-23 "safe" list (Sprout, Splash, Charge).
+- **Red** still never starts on a target.
+- **Blue** always takes Syzygy when red started on a target, on the Syzygy node next to Seal of Autumn iff red's
+  start is an Autumn-exposed charm. Otherwise blue's Syzygy has its plain rating and is chosen like any other
+  spell (the v17 "best of itself and both spells across, + 0.01" is gone).
 - **Blue drops the targets, and values them at no more than Syzygy's own strength, only when red started in or
   next to Syzygy** (`SyzygyThreat`); red on a mana or void node counts when that node touches Syzygy. Before, blue
   avoided them whatever red did.
@@ -2127,7 +2127,7 @@ The Carnage arm won 420-284 as red and 354-350 as blue.
 
 Tests `opening_never_starts_opposite_syzygy`, `opening_blue_takes_syzygy_against_an_exposed_start`,
 `opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy`, `opening_syzygy_values_by_colour`
-(162 pass); `wasm-smoke.js` green, wasm 632,091 bytes.
+(162 pass); `wasm-smoke.js` green.
 
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
