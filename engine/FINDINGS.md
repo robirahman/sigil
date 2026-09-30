@@ -2057,6 +2057,78 @@ holding Syzygy via `SIGIL_REQUIRE_SPELL=18`, two c3d-highcpu-90 VMs, runs 202609
 filtered to the 22.6% that hold Syzygy, so the effect over all competitive games is roughly a quarter of this.
 The first opening-selector change to measure positive in self-play (the v11 selector itself was -15.6).
 
+**2026-09-30: survey refresh and the contest rules (engine v19, cache v52; not yet arena-tested).** The
+tables were regenerated from the 2026-09-29 survey export (241 comparisons, 263 pairs; `gen_opening_table.py`
+now stores the export date in `opening_survey.json`). Designer's rulings, behind a new switch
+`opening_contest` (default on; off = the v18 rules on the new tables):
+
+- a **ritual contest costs no head start** (`SAME_SIGIL_TEMPO` = [0, 0.5, -] by role, was a flat 0.5);
+- inside a contested sigil the **push credit goes to the side the charm is behind** -- the stone on the node
+  touching the corner's Slash/Charge (a4/a8 and rotations, `behind_node`), which a push drops onto the
+  charm. Red, moving first, takes that node (its root mask becomes that one node in a push corner); blue
+  takes it when contesting a red stone that is elsewhere in the sigil. Other shared-zone cases keep red's
+  turn-3 credit;
+- blue answers with a **`++` counter to red's spell whenever the draw has one** (the mirror of red's veto),
+  so a free ritual contest never outranks Hail Storm or Decay against Blossom.
+
+Over 500 `legal_draw` seeds: the new tables change red's sigil in 65 draws (v18 rules both sides); the
+contest rules change it in none, but put red's root on the behind node in 42; blue's reply to red's pick
+changes in 72 and blue contests red's sigil in 224 (was 152). Tests `opening_red_avoids_blossom_when_decay_is_drawn`,
+`opening_blue_counters_blossom_with_low_rated_decay`, `opening_blue_contests_the_strongest_ritual`,
+`opening_contest_credits_the_side_the_charm_is_behind`, `opening_red_takes_the_behind_node_in_a_push_corner`
+(159 pass). Arena arm `gcp/arms/opening_contest_30s10.txt` (competitive; 30 s for each side's first 10 moves, then 10 s, the new `ab_search.py` ms schedule `30000@10/10000`).
+
+Same day, three more designer's rulings (still v19):
+
+- **A ritual has a charm on each side** -- its own corner's (touching a4) and the previous corner's, one void
+  node away (a5 -- a12 -- c7). In a ritual contest the push credit goes to the side holding the node next to a
+  push charm only when exactly one of the two charms is Slash/Charge; two cancel (`behind_node`, `side_node`;
+  part of `opening_contest`).
+- **Carnage, either colour,** is worth the strongest of itself and the sorceries on both sides of it (its own
+  corner's and the previous corner's, reached through a11), + 0.01 (`NEIGHBOUR_EDGE`). New switch
+  `opening_carnage`, arm `opening_carnage_30s10.txt`. Over 500 draws, 124 hold Carnage: red's pick changes in 14 and
+  red opens on Carnage in 22 (was 8); blue's reply changes to or from Carnage in 102 of the 992 red starts.
+- **Blue's Syzygy** gets the same + 0.01 over the best of the spells across from it; the forced Syzygy reply
+  and red's veto stay as they were.
+
+Tests `opening_ritual_contest_credits_the_far_charm_and_two_push_charms_cancel`,
+`opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides`,
+`opening_blue_syzygy_edges_past_the_spell_across_from_it` (162 pass).
+
+**Arenas (2026-09-30), competitive, 30 s for each side's first 10 moves then 10 s (`ms` schedule
+`30000@10/10000`), branch `opening-selector-arena` at `181d5d8`, four c3d-highcpu-90 (2 per arm, 88 shards x 4
+pairs each), 704 colour-swapped seeds per arm, none unfinished:**
+
+| change | knob | draws | arm wins | win rate | Elo [95%] | verdict |
+|---|---|---|---|---|---|---|
+| contest rules (free ritual contest, charm-behind push, blue's `++` counter first) | `opening_contest` | all | 703 / 1,408 | 49.93% [47.32, 52.54] | **-0.5 [-18.7, +17.7]** | no measurable effect; ships on the designer's authority |
+| Carnage worth the sorceries beside it + 0.01, both colours | `opening_carnage` | holding Carnage (`SIGIL_REQUIRE_SPELL=1`) | 774 / 1,408 | 54.97% [52.37, 57.57] | **+34.7 [+16.5, +53.0]** | BETTER, stays ON |
+
+Runs `20260930T151840Z`, `…151851Z` (contest, us-central1-f) and `20260930T152000Z`, `…152014Z` (Carnage,
+us-east1-d). Depth 6.93 / 6.93 and 7.06 / 7.08, 21.8-22.3 s/move on average, 33-35 plies. The Carnage draws are about a
+quarter of all competitive draws (124 / 500), so across all games the effect is roughly a quarter of +34.7.
+The Carnage arm won 420-284 as red and 354-350 as blue.
+
+**2026-09-30, engine v20 (cache v53): the Syzygy rules revised (designer's rulings; not arena-tested).**
+
+- **Which charms opposite Syzygy are targets:** Slash, Surge, Gust and the static seals always
+  (`SYZYGY_ALWAYS_EXPOSED`); Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of Autumn is the charm
+  touching Syzygy (its own corner's), which forbids dashing out with a stone that sits in a spell
+  (`SYZYGY_AUTUMN_EXPOSED`, `syzygy_targets`). A property of the draw, the same for both colours. This replaces the
+  2026-09-23 "safe" list (Sprout, Splash, Charge).
+- **Red** still never starts on a target.
+- **Blue** always takes Syzygy when red started on a target, on the Syzygy node next to Seal of Autumn iff red's
+  start is an Autumn-exposed charm. Otherwise blue's Syzygy has its plain rating and is chosen like any other
+  spell (the v17 "best of itself and both spells across, + 0.01" is gone).
+- **Blue drops the targets, and values them at no more than Syzygy's own strength, only when red started in or
+  next to Syzygy** (`SyzygyThreat`); red on a mana or void node counts when that node touches Syzygy. Before, blue
+  avoided them whatever red did.
+- **Red's Syzygy** is worth the greater of itself and the 3-node spell across from it.
+
+Tests `opening_never_starts_opposite_syzygy`, `opening_blue_takes_syzygy_against_an_exposed_start`,
+`opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy`, `opening_syzygy_values_by_colour`
+(162 pass); `wasm-smoke.js` green.
+
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
 
