@@ -53,6 +53,7 @@ const SPELL_FX = {
 	// Experimental expansion (unreleased playtest spells)
 	Spring_Tide:          { type: 'burst', color: '#3fa7d6', shake: true  },
 	Rapids:               { type: 'flash', color: '#2fc4c9', shake: false },
+	Avalanche:            { type: 'flash', color: '#b0c4de', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

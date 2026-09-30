@@ -150,6 +150,7 @@ encode as ID 0, like Panda) and from the Rust engine, which rejects them.*
 |---|---|---|
 | Sorcery | Spring Tide | Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones. |
 | Sorcery | Rapids | Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn. |
+| Sorcery | Avalanche | Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed. |
 
 Spring Tide (added 2026-09-07; phases flipped to pushes-first the same day)
 is Tsunami's chain with the hard moves ahead of the soft ones, at sorcery
@@ -173,6 +174,19 @@ casts); a Rapids cast as the Summer second spell still grants its extra
 cast. Encoded as the `extra_cast` metadata flag consumed by every turn
 driver (live controllers, both sims, both exhaustive enumerators, Flask),
 not by the resolver.
+
+Avalanche (added 2026-09-30) is a playtest rework of Tectonic's Rock Slide:
+the caster assigns a destination to every bordering enemy stone first, then
+all pushes resolve at once. Rulings: the pushed set is fixed at cast time
+and every stone in it must be pushed, even onto the caster's own stone; any
+neighbor is a legal destination, including a Fissure wall, which destroys
+the stone and stays a wall (design ruling, same day); a node whose stone is
+pushed away counts as vacated, so chains slide and closed loops rotate
+harmlessly, while the end of a chain destroys its stationary occupant; two
+stones pushed into one node, or onto each other's nodes, are all destroyed.
+One pure resolver per language (simboard.resolve_avalanche /
+constants.js resolveAvalanche) feeds the live resolvers, the greedy picker
+and replay.
 
 ### Cosmic
 

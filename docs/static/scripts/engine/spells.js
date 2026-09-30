@@ -1661,6 +1661,68 @@ const SpellResolvers = {
 		}
 	},
 
+	// --- Experimental: Avalanche (simultaneous Rock Slide) ---
+	// Every enemy stone bordering the caster (fixed at cast time) must get a
+	// destination (any neighbor, walls included); then all pushes resolve at
+	// once via resolveAvalanche (constants.js), with one update() at the end.
+	async avalanche(board, color, spellName, getInput, emit) {
+		const sources = avalancheSources(board.stones, color);
+		if (!sources.length) {
+			emit({ type: 'message', message: 'No enemy stones border you.', awaiting: null });
+			return;
+		}
+		const pushes = [];
+		const assigned = {};
+		while (pushes.length < sources.length) {
+			const selectOptions = {};
+			for (const name of sources) {
+				if (!(name in assigned)) selectOptions[name] = board.stones[name];
+			}
+			const planned = pushes.map(p => p.from + '→' + p.to).join(', ');
+			const remaining = sources.length - pushes.length;
+			const choice = await getInput({
+				type: 'message',
+				message: 'Choose a bordering enemy stone to push (' + remaining + ' left).'
+					+ (planned ? ' Planned: ' + planned + '.' : ''),
+				awaiting: 'node',
+				moveoptions: selectOptions,
+			});
+			if (!selectOptions[choice]) continue;
+
+			const destOptions = {};
+			for (const nb of ADJACENCY[choice]) destOptions[nb] = color;
+			const dest = await getInput({
+				type: 'message',
+				message: `Choose where to push the stone at ${choice}.`,
+				awaiting: 'node',
+				moveoptions: destOptions,
+			});
+			if (!ADJACENCY[choice].includes(dest)) continue;
+			assigned[choice] = dest;
+			pushes.push({ from: choice, to: dest });
+		}
+
+		const before = Object.assign({}, board.stones);
+		const { final, lost } = resolveAvalanche(before, pushes);
+		Object.assign(board.stones, final);
+		for (const p of pushes) {
+			emit({ type: 'push_animation', pushed_color: before[p.from], starting_node: p.from, ending_node: p.to });
+		}
+		for (const [n, c] of lost) {
+			emit({ type: 'crush_animation', crushed_color: c, node: n });
+		}
+		if (board.lastPlay && board.lastPlay in final) {
+			board.lastPlay = null;
+			board.lastPlayer = null;
+		}
+		if (lost.length) {
+			board.crushedThisTurn = true;
+			emit({ type: 'message', message: lost.length === 1 ? '1 stone destroyed!' : lost.length + ' stones destroyed!', awaiting: null });
+		}
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
 	// --- Providence: Dividend / Annuity / Endowment (scheduled extra moves) ---
 	async schedule_moves(board, color, spellName, getInput, emit) {
 		const turns = (CORE_SPELLS[spellName] && CORE_SPELLS[spellName].turns) || 1;

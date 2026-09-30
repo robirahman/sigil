@@ -1929,6 +1929,66 @@ class Rock_Slide(Spell):
 				break
 
 
+class Avalanche(Spell):
+	### Experimental: Rock Slide with every push chosen first, then resolved
+	### simultaneously. The pure rules live in simboard.resolve_avalanche
+	### (shared with the AI sim and constants.js's resolveAvalanche).
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed."
+
+	def resolve(self, player):
+		from simboard import avalanche_sources, avalanche_greedy_pushes, resolve_avalanche
+		nodes = player.board.nodes
+		stones = {name: nodes[name].stone for name in nodes}
+		sources = avalanche_sources(stones, player.color)
+		if not sources:
+			if player.ishuman:
+				player.jmessage("No enemy stones border you.")
+			return
+
+		if player.ishuman:
+			pushes = []
+			assigned = set()
+			while len(pushes) < len(sources):
+				planned = ', '.join(p['from'] + '->' + p['to'] for p in pushes)
+				msg = "Choose a bordering enemy stone to push ({} left).".format(len(sources) - len(pushes))
+				if planned:
+					msg += " Planned: " + planned + "."
+				player.jmessage(msg, "node")
+				chosen_from = None
+				while chosen_from is None:
+					resp = player.receivemessage()
+					if resp in sources and resp not in assigned:
+						chosen_from = resp
+				player.jmessage(f"Choose where to push the stone at {chosen_from}.", "node")
+				valid_neighbors = [nb.name for nb in nodes[chosen_from].neighbors]
+				target_to = None
+				while target_to is None:
+					resp = player.receivemessage()
+					if resp in valid_neighbors:
+						target_to = resp
+				assigned.add(chosen_from)
+				pushes.append({'from': chosen_from, 'to': target_to})
+		else:
+			time.sleep(1)
+			pushes = avalanche_greedy_pushes(stones, player.color)
+
+		final, lost = resolve_avalanche(stones, pushes)
+		for name, value in final.items():
+			nodes[name].stone = value
+		if player.board.last_play in final:
+			player.board.last_play = None
+			player.board.last_player = None
+		if lost:
+			msg = "1 stone destroyed!" if len(lost) == 1 else "{} stones destroyed!".format(len(lost))
+			if player.ishuman:
+				player.jmessage(msg)
+			if player.opp.ishuman:
+				player.opp.jmessage(msg)
+		player.board.update()
+
+
 class Bulwark(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)

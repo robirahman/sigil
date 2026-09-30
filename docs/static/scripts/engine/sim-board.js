@@ -21,7 +21,7 @@ class SimAction {
 		this.placed = opts.placed || null;   // perfect_heist: occupied nodes
 		this.converted = opts.converted || null; // corrupt: enemy stones turned to caster's color
 		this.wall = opts.wall || null;       // fissure: node permanently destroyed
-		this.pushes = opts.pushes || null;   // rock_slide: [{from, to, crushed}]
+		this.pushes = opts.pushes || null;   // rock_slide: [{from, to, crushed}]; avalanche: [{from, to}]
 		this.turns = opts.turns || null;     // schedule_moves: turns scheduled
 	}
 }
@@ -759,6 +759,16 @@ class SimBoard {
 				if (this.gameover) break;
 			}
 			actions.push(new SimAction('rock_slide', { pushes }));
+		} else if (rt === 'avalanche') {
+			// Every push is chosen first, then all resolve at once, with one
+			// update() at the end (no mid-resolution stone-count checks).
+			const pushes = avalancheGreedyPushes(this.stones, color, overrides.avalanche_pushes);
+			const { final, lost } = resolveAvalanche(this.stones, pushes);
+			Object.assign(this.stones, final);
+			if (lost.length) this.crushedThisTurn = true;
+			const destroyed = [...new Set(lost.map(([n]) => n))];
+			actions.push(new SimAction('avalanche', { pushes, destroyed: destroyed.length ? destroyed : null }));
+			this.update();
 		} else if (rt === 'schedule_moves') {
 			// Providence: schedule 1 extra move at the start of each of the
 			// caster's next `turns` turns (additive stacking).
@@ -1842,6 +1852,11 @@ function applySimTurn(board, turn, color) {
 					board.stones[p.to] = moved;
 				}
 			}
+		}
+		else if (action.type === 'avalanche') {
+			const { final, lost } = resolveAvalanche(board.stones, action.pushes || []);
+			Object.assign(board.stones, final);
+			if (lost.length) board.crushedThisTurn = true;
 		}
 		else if (action.type === 'schedule_moves') {
 			const sched = board.pendingMoves[color];

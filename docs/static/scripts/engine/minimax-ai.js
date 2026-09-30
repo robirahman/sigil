@@ -287,6 +287,11 @@ function _minimaxApplyTurn(board, turn, color) {
 				}
 			}
 		}
+		else if (t === 'avalanche') {
+			const { final, lost } = resolveAvalanche(sim.stones, action.pushes || []);
+			Object.assign(sim.stones, final);
+			if (lost.length) sim.crushedThisTurn = true;
+		}
 		else if (t === 'schedule_moves') {
 			const sched = sim.pendingMoves[color];
 			const n = action.turns || 0;

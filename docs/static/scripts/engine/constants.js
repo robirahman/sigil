@@ -322,6 +322,9 @@ const CORE_SPELLS = {
 	// spell window once (one more cast, no dash), the way Seal of Summer's
 	// second cast works. Consumed by the turn drivers, not the resolver.
 	Rapids:            { resolve: 'soft_hard_chain', counts: [1, 1], extra_cast: true, static: false, ischarm: false },
+	// Avalanche: Rock Slide with every push chosen first, then resolved
+	// simultaneously (see resolveAvalanche).
+	Avalanche:         { resolve: 'avalanche', static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -384,6 +387,7 @@ const SPELL_TEXTS = {
 	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
 	Spring_Tide:       'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.',
 	Rapids:            'Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn.',
+	Avalanche:         "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
 };
 
 // ---- Duplicate-copy aliases (the "allow duplicates" variant) ----
@@ -473,7 +477,7 @@ const PROVIDENCE_CHARMS = ['Dividend'];
 // not fill all three slots — the pool check only requires core + selected
 // packs to reach 3 spells per category.
 const EXPERIMENTAL_RITUALS = [];
-const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids'];
+const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Avalanche'];
 const EXPERIMENTAL_CHARMS = [];
 
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
@@ -541,6 +545,108 @@ function isExperimentalSpell(name) {
 // Panda and Experimental are permanently unrated (unofficial).
 function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
+}
+
+// ---- Avalanche (Experimental) ----
+// Pure helpers shared by the interactive resolver (spells.js), the AI sim
+// (sim-board.js), replay/playback (applySimTurn, minimax-ai.js,
+// ai-player.js). Mirrors avalanche_sources / resolve_avalanche /
+// avalanche_greedy_pushes in simboard.py.
+
+// Every enemy stone touching a `color` stone, in NODE_ORDER. Fixed at cast
+// time; every one of them must be pushed.
+function avalancheSources(stones, color) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+	return NODE_ORDER.filter(n => stones[n] === enemy && ADJACENCY[n].some(nb => stones[nb] === color));
+}
+
+// Resolve pushes ([{from, to}]) simultaneously without mutating `stones`.
+// Returns { final: {node: value}, lost: [[node, color]] }. A pushed-away
+// node counts as vacated (chains slide, loops of 3+ rotate); a stationary
+// stone on a destination is destroyed; 2+ stones into one node all die; a
+// swap kills both; a stone pushed into a wall dies and the wall stays.
+function resolveAvalanche(stones, pushes) {
+	const destOf = {};
+	const arrivals = new Map();
+	for (const p of pushes) {
+		destOf[p.from] = p.to;
+		if (!arrivals.has(p.to)) arrivals.set(p.to, []);
+		arrivals.get(p.to).push(p.from);
+	}
+	const final = {};
+	for (const src of Object.keys(destOf)) final[src] = null;
+	const lost = [];
+	for (const [dest, srcs] of arrivals) {
+		const occ = stones[dest];
+		if (!(dest in destOf) && (occ === 'red' || occ === 'blue')) {
+			lost.push([dest, occ]);
+			final[dest] = null;
+		}
+		if (occ === DESTROYED || srcs.length >= 2 || destOf[dest] === srcs[0]) {
+			for (const src of srcs) lost.push([dest, stones[src]]);
+		} else {
+			final[dest] = stones[srcs[0]];
+		}
+	}
+	return { final, lost };
+}
+
+function _avalancheScore(stones, pushes, color) {
+	let score = 0;
+	for (const [, c] of resolveAvalanche(stones, pushes).lost) score += c !== color ? 1 : -1;
+	return score;
+}
+
+// Greedy destinations: maximize enemy losses minus own losses. Exhaustive
+// (odometer, last source fastest, first maximum wins) when the option
+// product is <= 4096; otherwise a sequential pick in NODE_ORDER plus one
+// improvement pass. `overridePushes` pins valid {from, to} choices.
+function avalancheGreedyPushes(stones, color, overridePushes) {
+	const sources = avalancheSources(stones, color);
+	if (!sources.length) return [];
+	const pinned = {};
+	for (const ovr of overridePushes || []) {
+		if (sources.includes(ovr.from) && ADJACENCY[ovr.from].includes(ovr.to) && !(ovr.from in pinned)) {
+			pinned[ovr.from] = ovr.to;
+		}
+	}
+	const options = sources.map(s => (s in pinned ? [pinned[s]] : ADJACENCY[s].slice()));
+	let total = 1;
+	for (const o of options) total *= o.length;
+	const build = idx => sources.map((s, i) => ({ from: s, to: options[i][idx[i]] }));
+	if (total <= 4096) {
+		const idx = sources.map(() => 0);
+		let best = null, bestScore = null;
+		while (true) {
+			const pushes = build(idx);
+			const score = _avalancheScore(stones, pushes, color);
+			if (bestScore === null || score > bestScore) { best = pushes; bestScore = score; }
+			let k = idx.length - 1;
+			while (k >= 0 && ++idx[k] === options[k].length) { idx[k] = 0; k--; }
+			if (k < 0) break;
+		}
+		return best;
+	}
+	const chosen = [];
+	sources.forEach((s, i) => {
+		let bestD = null, bestScore = null;
+		for (const d of options[i]) {
+			const score = _avalancheScore(stones, chosen.concat([{ from: s, to: d }]), color);
+			if (bestScore === null || score > bestScore) { bestD = d; bestScore = score; }
+		}
+		chosen.push({ from: s, to: bestD });
+	});
+	sources.forEach((s, i) => {
+		let bestD = null, bestScore = null;
+		for (const d of options[i]) {
+			const trial = chosen.slice();
+			trial[i] = { from: s, to: d };
+			const score = _avalancheScore(stones, trial, color);
+			if (bestScore === null || score > bestScore) { bestD = d; bestScore = score; }
+		}
+		chosen[i] = { from: s, to: bestD };
+	});
+	return chosen;
 }
 
 // Game variants. Orthogonal dimensions encoded in a single string:

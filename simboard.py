@@ -6,6 +6,7 @@ used by the alpha-beta search and self-play data generation.
 """
 
 import copy
+import itertools
 from collections import deque
 from notation import NODE_ORDER, ADJACENCY, POSITIONS, base_spell_name, DUPLICATE_SUFFIXES
 
@@ -105,6 +106,9 @@ CORE_SPELLS = {
     # spell window once (one more cast, no dash), like Seal of Summer's
     # second cast. Consumed by the turn enumerators, not the resolver.
     'Rapids': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'extra_cast': True, 'static': False, 'ischarm': False},
+    # Avalanche: Rock Slide with every push chosen first, then resolved
+    # simultaneously (see resolve_avalanche).
+    'Avalanche': {'resolve': 'avalanche', 'static': False, 'ischarm': False},
 }
 
 # Duplicate-copy aliases (allow-duplicates variant): X~2 and X~3 share X's
@@ -122,6 +126,99 @@ for _big_pos in (1, 2, 3, 4, 5, 6):
 
 def is_big_spell_node(name):
     return name in BIG_SPELL_NODES
+
+def avalanche_sources(stones, color):
+    """Avalanche's pushed set: every enemy stone touching a `color` stone,
+    in NODE_ORDER. Fixed at cast time; every one of them must be pushed."""
+    enemy = 'blue' if color == 'red' else 'red'
+    return [n for n in NODE_ORDER
+            if stones[n] == enemy and any(stones[nb] == color for nb in ADJACENCY[n])]
+
+
+def resolve_avalanche(stones, pushes):
+    """Resolve Avalanche's pushes ([{'from', 'to'}, ...]) simultaneously.
+
+    Pure: returns (final, lost) without mutating `stones`. `final` maps each
+    touched node to its new value; `lost` lists (node, color) per destroyed
+    stone, at the node where it died. Rules:
+      - a node whose stone is pushed away counts as vacated, so chains slide
+        and closed loops of 3+ rotate;
+      - a stationary stone on a destination is destroyed;
+      - two or more stones pushed into the same node are all destroyed;
+      - two stones pushed onto each other's nodes (a swap) are both destroyed;
+      - a stone pushed into a wall is destroyed; the wall stays a wall.
+    Mirrors resolveAvalanche in constants.js.
+    """
+    dest_of = {p['from']: p['to'] for p in pushes}
+    arrivals = {}
+    for p in pushes:
+        arrivals.setdefault(p['to'], []).append(p['from'])
+    final = {src: None for src in dest_of}
+    lost = []
+    for dest, srcs in arrivals.items():
+        occ = stones[dest]
+        if dest not in dest_of and occ in ('red', 'blue'):
+            lost.append((dest, occ))
+            final[dest] = None
+        if occ == DESTROYED or len(srcs) >= 2 or dest_of.get(dest) == srcs[0]:
+            for src in srcs:
+                lost.append((dest, stones[src]))
+        else:
+            final[dest] = stones[srcs[0]]
+    return final, lost
+
+
+def _avalanche_score(stones, pushes, color):
+    _, lost = resolve_avalanche(stones, pushes)
+    return sum(1 if c != color else -1 for _, c in lost)
+
+
+def avalanche_greedy_pushes(stones, color, override_pushes=None):
+    """Pick Avalanche destinations maximizing enemy losses minus own losses.
+
+    Exhaustive (itertools.product order, first maximum wins) when the option
+    product is at most 4096; otherwise a sequential pick in NODE_ORDER
+    followed by one improvement pass. `override_pushes` pins valid
+    {'from', 'to'} choices. Mirrors avalancheGreedyPushes in constants.js.
+    """
+    sources = avalanche_sources(stones, color)
+    pinned = {}
+    for ovr in override_pushes or []:
+        src, dst = ovr.get('from'), ovr.get('to')
+        if src in sources and dst in ADJACENCY[src] and src not in pinned:
+            pinned[src] = dst
+    options = [[pinned[s]] if s in pinned else list(ADJACENCY[s]) for s in sources]
+    if not sources:
+        return []
+    total = 1
+    for opts in options:
+        total *= len(opts)
+    if total <= 4096:
+        best, best_score = None, None
+        for combo in itertools.product(*options):
+            pushes = [{'from': s, 'to': d} for s, d in zip(sources, combo)]
+            score = _avalanche_score(stones, pushes, color)
+            if best_score is None or score > best_score:
+                best, best_score = pushes, score
+        return best
+    chosen = []
+    for s, opts in zip(sources, options):
+        best_d, best_score = None, None
+        for d in opts:
+            score = _avalanche_score(stones, chosen + [{'from': s, 'to': d}], color)
+            if best_score is None or score > best_score:
+                best_d, best_score = d, score
+        chosen.append({'from': s, 'to': best_d})
+    for i, (s, opts) in enumerate(zip(sources, options)):
+        best_d, best_score = None, None
+        for d in opts:
+            trial = chosen[:i] + [{'from': s, 'to': d}] + chosen[i + 1:]
+            score = _avalanche_score(stones, trial, color)
+            if best_score is None or score > best_score:
+                best_d, best_score = d, score
+        chosen[i] = {'from': s, 'to': best_d}
+    return chosen
+
 
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
 SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
@@ -1541,6 +1638,18 @@ class SimBoard:
                     break
             actions.append(Action('rock_slide', pushes=pushes))
 
+        elif resolve_type == 'avalanche':
+            # Every push is chosen first, then all resolve at once, with one
+            # update() at the end (no mid-resolution stone-count checks).
+            pushes = avalanche_greedy_pushes(self.stones, color,
+                                             overrides.get('avalanche_pushes'))
+            final, lost = resolve_avalanche(self.stones, pushes)
+            self.stones.update(final)
+            destroyed = list(dict.fromkeys(n for n, _ in lost))
+            actions.append(Action('avalanche', pushes=pushes,
+                                  destroyed=destroyed or None))
+            self.update()
+
         elif resolve_type == 'schedule_moves':
             # Providence: schedule 1 extra move at the start of each of the
             # caster's next `turns` turns (additive stacking).
@@ -2112,6 +2221,9 @@ def apply_sim_turn(board, turn, color):
                     moved = board.stones[p['from']]
                     board.stones[p['from']] = None
                     board.stones[p['to']] = moved
+        elif t == 'avalanche':
+            final, _ = resolve_avalanche(board.stones, action.pushes or [])
+            board.stones.update(final)
         elif t == 'schedule_moves':
             sched = board.pending_moves[color]
             n = action.turns or 0

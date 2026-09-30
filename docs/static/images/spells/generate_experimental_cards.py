@@ -157,6 +157,58 @@ def rapids_rune(diameter):
     return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
 
 
+def avalanche_rune(diameter):
+    """A slope shedding boulders: rocks tumble down a mountainside in
+    several directions at once, and two of them meet in a burst."""
+    s = diameter * 4
+    im = parchment(s, seed=41)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 18)
+    rng = _rng(41)
+
+    # Twin peaks with a snow line.
+    d.line([(cx - s * 0.46, cy + s * 0.10), (cx - s * 0.16, cy - s * 0.30),
+            (cx + s * 0.02, cy - s * 0.08), (cx + s * 0.20, cy - s * 0.36),
+            (cx + s * 0.46, cy + s * 0.06)], fill=ink, width=w, joint='curve')
+    d.line([(cx - s * 0.24, cy - s * 0.19), (cx - s * 0.16, cy - s * 0.13),
+            (cx - s * 0.09, cy - s * 0.20)], fill=ink_soft, width=max(2, w // 2))
+    d.line([(cx + s * 0.12, cy - s * 0.25), (cx + s * 0.20, cy - s * 0.19),
+            (cx + s * 0.28, cy - s * 0.25)], fill=ink_soft, width=max(2, w // 2))
+
+    def boulder(px, py, r):
+        pts = []
+        for k in range(7):
+            a = 2 * math.pi * k / 7 + rng.uniform(-0.25, 0.25)
+            rr = r * rng.uniform(0.75, 1.1)
+            pts.append((px + rr * math.cos(a), py + rr * math.sin(a)))
+        d.polygon(pts, fill=ink)
+
+    # Boulders pushed outward, each trailing motion streaks.
+    for (bx, by, r, ang) in [(-0.30, 0.16, 0.065, 200), (0.30, 0.14, 0.060, 340),
+                             (-0.05, 0.22, 0.055, 110), (0.12, 0.30, 0.045, 60)]:
+        px, py, rr = cx + s * bx, cy + s * by, s * r
+        a = math.radians(ang)
+        for k, off in enumerate((-0.5, 0.0, 0.5)):
+            nx, ny = -math.sin(a) * rr * off, math.cos(a) * rr * off
+            L = rr * (1.6 - 0.3 * abs(off))
+            d.line([(px + nx - math.cos(a) * rr * 1.1, py + ny - math.sin(a) * rr * 1.1),
+                    (px + nx - math.cos(a) * (rr * 1.1 + L), py + ny - math.sin(a) * (rr * 1.1 + L))],
+                   fill=ink_soft, width=max(2, w // 3))
+        boulder(px, py, rr)
+
+    # Collision burst where two pushed stones meet.
+    bx, by, br = cx - s * 0.20, cy + s * 0.34, s * 0.07
+    for k in range(8):
+        a = 2 * math.pi * k / 8
+        d.line([(bx + br * 0.35 * math.cos(a), by + br * 0.35 * math.sin(a)),
+                (bx + br * math.cos(a), by + br * math.sin(a))], fill=ink, width=max(2, w // 2))
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
 def build_card(cfg):
     name, size = cfg['name'], cfg['size']
     cx, cy = size // 2, size // 2
@@ -254,6 +306,27 @@ CARDS = [
              'center_deg': 45, 'font_size': 6.2, 'spacing': 0.88},
             {'text': 'You may cast 1 additional spell this turn.', 'radius': 90,
              'center_deg': 45, 'font_size': 6.0, 'spacing': 0.88},
+        ],
+    },
+    {
+        'name': 'Avalanche',
+        'size': 260,
+        'inner_r': 56,
+        'outer_r': 128,
+        'bottom_bg': (8, 24, 44, 255),
+        'border_color': (120, 200, 240, 255),
+        'rune': avalanche_rune,
+        'spot_radius': 31,
+        'spots': [(130.0, 196.3), (72.5, 97.0), (187.5, 97.0)],
+        'title': 'AVALANCHE',
+        'name_radius': 105,
+        'name_center_deg': 138,
+        'name_font_size': 11.5,
+        'desc_lines': [
+            {'text': 'Push every bordering enemy stone at once.', 'radius': 106,
+             'center_deg': 45, 'font_size': 6.2, 'spacing': 0.88},
+            {'text': 'Collisions and occupants die.', 'radius': 90,
+             'center_deg': 36, 'font_size': 6.0, 'spacing': 0.88},
         ],
     },
 ]

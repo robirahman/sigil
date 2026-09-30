@@ -574,6 +574,26 @@ async function applyAITurn(board, turn, color, emit) {
 			}
 		}
 
+		else if (action.type === 'avalanche') {
+			// Experimental Avalanche: every recorded push resolves at once.
+			if (action.pushes && action.pushes.length) {
+				const before = Object.assign({}, board.stones);
+				const { final, lost } = resolveAvalanche(before, action.pushes);
+				Object.assign(board.stones, final);
+				for (const p of action.pushes) {
+					emit({ type: 'push_animation', pushed_color: before[p.from], starting_node: p.from, ending_node: p.to });
+				}
+				for (const [n, c] of lost) {
+					emit({ type: 'crush_animation', crushed_color: c, node: n });
+				}
+				if (board.lastPlay && board.lastPlay in final) { board.lastPlay = null; board.lastPlayer = null; }
+				if (lost.length) board.crushedThisTurn = true;
+				board.update();
+				emit(board.getBoardStatePayload());
+				await _aiDelay(600);
+			}
+		}
+
 		else if (action.type === 'hail_storm') {
 			if (action.destroyed) {
 				for (const n of action.destroyed) {
