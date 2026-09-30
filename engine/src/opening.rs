@@ -46,20 +46,24 @@
 //! draw is dropped, unless that drops everything. Ties break on strength then
 //! spell id, never on slot, so the choice is zone-invariant.
 //!
-//! **Syzygy (designer's rule, 2026-09-23).** Casting Syzygy blinks into the
-//! opposite 1-node sigil and then into the opposite 3-node sigil
-//! (`resolvers::syzygy_opposite`), pushing or crushing whatever stands there,
-//! so a stone started in either is a target the moment the ritual charges.
-//! Three consequences, switchable together with `set_opening_syzygy`:
+//! **Syzygy (designer's rules, 2026-09-23, revised 2026-09-30).** Casting
+//! Syzygy blinks into the opposite 1-node sigil and then into the opposite
+//! 3-node sigil (`resolvers::syzygy_opposite`), pushing or crushing whatever
+//! stands there. The 3-node spell opposite is always a target; the 1-node
+//! spell opposite is one if it is Slash, Surge, Gust or a static seal
+//! (`SYZYGY_ALWAYS_EXPOSED`), or -- for Splash, Charge, Lurk, Azimuth, Sprout,
+//! Comet -- only when the Syzygy side also starts near Seal of Autumn, which
+//! stops the dash that would otherwise get the stone out ("near" = in the
+//! sigil or on a node next to it). Switchable together with
+//! `set_opening_syzygy`:
 //!
-//! * never start on the 3-node spell opposite Syzygy, nor on the 1-node spell
-//!   opposite it unless that charm's cast moves the stone away before the
-//!   ritual can fire (`SYZYGY_SAFE_CHARMS`: Sprout, Splash, Charge);
-//! * when the enemy has started on one of those exposed slots, take Syzygy,
-//!   whatever the Bradley-Terry tables say (`OpeningPick::syzygy_threat`);
-//! * for blue, Syzygy is worth the strongest of itself and the two spells
-//!   across from it, plus 0.01 so it wins the tie, because casting it
-//!   effectively grants those spells.
+//! * red never starts on an exposed slot;
+//! * blue always takes Syzygy when red started on one (`syzygy_threat`),
+//!   on a node next to Seal of Autumn when that is what exposes the charm;
+//! * red's Syzygy is worth the greater of itself and the 3-node spell opposite;
+//! * blue drops the exposed slots, and values them at no more than Syzygy's
+//!   own strength, only when red started in or next to Syzygy; otherwise
+//!   they are ordinary spells for blue, and blue's Syzygy has its own rating.
 //!
 //! **Carnage (designer's rule, 2026-09-30, switch `set_opening_carnage`).**
 //! Its four hard moves reach the 3-node sigils on both sides of it (its own
@@ -101,31 +105,79 @@ pub fn opening_carnage_enabled() -> bool { OPENING_CARNAGE.with(|c| c.get()) }
 
 /// Carnage's engine id (`spells_meta.rs`; pinned by a test).
 pub const CARNAGE: u8 = 1;
-/// What a spell that grants its neighbours (Syzygy for blue, Carnage) adds on
-/// top of the best of them, so it wins the tie.
+/// What Carnage adds on top of the best of the sorceries beside it, so it wins the tie.
 pub const NEIGHBOUR_EDGE: f32 = 0.01;
 use crate::opening_data::{BOARD_PREF, MATCHUP, PUSH_CHARMS, STRENGTH, SYNERGY};
-use crate::spells_meta::{CHARGE, HURRICANE, NUM_OFFICIAL_SPELLS, SEAL_OF_DESTRUCTION, SPELLS, SPLASH, SPROUT, SYZYGY};
+use crate::spells_meta::{AZIMUTH, CHARGE, COMET, GUST, HURRICANE, LURK, NUM_OFFICIAL_SPELLS, SEAL_OF_AUTUMN,
+                         SEAL_OF_DESTRUCTION, SEAL_OF_SPRING, SEAL_OF_SUMMER, SEAL_OF_WINTER, SLASH, SPELLS, SPLASH,
+                         SPROUT, SURGE, SYZYGY};
 use crate::topology::{ADJ, SIGIL, VOID};
 use crate::resolvers::syzygy_opposite;
 
-/// Charms whose cast moves the stone off the charm node before Syzygy can
-/// crush it (designer's list, 2026-09-23): a stone started on any other
-/// 1-node sigil opposite Syzygy can only leave by dashing.
-pub const SYZYGY_SAFE_CHARMS: [u8; 3] = [SPROUT, SPLASH, CHARGE];
+/// Charms opposite Syzygy that are always its target (designer, 2026-09-30).
+pub const SYZYGY_ALWAYS_EXPOSED: [u8; 7] = [SLASH, SURGE, GUST, SEAL_OF_SPRING, SEAL_OF_SUMMER, SEAL_OF_AUTUMN, SEAL_OF_WINTER];
+/// Charms opposite Syzygy that are its target only when the Syzygy side also
+/// starts near Seal of Autumn (no dashing out with a stone in a spell).
+pub const SYZYGY_AUTUMN_EXPOSED: [u8; 6] = [SPLASH, CHARGE, LURK, AZIMUTH, SPROUT, COMET];
 
 /// The ritual slot Syzygy was drawn in, if any (it does nothing elsewhere).
 pub fn syzygy_slot(spells: &[u8; 9]) -> Option<usize> {
     (0..3).find(|&p| spells[p] == SYZYGY && syzygy_opposite(p).is_some())
 }
 
+/// Every node next to one in `mask`.
+fn neighbours(mask: u64) -> u64 {
+    let (mut m, mut out) = (mask, 0u64);
+    while m != 0 { let i = m.trailing_zeros() as usize; m &= m - 1; out |= ADJ[i]; }
+    out
+}
+/// Is some stone in `stones` in sigil `slot` or on a node next to it?
+pub fn stones_near(stones: u64, slot: usize) -> bool { stones & (SIGIL[slot] | neighbours(SIGIL[slot])) != 0 }
+/// Could one stone started in sigil `s` be near sigil `target` (in it, or touching it)?
+fn slot_near(s: usize, target: usize) -> bool { s == target || neighbours(SIGIL[s]) & SIGIL[target] != 0 }
+/// The charm slot holding Seal of Autumn, if drawn.
+fn autumn_slot(spells: &[u8; 9]) -> Option<usize> { (6..9).find(|&p| spells[p] == SEAL_OF_AUTUMN) }
+
 /// Is a stone started on `slot` a Syzygy target: the 3-node sigil opposite
-/// it, or the 1-node sigil opposite it when that charm cannot move its stone
-/// away.
-pub fn syzygy_exposed(spells: &[u8; 9], slot: usize) -> bool {
+/// Syzygy, or the 1-node sigil opposite it when that charm is always exposed,
+/// or is Autumn-exposed and `near_autumn` (the Syzygy side is near Seal of
+/// Autumn as well as Syzygy).
+pub fn syzygy_exposed(spells: &[u8; 9], slot: usize, near_autumn: bool) -> bool {
     let Some(z) = syzygy_slot(spells) else { return false };
     let Some((charm, sorcery)) = syzygy_opposite(z) else { return false };
-    slot == sorcery || (slot == charm && !SYZYGY_SAFE_CHARMS.contains(&spells[charm]))
+    slot == sorcery || (slot == charm && (SYZYGY_ALWAYS_EXPOSED.contains(&spells[charm])
+        || (near_autumn && SYZYGY_AUTUMN_EXPOSED.contains(&spells[charm]))))
+}
+
+/// Can a stone started in Syzygy also be near Seal of Autumn (one of Syzygy's
+/// nodes touches the seal)? What blue has when it answers red's start with Syzygy.
+fn syzygy_touches_autumn(spells: &[u8; 9]) -> bool {
+    match (syzygy_slot(spells), autumn_slot(spells)) {
+        (Some(z), Some(a)) => slot_near(z, a),
+        _ => false,
+    }
+}
+
+/// Red's start as the Syzygy side: is it in or next to Syzygy, and (for the
+/// Autumn-exposed charms) also near Seal of Autumn?
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SyzygyThreat { pub near_syzygy: bool, pub near_autumn: bool }
+
+impl SyzygyThreat {
+    /// From red's actual stone.
+    pub fn of_stones(spells: &[u8; 9], red: u64) -> Self {
+        let Some(z) = syzygy_slot(spells) else { return Self::default() };
+        Self { near_syzygy: stones_near(red, z), near_autumn: autumn_slot(spells).map_or(false, |a| stones_near(red, a)) }
+    }
+    /// From the sigil red starts in, assuming red picks the node that serves it.
+    pub fn of_slot(spells: &[u8; 9], s: usize) -> Self {
+        let Some(z) = syzygy_slot(spells) else { return Self::default() };
+        Self { near_syzygy: slot_near(s, z), near_autumn: autumn_slot(spells).map_or(false, |a| slot_near(s, a)) }
+    }
+    /// Is blue's start on `slot` exposed to this red start?
+    pub fn exposes(&self, spells: &[u8; 9], slot: usize) -> bool {
+        opening_syzygy_enabled() && self.near_syzygy && syzygy_exposed(spells, slot, self.near_autumn)
+    }
 }
 
 /// One matchup pip (`+`) in Bradley-Terry units; `++` is two.
@@ -183,17 +235,28 @@ fn colour_bonus(spell: u8, side: Color) -> f32 {
 }
 
 /// What starting on slot `x` is worth to `side`, given the enemy starts on
-/// `enemy` (a slot, or none yet).
+/// `enemy` (a slot, or none yet). For blue, red's Syzygy threat is read from
+/// red's slot; `own_value_ctx` takes it from red's actual stone.
 pub fn own_value(spells: &[u8; 9], x: usize, enemy: Option<usize>, side: Color) -> f32 {
+    let threat = match (side, enemy) { (Color::Blue, Some(s)) => SyzygyThreat::of_slot(spells, s), _ => SyzygyThreat::default() };
+    own_value_ctx(spells, x, enemy, side, threat)
+}
+
+/// `own_value` with red's Syzygy threat given (it only affects blue).
+pub fn own_value_ctx(spells: &[u8; 9], x: usize, enemy: Option<usize>, side: Color, threat: SyzygyThreat) -> f32 {
     let sx = spells[x] as usize;
     let mut strength = STRENGTH[sx];
-    // Blue's Syzygy is worth the best of itself and the two spells across from
-    // it: casting it plays into their sigils, so it effectively grants them.
-    if opening_syzygy_enabled() && side == Color::Blue && spells[x] == SYZYGY {
-        if let Some((charm, sorcery)) = syzygy_opposite(x) {
-            strength = strength.max(STRENGTH[spells[charm] as usize]).max(STRENGTH[spells[sorcery] as usize])
-                + NEIGHBOUR_EDGE;
+    // Red's Syzygy is worth the greater of itself and the 3-node spell across
+    // from it: casting it plays into that sigil, so it effectively grants it.
+    if opening_syzygy_enabled() && side == Color::Red && spells[x] == SYZYGY {
+        if let Some((_, sorcery)) = syzygy_opposite(x) {
+            strength = strength.max(STRENGTH[spells[sorcery] as usize]);
         }
+    }
+    // Blue's start across from a Syzygy red is in or next to is worth no more
+    // than Syzygy itself.
+    if side == Color::Blue && threat.exposes(spells, x) {
+        strength = strength.min(STRENGTH[SYZYGY as usize]);
     }
     // Carnage, either side: its hard moves reach the sorceries on both sides.
     if opening_carnage_enabled() && spells[x] == CARNAGE && role(x) == 0 {
@@ -260,10 +323,15 @@ fn push_term(spells: &[u8; 9], s: usize, t: usize, red_behind: bool) -> f32 {
 /// V(s, t): red opens on slot `s`, blue answers on slot `t`. Red POV.
 /// `red_behind` only matters when `s == t` (see `push_term`).
 pub fn pair_value(spells: &[u8; 9], s: usize, t: usize, red_behind: bool) -> f32 {
+    pair_value_ctx(spells, s, t, red_behind, SyzygyThreat::of_slot(spells, s))
+}
+
+/// `pair_value` with red's Syzygy threat given.
+pub fn pair_value_ctx(spells: &[u8; 9], s: usize, t: usize, red_behind: bool, threat: SyzygyThreat) -> f32 {
     let (ss, st) = (spells[s] as usize, spells[t] as usize);
     let tempo = if s != t { 0.0 }
         else if opening_contest_enabled() { SAME_SIGIL_TEMPO[role(s)] } else { SAME_SIGIL_TEMPO_V17 };
-    own_value(spells, s, Some(t), Color::Red) - own_value(spells, t, Some(s), Color::Blue)
+    own_value(spells, s, Some(t), Color::Red) - own_value_ctx(spells, t, Some(s), Color::Blue, threat)
         + W_MATCHUP_PIP * MATCHUP[ss][st] as f32
         + push_term(spells, s, t, red_behind)
         + tempo
@@ -318,7 +386,9 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         // Red's candidates: every slot; drop the hard-countered ones.
         let mut vetoed = 0u16;
         for &s in &slots {
-            if hard_countered(spells, s, &slots) || (opening_syzygy_enabled() && syzygy_exposed(spells, s)) {
+            // Exposed to blue's Syzygy reply (which can sit next to Seal of Autumn if the seal touches Syzygy).
+            if hard_countered(spells, s, &slots)
+                || (opening_syzygy_enabled() && syzygy_exposed(spells, s, syzygy_touches_autumn(spells))) {
                 vetoed |= 1 << s;
             }
         }
@@ -344,16 +414,17 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         let red = b.theirs(c);
         let s_red = (0..9).find(|&p| SIGIL[p] & red != 0);
         let syz = opening_syzygy_enabled();
+        let threat = SyzygyThreat::of_stones(spells, red);
         let Some(s) = s_red else {
             // Red opened on a mana or void node: no matchup to answer, take the
-            // best sigil on its own merits (never an exposed one).
+            // best sigil on its own merits (not an exposed one if red is next to Syzygy).
             let mut vetoed = 0u16;
-            for &t in &slots { if syz && syzygy_exposed(spells, t) { vetoed |= 1 << t; } }
+            for &t in &slots { if threat.exposes(spells, t) { vetoed |= 1 << t; } }
             let cands: Vec<usize> = slots.iter().copied().filter(|&t| vetoed & (1 << t) == 0).collect();
             let cands = if cands.is_empty() { vetoed = 0; slots.clone() } else { cands };
             let mut best: Option<(f32, usize)> = None;
             for &t in &cands {
-                let v = own_value(spells, t, None, Color::Blue);
+                let v = own_value_ctx(spells, t, None, Color::Blue, threat);
                 if best.map_or(true, |bt| better((v, t), bt)) { best = Some((v, t)); }
             }
             let (value, pos) = best?;
@@ -361,11 +432,20 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
                                       reply: None, vetoed, syzygy_threat: false });
         };
         // Red started on a slot Syzygy crushes: take Syzygy, whatever the
-        // tables say about it in general.
-        if syz && syzygy_exposed(spells, s) {
+        // tables say about it in general. If only Seal of Autumn makes red's
+        // charm a target, start on a Syzygy node next to the seal.
+        let near_autumn = syzygy_touches_autumn(spells);
+        if syz && syzygy_exposed(spells, s, near_autumn) {
             if let Some(z) = syzygy_slot(spells) {
-                if SIGIL[z] & b.empty() != 0 {
-                    return Some(OpeningPick { pos: z, spell: SYZYGY, node_mask: SIGIL[z] & b.empty(),
+                let free = SIGIL[z] & b.empty();
+                if free != 0 {
+                    let mut mask = free;
+                    if !syzygy_exposed(spells, s, false) {
+                        let a = autumn_slot(spells).expect("Autumn-exposed implies the seal");
+                        let by_seal = free & neighbours(SIGIL[a]);
+                        if by_seal != 0 { mask = by_seal; }
+                    }
+                    return Some(OpeningPick { pos: z, spell: SYZYGY, node_mask: mask,
                                               value: pair_value(spells, s, z, false), reply: Some(spells[s]),
                                               vetoed: 0, syzygy_threat: true });
                 }
@@ -373,7 +453,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         }
         let mut vetoed = 0u16;
         for &t in &slots {
-            if (t != s && MATCHUP[spells[s] as usize][spells[t] as usize] >= 2) || (syz && syzygy_exposed(spells, t)) {
+            if (t != s && MATCHUP[spells[s] as usize][spells[t] as usize] >= 2) || threat.exposes(spells, t) {
                 vetoed |= 1 << t;
             }
         }
@@ -390,7 +470,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
         let mut best: Option<(f32, usize)> = None;
         for &t in &cands {
             if t == s && SIGIL[s].count_ones() == 1 { continue; }
-            let v = -pair_value(spells, s, t, red_behind);
+            let v = -pair_value_ctx(spells, s, t, red_behind, threat);
             if best.map_or(true, |bt| better((v, t), bt)) { best = Some((v, t)); }
         }
         let (neg, pos) = best?;

@@ -21,6 +21,12 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-09-30: engine v20 (cache v53) -- Syzygy rules revised.** Charm targets: Slash, Surge, Gust, static seals
+always; Splash, Charge, Lurk, Azimuth, Sprout, Comet only with the Syzygy side near Seal of Autumn. Blue avoids and
+devalues the targets only when red started in or next to Syzygy; blue's Syzygy rating is plain (forced reply
+unchanged, now also against the Autumn-exposed charms); red's Syzygy is worth the greater of itself and the
+sorcery across. Not arena-tested. Tests 162/162, `wasm-smoke.js` green. FINDINGS "the Syzygy rules revised".
+
 **2026-09-30: engine v19 (cache v52) -- competitive opening selector on the 2026-09-29 survey, contest rules.**
 Tables from 241 comparisons; free ritual contests, push credit to the side the Slash/Charge is behind (red and
 blue root masks pick that node), blue takes a `++` counter first. Switch `opening_contest` (default on); arena arm

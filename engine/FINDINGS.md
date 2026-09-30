@@ -2109,6 +2109,26 @@ us-east1-d). Depth 6.93 / 6.93 and 7.06 / 7.08, 21.8-22.3 s/move on average, 33-
 quarter of all competitive draws (124 / 500), so across all games the effect is roughly a quarter of +34.7.
 The Carnage arm won 420-284 as red and 354-350 as blue.
 
+**2026-09-30, engine v20 (cache v53): the Syzygy rules revised (designer's rulings; not arena-tested).**
+
+- **Which charms opposite Syzygy are targets:** Slash, Surge, Gust and the static seals always
+  (`SYZYGY_ALWAYS_EXPOSED`); Splash, Charge, Lurk, Azimuth, Sprout, Comet only when the Syzygy side also starts
+  near Seal of Autumn, which forbids dashing out with a stone that sits in a spell (`SYZYGY_AUTUMN_EXPOSED`).
+  "Near" = in the sigil or on a node next to it. This replaces the 2026-09-23 "safe" list (Sprout, Splash, Charge).
+- **Red** still never starts on a target; an Autumn-exposed charm counts when the seal touches Syzygy (blue's
+  Syzygy reply can then sit next to it).
+- **Blue** always takes Syzygy when red started on a target, on a Syzygy node next to Seal of Autumn when only
+  the seal makes red's charm a target. Otherwise blue's Syzygy has its plain rating (the v17 "best of itself and
+  both spells across, + 0.01" is gone).
+- **Blue drops the targets, and values them at no more than Syzygy's own strength, only when red started in or
+  next to Syzygy** (`SyzygyThreat`); red on a mana or void node counts when that node touches Syzygy. Before, blue
+  avoided them whatever red did.
+- **Red's Syzygy** is worth the greater of itself and the 3-node spell across from it.
+
+Tests `opening_never_starts_opposite_syzygy`, `opening_blue_takes_syzygy_against_an_exposed_start`,
+`opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy`, `opening_syzygy_values_by_colour`
+(162 pass); `wasm-smoke.js` green, wasm 632,091 bytes.
+
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
 

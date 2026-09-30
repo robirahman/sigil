@@ -3348,26 +3348,27 @@ const SYZYGY_DRAW: [u8; 9] = [18, 0, 27, 5, 6, 28, 10, 11, 26];
 
 #[test]
 fn opening_never_starts_opposite_syzygy() {
-    use crate::opening::{choose_opening, set_opening_syzygy, opening_syzygy_enabled, syzygy_exposed, SYZYGY_SAFE_CHARMS};
+    use crate::opening::{choose_opening, set_opening_syzygy, opening_syzygy_enabled, syzygy_exposed,
+                         SYZYGY_ALWAYS_EXPOSED, SYZYGY_AUTUMN_EXPOSED};
     assert!(opening_syzygy_enabled(), "the Syzygy rules ship ON");
-    assert_eq!(SYZYGY_SAFE_CHARMS, [10, 29, 23], "Sprout, Splash, Charge");
-    assert!(syzygy_exposed(&SYZYGY_DRAW, 4) && syzygy_exposed(&SYZYGY_DRAW, 7));
-    assert!(!syzygy_exposed(&SYZYGY_DRAW, 3) && !syzygy_exposed(&SYZYGY_DRAW, 6) && !syzygy_exposed(&SYZYGY_DRAW, 0));
+    // Every official charm is in exactly one list.
+    for c in CHARMS { assert!(SYZYGY_ALWAYS_EXPOSED.contains(&c) ^ SYZYGY_AUTUMN_EXPOSED.contains(&c), "charm {c}"); }
+    assert!(syzygy_exposed(&SYZYGY_DRAW, 4, false) && syzygy_exposed(&SYZYGY_DRAW, 7, false), "Fireblast; Slash always");
+    assert!(!syzygy_exposed(&SYZYGY_DRAW, 3, true) && !syzygy_exposed(&SYZYGY_DRAW, 6, true) && !syzygy_exposed(&SYZYGY_DRAW, 0, true));
     // Red: Fireblast is the strongest spell drawn, but it is opposite Syzygy.
     let b = competitive_board(SYZYGY_DRAW);
     let p = choose_opening(&b, Color::Red).expect("applies");
     assert!(p.pos != 4 && p.pos != 7, "red must not start opposite Syzygy: {p:?}");
     assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "both exposed slots vetoed: {p:?}");
-    // Blue, after red started somewhere harmless (the Grow sorcery, slot 3).
-    let bb = after_red_opening_slot(SYZYGY_DRAW, 3);
-    let pb = choose_opening(&bb, Color::Blue).expect("applies");
-    assert!(pb.pos != 4 && pb.pos != 7, "blue must not start opposite Syzygy: {pb:?}");
-    assert!(!pb.syzygy_threat);
-    // A safe charm opposite Syzygy (Sprout for Slash) is allowed again.
-    let mut safe = SYZYGY_DRAW; safe[7] = 10; safe[6] = 11;
-    assert!(!syzygy_exposed(&safe, 7), "Sprout's cast moves the stone away");
-    let ps = choose_opening(&competitive_board(safe), Color::Red).expect("applies");
-    assert_eq!(ps.vetoed & (1 << 7), 0, "no veto on the safe charm: {ps:?}");
+    // Sprout opposite (Slash moved to a7): exposed only with Seal of Autumn near Syzygy.
+    let mut sprout = SYZYGY_DRAW; sprout[7] = 10; sprout[6] = 11;
+    assert!(!syzygy_exposed(&sprout, 7, false) && syzygy_exposed(&sprout, 7, true));
+    let ps = choose_opening(&competitive_board(sprout), Color::Red).expect("applies");
+    assert_eq!(ps.vetoed & (1 << 7), 0, "no seal, no veto on Sprout: {ps:?}");
+    // Seal of Autumn on a7, which touches Syzygy's a4: now Sprout is vetoed too.
+    let mut autumn = sprout; autumn[6] = 32;
+    let pa = choose_opening(&competitive_board(autumn), Color::Red).expect("applies");
+    assert_ne!(pa.vetoed & (1 << 7), 0, "Autumn next to Syzygy exposes Sprout: {pa:?}");
     // Knob off: the v16 selector takes Fireblast.
     set_opening_syzygy(false);
     let p0 = choose_opening(&b, Color::Red).expect("applies");
@@ -3388,19 +3389,26 @@ fn opening_blue_takes_syzygy_against_an_exposed_start() {
     assert_eq!(p.reply, Some(6));
     assert_eq!(p.node_mask, crate::topology::SIGIL[0]);
     assert!(crate::opening::report_line(&p, p.node_mask.trailing_zeros() as u8).contains("crushes the Fireblast start"));
-    // Red on the charm opposite Syzygy (Slash, slot 7): it cannot leave without a dash.
-    let b7 = after_red_opening_slot(SYZYGY_DRAW, 7);
-    let p7 = choose_opening(&b7, Color::Blue).expect("applies");
-    assert_eq!(p7.spell, 18, "Syzygy is forced against a stuck charm: {p7:?}");
-    assert!(p7.syzygy_threat);
-    // Red on a safe charm opposite Syzygy (Charge): no forced reply.
-    let mut safe = SYZYGY_DRAW; safe[7] = 23; safe[6] = 11;
-    let pc = choose_opening(&after_red_opening_slot(safe, 7), Color::Blue).expect("applies");
-    assert!(!pc.syzygy_threat, "Charge moves away: {pc:?}");
+    // Red on the charm opposite Syzygy, Slash: always a target.
+    let p7 = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 7), Color::Blue).expect("applies");
+    assert!(p7.syzygy_threat && p7.spell == 18, "{p7:?}");
+    // A static seal there (Seal of Winter) too.
+    let mut seal = SYZYGY_DRAW; seal[7] = 38; seal[8] = 11;
+    let pw = choose_opening(&after_red_opening_slot(seal, 7), Color::Blue).expect("applies");
+    assert!(pw.syzygy_threat, "{pw:?}");
+    // Charge there: not a target without Seal of Autumn near Syzygy...
+    let mut charge = SYZYGY_DRAW; charge[7] = 23; charge[6] = 11;
+    let pc = choose_opening(&after_red_opening_slot(charge, 7), Color::Blue).expect("applies");
+    assert!(!pc.syzygy_threat, "Charge gets away: {pc:?}");
+    // ...but with the seal on a7 blue takes Syzygy on a4, the node next to it.
+    let mut autumn = charge; autumn[6] = 32;
+    let pa = choose_opening(&after_red_opening_slot(autumn, 7), Color::Blue).expect("applies");
+    assert!(pa.syzygy_threat && pa.spell == 18, "{pa:?}");
+    assert_eq!(pa.node_mask, 1u64 << n("a4"), "{pa:?}");
     // Red elsewhere: not forced.
     let pe = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 3), Color::Blue).expect("applies");
     assert!(!pe.syzygy_threat);
-    // Knob off: the tables decide and Syzygy (-1.19) is not the reply to Fireblast.
+    // Knob off: the tables decide and Syzygy is not the reply to Fireblast.
     set_opening_syzygy(false);
     let p0 = choose_opening(&b, Color::Blue).expect("applies");
     set_opening_syzygy(true);
@@ -3408,25 +3416,40 @@ fn opening_blue_takes_syzygy_against_an_exposed_start() {
 }
 
 #[test]
-fn opening_blue_values_syzygy_by_the_spells_across_from_it() {
+fn opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy() {
+    use crate::opening::choose_opening;
+    // Red on the Grow sorcery (a8-a10), which does not touch Syzygy (a2-a6): Fireblast,
+    // the strongest spell, is fair game for blue.
+    let pe = choose_opening(&after_red_opening_slot(SYZYGY_DRAW, 3), Color::Blue).expect("applies");
+    assert_eq!(pe.vetoed & (1 << 4 | 1 << 7), 0, "{pe:?}");
+    assert_eq!(pe.spell, 6, "{pe:?}");
+    // Red in Syzygy, or on a node next to it (mana a1, void a13): blue keeps off both targets.
+    for node in ["a2", "a1", "a13"] {
+        let p = choose_opening(&after_red_opening(SYZYGY_DRAW, node), Color::Blue).expect("applies");
+        assert!(p.pos != 4 && p.pos != 7, "red on {node}: {p:?}");
+        assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "red on {node}: {p:?}");
+    }
+}
+
+#[test]
+fn opening_syzygy_values_by_colour() {
     use crate::opening::{own_value, set_opening_syzygy};
     use crate::opening_data::STRENGTH;
-    // Same zone-mates for Syzygy either way (the opposite sigils are in another
-    // zone), so swapping the opposite sorcery from Fireblast to Grow changes
-    // blue's value by exactly the strength substitution.
-    let strong = SYZYGY_DRAW;                       // Fireblast (6) opposite
-    let mut weak = SYZYGY_DRAW; weak[4] = 28; weak[5] = 6;  // Torrent (28) opposite, Fireblast moved to zone c
-    let v_strong = own_value(&strong, 0, None, Color::Blue);
-    let v_weak = own_value(&weak, 0, None, Color::Blue);
-    let expect = STRENGTH[6].max(STRENGTH[11]).max(STRENGTH[18]) - STRENGTH[28].max(STRENGTH[11]).max(STRENGTH[18]);
-    assert!((v_strong - v_weak - expect).abs() < 1e-5, "{v_strong} - {v_weak} vs {expect}");
-    assert!(v_strong - own_value(&strong, 0, None, Color::Red) > 2.5, "blue credits Fireblast's strength, red does not");
-    // Knob off: no substitution for either side.
+    // Red's Syzygy is worth the greater of itself and Fireblast across from it;
+    // blue's Syzygy has its own rating.
+    let red = own_value(&SYZYGY_DRAW, 0, None, Color::Red);
+    let blue = own_value(&SYZYGY_DRAW, 0, None, Color::Blue);
+    assert!((red - blue - (STRENGTH[6] - STRENGTH[18])).abs() < 1e-5, "{red} {blue}");
+    // Blue on Fireblast is worth only Syzygy's strength when red started in Syzygy
+    // (slot 0), and its own when red started on Grow (slot 3, zone a like Syzygy).
+    let near = own_value(&SYZYGY_DRAW, 4, Some(0), Color::Blue);
+    let far = own_value(&SYZYGY_DRAW, 4, Some(3), Color::Blue);
+    assert!((far - near - (STRENGTH[6] - STRENGTH[18])).abs() < 1e-5, "{near} {far}");
+    // Knob off: no adjustments.
     set_opening_syzygy(false);
-    let v_off = own_value(&strong, 0, None, Color::Blue);
+    let (r0, b0) = (own_value(&SYZYGY_DRAW, 0, None, Color::Red), own_value(&SYZYGY_DRAW, 4, Some(0), Color::Blue));
     set_opening_syzygy(true);
-    assert!((v_off - own_value(&strong, 0, None, Color::Red)).abs() < 1e-6, "{v_off}");
-    assert!(v_strong > v_off);
+    assert!((r0 - blue).abs() < 1e-6 && (b0 - far).abs() < 1e-6, "{r0} {b0}");
 }
 
 #[test]
@@ -4019,15 +4042,4 @@ fn opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides() {
     let off = own_value(&away, 0, None, Color::Red);
     set_opening_carnage(true);
     assert!((on - off - NEIGHBOUR_EDGE).abs() < 1e-5, "only the edge: {on} {off}");
-}
-
-#[test]
-fn opening_blue_syzygy_edges_past_the_spell_across_from_it() {
-    use crate::opening::{own_value, NEIGHBOUR_EDGE};
-    use crate::opening_data::{STRENGTH, BOARD_PREF};
-    // SYZYGY_DRAW: Fireblast across from Syzygy. Blue's Syzygy strength is Fireblast's + 0.01.
-    let blue = own_value(&SYZYGY_DRAW, 0, None, Color::Blue);
-    let red = own_value(&SYZYGY_DRAW, 0, None, Color::Red);
-    assert!((blue - red - (STRENGTH[6] + NEIGHBOUR_EDGE - STRENGTH[18])).abs() < 1e-5, "{blue} {red}");
-    let _ = BOARD_PREF;
 }
