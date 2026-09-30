@@ -2078,6 +2078,23 @@ changes in 72 and blue contests red's sigil in 224 (was 152). Tests `opening_red
 `opening_contest_credits_the_side_the_charm_is_behind`, `opening_red_takes_the_behind_node_in_a_push_corner`
 (159 pass). Arena arm `gcp/arms/opening_contest_10s.txt` (competitive, 10 s) is ready and not run.
 
+Same day, three more designer's rulings (still v19):
+
+- **A ritual has a charm on each side** -- its own corner's (touching a4) and the previous corner's, one void
+  node away (a5 -- a12 -- c7). In a ritual contest the push credit goes to the side holding the node next to a
+  push charm only when exactly one of the two charms is Slash/Charge; two cancel (`behind_node`, `side_node`;
+  part of `opening_contest`).
+- **Carnage, either colour,** is worth the strongest of itself and the sorceries on both sides of it (its own
+  corner's and the previous corner's, reached through a11), + 0.01 (`NEIGHBOUR_EDGE`). New switch
+  `opening_carnage`, arm `opening_carnage_10s.txt`. Over 500 draws, 124 hold Carnage: red's pick changes in 14 and
+  red opens on Carnage in 22 (was 8); blue's reply changes to or from Carnage in 102 of the 992 red starts.
+- **Blue's Syzygy** gets the same + 0.01 over the best of the spells across from it; the forced Syzygy reply
+  and red's veto stay as they were.
+
+Tests `opening_ritual_contest_credits_the_far_charm_and_two_push_charms_cancel`,
+`opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides`,
+`opening_blue_syzygy_edges_past_the_spell_across_from_it` (162 pass).
+
 
 ## A one-ply refutation the stream never generates (2026-09-21, room DSJZ2B)
 

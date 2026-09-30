@@ -34,7 +34,10 @@
 //!   sigil the push bonus goes to the side the charm is BEHIND: the stone on
 //!   the node touching the charm (`behind_node`), because pushing it back
 //!   drops it onto the charm, which then pushes on its owner's turn. Red,
-//!   moving first, takes that node; blue takes it when red did not. A `++`
+//!   moving first, takes that node; blue takes it when red did not. A ritual
+//!   has a charm on each side (its own corner's, and through the void node
+//!   the previous corner's): the credit goes to one side only when exactly one
+//!   of the two is a push charm -- two push charms cancel. A `++`
 //!   counter to red's spell still comes first: blue only contests (or picks
 //!   anything else) when the draw has no hard counter to red's start.
 //!
@@ -55,7 +58,14 @@
 //! * when the enemy has started on one of those exposed slots, take Syzygy,
 //!   whatever the Bradley-Terry tables say (`OpeningPick::syzygy_threat`);
 //! * for blue, Syzygy is worth the strongest of itself and the two spells
-//!   across from it, because casting it effectively grants those spells.
+//!   across from it, plus 0.01 so it wins the tie, because casting it
+//!   effectively grants those spells.
+//!
+//! **Carnage (designer's rule, 2026-09-30, switch `set_opening_carnage`).**
+//! Its four hard moves reach the 3-node sigils on both sides of it (its own
+//! corner's, and the previous corner's through the void node), so for either
+//! side Carnage is worth the strongest of itself and those two sorceries,
+//! plus 0.01.
 
 use crate::board::{Board, Color, Outcome};
 
@@ -81,9 +91,22 @@ thread_local! {
 /// `SAME_SIGIL_TEMPO_V17` and red's push credit. Default on, per thread.
 pub fn set_opening_contest(on: bool) { OPENING_CONTEST.with(|c| c.set(on)); }
 pub fn opening_contest_enabled() -> bool { OPENING_CONTEST.with(|c| c.get()) }
+thread_local! {
+    static OPENING_CARNAGE: std::cell::Cell<bool> = std::cell::Cell::new(true);
+}
+/// A/B switch for Carnage's strength substitution (the best of itself and the
+/// sorceries on both sides, + `NEIGHBOUR_EDGE`); default on, per thread.
+pub fn set_opening_carnage(on: bool) { OPENING_CARNAGE.with(|c| c.set(on)); }
+pub fn opening_carnage_enabled() -> bool { OPENING_CARNAGE.with(|c| c.get()) }
+
+/// Carnage's engine id (`spells_meta.rs`; pinned by a test).
+pub const CARNAGE: u8 = 1;
+/// What a spell that grants its neighbours (Syzygy for blue, Carnage) adds on
+/// top of the best of them, so it wins the tie.
+pub const NEIGHBOUR_EDGE: f32 = 0.01;
 use crate::opening_data::{BOARD_PREF, MATCHUP, PUSH_CHARMS, STRENGTH, SYNERGY};
 use crate::spells_meta::{CHARGE, HURRICANE, NUM_OFFICIAL_SPELLS, SEAL_OF_DESTRUCTION, SPELLS, SPLASH, SPROUT, SYZYGY};
-use crate::topology::{ADJ, SIGIL};
+use crate::topology::{ADJ, SIGIL, VOID};
 use crate::resolvers::syzygy_opposite;
 
 /// Charms whose cast moves the stone off the charm node before Syzygy can
@@ -168,8 +191,15 @@ pub fn own_value(spells: &[u8; 9], x: usize, enemy: Option<usize>, side: Color) 
     // it: casting it plays into their sigils, so it effectively grants them.
     if opening_syzygy_enabled() && side == Color::Blue && spells[x] == SYZYGY {
         if let Some((charm, sorcery)) = syzygy_opposite(x) {
-            strength = strength.max(STRENGTH[spells[charm] as usize]).max(STRENGTH[spells[sorcery] as usize]);
+            strength = strength.max(STRENGTH[spells[charm] as usize]).max(STRENGTH[spells[sorcery] as usize])
+                + NEIGHBOUR_EDGE;
         }
+    }
+    // Carnage, either side: its hard moves reach the sorceries on both sides.
+    if opening_carnage_enabled() && spells[x] == CARNAGE && role(x) == 0 {
+        let (own, prev) = (3 + zone(x), 3 + (zone(x) + 2) % 3);
+        strength = strength.max(STRENGTH[spells[own] as usize]).max(STRENGTH[spells[prev] as usize])
+            + NEIGHBOUR_EDGE;
     }
     let mut v = strength + W_BOARD_PREF * BOARD_PREF[sx] as f32 + TEMPO[role(x)]
               + colour_bonus(spells[x], side);
@@ -181,14 +211,35 @@ pub fn own_value(spells: &[u8; 9], x: usize, enemy: Option<usize>, side: Color) 
     v
 }
 
-/// The node of 3/5-node sigil `slot` that touches its corner's charm (a4 or
-/// a8 in corner a): a stone there, pushed back, lands on the charm. `None`
-/// for a charm slot.
-pub fn behind_node(slot: usize) -> Option<u8> {
+/// The node of 3/5-node sigil `slot` on the side of charm slot `charm_slot`:
+/// touching it (a4, a8 for charm a7), or for the previous corner's charm, one
+/// void node away (a5 -- a12 -- c7). `None` if neither.
+pub fn side_node(slot: usize, charm_slot: usize) -> Option<u8> {
     if role(slot) == 2 { return None; }
-    let charm = SIGIL[6 + zone(slot)].trailing_zeros() as usize;
-    let m = ADJ[charm] & SIGIL[slot];
+    let charm = SIGIL[charm_slot].trailing_zeros() as usize;
+    let mut m = ADJ[charm] & SIGIL[slot];
+    if m == 0 {
+        let mut v = ADJ[charm] & VOID;
+        while v != 0 { let i = v.trailing_zeros() as usize; v &= v - 1; m |= ADJ[i] & SIGIL[slot]; }
+    }
     (m != 0).then(|| m.trailing_zeros() as u8)
+}
+
+/// The charms on either side of 3/5-node sigil `slot`: its own corner's, and
+/// for a ritual the previous corner's (through the void node).
+fn side_charms(slot: usize) -> ([usize; 2], usize) {
+    if role(slot) == 0 { ([6 + zone(slot), 6 + (zone(slot) + 2) % 3], 2) } else { ([6 + zone(slot), 0], 1) }
+}
+
+/// The node a contested `slot`'s push charm is behind, if exactly one of the
+/// charms beside it is a push charm (Slash, Charge): holding it means a push
+/// drops you onto the charm. Two push charms cancel; none, no credit.
+pub fn behind_node(spells: &[u8; 9], slot: usize) -> Option<u8> {
+    if role(slot) == 2 { return None; }
+    let (cs, k) = side_charms(slot);
+    let push: Vec<usize> = cs[..k].iter().copied().filter(|&c| PUSH_CHARMS.contains(&spells[c])).collect();
+    if push.len() != 1 { return None; }
+    side_node(slot, push[0])
 }
 
 /// Does the corner of `slot` hold a push charm (Slash, Charge)?
@@ -197,10 +248,12 @@ fn push_corner(spells: &[u8; 9], slot: usize) -> bool { PUSH_CHARMS.contains(&sp
 /// Push leverage in a shared zone, red POV. `red_behind`: in a same-sigil
 /// contest, red's stone is on the node the charm is behind.
 fn push_term(spells: &[u8; 9], s: usize, t: usize, red_behind: bool) -> f32 {
+    if s == t && opening_contest_enabled() {
+        // Same-sigil contest: credit the side holding the node a push charm is behind.
+        return match behind_node(spells, s) { None => 0.0, Some(_) => if red_behind { PUSH } else { -PUSH } };
+    }
     if zone(s) != zone(t) || !push_corner(spells, s) { return 0.0; }
-    let charm_slot = 6 + zone(s);
-    if t == charm_slot { -PUSH }                                  // blue holds it
-    else if s == t && opening_contest_enabled() { if red_behind { PUSH } else { -PUSH } }
+    if t == 6 + zone(s) { -PUSH }            // blue holds it
     else { PUSH }                            // red holds it, or takes it first (turn 3)
 }
 
@@ -220,8 +273,8 @@ pub fn pair_value(spells: &[u8; 9], s: usize, t: usize, red_behind: bool) -> f32
 /// want it (and it is empty), otherwise every empty node of the sigil.
 fn pick_mask(b: &Board, spells: &[u8; 9], slot: usize, want_behind: bool) -> u64 {
     let all = SIGIL[slot] & b.empty();
-    if want_behind && opening_contest_enabled() && push_corner(spells, slot) {
-        if let Some(n) = behind_node(slot) {
+    if want_behind && opening_contest_enabled() {
+        if let Some(n) = behind_node(spells, slot) {
             if all & (1u64 << n) != 0 { return 1u64 << n; }
         }
     }
@@ -333,7 +386,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
             .filter(|&t| t != s && MATCHUP[spells[t] as usize][spells[s] as usize] >= 2).collect();
         let cands = if opening_contest_enabled() && !counters.is_empty() { counters } else { cands };
         // Blue minimises red's value: compare on -V so the tie-breaks favour blue's stronger spell.
-        let red_behind = behind_node(s).map_or(false, |n| red & (1u64 << n) != 0);
+        let red_behind = behind_node(spells, s).map_or(false, |n| red & (1u64 << n) != 0);
         let mut best: Option<(f32, usize)> = None;
         for &t in &cands {
             if t == s && SIGIL[s].count_ones() == 1 { continue; }

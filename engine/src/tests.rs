@@ -3944,10 +3944,14 @@ fn opening_blue_contests_the_strongest_ritual() {
 
 #[test]
 fn opening_contest_credits_the_side_the_charm_is_behind() {
-    use crate::opening::{behind_node, choose_opening, pair_value, PUSH};
-    let names: Vec<&str> = (0..6).map(|s| crate::topology::NAMES[behind_node(s).unwrap() as usize]).collect();
+    use crate::opening::{behind_node, choose_opening, pair_value, side_node, PUSH};
+    let names: Vec<&str> = (0..6).map(|s| crate::topology::NAMES[side_node(s, 6 + s % 3).unwrap() as usize]).collect();
     assert_eq!(names, ["a4", "b4", "c4", "a8", "b8", "c8"]);
-    assert_eq!(behind_node(6), None);
+    // The previous corner's charm, through the void node: a5 -- a12 -- c7 and rotations.
+    let far: Vec<&str> = (0..3).map(|s| crate::topology::NAMES[side_node(s, 6 + (s + 2) % 3).unwrap() as usize]).collect();
+    assert_eq!(far, ["a5", "b5", "c5"]);
+    assert_eq!(side_node(6, 6), None);
+    assert_eq!(behind_node(&[15u8, 0, 27, 5, 28, 19, 11, 38, 14], 0), Some(n("a4") as u8));
     // Slash (11) behind ritual a: the contest swings by two pushes on who holds a4.
     let draw = [15u8, 0, 27, 5, 28, 19, 11, 38, 14];
     let red_behind = pair_value(&draw, 0, 0, true);
@@ -3969,11 +3973,61 @@ fn opening_red_takes_the_behind_node_in_a_push_corner() {
     for seed in 1..=200u64 {
         let b = competitive_board(Board::legal_draw(seed));
         let p = choose_opening(&b, Color::Red).expect("applies");
-        let push = [11u8, 23].contains(&b.spells[6 + p.pos % 3]);
-        if p.pos < 6 && push {
-            assert_eq!(p.node_mask, 1u64 << behind_node(p.pos).unwrap(), "seed {seed}: {p:?}");
+        if let Some(bn) = behind_node(&b.spells, p.pos) {
+            assert_eq!(p.node_mask, 1u64 << bn, "seed {seed}: {p:?}");
         } else {
             assert_eq!(p.node_mask, SIGIL[p.pos], "seed {seed}: {p:?}");
         }
     }
+}
+
+#[test]
+fn opening_ritual_contest_credits_the_far_charm_and_two_push_charms_cancel() {
+    use crate::opening::{behind_node, choose_opening, pair_value};
+    // Ritual a (Blossom) with Slash on c7, the charm on its OTHER side (a5 -- a12 -- c7),
+    // and no push charm on a7: the behind node is a5.
+    let far = [15u8, 0, 27, 5, 28, 19, 38, 14, 11];
+    assert_eq!(behind_node(&far, 0), Some(n("a5") as u8));
+    let p = choose_opening(&after_red_opening(far, "a2"), Color::Blue).expect("applies");
+    assert_eq!(p.pos, 0, "{p:?}");
+    assert_eq!(p.node_mask, 1u64 << n("a5"), "blue contests from the Slash side: {p:?}");
+    // Charge on a7 AND Slash on c7: each side has one, no credit either way.
+    let both = [15u8, 0, 27, 5, 28, 19, 23, 14, 11];
+    assert_eq!(behind_node(&both, 0), None);
+    assert!((pair_value(&both, 0, 0, true) - pair_value(&both, 0, 0, false)).abs() < 1e-6);
+}
+
+#[test]
+fn opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides() {
+    use crate::opening::{own_value, set_opening_carnage, CARNAGE, NEIGHBOUR_EDGE};
+    use crate::opening_data::STRENGTH;
+    assert_eq!(SPELLS[CARNAGE as usize].name, "Carnage");
+    // Carnage on ritual a; Fireblast (6) on sorcery c, the previous corner's, beside it via a11.
+    let draw = [1u8, 0, 27, 5, 28, 6, 10, 38, 14];
+    for side in [Color::Red, Color::Blue] {
+        let on = own_value(&draw, 0, None, side);
+        set_opening_carnage(false);
+        let off = own_value(&draw, 0, None, side);
+        set_opening_carnage(true);
+        let want = STRENGTH[6] + NEIGHBOUR_EDGE - STRENGTH[1];
+        assert!((on - off - want).abs() < 1e-5, "{side:?}: {on} {off}");
+    }
+    // Fireblast on sorcery b (neither side of ritual a): no substitution.
+    let away = [1u8, 0, 27, 5, 6, 28, 10, 38, 14];
+    let on = own_value(&away, 0, None, Color::Red);
+    set_opening_carnage(false);
+    let off = own_value(&away, 0, None, Color::Red);
+    set_opening_carnage(true);
+    assert!((on - off - NEIGHBOUR_EDGE).abs() < 1e-5, "only the edge: {on} {off}");
+}
+
+#[test]
+fn opening_blue_syzygy_edges_past_the_spell_across_from_it() {
+    use crate::opening::{own_value, NEIGHBOUR_EDGE};
+    use crate::opening_data::{STRENGTH, BOARD_PREF};
+    // SYZYGY_DRAW: Fireblast across from Syzygy. Blue's Syzygy strength is Fireblast's + 0.01.
+    let blue = own_value(&SYZYGY_DRAW, 0, None, Color::Blue);
+    let red = own_value(&SYZYGY_DRAW, 0, None, Color::Red);
+    assert!((blue - red - (STRENGTH[6] + NEIGHBOUR_EDGE - STRENGTH[18])).abs() < 1e-5, "{blue} {red}");
+    let _ = BOARD_PREF;
 }

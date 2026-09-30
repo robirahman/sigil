@@ -80,6 +80,9 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # (opening::set_opening_contest: free ritual contests, push credit to the
          # side the charm is behind, blue's ++ counter first), 1/0; competitive only.
          'opening_contest',
+         # opening_carnage: Carnage worth the best of itself and the sorceries on
+         # both sides of it, +0.01, for either colour (opening::set_opening_carnage), 1/0.
+         'opening_carnage',
          # outcome_order_v2: score a cast's resolutions by what the placed
          # stones achieve (turn_iter::set_outcome_order_v2), 1/0 per move.
          'outcome_order_v2',
@@ -155,6 +158,8 @@ def play(b, ms, ev, hist, knob, val):
         se.set_opening_syzygy(bool(val))
     if knob == 'opening_contest':
         se.set_opening_contest(bool(val))
+    if knob == 'opening_carnage':
+        se.set_opening_carnage(bool(val))
     if knob == 'outcome_order_v2':
         se.set_outcome_order_v2(bool(val))
     if knob == 'swing_prepass':
@@ -210,7 +215,7 @@ def play(b, ms, ev, hist, knob, val):
 # harness board starts at 0 and `play_best` increments AFTER the move, so it
 # must start at 1 or red gets a SECOND free blink at counter 2.
 VARIANT = os.environ.get('SIGIL_VARIANT', 'standard')
-if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_syzygy', 'opening_contest'):
+if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_syzygy', 'opening_contest', 'opening_carnage'):
     sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
 # SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
 # (the seed is stepped deterministically until its draw does), so a knob that
