@@ -3349,10 +3349,10 @@ const SYZYGY_DRAW: [u8; 9] = [18, 0, 27, 5, 6, 28, 10, 11, 26];
 #[test]
 fn opening_never_starts_opposite_syzygy() {
     use crate::opening::{choose_opening, set_opening_syzygy, opening_syzygy_enabled, syzygy_exposed,
-                         SYZYGY_ALWAYS_EXPOSED, SYZYGY_AUTUMN_EXPOSED};
+                         SYZYGY_ALWAYS_EXPOSED, SYZYGY_WINTER_EXPOSED};
     assert!(opening_syzygy_enabled(), "the Syzygy rules ship ON");
     // Every official charm is in exactly one list.
-    for c in CHARMS { assert!(SYZYGY_ALWAYS_EXPOSED.contains(&c) ^ SYZYGY_AUTUMN_EXPOSED.contains(&c), "charm {c}"); }
+    for c in CHARMS { assert!(SYZYGY_ALWAYS_EXPOSED.contains(&c) ^ SYZYGY_WINTER_EXPOSED.contains(&c), "charm {c}"); }
     assert!(syzygy_exposed(&SYZYGY_DRAW, 4, false) && syzygy_exposed(&SYZYGY_DRAW, 7, false), "Fireblast; Slash always");
     assert!(!syzygy_exposed(&SYZYGY_DRAW, 3, true) && !syzygy_exposed(&SYZYGY_DRAW, 6, true) && !syzygy_exposed(&SYZYGY_DRAW, 0, true));
     // Red: Fireblast is the strongest spell drawn, but it is opposite Syzygy.
@@ -3360,15 +3360,15 @@ fn opening_never_starts_opposite_syzygy() {
     let p = choose_opening(&b, Color::Red).expect("applies");
     assert!(p.pos != 4 && p.pos != 7, "red must not start opposite Syzygy: {p:?}");
     assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "both exposed slots vetoed: {p:?}");
-    // Sprout opposite (Slash moved to a7): exposed only with Seal of Autumn near Syzygy.
+    // Sprout opposite (Slash moved to a7): exposed only with Seal of Winter near Syzygy.
     let mut sprout = SYZYGY_DRAW; sprout[7] = 10; sprout[6] = 11;
     assert!(!syzygy_exposed(&sprout, 7, false) && syzygy_exposed(&sprout, 7, true));
     let ps = choose_opening(&competitive_board(sprout), Color::Red).expect("applies");
     assert_eq!(ps.vetoed & (1 << 7), 0, "no seal, no veto on Sprout: {ps:?}");
-    // Seal of Autumn on a7, which touches Syzygy's a4: now Sprout is vetoed too.
-    let mut autumn = sprout; autumn[6] = 32;
-    let pa = choose_opening(&competitive_board(autumn), Color::Red).expect("applies");
-    assert_ne!(pa.vetoed & (1 << 7), 0, "Autumn next to Syzygy exposes Sprout: {pa:?}");
+    // Seal of Winter on a7, which touches Syzygy's a4: now Sprout is vetoed too.
+    let mut winter = sprout; winter[6] = 38;
+    let pa = choose_opening(&competitive_board(winter), Color::Red).expect("applies");
+    assert_ne!(pa.vetoed & (1 << 7), 0, "Winter next to Syzygy exposes Sprout: {pa:?}");
     // Knob off: the v16 selector takes Fireblast.
     set_opening_syzygy(false);
     let p0 = choose_opening(&b, Color::Red).expect("applies");
@@ -3396,13 +3396,13 @@ fn opening_blue_takes_syzygy_against_an_exposed_start() {
     let mut seal = SYZYGY_DRAW; seal[7] = 38; seal[8] = 11;
     let pw = choose_opening(&after_red_opening_slot(seal, 7), Color::Blue).expect("applies");
     assert!(pw.syzygy_threat, "{pw:?}");
-    // Charge there: not a target without Seal of Autumn near Syzygy...
+    // Charge there: not a target without Seal of Winter near Syzygy...
     let mut charge = SYZYGY_DRAW; charge[7] = 23; charge[6] = 11;
     let pc = choose_opening(&after_red_opening_slot(charge, 7), Color::Blue).expect("applies");
     assert!(!pc.syzygy_threat, "Charge gets away: {pc:?}");
     // ...but with the seal on a7 blue takes Syzygy on a4, the node next to it.
-    let mut autumn = charge; autumn[6] = 32;
-    let pa = choose_opening(&after_red_opening_slot(autumn, 7), Color::Blue).expect("applies");
+    let mut winter = charge; winter[6] = 38;
+    let pa = choose_opening(&after_red_opening_slot(winter, 7), Color::Blue).expect("applies");
     assert!(pa.syzygy_threat && pa.spell == 18, "{pa:?}");
     assert_eq!(pa.node_mask, 1u64 << n("a4"), "{pa:?}");
     // Red elsewhere: not forced.
@@ -3429,13 +3429,13 @@ fn opening_blue_avoids_the_syzygy_targets_only_when_red_is_near_syzygy() {
         assert!(p.pos != 4 && p.pos != 7, "red on {node}: {p:?}");
         assert_eq!(p.vetoed & (1 << 4 | 1 << 7), 1 << 4 | 1 << 7, "red on {node}: {p:?}");
     }
-    // Sprout opposite, Seal of Autumn on a7 (the charm touching Syzygy): Sprout is a
+    // Sprout opposite, Seal of Winter on a7 (the charm touching Syzygy): Sprout is a
     // target for blue too, although red's a2 is not next to the seal.
-    let mut autumn = SYZYGY_DRAW; autumn[7] = 10; autumn[6] = 32; autumn[8] = 11;
-    let pa = choose_opening(&after_red_opening(autumn, "a2"), Color::Blue).expect("applies");
+    let mut winter = SYZYGY_DRAW; winter[7] = 10; winter[6] = 38; winter[8] = 11;
+    let pa = choose_opening(&after_red_opening(winter, "a2"), Color::Blue).expect("applies");
     assert_ne!(pa.vetoed & (1 << 7), 0, "{pa:?}");
-    // Seal of Autumn elsewhere (c7, not touching Syzygy): Sprout is an ordinary spell.
-    let mut away = SYZYGY_DRAW; away[7] = 10; away[8] = 32; away[6] = 11;
+    // Seal of Winter elsewhere (c7, not touching Syzygy): Sprout is an ordinary spell.
+    let mut away = SYZYGY_DRAW; away[7] = 10; away[8] = 38; away[6] = 11;
     let pw = choose_opening(&after_red_opening(away, "a2"), Color::Blue).expect("applies");
     assert_eq!(pw.vetoed & (1 << 7), 0, "{pw:?}");
 }

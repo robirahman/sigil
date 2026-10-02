@@ -21,10 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-02: engine v21 (cache v56) -- Seal of Winter, not Autumn.** The conditional Syzygy charm targets
+(Splash, Charge, Lurk, Azimuth, Sprout, Comet) depend on Seal of Winter being the charm touching Syzygy: Winter
+forbids casting 1-node spells, so the charm cannot be cast to move its stone out. v20 used Seal of Autumn by
+mistake. Tests 162/162, `wasm-smoke.js` green.
+
 **2026-09-30: engine v20 (cache v53) -- Syzygy rules revised.** Charm targets: Slash, Surge, Gust, static seals
-always; Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of Autumn is the charm touching Syzygy. Blue avoids and
+always; Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of Autumn (Winter from v21) is the charm touching Syzygy. Blue avoids and
 devalues the targets only when red started in or next to Syzygy; blue's Syzygy rating is plain (forced reply
-unchanged, now also against the Autumn-exposed charms); red's Syzygy is worth the greater of itself and the
+unchanged, now also against the seal-exposed charms); red's Syzygy is worth the greater of itself and the
 sorcery across. Not arena-tested (designer's call). Tests 162/162, `wasm-smoke.js` green. FINDINGS "the Syzygy rules revised".
 
 **2026-09-30: engine v19 (cache v52) -- competitive opening selector on the 2026-09-29 survey, contest rules.**
