@@ -77,25 +77,35 @@
 			_write([]);
 		},
 
+		/** True if a guest game (played while not signed in) is queued. */
+		hasGuestGames() {
+			return _read().some((it) => it.guest);
+		},
+
 		/**
 		 * Try to upload everything in the queue.
 		 *
 		 * @param {firebase.database.Database} db
 		 * @param {function} processEloFn - processEloClientSide
+		 * @param {object} [opts]
+		 * @param {boolean} [opts.guestOnly] - upload only guest games (played
+		 *   while not signed in: unrated, no Elo). Used under an anonymous
+		 *   session, which cannot write a signed-in player's rating.
 		 * @returns {Promise<{uploaded, failed, results}>}
 		 */
-		flushAll(db, processEloFn) {
+		flushAll(db, processEloFn, opts) {
+			const guestOnly = !!(opts && opts.guestOnly);
 			const link = _flushChain.then(
-				() => _doFlush(db, processEloFn),
-				() => _doFlush(db, processEloFn),
+				() => _doFlush(db, processEloFn, guestOnly),
+				() => _doFlush(db, processEloFn, guestOnly),
 			);
 			_flushChain = link.catch(() => {});
 			return link;
 		},
 	};
 
-	async function _doFlush(db, processEloFn) {
-		const items = _read();
+	async function _doFlush(db, processEloFn, guestOnly) {
+		const items = _read().filter((it) => !guestOnly || it.guest);
 		if (items.length === 0) {
 			return { uploaded: 0, failed: 0, results: [] };
 		}
@@ -186,10 +196,22 @@
 			if (typeof processEloClientSide !== 'function') return;
 			if (OfflineGameQueue.count() === 0) return;
 			const user = firebase.auth().currentUser;
-			if (!user || user.isAnonymous) return;
+			// Signed out: guest games (played while not signed in) still upload,
+			// under an anonymous session -- the database only requires a
+			// signed-in writer. Rated games wait for the player to sign in.
+			let guestOnly = false;
+			if (!user || user.isAnonymous) {
+				if (!OfflineGameQueue.hasGuestGames()) return;
+				if (!user) {
+					// onAuthStateChanged re-runs _attempt once this lands.
+					try { await firebase.auth().signInAnonymously(); } catch (e) { /* offline */ }
+					return;
+				}
+				guestOnly = true;
+			}
 			try {
 				const db = firebase.database();
-				const result = await OfflineGameQueue.flushAll(db, processEloClientSide);
+				const result = await OfflineGameQueue.flushAll(db, processEloClientSide, { guestOnly });
 				if (onFlush && (result.uploaded > 0 || result.failed > 0)) {
 					try { onFlush(result); } catch (e) { /* swallow */ }
 				}
