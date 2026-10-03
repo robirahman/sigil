@@ -2010,14 +2010,21 @@ document.addEventListener('alpine:init', () => {
 						});
 					}
 
-					if (!_aiAuthManager || !_aiAuthManager.isAuthenticated) {
+					// Not signed in: the game is still recorded (unrated, no Elo) as a
+					// GUEST game, written under an anonymous Firebase session -- the
+					// database only requires a signed-in writer.
+					const guest = !_aiAuthManager || !_aiAuthManager.isAuthenticated;
+					if (guest) {
 						_this.messageHistory.push('Sign in to track your rating.');
-						return;
+						if (!_aiAuthManager) return;     // no Firebase on this page
 					}
 
 					if (typeof processEloClientSide !== 'function' || typeof OfflineGameQueue === 'undefined') {
-						_this.messageHistory.push('Rating update unavailable.');
+						if (!guest) _this.messageHistory.push('Rating update unavailable.');
 						return;
+					}
+					if (guest && !_aiAuthManager.currentUser && navigator.onLine !== false) {
+						try { await _aiAuthManager.signInAnonymously(); } catch (e) { /* queued; retried later */ }
 					}
 
 					// Unrated spell sets: the unofficial Panda expansion and the
@@ -2028,11 +2035,15 @@ document.addEventListener('alpine:init', () => {
 					try {
 						const db = firebase.database();
 						const aiUid = '__ai_' + difficulty + '__';
-						const humanUid = _aiAuthManager.uid;
+						// A guest is identified by their anonymous session's uid (stable
+						// per browser), or 'guest' if offline before one existed.
+						const humanUid = guest
+							? ((_aiAuthManager.currentUser && _aiAuthManager.currentUser.uid) || 'guest')
+							: _aiAuthManager.uid;
 
 						// Try to bootstrap the human's profile, but don't block on it —
 						// if we're offline, the queue will retry later.
-						if (navigator.onLine !== false) {
+						if (!guest && navigator.onLine !== false) {
 							try { await _aiAuthManager.ensureUserProfile(db); } catch (e) { /* offline; flush later */ }
 						}
 
@@ -2047,7 +2058,7 @@ document.addEventListener('alpine:init', () => {
 						const finalSfnForRecord = (_engineRef && _engineRef.board)
 							? boardToSfn(_engineRef.board) : null;
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
-						const humanName = aiLabel || _aiAuthManager.displayName || 'You';
+						const humanName = guest ? 'Guest' : (aiLabel || _aiAuthManager.displayName || 'You');
 						const aiName = _aiNameFor(difficulty);
 						// Variant the engine actually played under (read from the
 						// live board so we don't drift from the URL query param
@@ -2057,7 +2068,7 @@ document.addEventListener('alpine:init', () => {
 						const _isDuplicates = variantHasDuplicates(recordVariant);
 						const _isScramble = variantHasScramble(recordVariant);
 						const _isPentagon = variantHasPentagon(recordVariant);
-						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
+						const _unrated = guest || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2097,6 +2108,7 @@ document.addEventListener('alpine:init', () => {
 							timeControl: (typeof GameClock !== 'undefined') ? GameClock.toTimeControl(clockOpt) : { type: 'none' },
 							endReason: _this._lastEndReason || 'play',
 						};
+						if (guest) gameRecord.guest = true;
 
 						// Attach any annotations the human made during the game.
 						if (_this.annotations && Object.keys(_this.annotations).length > 0) {
@@ -2116,9 +2128,12 @@ document.addEventListener('alpine:init', () => {
 							aiUid: aiUid,
 							aiName: aiName,
 							difficulty: difficulty,
+							guest: guest,
 						});
 
-						if (_isDeathmatch) {
+						if (guest) {
+							// "Sign in to track your rating." already said it.
+						} else if (_isDeathmatch) {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
 						} else if (_isScramble) {
 							_this.messageHistory.push('Unrated: Scramble games do not affect rating.');
@@ -2130,11 +2145,16 @@ document.addEventListener('alpine:init', () => {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 
-						const flushResult = await OfflineGameQueue.flushAll(db, processEloClientSide);
+						// A guest's anonymous session cannot write anyone's rating, so it
+						// uploads guest games only; rated games wait for a sign-in.
+						if (guest && !_aiAuthManager.currentUser) return;   // offline: stays queued
+						const flushResult = await OfflineGameQueue.flushAll(db, processEloClientSide, { guestOnly: guest });
 						const mine = flushResult.results.find((r) => r.id === queuedId);
 						const stillQueued = OfflineGameQueue.peek().some((it) => it.id === queuedId);
 						if (stillQueued) {
-							if (navigator.onLine === false) {
+							if (guest) {
+								// Retried automatically on the next visit or reconnect.
+							} else if (navigator.onLine === false) {
 								_this.messageHistory.push('Offline — game saved. Rating will sync when you reconnect.');
 							} else {
 								_this.messageHistory.push('Upload failed; will retry automatically.');
