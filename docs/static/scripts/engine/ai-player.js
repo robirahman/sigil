@@ -576,7 +576,11 @@ async function applyAITurn(board, turn, color, emit) {
 
 		else if (action.type === 'avalanche') {
 			// Experimental Avalanche: every recorded push resolves at once.
+			// Show the planned pushes as arrows first, like a human caster's.
 			if (action.pushes && action.pushes.length) {
+				emit({ type: 'push_arrows', arrows: action.pushes.map(p => ({ from: p.from, to: p.to })) });
+				await _aiDelay(1000);
+				emit({ type: 'push_arrows', arrows: [] });
 				const before = Object.assign({}, board.stones);
 				const { final, lost } = resolveAvalanche(before, action.pushes);
 				Object.assign(board.stones, final);

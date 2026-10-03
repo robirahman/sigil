@@ -168,56 +168,263 @@ def resolve_avalanche(stones, pushes):
     return final, lost
 
 
-def _avalanche_score(stones, pushes, color):
-    _, lost = resolve_avalanche(stones, pushes)
-    return sum(1 if c != color else -1 for _, c in lost)
+class AvalancheVariantUnavailable(Exception):
+    """An 'avalanche_variant' override asked for more distinct optimal
+    outcomes than the position has. The exhaustive enumerators wrap casts in
+    try/except-continue, so the surplus variant just disappears."""
 
 
-def avalanche_greedy_pushes(stones, color, override_pushes=None):
-    """Pick Avalanche destinations maximizing enemy losses minus own losses.
+_AVALANCHE_MEMO = {}
+_AVALANCHE_MEMO_MAX = 256
 
-    Exhaustive (itertools.product order, first maximum wins) when the option
-    product is at most 4096; otherwise a sequential pick in NODE_ORDER
-    followed by one improvement pass. `override_pushes` pins valid
-    {'from', 'to'} choices. Mirrors avalancheGreedyPushes in constants.js.
-    """
-    sources = avalanche_sources(stones, color)
+
+def _avalanche_pinned(sources, override_pushes):
     pinned = {}
     for ovr in override_pushes or []:
         src, dst = ovr.get('from'), ovr.get('to')
         if src in sources and dst in ADJACENCY[src] and src not in pinned:
             pinned[src] = dst
-    options = [[pinned[s]] if s in pinned else list(ADJACENCY[s]) for s in sources]
-    if not sources:
-        return []
-    total = 1
-    for opts in options:
-        total *= len(opts)
-    if total <= 4096:
-        best, best_score = None, None
-        for combo in itertools.product(*options):
-            pushes = [{'from': s, 'to': d} for s, d in zip(sources, combo)]
-            score = _avalanche_score(stones, pushes, color)
-            if best_score is None or score > best_score:
-                best, best_score = pushes, score
+    return pinned
+
+
+def _avalanche_order(comp, opts):
+    """Deterministic variable order keeping the DP frontier narrow: BFS over
+    interacting sources (shared destination or adjacency), seeded and
+    tie-broken by NODE_ORDER (`comp` arrives in NODE_ORDER)."""
+    touches = {src: set(opts[src]) | {src} for src in comp}
+    order, seen = [], set()
+    for root in comp:
+        if root in seen:
+            continue
+        seen.add(root)
+        queue = [root]
+        while queue:
+            cur = queue.pop(0)
+            order.append(cur)
+            for nb in comp:
+                if nb not in seen and touches[cur] & touches[nb]:
+                    seen.add(nb)
+                    queue.append(nb)
+    return order
+
+
+def _avalanche_component(stones, color, comp, opts, src_set, limit):
+    """Exact max-net search over one interaction component.
+
+    Returns (best_net, [dest dict, ...]): one assignment per distinct
+    resolved outcome, each the first optimal assignment reaching it in
+    canonical order (sources in _avalanche_order, options in ADJACENCY
+    order), at most `limit` of them (None = all).
+
+    Net = sources destroyed + stationary enemy stones hit - own stones hit,
+    accrued per arrival: into a wall +1; the first arrival on a stationary
+    enemy / own stone +1 / -1; the second arrival anywhere +2 (both die),
+    each later one +1. A lone arrival on a pushed-away node dies only in a
+    swap, settled when the node closes. Sources are assigned in
+    _avalanche_order and a node "closes" once every source that can touch it is
+    assigned, so the open-node state is a small frontier: dp(i, frontier)
+    memoizes the best completion (dynamic programming over the frontier),
+    and the tie walk uses it as an exact bound, visiting only optimal paths.
+    """
+    enemy = 'blue' if color == 'red' else 'red'
+    kind = {}
+    for src in comp:
+        for d in opts[src] + [src]:
+            if d in src_set:
+                kind[d] = 'mover'
+            elif stones[d] == DESTROYED:
+                kind[d] = 'wall'
+            elif stones[d] == enemy:
+                kind[d] = 'enemy'
+            elif stones[d] == color:
+                kind[d] = 'own'
+            else:
+                kind[d] = 'empty'
+    in_comp = set(comp)
+    seq = _avalanche_order(comp, opts)
+    # close_at[d]: index of the last source whose choice can affect d.
+    close_at = {}
+    for i, src in enumerate(seq):
+        for d in opts[src]:
+            close_at[d] = i
+        close_at[src] = max(close_at.get(src, i), i)
+    closing = [[] for _ in seq]
+    for d, i in close_at.items():
+        if kind[d] == 'mover' and d in in_comp:
+            closing[i].append(d)
+    first_hit = {'enemy': 1, 'own': -1}
+
+    def step(frontier, i, d):
+        """Assign seq[i] -> d on `frontier` ({node: (count, arriver, dest)}).
+        Returns (gain, new frontier key)."""
+        src = seq[i]
+        f = dict(frontier)
+        kd = kind[d]
+        gain = 0
+        if kd == 'wall':
+            gain = 1
+        else:
+            cnt, arriver, dst = f.get(d, (0, None, None))
+            if cnt == 0:
+                gain = first_hit.get(kd, 0)
+                f[d] = (1, src, dst)
+            else:
+                gain = 2 if cnt == 1 else 1
+                f[d] = (2, None, dst)
+        if src in close_at and kind.get(src) == 'mover':
+            cnt, arriver, _ = f.get(src, (0, None, None))
+            f[src] = (cnt, arriver, d)
+        for node in closing[i]:
+            cnt, arriver, dst = f.pop(node, (0, None, None))
+            if cnt == 1 and dst == arriver:
+                gain += 1        # swap: the lone arrival here dies
+        for node in [n for n in f if close_at[n] <= i]:
+            del f[node]
+        return gain, tuple(sorted(f.items()))
+
+    memo = {}
+
+    def dp(i, key):
+        if i == len(seq):
+            return 0
+        hit = memo.get((i, key))
+        if hit is not None:
+            return hit
+        frontier = dict(key)
+        best = None
+        for d in opts[seq[i]]:
+            gain, nkey = step(frontier, i, d)
+            val = gain + dp(i + 1, nkey)
+            if best is None or val > best:
+                best = val
+        memo[(i, key)] = best
         return best
-    chosen = []
-    for s, opts in zip(sources, options):
-        best_d, best_score = None, None
-        for d in opts:
-            score = _avalanche_score(stones, chosen + [{'from': s, 'to': d}], color)
-            if best_score is None or score > best_score:
-                best_d, best_score = d, score
-        chosen.append({'from': s, 'to': best_d})
-    for i, (s, opts) in enumerate(zip(sources, options)):
-        best_d, best_score = None, None
-        for d in opts:
-            trial = chosen[:i] + [{'from': s, 'to': d}] + chosen[i + 1:]
-            score = _avalanche_score(stones, trial, color)
-            if best_score is None or score > best_score:
-                best_d, best_score = d, score
-        chosen[i] = {'from': s, 'to': best_d}
-    return chosen
+
+    best = dp(0, ())
+    dest = {}
+    out, keys = [], set()
+
+    def outcome_key():
+        # Key over every node the component can touch (not just this
+        # assignment's destinations): landing on a stationary enemy stone
+        # leaves an enemy stone there either way, so C->B vs C->D can be
+        # the same board.
+        arrivals = {}
+        for src in seq:
+            arrivals.setdefault(dest[src], []).append(src)
+        vals = {d: (None if d in src_set else stones[d]) for d in kind}
+        for d, srcs in arrivals.items():
+            if kind[d] == 'wall':
+                vals[d] = DESTROYED
+            elif len(srcs) >= 2 or (kind[d] == 'mover' and dest.get(d) == srcs[0]):
+                vals[d] = None
+            else:
+                vals[d] = enemy
+        return tuple(sorted(vals.items()))
+
+    def walk(i, key, acc):
+        if limit is not None and len(out) >= limit:
+            return
+        if i == len(seq):
+            k = outcome_key()
+            if k not in keys:
+                keys.add(k)
+                out.append(dict(dest))
+            return
+        frontier = dict(key)
+        for d in opts[seq[i]]:
+            gain, nkey = step(frontier, i, d)
+            if acc + gain + dp(i + 1, nkey) == best:
+                dest[seq[i]] = d
+                walk(i + 1, nkey, acc + gain)
+                del dest[seq[i]]
+
+    walk(0, (), 0)
+    return best, out
+
+
+def _avalanche_solve(stones, color, pinned, limit):
+    sources = avalanche_sources(stones, color)
+    src_set = set(sources)
+    opts = {s: [pinned[s]] if s in pinned else list(ADJACENCY[s]) for s in sources}
+    parent = {s: s for s in sources}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    by_dest = {}
+    for s in sources:
+        for d in opts[s]:
+            by_dest.setdefault(d, []).append(s)
+    for ss in by_dest.values():
+        for t in ss[1:]:
+            union(ss[0], t)
+    for s in sources:
+        for d in opts[s]:
+            if d in src_set and s in opts[d]:
+                union(s, d)
+    comps, index = [], {}
+    for s in sources:
+        r = find(s)
+        if r not in index:
+            index[r] = len(comps)
+            comps.append([])
+        comps[index[r]].append(s)
+    total, per_comp = 0, []
+    for comp in comps:
+        net, assigns = _avalanche_component(stones, color, comp, opts, src_set, limit)
+        total += net
+        per_comp.append(assigns)
+    return sources, total, per_comp
+
+
+def avalanche_optimal_pushes(stones, color, override_pushes=None, limit=None):
+    """Every Avalanche push set with the maximum net gain (enemy stones
+    destroyed minus own stones destroyed), one per distinct resolved board.
+
+    Returns (best_net, [pushes, ...]) in canonical order (first = greedy).
+    Exact: sources split into independent interaction components (shared
+    destination or possible swap), each solved by dynamic programming over
+    a narrow frontier (see _avalanche_component), which also walks the tied
+    optima; component optima multiply lazily, stopping at `limit`.
+    Components touch disjoint nodes, so per-component outcome dedupe makes
+    every combination a different board. `override_pushes` pins valid
+    {'from', 'to'} choices. Mirrors avalancheOptimalPushes in constants.js.
+    """
+    sources = avalanche_sources(stones, color)
+    pinned = _avalanche_pinned(sources, override_pushes)
+    # Memo per position; a solve with a larger limit serves smaller ones
+    # (the outcome lists are prefix-consistent).
+    key = (tuple(stones[n] for n in NODE_ORDER), color, tuple(sorted(pinned.items())))
+    hit = _AVALANCHE_MEMO.get(key)
+    if hit is None or not (hit[0] is None or (limit is not None and hit[0] >= limit)):
+        if len(_AVALANCHE_MEMO) >= _AVALANCHE_MEMO_MAX:
+            _AVALANCHE_MEMO.clear()
+        hit = _AVALANCHE_MEMO[key] = (limit, _avalanche_solve(stones, color, pinned, limit))
+    sources, best, per_comp = hit[1]
+    out = []
+    for combo in itertools.product(*per_comp):
+        merged = {}
+        for a in combo:
+            merged.update(a)
+        out.append([{'from': s, 'to': merged[s]} for s in sources])
+        if limit is not None and len(out) >= limit:
+            break
+    return best, out
+
+
+def avalanche_greedy_pushes(stones, color, override_pushes=None):
+    """The canonical first max-net Avalanche push set (see
+    avalanche_optimal_pushes). Mirrors avalancheGreedyPushes in constants.js."""
+    return avalanche_optimal_pushes(stones, color, override_pushes, limit=1)[1][0]
 
 
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
@@ -1641,8 +1848,21 @@ class SimBoard:
         elif resolve_type == 'avalanche':
             # Every push is chosen first, then all resolve at once, with one
             # update() at the end (no mid-resolution stone-count checks).
-            pushes = avalanche_greedy_pushes(self.stones, color,
-                                             overrides.get('avalanche_pushes'))
+            # 'avalanche_variant' i > 0 (exhaustive enumerator) picks the
+            # i-th distinct max-net outcome on this post-cast board.
+            variant = overrides.get('avalanche_variant') or 0
+            if variant:
+                # One generous solve serves the enumerator's whole run of
+                # variants through the memo.
+                _, options = avalanche_optimal_pushes(
+                    self.stones, color, overrides.get('avalanche_pushes'),
+                    limit=max(16, variant + 1))
+                if variant >= len(options):
+                    raise AvalancheVariantUnavailable(variant)
+                pushes = options[variant]
+            else:
+                pushes = avalanche_greedy_pushes(self.stones, color,
+                                                 overrides.get('avalanche_pushes'))
             final, lost = resolve_avalanche(self.stones, pushes)
             self.stones.update(final)
             destroyed = list(dict.fromkeys(n for n, _ in lost))

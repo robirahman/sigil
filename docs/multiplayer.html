@@ -551,9 +551,10 @@
 							</div>
 					</div>
 					<!-- Visible whenever a live game is on (not only mid-own-turn): the Forfeit button must be reachable during the opponent's turn too. -->
-					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass') || (whoseTurn && !winner && !reviewMode))}">
+					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass') || actionList.includes('submit') || (whoseTurn && !winner && !reviewMode))}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
 						<button class="action-button action-button--dash" x-bind:class="{ 'is-hidden': !actionList.includes('dash') }" x-on:click="handleDash">Dash</button>
+						<button class="action-button action-button--submit" x-bind:class="{ 'is-hidden': isSpectator || !actionList.includes('submit') }" x-on:click="handleSubmit">Submit</button>
 						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
 						<!-- Concede: first click arms and asks for confirmation, second declares the game a win for the opponent. -->
 						<button class="action-button action-button--forfeit" x-bind:class="{ 'is-hidden': isSpectator || !whoseTurn || winner || reviewMode, 'action-button--forfeit-armed': forfeitArmed }" x-on:click="handleForfeit" x-text="forfeitArmed ? 'Confirm forfeit?' : 'Forfeit'">Forfeit</button>
@@ -568,6 +569,7 @@
 							<template x-for="i in perType"><div><div x-bind:style="slotStyle('sorcery', i)" class="spell spell--tooltip-anchor sorcery-spell" x-bind:class="{ [`sorcery-spell--${i}`]: true, [`spell--tooltip-anchor-sorcery${i}`]: true }"></div><picture><source type="image/webp" x-bind:srcset="getSpellImgWebp('sorcery' + i)" /><img x-bind:style="slotStyle('sorcery', i)" class="spell sorcery-spell" alt="" src="static/images/spacer.gif" x-bind:class="{ 'spell--available': actionList.includes(spellDict[`sorcery${i}`]), 'spell--blue-lock': blueLock === spellDict[`sorcery${i}`], 'spell--red-lock': redLock === spellDict[`sorcery${i}`], 'spell--visible': spells.images[`sorcery${i}`], [`sorcery-spell--${i}`]: true }" x-bind:src="getSpellImg('sorcery' + i)" x-on:click.stop="handleSpellClick(`sorcery${i}`)" x-on:click.outside="closeSpellTooltip" x-on:mouseout="handleSpellMouseOut()" x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)" /></picture><div class="spell-spots sorcery-spell" x-bind:style="slotStyle('sorcery', i)" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div></div></template>
 						</div>
 						<div class="stone-nodes" x-cloak>
+							<svg class="push-arrows" x-ref="pushArrows" aria-hidden="true"></svg>
 							<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }" x-bind:style="scoreStyle()"></div>
 							<template x-bind:key="node" x-for="node in Object.keys(nodes)">
 								<button class="stone-node" x-bind:aria-label="node" x-bind:class="{ [`stone-node--${node}`]: true, [`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill, [`stone-node--${nodes[node]}`]: true, [`stone-node--valid-move-${validMoves[node]}`]: validMoves[node], 'stone-node--last-play': lastPlay === node && !validMoves[node], 'stone-node--refill': nodesToRefill[node] }" x-bind:id="`stone-node--${node}`" x-bind:style="nodeStyle(node)" x-on:click="handleNodeClick(node)"></button>

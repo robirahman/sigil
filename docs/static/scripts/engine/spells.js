@@ -1663,30 +1663,33 @@ const SpellResolvers = {
 
 	// --- Experimental: Avalanche (simultaneous Rock Slide) ---
 	// Every enemy stone bordering the caster (fixed at cast time) must get a
-	// destination (any neighbor, walls included); then all pushes resolve at
-	// once via resolveAvalanche (constants.js), with one update() at the end.
+	// destination (any neighbor, walls included). Each choice shows as a
+	// yellow arrow (`push_arrows` emit); clicking an arrowed stone re-aims
+	// it. Once every stone has an arrow the caster sends 'submit' and all
+	// pushes resolve at once via resolveAvalanche (constants.js), with one
+	// update() at the end.
 	async avalanche(board, color, spellName, getInput, emit) {
 		const sources = avalancheSources(board.stones, color);
 		if (!sources.length) {
 			emit({ type: 'message', message: 'No enemy stones border you.', awaiting: null });
 			return;
 		}
-		const pushes = [];
 		const assigned = {};
-		while (pushes.length < sources.length) {
+		const arrows = () => sources.filter(n => n in assigned).map(n => ({ from: n, to: assigned[n] }));
+		while (true) {
+			const remaining = sources.filter(n => !(n in assigned)).length;
 			const selectOptions = {};
-			for (const name of sources) {
-				if (!(name in assigned)) selectOptions[name] = board.stones[name];
-			}
-			const planned = pushes.map(p => p.from + '→' + p.to).join(', ');
-			const remaining = sources.length - pushes.length;
+			for (const name of sources) selectOptions[name] = board.stones[name];
 			const choice = await getInput({
 				type: 'message',
-				message: 'Choose a bordering enemy stone to push (' + remaining + ' left).'
-					+ (planned ? ' Planned: ' + planned + '.' : ''),
+				message: remaining
+					? 'Choose a bordering enemy stone to push (' + remaining + ' left).'
+					: 'Every bordering stone has a push. Submit to resolve Avalanche, or click a stone to re-aim it.',
 				awaiting: 'node',
 				moveoptions: selectOptions,
+				actionlist: remaining ? [] : ['submit'],
 			});
+			if (choice === 'submit' && !remaining) break;
 			if (!selectOptions[choice]) continue;
 
 			const destOptions = {};
@@ -1699,8 +1702,10 @@ const SpellResolvers = {
 			});
 			if (!ADJACENCY[choice].includes(dest)) continue;
 			assigned[choice] = dest;
-			pushes.push({ from: choice, to: dest });
+			emit({ type: 'push_arrows', arrows: arrows() });
 		}
+		const pushes = arrows();
+		emit({ type: 'push_arrows', arrows: [] });
 
 		const before = Object.assign({}, board.stones);
 		const { final, lost } = resolveAvalanche(before, pushes);

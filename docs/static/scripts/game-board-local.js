@@ -629,6 +629,11 @@ document.addEventListener('alpine:init', () => {
 				this.actionList = [];
 			},
 
+			handleSubmit() {
+				this.sendEvent('submit');
+				this.actionList = [];
+			},
+
 			// Two-click forfeit: the first click arms the button (it relabels to
 			// ask for confirmation), the second concedes. Arming decays on its
 			// own so a stray first click can't leave a live one-click forfeit
@@ -712,6 +717,7 @@ document.addEventListener('alpine:init', () => {
 				this.showReset = false;
 				this.validMoves = {};
 				this.pushSourceNode = '';
+				drawPushArrows(this.$refs.pushArrows, []);
 			},
 
 			handleNodeClick(node) {
@@ -1271,6 +1277,10 @@ document.addEventListener('alpine:init', () => {
 						e.preventDefault();
 						_this.handleEndTurn();
 					}
+					if (e.key === 'Enter' && _this.actionList.includes('submit')) {
+						e.preventDefault();
+						_this.handleSubmit();
+					}
 					if (e.key === 'd' && _this.actionList.includes('dash')) {
 						e.preventDefault();
 						_this.handleDash();
@@ -1320,6 +1330,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'turn_complete') {
+						drawPushArrows(_this.$refs.pushArrows, []);
 						const t = rest.turn;
 						if (puzzle && t) _puzzleOnTurn(t);
 						if (t && t.color && t.color !== _this.myColor) {
@@ -1375,6 +1386,11 @@ document.addEventListener('alpine:init', () => {
 						return;
 					}
 
+					if (type === 'push_arrows') {
+						drawPushArrows(_this.$refs.pushArrows, rest.arrows);
+						return;
+					}
+
 					if (type === 'pushingoptions') {
 						const { sourceNode, ...targets } = rest;
 						_this.pushSourceNode = sourceNode || '';
@@ -1383,6 +1399,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					if (type === 'game_over') {
+						drawPushArrows(_this.$refs.pushArrows, []);
 						if (_gameId && typeof LocalSaveStore !== 'undefined') {
 							LocalSaveStore.remove(_gameId);
 						}
@@ -1712,6 +1729,8 @@ document.addEventListener('alpine:init', () => {
 							handlePushAnimation(rest);
 						} else if (type === 'crush_animation') {
 							handleCrushAnimation(rest);
+						} else if (type === 'push_arrows') {
+							drawPushArrows(_this.$refs.pushArrows, rest.arrows);
 						} else if (type === 'message' && rest.message) {
 							_this.message = rest.message;
 							maybeSpellFx(rest.message);

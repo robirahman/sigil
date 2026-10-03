@@ -591,62 +591,231 @@ function resolveAvalanche(stones, pushes) {
 	return { final, lost };
 }
 
-function _avalancheScore(stones, pushes, color) {
-	let score = 0;
-	for (const [, c] of resolveAvalanche(stones, pushes).lost) score += c !== color ? 1 : -1;
-	return score;
-}
+// Thrown for an `avalanche_variant` override past the number of distinct
+// optimal outcomes; the exhaustive enumerators' try/catch skips it.
+class AvalancheVariantUnavailable extends Error {}
 
-// Greedy destinations: maximize enemy losses minus own losses. Exhaustive
-// (odometer, last source fastest, first maximum wins) when the option
-// product is <= 4096; otherwise a sequential pick in NODE_ORDER plus one
-// improvement pass. `overridePushes` pins valid {from, to} choices.
-function avalancheGreedyPushes(stones, color, overridePushes) {
-	const sources = avalancheSources(stones, color);
-	if (!sources.length) return [];
+const _AVALANCHE_MEMO = new Map();
+const _AVALANCHE_MEMO_MAX = 256;
+
+function _avalanchePinned(sources, overridePushes) {
 	const pinned = {};
 	for (const ovr of overridePushes || []) {
 		if (sources.includes(ovr.from) && ADJACENCY[ovr.from].includes(ovr.to) && !(ovr.from in pinned)) {
 			pinned[ovr.from] = ovr.to;
 		}
 	}
-	const options = sources.map(s => (s in pinned ? [pinned[s]] : ADJACENCY[s].slice()));
-	let total = 1;
-	for (const o of options) total *= o.length;
-	const build = idx => sources.map((s, i) => ({ from: s, to: options[i][idx[i]] }));
-	if (total <= 4096) {
-		const idx = sources.map(() => 0);
-		let best = null, bestScore = null;
-		while (true) {
-			const pushes = build(idx);
-			const score = _avalancheScore(stones, pushes, color);
-			if (bestScore === null || score > bestScore) { best = pushes; bestScore = score; }
-			let k = idx.length - 1;
-			while (k >= 0 && ++idx[k] === options[k].length) { idx[k] = 0; k--; }
-			if (k < 0) break;
+	return pinned;
+}
+
+// Deterministic variable order keeping the DP frontier narrow: BFS over
+// interacting sources, seeded and tie-broken by NODE_ORDER.
+function _avalancheOrder(comp, opts) {
+	const touches = {};
+	for (const src of comp) touches[src] = new Set([...opts[src], src]);
+	const order = [], seen = new Set();
+	for (const root of comp) {
+		if (seen.has(root)) continue;
+		seen.add(root);
+		const queue = [root];
+		while (queue.length) {
+			const cur = queue.shift();
+			order.push(cur);
+			for (const nb of comp) {
+				if (!seen.has(nb) && [...touches[cur]].some(n => touches[nb].has(n))) {
+					seen.add(nb);
+					queue.push(nb);
+				}
+			}
 		}
+	}
+	return order;
+}
+
+// Exact max-net search over one interaction component: DP over a narrow
+// frontier of open nodes, then a tie walk using the DP as an exact bound.
+// Returns [bestNet, [destMap, ...]] — one assignment per distinct resolved
+// outcome, first in canonical order, at most `limit` (null = all).
+// Mirrors _avalanche_component in simboard.py (see there for the scoring).
+function _avalancheComponent(stones, color, comp, opts, srcSet, limit) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+	const kind = {};
+	for (const src of comp) {
+		for (const d of [...opts[src], src]) {
+			if (srcSet.has(d)) kind[d] = 'mover';
+			else if (stones[d] === DESTROYED) kind[d] = 'wall';
+			else if (stones[d] === enemy) kind[d] = 'enemy';
+			else if (stones[d] === color) kind[d] = 'own';
+			else kind[d] = 'empty';
+		}
+	}
+	const inComp = new Set(comp);
+	const seq = _avalancheOrder(comp, opts);
+	const closeAt = {};
+	seq.forEach((src, i) => {
+		for (const d of opts[src]) closeAt[d] = i;
+		closeAt[src] = Math.max(src in closeAt ? closeAt[src] : i, i);
+	});
+	const closing = seq.map(() => []);
+	for (const d of Object.keys(closeAt)) {
+		if (kind[d] === 'mover' && inComp.has(d)) closing[closeAt[d]].push(d);
+	}
+	const firstHit = { enemy: 1, own: -1 };
+	const keyOf = (f) => Object.keys(f).sort().map(n => n + ':' + f[n].join(',')).join(';');
+
+	// frontier: {node: [count, arriver, dest]} (null for unknown)
+	function step(frontier, i, d) {
+		const src = seq[i];
+		const f = Object.assign({}, frontier);
+		const kd = kind[d];
+		let gain = 0;
+		if (kd === 'wall') {
+			gain = 1;
+		} else {
+			const [cnt, , dst] = f[d] || [0, null, null];
+			if (cnt === 0) {
+				gain = firstHit[kd] || 0;
+				f[d] = [1, src, dst];
+			} else {
+				gain = cnt === 1 ? 2 : 1;
+				f[d] = [2, null, dst];
+			}
+		}
+		if (src in closeAt && kind[src] === 'mover') {
+			const [cnt, arriver] = f[src] || [0, null, null];
+			f[src] = [cnt, arriver, d];
+		}
+		for (const node of closing[i]) {
+			const [cnt, arriver, dst] = f[node] || [0, null, null];
+			delete f[node];
+			if (cnt === 1 && dst === arriver) gain += 1;   // swap: the lone arrival here dies
+		}
+		for (const node of Object.keys(f)) if (closeAt[node] <= i) delete f[node];
+		return [gain, f];
+	}
+
+	const memo = new Map();
+	function dp(i, f) {
+		if (i === seq.length) return 0;
+		const mk = i + '|' + keyOf(f);
+		if (memo.has(mk)) return memo.get(mk);
+		let best = null;
+		for (const d of opts[seq[i]]) {
+			const [gain, nf] = step(f, i, d);
+			const val = gain + dp(i + 1, nf);
+			if (best === null || val > best) best = val;
+		}
+		memo.set(mk, best);
 		return best;
 	}
-	const chosen = [];
-	sources.forEach((s, i) => {
-		let bestD = null, bestScore = null;
-		for (const d of options[i]) {
-			const score = _avalancheScore(stones, chosen.concat([{ from: s, to: d }]), color);
-			if (bestScore === null || score > bestScore) { bestD = d; bestScore = score; }
+
+	const best = dp(0, {});
+	const dest = {};
+	const out = [], keys = new Set();
+	function outcomeKey() {
+		const arrivals = {};
+		for (const src of seq) (arrivals[dest[src]] = arrivals[dest[src]] || []).push(src);
+		const vals = {};
+		for (const d of Object.keys(kind)) vals[d] = srcSet.has(d) ? null : stones[d];
+		for (const d of Object.keys(arrivals)) {
+			const srcs = arrivals[d];
+			if (kind[d] === 'wall') vals[d] = DESTROYED;
+			else if (srcs.length >= 2 || (kind[d] === 'mover' && dest[d] === srcs[0])) vals[d] = null;
+			else vals[d] = enemy;
 		}
-		chosen.push({ from: s, to: bestD });
-	});
-	sources.forEach((s, i) => {
-		let bestD = null, bestScore = null;
-		for (const d of options[i]) {
-			const trial = chosen.slice();
-			trial[i] = { from: s, to: d };
-			const score = _avalancheScore(stones, trial, color);
-			if (bestScore === null || score > bestScore) { bestD = d; bestScore = score; }
+		return Object.keys(vals).sort().map(n => n + '=' + vals[n]).join(';');
+	}
+	function walk(i, f, acc) {
+		if (limit !== null && out.length >= limit) return;
+		if (i === seq.length) {
+			const k = outcomeKey();
+			if (!keys.has(k)) { keys.add(k); out.push(Object.assign({}, dest)); }
+			return;
 		}
-		chosen[i] = { from: s, to: bestD };
-	});
-	return chosen;
+		for (const d of opts[seq[i]]) {
+			const [gain, nf] = step(f, i, d);
+			if (acc + gain + dp(i + 1, nf) === best) {
+				dest[seq[i]] = d;
+				walk(i + 1, nf, acc + gain);
+				delete dest[seq[i]];
+			}
+		}
+	}
+	walk(0, {}, 0);
+	return [best, out];
+}
+
+function _avalancheSolve(stones, color, pinned, limit) {
+	const sources = avalancheSources(stones, color);
+	const srcSet = new Set(sources);
+	const opts = {};
+	for (const s of sources) opts[s] = s in pinned ? [pinned[s]] : ADJACENCY[s].slice();
+	const parent = {};
+	for (const s of sources) parent[s] = s;
+	const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+	const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+	const byDest = new Map();
+	for (const s of sources) for (const d of opts[s]) {
+		if (!byDest.has(d)) byDest.set(d, []);
+		byDest.get(d).push(s);
+	}
+	for (const ss of byDest.values()) for (const t of ss.slice(1)) union(ss[0], t);
+	for (const s of sources) for (const d of opts[s]) if (srcSet.has(d) && opts[d].includes(s)) union(s, d);
+	const comps = [], index = new Map();
+	for (const s of sources) {
+		const r = find(s);
+		if (!index.has(r)) { index.set(r, comps.length); comps.push([]); }
+		comps[index.get(r)].push(s);
+	}
+	let total = 0;
+	const perComp = [];
+	for (const comp of comps) {
+		const [net, assigns] = _avalancheComponent(stones, color, comp, opts, srcSet, limit);
+		total += net;
+		perComp.push(assigns);
+	}
+	return [sources, total, perComp];
+}
+
+// Every Avalanche push set with the maximum net gain (enemy stones destroyed
+// minus own stones destroyed), one per distinct resolved board, in canonical
+// order (first = greedy): [bestNet, [pushes, ...]]. Sources split into
+// independent interaction components, each solved exactly by DP; component
+// optima multiply lazily (last component fastest), stopping at `limit`.
+// Mirrors avalanche_optimal_pushes in simboard.py.
+function avalancheOptimalPushes(stones, color, overridePushes, limit) {
+	limit = limit === undefined ? null : limit;
+	const sources = avalancheSources(stones, color);
+	const pinned = _avalanchePinned(sources, overridePushes);
+	// Memo per position; a solve with a larger limit serves smaller ones
+	// (the outcome lists are prefix-consistent).
+	const key = NODE_ORDER.map(n => stones[n]).join(',') + '|' + color + '|'
+		+ Object.keys(pinned).sort().map(k => k + '>' + pinned[k]).join(',');
+	let hit = _AVALANCHE_MEMO.get(key);
+	if (!hit || !(hit[0] === null || (limit !== null && hit[0] >= limit))) {
+		if (_AVALANCHE_MEMO.size >= _AVALANCHE_MEMO_MAX) _AVALANCHE_MEMO.clear();
+		hit = [limit, _avalancheSolve(stones, color, pinned, limit)];
+		_AVALANCHE_MEMO.set(key, hit);
+	}
+	const [srcs, best, perComp] = hit[1];
+	const out = [];
+	if (perComp.some(c => !c.length)) return [best, out];
+	const idx = perComp.map(() => 0);
+	while (true) {
+		const merged = {};
+		perComp.forEach((c, i) => Object.assign(merged, c[idx[i]]));
+		out.push(srcs.map(s => ({ from: s, to: merged[s] })));
+		if (limit !== null && out.length >= limit) break;
+		let k = idx.length - 1;
+		while (k >= 0 && ++idx[k] === perComp[k].length) { idx[k] = 0; k--; }
+		if (k < 0) break;
+	}
+	return [best, out];
+}
+
+// The canonical first max-net push set. Mirrors avalanche_greedy_pushes.
+function avalancheGreedyPushes(stones, color, overridePushes) {
+	return avalancheOptimalPushes(stones, color, overridePushes, 1)[1][0];
 }
 
 // Game variants. Orthogonal dimensions encoded in a single string:

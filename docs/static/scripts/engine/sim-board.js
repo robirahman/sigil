@@ -762,7 +762,19 @@ class SimBoard {
 		} else if (rt === 'avalanche') {
 			// Every push is chosen first, then all resolve at once, with one
 			// update() at the end (no mid-resolution stone-count checks).
-			const pushes = avalancheGreedyPushes(this.stones, color, overrides.avalanche_pushes);
+			// `avalanche_variant` i > 0 (exhaustive enumerator) picks the i-th
+			// distinct max-net outcome on this post-cast board; one generous
+			// solve serves the whole run of variants through the memo.
+			const variant = overrides.avalanche_variant || 0;
+			let pushes;
+			if (variant) {
+				const options = avalancheOptimalPushes(this.stones, color, overrides.avalanche_pushes,
+					Math.max(16, variant + 1))[1];
+				if (variant >= options.length) throw new AvalancheVariantUnavailable(String(variant));
+				pushes = options[variant];
+			} else {
+				pushes = avalancheGreedyPushes(this.stones, color, overrides.avalanche_pushes);
+			}
 			const { final, lost } = resolveAvalanche(this.stones, pushes);
 			Object.assign(this.stones, final);
 			if (lost.length) this.crushedThisTurn = true;

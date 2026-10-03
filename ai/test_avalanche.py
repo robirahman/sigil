@@ -16,9 +16,12 @@ import os
 import random
 import subprocess
 
+import itertools
+import time
+
 from simboard import (SimBoard, Action, CompleteTurn, apply_sim_turn, CORE_SPELLS,
                       DESTROYED, avalanche_sources, avalanche_greedy_pushes,
-                      resolve_avalanche)
+                      avalanche_optimal_pushes, resolve_avalanche)
 from notation import NODE_ORDER, POSITIONS, ADJACENCY
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -145,6 +148,202 @@ def test_greedy():
     print("  PASS")
 
 
+def _brute(stones, color):
+    """Naive 3^s reference: the max net, and the distinct boards reaching it."""
+    srcs = avalanche_sources(stones, color)
+    best, boards = None, set()
+    for combo in itertools.product(*[ADJACENCY[s] for s in srcs]):
+        pushes = [{'from': s, 'to': d} for s, d in zip(srcs, combo)]
+        final, lost = resolve_avalanche(stones, pushes)
+        net = sum(1 if c != color else -1 for _, c in lost)
+        board = dict(stones)
+        board.update(final)
+        key = tuple(board[n] for n in NODE_ORDER)
+        if best is None or net > best:
+            best, boards = net, set()
+        if net == best:
+            boards.add(key)
+    return best, boards
+
+
+def _net_and_board(stones, pushes, color='red'):
+    final, lost = resolve_avalanche(stones, pushes)
+    board = dict(stones)
+    board.update(final)
+    return sum(1 if c != color else -1 for _, c in lost), tuple(board[n] for n in NODE_ORDER)
+
+
+def test_optimal_matches_brute_force():
+    print("Testing avalanche_optimal_pushes against 3^s brute force...")
+    rng = random.Random(4242)
+    checked = 0
+    while checked < 250:
+        stones = {}
+        density = rng.uniform(0.3, 0.9)
+        for node in NODE_ORDER:
+            r = rng.random()
+            stones[node] = DESTROYED if r < 0.05 else (
+                rng.choice(['red', 'blue']) if r < density else None)
+        if len(avalanche_sources(stones, 'red')) > 8:
+            continue
+        checked += 1
+        best, boards = _brute(stones, 'red')
+        got_best, options = avalanche_optimal_pushes(stones, 'red')
+        assert got_best == best, (got_best, best)
+        got = [_net_and_board(stones, p) for p in options]
+        assert all(net == best for net, _ in got)
+        got_boards = [b for _, b in got]
+        assert len(set(got_boards)) == len(got_boards), "two options give the same board"
+        assert set(got_boards) == boards, "optimal outcome set differs from brute force"
+        # The limit keeps a prefix of the full list.
+        assert avalanche_optimal_pushes(stones, 'red', limit=2)[1] == options[:2]
+    print("  PASS (%d positions)" % checked)
+
+
+def test_optimal_shapes():
+    print("Testing optimal Avalanche shapes (pair, triangle, 5-cycle, 5-chain, sinks)...")
+    # Touching pair: swap them (+2).
+    st = _empty(a9='red', a8='blue', a10='blue', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 2 and opts == [_p(('a8', 'a10'), ('a10', 'a8'))], (best, opts)
+    # Triangle a8/a9/a10, each bordering red: all three destroyed, one board.
+    st = _empty(a7='red', a13='red', b11='red', a8='blue', a9='blue', a10='blue', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 3 and len(opts) == 1, (best, opts)
+    # Odd loop: the a2-a6 ritual 5-cycle, each bordering red -> all 5 destroyed.
+    st = _empty(a1='red', a13='red', a7='red', a12='red', a11='red',
+                a2='blue', a3='blue', a4='blue', a5='blue', a6='blue', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 5 and len(opts) == 1, (best, opts)
+    # 5-chain c11-c6-c5-c4-c3: two swaps + the middle stone into either
+    # swap -> the same board, so ONE option although brute force finds
+    # several optimal push sets.
+    st = _empty(b10='red', c2='red', c12='red', c7='red', c13='red',
+                c11='blue', c6='blue', c5='blue', c4='blue', c3='blue', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 5 and len(opts) == 1, (best, opts)
+    srcs = avalanche_sources(st, 'red')
+    n_optimal = sum(1 for combo in itertools.product(*[ADJACENCY[s] for s in srcs])
+                    if _net_and_board(st, [{'from': s, 'to': d} for s, d in zip(srcs, combo)])[0] == 5)
+    assert n_optimal > 1, n_optimal
+    # Two pushes into a stationary enemy stone: +3 (beats the +2 swap).
+    st = _empty(a7='red', b11='red', a8='blue', a10='blue', a9='blue', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 3 and opts == [_p(('a8', 'a9'), ('a10', 'a9'))], (best, opts)
+    # Wall sink.
+    st = _empty(a9='red', a8='blue', a7=DESTROYED, b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 1 and opts == [_p(('a8', 'a7'))], (best, opts)
+    # Forced own loss: blue a1 only borders red a2 / red a11.
+    st = _empty(a1='blue', a2='red', a11='red', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == -1 and len(opts) == 2, (best, opts)
+    # Neutral ties are separate boards: c5 may go to c4 or c6 (not own c12).
+    st = _empty(c12='red', c5='blue', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red')
+    assert best == 0 and opts == [_p(('c5', 'c4')), _p(('c5', 'c6'))], (best, opts)
+    # Pinned override: the rest is optimized around it.
+    st = _empty(a9='red', a8='blue', a10='blue', c5='red', b4='blue')
+    best, opts = avalanche_optimal_pushes(st, 'red', _p(('a8', 'a7')))
+    assert opts[0][0] == {'from': 'a8', 'to': 'a7'} and best == 0, (best, opts)
+    print("  PASS")
+
+
+def test_optimal_timing():
+    print("Timing avalanche_optimal_pushes on dense random boards...")
+    import simboard
+    worst, total, n = 0.0, 0.0, 0
+    for stones in _random_positions(400, seed=99, dense=True):
+        simboard._AVALANCHE_MEMO.clear()
+        t0 = time.perf_counter()
+        avalanche_optimal_pushes(stones, 'red', limit=12)
+        dt = time.perf_counter() - t0
+        worst, total, n = max(worst, dt), total + dt, n + 1
+    assert worst < 0.5, worst
+    print("  PASS (mean %.2f ms, max %.2f ms)" % (1000 * total / n, 1000 * worst))
+
+
+def test_enumerator_variants():
+    print("Testing exhaustive enumeration: one turn per distinct max-net outcome...")
+    from ai.enumerator import get_legal_turns_exhaustive
+    # Ties guaranteed: c5 (bordering red c12) has two neutral destinations.
+    b = _sim(a8='red', a9='red', a10='red', b11='blue', a7='blue', b1='blue',
+             c5='blue', c12='red', a1='red')
+    turns = list(get_legal_turns_exhaustive(b, 'red', caps={}))
+    groups = {}
+    for t in turns:
+        idx = next((i for i, a in enumerate(t.actions) if a.type == 'avalanche'), None)
+        if idx is None:
+            continue
+        pre = b.copy()
+        apply_sim_turn(pre, CompleteTurn(t.actions[:idx]), 'red')
+        best, options = avalanche_optimal_pushes(pre.stones, 'red')
+        pushes = t.actions[idx].pushes
+        assert pushes in options[:12], pushes
+        net, board = _net_and_board(pre.stones, pushes)
+        assert net == best
+        prefix = repr([(a.type, a.node, a.pushed_to, a.spell, a.kept) for a in t.actions[:idx]])
+        suffix = repr([(a.type, a.node, a.sacrificed) for a in t.actions[idx + 1:]])
+        groups.setdefault((prefix, suffix), []).append(board)
+    assert groups, "no Avalanche turns"
+    for boards in groups.values():
+        assert len(set(boards)) == len(boards), "duplicate Avalanche outcomes in one branch"
+    assert any(len(v) > 1 for v in groups.values()), "tie variants never enumerated"
+    print("  PASS (%d branches, max %d variants)" % (len(groups), max(len(v) for v in groups.values())))
+
+
+def test_js_enumerator_and_timing():
+    print("Testing JS exhaustive enumeration variants + JS solve timing...")
+    dense = _random_positions(400, seed=99, dense=True)
+    js = _load_engine_js(('constants.js', 'notation.js', 'spells.js', 'moves.js',
+                          'sim-board.js', 'enumerator.js'))
+    js.append(r"""
+const SP = %s;
+const b = new SimBoard(SP);
+for (const n of NODE_ORDER) b.stones[n] = null;
+Object.assign(b.stones, { a8: 'red', a9: 'red', a10: 'red', b11: 'blue', a7: 'blue', b1: 'blue',
+                          c5: 'blue', c12: 'red', a1: 'red' });
+b.update(); b.whoseTurn = 'red';
+const turns = getLegalTurnsExhaustive(b, 'red', ENUM_CAPS);
+const groups = new Map();
+for (const t of turns) {
+  const idx = t.actions.findIndex(a => a.type === 'avalanche');
+  if (idx < 0) continue;
+  const pre = b.copy();
+  applySimTurn(pre, new SimTurn(t.actions.slice(0, idx)), 'red');
+  const [best, options] = avalancheOptimalPushes(pre.stones, 'red', null, null);
+  const pushes = t.actions[idx].pushes;
+  if (!options.slice(0, ENUM_CAPS.avalanche).some(o => JSON.stringify(o) === JSON.stringify(pushes))) throw new Error('non-optimal pushes ' + JSON.stringify(pushes));
+  const { final } = resolveAvalanche(pre.stones, pushes);
+  const board = NODE_ORDER.map(n => (n in final ? final[n] : pre.stones[n])).join(',');
+  const key = JSON.stringify(t.actions.slice(0, idx).map(a => [a.type, a.node, a.pushed_to, a.spell, a.kept]))
+    + '|' + JSON.stringify(t.actions.slice(idx + 1).map(a => [a.type, a.node, a.sacrificed]));
+  if (!groups.has(key)) groups.set(key, []);
+  groups.get(key).push(board);
+}
+let maxV = 0;
+for (const v of groups.values()) {
+  if (new Set(v).size !== v.length) throw new Error('duplicate outcomes in a branch');
+  maxV = Math.max(maxV, v.length);
+}
+const POS = %s;
+let worst = 0, total = 0;
+for (const st of POS) {
+  _AVALANCHE_MEMO.clear();
+  const t0 = process.hrtime.bigint();
+  avalancheOptimalPushes(st, 'red', null, 12);
+  const dt = Number(process.hrtime.bigint() - t0) / 1e6;
+  worst = Math.max(worst, dt); total += dt;
+}
+console.log('JS_RESULT ' + JSON.stringify({ branches: groups.size, maxV, worst, mean: total / POS.length }));
+""" % (json.dumps(SPELLS), json.dumps(dense)))
+    res = _run_node(js, 'JS_RESULT')
+    assert res['branches'] > 0 and res['maxV'] > 1, res
+    assert res['worst'] < 500, res
+    print("  PASS (%d branches, max %d variants; JS mean %.2f ms, max %.2f ms)"
+          % (res['branches'], res['maxV'], res['mean'], res['worst']))
+
+
 def test_sim_cast_and_replay():
     print("Testing SimBoard cast + replay equivalence...")
     b = _sim(a9='red', a8='blue', a10='blue', c5='red', b1='blue', a7='red')
@@ -230,12 +429,12 @@ def test_live_python_spell():
     print("  PASS")
 
 
-def _random_positions(n, seed=20260930):
+def _random_positions(n, seed=20260930, dense=False):
     rng = random.Random(seed)
     out = []
     for i in range(n):
         stones = {}
-        density = rng.uniform(0.35, 0.85)
+        density = rng.uniform(0.75, 1.0) if dense else rng.uniform(0.35, 0.85)
         for node in NODE_ORDER:
             r = rng.random()
             if r < 0.04:
@@ -269,25 +468,22 @@ def _run_node(js, marker, timeout=180):
 
 
 def test_js_parity():
-    print("Testing JS parity (random positions: greedy picks, resolution, sim cast)...")
-    positions = _random_positions(60)
+    print("Testing JS parity (random positions: optimal sets, greedy, resolution, sim cast)...")
+    positions = _random_positions(60) + _random_positions(40, seed=7, dense=True)
     py = []
-    n_fallback = 0
     for stones in positions:
-        srcs = avalanche_sources(stones, 'red')
-        total = 1
-        for s in srcs:
-            total *= len(ADJACENCY[s])
-        n_fallback += total > 4096
+        best, options = avalanche_optimal_pushes(stones, 'red', limit=12)
         pushes = avalanche_greedy_pushes(stones, 'red')
+        assert pushes == options[0]
         final, lost = resolve_avalanche(stones, pushes)
-        py.append({'pushes': pushes, 'final': final, 'lost': [list(x) for x in lost]})
-    assert n_fallback >= 3, "want some positions on the non-exhaustive path"
+        py.append({'best': best, 'options': options, 'pushes': pushes, 'final': final,
+                   'lost': [list(x) for x in lost]})
     js = _load_engine_js(('constants.js', 'notation.js', 'spells.js', 'moves.js', 'sim-board.js'))
     js.append(r"""
 const POS = %s;
 const SP = %s;
 const out = POS.map(stones => {
+  const [best, options] = avalancheOptimalPushes(stones, 'red', null, 12);
   const pushes = avalancheGreedyPushes(stones, 'red');
   const { final, lost } = resolveAvalanche(stones, pushes);
   // Same position through the SimBoard resolver + replay.
@@ -299,7 +495,7 @@ const out = POS.map(stones => {
   applySimTurn(before, new SimTurn(acts), 'red');
   for (const n of NODE_ORDER) if (before.stones[n] !== b.stones[n]) throw new Error('replay mismatch at ' + n);
   if (JSON.stringify(acts[0].pushes) !== JSON.stringify(pushes)) throw new Error('sim pushes differ');
-  return { pushes, final, lost };
+  return { best, options, pushes, final, lost };
 });
 if (!isUnratedSpell('Avalanche') || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids,Avalanche') throw new Error('pack');
 if (SPELL_TEXTS.Avalanche !== %s) throw new Error('text');
@@ -307,10 +503,9 @@ console.log('JS_RESULT ' + JSON.stringify(out));
 """ % (json.dumps(positions), json.dumps(SPELLS), json.dumps(TEXT)))
     res = _run_node(js, 'JS_RESULT')
     for i, (p, j) in enumerate(zip(py, res)):
-        assert p['pushes'] == j['pushes'], (i, p['pushes'], j['pushes'])
-        assert p['final'] == j['final'], (i, p['final'], j['final'])
-        assert p['lost'] == j['lost'], (i, p['lost'], j['lost'])
-    print("  PASS (%d positions, %d on the fallback path)" % (len(py), n_fallback))
+        for k in ('best', 'options', 'pushes', 'final', 'lost'):
+            assert p[k] == j[k], (i, k, p[k], j[k])
+    print("  PASS (%d positions)" % len(py))
 
 
 def test_js_interactive_resolver():
@@ -324,25 +519,44 @@ const SP = %s;
   for (const n of NODE_ORDER) board.stones[n] = null;
   Object.assign(board.stones, { a9: 'red', a8: 'blue', a10: 'blue', c5: 'red', b1: 'blue', a7: 'X', a4: 'red' });
   board.update();
-  // c5 (not bordering) is re-prompted; a8 -> a7 (wall), a10 -> a8.
-  const script = ['c5', 'a10', 'a8', 'a8', 'a7'];
+  // c5 (not bordering) and an early 'submit' are re-prompted; a10 -> a9,
+  // a8 -> a7 (wall); then a10 is re-aimed to a8 before submitting.
+  const script = ['c5', 'submit', 'a10', 'a9', 'a8', 'a7', 'a10', 'a8', 'submit'];
   const prompts = [];
   const events = [];
-  const getInput = async (payload) => { prompts.push(Object.keys(payload.moveoptions || {}).sort()); return script.shift(); };
-  await SpellResolvers.avalanche(board, 'red', 'Avalanche', getInput, (ev) => events.push(ev && ev.type));
+  const arrows = [];
+  const getInput = async (payload) => {
+    prompts.push({ opts: Object.keys(payload.moveoptions || {}).sort(), actions: payload.actionlist || [] });
+    return script.shift();
+  };
+  const emit = (ev) => {
+    events.push(ev && ev.type);
+    if (ev && ev.type === 'push_arrows') arrows.push(ev.arrows.map(a => a.from + '>' + a.to));
+  };
+  await SpellResolvers.avalanche(board, 'red', 'Avalanche', getInput, emit);
   const stones = {}; for (const n of ['a4', 'a7', 'a8', 'a9', 'a10']) stones[n] = board.stones[n];
-  console.log('JS_RESULT ' + JSON.stringify({ stones, prompts, left: script.length, events,
+  console.log('JS_RESULT ' + JSON.stringify({ stones, prompts, left: script.length, events, arrows,
                                               crushed: !!board.crushedThisTurn }));
 })().catch(e => { console.error(e && e.stack || e); process.exit(1); });
 """ % json.dumps(SPELLS))
     res = _run_node(js, 'JS_RESULT')
     assert res['stones'] == {'a4': 'red', 'a7': 'X', 'a8': 'blue', 'a9': 'red', 'a10': None}, res
     assert res['left'] == 0 and res['crushed'], res
-    # First pick offers both bordering stones (a7's wall never borders).
-    assert res['prompts'][0] == ['a10', 'a8'], res['prompts']
+    p = res['prompts']
+    # First pick offers both bordering stones (a7's wall never borders);
+    # Submit is withheld until every stone has an arrow.
+    assert p[0] == {'opts': ['a10', 'a8'], 'actions': []}, p[0]
+    assert p[1]['actions'] == [], p[1]
     # Destinations include the wall.
-    assert 'a7' in res['prompts'][-1], res['prompts']
-    assert 'crush_animation' in res['events'] and res['events'].count('push_animation') == 2
+    assert 'a7' in p[5]['opts'], p[5]
+    # All aimed: Submit offered, both stones still clickable for re-aiming.
+    assert p[6] == {'opts': ['a10', 'a8'], 'actions': ['submit']}, p[6]
+    assert p[-1]['actions'] == ['submit'], p[-1]
+    # Arrows grow per choice, re-aim replaces, then clear before resolving.
+    assert res['arrows'] == [['a10>a9'], ['a8>a7', 'a10>a9'], ['a8>a7', 'a10>a8'], []], res['arrows']
+    ev = res['events']
+    assert ev.index('push_animation') > max(i for i, t in enumerate(ev) if t == 'push_arrows')
+    assert 'crush_animation' in ev and ev.count('push_animation') == 2
     print("  PASS")
 
 
@@ -350,9 +564,14 @@ def main():
     test_registration()
     test_resolver_rules()
     test_greedy()
+    test_optimal_matches_brute_force()
+    test_optimal_shapes()
+    test_optimal_timing()
+    test_enumerator_variants()
     test_sim_cast_and_replay()
     test_live_python_spell()
     test_js_parity()
+    test_js_enumerator_and_timing()
     test_js_interactive_resolver()
     print("All Avalanche tests passed.")
 
