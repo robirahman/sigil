@@ -2911,3 +2911,98 @@ widen what the generator can produce, and each costs about 0.1 ply: `dash4` meas
 loses 34 Elo. The surprise audit's generator-gap class (102 of 284 falls) is real, but a blanket budget increase
 pays for it at every node; the v16 lesson repeats -- coverage has to arrive as a few targeted key moves, not as a
 wider stream. **`nmp` (3, 1)**: no difference from (2, 1); stays (2, 1).
+
+## Post-game deep review of the Rust AI's September games: backward depth-6 walk, depth-8 probes (2026-10-03)
+
+Question (Robi): analyse every game the Rust AI played in the last month the way a chess engine reviews a game --
+every position at depth 6, walking each game BACKWARDS so later positions' results are cached for earlier ones --
+find where the engine's value of its own position falls, and for each fall ask whether depth 8 picks a better
+move, or whether the engine systematically overlooks or misjudges a good move by its opponent.
+
+Data: every `completed_games` record since 2026-09-03 with a Rust tier on one side (337 games, 10,409 positions,
+all opponents human; 312 `rust_hard`). The CURRENT engine (v21 source) re-searched the recorded positions; the
+recorded moves came from whatever engine was live (227 games predate v6, 41 are v16+). 330 games walked
+backwards; the 7 longest (426 positions) did not finish an untimed walk in 2.5 h and are left out (a capped
+re-run finished, but with 125 positions at depth 4-5 its falls are not comparable). Harness
+`engine/harness/deep_review.py` (flag / probe / report) on top of `eval_games.py eval --walk backward`; VMs
+`engine/gcp/launch_deep_review.sh` (scan run `20261003T065657Z-sigil-deep-scan`, probe runs
+`20261003T0810*Z-sigil-deep-p0..p5`). Rows in `ai/data/deep_review_2026-10-03.json`, report in
+`engine/harness/reports/deep_review_2026-10-03.md`.
+
+**The backward walk does not save compute here.** New binding `SearchSession.analyze` (the `analyze` dict on a
+persistent table; first call node-identical to `analyze`). On 6 games / 151 positions at depth 5: backward on one
+table 1.00x the CPU of fresh tables (nodes 1.13x), backward with the played move searched first at the root
+(`probe_first`, new, default off in the engine) 0.88x; the median position costs 0.97-0.98x. The stored entry
+for position i+1 only covers ONE of the ~200-700 root turns of position i; the siblings are the work. What the
+walk does buy is consistency: the played move's value arrives one ply deeper, so a fall sits on the turn that
+caused it (the September scan below ran before `probe_first` existed, i.e. as `--walk backward-plain`).
+Consequences used below: across the AI's own turn a fall means the hindsight search prefers another
+move (an AI mistake); across the opponent's turn it means the opponent's actual turn was NOT searched at full
+depth at the root even with its value in the table. The depth-6 scan cost 78 CPU-hours (mean 28 s / position).
+
+Probes (fresh tables, shipped search, 30-minute cap per search): D = depth 8 at both positions of every fall
+(1,774 searches; 1,154 reached depth 8, 516 depth 7, 104 depth 6 or less under the cap), S = fresh depth 6 at
+the AI's position, alt / salt = the move D / S prefers re-searched at depth 7 from the other side, ref / gap =
+stream and ply-1 list ranks of the opponent's best (D) or actual reply. Threshold 0.75 stones (a single stone
+counts), tolerance 0.5.
+
+### Falls across the AI's own turn: 779 (16% of AI turns), 577 confirmed by depth 8
+
+| what the current engine does at the AI's position | cases | into a forced loss |
+|---|---|---|
+| confirmed; **a fresh depth-6 search already plays better** (its choice re-searched at depth 7 is > 0.75 better) | **384** | 116 |
+| confirmed; **only depth 7-8 finds the better move** (horizon) | **164** | 68 |
+| confirmed; depth 8 plays the move too (deeper than 8) | 29 | 12 |
+| not confirmed: depth 8 prefers another move by <= 0.75 | 138 | 56 |
+| not confirmed: depth 8 keeps the move | 64 | 20 |
+
+By the engine that played the game (confirmed own-turn falls per 100 AI turns; share a fresh depth 6 already
+fixes): v1-v5 12.8 (317/448 fixed), v6-v7 7.7 (12/20), v8-v10 4.5 (8/10), v11-v15 10.2 (21/38), v16-v17 9.4
+(18/37), v18-v21 10.5 (8/24). In the 41 games on v16+, the 61 confirmed falls split 26 already fixed / **28 horizon /
+7 deeper**: the September engine work removed most of the old engines' mistakes, and what is left is mostly depth.
+
+**Missed forced wins are an old-engine problem.** 78 falls start from a position where the scan proves a win;
+69 are v1-v5 games (all 16 proven wins among them), 4 v6-v7, 3 v11-v15, 2 v16-v17. A fresh depth-6 search
+finds the win in 77 of 78 (depth 8 in 72).
+
+**Overlooked or misjudged? Mostly misjudged.** For the 577 confirmed falls, the opponent's best reply to the AI's
+move (depth 8) sat in the AI's own ply-1 list with 5 plies left (a depth-6 search) at **full width in 388 (67%)**,
+in the **LMR band (searched one ply shallower) in 103 (18%)**, and **outside the list in 86 (15%)**; ordered-stream
+rank < 100 in 274, 100-999 in 241, beyond 1,000 in 14, not in the first 5,000 in 48. So in two thirds the engine
+generated and fully searched the refutation and misjudged what followed -- the one-to-two-ply horizon the
+2026-09-26 audit found, now on the current engine -- and in a sixth LMR searched exactly the refutation at reduced
+depth. The horizon class alone: full width 110 / LMR 29 / absent 25 of 164; the "deeper than 8" class is the only
+one where absent dominates (15 of 29). The reply's kind: dash+cast 171, move-only 148, dash 138, cast 72; no spell
+dominates (Fury 18, Charge 18, Slash 16, Surge 16, Gather 15, Harvest 13, Flourish 13, Azimuth 13). The human
+opponent actually played the engine's best reply in only 71 of 577 (12%).
+
+### Falls across the opponent's turn: 135 (2.7% of opponent turns), 118 confirmed
+
+| the opponent's actual turn at the root of its position | cases | depth 8 sees it |
+|---|---|---|
+| **never generated**: the dash landing is generated, never with this sacrifice pair / resolution | **49** | 18 |
+| searched at the root (the TT value did not reach the root: LMR or eviction), misjudged | 28 | 16 |
+| **never generated** by the stream at all | **27** | 12 |
+| in the stream, past the root width | 12 | 4 |
+| not in the capped enumeration | 2 | 0 |
+
+Depth 8 of the opponent's position sees 50 of 118 (42%) and picks exactly the human's turn in 7. The human's
+turn was outside the AI's ply-1 list (5 plies left) in 91 of 118. Kinds: dash+cast 52, dash 24, cast 22, move 18;
+Storm Front 7, Sprout 6, Harvest 5 lead the casts. This is the same generator-gap family as 2026-09-26 (dash
+sacrifice pairs, cast resolutions) and depth does not reach most of it; v16+ games: 10 / 6 / 5 / 3 of the
+first four rows.
+
+### Answers
+
+1. **Does depth 8 pick a better move?** Where the AI's move was confirmed bad, the current engine at depth 6
+   already plays better in 384 of 577 (most of them old-engine games); depth 7-8 finds a better move in another
+   164; 29 need more than depth 8. On v16+ games the depth-only class is the largest (28 of 61).
+2. **Is it systematically overlooking good opponent moves?** Two different things. Behind the AI's own mistakes
+   the opponent's refutation is usually generated and searched (67% full width) and misjudged by a ply or two;
+   18% sit in the LMR band. Behind the opponent-turn falls the human's turn is usually never generated (76 of
+   118: dash sacrifice pair or cast resolution 49, no generation at all 27) -- systematic, and depth does not fix it.
+3. **What to try**, in order: (a) depth on the AI's own decisions -- node rate, and a targeted extension or
+   LMR exemption for the opponent's crush/dash+cast replies at ply 1 (103 of 577 refutations were reduced there);
+   (b) the dash sacrifice-pair / cast-resolution generator gaps, as targeted key moves rather than a wider stream
+   (the 2026-09-27 arena showed blanket budgets lose); (c) re-run this audit on v21 games once there are a few
+   hundred: only 41 of 337 games were played by v16+.

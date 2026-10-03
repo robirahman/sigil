@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-03: post-game deep review (FINDINGS "Post-game deep review").** `eval_games.py eval` now walks each
+game BACKWARDS on one persistent table by default (`--walk backward`; new `SearchSession.analyze`, the `analyze`
+dict on a persistent table, and `Search::probe_first`, default off, which searches the played turn first at the
+root). Measured: no compute saving at fixed depth (0.88-1.00x CPU), but values consistent along the game line.
+`engine/harness/deep_review.py` + `engine/gcp/launch_deep_review.sh` audit the September Rust games: confirmed
+AI-turn falls are mostly already fixed by the current engine at depth 6 (old-engine games), then a depth-7-8
+horizon (refutation searched at full width in 67%, LMR band 18%); opponent-turn falls are generator gaps (dash
+sacrifice pair / cast resolution). No engine behaviour change; tests 162/162.
+
 **2026-10-02: engine v21 (cache v56) -- Seal of Winter, not Autumn.** The conditional Syzygy charm targets
 (Splash, Charge, Lurk, Azimuth, Sprout, Comet) depend on Seal of Winter being the charm touching Syzygy: Winter
 forbids casting 1-node spells, so the charm cannot be cast to move its stone out. v20 used Seal of Autumn by

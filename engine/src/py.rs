@@ -1004,15 +1004,32 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
                 probe_sfn: Option<String>)
     -> PyResult<Bound<'py, pyo3::types::PyDict>>
 {
-    use std::time::Instant;
-    use pyo3::types::PyDict;
     let b = crate::board::Board::from_sfn(sfn)
         .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let w = weights_by_name(eval_name)?;
+    let mut s = crate::search::Search::new(tt_bits);
+    if let Some(ws) = width_scale { s.set_width_scale(ws); }
+    s.weights = w;
+    if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
+    if let Some(w) = width_shape { s.set_width_shape(w); }
+    analyze_on(py, &mut s, &b, max_depth, time_ms, history_sfns, probe_sfn)
+}
+
+/// The body of `analyze` on a caller-configured `Search` (weights, widths,
+/// adaptive and shape already set): shared by the fresh-table `analyze` and
+/// `SearchSession::analyze`, whose table persists across calls.
+fn analyze_on<'py>(py: Python<'py>, s: &mut crate::search::Search, b: &crate::board::Board,
+                   max_depth: i32, time_ms: u64, history_sfns: Vec<String>,
+                   probe_sfn: Option<String>)
+    -> PyResult<Bound<'py, pyo3::types::PyDict>>
+{
+    use std::time::Instant;
+    use pyo3::types::PyDict;
+    let b = *b;
     let c = b.to_move;
     let d = PyDict::new_bound(py);
     let color = |c: Color| if c == Color::Red { "red" } else { "blue" };
     d.set_item("mover", color(c))?;
-    let w = weights_by_name(eval_name)?;
     if b.outcome != Outcome::Ongoing {
         d.set_item("over", true)?;
         d.set_item("winner", match b.outcome {
@@ -1025,11 +1042,9 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
         d.set_item("depth", 0)?; d.set_item("nodes", 0u64)?; d.set_item("seconds", 0.0)?;
         return Ok(d);
     }
-    let mut s = crate::search::Search::new(tt_bits);
-    if let Some(ws) = width_scale { s.set_width_scale(ws); }
-    s.weights = w;
-    if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
-    if let Some(w) = width_shape { s.set_width_shape(w); }
+    // A reused `Search` must not report the last call's probe or history.
+    s.root_probe_hit = None;
+    s.clear_history();
     // Board + mana key, as `rank_of_result`: the recorded after-position's
     // turn number and side token differ from a root child's.
     s.root_probe = probe_sfn.as_deref().map(|ps| {
@@ -1713,6 +1728,37 @@ impl SearchSession {
         let over = board.b.outcome != Outcome::Ongoing;
         let w = board.winner();
         Ok((st.depth_completed, st.nodes, dt, over, w, score, st.widened))
+    }
+
+    /// `analyze` (same arguments bar `tt_bits`, same dict) on the PERSISTENT
+    /// table: the post-game review walk. Analysing a game from its last
+    /// position backwards, each search starts from the entries the later
+    /// positions left -- position i+1 is one ply below i, so its deeper
+    /// subtree results cut the earlier search short and sharpen it (the chess
+    /// "analyse backwards" trick). Results therefore depend on the walk order,
+    /// unlike `analyze`. `None` knobs mean the engine's defaults, as on a fresh
+    /// table; do not interleave with `play_best` on the same session (its
+    /// play-time knobs would persist). `probe_first` searches the `probe_sfn`
+    /// turn first at the root (`Search::probe_first`): with the walk's stored
+    /// value for it, the rest of the root list runs against a tight window.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (sfn, eval_name, max_depth=6, time_ms=0, history_sfns=vec![],
+                        width_scale=None, adaptive=None, width_shape=None, probe_sfn=None,
+                        probe_first=false))]
+    fn analyze<'py>(&mut self, py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32,
+                    time_ms: u64, history_sfns: Vec<String>, width_scale: Option<usize>,
+                    adaptive: Option<(f32, usize, usize)>, width_shape: Option<usize>,
+                    probe_sfn: Option<String>, probe_first: bool)
+        -> PyResult<Bound<'py, pyo3::types::PyDict>>
+    {
+        let b = crate::board::Board::from_sfn(sfn)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+        self.s.weights = weights_by_name(eval_name)?;
+        self.s.set_width_scale(width_scale.unwrap_or(crate::search::DEFAULT_WIDTH_SCALE));
+        match adaptive { Some((p, e, h)) => self.s.set_adaptive(p, e, h), None => self.s.clear_adaptive() }
+        self.s.set_width_shape(width_shape.unwrap_or(0));
+        self.s.probe_first = probe_first;
+        analyze_on(py, &mut self.s, &b, max_depth, time_ms, history_sfns, probe_sfn)
     }
 
     /// Ponder `board` -- the position the OPPONENT is thinking about -- for
