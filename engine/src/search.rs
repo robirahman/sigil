@@ -238,6 +238,8 @@ pub fn pack_action(a: Action) -> u32 {
         Action::Cast { pos, keep, outcome } =>
             4 | (pos as u32) << 3 | (keep as u32) << 7 | (outcome as u32) << 11,
         Action::Pass => 5,
+        Action::Place { node, push_to } =>
+            6 | (node as u32) << 3 | pack_push(push_to) << 9,
     }
 }
 
@@ -253,6 +255,7 @@ pub fn unpack_action(v: u32) -> Option<Action> {
         4 => Some(Action::Cast { pos: ((v >> 3) & 0xF) as u8, keep: ((v >> 7) & 0xF) as u8,
                                  outcome: ((v >> 11) & 0xFFFF) as u16 }),
         5 => Some(Action::Pass),
+        6 => Some(Action::Place { node, push_to }),
         _ => None,
     }
 }
@@ -822,7 +825,7 @@ impl Search {
                     if id < 39 { v += self.hist_cast[ci][id]; }
                 }
                 Action::Dash { .. } => v += self.hist_dash[ci],
-                Action::Pass => {}
+                Action::Place { .. } | Action::Pass => {}
             }
         }
         v
@@ -849,7 +852,7 @@ impl Search {
                     let cell = &mut self.hist_dash[ci];
                     *cell = (*cell + delta).clamp(-1 << 20, 1 << 20);
                 }
-                Action::Pass => {}
+                Action::Place { .. } | Action::Pass => {}
             }
         }
     }
@@ -1412,7 +1415,7 @@ impl Search {
                 if acts.iter().any(|a| matches!(a, Action::Dash { .. })) { m |= 2; }
                 if child.total[them] < b.total[them] { m |= 4; }
                 if child.outcome == Outcome::Ongoing && !child.variant.has_deathmatch() {
-                    let lead = child.total[0] as i32 - (child.total[1] as i32 + 1);
+                    let lead = child.material(Color::Red) as i32 - (child.material(Color::Blue) as i32 + 1);
                     if lead.abs() == 2 { m |= 8; }
                 }
                 if m & self.tact_mask != 0 { ext = 1; self.stats.ext_tactical += 1; }

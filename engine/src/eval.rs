@@ -415,8 +415,8 @@ impl Board {
     /// when they drift -- which it has already caught once, on an integer
     /// truncation difference in the sigil term.
     pub fn evaluate(&self, c: Color, w: &Weights) -> i32 {
-        let red = self.total[0] as i32;
-        let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32;
+        let blue = self.material(Color::Blue) as i32;
         // Signed lead in *score* terms, i.e. including blue's +1 counter token.
         let red_score_lead = red - (blue + 1);
         let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
@@ -509,8 +509,8 @@ impl Board {
     /// of the sixth cast favours me. Zero when tied or before anyone has cast.
     #[inline]
     pub fn cast_pace_feature(&self, c: Color) -> i32 {
-        let red = self.total[0] as i32;
-        let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32;
+        let blue = self.material(Color::Blue) as i32;
         let red_score_lead = red - (blue + 1);
         let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
         let casts = (self.spell_counter[0] as i32).max(self.spell_counter[1] as i32);

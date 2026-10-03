@@ -176,6 +176,7 @@ impl PyBoard {
                 crate::turn::Action::Blink { .. } => "blink",
                 crate::turn::Action::Dash { .. } => "dash",
                 crate::turn::Action::Cast { .. } => "cast",
+                crate::turn::Action::Place { .. } => "place",
                 crate::turn::Action::Pass => "pass",
             }).collect::<Vec<_>>().join("+")
         }).collect()
@@ -556,6 +557,7 @@ impl PyBoard {
             Some(crate::turn::Action::Blink { node, .. }) => ("blink".to_string(), node as i32),
             Some(crate::turn::Action::Dash { node, .. }) => ("dash".to_string(), node as i32),
             Some(crate::turn::Action::Cast { pos, .. }) => ("cast".to_string(), pos as i32),
+            Some(crate::turn::Action::Place { node, .. }) => ("place".to_string(), node as i32),
             Some(crate::turn::Action::Pass) | None => ("pass".to_string(), -1),
         };
         Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs,
@@ -600,7 +602,9 @@ impl PyBoard {
                  sacs[..n_sacs as usize].to_vec(), -1),
             crate::turn::Action::Cast { pos, keep, outcome } =>
                 ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
-            crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
         }).collect()).collect())
     }
 
@@ -629,6 +633,8 @@ impl PyBoard {
                 // so `keep` rides that slot and the arity is unchanged.
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -662,6 +668,8 @@ impl PyBoard {
                      sacs[..n_sacs as usize].to_vec(), -1),
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -684,6 +692,8 @@ impl PyBoard {
                      sacs[..n_sacs as usize].to_vec(), -1),
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -814,6 +824,8 @@ impl PyBoard {
                 // so `keep` rides that slot and the arity is unchanged.
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect(),
         };
@@ -828,6 +840,33 @@ impl PyBoard {
 
     /// Distinct resulting positions after casting the spell at `pos`, as
     /// (red_mask, blue_mask) pairs. Post clear-and-refill, pre finish_cast.
+    /// Resolved states (39 stone chars incl. walls, then `|red bank:blue bank`)
+    /// for casting at `pos` after the priority keep -- the differential
+    /// harnesses compare these against simboard.py.
+    fn outcome_states(&self, pos: usize, c: &str) -> PyResult<Vec<String>> {
+        let col = color(c)?;
+        let mut b = self.b;
+        b.cast_clear_and_refill(pos, col);
+        let (outs, _t) = b.resolve_outcomes(pos, col, crate::turn::OUTCOME_CAP);
+        Ok(outs.iter().map(state_string).collect())
+    }
+
+    /// The state each exhaustively enumerated turn leaves (see `outcome_states`).
+    fn turn_states(&self) -> PyResult<Vec<String>> {
+        let c = self.b.to_move;
+        let (turns, _st) = self.b.enumerate_turns(c);
+        Ok(turns.iter().map(|t| { let mut b = self.b; b.apply_turn(t, c); state_string(&b) }).collect())
+    }
+
+    #[setter] fn set_walls(&mut self, w: Vec<u8>) {
+        self.b.walls = 0;
+        for i in w { self.b.walls |= 1u64 << i; }
+        self.b.update();
+    }
+    #[setter] fn set_bank(&mut self, bk: (u8, u8)) { self.b.bank = [bk.0, bk.1]; }
+    #[getter] fn bank(&self) -> (u8, u8) { (self.b.bank[0], self.b.bank[1]) }
+    fn shielded(&self) -> Vec<u8> { mask_to_vec(self.b.shielded()) }
+
     fn cast_outcomes(&self, pos: usize, c: &str) -> PyResult<Vec<(u64, u64)>> {
         let col = color(c)?;
         let mut b = self.b;
@@ -848,6 +887,7 @@ impl PyBoard {
             let a = match kind.as_str() {
                 "blink" => Action::Blink { node: node as u8, push_to: pt },
                 "move"  => Action::Move { node: node as u8, push_to: pt },
+                "place" => Action::Place { node: node as u8, push_to: pt },
                 "dash"  => {
                     let mut s = [0u8; 2];
                     for (i, v) in sacs.iter().enumerate().take(2) { s[i] = *v; }
@@ -1777,6 +1817,7 @@ fn turn_from_tuples(acts: &[(String, i32, i32, Vec<u8>, i32)]) -> crate::turn::T
         let a = match kind.as_str() {
             "blink" => Action::Blink { node: *node as u8, push_to: pt },
             "move"  => Action::Move { node: *node as u8, push_to: pt },
+            "place" => Action::Place { node: *node as u8, push_to: pt },
             "dash"  => {
                 let mut s = [0u8; 2];
                 for (i, v) in sacs.iter().enumerate().take(2) { s[i] = *v; }
@@ -1790,6 +1831,11 @@ fn turn_from_tuples(acts: &[(String, i32, i32, Vec<u8>, i32)]) -> crate::turn::T
     t
 }
 
+fn state_string(b: &crate::board::Board) -> String {
+    let sfn = b.to_sfn();
+    format!("{}|{}:{}", &sfn[..crate::topology::N], b.bank[0], b.bank[1])
+}
+
 fn turn_to_tuples(t: &crate::turn::Turn) -> Vec<(String, i32, i32, Vec<u8>, i32)> {
     use crate::turn::Action;
     t.slice().iter().map(|a| match *a {
@@ -1798,6 +1844,7 @@ fn turn_to_tuples(t: &crate::turn::Turn) -> Vec<(String, i32, i32, Vec<u8>, i32)
         Action::Dash { sacs, n_sacs, node, push_to } =>
             ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), sacs[..n_sacs as usize].to_vec(), -1),
         Action::Cast { pos, keep, outcome } => ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+        Action::Place { node, push_to } => ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
         Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
     }).collect()
 }

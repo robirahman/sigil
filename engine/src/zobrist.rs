@@ -30,6 +30,10 @@ pub struct Zobrist {
     lock: [[u64; NUM_SLOTS]; 2],
     springlock: [[u64; NUM_SLOTS]; 2],
     counter: [[u64; 8]; 2],
+    /// Fissure walls, per node.
+    wall: [u64; N],
+    /// Providence banks, per colour (1..=31; 0 hashes to nothing).
+    bank: [[u64; 32]; 2],
 }
 
 /// SplitMix64: deterministic, so tables are identical across builds and machines.
@@ -58,7 +62,14 @@ impl Zobrist {
         let mut counter = [[0u64; 8]; 2];
         let mut c = 0;
         while c < 2 { let mut i = 0; while i < 8 { s = splitmix(s); counter[c][i] = s; i += 1; } c += 1; }
-        Zobrist { stone, to_move, lock, springlock, counter }
+        // Drawn AFTER every older table, so pre-Tectonic keys are unchanged.
+        let mut wall = [0u64; N];
+        let mut i = 0;
+        while i < N { s = splitmix(s); wall[i] = s; i += 1; }
+        let mut bank = [[0u64; 32]; 2];
+        let mut c = 0;
+        while c < 2 { let mut i = 1; while i < 32 { s = splitmix(s); bank[c][i] = s; i += 1; } c += 1; }
+        Zobrist { stone, to_move, lock, springlock, counter, wall, bank }
     }
 
     #[inline] fn slot(id: u8) -> usize { if id == NO_SPELL { 51 } else { id as usize } }
@@ -70,6 +81,10 @@ impl Zobrist {
             let mut m = b.stones[c];
             while m != 0 { h ^= self.stone[c][m.trailing_zeros() as usize]; m &= m - 1; }
         }
+        // Walls and banks hash to nothing when absent: legacy keys are unchanged.
+        let mut w = b.walls;
+        while w != 0 { h ^= self.wall[w.trailing_zeros() as usize]; w &= w - 1; }
+        for c in 0..2 { h ^= self.bank[c][(b.bank[c] as usize).min(31)]; }
         h
     }
 

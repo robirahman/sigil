@@ -110,7 +110,7 @@ pub const CARNAGE: u8 = 1;
 /// What Carnage adds on top of the best of the sorceries beside it, so it wins the tie.
 pub const NEIGHBOUR_EDGE: f32 = 0.01;
 use crate::opening_data::{BOARD_PREF, MATCHUP, PUSH_CHARMS, STRENGTH, SYNERGY};
-use crate::spells_meta::{AZIMUTH, CHARGE, COMET, GUST, HURRICANE, LURK, NUM_OFFICIAL_SPELLS, SEAL_OF_AUTUMN,
+use crate::spells_meta::{AZIMUTH, CHARGE, COMET, GUST, HURRICANE, LURK, CORE_SPELL_COUNT, SEAL_OF_AUTUMN,
                          SEAL_OF_DESTRUCTION, SEAL_OF_SPRING, SEAL_OF_SUMMER, SEAL_OF_WINTER, SLASH, SPELLS, SPLASH,
                          SPROUT, SURGE, SYZYGY};
 use crate::topology::{ADJ, SIGIL, VOID};
@@ -366,7 +366,7 @@ fn hard_countered(spells: &[u8; 9], s: usize, candidates: &[usize]) -> bool {
 pub fn applies(b: &Board, c: Color) -> bool {
     b.variant.has_competitive() && b.turn_counter <= 2 && b.outcome == Outcome::Ongoing
         && b.mine(c) == 0 && b.theirs(c).count_ones() <= 1
-        && b.spells.iter().all(|&id| (id as usize) < NUM_OFFICIAL_SPELLS)
+        && b.spells.iter().all(|&id| (id as usize) < CORE_SPELL_COUNT)
 }
 
 /// The pick for `c`, or `None` when the selector does not apply.

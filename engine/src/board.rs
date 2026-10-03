@@ -1,9 +1,12 @@
 //! Core Sigil board: bitboard state, derived-state update, win conditions,
 //! move-generation primitives and push resolution.
 //!
-//! SCOPE: the 39 official spells only. The deferred playtest packs are why there
-//! is no `destroyed` mask, no pending-move/burn schedule and no snare map — so the
-//! graph is STATIC and `topology::ADJ` is a true constant.
+//! SCOPE: the 39 official spells plus Tectonic (Fissure, Rock Slide, Bulwark)
+//! and Providence (Dividend, Annuity, Endowment), ids 0..44. Fissure adds the
+//! `walls` mask (permanently destroyed nodes: never occupied, never entered,
+//! never pushed through; `topology::ADJ` stays the static graph and every
+//! primitive masks walls out). Providence adds the per-player `bank`. The
+//! retired packs (Aftershock, Ambush, ids 45..50) and Panda stay out.
 //!
 //! Two parity facts, both established by differential testing against simboard.py:
 //!  * A move PLACES a stone; it never relocates one. `_do_soft_move` and
@@ -14,8 +17,8 @@
 use crate::topology::{ADJ, ALL, MANA, N, SIGIL};
 
 pub const NO_SPELL: u8 = 255;
-/// Spell ids at or above this belong to the deferred playtest packs.
-pub const DEFERRED_SPELL_FLOOR: u8 = 39;
+/// Spell ids at or above this belong to retired packs (Aftershock, Ambush).
+pub const DEFERRED_SPELL_FLOOR: u8 = 45;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Color { Red = 0, Blue = 1 }
@@ -45,10 +48,15 @@ pub enum Push { To(u8), Crush }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Outcome { Ongoing, RedWins, BlueWins }
 
-/// A full position: `Copy`, ~48 bytes, no heap and no allocation on any path.
+/// A full position: `Copy`, ~64 bytes, no heap and no allocation on any path.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Board {
     pub stones: [u64; 2],
+    /// Nodes permanently destroyed by Fissure. Disjoint from both stone sets.
+    pub walls: u64,
+    /// Providence: stones each player has banked. They count toward the stone
+    /// total (`material`), not toward elimination (`total`).
+    pub bank: [u8; 2],
     pub spells: [u8; 9],
     pub spell_counter: [u8; 2],
     pub lock: [u8; 2],
@@ -66,7 +74,7 @@ pub struct Board {
 impl Board {
     pub fn new(spells: [u8; 9], variant: Variant) -> Self {
         Board {
-            stones: [0, 0], spells, spell_counter: [0, 0],
+            stones: [0, 0], walls: 0, bank: [0, 0], spells, spell_counter: [0, 0],
             lock: [NO_SPELL, NO_SPELL], springlock: [NO_SPELL, NO_SPELL],
             turn_counter: 0, to_move: Color::Red, variant, outcome: Outcome::Ongoing,
             total: [0, 0], mana: [0, 0], charged: [0, 0],
@@ -83,7 +91,7 @@ impl Board {
     }
 
     #[inline] pub fn occupied(&self) -> u64 { self.stones[0] | self.stones[1] }
-    #[inline] pub fn empty(&self) -> u64 { ALL & !self.occupied() }
+    #[inline] pub fn empty(&self) -> u64 { ALL & !self.occupied() & !self.walls }
     #[inline] pub fn mine(&self, c: Color) -> u64 { self.stones[c.idx()] }
     #[inline] pub fn theirs(&self, c: Color) -> u64 { self.stones[c.other().idx()] }
 
@@ -102,12 +110,66 @@ impl Board {
     #[inline] pub fn soft_moveable(&self, c: Color) -> u64 {
         Self::dilate(self.mine(c)) & self.empty()
     }
-    /// Bulwark is Tectonic (deferred), so there is no protection check.
+    /// Enemy stones `c` may hard-move onto: adjacent, and not shielded by the
+    /// enemy's Bulwark (evaluated on THIS board, so each step of a multi-move
+    /// effect re-checks it).
     #[inline] pub fn hard_moveable(&self, c: Color) -> u64 {
-        Self::dilate(self.mine(c)) & self.theirs(c)
+        Self::dilate(self.mine(c)) & self.theirs(c) & !self.shielded()
     }
     #[inline] pub fn all_moveable(&self, c: Color) -> u64 {
-        Self::dilate(self.mine(c)) & !self.mine(c) & ALL
+        Self::dilate(self.mine(c)) & !self.mine(c) & !self.walls & !self.shielded() & ALL
+    }
+
+    /// Bulwark: stones shielded by their owner's Bulwark — a player holding
+    /// Bulwark charged protects their own stones in their locked spell from
+    /// enemy hard moves, conversion, and destruction by any effect (their own
+    /// Fissure included). Sacrifices are unaffected. Mirrors
+    /// `bulwark_protected_nodes` (simboard.py) / `bulwarkProtectedNodes`.
+    pub fn shielded(&self) -> u64 {
+        let Some(bp) = self.position_of(crate::spells_meta::BULWARK) else { return 0 };
+        let mut out = 0u64;
+        for c in 0..2 {
+            if self.charged[c] & (1 << bp) == 0 { continue; }
+            let lock = self.lock[c];
+            if lock == NO_SPELL { continue; }
+            if let Some(lp) = self.position_of(lock) { out |= SIGIL[lp] & self.stones[c]; }
+        }
+        out
+    }
+
+    /// Nodes whose shield would drop if the stone at `node` were removed (it is
+    /// its owner's Bulwark charm stone). Mirrors `_bulwark_unshielded_by_removing`.
+    pub fn unshielded_by_removing(&self, node: u8) -> u64 {
+        let bit = 1u64 << node;
+        if self.occupied() & bit == 0 { return 0; }
+        let cur = self.shielded();
+        if cur == 0 || cur & bit != 0 { return 0; }
+        let mut b = *self;
+        b.stones[0] &= !bit;
+        b.stones[1] &= !bit;
+        b.update();
+        cur & !b.shielded()
+    }
+
+    /// The stone total that decides the game: board stones plus banked stones.
+    #[inline] pub fn material(&self, c: Color) -> u32 {
+        self.total[c.idx()] + self.bank[c.idx()] as u32
+    }
+
+    /// Dedupe key for a resolved position: stones, walls and banks. Stones use
+    /// 39 bits each, so walls and banks fold into the spare high bits.
+    #[inline] pub fn state_key(&self) -> (u64, u64) {
+        let w = self.walls;
+        (self.stones[0] | ((w & 0x1ff_ffff) << 39),
+         self.stones[1] | ((w >> 25) << 39) | (((self.bank[0] & 31) as u64) << 53)
+            | (((self.bank[1] & 31) as u64) << 58))
+    }
+
+    /// Adopt a resolved outcome's state (stones, walls, banks).
+    #[inline] pub fn adopt(&mut self, o: &Board) {
+        self.stones = o.stones;
+        self.walls = o.walls;
+        self.bank = o.bank;
     }
 
     /// Recompute totals, elimination, mana and charges. Mirrors `simboard.update()`
@@ -152,8 +214,9 @@ impl Board {
     pub fn check_game_over(&mut self, active: Color) -> bool {
         if self.outcome != Outcome::Ongoing { return true; }
         if self.variant.has_deathmatch() { return false; }
-        let red = self.total[0];
-        let blue = self.total[1] + 1;
+        // Providence banked stones count for their owner (symmetric).
+        let red = self.material(Color::Red);
+        let blue = self.material(Color::Blue) + 1;
         if red > blue + 2 { self.outcome = Outcome::RedWins; return true; }
         if blue > red + 2 { self.outcome = Outcome::BlueWins; return true; }
         if self.spell_counter[active.idx()] >= 6 {
@@ -181,7 +244,7 @@ impl Board {
     /// and lost when its next turn started. That is the game Fakey_McFaker saw.
     pub fn destruction_end_of_turn(&mut self, c: Color) -> u64 {
         if !self.holds_charged(c, crate::spells_meta::SEAL_OF_DESTRUCTION) { return 0; }
-        let doomed = self.theirs(c) & Self::dilate(self.mine(c));
+        let doomed = self.theirs(c) & Self::dilate(self.mine(c)) & !self.shielded();
         if doomed != 0 {
             self.stones[c.other().idx()] &= !doomed;
             self.update();
@@ -247,7 +310,9 @@ impl Board {
             if visited & bit != 0 { continue; }
             visited |= bit;
             if let Some(sh) = shortest { if dist > sh { break; } }
-            if mine & bit != 0 {
+            if self.walls & bit != 0 {
+                continue;                       // a wall is neither path nor landing
+            } else if mine & bit != 0 {
                 continue;                       // pusher's stones block the chain
             } else if theirs & bit != 0 {
                 let mut mm = ADJ[nd as usize];
@@ -299,7 +364,7 @@ impl Board {
             if visited & bit != 0 { continue; }
             visited |= bit;
             if dist > max_dist { break; }
-            if attacker & bit != 0 {
+            if attacker & bit != 0 || self.walls & bit != 0 {
                 continue;
             } else if def & bit != 0 {
                 let mut mm = ADJ[nd as usize];
@@ -320,7 +385,7 @@ impl Board {
         self.escape_distance(node, attacker.other(), N as u32) >= N as u32
     }
 
-    /// True if any drawn sigil holds a deferred-pack spell — position out of scope.
+    /// True if any drawn sigil holds a retired-pack spell — position out of scope.
     pub fn has_deferred_spell(&self) -> bool {
         self.spells.iter().any(|&s| s != NO_SPELL && s >= DEFERRED_SPELL_FLOOR)
     }

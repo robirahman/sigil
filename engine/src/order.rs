@@ -254,6 +254,37 @@ impl Board {
         v
     }
 
+    /// First steps for the turn stream: each ordered first move, and -- when
+    /// `c`'s Providence bank holds a stone -- that move followed by each legal
+    /// placement. Ordered jointly by (move score + placement score on the
+    /// post-move board); a bare move ranks as move score alone, so a placement
+    /// that helps comes first and the bare move stays reachable.
+    pub fn ordered_first_steps(&self, c: Color)
+        -> Vec<(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)>
+    {
+        let moves = self.ordered_first_moves(c);
+        if self.bank[c.idx()] == 0 {
+            return moves.into_iter().map(|(n, p)| (n, p, self.is_blink_pub(n, c), None)).collect();
+        }
+        let goal = self.placement_goal(c);
+        let mut v: Vec<(i32, usize, (u8, Option<u8>, bool, Option<(u8, Option<u8>)>))> = Vec::new();
+        for (i, (n, p)) in moves.into_iter().enumerate() {
+            let blink = self.is_blink_pub(n, c);
+            let s0 = self.move_score_goal(n, p, c, goal);
+            v.push((s0, i, (n, p, blink, None)));
+            let mut b = *self;
+            b.do_move_with_pub(n, p, c);
+            let g2 = b.placement_goal(c);
+            for (pn, pp) in b.placement_variants(c) {
+                let s1 = b.move_score_goal(pn, pp, c, g2);
+                v.push((s0 + s1, i, (n, p, blink, Some((pn, pp)))));
+            }
+        }
+        // Stable on the original move order for equal scores.
+        v.sort_by_key(|&(s, i, _)| (-s, i));
+        v.into_iter().map(|(_, _, m)| m).collect()
+    }
+
     /// Gust placements, best-first, WITHOUT materialising C(empties, displaced).
     ///
     /// The displaced stones are interchangeable, so an outcome is a SET of landing
@@ -265,7 +296,7 @@ impl Board {
     /// Candidates are then re-ranked by the exact `configuration_value`, which is
     /// what the sigil-spread / fragment / coalesce goals actually care about.
     pub fn gust_placements_ordered(&self, c: Color, limit: usize) -> Vec<Board> {
-        let picked = self.theirs(c) & Board::dilate(self.mine(c));
+        let picked = self.theirs(c) & Board::dilate(self.mine(c)) & !self.shielded();
         if picked == 0 { return vec![*self]; }
         let n = picked.count_ones() as usize;
         let goal = self.placement_goal(c);
@@ -353,6 +384,10 @@ impl Board {
         for a in t.slice() {
             match *a {
                 Action::Move { node, push_to } | Action::Blink { node, push_to } => {
+                    v += self.move_score(node, push_to, c);
+                }
+                // Providence placement: scored like the move it is.
+                Action::Place { node, push_to } => {
                     v += self.move_score(node, push_to, c);
                 }
                 Action::Dash { sacs, n_sacs, node, .. } => {

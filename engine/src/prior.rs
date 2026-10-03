@@ -88,7 +88,7 @@ impl Board {
         for p in 0..9 { x[i] = (self.uncontrolled_count(p, c) == 1) as i16; i += 1; }
         for p in 0..9 { x[i] = (self.uncontrolled_count(p, c.other()) == 1) as i16; i += 1; }
         // 20 scalars
-        let red = self.total[0] as i32; let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32; let blue = self.material(Color::Blue) as i32;
         let lead = if c == Color::Red { red - (blue + 1) } else { (blue + 1) - red };
         let (own0, own1) = self.liberty_census_pub(c);
         let (en0, en1) = self.liberty_census_pub(c.other());
@@ -144,6 +144,7 @@ impl Board {
                         post.do_move_with_pub(node, push_to, c);
                     }
                 }
+                Action::Place { node, push_to } => post.do_placement(node, push_to, c),
                 Action::Dash { sacs, n_sacs, node, push_to } => {
                     has_dash = true;
                     push(P_DASH, &mut parts);

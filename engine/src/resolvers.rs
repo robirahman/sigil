@@ -120,7 +120,7 @@ impl Board {
     /// all doomed stones are chosen before any is removed (the JS builds `doomed`
     /// fully, then deletes), so removals cannot cascade within one cast.
     pub fn resolve_destroy_exposed(&mut self, c: Color) -> u32 {
-        let enemy = self.theirs(c);
+        let enemy = self.theirs(c) & !self.shielded();
         let empty = self.empty();
         let mut doomed = 0u64;
         let mut m = enemy;
@@ -213,7 +213,11 @@ impl Board {
             Resolve::LockedOrSelfMoves => {
                 self.resolve_autumn_moves(pos, c, info.count); true
             }
-            _ => false,                                   // not yet ported
+            Resolve::Fissure => { self.resolve_fissure(c); true }
+            Resolve::RockSlide => { self.resolve_rock_slide(c); true }
+            Resolve::BankStones => {
+                self.bank[c.idx()] = self.bank[c.idx()].saturating_add(info.count); true
+            }
         }
     }
 
@@ -239,7 +243,8 @@ impl Board {
             | Resolve::Azimuth | Resolve::Eclipse | Resolve::Scatter
             | Resolve::Blossom | Resolve::Syzygy | Resolve::Charge
             | Resolve::Fury | Resolve::Erupt | Resolve::Gust
-            | Resolve::StormFront | Resolve::Hurricane | Resolve::Corrupt)
+            | Resolve::StormFront | Resolve::Hurricane | Resolve::Corrupt
+            | Resolve::Fissure | Resolve::RockSlide | Resolve::BankStones)
     }
 }
 
@@ -250,10 +255,10 @@ const MANA_ORDER: [u8; 3] = [0, 13, 26];
 
 impl Board {
     /// Nodes `c` may blink onto: anything not already `c`'s. Includes enemy-held
-    /// nodes (a blink onto one pushes). Bulwark is Tectonic, so no protection test.
+    /// nodes (a blink onto one pushes) except Bulwark-shielded ones; never walls.
     #[inline]
     pub fn blinkable(&self, c: Color) -> u64 {
-        crate::topology::ALL & !self.mine(c)
+        crate::topology::ALL & !self.mine(c) & !self.walls & !self.shielded()
     }
 
     /// Highest-index own stone, matching simboard's `for name in reversed(NODE_ORDER)`
@@ -270,7 +275,7 @@ impl Board {
     /// SKIPPED (both engines return early on gameover).
     pub fn resolve_fireblast(&mut self, c: Color) -> (u32, Option<u8>) {
         let mine = self.mine(c);
-        let doomed = self.theirs(c) & Self::dilate(mine);
+        let doomed = self.theirs(c) & Self::dilate(mine) & !self.shielded();
         self.stones[c.other().idx()] &= !doomed;
         self.update();
         if self.outcome != crate::board::Outcome::Ongoing {
@@ -289,8 +294,9 @@ impl Board {
     /// most six stones.
     pub fn resolve_hail_storm(&mut self, c: Color) -> u32 {
         let mut killed = 0;
+        let shield = self.shielded();
         for pos in 0..6 {
-            let m = crate::topology::SIGIL[pos] & self.theirs(c);
+            let m = crate::topology::SIGIL[pos] & self.theirs(c) & !shield;
             if m != 0 {
                 let node = m.trailing_zeros() as u8;
                 self.stones[c.other().idx()] &= !(1u64 << node);
@@ -304,7 +310,7 @@ impl Board {
     /// `bewitch` — convert one pair of ADJACENT enemy stones to your colour.
     /// Greedy takes the first such pair in (node order, neighbour order).
     pub fn bewitch_pairs(&self, c: Color) -> Vec<(u8, u8)> {
-        let theirs = self.theirs(c);
+        let theirs = self.theirs(c) & !self.shielded();
         let mut out = Vec::new();
         let mut m = theirs;
         while m != 0 {
@@ -321,7 +327,7 @@ impl Board {
     }
 
     pub fn resolve_bewitch(&mut self, c: Color) -> Option<(u8, u8)> {
-        let theirs = self.theirs(c);
+        let theirs = self.theirs(c) & !self.shielded();
         let mut m = theirs;
         while m != 0 {
             let a = m.trailing_zeros() as usize;
@@ -361,7 +367,7 @@ impl Board {
 
     fn starfall_score(&self, a: u8, b: u8, c: Color) -> (u32, u32) {
         let union = ADJ[a as usize] | ADJ[b as usize];
-        let kills = union & self.theirs(c);
+        let kills = union & self.theirs(c) & !self.shielded();
         (kills.count_ones(), (kills & crate::topology::MANA).count_ones())
     }
 
@@ -386,8 +392,9 @@ impl Board {
         }
         let (a, b) = best?;
         self.stones[c.idx()] |= (1u64 << a) | (1u64 << b);
+        self.update();
         let union = ADJ[a as usize] | ADJ[b as usize];
-        let kills = union & self.theirs(c);
+        let kills = union & self.theirs(c) & !self.shielded();
         self.stones[c.other().idx()] &= !kills;
         self.update();
         Some((a, b, kills.count_ones()))
@@ -402,7 +409,7 @@ impl Board {
         let crush = theirs & tb != 0 && self.is_crushable(t, c);
         let crush_kills = crush as u32;
         let crush_mana = (crush && (crate::topology::MANA & tb != 0)) as u32;
-        let adj_enemies = ADJ[t as usize] & theirs;
+        let adj_enemies = ADJ[t as usize] & theirs & !self.shielded();
         let kill = (adj_enemies != 0) as u32;
         let kill_mana = (adj_enemies & crate::topology::MANA != 0) as u32;
         (crush_kills + kill, crush_mana + kill_mana)
@@ -426,7 +433,7 @@ impl Board {
         else { self.place(chosen, c); }
         self.update();
         // Destroy one adjacent enemy, mana first, else lowest node order.
-        let adj_enemies = ADJ[chosen as usize] & self.theirs(c);
+        let adj_enemies = ADJ[chosen as usize] & self.theirs(c) & !self.shielded();
         if adj_enemies != 0 {
             let mana_hits = adj_enemies & crate::topology::MANA;
             let victim = if mana_hits != 0 { mana_hits.trailing_zeros() }
@@ -449,7 +456,7 @@ impl Board {
         let mut target: Option<u8> = None;
         for &mn in MANA_ORDER.iter().rev() {
             let bit = 1u64 << mn;
-            if mine & bit != 0 { continue; }
+            if mine & bit != 0 || self.walls & bit != 0 { continue; }
             let adj_enemy = (ADJ[mn as usize] & theirs).count_ones();
             let already_touching = (ADJ[mn as usize] & mine) != 0;
             if !already_touching && adj_enemy < 2 { target = Some(mn); break; }
@@ -578,12 +585,13 @@ impl Board {
         let Some((charm, sorcery)) = SYZYGY_OPPOSITE[pos_self] else { return 0 };
         let mut acted = 0u8;
         let charm_node = crate::topology::SIGIL[charm].trailing_zeros() as u8;
-        if self.mine(c) & (1u64 << charm_node) == 0 {
+        let cbit = 1u64 << charm_node;
+        if (self.mine(c) | self.walls | self.shielded()) & cbit == 0 {
             self.step_move(charm_node, c);   // blink: pushes if enemy-held
             acted += 1;
         }
         for _ in 0..3 {
-            let t = crate::topology::SIGIL[sorcery] & !self.mine(c);
+            let t = crate::topology::SIGIL[sorcery] & !self.mine(c) & !self.walls & !self.shielded();
             if t == 0 { break; }
             self.step_move(t.trailing_zeros() as u8, c);
             acted += 1;
@@ -640,7 +648,7 @@ impl Board {
     /// they are relocated, not destroyed, so a Gust never changes stone counts
     /// unless the board runs out of empty nodes.
     pub fn resolve_gust(&mut self, c: Color) -> u32 {
-        let picked = self.theirs(c) & Self::dilate(self.mine(c));
+        let picked = self.theirs(c) & Self::dilate(self.mine(c)) & !self.shielded();
         if picked == 0 { return 0; }
         let n = picked.count_ones();
         self.stones[c.other().idx()] &= !picked;
@@ -659,7 +667,8 @@ impl Board {
     pub fn resolve_storm_front(&mut self, c: Color) -> u32 {
         let mut destroyed = 0;
         for _ in 0..2 {
-            let t = self.theirs(c);
+            // One stone at a time: Bulwark is re-checked before each pick.
+            let t = self.theirs(c) & !self.shielded();
             if t == 0 { break; }
             self.stones[c.other().idx()] &= !(1u64 << t.trailing_zeros());
             destroyed += 1;
@@ -671,8 +680,9 @@ impl Board {
 
     /// Contiguous enemy groups, discovered in node order (matching the Python BFS
     /// scan) so that "the first smallest group" is well defined.
+    /// Bulwark-shielded stones are ignored: groups form from destroyable stones.
     pub fn enemy_groups(&self, c: Color) -> Vec<u64> {
-        let theirs = self.theirs(c);
+        let theirs = self.theirs(c) & !self.shielded();
         let mut seen = 0u64;
         let mut groups = Vec::new();
         let mut scan = theirs;
@@ -707,18 +717,36 @@ impl Board {
     /// one of your own. Eligibility is frozen against the PRE-conversion board so
     /// conversions cannot chain. If converting ends the game, no sacrifice.
     pub fn resolve_corrupt(&mut self, c: Color) -> (u32, Option<u8>) {
+        // Conversions are one at a time and Bulwark is re-checked before each,
+        // so a "breaker" (the enemy's Bulwark stone, when converting it exposes
+        // eligible stones) goes first. Mirrors simboard.py's greedy order.
         let eligible = self.theirs(c) & Self::dilate(self.mine(c));
-        let mut take = 0u64;
+        let mut order: Vec<u8> = Vec::new();
         let mut m = eligible;
-        let mut n = 0;
-        while m != 0 && n < 3 {
-            take |= 1u64 << m.trailing_zeros();
-            m &= m - 1;
-            n += 1;
+        while m != 0 {
+            let n = m.trailing_zeros() as u8; m &= m - 1;
+            if self.unshielded_by_removing(n) & eligible != 0 { order.push(n); }
         }
-        self.stones[c.other().idx()] &= !take;
-        self.stones[c.idx()] |= take;
-        self.update();
+        let mut m = eligible;
+        while m != 0 {
+            let n = m.trailing_zeros() as u8; m &= m - 1;
+            if !order.contains(&n) { order.push(n); }
+        }
+        let mut n = 0u32;
+        let mut done = 0u64;
+        while n < 3 && self.outcome == crate::board::Outcome::Ongoing {
+            let shield = self.shielded();
+            let Some(&pick) = order.iter().find(|&&x| {
+                let bit = 1u64 << x;
+                done & bit == 0 && self.theirs(c) & bit != 0 && shield & bit == 0
+            }) else { break };
+            let bit = 1u64 << pick;
+            self.stones[c.other().idx()] &= !bit;
+            self.stones[c.idx()] |= bit;
+            done |= bit;
+            n += 1;
+            self.update();
+        }
         if self.outcome != crate::board::Outcome::Ongoing { return (n, None); }
         let sac = self.sacrifice_pick(c, None);
         if let Some(s) = sac {
@@ -726,5 +754,62 @@ impl Board {
             self.update();
         }
         (n, sac)
+    }
+}
+
+// ============================ Tectonic / Providence ============================
+impl Board {
+    /// Fissure's outcome at `target` on this board: (destroyed mask, wall node).
+    /// Every unshielded stone of EITHER colour adjacent to the target is
+    /// destroyed; the target becomes a wall (its stone destroyed) unless it holds
+    /// a Bulwark-shielded stone, which stays (no wall). Mirrors `fissure_blast`.
+    pub fn fissure_blast(&self, target: u8) -> (u64, Option<u8>) {
+        let shield = self.shielded();
+        let occ = self.occupied();
+        let bit = 1u64 << target;
+        let mut destroyed = ADJ[target as usize] & occ & !shield;
+        if occ & bit != 0 && shield & bit != 0 { return (destroyed, None); }
+        if occ & bit != 0 { destroyed |= bit; }
+        (destroyed, Some(target))
+    }
+
+    /// Net swing of Fissure at `target` for `c` (+1 per enemy stone destroyed,
+    /// -1 per own); None for an existing wall. Mirrors `fissure_score`.
+    pub fn fissure_score(&self, c: Color, target: u8) -> Option<i32> {
+        if self.walls & (1u64 << target) != 0 { return None; }
+        let (d, _) = self.fissure_blast(target);
+        Some((d & self.theirs(c)).count_ones() as i32 - (d & self.mine(c)).count_ones() as i32)
+    }
+
+    /// Apply Fissure at `target`.
+    pub fn apply_fissure(&mut self, target: u8) -> (u64, Option<u8>) {
+        let (d, wall) = self.fissure_blast(target);
+        self.stones[0] &= !d;
+        self.stones[1] &= !d;
+        if let Some(w) = wall { self.walls |= 1u64 << w; }
+        self.update();
+        (d, wall)
+    }
+
+    /// Greedy Fissure: the best net swing, lowest node on ties (`fissure_ranked_targets`).
+    pub fn resolve_fissure(&mut self, c: Color) -> Option<u8> {
+        let mut best: Option<(i32, u8)> = None;
+        for t in 0..crate::topology::N as u8 {
+            if let Some(sc) = self.fissure_score(c, t) {
+                if best.map_or(true, |(b, _)| sc > b) { best = Some((sc, t)); }
+            }
+        }
+        let (_, t) = best?;
+        self.apply_fissure(t);
+        Some(t)
+    }
+
+    /// Greedy Rock Slide: the first maximum-net push set.
+    pub fn resolve_rock_slide(&mut self, c: Color) -> u32 {
+        let shield = self.shielded();
+        let (_, opts) = self.rock_slide_optimal_pushes(c, 1);
+        let Some(pushes) = opts.into_iter().next() else { return 0 };
+        let (lost, _) = self.apply_rock_slide(&pushes, shield);
+        lost.len() as u32
     }
 }

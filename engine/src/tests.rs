@@ -218,12 +218,14 @@ fn zobrist_distinguishes_and_is_stable() {
 }
 
 #[test]
-fn deferred_and_panda_are_out_of_scope() {
-    assert_eq!(NUM_OFFICIAL_SPELLS, 39, "official ids are 0..38 contiguous");
+fn retired_and_panda_are_out_of_scope() {
+    assert_eq!(NUM_OFFICIAL_SPELLS, 45, "ids 0..44: core, Tectonic, Providence");
     let ok = Board::new([0,5,14,20,30,32,36,37,38], Variant::Standard);
     assert!(!ok.has_deferred_spell());
-    let bad = Board::new([0,5,14,20,30,32,36,37,39], Variant::Standard);
-    assert!(bad.has_deferred_spell(), "39 is Tectonic/Fissure");
+    let tect = Board::new([39,40,41,42,43,44,36,37,38], Variant::Standard);
+    assert!(!tect.has_deferred_spell(), "Tectonic and Providence are in scope");
+    let bad = Board::new([0,5,14,20,30,32,36,37,45], Variant::Standard);
+    assert!(bad.has_deferred_spell(), "45 is Aftershock (retired)");
     // Panda has no ids at all, so it cannot be represented here.
     for s in SPELLS.iter() {
         for panda in ["Lifesap","Perfect_Heist","Moth_Plague","Ripples","Stampede",
@@ -422,13 +424,13 @@ fn castable_respects_locks_seals_and_charm_rules() {
 #[test]
 fn every_official_resolver_is_implemented() {
     let b = Board::new([0;9], Variant::Standard);
-    let missing: Vec<&str> = (0..39u8)
+    let missing: Vec<&str> = (0..45u8)
         .filter(|&id| !b.resolver_ready(id))
         .map(|id| SPELLS[id as usize].name)
         .collect();
     assert!(missing.is_empty(), "unimplemented official resolvers: {:?}", missing);
-    // And deferred ids must be refused, not silently mis-resolved.
-    for id in 39..51u8 { assert!(!b.resolver_ready(id), "id {} must be refused", id); }
+    // And retired ids must be refused, not silently mis-resolved.
+    for id in 45..51u8 { assert!(!b.resolver_ready(id), "id {} must be refused", id); }
 }
 
 #[test]
@@ -4051,4 +4053,124 @@ fn opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides() {
     let off = own_value(&away, 0, None, Color::Red);
     set_opening_carnage(true);
     assert!((on - off - NEIGHBOUR_EDGE).abs() < 1e-5, "only the edge: {on} {off}");
+}
+
+// ---------------- Tectonic + Providence (2026-10 port) ----------------
+// Draw: Fissure, Carnage, Corrupt / Rock Slide, Annuity, Storm Front /
+// Bulwark (a7), Dividend (b7), Slash (c7). Red holds Bulwark with Carnage
+// (b2..b6) locked, so b2..b6 are shielded.
+fn tect_board() -> Board {
+    let mut b = Board::new([39, 1, 33, 40, 43, 25, 41, 42, 11], Variant::Standard);
+    for s in ["b2", "b3", "b4", "b5", "b6", "a7"] { b.stones[0] |= 1 << n(s); }
+    for s in ["b1", "a8", "b13", "a1"] { b.stones[1] |= 1 << n(s); }
+    b.lock[0] = 1;
+    b.turn_counter = 10;
+    b.update();
+    b
+}
+fn shield_mask() -> u64 { ["b2","b3","b4","b5","b6"].iter().fold(0, |m, s| m | 1 << n(s)) }
+
+#[test]
+fn bulwark_shields_the_locked_spell() {
+    let b = tect_board();
+    assert_eq!(b.shielded(), shield_mask());
+    assert_eq!(b.hard_moveable(Color::Blue) & shield_mask(), 0, "no hard move into the shield");
+    assert_eq!(b.blinkable(Color::Blue) & shield_mask(), 0);
+    assert_eq!(b.unshielded_by_removing(n("a7")), shield_mask(), "a7 is the breaker");
+    let mut nb = b; nb.lock[0] = NO_SPELL; nb.update();
+    assert_eq!(nb.shielded(), 0, "no lock, nothing shielded");
+}
+
+#[test]
+fn fissure_destroys_own_stones_and_spares_the_shield() {
+    let b = tect_board();
+    // Blue blasts b3 (shielded): it stays, no wall; b13 (blue's own) dies.
+    let mut x = b;
+    let (d, wall) = x.apply_fissure(n("b3"));
+    assert_eq!(wall, None);
+    assert_eq!(d, 1 << n("b13"));
+    assert!(x.stones[0] & (1 << n("b3")) != 0);
+    // Red blasts b1 (blue): the wall forms, red's own shielded b2 survives.
+    let mut y = b;
+    let (d2, w2) = y.apply_fissure(n("b1"));
+    assert_eq!(w2, Some(n("b1")));
+    assert!(y.walls & (1 << n("b1")) != 0 && d2 & (1 << n("b2")) == 0);
+    // Walls block moves and pushes.
+    assert_eq!(y.all_moveable(Color::Red) & y.walls, 0);
+    assert_eq!(y.empty() & y.walls, 0);
+}
+
+#[test]
+fn sequential_effects_break_bulwark_simultaneous_ones_do_not() {
+    let b = tect_board();
+    // Storm Front: a7 then b2 is a legal outcome; b2 first is not.
+    let pos = b.position_of(25).unwrap();
+    let (outs, _) = b.resolve_outcomes(pos, Color::Blue, crate::turn::OUTCOME_CAP);
+    assert!(outs.iter().any(|o| o.stones[0] & (1 << n("a7")) == 0 && o.stones[0] & (1 << n("b2")) == 0));
+    assert!(outs.iter().all(|o| (o.stones[0] & shield_mask()).count_ones() >= 4),
+            "at most one shielded stone falls, and only after a7");
+    // Fireblast-like simultaneity: Decay never touches the shield.
+    let mut d = b;
+    d.resolve_destroy_exposed(Color::Blue);
+    assert_eq!(d.stones[0] & shield_mask(), shield_mask());
+    // Corrupt converts the breaker first, then a locked stone.
+    let mut c = b;
+    c.stones[1] |= 1 << n("b7");      // blue now touches b4 too
+    c.update();
+    c.resolve_corrupt(Color::Blue);
+    assert!(c.stones[1] & (1 << n("a7")) != 0, "breaker converted");
+    assert!(c.stones[1] & shield_mask() != 0, "then a locked stone");
+}
+
+#[test]
+fn rock_slide_never_pushes_or_kills_a_shielded_stone() {
+    let b = tect_board();
+    let (_, opts) = b.rock_slide_optimal_pushes(Color::Blue, 64);
+    for pushes in &opts {
+        assert!(pushes.iter().all(|p| shield_mask() & (1 << p.from) == 0));
+        let mut x = b;
+        x.apply_rock_slide(pushes, b.shielded());
+        assert_eq!(x.stones[0] & shield_mask(), shield_mask());
+    }
+}
+
+#[test]
+fn providence_bank_counts_and_places_once() {
+    let mut b = std_board();
+    b.turn_counter = 10;
+    b.stones[0] |= (1 << n("a2")) | (1 << n("a3"));
+    b.update();
+    let c = Color::Red;
+    // Win check: red 3 + bank 2 = 5 vs blue 1 + 1 = 2 -> red leads by 3.
+    let mut w = b; w.bank[0] = 2;
+    assert!(w.check_game_over(c) && w.outcome == Outcome::RedWins);
+    // Placement: optional, at most one per turn, spends one banked stone.
+    let mut p = b; p.bank[0] = 3;
+    let (turns, _) = p.enumerate_turns(c);
+    let places = |t: &crate::turn::Turn| t.slice().iter()
+        .filter(|a| matches!(a, crate::turn::Action::Place { .. })).count();
+    assert!(turns.iter().any(|t| places(t) == 1));
+    assert!(turns.iter().all(|t| places(t) <= 1));
+    assert!(turns.iter().any(|t| places(t) == 0), "skipping stays legal");
+    let t = turns.iter().find(|t| places(t) == 1).unwrap();
+    let mut q = p; q.apply_turn(t, c);
+    assert_eq!(q.bank[0], 2);
+    let (none, _) = b.enumerate_turns(c);
+    assert!(none.iter().all(|t| places(t) == 0), "empty bank: no placement");
+    // The lazy stream offers placements too.
+    assert!(p.turns_ordered(c).take(400).any(|t| places(&t) == 1));
+}
+
+#[test]
+fn sfn_round_trips_walls_and_banks() {
+    let mut b = tect_board();
+    b.walls = 1 << n("c13");
+    b.bank = [3, 1];
+    b.update();
+    let s = b.to_sfn();
+    assert!(s.ends_with(" pm:3:1"), "{}", s);
+    assert_eq!(s.chars().nth(n("c13") as usize), Some('x'));
+    let r = Board::from_sfn(&s).unwrap();
+    assert_eq!((r.walls, r.bank, r.stones), (b.walls, b.bank, b.stones));
+    assert_ne!(ZOBRIST.key_js(&b), ZOBRIST.key_js(&{ let mut z = b; z.bank = [0, 0]; z }));
 }

@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-03: engine v22 (cache v61) -- Tectonic and Providence.** Ids 39..44 are in scope: Fissure (every
+target; the blast takes both colours, the caster's own included), Rock Slide (every maximum-net outcome, exact DP
+port of `rock_slide_optimal_pushes`), Bulwark (shield vs enemy hard moves, conversion and destruction; step-by-step
+effects re-check it, simultaneous ones read it once), and the Providence bank (Dividend/Annuity/Endowment add 1/2/4;
+banked stones count as material; `Action::Place`, at most one optional placement per turn). SFN `x` walls and the
+`pm:` token round-trip. Tests 168/168, `wasm-smoke.js` green including three replay-verified Tectonic+Providence
+games, `harness/parity_tectonic_providence.py` against simboard.py. Not arena-tested; the eval has no positional
+terms for walls or banks beyond material.
+
 **2026-10-02: engine v21 (cache v56) -- Seal of Winter, not Autumn.** The conditional Syzygy charm targets
 (Splash, Charge, Lurk, Azimuth, Sprout, Comet) depend on Seal of Winter being the charm touching Syzygy: Winter
 forbids casting 1-node spells, so the charm cannot be cast to move its stone out. v20 used Seal of Autumn by

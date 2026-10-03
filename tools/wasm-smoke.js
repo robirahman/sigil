@@ -70,7 +70,10 @@ async function driver() {
 	}
 
 	// rust-ai.js's partial-SFN key: everything except the turn counter.
-	const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+	// Includes the Providence banks (the optional `pm:` token), which the
+		// stone field does not show.
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5],
+			p.find(t => t.startsWith('pm:')) || ''].join(' '); };
 	const OFFICIAL = ['core', 'springtime', 'celestial', 'fury', 'tempest',
 	                  'flood', 'autumn', 'gloom', 'covenant'];
 
@@ -125,6 +128,38 @@ async function driver() {
 		}
 	}
 	if (progressTicks === 0) throw new Error('on_depth progress callback never fired');
+
+	// Tectonic + Providence: draws holding all six spells, every ply
+	// replay-verified (walls, shields, Rock Slide pushes, banks, placements).
+	const seen = { fissure: 0, rock_slide: 0, bank_stones: 0, providence: 0 };
+	{
+		const core = generateSpellList(['core']);
+		const draws = [
+			['Fissure', 'Endowment', core[0], 'Rock_Slide', 'Annuity', core[3], 'Bulwark', 'Dividend', core[6]],
+			['Endowment', core[1], 'Fissure', 'Annuity', core[4], 'Rock_Slide', 'Dividend', core[7], 'Bulwark'],
+			[core[0], 'Fissure', 'Endowment', core[3], 'Rock_Slide', 'Annuity', 'Bulwark', core[6], 'Dividend'],
+		];
+		for (let g = 0; g < draws.length; g++) {
+			const b = new SigilBoard(draws[g].slice(), 'standard');
+			b.setupInitial();
+			let sfn = boardToSfn(b);
+			const history = [];
+			for (let ply = 0; ply < 60; ply++) {
+				const res = pick(sfn, history, 150);
+				if (!res.ok) throw new Error('tectonic game ' + g + ' ply ' + ply + ': ' + res.error);
+				for (const a of res.actions) {
+					if (a.type in seen) seen[a.type]++;
+					if (a.providence) seen.providence++;
+				}
+				const over = await verify(sfn, res);
+				plies++;
+				history.push(sfn);
+				sfn = res.expected_sfn;
+				if (over) break;
+			}
+		}
+		console.log('tectonic/providence games: ' + JSON.stringify(seen));
+	}
 
 	// The display report (search::report): present on every completed search,
 	// and an even opening reads ~0 stones, not the raw eval's -0.5 (blue's +1

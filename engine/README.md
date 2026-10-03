@@ -4,11 +4,15 @@ A rules kernel, exhaustive turn enumerator, and alpha-beta search, built to repl
 the per-branch copying of a 39-key string-keyed board with two `u64` bitboards over
 a static graph.
 
-**Scope: the 39 official spells (ids 0..38).** The four deferred playtest packs
-(Tectonic, Providence, Aftershock, Ambush — ids 39..50) and the fan-made Panda pack
-are out. Dropping them removes every mechanic that made the state awkward: no
-destroyed nodes, no pending move/burn schedules, no snares. A position is ~48 bytes
-and `topology::ADJ` is a compile-time constant.
+**Scope: the 39 core spells (ids 0..38) plus Tectonic (Fissure, Rock Slide,
+Bulwark; 39..41) and Providence (Dividend, Annuity, Endowment; 42..44).** The
+retired packs (Aftershock, Ambush — ids 45..50) and the fan-made Panda pack are
+out. Tectonic adds a `walls` mask (Fissure's destroyed nodes) and Bulwark's shield
+(`Board::shielded`); Providence adds the per-player `bank` and the optional
+once-per-turn placement (`Action::Place`). A position is ~64 bytes and
+`topology::ADJ` is still a compile-time constant (walls are masked out, never
+removed from the graph). `harness/parity_tectonic_providence.py` checks the port
+against `simboard.py`.
 
 ## Result
 

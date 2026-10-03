@@ -29,15 +29,15 @@
  * index. That was safe but capped the engine at the browser's `ENUM_CAPS`, which
  * offers on the order of 4,000x fewer turns per position.
  *
- * Only the 39 official spells are supported: the engine does not implement
- * Tectonic, Providence, the fan-made Panda pack or the Experimental playtest
- * pack and rejects positions containing them rather than mis-resolving.
+ * The 39 core spells plus Tectonic and Providence are supported: the engine
+ * does not implement the fan-made Panda pack or the Experimental playtest pack
+ * and rejects positions containing them rather than mis-resolving.
  */
 
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 21;
+const RUST_ENGINE_VERSION = 22;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -335,7 +335,7 @@ class RustAI {
 		if (!res || !res.ok) {
 			throw new Error('Rust engine error: ' + ((res && res.error) || 'unknown') +
 				'\nIf this mentions an out-of-scope spell, the draw includes a pack the ' +
-				'engine does not implement (Tectonic / Providence / Panda / Experimental).');
+				'engine does not implement (Panda / Experimental).');
 		}
 
 		const turn = await rustActionsToTurn(sim, color, res.actions, res.expected_sfn);
@@ -393,7 +393,10 @@ async function rustActionsToTurn(sim, color, actions, expectedSfn) {
 		} catch (e) {
 			throw new Error('Rust engine action replay threw: ' + e);
 		}
-		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+		// Includes the Providence banks (the optional `pm:` token), which the
+		// stone field does not show.
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5],
+			p.find(t => t.startsWith('pm:')) || ''].join(' '); };
 		if (key(boardToSfn(probe)) !== key(expectedSfn)) {
 			throw new Error(
 				'Rust engine action list did not reproduce its own position — refusing ' +

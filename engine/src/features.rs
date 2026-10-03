@@ -41,8 +41,8 @@ impl Board {
     /// The unweighted quantity each `Weights` field multiplies, from `c`'s POV.
     /// `evaluate(c, w)` is exactly the dot product of `w` with this.
     pub fn hand_features(&self, c: Color) -> [i32; N_HAND] {
-        let red = self.total[0] as i32;
-        let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32;
+        let blue = self.material(Color::Blue) as i32;
         let red_score_lead = red - (blue + 1);
         let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
 
@@ -205,7 +205,7 @@ impl Board {
                     f[2] = 1.0; f[8] = n_sacs as f32; node = n; push = push_to;
                 }
                 Action::Cast { .. } => f[3] = 1.0,
-                Action::Pass => {}
+                Action::Place { .. } | Action::Pass => {}
             }
         }
         let bit = 1u64 << node;
