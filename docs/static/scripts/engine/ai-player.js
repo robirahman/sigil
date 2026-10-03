@@ -554,23 +554,26 @@ async function applyAITurn(board, turn, color, emit) {
 		}
 
 		else if (action.type === 'rock_slide') {
-			// Tectonic Rock Slide: replay the recorded push sequence. (This
-			// branch was missing — an AI Rock Slide cast desynced the live
-			// board from the sim.)
-			if (action.pushes) {
+			// Tectonic Rock Slide: every recorded push resolves at once.
+			// Show the planned pushes as arrows first, like a human caster's.
+			if (action.pushes && action.pushes.length) {
+				emit({ type: 'push_arrows', arrows: action.pushes.map(p => ({ from: p.from, to: p.to })) });
+				await _aiDelay(1000);
+				emit({ type: 'push_arrows', arrows: [] });
+				const before = Object.assign({}, board.stones);
+				const { final, lost } = resolveRockSlide(before, action.pushes);
+				Object.assign(board.stones, final);
 				for (const p of action.pushes) {
-					const moved = board.stones[p.from];
-					board.stones[p.from] = null;
-					if (board.stones[p.to] !== null) {
-						emit({ type: 'crush_animation', crushed_color: board.stones[p.to], node: p.to });
-						if (board.lastPlay === p.to) { board.lastPlay = null; board.lastPlayer = null; }
-					}
-					board.stones[p.to] = moved;
-					emit({ type: 'push_animation', pushed_color: moved, starting_node: p.from, ending_node: p.to });
-					board.update();
-					emit(board.getBoardStatePayload());
-					await _aiDelay(400);
+					emit({ type: 'push_animation', pushed_color: before[p.from], starting_node: p.from, ending_node: p.to });
 				}
+				for (const [n, c] of lost) {
+					emit({ type: 'crush_animation', crushed_color: c, node: n });
+				}
+				if (board.lastPlay && board.lastPlay in final) { board.lastPlay = null; board.lastPlayer = null; }
+				if (lost.length) board.crushedThisTurn = true;
+				board.update();
+				emit(board.getBoardStatePayload());
+				await _aiDelay(600);
 			}
 		}
 

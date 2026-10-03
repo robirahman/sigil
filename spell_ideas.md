@@ -86,8 +86,23 @@ Refined spell concepts developed in design sessions based on gameplay balance an
 | Slot | Spell | Effect |
 |---|---|---|
 | Ritual | Fissure | Choose a target node. Destroy all enemy stones on that node and all nodes adjacent to it. |
-| Sorcery | Rock Slide | Make 1 hard move. If the pushed enemy stone has one or more stone(s) adjacent to it at its new position, destroy the displaced stone and 1 of its adjacent neighbors. |
+| Sorcery | Rock Slide | Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed. |
 | Charm | Bulwark | STATIC: Stones in your locked spell cannot be pushed by enemy hard moves. |
+
+Rock Slide was reworked on 2026-10-03, after playtesting the new rules as the
+Experimental spell "Avalanche". It used to push the bordering stones one at
+a time, each push crushing whatever it landed on. Now the caster assigns a
+destination to every bordering enemy stone first, and all pushes resolve at
+once. Rulings: the pushed set is fixed at cast time and every stone in it
+must be pushed, even onto the caster's own stone; any neighbor is a legal
+destination, including a Fissure wall, which destroys the stone and stays a
+wall; a node whose stone is pushed away counts as vacated, so chains slide
+and closed loops rotate harmlessly, while the end of a chain destroys its
+stationary occupant; two stones pushed into one node, or onto each other's
+nodes, are all destroyed. Recorded games from before the rework were deleted.
+The AI's push choice is exact: simboard.rock_slide_optimal_pushes /
+constants.js rockSlideOptimalPushes return every max-net push set (one per
+distinct resulting board), and the exhaustive enumerators branch over them.
 
 ### Providence (shipped, rated)
 

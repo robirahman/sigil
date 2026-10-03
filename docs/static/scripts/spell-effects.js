@@ -77,3 +77,64 @@ function playSpellEffect(overlayEl, containerEl, spellName) {
 		});
 	}
 }
+
+// Push-target arrows (Rock Slide): a heavy yellow arrow per planned push,
+// drawn into the board's `.push-arrows` SVG in pixel space from the live
+// node buttons, so it fits every board layout and size. The arrows are
+// kept on the element and redrawn on resize. `arrows`: [{from, to}].
+const PUSH_ARROW_STROKE = 4;   // same band as the locked-spell highlight
+
+function drawPushArrows(svgEl, arrows) {
+	if (!svgEl) return;
+	svgEl._pushArrows = arrows || [];
+	while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+	if (!svgEl._pushArrows.length) return;
+	const NS = 'http://www.w3.org/2000/svg';
+	const box = svgEl.getBoundingClientRect();
+	const centre = (node) => {
+		const el = document.getElementById('stone-node--' + node);
+		if (!el) return null;
+		const r = el.getBoundingClientRect();
+		return { x: r.left + r.width / 2 - box.left, y: r.top + r.height / 2 - box.top, r: r.width / 2 };
+	};
+	const add = (parent, tag, attrs) => {
+		const el = document.createElementNS(NS, tag);
+		for (const k in attrs) el.setAttribute(k, attrs[k]);
+		parent.appendChild(el);
+		return el;
+	};
+	for (const { from, to } of svgEl._pushArrows) {
+		const a = centre(from), b = centre(to);
+		if (!a || !b) continue;
+		const dx = b.x - a.x, dy = b.y - a.y;
+		const len = Math.hypot(dx, dy);
+		if (len < 1) continue;
+		const ux = dx / len, uy = dy / len;
+		const headLen = Math.max(12, b.r * 0.95);
+		const headHalf = headLen * 0.62;
+		// Tip stops just inside the destination node; the shaft ends at the
+		// head's base so its cap never pokes past the point.
+		const tipX = b.x - ux * b.r * 0.35, tipY = b.y - uy * b.r * 0.35;
+		const baseX = tipX - ux * headLen, baseY = tipY - uy * headLen;
+		const head = [
+			[tipX, tipY],
+			[baseX - uy * headHalf, baseY + ux * headHalf],
+			[baseX + uy * headHalf, baseY - ux * headHalf],
+		].map(p => p.join(',')).join(' ');
+		const shaft = { x1: a.x, y1: a.y, x2: baseX + ux, y2: baseY + uy };
+		const g = add(svgEl, 'g', { class: 'push-arrow' });
+		// Dark halo underneath keeps the yellow legible on any board theme.
+		add(g, 'line', Object.assign({ class: 'push-arrow__halo', 'stroke-width': PUSH_ARROW_STROKE + 3 }, shaft));
+		add(g, 'polygon', { class: 'push-arrow__halo', points: head, 'stroke-width': 3 });
+		add(g, 'line', Object.assign({ class: 'push-arrow__shaft', 'stroke-width': PUSH_ARROW_STROKE }, shaft));
+		add(g, 'polygon', { class: 'push-arrow__head', points: head });
+	}
+}
+
+if (typeof window !== 'undefined') {
+	window.addEventListener('resize', () => {
+		document.querySelectorAll('.push-arrows').forEach(el => {
+			if (el._pushArrows && el._pushArrows.length) drawPushArrows(el, el._pushArrows);
+		});
+	});
+}

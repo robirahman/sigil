@@ -1234,44 +1234,6 @@
    "pass"
   ]
  },
- "-OwFJqfuHW7UgbZnhfdn:t36": {
-  "key": "-OwFJqfuHW7UgbZnhfdn",
-  "turnNumber": 36,
-  "color": "blue",
-  "actions": [
-   "b7",
-   "Rock_Slide",
-   "b9",
-   "b13",
-   "b3",
-   "b4",
-   "b5",
-   "c3",
-   "c4",
-   "c4",
-   "c7",
-   "pass"
-  ]
- },
- "-Oyi0V1hL-fe_me5acoE:t21": {
-  "key": "-Oyi0V1hL-fe_me5acoE",
-  "turnNumber": 21,
-  "color": "red",
-  "actions": [
-   "c7",
-   "Rock_Slide",
-   "c9",
-   "c13",
-   "c3",
-   "c4",
-   "c3",
-   "c12",
-   "c5",
-   "b10",
-   "c11",
-   "pass"
-  ]
- },
  "-OpZWcM5OMg5QZsXRnsk:t16": {
   "key": "-OpZWcM5OMg5QZsXRnsk",
   "turnNumber": 16,

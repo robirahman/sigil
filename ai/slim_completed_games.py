@@ -874,8 +874,8 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=400000):
                 else:
                     starts = [(b2, [], count)]
 
-                # Per-start cap (see _rock_slide_candidates): one wrong
-                # (kept, prefix) start must not starve the right one.
+                # Per-start cap: one wrong (kept, prefix) start must not
+                # starve the right one.
                 local = [min(6000, max_applies // 40)]
                 stack = list(starts)
                 while stack:
@@ -906,121 +906,6 @@ def _hard_moves_candidates(base, color, spell, sfn_after, max_applies=400000):
                              for act2, b3 in push_branches(b, t)]
                     for t, act2, b3 in reversed(steps):
                         stack.append((b3, acts + [act2], left - 1))
-
-
-def _rock_slide_candidates(base, color, sfn_after, max_applies=300000):
-    """Diff-constrained composer for Rock Slide's cascade: while any
-    enemy stone borders the caster, the player slides one to an
-    adjacent node (crushing any occupant). The enumerator's override
-    sweep can't reach deep cascades, and every (from, to) pick is
-    human-aimed. DFS over the cascade with branches ordered by
-    agreement with the after-state; the recorded Action('rock_slide',
-    pushes=[...]) replays verbatim in both engines."""
-    spell = 'Rock_Slide'
-    if spell not in base.spell_names:
-        return
-    enemy = 'blue' if color == 'red' else 'red'
-    try:
-        after = sfn_to_dict(sfn_after)['stones']
-    except Exception:
-        return
-    idx = base.spell_names.index(spell)
-    pos = POSITIONS.get(idx + 1, [])
-    kept = [n for n in pos if after.get(n) == color]
-    move_opts = [n for n in NODE_ORDER
-                 if after.get(n) == color and base.stones[n] != color]
-    vacated = [n for n in NODE_ORDER
-               if base.stones[n] == color and after.get(n) is None]
-    move_pool = list(dict.fromkeys(
-        move_opts + [n for n in pos if base.stones[n] != color
-                     and base.stones[n] != DESTROYED]))
-    budget = [max_applies]
-    emitted = set()
-
-    def slide_options(b):
-        opts = []
-        for src in NODE_ORDER:
-            if b.stones[src] != enemy:
-                continue
-            if not any(b.stones[nb] == color
-                       for nb in b._adjacent_nodes(src)):
-                continue
-            for to in b._adjacent_nodes(src):
-                if b.stones[to] == DESTROYED:
-                    continue
-                # Order by after-state agreement: destination ends
-                # enemy > ends empty > disagreements last.
-                a = after.get(to)
-                rank = 0 if a == enemy else (1 if a is None else 2)
-                opts.append((rank, src, to))
-        opts.sort(key=lambda o: o[0])
-        return [(s, t) for _r, s, t in opts[:8]]
-
-    for kept_k in range(len(kept), -1, -1):
-        kept_opts = ([list(kept)] if kept_k == len(kept)
-                     else [list(c) for c in combinations(pos, kept_k)])
-        for kept_opt in kept_opts:
-            for prefix, b1 in _turn_prefixes(
-                    base, color, move_pool,
-                    _sac_pool(base, color, move_pool, vacated)):
-                if budget[0] <= 0:
-                    return
-                if any(b1.stones[n] != color for n in pos
-                       if b1.stones[n] != DESTROYED):
-                    continue
-                b2 = b1.copy()
-                for n in pos:
-                    if b2.stones[n] != DESTROYED:
-                        b2.stones[n] = None
-                for n in kept_opt:
-                    b2.stones[n] = color
-                if b2.lock[color] == spell:
-                    b2.springlock[color] = spell
-                else:
-                    b2.lock[color] = spell
-                    b2.springlock[color] = None
-                if not variant_has_deathmatch(b2.variant):
-                    b2.spell_counter[color] += 1
-                b2.update()
-                cast_act = Action('cast', spell=spell,
-                                  kept=list(kept_opt) or None)
-                # Per-start cap: one wrong (kept, prefix) start must not
-                # devour the whole budget before the right one runs —
-                # the sigil is often full BEFORE the standard move, so
-                # the empty prefix casts first into a diverged world.
-                local = [min(6000, max_applies // 20)]
-                stack = [(b2, [])]
-                while stack:
-                    if budget[0] <= 0:
-                        return
-                    if local[0] <= 0:
-                        break
-                    budget[0] -= 1
-                    local[0] -= 1
-                    b, pushes = stack.pop()
-                    opts = [] if b.gameover or len(pushes) >= 50 \
-                        else slide_options(b)
-                    if not opts:
-                        sfn = b.to_sfn()
-                        if sfn == sfn_after and sfn not in emitted:
-                            emitted.add(sfn)
-                            yield CompleteTurn(
-                                prefix + [cast_act]
-                                + [Action('rock_slide',
-                                          pushes=list(pushes))]
-                                + [Action('pass')])
-                        continue
-                    # LIFO stack: push in REVERSE so the best-ranked
-                    # option pops first (the budget dies in junk
-                    # branches otherwise).
-                    for src, to in reversed(opts):
-                        b3 = b.copy()
-                        occ = b3.stones[to]
-                        b3.stones[to] = b3.stones[src]
-                        b3.stones[src] = None
-                        b3.update()
-                        stack.append((b3, pushes + [
-                            {'from': src, 'to': to, 'crushed': occ}]))
 
 
 def _summer_double_cast_candidates(base, color, final_spell, sfn_after):
@@ -1105,8 +990,6 @@ def _candidates(board, color, cast_spell=None, sfn_after=None,
                                                               'fury'):
             yield from _hard_moves_candidates(board, color, cast_spell,
                                               sfn_after)
-        if cast_spell == 'Rock_Slide':
-            yield from _rock_slide_candidates(board, color, sfn_after)
         if cast_spell in _UNMODELED_CASTS:
             yield from _unmodeled_cast_candidates(board, color, cast_spell,
                                                   sfn_after)

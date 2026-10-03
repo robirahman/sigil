@@ -278,14 +278,9 @@ function _minimaxApplyTurn(board, turn, color) {
 			if (action.wall) sim.stones[action.wall] = DESTROYED;
 		}
 		else if (t === 'rock_slide') {
-			if (action.pushes) {
-				for (const p of action.pushes) {
-					const moved = sim.stones[p.from];
-					sim.stones[p.from] = null;
-					if (sim.stones[p.to] !== null) sim.crushedThisTurn = true;
-					sim.stones[p.to] = moved;
-				}
-			}
+			const { final, lost } = resolveRockSlide(sim.stones, action.pushes || []);
+			Object.assign(sim.stones, final);
+			if (lost.length) sim.crushedThisTurn = true;
 		}
 		else if (t === 'schedule_moves') {
 			const sched = sim.pendingMoves[color];

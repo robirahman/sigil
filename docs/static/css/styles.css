@@ -1068,6 +1068,18 @@ html[data-theme="volcanic"].webp {
 	background: var(--color-btn-end-turn-hover);
 }
 
+/* Submit: confirms a multi-target selection (Rock Slide's push arrows),
+   gold to match the arrows. */
+.action-button--submit {
+	background: #c99a0e;
+	color: #1a1405;
+}
+
+.action-button--submit:focus,
+.action-button--submit:hover {
+	background: #e0ad12;
+}
+
 .action-button--reset-turn {
 	background: var(--color-btn-reset);
 }
@@ -2401,4 +2413,33 @@ html[data-theme="volcanic"] .stone-nodes {
 .board--drawn .stone-node {
 	--outline-size: calc(((6 / var(--board-ref)) * var(--raw-size)) * 1em);
 	--size: calc(var(--raw-size) / var(--board-ref) * 100%);
+}
+
+/* --- Push-target arrows (Rock Slide) ---
+   Drawn by drawPushArrows (spell-effects.js) inside .stone-nodes, so theme
+   hue-rotate filters cancel out and the yellow stays yellow. */
+.push-arrows {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+	z-index: 103;
+}
+
+.push-arrow__halo {
+	fill: rgba(0, 0, 0, 0.55);
+	stroke: rgba(0, 0, 0, 0.55);
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.push-arrow__shaft {
+	stroke: var(--color-push-arrow, #ffd21f);
+	stroke-linecap: round;
+}
+
+.push-arrow__head {
+	fill: var(--color-push-arrow, #ffd21f);
 }

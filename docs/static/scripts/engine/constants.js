@@ -307,6 +307,8 @@ const CORE_SPELLS = {
 	Seal_of_Destruction: { resolve: null, static: true, ischarm: false },
 	// Tectonic expansion
 	Fissure:           { resolve: 'fissure',         static: false, ischarm: false },
+	// Rock Slide: every bordering enemy stone gets a push, then all resolve
+	// simultaneously (see resolveRockSlide).
 	Rock_Slide:        { resolve: 'rock_slide',      static: false, ischarm: false },
 	Bulwark:           { resolve: null,              static: true,  ischarm: true },
 	// Providence expansion (scheduled extra moves)
@@ -377,7 +379,7 @@ const SPELL_TEXTS = {
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
 	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all enemy stones on adjacent nodes.',
-	Rock_Slide:        'Push any enemy stones adjacent to you 1 space. (Order is chosen by the casting player.) If a stone is pushed to an occupied space, the stone previously occupying that space is crushed.',
+	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
 	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves.',
 	Dividend:          'Make 1 extra move at the beginning of your next turn.',
 	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
@@ -541,6 +543,277 @@ function isExperimentalSpell(name) {
 // Panda and Experimental are permanently unrated (unofficial).
 function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
+}
+
+// ---- Rock Slide (Tectonic) ----
+// Pure helpers shared by the interactive resolver (spells.js), the AI sim
+// (sim-board.js), replay/playback (applySimTurn, minimax-ai.js,
+// ai-player.js). Mirrors rock_slide_sources / resolve_rock_slide /
+// rock_slide_greedy_pushes in simboard.py.
+
+// Every enemy stone touching a `color` stone, in NODE_ORDER. Fixed at cast
+// time; every one of them must be pushed.
+function rockSlideSources(stones, color) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+	return NODE_ORDER.filter(n => stones[n] === enemy && ADJACENCY[n].some(nb => stones[nb] === color));
+}
+
+// Resolve pushes ([{from, to}]) simultaneously without mutating `stones`.
+// Returns { final: {node: value}, lost: [[node, color]] }. A pushed-away
+// node counts as vacated (chains slide, loops of 3+ rotate); a stationary
+// stone on a destination is destroyed; 2+ stones into one node all die; a
+// swap kills both; a stone pushed into a wall dies and the wall stays.
+function resolveRockSlide(stones, pushes) {
+	const destOf = {};
+	const arrivals = new Map();
+	for (const p of pushes) {
+		destOf[p.from] = p.to;
+		if (!arrivals.has(p.to)) arrivals.set(p.to, []);
+		arrivals.get(p.to).push(p.from);
+	}
+	const final = {};
+	for (const src of Object.keys(destOf)) final[src] = null;
+	const lost = [];
+	for (const [dest, srcs] of arrivals) {
+		const occ = stones[dest];
+		if (!(dest in destOf) && (occ === 'red' || occ === 'blue')) {
+			lost.push([dest, occ]);
+			final[dest] = null;
+		}
+		if (occ === DESTROYED || srcs.length >= 2 || destOf[dest] === srcs[0]) {
+			for (const src of srcs) lost.push([dest, stones[src]]);
+		} else {
+			final[dest] = stones[srcs[0]];
+		}
+	}
+	return { final, lost };
+}
+
+// Thrown for an `rock_slide_variant` override past the number of distinct
+// optimal outcomes; the exhaustive enumerators' try/catch skips it.
+class RockSlideVariantUnavailable extends Error {}
+
+const _ROCK_SLIDE_MEMO = new Map();
+const _ROCK_SLIDE_MEMO_MAX = 256;
+
+function _rockSlidePinned(sources, overridePushes) {
+	const pinned = {};
+	for (const ovr of overridePushes || []) {
+		if (sources.includes(ovr.from) && ADJACENCY[ovr.from].includes(ovr.to) && !(ovr.from in pinned)) {
+			pinned[ovr.from] = ovr.to;
+		}
+	}
+	return pinned;
+}
+
+// Deterministic variable order keeping the DP frontier narrow: BFS over
+// interacting sources, seeded and tie-broken by NODE_ORDER.
+function _rockSlideOrder(comp, opts) {
+	const touches = {};
+	for (const src of comp) touches[src] = new Set([...opts[src], src]);
+	const order = [], seen = new Set();
+	for (const root of comp) {
+		if (seen.has(root)) continue;
+		seen.add(root);
+		const queue = [root];
+		while (queue.length) {
+			const cur = queue.shift();
+			order.push(cur);
+			for (const nb of comp) {
+				if (!seen.has(nb) && [...touches[cur]].some(n => touches[nb].has(n))) {
+					seen.add(nb);
+					queue.push(nb);
+				}
+			}
+		}
+	}
+	return order;
+}
+
+// Exact max-net search over one interaction component: DP over a narrow
+// frontier of open nodes, then a tie walk using the DP as an exact bound.
+// Returns [bestNet, [destMap, ...]] — one assignment per distinct resolved
+// outcome, first in canonical order, at most `limit` (null = all).
+// Mirrors _rock_slide_component in simboard.py (see there for the scoring).
+function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
+	const enemy = color === 'red' ? 'blue' : 'red';
+	const kind = {};
+	for (const src of comp) {
+		for (const d of [...opts[src], src]) {
+			if (srcSet.has(d)) kind[d] = 'mover';
+			else if (stones[d] === DESTROYED) kind[d] = 'wall';
+			else if (stones[d] === enemy) kind[d] = 'enemy';
+			else if (stones[d] === color) kind[d] = 'own';
+			else kind[d] = 'empty';
+		}
+	}
+	const inComp = new Set(comp);
+	const seq = _rockSlideOrder(comp, opts);
+	const closeAt = {};
+	seq.forEach((src, i) => {
+		for (const d of opts[src]) closeAt[d] = i;
+		closeAt[src] = Math.max(src in closeAt ? closeAt[src] : i, i);
+	});
+	const closing = seq.map(() => []);
+	for (const d of Object.keys(closeAt)) {
+		if (kind[d] === 'mover' && inComp.has(d)) closing[closeAt[d]].push(d);
+	}
+	const firstHit = { enemy: 1, own: -1 };
+	const keyOf = (f) => Object.keys(f).sort().map(n => n + ':' + f[n].join(',')).join(';');
+
+	// frontier: {node: [count, arriver, dest]} (null for unknown)
+	function step(frontier, i, d) {
+		const src = seq[i];
+		const f = Object.assign({}, frontier);
+		const kd = kind[d];
+		let gain = 0;
+		if (kd === 'wall') {
+			gain = 1;
+		} else {
+			const [cnt, , dst] = f[d] || [0, null, null];
+			if (cnt === 0) {
+				gain = firstHit[kd] || 0;
+				f[d] = [1, src, dst];
+			} else {
+				gain = cnt === 1 ? 2 : 1;
+				f[d] = [2, null, dst];
+			}
+		}
+		if (src in closeAt && kind[src] === 'mover') {
+			const [cnt, arriver] = f[src] || [0, null, null];
+			f[src] = [cnt, arriver, d];
+		}
+		for (const node of closing[i]) {
+			const [cnt, arriver, dst] = f[node] || [0, null, null];
+			delete f[node];
+			if (cnt === 1 && dst === arriver) gain += 1;   // swap: the lone arrival here dies
+		}
+		for (const node of Object.keys(f)) if (closeAt[node] <= i) delete f[node];
+		return [gain, f];
+	}
+
+	const memo = new Map();
+	function dp(i, f) {
+		if (i === seq.length) return 0;
+		const mk = i + '|' + keyOf(f);
+		if (memo.has(mk)) return memo.get(mk);
+		let best = null;
+		for (const d of opts[seq[i]]) {
+			const [gain, nf] = step(f, i, d);
+			const val = gain + dp(i + 1, nf);
+			if (best === null || val > best) best = val;
+		}
+		memo.set(mk, best);
+		return best;
+	}
+
+	const best = dp(0, {});
+	const dest = {};
+	const out = [], keys = new Set();
+	function outcomeKey() {
+		const arrivals = {};
+		for (const src of seq) (arrivals[dest[src]] = arrivals[dest[src]] || []).push(src);
+		const vals = {};
+		for (const d of Object.keys(kind)) vals[d] = srcSet.has(d) ? null : stones[d];
+		for (const d of Object.keys(arrivals)) {
+			const srcs = arrivals[d];
+			if (kind[d] === 'wall') vals[d] = DESTROYED;
+			else if (srcs.length >= 2 || (kind[d] === 'mover' && dest[d] === srcs[0])) vals[d] = null;
+			else vals[d] = enemy;
+		}
+		return Object.keys(vals).sort().map(n => n + '=' + vals[n]).join(';');
+	}
+	function walk(i, f, acc) {
+		if (limit !== null && out.length >= limit) return;
+		if (i === seq.length) {
+			const k = outcomeKey();
+			if (!keys.has(k)) { keys.add(k); out.push(Object.assign({}, dest)); }
+			return;
+		}
+		for (const d of opts[seq[i]]) {
+			const [gain, nf] = step(f, i, d);
+			if (acc + gain + dp(i + 1, nf) === best) {
+				dest[seq[i]] = d;
+				walk(i + 1, nf, acc + gain);
+				delete dest[seq[i]];
+			}
+		}
+	}
+	walk(0, {}, 0);
+	return [best, out];
+}
+
+function _rockSlideSolve(stones, color, pinned, limit) {
+	const sources = rockSlideSources(stones, color);
+	const srcSet = new Set(sources);
+	const opts = {};
+	for (const s of sources) opts[s] = s in pinned ? [pinned[s]] : ADJACENCY[s].slice();
+	const parent = {};
+	for (const s of sources) parent[s] = s;
+	const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+	const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+	const byDest = new Map();
+	for (const s of sources) for (const d of opts[s]) {
+		if (!byDest.has(d)) byDest.set(d, []);
+		byDest.get(d).push(s);
+	}
+	for (const ss of byDest.values()) for (const t of ss.slice(1)) union(ss[0], t);
+	for (const s of sources) for (const d of opts[s]) if (srcSet.has(d) && opts[d].includes(s)) union(s, d);
+	const comps = [], index = new Map();
+	for (const s of sources) {
+		const r = find(s);
+		if (!index.has(r)) { index.set(r, comps.length); comps.push([]); }
+		comps[index.get(r)].push(s);
+	}
+	let total = 0;
+	const perComp = [];
+	for (const comp of comps) {
+		const [net, assigns] = _rockSlideComponent(stones, color, comp, opts, srcSet, limit);
+		total += net;
+		perComp.push(assigns);
+	}
+	return [sources, total, perComp];
+}
+
+// Every Rock Slide push set with the maximum net gain (enemy stones destroyed
+// minus own stones destroyed), one per distinct resolved board, in canonical
+// order (first = greedy): [bestNet, [pushes, ...]]. Sources split into
+// independent interaction components, each solved exactly by DP; component
+// optima multiply lazily (last component fastest), stopping at `limit`.
+// Mirrors rock_slide_optimal_pushes in simboard.py.
+function rockSlideOptimalPushes(stones, color, overridePushes, limit) {
+	limit = limit === undefined ? null : limit;
+	const sources = rockSlideSources(stones, color);
+	const pinned = _rockSlidePinned(sources, overridePushes);
+	// Memo per position; a solve with a larger limit serves smaller ones
+	// (the outcome lists are prefix-consistent).
+	const key = NODE_ORDER.map(n => stones[n]).join(',') + '|' + color + '|'
+		+ Object.keys(pinned).sort().map(k => k + '>' + pinned[k]).join(',');
+	let hit = _ROCK_SLIDE_MEMO.get(key);
+	if (!hit || !(hit[0] === null || (limit !== null && hit[0] >= limit))) {
+		if (_ROCK_SLIDE_MEMO.size >= _ROCK_SLIDE_MEMO_MAX) _ROCK_SLIDE_MEMO.clear();
+		hit = [limit, _rockSlideSolve(stones, color, pinned, limit)];
+		_ROCK_SLIDE_MEMO.set(key, hit);
+	}
+	const [srcs, best, perComp] = hit[1];
+	const out = [];
+	if (perComp.some(c => !c.length)) return [best, out];
+	const idx = perComp.map(() => 0);
+	while (true) {
+		const merged = {};
+		perComp.forEach((c, i) => Object.assign(merged, c[idx[i]]));
+		out.push(srcs.map(s => ({ from: s, to: merged[s] })));
+		if (limit !== null && out.length >= limit) break;
+		let k = idx.length - 1;
+		while (k >= 0 && ++idx[k] === perComp[k].length) { idx[k] = 0; k--; }
+		if (k < 0) break;
+	}
+	return [best, out];
+}
+
+// The canonical first max-net push set. Mirrors rock_slide_greedy_pushes.
+function rockSlideGreedyPushes(stones, color, overridePushes) {
+	return rockSlideOptimalPushes(stones, color, overridePushes, 1)[1][0];
 }
 
 // Game variants. Orthogonal dimensions encoded in a single string:

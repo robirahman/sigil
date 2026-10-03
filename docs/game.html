@@ -456,7 +456,7 @@
 
 						<div
 							class="actions"
-							x-bind:class="{ 'actions--visible': currentSfn || showReset || actionList.includes('dash') || actionList.includes('pass')}"
+							x-bind:class="{ 'actions--visible': currentSfn || showReset || actionList.includes('dash') || actionList.includes('pass') || actionList.includes('submit')}"
 						>
 							<button
 								class="action-button action-button--reset-turn"
@@ -471,6 +471,13 @@
 								x-on:click="handleDash"
 							>
 								Dash
+							</button>
+							<button
+								class="action-button action-button--submit"
+								x-bind:class="{ 'is-hidden': !actionList.includes('submit') }"
+								x-on:click="handleSubmit"
+							>
+								Submit
 							</button>
 							<button
 								class="action-button action-button--end-turn"
@@ -672,6 +679,8 @@
 								class="stone-nodes"
 								x-cloak
 							>
+								<!-- Planned push arrows (Rock Slide), drawn by drawPushArrows. -->
+								<svg class="push-arrows" x-ref="pushArrows" aria-hidden="true"></svg>
 								<div
 									class="stone-node stone-node--blue stone-node--score"
 									x-bind:class="{ [`stone-node--score-${score}`]: true }"

@@ -6,6 +6,7 @@ used by the alpha-beta search and self-play data generation.
 """
 
 import copy
+import itertools
 from collections import deque
 from notation import NODE_ORDER, ADJACENCY, POSITIONS, base_spell_name, DUPLICATE_SUFFIXES
 
@@ -91,6 +92,8 @@ CORE_SPELLS = {
     'Seal_of_Destruction': {'resolve': None, 'static': True, 'ischarm': False},
     # Tectonic expansion
     'Fissure': {'resolve': 'fissure', 'static': False, 'ischarm': False},
+    # Rock Slide: every bordering enemy stone gets a push, then all resolve
+    # simultaneously (see resolve_rock_slide).
     'Rock_Slide': {'resolve': 'rock_slide', 'static': False, 'ischarm': False},
     'Bulwark': {'resolve': None, 'static': True, 'ischarm': True},
     # Providence expansion (scheduled extra moves)
@@ -123,6 +126,306 @@ for _big_pos in (1, 2, 3, 4, 5, 6):
 def is_big_spell_node(name):
     return name in BIG_SPELL_NODES
 
+def rock_slide_sources(stones, color):
+    """Rock Slide's pushed set: every enemy stone touching a `color` stone,
+    in NODE_ORDER. Fixed at cast time; every one of them must be pushed."""
+    enemy = 'blue' if color == 'red' else 'red'
+    return [n for n in NODE_ORDER
+            if stones[n] == enemy and any(stones[nb] == color for nb in ADJACENCY[n])]
+
+
+def resolve_rock_slide(stones, pushes):
+    """Resolve Rock Slide's pushes ([{'from', 'to'}, ...]) simultaneously.
+
+    Pure: returns (final, lost) without mutating `stones`. `final` maps each
+    touched node to its new value; `lost` lists (node, color) per destroyed
+    stone, at the node where it died. Rules:
+      - a node whose stone is pushed away counts as vacated, so chains slide
+        and closed loops of 3+ rotate;
+      - a stationary stone on a destination is destroyed;
+      - two or more stones pushed into the same node are all destroyed;
+      - two stones pushed onto each other's nodes (a swap) are both destroyed;
+      - a stone pushed into a wall is destroyed; the wall stays a wall.
+    Mirrors resolveRockSlide in constants.js.
+    """
+    dest_of = {p['from']: p['to'] for p in pushes}
+    arrivals = {}
+    for p in pushes:
+        arrivals.setdefault(p['to'], []).append(p['from'])
+    final = {src: None for src in dest_of}
+    lost = []
+    for dest, srcs in arrivals.items():
+        occ = stones[dest]
+        if dest not in dest_of and occ in ('red', 'blue'):
+            lost.append((dest, occ))
+            final[dest] = None
+        if occ == DESTROYED or len(srcs) >= 2 or dest_of.get(dest) == srcs[0]:
+            for src in srcs:
+                lost.append((dest, stones[src]))
+        else:
+            final[dest] = stones[srcs[0]]
+    return final, lost
+
+
+class RockSlideVariantUnavailable(Exception):
+    """A 'rock_slide_variant' override asked for more distinct optimal
+    outcomes than the position has. The exhaustive enumerators wrap casts in
+    try/except-continue, so the surplus variant just disappears."""
+
+
+_ROCK_SLIDE_MEMO = {}
+_ROCK_SLIDE_MEMO_MAX = 256
+
+
+def _rock_slide_pinned(sources, override_pushes):
+    pinned = {}
+    for ovr in override_pushes or []:
+        src, dst = ovr.get('from'), ovr.get('to')
+        if src in sources and dst in ADJACENCY[src] and src not in pinned:
+            pinned[src] = dst
+    return pinned
+
+
+def _rock_slide_order(comp, opts):
+    """Deterministic variable order keeping the DP frontier narrow: BFS over
+    interacting sources (shared destination or adjacency), seeded and
+    tie-broken by NODE_ORDER (`comp` arrives in NODE_ORDER)."""
+    touches = {src: set(opts[src]) | {src} for src in comp}
+    order, seen = [], set()
+    for root in comp:
+        if root in seen:
+            continue
+        seen.add(root)
+        queue = [root]
+        while queue:
+            cur = queue.pop(0)
+            order.append(cur)
+            for nb in comp:
+                if nb not in seen and touches[cur] & touches[nb]:
+                    seen.add(nb)
+                    queue.append(nb)
+    return order
+
+
+def _rock_slide_component(stones, color, comp, opts, src_set, limit):
+    """Exact max-net search over one interaction component.
+
+    Returns (best_net, [dest dict, ...]): one assignment per distinct
+    resolved outcome, each the first optimal assignment reaching it in
+    canonical order (sources in _rock_slide_order, options in ADJACENCY
+    order), at most `limit` of them (None = all).
+
+    Net = sources destroyed + stationary enemy stones hit - own stones hit,
+    accrued per arrival: into a wall +1; the first arrival on a stationary
+    enemy / own stone +1 / -1; the second arrival anywhere +2 (both die),
+    each later one +1. A lone arrival on a pushed-away node dies only in a
+    swap, settled when the node closes. Sources are assigned in
+    _rock_slide_order and a node "closes" once every source that can touch it is
+    assigned, so the open-node state is a small frontier: dp(i, frontier)
+    memoizes the best completion (dynamic programming over the frontier),
+    and the tie walk uses it as an exact bound, visiting only optimal paths.
+    """
+    enemy = 'blue' if color == 'red' else 'red'
+    kind = {}
+    for src in comp:
+        for d in opts[src] + [src]:
+            if d in src_set:
+                kind[d] = 'mover'
+            elif stones[d] == DESTROYED:
+                kind[d] = 'wall'
+            elif stones[d] == enemy:
+                kind[d] = 'enemy'
+            elif stones[d] == color:
+                kind[d] = 'own'
+            else:
+                kind[d] = 'empty'
+    in_comp = set(comp)
+    seq = _rock_slide_order(comp, opts)
+    # close_at[d]: index of the last source whose choice can affect d.
+    close_at = {}
+    for i, src in enumerate(seq):
+        for d in opts[src]:
+            close_at[d] = i
+        close_at[src] = max(close_at.get(src, i), i)
+    closing = [[] for _ in seq]
+    for d, i in close_at.items():
+        if kind[d] == 'mover' and d in in_comp:
+            closing[i].append(d)
+    first_hit = {'enemy': 1, 'own': -1}
+
+    def step(frontier, i, d):
+        """Assign seq[i] -> d on `frontier` ({node: (count, arriver, dest)}).
+        Returns (gain, new frontier key)."""
+        src = seq[i]
+        f = dict(frontier)
+        kd = kind[d]
+        gain = 0
+        if kd == 'wall':
+            gain = 1
+        else:
+            cnt, arriver, dst = f.get(d, (0, None, None))
+            if cnt == 0:
+                gain = first_hit.get(kd, 0)
+                f[d] = (1, src, dst)
+            else:
+                gain = 2 if cnt == 1 else 1
+                f[d] = (2, None, dst)
+        if src in close_at and kind.get(src) == 'mover':
+            cnt, arriver, _ = f.get(src, (0, None, None))
+            f[src] = (cnt, arriver, d)
+        for node in closing[i]:
+            cnt, arriver, dst = f.pop(node, (0, None, None))
+            if cnt == 1 and dst == arriver:
+                gain += 1        # swap: the lone arrival here dies
+        for node in [n for n in f if close_at[n] <= i]:
+            del f[node]
+        return gain, tuple(sorted(f.items()))
+
+    memo = {}
+
+    def dp(i, key):
+        if i == len(seq):
+            return 0
+        hit = memo.get((i, key))
+        if hit is not None:
+            return hit
+        frontier = dict(key)
+        best = None
+        for d in opts[seq[i]]:
+            gain, nkey = step(frontier, i, d)
+            val = gain + dp(i + 1, nkey)
+            if best is None or val > best:
+                best = val
+        memo[(i, key)] = best
+        return best
+
+    best = dp(0, ())
+    dest = {}
+    out, keys = [], set()
+
+    def outcome_key():
+        # Key over every node the component can touch (not just this
+        # assignment's destinations): landing on a stationary enemy stone
+        # leaves an enemy stone there either way, so C->B vs C->D can be
+        # the same board.
+        arrivals = {}
+        for src in seq:
+            arrivals.setdefault(dest[src], []).append(src)
+        vals = {d: (None if d in src_set else stones[d]) for d in kind}
+        for d, srcs in arrivals.items():
+            if kind[d] == 'wall':
+                vals[d] = DESTROYED
+            elif len(srcs) >= 2 or (kind[d] == 'mover' and dest.get(d) == srcs[0]):
+                vals[d] = None
+            else:
+                vals[d] = enemy
+        return tuple(sorted(vals.items()))
+
+    def walk(i, key, acc):
+        if limit is not None and len(out) >= limit:
+            return
+        if i == len(seq):
+            k = outcome_key()
+            if k not in keys:
+                keys.add(k)
+                out.append(dict(dest))
+            return
+        frontier = dict(key)
+        for d in opts[seq[i]]:
+            gain, nkey = step(frontier, i, d)
+            if acc + gain + dp(i + 1, nkey) == best:
+                dest[seq[i]] = d
+                walk(i + 1, nkey, acc + gain)
+                del dest[seq[i]]
+
+    walk(0, (), 0)
+    return best, out
+
+
+def _rock_slide_solve(stones, color, pinned, limit):
+    sources = rock_slide_sources(stones, color)
+    src_set = set(sources)
+    opts = {s: [pinned[s]] if s in pinned else list(ADJACENCY[s]) for s in sources}
+    parent = {s: s for s in sources}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    by_dest = {}
+    for s in sources:
+        for d in opts[s]:
+            by_dest.setdefault(d, []).append(s)
+    for ss in by_dest.values():
+        for t in ss[1:]:
+            union(ss[0], t)
+    for s in sources:
+        for d in opts[s]:
+            if d in src_set and s in opts[d]:
+                union(s, d)
+    comps, index = [], {}
+    for s in sources:
+        r = find(s)
+        if r not in index:
+            index[r] = len(comps)
+            comps.append([])
+        comps[index[r]].append(s)
+    total, per_comp = 0, []
+    for comp in comps:
+        net, assigns = _rock_slide_component(stones, color, comp, opts, src_set, limit)
+        total += net
+        per_comp.append(assigns)
+    return sources, total, per_comp
+
+
+def rock_slide_optimal_pushes(stones, color, override_pushes=None, limit=None):
+    """Every Rock Slide push set with the maximum net gain (enemy stones
+    destroyed minus own stones destroyed), one per distinct resolved board.
+
+    Returns (best_net, [pushes, ...]) in canonical order (first = greedy).
+    Exact: sources split into independent interaction components (shared
+    destination or possible swap), each solved by dynamic programming over
+    a narrow frontier (see _rock_slide_component), which also walks the tied
+    optima; component optima multiply lazily, stopping at `limit`.
+    Components touch disjoint nodes, so per-component outcome dedupe makes
+    every combination a different board. `override_pushes` pins valid
+    {'from', 'to'} choices. Mirrors rockSlideOptimalPushes in constants.js.
+    """
+    sources = rock_slide_sources(stones, color)
+    pinned = _rock_slide_pinned(sources, override_pushes)
+    # Memo per position; a solve with a larger limit serves smaller ones
+    # (the outcome lists are prefix-consistent).
+    key = (tuple(stones[n] for n in NODE_ORDER), color, tuple(sorted(pinned.items())))
+    hit = _ROCK_SLIDE_MEMO.get(key)
+    if hit is None or not (hit[0] is None or (limit is not None and hit[0] >= limit)):
+        if len(_ROCK_SLIDE_MEMO) >= _ROCK_SLIDE_MEMO_MAX:
+            _ROCK_SLIDE_MEMO.clear()
+        hit = _ROCK_SLIDE_MEMO[key] = (limit, _rock_slide_solve(stones, color, pinned, limit))
+    sources, best, per_comp = hit[1]
+    out = []
+    for combo in itertools.product(*per_comp):
+        merged = {}
+        for a in combo:
+            merged.update(a)
+        out.append([{'from': s, 'to': merged[s]} for s in sources])
+        if limit is not None and len(out) >= limit:
+            break
+    return best, out
+
+
+def rock_slide_greedy_pushes(stones, color, override_pushes=None):
+    """The canonical first max-net Rock Slide push set (see
+    rock_slide_optimal_pushes). Mirrors rockSlideGreedyPushes in constants.js."""
+    return rock_slide_optimal_pushes(stones, color, override_pushes, limit=1)[1][0]
+
+
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
 SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
 
@@ -146,7 +449,7 @@ class Action:
         # Node permanently destroyed (turned into a wall) by this action,
         # e.g. Fissure's target node. None for actions that create no wall.
         self.wall = kwargs.get('wall')
-        # Rock Slide push sequence: list of {'from', 'to', 'crushed'} dicts.
+        # Rock Slide pushes: list of {'from', 'to'} dicts (resolved simultaneously).
         self.pushes = kwargs.get('pushes')
         # Providence schedule_moves: extra-move turns scheduled by this cast.
         self.turns = kwargs.get('turns')
@@ -1473,73 +1776,29 @@ class SimBoard:
             self.update()
 
         elif resolve_type == 'rock_slide':
-            pushes = []
-            override_pushes = overrides.get('rock_slide_pushes') or []
-            safety = 0
-            while safety < 50:
-                safety += 1
-                adjacent_enemy_nodes = []
-                for name in NODE_ORDER:
-                    if self.stones[name] == enemy:
-                        has_caster_nb = any(self.stones[nb] == color for nb in self._adjacent_nodes(name))
-                        if has_caster_nb:
-                            adjacent_enemy_nodes.append(name)
-                
-                if len(adjacent_enemy_nodes) == 0:
-                    break
-                
-                from_node = None
-                to_node = None
-                
-                if len(pushes) < len(override_pushes):
-                    ovr = override_pushes[len(pushes)]
-                    if ovr.get('from') in adjacent_enemy_nodes and ovr.get('to') in self._adjacent_nodes(ovr.get('from')):
-                        from_node = ovr.get('from')
-                        to_node = ovr.get('to')
-                
-                if from_node is None:
-                    best_from = None
-                    best_to = None
-                    best_score = -9999
-                    for source in adjacent_enemy_nodes:
-                        stone_color = self.stones[source]
-                        for nb in self._adjacent_nodes(source):
-                            occ = self.stones[nb]
-                            score = 0
-                            if occ is None:
-                                score = 10
-                            elif occ == enemy:
-                                if stone_color == color:
-                                    score = 5
-                                else:
-                                    score = 20
-                            elif occ == color:
-                                if stone_color == color:
-                                    score = -50
-                                else:
-                                    score = -100
-                            
-                            if score > best_score:
-                                best_score = score
-                                best_from = source
-                                best_to = nb
-                    if best_from is not None:
-                        from_node = best_from
-                        to_node = best_to
-                    else:
-                        from_node = adjacent_enemy_nodes[0]
-                        to_node = self._adjacent_nodes(from_node)[0]
-                
-                stone_color = self.stones[from_node]
-                occupant = self.stones[to_node]
-                self.stones[from_node] = None
-                self.stones[to_node] = stone_color
-                pushes.append({'from': from_node, 'to': to_node, 'crushed': occupant})
-                self.update()
-                
-                if self.gameover:
-                    break
-            actions.append(Action('rock_slide', pushes=pushes))
+            # Every push is chosen first, then all resolve at once, with one
+            # update() at the end (no mid-resolution stone-count checks).
+            # 'rock_slide_variant' i > 0 (exhaustive enumerator) picks the
+            # i-th distinct max-net outcome on this post-cast board.
+            variant = overrides.get('rock_slide_variant') or 0
+            if variant:
+                # One generous solve serves the enumerator's whole run of
+                # variants through the memo.
+                _, options = rock_slide_optimal_pushes(
+                    self.stones, color, overrides.get('rock_slide_pushes'),
+                    limit=max(16, variant + 1))
+                if variant >= len(options):
+                    raise RockSlideVariantUnavailable(variant)
+                pushes = options[variant]
+            else:
+                pushes = rock_slide_greedy_pushes(self.stones, color,
+                                                  overrides.get('rock_slide_pushes'))
+            final, lost = resolve_rock_slide(self.stones, pushes)
+            self.stones.update(final)
+            destroyed = list(dict.fromkeys(n for n, _ in lost))
+            actions.append(Action('rock_slide', pushes=pushes,
+                                  destroyed=destroyed or None))
+            self.update()
 
         elif resolve_type == 'schedule_moves':
             # Providence: schedule 1 extra move at the start of each of the
@@ -2107,11 +2366,8 @@ def apply_sim_turn(board, turn, color):
             if action.wall:
                 board.stones[action.wall] = DESTROYED
         elif t == 'rock_slide':
-            if action.pushes:
-                for p in action.pushes:
-                    moved = board.stones[p['from']]
-                    board.stones[p['from']] = None
-                    board.stones[p['to']] = moved
+            final, _ = resolve_rock_slide(board.stones, action.pushes or [])
+            board.stones.update(final)
         elif t == 'schedule_moves':
             sched = board.pending_moves[color]
             n = action.turns or 0
