@@ -65,7 +65,7 @@ PROVIDENCE_CHARMS = ['Dividend']
 # Experimental expansion: the unofficial, permanently unrated home for spells
 # still being playtested before release. It need not fill all three slots.
 EXPERIMENTAL_RITUALS = []
-EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Avalanche']
+EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids']
 EXPERIMENTAL_CHARMS = []
 EXPERIMENTAL_SPELLS = set(EXPERIMENTAL_RITUALS + EXPERIMENTAL_SORCERIES + EXPERIMENTAL_CHARMS)
 

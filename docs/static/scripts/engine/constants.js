@@ -307,6 +307,8 @@ const CORE_SPELLS = {
 	Seal_of_Destruction: { resolve: null, static: true, ischarm: false },
 	// Tectonic expansion
 	Fissure:           { resolve: 'fissure',         static: false, ischarm: false },
+	// Rock Slide: every bordering enemy stone gets a push, then all resolve
+	// simultaneously (see resolveRockSlide).
 	Rock_Slide:        { resolve: 'rock_slide',      static: false, ischarm: false },
 	Bulwark:           { resolve: null,              static: true,  ischarm: true },
 	// Providence expansion (scheduled extra moves)
@@ -322,9 +324,6 @@ const CORE_SPELLS = {
 	// spell window once (one more cast, no dash), the way Seal of Summer's
 	// second cast works. Consumed by the turn drivers, not the resolver.
 	Rapids:            { resolve: 'soft_hard_chain', counts: [1, 1], extra_cast: true, static: false, ischarm: false },
-	// Avalanche: Rock Slide with every push chosen first, then resolved
-	// simultaneously (see resolveAvalanche).
-	Avalanche:         { resolve: 'avalanche', static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -380,14 +379,13 @@ const SPELL_TEXTS = {
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
 	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all enemy stones on adjacent nodes.',
-	Rock_Slide:        'Push any enemy stones adjacent to you 1 space. (Order is chosen by the casting player.) If a stone is pushed to an occupied space, the stone previously occupying that space is crushed.',
+	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
 	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves.',
 	Dividend:          'Make 1 extra move at the beginning of your next turn.',
 	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
 	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
 	Spring_Tide:       'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.',
 	Rapids:            'Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn.',
-	Avalanche:         "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
 };
 
 // ---- Duplicate-copy aliases (the "allow duplicates" variant) ----
@@ -477,7 +475,7 @@ const PROVIDENCE_CHARMS = ['Dividend'];
 // not fill all three slots — the pool check only requires core + selected
 // packs to reach 3 spells per category.
 const EXPERIMENTAL_RITUALS = [];
-const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Avalanche'];
+const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids'];
 const EXPERIMENTAL_CHARMS = [];
 
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
@@ -547,15 +545,15 @@ function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
 }
 
-// ---- Avalanche (Experimental) ----
+// ---- Rock Slide (Tectonic) ----
 // Pure helpers shared by the interactive resolver (spells.js), the AI sim
 // (sim-board.js), replay/playback (applySimTurn, minimax-ai.js,
-// ai-player.js). Mirrors avalanche_sources / resolve_avalanche /
-// avalanche_greedy_pushes in simboard.py.
+// ai-player.js). Mirrors rock_slide_sources / resolve_rock_slide /
+// rock_slide_greedy_pushes in simboard.py.
 
 // Every enemy stone touching a `color` stone, in NODE_ORDER. Fixed at cast
 // time; every one of them must be pushed.
-function avalancheSources(stones, color) {
+function rockSlideSources(stones, color) {
 	const enemy = color === 'red' ? 'blue' : 'red';
 	return NODE_ORDER.filter(n => stones[n] === enemy && ADJACENCY[n].some(nb => stones[nb] === color));
 }
@@ -565,7 +563,7 @@ function avalancheSources(stones, color) {
 // node counts as vacated (chains slide, loops of 3+ rotate); a stationary
 // stone on a destination is destroyed; 2+ stones into one node all die; a
 // swap kills both; a stone pushed into a wall dies and the wall stays.
-function resolveAvalanche(stones, pushes) {
+function resolveRockSlide(stones, pushes) {
 	const destOf = {};
 	const arrivals = new Map();
 	for (const p of pushes) {
@@ -591,14 +589,14 @@ function resolveAvalanche(stones, pushes) {
 	return { final, lost };
 }
 
-// Thrown for an `avalanche_variant` override past the number of distinct
+// Thrown for an `rock_slide_variant` override past the number of distinct
 // optimal outcomes; the exhaustive enumerators' try/catch skips it.
-class AvalancheVariantUnavailable extends Error {}
+class RockSlideVariantUnavailable extends Error {}
 
-const _AVALANCHE_MEMO = new Map();
-const _AVALANCHE_MEMO_MAX = 256;
+const _ROCK_SLIDE_MEMO = new Map();
+const _ROCK_SLIDE_MEMO_MAX = 256;
 
-function _avalanchePinned(sources, overridePushes) {
+function _rockSlidePinned(sources, overridePushes) {
 	const pinned = {};
 	for (const ovr of overridePushes || []) {
 		if (sources.includes(ovr.from) && ADJACENCY[ovr.from].includes(ovr.to) && !(ovr.from in pinned)) {
@@ -610,7 +608,7 @@ function _avalanchePinned(sources, overridePushes) {
 
 // Deterministic variable order keeping the DP frontier narrow: BFS over
 // interacting sources, seeded and tie-broken by NODE_ORDER.
-function _avalancheOrder(comp, opts) {
+function _rockSlideOrder(comp, opts) {
 	const touches = {};
 	for (const src of comp) touches[src] = new Set([...opts[src], src]);
 	const order = [], seen = new Set();
@@ -636,8 +634,8 @@ function _avalancheOrder(comp, opts) {
 // frontier of open nodes, then a tie walk using the DP as an exact bound.
 // Returns [bestNet, [destMap, ...]] — one assignment per distinct resolved
 // outcome, first in canonical order, at most `limit` (null = all).
-// Mirrors _avalanche_component in simboard.py (see there for the scoring).
-function _avalancheComponent(stones, color, comp, opts, srcSet, limit) {
+// Mirrors _rock_slide_component in simboard.py (see there for the scoring).
+function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const kind = {};
 	for (const src of comp) {
@@ -650,7 +648,7 @@ function _avalancheComponent(stones, color, comp, opts, srcSet, limit) {
 		}
 	}
 	const inComp = new Set(comp);
-	const seq = _avalancheOrder(comp, opts);
+	const seq = _rockSlideOrder(comp, opts);
 	const closeAt = {};
 	seq.forEach((src, i) => {
 		for (const d of opts[src]) closeAt[d] = i;
@@ -745,8 +743,8 @@ function _avalancheComponent(stones, color, comp, opts, srcSet, limit) {
 	return [best, out];
 }
 
-function _avalancheSolve(stones, color, pinned, limit) {
-	const sources = avalancheSources(stones, color);
+function _rockSlideSolve(stones, color, pinned, limit) {
+	const sources = rockSlideSources(stones, color);
 	const srcSet = new Set(sources);
 	const opts = {};
 	for (const s of sources) opts[s] = s in pinned ? [pinned[s]] : ADJACENCY[s].slice();
@@ -770,32 +768,32 @@ function _avalancheSolve(stones, color, pinned, limit) {
 	let total = 0;
 	const perComp = [];
 	for (const comp of comps) {
-		const [net, assigns] = _avalancheComponent(stones, color, comp, opts, srcSet, limit);
+		const [net, assigns] = _rockSlideComponent(stones, color, comp, opts, srcSet, limit);
 		total += net;
 		perComp.push(assigns);
 	}
 	return [sources, total, perComp];
 }
 
-// Every Avalanche push set with the maximum net gain (enemy stones destroyed
+// Every Rock Slide push set with the maximum net gain (enemy stones destroyed
 // minus own stones destroyed), one per distinct resolved board, in canonical
 // order (first = greedy): [bestNet, [pushes, ...]]. Sources split into
 // independent interaction components, each solved exactly by DP; component
 // optima multiply lazily (last component fastest), stopping at `limit`.
-// Mirrors avalanche_optimal_pushes in simboard.py.
-function avalancheOptimalPushes(stones, color, overridePushes, limit) {
+// Mirrors rock_slide_optimal_pushes in simboard.py.
+function rockSlideOptimalPushes(stones, color, overridePushes, limit) {
 	limit = limit === undefined ? null : limit;
-	const sources = avalancheSources(stones, color);
-	const pinned = _avalanchePinned(sources, overridePushes);
+	const sources = rockSlideSources(stones, color);
+	const pinned = _rockSlidePinned(sources, overridePushes);
 	// Memo per position; a solve with a larger limit serves smaller ones
 	// (the outcome lists are prefix-consistent).
 	const key = NODE_ORDER.map(n => stones[n]).join(',') + '|' + color + '|'
 		+ Object.keys(pinned).sort().map(k => k + '>' + pinned[k]).join(',');
-	let hit = _AVALANCHE_MEMO.get(key);
+	let hit = _ROCK_SLIDE_MEMO.get(key);
 	if (!hit || !(hit[0] === null || (limit !== null && hit[0] >= limit))) {
-		if (_AVALANCHE_MEMO.size >= _AVALANCHE_MEMO_MAX) _AVALANCHE_MEMO.clear();
-		hit = [limit, _avalancheSolve(stones, color, pinned, limit)];
-		_AVALANCHE_MEMO.set(key, hit);
+		if (_ROCK_SLIDE_MEMO.size >= _ROCK_SLIDE_MEMO_MAX) _ROCK_SLIDE_MEMO.clear();
+		hit = [limit, _rockSlideSolve(stones, color, pinned, limit)];
+		_ROCK_SLIDE_MEMO.set(key, hit);
 	}
 	const [srcs, best, perComp] = hit[1];
 	const out = [];
@@ -813,9 +811,9 @@ function avalancheOptimalPushes(stones, color, overridePushes, limit) {
 	return [best, out];
 }
 
-// The canonical first max-net push set. Mirrors avalanche_greedy_pushes.
-function avalancheGreedyPushes(stones, color, overridePushes) {
-	return avalancheOptimalPushes(stones, color, overridePushes, 1)[1][0];
+// The canonical first max-net push set. Mirrors rock_slide_greedy_pushes.
+function rockSlideGreedyPushes(stones, color, overridePushes) {
+	return rockSlideOptimalPushes(stones, color, overridePushes, 1)[1][0];
 }
 
 // Game variants. Orthogonal dimensions encoded in a single string:

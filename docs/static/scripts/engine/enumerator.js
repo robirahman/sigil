@@ -59,8 +59,8 @@ const ENUM_CAPS = {
 	// move (the chain also always offers "stop here", so branching per
 	// extra is extra_move + 1).
 	extra_move: 2,
-	// Avalanche (Experimental): distinct max-net push outcomes, incl. greedy.
-	avalanche: 12,
+	// Rock Slide (Tectonic): distinct max-net push outcomes, incl. greedy.
+	rock_slide: 12,
 	// Panda expansion caps.
 	shiver: 8,
 	choke: 6,
@@ -472,14 +472,14 @@ function _spellOverrides(board, color, spellName, caps) {
 				out.push({ sacrifice_targets: window });
 			}
 		}
-	} else if (rt === 'avalanche') {
+	} else if (rt === 'rock_slide') {
 		// Every max-net push set with a distinct resolved board, chosen at
 		// resolve time on the post-cast board (the cast's sacrifice changes
 		// who borders the caster). Variant 0 is the greedy {}; a variant past
 		// the position's count throws inside the resolver and is skipped by
 		// the try/catch around _castSpell.
-		const cap = caps.avalanche !== undefined ? caps.avalanche : ENUM_CAPS.avalanche;
-		for (let i = 1; i < cap; i++) out.push({ avalanche_variant: i });
+		const cap = caps.rock_slide !== undefined ? caps.rock_slide : ENUM_CAPS.rock_slide;
+		for (let i = 1; i < cap; i++) out.push({ rock_slide_variant: i });
 	} else if (rt === 'fissure') {
 		// Branch over which node to permanently destroy, scored by net
 		// stone-count advantage so the strongest walls are explored first:

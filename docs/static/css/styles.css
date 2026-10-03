@@ -1068,7 +1068,7 @@ html[data-theme="volcanic"].webp {
 	background: var(--color-btn-end-turn-hover);
 }
 
-/* Submit: confirms a multi-target selection (Avalanche's push arrows),
+/* Submit: confirms a multi-target selection (Rock Slide's push arrows),
    gold to match the arrows. */
 .action-button--submit {
 	background: #c99a0e;
@@ -2415,7 +2415,7 @@ html[data-theme="volcanic"] .stone-nodes {
 	--size: calc(var(--raw-size) / var(--board-ref) * 100%);
 }
 
-/* --- Push-target arrows (Avalanche) ---
+/* --- Push-target arrows (Rock Slide) ---
    Drawn by drawPushArrows (spell-effects.js) inside .stone-nodes, so theme
    hue-rotate filters cancel out and the yellow stays yellow. */
 .push-arrows {

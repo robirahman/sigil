@@ -21,7 +21,7 @@ class SimAction {
 		this.placed = opts.placed || null;   // perfect_heist: occupied nodes
 		this.converted = opts.converted || null; // corrupt: enemy stones turned to caster's color
 		this.wall = opts.wall || null;       // fissure: node permanently destroyed
-		this.pushes = opts.pushes || null;   // rock_slide: [{from, to, crushed}]; avalanche: [{from, to}]
+		this.pushes = opts.pushes || null;   // rock_slide: [{from, to}], resolved simultaneously
 		this.turns = opts.turns || null;     // schedule_moves: turns scheduled
 	}
 }
@@ -676,110 +676,26 @@ class SimBoard {
 			actions.push(new SimAction('fissure', { node: target, destroyed, wall: target }));
 			this.update();
 		} else if (rt === 'rock_slide') {
-			const pushes = [];
-			const overridePushes = overrides.rock_slide_pushes || [];
-			let safety = 0;
-			while (safety < 50) {
-				safety++;
-				const adjacentEnemyNodes = [];
-				for (const name of NODE_ORDER) {
-					if (this.stones[name] === enemy) {
-						const hasCasterNb = ADJACENCY[name].some(nb => this.stones[nb] === color);
-						if (hasCasterNb) {
-							adjacentEnemyNodes.push(name);
-						}
-					}
-				}
-
-				if (adjacentEnemyNodes.length === 0) {
-					break;
-				}
-
-				let fromNode = null;
-				let toNode = null;
-
-				if (pushes.length < overridePushes.length) {
-					const ovr = overridePushes[pushes.length];
-					if (adjacentEnemyNodes.includes(ovr.from) && ADJACENCY[ovr.from].includes(ovr.to)) {
-						fromNode = ovr.from;
-						toNode = ovr.to;
-					}
-				}
-
-				if (fromNode === null) {
-					let bestFrom = null;
-					let bestTo = null;
-					let bestScore = -9999;
-					for (const source of adjacentEnemyNodes) {
-						const stoneColor = this.stones[source];
-						for (const nb of ADJACENCY[source]) {
-							const occ = this.stones[nb];
-							let score = 0;
-							if (occ === null) {
-								score = 10;
-							} else if (occ === enemy) {
-								if (stoneColor === color) {
-									score = 5;
-								} else {
-									score = 20;
-								}
-							} else if (occ === color) {
-								if (stoneColor === color) {
-									score = -50;
-								} else {
-									score = -100;
-								}
-							}
-							if (score > bestScore) {
-								bestScore = score;
-								bestFrom = source;
-								bestTo = nb;
-							}
-						}
-					}
-					if (bestFrom !== null) {
-						fromNode = bestFrom;
-						toNode = bestTo;
-					} else {
-						fromNode = adjacentEnemyNodes[0];
-						toNode = ADJACENCY[fromNode][0];
-					}
-				}
-
-				const stoneColor = this.stones[fromNode];
-				const occupant = this.stones[toNode];
-				this.stones[fromNode] = null;
-				if (occupant !== null) {
-					this.crushedThisTurn = true;
-				}
-				this.stones[toNode] = stoneColor;
-				pushes.push({ from: fromNode, to: toNode, crushed: occupant });
-				this.update();
-
-				if (this.gameover) break;
-			}
-			actions.push(new SimAction('rock_slide', { pushes }));
-		} else if (rt === 'avalanche') {
 			// Every push is chosen first, then all resolve at once, with one
 			// update() at the end (no mid-resolution stone-count checks).
-			// `avalanche_variant` i > 0 (exhaustive enumerator) picks the i-th
+			// `rock_slide_variant` i > 0 (exhaustive enumerator) picks the i-th
 			// distinct max-net outcome on this post-cast board; one generous
 			// solve serves the whole run of variants through the memo.
-			const variant = overrides.avalanche_variant || 0;
+			const variant = overrides.rock_slide_variant || 0;
 			let pushes;
 			if (variant) {
-				const options = avalancheOptimalPushes(this.stones, color, overrides.avalanche_pushes,
+				const options = rockSlideOptimalPushes(this.stones, color, overrides.rock_slide_pushes,
 					Math.max(16, variant + 1))[1];
-				if (variant >= options.length) throw new AvalancheVariantUnavailable(String(variant));
+				if (variant >= options.length) throw new RockSlideVariantUnavailable(String(variant));
 				pushes = options[variant];
 			} else {
-				pushes = avalancheGreedyPushes(this.stones, color, overrides.avalanche_pushes);
+				pushes = rockSlideGreedyPushes(this.stones, color, overrides.rock_slide_pushes);
 			}
-			const { final, lost } = resolveAvalanche(this.stones, pushes);
+			const { final, lost } = resolveRockSlide(this.stones, pushes);
 			Object.assign(this.stones, final);
 			if (lost.length) this.crushedThisTurn = true;
 			const destroyed = [...new Set(lost.map(([n]) => n))];
-			actions.push(new SimAction('avalanche', { pushes, destroyed: destroyed.length ? destroyed : null }));
+			actions.push(new SimAction('rock_slide', { pushes, destroyed: destroyed.length ? destroyed : null }));
 			this.update();
 		} else if (rt === 'schedule_moves') {
 			// Providence: schedule 1 extra move at the start of each of the
@@ -1856,17 +1772,7 @@ function applySimTurn(board, turn, color) {
 			if (action.wall) board.stones[action.wall] = DESTROYED;
 		}
 		else if (action.type === 'rock_slide') {
-			if (action.pushes) {
-				for (const p of action.pushes) {
-					const moved = board.stones[p.from];
-					board.stones[p.from] = null;
-					if (board.stones[p.to] !== null) board.crushedThisTurn = true;
-					board.stones[p.to] = moved;
-				}
-			}
-		}
-		else if (action.type === 'avalanche') {
-			const { final, lost } = resolveAvalanche(board.stones, action.pushes || []);
+			const { final, lost } = resolveRockSlide(board.stones, action.pushes || []);
 			Object.assign(board.stones, final);
 			if (lost.length) board.crushedThisTurn = true;
 		}

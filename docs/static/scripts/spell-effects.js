@@ -53,7 +53,6 @@ const SPELL_FX = {
 	// Experimental expansion (unreleased playtest spells)
 	Spring_Tide:          { type: 'burst', color: '#3fa7d6', shake: true  },
 	Rapids:               { type: 'flash', color: '#2fc4c9', shake: false },
-	Avalanche:            { type: 'flash', color: '#b0c4de', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {
@@ -79,7 +78,7 @@ function playSpellEffect(overlayEl, containerEl, spellName) {
 	}
 }
 
-// Push-target arrows (Avalanche): a heavy yellow arrow per planned push,
+// Push-target arrows (Rock Slide): a heavy yellow arrow per planned push,
 // drawn into the board's `.push-arrows` SVG in pixel space from the live
 // node buttons, so it fits every board layout and size. The arrows are
 // kept on the element and redrawn on resize. `arrows`: [{from, to}].

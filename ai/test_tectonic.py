@@ -121,36 +121,27 @@ def test_fissure_enumeration():
     print("Fissure enumeration test passed!")
 
 def test_rock_slide():
+    # Smoke test only; ai/test_rock_slide.py covers the mechanic in depth.
     print("Testing Rock Slide...")
     spell_names = ['Flourish', 'Rock_Slide'] + ['Grow'] * 7
     board = SimBoard(spell_names)
-    
-    # Red caster has stones on 'a2' and 'a6'
+
+    # Red caster stones on a2 and a6; blue a1 and a3 both border a2.
     board.stones['a2'] = 'red'
-    board.stones['a6'] = 'red'  # Caster stone, should NOT be pushed.
-    
-    # Place Blue stones (adjacent to red caster on a2)
+    board.stones['a6'] = 'red'
     board.stones['a1'] = 'blue'
     board.stones['a3'] = 'blue'
-    
-    overrides = {
-        'rock_slide_pushes': [
-            {'from': 'a1', 'to': 'a11'},
-            {'from': 'a3', 'to': 'a2'},
-            {'from': 'a11', 'to': 'c10'},
-            {'from': 'a2', 'to': 'a1'},
-        ]
-    }
-    
+    board.stones['c5'] = 'blue'   # far away, keeps blue alive
+
+    # Both pushed into a2 at once: the two movers collide and red's a2
+    # stone (the occupant) is destroyed with them.
+    overrides = {'rock_slide_pushes': [{'from': 'a1', 'to': 'a2'}, {'from': 'a3', 'to': 'a2'}]}
     board.whose_turn = 'red'
-    board._resolve_spell('Rock_Slide', 'red', POSITIONS[4], target_overrides=overrides)
-    
-    # Assertions
-    assert board.stones['a1'] == 'blue', "a2 should be pushed to a1"
-    assert board.stones['c10'] == 'blue', "a11 should be pushed to c10"
+    acts = board._resolve_spell('Rock_Slide', 'red', POSITIONS[4], target_overrides=overrides)
+
+    assert acts[0].type == 'rock_slide'
+    assert board.stones['a1'] is None and board.stones['a2'] is None and board.stones['a3'] is None
     assert board.stones['a6'] == 'red', "a6 should NOT be pushed (caster stone)"
-    assert board.stones['a3'] is None
-    assert board.stones['a2'] is None
     print("Rock Slide test passed!")
 
 def test_bulwark():

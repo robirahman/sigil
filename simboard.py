@@ -92,6 +92,8 @@ CORE_SPELLS = {
     'Seal_of_Destruction': {'resolve': None, 'static': True, 'ischarm': False},
     # Tectonic expansion
     'Fissure': {'resolve': 'fissure', 'static': False, 'ischarm': False},
+    # Rock Slide: every bordering enemy stone gets a push, then all resolve
+    # simultaneously (see resolve_rock_slide).
     'Rock_Slide': {'resolve': 'rock_slide', 'static': False, 'ischarm': False},
     'Bulwark': {'resolve': None, 'static': True, 'ischarm': True},
     # Providence expansion (scheduled extra moves)
@@ -106,9 +108,6 @@ CORE_SPELLS = {
     # spell window once (one more cast, no dash), like Seal of Summer's
     # second cast. Consumed by the turn enumerators, not the resolver.
     'Rapids': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'extra_cast': True, 'static': False, 'ischarm': False},
-    # Avalanche: Rock Slide with every push chosen first, then resolved
-    # simultaneously (see resolve_avalanche).
-    'Avalanche': {'resolve': 'avalanche', 'static': False, 'ischarm': False},
 }
 
 # Duplicate-copy aliases (allow-duplicates variant): X~2 and X~3 share X's
@@ -127,16 +126,16 @@ for _big_pos in (1, 2, 3, 4, 5, 6):
 def is_big_spell_node(name):
     return name in BIG_SPELL_NODES
 
-def avalanche_sources(stones, color):
-    """Avalanche's pushed set: every enemy stone touching a `color` stone,
+def rock_slide_sources(stones, color):
+    """Rock Slide's pushed set: every enemy stone touching a `color` stone,
     in NODE_ORDER. Fixed at cast time; every one of them must be pushed."""
     enemy = 'blue' if color == 'red' else 'red'
     return [n for n in NODE_ORDER
             if stones[n] == enemy and any(stones[nb] == color for nb in ADJACENCY[n])]
 
 
-def resolve_avalanche(stones, pushes):
-    """Resolve Avalanche's pushes ([{'from', 'to'}, ...]) simultaneously.
+def resolve_rock_slide(stones, pushes):
+    """Resolve Rock Slide's pushes ([{'from', 'to'}, ...]) simultaneously.
 
     Pure: returns (final, lost) without mutating `stones`. `final` maps each
     touched node to its new value; `lost` lists (node, color) per destroyed
@@ -147,7 +146,7 @@ def resolve_avalanche(stones, pushes):
       - two or more stones pushed into the same node are all destroyed;
       - two stones pushed onto each other's nodes (a swap) are both destroyed;
       - a stone pushed into a wall is destroyed; the wall stays a wall.
-    Mirrors resolveAvalanche in constants.js.
+    Mirrors resolveRockSlide in constants.js.
     """
     dest_of = {p['from']: p['to'] for p in pushes}
     arrivals = {}
@@ -168,17 +167,17 @@ def resolve_avalanche(stones, pushes):
     return final, lost
 
 
-class AvalancheVariantUnavailable(Exception):
-    """An 'avalanche_variant' override asked for more distinct optimal
+class RockSlideVariantUnavailable(Exception):
+    """A 'rock_slide_variant' override asked for more distinct optimal
     outcomes than the position has. The exhaustive enumerators wrap casts in
     try/except-continue, so the surplus variant just disappears."""
 
 
-_AVALANCHE_MEMO = {}
-_AVALANCHE_MEMO_MAX = 256
+_ROCK_SLIDE_MEMO = {}
+_ROCK_SLIDE_MEMO_MAX = 256
 
 
-def _avalanche_pinned(sources, override_pushes):
+def _rock_slide_pinned(sources, override_pushes):
     pinned = {}
     for ovr in override_pushes or []:
         src, dst = ovr.get('from'), ovr.get('to')
@@ -187,7 +186,7 @@ def _avalanche_pinned(sources, override_pushes):
     return pinned
 
 
-def _avalanche_order(comp, opts):
+def _rock_slide_order(comp, opts):
     """Deterministic variable order keeping the DP frontier narrow: BFS over
     interacting sources (shared destination or adjacency), seeded and
     tie-broken by NODE_ORDER (`comp` arrives in NODE_ORDER)."""
@@ -208,12 +207,12 @@ def _avalanche_order(comp, opts):
     return order
 
 
-def _avalanche_component(stones, color, comp, opts, src_set, limit):
+def _rock_slide_component(stones, color, comp, opts, src_set, limit):
     """Exact max-net search over one interaction component.
 
     Returns (best_net, [dest dict, ...]): one assignment per distinct
     resolved outcome, each the first optimal assignment reaching it in
-    canonical order (sources in _avalanche_order, options in ADJACENCY
+    canonical order (sources in _rock_slide_order, options in ADJACENCY
     order), at most `limit` of them (None = all).
 
     Net = sources destroyed + stationary enemy stones hit - own stones hit,
@@ -221,7 +220,7 @@ def _avalanche_component(stones, color, comp, opts, src_set, limit):
     enemy / own stone +1 / -1; the second arrival anywhere +2 (both die),
     each later one +1. A lone arrival on a pushed-away node dies only in a
     swap, settled when the node closes. Sources are assigned in
-    _avalanche_order and a node "closes" once every source that can touch it is
+    _rock_slide_order and a node "closes" once every source that can touch it is
     assigned, so the open-node state is a small frontier: dp(i, frontier)
     memoizes the best completion (dynamic programming over the frontier),
     and the tie walk uses it as an exact bound, visiting only optimal paths.
@@ -241,7 +240,7 @@ def _avalanche_component(stones, color, comp, opts, src_set, limit):
             else:
                 kind[d] = 'empty'
     in_comp = set(comp)
-    seq = _avalanche_order(comp, opts)
+    seq = _rock_slide_order(comp, opts)
     # close_at[d]: index of the last source whose choice can affect d.
     close_at = {}
     for i, src in enumerate(seq):
@@ -343,8 +342,8 @@ def _avalanche_component(stones, color, comp, opts, src_set, limit):
     return best, out
 
 
-def _avalanche_solve(stones, color, pinned, limit):
-    sources = avalanche_sources(stones, color)
+def _rock_slide_solve(stones, color, pinned, limit):
+    sources = rock_slide_sources(stones, color)
     src_set = set(sources)
     opts = {s: [pinned[s]] if s in pinned else list(ADJACENCY[s]) for s in sources}
     parent = {s: s for s in sources}
@@ -380,35 +379,35 @@ def _avalanche_solve(stones, color, pinned, limit):
         comps[index[r]].append(s)
     total, per_comp = 0, []
     for comp in comps:
-        net, assigns = _avalanche_component(stones, color, comp, opts, src_set, limit)
+        net, assigns = _rock_slide_component(stones, color, comp, opts, src_set, limit)
         total += net
         per_comp.append(assigns)
     return sources, total, per_comp
 
 
-def avalanche_optimal_pushes(stones, color, override_pushes=None, limit=None):
-    """Every Avalanche push set with the maximum net gain (enemy stones
+def rock_slide_optimal_pushes(stones, color, override_pushes=None, limit=None):
+    """Every Rock Slide push set with the maximum net gain (enemy stones
     destroyed minus own stones destroyed), one per distinct resolved board.
 
     Returns (best_net, [pushes, ...]) in canonical order (first = greedy).
     Exact: sources split into independent interaction components (shared
     destination or possible swap), each solved by dynamic programming over
-    a narrow frontier (see _avalanche_component), which also walks the tied
+    a narrow frontier (see _rock_slide_component), which also walks the tied
     optima; component optima multiply lazily, stopping at `limit`.
     Components touch disjoint nodes, so per-component outcome dedupe makes
     every combination a different board. `override_pushes` pins valid
-    {'from', 'to'} choices. Mirrors avalancheOptimalPushes in constants.js.
+    {'from', 'to'} choices. Mirrors rockSlideOptimalPushes in constants.js.
     """
-    sources = avalanche_sources(stones, color)
-    pinned = _avalanche_pinned(sources, override_pushes)
+    sources = rock_slide_sources(stones, color)
+    pinned = _rock_slide_pinned(sources, override_pushes)
     # Memo per position; a solve with a larger limit serves smaller ones
     # (the outcome lists are prefix-consistent).
     key = (tuple(stones[n] for n in NODE_ORDER), color, tuple(sorted(pinned.items())))
-    hit = _AVALANCHE_MEMO.get(key)
+    hit = _ROCK_SLIDE_MEMO.get(key)
     if hit is None or not (hit[0] is None or (limit is not None and hit[0] >= limit)):
-        if len(_AVALANCHE_MEMO) >= _AVALANCHE_MEMO_MAX:
-            _AVALANCHE_MEMO.clear()
-        hit = _AVALANCHE_MEMO[key] = (limit, _avalanche_solve(stones, color, pinned, limit))
+        if len(_ROCK_SLIDE_MEMO) >= _ROCK_SLIDE_MEMO_MAX:
+            _ROCK_SLIDE_MEMO.clear()
+        hit = _ROCK_SLIDE_MEMO[key] = (limit, _rock_slide_solve(stones, color, pinned, limit))
     sources, best, per_comp = hit[1]
     out = []
     for combo in itertools.product(*per_comp):
@@ -421,10 +420,10 @@ def avalanche_optimal_pushes(stones, color, override_pushes=None, limit=None):
     return best, out
 
 
-def avalanche_greedy_pushes(stones, color, override_pushes=None):
-    """The canonical first max-net Avalanche push set (see
-    avalanche_optimal_pushes). Mirrors avalancheGreedyPushes in constants.js."""
-    return avalanche_optimal_pushes(stones, color, override_pushes, limit=1)[1][0]
+def rock_slide_greedy_pushes(stones, color, override_pushes=None):
+    """The canonical first max-net Rock Slide push set (see
+    rock_slide_optimal_pushes). Mirrors rockSlideGreedyPushes in constants.js."""
+    return rock_slide_optimal_pushes(stones, color, override_pushes, limit=1)[1][0]
 
 
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
@@ -450,7 +449,7 @@ class Action:
         # Node permanently destroyed (turned into a wall) by this action,
         # e.g. Fissure's target node. None for actions that create no wall.
         self.wall = kwargs.get('wall')
-        # Rock Slide push sequence: list of {'from', 'to', 'crushed'} dicts.
+        # Rock Slide pushes: list of {'from', 'to'} dicts (resolved simultaneously).
         self.pushes = kwargs.get('pushes')
         # Providence schedule_moves: extra-move turns scheduled by this cast.
         self.turns = kwargs.get('turns')
@@ -1777,96 +1776,27 @@ class SimBoard:
             self.update()
 
         elif resolve_type == 'rock_slide':
-            pushes = []
-            override_pushes = overrides.get('rock_slide_pushes') or []
-            safety = 0
-            while safety < 50:
-                safety += 1
-                adjacent_enemy_nodes = []
-                for name in NODE_ORDER:
-                    if self.stones[name] == enemy:
-                        has_caster_nb = any(self.stones[nb] == color for nb in self._adjacent_nodes(name))
-                        if has_caster_nb:
-                            adjacent_enemy_nodes.append(name)
-                
-                if len(adjacent_enemy_nodes) == 0:
-                    break
-                
-                from_node = None
-                to_node = None
-                
-                if len(pushes) < len(override_pushes):
-                    ovr = override_pushes[len(pushes)]
-                    if ovr.get('from') in adjacent_enemy_nodes and ovr.get('to') in self._adjacent_nodes(ovr.get('from')):
-                        from_node = ovr.get('from')
-                        to_node = ovr.get('to')
-                
-                if from_node is None:
-                    best_from = None
-                    best_to = None
-                    best_score = -9999
-                    for source in adjacent_enemy_nodes:
-                        stone_color = self.stones[source]
-                        for nb in self._adjacent_nodes(source):
-                            occ = self.stones[nb]
-                            score = 0
-                            if occ is None:
-                                score = 10
-                            elif occ == enemy:
-                                if stone_color == color:
-                                    score = 5
-                                else:
-                                    score = 20
-                            elif occ == color:
-                                if stone_color == color:
-                                    score = -50
-                                else:
-                                    score = -100
-                            
-                            if score > best_score:
-                                best_score = score
-                                best_from = source
-                                best_to = nb
-                    if best_from is not None:
-                        from_node = best_from
-                        to_node = best_to
-                    else:
-                        from_node = adjacent_enemy_nodes[0]
-                        to_node = self._adjacent_nodes(from_node)[0]
-                
-                stone_color = self.stones[from_node]
-                occupant = self.stones[to_node]
-                self.stones[from_node] = None
-                self.stones[to_node] = stone_color
-                pushes.append({'from': from_node, 'to': to_node, 'crushed': occupant})
-                self.update()
-                
-                if self.gameover:
-                    break
-            actions.append(Action('rock_slide', pushes=pushes))
-
-        elif resolve_type == 'avalanche':
             # Every push is chosen first, then all resolve at once, with one
             # update() at the end (no mid-resolution stone-count checks).
-            # 'avalanche_variant' i > 0 (exhaustive enumerator) picks the
+            # 'rock_slide_variant' i > 0 (exhaustive enumerator) picks the
             # i-th distinct max-net outcome on this post-cast board.
-            variant = overrides.get('avalanche_variant') or 0
+            variant = overrides.get('rock_slide_variant') or 0
             if variant:
                 # One generous solve serves the enumerator's whole run of
                 # variants through the memo.
-                _, options = avalanche_optimal_pushes(
-                    self.stones, color, overrides.get('avalanche_pushes'),
+                _, options = rock_slide_optimal_pushes(
+                    self.stones, color, overrides.get('rock_slide_pushes'),
                     limit=max(16, variant + 1))
                 if variant >= len(options):
-                    raise AvalancheVariantUnavailable(variant)
+                    raise RockSlideVariantUnavailable(variant)
                 pushes = options[variant]
             else:
-                pushes = avalanche_greedy_pushes(self.stones, color,
-                                                 overrides.get('avalanche_pushes'))
-            final, lost = resolve_avalanche(self.stones, pushes)
+                pushes = rock_slide_greedy_pushes(self.stones, color,
+                                                  overrides.get('rock_slide_pushes'))
+            final, lost = resolve_rock_slide(self.stones, pushes)
             self.stones.update(final)
             destroyed = list(dict.fromkeys(n for n, _ in lost))
-            actions.append(Action('avalanche', pushes=pushes,
+            actions.append(Action('rock_slide', pushes=pushes,
                                   destroyed=destroyed or None))
             self.update()
 
@@ -2436,13 +2366,7 @@ def apply_sim_turn(board, turn, color):
             if action.wall:
                 board.stones[action.wall] = DESTROYED
         elif t == 'rock_slide':
-            if action.pushes:
-                for p in action.pushes:
-                    moved = board.stones[p['from']]
-                    board.stones[p['from']] = None
-                    board.stones[p['to']] = moved
-        elif t == 'avalanche':
-            final, _ = resolve_avalanche(board.stones, action.pushes or [])
+            final, _ = resolve_rock_slide(board.stones, action.pushes or [])
             board.stones.update(final)
         elif t == 'schedule_moves':
             sched = board.pending_moves[color]

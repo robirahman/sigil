@@ -64,7 +64,7 @@ def test_metadata_and_texts():
         assert 'hard_first' not in CORE_SPELLS[name]
 
     import spellgenerator as g
-    assert g.EXPANSIONS['experimental'] == {'rituals': [], 'sorceries': ['Spring_Tide', 'Rapids', 'Avalanche'], 'charms': []}
+    assert g.EXPANSIONS['experimental'] == {'rituals': [], 'sorceries': ['Spring_Tide', 'Rapids'], 'charms': []}
     assert 'experimental' in g.EXPANSION_KEYS
     assert 'Spring_Tide' in g.UNRATED_SPELLS
     r, s, c = g.spell_pool(['experimental'])
@@ -241,7 +241,7 @@ const acts = b._castSpell('Spring_Tide', 'red');
 const seq = acts.filter(a => a.type !== 'cast').map(a => [a.type, a.node]);
 const stones = {}; for (const n of NODE_ORDER) stones[n] = b.stones[n];
 // Pack registration on the JS side.
-if (!EXPANSIONS.experimental || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids,Avalanche') throw new Error('pack');
+if (!EXPANSIONS.experimental || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids') throw new Error('pack');
 if (!EXPANSION_KEYS.includes('experimental')) throw new Error('keys');
 if (!isUnratedSpell('Spring_Tide') || !isExperimentalSpell('Spring_Tide')) throw new Error('unrated');
 if (isUnratedSpell('Torrent')) throw new Error('Torrent must stay rated');
@@ -329,7 +329,7 @@ def test_rapids_metadata():
                                      'extra_cast': True, 'static': False, 'ischarm': False}
     assert 'extra_cast' not in CORE_SPELLS['Torrent']
     import spellgenerator as g
-    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids', 'Avalanche']
+    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids']
     assert 'Rapids' in g.UNRATED_SPELLS
     import spellfile
     sp = spellfile.Rapids(None, [], 'Rapids')

@@ -1596,80 +1596,15 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Tectonic: Rock Slide ---
-	async rock_slide(board, color, spellName, getInput, emit) {
-		const enemy = board.enemy(color);
-		let safetyCounter = 0;
-		while (safetyCounter < 50) {
-			safetyCounter++;
-			const adjacentEnemyNodes = [];
-			for (const name of NODE_ORDER) {
-				if (board.stones[name] === enemy) {
-					const hasCasterNb = ADJACENCY[name].some(nb => board.stones[nb] === color);
-					if (hasCasterNb) {
-						adjacentEnemyNodes.push(name);
-					}
-				}
-			}
-
-			if (adjacentEnemyNodes.length === 0) {
-				break;
-			}
-
-			const selectOptions = {};
-			for (const name of adjacentEnemyNodes) {
-				selectOptions[name] = board.stones[name];
-			}
-
-			const choice = await getInput({
-				type: 'message',
-				message: 'Choose an adjacent enemy stone to push.',
-				awaiting: 'node',
-				moveoptions: selectOptions,
-			});
-
-			if (!selectOptions[choice]) continue;
-
-			const destOptions = {};
-			for (const nb of ADJACENCY[choice]) {
-				destOptions[nb] = color;
-			}
-
-			const dest = await getInput({
-				type: 'message',
-				message: `Choose where to push the stone at ${choice}.`,
-				awaiting: 'node',
-				moveoptions: destOptions,
-			});
-
-			if (!ADJACENCY[choice].includes(dest)) continue;
-
-			const stoneColor = board.stones[choice];
-			const occupant = board.stones[dest];
-
-			board.stones[choice] = null;
-			if (occupant !== null) {
-				emit({ type: 'crush_animation', crushed_color: occupant, node: dest });
-			}
-			board.stones[dest] = stoneColor;
-			emit({ type: 'push_animation', pushed_color: stoneColor, starting_node: choice, ending_node: dest });
-
-			board.update();
-			emit(board.getBoardStatePayload());
-
-			if (board.gameover) break;
-		}
-	},
-
-	// --- Experimental: Avalanche (simultaneous Rock Slide) ---
+	// --- Tectonic: Rock Slide (simultaneous pushes) ---
 	// Every enemy stone bordering the caster (fixed at cast time) must get a
 	// destination (any neighbor, walls included). Each choice shows as a
 	// yellow arrow (`push_arrows` emit); clicking an arrowed stone re-aims
 	// it. Once every stone has an arrow the caster sends 'submit' and all
-	// pushes resolve at once via resolveAvalanche (constants.js), with one
+	// pushes resolve at once via resolveRockSlide (constants.js), with one
 	// update() at the end.
-	async avalanche(board, color, spellName, getInput, emit) {
-		const sources = avalancheSources(board.stones, color);
+	async rock_slide(board, color, spellName, getInput, emit) {
+		const sources = rockSlideSources(board.stones, color);
 		if (!sources.length) {
 			emit({ type: 'message', message: 'No enemy stones border you.', awaiting: null });
 			return;
@@ -1684,7 +1619,7 @@ const SpellResolvers = {
 				type: 'message',
 				message: remaining
 					? 'Choose a bordering enemy stone to push (' + remaining + ' left).'
-					: 'Every bordering stone has a push. Submit to resolve Avalanche, or click a stone to re-aim it.',
+					: 'Every bordering stone has a push. Submit to resolve Rock Slide, or click a stone to re-aim it.',
 				awaiting: 'node',
 				moveoptions: selectOptions,
 				actionlist: remaining ? [] : ['submit'],
@@ -1708,7 +1643,7 @@ const SpellResolvers = {
 		emit({ type: 'push_arrows', arrows: [] });
 
 		const before = Object.assign({}, board.stones);
-		const { final, lost } = resolveAvalanche(before, pushes);
+		const { final, lost } = resolveRockSlide(before, pushes);
 		Object.assign(board.stones, final);
 		for (const p of pushes) {
 			emit({ type: 'push_animation', pushed_color: before[p.from], starting_node: p.from, ending_node: p.to });

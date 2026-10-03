@@ -51,7 +51,7 @@ DEFAULT_SOFT_HARD_SAC_CAP = 3   # Spring Tide trailing-sacrifice SET variants (b
 DEFAULT_SPLASH_CAP = 6          # Splash move-target variants
 DEFAULT_FISSURE_CAP = 4         # Fissure wall-target variants
 DEFAULT_EXTRA_MOVE_CAP = 3      # Providence extra-move targets per step
-DEFAULT_AVALANCHE_CAP = 12      # Avalanche distinct max-net outcomes (incl. greedy)
+DEFAULT_ROCK_SLIDE_CAP = 12     # Rock Slide distinct max-net outcomes (incl. greedy)
 
 # Every cap key with its package default. get_legal_turns_exhaustive merges
 # caller overrides on top of this dict, so a key only needs to be added here
@@ -78,7 +78,7 @@ DEFAULT_CAPS = {
     'splash': DEFAULT_SPLASH_CAP,
     'fissure': DEFAULT_FISSURE_CAP,
     'extra_move': DEFAULT_EXTRA_MOVE_CAP,
-    'avalanche': DEFAULT_AVALANCHE_CAP,
+    'rock_slide': DEFAULT_ROCK_SLIDE_CAP,
 }
 
 
@@ -364,14 +364,14 @@ def _spell_overrides(board, color, spell_name, caps):
                 if len(window) < sac_count:
                     break
                 out.append({'sacrifice_targets': window})
-    elif rt == 'avalanche':
+    elif rt == 'rock_slide':
         # Every max-net push set with a distinct resolved board, chosen at
         # resolve time on the post-cast board (the cast's sacrifice changes
         # who borders the caster). Variant 0 is the greedy {} above; a
         # variant past the position's count raises inside the resolver and
         # is skipped by the try/except around _cast_spell.
-        for i in range(1, caps.get('avalanche', DEFAULT_AVALANCHE_CAP)):
-            out.append({'avalanche_variant': i})
+        for i in range(1, caps.get('rock_slide', DEFAULT_ROCK_SLIDE_CAP)):
+            out.append({'rock_slide_variant': i})
     elif rt == 'fissure':
         # Branch over which node to permanently destroy. Each candidate is
         # scored by its net stone-count advantage so the search explores the
