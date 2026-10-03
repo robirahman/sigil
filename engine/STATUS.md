@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-03: post-game deep review (FINDINGS "Post-game deep review").** `eval_games.py eval` now walks each
+game BACKWARDS on one persistent table by default (`--walk backward`; new `SearchSession.analyze`, the `analyze`
+dict on a persistent table, and `Search::probe_first`, default off, which searches the played turn first at the
+root). Measured: no compute saving at fixed depth (0.88-1.00x CPU), but values consistent along the game line.
+`engine/harness/deep_review.py` + `engine/gcp/launch_deep_review.sh` audit the September Rust games: confirmed
+AI-turn falls are mostly already fixed by the current engine at depth 6 (old-engine games), then a depth-7-8
+horizon (refutation searched at full width in 67%, LMR band 18%); opponent-turn falls are generator gaps (dash
+sacrifice pair / cast resolution). No engine behaviour change; tests 162/162.
+
 **2026-10-07: engine v28 (cache v69) -- generator exploration tail ON (round 3 preset 3).** New
 `policy::SHIPPED_EXPLORE` = `set_policy_explore(3,64,128,8,48,512,16)`: every cast/dash stub the policy stream
 expands also pushes one lazy tail (every keep and 64 resolutions per cast; 128 dash branches, 8 pairs per landing
