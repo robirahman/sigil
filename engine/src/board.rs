@@ -58,6 +58,10 @@ pub struct Board {
     /// total (`material`), not toward elimination (`total`).
     pub bank: [u8; 2],
     pub spells: [u8; 9],
+    /// Sigil position (0-based) of Bulwark, or NO_SPELL when it is not drawn.
+    /// Cached in `new` so `shielded()` -- run on every move generation --
+    /// costs one compare in the (usual) games without Bulwark.
+    pub bulwark_pos: u8,
     pub spell_counter: [u8; 2],
     pub lock: [u8; 2],
     pub springlock: [u8; 2],
@@ -74,7 +78,10 @@ pub struct Board {
 impl Board {
     pub fn new(spells: [u8; 9], variant: Variant) -> Self {
         Board {
-            stones: [0, 0], walls: 0, bank: [0, 0], spells, spell_counter: [0, 0],
+            stones: [0, 0], walls: 0, bank: [0, 0], spells,
+            bulwark_pos: spells.iter().position(|&s| s == crate::spells_meta::BULWARK)
+                .map_or(NO_SPELL, |p| p as u8),
+            spell_counter: [0, 0],
             lock: [NO_SPELL, NO_SPELL], springlock: [NO_SPELL, NO_SPELL],
             turn_counter: 0, to_move: Color::Red, variant, outcome: Outcome::Ongoing,
             total: [0, 0], mana: [0, 0], charged: [0, 0],
@@ -125,8 +132,14 @@ impl Board {
     /// enemy hard moves, conversion, and destruction by any effect (their own
     /// Fissure included). Sacrifices are unaffected. Mirrors
     /// `bulwark_protected_nodes` (simboard.py) / `bulwarkProtectedNodes`.
+    #[inline]
     pub fn shielded(&self) -> u64 {
-        let Some(bp) = self.position_of(crate::spells_meta::BULWARK) else { return 0 };
+        if self.bulwark_pos == NO_SPELL { return 0; }
+        self.shielded_slow()
+    }
+
+    fn shielded_slow(&self) -> u64 {
+        let bp = self.bulwark_pos as usize;
         let mut out = 0u64;
         for c in 0..2 {
             if self.charged[c] & (1 << bp) == 0 { continue; }

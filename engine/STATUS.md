@@ -21,6 +21,12 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-03: engine v23 (cache v62) -- v22 shipped; shield check skipped when Bulwark is not drawn.** Version
+A/B (`harness/ab_version.py`, new `runner.sh` `base-branch` build), v22 vs main's v21 on core-only draws, shipped
+config, 3 x c3d-highcpu-90: 1 s/move -10.5 Elo [-27, +6], 3 s/move -6.6 [-24, +11], pooled ~-9 [-21, +4] over
+1,056 games; depth -0.03 ply at both. v23 caches Bulwark's position on the Board so `shielded()` is one compare in
+games without it. Tests 168/168, wasm smoke green, parity harness 0 mismatches.
+
 **2026-10-03: engine v22 (cache v61) -- Tectonic and Providence.** Ids 39..44 are in scope: Fissure (every
 target; the blast takes both colours, the caster's own included), Rock Slide (every maximum-net outcome, exact DP
 port of `rock_slide_optimal_pushes`), Bulwark (shield vs enemy hard moves, conversion and destruction; step-by-step
