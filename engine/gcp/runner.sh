@@ -86,6 +86,25 @@ $WORK/venv/bin/pip -q install --upgrade pip maturin numpy 2>&1 | tail -1
 cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2
 export SCRATCH=$WORK
 
+# Optional BASE build for engine-version A/Bs (harness ab_version.py): the
+# `base-branch` metadata names a branch whose engine is built into a second
+# extension module, exported as $SIGIL_BASE_MODULE.
+BASE_BRANCH=$(md base-branch || true)
+if [ -n "$BASE_BRANCH" ]; then
+  cd $WORK
+  git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$BASE_BRANCH" \
+    https://github.com/robirahman/sigil.git base >/dev/null 2>&1 \
+    || { echo "FATAL: base clone failed"; shutdown -h now; exit 1; }
+  cd base && git sparse-checkout init --cone >/dev/null 2>&1
+  git sparse-checkout set engine >/dev/null 2>&1
+  git checkout >/dev/null 2>&1
+  echo "base at $(git log --oneline -1)"
+  echo "BASE $(git log --oneline -1)" >> $WORK/out/COMMIT.txt
+  cd engine && cargo build --release 2>&1 | tail -1
+  export SIGIL_BASE_MODULE=$WORK/base/engine/target/release/libsigil_engine.so
+  [ -f "$SIGIL_BASE_MODULE" ] || { echo "FATAL: base build failed"; shutdown -h now; exit 1; }
+fi
+
 # Uploads .npz as well as logs. Data-generation shards checkpoint their npz in
 # place, so shipping them continuously is what makes a watchdog kill survivable:
 # an earlier depth-8 run lost 90 minutes across 28 shards because nothing left the
