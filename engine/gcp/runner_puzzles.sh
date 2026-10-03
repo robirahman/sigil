@@ -6,7 +6,9 @@
 # over ONE resumable work file (positions where the mover went on to win within
 # four plies first, since that is where mate-in-2/3 puzzles live; then the rest),
 # uploads the work file every two minutes so a preemption or the watchdog keeps
-# everything solved so far, writes COMPLETE, and shuts the VM down.
+# everything solved so far, writes COMPLETE (FAILED, with the exit code and
+# phase, when a phase exits nonzero; later phases are then skipped), and shuts
+# the VM down.
 #
 # Metadata attributes:
 #   run-id      GCS prefix under runs/
@@ -63,6 +65,7 @@ apt-get -qq install -y build-essential curl git python3-venv >/dev/null 2>&1
 WORK=/opt/sigil
 rm -rf $WORK/repo
 mkdir -p $WORK/out && cd $WORK
+rm -f $WORK/out/COMPLETE $WORK/out/FAILED   # a restarted VM must not re-upload the last boot's marker
 export RUSTUP_HOME=$WORK/rustup CARGO_HOME=$WORK/cargo PATH=$WORK/cargo/bin:$PATH
 [ -x $WORK/cargo/bin/rustc ] || curl -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
@@ -100,18 +103,27 @@ cd $WORK/repo
 GEN="$WORK/venv/bin/python -u tools/gen_mate_puzzles.py --hydrated $WORK/hydrated.json --work $WORK/out/mates.jsonl --out $WORK/out/mate_puzzles.json --workers $WORKERS"
 echo "=== phase 1: promising positions, mate <= 3, ${TMS1} ms/position ==="
 $GEN --only-promising --max-mate 3 --time-ms "$TMS1" > $WORK/out/phase1.log 2>&1
+STATUS=$?; FAILED_STAGE="phase 1"
 tail -3 $WORK/out/phase1.log
-echo "=== phase 2: everything else, mate <= $MM2, ${TMS2} ms/position ==="
-$GEN --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/phase2.log 2>&1
-tail -3 $WORK/out/phase2.log
-if [ "$TMS3" -gt 0 ]; then
+if [ "$STATUS" -eq 0 ]; then
+  echo "=== phase 2: everything else, mate <= $MM2, ${TMS2} ms/position ==="
+  $GEN --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/phase2.log 2>&1
+  STATUS=$?; FAILED_STAGE="phase 2"
+  tail -3 $WORK/out/phase2.log
+fi
+if [ "$STATUS" -eq 0 ] && [ "$TMS3" -gt 0 ]; then
   echo "=== phase 3: retry promising no-mate / budget-exceeded positions, mate <= 3, ${TMS3} ms/position ==="
   $GEN --only-promising --max-mate 3 --time-ms "$TMS3" --retry promising > $WORK/out/phase3.log 2>&1
+  STATUS=$?; FAILED_STAGE="phase 3"
   tail -3 $WORK/out/phase3.log
 fi
 
+# The partial work file is uploaded either way (a RESUME can pick it up), but
+# only a run whose stages all exited 0 earns COMPLETE; otherwise FAILED.
+if [ "$STATUS" -eq 0 ]; then MARK=COMPLETE; else MARK=FAILED; echo "FATAL: $FAILED_STAGE exited $STATUS"; fi
+echo "$(date -u +%FT%TZ) exit $STATUS${FAILED_STAGE:+ in $FAILED_STAGE}" > $WORK/out/$MARK
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done
 gcs_put /var/log/sigil-puzzles.log "runs/$RUN/live/runner.log" || true
-date -u +%FT%TZ > $WORK/out/COMPLETE; gcs_put $WORK/out/COMPLETE "runs/$RUN/COMPLETE" || true
-echo "=== done $(date -u +%FT%TZ); shutting down ==="
+gcs_put $WORK/out/$MARK "runs/$RUN/$MARK" || true
+echo "=== $MARK $(date -u +%FT%TZ); shutting down ==="
 shutdown -h now

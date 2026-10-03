@@ -13,7 +13,9 @@ teardown.sh
 `runner.sh` is the startup script; it clones the branch from GitHub, builds the
 engine, runs the smoke arm, fans the arms out over shards, streams logs to
 `gs://…-sigil/runs/<run-id>/live/`, uploads `.npz` artefacts to `…/data/`, writes a
-`COMPLETE` marker, and shuts the VM down.
+`COMPLETE` marker (or `FAILED`, naming how many shards exited nonzero), and shuts the
+VM down. Every runner here does the same: `COMPLETE` only when every stage or shard
+exited 0.
 
 ## Three failures this encodes
 
@@ -35,8 +37,9 @@ script does. `--boot-disk-auto-delete` means a deleted instance cannot leave a
 
 ## Reading a result
 
-`collect.sh` prints a **warning when there is no `COMPLETE` marker**, because a
-partial result looks exactly like a finished one otherwise. It also prints
+`collect.sh` prints a **warning when there is no `COMPLETE` marker** and says so when
+there is a `FAILED` one, because a partial result looks exactly like a finished one
+otherwise. It also prints
 `COMMIT.txt`, the commit the VM actually cloned — worth checking, since a local
 commit that failed to push once caused an arena to silently measure the previous
 code.

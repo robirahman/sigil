@@ -147,8 +147,11 @@ for arm in $ARMS; do
   done
 done
 echo "launched ${#PIDS[@]} shards"
-wait "${PIDS[@]}"
-echo "=== all shards done $(date -u +%FT%TZ) ==="
+# `wait "${PIDS[@]}"` returns only the LAST pid's status, so a crashed shard
+# would still earn COMPLETE. Wait for each and count the failures.
+NFAIL=0
+for p in "${PIDS[@]}"; do wait "$p" || NFAIL=$((NFAIL+1)); done
+echo "=== all shards done $(date -u +%FT%TZ); $NFAIL of ${#PIDS[@]} exited nonzero ==="
 
 kill $UPLOADER 2>/dev/null || true
 { grep -h '^SPRT' $WORK/out/arm*_w*.log; grep -h '^SHARD' $WORK/out/arm*_w*.log; \
@@ -163,8 +166,15 @@ for f in $WORK/out/*.npz $WORK/out/data/*.npz; do
   gcs_put "$f" "runs/$RUN/data/$(basename "$f")" || true
 done
 gcs_put "$WORK/out/summary.txt" "runs/$RUN/summary.txt" || true
-echo "DONE $(date -u +%FT%TZ) $COMMIT" > $WORK/out/COMPLETE
-gcs_put "$WORK/out/COMPLETE" "runs/$RUN/COMPLETE" || true
+# Results of the shards that finished are uploaded either way; only a run with
+# every shard exiting 0 earns COMPLETE, otherwise FAILED says how many died.
+if [ "$NFAIL" -eq 0 ]; then
+  echo "DONE $(date -u +%FT%TZ) $COMMIT" > $WORK/out/COMPLETE
+  gcs_put "$WORK/out/COMPLETE" "runs/$RUN/COMPLETE" || true
+else
+  echo "FAILED $(date -u +%FT%TZ) $COMMIT: $NFAIL of ${#PIDS[@]} shards exited nonzero" > $WORK/out/FAILED
+  gcs_put "$WORK/out/FAILED" "runs/$RUN/FAILED" || true
+fi
 gcs_put /var/log/sigil-arena.log "runs/$RUN/bootstrap.log" || true
 kill $WATCHDOG 2>/dev/null || true
 shutdown -h now
