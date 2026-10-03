@@ -5,7 +5,9 @@
 # depth DEPTH (eval_games.py eval), (2) the opponent turns where that value fell
 # against the Rust AI (surprise_audit.py flag), (3) the deeper / wider probes
 # of each flagged case (surprise_audit.py probe), (4) the report. Work files
-# stream to GCS every two minutes; COMPLETE is written at the end.
+# stream to GCS every two minutes. Each stage feeds the next, so the first one
+# to exit nonzero stops the run; COMPLETE is written only when all four exit 0,
+# FAILED (exit code and stage) otherwise.
 #
 # Metadata attributes: run-id, branch, workers, max-hours, corpus (GCS object
 # under the sigil bucket), depth, time-ms (per-position cap, 0 = untimed),
@@ -60,6 +62,7 @@ apt-get -qq install -y build-essential curl git python3-venv >/dev/null 2>&1
 WORK=/opt/sigil
 rm -rf $WORK/repo
 mkdir -p $WORK/out && cd $WORK
+rm -f $WORK/out/COMPLETE $WORK/out/FAILED   # a restarted VM must not re-upload the last boot's marker
 export RUSTUP_HOME=$WORK/rustup CARGO_HOME=$WORK/cargo PATH=$WORK/cargo/bin:$PATH
 [ -x $WORK/cargo/bin/rustc ] || curl -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
@@ -106,6 +109,10 @@ fi
 
 cd $WORK/repo
 H=engine/harness
+# First nonzero stage exit decides FAILED (the default mode stops at it;
+# the multi-stage modes record it and carry on, as before).
+STATUS=0; FAILED_STAGE=
+stage() { if [ "$1" -ne 0 ] && [ "$STATUS" -eq 0 ]; then STATUS=$1; FAILED_STAGE=$2; fi; }
 if [ "$MODE" = r2bench ]; then
   # Round 2: re-score the surprise targets with the shipped engine, then the release
   # table (v23 / v24 / v25 configs) against the old and the re-scored targets.
@@ -113,6 +120,7 @@ if [ "$MODE" = r2bench ]; then
   echo "=== rescore: $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/bench_rescore.py --suites $B --workers "$WORKERS" \
     --out-all $WORK/out/rescore_all.json --out-suite $B/surprise_cases_v25.json > $WORK/out/rescore.log 2>&1
+  stage $? bench_rescore
   cp $B/surprise_cases_v25.json $WORK/out/surprise_cases_v25.json
   tail -2 $WORK/out/rescore.log
   CFGS=(--config "v23:eval=tfit" --config "v24:eval=tfit_spell_v2"
@@ -121,55 +129,76 @@ if [ "$MODE" = r2bench ]; then
     echo "=== bench_suites $sf ==="
     $WORK/venv/bin/python -u $H/bench_suites.py --suites $B --surprise-file $sf --workers "$WORKERS" \
       "${CFGS[@]}" --json $WORK/out/bench_${sf%.json}.txt > $WORK/out/bench_${sf%.json}.log 2>&1
+    stage $? bench_suites
     tail -6 $WORK/out/bench_${sf%.json}.log
   done
 elif [ "$MODE" = guest ]; then
   echo "=== 1. eval: depth $DEPTH, $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/eval_games.py eval --lines $WORK/lines.json \
     --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 > $WORK/out/eval.log 2>&1
+  stage $? eval_games
   tail -2 $WORK/out/eval.log
   for S in opp own; do
     echo "=== 2-4. $S: flag / probe / report ==="
     $WORK/venv/bin/python -u $H/surprise_audit.py flag --side "$S" --lines $WORK/lines.json --evals $WORK/out/evals.jsonl \
       --out $WORK/out/cases_$S.json > $WORK/out/flag_$S.log 2>&1
+    stage $? surprise_audit
     cat $WORK/out/flag_$S.log
     $WORK/venv/bin/python -u $H/surprise_audit.py probe --lines $WORK/lines.json --cases $WORK/out/cases_$S.json \
       --out $WORK/out/probes_$S.jsonl --workers "$WORKERS" --time-ms "$PTMS" > $WORK/out/probe_$S.log 2>&1
+    stage $? surprise_audit
     tail -2 $WORK/out/probe_$S.log
     $WORK/venv/bin/python -u $H/surprise_audit.py report --cases $WORK/out/cases_$S.json --probes $WORK/out/probes_$S.jsonl \
       --md $WORK/out/report_$S.txt --json $WORK/out/report_rows_$S.json > $WORK/out/report_$S.log 2>&1
+    stage $? surprise_audit
     tail -20 $WORK/out/report_$S.log
   done
   echo "=== 5. final_blow_probe ==="
   $WORK/venv/bin/python -u $H/final_blow_probe.py --lines $WORK/lines.json \
     --out $WORK/out/final_probe.jsonl --workers "$WORKERS" > $WORK/out/final.log 2>&1
+  stage $? final_blow_probe
   tail -2 $WORK/out/final.log
 elif [ "$MODE" = final ]; then
   echo "=== final_blow_probe: $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/final_blow_probe.py --lines $WORK/lines.json \
     --out $WORK/out/final_probe.jsonl --workers "$WORKERS" > $WORK/out/final.log 2>&1
+  stage $? final_blow_probe
   tail -2 $WORK/out/final.log
 else
 echo "=== 1. eval: depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
 $WORK/venv/bin/python -u $H/eval_games.py eval --lines $WORK/lines.json \
   --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 > $WORK/out/eval.log 2>&1
+STATUS=$?; FAILED_STAGE=eval
 tail -2 $WORK/out/eval.log
-echo "=== 2. flag ==="
-$WORK/venv/bin/python -u $H/surprise_audit.py flag --side "$SIDE" --lines $WORK/lines.json --evals $WORK/out/evals.jsonl \
-  --out $WORK/out/cases.json > $WORK/out/flag.log 2>&1
-cat $WORK/out/flag.log
-echo "=== 3. probe ==="
-$WORK/venv/bin/python -u $H/surprise_audit.py probe --lines $WORK/lines.json --cases $WORK/out/cases.json \
-  --out $WORK/out/probes.jsonl --workers "$WORKERS" --time-ms "$PTMS" > $WORK/out/probe.log 2>&1
-tail -2 $WORK/out/probe.log
-echo "=== 4. report ==="
-$WORK/venv/bin/python -u $H/surprise_audit.py report --cases $WORK/out/cases.json --probes $WORK/out/probes.jsonl \
-  --md $WORK/out/report.txt --json $WORK/out/report_rows.json > $WORK/out/report.log 2>&1
-cat $WORK/out/report.log
+if [ "$STATUS" -eq 0 ]; then
+  echo "=== 2. flag ==="
+  $WORK/venv/bin/python -u $H/surprise_audit.py flag --side "$SIDE" --lines $WORK/lines.json --evals $WORK/out/evals.jsonl \
+    --out $WORK/out/cases.json > $WORK/out/flag.log 2>&1
+  STATUS=$?; FAILED_STAGE=flag
+  cat $WORK/out/flag.log
+fi
+if [ "$STATUS" -eq 0 ]; then
+  echo "=== 3. probe ==="
+  $WORK/venv/bin/python -u $H/surprise_audit.py probe --lines $WORK/lines.json --cases $WORK/out/cases.json \
+    --out $WORK/out/probes.jsonl --workers "$WORKERS" --time-ms "$PTMS" > $WORK/out/probe.log 2>&1
+  STATUS=$?; FAILED_STAGE=probe
+  tail -2 $WORK/out/probe.log
+fi
+if [ "$STATUS" -eq 0 ]; then
+  echo "=== 4. report ==="
+  $WORK/venv/bin/python -u $H/surprise_audit.py report --cases $WORK/out/cases.json --probes $WORK/out/probes.jsonl \
+    --md $WORK/out/report.txt --json $WORK/out/report_rows.json > $WORK/out/report.log 2>&1
+  STATUS=$?; FAILED_STAGE=report
+  cat $WORK/out/report.log
+fi
 fi
 
+# The partial work file is uploaded either way (a RESUME can pick it up), but
+# only a run whose stages all exited 0 earns COMPLETE; otherwise FAILED.
+if [ "$STATUS" -eq 0 ]; then MARK=COMPLETE; else MARK=FAILED; echo "FATAL: $FAILED_STAGE stage exited $STATUS"; fi
+echo "$(date -u +%FT%TZ) exit $STATUS${FAILED_STAGE:+ in $FAILED_STAGE}" > $WORK/out/$MARK
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done
 gcs_put /var/log/sigil-surprise.log "runs/$RUN/live/runner.log" || true
-date -u +%FT%TZ > $WORK/out/COMPLETE; gcs_put $WORK/out/COMPLETE "runs/$RUN/COMPLETE" || true
-echo "=== done $(date -u +%FT%TZ); shutting down ==="
+gcs_put $WORK/out/$MARK "runs/$RUN/$MARK" || true
+echo "=== $MARK $(date -u +%FT%TZ); shutting down ==="
 shutdown -h now
