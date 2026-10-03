@@ -18,13 +18,27 @@ marked to move, so `sfnAfter` must never be fed to the engine as a position to
 search (tools/gen_mate_puzzles.py has the same note). The final position is
 recorded as the game's terminal result, not searched.
 
-How: `sigil_engine.analyze(sfn, 'tfit', max_depth=D, time_ms=0, ...)` -- the
-SHIPPED search (progressive widening at the engine's default width, the
-stone-lead pre-pass, the mate guard) deepened to exactly D plies, untimed, on a
-fresh table per position so results do not depend on the walk order. The
-widening and adaptive knobs are the engine's exported constants, never
+How: the SHIPPED search (progressive widening at the engine's default width,
+the stone-lead pre-pass, the mate guard) deepened to exactly D plies, untimed.
+The widening and adaptive knobs are the engine's exported constants, never
 literals restated here. `history_sfns` carries the game so far so threefold
 repetition is scored as in live play.
+
+Walk order (`--walk`). `backward` (the default since 2026-10-03) analyses each
+game from its LAST position to its first on ONE persistent table
+(`SearchSession.analyze`), as chess post-game analysis does: position i+1 is
+one ply below position i, so the value of the move actually played arrives
+from the table already searched one ply deeper. The per-position values become
+consistent along the game line (an eval drop then sits on the move that caused
+it). It does NOT make the walk much cheaper in Sigil: that entry covers one of
+the hundreds of root turns, and the siblings are the work (measured 0.88-1.00x
+the fresh walk's CPU; FINDINGS 2026-10-03). Results
+depend on the walk order, so a game is always one work item (`--split` is for
+`--walk fresh` only). The root searches the move actually played first
+(`probe_first`): its value is already in the table, one ply deeper, so the
+rest of the root list runs against a tight window. `backward-plain` keeps the
+generator's order (A/B only). `fresh` is the old walk: `sigil_engine.analyze` on a new
+table per position, order-independent.
 
 What is stored (red POV, so the review panel needs no flipping):
   evalPerPly[i]   stones with the even-game offset applied (search::report);
@@ -34,6 +48,8 @@ What is stored (red POV, so the review panel needs no flipping):
                   wins, null if none. provenPerPly[i] false = the search was
                   width- or window-limited ("likely").
   bestPerPly[i]   the engine's chosen turn as an applyAITurn action list.
+  walk            'backward' or 'fresh' (absent on documents before 2026-10-03:
+                  fresh).
   depthPerPly / nodesPerPly, moverPerPly, terminal {winner}, finalSfn, gameId.
 
 Room codes are the review flows' key but are NOT unique across history (7
@@ -55,7 +71,8 @@ sys.path.insert(0, REPO)
 
 DB_URL = 'https://sigil-js-default-rtdb.firebaseio.com'
 EVAL_NAME = 'tfit'
-ENGINE_TAG = 'rust-v10'
+ENGINE_TAG = 'rust-v21'
+WALK_TT_BITS = 22          # 64 MB per worker: a backward walk keeps the whole game's tree
 DEFERRED_PREFIXES = ('pm:', 'ab:', 'sn:')
 
 
@@ -176,31 +193,53 @@ def _red_pov(mover, v):
     return v if mover == 'red' else -v
 
 
+def eval_row(gid, i, r, t0, walk):
+    """`analyze` dict -> one stored row (red POV). `probe` is where the turn
+    actually played sat in the root list of the last completed iteration:
+    (depth, index, list length, score from the mover's side in centistones,
+    alpha it was searched against), None when the root never searched it."""
+    mover = r['mover']
+    return {'g': gid, 'i': i, 'mover': mover, 'over': bool(r['over']),
+            'stones': _red_pov(mover, r['stones']),
+            'mate': _red_pov(mover, r['mate_in_turns']),
+            'proven': bool(r['proven']), 'score': r['score'],
+            'depth': r['depth'], 'nodes': r['nodes'], 'seconds': round(time.time() - t0, 3),
+            'best': json.loads(r['actions_json']) if r.get('actions_json') else None,
+            'exp': r.get('expected_sfn'),
+            'probe': list(r['probe']) if r.get('probe') is not None else None, 'walk': walk}
+
+
 def eval_game(item):
-    """Evaluate every non-final position of one game; returns the rows."""
-    gid, game, depth, time_ms = item[:4]
-    lo, hi = (item[4], item[5]) if len(item) > 4 else (0, None)
+    """Evaluate every non-final position of one game (or of positions
+    [lo, hi) of it); returns the rows. `walk` 'backward' runs last to first on
+    one persistent table, 'fresh' gives every position its own."""
+    gid, game, depth, time_ms, walk = item[:5]
+    lo, hi = (item[5], item[6]) if len(item) > 5 else (0, None)
     import sigil_engine as se
     kw = _analyze_kwargs(se, depth, time_ms)
+    session = None
+    if walk != 'fresh':
+        kw.pop('tt_bits')
+        kw['probe_first'] = walk == 'backward'
+        session = se.SearchSession(WALK_TT_BITS)
     rows = []
     positions = game['positions']
-    for i, sfn in enumerate(positions[:-1]):
+    order = range(len(positions) - 1)
+    if walk != 'fresh':
+        order = reversed(order)
+    for i in order:
         if i < lo or (hi is not None and i >= hi):
             continue
         t0 = time.time()
         try:
-            r = se.analyze(sfn, EVAL_NAME, history_sfns=positions[:i], **kw)
+            run = session.analyze if session is not None else se.analyze
+            # The probe is the turn actually played: where it sat in the root list.
+            r = run(positions[i], EVAL_NAME, history_sfns=positions[:i], probe_sfn=positions[i + 1], **kw)
         except Exception as e:  # noqa: BLE001
             rows.append({'g': gid, 'i': i, 'error': f'{type(e).__name__}: {e}'})
             continue
-        mover = r['mover']
-        row = {'g': gid, 'i': i, 'mover': mover, 'over': bool(r['over']),
-               'stones': _red_pov(mover, r['stones']),
-               'mate': _red_pov(mover, r['mate_in_turns']),
-               'proven': bool(r['proven']), 'score': r['score'],
-               'depth': r['depth'], 'nodes': r['nodes'], 'seconds': round(time.time() - t0, 3),
-               'best': json.loads(r['actions_json']) if r.get('actions_json') else None}
-        rows.append(row)
+        rows.append(eval_row(gid, i, r, t0, walk))
+    rows.sort(key=lambda r: r['i'])
     return gid, rows
 
 
@@ -267,15 +306,19 @@ def cmd_eval(a):
         n = len(g['positions']) - 1
         if all((gid, i) in done for i in range(n)):
             continue
-        if a.split > 0:
+        if a.split > 0 and a.walk == 'fresh':
             # Position-level work items: a 117-position game no longer pins one
             # worker for two hours while the other 87 sit idle.
             for lo in range(0, n, a.split):
                 if not all((gid, i) in done for i in range(lo, min(n, lo + a.split))):
-                    todo.append((gid, g, a.depth, a.time_ms, lo, min(n, lo + a.split)))
+                    todo.append((gid, g, a.depth, a.time_ms, a.walk, lo, min(n, lo + a.split)))
         else:
-            todo.append((gid, g, a.depth, a.time_ms))
-    print(f'{len(items)} games, {len(done)} positions already done, {len(todo)} games to evaluate', flush=True)
+            todo.append((gid, g, a.depth, a.time_ms, a.walk))
+    if a.walk != 'fresh':
+        # Whole games, longest first, so the last one to start is short.
+        todo.sort(key=lambda it: -len(it[1]['positions']))
+    print(f'{len(items)} games, {len(done)} positions already done, {len(todo)} work items to evaluate '
+          f'({a.walk} walk)', flush=True)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or '.', exist_ok=True)
     t_start = time.time(); n_rows = 0
     with open(a.out, 'a', encoding='utf-8') as fh, ProcessPoolExecutor(max_workers=a.workers) as ex:
@@ -317,6 +360,7 @@ def build_docs(lines, evals_paths):
         if any(r is None for r in got):
             incomplete.append((gid, sum(r is None for r in got), n)); continue
         movers = [r['mover'] for r in got]
+        walk = got[0].get('walk', 'fresh')         # rows before 2026-10-03 carry none: fresh tables
         last_tok = g['positions'][-1].split()[1]
         # The final position's side-to-move token is the mover's (browser convention);
         # the side to move in the position proper is the other one.
@@ -324,7 +368,7 @@ def build_docs(lines, evals_paths):
         winner = g.get('winner') if g.get('winner') in ('red', 'blue') else None
         docs[gid] = {
             'gameId': gid, 'roomCode': g['roomCode'], 'finalSfn': g['finalSfn'],
-            'engine': ENGINE_TAG, 'eval': EVAL_NAME, 'depth': max(r['depth'] for r in got),
+            'engine': ENGINE_TAG, 'walk': walk, 'eval': EVAL_NAME, 'depth': max(r['depth'] for r in got),
             'computedAt': int(time.time() * 1000), 'plies': n,
             'moverPerPly': movers,
             'evalPerPly': [r['stones'] for r in got] + [None],
@@ -359,7 +403,7 @@ def cmd_upload(a):
             if cur_gid != gid and rc not in dupes:
                 print(f'  {rc}: exists for another game {cur_gid}; skipping (pass --overwrite to replace)')
                 skipped += 1; continue
-            if cur_gid == gid and not a.overwrite:
+            if cur_gid == gid and not a.replace:
                 skipped += 1; continue
         mates = sum(1 for m in d['matePerPly'] if m)
         print(f"  {'PUT' if a.apply else 'would PUT'} game_evals/{rc}  {gid}  {d['plies']} plies, {mates} forced-result positions")
@@ -381,12 +425,17 @@ def main():
     e = sub.add_parser('eval'); e.add_argument('--lines', required=True); e.add_argument('--out', required=True)
     e.add_argument('--depth', type=int, default=6); e.add_argument('--time-ms', type=int, default=0, help='0 = untimed fixed depth')
     e.add_argument('--workers', type=int, default=os.cpu_count() or 2); e.add_argument('--limit-games', type=int, default=0)
-    e.add_argument('--split', type=int, default=0, help='work items of this many positions instead of whole games (0 = whole games)')
+    e.add_argument('--split', type=int, default=0, help='--walk fresh only: work items of this many positions instead of whole games (0 = whole games)')
+    e.add_argument('--walk', choices=('backward', 'backward-plain', 'fresh'), default='backward',
+                   help='backward: last position to first on one persistent table, the played move searched first '
+                        '(default); backward-plain: the same walk in generator order; fresh: a new table per position')
     e.add_argument('--time-only', action='store_true'); e.add_argument('--sample', type=int, default=50)
     e.add_argument('--shard', default='', help='k/n: evaluate every n-th game starting at k (games sorted by timestamp)')
     e.add_argument('--exclude', action='append', default=[], help='lines.json of a corpus already evaluated; its games are skipped')
     u = sub.add_parser('upload'); u.add_argument('--lines', required=True); u.add_argument('--evals', required=True, action='append')
-    u.add_argument('--service-account', required=True); u.add_argument('--apply', action='store_true'); u.add_argument('--overwrite', action='store_true')
+    u.add_argument('--service-account', required=True); u.add_argument('--apply', action='store_true')
+    u.add_argument('--overwrite', action='store_true', help='replace any existing document, even one written for another game')
+    u.add_argument('--replace', action='store_true', help='replace documents written for the SAME game (a re-evaluation)')
     a = p.parse_args()
     {'download': cmd_download, 'hydrate': cmd_hydrate, 'eval': cmd_eval, 'upload': cmd_upload}[a.cmd](a)
 
