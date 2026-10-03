@@ -52,15 +52,16 @@
 //! stands there. The 3-node spell opposite is always a target; the 1-node
 //! spell opposite is one if it is Slash, Surge, Gust or a static seal
 //! (`SYZYGY_ALWAYS_EXPOSED`), or -- for Splash, Charge, Lurk, Azimuth, Sprout,
-//! Comet -- only when Seal of Autumn is the charm touching Syzygy (its own
-//! corner's), which stops the dash that would otherwise get the stone out.
+//! Comet -- only when Seal of Winter is the charm touching Syzygy (its own
+//! corner's): the seal forbids casting 1-node spells, so the charm cannot be
+//! cast to move its stone out.
 //! That is a property of the draw, the same for both colours. "Next to
 //! Syzygy" below = in the sigil or on a node touching it. Switchable together
 //! with `set_opening_syzygy`:
 //!
 //! * red never starts on an exposed slot;
 //! * blue always takes Syzygy when red started on one (`syzygy_threat`),
-//!   on a node next to Seal of Autumn when that is what exposes the charm;
+//!   on a node next to Seal of Winter when that is what exposes the charm;
 //! * red's Syzygy is worth the greater of itself and the 3-node spell opposite;
 //! * blue drops the exposed slots, and values them at no more than Syzygy's
 //!   own strength, only when red started in or next to Syzygy; otherwise
@@ -117,9 +118,10 @@ use crate::resolvers::syzygy_opposite;
 
 /// Charms opposite Syzygy that are always its target (designer, 2026-09-30).
 pub const SYZYGY_ALWAYS_EXPOSED: [u8; 7] = [SLASH, SURGE, GUST, SEAL_OF_SPRING, SEAL_OF_SUMMER, SEAL_OF_AUTUMN, SEAL_OF_WINTER];
-/// Charms opposite Syzygy that are its target only when Seal of Autumn is the
-/// charm touching Syzygy (no dashing out with a stone in a spell).
-pub const SYZYGY_AUTUMN_EXPOSED: [u8; 6] = [SPLASH, CHARGE, LURK, AZIMUTH, SPROUT, COMET];
+/// Charms opposite Syzygy that are its target only when Seal of Winter is the
+/// charm touching Syzygy (2026-10-02: Winter, not Autumn -- the owner cannot
+/// cast the charm to move its stone out).
+pub const SYZYGY_WINTER_EXPOSED: [u8; 6] = [SPLASH, CHARGE, LURK, AZIMUTH, SPROUT, COMET];
 
 /// The ritual slot Syzygy was drawn in, if any (it does nothing elsewhere).
 pub fn syzygy_slot(spells: &[u8; 9]) -> Option<usize> {
@@ -136,24 +138,24 @@ fn neighbours(mask: u64) -> u64 {
 pub fn stones_near(stones: u64, slot: usize) -> bool { stones & (SIGIL[slot] | neighbours(SIGIL[slot])) != 0 }
 /// Could one stone started in sigil `s` be near sigil `target` (in it, or touching it)?
 fn slot_near(s: usize, target: usize) -> bool { s == target || neighbours(SIGIL[s]) & SIGIL[target] != 0 }
-/// The charm slot holding Seal of Autumn, if drawn.
-fn autumn_slot(spells: &[u8; 9]) -> Option<usize> { (6..9).find(|&p| spells[p] == SEAL_OF_AUTUMN) }
+/// The charm slot holding Seal of Winter, if drawn.
+fn winter_slot(spells: &[u8; 9]) -> Option<usize> { (6..9).find(|&p| spells[p] == SEAL_OF_WINTER) }
 
 /// Is a stone started on `slot` a Syzygy target: the 3-node sigil opposite
 /// Syzygy, or the 1-node sigil opposite it when that charm is always exposed,
-/// or is Autumn-exposed and `near_autumn` (`syzygy_touches_autumn`).
-pub fn syzygy_exposed(spells: &[u8; 9], slot: usize, near_autumn: bool) -> bool {
+/// or is Winter-exposed and `near_winter` (`syzygy_touches_winter`).
+pub fn syzygy_exposed(spells: &[u8; 9], slot: usize, near_winter: bool) -> bool {
     let Some(z) = syzygy_slot(spells) else { return false };
     let Some((charm, sorcery)) = syzygy_opposite(z) else { return false };
     slot == sorcery || (slot == charm && (SYZYGY_ALWAYS_EXPOSED.contains(&spells[charm])
-        || (near_autumn && SYZYGY_AUTUMN_EXPOSED.contains(&spells[charm]))))
+        || (near_winter && SYZYGY_WINTER_EXPOSED.contains(&spells[charm]))))
 }
 
-/// Is Seal of Autumn the charm touching Syzygy (one of Syzygy's nodes is next
-/// to the seal)? Then the Autumn-exposed charms opposite are targets too.
-pub fn syzygy_targets(spells: &[u8; 9], slot: usize) -> bool { syzygy_exposed(spells, slot, syzygy_touches_autumn(spells)) }
-fn syzygy_touches_autumn(spells: &[u8; 9]) -> bool {
-    match (syzygy_slot(spells), autumn_slot(spells)) {
+/// Is Seal of Winter the charm touching Syzygy (one of Syzygy's nodes is next
+/// to the seal)? Then the Winter-exposed charms opposite are targets too.
+pub fn syzygy_targets(spells: &[u8; 9], slot: usize) -> bool { syzygy_exposed(spells, slot, syzygy_touches_winter(spells)) }
+fn syzygy_touches_winter(spells: &[u8; 9]) -> bool {
+    match (syzygy_slot(spells), winter_slot(spells)) {
         (Some(z), Some(a)) => slot_near(z, a),
         _ => false,
     }
@@ -428,7 +430,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
                                       reply: None, vetoed, syzygy_threat: false });
         };
         // Red started on a slot Syzygy crushes: take Syzygy, whatever the
-        // tables say about it in general. If only Seal of Autumn makes red's
+        // tables say about it in general. If only Seal of Winter makes red's
         // charm a target, start on the Syzygy node next to the seal.
         if syz && syzygy_targets(spells, s) {
             if let Some(z) = syzygy_slot(spells) {
@@ -436,7 +438,7 @@ pub fn choose_opening(b: &Board, c: Color) -> Option<OpeningPick> {
                 if free != 0 {
                     let mut mask = free;
                     if !syzygy_exposed(spells, s, false) {
-                        let a = autumn_slot(spells).expect("Autumn-exposed implies the seal");
+                        let a = winter_slot(spells).expect("Winter-exposed implies the seal");
                         let by_seal = free & neighbours(SIGIL[a]);
                         if by_seal != 0 { mask = by_seal; }
                     }

@@ -2112,13 +2112,14 @@ The Carnage arm won 420-284 as red and 354-350 as blue.
 **2026-09-30, engine v20 (cache v53): the Syzygy rules revised (designer's rulings; not arena-tested).**
 
 - **Which charms opposite Syzygy are targets:** Slash, Surge, Gust and the static seals always
-  (`SYZYGY_ALWAYS_EXPOSED`); Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of Autumn is the charm
-  touching Syzygy (its own corner's), which forbids dashing out with a stone that sits in a spell
-  (`SYZYGY_AUTUMN_EXPOSED`, `syzygy_targets`). A property of the draw, the same for both colours. This replaces the
+  (`SYZYGY_ALWAYS_EXPOSED`); Splash, Charge, Lurk, Azimuth, Sprout, Comet only when Seal of **Winter** is the charm
+  touching Syzygy (its own corner's), which forbids casting 1-node spells, so the charm cannot move its stone
+  out (`SYZYGY_WINTER_EXPOSED`, `syzygy_targets`; v20 said Seal of Autumn by mistake, corrected in v21 / cache
+  v56). A property of the draw, the same for both colours. This replaces the
   2026-09-23 "safe" list (Sprout, Splash, Charge).
 - **Red** still never starts on a target.
-- **Blue** always takes Syzygy when red started on a target, on the Syzygy node next to Seal of Autumn iff red's
-  start is an Autumn-exposed charm. Otherwise blue's Syzygy has its plain rating and is chosen like any other
+- **Blue** always takes Syzygy when red started on a target, on the Syzygy node next to Seal of Winter iff red's
+  start is a Winter-exposed charm. Otherwise blue's Syzygy has its plain rating and is chosen like any other
   spell (the v17 "best of itself and both spells across, + 0.01" is gone).
 - **Blue drops the targets, and values them at no more than Syzygy's own strength, only when red started in or
   next to Syzygy** (`SyzygyThreat`); red on a mana or void node counts when that node touches Syzygy. Before, blue
