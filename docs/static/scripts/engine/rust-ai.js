@@ -383,7 +383,6 @@ async function rustActionsToTurn(sim, color, actions, expectedSfn) {
 		const probe = sim.copy();
 		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
 		probe.getBoardStatePayload = () => ({});
-		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
 		try {
 			await applyAITurn(probe, { actions: actions }, color, () => {});
 			probe.update();

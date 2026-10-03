@@ -159,17 +159,10 @@ class SpectatorController {
 					return;
 				}
 
-				// Providence: shift the schedule head into the turn-scoped
-				// move counters (deterministic — replays the players' state).
-				const extraMoves = board.pendingMoves[color].length
-					? board.pendingMoves[color].shift() : 0;
-				board.movesLeftThisTurn = 1 + extraMoves;
-				board.movesGrantedThisTurn = 1 + extraMoves;
+				// Providence: open the optional banked-stone placement
+				// (deterministic — replays the players' state).
+				board.providenceOpen = board.providenceBank[color] > 0;
 				board.crushedThisTurn = false;
-				if (extraMoves > 0) {
-					const pname = color === 'red' ? 'Red' : 'Blue';
-					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
-				}
 
 				await this._takeTurn(color, true, true, true, true);
 
@@ -226,17 +219,26 @@ class SpectatorController {
 			return;
 		}
 
+		// Providence: the optional banked-stone placement, offered once after
+		// the regular move (mirrors the player controllers).
+		if (!canmove && board.providenceOpen) {
+			board.providenceOpen = false;
+			if (await this._providenceStep(color)) return;
+		}
+
 		const enemy = board.enemy(color);
 		const actions = [];
 		let spellList = [];
 		let moveoptions = {};
-		// Providence: Seal of Wind / Seal of Stone key off the turn's FIRST move.
-		const isFirstMove = board.movesLeftThisTurn === board.movesGrantedThisTurn;
 
 		if (canmove) {
 			actions.push('move');
-			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
-			if (Object.keys(moveoptions).length === 0) return;
+			moveoptions = getStandardMoveTargets(board, color, true);
+			// No legal move: dash / cast / pass remain (mirrors the players'
+			// controllers, ruling 2026-08-26).
+			if (Object.keys(moveoptions).length === 0) {
+				return this._takeTurn(color, false, candash, canspell, cansummer, extracast);
+			}
 		} else {
 			if (candash && canspell && !extracast && canDash(board, color)) actions.push('dash');
 			let summerActive = false;
@@ -273,9 +275,8 @@ class SpectatorController {
 
 		const nodeNames = Object.keys(board.stones);
 		if (actions.includes('move') && nodeNames.includes(action)) {
-			await this._doMove(color, action, isFirstMove);
-			board.movesLeftThisTurn = Math.max(0, board.movesLeftThisTurn - 1);
-			await this._takeTurn(color, board.movesLeftThisTurn > 0, candash, canspell, cansummer);
+			await this._doMove(color, action, true);
+			await this._takeTurn(color, false, candash, canspell, cansummer);
 			return;
 		}
 		if (action === 'pass') return;
@@ -294,6 +295,26 @@ class SpectatorController {
 			else await this._takeTurn(color, false, candash, false, false);
 			return;
 		}
+	}
+
+	/** Providence placement prompt, replayed from the mover's input. */
+	async _providenceStep(color) {
+		const board = this.board;
+		const moveoptions = getStandardMoveTargets(board, color, false);
+		if (Object.keys(moveoptions).length === 0) return false;
+		const action = await this.getInput({
+			type: 'message', message: 'Waiting for Providence placement...',
+			awaiting: 'action', actionlist: [], moveoptions: {},
+		});
+		if (action === '__game_finished__') throw new Error('__game_finished__');
+		if (action === 'pass') return true;
+		if (action === 'skip_providence') return false;
+		if (moveoptions[action]) {
+			board.providenceBank[color]--;
+			await this._doMove(color, action, false);
+			return false;
+		}
+		return this._providenceStep(color);
 	}
 
 	async _doMove(color, nodeName, standardMove) {
@@ -407,12 +428,11 @@ class SpectatorController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
-		// Providence: unused granted moves forfeit before the win checks.
-		board.movesLeftThisTurn = 0;
-		board.movesGrantedThisTurn = 0;
+		board.providenceOpen = false;
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+			const shielded = bulwarkProtectedNodes(board);
 			for (const name of NODE_ORDER) {
-				if (board.stones[name] === enemy) {
+				if (board.stones[name] === enemy && !shielded.has(name)) {
 					for (const nb of ADJACENCY[name]) {
 						if (board.stones[nb] === color) { board.stones[name] = null; break; }
 					}

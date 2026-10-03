@@ -67,9 +67,10 @@ SPELL_EMBED_DIM = 16        # Embedding dimension per spell
 #    39 — destroyed-node channel (1.0 per node permanently destroyed by Fissure).
 #         APPENDED LAST so the older 456-dim feature columns keep their indices,
 #         which lets ai/migrate_checkpoint.py warm-start by zero-padding raw_proj.
-#    10 — Providence pending-move block (own/enemy schedule slots 0-3, each
-#         min(x,3)/3, plus own/enemy extras-granted-this-turn). Appended last,
-#         same migration convention as the destroyed-node channel.
+#    10 — Providence bank block (own/enemy bank min(x,8)/8 in slots 0 and 4,
+#         slots 1-3 and 5-7 zero, plus own/enemy placement-available flags).
+#         Appended last, same migration convention as the destroyed-node
+#         channel.
 #    10 — reserved block [505:515] (retired spells; always zero).
 #    78 — reserved channels [515:593] (retired spells; always zero).
 #         Kept so trained checkpoints' raw_proj columns stay aligned.
@@ -82,8 +83,8 @@ VALUE_HIDDEN_DIM = 128      # Value head hidden dimension
 #   + 30 spell-ID one-hot extension for IDs 15-44 at [84:114] (v29 — the
 #     legacy [43:58] one-hot only covers core IDs 0-14; expansion casts
 #     previously overflowed into the tactical columns)
-#   + 2 Providence scalars ([114] extra base moves used, [115] turns
-#     scheduled by this turn's cast)
+#   + 2 Providence scalars ([114] banked stone placed this turn, [115]
+#     stones banked by this turn's cast /4)
 #   + 6 spell-ID one-hot extension for reserved IDs 45-50 at [116:122]
 #     (retired spells; always zero)
 #   + 2 reserved scalars [122], [123] (retired spells; always zero) = 124

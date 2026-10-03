@@ -81,7 +81,6 @@ async function driver() {
 		const probe = sfnToSimBoard(sfn);
 		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
 		probe.getBoardStatePayload = () => ({});
-		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
 		await applyAITurn(probe, { actions: res.actions }, color, () => {});
 		probe.update();
 		probe.checkGameOver(color);

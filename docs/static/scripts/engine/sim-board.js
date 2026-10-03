@@ -22,7 +22,8 @@ class SimAction {
 		this.converted = opts.converted || null; // corrupt: enemy stones turned to caster's color
 		this.wall = opts.wall || null;       // fissure: node permanently destroyed
 		this.pushes = opts.pushes || null;   // rock_slide: [{from, to}], resolved simultaneously
-		this.turns = opts.turns || null;     // schedule_moves: turns scheduled
+		this.banked = opts.banked || null;   // bank_stones: stones added to the Providence bank
+		this.providence = opts.providence || null; // true on a Providence placement move
 	}
 }
 
@@ -55,11 +56,10 @@ class SimBoard {
 		// Turn-local: set true when a push crushes an enemy stone this turn.
 		// Read by Blood Saplings; reset at each turn's start by the enumerator.
 		this.crushedThisTurn = false;
-		// Providence: pendingMoves[color][i] = extra moves granted at the
-		// start of that player's i-th upcoming turn. extraMovesThisTurn =
-		// extras popped for the current side-to-move by advanceTurn().
-		this.pendingMoves = { red: [], blue: [] };
-		this.extraMovesThisTurn = 0;
+		// Providence: stones banked by Dividend/Annuity/Endowment. They count
+		// toward the owner's stone total; a turn that starts with a nonempty
+		// bank may place one of them after the regular move.
+		this.providenceBank = { red: 0, blue: 0 };
 	}
 
 	static fromSigilBoard(board) {
@@ -77,15 +77,7 @@ class SimBoard {
 		sb.mana = { ...board.mana };
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
 		sb.crushedThisTurn = !!board.crushedThisTurn;
-		sb.pendingMoves = {
-			red: [...((board.pendingMoves && board.pendingMoves.red) || [])],
-			blue: [...((board.pendingMoves && board.pendingMoves.blue) || [])],
-		};
-		// The live board tracks a granted-move countdown (movesLeftThisTurn =
-		// 1 + extras at turn start); the sim tracks just the extras. The AI
-		// picks its whole turn at turn start, when no moves are spent yet,
-		// so remaining extras = movesLeft - 1.
-		sb.extraMovesThisTurn = Math.max(0, (board.movesLeftThisTurn || 1) - 1);
+		sb.providenceBank = { red: 0, blue: 0, ...(board.providenceBank || {}) };
 		return sb;
 	}
 
@@ -104,28 +96,15 @@ class SimBoard {
 		b.mana = { ...this.mana };
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
 		b.crushedThisTurn = this.crushedThisTurn;
-		b.pendingMoves = { red: [...this.pendingMoves.red], blue: [...this.pendingMoves.blue] };
-		b.extraMovesThisTurn = this.extraMovesThisTurn;
+		b.providenceBank = { ...this.providenceBank };
 		return b;
 	}
 
 	_enemy(color) { return color === 'red' ? 'blue' : 'red'; }
 
-	// Providence helpers.
-	pendingSum(color) {
-		let s = 0;
-		for (const v of this.pendingMoves[color]) s += v;
-		return s;
-	}
-	pendingStones(color) {
-		// Providence scheduled extras (plus, for the side to move, extras
-		// granted this turn but not yet placed).
-		return this.pendingSum(color)
-			+ (this.whoseTurn === color ? this.extraMovesThisTurn : 0);
-	}
 	effectiveStones(color) {
-		// Real stones plus Providence phantoms (no blue +1 token).
-		return this.totalStones[color] + this.pendingStones(color);
+		// Board stones plus Providence banked stones (no blue +1 token).
+		return this.totalStones[color] + this.providenceBank[color];
 	}
 
 	update() {
@@ -159,11 +138,9 @@ class SimBoard {
 			}
 		}
 
-		// Providence pending stones display in the score for both sides; the
-		// side to move also shows extras granted this turn (correct at turn
-		// boundaries, which is when score is read — mid-replay transient).
-		const rs = rc + this.pendingStones('red');
-		const bs = bc + 1 + this.pendingStones('blue');
+		// Providence banked stones count for their owner.
+		const rs = rc + this.providenceBank.red;
+		const bs = bc + 1 + this.providenceBank.blue;
 		if (rs === bs) this.score = 'tied';
 		else if (rs > bs) this.score = 'r' + Math.min(BOARD.winLead, rs - bs);
 		else this.score = 'b' + Math.min(BOARD.winLead, bs - rs);
@@ -216,19 +193,11 @@ class SimBoard {
 		if (!variantHasDeathmatch(this.variant)) {
 			key += '|' + this.spellCounter.red + '|' + this.spellCounter.blue;
 		}
-		// Providence: positions with different pending schedules are NOT the
-		// same position. Suffix only when non-empty so legacy keys stay
-		// byte-identical. Canonical form is the PRE-SHIFT schedule (matching
-		// board.js takeSnapshot, which runs before the controller's shift):
-		// re-prepend the popped extras counter to the mover's list.
-		const schedRed = [...this.pendingMoves.red];
-		const schedBlue = [...this.pendingMoves.blue];
-		if (this.extraMovesThisTurn) {
-			(this.whoseTurn === 'red' ? schedRed : schedBlue)
-				.unshift(this.extraMovesThisTurn);
-		}
-		if (schedRed.length || schedBlue.length) {
-			key += '|P' + schedRed.join(',') + '/' + schedBlue.join(',');
+		// Providence: positions with different banks are NOT the same
+		// position. Suffix only when a bank is nonempty so legacy keys stay
+		// byte-identical (matches board.js takeSnapshot).
+		if (this.providenceBank.red || this.providenceBank.blue) {
+			key += '|P' + this.providenceBank.red + '/' + this.providenceBank.blue;
 		}
 		return key;
 	}
@@ -250,21 +219,16 @@ class SimBoard {
 			return false;
 		}
 
-		// ±3-lead check: Providence phantoms count ASYMMETRICALLY (defense
-		// only) — a player's win claim uses their real placed stones,
-		// checked against the opponent's real+pending total. In the
-		// sixth-spell count they are symmetric (2026-08 playtest ruling).
-		// The mover's extras-this-turn are NOT counted here: placed ones
-		// are already real, unused ones forfeit at end of turn.
-		const rt = this.totalStones.red, bt = this.totalStones.blue + 1;
-		const rProv = this.pendingSum('red'), bProv = this.pendingSum('blue');
+		// Stone-lead and sixth-spell checks: Providence banked stones count
+		// fully for their owner.
+		const rt = this.effectiveStones('red'), bt = this.effectiveStones('blue') + 1;
 		const margin = BOARD.winLead - 1;
-		if (rt > bt + bProv + margin) { this.gameover = true; this.winner = 'red'; return true; }
-		if (bt > rt + rProv + margin) { this.gameover = true; this.winner = 'blue'; return true; }
+		if (rt > bt + margin) { this.gameover = true; this.winner = 'red'; return true; }
+		if (bt > rt + margin) { this.gameover = true; this.winner = 'blue'; return true; }
 		if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
 			this.gameover = true;
-			if (rt + rProv > bt + bProv) this.winner = 'red';
-			else if (bt + bProv > rt + rProv) this.winner = 'blue';
+			if (rt > bt) this.winner = 'red';
+			else if (bt > rt) this.winner = 'blue';
 			else this.winner = this._enemy(activeColor);
 			return true;
 		}
@@ -272,14 +236,8 @@ class SimBoard {
 	}
 
 	advanceTurn() {
-		// The Providence shift lives here so every turn driver (search,
-		// arena, replay) is correct without per-driver edits, and end-of-turn
-		// forfeit is implicit: the pop overwrites whatever the previous mover
-		// left unused.
 		this.turnCounter++;
 		this.whoseTurn = this.whoseTurn === 'red' ? 'blue' : 'red';
-		const sched = this.pendingMoves[this.whoseTurn];
-		this.extraMovesThisTurn = sched.length ? sched.shift() : 0;
 	}
 
 	// --- Move helpers ---
@@ -503,9 +461,10 @@ class SimBoard {
 	// cascade, then applied simultaneously. Pushes a 'decay' SimAction and updates.
 	_destroyExposed(color, actions) {
 		const enemy = this._enemy(color);
+		const shielded = bulwarkProtectedNodes(this);
 		const doomed = [];
 		for (const name of NODE_ORDER) {
-			if (this.stones[name] !== enemy) continue;
+			if (this.stones[name] !== enemy || shielded.has(name)) continue;
 			let empties = 0;
 			for (const nb of ADJACENCY[name]) {
 				if (this.stones[nb] === null) empties++;
@@ -527,14 +486,17 @@ class SimBoard {
 		const queue = (chosen || []).slice();
 		const destroyed = [];
 		for (let k = 0; k < count; k++) {
+			// One stone at a time: destroying the enemy's Bulwark stone first
+			// exposes their locked spell to the next pick.
+			const shielded = bulwarkProtectedNodes(this);
 			let target = null;
 			while (queue.length && target === null) {
 				const cand = queue.shift();
-				if (this.stones[cand] === enemy) target = cand;
+				if (this.stones[cand] === enemy && !shielded.has(cand)) target = cand;
 			}
 			if (target === null) {
 				for (const name of NODE_ORDER) {
-					if (this.stones[name] === enemy) { target = name; break; }
+					if (this.stones[name] === enemy && !shielded.has(name)) { target = name; break; }
 				}
 			}
 			if (target === null) break;
@@ -591,8 +553,9 @@ class SimBoard {
 			}
 		} else if (rt === 'fireblast') {
 			const destroyed = [];
+			const shielded = bulwarkProtectedNodes(this);
 			for (const name of NODE_ORDER) {
-				if (this.stones[name] === enemy) {
+				if (this.stones[name] === enemy && !shielded.has(name)) {
 					for (const nb of ADJACENCY[name]) {
 						if (this.stones[nb] === color) {
 							this.stones[name] = null;
@@ -628,9 +591,10 @@ class SimBoard {
 			this.update();
 		} else if (rt === 'hail_storm') {
 			const destroyed = [];
+			const shielded = bulwarkProtectedNodes(this);
 			for (let pos = 1; pos <= 2 * BOARD.perType; pos++) {
 				for (const n of POSITIONS[pos]) {
-					if (this.stones[n] === enemy) {
+					if (this.stones[n] === enemy && !shielded.has(n)) {
 						this.stones[n] = null;
 						destroyed.push(n);
 						this.update();
@@ -640,41 +604,20 @@ class SimBoard {
 			}
 			if (destroyed.length) actions.push(new SimAction('hail_storm', { destroyed }));
 		} else if (rt === 'fissure') {
+			const shielded = bulwarkProtectedNodes(this);
 			let target = overrides.fissure_target;
-			if (!target || !NODE_ORDER.includes(target)) {
-				// Greedy default: pick the target with the greatest net
-				// stone-count advantage. Target term: +1 enemy / 0 empty /
-				// -1 own. Blast term: +1 per adjacent enemy stone.
-				let bestScore = null;
-				let bestTarget = NODE_ORDER[0];
-				for (const node of NODE_ORDER) {
-					let score = this.stones[node] === enemy ? 1
-						: (this.stones[node] === color ? -1 : 0);
-					for (const nb of ADJACENCY[node]) {
-						if (this.stones[nb] === enemy) score++;
-					}
-					if (bestScore === null || score > bestScore) {
-						bestScore = score;
-						bestTarget = node;
-					}
-				}
-				target = bestTarget;
+			if (!target || !NODE_ORDER.includes(target) || this.stones[target] === DESTROYED) {
+				// Greedy default: the target with the greatest net stone swing
+				// (see fissureScore in constants.js).
+				target = fissureRankedTargets(this.stones, color, shielded)[0] || null;
 			}
-			const destroyed = [];
-			// Adjacent nodes: destroy enemy stones only (revert to normal empty).
-			for (const n of ADJACENCY[target]) {
-				if (this.stones[n] === enemy) {
-					this.stones[n] = null;
-					destroyed.push(n);
-				}
+			if (target) {
+				const { destroyed, wall } = fissureBlast(this.stones, target, shielded);
+				for (const n of destroyed) this.stones[n] = null;
+				if (wall) this.stones[wall] = DESTROYED;
+				actions.push(new SimAction('fissure', { node: target, destroyed, wall }));
+				this.update();
 			}
-			// Target node: permanently destroyed (a wall), regardless of occupant.
-			if (this.stones[target] === color || this.stones[target] === enemy) {
-				destroyed.push(target);
-			}
-			this.stones[target] = DESTROYED;
-			actions.push(new SimAction('fissure', { node: target, destroyed, wall: target }));
-			this.update();
 		} else if (rt === 'rock_slide') {
 			// Every push is chosen first, then all resolve at once, with one
 			// update() at the end (no mid-resolution stone-count checks).
@@ -682,35 +625,35 @@ class SimBoard {
 			// distinct max-net outcome on this post-cast board; one generous
 			// solve serves the whole run of variants through the memo.
 			const variant = overrides.rock_slide_variant || 0;
+			const shielded = bulwarkProtectedNodes(this);
 			let pushes;
 			if (variant) {
 				const options = rockSlideOptimalPushes(this.stones, color, overrides.rock_slide_pushes,
-					Math.max(16, variant + 1))[1];
+					Math.max(16, variant + 1), shielded)[1];
 				if (variant >= options.length) throw new RockSlideVariantUnavailable(String(variant));
 				pushes = options[variant];
 			} else {
-				pushes = rockSlideGreedyPushes(this.stones, color, overrides.rock_slide_pushes);
+				pushes = rockSlideGreedyPushes(this.stones, color, overrides.rock_slide_pushes, shielded);
 			}
-			const { final, lost } = resolveRockSlide(this.stones, pushes);
+			const { final, lost } = resolveRockSlide(this.stones, pushes, shielded);
 			Object.assign(this.stones, final);
 			if (lost.length) this.crushedThisTurn = true;
 			const destroyed = [...new Set(lost.map(([n]) => n))];
 			actions.push(new SimAction('rock_slide', { pushes, destroyed: destroyed.length ? destroyed : null }));
 			this.update();
-		} else if (rt === 'schedule_moves') {
-			// Providence: schedule 1 extra move at the start of each of the
-			// caster's next `turns` turns (additive stacking).
-			const turns = info.turns || 1;
-			const sched = this.pendingMoves[color];
-			while (sched.length < turns) sched.push(0);
-			for (let i = 0; i < turns; i++) sched[i] += 1;
-			actions.push(new SimAction('schedule_moves', { spell: spellName, turns }));
+		} else if (rt === 'bank_stones') {
+			// Providence: add stones to the caster's bank.
+			const n = info.stones || 1;
+			this.providenceBank[color] += n;
+			actions.push(new SimAction('bank_stones', { spell: spellName, banked: n }));
 			this.update();
 		} else if (rt === 'bewitch') {
 			const ovr = overrides.bewitch_pair;
+			const shielded = bulwarkProtectedNodes(this);
 			if (ovr) {
 				const [n1, n2] = ovr;
 				if (this.stones[n1] === enemy && this.stones[n2] === enemy
+				    && !shielded.has(n1) && !shielded.has(n2)
 				    && ADJACENCY[n1].includes(n2)) {
 					this.stones[n1] = color;
 					this.stones[n2] = color;
@@ -720,9 +663,9 @@ class SimBoard {
 				}
 			}
 			for (const name of NODE_ORDER) {
-				if (this.stones[name] === enemy) {
+				if (this.stones[name] === enemy && !shielded.has(name)) {
 					for (const nb of ADJACENCY[name]) {
-						if (this.stones[nb] === enemy) {
+						if (this.stones[nb] === enemy && !shielded.has(nb)) {
 							this.stones[name] = color;
 							this.stones[nb] = color;
 							actions.push(new SimAction('bewitch', { node: name, node2: nb }));
@@ -745,12 +688,13 @@ class SimBoard {
 				// Heuristic: max enemy stones destroyed; ties broken by
 				// destroying an enemy on a mana node (a1/b1/c1).
 				let bestScore = [-1, -1];
+				const shieldedNow = bulwarkProtectedNodes(this);
 				for (const name of NODE_ORDER) {
 					if (this.stones[name] !== null) continue;
 					for (const nb of ADJACENCY[name]) {
 						if (this.stones[nb] !== null) continue;
 						const union = new Set([...ADJACENCY[name], ...ADJACENCY[nb]]);
-						const enemies = [...union].filter(n => this.stones[n] === enemy);
+						const enemies = [...union].filter(n => this.stones[n] === enemy && !shieldedNow.has(n));
 						const ec = enemies.length;
 						const mana = enemies.filter(n => MANA_NODES.includes(n)).length;
 						if (ec > bestScore[0] || (ec === bestScore[0] && mana > bestScore[1])) {
@@ -765,9 +709,10 @@ class SimBoard {
 				this.stones[n1] = color;
 				this.stones[n2] = color;
 				const destroyed = [];
+				const shielded = bulwarkProtectedNodes(this);
 				const union = new Set([...ADJACENCY[n1], ...ADJACENCY[n2]]);
 				for (const n of union) {
-					if (this.stones[n] === enemy) { this.stones[n] = null; destroyed.push(n); }
+					if (this.stones[n] === enemy && !shielded.has(n)) { this.stones[n] = null; destroyed.push(n); }
 				}
 				actions.push(new SimAction('starfall', { node: n1, node2: n2, destroyed }));
 				this.update();
@@ -783,12 +728,13 @@ class SimBoard {
 				// adjacent kill); ties broken in favor of eliminating
 				// enemy mana stones.
 				let bestScore = [-1, -1];
+				const shieldedNow = bulwarkProtectedNodes(this);
 				for (const t of targets) {
 					const crush = (this.stones[t] === enemy
 					               && this.isCrushable(t, color));
 					const crushKills = crush ? 1 : 0;
 					const crushMana = (crush && MANA_NODES.includes(t)) ? 1 : 0;
-					const adjEnemies = ADJACENCY[t].filter(nb => this.stones[nb] === enemy);
+					const adjEnemies = ADJACENCY[t].filter(nb => this.stones[nb] === enemy && !shieldedNow.has(nb));
 					const kill = adjEnemies.length > 0 ? 1 : 0;
 					const killMana = adjEnemies.some(n => MANA_NODES.includes(n)) ? 1 : 0;
 					const score = [crushKills + kill, crushMana + killMana];
@@ -809,7 +755,8 @@ class SimBoard {
 				}
 				this.update();
 				// Destroy 1 adjacent enemy — prefer one on a mana node.
-				const adjEnemies = ADJACENCY[chosen].filter(nb => this.stones[nb] === enemy);
+				const shielded = bulwarkProtectedNodes(this);
+				const adjEnemies = ADJACENCY[chosen].filter(nb => this.stones[nb] === enemy && !shielded.has(nb));
 				let killTarget = adjEnemies.find(n => MANA_NODES.includes(n));
 				if (!killTarget && adjEnemies.length) killTarget = adjEnemies[0];
 				if (killTarget) {
@@ -891,8 +838,9 @@ class SimBoard {
 		} else if (rt === 'gust') {
 			// Pick up every enemy stone touching any of our remaining stones.
 			const picked = [];
+			const shielded = bulwarkProtectedNodes(this);
 			for (const n of NODE_ORDER) {
-				if (this.stones[n] !== enemy) continue;
+				if (this.stones[n] !== enemy || shielded.has(n)) continue;
 				for (const nb of ADJACENCY[n]) {
 					if (this.stones[nb] === color) { picked.push(n); break; }
 				}
@@ -924,8 +872,9 @@ class SimBoard {
 			this._destroyChosen(color, actions, 2, overrides.storm_front_pair);
 			this.update();
 		} else if (rt === 'hurricane') {
-			// Destroy the smallest contiguous enemy group.
-			const visited = new Set();
+			// Destroy the smallest contiguous enemy group. Bulwark-shielded
+			// stones are ignored: groups form from destroyable stones only.
+			const visited = new Set(bulwarkProtectedNodes(this));
 			const groups = [];
 			for (const start of NODE_ORDER) {
 				if (visited.has(start) || this.stones[start] !== enemy) continue;
@@ -1172,7 +1121,8 @@ class SimBoard {
 			const opp = BOARD.syzygyOpposite[spellIdx];
 			if (opp) {
 				const charmNode = POSITIONS[opp.charm][0];
-				if (this.stones[charmNode] !== color && this.stones[charmNode] !== DESTROYED) {
+				if (this.stones[charmNode] !== color && this.stones[charmNode] !== DESTROYED
+				    && !this._isBulwarkProtected(enemy, charmNode)) {
 					if (this.stones[charmNode] === enemy) {
 						const dest = this._pushEnemy(charmNode, color, pushDests.shift());
 						actions.push(new SimAction('blink', { node: charmNode, pushed_to: dest }));
@@ -1185,7 +1135,8 @@ class SimBoard {
 				for (let move = 0; move < 3; move++) {
 					let target = null;
 					for (const n of POSITIONS[opp.sorcery]) {
-						if (this.stones[n] !== color && this.stones[n] !== DESTROYED) { target = n; break; }
+						if (this.stones[n] !== color && this.stones[n] !== DESTROYED
+						    && !this._isBulwarkProtected(enemy, n)) { target = n; break; }
 					}
 					if (!target) break;
 					if (this.stones[target] === enemy) {
@@ -1206,22 +1157,30 @@ class SimBoard {
 			// board so conversions can't chain. Greedy converts the first 3
 			// eligible by NODE_ORDER; 'corrupt_targets' override picks specific
 			// ones, 'corrupt_sacrifice' picks the stone to give up.
+			// Conversions happen one at a time, so Bulwark is checked before
+			// each: converting the enemy's Bulwark stone first exposes their
+			// locked spell to the remaining conversions. Greedy therefore
+			// takes such a "Bulwark breaker" first, when eligible.
 			const eligible = [];
 			for (const name of NODE_ORDER) {
 				if (this.stones[name] !== enemy) continue;
 				if (ADJACENCY[name].some(nb => this.stones[nb] === color)) eligible.push(name);
 			}
-			const chosenTargets = [];
-			for (const cand of (overrides.corrupt_targets || [])) {
-				if (eligible.includes(cand) && !chosenTargets.includes(cand)) chosenTargets.push(cand);
-			}
-			for (const cand of eligible) {
-				if (chosenTargets.length >= 3) break;
-				if (!chosenTargets.includes(cand)) chosenTargets.push(cand);
+			const breakers = eligible.filter(n =>
+				[...bulwarkUnshieldedByRemoving(this, n)].some(u => eligible.includes(u)));
+			const order = [];
+			for (const cand of [...(overrides.corrupt_targets || []), ...breakers, ...eligible]) {
+				if (eligible.includes(cand) && !order.includes(cand)) order.push(cand);
 			}
 			const converted = [];
-			for (const name of chosenTargets.slice(0, 3)) {
-				if (this.stones[name] === enemy) { this.stones[name] = color; converted.push(name); }
+			while (converted.length < 3 && !this.gameover) {
+				const shielded = bulwarkProtectedNodes(this);
+				const pick = order.find(n => !converted.includes(n)
+					&& this.stones[n] === enemy && !shielded.has(n));
+				if (pick === undefined) break;
+				this.stones[pick] = color;
+				converted.push(pick);
+				this.update();
 			}
 			if (converted.length) actions.push(new SimAction('corrupt', { converted }));
 			this.update();
@@ -1270,8 +1229,10 @@ class SimBoard {
 		} else if (rt === 'shiver') {
 			// No useful default swap; rely on enumerated overrides.
 			const ovr = overrides.shiver_pair;
+			const shielded = bulwarkProtectedNodes(this);
 			if (ovr && ovr.length === 2 && ovr[0] !== ovr[1]
-			    && this.stones[ovr[0]] !== null && this.stones[ovr[1]] !== null) {
+			    && this.stones[ovr[0]] !== null && this.stones[ovr[1]] !== null
+			    && !shielded.has(ovr[0]) && !shielded.has(ovr[1])) {
 				const [a, b] = ovr;
 				const tmp = this.stones[a];
 				this.stones[a] = this.stones[b];
@@ -1322,8 +1283,9 @@ class SimBoard {
 		} else if (rt === 'residue_mixture') {
 			if (this.spellCounter[color] > this.spellCounter[enemy]) {
 				const ovr = overrides.residue_target;
-				let target = (ovr && this.stones[ovr] === enemy)
-					? ovr : (NODE_ORDER.find(n => this.stones[n] === enemy) || null);
+				const shielded = bulwarkProtectedNodes(this);
+				let target = (ovr && this.stones[ovr] === enemy && !shielded.has(ovr))
+					? ovr : (NODE_ORDER.find(n => this.stones[n] === enemy && !shielded.has(n)) || null);
 				if (target) {
 					this.stones[target] = color;
 					actions.push(new SimAction('bewitch', { node: target }));
@@ -1375,12 +1337,13 @@ class SimBoard {
 		} else if (rt === 'moth_plague') {
 			const overrideTargets = (overrides.moth_targets || []).slice();
 			for (let i = 0; i < 3; i++) {
-				const enemies = NODE_ORDER.filter(n => this.stones[n] === enemy);
+				const enemies = NODE_ORDER.filter(n => this.stones[n] === enemy
+					&& !this._isBulwarkProtected(enemy, n));
 				if (!enemies.length) break;
 				let chosen = null;
 				while (overrideTargets.length && chosen === null) {
 					const cand = overrideTargets.shift();
-					if (this.stones[cand] === enemy) chosen = cand;
+					if (enemies.includes(cand)) chosen = cand;
 				}
 				if (chosen === null) chosen = enemies[0];
 				const dest = this._pushEnemy(chosen, color, pushDests.shift());
@@ -1620,6 +1583,9 @@ class SimBoard {
 			// dash, the casts and the bare pass remain. `_enumeratePostMove`
 			// yields the pass first, then the rest.
 			yield* this._enumeratePostMove(color, [], true, true, true);
+			// A Providence placement ignores Stone's soft-only rule, so it
+			// may still be possible.
+			yield* this._enumerateProvidenceStep(color, []);
 			return;
 		}
 
@@ -1629,30 +1595,42 @@ class SimBoard {
 			const moveAction = bam._doMove(color, target, isBlink);
 			if (!moveAction) continue;
 			bam.update();
-			yield* bam._enumerateMovePhase(color, [moveAction], this.extraMovesThisTurn);
+			// Optional Providence placement, then dash/cast/pass.
+			yield* bam._enumeratePostMove(color, [moveAction], true, true, true);
+			yield* bam._enumerateProvidenceStep(color, [moveAction]);
 		}
 	}
 
 	/**
-	 * Providence move phase: at each step, either stop taking base moves
-	 * (proceed to dash/cast/pass — remaining extras forfeit at end of turn)
-	 * or take one more. Greedy engine: a single target per extra step
-	 * (matching the greedy dash convention); the exhaustive enumerator
-	 * branches over top-K targets instead. With extrasLeft === 0 this is
-	 * exactly the pre-Providence flow. Wind's blink privilege and Stone's
-	 * soft-move restriction apply only to the turn's FIRST move, so extra
-	 * steps use _allMoveable.
+	 * Place one banked stone at `node` (soft or hard move, never a blink).
+	 * Returns the SimAction flagged providence, or null.
 	 */
-	* _enumerateMovePhase(color, actionsSoFar, extrasLeft) {
-		yield* this._enumeratePostMove(color, actionsSoFar, true, true, true);
-		if (extrasLeft <= 0 || this.gameover) return;
+	_doProvidenceMove(color, node) {
+		const act = this._doMove(color, node, false);
+		if (!act) return null;
+		act.providence = true;
+		this.providenceBank[color]--;
+		this.update();
+		return act;
+	}
+
+	/**
+	 * Providence: with a nonempty bank, the mover may place one banked stone
+	 * after the regular move, then proceed to dash/cast/pass. (Skipping it is
+	 * the caller's plain post-move branch.) Greedy engine: a single target,
+	 * matching the greedy dash convention; the exhaustive enumerator
+	 * branches over top-K targets instead. Wind's blink privilege and
+	 * Stone's soft-move restriction apply only to the regular move, so the
+	 * placement uses _allMoveable.
+	 */
+	* _enumerateProvidenceStep(color, actionsSoFar) {
+		if (this.providenceBank[color] <= 0 || this.gameover) return;
 		const targets = this._allMoveable(color);
 		if (!targets.length) return;
 		const b = this.copy();
-		const act = b._doMove(color, targets[0], false);
+		const act = b._doProvidenceMove(color, targets[0]);
 		if (!act) return;
-		b.update();
-		yield* b._enumerateMovePhase(color, actionsSoFar.concat([act]), extrasLeft - 1);
+		yield* b._enumeratePostMove(color, actionsSoFar.concat([act]), true, true, true);
 	}
 }
 
@@ -1664,9 +1642,10 @@ class SimBoard {
 function destructionEndOfTurn(board, color) {
 	if (!board.chargedSpells[color].includes('Seal_of_Destruction')) return [];
 	const enemy = board._enemy(color);
+	const shielded = bulwarkProtectedNodes(board);
 	const destroyed = [];
 	for (const name of NODE_ORDER) {
-		if (board.stones[name] !== enemy) continue;
+		if (board.stones[name] !== enemy || shielded.has(name)) continue;
 		for (const nb of ADJACENCY[name]) {
 			if (board.stones[nb] === color) { board.stones[name] = null; destroyed.push(name); break; }
 		}
@@ -1701,6 +1680,7 @@ function applySimTurn(board, turn, color) {
 	const enemy = board._enemy(color);
 	board.crushedThisTurn = false;
 	for (const action of turn.actions) {
+		if (action.providence) board.providenceBank[color]--;
 		if (action.type === 'move') {
 			board.stones[action.node] = color;
 		} else if (action.type === 'hard_move') {
@@ -1772,15 +1752,14 @@ function applySimTurn(board, turn, color) {
 			if (action.wall) board.stones[action.wall] = DESTROYED;
 		}
 		else if (action.type === 'rock_slide') {
-			const { final, lost } = resolveRockSlide(board.stones, action.pushes || []);
+			const pushes = action.pushes || [];
+			const { final, lost } = resolveRockSlide(board.stones, pushes,
+				rockSlideReplayShielded(board.stones, pushes, action.destroyed));
 			Object.assign(board.stones, final);
 			if (lost.length) board.crushedThisTurn = true;
 		}
-		else if (action.type === 'schedule_moves') {
-			const sched = board.pendingMoves[color];
-			const n = action.turns || 0;
-			while (sched.length < n) sched.push(0);
-			for (let i = 0; i < n; i++) sched[i] += 1;
+		else if (action.type === 'bank_stones') {
+			board.providenceBank[color] += action.banked || 0;
 		}
 		board.update();
 	}

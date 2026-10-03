@@ -61,9 +61,9 @@ function sfnToSimBoard(sfnStr) {
 	sb.lock = { red: state.red_lock, blue: state.blue_lock };
 	sb.springlock = { red: state.red_springlock, blue: state.blue_springlock };
 	sb.score = state.score;
-	// Cross-turn scheduled state must survive into review evals, or the
-	// search misjudges positions with schedules in flight.
-	sb.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
+	// Providence banks must survive into review evals, or the search
+	// misjudges positions with banked stones.
+	sb.providenceBank = { red: state.red_bank || 0, blue: state.blue_bank || 0 };
 	sb.update();
 	return sb;
 }
@@ -606,7 +606,7 @@ function turnToNotation(turn) {
  * sfnBefore, sfnAfter}) by REPLAYING a slim transcript through the real
  * game engine. This is how SGN-T imports, slim local saves, and slim
  * rooms/gameLog records recover per-ply positions — nothing derived
- * (including Providence pending-move schedules) is ever stored at rest.
+ * (including Providence banks) is ever stored at rest.
  *
  * Human turns replay their input-token transcript through a headless
  * GameController whose getInput() shifts tokens off the queue (an empty
@@ -614,7 +614,7 @@ function turnToNotation(turn) {
  * recorded SimActions via applyAITurn with animation pacing disabled.
  *
  * The start-of-turn preamble MUST mirror GameController._runGameLoop
- * (snapshot → turn counter → Destruction check → Providence shift).
+ * (snapshot → turn counter → Destruction check → Providence opening).
  *
  * @returns {Promise<Array>} rebuilt fat entries (ends early on game over)
  * @throws on transcript/engine mismatch — callers fall back to a
@@ -713,7 +713,7 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 			// the move sequence for this turn is unknown — adopt the stored
 			// after-state wholesale and continue replaying from it. The SFN
 			// carries the complete position (stones, locks, counters,
-			// schedules), and it was captured pre-advance, so the
+			// banks), and it was captured pre-advance, so the
 			// next iteration's turnNumber-derived preamble lines up.
 			if (t.kind === 'snapshot') {
 				if (!t.sfnAfter) throw new Error(
@@ -734,11 +734,8 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 				continue;
 			}
 
-			// Providence shift (mirrors _runGameLoop).
-			const extraMoves = board.pendingMoves[t.color].length
-				? board.pendingMoves[t.color].shift() : 0;
-			board.movesLeftThisTurn = 1 + extraMoves;
-			board.movesGrantedThisTurn = 1 + extraMoves;
+			// Providence opening (mirrors _runGameLoop).
+			board.providenceOpen = board.providenceBank[t.color] > 0;
 
 			const simActions = t.kind === 'sim'
 				? (t.actions || []).map(normAction) : null;

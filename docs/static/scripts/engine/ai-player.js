@@ -384,12 +384,11 @@ async function applyAITurn(board, turn, color, emit) {
 			continue;
 		}
 
-		// Providence: count down the live board's granted moves as the AI's
-		// base moves replay, so the mid-turn score display (phantom stones)
-		// stays exact. Base moves come first in enumerated turns; later
-		// spell-driven move actions clamp harmlessly at 0.
-		if (action.type === 'move' || action.type === 'hard_move' || action.type === 'blink') {
-			if (board.movesLeftThisTurn > 0) board.movesLeftThisTurn--;
+		// Providence: this move places a banked stone.
+		if (action.providence) {
+			board.providenceBank[color]--;
+			const pname = color === 'red' ? 'Red' : 'Blue';
+			emit({ type: 'message', message: pname + ' places a banked stone (Providence).', awaiting: null });
 		}
 
 		if (action.type === 'move') {
@@ -534,14 +533,15 @@ async function applyAITurn(board, turn, color, emit) {
 		}
 
 		else if (action.type === 'fissure') {
-			// Tectonic Fissure: destroy adjacent enemy stones, then turn the
-			// target node into a permanent wall. (This branch was missing —
-			// an AI Fissure cast desynced the live board from the sim.)
+			// Tectonic Fissure: destroy the recorded adjacent stones (either
+			// color), then turn the target node into a permanent wall unless
+			// Bulwark shielded its stone (wall === null).
 			if (action.destroyed) {
 				for (const n of action.destroyed) {
+					const crushed = board.stones[n];
 					board.stones[n] = null;
 					if (board.lastPlay === n) { board.lastPlay = null; board.lastPlayer = null; }
-					emit({ type: 'crush_animation', crushed_color: enemy, node: n });
+					emit({ type: 'crush_animation', crushed_color: crushed, node: n });
 				}
 			}
 			if (action.wall) {
@@ -561,7 +561,8 @@ async function applyAITurn(board, turn, color, emit) {
 				await _aiDelay(1000);
 				emit({ type: 'push_arrows', arrows: [] });
 				const before = Object.assign({}, board.stones);
-				const { final, lost } = resolveRockSlide(before, action.pushes);
+				const { final, lost } = resolveRockSlide(before, action.pushes,
+					rockSlideReplayShielded(before, action.pushes, action.destroyed));
 				Object.assign(board.stones, final);
 				for (const p of action.pushes) {
 					emit({ type: 'push_animation', pushed_color: before[p.from], starting_node: p.from, ending_node: p.to });
@@ -688,17 +689,13 @@ async function applyAITurn(board, turn, color, emit) {
 			}
 		}
 
-		else if (action.type === 'schedule_moves') {
-			// Providence: replay the scheduled extra moves onto the live board.
-			const sched = board.pendingMoves[color];
-			const n = action.turns || 0;
-			while (sched.length < n) sched.push(0);
-			for (let i = 0; i < n; i++) sched[i] += 1;
+		else if (action.type === 'bank_stones') {
+			// Providence: replay the banked stones onto the live board.
+			const n = action.banked || 0;
+			board.providenceBank[color] += n;
 			const pname = color === 'red' ? 'Red' : 'Blue';
-			const when = n === 1
-				? 'at the beginning of their next turn'
-				: 'at the beginning of each of their next ' + n + ' turns';
-			emit({ type: 'message', message: pname + ' will make 1 extra move ' + when + '.', awaiting: null });
+			emit({ type: 'message', message: pname + ' banks ' + n + ' stone' + (n === 1 ? '' : 's')
+				+ ' (Providence bank: ' + board.providenceBank[color] + ').', awaiting: null });
 			board.update();
 			emit(board.getBoardStatePayload());
 		}

@@ -31,15 +31,13 @@ function boardToSfn(board) {
 	// existing SFN strings byte-identical with the Python writer.
 	const variant = board.variant || 'standard';
 	if (variant !== 'standard') out += ` ${variant}`;
-	// Providence pending-move schedules. Self-tagged optional token, emitted
-	// only while a schedule is in flight, so every pre-Providence SFN — and
-	// every Providence SFN with no active effect — stays byte-identical.
+	// Providence banks. Self-tagged optional token, emitted only while a
+	// bank is nonempty, so every pre-Providence SFN — and every Providence
+	// SFN with empty banks — stays byte-identical with the Python writer.
 	// Readers recognize trailing tokens by prefix ('pm:'), not position.
-	const pr = (board.pendingMoves && board.pendingMoves.red) || [];
-	const pb = (board.pendingMoves && board.pendingMoves.blue) || [];
-	if (pr.length || pb.length) {
-		out += ` pm:${pr.length ? pr.join(',') : '-'}:${pb.length ? pb.join(',') : '-'}`;
-	}
+	const pr = (board.providenceBank && board.providenceBank.red) || 0;
+	const pb = (board.providenceBank && board.providenceBank.blue) || 0;
+	if (pr || pb) out += ` pm:${pr}:${pb}`;
 	return out;
 }
 
@@ -83,16 +81,16 @@ function sfnToDict(sfnStr) {
 	const score = parts[6];
 
 	// Optional trailing tokens, recognized by prefix so they can appear in
-	// any combination: 'pm:<red>:<blue>' carries Providence pending-move
-	// schedules; any other token is the variant. Both default for legacy SFN.
+	// any combination: 'pm:<red>:<blue>' carries the Providence bank sizes;
+	// any other token is the variant. Both default for legacy SFN.
 	let variant = 'standard';
-	let redPending = [];
-	let bluePending = [];
+	let redBank = 0;
+	let blueBank = 0;
 	for (const token of parts.slice(7)) {
 		if (token.startsWith('pm:')) {
 			const [, prStr, pbStr] = token.split(':');
-			redPending = prStr === '-' ? [] : prStr.split(',').map(Number);
-			bluePending = pbStr === '-' ? [] : pbStr.split(',').map(Number);
+			redBank = Number(prStr);
+			blueBank = Number(pbStr);
 		} else if (token) {
 			variant = token;
 		}
@@ -110,7 +108,7 @@ function sfnToDict(sfnStr) {
 		red_lock: redLock, blue_lock: blueLock,
 		red_springlock: redSpring, blue_springlock: blueSpring,
 		score, variant, layout,
-		red_pending: redPending, blue_pending: bluePending,
+		red_bank: redBank, blue_bank: blueBank,
 	};
 }
 

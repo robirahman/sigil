@@ -243,29 +243,18 @@ class GameController {
 				this._currentTurnActions = [];
 				this._lastTurnKind = 'input';
 				this._lastSimActions = null;
-				// Captured BEFORE the Providence shift so sfnBefore carries the
-				// un-shifted schedule (review replay re-derives the shift).
 				const turnSfn = boardToSfn(board);
 
-				// Providence: shift the schedule head into the turn-scoped
-				// move counters. Destruction death above never reaches this,
-				// so a player killed at SOT never consumes their extras.
-				const extraMoves = board.pendingMoves[color].length
-					? board.pendingMoves[color].shift() : 0;
-				board.movesLeftThisTurn = 1 + extraMoves;
-				board.movesGrantedThisTurn = 1 + extraMoves;
-				if (extraMoves > 0) {
-					const pname = color === 'red' ? 'Red' : 'Blue';
-					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
-				}
+				// Providence: a turn that starts with a nonempty bank may
+				// place one banked stone after the regular move.
+				board.providenceOpen = board.providenceBank[color] > 0;
 
 				// Pondering: while the human is on move and there's an AI
 				// opponent, fire a background search to prime the shared TT.
 				// No move prediction — the search runs as the side-to-move
 				// (the human) and accumulates TT entries the AI's real
 				// search will reuse when it later searches from the post-
-				// human-move SFN. Runs after the Providence shift so the
-				// ponder sees any extra moves granted this turn.
+				// human-move SFN.
 				if (this.ai && color !== this.aiColor
 				    && typeof this.ai.startPonder === 'function') {
 					try { this.ai.startPonder(board); } catch (_) { /* non-fatal */ }
@@ -415,23 +404,26 @@ class GameController {
 			return;
 		}
 
+		// Providence: after the regular move (or when none was legal), offer
+		// the optional banked-stone placement once. Passing there ends the turn.
+		if (!canmove && board.providenceOpen) {
+			board.providenceOpen = false;
+			if (await this._providenceStep(color)) return;
+		}
+
 		const enemy = board.enemy(color);
 		const actions = [];
 		let spellList = [];
 		let moveoptions = {};
-		// Providence: Seal of Wind / Seal of Stone key off the turn's FIRST
-		// move; extra granted moves are ordinary moves.
-		const isFirstMove = board.movesLeftThisTurn === board.movesGrantedThisTurn;
 
 		if (canmove) {
 			actions.push('move');
-			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
-			// No legal move. Any remaining granted moves are forfeited (the
-			// EOT triggers zero the counters), but the turn is NOT over: a
-			// turn is move + optional dash + optional cast (ruling
-			// 2026-08-26, mirrored by the engine's enumerator), so a
-			// surrounded player may still dash, cast, or pass. This used to
-			// `return` here and silently skip the whole turn.
+			moveoptions = getStandardMoveTargets(board, color, true);
+			// No legal move, but the turn is NOT over: a turn is move +
+			// optional dash + optional cast (ruling 2026-08-26, mirrored by
+			// the engine's enumerator), so a surrounded player may still
+			// dash, cast, or pass. This used to `return` here and silently
+			// skip the whole turn.
 			if (Object.keys(moveoptions).length === 0) {
 				this.emit({ type: 'message', awaiting: null,
 					message: 'No legal stone placement: dash, cast a spell, or pass.' });
@@ -495,14 +487,9 @@ class GameController {
 		}
 
 		// Send action prompt
-		let movePrompt = 'Choose where to move.';
-		if (canmove && board.movesGrantedThisTurn > 1) {
-			const moveNum = board.movesGrantedThisTurn - board.movesLeftThisTurn + 1;
-			movePrompt = 'Move ' + moveNum + ' of ' + board.movesGrantedThisTurn + ': choose where to move.';
-		}
 		const action = await this.getInput({
 			type: 'message',
-			message: canmove ? movePrompt : String(actions),
+			message: canmove ? 'Choose where to move.' : String(actions),
 			awaiting: 'action',
 			actionlist: actions,
 			moveoptions,
@@ -513,9 +500,8 @@ class GameController {
 
 		if (actions.includes('move') && nodeNames.includes(action)) {
 			// Player clicked a node while 'move' was available (shortcut)
-			await this._doMove(color, action, isFirstMove);
-			board.movesLeftThisTurn = Math.max(0, board.movesLeftThisTurn - 1);
-			await this._takeTurn(color, board.movesLeftThisTurn > 0, candash, canspell, cansummer);
+			await this._doMove(color, action, true);
+			await this._takeTurn(color, false, candash, canspell, cansummer);
 			return;
 		}
 
@@ -549,6 +535,39 @@ class GameController {
 			}
 			return;
 		}
+	}
+
+	/**
+	 * Providence: offer to place one banked stone, an ordinary adjacent soft
+	 * or hard move (Seal of Wind's blink and the enemy Seal of Stone's
+	 * soft-only rule apply to the regular move only). Skipping, or having no
+	 * legal node, leaves the stone banked. Returns true iff the player ended
+	 * the turn from this prompt.
+	 */
+	async _providenceStep(color) {
+		const board = this.board;
+		const moveoptions = getStandardMoveTargets(board, color, false);
+		if (Object.keys(moveoptions).length === 0) {
+			this.emit({ type: 'message', awaiting: null,
+				message: 'No legal Providence placement: your banked stones stay banked.' });
+			return false;
+		}
+		const bank = board.providenceBank[color];
+		const action = await this.getInput({
+			type: 'message',
+			message: 'Providence: place a banked stone (' + bank + ' in bank), or skip.',
+			awaiting: 'action',
+			actionlist: ['providence', 'skip_providence', 'pass'],
+			moveoptions,
+		});
+		if (action === 'pass') return true;
+		if (action === 'skip_providence') return false;
+		if (moveoptions[action]) {
+			board.providenceBank[color]--;
+			await this._doMove(color, action, false);
+			return false;
+		}
+		return this._providenceStep(color);
 	}
 
 	async _doMove(color, nodeName, standardMove) {
@@ -805,16 +824,13 @@ class GameController {
 		const board = this.board;
 		const enemy = board.enemy(color);
 
-		// Providence: unused granted moves are forfeited. Zero the counters
-		// BEFORE the win checks so a player who ran out of legal moves does
-		// not carry this turn's phantoms into the ±3-lead / tiebreak math.
-		board.movesLeftThisTurn = 0;
-		board.movesGrantedThisTurn = 0;
+		board.providenceOpen = false;
 		// Seal of Destruction end-of-turn effect
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 			this.emit({ type: 'message', message: 'DESTRUCTION BURNS!', awaiting: null });
+			const shielded = bulwarkProtectedNodes(board);
 			for (const name of NODE_ORDER) {
-				if (board.stones[name] === enemy) {
+				if (board.stones[name] === enemy && !shielded.has(name)) {
 					for (const nb of ADJACENCY[name]) {
 						if (board.stones[nb] === color) {
 							board.stones[name] = null;

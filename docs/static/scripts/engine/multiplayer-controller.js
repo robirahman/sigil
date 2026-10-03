@@ -382,21 +382,13 @@ class MultiplayerController {
 				this._currentTurnActions = [];
 				board.crushedThisTurn = false;
 
-				// Record position before the turn is taken (pre-Providence-shift
-				// so sfnBefore carries the un-shifted schedule).
+				// Record position before the turn is taken.
 				const turnSfn = boardToSfn(board);
 
-				// Providence: shift the schedule head into the turn-scoped
-				// move counters. Both clients run this deterministically, so
-				// nothing extra goes over the wire.
-				const extraMoves = board.pendingMoves[color].length
-					? board.pendingMoves[color].shift() : 0;
-				board.movesLeftThisTurn = 1 + extraMoves;
-				board.movesGrantedThisTurn = 1 + extraMoves;
-				if (extraMoves > 0) {
-					const pname = color === 'red' ? 'Red' : 'Blue';
-					this.emit({ type: 'message', message: pname + ' gets ' + extraMoves + ' extra move' + (extraMoves === 1 ? '' : 's') + ' this turn (Providence).', awaiting: null });
-				}
+				// Providence: a turn that starts with a nonempty bank may
+				// place one banked stone after the regular move. Both clients
+				// run this deterministically, so nothing extra goes over the wire.
+				board.providenceOpen = board.providenceBank[color] > 0;
 
 				await this._takeTurn(color, true, true, true, true);
 
@@ -492,20 +484,23 @@ class MultiplayerController {
 			return;
 		}
 
+		// Providence: after the regular move (or when none was legal), offer
+		// the optional banked-stone placement once. Passing there ends the turn.
+		if (!canmove && board.providenceOpen) {
+			board.providenceOpen = false;
+			if (await this._providenceStep(color)) return;
+		}
+
 		const enemy = board.enemy(color);
 		const actions = [];
 		let spellList = [];
 		let moveoptions = {};
-		// Providence: Seal of Wind / Seal of Stone key off the turn's FIRST
-		// move; extra granted moves are ordinary moves.
-		const isFirstMove = board.movesLeftThisTurn === board.movesGrantedThisTurn;
 
 		if (canmove) {
 			actions.push('move');
-			moveoptions = getStandardMoveTargets(board, color, isFirstMove);
-			// No legal move: remaining granted moves forfeit at EOT, but the
-			// dash / cast / pass options remain (a turn is move + optional
-			// dash + optional cast; ruling 2026-08-26). Mirrors
+			moveoptions = getStandardMoveTargets(board, color, true);
+			// No legal move: the dash / cast / pass options remain (a turn is
+			// move + optional dash + optional cast; ruling 2026-08-26). Mirrors
 			// game-controller.js, which used to skip the whole turn here.
 			if (Object.keys(moveoptions).length === 0) {
 				this.emit({ type: 'message', awaiting: null,
@@ -541,12 +536,7 @@ class MultiplayerController {
 		}
 
 		const isMyTurn = color === this.myColor;
-		let movePrompt = 'Choose where to move.';
-		if (canmove && board.movesGrantedThisTurn > 1) {
-			const moveNum = board.movesGrantedThisTurn - board.movesLeftThisTurn + 1;
-			movePrompt = 'Move ' + moveNum + ' of ' + board.movesGrantedThisTurn + ': choose where to move.';
-		}
-		const msg = canmove ? (isMyTurn ? movePrompt : 'Opponent is choosing...') : String(actions);
+		const msg = canmove ? (isMyTurn ? 'Choose where to move.' : 'Opponent is choosing...') : String(actions);
 
 		const action = await this.getInput({
 			type: 'message', message: msg,
@@ -557,9 +547,8 @@ class MultiplayerController {
 
 		const nodeNames = Object.keys(board.stones);
 		if (actions.includes('move') && nodeNames.includes(action)) {
-			await this._doMove(color, action, isFirstMove);
-			board.movesLeftThisTurn = Math.max(0, board.movesLeftThisTurn - 1);
-			await this._takeTurn(color, board.movesLeftThisTurn > 0, candash, canspell, cansummer);
+			await this._doMove(color, action, true);
+			await this._takeTurn(color, false, candash, canspell, cansummer);
 			return;
 		}
 		if (!actions.includes(action) && !nodeNames.includes(action)) {
@@ -702,6 +691,42 @@ class MultiplayerController {
 	}
 
 	// These methods are identical to GameController's — just reuse the logic
+	/**
+	 * Providence: offer to place one banked stone, an ordinary adjacent soft
+	 * or hard move (Seal of Wind's blink and the enemy Seal of Stone's
+	 * soft-only rule apply to the regular move only). Skipping, or having no
+	 * legal node, leaves the stone banked. Returns true iff the player ended
+	 * the turn from this prompt. Mirrors game-controller.js.
+	 */
+	async _providenceStep(color) {
+		const board = this.board;
+		const moveoptions = getStandardMoveTargets(board, color, false);
+		if (Object.keys(moveoptions).length === 0) {
+			this.emit({ type: 'message', awaiting: null,
+				message: 'No legal Providence placement: banked stones stay banked.' });
+			return false;
+		}
+		const isMyTurn = color === this.myColor;
+		const bank = board.providenceBank[color];
+		const action = await this.getInput({
+			type: 'message',
+			message: isMyTurn
+				? 'Providence: place a banked stone (' + bank + ' in bank), or skip.'
+				: 'Opponent is choosing...',
+			awaiting: 'action',
+			actionlist: isMyTurn ? ['providence', 'skip_providence', 'pass'] : [],
+			moveoptions: isMyTurn ? moveoptions : {},
+		});
+		if (action === 'pass') return true;
+		if (action === 'skip_providence') return false;
+		if (moveoptions[action]) {
+			board.providenceBank[color]--;
+			await this._doMove(color, action, false);
+			return false;
+		}
+		return this._providenceStep(color);
+	}
+
 	async _doMove(color, nodeName, standardMove) {
 		const board = this.board;
 		const enemy = board.enemy(color);
@@ -829,14 +854,12 @@ class MultiplayerController {
 	_eotTriggers(color) {
 		const board = this.board;
 		const enemy = board.enemy(color);
-		// Providence: unused granted moves are forfeited. Zero the counters
-		// BEFORE the win checks so leftover phantoms don't enter the math.
-		board.movesLeftThisTurn = 0;
-		board.movesGrantedThisTurn = 0;
+		board.providenceOpen = false;
 		// Seal of Destruction end-of-turn effect.
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+			const shielded = bulwarkProtectedNodes(board);
 			for (const name of NODE_ORDER) {
-				if (board.stones[name] === enemy) {
+				if (board.stones[name] === enemy && !shielded.has(name)) {
 					for (const nb of ADJACENCY[name]) {
 						if (board.stones[nb] === color) { board.stones[name] = null; break; }
 					}

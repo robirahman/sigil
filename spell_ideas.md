@@ -85,9 +85,30 @@ Refined spell concepts developed in design sessions based on gameplay balance an
 
 | Slot | Spell | Effect |
 |---|---|---|
-| Ritual | Fissure | Choose a target node. Destroy all enemy stones on that node and all nodes adjacent to it. |
+| Ritual | Fissure | Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own. |
 | Sorcery | Rock Slide | Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed. |
 | Charm | Bulwark | STATIC: Stones in your locked spell cannot be pushed by enemy hard moves. |
+
+Fissure and Bulwark were rebalanced on 2026-10-03. Fissure's blast now also
+destroys the caster's own adjacent stones. Bulwark now reads "Stones in your
+locked spell cannot be targeted by enemy hard moves, converted, or
+destroyed." Rulings: the shield covers destruction from any source, so it
+protects its owner's stones from their own Fissure too, but never blocks a
+sacrifice the owner chooses. Fissure may target a node holding a shielded
+stone: its unshielded neighbors are destroyed, but the stone stays and no
+void forms. Gust can't pick up shielded stones; Rock Slide doesn't push them,
+and a stone pushed into one is destroyed as if pushed into a wall. Hurricane
+forms its groups from unshielded stones only.
+
+Timing: effects that act one step at a time re-check Bulwark before every
+step. These are the hard moves of Carnage, Slash, Fury, Torrent and Tsunami,
+Storm Front's two picks, and Corrupt's conversions. Taking the Bulwark stone
+with an early step therefore exposes the locked spell to the later steps:
+for example, Carnage can push the stone off Bulwark and then push the locked
+spell's stones. Effects that hit all their targets at once check Bulwark
+only once, when cast: Fireblast, Bewitch, Decay, Rock Slide, Hurricane, Gust,
+Starfall's blast, Fissure and the Seal of Destruction. For these the locked
+spell stays immune even if the same effect destroys the Bulwark stone.
 
 Rock Slide was reworked on 2026-10-03, after playtesting the new rules as the
 Experimental spell "Avalanche". It used to push the bordering stones one at
@@ -106,17 +127,21 @@ distinct resulting board), and the exhaustive enumerators branch over them.
 
 ### Providence (shipped, rated)
 
-*Deferred payouts: invest mana now, receive extra moves on future turns.
-Pending stones shield you from losing (the opponent's win checks count them
-against your total) but never power your own ±3-lead win until actually
-placed. At the sixth-spell count, invested stones DO count for the player
-who cast them (2026-08 playtest ruling).*
+*Deferred payouts: bank stones now, place them on later turns. Each player
+has one Providence bank. Banked stones count toward your stone total at all
+times (±3-lead win and sixth-spell count, not zero-stone elimination). A
+turn that starts with a nonempty bank may place one banked stone (an
+ordinary soft or hard move, untouched by Seal of Wind / Seal of Stone)
+after the standard move and before dashing; skipped or blocked placements
+stay banked. At most one placement per turn, however many stones are
+banked (2026-10 simplification; replaced the per-turn extra-move
+schedules).*
 
 | Slot | Spell | Effect |
 |---|---|---|
-| Ritual | Endowment | Make 1 extra move at the beginning of each of your next 4 turns. |
-| Sorcery | Annuity | Make 1 extra move at the beginning of each of your next 2 turns. |
-| Charm | Dividend | Make 1 extra move at the beginning of your next turn. |
+| Ritual | Endowment | Add 4 stones to your Providence bank. |
+| Sorcery | Annuity | Add 2 stones to your Providence bank. |
+| Charm | Dividend | Add 1 stone to your Providence bank. |
 
 ### Aftershock (shipped, unrated playtest)
 

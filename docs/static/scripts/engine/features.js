@@ -63,7 +63,7 @@ const NUM_SPELL_SLOTS = 9;
 const ESCAPE_MAX = 6;
 // Match ai/config.py — 250 base + 156 life + 18 fill + 18 threat
 //                      + 6 mana_pressure + 8 tempo = 456
-// 456 legacy features + 39 destroyed-node channel + 10 Providence pending
+// 456 legacy features + 39 destroyed-node channel + 10 Providence bank
 // dims (each block appended last in turn) = 505. Columns [505:593] are
 // always zero; they stay in the vector so it matches the input layout of
 // the trained checkpoint. Must equal ai/config.py:RAW_FEATURE_DIM.
@@ -375,20 +375,19 @@ function boardToTensor(board, sideToMove) {
 	features.set(stonesEnemy, fi); fi += NUM_NODES;
 	fi += NUM_NODES; // empty already set
 
-	// Providence pending-move block (appended, mirrors ai/features.py):
-	// own/enemy schedule slots 0-3 (min(x,3)/3), then own/enemy extras
-	// granted this turn but not yet used.
+	// Providence bank block (appended, mirrors ai/features.py): own bank
+	// (min(x,8)/8) then three zero slots, the same for the enemy, then
+	// own/enemy "placement available this turn".
 	{
+		const bank = board.providenceBank || { red: 0, blue: 0 };
 		let pi = _PENDING_BLOCK_OFFSET;
 		for (const side of [sideToMove, enemy]) {
-			const sched = (board.pendingMoves && board.pendingMoves[side]) || [];
-			for (let i = 0; i < 4; i++) {
-				features[pi++] = Math.min(i < sched.length ? sched[i] : 0, 3) / 3.0;
-			}
+			features[pi] = Math.min(bank[side] || 0, 8) / 8.0;
+			pi += 4;
 		}
-		const extra = Math.min(board.extraMovesThisTurn || 0, 3) / 3.0;
-		features[pi++] = board.whoseTurn === sideToMove ? extra : 0.0;
-		features[pi++] = board.whoseTurn === enemy ? extra : 0.0;
+		for (const side of [sideToMove, enemy]) {
+			features[pi++] = board.whoseTurn === side && (bank[side] || 0) > 0 ? 1.0 : 0.0;
+		}
 	}
 
 	// Neighborhood features: 39 x 2 = 78
@@ -633,22 +632,16 @@ function encodeTurn(turn, board, color) {
 			// at [84:114] — mirrors ai/features.py:encode_turn.
 			if (spellId < 15) features[43 + spellId] = 1;
 			else features[84 + (spellId - 15)] = 1;
-		} else if (action.type === 'schedule_moves') {
-			features[115] = Math.min(action.turns || 0, 4) / 4.0;
+		} else if (action.type === 'bank_stones') {
+			features[115] = Math.min(action.banked || 0, 4) / 4.0;
 		}
 	}
 
 	features[58] = turn.actions.length / 5.0;
 	if (turn.actions.length === 1 && turn.actions[0].type === 'pass') features[60] = 1;
 
-	// Providence: extra base moves used this turn (leading move-phase
-	// actions beyond the ordinary first move).
-	let baseMoves = 0;
-	for (const action of turn.actions) {
-		if (action.type === 'move' || action.type === 'hard_move' || action.type === 'blink') baseMoves++;
-		else break;
-	}
-	features[114] = Math.min(Math.max(baseMoves - 1, 0), 3) / 3.0;
+	// Providence: a banked stone was placed this turn.
+	if (turn.actions.some(a => a.providence)) features[114] = 1;
 
 	if (simAfter !== null) {
 		const ownBefore = board.totalStones[color];

@@ -245,10 +245,8 @@ async function playCase(c) {
 
   gc._currentTurnActions = [];
   // Start-of-turn preamble (mirrors reconstructGameLog): Providence
-  // shift.
-  const extra = board.pendingMoves[c.color].length ? board.pendingMoves[c.color].shift() : 0;
-  board.movesLeftThisTurn = 1 + extra;
-  board.movesGrantedThisTurn = 1 + extra;
+  // opening.
+  board.providenceOpen = board.providenceBank[c.color] > 0;
   try {
     if (!board.gameover) {
       await gc._takeTurn(c.color, true, true, true, true);
