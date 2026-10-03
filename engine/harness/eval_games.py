@@ -390,17 +390,27 @@ def cmd_upload(a):
     for gid, missing, n in incomplete[:10]:
         print(f'  incomplete {gid}: {missing}/{n} positions missing')
     tok = {'access_token': db_token(a.service_account)}
-    by_room = Counter(d['roomCode'] for d in docs.values())
-    dupes = {rc for rc, c in by_room.items() if c > 1}
-    if dupes:
-        print(f'  WARNING duplicate room codes among documents: {sorted(dupes)} -- the newer game wins')
+    # Room codes are reused: keep only the newest game per code, so each
+    # document is written once and the foreign-game check below always applies
+    # (writing the older game first would clobber the live document, and an
+    # interrupted run could leave it pointing at the older game).
+    newest = {}
+    for gid, d in docs.items():
+        rc = d['roomCode']
+        if rc not in newest or (lines[gid].get('timestamp') or 0) > (lines[newest[rc]].get('timestamp') or 0):
+            newest[rc] = gid
+    dropped = sorted(gid for gid in docs if newest[docs[gid]['roomCode']] != gid)
+    for gid in dropped:
+        rc = docs[gid]['roomCode']
+        print(f'  {rc}: room code also used by {newest[rc]} (recorded no earlier); not writing {gid}')
+    docs = {gid: d for gid, d in docs.items() if gid not in set(dropped)}
     written = skipped = 0
     for gid, d in sorted(docs.items(), key=lambda kv: lines[kv[0]].get('timestamp') or 0):
         rc = d['roomCode']
         cur = requests.get(f'{DB_URL}/game_evals/{rc}.json', params=dict(tok, shallow='true'), timeout=60).json()
         if cur is not None and not a.overwrite:
             cur_gid = requests.get(f'{DB_URL}/game_evals/{rc}/gameId.json', params=tok, timeout=60).json()
-            if cur_gid != gid and rc not in dupes:
+            if cur_gid != gid:
                 print(f'  {rc}: exists for another game {cur_gid}; skipping (pass --overwrite to replace)')
                 skipped += 1; continue
             if cur_gid == gid and not a.replace:

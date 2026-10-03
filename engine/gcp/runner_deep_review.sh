@@ -8,7 +8,8 @@
 #   probe  deep_review.py probe --depth DEPTH over the cases object (or one
 #          task shard of it) -> probes.jsonl
 # `flag` and `report` are cheap and run locally between the two. Work files
-# stream to GCS every two minutes; COMPLETE is written at the end.
+# stream to GCS every two minutes; COMPLETE is written at the end when the
+# stage exited 0, FAILED (with the exit code) when it did not.
 #
 # Source: metadata `src` (a tar.gz object under the bucket, the working tree's
 # engine/ directory) when set, else a clone of `branch`. The tarball lets an
@@ -58,6 +59,7 @@ apt-get -qq install -y build-essential curl git python3-venv >/dev/null 2>&1
 WORK=/opt/sigil
 rm -rf $WORK/repo
 mkdir -p $WORK/out $WORK/repo && cd $WORK
+rm -f $WORK/out/COMPLETE $WORK/out/FAILED   # a restarted VM must not re-upload the last boot's marker
 export RUSTUP_HOME=$WORK/rustup CARGO_HOME=$WORK/cargo PATH=$WORK/cargo/bin:$PATH
 [ -x $WORK/cargo/bin/rustc ] || curl -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
@@ -105,6 +107,7 @@ if [ "$MODE" = probe ]; then
   echo "=== probe: depth $DEPTH, cap ${TMS} ms/search, $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/deep_review.py probe --lines $WORK/lines.json --cases $WORK/cases.json \
     --out "$OUTF" --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" "${SH[@]}" "${KI[@]}" >> $WORK/out/probe.log 2>&1
+  STATUS=$?
   tail -3 $WORK/out/probe.log
 else
   # A fresh walk is order-free, so it splits games into single positions.
@@ -112,11 +115,16 @@ else
   echo "=== scan: $WALK walk, depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/eval_games.py eval --walk "$WALK" "${SPLIT[@]}" --lines $WORK/lines.json \
     --out "$OUTF" --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" "${SH[@]}" > $WORK/out/scan.log 2>&1
+  STATUS=$?
   tail -3 $WORK/out/scan.log
 fi
 
+# The partial work file is uploaded either way (a RESUME can pick it up), but
+# only a stage that exited 0 earns COMPLETE; a crash writes FAILED instead.
+if [ "$STATUS" -eq 0 ]; then MARK=COMPLETE; else MARK=FAILED; echo "FATAL: $MODE stage exited $STATUS"; fi
+echo "$(date -u +%FT%TZ) exit $STATUS" > $WORK/out/$MARK
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done
 gcs_put /var/log/sigil-deep.log "runs/$RUN/live/runner.log" || true
-date -u +%FT%TZ > $WORK/out/COMPLETE; gcs_put $WORK/out/COMPLETE "runs/$RUN/COMPLETE" || true
-echo "=== done $(date -u +%FT%TZ); shutting down ==="
+gcs_put $WORK/out/$MARK "runs/$RUN/$MARK" || true
+echo "=== $MARK $(date -u +%FT%TZ); shutting down ==="
 shutdown -h now
