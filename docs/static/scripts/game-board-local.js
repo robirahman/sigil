@@ -496,6 +496,40 @@ document.addEventListener('alpine:init', () => {
 				this.playAgain();
 			},
 
+			// Rematch from the reviewed position: a fresh game seeded with the
+			// cursored ply's SFN (which carries the spells, side to move and
+			// variant), same opponent tier and clock, human on the same side.
+			// The final position of a decided game has nothing left to play.
+			get canRematchFromPosition() {
+				if (!this.reviewMode || this.puzzle) return false;
+				if (!this.reviewSfns[this.reviewIndex]) return false;
+				return !(this.winner && this.reviewIndex >= this.reviewSfns.length - 1);
+			},
+
+			rematchFromPosition() {
+				if (!this.canRematchFromPosition || this.reviewReplaying) return;
+				this.reviewAutoplay = false;
+				const sfn = this.reviewSfns[this.reviewIndex];
+				if (this.isAiGame && (this.myColor === 'red' || this.myColor === 'blue')) {
+					try {
+						sessionStorage.setItem('sigil_rematch_human_color', this.myColor);
+					} catch (e) { /* sessionStorage blocked */ }
+				}
+				warnBeforeUnload = false;
+				const params = new URLSearchParams(window.location.search);
+				params.delete('review');
+				// A new game: mint a fresh persistence id (see playAgain).
+				params.delete('id');
+				params.set('sfn', sfn);
+				// The SFN's variant is authoritative (an imported game's URL
+				// may not name one); the page reads its rules from ?variant.
+				let variant = 'standard';
+				try { variant = sfnToDict(sfn).variant || 'standard'; } catch (e) { /* default */ }
+				if (variant === 'standard') params.delete('variant');
+				else params.set('variant', variant);
+				window.location.href = window.location.pathname + '?' + params.toString();
+			},
+
 			rematchStage: 'idle',  // 'idle' | 'rematch'
 			isAiGame: !!new URLSearchParams(window.location.search).get('ai'),
 

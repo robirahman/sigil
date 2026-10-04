@@ -211,6 +211,12 @@
 								</p>
 								<br />
 								<p>
+									<strong>Rematch From Here</strong><br />
+									In review, step to any position and press &ldquo;Rematch from here&rdquo; to
+									start a new game from it, against the same opponent, on the same side.
+								</p>
+								<br />
+								<p>
 									<strong>Mana auto-fill</strong><br />
 									When you have enough mana to keep every stone in a spell, the game no longer
 									asks you to click each one &mdash; the spell completes immediately.
@@ -783,6 +789,10 @@
 						x-text="reviewAutoplay ? '⏸' : '⏯'"></button>
 					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x25B6;</button>
 					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x23ED;</button>
+					<button class="review-bar__btn review-bar__btn--text" x-show="canRematchFromPosition"
+						x-on:click="rematchFromPosition"
+						x-bind:disabled="reviewReplaying"
+						title="Start a new game from this position">Rematch from here</button>
 					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
 				</div>
 
