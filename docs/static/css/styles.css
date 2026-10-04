@@ -1868,8 +1868,12 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	left: 50%;
 	transform: translateX(-50%);
 	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
 	align-items: center;
 	gap: 6px;
+	width: max-content;
+	max-width: calc(100vw - 16px);
 	padding: 8px 14px;
 	background: var(--color-review-bar-bg);
 	border: 2px solid var(--color-border);
@@ -1898,6 +1902,13 @@ html.webp .stone-node--red.stone-node--last-play::after {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+}
+
+.review-bar__btn--text {
+	width: auto;
+	padding: 0 10px;
+	font-size: 0.85em;
+	white-space: nowrap;
 }
 
 .review-bar__btn:hover:not(:disabled) {
