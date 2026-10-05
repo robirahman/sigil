@@ -7,6 +7,19 @@ Sigil is an abstract two-player strategy game. The repo hosts two builds:
 
 To work on the static build, serve `docs/` over any static file server (e.g. `python3 -m http.server -d docs 8080`) and open `http://localhost:8080/`.
 
+## What's New (2026-10-05)
+
+- **Fully offline local play.** After one online visit, the menu, Local 1v1 and vs AI (all Rust
+  tiers) start and play with no connection: the service worker (`docs/sw.js`) serves the cached
+  `game.html` whatever its query string, gives up on a slow network after 3.5s, and precaches
+  every spell's art (derived from `constants.js`), the clock, theme backgrounds and stone sprites.
+- **Finished games sync later.** Every finished local game, vs AI *and* Local 1v1 (stored unranked
+  with `mode: 'local_1v1'`, the signed-in player on both sides), is written to localStorage before
+  any network call (`offline-queue.js`) and uploaded when the Realtime Database connection comes up
+  (`.info/connected`), from the game page or the main menu. Each game's `completed_games` key is
+  fixed when it is queued and a rated game whose `user_games` entry exists is not rated again, so a
+  retried or interrupted upload never duplicates a record or double-counts Elo.
+
 ## What's New (2026-09-17)
 
 - **Puzzles page.** `docs/puzzles.html` (main menu: *Puzzles*) shows a position from a real

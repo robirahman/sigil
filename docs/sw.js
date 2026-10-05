@@ -1,16 +1,28 @@
 /**
  * Service worker for offline app-shell support.
  *
- * Caches the static assets so the menu and single-player flows work without
- * a network connection. Firebase RTDB / Auth still need a live connection at
- * write time — the offline-queue.js module handles that.
+ * Caches everything a local game needs, so the menu, Local 1v1 and vs AI can
+ * be started and played with no connection at all — opening a new game never
+ * needs the site. Finished games are stored locally and uploaded to Firebase
+ * when it is reachable again (offline-queue.js).
  *
  * Strategy:
- *   - HTML navigations: network-first, fall back to cache, then to /index.html
+ *   - HTML navigations: network-first with a short timeout, falling back to
+ *     the cached page. Pages are cached by path, so game.html?ai=…&id=… is
+ *     served from the one precached game.html whatever its query string.
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
- *   - Cross-origin (Firebase/Alpine/Popper/fonts): network-first, cache fallback
+ *   - Cross-origin (Firebase/Alpine/Popper/fonts): cache-first for what we
+ *     cached, network otherwise
  */
-const CACHE_VERSION = 'v59';
+
+// Spell lists (CORE_* and EXPANSIONS) for the spell-art precache below. The
+// file is DOM-free (the AI worker loads it too). Browsers also re-check
+// imported scripts for updates, so a new spell reinstalls the worker.
+try {
+	importScripts('static/scripts/engine/constants.js');
+} catch (e) { /* precache falls back to the static list only */ }
+
+const CACHE_VERSION = 'v60';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -71,6 +83,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/wasm/sigil_engine.js?v=21',
 	'./static/wasm/sigil_engine_bg.wasm?v=21',
 	'./static/scripts/engine/ai-player.js',
+	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
 	'./static/scripts/engine/game-review.js',
 	'./static/scripts/engine/auth-manager.js',
@@ -89,31 +102,47 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/images/tiled-background.jpg',
 	'./static/images/stones/red.png',
 	'./static/images/stones/blue.png',
-	// Spell tile images. The board picks 9 at random from a pack, and
-	// any of these could appear; caching them all keeps every random
-	// layout playable offline.
-	'./static/images/spells/Flourish.png',
-	'./static/images/spells/Carnage.png',
-	'./static/images/spells/Bewitch.png',
-	'./static/images/spells/Starfall.png',
-	'./static/images/spells/Seal_of_Lightning.png',
-	'./static/images/spells/Grow.png',
-	'./static/images/spells/Fireblast.png',
-	'./static/images/spells/Hail_Storm.png',
-	'./static/images/spells/Meteor.png',
-	'./static/images/spells/Seal_of_Wind.png',
-	'./static/images/spells/Sprout.png',
-	'./static/images/spells/Slash.png',
-	'./static/images/spells/Surge.png',
-	'./static/images/spells/Comet.png',
-	'./static/images/spells/Seal_of_Summer.png',
-	'./static/images/spells/Seal_of_Spring.png',
-	'./static/images/spells/Scatter.png',
-	'./static/images/spells/Blossom.png',
-	'./static/images/spells/Azimuth.png',
-	'./static/images/spells/Eclipse.png',
-	'./static/images/spells/Syzygy.png',
+	'./static/images/stones/red.webp',
+	'./static/images/stones/blue.webp',
+	'./static/images/send-icon.svg',
+	'./static/images/step-pointer.svg',
+	'./static/images/swoosh-separator.svg',
+	// Theme backgrounds (styles.css requests them with ?v2).
+	'./static/images/themes/tiled-background-frost.jpg?v2',
+	'./static/images/themes/tiled-background-parchment.jpg?v2',
+	'./static/images/themes/tiled-background-forest.jpg?v2',
+	'./static/images/themes/tiled-background-volcanic.jpg?v2',
+	// Spell art is added by spellArtUrls() below.
 ];
+
+// Spell tile art. The board draws 9 spells from the selected packs, and any
+// of them could appear, so every spell's art is cached to keep every random
+// layout playable offline: the .webp the board shows (normal and art-only),
+// plus the .png fallback for browsers without WebP. Art that is missing
+// (404) is skipped by the install loop.
+function spellArtUrls() {
+	const names = new Set();
+	try {
+		[CORE_RITUALS, CORE_SORCERIES, CORE_CHARMS].forEach((l) => l.forEach((n) => names.add(n)));
+		// Panda has no art (the board shows names only).
+		Object.keys(EXPANSIONS).filter((k) => k !== 'panda').forEach((k) => {
+			const x = EXPANSIONS[k];
+			[x.rituals, x.sorceries, x.charms].forEach((l) => l.forEach((n) => names.add(n)));
+		});
+	} catch (e) {
+		// constants.js failed to load: at least the core set.
+		['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning', 'Grow', 'Fireblast',
+			'Hail_Storm', 'Meteor', 'Seal_of_Wind', 'Sprout', 'Slash', 'Surge', 'Comet',
+			'Seal_of_Summer'].forEach((n) => names.add(n));
+	}
+	const urls = [];
+	names.forEach((n) => {
+		urls.push('./static/images/spells/' + n + '.webp');
+		urls.push('./static/images/spells/art_only/' + n + '.webp');
+		urls.push('./static/images/spells/' + n + '.png');
+	});
+	return urls;
+}
 
 // Cross-origin dependencies fetched as no-cors so the opaque responses can
 // be stored in the cache and served back to <script>/<link> elements when
@@ -131,7 +160,7 @@ const CROSS_ORIGIN_PRECACHE = [
 self.addEventListener('install', (event) => {
 	event.waitUntil((async () => {
 		const cache = await caches.open(CACHE_NAME);
-		const sameOrigin = SAME_ORIGIN_PRECACHE.map((url) => ({ url, mode: 'cors' }));
+		const sameOrigin = SAME_ORIGIN_PRECACHE.concat(spellArtUrls()).map((url) => ({ url, mode: 'cors' }));
 		const crossOrigin = CROSS_ORIGIN_PRECACHE.map((url) => ({ url, mode: 'no-cors' }));
 		await Promise.all([...sameOrigin, ...crossOrigin].map(async ({ url, mode }) => {
 			try {
@@ -153,6 +182,69 @@ self.addEventListener('activate', (event) => {
 	})());
 });
 
+const NAV_TIMEOUT_MS = 3500;
+
+// Pages are the same HTML whatever their query string (game.html?ai=…&id=…
+// configures the game client-side), so they are cached under the bare path.
+function pageCacheKey(url) {
+	return url.origin + url.pathname;
+}
+
+async function cachedPage(url) {
+	const cache = await caches.open(CACHE_NAME);
+	let hit = await cache.match(pageCacheKey(url));
+	if (!hit && url.pathname.endsWith('/')) hit = await cache.match(pageCacheKey(url) + 'index.html');
+	if (!hit) hit = await cache.match(url.href, { ignoreSearch: true });
+	return hit || null;
+}
+
+async function handleNavigation(req, url, event) {
+	const network = fetch(req).then((resp) => {
+		if (resp && resp.ok) {
+			const copy = resp.clone();
+			event.waitUntil(caches.open(CACHE_NAME)
+				.then((c) => c.put(pageCacheKey(url), copy)).catch(() => {}));
+		}
+		return resp;
+	});
+	network.catch(() => {});
+
+	const fallback = async () => {
+		const cached = await cachedPage(url);
+		if (cached) return cached;
+		const home = await caches.match(new URL('./index.html', self.registration.scope).href);
+		if (home) return home;
+		return null;
+	};
+
+	if (self.navigator && self.navigator.onLine === false) {
+		const cached = await fallback();
+		if (cached) return cached;
+	}
+
+	let timer;
+	const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), NAV_TIMEOUT_MS); });
+	try {
+		const first = await Promise.race([network, timeout]);
+		if (first !== 'timeout') {
+			clearTimeout(timer);
+			return first;
+		}
+		// Network is slow: serve the cached page if there is one, else keep waiting.
+		const cached = await cachedPage(url);
+		if (cached) return cached;
+		return await network;
+	} catch (e) {
+		clearTimeout(timer);
+		const cached = await fallback();
+		if (cached) return cached;
+		return new Response('Offline and no cached page available.', {
+			status: 503,
+			headers: { 'Content-Type': 'text/plain' },
+		});
+	}
+}
+
 self.addEventListener('fetch', (event) => {
 	const req = event.request;
 	if (req.method !== 'GET') return;
@@ -160,32 +252,17 @@ self.addEventListener('fetch', (event) => {
 	const url = new URL(req.url);
 	const sameOrigin = url.origin === self.location.origin;
 
-	// HTML navigations: network-first so deploys propagate, cache fallback for offline.
+	// HTML navigations: network-first so deploys propagate, cache fallback for
+	// offline. A slow or dead connection falls back after NAV_TIMEOUT_MS
+	// instead of hanging the game start.
 	const isNavigation = req.mode === 'navigate' ||
 		(req.destination === 'document') ||
 		(req.headers.get('accept') || '').includes('text/html');
-	if (isNavigation) {
-		event.respondWith((async () => {
-			try {
-				const resp = await fetch(req);
-				if (resp && resp.ok && sameOrigin) {
-					const copy = resp.clone();
-					caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
-				}
-				return resp;
-			} catch (e) {
-				const cached = await caches.match(req);
-				if (cached) return cached;
-				const fallback = await caches.match('./index.html');
-				if (fallback) return fallback;
-				return new Response('Offline and no cached page available.', {
-					status: 503,
-					headers: { 'Content-Type': 'text/plain' },
-				});
-			}
-		})());
+	if (isNavigation && sameOrigin) {
+		event.respondWith(handleNavigation(req, url, event));
 		return;
 	}
+	if (isNavigation) return;
 
 	// Same-origin static: stale-while-revalidate.
 	if (sameOrigin) {
