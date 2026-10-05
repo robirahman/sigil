@@ -82,7 +82,7 @@
     "completed_games": {
       ".read": false,
       "$gameId": {
-        ".write": "auth !== null",
+        ".write": "auth !== null || (newData.child('guest').val() === true && newData.child('ranked').val() === false && (!data.exists() || data.child('guest').val() === true))",
         ".validate": "newData.hasChildren(['winner', 'timestamp'])",
         "annotations": {
           "$turnNumber": {

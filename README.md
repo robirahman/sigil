@@ -19,6 +19,10 @@ To work on the static build, serve `docs/` over any static file server (e.g. `py
   (`.info/connected`), from the game page or the main menu. Each game's `completed_games` key is
   fixed when it is queued and a rated game whose `user_games` entry exists is not rated again, so a
   retried or interrupted upload never duplicates a record or double-counts Elo.
+- **Guest games are saved too.** A game finished with nobody signed in is queued as an unranked
+  guest record (`guest: true`, the human side a per-device `guest_…` id) and uploads without an
+  account; `database.rules.json` lets unauthenticated clients write only such records to
+  `completed_games` (deploy with `python -m ai.deploy_db_rules … --apply`).
 
 ## What's New (2026-09-17)
 

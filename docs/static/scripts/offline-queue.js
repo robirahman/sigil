@@ -18,7 +18,11 @@
  * `gameId` is the completed_games key, fixed at enqueue time so a retry after
  * a half-finished upload rewrites the same record instead of duplicating it.
  * `uid` is the signed-in player the game belongs to; an item is only uploaded
- * while that player is signed in.
+ * while that player is signed in. A game finished with nobody signed in is a
+ * guest game (`guest: true`, unranked, its human side a per-device guest id
+ * from guestId()): it uploads with or without a signed-in user, and only its
+ * completed_games and rooms records are written (database.rules.json lets
+ * unauthenticated clients write unranked guest records).
  *
  * Each flush is sequential — entries are processed in queue order so Elo
  * updates compose correctly across multiple stacked offline games.
@@ -28,6 +32,7 @@
 	// How long a flush waits for the database connection before giving up
 	// (the next .info/connected transition retries).
 	const CONNECT_TIMEOUT_MS = 8000;
+	const GUEST_ID_KEY = 'sigil_guest_id';
 
 	function _read() {
 		try {
@@ -77,6 +82,12 @@
 		return null;
 	}
 
+	// Whether `item` may be uploaded by whoever is signed in now (`uid`, or
+	// null for no one / an anonymous user).
+	function _uploadable(item, uid) {
+		return item.guest === true || (!!uid && _ownerUid(item) === uid);
+	}
+
 	// Flushes are chained, not deduped. Multiple triggers (auth change,
 	// reconnect, post-game) can fire near-simultaneously; serializing them
 	// keeps Elo updates ordered and avoids double-uploading the same item,
@@ -103,6 +114,20 @@
 			return _read().length;
 		},
 
+		/**
+		 * Stable per-device id recorded as the human side of guest games, so
+		 * one device's guest games can be told apart from another's.
+		 */
+		guestId() {
+			let id = null;
+			try { id = localStorage.getItem(GUEST_ID_KEY); } catch (e) { /* blocked */ }
+			if (!id) {
+				id = 'guest_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+				try { localStorage.setItem(GUEST_ID_KEY, id); } catch (e) { /* blocked */ }
+			}
+			return id;
+		},
+
 		peek() {
 			return _read();
 		},
@@ -116,7 +141,8 @@
 		},
 
 		/**
-		 * Try to upload every queued game owned by the signed-in player.
+		 * Try to upload every queued guest game and every queued game owned
+		 * by the signed-in player.
 		 *
 		 * @param {firebase.database.Database} db
 		 * @param {function} processEloFn - processEloClientSide
@@ -164,7 +190,7 @@
 	async function _doFlush(db, processEloFn) {
 		const user = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : null;
 		const uid = user && !user.isAnonymous ? user.uid : null;
-		const items = _read().filter((it) => uid && _ownerUid(it) === uid);
+		const items = _read().filter((it) => _uploadable(it, uid));
 		if (items.length === 0) {
 			return { uploaded: 0, failed: 0, results: [] };
 		}
@@ -208,6 +234,18 @@
 		}
 		const gameId = item.gameId;
 		const record = item.gameRecord || {};
+		if (item.guest === true) {
+			// No profile, AI user or Elo writes: those need a signed-in player.
+			if (item.roomCode && item.roomRecord) {
+				try {
+					await db.ref('rooms/' + item.roomCode).set(item.roomRecord);
+				} catch (e) {
+					console.warn('[OfflineQueue] room record write failed:', e.message);
+				}
+			}
+			await db.ref('completed_games/' + gameId).set(Object.assign({}, record, { guest: true, ranked: false }));
+			return null;
+		}
 		const ranked = !!(record.ranked && typeof processEloFn === 'function');
 
 		// A ranked upload that already finished (Elo writes user_games
@@ -278,9 +316,9 @@
 	async function _attempt() {
 		if (typeof firebase === 'undefined' || !firebase.apps || firebase.apps.length === 0) return;
 		if (typeof processEloClientSide !== 'function') return;
-		if (OfflineGameQueue.count() === 0) return;
 		const user = firebase.auth().currentUser;
-		if (!user || user.isAnonymous) return;
+		const uid = user && !user.isAnonymous ? user.uid : null;
+		if (!_read().some((it) => _uploadable(it, uid))) return;
 		try {
 			const db = firebase.database();
 			const result = await OfflineGameQueue.flushAll(db, processEloClientSide);

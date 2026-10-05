@@ -2009,7 +2009,9 @@ document.addEventListener('alpine:init', () => {
 				 * touches the network, so a game finished offline (or a tab
 				 * closed mid-upload) syncs the next time the site is reachable.
 				 * `difficulty` is the AI tier, or null for a local 1v1 game
-				 * (stored unranked under the signed-in player for both colors).
+				 * (stored unranked under the player for both colors). With no
+				 * one signed in it is saved as an unranked guest game under this
+				 * device's guest id.
 				 */
 				async function _recordFinishedGame(winner, difficulty) {
 					// Wait for auth state to resolve if needed
@@ -2020,14 +2022,13 @@ document.addEventListener('alpine:init', () => {
 						});
 					}
 
-					if (!_aiAuthManager || !_aiAuthManager.isAuthenticated) {
-						if (difficulty) _this.messageHistory.push('Sign in to track your rating.');
-						return;
-					}
-
-					if (typeof processEloClientSide !== 'function' || typeof OfflineGameQueue === 'undefined') {
+					if (typeof OfflineGameQueue === 'undefined' || typeof firebase === 'undefined') {
 						if (difficulty) _this.messageHistory.push('Rating update unavailable.');
 						return;
+					}
+					const isGuest = !_aiAuthManager || !_aiAuthManager.isAuthenticated;
+					if (isGuest && difficulty) {
+						_this.messageHistory.push('Sign in to track your rating. This game is saved as a guest game.');
 					}
 
 					// Unrated spell sets: the unofficial Panda expansion and the
@@ -2037,7 +2038,7 @@ document.addEventListener('alpine:init', () => {
 
 					try {
 						const db = firebase.database();
-						const humanUid = _aiAuthManager.uid;
+						const humanUid = isGuest ? OfflineGameQueue.guestId() : _aiAuthManager.uid;
 						// Local 1v1: the signed-in player sits on both sides.
 						const aiUid = difficulty ? '__ai_' + difficulty + '__' : humanUid;
 						// (The human's /users profile is bootstrapped by the queue
@@ -2054,7 +2055,7 @@ document.addEventListener('alpine:init', () => {
 						const finalSfnForRecord = (_engineRef && _engineRef.board)
 							? boardToSfn(_engineRef.board) : null;
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
-						const humanName = aiLabel || _aiAuthManager.displayName || 'You';
+						const humanName = isGuest ? 'Guest' : (aiLabel || _aiAuthManager.displayName || 'You');
 						const aiName = difficulty ? _aiNameFor(difficulty) : humanName;
 						// Variant the engine actually played under (read from the
 						// live board so we don't drift from the URL query param
@@ -2064,7 +2065,7 @@ document.addEventListener('alpine:init', () => {
 						const _isDuplicates = variantHasDuplicates(recordVariant);
 						const _isScramble = variantHasScramble(recordVariant);
 						const _isPentagon = variantHasPentagon(recordVariant);
-						const _unrated = !difficulty || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
+						const _unrated = isGuest || !difficulty || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2105,6 +2106,7 @@ document.addEventListener('alpine:init', () => {
 							endReason: _this._lastEndReason || 'play',
 						};
 						if (!difficulty) gameRecord.mode = 'local_1v1';
+						if (isGuest) gameRecord.guest = true;
 
 						// Attach any annotations the human made during the game.
 						if (_this.annotations && Object.keys(_this.annotations).length > 0) {
@@ -2119,6 +2121,7 @@ document.addEventListener('alpine:init', () => {
 						// best-effort: if we're offline, it just stays queued.
 						const queuedId = OfflineGameQueue.enqueue(Object.assign({
 							uid: humanUid,
+							guest: isGuest,
 							roomCode: roomCode,
 							roomRecord: roomRecord,
 							gameRecord: gameRecord,
@@ -2132,8 +2135,8 @@ document.addEventListener('alpine:init', () => {
 							return;
 						}
 
-						if (!difficulty) {
-							// Local 1v1 games are never rated; no notice needed.
+						if (!difficulty || isGuest) {
+							// Local 1v1 and guest games are never rated; no notice needed.
 						} else if (_isDeathmatch) {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
 						} else if (_isScramble) {
@@ -2146,7 +2149,8 @@ document.addEventListener('alpine:init', () => {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 
-						const flushResult = await OfflineGameQueue.flushAll(db, processEloClientSide);
+						const flushResult = await OfflineGameQueue.flushAll(db,
+							typeof processEloClientSide === 'function' ? processEloClientSide : null);
 						const mine = flushResult.results.find((r) => r.id === queuedId);
 						const stillQueued = OfflineGameQueue.peek().some((it) => it.id === queuedId);
 						if (stillQueued) {
@@ -2154,7 +2158,7 @@ document.addEventListener('alpine:init', () => {
 							// attempted), same as offline from the player's view.
 							const offline = !mine || mine.error === 'offline' || mine.error === 'unreachable';
 							if (offline) {
-								_this.messageHistory.push(difficulty
+								_this.messageHistory.push(difficulty && !isGuest
 									? 'Offline — game saved. It will upload and your rating will sync when you reconnect.'
 									: 'Offline — game saved. It will upload when you reconnect.');
 							} else {
