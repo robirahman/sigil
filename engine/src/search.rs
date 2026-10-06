@@ -517,6 +517,13 @@ pub struct Search {
     /// the root mover's side, alpha when it was searched) for the last
     /// iteration that searched it; `None` if no root turn produced it.
     pub root_probe_hit: Option<(i32, usize, usize, i32, i32)>,
+    /// Post-game analysis: search the `root_probe` turn (the move actually
+    /// played) FIRST at the root of every iteration. On a table a backward walk
+    /// filled, its value is already stored one ply deeper, so it costs almost
+    /// nothing and opens the window at the played move's true value. Ordering
+    /// only: a probe turn the root list lacks is not added, and
+    /// `root_probe_hit` still reports its index in the list as generated.
+    pub probe_first: bool,
     /// The competitive opening selector's pick for the last `go`, when it
     /// applied (`opening.rs`; switch `opening::set_opening_book`).
     opening_pick: Option<crate::opening::OpeningPick>,
@@ -654,6 +661,7 @@ impl Search {
             root_scores_out: Vec::new(),
             root_probe: None,
             root_probe_hit: None,
+            probe_first: false,
             opening_pick: None,
             pvs: false,
             lmr_ext: 2,
@@ -1182,10 +1190,25 @@ impl Search {
             };
             turns.sort_by_cached_key(rank);
         }
+        let n_root = turns.len();
+        let mut probe_ix: Option<usize> = None;
+        if self.probe_first {
+            if let Some(pk) = self.root_probe.clone() {
+                probe_ix = turns.iter().position(|t| {
+                    let mut child = *b;
+                    child.apply_turn(t, c);
+                    child.turn_counter += 1;
+                    child.to_move = c.other();
+                    let sfn = child.to_sfn();
+                    let p: Vec<&str> = sfn.split_whitespace().collect();
+                    p.len() >= 4 && format!("{} {}", p[0], p[3]) == pk
+                });
+                if let Some(ix) = probe_ix { let t = turns.remove(ix); turns.insert(0, t); }
+            }
+        }
         // `adopt_partial` bookkeeping: did a move whose subtree COMPLETED beat
         // the seed (which is searched first and therefore completes first)?
-        let seed = best_local;
-        let n_root = turns.len();
+        let seed = if probe_ix.is_some() { turns.first().copied() } else { best_local };
         let mut seed_completed = false;
         let mut completed_beat_seed = false;
         let mut i = 0usize;
@@ -1204,7 +1227,9 @@ impl Search {
                 let sfn = child.to_sfn();
                 let p: Vec<&str> = sfn.split_whitespace().collect();
                 if p.len() >= 4 && self.root_probe.as_deref() == Some(format!("{} {}", p[0], p[3]).as_str()) {
-                    self.root_probe_hit = Some((depth, i, n_root, v, alpha));
+                    // the index as generated, before `probe_first` moved it
+                    let ix = match probe_ix { Some(px) if i == 0 => px, Some(px) if i <= px => i - 1, _ => i };
+                    self.root_probe_hit = Some((depth, ix, n_root, v, alpha));
                 }
             }
             if completed {
