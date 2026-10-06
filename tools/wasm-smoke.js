@@ -92,7 +92,9 @@ async function driver() {
 		probe.update();
 		if (key(boardToSfn(probe)) !== key(res.expected_sfn)) {
 			throw new Error('replay mismatch:\n  replayed: ' + key(boardToSfn(probe)) +
-			                '\n  expected: ' + key(res.expected_sfn));
+			                '\n  expected: ' + key(res.expected_sfn) +
+			                '\n  before:   ' + sfn +
+			                '\n  actions:  ' + JSON.stringify(res.actions));
 		}
 		return probe.gameover;
 	}

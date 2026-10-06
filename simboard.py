@@ -224,8 +224,11 @@ def resolve_rock_slide(stones, pushes, protected=()):
             final[dest] = None
         if (occ == DESTROYED or shielded or len(srcs) >= 2
                 or dest_of.get(dest) == srcs[0]):
+            # A stone stopped by a shield dies where it stood: recording it at
+            # the shield would put the shielded node in `destroyed`, and
+            # rock_slide_replay_protected would then read the shield as absent.
             for src in srcs:
-                lost.append((dest, stones[src]))
+                lost.append((src if shielded else dest, stones[src]))
         else:
             final[dest] = stones[srcs[0]]
     return final, lost

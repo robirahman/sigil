@@ -4177,6 +4177,33 @@ fn rock_slide_never_pushes_or_kills_a_shielded_stone() {
 }
 
 #[test]
+fn rock_slide_destroyed_list_never_names_a_surviving_shielded_stone() {
+    // The JS/Python replay infers the shield from `destroyed` (a stationary
+    // stone on a destination that is NOT listed was shielded), so a stone that
+    // dies against a shield must be recorded at its own node, never the shield's.
+    // Push every blue stone bordering the red shield straight into it.
+    use crate::rockslide::Push;
+    let b = tect_board();
+    let shield = b.shielded();
+    let mut pushes = Vec::new();
+    let mut m = b.rock_slide_sources(Color::Red);
+    while m != 0 {
+        let from = m.trailing_zeros() as u8; m &= m - 1;
+        let into = crate::topology::ADJ[from as usize] & shield;
+        if into != 0 { pushes.push(Push { from, to: into.trailing_zeros() as u8 }); }
+    }
+    assert!(!pushes.is_empty(), "fixture has a blue stone bordering the shield");
+    let mut x = b;
+    let (lost_nodes, lost) = x.apply_rock_slide(&pushes, shield);
+    assert_eq!(x.stones[0] & shield_mask(), shield_mask(), "shield intact");
+    assert_eq!(lost[1] as usize, pushes.len(), "every pushed blue stone died");
+    for p in &pushes {
+        assert!(!lost_nodes.contains(&p.to), "shielded node {} listed as destroyed", p.to);
+        assert!(lost_nodes.contains(&p.from), "stopped stone not recorded at its source");
+    }
+}
+
+#[test]
 fn providence_bank_counts_and_places_once() {
     let mut b = std_board();
     b.turn_counter = 10;

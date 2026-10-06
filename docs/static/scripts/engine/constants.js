@@ -666,7 +666,11 @@ function resolveRockSlide(stones, pushes, shielded) {
 			final[dest] = null;
 		}
 		if (occ === DESTROYED || shield || srcs.length >= 2 || destOf[dest] === srcs[0]) {
-			for (const src of srcs) lost.push([dest, stones[src]]);
+			// A stone stopped by a shield dies where it stood: recording it at
+			// the shield would put the shielded node in `destroyed`, and the
+			// replay (rockSlideReplayShielded) would then read the shield as
+			// absent and kill the stone it protects.
+			for (const src of srcs) lost.push([shield ? src : dest, stones[src]]);
 		} else {
 			final[dest] = stones[srcs[0]];
 		}

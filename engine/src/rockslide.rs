@@ -85,9 +85,13 @@ impl Board {
             }
             let wall = before.walls & dbit != 0;
             if wall || shielded || srcs.len() >= 2 || dest_of[d as usize] == srcs[0] {
+                // A stone stopped by a shield dies where it stood: recording it
+                // at the shield would put the shielded node in `destroyed`, and
+                // the JS/Python replay would then read the shield as absent.
                 for &s in srcs {
                     if let Some(sc) = color_at(&before, s) { lost[sc] += 1; }
-                    if !lost_nodes.contains(&d) { lost_nodes.push(d); }
+                    let at = if shielded { s } else { d };
+                    if !lost_nodes.contains(&at) { lost_nodes.push(at); }
                 }
             } else if let Some(sc) = color_at(&before, srcs[0]) {
                 self.stones[sc] |= dbit;

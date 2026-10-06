@@ -221,7 +221,7 @@ def test_rock_slide_shield_brute_force():
     print("Testing Rock Slide with shields against brute force...")
     import itertools
     import random
-    from simboard import (rock_slide_sources, resolve_rock_slide,
+    from simboard import (rock_slide_sources, resolve_rock_slide, rock_slide_replay_protected,
                           rock_slide_optimal_pushes)
     from notation import ADJACENCY
     rng = random.Random(77)
@@ -245,6 +245,12 @@ def test_rock_slide_shield_brute_force():
             final, lost = resolve_rock_slide(stones, pushes, prot)
             for n in prot:
                 assert final.get(n, stones[n]) == stones[n], "shielded stone moved or died"
+            # A replay re-derives the shield from the recorded `destroyed`
+            # list; it must reproduce the same board.
+            destroyed = list(dict.fromkeys(n for n, _ in lost))
+            replay_prot = rock_slide_replay_protected(stones, pushes, destroyed)
+            assert resolve_rock_slide(stones, pushes, replay_prot)[0] == final, \
+                "replay from the destroyed list disagrees"
             net = sum(1 if c != 'red' else -1 for _, c in lost)
             best = net if best is None else max(best, net)
         got, options = rock_slide_optimal_pushes(stones, 'red', protected=prot)
