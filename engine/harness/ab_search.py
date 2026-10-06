@@ -122,8 +122,10 @@ DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the s
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
     if ':' in ev:
-        if knob != 'preset':
-            sys.exit(f"an `arm:base` eval pair needs knob=preset, got {knob!r}")
+        # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
+        # val != 0) plays the left eval, the base (policy off) the right one.
+        if knob not in ('preset', 'policy'):
+            sys.exit(f"an `arm:base` eval pair needs knob=preset or policy, got {knob!r}")
         ev = ev.split(':')[0 if val else 1]
     ws = val if knob == 'width_scale' else BASE_WS
     qd = val if knob == 'q_depth' else None
@@ -327,6 +329,8 @@ if __name__ == "__main__":
     knob = sys.argv[4]; arm_val = int(sys.argv[5]); base_val = int(sys.argv[6])
     if knob not in KNOBS:
         sys.exit(f"unknown knob {knob!r}; expected one of {KNOBS}")
+    if knob == 'policy' and ':' in ev and base_val != 0:
+        sys.exit("knob=policy with an eval pair needs base value 0 (policy off)")
     if knob == 'preset' and (':' not in ev or arm_val == base_val):
         sys.exit("knob=preset needs eval=<arm>:<base> and arm/base values 1 0")
     for e in ev.split(':'):
