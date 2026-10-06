@@ -4370,3 +4370,46 @@ fn policy_stream_is_a_deterministic_subset_of_the_shipped_stream() {
     }
     assert!(checked > 20, "only {checked} positions checked");
 }
+
+/// Step 5: the Rust network is bit-for-bit the integer forward pass that
+/// `harness/nn_eval.py` trained and quantised (vectors written by its `golden`
+/// command from the SAME `nets/nnue_spell.bin`). Integer-only arithmetic, so
+/// this also pins the wasm build, which runs the same code.
+#[test]
+fn nn_matches_the_python_reference() {
+    let net = crate::nn::NNUE_SPELL.net();
+    let mut n = 0;
+    for line in include_str!("../nets/nnue_spell_golden.txt").lines() {
+        let f: Vec<&str> = line.split(' ').collect();
+        let mine: u64 = f[0].parse().unwrap();
+        let theirs: u64 = f[1].parse().unwrap();
+        let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+        let spells: [u8; 9] = sp.try_into().unwrap();
+        let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+        let want: i32 = f[4].parse().unwrap();
+        assert_eq!(net.eval_raw(&spells, mine, theirs, c), want, "{line}");
+        n += 1;
+    }
+    assert!(n >= 50, "only {n} golden vectors");
+}
+
+/// `nnue_spell` is exactly `tfit_spell` plus the clamped network term, through the
+/// cached per-draw fold, for both POVs and across draws (the cache must re-key).
+#[test]
+fn nnue_spell_is_tfit_spell_plus_the_network() {
+    let w = crate::eval::weights_by_name("nnue_spell").unwrap();
+    let base = crate::eval::TFIT_SPELL;
+    let net = crate::nn::NNUE_SPELL.net();
+    for seed in 0..30u64 {
+        let mut b = Board::new(Board::legal_draw(seed % 7), Variant::Standard);
+        b.stones[0] = (0x1234_5678_9abcu64 ^ (seed * 2654435761)) & ALL;
+        b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & ALL & !b.stones[0];
+        b.to_move = if seed % 2 == 0 { Color::Red } else { Color::Blue };
+        b.update();
+        for c in [Color::Red, Color::Blue] {
+            let nn = net.eval_raw(&b.spells, b.mine(c), b.theirs(c), c);
+            assert!(nn.abs() <= net.cap);
+            assert_eq!(b.evaluate(c, &w), b.evaluate(c, &base) + nn, "seed {seed}");
+        }
+    }
+}

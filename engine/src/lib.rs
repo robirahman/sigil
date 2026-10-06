@@ -17,6 +17,7 @@ pub mod ranker;
 pub mod turn_iter;
 pub mod sfn;
 pub mod eval;
+pub mod nn;
 pub mod features;
 pub mod search;
 pub mod opening_data;

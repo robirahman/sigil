@@ -101,6 +101,9 @@ pub struct Weights {
     /// `stone[spell_p] * stone_p + charged[spell_p] * charged_p` (the same per-slot
     /// quantities the shared term sums). `None` for every preset but `tfit_spell*`.
     pub spell_sigil: Option<&'static SpellSigil>,
+    /// Step 5 network residual (`nn.rs`), added UNSCALED after everything else and
+    /// already clamped to the net's own cap. `None` for every preset but `nnue_*`.
+    pub nn: Option<&'static crate::nn::NnSpec>,
 }
 
 /// Raw positional weights per spell id (`spells_meta::SPELLS` order), in the same
@@ -165,7 +168,7 @@ impl Weights {
             pos_num: 1,
             pos_den: 1,
             tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 }
     }
 }
@@ -186,7 +189,7 @@ pub const CLASSIC: Weights = Weights {
     sigil_stone: 0, sigil_charged: 0,
     mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0,
     pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 };
 
 /// Mana term only, to separate the two contributions.
@@ -201,7 +204,7 @@ pub const MATERIAL_ONLY: Weights = Weights {
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0, mana: 0, sixth_spell_danger: 0, control: 0,
     void_penalty: 0, pos_num: 1, pos_den: 1, tempo: 0,
-    cast_pace: 0, mobility: 0, spell_sigil: None,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 };
 
 /// Material only PLUS the tempo correction: the minimal change that removes the
@@ -258,7 +261,7 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
         sigil_stone: 0, sigil_charged: 0,
         mana: m, sixth_spell_danger: 0, control: c, void_penalty: v,
         pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 }
 }
 
@@ -353,7 +356,7 @@ pub const FIT_SHAPE: Weights = Weights {
     mana: 82, sixth_spell_danger: 64,
     control: 3, void_penalty: -22,
     pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 };
 
 /// The hand shape with only the four disputed SIGNS flipped, magnitudes untouched.
@@ -617,6 +620,9 @@ impl Board {
         if w.mobility != 0 {
             mat += w.mobility * self.mobility_feature(c);
         }
+        if let Some(net) = w.nn {
+            mat += crate::nn::eval(net, self, c);
+        }
         mat
     }
 
@@ -652,10 +658,10 @@ pub const SHIPPED_EVAL: &str = "tfit_spell_v2";
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 22] = [
+pub const EVAL_NAMES: [&str; 23] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
-    "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2",
+    "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -679,6 +685,8 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "tfit_spell" => TFIT_SPELL,
         "tfit_spell2" => TFIT_SPELL2,
         "tfit_spell_v2" => TFIT_SPELL_V2,
+        // Step 5: the network residual on top of `tfit_spell` (default OFF).
+        "nnue_spell" => Weights { nn: Some(&crate::nn::NNUE_SPELL), ..TFIT_SPELL },
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
         "s02" => STRUCT_02,
@@ -696,6 +704,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }
