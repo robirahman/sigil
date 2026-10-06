@@ -51,13 +51,16 @@
 
 	firebase.auth().onAuthStateChanged(async function (user) {
 		if (user && !user.isAnonymous) {
-			let name = user.displayName || 'Player';
-			// Try to load display name from RTDB profile
+			const render = function (name) {
+				el.innerHTML = '<a class="auth-status__name" href="profile.html?uid=' + encodeURIComponent(user.uid) + '" style="color: inherit; text-decoration: none;">' + _escHtml(name) + '</a>';
+			};
+			// Show the Auth name at once (the read below never settles while
+			// offline), then the RTDB profile name once it arrives.
+			render(user.displayName || 'Player');
 			try {
 				const snap = await firebase.database().ref('users/' + user.uid + '/displayName').once('value');
-				if (snap.exists()) name = snap.val();
+				if (snap.exists() && firebase.auth().currentUser === user) render(snap.val());
 			} catch (e) { /* ignore */ }
-			el.innerHTML = '<a class="auth-status__name" href="profile.html?uid=' + encodeURIComponent(user.uid) + '" style="color: inherit; text-decoration: none;">' + _escHtml(name) + '</a>';
 		} else {
 			el.innerHTML = '<a class="auth-status__link" href="account.html">Sign in</a>';
 		}

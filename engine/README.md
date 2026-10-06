@@ -16,6 +16,9 @@ against `simboard.py`.
 
 ## Result
 
+First gate against the retired JS engine (2026-08, both on material eval). For the
+current strength and shipped configuration see `STATUS.md`.
+
 | measurement | this engine | shipped JS engine |
 |---|---|---|
 | strength, 402 games colour-swapped @200 ms/move | **66.7%** (z = 7.1) | 33.3% |
@@ -31,7 +34,7 @@ clears it. Both engines used pure material eval, so this is a search result.
 ```sh
 python3 -m venv .venv && .venv/bin/pip install maturin
 VIRTUAL_ENV=.venv .venv/bin/maturin develop --release   # builds the `sigil_engine` module
-cargo test --release                                    # 55 unit tests
+cargo test --release                                    # unit tests (count in STATUS.md)
 ```
 
 ## Verification
@@ -89,12 +92,12 @@ Two things worth a maintainer's attention:
   repeating it. The Python key omits both, making it over-broad — and threefold
   repetition is a blue win, so it can end games that should continue. There is a
   `TODO(upstream)` in `src/zobrist.rs`; this engine implements the JS rule.
-* **Positional eval weights must stay strictly sub-material.** `cavemanCapWeights`
-  caps `3*mana + 9*voidPenalty + 39*mapControl <= 0.96` stones. Violating that is
-  fatal: uncapped variants scored 17.5% and 22.5% against material-only. Capped
-  variants were neutral-to-negative here too (map-control 36.0%, mana+void 53.5% at
-  ~depth 4.6 falling to 48.0% at ~depth 5.8), so the 2026-08 campaign's verdict
-  survives cheaper depth.
+* **Positional eval weights must stay strictly sub-material.** The positional sum
+  is held under a 96-centistone budget (`eval::at_budget`). Violating that is
+  fatal: uncapped variants scored 17.5% and 22.5% against material-only. Within
+  the budget, hand-chosen weights were neutral-to-negative but texel-FITTED
+  magnitudes (`tfit`) beat material by ~+50 Elo at every control from 300 ms to
+  60 s, and `tfit` is the shipped eval.
 
 ## Playing it locally
 
@@ -204,12 +207,11 @@ tiers work everywhere, this server included.
 
 ### Eval selection matters
 
-`--eval` defaults to `material`, and that is the only leaf eval that beat the
-shipped engine in the arenas. The alternatives are kept for A/B work only:
-`classic` and `default` (my structural set) both **lost heavily** — 17.5% and 22.5%
-against material-only over 80 games each — and the capped variants (`mc`,
-`manavoid`, `mix`) were neutral-to-negative. Do not read a playtest against
-anything but `material` as representative.
+`serve.py --eval` defaults to `tfit`, the shipped eval. The other presets in
+`eval.rs` (`EVAL_NAMES`: `material`, `default`, `hand`, `mc`, `manavoid`, `tfit2`, ...)
+are kept for A/B work only; several lost heavily (the unscaled structural `default`
+22.5% against material-only, `tfit2` -40 Elo against `tfit`). Do not read a playtest
+against anything but `tfit` as representative.
 
 ### Score units
 

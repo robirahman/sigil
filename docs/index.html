@@ -294,6 +294,7 @@
 
 	<div class="main">
 		<div class="mode-menu">
+			<p id="offline-sync-note" class="game-options__hint" style="display: none; text-align: center;"></p>
 			<div id="resume-section" class="resume-section" style="display: none;">
 				<div class="resume-section__title">In progress</div>
 				<div id="resume-list"></div>
@@ -848,6 +849,30 @@
 		});
 	</script>
 	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/engine/auth-manager.js"></script>
+	<script src="static/scripts/engine/elo.js"></script>
+	<script src="static/scripts/offline-queue.js"></script>
+	<script>
+		// Upload games finished offline as soon as Firebase is reachable, and
+		// say how many are still waiting.
+		(function() {
+			if (typeof OfflineGameQueue === 'undefined') return;
+			var note = document.getElementById('offline-sync-note');
+			function render(synced) {
+				var n = OfflineGameQueue.count();
+				if (synced) {
+					note.textContent = 'Uploaded ' + synced + ' game' + (synced === 1 ? '' : 's') + ' played offline.'
+						+ (n ? ' ' + n + ' still waiting.' : '');
+				} else if (n) {
+					note.textContent = n + ' finished game' + (n === 1 ? '' : 's') + ' saved on this device, waiting to upload'
+						+ ' (they sync when you are back online).';
+				}
+				note.style.display = note.textContent ? '' : 'none';
+			}
+			render(0);
+			OfflineGameQueue.installAutoflush({ onFlush: function(r) { render(r.uploaded); } });
+		})();
+	</script>
 	<script>
 		if ('serviceWorker' in navigator) {
 			window.addEventListener('load', function () {
