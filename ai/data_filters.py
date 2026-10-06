@@ -116,3 +116,29 @@ def is_pre_competitive_fix_record(path, sfn,
     if file_date is None:
         return False
     return file_date < cutoff
+
+
+# Spells whose rules the providence-bank branch (2026-10) changes: the
+# Providence pack moves from per-turn extra-move schedules to a stone bank,
+# Fissure's blast also destroys the caster's stones, Bulwark also shields
+# against conversion and destruction. Every record holding one of them was
+# played under the OLD rules (the branch purges them from Firebase at deploy,
+# ai/purge_spell_games.py), so benchmarks and training data drop them.
+OCT2026_RULE_CHANGE_SPELLS = frozenset(
+    {'Fissure', 'Bulwark', 'Dividend', 'Annuity', 'Endowment'})
+
+
+def sfn_spell_names(sfn):
+    """Base spell names in an SFN's spell list (duplicate-variant aliases such
+    as 'Annuity~2' collapse to 'Annuity')."""
+    if not sfn:
+        return []
+    head = sfn.split(' ', 1)[0]
+    if '/' not in head:
+        return []
+    return [s.split('~')[0] for s in head.split('/', 1)[1].split(',') if s]
+
+
+def has_oct2026_rule_change_spell(sfn):
+    """True iff the SFN's draw holds a spell the 2026-10 rule change rewrote."""
+    return any(s in OCT2026_RULE_CHANGE_SPELLS for s in sfn_spell_names(sfn))

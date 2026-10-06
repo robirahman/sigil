@@ -1157,6 +1157,25 @@ fn singular_extension_tests_the_tt_move_at_pv_nodes() {
     assert!(st.se_tries > 0, "the singular test never ran");
     assert!(st.se_extensions <= st.se_tries);
 }
+/// `node_limit` (bench_suites.py's fixed budget) stops the search as a clock
+/// would, keeps the last completed depth, and is deterministic.
+#[test]
+fn node_limit_stops_deterministically_at_the_last_completed_depth() {
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let run = |n: u64| {
+        let mut s = crate::search::Search::new(16);
+        s.node_limit = Some(n);
+        let (best, score, st) = s.go(&b, b.to_move, 40, 0);
+        (best.map(|t| t.slice().to_vec()), score, st.nodes, st.depth_completed, st.timed_out)
+    };
+    let a = run(20_000);
+    assert!(a.0.is_some() && a.4, "budget not hit or no completed depth: {:?}", (a.2, a.3));
+    assert!(a.2 <= 20_000 + 64, "overran the budget: {}", a.2);
+    assert_eq!(a, run(20_000), "a node budget must be deterministic");
+    let mut full = crate::search::Search::new(16);
+    let (_, score_full, _) = full.go(&b, b.to_move, a.3, 0);
+    assert_eq!(a.1, score_full, "the budgeted search must report its last completed depth");
+}
 #[test]
 fn first_action_is_legal_agrees_with_the_generator() {
     for seed in 1..40u64 {

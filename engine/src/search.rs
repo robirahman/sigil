@@ -540,6 +540,11 @@ pub struct Search {
     /// Zobrist keys along the current search path.
     path: Vec<u64>,
     deadline: Option<f64>,   // absolute ms from now_ms()
+    /// Fixed NODE budget (benchmarks, `bench_suites.py`): the search stops as if
+    /// out of time once `stats.nodes` reaches it, so iterative deepening keeps the
+    /// last completed depth. Unlike a clock it is machine-independent and
+    /// deterministic. `None` (every shipped path) leaves search unchanged.
+    pub node_limit: Option<u64>,
     pub stats: SearchStats,
     window: usize,
     width_scale: usize,
@@ -683,6 +688,7 @@ impl Search {
             base_history: std::collections::HashMap::new(),
             path: Vec::with_capacity(MAX_PLY),
             deadline: None,
+            node_limit: None,
             stats: SearchStats::default(),
             window: DEFAULT_WINDOW,
             width_scale: DEFAULT_WIDTH_SCALE,
@@ -1718,6 +1724,9 @@ impl Search {
     /// search (`time_ms == 0`, the bench) is unaffected.
     #[inline]
     fn out_of_time(&self) -> bool {
+        if let Some(n) = self.node_limit {
+            if self.stats.nodes >= n { return true; }
+        }
         match self.deadline {
             Some(d) => self.stats.nodes & 63 == 0 && now_ms() >= d,
             None => false,
