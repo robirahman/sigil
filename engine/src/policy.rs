@@ -202,6 +202,21 @@ thread_local! {
     /// (on, min_width): the search uses the policy stream at nodes whose width
     /// budget is at least `min_width`. Off by default.
     static POLICY: Cell<(bool, usize)> = Cell::new((false, 0));
+    /// (penalty, free_width): at nodes whose width budget is below `free_width`
+    /// the stop/continue level's CONTINUE logit is lowered by `penalty` (1/256
+    /// nat). Continuations (casts, dashes) are what cost generation and
+    /// `apply_turn` time, so this trades coverage for node rate where nodes
+    /// are many. (0, 0) = no penalty.
+    static COST_PEN: Cell<(i32, usize)> = Cell::new((0, 0));
+}
+
+pub fn set_policy_cost(penalty: i32, free_width: usize) { COST_PEN.with(|c| c.set((penalty, free_width))); }
+pub fn policy_cost() -> (i32, usize) { COST_PEN.with(|c| c.get()) }
+
+/// The continuation penalty for a node of this width budget.
+pub fn cost_penalty_for(width: usize) -> i32 {
+    let (p, free) = policy_cost();
+    if width < free { p } else { 0 }
 }
 
 /// Replace this thread's weights (flat, `NF * PW`, row-major). For training
@@ -571,6 +586,9 @@ pub struct PolicyIter<'a> {
     pub yielded: usize,
     /// Internal nodes expanded (generation work), for the cost report.
     pub expanded: usize,
+    /// Cost penalty (1/256 nat) on the expensive branches: continuing after the
+    /// move, choosing the dash, casting after a dash.
+    pen: i32,
 }
 
 impl Board {
@@ -578,19 +596,24 @@ impl Board {
     /// sets, best-first by policy probability. Positions the stream special-cases
     /// (the competitive opening, no legal first move) fall back to it.
     pub fn turns_policy(&self, c: Color, window: usize, keep_window: usize) -> PolicyIter<'_> {
-        PolicyIter::new(self, c, window, keep_window)
+        PolicyIter::new(self, c, window, keep_window, 0)
+    }
+
+    /// `turns_policy` with the continuation penalty `pen` (1/256 nat).
+    pub fn turns_policy_pen(&self, c: Color, window: usize, keep_window: usize, pen: i32) -> PolicyIter<'_> {
+        PolicyIter::new(self, c, window, keep_window, pen)
     }
 }
 
 impl<'a> PolicyIter<'a> {
-    fn new(board: &'a Board, c: Color, window: usize, keep_window: usize) -> Self {
+    fn new(board: &'a Board, c: Color, window: usize, keep_window: usize, pen: i32) -> Self {
         let w = policy_weights();
         let mut b = *board;
         b.update();
         let mut it = PolicyIter {
             board, c, window, keep_window, fallback: None, front: VecDeque::new(),
             steps: Vec::new(), ri: None, w, heap: BinaryHeap::new(), seq: 0,
-            windowed: false, yielded: 0, expanded: 0,
+            windowed: false, yielded: 0, expanded: 0, pen,
         };
         if b.variant.has_competitive() && b.turn_counter <= 2 {
             it.fallback = Some(board.turns_ordered_keeps(c, window, 0, keep_window));
@@ -609,7 +632,7 @@ impl<'a> PolicyIter<'a> {
         for (r, (st, sc)) in scored.iter().enumerate() {
             let (fm, fp, possible) = step_feats(&b, c, st, *sc, r, &ri);
             qm.push(quant(it.w.logit(&fm, &ri.z)));
-            conts.push(if possible { Some(quant(it.w.logit(&fp, &ri.z))) } else { None });
+            conts.push(if possible { Some(quant(it.w.logit(&fp, &ri.z)) - pen) } else { None });
         }
         let lpm = log_softmax_q(&qm);
         for mi in 0..scored.len() {
@@ -651,6 +674,15 @@ impl<'a> PolicyIter<'a> {
         b
     }
 
+    fn push_softmax_adj<T>(&mut self, lp: i32, opts: Vec<(Feats, T)>, adj: impl Fn(&T) -> i32,
+                           mut mk: impl FnMut(&mut Self, i32, T)) {
+        if opts.is_empty() { return; }
+        let z = self.ri.as_ref().map(|r| r.z).unwrap_or([0.0; PK]);
+        let qs: Vec<i32> = opts.iter().map(|(f, t)| quant(self.w.logit(f, &z)) - adj(t)).collect();
+        let ls = log_softmax_q(&qs);
+        for ((_, t), l) in opts.into_iter().zip(ls) { mk(self, lp + l, t); }
+    }
+
     fn push_softmax<T>(&mut self, lp: i32, opts: Vec<(Feats, T)>, mut mk: impl FnMut(&mut Self, i32, T)) {
         if opts.is_empty() { return; }
         let z = self.ri.as_ref().map(|r| r.z).unwrap_or([0.0; PK]);
@@ -669,7 +701,8 @@ impl<'a> PolicyIter<'a> {
                 let bm = self.post_move_board(mi as usize);
                 let opts = cont_opts(&bm, c, self.ri.as_ref().unwrap());
                 let prefix = self.first_prefix(mi as usize);
-                self.push_softmax(lp, opts, |s, l, o| match o {
+                let pen = self.pen;
+                self.push_softmax_adj(lp, opts, |o| if matches!(o, ContOpt::Dash) { pen } else { 0 }, |s, l, o| match o {
                     ContOpt::Cast(pos) => s.push(l, Node::CastStub { prefix, b: bm, pos, kind: CK_MOVE }),
                     ContOpt::Dash => s.push(l, Node::DashStub { mi }),
                 });
@@ -685,7 +718,7 @@ impl<'a> PolicyIter<'a> {
                     let t = prefix.push_pub(o.act);
                     match o.p2 {
                         Some(g) => {
-                            let (lst, lc) = binary_q(quant(self.w.logit(&g, &z)));
+                            let (lst, lc) = binary_q(quant(self.w.logit(&g, &z)) - self.pen);
                             self.push(lp + l + lst, Node::Leaf(t));
                             self.push(lp + l + lc, Node::PostDash { prefix: t, bd: o.bd });
                         }

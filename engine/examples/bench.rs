@@ -39,6 +39,11 @@ fn main() {
             "--no-adaptive" => { adaptive = false; i += 1; }
             "--scale" => { scale = args[i + 1].parse().unwrap(); i += 2; }
             "--eval" => { eval = args[i + 1].clone(); i += 2; }
+            "--pcost" => {
+                // --pcost PENALTY FREE_WIDTH
+                sigil_engine::policy::set_policy_cost(args[i + 1].parse().unwrap(), args[i + 2].parse().unwrap());
+                i += 3;
+            }
             "--policy" => {
                 sigil_engine::policy::set_policy(true, args[i + 1].parse().unwrap());
                 i += 2;

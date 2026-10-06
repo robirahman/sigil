@@ -1625,7 +1625,8 @@ impl Search {
             // Step 4: the learned generator policy (`policy.rs`). The `width`
             // most probable turns, built best-first; the stream's own prepass
             // (stone-lead and Destruction mates) still comes first.
-            let mut it = b.turns_policy(c, self.window, self.keep_window);
+            let pen = crate::policy::cost_penalty_for(width);
+            let mut it = b.turns_policy_pen(c, self.window, self.keep_window, pen);
             v = it.by_ref().take(width).collect();
             if it.next().is_some() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }

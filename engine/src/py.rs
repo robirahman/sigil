@@ -2191,6 +2191,11 @@ fn set_policy_weights(flat: Option<Vec<f32>>) -> PyResult<()> {
 #[pyo3(signature = (on, min_width=0))]
 fn set_policy(on: bool, min_width: usize) { crate::policy::set_policy(on, min_width); }
 
+/// Continuation penalty (1/256 nat) at nodes whose width is below `free_width`.
+#[pyfunction]
+#[pyo3(signature = (penalty, free_width=usize::MAX))]
+fn set_policy_cost(penalty: i32, free_width: usize) { crate::policy::set_policy_cost(penalty, free_width); }
+
 /// (NF, PW, feature groups [(name, base, size)]).
 #[pyfunction]
 fn policy_layout() -> (usize, usize, Vec<(String, u16, u16)>) {
@@ -2202,8 +2207,8 @@ fn policy_layout() -> (usize, usize, Vec<(String, u16, u16)>) {
 /// (-1 if not within `cap`), turns generated, and internal nodes expanded
 /// when it was found (or at the end).
 #[pyfunction]
-#[pyo3(signature = (sfn, result_sfn, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
-fn policy_rank_of_result(sfn: &str, result_sfn: &str, cap: usize, window: usize, keep_window: usize)
+#[pyo3(signature = (sfn, result_sfn, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW, pen=0))]
+fn policy_rank_of_result(sfn: &str, result_sfn: &str, cap: usize, window: usize, keep_window: usize, pen: i32)
     -> PyResult<(i64, usize, usize)>
 {
     let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
@@ -2214,7 +2219,7 @@ fn policy_rank_of_result(sfn: &str, result_sfn: &str, cap: usize, window: usize,
         format!("{} {}", p[0], p[3])
     };
     let want = key(result_sfn);
-    let mut it = b.turns_policy(c, window, keep_window);
+    let mut it = b.turns_policy_pen(c, window, keep_window, pen);
     let (mut rank, mut generated, mut exp) = (-1i64, 0usize, 0usize);
     while generated < cap {
         let Some(t) = it.next() else { break };
@@ -2229,8 +2234,8 @@ fn policy_rank_of_result(sfn: &str, result_sfn: &str, cap: usize, window: usize,
 /// Same-budget rank in BOTH streams for a packed target turn: (policy rank,
 /// shipped-stream rank), each -1 past `cap`. Matching is by resulting board.
 #[pyfunction]
-#[pyo3(signature = (sfn, packed, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
-fn policy_vs_stream_rank(sfn: &str, packed: Vec<u32>, cap: usize, window: usize, keep_window: usize)
+#[pyo3(signature = (sfn, packed, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW, pen=0))]
+fn policy_vs_stream_rank(sfn: &str, packed: Vec<u32>, cap: usize, window: usize, keep_window: usize, pen: i32)
     -> PyResult<(i64, i64)>
 {
     let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
@@ -2245,7 +2250,7 @@ fn policy_vs_stream_rank(sfn: &str, packed: Vec<u32>, cap: usize, window: usize,
         }
         -1
     };
-    let rp = find(&mut b.turns_policy(c, window, keep_window));
+    let rp = find(&mut b.turns_policy_pen(c, window, keep_window, pen));
     let rs = find(&mut b.turns_ordered_keeps(c, window, 0, keep_window));
     Ok((rp, rs))
 }
@@ -2256,6 +2261,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(policy_example, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy_weights, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_cost, m)?)?;
     m.add_function(wrap_pyfunction!(policy_layout, m)?)?;
     m.add_function(wrap_pyfunction!(policy_rank_of_result, m)?)?;
     m.add_function(wrap_pyfunction!(policy_vs_stream_rank, m)?)?;

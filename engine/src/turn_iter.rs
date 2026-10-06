@@ -246,6 +246,12 @@ pub(crate) fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, wind
 /// `steps` the position's ordered first steps (their bare moves seed the lead
 /// scan, collected only on a cache miss).
 /// Shared by `TurnIter` and the learned-policy stream (`policy.rs`).
+/// `front_prepass` for benches.
+pub fn front_prepass_pub(board: &Board, b: &Board, c: Color,
+                         steps: &[(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)]) -> Vec<Turn> {
+    front_prepass(board, b, c, steps)
+}
+
 pub(crate) fn front_prepass(board: &Board, b: &Board, c: Color,
                             steps: &[(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)])
     -> Vec<Turn>
