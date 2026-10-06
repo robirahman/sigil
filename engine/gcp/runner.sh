@@ -85,6 +85,11 @@ python3 -m venv $WORK/venv
 $WORK/venv/bin/pip -q install --upgrade pip maturin numpy 2>&1 | tail -1
 cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2
 export SCRATCH=$WORK
+# Arena harnesses (ab_search.py) keep every position as training data when this is
+# set; the uploader below ships out/data/*.npz to runs/<run>/data/. The smoke arm
+# runs with it unset so its file cannot collide with shard 0's.
+export SIGIL_ARENA_DATA=$WORK/out/data
+mkdir -p $SIGIL_ARENA_DATA
 
 # Optional BASE build for engine-version A/Bs (harness ab_version.py): the
 # `base-branch` metadata names a branch whose engine is built into a second
@@ -140,7 +145,7 @@ if [ -n "$SMOKE" ]; then
   # smoke cannot burn the VM, not that every harness fits one number.
   SMOKE_TIMEOUT=$(md smoke-timeout); : "${SMOKE_TIMEOUT:=900}"
   echo "smoke timeout ${SMOKE_TIMEOUT}s"
-  if ! timeout "$SMOKE_TIMEOUT" $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
+  if ! SIGIL_ARENA_DATA= timeout "$SMOKE_TIMEOUT" $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
        $(echo "$SMOKE" | tr ',' ' ') > $WORK/out/smoke.log 2>&1; then
     echo "FATAL: smoke failed"; sed -n '1,40p' $WORK/out/smoke.log
     gcs_put "$WORK/out/smoke.log" "runs/$RUN/smoke_FAILED.log"; shutdown -h now; exit 1

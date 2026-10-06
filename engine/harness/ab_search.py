@@ -304,6 +304,77 @@ def ms_for(sched, ply):
     return open_ms if ply // 2 < n else ms
 
 
+# Position saving (2026-10). With $SIGIL_ARENA_DATA set (runner.sh sets it to the
+# directory it ships to gs://...-sigil/runs/<run>/data/), every arena position is
+# kept as training data: the SFN, the 9 spell ids, full/hand features from the side
+# to move, the mover's search result (depth, nodes, score, seconds) and, once the
+# game ends, the winner from the mover's side (`y`; 255 = unfinished). The played
+# move is the next row's SFN. There are no root-candidate scores (selfplay_v2.py
+# has those); these rows add outcome labels and start positions from engines of
+# release strength. One npz per shard and arm, rewritten atomically after every
+# game, so a watchdog kill loses at most the game in progress.
+class ArenaRecorder:
+    COLS = ('sfn', 'spells', 'full', 'hand', 'is_red', 'ply', 'game', 'is_arm',
+            'ms', 'depth', 'nodes', 'score', 'secs', 'y')
+
+    def __init__(self, path, meta):
+        self.path, self.meta = path, meta
+        self.rows = {c: [] for c in self.COLS}
+
+    @classmethod
+    def from_env(cls, knob, arm_val, base_val, ms_spec, ev, off):
+        d = os.environ.get('SIGIL_ARENA_DATA')
+        if not d:
+            return None
+        os.makedirs(d, exist_ok=True)
+        tag = ''.join(ch if ch.isalnum() else '_' for ch in f"{knob}{arm_val}v{base_val}_{ms_spec}")
+        meta = dict(harness='ab_search', knob=knob, arm=arm_val, base=base_val, ms=ms_spec,
+                    eval=ev, variant=VARIANT, require_spell=REQUIRE_SPELL, shard_off=off,
+                    engine_version=getattr(se, 'ENGINE_VERSION', None),
+                    shipped_eval=getattr(se, 'SHIPPED_EVAL', None))
+        return cls(os.path.join(d, f"arena_{tag}_{off}.npz"), meta)
+
+    def before(self, b, side, ply, gid, is_arm, ms):
+        R = self.rows
+        R['sfn'].append(b.to_sfn()); R['spells'].append(b.spell_ids())
+        R['full'].append(b.full_features(side)); R['hand'].append(b.hand_features(side))
+        R['is_red'].append(side == 'red'); R['ply'].append(ply); R['game'].append(gid)
+        R['is_arm'].append(is_arm); R['ms'].append(ms)
+
+    def after(self, r):
+        R = self.rows
+        R['depth'].append(r[0]); R['nodes'].append(r[1]); R['secs'].append(r[2])
+        R['score'].append(r[5]); R['y'].append(255)
+
+    def end_game(self, gid, winner):
+        R = self.rows
+        for i in range(len(R['game']) - 1, -1, -1):
+            if R['game'][i] != gid:
+                break
+            if winner is not None:
+                R['y'][i] = 1 if (winner == 'red') == bool(R['is_red'][i]) else 0
+        self.write()
+
+    def write(self):
+        import json
+        import numpy as np
+        R = self.rows
+        tmp = self.path + '.tmp.npz'
+        np.savez_compressed(
+            tmp, sfn=np.asarray(R['sfn']), spells=np.asarray(R['spells'], np.uint8),
+            full=np.asarray(R['full'], np.float32), hand=np.asarray(R['hand'], np.int32),
+            is_red=np.asarray(R['is_red'], np.uint8), ply=np.asarray(R['ply'], np.int16),
+            game=np.asarray(R['game'], np.int64), is_arm=np.asarray(R['is_arm'], np.uint8),
+            ms=np.asarray(R['ms'], np.int32), depth=np.asarray(R['depth'], np.int8),
+            nodes=np.asarray(R['nodes'], np.int64), score=np.asarray(R['score'], np.int32),
+            secs=np.asarray(R['secs'], np.float32), y=np.asarray(R['y'], np.uint8),
+            meta=np.asarray(json.dumps(self.meta)))
+        os.replace(tmp, self.path)
+
+
+RECORDER = None
+
+
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
     b = se.Board(draw_for(seed), VARIANT)
     b.setup_initial()
@@ -316,11 +387,20 @@ def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
         side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
         is_arm = (side == arm_color)
         hist.append(b.key_js)
+        gid = seed * 2 + (arm_color == 'blue')
+        if RECORDER:
+            RECORDER.before(b, side, ply, gid, is_arm, ms_for(ms, ply))
         r = play(b, ms_for(ms, ply), ev, hist, knob, arm_val if is_arm else base_val)
+        if RECORDER:
+            RECORDER.after(r)
         dep['arm' if is_arm else 'base'].append(r[0])
         secs['arm' if is_arm else 'base'].append(r[2])
         if r[3]:
+            if RECORDER:
+                RECORDER.end_game(gid, r[4])
             return r[4], ply + 1, dep, secs
+    if RECORDER:
+        RECORDER.end_game(seed * 2 + (arm_color == 'blue'), None)
     return None, max_plies, dep, secs
 
 
@@ -337,6 +417,7 @@ if __name__ == "__main__":
         if e not in se.EVAL_NAMES:
             sys.exit(f"unknown eval {e!r}; expected one of {se.EVAL_NAMES}")
     off = shard_offset()
+    RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
     print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
