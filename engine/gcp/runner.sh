@@ -105,6 +105,19 @@ if [ -n "$BASE_BRANCH" ]; then
   [ -f "$SIGIL_BASE_MODULE" ] || { echo "FATAL: base build failed"; shutdown -h now; exit 1; }
 fi
 
+# Ship an .npz only if it changed since it was last shipped. A data run writes
+# thousands of immutable chunk files per VM (selfplay_v2.py), and re-sending every
+# one each cycle -- and again, serially, after the last shard -- kept a 40-VM
+# fleet idle for ~30 minutes after its shards had finished. The stamp copies the
+# file's mtime from BEFORE the upload, so a file rewritten mid-upload ships again.
+SHIPPED=$WORK/out/.shipped; mkdir -p "$SHIPPED"
+ship_npz() {
+  local f=$1 st="$SHIPPED/$(basename "$1").$(dirname "$1" | tr '/' '_')"
+  [ -e "$st" ] && [ ! "$f" -nt "$st" ] && return 0
+  touch -r "$f" "$st.tmp"
+  gcs_put "$f" "runs/$RUN/data/$(basename "$f")" && mv "$st.tmp" "$st"
+}
+
 # Uploads .npz as well as logs. Data-generation shards checkpoint their npz in
 # place, so shipping them continuously is what makes a watchdog kill survivable:
 # an earlier depth-8 run lost 90 minutes across 28 shards because nothing left the
@@ -113,7 +126,7 @@ fi
     for f in $WORK/out/*.log $WORK/out/*.txt; do [ -e "$f" ] || continue
       gcs_put "$f" "runs/$RUN/live/$(basename "$f")" 2>/dev/null || true; done
     for f in $WORK/out/*.npz $WORK/out/data/*.npz; do [ -e "$f" ] || continue
-      gcs_put "$f" "runs/$RUN/data/$(basename "$f")" 2>/dev/null || true; done
+      ship_npz "$f" 2>/dev/null || true; done
     sleep 120; done ) &
 UPLOADER=$!
 
@@ -179,7 +192,7 @@ done
 # data-generation shards emit .npz artefacts
 for f in $WORK/out/*.npz $WORK/out/data/*.npz; do
   [ -e "$f" ] || continue
-  gcs_put "$f" "runs/$RUN/data/$(basename "$f")" || true
+  ship_npz "$f" || true
 done
 gcs_put "$WORK/out/summary.txt" "runs/$RUN/summary.txt" || true
 echo "DONE $(date -u +%FT%TZ) $COMMIT" > $WORK/out/COMPLETE

@@ -35,7 +35,9 @@ if [ "${SPOT:-0}" = 1 ]; then
 fi
 BRANCH=${BRANCH:-main}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-RUN=$(date -u +%Y%m%dT%H%M%SZ)
+# The VM name is part of the run id: two fleets launched in parallel can start a
+# VM in the same second, and a bare timestamp then puts both in one GCS prefix.
+RUN=$(date -u +%Y%m%dT%H%M%SZ)-$NAME
 
 SMOKE_FILE=$(mktemp); printf '%s' "$SMOKE" > "$SMOKE_FILE"
 echo "RUN=$RUN  name=$NAME  harness=$HARNESS  workers=$WORKERS  zone=$ZONE \

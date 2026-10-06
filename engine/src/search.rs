@@ -510,8 +510,20 @@ pub struct Search {
     hist_move: Vec<i32>,     // [2][39][40] flattened
     hist_cast: [[i32; 39]; 2],
     hist_dash: [i32; 2],
-    /// Scratch: this iteration's per-root-move scores (root_resort).
+    /// Scratch: this iteration's per-root-move scores (root_resort, or
+    /// `record_root` for the training-data harness).
     root_scores_out: Vec<(Turn, i32)>,
+    /// `record_root`: fill `root_scores_out` (and `root_detail_out`) for every
+    /// completed root move WITHOUT re-sorting the root, so recording changes
+    /// nothing about the search (`harness/selfplay_v2.py`).
+    record_root: bool,
+    /// `root_exact`: search every root child on the full window, so each
+    /// recorded root score is exact rather than a bound. Costs nodes; off in play.
+    root_exact: bool,
+    /// Parallel to `root_scores_out` while `record_root` is on:
+    /// (bound, nodes spent on that child). bound 0 = exact, 1 = upper (the move
+    /// failed low against the root's alpha), 2 = lower (failed high on beta).
+    root_detail_out: Vec<(u8, u64)>,
     /// Audit hook (`surprise_audit.py`, py `analyze(probe_sfn=)`): the board +
     /// mana key of a position one root turn might produce. `root_search`
     /// records where that turn sat in the root list and what it scored.
@@ -660,6 +672,9 @@ impl Search {
             ext_cap: 0,
             se_margin: 0,
             root_scores_out: Vec::new(),
+            record_root: false,
+            root_exact: false,
+            root_detail_out: Vec::new(),
             root_probe: None,
             root_probe_hit: None,
             opening_pick: None,
@@ -786,6 +801,14 @@ impl Search {
     /// while `root_resort` is on). The puzzle solver reads mate-scored root
     /// moves off it as candidates to prove exhaustively.
     pub fn root_scores(&self) -> &[(Turn, i32)] { &self.root_scores_out }
+    /// Record root scores (see `record_root`); `exact` searches every root
+    /// child on the full window so the scores are exact, not bounds.
+    pub fn set_record_root(&mut self, on: bool, exact: bool) {
+        self.record_root = on;
+        self.root_exact = on && exact;
+    }
+    /// (bound, child nodes) per entry of `root_scores()`, while `record_root`.
+    pub fn root_details(&self) -> &[(u8, u64)] { &self.root_detail_out }
     pub fn set_aspiration_steps(&mut self, on: bool) { self.aspiration_steps = on; }
     pub fn set_adopt_partial(&mut self, on: bool) { self.adopt_partial = on; }
     pub fn set_elastic(&mut self, e: Option<Elastic>) { self.elastic = e; }
@@ -1031,6 +1054,7 @@ impl Search {
         let mut stable_count: u8 = 0;
         let mut extended = false;
         self.root_scores_out.clear();
+        self.root_detail_out.clear();
 
         for depth in 1..=max_depth {
             let t_iter0 = now_ms();
@@ -1043,6 +1067,7 @@ impl Search {
             let mut iter_best: Option<Turn> = best;   // seed ordering with the last best
             loop {
                 self.root_scores_out.clear();
+                self.root_detail_out.clear();
                 score = self.root_search(root, c, depth, alpha, beta, &mut iter_best, &root_scores);
                 if self.stats.timed_out { break; }
                 if self.aspiration_steps {
@@ -1206,7 +1231,9 @@ impl Search {
             child.to_move = c.other();
             let key = crate::zobrist::ZOBRIST.key_js(&child);
             let mut rep = false;    // the root itself never caches, so unused here
-            let v = -self.negamax(&child, c.other(), depth - 1, -beta, -alpha, 1, key,
+            let (ca, cb) = if self.root_exact { (-WIN, WIN) } else { (alpha, beta) };
+            let nodes0 = self.stats.nodes;
+            let v = -self.negamax(&child, c.other(), depth - 1, -cb, -ca, 1, key,
                                   &mut rep);
             let completed = !self.stats.timed_out;
             if completed && self.root_probe.is_some() {
@@ -1218,7 +1245,12 @@ impl Search {
             }
             if completed {
                 if i == 0 { seed_completed = true; }
-                if self.root_resort { self.root_scores_out.push((t, v)); }
+                if self.root_resort || self.record_root { self.root_scores_out.push((t, v)); }
+                if self.record_root {
+                    let bound = if self.root_exact { 0 }
+                                else if v <= alpha { 1 } else if v >= beta { 2 } else { 0 };
+                    self.root_detail_out.push((bound, self.stats.nodes - nodes0));
+                }
             }
             if v > best_val && (completed || !self.adopt_partial) {
                 if completed && seed_completed && !same_turn(Some(t), seed)
