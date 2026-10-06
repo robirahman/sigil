@@ -104,7 +104,11 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
          # preset: an EVAL A/B on the shipped search. Pass the eval argument as
          # `<arm_eval>:<base_eval>` (e.g. tfit_spell:tfit); the side whose knob
          # value is non-zero plays the left one. Arm 1, base 0.
-         'preset')
+         'preset',
+         # threads = search threads*10 + mode (2026-10 step 6; mode 0 = Lazy SMP,
+         # 1 = parallel root), base 10 = one thread. Give each shard as many vCPUs as
+         # its arm's threads: WORKERS = vCPUs // threads.
+         'threads')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -221,6 +225,9 @@ def play(b, ms, ev, hist, knob, val):
         e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
         sp = tuple(se.SHIPPED_ADAPTIVE)
         adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
+    if knob == 'threads' and val // 10 > 1:
+        extra['threads'] = val // 10
+        extra['smp_mode'] = val % 10
     if knob == 'key_dash_v2':
         # val = moves*100 + combos*10 + extra: a wider key-dash scan (8 sacrifice
         # stones) feeding the additive path with reasons CRUSH|SPELL_CRUSH|FILLS.

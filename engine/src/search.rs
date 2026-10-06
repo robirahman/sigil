@@ -35,6 +35,8 @@ pub(crate) fn now_ms() -> f64 {
     js_sys::Date::now()
 }
 use crate::board::{Board, Color, Outcome};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+use std::sync::Arc;
 use crate::turn::{Action, Turn};
 
 pub const WIN: i32 = 10_000_000;
@@ -215,6 +217,64 @@ const TT_EMPTY: i8 = i8::MIN;
 impl TtEntry {
     const EMPTY: TtEntry = TtEntry { key_hi: 0, best: 0, score: 0, depth: TT_EMPTY,
                                      bound: 0, age: 0, _pad: 0 };
+
+    #[inline]
+    fn words(self) -> (u64, u64) {
+        let w0 = self.key_hi as u64 | (self.best as u64) << 32;
+        let w1 = self.score as u32 as u64 | (self.depth as u8 as u64) << 32
+                 | (self.bound as u64) << 40 | (self.age as u64) << 48;
+        (w0, w1)
+    }
+
+    #[inline]
+    fn from_words(w0: u64, w1: u64) -> TtEntry {
+        TtEntry { key_hi: w0 as u32, best: (w0 >> 32) as u32, score: w1 as u32 as i32,
+                  depth: (w1 >> 32) as u8 as i8, bound: (w1 >> 40) as u8,
+                  age: (w1 >> 48) as u8, _pad: 0 }
+    }
+}
+
+/// The transposition table, shared by every thread of a Lazy SMP search
+/// (`Search::set_threads`). Each slot is two `AtomicU64`s written lock-free with
+/// the XOR trick (Hyatt and Mann): the first word holds `w0 ^ w1`, so a slot
+/// torn by two threads writing at once decodes to a `key_hi` that almost surely
+/// fails verification and reads as a miss, never as another position's score.
+/// With one thread the loads and stores are plain moves and every entry
+/// round-trips exactly, so the single-threaded tree is unchanged (pinned in
+/// tests: `tt_entry_words_round_trip`, `threads_one_is_bit_identical`).
+pub(crate) struct Tt {
+    slots: Box<[[AtomicU64; 2]]>,
+}
+
+impl Tt {
+    fn new(n: usize) -> Tt {
+        let (w0, w1) = TtEntry::EMPTY.words();
+        Tt { slots: (0..n).map(|_| [AtomicU64::new(w0 ^ w1), AtomicU64::new(w1)]).collect() }
+    }
+
+    #[inline]
+    fn load(&self, slot: usize) -> TtEntry {
+        let s = &self.slots[slot];
+        let x = s[0].load(Relaxed);
+        let w1 = s[1].load(Relaxed);
+        TtEntry::from_words(x ^ w1, w1)
+    }
+
+    #[inline]
+    fn store(&self, slot: usize, e: TtEntry) {
+        let (w0, w1) = e.words();
+        let s = &self.slots[slot];
+        s[0].store(w0 ^ w1, Relaxed);
+        s[1].store(w1, Relaxed);
+    }
+
+    fn clear(&self) {
+        for i in 0..self.slots.len() { self.store(i, TtEntry::EMPTY); }
+    }
+
+    fn filled(&self) -> usize {
+        (0..self.slots.len()).filter(|&i| self.load(i).depth != TT_EMPTY).count()
+    }
 }
 
 #[inline]
@@ -363,6 +423,10 @@ impl Elastic {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SearchStats {
     pub nodes: u64,
+    /// Lazy SMP: nodes of every thread (main + helpers); 0 when single-threaded.
+    pub smp_nodes: u64,
+    /// Lazy SMP: a helper that completed a deeper iteration supplied the move.
+    pub smp_helper_won: bool,
     /// Wall time this search used, ms (for matched-average-time gating).
     pub elapsed_ms: f64,
     /// Elastic: the deadline was extended for instability.
@@ -428,8 +492,32 @@ pub struct SearchStats {
     pub qnodes: u64,
 }
 
+#[derive(Clone)]
 pub struct Search {
-    tt: Vec<TtEntry>,
+    /// Shared with the helper threads of a Lazy SMP search: cloning a `Search`
+    /// shares its table (`Arc`), which is exactly what a helper needs.
+    tt: Arc<Tt>,
+    /// Lazy SMP: total search threads (1 = the single-threaded engine, the
+    /// default; native only, wasm ignores it). Helpers are clones of this search
+    /// sharing its table; only this thread's result is used.
+    threads: usize,
+    /// 0 for the main thread; helper `k` of a Lazy SMP search has `k`. Helpers
+    /// diversify by rotating the root list after the seed move and, for odd ids,
+    /// skipping alternate depths, so they fill the table ahead of the main thread
+    /// instead of repeating it.
+    helper_id: usize,
+    /// Set by the main thread when its search ends; helpers treat it as a deadline.
+    stop: Option<Arc<AtomicBool>>,
+    /// Browser root split `(part, parts)`: search only the root turns with
+    /// `root_part(turn, parts) == part`. `(0, 1)` = every turn (the default).
+    root_split: (u32, u32),
+    /// Lazy SMP best-thread vote; see `set_smp_vote`.
+    smp_vote: bool,
+    /// Multi-thread scheme when `threads > 1`: 0 = Lazy SMP (independent helpers
+    /// on a shared table), 1 = parallel root (`root_parallel`). See `set_smp_mode`.
+    smp_mode: u8,
+    /// The parallel root's helpers, present only inside a `smp_mode` 1 search.
+    smp_pool: Option<Vec<Search>>,
     mask: usize,
     /// Search generation, bumped per `go`; see `TtEntry::age`.
     age: u8,
@@ -648,7 +736,14 @@ impl Search {
     pub fn new(tt_bits: u32) -> Self {
         let n = 1usize << tt_bits;
         Search {
-            tt: vec![TtEntry::EMPTY; n],
+            tt: Arc::new(Tt::new(n)),
+            threads: 1,
+            helper_id: 0,
+            stop: None,
+            root_split: (0, 1),
+            smp_vote: true,
+            smp_mode: 0,
+            smp_pool: None,
             mask: n - 1,
             age: 0,
             killers: [[None; 2]; MAX_PLY],
@@ -911,7 +1006,7 @@ impl Search {
     /// killers, the history and the generation counter. A fresh `Search::new`
     /// with the same `tt_bits` is equivalent but re-allocates the table.
     pub fn new_game(&mut self) {
-        for e in self.tt.iter_mut() { *e = TtEntry::EMPTY; }
+        self.tt.clear();
         self.killers = [[None; 2]; MAX_PLY];
         self.base_history.clear();
         self.age = 0;
@@ -920,7 +1015,7 @@ impl Search {
     /// Number of table slots currently holding an entry -- a harness reads this
     /// to prove a persistent table actually carries knowledge between moves.
     pub fn tt_filled(&self) -> usize {
-        self.tt.iter().filter(|e| e.depth != TT_EMPTY).count()
+        self.tt.filled()
     }
 
     #[inline]
@@ -973,6 +1068,10 @@ impl Search {
         if self.use_history { self.hist_decay(); }
 
         let t_start = now_ms();
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.threads > 1 && self.helper_id == 0 {
+            return self.go_smp(root, c, max_depth, time_ms, progress, t_start);
+        }
         // The exhaustive mate-in-1 bookends that wrapped this call in v6/v7 were
         // discarded after the arena (see the note at BOOKEND in the module head).
         let (best, best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
@@ -983,6 +1082,278 @@ impl Search {
         }
         self.stats.elapsed_ms = now_ms() - t_start;
         (best, best_score, self.stats)
+    }
+
+    /// Lazy SMP (`threads > 1`, native only). `threads - 1` helpers, each a clone
+    /// of this search sharing its table, search the same root with the same clock;
+    /// this thread searches exactly as it would alone. The helpers leave entries in
+    /// the shared table, and (`smp_vote`, default on) a helper that completed a
+    /// deeper iteration than this thread supplies the move. When this thread
+    /// finishes it raises `stop` and the helpers unwind within 64 nodes.
+    /// `stats.nodes` is this thread's; `stats.smp_nodes` is all threads'.
+    ///
+    /// `smp_mode` 1 (parallel root) instead keeps the helpers in a pool that
+    /// `root_search` shares each iteration's root turns with: this thread searches
+    /// the first turn, then every thread takes turns from a shared counter.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn go_smp(&mut self, root: &Board, c: Color, max_depth: i32, time_ms: u64,
+              mut progress: Option<&mut dyn FnMut(i32, i32, u64)>, t_start: f64)
+        -> (Option<Turn>, i32, SearchStats)
+    {
+        if self.smp_mode == 1 {
+            let pool: Vec<Search> = (1..self.threads).map(|k| {
+                let mut h = self.clone();
+                h.helper_id = k;
+                h.threads = 1;
+                h.root_probe = None;
+                h.stats = SearchStats::default();
+                h
+            }).collect();
+            self.smp_pool = Some(pool);
+            let (best, best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
+            if self.exact_clock {
+                if let (Some(d), Some(t)) = (self.deadline, best) {
+                    if now_ms() < d { self.spend_remaining(root, c, &t, d); }
+                }
+            }
+            let pool = self.smp_pool.take().unwrap_or_default();
+            self.stats.smp_nodes = self.stats.nodes + pool.iter().map(|h| h.stats.nodes).sum::<u64>();
+            self.stats.elapsed_ms = now_ms() - t_start;
+            return (best, best_score, self.stats);
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut helpers: Vec<Search> = (1..self.threads).map(|k| {
+            let mut h = self.clone();
+            h.helper_id = k;
+            h.threads = 1;
+            h.stop = Some(stop.clone());
+            h.root_probe = None;
+            h
+        }).collect();
+        // The helpers were cloned AFTER this search's own per-go setup (age bump,
+        // killers, history decay) and redo it in `go`; step their age back so the
+        // whole fleet writes one generation.
+        for h in helpers.iter_mut() { h.age = h.age.wrapping_sub(1); }
+        let deadline = self.deadline;
+        let switches = ThreadSwitches::capture();
+        let best_thread = self.smp_vote;
+        let (mut best, mut best_score, helper_nodes, deeper) = std::thread::scope(|sc| {
+            let handles: Vec<_> = helpers.iter_mut().map(|h| {
+                sc.spawn(move || {
+                    switches.apply();
+                    let ms = match deadline { Some(d) => (d - now_ms()).max(1.0) as u64, None => 0 };
+                    let (b, s, st) = h.go(root, c, max_depth, ms);
+                    (b, s, st)
+                })
+            }).collect();
+            let (best, best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
+            if self.exact_clock {
+                if let (Some(d), Some(t)) = (self.deadline, best) {
+                    if now_ms() < d { self.spend_remaining(root, c, &t, d); }
+                }
+            }
+            stop.store(true, Relaxed);
+            let mut n = 0u64;
+            // Best thread: a helper that COMPLETED a deeper iteration than this
+            // thread (odd helpers skip depths, so they often do) answers instead.
+            let mut deeper: Option<(Turn, i32, SearchStats)> = None;
+            for h in handles {
+                if let Ok((b, s, st)) = h.join() {
+                    n += st.nodes;
+                    let bar = deeper.as_ref().map_or(self.stats.depth_completed, |d| d.2.depth_completed);
+                    if let Some(t) = b {
+                        if best_thread && st.depth_completed > bar { deeper = Some((t, s, st)); }
+                    }
+                }
+            }
+            (best, best_score, n, deeper)
+        });
+        if let Some((t, s, st)) = deeper {
+            best = Some(t);
+            best_score = s;
+            self.stats.depth_completed = st.depth_completed;
+            self.stats.mate_plies = st.mate_plies;
+            self.stats.mate_proven = st.mate_proven;
+            self.stats.smp_helper_won = true;
+        }
+        self.stats.smp_nodes = self.stats.nodes + helper_nodes;
+        self.stats.elapsed_ms = now_ms() - t_start;
+        (best, best_score, self.stats)
+    }
+
+    /// Parallel root (`smp_mode` 1): search `rest` (the root turns after the first)
+    /// on this thread and every pool helper, each taking the next unsearched turn
+    /// from a shared counter and searching it against the best alpha found so far.
+    /// Returns `(index into rest, score, completed)` sorted by index; marks the
+    /// iteration timed out when the clock cut it short.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[allow(clippy::too_many_arguments)]
+    fn root_parallel(&mut self, pool: &mut [Search], b: &Board, c: Color, depth: i32,
+                     alpha: i32, beta: i32, rest: &[Turn]) -> Vec<(usize, i32, bool)>
+    {
+        use std::sync::atomic::{AtomicI32, AtomicUsize};
+        use std::sync::Mutex;
+        let next = AtomicUsize::new(0);
+        let shared_alpha = AtomicI32::new(alpha);
+        let cut = AtomicBool::new(false);
+        let out: Mutex<Vec<(usize, i32, bool)>> = Mutex::new(Vec::with_capacity(rest.len()));
+        let switches = ThreadSwitches::capture();
+        for h in pool.iter_mut() {
+            h.iter_depth = depth;
+            h.deadline = self.deadline;
+            h.ignore_decisive = self.ignore_decisive;
+            h.age = self.age;
+            h.path.clone_from(&self.path);
+            h.stats.timed_out = false;
+        }
+        let work = |s: &mut Search| {
+            loop {
+                if cut.load(Relaxed) { break; }
+                let j = next.fetch_add(1, Relaxed);
+                if j >= rest.len() { break; }
+                if s.deadline.is_some_and(|d| now_ms() >= d) {
+                    s.stats.timed_out = true;
+                    break;
+                }
+                let mut child = *b;
+                child.apply_turn(&rest[j], c);
+                child.turn_counter += 1;
+                child.to_move = c.other();
+                let key = crate::zobrist::ZOBRIST.key_js(&child);
+                let mut rep = false;
+                let a = shared_alpha.load(Relaxed);
+                s.stats.timed_out = false;
+                let v = -s.negamax(&child, c.other(), depth - 1, -beta, -a, 1, key, &mut rep);
+                let completed = !s.stats.timed_out;
+                if completed {
+                    shared_alpha.fetch_max(v, Relaxed);
+                    if v >= beta { cut.store(true, Relaxed); }
+                }
+                out.lock().unwrap().push((j, v, completed));
+                if !completed { break; }
+            }
+        };
+        let main_timed_out = self.stats.timed_out;
+        std::thread::scope(|sc| {
+            for h in pool.iter_mut() {
+                let work = &work;
+                sc.spawn(move || { switches.apply(); work(h); });
+            }
+            work(self);
+        });
+        // `work` leaves this thread's flag describing its last item only; the
+        // merge in `root_search` decides from the results.
+        self.stats.timed_out = main_timed_out;
+        let mut res = out.into_inner().unwrap();
+        res.sort_unstable_by_key(|r| r.0);
+        if !cut.load(Relaxed) && res.len() < rest.len() { self.stats.timed_out = true; }
+        res
+    }
+
+    /// Lazy SMP best-thread vote (default on): take a helper's move when it
+    /// completed a deeper iteration than the main thread. Off = the main
+    /// thread always answers and helpers only fill the table.
+    pub fn set_smp_vote(&mut self, on: bool) { self.smp_vote = on; }
+
+    /// Multi-thread scheme for `threads > 1`: 0 = Lazy SMP, 1 = parallel root.
+    pub fn set_smp_mode(&mut self, mode: u8) { self.smp_mode = mode.min(1); }
+
+}
+
+/// Which part of a `parts`-way root split a turn belongs to: an FNV hash of its
+/// packed actions, so it depends on the turn alone.
+pub fn root_part(t: &Turn, parts: u32) -> u32 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for a in t.slice() {
+        for byte in pack_action(*a).to_le_bytes() {
+            h ^= byte as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    (h % parts.max(1) as u64) as u32
+}
+
+/// The generator's per-thread A/B switches (`turn_iter`, `key_dash`, `opening`).
+/// A helper thread starts with every switch at its default, so a Lazy SMP search
+/// copies the main thread's values into each helper; otherwise an arena arm that
+/// set a switch would search with it on one thread and off on the others.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy)]
+struct ThreadSwitches {
+    decisive_lead: (bool, usize),
+    lead_bounds_v2: bool,
+    outcome_order_v2: bool,
+    lead_min_remaining: i32,
+    speed_v1: bool,
+    outcome_sel: (u8, usize, usize, u64),
+    swing_prepass: bool,
+    dash_summer: bool,
+    dash_gen: (u8, usize, usize),
+    key_dash_scan: (usize, usize, usize),
+    opening: (bool, bool, bool, bool),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ThreadSwitches {
+    fn capture() -> ThreadSwitches {
+        use crate::turn_iter as ti;
+        use crate::opening as op;
+        ThreadSwitches {
+            decisive_lead: (ti::decisive_lead_enabled(), ti::decisive_lead_cap()),
+            lead_bounds_v2: ti::lead_bounds_v2(),
+            outcome_order_v2: ti::outcome_order_v2(),
+            lead_min_remaining: ti::lead_min_remaining(),
+            speed_v1: ti::speed_v1(),
+            outcome_sel: ti::outcome_sel(),
+            swing_prepass: ti::swing_prepass_enabled(),
+            dash_summer: ti::dash_summer_enabled(),
+            dash_gen: ti::dash_gen(),
+            key_dash_scan: crate::key_dash::key_dash_scan(),
+            opening: (op::opening_book_enabled(), op::opening_syzygy_enabled(),
+                      op::opening_contest_enabled(), op::opening_carnage_enabled()),
+        }
+    }
+
+    fn apply(self) {
+        use crate::turn_iter as ti;
+        use crate::opening as op;
+        ti::set_decisive_lead(self.decisive_lead.0, self.decisive_lead.1);
+        ti::set_lead_bounds_v2(self.lead_bounds_v2);
+        ti::set_outcome_order_v2(self.outcome_order_v2);
+        ti::set_lead_min_remaining(self.lead_min_remaining);
+        ti::set_speed_v1(self.speed_v1);
+        let (m, w, k, mask) = self.outcome_sel;
+        ti::set_outcome_sel(m, w, k, mask);
+        ti::set_swing_prepass(self.swing_prepass);
+        ti::set_dash_summer(self.dash_summer);
+        // The setters clamp, and some defaults sit outside the clamp (the key-dash
+        // scan ships with 1 candidate, the setter floors at 2), so only a value that
+        // differs from this thread's is written.
+        if ti::dash_gen() != self.dash_gen {
+            let (m, w, p) = self.dash_gen;
+            ti::set_dash_gen(m, w, p);
+        }
+        if crate::key_dash::key_dash_scan() != self.key_dash_scan {
+            let (m, c, k) = self.key_dash_scan;
+            crate::key_dash::set_key_dash_scan(m, c, k);
+        }
+        op::set_opening_book(self.opening.0);
+        op::set_opening_syzygy(self.opening.1);
+        op::set_opening_contest(self.opening.2);
+        op::set_opening_carnage(self.opening.3);
+    }
+}
+
+impl Search {
+    /// Lazy SMP thread count (1 = single-threaded, the default). Native only; the
+    /// wasm build has no threads and ignores it.
+    pub fn set_threads(&mut self, n: usize) { self.threads = n.max(1); }
+    pub fn threads(&self) -> usize { self.threads }
+
+    /// Browser root split (step 6 option A, prototype): search only part `part` of
+    /// `parts` of the root list. `parts <= 1` turns it off.
+    pub fn set_root_split(&mut self, part: u32, parts: u32) {
+        self.root_split = if parts <= 1 { (0, 1) } else { (part % parts, parts) };
     }
 
     /// `exact_clock`: the root finished before the deadline (a proven decisive
@@ -1057,6 +1428,11 @@ impl Search {
         self.root_detail_out.clear();
 
         for depth in 1..=max_depth {
+            // Lazy SMP: odd helpers skip even depths past 2, so half the helpers
+            // are always an iteration ahead of the main thread.
+            if self.helper_id % 2 == 1 && depth >= 3 && depth % 2 == 0 && depth < max_depth {
+                continue;
+            }
             let t_iter0 = now_ms();
             // Aspiration window around the previous score, matching the existing
             // engine's ±0.15-of-a-stone idea scaled to integer material.
@@ -1216,6 +1592,24 @@ impl Search {
             };
             turns.sort_by_cached_key(rank);
         }
+        // Lazy SMP: helper k searches the root in a rotated order after the seed,
+        // so the helpers spread over different subtrees.
+        if self.helper_id > 0 && turns.len() > 2 {
+            let k = self.helper_id % (turns.len() - 1);
+            turns[1..].rotate_left(k);
+        }
+        // Browser root split (step 6 option A): this engine searches only the root
+        // turns whose hash falls in its part. The hash depends on the turn alone,
+        // never on its place in the list, so the parts stay disjoint and complete
+        // across iterations and engines even though each orders its list by its
+        // own table. An empty part keeps the list's first turn so it still
+        // returns a move (the coordinator compares scores across parts).
+        if self.root_split.1 > 1 {
+            let (part, parts) = self.root_split;
+            let first = turns.first().copied();
+            turns.retain(|t| root_part(t, parts) == part);
+            if turns.is_empty() { turns.extend(first); }
+        }
         // `adopt_partial` bookkeeping: did a move whose subtree COMPLETED beat
         // the seed (which is searched first and therefore completes first)?
         let seed = best_local;
@@ -1223,8 +1617,13 @@ impl Search {
         let mut seed_completed = false;
         let mut completed_beat_seed = false;
         let mut i = 0usize;
-        for t in turns {
-            if self.out_of_time() { self.stats.timed_out = true; break; }
+        // Parallel root (`smp_mode` 1): this thread searches the first turn alone,
+        // which sets alpha; the rest are shared out below. Without a pool every
+        // turn is searched here, exactly as before.
+        let seq_n = if self.smp_pool.is_some() { 1.min(n_root) } else { n_root };
+        let mut stopped = false;
+        for &t in turns[..seq_n].iter() {
+            if self.out_of_time() { self.stats.timed_out = true; stopped = true; break; }
             let mut child = *b;
             child.apply_turn(&t, c);
             child.turn_counter += 1;
@@ -1261,8 +1660,34 @@ impl Search {
                 best_local = Some(t);
                 if v > alpha { alpha = v; }
             }
-            if alpha >= beta { self.stats.cutoffs += 1; break; }
+            if alpha >= beta { self.stats.cutoffs += 1; stopped = true; break; }
+            if !completed { stopped = true; }
             i += 1;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if !stopped && seq_n < n_root {
+            if let Some(mut pool) = self.smp_pool.take() {
+                let results = self.root_parallel(&mut pool, b, c, depth, alpha, beta, &turns[seq_n..]);
+                self.smp_pool = Some(pool);
+                // Merge in list order with the sequential loop's rules. A turn
+                // searched against a later (higher) alpha only ever fails low, which
+                // the sequential loop would also have discarded.
+                for (j, v, completed) in results {
+                    let t = turns[seq_n + j];
+                    if !completed { self.stats.timed_out = true; }
+                    if completed && self.root_resort { self.root_scores_out.push((t, v)); }
+                    if v > best_val && (completed || !self.adopt_partial) {
+                        if completed && seed_completed && !same_turn(Some(t), seed)
+                           && same_turn(best_local, seed) && seed.is_some() && v > alpha {
+                            completed_beat_seed = true;
+                        }
+                        best_val = v;
+                        best_local = Some(t);
+                        if v > alpha { alpha = v; }
+                    }
+                    if alpha >= beta { self.stats.cutoffs += 1; break; }
+                }
+            }
         }
         // Only hand back a move if this call actually finished; otherwise the
         // caller keeps the previous iteration's fully-searched choice -- unless
@@ -1316,7 +1741,7 @@ impl Search {
         // (score, bound, depth) of the entry, for the singular-extension test.
         let mut tt_hit: Option<(i32, Bound, i32)> = None;
         {
-            let e = self.tt[slot];
+            let e = self.tt.load(slot);
             if e.depth != TT_EMPTY && e.key_hi == key_hi {
                 self.stats.tt_hits += 1;
                 tt_move = unpack_action(e.best);
@@ -1540,12 +1965,12 @@ impl Search {
             let bound = if best_val <= alpha_orig { Bound::Upper }
                         else if best_val >= beta { Bound::Lower }
                         else { Bound::Exact };
-            let e = self.tt[slot];
+            let e = self.tt.load(slot);
             // Same position, a stale generation, or a shallower entry all yield.
             let replace = e.depth == TT_EMPTY || e.key_hi == key_hi
                           || e.age != self.age || (e.depth as i32) <= depth;
             if replace {
-                self.tt[slot] = TtEntry {
+                self.tt.store(slot, TtEntry {
                     key_hi,
                     best: best_turn.map(|t| pack_action(t.slice()[0])).unwrap_or(0),
                     score: score_to_tt(best_val, ply),
@@ -1553,7 +1978,7 @@ impl Search {
                     bound: bound.to_u8(),
                     age: self.age,
                     _pad: 0,
-                };
+                });
             }
         }
         best_val
@@ -1737,8 +2162,10 @@ impl Search {
         if let Some(n) = self.node_limit {
             if self.stats.nodes >= n { return true; }
         }
+        if self.stats.nodes & 63 != 0 { return false; }
+        if let Some(s) = &self.stop { if s.load(Relaxed) { return true; } }
         match self.deadline {
-            Some(d) => self.stats.nodes & 63 == 0 && now_ms() >= d,
+            Some(d) => now_ms() >= d,
             None => false,
         }
     }
@@ -1942,4 +2369,133 @@ pub fn report(score: i32, st: &SearchStats, mover: Color, w: &crate::eval::Weigh
     }
     Report { stones: (score + even_offset(mover, w)) as f64 / w.lead.max(1) as f64,
              mate_in: None, proven: true }
+}
+
+#[cfg(test)]
+mod smp_tests {
+    use super::*;
+
+    const POS: &str = include_str!("../harness/positions_midgame.txt");
+
+    fn boards(n: usize) -> Vec<Board> {
+        POS.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .take(n).map(|l| Board::from_sfn(l).expect("sfn")).collect()
+    }
+
+    fn shipped(tt_bits: u32) -> Search {
+        let mut s = Search::new(tt_bits);
+        s.set_width_scale(DEFAULT_WIDTH_SCALE);
+        s.weights = crate::eval::weights_by_name("tfit").unwrap();
+        let (p, e, h) = SHIPPED_ADAPTIVE;
+        s.set_adaptive(p, e, h);
+        s
+    }
+
+    #[test]
+    fn tt_entry_words_round_trip() {
+        let mut es = vec![TtEntry::EMPTY];
+        for &score in &[0, 1, -1, WIN, -WIN, -WIN * 2, i32::MAX, i32::MIN] {
+            for &depth in &[0i8, 1, 7, 63, -1, TT_EMPTY, i8::MAX] {
+                for &(bound, age) in &[(0u8, 0u8), (1, 1), (2, 255)] {
+                    es.push(TtEntry { key_hi: 0xDEAD_BEEF, best: 0x8765_4321, score, depth,
+                                      bound, age, _pad: 0 });
+                }
+            }
+        }
+        let tt = Tt::new(4);
+        for e in es {
+            tt.store(1, e);
+            let r = tt.load(1);
+            assert_eq!((r.key_hi, r.best, r.score, r.depth, r.bound, r.age),
+                       (e.key_hi, e.best, e.score, e.depth, e.bound, e.age));
+        }
+        assert_eq!(Tt::new(8).filled(), 0, "a fresh table is empty");
+    }
+
+    #[test]
+    fn threads_one_is_the_single_threaded_search() {
+        // `set_threads(1)` must not route through `go_smp`: same tree, node for
+        // node, as a search that never heard of threads. (The cross-version pin --
+        // the shared table reproduces the Vec table's tree -- is the bench hash in
+        // engine/reports/2026-10-step6.md.)
+        for b in boards(6) {
+            let mut a = shipped(16);
+            let mut t = shipped(16);
+            t.set_threads(1);
+            let (ba, sa, xa) = a.go(&b, b.to_move, 3, 0);
+            let (bt, st, xt) = t.go(&b, b.to_move, 3, 0);
+            assert_eq!(xa.nodes, xt.nodes);
+            assert_eq!(sa, st);
+            assert_eq!(ba.map(|x| x.slice().to_vec()), bt.map(|x| x.slice().to_vec()));
+            assert_eq!(xt.smp_nodes, 0);
+        }
+    }
+
+    #[test]
+    fn lazy_smp_finishes_and_returns_a_legal_turn() {
+        for (k, b) in boards(8).into_iter().enumerate() {
+            let c = b.to_move;
+            // Clockless: every thread stops at max_depth or when the main thread ends.
+            let mut s = shipped(16);
+            s.set_threads(4);
+            s.set_smp_mode((k % 2) as u8);   // both schemes
+            let (best, _, st) = s.go(&b, c, 3, 0);
+            let best = best.expect("a move");
+            assert!(b.first_action_is_legal(best.slice()[0], c), "SMP move must be legal");
+            assert_eq!(st.depth_completed, 3);
+            assert!(st.smp_nodes >= st.nodes);
+            // Timed: returns close to the deadline.
+            let mut s = shipped(16);
+            s.set_threads(3);
+            s.set_smp_mode((k % 2) as u8);
+            let t0 = now_ms();
+            let (best, _, _) = s.go(&b, c, 64, 150);
+            assert!(now_ms() - t0 < 1500.0, "helpers must stop with the main thread");
+            assert!(b.first_action_is_legal(best.expect("a move").slice()[0], c));
+        }
+    }
+
+    #[test]
+    fn root_split_parts_are_disjoint_and_cover_the_root() {
+        for b in boards(3) {
+            let c = b.to_move;
+            let (turns, _) = b.enumerate_turns_capped(c, 3000);
+            for parts in [2u32, 3, 7] {
+                let mut counts = vec![0usize; parts as usize];
+                for t in &turns { counts[root_part(t, parts) as usize] += 1; }
+                assert_eq!(counts.iter().sum::<usize>(), turns.len());
+                if turns.len() > 50 * parts as usize {
+                    assert!(counts.iter().all(|&k| k > 0), "a part is empty: {counts:?}");
+                }
+            }
+            // Each part's search returns a turn from its own part.
+            for part in 0..3u32 {
+                let mut s = shipped(16);
+                s.set_root_split(part, 3);
+                let (best, _, _) = s.go(&b, c, 2, 0);
+                let best = best.expect("a move");
+                assert!(b.first_action_is_legal(best.slice()[0], c));
+                assert_eq!(root_part(&best, 3), part, "the move must come from this part");
+            }
+        }
+    }
+
+    #[test]
+    fn helpers_inherit_the_generator_switches() {
+        crate::turn_iter::set_dash_summer(false);
+        crate::turn_iter::set_lead_min_remaining(0);
+        let sw = ThreadSwitches::capture();
+        let (ds, lm, kd) = std::thread::spawn(move || {
+            let fresh = crate::key_dash::key_dash_scan();
+            sw.apply();
+            assert_eq!(crate::key_dash::key_dash_scan(), fresh, "an unchanged default is not re-clamped");
+            (crate::turn_iter::dash_summer_enabled(), crate::turn_iter::lead_min_remaining(),
+             crate::key_dash::key_dash_scan())
+        }).join().unwrap();
+        crate::turn_iter::set_dash_summer(true);
+        crate::turn_iter::set_lead_min_remaining(2);
+        assert!(!ds);
+        assert_eq!(lm, 0);
+        assert_eq!(kd, crate::key_dash::key_dash_scan());
+    }
 }

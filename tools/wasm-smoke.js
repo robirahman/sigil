@@ -20,7 +20,9 @@ const fs = require('fs');
 const path = require('path');
 const REPO = path.dirname(__dirname);
 const ENGINE = path.join(REPO, 'docs', 'static', 'scripts', 'engine');
-const WASM_DIR = path.join(REPO, 'docs', 'static', 'wasm');
+// SIGIL_WASM_DIR points the smoke at an unshipped build (engine/build-wasm.sh
+// with WASM_OUT=<dir>), e.g. a prototype that must not replace docs/static/wasm.
+const WASM_DIR = process.env.SIGIL_WASM_DIR || path.join(REPO, 'docs', 'static', 'wasm');
 
 // Superset of ai/replay_bridge.py's list: sim-board for the probe boards,
 // features/enumerator because sim-board's evaluation hooks reference them.
@@ -290,6 +292,64 @@ async function driver() {
 		const idle = JSON.parse(eng.ponder_step(10, 4));
 		if (!idle.ok || !idle.done) throw new Error('idle ponder_step: ' + JSON.stringify(idle));
 		eng.free();
+	}
+	// Step 6 option A (prototype): root split across several Engines, combined
+	// by rust-ai.js's own pickSplitResult, every move replay-verified; then a
+	// ponder (which must read the whole root) and a split search after it. Runs
+	// only against a wasm that has set_root_split (SIGIL_WASM_DIR=<proto build>).
+	let splitMoves = 0;
+	{
+		// The worker-count cap: hardwareConcurrency - 1, at least 1, default 1.
+		const wc = RustAI.rustWorkerCount;
+		if (wc(undefined, 8) !== 1 || wc(4, 8) !== 4 || wc(16, 8) !== 7 || wc(4, 1) !== 1 || wc(4, undefined) !== 1) {
+			throw new Error('rustWorkerCount cap is wrong');
+		}
+		if (typeof wasm_bindgen.Engine.prototype.set_root_split === 'function') {
+			const PARTS = 3;
+			const engines = Array.from({ length: PARTS }, () => new wasm_bindgen.Engine(18));
+			const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
+			b.setupInitial();
+			let sfn = boardToSfn(b);
+			const history = [];
+			for (let ply = 0; ply < 8; ply++) {
+				const results = engines.map((eng, i) => {
+					eng.set_root_split(i, PARTS);
+					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6, undefined));
+				});
+				const res = RustAI.pickSplitResult(results);
+				if (!res.ok) throw new Error('split ply ' + ply + ': ' + res.error);
+				if (!res.split || res.split.parts !== PARTS) throw new Error('split report missing');
+				// Parts are disjoint: two completed parts never choose the same turn
+				// (an empty part falls back to the list's first turn, so allow that).
+				const keys = results.filter((r) => r.ok && r.depth > 0).map((r) => JSON.stringify(r.actions));
+				if (new Set(keys).size < keys.length - 1) throw new Error('parts chose the same turn: ' + keys.join(' | '));
+				const over = await verify(sfn, res);
+				splitMoves++;
+				history.push(sfn);
+				sfn = res.expected_sfn;
+				if (over) break;
+				// The opponent's turn: ponder on every engine with the split dropped,
+				// exactly as rust-worker.js does.
+				for (const eng of engines) {
+					eng.set_root_split(0, 1);
+					const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6));
+					if (!pb.ok) throw new Error('split ponder_begin: ' + pb.error);
+					const st = JSON.parse(eng.ponder_step(20, 8));
+					if (!st.ok) throw new Error('split ponder_step failed');
+					eng.ponder_end();
+				}
+				const reply = JSON.parse(engines[0].search(sfn, 100, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6, undefined));
+				if (!reply.ok) throw new Error('split reply: ' + reply.error);
+				const over2 = await verify(sfn, reply);
+				history.push(sfn);
+				sfn = reply.expected_sfn;
+				if (over2) break;
+			}
+			for (const eng of engines) eng.free();
+			console.log('root split: ' + splitMoves + ' moves across ' + PARTS + ' engines replay-verified');
+		} else {
+			console.log('root split: skipped (this wasm has no set_root_split)');
+		}
 	}
 	console.log('wasm smoke OK: ' + GAMES + ' games, ' + plies +
 	            ' plies replay-verified, ' + progressTicks + ' progress ticks, ' +
