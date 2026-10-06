@@ -3,7 +3,7 @@
     nn_eval.py prep  <chunk-dir|list-file> <out.npz> [--workers N] [--evals tfit,tfit_spell]
     nn_eval.py train <prep.npz> <out-dir> [--lam 0.5] [--hidden 128] [--epochs 6]
                      [--split game|fold0|fold1|fold2] [--cap 96] [--device cuda]
-    nn_eval.py golden <net.bin> <prep.npz> <out.json> [--n 64]
+    nn_eval.py golden <net.bin> <prep.npz> <out.txt> [--n 64]
 
 WHAT IS LEARNED. A residual on top of the `tfit_spell` eval (Step 2), in
 centistones, clamped to +-`cap`:
@@ -458,14 +458,13 @@ def cmd_golden(a):
     rng = np.random.default_rng(1)
     ix = rng.choice(len(D['y']), size=min(a.n, len(D['y'])), replace=False)
     v = qforward(q, D['mine'][ix], D['theirs'][ix], D['spells'][ix], D['is_red'][ix])
-    rows = []
-    for i, cs in zip(ix, v):
-        rows.append({'mine': int(D['mine'][i]), 'theirs': int(D['theirs'][i]),
-                     'spells': D['spells'][i].tolist(), 'red': int(D['is_red'][i]),
-                     'cs': int(cs)})
+    # one line per vector: mine theirs s0,..,s8 red cs  (read by src/tests.rs)
     with open(a.out, 'w') as f:
-        json.dump(rows, f)
-    print(f"WROTE {a.out}: {len(rows)} vectors, |cs| mean {np.mean(np.abs(v)):.1f}")
+        for i, cs in zip(ix, v):
+            f.write(f"{int(D['mine'][i])} {int(D['theirs'][i])} "
+                    f"{','.join(str(int(x)) for x in D['spells'][i])} "
+                    f"{int(D['is_red'][i])} {int(cs)}\n")
+    print(f"WROTE {a.out}: {len(ix)} vectors, |cs| mean {np.mean(np.abs(v)):.1f}")
 
 
 def main():
