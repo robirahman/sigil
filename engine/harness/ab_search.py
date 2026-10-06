@@ -100,7 +100,11 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
          #   24 resolutions, 4 keeps, for the SEL_SPELLS_DEFAULT spells); 0 = off.
          # speed = 1/0: the tree-identical node-rate switch (turn_iter::set_speed_v1).
          # lead_min = skip the stone-lead pre-pass below this many plies left (2 = shipped since v18, 0 = v17).
-         'outcome_sel', 'speed', 'lead_min')
+         'outcome_sel', 'speed', 'lead_min',
+         # preset: an EVAL A/B on the shipped search. Pass the eval argument as
+         # `<arm_eval>:<base_eval>` (e.g. tfit_spell:tfit); the side whose knob
+         # value is non-zero plays the left one. Arm 1, base 0.
+         'preset')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -113,6 +117,10 @@ DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the s
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
+    if ':' in ev:
+        if knob != 'preset':
+            sys.exit(f"an `arm:base` eval pair needs knob=preset, got {knob!r}")
+        ev = ev.split(':')[0 if val else 1]
     ws = val if knob == 'width_scale' else BASE_WS
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
@@ -235,11 +243,33 @@ if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('openi
     sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
 # SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
 # (the seed is stepped deterministically until its draw does), so a knob that
-# acts in one spell's draws is measured where it acts.
+# acts in one spell's draws is measured where it acts. `legal_draw` draws the 39
+# core spells only, so for an EXPANSION id (39-44, Tectonic/Providence) the draw
+# comes from the 15-spell-per-role pool instead (core plus the two expansion
+# spells of each role, as selfplay_v2.py's all-45 draws), stepped until it holds
+# the spell; -1 means "any expansion spell". The GAME lines carry the draw, so
+# split_by_draw.py never has to reconstruct it.
 REQUIRE_SPELL = int(os.environ['SIGIL_REQUIRE_SPELL']) if os.environ.get('SIGIL_REQUIRE_SPELL') else None
+_CORE_POOLS = ([0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36],
+               [5, 6, 7, 8, 9, 16, 19, 22, 25, 28, 31, 34, 37],
+               [10, 11, 12, 13, 14, 17, 20, 23, 26, 29, 32, 35, 38])
+_EXPANSION_POOLS = ([39, 44], [40, 43], [41, 42])
+
+
+def _expansion_draw(seed, want):
+    import random
+    rng = random.Random(seed * 1_000_003 + 45)
+    while True:
+        d = []
+        for role in range(3):
+            d += rng.sample(_CORE_POOLS[role] + _EXPANSION_POOLS[role], 3)
+        if (want == -1 and any(x >= 39 for x in d)) or want in d:
+            return d
 
 
 def draw_for(seed):
+    if REQUIRE_SPELL is not None and (REQUIRE_SPELL < 0 or REQUIRE_SPELL >= 39):
+        return _expansion_draw(seed, REQUIRE_SPELL)
     d = se.Board.legal_draw(seed)
     if REQUIRE_SPELL is None:
         return d
@@ -290,6 +320,11 @@ if __name__ == "__main__":
     knob = sys.argv[4]; arm_val = int(sys.argv[5]); base_val = int(sys.argv[6])
     if knob not in KNOBS:
         sys.exit(f"unknown knob {knob!r}; expected one of {KNOBS}")
+    if knob == 'preset' and (':' not in ev or arm_val == base_val):
+        sys.exit("knob=preset needs eval=<arm>:<base> and arm/base values 1 0")
+    for e in ev.split(':'):
+        if e not in se.EVAL_NAMES:
+            sys.exit(f"unknown eval {e!r}; expected one of {se.EVAL_NAMES}")
     off = shard_offset()
 
     cfg = se.search_defaults()
@@ -314,7 +349,8 @@ if __name__ == "__main__":
             ma = statistics.mean(sc['arm']) if sc['arm'] else 0.0
             mb = statistics.mean(sc['base']) if sc['base'] else 0.0
             print(f"GAME seed={6_000_000+off+i} arm={arm} winner={w} plies={n} "
-                  f"arm_s={ma:.3f} base_s={mb:.3f}", flush=True)
+                  f"arm_s={ma:.3f} base_s={mb:.3f} "
+                  f"draw={','.join(map(str, draw_for(6_000_000 + off + i)))}", flush=True)
         if s.verdict != 'continue':
             break
     print(f"SHARD knob={knob} arm={arm_val} base={base_val} eval={ev} ms={ms_spec} "

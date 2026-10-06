@@ -1627,6 +1627,19 @@ fn the_key_dash_filter_never_invents_an_illegal_turn() {
 }
 
 #[test]
+fn spell_sigil_presets_hold_their_positional_budgets() {
+    // tfit_spell: everything inside 96 cs; tfit_spell2: tfit's 96 plus the table's 96.
+    use crate::eval::*;
+    assert!(worst_case_positional(&TFIT_SPELL) <= POSITIONAL_BUDGET);
+    assert!(worst_case_positional(&TFIT_SPELL_V2) <= POSITIONAL_BUDGET);
+    assert!(worst_case_positional(&TFIT_SPELL2) <= 2 * POSITIONAL_BUDGET);
+    let t = TFIT_SPELL2.spell_sigil.unwrap();
+    assert!(t.worst_case() * TFIT_SPELL2.pos_num / TFIT_SPELL2.pos_den <= POSITIONAL_BUDGET);
+    assert!(weights_by_name("tfit_spell").is_ok() && weights_by_name("tfit_spell2").is_ok());
+    for n in EVAL_NAMES { assert!(weights_by_name(n).is_ok(), "{n}"); }
+}
+
+#[test]
 fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
     // This invariant is what makes a logistic/texel fit on `hand_features` produce
     // numbers that drop straight into `Weights`. If the two paths ever drift, a
@@ -1640,9 +1653,16 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
                 crate::eval::STRUCT_25, crate::eval::STRUCT_50,
                 crate::eval::CLASSIC,
                 crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
-                crate::eval::CAPPED_MIX];
+                crate::eval::CAPPED_MIX, crate::eval::FIT_AT_BUDGET,
+                crate::eval::TFIT_SPELL, crate::eval::TFIT_SPELL2,
+                crate::eval::TFIT_SPELL_V2];
+    // legal_draw draws core spells only; every fourth seed swaps in Tectonic and
+    // Providence spells (rituals 39/44, sorceries 40/43, charms 41/42) so the
+    // expansion entries of the per-spell tables are exercised too.
     for seed in 0..40u64 {
-        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        let mut draw = Board::legal_draw(seed);
+        if seed % 4 == 3 { draw = [39, 44, draw[2], 40, 43, draw[5], 41, 42, draw[8]]; }
+        let mut b = Board::new(draw, Variant::Standard);
         b.stones[0] = (0x1234_5678_9abcu64 ^ (seed * 2654435761)) & crate::topology::ALL;
         b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
         b.spell_counter = [(seed % 7) as u8, ((seed / 7) % 7) as u8];
@@ -1662,6 +1682,9 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
                         _ => pos += wv[i] * f[i],
                     }
                 }
+                let sf = b.spell_sigil_features(c);
+                let sw = Board::spell_sigil_weight_vec(w);
+                pos += sf.iter().zip(&sw).map(|(a, b)| a * b).sum::<i32>();
                 assert_eq!(mat + pos * w.pos_num / w.pos_den, b.evaluate(c, w),
                     "seed {seed} {c:?}: hand_features dot != evaluate");
             }

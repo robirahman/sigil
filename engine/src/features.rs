@@ -92,6 +92,36 @@ impl Board {
 
     /// Dot product of `hand_features` with `w`, in the same order as
     /// `HAND_NAMES`. Kept next to the feature vector so the two cannot drift.
+    /// Feature vector of the per-spell sigil terms (`Weights::spell_sigil`): entry s
+    /// sums `stone_p` over the slots holding spell s, entry N + s sums `charged_p`.
+    /// `evaluate`'s positional sum adds `mult * dot(spell_sigil_weight_vec, this)`;
+    /// kept apart from `hand_features` so the fixed 15-column vector the harnesses
+    /// store keeps its shape.
+    pub fn spell_sigil_features(&self, c: Color) -> Vec<i32> {
+        let n_sp = crate::spells_meta::NUM_OFFICIAL_SPELLS;
+        let mut v = vec![0i32; 2 * n_sp];
+        for p in 0..9 {
+            let s = self.spells[p] as usize;
+            if s >= n_sp { continue; }
+            let m = SIGIL[p];
+            let n = m.count_ones() as i32;
+            let mine = (m & self.mine(c)).count_ones() as i32;
+            let theirs = (m & self.theirs(c)).count_ones() as i32;
+            v[s] += mine * mine / n - theirs * theirs / n;
+            v[n_sp + s] += (mine == n) as i32 - (theirs == n) as i32;
+        }
+        v
+    }
+
+    /// Weights matching `spell_sigil_features`, `mult` folded in (zeros if none).
+    pub fn spell_sigil_weight_vec(w: &Weights) -> Vec<i32> {
+        let n_sp = crate::spells_meta::NUM_OFFICIAL_SPELLS;
+        match w.spell_sigil {
+            None => vec![0; 2 * n_sp],
+            Some(t) => t.stone.iter().chain(t.charged.iter()).map(|x| x * t.mult).collect(),
+        }
+    }
+
     pub fn hand_weight_vec(w: &Weights) -> [i32; N_HAND] {
         [w.lead, w.near_threshold, w.own_zero_liberty, w.own_one_liberty,
          w.enemy_zero_liberty, w.enemy_one_liberty, w.sigil_stone, w.sigil_charged,
