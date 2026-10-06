@@ -21,9 +21,10 @@ CORPUS=$(md corpus); DEPTH=$(md depth); TMS=$(md time-ms); RESUME=$(md resume); 
 SHARD=$(md shard); : "${SHARD:=}"
 PTMS=$(md probe-time-ms); : "${PTMS:=300000}"
 SIDE=$(md side); : "${SIDE:=opp}"
+MODE=$(md mode); : "${MODE:=surprise}"
 : "${RUN:=unknown}" "${BRANCH:=main}" "${WORKERS:=$(nproc)}" "${MAXH:=4}" \
   "${CORPUS:=data/eval_lines_2026-09-21.json}" "${DEPTH:=6}" "${TMS:=300000}"
-echo "probe_time_ms=$PTMS side=$SIDE"
+echo "probe_time_ms=$PTMS side=$SIDE mode=$MODE"
 echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS depth=$DEPTH time_ms=$TMS shard=${SHARD:-all}"
 
 # WATCHDOG: nothing below is trusted to terminate (see runner.sh for why).
@@ -87,6 +88,12 @@ fi
 
 cd $WORK/repo
 H=engine/harness
+if [ "$MODE" = final ]; then
+  echo "=== final_blow_probe: $WORKERS workers ==="
+  $WORK/venv/bin/python -u $H/final_blow_probe.py --lines $WORK/lines.json \
+    --out $WORK/out/final_probe.jsonl --workers "$WORKERS" > $WORK/out/final.log 2>&1
+  tail -2 $WORK/out/final.log
+else
 echo "=== 1. eval: depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
 $WORK/venv/bin/python -u $H/eval_games.py eval --lines $WORK/lines.json \
   --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 > $WORK/out/eval.log 2>&1
@@ -103,6 +110,7 @@ echo "=== 4. report ==="
 $WORK/venv/bin/python -u $H/surprise_audit.py report --cases $WORK/out/cases.json --probes $WORK/out/probes.jsonl \
   --md $WORK/out/report.txt --json $WORK/out/report_rows.json > $WORK/out/report.log 2>&1
 cat $WORK/out/report.log
+fi
 
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done
 gcs_put /var/log/sigil-surprise.log "runs/$RUN/live/runner.log" || true
