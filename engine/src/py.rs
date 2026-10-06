@@ -2141,9 +2141,130 @@ fn human_move_dash_turn(sfn: &str, result_sfn: &str)
     Ok(Vec::new())
 }
 
+
+// ---------------------------------------------------------------------------
+// Step 4: the learned generator policy (policy.rs)
+// ---------------------------------------------------------------------------
+
+use crate::turn::{Action as PAction, Turn as PTurn};
+fn turn_from_packed(packed: &[u32]) -> PTurn {
+    let mut acts = packed.iter().filter_map(|&v| crate::search::unpack_action(v));
+    let mut t = match acts.next() { Some(a) => PTurn::single(a), None => return PTurn::single(PAction::Pass) };
+    for a in acts { t = t.push_pub(a); }
+    t
+}
+
+/// Training example for the generator policy: walk the policy tree along the
+/// packed turn and return (z, levels, targets, n_opts per level, n_feats per
+/// option, flat feature ids), or None for a position the policy stream hands
+/// to the shipped stream (competitive opening, no legal first move).
+#[pyfunction]
+#[pyo3(signature = (sfn, packed, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
+fn policy_example(sfn: &str, packed: Vec<u32>, window: usize, keep_window: usize)
+    -> PyResult<Option<(Vec<f32>, Vec<u8>, Vec<i32>, Vec<u32>, Vec<u8>, Vec<u16>)>>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let t = turn_from_packed(&packed);
+    let Some((z, levels)) = crate::policy::policy_example(&b, b.to_move, &t, window, keep_window) else { return Ok(None) };
+    let (mut lv, mut tg, mut no, mut nf, mut ff) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for l in levels {
+        lv.push(l.level); tg.push(l.target); no.push(l.opts.len() as u32);
+        for o in &l.opts { nf.push(o.n); ff.extend_from_slice(o.slice()); }
+    }
+    Ok(Some((z.to_vec(), lv, tg, no, nf, ff)))
+}
+
+/// Install policy weights for this thread (flat NF x PW, row-major); `None`
+/// restores the compiled ones.
+#[pyfunction]
+#[pyo3(signature = (flat=None))]
+fn set_policy_weights(flat: Option<Vec<f32>>) -> PyResult<()> {
+    match flat {
+        Some(v) => crate::policy::set_policy_weights(&v).map_err(pyo3::exceptions::PyValueError::new_err),
+        None => { crate::policy::reset_policy_weights(); Ok(()) }
+    }
+}
+
+/// Search switch: use the policy stream at nodes whose width budget is at
+/// least `min_width` (per thread; off by default).
+#[pyfunction]
+#[pyo3(signature = (on, min_width=0))]
+fn set_policy(on: bool, min_width: usize) { crate::policy::set_policy(on, min_width); }
+
+/// Continuation penalty (1/256 nat) at nodes whose width is below `free_width`.
+#[pyfunction]
+#[pyo3(signature = (penalty, free_width=usize::MAX))]
+fn set_policy_cost(penalty: i32, free_width: usize) { crate::policy::set_policy_cost(penalty, free_width); }
+
+/// (NF, PW, feature groups [(name, base, size)]).
+#[pyfunction]
+fn policy_layout() -> (usize, usize, Vec<(String, u16, u16)>) {
+    (crate::policy::NF, crate::policy::PW,
+     crate::policy::FEATURE_GROUPS.iter().map(|&(n, b, s)| (n.to_string(), b, s)).collect())
+}
+
+/// Rank of the turn producing `result_sfn` in the POLICY stream of `sfn`
+/// (-1 if not within `cap`), turns generated, and internal nodes expanded
+/// when it was found (or at the end).
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW, pen=0))]
+fn policy_rank_of_result(sfn: &str, result_sfn: &str, cap: usize, window: usize, keep_window: usize, pen: i32)
+    -> PyResult<(i64, usize, usize)>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let mut it = b.turns_policy_pen(c, window, keep_window, pen);
+    let (mut rank, mut generated, mut exp) = (-1i64, 0usize, 0usize);
+    while generated < cap {
+        let Some(t) = it.next() else { break };
+        generated += 1;
+        let mut ch = b; ch.apply_turn(&t, c);
+        if key(&ch.to_sfn()) == want { rank = (generated - 1) as i64; exp = it.expanded; break; }
+    }
+    if rank < 0 { exp = it.expanded; }
+    Ok((rank, generated, exp))
+}
+
+/// Same-budget rank in BOTH streams for a packed target turn: (policy rank,
+/// shipped-stream rank), each -1 past `cap`. Matching is by resulting board.
+#[pyfunction]
+#[pyo3(signature = (sfn, packed, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW, pen=0))]
+fn policy_vs_stream_rank(sfn: &str, packed: Vec<u32>, cap: usize, window: usize, keep_window: usize, pen: i32)
+    -> PyResult<(i64, i64)>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let t = turn_from_packed(&packed);
+    let mut want = b; want.apply_turn(&t, c);
+    let wk = want.state_key();
+    let find = |it: &mut dyn Iterator<Item = PTurn>| -> i64 {
+        for (i, x) in it.take(cap).enumerate() {
+            let mut ch = b; ch.apply_turn(&x, c);
+            if ch.state_key() == wk && ch.outcome == want.outcome { return i as i64; }
+        }
+        -1
+    };
+    let rp = find(&mut b.turns_policy_pen(c, window, keep_window, pen));
+    let rs = find(&mut b.turns_ordered_keeps(c, window, 0, keep_window));
+    Ok((rp, rs))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
+    m.add_function(wrap_pyfunction!(policy_example, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_weights, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_cost, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_rank_of_result, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_vs_stream_rank, m)?)?;
     m.add_class::<SearchSession>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;

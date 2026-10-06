@@ -1620,7 +1620,17 @@ impl Search {
         // over 80 games. So merge only near the ROOT, where nodes are few and the
         // budget is wide; deeper nodes keep the cheap ordering.
         let mut v: Vec<Turn>;
-        if self.legacy_order || width < self.merge_min_width {
+        let (pol_on, pol_min) = crate::policy::policy_setting();
+        if pol_on && width >= pol_min && !self.legacy_order {
+            // Step 4: the learned generator policy (`policy.rs`). The `width`
+            // most probable turns, built best-first; the stream's own prepass
+            // (stone-lead and Destruction mates) still comes first.
+            let pen = crate::policy::cost_penalty_for(width);
+            let mut it = b.turns_policy_pen(c, self.window, self.keep_window, pen);
+            v = it.by_ref().take(width).collect();
+            if it.has_more() { self.stats.widened = true; }
+            if it.windowed { self.stats.windowed = true; }
+        } else if self.legacy_order || width < self.merge_min_width {
             // The additive path takes the stream WITHOUT reserved slots and appends
             // the key dashes afterwards, so nothing falls out of the budget.
             let additive = self.key_dash_extra > 0 && !self.legacy_order

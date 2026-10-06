@@ -4,7 +4,7 @@
 //! node-rate work. Wall time is reported separately and is the thing being optimised.
 //!
 //!     cargo run --release --no-default-features --example bench -- \
-//!         harness/positions_midgame.txt 5 [--tt 20] [--no-adaptive] [--scale 4] [--eval tfit]
+//!         harness/positions_midgame.txt 5 [--tt 20] [--no-adaptive] [--scale 4] [--eval tfit] [--policy MIN_WIDTH]
 //!
 //! Prints one line per position and a footer with total nodes, total ms, us/node and
 //! the combined hash. Two runs whose combined hash agree searched the SAME tree.
@@ -39,6 +39,15 @@ fn main() {
             "--no-adaptive" => { adaptive = false; i += 1; }
             "--scale" => { scale = args[i + 1].parse().unwrap(); i += 2; }
             "--eval" => { eval = args[i + 1].clone(); i += 2; }
+            "--pcost" => {
+                // --pcost PENALTY FREE_WIDTH
+                sigil_engine::policy::set_policy_cost(args[i + 1].parse().unwrap(), args[i + 2].parse().unwrap());
+                i += 3;
+            }
+            "--policy" => {
+                sigil_engine::policy::set_policy(true, args[i + 1].parse().unwrap());
+                i += 2;
+            }
             a => { eprintln!("unknown arg {a}"); std::process::exit(2); }
         }
     }

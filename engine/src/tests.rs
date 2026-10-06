@@ -4322,3 +4322,51 @@ fn shipped_eval_is_a_known_preset_and_named_in_eval_names() {
     assert!(crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).is_ok());
     assert!(crate::eval::EVAL_NAMES.contains(&crate::eval::SHIPPED_EVAL));
 }
+
+/// Step 4: every turn the learned-policy stream yields is one the shipped
+/// stream builds (same candidate sets; the policy only reorders and prunes),
+/// it yields no duplicates, it is deterministic, and `has_more` is false only
+/// once the stream is exhausted. The lazy Summer / post-dash splits must not
+/// lose or invent turns.
+#[test]
+fn policy_stream_is_a_deterministic_subset_of_the_shipped_stream() {
+    use std::collections::HashSet;
+    let mut checked = 0;
+    for seed in 1..60u64 {
+        let draw = Board::legal_draw(seed);
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL & nx();
+        let bl = (nx() & ALL & nx()) & !r;
+        b.stones = [r, bl];
+        b.turn_counter = 10 + (seed % 20) as u32;
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        for c in [Color::Red, Color::Blue] {
+            let after = |t: &Turn| { let mut x = b; x.apply_turn(t, c); x.state_key() };
+            let shipped: HashSet<_> = b.turns_ordered_keeps(c, 24, 0, 2).map(|t| after(&t)).collect();
+            let a: Vec<Turn> = b.turns_policy(c, 24, 2).take(64).collect();
+            let a2: Vec<Turn> = b.turns_policy(c, 24, 2).take(64).collect();
+            assert_eq!(a.len(), a2.len());
+            for (x, y) in a.iter().zip(&a2) { assert_eq!(x.slice(), y.slice(), "seed {seed}: nondeterministic"); }
+            // The decisive-turn prepass puts its turns at the FRONT and the
+            // tree yields them again later (as the shipped stream does: the
+            // duplicate costs a TT probe), so a turn may appear at most twice.
+            let mut seen = std::collections::HashMap::new();
+            for t in &a {
+                let k = seen.entry(t.slice().to_vec()).or_insert(0);
+                *k += 1;
+                assert!(*k <= 2, "seed {seed} {c:?}: {:?} yielded {} times", t.slice(), *k);
+                assert!(shipped.contains(&after(t)), "seed {seed} {c:?}: {:?} not in the shipped stream", t.slice());
+            }
+            let mut it = b.turns_policy(c, 24, 2);
+            let mut n = 0;
+            while it.has_more() { if it.next().is_some() { n += 1; } }
+            assert!(it.next().is_none(), "has_more false but a turn remained");
+            assert!(n >= a.len());
+            checked += 1;
+        }
+    }
+    assert!(checked > 20, "only {checked} positions checked");
+}

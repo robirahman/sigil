@@ -22,6 +22,9 @@ pub mod search;
 pub mod opening_data;
 pub mod opening;
 pub mod prior;
+pub mod policy;
+pub mod policy_lse;
+pub mod policy_weights;
 pub mod mate;
 pub mod candidates;
 #[cfg(feature = "python")]

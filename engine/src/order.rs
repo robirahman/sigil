@@ -244,14 +244,23 @@ impl Board {
 
     /// All first-move options, best-first.
     pub fn ordered_first_moves(&self, c: Color) -> Vec<(u8, Option<u8>)> {
+        self.ordered_first_moves_scored(c).into_iter().map(|(m, _)| m).collect()
+    }
+
+    /// `ordered_first_moves` with each move's `move_score_goal`, so a caller
+    /// that needs the score (the learned generator policy, `policy.rs`) does not
+    /// recompute it. Same order.
+    pub fn ordered_first_moves_scored(&self, c: Color) -> Vec<((u8, Option<u8>), i32)> {
         let (targets, _wind) = self.first_move_targets(c);
-        let mut v = self.move_variants_pub(targets, c);
+        let v = self.move_variants_pub(targets, c);
         // Stable, key computed ONCE per element: identical order to the old
         // `sort_by_key`, which recomputed `move_score` (and inside it
         // `placement_goal`) on every comparison -- ~15% of the search profile.
         let goal = self.placement_goal(c);
-        v.sort_by_cached_key(|&(n, p)| -self.move_score_goal(n, p, c, goal));
-        v
+        let mut s: Vec<((u8, Option<u8>), i32)> =
+            v.into_iter().map(|(n, p)| ((n, p), self.move_score_goal(n, p, c, goal))).collect();
+        s.sort_by_key(|&(_, sc)| -sc);
+        s
     }
 
     /// First steps for the turn stream: each ordered first move, and -- when
@@ -262,15 +271,22 @@ impl Board {
     pub fn ordered_first_steps(&self, c: Color)
         -> Vec<(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)>
     {
-        let moves = self.ordered_first_moves(c);
+        self.ordered_first_steps_scored(c).into_iter().map(|(m, _)| m).collect()
+    }
+
+    /// `ordered_first_steps` with each step's ordering score (the move score,
+    /// plus the placement's score for a step with a Providence placement).
+    pub fn ordered_first_steps_scored(&self, c: Color)
+        -> Vec<((u8, Option<u8>, bool, Option<(u8, Option<u8>)>), i32)>
+    {
+        let moves = self.ordered_first_moves_scored(c);
         if self.bank[c.idx()] == 0 {
-            return moves.into_iter().map(|(n, p)| (n, p, self.is_blink_pub(n, c), None)).collect();
+            return moves.into_iter()
+                .map(|((n, p), s)| ((n, p, self.is_blink_pub(n, c), None), s)).collect();
         }
-        let goal = self.placement_goal(c);
         let mut v: Vec<(i32, usize, (u8, Option<u8>, bool, Option<(u8, Option<u8>)>))> = Vec::new();
-        for (i, (n, p)) in moves.into_iter().enumerate() {
+        for (i, ((n, p), s0)) in moves.into_iter().enumerate() {
             let blink = self.is_blink_pub(n, c);
-            let s0 = self.move_score_goal(n, p, c, goal);
             v.push((s0, i, (n, p, blink, None)));
             let mut b = *self;
             b.do_move_with_pub(n, p, c);
@@ -282,7 +298,7 @@ impl Board {
         }
         // Stable on the original move order for equal scores.
         v.sort_by_key(|&(s, i, _)| (-s, i));
-        v.into_iter().map(|(_, _, m)| m).collect()
+        v.into_iter().map(|(s, _, m)| (m, s)).collect()
     }
 
     /// Gust placements, best-first, WITHOUT materialising C(empties, displaced).
