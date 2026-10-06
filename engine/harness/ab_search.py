@@ -231,11 +231,33 @@ if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('openi
     sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
 # SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
 # (the seed is stepped deterministically until its draw does), so a knob that
-# acts in one spell's draws is measured where it acts.
+# acts in one spell's draws is measured where it acts. `legal_draw` draws the 39
+# core spells only, so for an EXPANSION id (39-44, Tectonic/Providence) the draw
+# comes from the 15-spell-per-role pool instead (core plus the two expansion
+# spells of each role, as selfplay_v2.py's all-45 draws), stepped until it holds
+# the spell; -1 means "any expansion spell". The GAME lines carry the draw, so
+# split_by_draw.py never has to reconstruct it.
 REQUIRE_SPELL = int(os.environ['SIGIL_REQUIRE_SPELL']) if os.environ.get('SIGIL_REQUIRE_SPELL') else None
+_CORE_POOLS = ([0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36],
+               [5, 6, 7, 8, 9, 16, 19, 22, 25, 28, 31, 34, 37],
+               [10, 11, 12, 13, 14, 17, 20, 23, 26, 29, 32, 35, 38])
+_EXPANSION_POOLS = ([39, 44], [40, 43], [41, 42])
+
+
+def _expansion_draw(seed, want):
+    import random
+    rng = random.Random(seed * 1_000_003 + 45)
+    while True:
+        d = []
+        for role in range(3):
+            d += rng.sample(_CORE_POOLS[role] + _EXPANSION_POOLS[role], 3)
+        if (want == -1 and any(x >= 39 for x in d)) or want in d:
+            return d
 
 
 def draw_for(seed):
+    if REQUIRE_SPELL is not None and (REQUIRE_SPELL < 0 or REQUIRE_SPELL >= 39):
+        return _expansion_draw(seed, REQUIRE_SPELL)
     d = se.Board.legal_draw(seed)
     if REQUIRE_SPELL is None:
         return d
@@ -315,7 +337,8 @@ if __name__ == "__main__":
             ma = statistics.mean(sc['arm']) if sc['arm'] else 0.0
             mb = statistics.mean(sc['base']) if sc['base'] else 0.0
             print(f"GAME seed={6_000_000+off+i} arm={arm} winner={w} plies={n} "
-                  f"arm_s={ma:.3f} base_s={mb:.3f}", flush=True)
+                  f"arm_s={ma:.3f} base_s={mb:.3f} "
+                  f"draw={','.join(map(str, draw_for(6_000_000 + off + i)))}", flush=True)
         if s.verdict != 'continue':
             break
     print(f"SHARD knob={knob} arm={arm_val} base={base_val} eval={ev} ms={ms_spec} "

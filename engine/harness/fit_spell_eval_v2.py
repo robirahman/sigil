@@ -1,6 +1,6 @@
 """Step 2b of the 2026-10 plan: refit the per-spell sigil table on the Step 3 data.
 
-    fit_spell_eval_v2.py <keep_frac> [--smoke] [--src gs://.../v2_2026-10-06] [--out FILE]
+    fit_spell_eval_v2.py <keep_frac> [--smoke] [--src gs://.../v2_2026-10-06] [--out FILE] [--engine DIR]
 
 Same model and method as `fit_spell_eval.py` (step 2), on the v2 self-play data
 (`selfplay_v2.py`, engine v23, depth-4 and depth-5 tfit scores) instead of the
@@ -354,6 +354,8 @@ def main():
     smoke = '--smoke' in a
     src = a[a.index('--src') + 1] if '--src' in a else 'gs://focus-surfer-494820-g0-sigil/data/s3/v2_2026-10-06'
     out = a[a.index('--out') + 1] if '--out' in a else '/opt/sigil/out/fit_spell_v2.txt'
+    if '--engine' in a:   # a directory holding a locally built sigil_engine.so
+        sys.path.insert(0, a[a.index('--engine') + 1])
     os.makedirs(os.path.dirname(out) or '.', exist_ok=True)
     workers = max(1, (os.cpu_count() or 2) - 1)
     tmp = tempfile.mkdtemp(prefix='s2b_')
