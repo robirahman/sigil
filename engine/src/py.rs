@@ -2185,6 +2185,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
     // hardcoded it, which is fine historically but would confound any future test.
+    m.add("SHIPPED_EVAL", crate::eval::SHIPPED_EVAL)?;
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
     // The shipped adaptive-widening point, exported for the same reason: a
     // harness that wants the shipped search must pass it, and every literal

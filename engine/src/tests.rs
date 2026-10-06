@@ -4316,3 +4316,9 @@ fn record_root_is_inert_deterministic_and_round_trips() {
     }
     assert!(checked >= 2);
 }
+
+#[test]
+fn shipped_eval_is_a_known_preset_and_named_in_eval_names() {
+    assert!(crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).is_ok());
+    assert!(crate::eval::EVAL_NAMES.contains(&crate::eval::SHIPPED_EVAL));
+}

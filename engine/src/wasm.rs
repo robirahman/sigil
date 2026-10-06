@@ -277,7 +277,7 @@ pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
         budget_ms = budget_ms.saturating_sub(used).max(500);
     }
     let mut s = Search::new(tt_bits.clamp(10, 22));
-    if let Err(e) = configure(&mut s, crate::search::DEFAULT_WIDTH_SCALE as u32, "tfit",
+    if let Err(e) = configure(&mut s, crate::search::DEFAULT_WIDTH_SCALE as u32, crate::eval::SHIPPED_EVAL,
                               crate::search::SHIPPED_ADAPTIVE.0, crate::search::SHIPPED_ADAPTIVE.1 as u32,
                               crate::search::SHIPPED_ADAPTIVE.2 as u32) {
         return err_json(&e);

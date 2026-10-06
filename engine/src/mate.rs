@@ -161,7 +161,7 @@ impl Solver {
     fn new(budget: u64, time_ms: u64) -> Self {
         let deadline = if time_ms > 0 { Some(crate::search::now_ms() + time_ms as f64) } else { None };
         let mut se = crate::search::Search::new(18);
-        se.weights = crate::eval::weights_by_name("tfit").unwrap_or_default();
+        se.weights = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap_or_default();
         se.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
         let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
         se.set_adaptive(p, e, h);

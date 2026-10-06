@@ -137,15 +137,13 @@ def main():
                          "the measured default: +47 Elo at 300 ms and +223 at 3 s "
                          "over the old value of 1, peaking at 4-6. It gives up "
                          "~2 plies of depth to do it")
-    ap.add_argument('--eval', default='tfit',
+    ap.add_argument('--eval', default=se.SHIPPED_EVAL,
                     choices=sorted(se.EVAL_NAMES),
                     help="leaf eval preset; enumerated from the engine, never "
-                         "restated here. 'tfit' beats 'material' by +54 Elo "
-                         "[+14,+94] over 300 DISTINCT games at 300 ms, and is "
-                         "ahead at 3 s on two independent 50-game samples (+85, "
-                         "+131). Longer time controls are NOT yet measured with "
-                         "independent seeds. Pass --eval material for the "
-                         "previous behaviour.")
+                         "restated here. Default is the engine's SHIPPED_EVAL "
+                         "(tfit_spell_v2 since v24: per-spell sigil terms, +50 "
+                         "Elo at 10 s over 'tfit', engine/reports/2026-10-step2.md). "
+                         "Pass --eval tfit for the previous behaviour.")
     ap.add_argument('--adaptive', default='2,6', dest='adaptive',
                     help="adaptive widening as EASY,HARD scales, or 'off'. The "
                          "default 2,6 spends a narrow budget on positions a "
