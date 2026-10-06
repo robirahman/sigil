@@ -140,9 +140,17 @@ def gather(prefix, frac, tmp, workers, max_files=None):
     with Pool(workers) as pool:
         for i in range(0, len(names), B):
             batch = names[i:i + B]
-            subprocess.run(['gcloud', 'storage', 'cp', '-q', '-I', tmp],
-                           input='\n'.join(batch), text=True, check=True,
-                           capture_output=True)
+            # One gcloud process manages ~3 small objects a second; run many.
+            P = 24
+            procs = [subprocess.Popen(['gcloud', 'storage', 'cp', '-q', '-I', tmp],
+                                      stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL, text=True)
+                     for _ in range(P)]
+            for j, pr in enumerate(procs):
+                pr.stdin.write('\n'.join(batch[j::P]))
+                pr.stdin.close()
+            for pr in procs:
+                pr.wait()
             paths = [os.path.join(tmp, os.path.basename(u)) for u in batch]
             for name, r in pool.imap_unordered(extract, paths, chunksize=8):
                 if r is None:
