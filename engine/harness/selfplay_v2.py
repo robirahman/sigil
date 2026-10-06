@@ -43,7 +43,7 @@ Human games holding Fissure, Rock Slide, Bulwark or a Providence spell are
 excluded: their rules changed on 2026-10-03, so the recorded lines encode the
 old ones. Fresh draws use the current rules.
 
-Output: one npz per CHUNK_GAMES games, `<out_dir>/v2_<off>_<chunk>.npz`, written
+Output: one npz per CHUNK_GAMES games, `<out_dir>/v2d<depth>_<off>_<chunk>.npz`, written
 atomically (temp + rename), so a shard killed by the watchdog or a Spot
 preemption loses at most one chunk, and the runner ships each as it lands.
 """
@@ -306,16 +306,16 @@ def main():
         if (g + 1) % CHUNK_GAMES == 0:
             npos += len(ch); ncand += len(ch.cand['score'])
             nx += sum(ch.cand['kind'])
-            ch.write(os.path.join(out_dir, f"v2_{off}_{chunk_i:04d}.npz"), meta)
+            ch.write(os.path.join(out_dir, f"v2d{depth}_{off}_{chunk_i:04d}.npz"), meta)
             chunk_i += 1; ch = Chunk()
             el = time.time() - t0
             print(f"  game {g+1}: {npos} positions, {ncand} cands ({nx} exploration), "
                   f"{el:.0f}s, {npos / el * 3600:.0f} pos/h", flush=True)
     if len(ch):
         npos += len(ch); ncand += len(ch.cand['score']); nx += sum(ch.cand['kind'])
-        ch.write(os.path.join(out_dir, f"v2_{off}_{chunk_i:04d}.npz"), meta)
+        ch.write(os.path.join(out_dir, f"v2d{depth}_{off}_{chunk_i:04d}.npz"), meta)
     el = time.time() - t0
-    print(f"WROTE {out_dir}/v2_{off}_*.npz: {npos} positions, {ncand} candidates "
+    print(f"WROTE {out_dir}/v2d{depth}_{off}_*.npz: {npos} positions, {ncand} candidates "
           f"({nx} exploration), games fresh/comp/human {kinds}, {unfinished} unfinished, "
           f"{el:.0f}s, {npos / max(el, 1e-9) * 3600:.0f} pos/h", flush=True)
 
