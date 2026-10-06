@@ -34,7 +34,8 @@ Config spec: `name:key=val;key=val`. Keys:
                           call=set_dash_gen(2,16,2); repeatable (separate with ';')
   module=<path.so>        load sigil_engine from this extension module instead (engine-
                           version A/Bs, as ab_version.py's $SIGIL_BASE_MODULE)
-  stream=<s>              which generator the COVERAGE metric ranks in: `shipped` (default,
+  stream=<s>              which generator the COVERAGE metric ranks in (default `policy` when a
+                          call=set_policy(True,...) is given, else `shipped`): `shipped` (
                           `rank_of_result`: the ordered stream at its default cast window 24),
                           `shipped16` (the same stream at the search's own budgets, window 16,
                           keep window 2) or `policy` (the Step 4 learned-policy stream at the
@@ -77,6 +78,12 @@ def parse_config(spec):
             cfg[k] = v
         else:
             raise SystemExit(f'unknown config key {k!r} in {spec!r}')
+    # A config whose SEARCH uses the policy stream gets its COVERAGE measured in
+    # that stream too, unless it names one. The first Step 4 sees run set only
+    # call=set_policy(...), so its coverage lines silently re-measured the shipped
+    # stream and read identical to the baseline.
+    if 'stream' not in cfg and any(fn == 'set_policy' and args and args[0] for fn, args in cfg['calls']):
+        cfg['stream'] = 'policy'
     return cfg
 
 
