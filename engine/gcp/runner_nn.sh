@@ -15,7 +15,8 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1"; }
 RUN=$(md run-id); BRANCH=$(md branch); MAXH=$(md max-hours); DATA=$(md data)
 PREP=$(md prep); LAMS=$(md lams); EPOCHS=$(md epochs)
-: "${MAXH:=4}" "${LAMS:=0 0.25 0.5 0.75 1}" "${EPOCHS:=6}"
+DEVICE=$(md device || true); SMOKE=$(md smoke || true)
+: "${MAXH:=4}" "${LAMS:=0 0.25 0.5 0.75 1}" "${EPOCHS:=6}" "${DEVICE:=cuda}" "${SMOKE:=0}"
 ( sleep $((MAXH * 3600)); echo "WATCHDOG"; shutdown -h now ) &
 WATCHDOG=$!
 DEST=gs://$BUCKET/runs/$RUN
@@ -38,12 +39,47 @@ for p in /opt/conda/bin/python /usr/bin/python3 /opt/python/bin/python3; do
   [ -x "$p" ] && "$p" -c 'import torch' 2>/dev/null && { PY=$p; break; }
 done
 [ -n "$PY" ] || fail "no python with torch"
-$PY -m venv --system-site-packages $WORK/venv || fail venv
+# The Deep Learning VM's python carries torch but not ensurepip (no python3.X-venv),
+# so a bare `python -m venv` fails there: the first trainer died on exactly that.
+mkvenv() {
+  rm -rf $WORK/venv
+  $PY -m venv --system-site-packages $WORK/venv 2>&1 | tail -2
+  $WORK/venv/bin/python -m pip --version >/dev/null 2>&1 \
+    && $WORK/venv/bin/python -c 'import torch' 2>/dev/null
+}
+if ! mkvenv; then
+  PYV=$($PY -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+  echo "venv failed; installing python3-venv python$PYV-venv"
+  apt-get -qq install -y python3-venv "python$PYV-venv" >/dev/null 2>&1
+  mkvenv || fail venv
+fi
+echo "venv ok ($PY, $($WORK/venv/bin/python -c 'import torch; print("torch", torch.__version__)'))"
 $WORK/venv/bin/pip -q install maturin numpy scipy 2>&1 | tail -1
 cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -1
 $WORK/venv/bin/python -c 'import sigil_engine, torch; print("engine ok; cuda", torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else "")' \
   || fail "engine/torch import"
+if [ "$DEVICE" = cuda ]; then
+  $WORK/venv/bin/python -c 'import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)' \
+    || fail "device=cuda but torch sees no GPU"
+fi
 NN="$WORK/venv/bin/python $WORK/repo/engine/harness/nn_eval.py"
+
+if [ "$SMOKE" = 1 ]; then
+  # Bootstrap smoke (cheap CPU VM, same image): everything up to one tiny training
+  # run on a handful of chunks, then COMPLETE. Never writes the shared PREP path.
+  mkdir -p $WORK/data
+  gcloud storage ls "$DATA/" | head -8 > $WORK/smoke_list.txt
+  gcloud storage cp -q $(cat $WORK/smoke_list.txt) $WORK/data/ || fail "smoke data"
+  $NN prep $WORK/data $WORK/prep.npz --workers $(nproc) --evals tfit,tfit_spell,tfit_spell2 || fail "smoke prep"
+  $NN train $WORK/prep.npz $WORK/out/smoke --lam 0.5 --epochs 1 --split game --device "$DEVICE" \
+    --batch 256 > $WORK/out/smoke.log 2>&1 || fail "smoke train"
+  tail -1 $WORK/out/smoke.log
+  gcloud storage rsync -q -r $WORK/out $DEST/out
+  echo "SMOKE OK $(date -u +%FT%TZ)" > $WORK/COMPLETE
+  gcloud storage cp -q $WORK/COMPLETE $DEST/COMPLETE
+  gcloud storage cp -q /var/log/sigil-nn.log $DEST/runner.log
+  shutdown -h now; exit 0
+fi
 
 if gcloud storage cp -q "$PREP" $WORK/prep.npz 2>/dev/null; then
   echo "reusing prepped data $PREP"
@@ -58,7 +94,7 @@ else
 fi
 
 for L in $LAMS; do
-  $NN train $WORK/prep.npz $WORK/out/game_l$L --lam $L --epochs $EPOCHS --split game \
+  $NN train $WORK/prep.npz $WORK/out/game_l$L --lam $L --epochs $EPOCHS --split game --device "$DEVICE" \
     > $WORK/out/game_l$L.log 2>&1 || echo "train lam=$L failed"
   tail -1 $WORK/out/game_l$L.log
 done
@@ -72,12 +108,12 @@ EOF
 )
 echo "best lambda on held-out outcome log-loss: $BEST" | tee $WORK/out/BEST.txt
 for F in fold0 fold1 fold2; do
-  $NN train $WORK/prep.npz $WORK/out/${F}_l$BEST --lam $BEST --epochs $EPOCHS --split $F \
+  $NN train $WORK/prep.npz $WORK/out/${F}_l$BEST --lam $BEST --epochs $EPOCHS --split $F --device "$DEVICE" \
     > $WORK/out/${F}.log 2>&1 || echo "train $F failed"
   tail -1 $WORK/out/${F}.log
 done
 $NN train $WORK/prep.npz $WORK/out/game_l${BEST}_h256 --lam $BEST --epochs $EPOCHS --split game \
-  --hidden 256 > $WORK/out/game_h256.log 2>&1 || echo "h256 failed"
+  --device "$DEVICE" --hidden 256 > $WORK/out/game_h256.log 2>&1 || echo "h256 failed"
 tail -1 $WORK/out/game_h256.log
 
 kill $UPLOADER 2>/dev/null
