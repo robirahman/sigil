@@ -453,7 +453,7 @@ impl PyBoard {
                         force_hints=None, root_resort=None, aspiration_steps=None,
                         adopt_partial=None, elastic=None, pvs=None, lmr=None,
                         use_history=None, exact_clock=None, nmp=None, lmr_quiet=None,
-                        tact_ext=None, singular=None, threads=None))]
+                        tact_ext=None, singular=None, threads=None, smp_mode=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -476,8 +476,9 @@ impl PyBoard {
                  pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>,
                  exact_clock: Option<bool>, nmp: Option<(i32, u8)>, lmr_quiet: Option<usize>,
                  tact_ext: Option<(u8, i32)>, singular: Option<i32>,
-                 // Lazy SMP thread count; None leaves the engine default (1).
-                 threads: Option<usize>)
+                 // Search threads; None leaves the engine default (1). `smp_mode`
+                 // 0 = Lazy SMP, 1 = parallel root (Search::set_smp_mode).
+                 threads: Option<usize>, smp_mode: Option<u8>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -491,6 +492,7 @@ impl PyBoard {
                          elastic, pvs, lmr, use_history, exact_clock, nmp, lmr_quiet,
                          tact_ext, singular)?;
         if let Some(n) = threads { s.set_threads(n); }
+        if let Some(m) = smp_mode { s.set_smp_mode(m); }
         for k in history { s.add_history(k); }
         let t = Instant::now();
         let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);

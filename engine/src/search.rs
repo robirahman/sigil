@@ -425,6 +425,8 @@ pub struct SearchStats {
     pub nodes: u64,
     /// Lazy SMP: nodes of every thread (main + helpers); 0 when single-threaded.
     pub smp_nodes: u64,
+    /// Lazy SMP: a helper that completed a deeper iteration supplied the move.
+    pub smp_helper_won: bool,
     /// Wall time this search used, ms (for matched-average-time gating).
     pub elapsed_ms: f64,
     /// Elastic: the deadline was extended for instability.
@@ -509,6 +511,13 @@ pub struct Search {
     /// Browser root split `(part, parts)`: search only the root turns with
     /// `root_part(turn, parts) == part`. `(0, 1)` = every turn (the default).
     root_split: (u32, u32),
+    /// Lazy SMP best-thread vote; see `set_smp_vote`.
+    smp_vote: bool,
+    /// Multi-thread scheme when `threads > 1`: 0 = Lazy SMP (independent helpers
+    /// on a shared table), 1 = parallel root (`root_parallel`). See `set_smp_mode`.
+    smp_mode: u8,
+    /// The parallel root's helpers, present only inside a `smp_mode` 1 search.
+    smp_pool: Option<Vec<Search>>,
     mask: usize,
     /// Search generation, bumped per `go`; see `TtEntry::age`.
     age: u8,
@@ -715,6 +724,9 @@ impl Search {
             helper_id: 0,
             stop: None,
             root_split: (0, 1),
+            smp_vote: true,
+            smp_mode: 0,
+            smp_pool: None,
             mask: n - 1,
             age: 0,
             killers: [[None; 2]; MAX_PLY],
@@ -1045,15 +1057,41 @@ impl Search {
 
     /// Lazy SMP (`threads > 1`, native only). `threads - 1` helpers, each a clone
     /// of this search sharing its table, search the same root with the same clock;
-    /// this thread searches exactly as it would alone and its move is the answer.
-    /// The helpers' only effect is the entries they leave in the shared table.
-    /// When this thread finishes it raises `stop` and the helpers unwind within 64
-    /// nodes. `stats.nodes` is this thread's; `stats.smp_nodes` is all threads'.
+    /// this thread searches exactly as it would alone. The helpers leave entries in
+    /// the shared table, and (`smp_vote`, default on) a helper that completed a
+    /// deeper iteration than this thread supplies the move. When this thread
+    /// finishes it raises `stop` and the helpers unwind within 64 nodes.
+    /// `stats.nodes` is this thread's; `stats.smp_nodes` is all threads'.
+    ///
+    /// `smp_mode` 1 (parallel root) instead keeps the helpers in a pool that
+    /// `root_search` shares each iteration's root turns with: this thread searches
+    /// the first turn, then every thread takes turns from a shared counter.
     #[cfg(not(target_arch = "wasm32"))]
     fn go_smp(&mut self, root: &Board, c: Color, max_depth: i32, time_ms: u64,
               mut progress: Option<&mut dyn FnMut(i32, i32, u64)>, t_start: f64)
         -> (Option<Turn>, i32, SearchStats)
     {
+        if self.smp_mode == 1 {
+            let pool: Vec<Search> = (1..self.threads).map(|k| {
+                let mut h = self.clone();
+                h.helper_id = k;
+                h.threads = 1;
+                h.root_probe = None;
+                h.stats = SearchStats::default();
+                h
+            }).collect();
+            self.smp_pool = Some(pool);
+            let (best, best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
+            if self.exact_clock {
+                if let (Some(d), Some(t)) = (self.deadline, best) {
+                    if now_ms() < d { self.spend_remaining(root, c, &t, d); }
+                }
+            }
+            let pool = self.smp_pool.take().unwrap_or_default();
+            self.stats.smp_nodes = self.stats.nodes + pool.iter().map(|h| h.stats.nodes).sum::<u64>();
+            self.stats.elapsed_ms = now_ms() - t_start;
+            return (best, best_score, self.stats);
+        }
         let stop = Arc::new(AtomicBool::new(false));
         let mut helpers: Vec<Search> = (1..self.threads).map(|k| {
             let mut h = self.clone();
@@ -1069,13 +1107,14 @@ impl Search {
         for h in helpers.iter_mut() { h.age = h.age.wrapping_sub(1); }
         let deadline = self.deadline;
         let switches = ThreadSwitches::capture();
-        let (best, best_score, helper_nodes) = std::thread::scope(|sc| {
+        let best_thread = self.smp_vote;
+        let (mut best, mut best_score, helper_nodes, deeper) = std::thread::scope(|sc| {
             let handles: Vec<_> = helpers.iter_mut().map(|h| {
                 sc.spawn(move || {
                     switches.apply();
                     let ms = match deadline { Some(d) => (d - now_ms()).max(1.0) as u64, None => 0 };
-                    let _ = h.go(root, c, max_depth, ms);
-                    h.stats.nodes
+                    let (b, s, st) = h.go(root, c, max_depth, ms);
+                    (b, s, st)
                 })
             }).collect();
             let (best, best_score) = self.deepen(root, c, max_depth, time_ms, &mut progress);
@@ -1085,13 +1124,110 @@ impl Search {
                 }
             }
             stop.store(true, Relaxed);
-            let n: u64 = handles.into_iter().map(|h| h.join().unwrap_or(0)).sum();
-            (best, best_score, n)
+            let mut n = 0u64;
+            // Best thread: a helper that COMPLETED a deeper iteration than this
+            // thread (odd helpers skip depths, so they often do) answers instead.
+            let mut deeper: Option<(Turn, i32, SearchStats)> = None;
+            for h in handles {
+                if let Ok((b, s, st)) = h.join() {
+                    n += st.nodes;
+                    let bar = deeper.as_ref().map_or(self.stats.depth_completed, |d| d.2.depth_completed);
+                    if let Some(t) = b {
+                        if best_thread && st.depth_completed > bar { deeper = Some((t, s, st)); }
+                    }
+                }
+            }
+            (best, best_score, n, deeper)
         });
+        if let Some((t, s, st)) = deeper {
+            best = Some(t);
+            best_score = s;
+            self.stats.depth_completed = st.depth_completed;
+            self.stats.mate_plies = st.mate_plies;
+            self.stats.mate_proven = st.mate_proven;
+            self.stats.smp_helper_won = true;
+        }
         self.stats.smp_nodes = self.stats.nodes + helper_nodes;
         self.stats.elapsed_ms = now_ms() - t_start;
         (best, best_score, self.stats)
     }
+
+    /// Parallel root (`smp_mode` 1): search `rest` (the root turns after the first)
+    /// on this thread and every pool helper, each taking the next unsearched turn
+    /// from a shared counter and searching it against the best alpha found so far.
+    /// Returns `(index into rest, score, completed)` sorted by index; marks the
+    /// iteration timed out when the clock cut it short.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[allow(clippy::too_many_arguments)]
+    fn root_parallel(&mut self, pool: &mut [Search], b: &Board, c: Color, depth: i32,
+                     alpha: i32, beta: i32, rest: &[Turn]) -> Vec<(usize, i32, bool)>
+    {
+        use std::sync::atomic::{AtomicI32, AtomicUsize};
+        use std::sync::Mutex;
+        let next = AtomicUsize::new(0);
+        let shared_alpha = AtomicI32::new(alpha);
+        let cut = AtomicBool::new(false);
+        let out: Mutex<Vec<(usize, i32, bool)>> = Mutex::new(Vec::with_capacity(rest.len()));
+        let switches = ThreadSwitches::capture();
+        for h in pool.iter_mut() {
+            h.iter_depth = depth;
+            h.deadline = self.deadline;
+            h.ignore_decisive = self.ignore_decisive;
+            h.age = self.age;
+            h.path.clone_from(&self.path);
+            h.stats.timed_out = false;
+        }
+        let work = |s: &mut Search| {
+            loop {
+                if cut.load(Relaxed) { break; }
+                let j = next.fetch_add(1, Relaxed);
+                if j >= rest.len() { break; }
+                if s.deadline.is_some_and(|d| now_ms() >= d) {
+                    s.stats.timed_out = true;
+                    break;
+                }
+                let mut child = *b;
+                child.apply_turn(&rest[j], c);
+                child.turn_counter += 1;
+                child.to_move = c.other();
+                let key = crate::zobrist::ZOBRIST.key_js(&child);
+                let mut rep = false;
+                let a = shared_alpha.load(Relaxed);
+                s.stats.timed_out = false;
+                let v = -s.negamax(&child, c.other(), depth - 1, -beta, -a, 1, key, &mut rep);
+                let completed = !s.stats.timed_out;
+                if completed {
+                    shared_alpha.fetch_max(v, Relaxed);
+                    if v >= beta { cut.store(true, Relaxed); }
+                }
+                out.lock().unwrap().push((j, v, completed));
+                if !completed { break; }
+            }
+        };
+        let main_timed_out = self.stats.timed_out;
+        std::thread::scope(|sc| {
+            for h in pool.iter_mut() {
+                let work = &work;
+                sc.spawn(move || { switches.apply(); work(h); });
+            }
+            work(self);
+        });
+        // `work` leaves this thread's flag describing its last item only; the
+        // merge in `root_search` decides from the results.
+        self.stats.timed_out = main_timed_out;
+        let mut res = out.into_inner().unwrap();
+        res.sort_unstable_by_key(|r| r.0);
+        if !cut.load(Relaxed) && res.len() < rest.len() { self.stats.timed_out = true; }
+        res
+    }
+
+    /// Lazy SMP best-thread vote (default on): take a helper's move when it
+    /// completed a deeper iteration than the main thread. Off = the main
+    /// thread always answers and helpers only fill the table.
+    pub fn set_smp_vote(&mut self, on: bool) { self.smp_vote = on; }
+
+    /// Multi-thread scheme for `threads > 1`: 0 = Lazy SMP, 1 = parallel root.
+    pub fn set_smp_mode(&mut self, mode: u8) { self.smp_mode = mode.min(1); }
 
 }
 
@@ -1450,8 +1586,13 @@ impl Search {
         let mut seed_completed = false;
         let mut completed_beat_seed = false;
         let mut i = 0usize;
-        for t in turns {
-            if self.out_of_time() { self.stats.timed_out = true; break; }
+        // Parallel root (`smp_mode` 1): this thread searches the first turn alone,
+        // which sets alpha; the rest are shared out below. Without a pool every
+        // turn is searched here, exactly as before.
+        let seq_n = if self.smp_pool.is_some() { 1.min(n_root) } else { n_root };
+        let mut stopped = false;
+        for &t in turns[..seq_n].iter() {
+            if self.out_of_time() { self.stats.timed_out = true; stopped = true; break; }
             let mut child = *b;
             child.apply_turn(&t, c);
             child.turn_counter += 1;
@@ -1481,8 +1622,34 @@ impl Search {
                 best_local = Some(t);
                 if v > alpha { alpha = v; }
             }
-            if alpha >= beta { self.stats.cutoffs += 1; break; }
+            if alpha >= beta { self.stats.cutoffs += 1; stopped = true; break; }
+            if !completed { stopped = true; }
             i += 1;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if !stopped && seq_n < n_root {
+            if let Some(mut pool) = self.smp_pool.take() {
+                let results = self.root_parallel(&mut pool, b, c, depth, alpha, beta, &turns[seq_n..]);
+                self.smp_pool = Some(pool);
+                // Merge in list order with the sequential loop's rules. A turn
+                // searched against a later (higher) alpha only ever fails low, which
+                // the sequential loop would also have discarded.
+                for (j, v, completed) in results {
+                    let t = turns[seq_n + j];
+                    if !completed { self.stats.timed_out = true; }
+                    if completed && self.root_resort { self.root_scores_out.push((t, v)); }
+                    if v > best_val && (completed || !self.adopt_partial) {
+                        if completed && seed_completed && !same_turn(Some(t), seed)
+                           && same_turn(best_local, seed) && seed.is_some() && v > alpha {
+                            completed_beat_seed = true;
+                        }
+                        best_val = v;
+                        best_local = Some(t);
+                        if v > alpha { alpha = v; }
+                    }
+                    if alpha >= beta { self.stats.cutoffs += 1; break; }
+                }
+            }
         }
         // Only hand back a move if this call actually finished; otherwise the
         // caller keeps the previous iteration's fully-searched choice -- unless
@@ -2215,11 +2382,12 @@ mod smp_tests {
 
     #[test]
     fn lazy_smp_finishes_and_returns_a_legal_turn() {
-        for b in boards(4) {
+        for (k, b) in boards(8).into_iter().enumerate() {
             let c = b.to_move;
             // Clockless: every thread stops at max_depth or when the main thread ends.
             let mut s = shipped(16);
             s.set_threads(4);
+            s.set_smp_mode((k % 2) as u8);   // both schemes
             let (best, _, st) = s.go(&b, c, 3, 0);
             let best = best.expect("a move");
             assert!(b.first_action_is_legal(best.slice()[0], c), "SMP move must be legal");
@@ -2228,6 +2396,7 @@ mod smp_tests {
             // Timed: returns close to the deadline.
             let mut s = shipped(16);
             s.set_threads(3);
+            s.set_smp_mode((k % 2) as u8);
             let t0 = now_ms();
             let (best, _, _) = s.go(&b, c, 64, 150);
             assert!(now_ms() - t0 < 1500.0, "helpers must stop with the main thread");

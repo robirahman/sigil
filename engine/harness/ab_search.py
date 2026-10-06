@@ -101,8 +101,9 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          # speed = 1/0: the tree-identical node-rate switch (turn_iter::set_speed_v1).
          # lead_min = skip the stone-lead pre-pass below this many plies left (2 = shipped since v18, 0 = v17).
          'outcome_sel', 'speed', 'lead_min',
-         # threads = Lazy SMP thread count (2026-10 step 6), base 1. Give each shard
-         # as many vCPUs as its arm's threads: WORKERS = vCPUs // threads.
+         # threads = search threads*10 + mode (2026-10 step 6; mode 0 = Lazy SMP,
+         # 1 = parallel root), base 10 = one thread. Give each shard as many vCPUs as
+         # its arm's threads: WORKERS = vCPUs // threads.
          'threads')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
@@ -204,8 +205,9 @@ def play(b, ms, ev, hist, knob, val):
         se.set_speed_v1(bool(val))
     if knob == 'lead_min':
         se.set_lead_min_remaining(val)
-    if knob == 'threads' and val > 1:
-        extra['threads'] = val
+    if knob == 'threads' and val // 10 > 1:
+        extra['threads'] = val // 10
+        extra['smp_mode'] = val % 10
     if knob == 'key_dash_v2':
         # val = moves*100 + combos*10 + extra: a wider key-dash scan (8 sacrifice
         # stones) feeding the additive path with reasons CRUSH|SPELL_CRUSH|FILLS.
