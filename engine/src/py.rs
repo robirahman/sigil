@@ -1024,6 +1024,8 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 ///   defaults; a harness that wants the shipped search passes
 ///   `se.DEFAULT_WIDTH_SCALE` / `se.SHIPPED_ADAPTIVE`.
 /// * `time_ms=0` = untimed, deepen to exactly `max_depth`.
+/// * `node_limit=N` stops the search at N nodes and keeps the last COMPLETED
+///   depth: a deterministic, machine-independent budget (`bench_suites.py`).
 /// * A fresh table per call, so results do not depend on the walk order.
 /// * A finished position is NOT searched (`over=True`): a terminal root would
 ///   score every child as a mate and report "win in 1".
@@ -1036,12 +1038,12 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 #[pyfunction]
 #[pyo3(signature = (sfn, eval_name, max_depth=6, time_ms=0, tt_bits=20,
                     history_sfns=vec![], width_scale=None, adaptive=None, width_shape=None,
-                    probe_sfn=None))]
+                    probe_sfn=None, node_limit=None))]
 #[allow(clippy::too_many_arguments)]
 fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, time_ms: u64,
                 tt_bits: u32, history_sfns: Vec<String>, width_scale: Option<usize>,
                 adaptive: Option<(f32, usize, usize)>, width_shape: Option<usize>,
-                probe_sfn: Option<String>)
+                probe_sfn: Option<String>, node_limit: Option<u64>)
     -> PyResult<Bound<'py, pyo3::types::PyDict>>
 {
     use std::time::Instant;
@@ -1070,6 +1072,7 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
     s.weights = w;
     if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
     if let Some(w) = width_shape { s.set_width_shape(w); }
+    s.node_limit = node_limit;
     // Board + mana key, as `rank_of_result`: the recorded after-position's
     // turn number and side token differ from a root child's.
     s.root_probe = probe_sfn.as_deref().map(|ps| {
