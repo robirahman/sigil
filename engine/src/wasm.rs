@@ -318,6 +318,12 @@ pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
 /// Game clock allocation, see `search::move_budget_ms`. Exported for the
 /// smoke test's parity check against rust-ai.js's mirror and for callers that
 /// prefer the engine's number.
+/// Step 4 learned generator policy (`policy.rs`): on at nodes whose width budget
+/// is at least `min_width`. Off by default; not used by the site. Lets
+/// `tools/wasm-smoke.js` (SIGIL_SMOKE_POLICY) replay-verify policy-ordered play.
+#[wasm_bindgen]
+pub fn set_policy(on: bool, min_width: u32) { crate::policy::set_policy(on, min_width as usize); }
+
 #[wasm_bindgen]
 pub fn move_budget_ms(remaining_ms: u32, inc_ms: u32, my_moves_played: u32) -> u32 {
     crate::search::move_budget_ms(remaining_ms as u64, inc_ms as u64, my_moves_played) as u32

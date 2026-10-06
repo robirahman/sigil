@@ -48,6 +48,11 @@ async function driver() {
 	const fs = require('fs');
 	const path = require('path');
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
+	// SIGIL_SMOKE_POLICY=<min_width> replays with the Step 4 generator policy on.
+	if (process.env.SIGIL_SMOKE_POLICY) {
+		wasm_bindgen.set_policy(true, parseInt(process.env.SIGIL_SMOKE_POLICY, 10));
+		console.log('generator policy ON, min_width ' + process.env.SIGIL_SMOKE_POLICY);
+	}
 	const info = JSON.parse(wasm_bindgen.engine_info());
 	if (info.nodes !== 39) throw new Error('engine_info nodes != 39');
 	// Game clock: the JS allocation must equal the engine's for every input.
