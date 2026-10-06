@@ -1,13 +1,13 @@
 //! Iterative-deepening alpha-beta with a Zobrist transposition table, killer
 //! moves and aspiration windows.
 //!
-//! EVALUATION is pure material, deliberately. `ai/ARENA_POSITIONAL_WEIGHTS.md`
-//! reports three 200-game campaigns in which no positional weight set beat the
-//! stone-count baseline (47.0%, 37.0%, 44.5% — the middle one significantly
-//! WORSE), and `CAVEMAN_EVAL_WEIGHTS` ships as zeros. Their reading was that a
-//! deep material search already prices in what those static terms describe, so
-//! depth is the thing to buy first. Blue's permanent +1 counter token is included,
-//! which is what makes the ±3 lead asymmetric.
+//! EVALUATION is chosen by `Search::weights`; the shipped eval is `tfit` (texel-fitted
+//! magnitudes held under the 96-centistone positional budget, see `eval.rs` and
+//! FINDINGS "The eval's MAGNITUDES were the problem"). The engine started on pure
+//! material because the 2026-08 JS campaign (`ai/ARENA_POSITIONAL_WEIGHTS.md`) found no
+//! hand-chosen positional set that beat it; that verdict did not survive fitted
+//! magnitudes. Blue's permanent +1 counter token is included, which is what makes
+//! the ±3 lead asymmetric.
 //!
 //! REPETITION is threefold = blue wins (Robi's ruling). The path history is
 //! threaded down the search and undone on the way back up, so a repetition is

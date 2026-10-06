@@ -1,5 +1,9 @@
 # Headless Caveman / Prune arena
 
+> **Historical.** This arena drives the retired JS Caveman engine. It is kept for
+> comparisons against the old engine only; current engine arenas are
+> `engine/harness/ab_search.py` on the Cloud fleet (`engine/gcp/`).
+
 Runs the **same** browser engine (`docs/static/scripts/engine/`) under Node,
 parallelized across CPU threads, so a batch of AI-vs-AI games finishes ~N-cores
 faster than the one-tab browser arena and each move reaches the same depth (no

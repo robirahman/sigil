@@ -1,8 +1,8 @@
 """Filters applied at training data load time.
 
-The cutoff date for the Fireblast rule change is 2026-05-07. See
-TRAINING.md ("Rule changes and training-data hygiene") for the full
-explanation: any self-play / human game whose board includes Fireblast
+The cutoff date for the Fireblast rule change is 2026-05-07 (the
+explanation used to live in the since-deleted TRAINING.md; see git
+history and 2026-10-training-plan.md): any self-play / human game whose board includes Fireblast
 and was played before that date encodes the OLD (un-nerfed) value of
 the spell, and training the network on those positions teaches it the
 wrong cost-benefit for casting Fireblast.

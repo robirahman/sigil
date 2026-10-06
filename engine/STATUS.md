@@ -365,7 +365,9 @@ unreachable), and seven pyo3 signatures no longer restate `width_scale`.
 
 ## Where the next Elo is not
 
-Closed by measurement, do not re-open without new evidence: a learned leaf
+Closed by measurement, do not re-open without new evidence (**except the learned
+leaf eval, which `2026-10-training-plan.md` reopens:** the test behind the verdict
+below was spell-blind and fit noisy game outcomes, see that plan's §2): a learned leaf
 eval (GBM extracts nothing beyond linear over 8.2M on-policy positions,
 ceiling ~+15-25 Elo before cost), a wider linear eval (`full_features` is
 9-12% of a node against a 5% gate), retuning adaptive widening (the shipped
@@ -430,7 +432,7 @@ own slot, and the soft-move avoidance mask is the casting sigil.)
 
 Harvest / Gather / Seal_of_Autumn are excluded from that sweep because they are
 **absent from simboard.py's `CORE_SPELLS` entirely** — confirmed by KeyError, matching
-`ai/RETRAINING_FISSURE.md`. They have no Python reference and are covered instead by
+the since-deleted `ai/RETRAINING_FISSURE.md` (git history). They have no Python reference and are covered instead by
 unit tests written from the live JS spec.
 
 ## Compound turns, openings and full enumeration: DONE

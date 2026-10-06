@@ -1,11 +1,14 @@
 # Sigil Online
 
-Sigil is an abstract two-player strategy game. The repo hosts two builds:
+Sigil is an abstract two-player strategy game. The repo's main parts:
 
-- **`docs/` — the static GitHub Pages build** that's deployed to the live site. The board, AI engine ("Caveman" minimax), and Firebase-backed online multiplayer all run in the browser. This is what `gh-pages-static` deploys.
-- **Root Flask app (`app.py`, `game.py`, `simboard.py`, `ai/…`)** — the legacy server stack used for local development, AI training, and offline tooling.
+- **`docs/` — the static GitHub Pages build** that's deployed to the live site. The board, the AI and Firebase-backed online multiplayer all run in the browser. Every vs-AI tier is the Rust engine compiled to WebAssembly (`docs/static/wasm/`); the JS "Caveman" tiers are retired.
+- **`engine/` — the Rust engine** (rules kernel, turn enumerator, alpha-beta search), its test and arena harnesses, and the Google Cloud fleet scripts. Start with `engine/README.md`; `engine/STATUS.md` is the current state and `engine/FINDINGS.md` the experiment log.
+- **Root Flask app (`app.py`, `game.py`, `simboard.py`, `ai/…`)** — the legacy Python stack from before the Rust engine. `simboard.py` and `notation.py` remain the reference implementations for the engine's parity harnesses; the Python AI in `ai/` (SigilNet / MCTS / AlphaZero self-play) is historical and is not what the site plays.
 
 To work on the static build, serve `docs/` over any static file server (e.g. `python3 -m http.server -d docs 8080`) and open `http://localhost:8080/`.
+
+Engine strength work: the current plan is [`2026-10-training-plan.md`](2026-10-training-plan.md).
 
 ## What's New (2026-10-05)
 
@@ -53,17 +56,11 @@ To work on the static build, serve `docs/` over any static file server (e.g. `py
 - **Mana auto-fill.** Casting a spell with mana ≥ empty spell nodes no longer prompts you to click each stone; it fills them all at once.
 - **AI think report (optional).** New checkbox on `account.html`: when on, each AI move appends `"Red AI: depth N, X.Xs, M nodes"` to the game log. Persisted on the user profile.
 
-## How to run Sigil Online locally:
+## How to run Sigil Online locally
 
-1. Install python3 and pip3 (the standard python3 package manager) on your machine. They may already be there; try running `which pip3`, if it returns anything then you already have python3 and pip3. If not, `brew install python3` will install both python3 and pip3 using Homebrew on Mac. On Linux, `apt install python3-pip python3-dev build-essential libssl-dev libffi-dev python3-setuptools` should do it.
-
-2. Clone this Github repo and `cd` into the top-level directory (where the `requirements.txt` file is).
-
-3. Run `pip3 install -r requirements.txt`. This will install all the necessary python3 packages for running Sigil Online locally.
-
-4. From the same directory, run `flask run`. This will launch a lightweight development version of the full Sigil Online server. It should be running at `http://127.0.0.1:5000/`.
-
-5. Visit the above URL in a web browser.
+- **The site:** `python3 -m http.server -d docs 8080`, then open `http://localhost:8080/`. The wasm engine runs in the page, so no build step is needed.
+- **The native Rust engine behind the real UI:** see "Playing it in the real web UI" in `engine/README.md` (`engine/server/serve.py`, `game.html?ai=rust_native`).
+- **The legacy Flask server** (`flask run` after `pip install -r requirements.txt`) is not maintained: its AI is the pre-Rust Python stack; don't use it to judge the AI.
 
 ## Installing front-end dependencies
 
