@@ -33,7 +33,7 @@ MERGE_OFF = 1 << 62
 # and a harness that hardcoded 1 would silently test every other knob under the old,
 # far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
 BASE_WS = se.DEFAULT_WIDTH_SCALE
-KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
+KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
          'rank_oversample', 'width_shape',
          # §1.2 booleans: arm value 1 = on, 0 = off (engine default).
@@ -201,6 +201,16 @@ def play(b, ms, ev, hist, knob, val):
         se.set_speed_v1(bool(val))
     if knob == 'lead_min':
         se.set_lead_min_remaining(val)
+    if knob == 'policy':
+        # Step 4 learned generator policy (engine/src/policy.rs), BOTH arms at the
+        # SHIPPED adaptive widening (0.10, 2, 6) unless the arm overrides it.
+        # val = easy*10^7 + hard*10^6 + penalty*1000 + min_width; 0 = shipped
+        # engine (policy off). penalty in 1/256 nat; easy/hard 0 = shipped (2, 6).
+        se.set_policy(bool(val), val % 1000)
+        se.set_policy_cost((val // 1000) % 1000, 1 << 30)
+        e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
+        sp = tuple(se.SHIPPED_ADAPTIVE)
+        adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
     if knob == 'key_dash_v2':
         # val = moves*100 + combos*10 + extra: a wider key-dash scan (8 sacrifice
         # stones) feeding the additive path with reasons CRUSH|SPELL_CRUSH|FILLS.
