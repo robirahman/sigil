@@ -384,9 +384,25 @@ pub fn cont_opts(bm: &Board, c: Color, ri: &RootInfo) -> Vec<(Feats, ContOpt)> {
     v
 }
 
-/// One dash branch: its D features, the dash action, the post-dash board, and
-/// (if any cast is possible after it) the P2 continue features.
-pub struct DashOpt { pub f: Feats, pub act: Action, pub bd: Board, pub p2: Option<Feats> }
+/// One dash branch: its D features, the dash action and the post-dash board.
+/// The P2 continue features (`p2`) are computed only when the branch is
+/// popped: most dash branches of a wide window are never reached.
+pub struct DashOpt { pub f: Feats, pub act: Action, pub bd: Board }
+
+impl DashOpt {
+    /// P2 continue features, if any cast is possible after the dash.
+    pub fn p2(&self, c: Color) -> Option<Feats> { dash_p2(&self.bd, c) }
+}
+
+/// P2 continue features on a post-dash board, `None` when nothing is castable.
+pub fn dash_p2(bd: &Board, c: Color) -> Option<Feats> {
+    let post = bd.castable(c, true, true, true);
+    if post.is_empty() { return None; }
+    let mut g = Feats::new();
+    g.push(F_P2_BIAS);
+    for &id in &post { g.spell(F_P2_CASTID, id); }
+    Some(g)
+}
 
 pub fn dash_opts(bm: &Board, c: Color, window: usize) -> Vec<DashOpt> {
     let mut out = Vec::new();
@@ -404,14 +420,7 @@ pub fn dash_opts(bm: &Board, c: Color, window: usize) -> Vec<DashOpt> {
         f.push(F_D_RANK + rank_bucket(j));
         let newly = bd.charged[c.idx()] & !bm.charged[c.idx()];
         for p in 0..9 { if newly & (1 << p) != 0 { f.spell(F_D_COMPL, bd.spells[p]); } }
-        let post = bd.castable(c, true, true, true);
-        let p2 = if post.is_empty() { None } else {
-            let mut g = Feats::new();
-            g.push(F_P2_BIAS);
-            for &id in &post { g.spell(F_P2_CASTID, id); }
-            Some(g)
-        };
-        out.push(DashOpt { f, act, bd, p2 });
+        out.push(DashOpt { f, act, bd });
     }
     out
 }
@@ -446,9 +455,39 @@ pub const CK_MOVE: u8 = 0;
 pub const CK_DASH: u8 = 1;
 pub const CK_SECOND: u8 = 2;
 
-/// One (keep, outcome) candidate of a cast: C features, the action, and when a
-/// Summer second cast can follow, the board after the cast plus Z features.
-pub struct CastOpt { pub f: Feats, pub act: Action, pub after: Option<(Board, Feats)> }
+/// One (keep, outcome) candidate of a cast: C features, the action, and, when
+/// a Seal of Summer second cast is possible in principle, what `summer` needs
+/// to decide it (the keep board and the resolved board). The Summer check
+/// (`finish_cast`, two `update`s, a castable scan) runs only for candidates the
+/// stream actually pops.
+pub struct CastOpt { pub f: Feats, pub act: Action, pub pending: Option<(Board, Board)> }
+
+impl CastOpt {
+    /// The board after the cast plus Z features, when a Summer second cast can
+    /// follow it. `id` is the cast spell, `post_dash` whether the cast came
+    /// after a dash.
+    pub fn summer(&self, c: Color, post_dash: bool) -> Option<(Board, Feats)> {
+        let (cl, ob) = self.pending?;
+        let Action::Cast { pos, .. } = self.act else { return None };
+        summer_after(&cl, &ob, cl.spells[pos as usize], c, post_dash)
+    }
+}
+
+/// `CastOpt::summer` on explicit boards.
+pub fn summer_after(cl: &Board, ob: &Board, id: u8, c: Color, post_dash: bool) -> Option<(Board, Feats)> {
+    let mut bs = *cl;
+    bs.adopt(ob);
+    bs.update();
+    bs.finish_cast(id, c);
+    bs.update();
+    if !bs.holds_charged(c, SEAL_OF_SUMMER) { return None; }
+    let post = bs.castable(c, false, true, post_dash);
+    if post.is_empty() { return None; }
+    let mut g = Feats::new();
+    g.push(F_Z_BIAS);
+    for &i2 in &post { g.spell(F_Z_CASTID, i2); }
+    Some((bs, g))
+}
 
 /// The cast candidates the SHIPPED stream builds for this kind (same keep
 /// budget, same resolver keys, same windows), in its order.
@@ -526,24 +565,8 @@ pub fn cast_opts(b: &Board, c: Color, pos: usize, kind: u8, window: usize, keep_
             f.push(F_C_SPELLR + id as u16 * 3 + coarse);
         }
         let act = Action::Cast { pos: pos as u8, keep: ki as u8, outcome: raw as u16 };
-        let mut after = None;
-        if summer_ok {
-            let mut bs = cl;
-            bs.adopt(&ob);
-            bs.update();
-            bs.finish_cast(id, c);
-            bs.update();
-            if bs.holds_charged(c, SEAL_OF_SUMMER) {
-                let post = bs.castable(c, false, true, kind == CK_DASH);
-                if !post.is_empty() {
-                    let mut g = Feats::new();
-                    g.push(F_Z_BIAS);
-                    for &i2 in &post { g.spell(F_Z_CASTID, i2); }
-                    after = Some((bs, g));
-                }
-            }
-        }
-        out.push(CastOpt { f, act, after });
+        let pending = if summer_ok { Some((cl, ob)) } else { None };
+        out.push(CastOpt { f, act, pending });
     }
     out
 }
@@ -556,7 +579,13 @@ enum Node {
     Leaf(Turn),
     Cont { mi: u16 },
     CastStub { prefix: Turn, b: Board, pos: u8, kind: u8 },
-    DashStub { mi: u16 },
+    DashStub { mi: u16, bm: Board },
+    /// A dash branch whose P2 split (stop / cast after the dash) is not yet
+    /// computed. Popping it computes the split: with no cast possible it IS
+    /// the leaf, at the probability it was popped with.
+    DashCand { t: Turn, bd: Board },
+    /// A cast candidate whose Summer split is not yet computed (as `DashCand`).
+    CastCand { t: Turn, cl: Board, ob: Board, post_dash: bool },
     PostDash { prefix: Turn, bd: Board },
     Summer { prefix: Turn, bs: Board, post_dash: bool },
 }
@@ -615,6 +644,7 @@ impl<'a> PolicyIter<'a> {
             steps: Vec::new(), ri: None, w, heap: BinaryHeap::new(), seq: 0,
             windowed: false, yielded: 0, expanded: 0, pen,
         };
+        it.heap.reserve(256);
         if b.variant.has_competitive() && b.turn_counter <= 2 {
             it.fallback = Some(board.turns_ordered_keeps(c, window, 0, keep_window));
             return it;
@@ -704,28 +734,20 @@ impl<'a> PolicyIter<'a> {
                 let pen = self.pen;
                 self.push_softmax_adj(lp, opts, |o| if matches!(o, ContOpt::Dash) { pen } else { 0 }, |s, l, o| match o {
                     ContOpt::Cast(pos) => s.push(l, Node::CastStub { prefix, b: bm, pos, kind: CK_MOVE }),
-                    ContOpt::Dash => s.push(l, Node::DashStub { mi }),
+                    ContOpt::Dash => s.push(l, Node::DashStub { mi, bm }),
                 });
             }
-            Node::DashStub { mi } => {
-                let bm = self.post_move_board(mi as usize);
+            Node::DashStub { mi, bm } => {
                 let prefix = self.first_prefix(mi as usize);
                 let opts = dash_opts(&bm, c, self.window);
                 if opts.is_empty() { return; }
                 let qs: Vec<i32> = opts.iter().map(|o| quant(self.w.logit(&o.f, &z))).collect();
                 let ls = log_softmax_q(&qs);
                 for (o, l) in opts.into_iter().zip(ls) {
-                    let t = prefix.push_pub(o.act);
-                    match o.p2 {
-                        Some(g) => {
-                            let (lst, lc) = binary_q(quant(self.w.logit(&g, &z)) - self.pen);
-                            self.push(lp + l + lst, Node::Leaf(t));
-                            self.push(lp + l + lc, Node::PostDash { prefix: t, bd: o.bd });
-                        }
-                        None => self.push(lp + l, Node::Leaf(t)),
-                    }
+                    self.push(lp + l, Node::DashCand { t: prefix.push_pub(o.act), bd: o.bd });
                 }
             }
+            Node::DashCand { .. } | Node::CastCand { .. } => unreachable!("split in next()"),
             Node::PostDash { prefix, bd } => {
                 let opts = postdash_opts(&bd, c, self.ri.as_ref().unwrap());
                 self.push_softmax(lp, opts, |s, l, pos| {
@@ -747,12 +769,8 @@ impl<'a> PolicyIter<'a> {
                 let ls = log_softmax_q(&qs);
                 for (o, l) in opts.into_iter().zip(ls) {
                     let t = prefix.push_pub(o.act);
-                    match o.after {
-                        Some((bs, g)) => {
-                            let (lst, lc) = binary_q(quant(self.w.logit(&g, &z)));
-                            self.push(lp + l + lst, Node::Leaf(t));
-                            self.push(lp + l + lc, Node::Summer { prefix: t, bs, post_dash: kind == CK_DASH });
-                        }
+                    match o.pending {
+                        Some((cl, ob)) => self.push(lp + l, Node::CastCand { t, cl, ob, post_dash: kind == CK_DASH }),
                         None => self.push(lp + l, Node::Leaf(t)),
                     }
                 }
@@ -780,10 +798,53 @@ impl<'a> Iterator for PolicyIter<'a> {
                     self.yielded += 1;
                     return Some(t.push_pub(Action::Pass));
                 }
+                // The lazy splits. With no continuation the candidate is a leaf
+                // at the probability it was popped with, so it is yielded now;
+                // otherwise both halves are at most that probability and go back
+                // on the heap -- the pop order stays non-increasing.
+                Node::DashCand { t, bd } => match dash_p2(&bd, self.c) {
+                    None => { self.yielded += 1; return Some(t.push_pub(Action::Pass)); }
+                    Some(g) => {
+                        let z = self.ri.as_ref().map(|r| r.z).unwrap_or([0.0; PK]);
+                        let (lst, lc) = binary_q(quant(self.w.logit(&g, &z)) - self.pen);
+                        self.push(e.lp + lst, Node::Leaf(t));
+                        self.push(e.lp + lc, Node::PostDash { prefix: t, bd });
+                    }
+                },
+                Node::CastCand { t, cl, ob, post_dash } => {
+                    let id = match t.slice().last() {
+                        Some(Action::Cast { pos, .. }) => cl.spells[*pos as usize],
+                        _ => unreachable!(),
+                    };
+                    match summer_after(&cl, &ob, id, self.c, post_dash) {
+                        None => { self.yielded += 1; return Some(t.push_pub(Action::Pass)); }
+                        Some((bs, g)) => {
+                            let z = self.ri.as_ref().map(|r| r.z).unwrap_or([0.0; PK]);
+                            let (lst, lc) = binary_q(quant(self.w.logit(&g, &z)));
+                            self.push(e.lp + lst, Node::Leaf(t));
+                            self.push(e.lp + lc, Node::Summer { prefix: t, bs, post_dash });
+                        }
+                    }
+                }
                 node => self.expand(e.lp, node),
             }
         }
         None
+    }
+}
+
+impl<'a> PolicyIter<'a> {
+    /// Whether the stream may yield another turn, WITHOUT building it. The
+    /// search uses this for its `widened` flag; calling `next()` there built a
+    /// whole extra turn (often a cast or dash expansion) at every node only to
+    /// throw it away. Conservative: a pending internal node that turns out to
+    /// hold no turn still counts, which can only mark a search widened (never
+    /// proven) where it was not.
+    pub fn has_more(&self) -> bool {
+        match &self.fallback {
+            Some(_) => true,
+            None => !self.front.is_empty() || !self.heap.is_empty(),
+        }
     }
 }
 
@@ -887,7 +948,7 @@ pub fn policy_example(board: &Board, c: Color, target: &Turn, window: usize, kee
         levels.push(LevelEx { level: L_D, opts: dopts.iter().map(|o| o.f).collect(), target: di });
         if di < 0 { return Some((ri.z, levels)); }
         let o = &dopts[di as usize];
-        let Some(g) = o.p2 else { return Some((ri.z, levels)) };
+        let Some(g) = o.p2(c) else { return Some((ri.z, levels)) };
         let more = rest.len() > 1;
         levels.push(LevelEx { level: L_P2, opts: vec![Feats::new(), g], target: more as i32 });
         if !more { return Some((ri.z, levels)); }
@@ -920,7 +981,7 @@ pub fn policy_example(board: &Board, c: Color, target: &Turn, window: usize, kee
         levels.push(LevelEx { level: L_C, opts: copts2.iter().map(|o| o.f).collect(), target: ci });
         if ci < 0 || round == 1 { return Some((ri.z, levels)); }
         let o = &copts2[ci as usize];
-        let Some((bs, g)) = o.after else { return Some((ri.z, levels)) };
+        let Some((bs, g)) = o.summer(c, kind == CK_DASH) else { return Some((ri.z, levels)) };
         let more = rest.len() > i + 1;
         levels.push(LevelEx { level: L_Z, opts: vec![Feats::new(), g], target: more as i32 });
         if !more { return Some((ri.z, levels)); }

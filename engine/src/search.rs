@@ -1628,7 +1628,7 @@ impl Search {
             let pen = crate::policy::cost_penalty_for(width);
             let mut it = b.turns_policy_pen(c, self.window, self.keep_window, pen);
             v = it.by_ref().take(width).collect();
-            if it.next().is_some() { self.stats.widened = true; }
+            if it.has_more() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }
         } else if self.legacy_order || width < self.merge_min_width {
             // The additive path takes the stream WITHOUT reserved slots and appends
