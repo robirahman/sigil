@@ -4,7 +4,8 @@
 
 Reads `GAME seed=.. arm=<colour> winner=<colour>` lines (pool_shards.py's rule:
 games, never shard summaries), recomputes each game's draw with
-`Board.legal_draw(seed)` (no SIGIL_REQUIRE_SPELL runs only), and reports the arm's
+the `draw=` field of the GAME line (falling back to `Board.legal_draw(seed)`
+for logs that predate it, valid for no-SIGIL_REQUIRE_SPELL runs only), and reports the arm's
 score with a Wilson interval
   * overall,
   * per spell, for spells in at least --min-games games (a per-spell eval can only
@@ -14,6 +15,7 @@ import glob, math, re, sys
 import sigil_engine as se
 
 RE = re.compile(r'^GAME seed=(\d+) arm=(red|blue) winner=(red|blue|None)')
+RE_DRAW = re.compile(r' draw=([0-9,]+)')
 
 
 def wilson(w, n, z=1.96):
@@ -44,14 +46,15 @@ if __name__ == '__main__':
         for l in open(f):
             m = RE.match(l)
             if m and m.group(3) != 'None':
-                games.append((int(m.group(1)), m.group(2), m.group(3)))
+                md = RE_DRAW.search(l)
+                d = tuple(int(x) for x in md.group(1).split(',')) if md else None
+                games.append((int(m.group(1)), m.group(2), m.group(3), d))
     names = se.SPELL_NAMES
-    draws = {s: se.Board.legal_draw(s) for s in {g[0] for g in games}}
-    w = sum(a == b for _, a, b in games)
+    w = sum(g[1] == g[2] for g in games)
     print(line('ALL', w, len(games)))
     by = {}
-    for s, a, b in games:
-        for sp in draws[s]:
+    for s, a, b, d in games:
+        for sp in (d if d is not None else se.Board.legal_draw(s)):
             by.setdefault(sp, [0, 0]); by[sp][0] += a == b; by[sp][1] += 1
     for sp in sorted(by, key=lambda k: -by[k][1]):
         if by[sp][1] >= mg:
