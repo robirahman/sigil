@@ -4174,3 +4174,76 @@ fn sfn_round_trips_walls_and_banks() {
     assert_eq!((r.walls, r.bank, r.stones), (b.walls, b.bank, b.stones));
     assert_ne!(ZOBRIST.key_js(&b), ZOBRIST.key_js(&{ let mut z = b; z.bank = [0, 0]; z }));
 }
+
+/// Step 3 training data (`harness/selfplay_v2.py`): recording the root's
+/// per-move scores must not change the search, must be deterministic, and every
+/// recorded turn must round-trip through `pack_action` and match its
+/// `dataset_rows` parts. With `root_exact` every entry is exact, and wherever
+/// the bound-mode search reported an upper bound, the exact score respects it.
+#[test]
+fn record_root_is_inert_deterministic_and_round_trips() {
+    use crate::search::{pack_action, unpack_action, Search, DEFAULT_WIDTH_SCALE, SHIPPED_ADAPTIVE};
+    let mk = |rec: bool, exact: bool| {
+        let mut s = Search::new(16);
+        s.set_width_scale(DEFAULT_WIDTH_SCALE);
+        let (p, e, h) = SHIPPED_ADAPTIVE;
+        s.set_adaptive(p, e, h);
+        s.weights = crate::eval::weights_by_name("tfit").unwrap();
+        if rec { s.set_record_root(true, exact); }
+        s
+    };
+    let mut checked = 0;
+    for seed in [3u64, 17, 41, 45] {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        b.setup_initial();
+        // reach a middlegame: a few depth-2 plies
+        for _ in 0..8 {
+            let c = b.to_move;
+            let (t, _, _) = mk(false, false).go(&b, c, 2, 0);
+            let Some(t) = t else { break };
+            b.apply_turn(&t, c); b.turn_counter += 1; b.to_move = c.other(); b.update();
+            if b.outcome != Outcome::Ongoing { break; }
+        }
+        if b.outcome != Outcome::Ongoing { continue; }
+        checked += 1;
+        let c = b.to_move;
+        let (b0, s0, st0) = mk(false, false).go(&b, c, 3, 0);
+        let mut r1 = mk(true, false);
+        let (b1, s1, st1) = r1.go(&b, c, 3, 0);
+        assert_eq!((b0.map(|t| t.slice().to_vec()), s0, st0.nodes),
+                   (b1.map(|t| t.slice().to_vec()), s1, st1.nodes), "recording changed the search");
+        let mut r2 = mk(true, false);
+        r2.go(&b, c, 3, 0);
+        let key = |s: &Search| s.root_scores().iter().map(|(t, v)| (t.slice().to_vec(), *v))
+            .zip(s.root_details().iter().copied()).collect::<Vec<_>>();
+        assert_eq!(key(&r1), key(&r2), "root scores are not deterministic");
+        assert!(!r1.root_scores().is_empty());
+        assert_eq!(r1.root_scores().len(), r1.root_details().len());
+        let chosen = b1.unwrap().slice().to_vec();
+        assert!(r1.root_scores().iter().any(|(t, v)| *v == s1 && t.slice() == chosen.as_slice()),
+                "the chosen turn's root score is recorded");
+        let (rows, _, _, packed, _) = b.dataset_rows(c, 600);
+        let strip = |r: [u16; crate::prior::MAX_PARTS]| r.iter().copied()
+            .filter(|&p| !(crate::prior::P_ORANK..crate::prior::P_ORANK + 6).contains(&p))
+            .collect::<Vec<_>>();
+        for (t, _) in r1.root_scores() {
+            let pk: Vec<u32> = t.slice().iter().map(|a| pack_action(*a)).collect();
+            let back: Vec<_> = pk.iter().map(|&v| unpack_action(v).unwrap()).collect();
+            assert_eq!(back.as_slice(), t.slice(), "pack/unpack round trip");
+            let i = packed.iter().position(|p| *p == pk).expect("root turn is in the ordered universe");
+            // parts agree except the within-stub rank, which only the stream knows
+            assert_eq!(strip(rows[i]), strip(b.parts_outside_stream(t, c)));
+        }
+        let mut ex = mk(true, true);
+        ex.go(&b, c, 3, 0);
+        assert!(ex.root_details().iter().all(|(bd, _)| *bd == 0));
+        let exact: std::collections::HashMap<Vec<crate::turn::Action>, i32> =
+            ex.root_scores().iter().map(|(t, v)| (t.slice().to_vec(), *v)).collect();
+        for ((t, v), (bd, _)) in r1.root_scores().iter().zip(r1.root_details()) {
+            if let Some(&xv) = exact.get(&t.slice().to_vec()) {
+                if *bd == 1 { assert!(xv <= *v, "upper bound {v} below exact {xv}"); }
+            }
+        }
+    }
+    assert!(checked >= 2);
+}
