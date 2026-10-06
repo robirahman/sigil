@@ -7,7 +7,7 @@
         --audit ai/data/surprise_audit_2026-09-26.json --out work/lines_new.json
     # 3. freeze the three suites under ai/data/benchmarks/:
     python engine/harness/bench_build.py freeze --lines work/lines.json --old-lines <corpus of the old audit> \
-        --audit ai/data/surprise_audit_2026-09-26.json [--new-cases cases.json --new-probes probes.jsonl] \
+        --audit ai/data/surprise_audit_2026-09-26.json [--new-rows report_rows.json] \
         --drops ai/data/human_turn_drops_2026-09-23.json --final work/final_probe.jsonl --out ai/data/benchmarks
 
 Every case in a frozen suite carries its own SFNs (and the game history up to the position,
@@ -99,7 +99,7 @@ def cmd_freeze(a):
     old_lines = {}
     for p in a.old_lines:
         old_lines.update(json.load(open(p, encoding='utf-8')))
-    allg = {**old_lines, **lines}
+    allg = {**lines, **old_lines}   # the audited corpora win: case indices refer to them
     report = {}
 
     # --- surprise suite -----------------------------------------------------------
@@ -118,24 +118,14 @@ def cmd_freeze(a):
         cases.append(_surprise_case(c, allg, 'surprise_audit_2026-09-26'))
     n_old = len(cases)
     n_new = 0
-    if a.new_cases:
-        nc = json.load(open(a.new_cases, encoding='utf-8'))
-        nc = nc['cases'] if isinstance(nc, dict) and 'cases' in nc else nc
-        probes = {}
-        if a.new_probes:
-            for ln in open(a.new_probes, encoding='utf-8'):
-                if ln.strip():
-                    p = json.loads(ln)
-                    probes[(p['g'], p['i'])] = p
-        for c in nc:
-            p = probes.get((c['g'], c['i']), {})
-            m = {**c, **p}
-            if not m.get('confirmed'):
+    if a.new_rows:   # surprise_audit.py report --json output of the new games' run
+        for c in json.load(open(a.new_rows, encoding='utf-8')):
+            if not c.get('confirmed'):
                 continue
             g = lines.get(c['g'])
             if g is None or excluded_reason(g['positions'][0], g.get('timestamp')):
                 continue
-            cases.append(_surprise_case(m, lines, a.new_tag))
+            cases.append(_surprise_case(c, lines, a.new_tag))
             n_new += 1
     _write(os.path.join(a.out, 'surprise_cases.json'), cases)
     report['surprise'] = {'old_confirmed': len(old), 'old_kept': n_old, 'old_dropped': dict(dropped),
@@ -167,7 +157,9 @@ def cmd_freeze(a):
             continue
         r = json.loads(ln)
         n_all += 1
-        if r.get('d2_sees') or r.get('error') or not r.get('sfn'):
+        # A miss = the mover had an immediate win (solver) and the depth-2 search did not
+        # report a forced win: weakness_report.py's Part 3 definition (61 in 2026-09).
+        if r.get('d2_sees') or r.get('error') or not r.get('sfn') or not r.get('mate1_total'):
             continue
         g = allg.get(r['g'])
         why = excluded_reason(r['sfn'], g.get('timestamp') if g else None)
@@ -193,7 +185,7 @@ def main():
     n.add_argument('--seen-lines', help='lines.json whose games were already audited'); n.add_argument('--out', required=True)
     z = sub.add_parser('freeze')
     z.add_argument('--lines', required=True); z.add_argument('--old-lines', action='append', default=[])
-    z.add_argument('--audit', required=True); z.add_argument('--new-cases'); z.add_argument('--new-probes')
+    z.add_argument("--audit", required=True); z.add_argument("--new-rows")
     z.add_argument('--new-tag', default='surprise_audit_2026-10'); z.add_argument('--drops', required=True)
     z.add_argument('--final', required=True); z.add_argument('--final-tag', default='final_blow_probe_2026-10')
     z.add_argument('--out', required=True)

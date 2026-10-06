@@ -1,6 +1,6 @@
 """Fixed benchmarks on the frozen human-game suites (2026-10 training plan, Step 1).
 
-    python engine/harness/bench_suites.py [--suites ai/data/benchmarks] [--nodes 50000,200000]
+    python engine/harness/bench_suites.py [--suites ai/data/benchmarks] [--nodes 50000,300000,1500000]
         [--cover 10,24,96,500] [--workers 4] [--json out.json]
         --config shipped:eval=tfit  --config spell:eval=tfit_spell  ...
 
@@ -27,7 +27,8 @@ Metrics (per config):
 
 Config spec: `name:key=val;key=val`. Keys:
   eval=<preset>           eval preset name (`se.eval_weights` must know it); default tfit
-  width_scale=<int>       default: the engine's DEFAULT_WIDTH_SCALE
+  width_scale=<int>       default: the engine's DEFAULT_WIDTH_SCALE (ignored while adaptive is on:
+                          the adaptive scales replace it, so pair it with adaptive=none)
   adaptive=<p,e,h>        default: the engine's SHIPPED_ADAPTIVE; `adaptive=none` disables
   call=<fn>(<args>)       a sigil_engine setter run once per worker before any work, e.g.
                           call=set_dash_gen(2,16,2); repeatable (separate with ';')
@@ -176,7 +177,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--suites', default=os.path.join(ROOT, 'ai', 'data', 'benchmarks'))
     ap.add_argument('--config', action='append', default=[])
-    ap.add_argument('--nodes', default='50000,200000')
+    ap.add_argument('--nodes', default='50000,300000,1500000')
     ap.add_argument('--cover', default='10,24,96,500')
     ap.add_argument('--workers', type=int, default=os.cpu_count() or 2)
     ap.add_argument('--limit', type=int, default=0, help='first N cases of each suite (smoke runs)')
