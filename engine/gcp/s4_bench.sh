@@ -71,6 +71,21 @@ if [ "$JOBS" = all ] || [ "$JOBS" = sees ]; then
     --config 'pol40_512:eval=tfit;call=set_policy(True,40);call=set_policy_cost(512,100000)' \
     --json $W/out/sees.json > $W/out/sees.log 2>&1
 fi
+if [ "$JOBS" = sees2 ]; then
+  # the 3 s arena winner (min_width 96) and its neighbours, and the stack with
+  # the v24 site eval; coverage follows each config's own policy stream
+  cd $W/repo
+  N=$(nproc)
+  PYTHONPATH=$W/py $W/venv/bin/python engine/harness/bench_suites.py --nodes 50000,300000,1500000 \
+    --cover 6,10,12,24,40,96,500 --workers $N \
+    --config 'shipped:eval=tfit' \
+    --config 'pol96:eval=tfit;call=set_policy(True,96)' \
+    --config 'pol128:eval=tfit;call=set_policy(True,128)' \
+    --config 'pol160:eval=tfit;call=set_policy(True,160)' \
+    --config 'tsv2:eval=tfit_spell_v2' \
+    --config 'tsv2_pol96:eval=tfit_spell_v2;call=set_policy(True,96)' \
+    --json $W/out/sees2.json > $W/out/sees2.log 2>&1
+fi
 kill $UP 2>/dev/null
 for f in $W/out/*; do gcs_put "$f" "runs/$RUN/$(basename "$f")" || true; done
 echo "DONE $(date -u +%FT%TZ)" > $W/out/COMPLETE; gcs_put $W/out/COMPLETE "runs/$RUN/COMPLETE"
