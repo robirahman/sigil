@@ -73,7 +73,7 @@ impl Board {
 
     /// One cast's resolution score, the key both the ordered and ranked forms use.
     #[inline]
-    fn outcome_score(&self, c: Color, goal: crate::order::PlacementGoal) -> i32 {
+    pub(crate) fn outcome_score(&self, c: Color, goal: crate::order::PlacementGoal) -> i32 {
         self.configuration_value(c, goal) + 30 * self.material(c) as i32
             - 30 * self.material(c.other()) as i32
     }
@@ -217,7 +217,7 @@ impl Board {
 /// exactly as blind as it was before the choice was enumerated. Round-robin
 /// instead, best keep first, so a width-`k` budget sees `k` distinct keeps.
 /// This is the same starvation the KEY_DASH reserved slot exists to prevent.
-fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
+pub(crate) fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
     -> (Vec<(i32, usize, usize)>, bool)
 {
     per_keep.sort_by_key(|v| v.first().map(|&(s, _, _)| -s).unwrap_or(i32::MAX));
@@ -237,6 +237,54 @@ fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
         round += 1;
     }
     (out, total > window)
+}
+
+
+/// The turns every ordered stream puts at its FRONT, in front-to-back order:
+/// the stone-lead mate (if the pre-pass is live here and finds one), then the
+/// Seal of Destruction decisive turns. `b` is `board` after `update()`, and
+/// `steps` the position's ordered first steps (their bare moves seed the lead
+/// scan, collected only on a cache miss).
+/// Shared by `TurnIter` and the learned-policy stream (`policy.rs`).
+pub(crate) fn front_prepass(board: &Board, b: &Board, c: Color,
+                            steps: &[(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)])
+    -> Vec<Turn>
+{
+    let mut front: Vec<Turn> = Vec::new();
+    // Seal of Destruction: a turn that decides the game goes to the FRONT of
+    // the stream, ahead of every stage. Width cuts the stream after `w`
+    // turns and the stages put every cast under every first move before any
+    // dash, so a mate under the last-ranked first move -- the only soft move
+    // in a position full of tempting pushes -- sat 120+ turns deep and was
+    // never searched (the k=5 Gust case). The stages emit it again later;
+    // the duplicate costs a TT probe.
+    front.extend(board.decisive_destruction_turns(c));
+    // Stone-lead mates (the ordinary way a game ends) get the same treatment:
+    // a material-gated scan puts every turn that reaches the lead now at the
+    // front of the stream. See `decisive_lead_turns`.
+    if decisive_lead_enabled() && lead_prepass_here() {
+        // Iterative deepening regenerates every node's stream once per
+        // iteration, so the scan's answer is memoised per position.
+        let key = crate::zobrist::ZOBRIST.key_js(b) ^ if c == Color::Red { 0 } else { 0x9E37_79B9_7F4A_7C15 };
+        let cached = LEAD_CACHE.with(|cache| {
+            let e = &cache.borrow()[(key as usize) & lead_cache_mask()];
+            if e.key == key { Some(e.turn) } else { None }
+        });
+        let found: Option<Turn> = match cached {
+            Some(t) => t,
+            None => {
+                let fm: Vec<(u8, Option<u8>)> = steps.iter()
+                    .filter(|m| m.3.is_none()).map(|&(n, p, _, _)| (n, p)).collect();
+                let t = board.decisive_lead_turns_from(c, decisive_lead_cap(), &fm).into_iter().next();
+                LEAD_CACHE.with(|cache| {
+                    cache.borrow_mut()[(key as usize) & lead_cache_mask()] = LeadEntry { key, turn: t };
+                });
+                t
+            }
+        };
+        if let Some(t) = found { front.insert(0, t); }
+    }
+    front
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -325,40 +373,8 @@ impl<'a> TurnIter<'a> {
             }
         }
         it.build_key_dashes();
-        // Seal of Destruction: a turn that decides the game goes to the FRONT of
-        // the stream, ahead of every stage. Width cuts the stream after `w`
-        // turns and the stages put every cast under every first move before any
-        // dash, so a mate under the last-ranked first move -- the only soft move
-        // in a position full of tempting pushes -- sat 120+ turns deep and was
-        // never searched (the k=5 Gust case). The stages emit it again later;
-        // the duplicate costs a TT probe.
-        for t in board.decisive_destruction_turns(c).into_iter().rev() {
+        for t in front_prepass(board, &b, c, &it.moves).into_iter().rev() {
             it.pending.push_front(t);
-        }
-        // Stone-lead mates (the ordinary way a game ends) get the same treatment:
-        // a material-gated scan puts every turn that reaches the lead now at the
-        // front of the stream. See `decisive_lead_turns`.
-        if decisive_lead_enabled() && lead_prepass_here() {
-            // Iterative deepening regenerates every node's stream once per
-            // iteration, so the scan's answer is memoised per position.
-            let key = crate::zobrist::ZOBRIST.key_js(&b) ^ if c == Color::Red { 0 } else { 0x9E37_79B9_7F4A_7C15 };
-            let cached = LEAD_CACHE.with(|cache| {
-                let e = &cache.borrow()[(key as usize) & lead_cache_mask()];
-                if e.key == key { Some(e.turn) } else { None }
-            });
-            let found: Option<Turn> = match cached {
-                Some(t) => t,
-                None => {
-                    let fm: Vec<(u8, Option<u8>)> = it.moves.iter()
-                        .filter(|m| m.3.is_none()).map(|&(n, p, _, _)| (n, p)).collect();
-                    let t = board.decisive_lead_turns_from(c, decisive_lead_cap(), &fm).into_iter().next();
-                    LEAD_CACHE.with(|cache| {
-                        cache.borrow_mut()[(key as usize) & lead_cache_mask()] = LeadEntry { key, turn: t };
-                    });
-                    t
-                }
-            };
-            if let Some(t) = found { it.pending.push_front(t); }
         }
         it
     }

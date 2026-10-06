@@ -34,6 +34,14 @@ Config spec: `name:key=val;key=val`. Keys:
                           call=set_dash_gen(2,16,2); repeatable (separate with ';')
   module=<path.so>        load sigil_engine from this extension module instead (engine-
                           version A/Bs, as ab_version.py's $SIGIL_BASE_MODULE)
+  stream=<s>              which generator the COVERAGE metric ranks in: `shipped` (default,
+                          `rank_of_result`: the ordered stream at its default cast window 24),
+                          `shipped16` (the same stream at the search's own budgets, window 16,
+                          keep window 2) or `policy` (the Step 4 learned-policy stream at the
+                          search's budgets, `policy_rank_of_result`)
+  weights=<path.npy>      learned-policy weights for this worker (`set_policy_weights`); the
+                          compiled weights otherwise. Pair with call=set_policy(True,<min_width>)
+                          to make the SEARCH use the policy stream too
 """
 import argparse
 import ast
@@ -65,7 +73,7 @@ def parse_config(spec):
             cfg['width_scale'] = int(v)
         elif k == 'adaptive':
             cfg['adaptive'] = None if v == 'none' else tuple(ast.literal_eval(v))
-        elif k in ('eval', 'module'):
+        elif k in ('eval', 'module', 'stream', 'weights'):
             cfg[k] = v
         else:
             raise SystemExit(f'unknown config key {k!r} in {spec!r}')
@@ -91,6 +99,9 @@ def _init(cfg):
         _cfg['adaptive'] = tuple(_se.SHIPPED_ADAPTIVE)
     for fn, args in cfg['calls']:
         getattr(_se, fn)(*args)
+    if cfg.get('weights'):
+        import numpy as np
+        _se.set_policy_weights(np.load(cfg['weights']).astype('float32').ravel().tolist())
 
 
 def _value(r, pov):
@@ -115,7 +126,13 @@ def _search(sfn, history, nodes):
 def job_cover(item):
     sfn, after, cap = item
     try:
-        rank, _gen, _acts = _se.rank_of_result(sfn, after, cap)
+        stream = _cfg.get('stream', 'shipped')
+        if stream == 'policy':
+            rank, _gen, _exp = _se.policy_rank_of_result(sfn, after, cap)
+        elif stream == 'shipped16':
+            rank, _gen = _se.rank_of_result_budget(sfn, after, 16, 2, cap)
+        else:
+            rank, _gen, _acts = _se.rank_of_result(sfn, after, cap)
     except Exception:  # noqa: BLE001 -- a position the engine refuses counts as not covered
         rank = -1
     return rank
