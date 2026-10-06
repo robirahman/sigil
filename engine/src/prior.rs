@@ -177,6 +177,18 @@ impl Board {
         parts
     }
 
+    /// `turn_parts` for a turn that is NOT in the ordered universe (an
+    /// exploration turn): the move score is recomputed as `dataset_rows` does,
+    /// and the within-stub rank, which such a turn does not have, is 0.
+    pub fn parts_outside_stream(&self, t: &Turn, c: Color) -> [u16; MAX_PARTS] {
+        let ms = match t.slice().first() {
+            Some(Action::Move { node, push_to }) | Some(Action::Blink { node, push_to }) =>
+                self.move_score_goal(*node, *push_to, c, self.placement_goal(c)),
+            _ => 0,
+        };
+        self.turn_parts(t, c, ms, 0)
+    }
+
     /// The ordered candidate universe of this position (the shipped generator,
     /// drained to `cap`), each with its parts, a STUB id and its rank within the
     /// stub. A stub is the generator's own choice point: `[move, pass]` turns are

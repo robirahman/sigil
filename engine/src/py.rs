@@ -431,6 +431,170 @@ impl PyBoard {
             stubs, ranks, packed, trunc))
     }
 
+    /// Step 3 training label (`harness/selfplay_v2.py`): search THIS position at
+    /// a fixed depth with the shipped config (eval, engine-default width,
+    /// `SHIPPED_ADAPTIVE` unless given), recording every root move the final
+    /// iteration completed, then (if `play`) play the chosen turn.
+    ///
+    /// Returns (sfn_before, score, nodes, depth_completed, chosen packed,
+    /// candidates, n_universe, universe_truncated). Each candidate is
+    /// (packed actions, parts, score, bound, child nodes, urank): `bound` is
+    /// 0 exact / 1 upper / 2 lower (`exact` makes every score exact); `urank`
+    /// is the turn's index in `prior_dataset(universe_cap)` -- the generator's
+    /// ordered stream -- or -1 when the search reached it some other way
+    /// (opening book, pre-pass). Universe turns that carry no candidate entry
+    /// were NOT searched: they lie past the root width, which says nothing
+    /// about their quality.
+    #[pyo3(signature = (max_depth=4, eval_name="tfit", exact=false, universe_cap=400,
+                        history=vec![], play=true, width_scale=None, adaptive=None,
+                        keep_window=None, tt_bits=20))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn root_scores_and_play(&mut self, max_depth: i32, eval_name: &str, exact: bool,
+                            universe_cap: usize, history: Vec<u64>, play: bool,
+                            width_scale: Option<usize>,
+                            adaptive: Option<(f32, usize, usize)>,
+                            keep_window: Option<usize>, tt_bits: u32)
+        -> PyResult<(String, i32, u64, i32, Vec<u32>,
+                     Vec<(Vec<u32>, Vec<u16>, i32, u8, u64, i32)>, usize, bool)>
+    {
+        let c = self.b.to_move;
+        let before = self.b.to_sfn();
+        let (urows, _stubs, _ranks, upacked, trunc) = self.b.dataset_rows(c, universe_cap);
+        let index: std::collections::HashMap<&[u32], usize> =
+            upacked.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
+        let mut s = crate::search::Search::new(tt_bits);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
+        let (p, e, h) = adaptive.unwrap_or(crate::search::SHIPPED_ADAPTIVE);
+        s.set_adaptive(p, e, h);
+        if let Some(k) = keep_window { s.set_keep_window(k); }
+        s.weights = weights_by_name(eval_name)?;
+        s.set_record_root(true, exact);
+        for k in history { s.add_history(k); }
+        let (best, score, st) = s.go(&self.b, c, max_depth, 0);
+        let mut cands = Vec::with_capacity(s.root_scores().len());
+        for ((t, v), (bound, n)) in s.root_scores().iter().zip(s.root_details()) {
+            let packed: Vec<u32> = t.slice().iter().map(|a| crate::search::pack_action(*a)).collect();
+            let (parts, ur) = match index.get(packed.as_slice()) {
+                Some(&i) => (urows[i], i as i32),
+                None => (self.b.parts_outside_stream(t, c), -1),
+            };
+            cands.push((packed, parts.to_vec(), *v, *bound, *n, ur));
+        }
+        let chosen: Vec<u32> = best.map(|t| t.slice().iter()
+            .map(|a| crate::search::pack_action(*a)).collect()).unwrap_or_default();
+        if play {
+            if let Some(t) = best { self.b.apply_turn(&t, c); }
+            self.b.turn_counter += 1;
+            self.b.to_move = c.other();
+            self.b.update();
+        }
+        Ok((before, score, st.nodes, st.depth_completed, chosen, cands, upacked.len(), trunc))
+    }
+
+    /// Step 3.2 exploration: turns of the FULL enumeration whose resulting
+    /// position the ordered stream (drained to `stream_cap`) never produces,
+    /// deduplicated by result. Up to `k` are drawn round-robin over three
+    /// classes (dash with sacrifices, cast, other), shuffled by `seed` within
+    /// each class, so the sacrifice pairs -- by far the most numerous missing
+    /// turns -- cannot crowd out the cast outcomes and keeps. Turns that lose on
+    /// the spot (e.g. sacrificing the last stones) are counted but never drawn:
+    /// their value needs no search. Each draw is scored by a fixed depth `depth - 1` search of its resulting
+    /// position, negated to the mover's view (the same scale as a root score of
+    /// `root_scores_and_play(depth)`).
+    ///
+    /// Returns (picked, n_enumerated, n_stream, n_missing, n_suicide, enum_truncated);
+    /// each pick is (packed, parts, score, nodes, class) with class 0 = dash
+    /// with sacrifices, 1 = cast (no dash), 2 = other.
+    #[pyo3(signature = (depth=4, k=8, seed=0, enum_cap=20000, stream_cap=5000,
+                        eval_name="tfit", history=vec![], tt_bits=18))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn explore_unemitted(&self, depth: i32, k: usize, seed: u64, enum_cap: usize,
+                         stream_cap: usize, eval_name: &str, history: Vec<u64>, tt_bits: u32)
+        -> PyResult<(Vec<(Vec<u32>, Vec<u16>, i32, u64, u8)>, usize, usize, usize, usize, bool)>
+    {
+        use crate::turn::Action;
+        let c = self.b.to_move;
+        let child_of = |t: &crate::turn::Turn| {
+            let mut ch = self.b;
+            ch.apply_turn(t, c);
+            ch.turn_counter += 1;
+            ch.to_move = c.other();
+            ch.update();
+            ch
+        };
+        let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
+        let mut n_stream = 0usize;
+        for t in self.b.turns_ordered(c).take(stream_cap) {
+            seen.insert(ZOBRIST.key_js(&child_of(&t)));
+            n_stream += 1;
+        }
+        let (all, est) = self.b.enumerate_turns_capped(c, enum_cap);
+        let mut missing: [Vec<(crate::turn::Turn, Board)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        let mut n_missing = 0usize;
+        let mut n_suicide = 0usize;
+        let lost = if c == Color::Red { Outcome::BlueWins } else { Outcome::RedWins };
+        for t in all.iter() {
+            let ch = child_of(t);
+            if !seen.insert(ZOBRIST.key_js(&ch)) { continue; }
+            n_missing += 1;
+            if ch.outcome == lost { n_suicide += 1; continue; }
+            let acts = t.slice();
+            let class = if acts.iter().any(|a| matches!(a, Action::Dash { n_sacs, .. } if *n_sacs > 0)) { 0 }
+                        else if acts.iter().any(|a| matches!(a, Action::Cast { .. })) { 1 } else { 2 };
+            missing[class].push((*t, ch));
+        }
+        // xorshift, seeded through SplitMix64 so adjacent seeds differ
+        let mut x = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        x ^= x >> 31;
+        if x == 0 { x = 1; }
+        let mut next = || { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x };
+        for v in missing.iter_mut() {
+            for i in (1..v.len()).rev() {
+                let j = (next() % (i as u64 + 1)) as usize;
+                v.swap(i, j);
+            }
+        }
+        let mut picks: Vec<(crate::turn::Turn, Board, u8)> = Vec::new();
+        let mut at = [0usize; 3];
+        while picks.len() < k && (0..3).any(|cl| at[cl] < missing[cl].len()) {
+            for cl in 0..3 {
+                if picks.len() < k && at[cl] < missing[cl].len() {
+                    let (t, ch) = missing[cl][at[cl]];
+                    picks.push((t, ch, cl as u8));
+                    at[cl] += 1;
+                }
+            }
+        }
+        let mut s = crate::search::Search::new(tt_bits);
+        let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+        s.set_adaptive(p, e, h);
+        s.weights = weights_by_name(eval_name)?;
+        let mut out = Vec::with_capacity(picks.len());
+        for (t, ch, class) in picks {
+            let packed: Vec<u32> = t.slice().iter().map(|a| crate::search::pack_action(*a)).collect();
+            let parts = self.b.parts_outside_stream(&t, c).to_vec();
+            let (v, n) = match ch.outcome {
+                Outcome::Ongoing => {
+                    s.clear_history();
+                    // `history` already holds this position's own key, as the
+                    // other bindings' callers pass it (the game so far, inclusive).
+                    for key in history.iter() { s.add_history(*key); }
+                    let (_b, sc, st) = s.go(&ch, c.other(), (depth - 1).max(1), 0);
+                    (-sc, st.nodes)
+                }
+                // A turn that ends the game: the mover's own terminal score at ply 1.
+                o => {
+                    let won = (o == Outcome::RedWins) == (c == Color::Red);
+                    (if won { crate::search::WIN - 1 } else { -(crate::search::WIN - 1) }, 0)
+                }
+            };
+            out.push((packed, parts, v, n, class));
+        }
+        Ok((out, all.len(), n_stream, n_missing, n_suicide, est.truncated))
+    }
+
     /// Rich, close-to-the-board features for the offline learnability test.
     fn full_features(&self, c: &str) -> PyResult<Vec<f32>> {
         Ok(self.b.full_features(color(c)?))
