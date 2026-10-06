@@ -1,6 +1,6 @@
 """Does `tfit_spell*` actually change play through `play_best`?
 
-    smoke_spell_eval.py [positions-file] [depth=4]
+    smoke_spell_eval.py [positions-file] [depth=4] [presets=tfit_spell,tfit_spell2] [base=tfit]
 
 The eval knob analogue of smoke_knobbite.py: before an arena spends money on
 `tfit_spell` vs `tfit`, show through the binding every arena uses that the preset
@@ -23,16 +23,18 @@ def best(sfn, ev, depth):
 if __name__ == '__main__':
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'harness', 'positions_midgame.txt')
     depth = int(sys.argv[2]) if len(sys.argv) > 2 else 4
+    presets = sys.argv[3].split(',') if len(sys.argv) > 3 else ['tfit_spell', 'tfit_spell2']
+    base = sys.argv[4] if len(sys.argv) > 4 else 'tfit'
     sfns = [l.strip() for l in open(path) if l.strip()]
     ok = True
-    for ev in ('tfit_spell', 'tfit_spell2'):
+    for ev in presets:
         moved = scored = 0
         for sfn in sfns:
-            a, sa = best(sfn, 'tfit', depth)
+            a, sa = best(sfn, base, depth)
             c, sc = best(sfn, ev, depth)
             moved += a != c
             scored += sa != sc
-        print(f"{ev} vs tfit at depth {depth}: {moved}/{len(sfns)} different turns, "
+        print(f"{ev} vs {base} at depth {depth}: {moved}/{len(sfns)} different turns, "
               f"{scored}/{len(sfns)} different root scores")
         ok &= moved > 0 and scored > 0
     sys.exit(0 if ok else 1)

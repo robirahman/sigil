@@ -1631,6 +1631,7 @@ fn spell_sigil_presets_hold_their_positional_budgets() {
     // tfit_spell: everything inside 96 cs; tfit_spell2: tfit's 96 plus the table's 96.
     use crate::eval::*;
     assert!(worst_case_positional(&TFIT_SPELL) <= POSITIONAL_BUDGET);
+    assert!(worst_case_positional(&TFIT_SPELL_V2) <= POSITIONAL_BUDGET);
     assert!(worst_case_positional(&TFIT_SPELL2) <= 2 * POSITIONAL_BUDGET);
     let t = TFIT_SPELL2.spell_sigil.unwrap();
     assert!(t.worst_case() * TFIT_SPELL2.pos_num / TFIT_SPELL2.pos_den <= POSITIONAL_BUDGET);
@@ -1653,9 +1654,15 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
                 crate::eval::CLASSIC,
                 crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
                 crate::eval::CAPPED_MIX, crate::eval::FIT_AT_BUDGET,
-                crate::eval::TFIT_SPELL, crate::eval::TFIT_SPELL2];
+                crate::eval::TFIT_SPELL, crate::eval::TFIT_SPELL2,
+                crate::eval::TFIT_SPELL_V2];
+    // legal_draw draws core spells only; every fourth seed swaps in Tectonic and
+    // Providence spells (rituals 39/44, sorceries 40/43, charms 41/42) so the
+    // expansion entries of the per-spell tables are exercised too.
     for seed in 0..40u64 {
-        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        let mut draw = Board::legal_draw(seed);
+        if seed % 4 == 3 { draw = [39, 44, draw[2], 40, 43, draw[5], 41, 42, draw[8]]; }
+        let mut b = Board::new(draw, Variant::Standard);
         b.stones[0] = (0x1234_5678_9abcu64 ^ (seed * 2654435761)) & crate::topology::ALL;
         b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
         b.spell_counter = [(seed % 7) as u8, ((seed / 7) % 7) as u8];

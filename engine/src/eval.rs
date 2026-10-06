@@ -116,21 +116,27 @@ pub struct SpellSigil {
 impl SpellSigil {
     /// Worst-case |contribution| over every legal draw: each draw holds three
     /// spells of each role, in sigils of 5, 3 and 1 nodes, so take the three largest
-    /// `|stone| * n + |charged|` per role.
+    /// `|stone| * n + |charged|` per role. Every official spell of the role counts
+    /// (core plus Tectonic and Providence), so a table that prices the expansion
+    /// spells stays inside the budget too.
     pub const fn worst_case(&self) -> i32 {
-        let groups: [&[u8; 13]; 3] = [&crate::spells_meta::RITUALS,
-            &crate::spells_meta::SORCERIES, &crate::spells_meta::CHARMS];
         let sizes = [5, 3, 1];
         let mut total = 0;
         let mut g = 0;
         while g < 3 {
             let (mut a, mut b, mut c) = (0, 0, 0);   // three largest, a >= b >= c
-            let mut i = 0;
-            while i < 13 {
-                let s = groups[g][i] as usize;
-                let v = abs_i32(self.stone[s]) * sizes[g] + abs_i32(self.charged[s]);
-                if v > a { c = b; b = a; a = v; } else if v > b { c = b; b = v; } else if v > c { c = v; }
-                i += 1;
+            let mut s = 0;
+            while s < crate::spells_meta::NUM_OFFICIAL_SPELLS {
+                let r = match crate::spells_meta::SPELLS[s].role {
+                    crate::spells_meta::Role::Ritual => 0,
+                    crate::spells_meta::Role::Sorcery => 1,
+                    crate::spells_meta::Role::Charm => 2,
+                };
+                if r == g {
+                    let v = abs_i32(self.stone[s]) * sizes[g] + abs_i32(self.charged[s]);
+                    if v > a { c = b; b = a; a = v; } else if v > b { c = b; b = v; } else if v > c { c = v; }
+                }
+                s += 1;
             }
             total += a + b + c;
             g += 1;
@@ -401,6 +407,25 @@ pub const TFIT_SPELL2: Weights = Weights {
     spell_sigil: Some(&SPELL_SIGIL_FIT), ..FIT_SHAPE
 };
 
+/// The step-2 table REFITTED (2026-10 plan, step 2b) by `harness/fit_spell_eval_v2.py`
+/// on the step-3 v2 self-play data (engine v23, depth-4 tfit scores), which draws
+/// the Tectonic and Providence spells too, so ids 39-44 carry their own weights.
+/// Same method, target (search score) and scaling (worst case over any legal draw,
+/// now counting the expansion spells, equal to `FIT_SHAPE`'s 1,887 raw).
+/// Fitted on 7.6M positions (half the d4 chunks, 80% of them by chunk; run
+/// 20261006T155615Z); 0.65-0.67M positions per expansion spell.
+pub const SPELL_SIGIL_FIT_V2: SpellSigil = SpellSigil {
+    stone: [27, 95, 56, 29, 44, 0, 25, 91, 30, 0, -28, 51, -33, -49, -51, -22, 0, -15, 72,
+            9, -7, -7, 56, 11, -12, 15, -19, 50, 15, 19, 36, 1, -23, 26, -6, 3, -8, 32, 0,
+            18, 43, -12, 0, 2, 0],
+    charged: [3, 6, 1, -4, 20, -9, 1, 9, -9, 6, 0, 0, 0, 0, 0, -6, -6, 0, 5, 1, 0, 1, 16, 0,
+              -8, -4, 0, 2, 3, 0, 0, -8, 0, 3, -4, 0, 0, 13, 0, 1, 14, 0, 0, -2, -1],
+    mult: 1,
+};
+pub const SPELL_SIGIL_FIT_V2_X3: SpellSigil = SpellSigil { mult: 3, ..SPELL_SIGIL_FIT_V2 };
+/// `tfit_spell` with the refitted table: same 96 cs budget, same 3/4 : 1/4 split.
+pub const TFIT_SPELL_V2: Weights = at_budget(Weights { spell_sigil: Some(&SPELL_SIGIL_FIT_V2_X3), ..FIT_SHAPE });
+
 pub const STRUCT_01: Weights = scaled_structural(1, 100);
 pub const STRUCT_02: Weights = scaled_structural(2, 100);
 pub const STRUCT_06: Weights = scaled_structural(6, 100);
@@ -621,10 +646,10 @@ impl Board {
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 21] = [
+pub const EVAL_NAMES: [&str; 22] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
-    "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2",
+    "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -647,6 +672,7 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "tfit2" => FIT2_AT_BUDGET,
         "tfit_spell" => TFIT_SPELL,
         "tfit_spell2" => TFIT_SPELL2,
+        "tfit_spell_v2" => TFIT_SPELL_V2,
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
         "s02" => STRUCT_02,
@@ -664,6 +690,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }
