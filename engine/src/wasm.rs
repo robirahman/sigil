@@ -208,6 +208,13 @@ impl Engine {
     /// Stop pondering (the table keeps everything it learned).
     pub fn ponder_end(&mut self) { self.ponder = None; }
 
+    /// Step 6 option A (prototype, off unless rust-ai.js's multi-worker flag is
+    /// set): search only part `part` of a `parts`-way split of the root list, so
+    /// several workers, each with its own Engine, share one move's root.
+    /// `parts <= 1` restores the whole root. Applies to the searches that follow,
+    /// pondering included; the worker resets it before a ponder.
+    pub fn set_root_split(&mut self, part: u32, parts: u32) { self.s.set_root_split(part, parts); }
+
     /// Slots in use, for the smoke test's "the table survived the move" check.
     pub fn tt_filled(&self) -> u32 { self.s.tt_filled() as u32 }
 

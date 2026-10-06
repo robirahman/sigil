@@ -135,10 +135,51 @@ class RustEngineWorker {
 	}
 }
 
-let _rustEngineWorker = null;
-function getRustEngineWorker() {
-	if (!_rustEngineWorker) _rustEngineWorker = new RustEngineWorker();
-	return _rustEngineWorker;
+// Worker 0 is the one engine every tier uses. Step 6 option A (a PROTOTYPE, off
+// by default) adds more: `rustWorkerCount` > 1 splits each move's root across
+// that many workers, each with its own Engine and table (no shared memory, so
+// it works on GitHub Pages as-is).
+const _rustEnginePool = [];
+function getRustEnginePool(n) {
+	while (_rustEnginePool.length < n) _rustEnginePool.push(new RustEngineWorker());
+	return _rustEnginePool.slice(0, Math.max(1, n));
+}
+function getRustEngineWorker() { return getRustEnginePool(1)[0]; }
+
+/**
+ * How many root-split workers to use: `requested` (RustAI's `workers` option,
+ * else `window.SIGIL_RUST_WORKERS`), capped at hardwareConcurrency - 1 so the
+ * page keeps a core; 1 (the shipped single worker) when unset or unknown.
+ */
+function rustWorkerCount(requested, hardwareConcurrency) {
+	const want = Math.floor(Number(requested) || 1);
+	const hc = Math.floor(Number(hardwareConcurrency) || 0);
+	const cap = Math.max(1, hc - 1);
+	return Math.max(1, Math.min(want, cap));
+}
+
+/**
+ * Combine the per-part results of a root-split search into one /api/move
+ * result: the best root score among the parts that completed a depth (scores
+ * of different parts are from the same root and mover, so comparable; a part
+ * one iteration shallower is the price of the prototype), ties to the deeper
+ * part. `nodes` becomes the total; `split` records the per-part view.
+ */
+function pickSplitResult(results) {
+	const ok = results.filter((r) => r && r.ok && Array.isArray(r.actions) && r.actions.length);
+	if (!ok.length) return results.find((r) => r) || { ok: false, error: 'no part returned a move' };
+	const done = ok.filter((r) => (r.depth || 0) > 0);
+	const pool = done.length ? done : ok;
+	let best = pool[0];
+	for (const r of pool) {
+		if (r.score > best.score || (r.score === best.score && (r.depth || 0) > (best.depth || 0))) best = r;
+	}
+	const out = Object.assign({}, best);
+	out.nodes = ok.reduce((s, r) => s + (r.nodes || 0), 0);
+	out.split = { parts: results.length, chosen: results.indexOf(best),
+		depths: results.map((r) => (r && r.depth) || 0),
+		scores: results.map((r) => (r && r.ok) ? r.score : null) };
+	return out;
 }
 
 class RustAI {
@@ -180,12 +221,22 @@ class RustAI {
 		this.ponderMaxDepth = options.ponderMaxDepth || 12;
 		this.lastMeta = null;
 		this._historySfns = [];
-		// One RustAI per game: reset the worker's persistent table so a previous
+		// Step 6 option A root split (prototype): 1 = the shipped single worker.
+		const hc = (typeof navigator !== 'undefined') ? navigator.hardwareConcurrency : 0;
+		const req = (options.workers !== undefined) ? options.workers
+			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || 1);
+		this.workers = (this.transport === 'worker') ? rustWorkerCount(req, hc) : 1;
+		// One RustAI per game: reset the workers' persistent tables so a previous
 		// game's entries cannot leak into this one.
 		if (this.transport === 'worker') {
-			try { getRustEngineWorker().post({ type: 'new_game', ttBits: this.ttBits }); }
-			catch (e) { /* surfaced on first move */ }
+			this._postAll({ type: 'new_game', ttBits: this.ttBits });
 		}
+	}
+
+	/** Fire-and-forget to every worker this AI uses. */
+	_postAll(msg) {
+		try { for (const w of getRustEnginePool(this.workers)) w.post(msg); }
+		catch (e) { /* surfaced on first move */ }
 	}
 
 	/** Per-move budget from a game clock: `search::move_budget_ms`, same
@@ -250,7 +301,9 @@ class RustAI {
 		} catch (e) { return; }
 		if (this._historySfns[this._historySfns.length - 1] !== sfn) this._historySfns.push(sfn);
 		if (!this.pondering) return;
-		getRustEngineWorker().post({
+		// Every worker ponders the whole position (the worker drops any root
+		// split for a ponder), so each one's table is primed for its next part.
+		this._postAll({
 			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale,
 			historySfns: this._historySfns.slice(-64), evalName: this.evalName,
 			adaptive: this.adaptive, sliceMs: this.ponderSliceMs, maxDepth: this.ponderMaxDepth,
@@ -259,7 +312,7 @@ class RustAI {
 
 	cancelPonder() {
 		if (this.transport !== 'worker') return;
-		getRustEngineWorker().post({ type: 'ponder_stop' });
+		this._postAll({ type: 'ponder_stop' });
 	}
 
 	async _send(sfn, onProgress) {
@@ -291,7 +344,7 @@ class RustAI {
 			}
 		}
 		const t0 = Date.now();
-		return getRustEngineWorker().search({
+		const req = {
 			sfn: sfn,
 			timeMs: budgetMs,
 			ttBits: this.ttBits,
@@ -299,7 +352,8 @@ class RustAI {
 			historySfns: history,
 			evalName: this.evalName,
 			adaptive: this.adaptive,
-		}, (msg) => {
+		};
+		const progress = (msg) => {
 			// Per-completed-depth ticks; same fields the caveman meter renders.
 			if (onProgress) onProgress({
 				depth: msg.depth, score: msg.score, nodes: msg.nodes,
@@ -307,7 +361,14 @@ class RustAI {
 				budgetMs: budgetMs,
 				clockMs: this.clockMs,
 			});
-		});
+		};
+		if (this.workers <= 1) return getRustEngineWorker().search(req, progress);
+		// Root split: every worker searches its part with the same clock; the
+		// meter follows part 0.
+		const pool = getRustEnginePool(this.workers);
+		const results = await Promise.all(pool.map((w, i) => w.search(
+			Object.assign({}, req, { split: [i, pool.length] }), i === 0 ? progress : null)));
+		return pickSplitResult(results);
 	}
 
 	async pickTurn(board, color, onProgress) {
@@ -421,5 +482,9 @@ RustAI.judgeMove = async function (board, plies, timeMs) {
 	res.turn = await rustActionsToTurn(sim, board.whoseTurn, res.actions, res.expected_sfn);
 	return res;
 };
+
+// Exposed for tools/wasm-smoke.js, which drives the same combination headless.
+RustAI.pickSplitResult = pickSplitResult;
+RustAI.rustWorkerCount = rustWorkerCount;
 
 if (typeof window !== 'undefined') window.RustAI = RustAI;

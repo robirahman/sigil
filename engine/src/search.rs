@@ -506,6 +506,9 @@ pub struct Search {
     helper_id: usize,
     /// Set by the main thread when its search ends; helpers treat it as a deadline.
     stop: Option<Arc<AtomicBool>>,
+    /// Browser root split `(part, parts)`: search only the root turns with
+    /// `root_part(turn, parts) == part`. `(0, 1)` = every turn (the default).
+    root_split: (u32, u32),
     mask: usize,
     /// Search generation, bumped per `go`; see `TtEntry::age`.
     age: u8,
@@ -711,6 +714,7 @@ impl Search {
             threads: 1,
             helper_id: 0,
             stop: None,
+            root_split: (0, 1),
             mask: n - 1,
             age: 0,
             killers: [[None; 2]; MAX_PLY],
@@ -1091,6 +1095,19 @@ impl Search {
 
 }
 
+/// Which part of a `parts`-way root split a turn belongs to: an FNV hash of its
+/// packed actions, so it depends on the turn alone.
+pub fn root_part(t: &Turn, parts: u32) -> u32 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for a in t.slice() {
+        for byte in pack_action(*a).to_le_bytes() {
+            h ^= byte as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    (h % parts.max(1) as u64) as u32
+}
+
 /// The generator's per-thread A/B switches (`turn_iter`, `key_dash`, `opening`).
 /// A helper thread starts with every switch at its default, so a Lazy SMP search
 /// copies the main thread's values into each helper; otherwise an arena arm that
@@ -1167,6 +1184,12 @@ impl Search {
     /// wasm build has no threads and ignores it.
     pub fn set_threads(&mut self, n: usize) { self.threads = n.max(1); }
     pub fn threads(&self) -> usize { self.threads }
+
+    /// Browser root split (step 6 option A, prototype): search only part `part` of
+    /// `parts` of the root list. `parts <= 1` turns it off.
+    pub fn set_root_split(&mut self, part: u32, parts: u32) {
+        self.root_split = if parts <= 1 { (0, 1) } else { (part % parts, parts) };
+    }
 
     /// `exact_clock`: the root finished before the deadline (a proven decisive
     /// score, or `max_depth` completed, which a single-legal-turn root can
@@ -1407,6 +1430,18 @@ impl Search {
         if self.helper_id > 0 && turns.len() > 2 {
             let k = self.helper_id % (turns.len() - 1);
             turns[1..].rotate_left(k);
+        }
+        // Browser root split (step 6 option A): this engine searches only the root
+        // turns whose hash falls in its part. The hash depends on the turn alone,
+        // never on its place in the list, so the parts stay disjoint and complete
+        // across iterations and engines even though each orders its list by its
+        // own table. An empty part keeps the list's first turn so it still
+        // returns a move (the coordinator compares scores across parts).
+        if self.root_split.1 > 1 {
+            let (part, parts) = self.root_split;
+            let first = turns.first().copied();
+            turns.retain(|t| root_part(t, parts) == part);
+            if turns.is_empty() { turns.extend(first); }
         }
         // `adopt_partial` bookkeeping: did a move whose subtree COMPLETED beat
         // the seed (which is searched first and therefore completes first)?
@@ -2197,6 +2232,31 @@ mod smp_tests {
             let (best, _, _) = s.go(&b, c, 64, 150);
             assert!(now_ms() - t0 < 1500.0, "helpers must stop with the main thread");
             assert!(b.first_action_is_legal(best.expect("a move").slice()[0], c));
+        }
+    }
+
+    #[test]
+    fn root_split_parts_are_disjoint_and_cover_the_root() {
+        for b in boards(3) {
+            let c = b.to_move;
+            let (turns, _) = b.enumerate_turns_capped(c, 3000);
+            for parts in [2u32, 3, 7] {
+                let mut counts = vec![0usize; parts as usize];
+                for t in &turns { counts[root_part(t, parts) as usize] += 1; }
+                assert_eq!(counts.iter().sum::<usize>(), turns.len());
+                if turns.len() > 50 * parts as usize {
+                    assert!(counts.iter().all(|&k| k > 0), "a part is empty: {counts:?}");
+                }
+            }
+            // Each part's search returns a turn from its own part.
+            for part in 0..3u32 {
+                let mut s = shipped(16);
+                s.set_root_split(part, 3);
+                let (best, _, _) = s.go(&b, c, 2, 0);
+                let best = best.expect("a move");
+                assert!(b.first_action_is_legal(best.slice()[0], c));
+                assert_eq!(root_part(&best, 3), part, "the move must come from this part");
+            }
         }
     }
 
