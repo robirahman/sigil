@@ -116,21 +116,27 @@ pub struct SpellSigil {
 impl SpellSigil {
     /// Worst-case |contribution| over every legal draw: each draw holds three
     /// spells of each role, in sigils of 5, 3 and 1 nodes, so take the three largest
-    /// `|stone| * n + |charged|` per role.
+    /// `|stone| * n + |charged|` per role. Every official spell of the role counts
+    /// (core plus Tectonic and Providence), so a table that prices the expansion
+    /// spells stays inside the budget too.
     pub const fn worst_case(&self) -> i32 {
-        let groups: [&[u8; 13]; 3] = [&crate::spells_meta::RITUALS,
-            &crate::spells_meta::SORCERIES, &crate::spells_meta::CHARMS];
         let sizes = [5, 3, 1];
         let mut total = 0;
         let mut g = 0;
         while g < 3 {
             let (mut a, mut b, mut c) = (0, 0, 0);   // three largest, a >= b >= c
-            let mut i = 0;
-            while i < 13 {
-                let s = groups[g][i] as usize;
-                let v = abs_i32(self.stone[s]) * sizes[g] + abs_i32(self.charged[s]);
-                if v > a { c = b; b = a; a = v; } else if v > b { c = b; b = v; } else if v > c { c = v; }
-                i += 1;
+            let mut s = 0;
+            while s < crate::spells_meta::NUM_OFFICIAL_SPELLS {
+                let r = match crate::spells_meta::SPELLS[s].role {
+                    crate::spells_meta::Role::Ritual => 0,
+                    crate::spells_meta::Role::Sorcery => 1,
+                    crate::spells_meta::Role::Charm => 2,
+                };
+                if r == g {
+                    let v = abs_i32(self.stone[s]) * sizes[g] + abs_i32(self.charged[s]);
+                    if v > a { c = b; b = a; a = v; } else if v > b { c = b; b = v; } else if v > c { c = v; }
+                }
+                s += 1;
             }
             total += a + b + c;
             g += 1;
