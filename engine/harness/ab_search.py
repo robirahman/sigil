@@ -204,9 +204,11 @@ def play(b, ms, ev, hist, knob, val):
     if knob == 'policy':
         # Step 4 learned generator policy (engine/src/policy.rs), BOTH arms at the
         # SHIPPED adaptive widening (0.10, 2, 6) unless the arm overrides it.
-        # val = easy*10^7 + hard*10^6 + penalty*1000 + min_width; 0 = shipped
-        # engine (policy off). penalty in 1/256 nat; easy/hard 0 = shipped (2, 6).
+        # val = ws*10^8 + easy*10^7 + hard*10^6 + penalty*1000 + min_width; 0 =
+        # shipped engine (policy off). penalty in 1/256 nat; easy/hard 0 = shipped
+        # (2, 6); ws 0 = BASE_WS (the policy may let width_scale come down).
         se.set_policy(bool(val), val % 1000)
+        ws = (val // 10 ** 8) % 10 or ws
         se.set_policy_cost((val // 1000) % 1000, 1 << 30)
         e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
         sp = tuple(se.SHIPPED_ADAPTIVE)
