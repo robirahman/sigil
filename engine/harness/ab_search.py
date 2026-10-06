@@ -100,7 +100,11 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          #   24 resolutions, 4 keeps, for the SEL_SPELLS_DEFAULT spells); 0 = off.
          # speed = 1/0: the tree-identical node-rate switch (turn_iter::set_speed_v1).
          # lead_min = skip the stone-lead pre-pass below this many plies left (2 = shipped since v18, 0 = v17).
-         'outcome_sel', 'speed', 'lead_min')
+         'outcome_sel', 'speed', 'lead_min',
+         # preset: an EVAL A/B on the shipped search. Pass the eval argument as
+         # `<arm_eval>:<base_eval>` (e.g. tfit_spell:tfit); the side whose knob
+         # value is non-zero plays the left one. Arm 1, base 0.
+         'preset')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -113,6 +117,10 @@ DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the s
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
+    if ':' in ev:
+        if knob != 'preset':
+            sys.exit(f"an `arm:base` eval pair needs knob=preset, got {knob!r}")
+        ev = ev.split(':')[0 if val else 1]
     ws = val if knob == 'width_scale' else BASE_WS
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
@@ -278,6 +286,11 @@ if __name__ == "__main__":
     knob = sys.argv[4]; arm_val = int(sys.argv[5]); base_val = int(sys.argv[6])
     if knob not in KNOBS:
         sys.exit(f"unknown knob {knob!r}; expected one of {KNOBS}")
+    if knob == 'preset' and (':' not in ev or arm_val == base_val):
+        sys.exit("knob=preset needs eval=<arm>:<base> and arm/base values 1 0")
+    for e in ev.split(':'):
+        if e not in se.EVAL_NAMES:
+            sys.exit(f"unknown eval {e!r}; expected one of {se.EVAL_NAMES}")
     off = shard_offset()
 
     cfg = se.search_defaults()
