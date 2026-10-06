@@ -21,6 +21,14 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-06: engine v24 (cache v64) -- eval `tfit_spell_v2` shipped.** `eval::SHIPPED_EVAL` now names the site's eval
+(wasm default, puzzle judge, mate nominator, `serve.py`); harness defaults stay `tfit`. Per-spell sigil terms: the
+original fit `tfit_spell` scored +59 [+45, +72] at 3 s (2,580 games) and +50 [+33, +66] at 10 s (1,806) over `tfit`
+(`reports/2026-10-step2.md`); the v2 refit on Step 3 data ties it at 10 s, -4.8 [-25, +15] on core draws and
+-3.0 [-23, +17] on Tectonic/Providence draws (1,168 each, `reports/2026-10-step2b.md`), and covers ids 39-44.
+Same release fixes a Rock Slide x Bulwark replay bug (396e49b0): a stone stopped by a shield was recorded as
+dying AT the shield, so the replay's shield inference killed the shielded stone. Tests 173/173, wasm smoke 5/5.
+
 **2026-10-03: engine v23 (cache v62) -- v22 shipped; shield check skipped when Bulwark is not drawn.** Version
 A/B (`harness/ab_version.py`, new `runner.sh` `base-branch` build), v22 vs main's v21 on core-only draws, shipped
 config, 3 x c3d-highcpu-90: 1 s/move -10.5 Elo [-27, +6], 3 s/move -6.6 [-24, +11], pooled ~-9 [-21, +4] over
