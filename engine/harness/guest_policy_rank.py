@@ -32,9 +32,13 @@ def main():
                                                     'guest_2026-10_cases.json'))
     ap.add_argument('--cap', type=int, default=5000)
     ap.add_argument('--json', default='')
+    ap.add_argument('--explore', default='', help='set_policy_explore args, comma-separated (r3-gen; '
+                    'ab_search preset 3 = 3,64,128,8,48,512,16)')
     a = ap.parse_args()
     cases = json.load(open(a.cases))
     se.set_policy(True, 96)
+    if a.explore:
+        se.set_policy_explore(*[int(x) for x in a.explore.split(',')])
     out = {}
     for w in a.weights:
         se.set_policy_weights(load_weights(w).ravel().tolist())

@@ -169,12 +169,17 @@ def _arm_policy_weights():
 # Python, so without this an arena of any other knob measures the pre-v25 search.
 # Default off keeps the older arms files reproducible.
 POLICY_MODE = os.environ.get('SIGIL_POLICY', 'off')
+# SIGIL_BASE_EXPLORE=<preset>: BOTH arms play the policy exploration tail
+# EXPLORE_PRESETS[preset] (round 3: stack a policy_weights A/B on explore preset 3).
+BASE_EXPLORE = int(os.environ.get('SIGIL_BASE_EXPLORE') or 0)
 
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
     if (AB_BASE == 'shipped' or POLICY_MODE == 'shipped') and knob != 'policy':
         se.set_policy(*se.SHIPPED_POLICY)
+    if BASE_EXPLORE and knob != 'policy_explore':
+        se.set_policy_explore(*EXPLORE_PRESETS[BASE_EXPLORE])
     if ':' in ev:
         # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
         # val != 0) plays the left eval, the base (policy off) the right one.
@@ -502,7 +507,7 @@ if __name__ == "__main__":
     RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  ab_base={AB_BASE} policy_mode={POLICY_MODE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  ab_base={AB_BASE} policy_mode={POLICY_MODE} base_explore={BASE_EXPLORE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "
