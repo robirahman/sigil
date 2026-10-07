@@ -9,6 +9,7 @@
 #     --metadata run-id=<RUN>,branch=r3-gate,max-hours=3,procs=8 \
 #     --metadata-from-file startup-script=engine/gcp/runner_r3gate.sh
 #
+# Rerunning the startup script on the same VM (out/ kept) skips the finished steps.
 # `procs` node processes run the depth probe side by side, one per PHYSICAL core
 # (C3D vCPUs are hyperthreads), so each search has a core to itself.
 set -uo pipefail
@@ -79,9 +80,11 @@ gcs_get data/guest-audit-2026-10/lines_all.json $WORK/lines_all.json || { echo "
 cd $WORK/repo
 P=engine/harness/positions_midgame.txt
 for d in 4 5; do
+  grep -q RESULT $OUT/calib_wasm_d$d.txt 2>/dev/null && continue
   engine/target/release/examples/bench $P $d --eval nnue_spell3 --policy 96 > $OUT/calib_native_d$d.txt 2>&1
   H=$(grep -o 'HASH [0-9a-f]*' $OUT/calib_native_d$d.txt | tail -1 | awk '{print $2}')
-  /usr/bin/time -f "wall %e s" node tools/policy-wasm-parity.js "$H" $d nnue_spell3 > $OUT/calib_wasm_d$d.txt 2>&1
+  node tools/policy-wasm-parity.js "$H" $d nnue_spell3 > $OUT/calib_wasm_d$d.txt 2>&1
+  node tools/browser/wasm-speed.js node $d >> $OUT/calib_wasm_d$d.txt 2>&1   # same trees, timed
 done
 tail -n 2 $OUT/calib_*.txt
 
@@ -90,11 +93,14 @@ B=ai/data/benchmarks
 # PROCS shards side by side; SHARDS=n > PROCS samples shards 0..PROCS-1 of n.
 probe() {  # out-prefix mode in [opts...]
   local pre=$1 mode=$2 in=$3; shift 3
-  local nshard=${SHARDS:-$PROCS} k
+  local nshard=${SHARDS:-$PROCS} k pids=()
+  [ -s $OUT/$pre.jsonl ] && { echo "$pre: done before, skipped"; return; }
+  rm -f $OUT/$pre.s*.jsonl
   for k in $(seq 0 $((PROCS - 1))); do
     node tools/browser-depth.js $mode $in $OUT/$pre.s$k.jsonl --shard $k/$nshard "$@" 2>>$OUT/$pre.log &
+    pids+=($!)
   done
-  wait
+  wait "${pids[@]}"   # NOT a bare wait: the uploader loop and the watchdog are children too
   cat $OUT/$pre.s*.jsonl > $OUT/$pre.jsonl && rm -f $OUT/$pre.s*.jsonl
   echo "$pre: $(wc -l < $OUT/$pre.jsonl) searches $(date -u +%T)"
 }
@@ -111,6 +117,7 @@ NODES=${NODES:-50000,300000,600000,1500000}
 for cfg in "v27:eval=shipped" "v25:eval=shipped;module=$WORK/mods/audit-v25.so" \
            "v23:eval=shipped;module=$WORK/mods/audit-v23.so"; do
   name=${cfg%%:*}
+  [ -s $OUT/guest_gate_$name.json ] && continue
   $WORK/venv/bin/python -u engine/harness/bench_suites.py --guest-only --nodes $NODES --guest-depths 5,6 \
     --workers $(nproc) --config "$cfg" --json $OUT/guest_gate_$name.json >> $OUT/gate.log 2>&1
   tail -1 $OUT/gate.log

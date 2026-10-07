@@ -195,8 +195,8 @@ def job_sees(item):
 
 
 def is_competitive(sfn):
-    """The SFN's last token names the variant when it is not standard."""
-    return sfn.split(' ')[-1].startswith('competitive')
+    """A non-standard variant is named by an SFN token (a Providence `pm:` token may follow it)."""
+    return any(t.startswith('competitive') for t in sfn.split(' ')[1:])
 
 
 def _result_key(sfn):

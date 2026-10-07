@@ -12,7 +12,7 @@ budget, `exact_clock`, so iterative deepening is cut by wall time alone). The 30
 probes therefore give the 10 s depth for speed <= 3.
 
 Every table splits the competitive variant (`competitive`, `competitive_deathmatch`) from
-the standard one: the variant is the SFN's last token when it names one.
+the standard one: the variant is a token of the SFN when it names one.
 """
 import argparse
 import collections
@@ -21,8 +21,8 @@ import os
 
 
 def variant(sfn):
-    last = (sfn or '').split(' ')[-1]
-    return 'competitive' if last.startswith('competitive') else 'standard'
+    comp = any(t.startswith('competitive') for t in (sfn or '').split(' ')[1:])
+    return 'competitive' if comp else 'standard'
 
 
 def load(path):
