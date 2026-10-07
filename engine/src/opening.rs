@@ -76,10 +76,14 @@
 use crate::board::{Board, Color, Outcome};
 
 thread_local! {
-    static OPENING_BOOK: std::cell::Cell<bool> = std::cell::Cell::new(true);
+    static OPENING_BOOK: std::cell::Cell<bool> = std::cell::Cell::new(false);
 }
-/// A/B switch for the opening selector (default on), per thread like the
-/// pre-pass switches: the arena sets it before every move.
+/// A/B switch for the opening selector, per thread like the pre-pass switches: the
+/// arena sets it before every move. OFF by default since engine v27 (2026-10-07):
+/// with the spell-conditioned network eval the search places the first stone itself,
+/// and v25 without the selector beat v25 with it by +90.5 Elo [+75.3, +105.6] at
+/// 10 s in the competitive variant (engine/reports/2026-10-r2-opening.md). The
+/// selector stays for A/Bs and for a weaker eval that needs it.
 pub fn set_opening_book(on: bool) { OPENING_BOOK.with(|c| c.set(on)); }
 pub fn opening_book_enabled() -> bool { OPENING_BOOK.with(|c| c.get()) }
 thread_local! {

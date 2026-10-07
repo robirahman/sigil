@@ -3571,6 +3571,9 @@ fn opening_book_is_a_noop_outside_the_competitive_opening() {
 
 #[test]
 fn opening_book_restricts_the_root_to_the_chosen_sigil() {
+    // The book is OFF by default since v27; this pins its behaviour when on.
+    assert!(!crate::opening::opening_book_enabled(), "v27 ships the opening book off");
+    crate::opening::set_opening_book(true);
     let b = competitive_board(Board::legal_draw(3));
     let pick = crate::opening::choose_opening(&b, Color::Red).expect("applies");
     let mut s = crate::search::Search::new(16);
