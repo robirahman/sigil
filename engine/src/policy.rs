@@ -746,11 +746,15 @@ impl<'a> PolicyIter<'a> {
             let c = self.c;
             let ri = self.ri.as_ref().unwrap();
             let opts = postdash_opts(&bd, c, ri);
+            let by_eval = self.explore.mode & 4 != 0;
+            let step = self.explore.step.max(1);
+            let mut j = 0i32;
             for (_, pos) in opts {
                 let mut wd = false;
                 for o in cast_opts(&bd, c, pos as usize, CK_DASH, self.window, self.keep_window, &mut wd) {
                     let t2 = x.t.push_pub(o.act);
-                    let sc = self.tail_score(&t2);
+                    j += 1;
+                    let sc = if by_eval { self.tail_score(&t2) } else { x.sc - step * j };
                     self.xpush(sc, t2, None);
                 }
             }
@@ -920,11 +924,15 @@ impl<'a> PolicyIter<'a> {
                     if keys.contains(&o.key) { continue; }
                     keys.push(o.key);
                     let t = prefix.push_pub(o.act);
-                    let sc = if e.mode & 4 != 0 || e.slot_every > 0 { self.tail_score(&t) } else { 0 };
+                    let sc = if e.mode & 4 != 0 { self.tail_score(&t) } else { 0 };
                     items.push((sc, t, o.pending));
                 }
                 if e.slot_every > 0 {
-                    for (sc, t, _) in items { self.xpush(sc, t, None); }
+                    // slot heap: by eval (mode bit 2) or by the tail's own probability order
+                    for (j, (sc, t, _)) in items.into_iter().enumerate() {
+                        let k = if e.mode & 4 != 0 { sc } else { lp - e.step * j as i32 };
+                        self.xpush(k, t, None);
+                    }
                     return;
                 }
                 if e.mode & 4 != 0 { items.sort_by_key(|x| -x.0); }
@@ -945,13 +953,14 @@ impl<'a> PolicyIter<'a> {
                     if keys.contains(&k) { continue; }
                     keys.push(k);
                     let t = prefix.push_pub(t.slice()[0]);
-                    let sc = if e.mode & 4 != 0 || e.slot_every > 0 { self.tail_score(&t) } else { 0 };
+                    let sc = if e.mode & 4 != 0 { self.tail_score(&t) } else { 0 };
                     items.push((sc, t, bd));
                 }
                 if e.slot_every > 0 {
-                    for (sc, t, bd) in items {
+                    for (j, (sc, t, bd)) in items.into_iter().enumerate() {
                         let cont = if dash_p2(&bd, c).is_some() { Some(bd) } else { None };
-                        self.xpush(sc, t, cont);
+                        let k = if e.mode & 4 != 0 { sc } else { lp - e.step * j as i32 };
+                        self.xpush(k, t, cont);
                     }
                     return;
                 }
