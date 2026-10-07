@@ -25,6 +25,8 @@ RUN=$(md run-id); WORKERS=$(md workers); BRANCH=$(md branch)
 HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
 VARIANT=$(md variant); : "${VARIANT:=standard}"   # SIGIL_VARIANT for the harness (competitive opening arenas)
 export SIGIL_VARIANT="$VARIANT"   # the smoke arm reads it too, not only the shards
+POLICY_MODE=$(md policy-mode || true); : "${POLICY_MODE:=off}"
+export SIGIL_POLICY="$POLICY_MODE"   # ab_search: shipped = both arms at se.SHIPPED_POLICY
 REQUIRE_SPELL=$(md require-spell || true)   # SIGIL_REQUIRE_SPELL: play only draws holding this spell id
 if [ -n "$REQUIRE_SPELL" ]; then export SIGIL_REQUIRE_SPELL="$REQUIRE_SPELL"; fi
 SHARD_BASE=$(md shard-base)

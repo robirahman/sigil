@@ -119,8 +119,18 @@ ADAPTIVE_P = 0.10
 DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the switch takes the cap too
 
 
+# SIGIL_POLICY=shipped plays BOTH arms with the shipped generator policy
+# (se.SHIPPED_POLICY, on since v25) unless the knob under test is the policy
+# itself. The policy is a thread-local engine setting that is OFF by default in
+# Python, so without this an arena of any other knob measures the pre-v25 search.
+# Default off keeps the older arms files reproducible.
+POLICY_MODE = os.environ.get('SIGIL_POLICY', 'off')
+
+
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
+    if POLICY_MODE == 'shipped' and knob != 'policy':
+        se.set_policy(*se.SHIPPED_POLICY)
     if ':' in ev:
         # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
         # val != 0) plays the left eval, the base (policy off) the right one.
@@ -420,7 +430,7 @@ if __name__ == "__main__":
     RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} policy_mode={POLICY_MODE} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "
