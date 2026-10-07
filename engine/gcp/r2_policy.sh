@@ -43,8 +43,14 @@ git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$
 cd repo && git sparse-checkout init --cone && git sparse-checkout set engine ai && git checkout >/dev/null 2>&1
 git log --oneline -1 > $W/out/COMMIT.txt
 python3 -m venv $W/venv
+$W/venv/bin/pip -q install --upgrade pip
 $W/venv/bin/pip -q install numpy
-$W/venv/bin/pip -q install torch --index-url https://download.pytorch.org/whl/cpu
+# Debian 12's venv pip is too old for torch's build deps off the CPU-only index
+# alone (no flit_core there): upgrade pip and keep PyPI as the fallback index.
+$W/venv/bin/pip -q install torch --index-url https://download.pytorch.org/whl/cpu \
+  --extra-index-url https://pypi.org/simple
+$W/venv/bin/python -c 'import torch; print("torch", torch.__version__)' \
+  || { echo "FATAL: torch"; gcs_put /var/log/sigil-r2p.log "runs/$RUN/FAILED.log"; shutdown -h now; exit 1; }
 cd engine && cargo build --release 2>&1 | tail -1
 mkdir -p $W/py; cp target/release/libsigil_engine.so $W/py/sigil_engine.so
 ( while true; do for f in $W/out/*; do [ -f "$f" ] && gcs_put "$f" "runs/$RUN/$(basename "$f")" || true; done; sleep 120; done ) &
@@ -82,7 +88,9 @@ for w in compiled $W/out/w_zero.npy $W/out/w_warm.npy; do
 done
 
 # --- Step 1 suites at the shipped v25 search config ------------------------------
+SUITES=$(md suites); : "${SUITES:=1}"
 cd $W/repo
+[ "$SUITES" = 1 ] && \
 P96="call=set_policy(True,96)"
 $PY engine/harness/bench_suites.py --nodes 50000,300000,1500000 \
   --cover 6,10,12,24,40,96,500 --workers $N \
