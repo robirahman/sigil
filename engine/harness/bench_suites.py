@@ -188,12 +188,12 @@ def run_config(cfg, suites, a):
     return out
 
 
-def load_suites(d, limit=0):
+def load_suites(d, limit=0, surprise_file='surprise_cases.json'):
     def ld(name):
         p = os.path.join(d, name)
         x = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else []
         return x[:limit] if limit else x
-    return {'surprise': ld('surprise_cases.json'), 'finds': ld('human_finds.json'),
+    return {'surprise': ld(surprise_file), 'finds': ld('human_finds.json'),
             'final': ld('final_blow_misses.json')}
 
 
@@ -201,6 +201,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--suites', default=os.path.join(ROOT, 'ai', 'data', 'benchmarks'))
     ap.add_argument('--config', action='append', default=[])
+    ap.add_argument('--surprise-file', default='surprise_cases.json',
+                    help='surprise suite file under --suites (e.g. surprise_cases_v25.json, the '
+                         'targets re-scored by bench_rescore.py)')
     ap.add_argument('--nodes', default='50000,300000,1500000')
     ap.add_argument('--cover', default='10,24,96,500')
     ap.add_argument('--workers', type=int, default=os.cpu_count() or 2)
@@ -210,8 +213,8 @@ def main():
     a.nodes = [int(x) for x in a.nodes.split(',') if x]
     a.cover = [int(x) for x in a.cover.split(',') if x]
     cfgs = [parse_config(s) for s in (a.config or ['shipped:eval=tfit'])]
-    suites = load_suites(a.suites, a.limit)
-    print(f"suites: {len(suites['surprise'])} surprise, {len(suites['finds'])} human finds, "
+    suites = load_suites(a.suites, a.limit, a.surprise_file)
+    print(f"suites: {len(suites['surprise'])} surprise ({a.surprise_file}), {len(suites['finds'])} human finds, "
           f"{len(suites['final'])} final-blow misses; nodes {a.nodes}; cover {a.cover}", flush=True)
     results = []
     for cfg in cfgs:

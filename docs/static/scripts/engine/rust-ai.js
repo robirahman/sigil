@@ -147,11 +147,28 @@ function getRustEnginePool(n) {
 function getRustEngineWorker() { return getRustEnginePool(1)[0]; }
 
 /**
+ * The device setting's worker count ('auto'): up to 4, leaving a core for the
+ * page. Measured 2026-10 (engine/reports/2026-10-r2-multicore.md).
+ */
+function recommendedRustWorkers(hardwareConcurrency) {
+	const hc = Math.floor(Number(hardwareConcurrency) || 0);
+	return Math.max(1, Math.min(4, hc - 1));
+}
+
+/** The account page's device setting (localStorage 'sigil.rustWorkers'):
+ *  'auto' or unset (one worker). Never throws (private mode, blocked storage). */
+function rustWorkersSetting() {
+	try { return (typeof localStorage !== 'undefined' && localStorage.getItem('sigil.rustWorkers')) || undefined; }
+	catch (e) { return undefined; }
+}
+
+/**
  * How many root-split workers to use: `requested` (RustAI's `workers` option,
  * else `window.SIGIL_RUST_WORKERS`), capped at hardwareConcurrency - 1 so the
  * page keeps a core; 1 (the shipped single worker) when unset or unknown.
  */
 function rustWorkerCount(requested, hardwareConcurrency) {
+	if (requested === 'auto') return recommendedRustWorkers(hardwareConcurrency);
 	const want = Math.floor(Number(requested) || 1);
 	const hc = Math.floor(Number(hardwareConcurrency) || 0);
 	const cap = Math.max(1, hc - 1);
@@ -165,20 +182,34 @@ function rustWorkerCount(requested, hardwareConcurrency) {
  * one iteration shallower is the price of the prototype), ties to the deeper
  * part. `nodes` becomes the total; `split` records the per-part view.
  */
-function pickSplitResult(results) {
+function pickSplitResult(results, perDepth) {
 	const ok = results.filter((r) => r && r.ok && Array.isArray(r.actions) && r.actions.length);
 	if (!ok.length) return results.find((r) => r) || { ok: false, error: 'no part returned a move' };
 	const done = ok.filter((r) => (r.depth || 0) > 0);
 	const pool = done.length ? done : ok;
+	// Scores of different depths are not comparable (2026-10 round 2: comparing
+	// final scores lost -27 Elo at 2 parts and -90 at 4). With the per-part
+	// progress history (`perDepth[i]` = [[depth, uiScore], ...]) the parts are
+	// compared at the deepest depth every one of them completed.
+	const hist = (r) => (perDepth && perDepth[results.indexOf(r)]) || null;
+	const useCommon = !!perDepth && pool.every((r) => hist(r) && hist(r).length);
+	const common = useCommon ? Math.min(...pool.map((r) => Math.max(...hist(r).map((x) => x[0])))) : 0;
+	const key = (r) => {
+		if (!useCommon) return r.score;
+		const at = hist(r).filter((x) => x[0] === common);
+		return at.length ? at[at.length - 1][1] : r.score_ui;
+	};
 	let best = pool[0];
 	for (const r of pool) {
-		if (r.score > best.score || (r.score === best.score && (r.depth || 0) > (best.depth || 0))) best = r;
+		const kr = key(r), kb = key(best);
+		if (kr > kb || (kr === kb && (r.depth || 0) > (best.depth || 0))) best = r;
 	}
 	const out = Object.assign({}, best);
 	out.nodes = ok.reduce((s, r) => s + (r.nodes || 0), 0);
 	out.split = { parts: results.length, chosen: results.indexOf(best),
 		depths: results.map((r) => (r && r.depth) || 0),
-		scores: results.map((r) => (r && r.ok) ? r.score : null) };
+		scores: results.map((r) => (r && r.ok) ? r.score : null),
+		common_depth: useCommon ? common : null };
 	return out;
 }
 
@@ -224,7 +255,7 @@ class RustAI {
 		// Step 6 option A root split (prototype): 1 = the shipped single worker.
 		const hc = (typeof navigator !== 'undefined') ? navigator.hardwareConcurrency : 0;
 		const req = (options.workers !== undefined) ? options.workers
-			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || 1);
+			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || rustWorkersSetting() || 1);
 		this.workers = (this.transport === 'worker') ? rustWorkerCount(req, hc) : 1;
 		// One RustAI per game: reset the workers' persistent tables so a previous
 		// game's entries cannot leak into this one.
@@ -366,9 +397,13 @@ class RustAI {
 		// Root split: every worker searches its part with the same clock; the
 		// meter follows part 0.
 		const pool = getRustEnginePool(this.workers);
+		const perDepth = pool.map(() => []);
 		const results = await Promise.all(pool.map((w, i) => w.search(
-			Object.assign({}, req, { split: [i, pool.length] }), i === 0 ? progress : null)));
-		return pickSplitResult(results);
+			Object.assign({}, req, { split: [i, pool.length] }), (msg) => {
+				perDepth[i].push([msg.depth, msg.score]);
+				if (i === 0 && progress) progress(msg);
+			})));
+		return pickSplitResult(results, perDepth);
 	}
 
 	async pickTurn(board, color, onProgress) {
@@ -486,5 +521,6 @@ RustAI.judgeMove = async function (board, plies, timeMs) {
 // Exposed for tools/wasm-smoke.js, which drives the same combination headless.
 RustAI.pickSplitResult = pickSplitResult;
 RustAI.rustWorkerCount = rustWorkerCount;
+RustAI.recommendedRustWorkers = recommendedRustWorkers;
 
 if (typeof window !== 'undefined') window.RustAI = RustAI;
