@@ -161,7 +161,7 @@ impl Solver {
     fn new(budget: u64, time_ms: u64) -> Self {
         let deadline = if time_ms > 0 { Some(crate::search::now_ms() + time_ms as f64) } else { None };
         let mut se = crate::search::Search::new(18);
-        se.weights = crate::eval::weights_by_name("tfit").unwrap_or_default();
+        se.weights = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap_or_default();
         se.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
         let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
         se.set_adaptive(p, e, h);
@@ -291,7 +291,7 @@ impl Solver {
         idx.sort_by_key(|&i| {
             let t = &replies[i].0;
             let is_killer = self.killers.iter().any(|k| k.slice() == t.slice());
-            let mat = replies[i].1.total[o.idx()] as i32 - replies[i].1.total[c.idx()] as i32;
+            let mat = replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32;
             (if is_killer { 0 } else { 1 }, -mat)
         });
         for &i in &idx {
@@ -332,7 +332,7 @@ impl Solver {
             // turn holding Seal of Destruction). Any reply will do.
             return Ok(replies.first().map(|r| (*r, None, 0)));
         }
-        cands.sort_by_key(|(_, b)| -(b.total[o.idx()] as i32 - b.total[c.idx()] as i32));
+        cands.sort_by_key(|(_, b)| -(b.material(o) as i32 - b.material(c) as i32));
         let mut best: Option<((Turn, Board), Option<(Turn, Board)>, usize)> = None;
         for r in cands.iter().take(probe.max(1)) {
             let mates = self.mate_in_1_all(&r.1, c)?;
@@ -414,7 +414,7 @@ impl Solver {
             idx.sort_by_key(|&i| {
                 let rt = &replies[i].0;
                 let is_killer = self.killers.iter().any(|k| k.slice() == rt.slice());
-                let mat = replies[i].1.total[o.idx()] as i32 - replies[i].1.total[c.idx()] as i32;
+                let mat = replies[i].1.material(o) as i32 - replies[i].1.material(c) as i32;
                 (if is_killer { 0 } else { 1 }, -mat)
             });
             // Replies that needed a mate-in-2 (no mate-in-1 for the mover): the

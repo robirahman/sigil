@@ -424,17 +424,16 @@ def board_to_tensor(board, side_to_move=None):
     # into a permanent wall.
     features.extend(stones_destroyed)  # 39
 
-    # Providence pending-move block (appended last, same migration
-    # convention): own/enemy schedule slots 0-3 (min(x,3)/3), then
-    # own/enemy extras granted this turn but not yet used.
+    # Providence bank block (appended last, same migration convention; the
+    # 10-dim layout predates the bank rules): own bank (min(x,8)/8) then
+    # three zero slots, the same for the enemy, then own/enemy "placement
+    # available this turn" (nonempty bank on the side to move).
     for side in (side_to_move, enemy):
-        sched = board.pending_moves[side]
-        for i in range(4):
-            v = sched[i] if i < len(sched) else 0
-            features.append(min(v, 3) / 3.0)
-    extra = min(board.extra_moves_this_turn, 3) / 3.0
-    features.append(extra if board.whose_turn == side_to_move else 0.0)
-    features.append(extra if board.whose_turn == enemy else 0.0)  # 10 dims
+        features.append(min(board.prov_bank[side], 8) / 8.0)
+        features.extend((0.0, 0.0, 0.0))
+    for side in (side_to_move, enemy):
+        features.append(1.0 if board.whose_turn == side
+                        and board.prov_bank[side] > 0 else 0.0)  # 10 dims
 
     # Reserved [505:593]: 10-dim block + 78 node channels formerly used by
     # retired spells. Always zero; kept so checkpoint raw_proj columns align.
@@ -491,8 +490,8 @@ def encode_turn(turn, board, color):
     #  [79]    — tempo-waste: re-fills own locked spell (stones / 3)  [v28]
     #  [80:84] — reserved
     #  [84:114]— spell cast ID one-hot, expansion spells (IDs 15-44)  [v29]
-    #  [114]   — Providence extra base moves used this turn (/3)  [v29]
-    #  [115]   — Providence turns scheduled by this turn's cast (/4)  [v29]
+    #  [114]   — Providence placement made this turn (0/1)  [v29]
+    #  [115]   — Providence stones banked by this turn's cast (/4)  [v29]
     #  [116:124]— reserved (retired spells; always zero)  [v30]
 
     crushable_own_before = _count_crushable(board, color, enemy)
@@ -565,22 +564,16 @@ def encode_turn(turn, board, color):
             else:
                 features[84 + (spell_id - 15)] = 1.0
 
-        elif action.type == 'schedule_moves':
-            features[115] = min(action.turns or 0, 4) / 4.0
+        elif action.type == 'bank_stones':
+            features[115] = min(action.banked or 0, 4) / 4.0
 
     features[58] = len(turn.actions) / 5.0
     if len(turn.actions) == 1 and turn.actions[0].type == 'pass':
         features[60] = 1.0
 
-    # Providence: extra base moves used this turn (leading move-phase
-    # actions beyond the ordinary first move).
-    base_moves = 0
-    for action in turn.actions:
-        if action.type in ('move', 'hard_move', 'blink'):
-            base_moves += 1
-        else:
-            break
-    features[114] = min(max(base_moves - 1, 0), 3) / 3.0
+    # Providence: a banked stone was placed this turn.
+    if any(action.providence for action in turn.actions):
+        features[114] = 1.0
 
     # Tactical extension: read from sim_after
     if sim_after is not None:

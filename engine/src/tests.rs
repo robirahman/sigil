@@ -218,12 +218,14 @@ fn zobrist_distinguishes_and_is_stable() {
 }
 
 #[test]
-fn deferred_and_panda_are_out_of_scope() {
-    assert_eq!(NUM_OFFICIAL_SPELLS, 39, "official ids are 0..38 contiguous");
+fn retired_and_panda_are_out_of_scope() {
+    assert_eq!(NUM_OFFICIAL_SPELLS, 45, "ids 0..44: core, Tectonic, Providence");
     let ok = Board::new([0,5,14,20,30,32,36,37,38], Variant::Standard);
     assert!(!ok.has_deferred_spell());
-    let bad = Board::new([0,5,14,20,30,32,36,37,39], Variant::Standard);
-    assert!(bad.has_deferred_spell(), "39 is Tectonic/Fissure");
+    let tect = Board::new([39,40,41,42,43,44,36,37,38], Variant::Standard);
+    assert!(!tect.has_deferred_spell(), "Tectonic and Providence are in scope");
+    let bad = Board::new([0,5,14,20,30,32,36,37,45], Variant::Standard);
+    assert!(bad.has_deferred_spell(), "45 is Aftershock (retired)");
     // Panda has no ids at all, so it cannot be represented here.
     for s in SPELLS.iter() {
         for panda in ["Lifesap","Perfect_Heist","Moth_Plague","Ripples","Stampede",
@@ -422,13 +424,13 @@ fn castable_respects_locks_seals_and_charm_rules() {
 #[test]
 fn every_official_resolver_is_implemented() {
     let b = Board::new([0;9], Variant::Standard);
-    let missing: Vec<&str> = (0..39u8)
+    let missing: Vec<&str> = (0..45u8)
         .filter(|&id| !b.resolver_ready(id))
         .map(|id| SPELLS[id as usize].name)
         .collect();
     assert!(missing.is_empty(), "unimplemented official resolvers: {:?}", missing);
-    // And deferred ids must be refused, not silently mis-resolved.
-    for id in 39..51u8 { assert!(!b.resolver_ready(id), "id {} must be refused", id); }
+    // And retired ids must be refused, not silently mis-resolved.
+    for id in 45..51u8 { assert!(!b.resolver_ready(id), "id {} must be refused", id); }
 }
 
 #[test]
@@ -1155,6 +1157,25 @@ fn singular_extension_tests_the_tt_move_at_pv_nodes() {
     assert!(st.se_tries > 0, "the singular test never ran");
     assert!(st.se_extensions <= st.se_tries);
 }
+/// `node_limit` (bench_suites.py's fixed budget) stops the search as a clock
+/// would, keeps the last completed depth, and is deterministic.
+#[test]
+fn node_limit_stops_deterministically_at_the_last_completed_depth() {
+    let b = Board::from_sfn(X4TNAS_BLUE_T32).unwrap();
+    let run = |n: u64| {
+        let mut s = crate::search::Search::new(16);
+        s.node_limit = Some(n);
+        let (best, score, st) = s.go(&b, b.to_move, 40, 0);
+        (best.map(|t| t.slice().to_vec()), score, st.nodes, st.depth_completed, st.timed_out)
+    };
+    let a = run(20_000);
+    assert!(a.0.is_some() && a.4, "budget not hit or no completed depth: {:?}", (a.2, a.3));
+    assert!(a.2 <= 20_000 + 64, "overran the budget: {}", a.2);
+    assert_eq!(a, run(20_000), "a node budget must be deterministic");
+    let mut full = crate::search::Search::new(16);
+    let (_, score_full, _) = full.go(&b, b.to_move, a.3, 0);
+    assert_eq!(a.1, score_full, "the budgeted search must report its last completed depth");
+}
 #[test]
 fn first_action_is_legal_agrees_with_the_generator() {
     for seed in 1..40u64 {
@@ -1606,6 +1627,19 @@ fn the_key_dash_filter_never_invents_an_illegal_turn() {
 }
 
 #[test]
+fn spell_sigil_presets_hold_their_positional_budgets() {
+    // tfit_spell: everything inside 96 cs; tfit_spell2: tfit's 96 plus the table's 96.
+    use crate::eval::*;
+    assert!(worst_case_positional(&TFIT_SPELL) <= POSITIONAL_BUDGET);
+    assert!(worst_case_positional(&TFIT_SPELL_V2) <= POSITIONAL_BUDGET);
+    assert!(worst_case_positional(&TFIT_SPELL2) <= 2 * POSITIONAL_BUDGET);
+    let t = TFIT_SPELL2.spell_sigil.unwrap();
+    assert!(t.worst_case() * TFIT_SPELL2.pos_num / TFIT_SPELL2.pos_den <= POSITIONAL_BUDGET);
+    assert!(weights_by_name("tfit_spell").is_ok() && weights_by_name("tfit_spell2").is_ok());
+    for n in EVAL_NAMES { assert!(weights_by_name(n).is_ok(), "{n}"); }
+}
+
+#[test]
 fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
     // This invariant is what makes a logistic/texel fit on `hand_features` produce
     // numbers that drop straight into `Weights`. If the two paths ever drift, a
@@ -1619,9 +1653,16 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
                 crate::eval::STRUCT_25, crate::eval::STRUCT_50,
                 crate::eval::CLASSIC,
                 crate::eval::CAPPED_MC, crate::eval::CAPPED_MANAVOID,
-                crate::eval::CAPPED_MIX];
+                crate::eval::CAPPED_MIX, crate::eval::FIT_AT_BUDGET,
+                crate::eval::TFIT_SPELL, crate::eval::TFIT_SPELL2,
+                crate::eval::TFIT_SPELL_V2];
+    // legal_draw draws core spells only; every fourth seed swaps in Tectonic and
+    // Providence spells (rituals 39/44, sorceries 40/43, charms 41/42) so the
+    // expansion entries of the per-spell tables are exercised too.
     for seed in 0..40u64 {
-        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        let mut draw = Board::legal_draw(seed);
+        if seed % 4 == 3 { draw = [39, 44, draw[2], 40, 43, draw[5], 41, 42, draw[8]]; }
+        let mut b = Board::new(draw, Variant::Standard);
         b.stones[0] = (0x1234_5678_9abcu64 ^ (seed * 2654435761)) & crate::topology::ALL;
         b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
         b.spell_counter = [(seed % 7) as u8, ((seed / 7) % 7) as u8];
@@ -1641,6 +1682,9 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
                         _ => pos += wv[i] * f[i],
                     }
                 }
+                let sf = b.spell_sigil_features(c);
+                let sw = Board::spell_sigil_weight_vec(w);
+                pos += sf.iter().zip(&sw).map(|(a, b)| a * b).sum::<i32>();
                 assert_eq!(mat + pos * w.pos_num / w.pos_den, b.evaluate(c, w),
                     "seed {seed} {c:?}: hand_features dot != evaluate");
             }
@@ -4051,4 +4095,323 @@ fn opening_carnage_is_worth_the_sorceries_beside_it_for_both_sides() {
     let off = own_value(&away, 0, None, Color::Red);
     set_opening_carnage(true);
     assert!((on - off - NEIGHBOUR_EDGE).abs() < 1e-5, "only the edge: {on} {off}");
+}
+
+// ---------------- Tectonic + Providence (2026-10 port) ----------------
+// Draw: Fissure, Carnage, Corrupt / Rock Slide, Annuity, Storm Front /
+// Bulwark (a7), Dividend (b7), Slash (c7). Red holds Bulwark with Carnage
+// (b2..b6) locked, so b2..b6 are shielded.
+fn tect_board() -> Board {
+    let mut b = Board::new([39, 1, 33, 40, 43, 25, 41, 42, 11], Variant::Standard);
+    for s in ["b2", "b3", "b4", "b5", "b6", "a7"] { b.stones[0] |= 1 << n(s); }
+    for s in ["b1", "a8", "b13", "a1"] { b.stones[1] |= 1 << n(s); }
+    b.lock[0] = 1;
+    b.turn_counter = 10;
+    b.update();
+    b
+}
+fn shield_mask() -> u64 { ["b2","b3","b4","b5","b6"].iter().fold(0, |m, s| m | 1 << n(s)) }
+
+#[test]
+fn bulwark_shields_the_locked_spell() {
+    let b = tect_board();
+    assert_eq!(b.shielded(), shield_mask());
+    assert_eq!(b.hard_moveable(Color::Blue) & shield_mask(), 0, "no hard move into the shield");
+    assert_eq!(b.blinkable(Color::Blue) & shield_mask(), 0);
+    assert_eq!(b.unshielded_by_removing(n("a7")), shield_mask(), "a7 is the breaker");
+    let mut nb = b; nb.lock[0] = NO_SPELL; nb.update();
+    assert_eq!(nb.shielded(), 0, "no lock, nothing shielded");
+}
+
+#[test]
+fn fissure_destroys_own_stones_and_spares_the_shield() {
+    let b = tect_board();
+    // Blue blasts b3 (shielded): it stays, no wall; b13 (blue's own) dies.
+    let mut x = b;
+    let (d, wall) = x.apply_fissure(n("b3"));
+    assert_eq!(wall, None);
+    assert_eq!(d, 1 << n("b13"));
+    assert!(x.stones[0] & (1 << n("b3")) != 0);
+    // Red blasts b1 (blue): the wall forms, red's own shielded b2 survives.
+    let mut y = b;
+    let (d2, w2) = y.apply_fissure(n("b1"));
+    assert_eq!(w2, Some(n("b1")));
+    assert!(y.walls & (1 << n("b1")) != 0 && d2 & (1 << n("b2")) == 0);
+    // Walls block moves and pushes.
+    assert_eq!(y.all_moveable(Color::Red) & y.walls, 0);
+    assert_eq!(y.empty() & y.walls, 0);
+}
+
+#[test]
+fn sequential_effects_break_bulwark_simultaneous_ones_do_not() {
+    let b = tect_board();
+    // Storm Front: a7 then b2 is a legal outcome; b2 first is not.
+    let pos = b.position_of(25).unwrap();
+    let (outs, _) = b.resolve_outcomes(pos, Color::Blue, crate::turn::OUTCOME_CAP);
+    assert!(outs.iter().any(|o| o.stones[0] & (1 << n("a7")) == 0 && o.stones[0] & (1 << n("b2")) == 0));
+    assert!(outs.iter().all(|o| (o.stones[0] & shield_mask()).count_ones() >= 4),
+            "at most one shielded stone falls, and only after a7");
+    // Fireblast-like simultaneity: Decay never touches the shield.
+    let mut d = b;
+    d.resolve_destroy_exposed(Color::Blue);
+    assert_eq!(d.stones[0] & shield_mask(), shield_mask());
+    // Corrupt converts the breaker first, then a locked stone.
+    let mut c = b;
+    c.stones[1] |= 1 << n("b7");      // blue now touches b4 too
+    c.update();
+    c.resolve_corrupt(Color::Blue);
+    assert!(c.stones[1] & (1 << n("a7")) != 0, "breaker converted");
+    assert!(c.stones[1] & shield_mask() != 0, "then a locked stone");
+}
+
+#[test]
+fn rock_slide_never_pushes_or_kills_a_shielded_stone() {
+    let b = tect_board();
+    let (_, opts) = b.rock_slide_optimal_pushes(Color::Blue, 64);
+    for pushes in &opts {
+        assert!(pushes.iter().all(|p| shield_mask() & (1 << p.from) == 0));
+        let mut x = b;
+        x.apply_rock_slide(pushes, b.shielded());
+        assert_eq!(x.stones[0] & shield_mask(), shield_mask());
+    }
+}
+
+#[test]
+fn rock_slide_destroyed_list_never_names_a_surviving_shielded_stone() {
+    // The JS/Python replay infers the shield from `destroyed` (a stationary
+    // stone on a destination that is NOT listed was shielded), so a stone that
+    // dies against a shield must be recorded at its own node, never the shield's.
+    // Push every blue stone bordering the red shield straight into it.
+    use crate::rockslide::Push;
+    let b = tect_board();
+    let shield = b.shielded();
+    let mut pushes = Vec::new();
+    let mut m = b.rock_slide_sources(Color::Red);
+    while m != 0 {
+        let from = m.trailing_zeros() as u8; m &= m - 1;
+        let into = crate::topology::ADJ[from as usize] & shield;
+        if into != 0 { pushes.push(Push { from, to: into.trailing_zeros() as u8 }); }
+    }
+    assert!(!pushes.is_empty(), "fixture has a blue stone bordering the shield");
+    let mut x = b;
+    let (lost_nodes, lost) = x.apply_rock_slide(&pushes, shield);
+    assert_eq!(x.stones[0] & shield_mask(), shield_mask(), "shield intact");
+    assert_eq!(lost[1] as usize, pushes.len(), "every pushed blue stone died");
+    for p in &pushes {
+        assert!(!lost_nodes.contains(&p.to), "shielded node {} listed as destroyed", p.to);
+        assert!(lost_nodes.contains(&p.from), "stopped stone not recorded at its source");
+    }
+}
+
+#[test]
+fn providence_bank_counts_and_places_once() {
+    let mut b = std_board();
+    b.turn_counter = 10;
+    b.stones[0] |= (1 << n("a2")) | (1 << n("a3"));
+    b.update();
+    let c = Color::Red;
+    // Win check: red 3 + bank 2 = 5 vs blue 1 + 1 = 2 -> red leads by 3.
+    let mut w = b; w.bank[0] = 2;
+    assert!(w.check_game_over(c) && w.outcome == Outcome::RedWins);
+    // Placement: optional, at most one per turn, spends one banked stone.
+    let mut p = b; p.bank[0] = 3;
+    let (turns, _) = p.enumerate_turns(c);
+    let places = |t: &crate::turn::Turn| t.slice().iter()
+        .filter(|a| matches!(a, crate::turn::Action::Place { .. })).count();
+    assert!(turns.iter().any(|t| places(t) == 1));
+    assert!(turns.iter().all(|t| places(t) <= 1));
+    assert!(turns.iter().any(|t| places(t) == 0), "skipping stays legal");
+    let t = turns.iter().find(|t| places(t) == 1).unwrap();
+    let mut q = p; q.apply_turn(t, c);
+    assert_eq!(q.bank[0], 2);
+    let (none, _) = b.enumerate_turns(c);
+    assert!(none.iter().all(|t| places(t) == 0), "empty bank: no placement");
+    // The lazy stream offers placements too.
+    assert!(p.turns_ordered(c).take(400).any(|t| places(&t) == 1));
+}
+
+#[test]
+fn sfn_round_trips_walls_and_banks() {
+    let mut b = tect_board();
+    b.walls = 1 << n("c13");
+    b.bank = [3, 1];
+    b.update();
+    let s = b.to_sfn();
+    assert!(s.ends_with(" pm:3:1"), "{}", s);
+    assert_eq!(s.chars().nth(n("c13") as usize), Some('x'));
+    let r = Board::from_sfn(&s).unwrap();
+    assert_eq!((r.walls, r.bank, r.stones), (b.walls, b.bank, b.stones));
+    assert_ne!(ZOBRIST.key_js(&b), ZOBRIST.key_js(&{ let mut z = b; z.bank = [0, 0]; z }));
+}
+
+/// Step 3 training data (`harness/selfplay_v2.py`): recording the root's
+/// per-move scores must not change the search, must be deterministic, and every
+/// recorded turn must round-trip through `pack_action` and match its
+/// `dataset_rows` parts. With `root_exact` every entry is exact, and wherever
+/// the bound-mode search reported an upper bound, the exact score respects it.
+#[test]
+fn record_root_is_inert_deterministic_and_round_trips() {
+    use crate::search::{pack_action, unpack_action, Search, DEFAULT_WIDTH_SCALE, SHIPPED_ADAPTIVE};
+    let mk = |rec: bool, exact: bool| {
+        let mut s = Search::new(16);
+        s.set_width_scale(DEFAULT_WIDTH_SCALE);
+        let (p, e, h) = SHIPPED_ADAPTIVE;
+        s.set_adaptive(p, e, h);
+        s.weights = crate::eval::weights_by_name("tfit").unwrap();
+        if rec { s.set_record_root(true, exact); }
+        s
+    };
+    let mut checked = 0;
+    for seed in [3u64, 17, 41, 45] {
+        let mut b = Board::new(Board::legal_draw(seed), Variant::Standard);
+        b.setup_initial();
+        // reach a middlegame: a few depth-2 plies
+        for _ in 0..8 {
+            let c = b.to_move;
+            let (t, _, _) = mk(false, false).go(&b, c, 2, 0);
+            let Some(t) = t else { break };
+            b.apply_turn(&t, c); b.turn_counter += 1; b.to_move = c.other(); b.update();
+            if b.outcome != Outcome::Ongoing { break; }
+        }
+        if b.outcome != Outcome::Ongoing { continue; }
+        checked += 1;
+        let c = b.to_move;
+        let (b0, s0, st0) = mk(false, false).go(&b, c, 3, 0);
+        let mut r1 = mk(true, false);
+        let (b1, s1, st1) = r1.go(&b, c, 3, 0);
+        assert_eq!((b0.map(|t| t.slice().to_vec()), s0, st0.nodes),
+                   (b1.map(|t| t.slice().to_vec()), s1, st1.nodes), "recording changed the search");
+        let mut r2 = mk(true, false);
+        r2.go(&b, c, 3, 0);
+        let key = |s: &Search| s.root_scores().iter().map(|(t, v)| (t.slice().to_vec(), *v))
+            .zip(s.root_details().iter().copied()).collect::<Vec<_>>();
+        assert_eq!(key(&r1), key(&r2), "root scores are not deterministic");
+        assert!(!r1.root_scores().is_empty());
+        assert_eq!(r1.root_scores().len(), r1.root_details().len());
+        let chosen = b1.unwrap().slice().to_vec();
+        assert!(r1.root_scores().iter().any(|(t, v)| *v == s1 && t.slice() == chosen.as_slice()),
+                "the chosen turn's root score is recorded");
+        let (rows, _, _, packed, _) = b.dataset_rows(c, 600);
+        let strip = |r: [u16; crate::prior::MAX_PARTS]| r.iter().copied()
+            .filter(|&p| !(crate::prior::P_ORANK..crate::prior::P_ORANK + 6).contains(&p))
+            .collect::<Vec<_>>();
+        for (t, _) in r1.root_scores() {
+            let pk: Vec<u32> = t.slice().iter().map(|a| pack_action(*a)).collect();
+            let back: Vec<_> = pk.iter().map(|&v| unpack_action(v).unwrap()).collect();
+            assert_eq!(back.as_slice(), t.slice(), "pack/unpack round trip");
+            let i = packed.iter().position(|p| *p == pk).expect("root turn is in the ordered universe");
+            // parts agree except the within-stub rank, which only the stream knows
+            assert_eq!(strip(rows[i]), strip(b.parts_outside_stream(t, c)));
+        }
+        let mut ex = mk(true, true);
+        ex.go(&b, c, 3, 0);
+        assert!(ex.root_details().iter().all(|(bd, _)| *bd == 0));
+        let exact: std::collections::HashMap<Vec<crate::turn::Action>, i32> =
+            ex.root_scores().iter().map(|(t, v)| (t.slice().to_vec(), *v)).collect();
+        for ((t, v), (bd, _)) in r1.root_scores().iter().zip(r1.root_details()) {
+            if let Some(&xv) = exact.get(&t.slice().to_vec()) {
+                if *bd == 1 { assert!(xv <= *v, "upper bound {v} below exact {xv}"); }
+            }
+        }
+    }
+    assert!(checked >= 2);
+}
+
+#[test]
+fn shipped_eval_is_a_known_preset_and_named_in_eval_names() {
+    assert!(crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).is_ok());
+    assert!(crate::eval::EVAL_NAMES.contains(&crate::eval::SHIPPED_EVAL));
+    let (on, w) = crate::policy::SHIPPED_POLICY;
+    assert!(on && w > 0, "v25 ships the generator policy");
+}
+
+/// Step 4: every turn the learned-policy stream yields is one the shipped
+/// stream builds (same candidate sets; the policy only reorders and prunes),
+/// it yields no duplicates, it is deterministic, and `has_more` is false only
+/// once the stream is exhausted. The lazy Summer / post-dash splits must not
+/// lose or invent turns.
+#[test]
+fn policy_stream_is_a_deterministic_subset_of_the_shipped_stream() {
+    use std::collections::HashSet;
+    let mut checked = 0;
+    for seed in 1..60u64 {
+        let draw = Board::legal_draw(seed);
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL & nx();
+        let bl = (nx() & ALL & nx()) & !r;
+        b.stones = [r, bl];
+        b.turn_counter = 10 + (seed % 20) as u32;
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        for c in [Color::Red, Color::Blue] {
+            let after = |t: &Turn| { let mut x = b; x.apply_turn(t, c); x.state_key() };
+            let shipped: HashSet<_> = b.turns_ordered_keeps(c, 24, 0, 2).map(|t| after(&t)).collect();
+            let a: Vec<Turn> = b.turns_policy(c, 24, 2).take(64).collect();
+            let a2: Vec<Turn> = b.turns_policy(c, 24, 2).take(64).collect();
+            assert_eq!(a.len(), a2.len());
+            for (x, y) in a.iter().zip(&a2) { assert_eq!(x.slice(), y.slice(), "seed {seed}: nondeterministic"); }
+            // The decisive-turn prepass puts its turns at the FRONT and the
+            // tree yields them again later (as the shipped stream does: the
+            // duplicate costs a TT probe), so a turn may appear at most twice.
+            let mut seen = std::collections::HashMap::new();
+            for t in &a {
+                let k = seen.entry(t.slice().to_vec()).or_insert(0);
+                *k += 1;
+                assert!(*k <= 2, "seed {seed} {c:?}: {:?} yielded {} times", t.slice(), *k);
+                assert!(shipped.contains(&after(t)), "seed {seed} {c:?}: {:?} not in the shipped stream", t.slice());
+            }
+            let mut it = b.turns_policy(c, 24, 2);
+            let mut n = 0;
+            while it.has_more() { if it.next().is_some() { n += 1; } }
+            assert!(it.next().is_none(), "has_more false but a turn remained");
+            assert!(n >= a.len());
+            checked += 1;
+        }
+    }
+    assert!(checked > 20, "only {checked} positions checked");
+}
+
+/// Step 5: the Rust network is bit-for-bit the integer forward pass that
+/// `harness/nn_eval.py` trained and quantised (vectors written by its `golden`
+/// command from the SAME `nets/nnue_spell.bin`). Integer-only arithmetic, so
+/// this also pins the wasm build, which runs the same code.
+#[test]
+fn nn_matches_the_python_reference() {
+    let net = crate::nn::NNUE_SPELL.net();
+    let mut n = 0;
+    for line in include_str!("../nets/nnue_spell_golden.txt").lines() {
+        let f: Vec<&str> = line.split(' ').collect();
+        let mine: u64 = f[0].parse().unwrap();
+        let theirs: u64 = f[1].parse().unwrap();
+        let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+        let spells: [u8; 9] = sp.try_into().unwrap();
+        let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+        let want: i32 = f[4].parse().unwrap();
+        assert_eq!(net.eval_raw(&spells, mine, theirs, c), want, "{line}");
+        n += 1;
+    }
+    assert!(n >= 50, "only {n} golden vectors");
+}
+
+/// `nnue_spell` is exactly `tfit_spell` plus the clamped network term, through the
+/// cached per-draw fold, for both POVs and across draws (the cache must re-key).
+#[test]
+fn nnue_spell_is_tfit_spell_plus_the_network() {
+    let w = crate::eval::weights_by_name("nnue_spell").unwrap();
+    let base = crate::eval::TFIT_SPELL;
+    let net = crate::nn::NNUE_SPELL.net();
+    for seed in 0..30u64 {
+        let mut b = Board::new(Board::legal_draw(seed % 7), Variant::Standard);
+        b.stones[0] = (0x1234_5678_9abcu64 ^ (seed * 2654435761)) & ALL;
+        b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & ALL & !b.stones[0];
+        b.to_move = if seed % 2 == 0 { Color::Red } else { Color::Blue };
+        b.update();
+        for c in [Color::Red, Color::Blue] {
+            let nn = net.eval_raw(&b.spells, b.mine(c), b.theirs(c), c);
+            assert!(nn.abs() <= net.cap);
+            assert_eq!(b.evaluate(c, &w), b.evaluate(c, &base) + nn, "seed {seed}");
+        }
+    }
 }

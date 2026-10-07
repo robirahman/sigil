@@ -8,6 +8,9 @@ document.addEventListener('alpine:init', () => {
 		'gameBoard',
 		() => ({
 			actionList: [],
+			// Providence bank sizes (badge beside the dice).
+			redBank: 0,
+			blueBank: 0,
 			activeSpell: '',
 			activeSpellIsCastable: false,
 			awaiting: '',
@@ -463,6 +466,8 @@ document.addEventListener('alpine:init', () => {
 				const state = sfnToDict(sfn);
 				for (const node of Object.keys(this.nodes)) { this.nodes[node] = state.stones[node] || null; }
 				this.redSpellCounter = state.red_spellcounter || 0;
+				this.redBank = state.red_bank || 0;
+				this.blueBank = state.blue_bank || 0;
 				this.blueSpellCounter = state.blue_spellcounter || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
@@ -501,6 +506,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
 			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
+			handleSkipProvidence() { if (this.isSpectator) return; this.sendEvent('skip_providence'); this.actionList = []; },
 			handleEndTurn() { if (this.isSpectator) return; this.sendEvent('pass'); this.actionList = []; },
 			handleSubmit() { if (this.isSpectator) return; this.sendEvent('submit'); this.actionList = []; },
 			// Two-click forfeit, mirroring game-board-local.js: first click arms
@@ -541,7 +547,7 @@ document.addEventListener('alpine:init', () => {
 				if (this.isSpectator) return;
 				this.currentPlayer = this.whoseTurn;
 				if (this.awaiting === 'node') this.sendEvent(node);
-				else if (this.awaiting === 'action' && this.actionList.includes('move')) this.sendEvent(node);
+				else if (this.awaiting === 'action' && (this.actionList.includes('move') || this.actionList.includes('providence'))) this.sendEvent(node);
 			},
 
 			// Spread the shared AI-review behaviour (game-review.js), then
@@ -726,13 +732,15 @@ document.addEventListener('alpine:init', () => {
 						const changed = Object.keys(rest).reduce((acc, c) => { if (rest[c] !== _this.previousBoardState[c]) acc[c] = rest[c]; return acc; }, {});
 						// Non-node payload fields must be destructured out or the
 					// ...nodes rest treats them as node names.
-					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redpending, bluepending, ...nodes } = changed;
+					const { bluelock, bluespellcounter, last_play, last_player, redlock, redspellcounter, score, redbank, bluebank, ...nodes } = changed;
 						Object.keys(nodes).forEach(n => { _this.nodes[n] = nodes[n]; });
 						if (bluelock !== undefined) _this.blueLock = bluelock;
 						if (bluespellcounter !== undefined) _this.blueSpellCounter = bluespellcounter;
 						if (redlock !== undefined) _this.redLock = redlock;
 						if (redspellcounter !== undefined) _this.redSpellCounter = redspellcounter;
 						if (score !== undefined) _this.score = score;
+						if (redbank !== undefined) _this.redBank = redbank;
+						if (bluebank !== undefined) _this.blueBank = bluebank;
 						_this.previousBoardState = rest;
 						_this._recomputeMapControl();
 						if (_this.devEvalEnabled) {

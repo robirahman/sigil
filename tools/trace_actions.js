@@ -51,8 +51,6 @@ function boardFromSfn(sfn){
   // (stones, lock, springlock, spellCounter, update) SimBoard already has.
   b.enemy = (col) => (col === 'red' ? 'blue' : 'red');
   b.getBoardStatePayload = () => ({});
-  if (b.movesLeftThisTurn === undefined) b.movesLeftThisTurn = 1;
-  if (b.movesGrantedThisTurn === undefined) b.movesGrantedThisTurn = 0;
   b.update();
   return b;
 }

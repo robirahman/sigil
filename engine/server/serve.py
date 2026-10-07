@@ -47,6 +47,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         route = self.path.rstrip('/')
+        # The generator policy is a per-thread engine setting and every request
+        # runs on a fresh ThreadingHTTPServer thread, so set it per request.
+        se.set_policy(ARGS.policy > 0, ARGS.policy)
         if route == '/api/move': return self._do_move()
         if route != '/api/pick':
             self.send_error(404, 'unknown endpoint'); return
@@ -137,21 +140,21 @@ def main():
                          "the measured default: +47 Elo at 300 ms and +223 at 3 s "
                          "over the old value of 1, peaking at 4-6. It gives up "
                          "~2 plies of depth to do it")
-    ap.add_argument('--eval', default='tfit',
+    ap.add_argument('--eval', default=se.SHIPPED_EVAL,
                     choices=sorted(se.EVAL_NAMES),
                     help="leaf eval preset; enumerated from the engine, never "
-                         "restated here. 'tfit' beats 'material' by +54 Elo "
-                         "[+14,+94] over 300 DISTINCT games at 300 ms, and is "
-                         "ahead at 3 s on two independent 50-game samples (+85, "
-                         "+131). Longer time controls are NOT yet measured with "
-                         "independent seeds. Pass --eval material for the "
-                         "previous behaviour.")
+                         "restated here. Default is the engine's SHIPPED_EVAL "
+                         "(nnue_spell since v25; tfit_spell_v2 in v24). "
+                         "Pass --eval tfit for the pre-v24 behaviour.")
     ap.add_argument('--adaptive', default='2,6', dest='adaptive',
                     help="adaptive widening as EASY,HARD scales, or 'off'. The "
                          "default 2,6 spends a narrow budget on positions a "
                          "classifier calls easy and a wide one on the rest: "
                          "+22 Elo [+7,+36] at 3 s over uniform width_scale 4, "
                          "SPRT-accepted over 2,239 games")
+    ap.add_argument('--policy', type=int, default=se.SHIPPED_POLICY[1] if se.SHIPPED_POLICY[0] else 0,
+                    help="learned generator policy at nodes whose width budget is at "
+                         "least this (engine SHIPPED_POLICY, 96 since v25); 0 = off")
     ap.add_argument('--verbose', action='store_true')
     ARGS = ap.parse_args()
     if ARGS.docs is None:

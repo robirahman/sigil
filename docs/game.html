@@ -171,6 +171,14 @@
 								</p>
 								<br />
 								<p>
+									<strong>Providence Bank</strong><br />
+									Dividend, Annuity and Endowment add 1, 2 and 4 stones to your bank. Banked
+									stones count toward your stone total. Each turn, if your bank is not empty, you
+									may place one banked stone (an ordinary soft or hard move) after your standard
+									move and before dashing.
+								</p>
+								<br />
+								<p>
 									<strong>Static</strong><br />
 									A spell that grants a permanent effect and is not cast. You must fully occupy the spell
 									to gain its effect.
@@ -178,8 +186,9 @@
 							</div>
 							<div class="turn-structure">
 								<div>1. Standard move</div>
-								<div>2. Dash (optional)</div>
-								<div>3. Cast spell (optional)</div>
+								<div>2. Providence placement (optional)</div>
+								<div>3. Dash (optional)</div>
+								<div>4. Cast spell (optional)</div>
 								<div class="indent">
 									&bull; sacrifice stones<br />
 									&bull; mana refill (3 and 5 node only)<br />
@@ -452,11 +461,12 @@
 									<div class="die__pip die__pip--tl"></div>
 								</div>
 							</div>
+							<div class="providence-bank" x-show="redBank || blueBank" x-bind:title="`Providence bank: Red ${redBank}, Blue ${blueBank}`"><span class="providence-bank__label">Bank</span><span class="providence-bank__count providence-bank__count--red" x-text="redBank"></span><span class="providence-bank__count providence-bank__count--blue" x-text="blueBank"></span></div>
 						</div>
 
 						<div
 							class="actions"
-							x-bind:class="{ 'actions--visible': currentSfn || showReset || actionList.includes('dash') || actionList.includes('pass') || actionList.includes('submit')}"
+							x-bind:class="{ 'actions--visible': currentSfn || showReset || actionList.includes('dash') || actionList.includes('skip_providence') || actionList.includes('pass') || actionList.includes('submit')}"
 						>
 							<button
 								class="action-button action-button--reset-turn"
@@ -471,6 +481,13 @@
 								x-on:click="handleDash"
 							>
 								Dash
+							</button>
+							<button
+								class="action-button action-button--skip-providence"
+								x-bind:class="{ 'is-hidden': !actionList.includes('skip_providence') }"
+								x-on:click="handleSkipProvidence"
+							>
+								Skip Providence
 							</button>
 							<button
 								class="action-button action-button--submit"

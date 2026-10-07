@@ -46,10 +46,9 @@ def _live_board_to_simboard(board):
     # track this field; getattr guard keeps the conversion safe.
     sim.all_looping_snapshot_counts = dict(getattr(board, 'all_looping_snapshot_counts', {}))
 
-    # Providence schedules (and any future cross-turn scheduled
-    # state) must reach the sim or the search neither values nor grants them.
-    pending = getattr(board, 'pending_moves', None) or {'red': [], 'blue': []}
-    sim.pending_moves = {'red': list(pending['red']), 'blue': list(pending['blue'])}
+    # Providence banks must reach the sim or the search neither values nor
+    # places them.
+    sim.prov_bank = dict(getattr(board, 'prov_bank', None) or {'red': 0, 'blue': 0})
 
     sim.update()
     return sim
@@ -100,16 +99,8 @@ class NNAIPlayer:
         self.board.update()
         time.sleep(1)  # Realistic delay
 
-        # Providence: pop this turn's extra-move grant from the LIVE
-        # schedule (this player replaces AIPlayer.taketurn, which is where
-        # the pop normally lives) and hand it to the sim so the search can
-        # both use and value the extra moves.
-        sched = getattr(self.board, 'pending_moves', {}).get(self.color)
-        extra_moves = sched.pop(0) if sched else 0
-
         # Convert live board to SimBoard
         sim = _live_board_to_simboard(self.board)
-        sim.extra_moves_this_turn = extra_moves
 
         best_turn = None
 
@@ -157,6 +148,9 @@ class NNAIPlayer:
         """Translate CompleteTurn actions into live game engine calls."""
         for action in turn.actions:
             time.sleep(1)
+
+            if action.providence:
+                self.board.prov_bank[self.color] -= 1
 
             if action.type == 'move':
                 self._execute_soft_move(action.node)

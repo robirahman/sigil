@@ -29,32 +29,17 @@ class SigilBoard {
 		// Turn-local: set true when a push crushes an enemy stone this turn
 		// (read by Blood Saplings). Reset by the controller at each turn's start.
 		this.crushedThisTurn = false;
-		// Providence: pendingMoves[color][i] = extra moves granted at the
-		// start of that player's i-th upcoming turn. The two counters are
-		// turn-scoped (like crushedThisTurn): the controller shifts the
-		// schedule head into them at the start of each turn and zeroes them
-		// at end of turn. They never serialize (all SFN writes happen at
-		// turn boundaries). First move of the turn ⇔ movesLeft === movesGranted.
-		this.pendingMoves = { red: [], blue: [] };
-		this.movesLeftThisTurn = 0;
-		this.movesGrantedThisTurn = 0;
+		// Providence: stones banked by Dividend/Annuity/Endowment. They count
+		// toward the owner's stone total; a turn that starts with a nonempty
+		// bank may place one of them after the regular move.
+		// providenceOpen is turn-scoped (like crushedThisTurn): the
+		// controller opens it at the start of the turn and closes it once the
+		// placement has been offered. It never serializes.
+		this.providenceBank = { red: 0, blue: 0 };
+		this.providenceOpen = false;
 		this.snapshot = null;
 		this.allLoopingSnapshotCounts = {};
 		this.variant = normalizeVariant(variant);
-	}
-
-	// Phantom stones for `color`: Providence scheduled extras plus, for
-	// the side to move, extras granted this turn but not yet placed
-	// (before any move this turn, one of the remaining moves is the
-	// ordinary turn move — never a phantom; once a move has been made,
-	// every remaining move is an extra — hence min(left, granted - 1)).
-	pendingStones(color) {
-		let p = 0;
-		for (const v of this.pendingMoves[color]) p += v;
-		if (this.whoseTurn === color) {
-			p += Math.max(0, Math.min(this.movesLeftThisTurn, this.movesGrantedThisTurn - 1));
-		}
-		return p;
 	}
 
 	setupInitial() {
@@ -102,10 +87,10 @@ class SigilBoard {
 		}
 
 		// Score: blue gets +1 phantom stone (counter token off the
-		// playable board — counts toward score only). Providence pending
-		// stones display in the score for both sides.
-		const redscore = redCount + this.pendingStones('red');
-		const bluescore = blueCount + 1 + this.pendingStones('blue');
+		// playable board — counts toward score only). Providence banked
+		// stones count for their owner.
+		const redscore = redCount + this.providenceBank.red;
+		const bluescore = blueCount + 1 + this.providenceBank.blue;
 		if (redscore === bluescore) {
 			this.score = 'tied';
 		} else if (redscore > bluescore) {
@@ -155,9 +140,9 @@ class SigilBoard {
 		payload.score = this.score;
 		payload.last_player = this.lastPlayer;
 		payload.last_play = this.lastPlay;
-		// Providence phantom-stone totals (0 unless the pack is in play).
-		payload.redpending = this.pendingStones('red');
-		payload.bluepending = this.pendingStones('blue');
+		// Providence bank sizes (0 unless the pack is in play).
+		payload.redbank = this.providenceBank.red;
+		payload.bluebank = this.providenceBank.blue;
 		return payload;
 	}
 
@@ -178,8 +163,8 @@ class SigilBoard {
 			blueSpringlock: this.springlock.blue,
 			lastPlay: this.lastPlay,
 			lastPlayer: this.lastPlayer,
-			pendingRed: [...this.pendingMoves.red],
-			pendingBlue: [...this.pendingMoves.blue],
+			bankRed: this.providenceBank.red,
+			bankBlue: this.providenceBank.blue,
 			stones: {},
 		};
 		for (const n of NODE_ORDER) {
@@ -203,13 +188,11 @@ class SigilBoard {
 		if (!variantHasDeathmatch(this.variant)) {
 			loopKey += '|' + this.spellCounter.red + ',' + this.spellCounter.blue;
 		}
-		// Providence: positions with different pending schedules are NOT the
-		// same position. Suffix only when non-empty so legacy keys stay
-		// byte-identical. (takeSnapshot runs at turn start, before the shift,
-		// so the turn-scoped counters are not part of the key.)
-		if (this.pendingMoves.red.length || this.pendingMoves.blue.length) {
-			loopKey += '|P' + this.pendingMoves.red.join(',')
-				+ '/' + this.pendingMoves.blue.join(',');
+		// Providence: positions with different banks are NOT the same
+		// position. Suffix only when a bank is nonempty so legacy keys stay
+		// byte-identical.
+		if (this.providenceBank.red || this.providenceBank.blue) {
+			loopKey += '|P' + this.providenceBank.red + '/' + this.providenceBank.blue;
 		}
 
 		if (this.allLoopingSnapshotCounts[loopKey]) {
@@ -235,11 +218,8 @@ class SigilBoard {
 		this.springlock.blue = snap.blueSpringlock;
 		this.lastPlay = snap.lastPlay;
 		this.lastPlayer = snap.lastPlayer;
-		// Restore the pre-turn schedule and zero the turn-scoped counters;
-		// the re-run turn re-shifts from the restored schedule.
-		this.pendingMoves = { red: [...snap.pendingRed || []], blue: [...snap.pendingBlue || []] };
-		this.movesLeftThisTurn = 0;
-		this.movesGrantedThisTurn = 0;
+		// Restore the pre-turn banks; the re-run turn re-opens the placement.
+		this.providenceBank = { red: snap.bankRed || 0, blue: snap.bankBlue || 0 };
 		for (const n of NODE_ORDER) {
 			this.stones[n] = snap.stones[n];
 		}
@@ -267,24 +247,17 @@ class SigilBoard {
 			return false;
 		}
 
-		// Stone-lead check (±BOARD.winLead: 3 on core): Providence phantoms count ASYMMETRICALLY (defense
-		// only) — a player's win claim uses their real placed stones,
-		// checked against the opponent's real+pending total. In the
-		// sixth-spell count they are symmetric (2026-08 playtest ruling).
-		// Controllers zero the turn-scoped counters at EOT before calling
-		// this, so only the schedules matter here.
-		const redTotal = this.totalStones.red;
-		const blueTotal = this.totalStones.blue + 1; // phantom stone
-		let redProv = 0, blueProv = 0;
-		for (const v of this.pendingMoves.red) redProv += v;
-		for (const v of this.pendingMoves.blue) blueProv += v;
+		// Stone-lead check (±BOARD.winLead: 3 on core) and sixth-spell
+		// count: Providence banked stones count fully for their owner.
+		const redTotal = this.totalStones.red + this.providenceBank.red;
+		const blueTotal = this.totalStones.blue + 1 + this.providenceBank.blue; // +1 phantom stone
 
-		if (redTotal > blueTotal + blueProv + BOARD.winLead - 1) {
+		if (redTotal > blueTotal + BOARD.winLead - 1) {
 			this.gameover = true;
 			this.winner = 'red';
 			return true;
 		}
-		if (blueTotal > redTotal + redProv + BOARD.winLead - 1) {
+		if (blueTotal > redTotal + BOARD.winLead - 1) {
 			this.gameover = true;
 			this.winner = 'blue';
 			return true;
@@ -292,8 +265,8 @@ class SigilBoard {
 
 		if (this.spellCounter[activeColor] >= BOARD.spellTarget) {
 			this.gameover = true;
-			if (redTotal + redProv > blueTotal + blueProv) this.winner = 'red';
-			else if (blueTotal + blueProv > redTotal + redProv) this.winner = 'blue';
+			if (redTotal > blueTotal) this.winner = 'red';
+			else if (blueTotal > redTotal) this.winner = 'blue';
 			else this.winner = this.enemy(activeColor);
 			return true;
 		}
@@ -325,9 +298,8 @@ class SigilBoard {
 		this.lock.blue = state.blue_lock;
 		this.springlock.red = state.red_springlock;
 		this.springlock.blue = state.blue_springlock;
-		this.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
-		this.movesLeftThisTurn = 0;
-		this.movesGrantedThisTurn = 0;
+		this.providenceBank = { red: state.red_bank || 0, blue: state.blue_bank || 0 };
+		this.providenceOpen = false;
 		this.update();
 	}
 }

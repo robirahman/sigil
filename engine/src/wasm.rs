@@ -124,6 +124,7 @@ pub struct Engine {
 impl Engine {
     #[wasm_bindgen(constructor)]
     pub fn new(tt_bits: u32) -> Engine {
+        ensure_shipped_policy();
         Engine { s: Search::new(tt_bits.clamp(10, 22)), ponder: None, ponder_depth: 0,
                  ponder_nodes: 0 }
     }
@@ -208,6 +209,13 @@ impl Engine {
     /// Stop pondering (the table keeps everything it learned).
     pub fn ponder_end(&mut self) { self.ponder = None; }
 
+    /// Step 6 option A (prototype, off unless rust-ai.js's multi-worker flag is
+    /// set): search only part `part` of a `parts`-way split of the root list, so
+    /// several workers, each with its own Engine, share one move's root.
+    /// `parts <= 1` restores the whole root. Applies to the searches that follow,
+    /// pondering included; the worker resets it before a ponder.
+    pub fn set_root_split(&mut self, part: u32, parts: u32) { self.s.set_root_split(part, parts); }
+
     /// Slots in use, for the smoke test's "the table survived the move" check.
     pub fn tt_filled(&self) -> u32 { self.s.tt_filled() as u32 }
 
@@ -250,6 +258,7 @@ impl Engine {
 #[wasm_bindgen]
 pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
     use crate::search::{WIN, MAX_PLY, UNPROVEN_MATE};
+    ensure_shipped_policy();
     let b = match Board::from_sfn(sfn) {
         Ok(b) => b,
         Err(e) => return err_json(&e),
@@ -277,7 +286,7 @@ pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
         budget_ms = budget_ms.saturating_sub(used).max(500);
     }
     let mut s = Search::new(tt_bits.clamp(10, 22));
-    if let Err(e) = configure(&mut s, crate::search::DEFAULT_WIDTH_SCALE as u32, "tfit",
+    if let Err(e) = configure(&mut s, crate::search::DEFAULT_WIDTH_SCALE as u32, crate::eval::SHIPPED_EVAL,
                               crate::search::SHIPPED_ADAPTIVE.0, crate::search::SHIPPED_ADAPTIVE.1 as u32,
                               crate::search::SHIPPED_ADAPTIVE.2 as u32) {
         return err_json(&e);
@@ -318,9 +327,69 @@ pub fn judge_move(sfn: &str, plies: u32, time_ms: u32, tt_bits: u32) -> String {
 /// Game clock allocation, see `search::move_budget_ms`. Exported for the
 /// smoke test's parity check against rust-ai.js's mirror and for callers that
 /// prefer the engine's number.
+/// Step 4 learned generator policy (`policy.rs`): on at nodes whose width budget
+/// is at least `min_width`. The site plays `policy::SHIPPED_POLICY` (on since v25),
+/// applied once when the first `Engine` (or `judge_move`) starts; an explicit call
+/// here overrides it for the rest of the module's life (tools/wasm-smoke.js
+/// SIGIL_SMOKE_POLICY, tools/policy-wasm-parity.js).
+#[wasm_bindgen]
+pub fn set_policy(on: bool, min_width: u32) {
+    crate::policy::set_policy(on, min_width as usize);
+    POLICY_SET.with(|c| c.set(true));
+}
+
+thread_local! { static POLICY_SET: std::cell::Cell<bool> = std::cell::Cell::new(false); }
+
+fn ensure_shipped_policy() {
+    POLICY_SET.with(|c| if !c.get() {
+        let (on, w) = crate::policy::SHIPPED_POLICY;
+        crate::policy::set_policy(on, w);
+        c.set(true);
+    });
+}
+
+/// Parity gate for the policy-ordered search (tools/policy-wasm-parity.js): one
+/// clockless fixed-depth search on a fresh table, hashed exactly as
+/// `examples/bench.rs` hashes a position (FNV-1a of `nodes|score|{best:?}`), so a
+/// file of positions gives the same combined HASH natively and in wasm iff the
+/// trees are identical.
+#[wasm_bindgen]
+pub fn bench_hash(sfn: &str, depth: i32, eval_name: &str, tt_bits: u32) -> String {
+    ensure_shipped_policy();
+    let b = match Board::from_sfn(sfn) {
+        Ok(b) => b,
+        Err(e) => return err_json(&e),
+    };
+    let mut s = Search::new(tt_bits.clamp(10, 22));
+    if let Err(e) = configure(&mut s, crate::search::DEFAULT_WIDTH_SCALE as u32, eval_name,
+                              crate::search::SHIPPED_ADAPTIVE.0, crate::search::SHIPPED_ADAPTIVE.1 as u32,
+                              crate::search::SHIPPED_ADAPTIVE.2 as u32) {
+        return err_json(&e);
+    }
+    let (best, score, st) = s.go(&b, b.to_move, depth.clamp(1, 63), 0);
+    let best_s = match best { Some(t) => format!("{:?}", t.slice()), None => "none".into() };
+    let mut h = 0xcbf29ce484222325u64;
+    for byte in format!("{}|{}|{}", st.nodes, score, best_s).bytes() {
+        h ^= byte as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{{\"ok\":true,\"hash\":\"{h:016x}\",\"nodes\":{},\"depth\":{}}}", st.nodes, st.depth_completed)
+}
+
 #[wasm_bindgen]
 pub fn move_budget_ms(remaining_ms: u32, inc_ms: u32, my_moves_played: u32) -> u32 {
     crate::search::move_budget_ms(remaining_ms as u64, inc_ms as u64, my_moves_played) as u32
+}
+
+/// The Step 5 network's raw output (centistones, before the cap is added to the
+/// hand eval) for one input. Exported only so `tools/nn-wasm-parity.js` can check
+/// the wasm build against `engine/nets/nnue_spell_golden.txt`, the vectors that
+/// pin Python == native; the play path never calls it.
+#[wasm_bindgen]
+pub fn nn_eval_raw(spells: Vec<u8>, mine: u64, theirs: u64, red: bool) -> i32 {
+    let sp: [u8; 9] = match spells.try_into() { Ok(a) => a, Err(_) => return i32::MIN };
+    let c = if red { crate::board::Color::Red } else { crate::board::Color::Blue };
+    crate::nn::NNUE_SPELL.net().eval_raw(&sp, mine, theirs, c)
 }
 
 #[wasm_bindgen]

@@ -104,29 +104,15 @@ class Board():
 		self.last_play = None
 		self.last_player = None
 
-		### Providence: pending_moves[color][i] = extra moves granted at the
-		### start of that player's i-th upcoming turn. The two counters are
-		### turn-scoped: taketurn shifts the schedule head into them at the
-		### start of each turn and eot_triggers zeroes them. They never
-		### serialize (all SFN writes happen at turn boundaries). First move
-		### of the turn <=> moves_left == moves_granted.
-		self.pending_moves = {'red': [], 'blue': []}
-		self.moves_left_this_turn = 0
-		self.moves_granted_this_turn = 0
+		### Providence: stones banked by Dividend/Annuity/Endowment. They
+		### count toward their owner's stone total; a turn that starts with
+		### a nonempty bank may place one of them after the regular move.
+		### providence_open is turn-scoped: taketurn opens it at the start of
+		### the turn and closes it once the placement has been offered.
+		self.prov_bank = {'red': 0, 'blue': 0}
+		self.providence_open = False
 
 		self.recorder = None
-
-	def pending_stones(self, color):
-		### Providence phantom stones for `color`: scheduled extras plus,
-		### for the side to move, extras granted this turn but not yet
-		### placed. Before any move this turn, one remaining move is the
-		### ordinary turn move (never a phantom); after that, every
-		### remaining move is an extra — hence min(left, granted - 1).
-		p = sum(self.pending_moves[color])
-		if self.whoseturn == color:
-			p += max(0, min(self.moves_left_this_turn,
-			                self.moves_granted_this_turn - 1))
-		return p
 
 	def record(self, action_type, **kwargs):
 		if self.recorder is not None:
@@ -169,8 +155,8 @@ class Board():
 		snapshot["last_play"] = self.last_play
 		snapshot["last_player"] = self.last_player
 
-		snapshot["red_pending"] = list(self.pending_moves['red'])
-		snapshot["blue_pending"] = list(self.pending_moves['blue'])
+		snapshot["red_bank"] = self.prov_bank['red']
+		snapshot["blue_bank"] = self.prov_bank['blue']
 
 		self.snapshot = snapshot
 
@@ -193,15 +179,11 @@ class Board():
 		else:
 			looping_snapshot += "None"
 
-		### Providence: positions with different pending schedules are NOT
-		### the same position. Suffix only when non-empty so legacy keys
-		### stay byte-identical. Canonical form is the PRE-SHIFT schedule
-		### (take_snapshot runs at turn start, before the shift); SimBoard's
-		### looping_snapshot re-prepends its popped extras counter to the
-		### mover's list to produce the same canonical key.
-		if self.pending_moves['red'] or self.pending_moves['blue']:
-			looping_snapshot += ('|P' + ','.join(map(str, self.pending_moves['red']))
-			                     + '/' + ','.join(map(str, self.pending_moves['blue'])))
+		### Providence: positions with different banks are NOT the same
+		### position. Suffix only when a bank is nonempty so legacy keys stay
+		### byte-identical (matches SimBoard.looping_snapshot).
+		if self.prov_bank['red'] or self.prov_bank['blue']:
+			looping_snapshot += '|P%d/%d' % (self.prov_bank['red'], self.prov_bank['blue'])
 
 
 		if looping_snapshot in self.all_looping_snapshot_counts:
@@ -262,9 +244,9 @@ class Board():
 				self.gameover = True
 				self.winner = 'red'
 
-		### Providence pending stones display in the score for both sides.
-		redscore = redtotalstones + self.pending_stones('red')
-		bluescore = bluetotalstones + 1 + self.pending_stones('blue')
+		### Providence banked stones count for their owner.
+		redscore = redtotalstones + self.prov_bank['red']
+		bluescore = bluetotalstones + 1 + self.prov_bank['blue']
 
 
 		if update_score:
@@ -665,24 +647,11 @@ class Player():
 			self.opp.timer_running = False
 			self.timer_running = True
 
-		### Providence: at the turn-initial call, shift the schedule head
-		### into the turn-scoped move counters and turn `canmove` into an
-		### integer countdown of remaining moves. Recursions and retries
-		### pass ints, so `canmove is True` fires exactly once per turn.
+		### Providence: the turn-initial call (the only one passing
+		### canmove=True before a move is made) opens the optional placement
+		### when this player's bank is nonempty.
 		if canmove is True:
-			extra = 0
-			sched = self.board.pending_moves[self.color]
-			if sched:
-				extra = sched.pop(0)
-			self.board.moves_left_this_turn = 1 + extra
-			self.board.moves_granted_this_turn = 1 + extra
-			canmove = 1 + extra
-			if extra > 0:
-				plural = '' if extra == 1 else 's'
-				self.jmessage("You get {} extra move{} this turn (Providence).".format(extra, plural))
-				if self.opp.ishuman:
-					self.opp.jmessage("{} gets {} extra move{} this turn (Providence).".format(
-						self.color.capitalize(), extra, plural))
+			self.board.providence_open = self.board.prov_bank[self.color] > 0
 
 		### Competitive variant opening: when this player has zero stones
 		### and the variant is 'competitive', their entire turn is a single
@@ -712,22 +681,18 @@ class Player():
 						self.opp.ws.send(json.dumps(new_stone))
 					return None
 
+		### Providence: after the regular move, offer the placement once.
+		if not canmove and self.board.providence_open:
+			self.board.providence_open = False
+			self.providence_step()
+
 		actions = []
 		spelllist = []
 
 		if canmove:
-			### Providence: Seal of Wind (and Seal of Stone, via the
-			### standardmove flag below) applies only to the turn's FIRST
-			### move; extra granted moves are ordinary moves.
-			first_move = (self.board.moves_left_this_turn == self.board.moves_granted_this_turn)
-			if self.board.moves_granted_this_turn > 1:
-				move_num = self.board.moves_granted_this_turn - self.board.moves_left_this_turn + 1
-				self.jmessage("Move {} of {}: choose where to move.".format(
-					move_num, self.board.moves_granted_this_turn))
-			else:
-				self.jmessage("Choose where to move.")
+			self.jmessage("Choose where to move.")
 			actions.append('move')
-			if first_move and ('Seal_of_Wind' in [s.name for s in self.charged_spells]):
+			if 'Seal_of_Wind' in [s.name for s in self.charged_spells]:
 				moveoptions = self.allblinkablenodes()
 			else:
 				moveoptions = self.allmoveablenodes()
@@ -787,17 +752,13 @@ class Player():
 			return None
 
 		elif action in shortcuts:
-			first_move = (self.board.moves_left_this_turn == self.board.moves_granted_this_turn)
-			self.move(action, standardmove=first_move)
-			self.board.moves_left_this_turn = max(0, self.board.moves_left_this_turn - 1)
-			self.taketurn(self.board.moves_left_this_turn, candash, canspell, cansummer)
+			self.move(action, standardmove=True)
+			self.taketurn(False, candash, canspell, cansummer)
 			return None
 
 		elif action == 'move':
-			first_move = (self.board.moves_left_this_turn == self.board.moves_granted_this_turn)
-			self.move(standardmove=first_move)
-			self.board.moves_left_this_turn = max(0, self.board.moves_left_this_turn - 1)
-			self.taketurn(self.board.moves_left_this_turn, candash, canspell, cansummer)
+			self.move(standardmove=True)
+			self.taketurn(False, candash, canspell, cansummer)
 			return None
 
 		elif action == 'dash':
@@ -830,6 +791,30 @@ class Player():
 		elif action == 'pass':
 			return None
 
+	def providence_step(self):
+		### Providence: optionally place one banked stone. It is an ordinary
+		### adjacent soft or hard move — Seal of Wind's blink and the enemy
+		### Seal of Stone's soft-only rule apply to the regular move only.
+		### Skipped or impossible placements leave the stone banked.
+		moveoptions = self.allmoveablenodes()
+		if not moveoptions:
+			self.jmessage("No legal Providence placement; your banked stones stay banked.")
+			return
+		self.jmessage("Providence: place a banked stone ({} in bank), or skip.".format(
+			self.board.prov_bank[self.color]))
+		actions = ['skip_providence']
+		while True:
+			egress = {"type": "message", "message": str(actions),
+			"awaiting": "action", "actionlist": actions, "moveoptions": moveoptions}
+			self.ws.send(json.dumps(egress))
+			resp = self.receivemessage()
+			if resp == 'skip_providence':
+				return
+			if resp in moveoptions:
+				self.board.prov_bank[self.color] -= 1
+				self.move(resp, standardmove=False)
+				return
+
 	def bot_triggers(self):
 		### Put any beginning-of-turn triggers here,
 		### like Inferno, which should set the global
@@ -852,12 +837,6 @@ class Player():
 
 		### Check whether the spellcounter >= 6.
 
-		### Providence: unused granted moves are forfeited. Zero the
-		### counters BEFORE the win checks so leftover this-turn phantoms
-		### never enter the lead/tiebreak math.
-		self.board.moves_left_this_turn = 0
-		self.board.moves_granted_this_turn = 0
-
 		### INSERT SPELL-SPECIFIC EOT EFFECTS HERE
 
 
@@ -865,9 +844,10 @@ class Player():
 			self.jmessage("DESTRUCTION BURNS!")
 			if self.opp.ishuman:
 				self.opp.jmessage("DESTRUCTION BURNS!")
+			prot = spellfile._bulwark_protected(self)
 			for name in board.nodes:
 				node = board.nodes[name]
-				if node.stone == self.enemy:
+				if node.stone == self.enemy and name not in prot:
 					for neighbor in node.neighbors:
 						if neighbor.stone == self.color:
 							node.stone = None
@@ -888,27 +868,25 @@ class Player():
 			elif color == 'blue':
 				bluetotal += 1
 
-		### ±3-lead check: Providence phantoms count ASYMMETRICALLY
-		### (defense only) — each win claim uses real placed stones,
-		### checked against the opponent's real+pending total. In the
-		### sixth-spell count they are symmetric (2026-08 playtest ruling).
-		redprov = sum(self.board.pending_moves['red'])
-		blueprov = sum(self.board.pending_moves['blue'])
+		### Providence banked stones count for their owner in both the
+		### ±3-lead check and the sixth-spell count.
+		redtotal += self.board.prov_bank['red']
+		bluetotal += self.board.prov_bank['blue']
 
-		if redtotal > bluetotal + blueprov + 2:
+		if redtotal > bluetotal + 2:
 			self.board.gameover = True
 			self.board.winner = 'red'
 
-		elif bluetotal > redtotal + redprov + 2:
+		elif bluetotal > redtotal + 2:
 			self.board.gameover = True
 			self.board.winner = 'blue'
 
 		else:
 			if self.spellcounter >= 6:
 				self.board.gameover = True
-				if redtotal + redprov > bluetotal + blueprov:
+				if redtotal > bluetotal:
 					self.board.winner = 'red'
-				elif bluetotal + blueprov > redtotal + redprov:
+				elif bluetotal > redtotal:
 					self.board.winner = 'blue'
 				else:
 					a = ['red', 'blue']

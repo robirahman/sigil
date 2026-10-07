@@ -12,7 +12,8 @@
  * Protocol (mirrors ai-worker.js):
  *   in:  { type:'init',   id }
  *   in:  { type:'search', id, sfn, timeMs, ttBits, widthScale,
- *          historySfns, evalName, adaptive: [p, easy, hard] }
+ *          historySfns, evalName, adaptive: [p, easy, hard],
+ *          split?: [part, parts] }       // step 6 root split (prototype, off by default)
  *   in:  { type:'new_game', ttBits }                    // forget the last game
  *   in:  { type:'ponder', sfn, ttBits, widthScale, historySfns, evalName,
  *          adaptive, sliceMs, maxDepth }                // prime the TT while the human thinks
@@ -107,9 +108,11 @@ self.onmessage = async (e) => {
 			if (_busy) return;                 // a real search owns the engine
 			const a = msg.adaptive || [0, 0, 0];
 			const eng = engineFor(msg.ttBits);
+			// A ponder always reads the whole root, whatever split the last search used.
+			if (typeof eng.set_root_split === 'function') eng.set_root_split(0, 1);
 			const r = JSON.parse(eng.ponder_begin(
 				msg.sfn, (msg.widthScale || 4) >>> 0, msg.historySfns || [],
-				msg.evalName || 'tfit', a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0));
+				msg.evalName || 'nnue_spell', a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0));
 			if (!r.ok) return;                 // out-of-scope position: nothing to ponder
 			_ponder.sliceMs = (msg.sliceMs || 250) >>> 0;
 			_ponder.maxDepth = (msg.maxDepth || 12) | 0;
@@ -146,9 +149,17 @@ self.onmessage = async (e) => {
 			const onDepth = (depth, score, nodes) => {
 				self.postMessage({ type: 'progress', id, depth, score, nodes });
 			};
-			const raw = engineFor(msg.ttBits).search(
+			const eng = engineFor(msg.ttBits);
+			// Step 6 option A (prototype): `split: [part, parts]` searches one part
+			// of the root; absent = the whole root, as before. An older wasm without
+			// the method searches the whole root and the coordinator still works.
+			if (typeof eng.set_root_split === 'function') {
+				const sp = Array.isArray(msg.split) ? msg.split : [0, 1];
+				eng.set_root_split(sp[0] >>> 0, sp[1] >>> 0);
+			}
+			const raw = eng.search(
 				msg.sfn, msg.timeMs >>> 0, (msg.widthScale || 4) >>> 0,
-				msg.historySfns || [], msg.evalName || 'tfit',
+				msg.historySfns || [], msg.evalName || 'nnue_spell',
 				a[0] || 0, (a[1] || 0) >>> 0, (a[2] || 0) >>> 0, onDepth);
 			self.postMessage({ type: 'result', id, res: JSON.parse(raw) });
 		} finally {

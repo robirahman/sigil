@@ -63,8 +63,8 @@ impl Board {
         let (mut outs, trunc) = self.resolve_outcomes(pos, c, OUTCOME_CAP);
         outs.sort_by_cached_key(|b| {
             // Prefer configurations the goal likes, and our own material.
-            -(b.configuration_value(c, goal) + 30 * b.total[c.idx()] as i32
-              - 30 * b.total[c.other().idx()] as i32)
+            -(b.configuration_value(c, goal) + 30 * b.material(c) as i32
+              - 30 * b.material(c.other()) as i32)
         });
         let truncated = trunc || outs.len() > limit;
         outs.truncate(limit);
@@ -73,9 +73,9 @@ impl Board {
 
     /// One cast's resolution score, the key both the ordered and ranked forms use.
     #[inline]
-    fn outcome_score(&self, c: Color, goal: crate::order::PlacementGoal) -> i32 {
-        self.configuration_value(c, goal) + 30 * self.total[c.idx()] as i32
-            - 30 * self.total[c.other().idx()] as i32
+    pub(crate) fn outcome_score(&self, c: Color, goal: crate::order::PlacementGoal) -> i32 {
+        self.configuration_value(c, goal) + 30 * self.material(c) as i32
+            - 30 * self.material(c.other()) as i32
     }
 
     /// What a resolution's PLACED stones achieve for the caster, scored like a
@@ -217,7 +217,7 @@ impl Board {
 /// exactly as blind as it was before the choice was enumerated. Round-robin
 /// instead, best keep first, so a width-`k` budget sees `k` distinct keeps.
 /// This is the same starvation the KEY_DASH reserved slot exists to prevent.
-fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
+pub(crate) fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
     -> (Vec<(i32, usize, usize)>, bool)
 {
     per_keep.sort_by_key(|v| v.first().map(|&(s, _, _)| -s).unwrap_or(i32::MAX));
@@ -239,6 +239,60 @@ fn stratify_by_keep(mut per_keep: Vec<Vec<(i32, usize, usize)>>, window: usize)
     (out, total > window)
 }
 
+
+/// The turns every ordered stream puts at its FRONT, in front-to-back order:
+/// the stone-lead mate (if the pre-pass is live here and finds one), then the
+/// Seal of Destruction decisive turns. `b` is `board` after `update()`, and
+/// `steps` the position's ordered first steps (their bare moves seed the lead
+/// scan, collected only on a cache miss).
+/// Shared by `TurnIter` and the learned-policy stream (`policy.rs`).
+/// `front_prepass` for benches.
+pub fn front_prepass_pub(board: &Board, b: &Board, c: Color,
+                         steps: &[(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)]) -> Vec<Turn> {
+    front_prepass(board, b, c, steps)
+}
+
+pub(crate) fn front_prepass(board: &Board, b: &Board, c: Color,
+                            steps: &[(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)])
+    -> Vec<Turn>
+{
+    let mut front: Vec<Turn> = Vec::new();
+    // Seal of Destruction: a turn that decides the game goes to the FRONT of
+    // the stream, ahead of every stage. Width cuts the stream after `w`
+    // turns and the stages put every cast under every first move before any
+    // dash, so a mate under the last-ranked first move -- the only soft move
+    // in a position full of tempting pushes -- sat 120+ turns deep and was
+    // never searched (the k=5 Gust case). The stages emit it again later;
+    // the duplicate costs a TT probe.
+    front.extend(board.decisive_destruction_turns(c));
+    // Stone-lead mates (the ordinary way a game ends) get the same treatment:
+    // a material-gated scan puts every turn that reaches the lead now at the
+    // front of the stream. See `decisive_lead_turns`.
+    if decisive_lead_enabled() && lead_prepass_here() {
+        // Iterative deepening regenerates every node's stream once per
+        // iteration, so the scan's answer is memoised per position.
+        let key = crate::zobrist::ZOBRIST.key_js(b) ^ if c == Color::Red { 0 } else { 0x9E37_79B9_7F4A_7C15 };
+        let cached = LEAD_CACHE.with(|cache| {
+            let e = &cache.borrow()[(key as usize) & lead_cache_mask()];
+            if e.key == key { Some(e.turn) } else { None }
+        });
+        let found: Option<Turn> = match cached {
+            Some(t) => t,
+            None => {
+                let fm: Vec<(u8, Option<u8>)> = steps.iter()
+                    .filter(|m| m.3.is_none()).map(|&(n, p, _, _)| (n, p)).collect();
+                let t = board.decisive_lead_turns_from(c, decisive_lead_cap(), &fm).into_iter().next();
+                LEAD_CACHE.with(|cache| {
+                    cache.borrow_mut()[(key as usize) & lead_cache_mask()] = LeadEntry { key, turn: t };
+                });
+                t
+            }
+        };
+        if let Some(t) = found { front.insert(0, t); }
+    }
+    front
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Stage { Moves, MoveCast, Dash, DashCast, Done }
 
@@ -247,8 +301,10 @@ pub struct TurnIter<'a> {
     c: Color,
     window: usize,
     stage: Stage,
-    /// Ordered first-move options, and the post-move board for each.
-    moves: Vec<(u8, Option<u8>, bool)>, // (node, push_to, is_blink)
+    /// Ordered first-move options: (node, push_to, is_blink, Providence
+    /// placement). With a nonempty bank each first move appears bare and once
+    /// per placement, ordered jointly.
+    moves: Vec<(u8, Option<u8>, bool, Option<(u8, Option<u8>)>)>,
     mi: usize,
     /// Ordered castable spells for the current move's post-move board.
     casts: Vec<usize>,
@@ -294,10 +350,7 @@ impl<'a> TurnIter<'a> {
             }
             return it;
         }
-        let moves: Vec<(u8, Option<u8>, bool)> = board.ordered_first_moves(c)
-            .into_iter()
-            .map(|(n, p)| (n, p, board.is_blink_pub(n, c)))
-            .collect();
+        let moves = board.ordered_first_steps(c);
         let mut it = TurnIter {
             board, c, window,
             stage: if moves.is_empty() { Stage::Done } else { Stage::Moves },
@@ -326,39 +379,8 @@ impl<'a> TurnIter<'a> {
             }
         }
         it.build_key_dashes();
-        // Seal of Destruction: a turn that decides the game goes to the FRONT of
-        // the stream, ahead of every stage. Width cuts the stream after `w`
-        // turns and the stages put every cast under every first move before any
-        // dash, so a mate under the last-ranked first move -- the only soft move
-        // in a position full of tempting pushes -- sat 120+ turns deep and was
-        // never searched (the k=5 Gust case). The stages emit it again later;
-        // the duplicate costs a TT probe.
-        for t in board.decisive_destruction_turns(c).into_iter().rev() {
+        for t in front_prepass(board, &b, c, &it.moves).into_iter().rev() {
             it.pending.push_front(t);
-        }
-        // Stone-lead mates (the ordinary way a game ends) get the same treatment:
-        // a material-gated scan puts every turn that reaches the lead now at the
-        // front of the stream. See `decisive_lead_turns`.
-        if decisive_lead_enabled() && lead_prepass_here() {
-            // Iterative deepening regenerates every node's stream once per
-            // iteration, so the scan's answer is memoised per position.
-            let key = crate::zobrist::ZOBRIST.key_js(&b) ^ if c == Color::Red { 0 } else { 0x9E37_79B9_7F4A_7C15 };
-            let cached = LEAD_CACHE.with(|cache| {
-                let e = &cache.borrow()[(key as usize) & lead_cache_mask()];
-                if e.key == key { Some(e.turn) } else { None }
-            });
-            let found: Option<Turn> = match cached {
-                Some(t) => t,
-                None => {
-                    let fm: Vec<(u8, Option<u8>)> = it.moves.iter().map(|&(n, p, _)| (n, p)).collect();
-                    let t = board.decisive_lead_turns_from(c, decisive_lead_cap(), &fm).into_iter().next();
-                    LEAD_CACHE.with(|cache| {
-                        cache.borrow_mut()[(key as usize) & lead_cache_mask()] = LeadEntry { key, turn: t };
-                    });
-                    t
-                }
-            };
-            if let Some(t) = found { it.pending.push_front(t); }
         }
         it
     }
@@ -396,15 +418,23 @@ impl<'a> TurnIter<'a> {
         self.key.iter().any(|k| k.slice() == t.slice())
     }
 
-    fn first_action(&self, i: usize) -> Action {
-        let (n, p, blink) = self.moves[i];
-        if blink { Action::Blink { node: n, push_to: p } } else { Action::Move { node: n, push_to: p } }
+    /// The turn's opening actions for move `i`: the first move, then the
+    /// Providence placement when there is one.
+    fn first_prefix(&self, i: usize) -> Turn {
+        let (n, p, blink, place) = self.moves[i];
+        let a = if blink { Action::Blink { node: n, push_to: p } } else { Action::Move { node: n, push_to: p } };
+        let t = Turn::single(a);
+        match place {
+            Some((pn, pp)) => t.push_pub(Action::Place { node: pn, push_to: pp }),
+            None => t,
+        }
     }
 
     fn post_move_board(&self, i: usize) -> Board {
-        let (n, p, _) = self.moves[i];
+        let (n, p, _, place) = self.moves[i];
         let mut b = *self.board;
         b.do_move_with_pub(n, p, self.c);
+        if let Some((pn, pp)) = place { b.do_placement(pn, pp, self.c); }
         b
     }
 
@@ -452,8 +482,8 @@ impl<'a> TurnIter<'a> {
                 if self.mi >= self.moves.len() {
                     self.mi = 0; self.stage = Stage::MoveCast; return true;
                 }
-                let a = self.first_action(self.mi);
-                self.pending.push_back(Turn::single(a));
+                let a = self.first_prefix(self.mi);
+                self.pending.push_back(a);
                 self.mi += 1;
                 true
             }
@@ -479,7 +509,7 @@ impl<'a> TurnIter<'a> {
                             let (outs, _) = cl.resolve_outcomes_ordered(pos, self.c, 1);
                             let s = outs.first()
                                 .map(|o| o.configuration_value(self.c, goal)
-                                        + 30 * o.total[self.c.idx()] as i32)
+                                        + 30 * o.material(self.c) as i32)
                                 .unwrap_or(i32::MIN / 4);
                             (s, pos)
                         }).collect();
@@ -491,7 +521,7 @@ impl<'a> TurnIter<'a> {
                 }
                 let pos = self.casts[self.ci];
                 self.ci += 1;
-                let a = self.first_action(self.mi);
+                let a = self.first_prefix(self.mi);
                 let goal = b.placement_goal(self.c);
 
                 // The keep and the resolution are ONE choice -- the resolver
@@ -532,7 +562,7 @@ impl<'a> TurnIter<'a> {
                 let (cands, more) = stratify_by_keep(per_keep, sel_win);
                 if more { self.windowed = true; }
                 for &(_, ki, raw) in &cands {
-                    self.pending.push_back(Turn::single(a).push_pub(Action::Cast {
+                    self.pending.push_back(a.push_pub(Action::Cast {
                         pos: pos as u8, keep: ki as u8, outcome: raw as u16,
                     }));
                 }
@@ -546,11 +576,11 @@ impl<'a> TurnIter<'a> {
                         resolved.iter().find(|(k, _, _)| *k == ki) else { continue };
                     let Some(ob) = outs.get(raw) else { continue };
                     let mut bs = *cl;
-                    bs.stones = ob.stones;
+                    bs.adopt(&ob);
                     bs.update();
                     bs.finish_cast(id, self.c);
                     bs.update();
-                    let prefix = Turn::single(a).push_pub(Action::Cast {
+                    let prefix = a.push_pub(Action::Cast {
                         pos: pos as u8, keep: ki as u8, outcome: raw as u16,
                     });
                     self.push_summer_casts(prefix, &bs, false);
@@ -562,9 +592,9 @@ impl<'a> TurnIter<'a> {
                     self.mi = 0; self.stage = Stage::DashCast; return true;
                 }
                 let b = self.post_move_board(self.mi);
-                let a = self.first_action(self.mi);
+                let a = self.first_prefix(self.mi);
                 for (t, _bd) in b.ordered_dash_branches(self.c, self.window) {
-                    let mut full = Turn::single(a);
+                    let mut full = a;
                     for act in t.slice() { full = full.push_pub(*act); }
                     if self.is_key_dup(&full) { continue; }
                     self.pending.push_back(full);
@@ -575,7 +605,7 @@ impl<'a> TurnIter<'a> {
             Stage::DashCast => {
                 if self.mi >= self.moves.len() { self.stage = Stage::Done; return true; }
                 let b = self.post_move_board(self.mi);
-                let a = self.first_action(self.mi);
+                let a = self.first_prefix(self.mi);
                 for (t, bd) in b.ordered_dash_branches(self.c, self.window) {
                     // post-dash casts
                     let goal = bd.placement_goal(self.c);
@@ -609,7 +639,7 @@ impl<'a> TurnIter<'a> {
                         let (cands, more) = stratify_by_keep(per_keep, sel_win);
                         if more { self.windowed = true; }
                         for &(_, ki, raw) in &cands {
-                            let mut full = Turn::single(a);
+                            let mut full = a;
                             for act in t.slice() { full = full.push_pub(*act); }
                             full = full.push_pub(Action::Cast {
                                 pos: pos as u8, keep: ki as u8, outcome: raw as u16,
@@ -625,7 +655,7 @@ impl<'a> TurnIter<'a> {
                                 resolved.iter().find(|(k, _, _)| *k == ki) else { continue };
                             let Some((_, ob)) = ranked.iter().find(|(r, _)| *r == raw) else { continue };
                             let mut bs = *cl;
-                            bs.stones = ob.stones;
+                            bs.adopt(&ob);
                             bs.update();
                             bs.finish_cast(id, self.c);
                             bs.update();
@@ -1295,6 +1325,12 @@ impl Board {
             Resolve::Fury | Resolve::Corrupt => 5,
             Resolve::Erupt => 16,
             Resolve::Hurricane | Resolve::DestroyExposed => theirs,
+            // Fissure: the target and its (at most three) neighbours.
+            Resolve::Fissure => theirs.min(4),
+            // Rock Slide: every bordering stone, and whatever it lands on.
+            Resolve::RockSlide => theirs,
+            // Providence: banked stones count as material.
+            Resolve::BankStones => info.count as i32,
         }
     }
 
@@ -1537,7 +1573,10 @@ struct LeadScan {
 }
 
 impl LeadScan {
-    #[inline] fn diff(&self, b: &Board) -> i32 { b.total[self.me] as i32 - b.total[self.them] as i32 }
+    #[inline] fn diff(&self, b: &Board) -> i32 {
+        // Providence banked stones count toward the lead.
+        (b.total[self.me] + b.bank[self.me] as u32) as i32 - (b.total[self.them] + b.bank[self.them] as u32) as i32
+    }
     #[inline] fn decides(&self, b: &Board, casted: bool) -> bool {
         if let Some(g) = self.swing { return self.diff(b) - self.root_diff >= g; }
         // B: wiping the enemy off the board wins whatever the count says.
@@ -1655,7 +1694,7 @@ impl LeadScan {
                         if self.decides(ob, true) { self.verify(t); continue; }
                         if !(can_dash && can_spell) && !(next_summer && ob.holds_charged(c, crate::spells_meta::SEAL_OF_SUMMER)) { continue; }
                         let mut bs = cl;
-                        bs.stones = ob.stones;
+                        bs.adopt(&ob);
                         bs.update();
                         bs.finish_cast(id, c);
                         bs.update();
@@ -1806,6 +1845,7 @@ impl Board {
                 Action::Blink { node, push_to } | Action::Move { node, push_to } => {
                     b.do_move_with_pub(node, push_to, c);
                 }
+                Action::Place { node, push_to } => b.do_placement(node, push_to, c),
                 Action::Dash { sacs, n_sacs, node, push_to } => {
                     for i in 0..n_sacs as usize { b.stones[c.idx()] &= !(1u64 << sacs[i]); }
                     b.update();
@@ -1831,7 +1871,7 @@ impl Board {
                             .map_or(-1, |x| x as i64)
                     }).collect();
                     out.push(CastRank { spell: id, n_outcomes: outs.len(), n_keeps, keep_rank, ranks });
-                    let mut f = cl; f.stones = chosen.stones; f.update(); f.finish_cast(id, c); f.update();
+                    let mut f = cl; f.adopt(&chosen); f.update(); f.finish_cast(id, c); f.update();
                     b = f;
                 }
                 Action::Pass => {}

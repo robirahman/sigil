@@ -44,11 +44,8 @@ function _ensureSharedTt() {
 	return _sharedTt;
 }
 
-/** Rebuild a SimBoard from the SFN string the main thread sent over.
- * `extraMoves`: Providence extras already granted for the current turn —
- * the SFN carries only the future schedule (pm: token); the popped counter
- * travels via opts. */
-function _sfnToSimBoard(sfn, extraMoves) {
+/** Rebuild a SimBoard from the SFN string the main thread sent over. */
+function _sfnToSimBoard(sfn) {
 	const state = sfnToDict(sfn);
 	const sb = new SimBoard(state.spell_names, state.variant || 'standard');
 	for (const n of NODE_ORDER) sb.stones[n] = state.stones[n];
@@ -58,8 +55,7 @@ function _sfnToSimBoard(sfn, extraMoves) {
 	sb.lock = { red: state.red_lock, blue: state.blue_lock };
 	sb.springlock = { red: state.red_springlock, blue: state.blue_springlock };
 	sb.score = state.score;
-	sb.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
-	sb.extraMovesThisTurn = extraMoves || 0;
+	sb.providenceBank = { red: state.red_bank || 0, blue: state.blue_bank || 0 };
 	sb.update();
 	return sb;
 }
@@ -80,7 +76,8 @@ function _serializeTurn(turn) {
 			converted: a.converted,
 			wall: a.wall,
 			pushes: a.pushes,
-			turns: a.turns,
+			banked: a.banked,
+			providence: a.providence,
 			nodes: a.nodes,
 			target: a.target,
 			val: a.val,
@@ -132,7 +129,7 @@ async function _runSearch(msg) {
 		}
 		const tt = opts.useSharedTt ? _ensureSharedTt() : new MinimaxTT(_CAVEMAN_TT_MAX);
 
-		const sim = _sfnToSimBoard(sfn, opts.extraMoves);
+		const sim = _sfnToSimBoard(sfn);
 
 		const searchOpts = {
 			timeLimit: opts.timeLimit,

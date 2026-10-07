@@ -96,6 +96,56 @@ pub struct Weights {
     /// flagged Flourish casts were exactly the ones that packed stones back in
     /// instead of walking out.
     pub mobility: i32,
+    /// Per-SPELL sigil weights, added inside the positional sum on top of the
+    /// shared `sigil_stone` / `sigil_charged`: slot p contributes
+    /// `stone[spell_p] * stone_p + charged[spell_p] * charged_p` (the same per-slot
+    /// quantities the shared term sums). `None` for every preset but `tfit_spell*`.
+    pub spell_sigil: Option<&'static SpellSigil>,
+    /// Step 5 network residual (`nn.rs`), added UNSCALED after everything else and
+    /// already clamped to the net's own cap. `None` for every preset but `nnue_*`.
+    pub nn: Option<&'static crate::nn::NnSpec>,
+}
+
+/// Raw positional weights per spell id (`spells_meta::SPELLS` order), in the same
+/// units as the other positional terms. `mult` scales the whole table, so one fitted
+/// shape serves presets that give it different shares of the budget.
+#[derive(Debug)]
+pub struct SpellSigil {
+    pub stone: [i32; crate::spells_meta::NUM_OFFICIAL_SPELLS],
+    pub charged: [i32; crate::spells_meta::NUM_OFFICIAL_SPELLS],
+    pub mult: i32,
+}
+
+impl SpellSigil {
+    /// Worst-case |contribution| over every legal draw: each draw holds three
+    /// spells of each role, in sigils of 5, 3 and 1 nodes, so take the three largest
+    /// `|stone| * n + |charged|` per role. Every official spell of the role counts
+    /// (core plus Tectonic and Providence), so a table that prices the expansion
+    /// spells stays inside the budget too.
+    pub const fn worst_case(&self) -> i32 {
+        let sizes = [5, 3, 1];
+        let mut total = 0;
+        let mut g = 0;
+        while g < 3 {
+            let (mut a, mut b, mut c) = (0, 0, 0);   // three largest, a >= b >= c
+            let mut s = 0;
+            while s < crate::spells_meta::NUM_OFFICIAL_SPELLS {
+                let r = match crate::spells_meta::SPELLS[s].role {
+                    crate::spells_meta::Role::Ritual => 0,
+                    crate::spells_meta::Role::Sorcery => 1,
+                    crate::spells_meta::Role::Charm => 2,
+                };
+                if r == g {
+                    let v = abs_i32(self.stone[s]) * sizes[g] + abs_i32(self.charged[s]);
+                    if v > a { c = b; b = a; a = v; } else if v > b { c = b; b = v; } else if v > c { c = v; }
+                }
+                s += 1;
+            }
+            total += a + b + c;
+            g += 1;
+        }
+        total * abs_i32(self.mult)
+    }
 }
 
 impl Weights {
@@ -118,7 +168,7 @@ impl Weights {
             pos_num: 1,
             pos_den: 1,
             tempo: 50,
-    cast_pace: 0, mobility: 0,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 }
     }
 }
@@ -139,7 +189,7 @@ pub const CLASSIC: Weights = Weights {
     sigil_stone: 0, sigil_charged: 0,
     mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0,
     pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 };
 
 /// Mana term only, to separate the two contributions.
@@ -154,7 +204,7 @@ pub const MATERIAL_ONLY: Weights = Weights {
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0, mana: 0, sixth_spell_danger: 0, control: 0,
     void_penalty: 0, pos_num: 1, pos_den: 1, tempo: 0,
-    cast_pace: 0, mobility: 0,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 };
 
 /// Material only PLUS the tempo correction: the minimal change that removes the
@@ -211,7 +261,7 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
         sigil_stone: 0, sigil_charged: 0,
         mana: m, sixth_spell_danger: 0, control: c, void_penalty: v,
         pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 }
 }
 
@@ -239,6 +289,7 @@ pub const fn unscaled_worst_case(w: &Weights) -> i32 {
         + abs_i32(w.sigil_stone) * 27 + abs_i32(w.sigil_charged) * 9
         + abs_i32(w.mana) * 3 + abs_i32(w.sixth_spell_danger) * 1
         + abs_i32(w.control) * 39 + abs_i32(w.void_penalty) * 9
+        + match w.spell_sigil { Some(t) => t.worst_case(), None => 0 }
 }
 
 const fn abs_i32(x: i32) -> i32 { if x < 0 { -x } else { x } }
@@ -305,7 +356,7 @@ pub const FIT_SHAPE: Weights = Weights {
     mana: 82, sixth_spell_danger: 64,
     control: 3, void_penalty: -22,
     pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0,
+    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
 };
 
 /// The hand shape with only the four disputed SIGNS flipped, magnitudes untouched.
@@ -329,6 +380,54 @@ pub const FIT_AT_BUDGET: Weights = at_budget(FIT_SHAPE);
 /// target (+-0.32 stone at the clamp). Arena-gated against `tfit`.
 pub const FIT2_AT_BUDGET: Weights = Weights { control: 40, cast_pace: 15, mobility: 4, ..FIT_AT_BUDGET };
 pub const FLIP_AT_BUDGET: Weights = at_budget(FLIP_SHAPE);
+
+/// Per-spell sigil weights (2026-10 plan, step 2), fitted by
+/// `harness/fit_spell_eval.py` against the depth-4 search score of 3.0M self-play
+/// positions (run 20260831T0045Z, spells 0-38 only), regularised towards the shared
+/// `tfit` terms, and scaled so the table's worst case over any legal draw is 1,887
+/// raw -- the same as `FIT_SHAPE`'s whole positional set. Charms sit in one-node
+/// sigils where stone == charged, so their weight is all on `stone`. Spells 39-44
+/// (Tectonic, Providence) were not in the data and fall back to the shared terms.
+pub const SPELL_SIGIL_FIT: SpellSigil = SpellSigil {
+    stone: [9, 87, 50, 23, 22, 3, 21, 61, 4, 1, -22, 40, -53, -57, -44, -27, -7, -17, 81,
+            28, -10, -3, 73, 19, -10, 21, -44, 50, 24, 31, 54, -2, -33, 36, -4, 10, -52,
+            48, -9, 0, 0, 0, 0, 0, 0],
+    charged: [-3, 8, 3, 0, 7, -4, 6, 16, -3, -1, 0, 0, 0, 0, 0, -7, -5, 0, 6, 7, 0, 0,
+              22, 0, -4, -3, 0, 2, 7, 0, 3, -4, 0, 4, -4, 0, -9, 20, 0, 0, 0, 0, 0, 0, 0],
+    mult: 1,
+};
+pub const SPELL_SIGIL_FIT_X3: SpellSigil = SpellSigil { mult: 3, ..SPELL_SIGIL_FIT };
+
+/// `tfit` plus the per-spell table inside ONE 96-centistone budget: the table gets
+/// three quarters of it, the `tfit` terms the rest (offline the per-spell terms
+/// carried more of the outcome signal than the shared ones).
+pub const TFIT_SPELL: Weights = at_budget(Weights { spell_sigil: Some(&SPELL_SIGIL_FIT_X3), ..FIT_SHAPE });
+/// `tfit` untouched (96 cs) plus the table at its own 96 cs: twice the positional
+/// budget, inside the range the 2026-08 scale sweep still found positive (s12).
+pub const TFIT_SPELL2: Weights = Weights {
+    pos_num: 2 * POSITIONAL_BUDGET,
+    pos_den: unscaled_worst_case(&Weights { spell_sigil: Some(&SPELL_SIGIL_FIT), ..FIT_SHAPE }),
+    spell_sigil: Some(&SPELL_SIGIL_FIT), ..FIT_SHAPE
+};
+
+/// The step-2 table REFITTED (2026-10 plan, step 2b) by `harness/fit_spell_eval_v2.py`
+/// on the step-3 v2 self-play data (engine v23, depth-4 tfit scores), which draws
+/// the Tectonic and Providence spells too, so ids 39-44 carry their own weights.
+/// Same method, target (search score) and scaling (worst case over any legal draw,
+/// now counting the expansion spells, equal to `FIT_SHAPE`'s 1,887 raw).
+/// Fitted on 7.6M positions (half the d4 chunks, 80% of them by chunk; run
+/// 20261006T155615Z); 0.65-0.67M positions per expansion spell.
+pub const SPELL_SIGIL_FIT_V2: SpellSigil = SpellSigil {
+    stone: [27, 95, 56, 29, 44, 0, 25, 91, 30, 0, -28, 51, -33, -49, -51, -22, 0, -15, 72,
+            9, -7, -7, 56, 11, -12, 15, -19, 50, 15, 19, 36, 1, -23, 26, -6, 3, -8, 32, 0,
+            18, 43, -12, 0, 2, 0],
+    charged: [3, 6, 1, -4, 20, -9, 1, 9, -9, 6, 0, 0, 0, 0, 0, -6, -6, 0, 5, 1, 0, 1, 16, 0,
+              -8, -4, 0, 2, 3, 0, 0, -8, 0, 3, -4, 0, 0, 13, 0, 1, 14, 0, 0, -2, -1],
+    mult: 1,
+};
+pub const SPELL_SIGIL_FIT_V2_X3: SpellSigil = SpellSigil { mult: 3, ..SPELL_SIGIL_FIT_V2 };
+/// `tfit_spell` with the refitted table: same 96 cs budget, same 3/4 : 1/4 split.
+pub const TFIT_SPELL_V2: Weights = at_budget(Weights { spell_sigil: Some(&SPELL_SIGIL_FIT_V2_X3), ..FIT_SHAPE });
 
 pub const STRUCT_01: Weights = scaled_structural(1, 100);
 pub const STRUCT_02: Weights = scaled_structural(2, 100);
@@ -415,8 +514,8 @@ impl Board {
     /// when they drift -- which it has already caught once, on an integer
     /// truncation difference in the sigil term.
     pub fn evaluate(&self, c: Color, w: &Weights) -> i32 {
-        let red = self.total[0] as i32;
-        let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32;
+        let blue = self.material(Color::Blue) as i32;
         // Signed lead in *score* terms, i.e. including blue's +1 counter token.
         let red_score_lead = red - (blue + 1);
         let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
@@ -463,6 +562,25 @@ impl Board {
             pos += w.sigil_stone * stone_feat + w.sigil_charged * charged_feat;
         }
 
+        if let Some(t) = w.spell_sigil {
+            // Per-spell sigil terms. The same per-slot quantities as above, priced by
+            // the spell sitting in the slot; `spell_sigil_features` is its feature
+            // vector and the dot-product test pins the two together.
+            let mut acc = 0i32;
+            for p in 0..9 {
+                let s = self.spells[p] as usize;
+                if s >= t.stone.len() { continue; }
+                let m = SIGIL[p];
+                let n = m.count_ones() as i32;
+                let mine = (m & self.mine(c)).count_ones() as i32;
+                let theirs = (m & self.theirs(c)).count_ones() as i32;
+                let stone = mine * mine / n - theirs * theirs / n;
+                let charged = (mine == n) as i32 - (theirs == n) as i32;
+                acc += t.stone[s] * stone + t.charged[s] * charged;
+            }
+            pos += t.mult * acc;
+        }
+
         if w.mana != 0 {
             pos += w.mana * ((self.mine(c) & MANA).count_ones() as i32
                            - (self.theirs(c) & MANA).count_ones() as i32);
@@ -502,6 +620,9 @@ impl Board {
         if w.mobility != 0 {
             mat += w.mobility * self.mobility_feature(c);
         }
+        if let Some(net) = w.nn {
+            mat += crate::nn::eval(net, self, c);
+        }
         mat
     }
 
@@ -509,8 +630,8 @@ impl Board {
     /// of the sixth cast favours me. Zero when tied or before anyone has cast.
     #[inline]
     pub fn cast_pace_feature(&self, c: Color) -> i32 {
-        let red = self.total[0] as i32;
-        let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32;
+        let blue = self.material(Color::Blue) as i32;
         let red_score_lead = red - (blue + 1);
         let my_lead = if c == Color::Red { red_score_lead } else { -red_score_lead };
         let casts = (self.spell_counter[0] as i32).max(self.spell_counter[1] as i32);
@@ -526,15 +647,22 @@ impl Board {
     }
 }
 
+/// The eval the site plays: every browser tier (wasm `Engine` default, the puzzle
+/// judge) and the mate solver's nominator read this, never a literal.
+/// `nnue_spell` since engine v25 (2026-10-06): the spell-conditioned network,
+/// +79 Elo at 10 s over `tfit_spell_v2` (engine/reports/2026-10-step5.md), which was
+/// v24's (per-spell sigil terms, +50 at 10 s over `tfit`, 2026-10-step2.md).
+pub const SHIPPED_EVAL: &str = "nnue_spell";
+
 /// Every accepted preset name, in one place. Exported (via py.rs) as
 /// `EVAL_NAMES` so callers (argparse `choices`, harnesses, docs) enumerate
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 19] = [
+pub const EVAL_NAMES: [&str; 23] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
-    "hand", "tfit", "tflip", "tfit2",
+    "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -555,6 +683,11 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "hand" => HAND_AT_BUDGET,
         "tfit" => FIT_AT_BUDGET,
         "tfit2" => FIT2_AT_BUDGET,
+        "tfit_spell" => TFIT_SPELL,
+        "tfit_spell2" => TFIT_SPELL2,
+        "tfit_spell_v2" => TFIT_SPELL_V2,
+        // Step 5: the network residual on top of `tfit_spell` (default OFF).
+        "nnue_spell" => Weights { nn: Some(&crate::nn::NNUE_SPELL), ..TFIT_SPELL },
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
         "s02" => STRUCT_02,
@@ -572,6 +705,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }

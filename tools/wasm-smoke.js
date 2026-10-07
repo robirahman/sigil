@@ -20,7 +20,9 @@ const fs = require('fs');
 const path = require('path');
 const REPO = path.dirname(__dirname);
 const ENGINE = path.join(REPO, 'docs', 'static', 'scripts', 'engine');
-const WASM_DIR = path.join(REPO, 'docs', 'static', 'wasm');
+// SIGIL_WASM_DIR points the smoke at an unshipped build (engine/build-wasm.sh
+// with WASM_OUT=<dir>), e.g. a prototype that must not replace docs/static/wasm.
+const WASM_DIR = process.env.SIGIL_WASM_DIR || path.join(REPO, 'docs', 'static', 'wasm');
 
 // Superset of ai/replay_bridge.py's list: sim-board for the probe boards,
 // features/enumerator because sim-board's evaluation hooks reference them.
@@ -48,6 +50,15 @@ async function driver() {
 	const fs = require('fs');
 	const path = require('path');
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
+	// SIGIL_SMOKE_POLICY=<min_width> overrides the shipped generator policy.
+	// The shipped engine has it on (policy::SHIPPED_POLICY); 'off' replays without it.
+	if (process.env.SIGIL_SMOKE_POLICY === 'off') {
+		wasm_bindgen.set_policy(false, 0);
+		console.log('generator policy OFF');
+	} else if (process.env.SIGIL_SMOKE_POLICY) {
+		wasm_bindgen.set_policy(true, parseInt(process.env.SIGIL_SMOKE_POLICY, 10));
+		console.log('generator policy ON, min_width ' + process.env.SIGIL_SMOKE_POLICY);
+	}
 	const info = JSON.parse(wasm_bindgen.engine_info());
 	if (info.nodes !== 39) throw new Error('engine_info nodes != 39');
 	// Game clock: the JS allocation must equal the engine's for every input.
@@ -70,7 +81,10 @@ async function driver() {
 	}
 
 	// rust-ai.js's partial-SFN key: everything except the turn counter.
-	const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+	// Includes the Providence banks (the optional `pm:` token), which the
+		// stone field does not show.
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5],
+			p.find(t => t.startsWith('pm:')) || ''].join(' '); };
 	const OFFICIAL = ['core', 'springtime', 'celestial', 'fury', 'tempest',
 	                  'flood', 'autumn', 'gloom', 'covenant'];
 
@@ -81,7 +95,6 @@ async function driver() {
 		const probe = sfnToSimBoard(sfn);
 		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
 		probe.getBoardStatePayload = () => ({});
-		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
 		await applyAITurn(probe, { actions: res.actions }, color, () => {});
 		probe.update();
 		probe.checkGameOver(color);
@@ -90,7 +103,9 @@ async function driver() {
 		probe.update();
 		if (key(boardToSfn(probe)) !== key(res.expected_sfn)) {
 			throw new Error('replay mismatch:\n  replayed: ' + key(boardToSfn(probe)) +
-			                '\n  expected: ' + key(res.expected_sfn));
+			                '\n  expected: ' + key(res.expected_sfn) +
+			                '\n  before:   ' + sfn +
+			                '\n  actions:  ' + JSON.stringify(res.actions));
 		}
 		return probe.gameover;
 	}
@@ -126,6 +141,38 @@ async function driver() {
 		}
 	}
 	if (progressTicks === 0) throw new Error('on_depth progress callback never fired');
+
+	// Tectonic + Providence: draws holding all six spells, every ply
+	// replay-verified (walls, shields, Rock Slide pushes, banks, placements).
+	const seen = { fissure: 0, rock_slide: 0, bank_stones: 0, providence: 0 };
+	{
+		const core = generateSpellList(['core']);
+		const draws = [
+			['Fissure', 'Endowment', core[0], 'Rock_Slide', 'Annuity', core[3], 'Bulwark', 'Dividend', core[6]],
+			['Endowment', core[1], 'Fissure', 'Annuity', core[4], 'Rock_Slide', 'Dividend', core[7], 'Bulwark'],
+			[core[0], 'Fissure', 'Endowment', core[3], 'Rock_Slide', 'Annuity', 'Bulwark', core[6], 'Dividend'],
+		];
+		for (let g = 0; g < draws.length; g++) {
+			const b = new SigilBoard(draws[g].slice(), 'standard');
+			b.setupInitial();
+			let sfn = boardToSfn(b);
+			const history = [];
+			for (let ply = 0; ply < 60; ply++) {
+				const res = pick(sfn, history, 150);
+				if (!res.ok) throw new Error('tectonic game ' + g + ' ply ' + ply + ': ' + res.error);
+				for (const a of res.actions) {
+					if (a.type in seen) seen[a.type]++;
+					if (a.providence) seen.providence++;
+				}
+				const over = await verify(sfn, res);
+				plies++;
+				history.push(sfn);
+				sfn = res.expected_sfn;
+				if (over) break;
+			}
+		}
+		console.log('tectonic/providence games: ' + JSON.stringify(seen));
+	}
 
 	// The display report (search::report): present on every completed search,
 	// and an even opening reads ~0 stones, not the raw eval's -0.5 (blue's +1
@@ -249,6 +296,64 @@ async function driver() {
 		const idle = JSON.parse(eng.ponder_step(10, 4));
 		if (!idle.ok || !idle.done) throw new Error('idle ponder_step: ' + JSON.stringify(idle));
 		eng.free();
+	}
+	// Step 6 option A (prototype): root split across several Engines, combined
+	// by rust-ai.js's own pickSplitResult, every move replay-verified; then a
+	// ponder (which must read the whole root) and a split search after it. Runs
+	// only against a wasm that has set_root_split (SIGIL_WASM_DIR=<proto build>).
+	let splitMoves = 0;
+	{
+		// The worker-count cap: hardwareConcurrency - 1, at least 1, default 1.
+		const wc = RustAI.rustWorkerCount;
+		if (wc(undefined, 8) !== 1 || wc(4, 8) !== 4 || wc(16, 8) !== 7 || wc(4, 1) !== 1 || wc(4, undefined) !== 1) {
+			throw new Error('rustWorkerCount cap is wrong');
+		}
+		if (typeof wasm_bindgen.Engine.prototype.set_root_split === 'function') {
+			const PARTS = 3;
+			const engines = Array.from({ length: PARTS }, () => new wasm_bindgen.Engine(18));
+			const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
+			b.setupInitial();
+			let sfn = boardToSfn(b);
+			const history = [];
+			for (let ply = 0; ply < 8; ply++) {
+				const results = engines.map((eng, i) => {
+					eng.set_root_split(i, PARTS);
+					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6, undefined));
+				});
+				const res = RustAI.pickSplitResult(results);
+				if (!res.ok) throw new Error('split ply ' + ply + ': ' + res.error);
+				if (!res.split || res.split.parts !== PARTS) throw new Error('split report missing');
+				// Parts are disjoint: two completed parts never choose the same turn
+				// (an empty part falls back to the list's first turn, so allow that).
+				const keys = results.filter((r) => r.ok && r.depth > 0).map((r) => JSON.stringify(r.actions));
+				if (new Set(keys).size < keys.length - 1) throw new Error('parts chose the same turn: ' + keys.join(' | '));
+				const over = await verify(sfn, res);
+				splitMoves++;
+				history.push(sfn);
+				sfn = res.expected_sfn;
+				if (over) break;
+				// The opponent's turn: ponder on every engine with the split dropped,
+				// exactly as rust-worker.js does.
+				for (const eng of engines) {
+					eng.set_root_split(0, 1);
+					const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6));
+					if (!pb.ok) throw new Error('split ponder_begin: ' + pb.error);
+					const st = JSON.parse(eng.ponder_step(20, 8));
+					if (!st.ok) throw new Error('split ponder_step failed');
+					eng.ponder_end();
+				}
+				const reply = JSON.parse(engines[0].search(sfn, 100, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6, undefined));
+				if (!reply.ok) throw new Error('split reply: ' + reply.error);
+				const over2 = await verify(sfn, reply);
+				history.push(sfn);
+				sfn = reply.expected_sfn;
+				if (over2) break;
+			}
+			for (const eng of engines) eng.free();
+			console.log('root split: ' + splitMoves + ' moves across ' + PARTS + ' engines replay-verified');
+		} else {
+			console.log('root split: skipped (this wasm has no set_root_split)');
+		}
 	}
 	console.log('wasm smoke OK: ' + GAMES + ' games, ' + plies +
 	            ' plies replay-verified, ' + progressTicks + ' progress ticks, ' +

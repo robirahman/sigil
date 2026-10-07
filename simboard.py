@@ -96,10 +96,10 @@ CORE_SPELLS = {
     # simultaneously (see resolve_rock_slide).
     'Rock_Slide': {'resolve': 'rock_slide', 'static': False, 'ischarm': False},
     'Bulwark': {'resolve': None, 'static': True, 'ischarm': True},
-    # Providence expansion (scheduled extra moves)
-    'Dividend': {'resolve': 'schedule_moves', 'turns': 1, 'static': False, 'ischarm': True},
-    'Annuity': {'resolve': 'schedule_moves', 'turns': 2, 'static': False, 'ischarm': False},
-    'Endowment': {'resolve': 'schedule_moves', 'turns': 4, 'static': False, 'ischarm': False},
+    # Providence expansion (stones banked into the caster's Providence bank)
+    'Dividend': {'resolve': 'bank_stones', 'stones': 1, 'static': False, 'ischarm': True},
+    'Annuity': {'resolve': 'bank_stones', 'stones': 2, 'static': False, 'ischarm': False},
+    'Endowment': {'resolve': 'bank_stones', 'stones': 4, 'static': False, 'ischarm': False},
     # Experimental expansion (unofficial, unrated: unreleased spells under
     # playtest). Spring Tide rides the Flood soft_hard_chain resolver with an
     # optional trailing 'sacrifice' count (Torrent/Tsunami leave it unset).
@@ -126,15 +126,75 @@ for _big_pos in (1, 2, 3, 4, 5, 6):
 def is_big_spell_node(name):
     return name in BIG_SPELL_NODES
 
-def rock_slide_sources(stones, color):
+def bulwark_protected_nodes(stones, spell_names, lock, charged_spells):
+    """Nodes whose stone is shielded by its owner's Bulwark: a player who
+    holds Bulwark charged protects their own stones in their locked spell.
+    Protected stones cannot be hard-moved by the enemy, converted, or
+    destroyed by any effect (the owner's own Fissure included); sacrifices
+    the owner chooses are unaffected. Mirrors bulwarkProtectedNodes in
+    constants.js."""
+    out = set()
+    for c in ('red', 'blue'):
+        if 'Bulwark' not in charged_spells[c] or not lock[c]:
+            continue
+        try:
+            idx = spell_names.index(lock[c])
+        except ValueError:
+            continue
+        for n in POSITIONS.get(idx + 1, []):
+            if stones[n] == c:
+                out.add(n)
+    return out
+
+
+def fissure_blast(stones, target, protected=()):
+    """Fissure's outcome at `target`: (destroyed nodes, wall-or-None).
+    Every unprotected stone of EITHER color on an adjacent node is
+    destroyed. The target node becomes a permanent wall (its stone, if any,
+    destroyed) unless it holds a Bulwark-protected stone, in which case the
+    stone stays and no wall forms. Mirrors fissureBlast in constants.js."""
+    destroyed = [n for n in ADJACENCY[target]
+                 if stones[n] in ('red', 'blue') and n not in protected]
+    if stones[target] in ('red', 'blue') and target in protected:
+        return destroyed, None
+    if stones[target] in ('red', 'blue'):
+        destroyed.append(target)
+    return destroyed, target
+
+
+def fissure_score(stones, color, target, protected=()):
+    """Net stone swing of casting Fissure at `target` for `color`: +1 per
+    enemy stone destroyed, -1 per own stone destroyed. None for a node that
+    is already a wall (not a legal target). Mirrors fissureScore."""
+    if stones[target] == DESTROYED:
+        return None
+    destroyed, _ = fissure_blast(stones, target, protected)
+    return sum(1 if stones[n] != color else -1 for n in destroyed)
+
+
+def fissure_ranked_targets(stones, color, protected=()):
+    """Legal Fissure targets, best net swing first (stable: NODE_ORDER on
+    ties). Mirrors fissureRankedTargets in constants.js."""
+    scored = []
+    for node in NODE_ORDER:
+        sc = fissure_score(stones, color, node, protected)
+        if sc is not None:
+            scored.append((sc, node))
+    scored.sort(key=lambda t: -t[0])
+    return [n for _, n in scored]
+
+
+def rock_slide_sources(stones, color, protected=()):
     """Rock Slide's pushed set: every enemy stone touching a `color` stone,
-    in NODE_ORDER. Fixed at cast time; every one of them must be pushed."""
+    in NODE_ORDER, except Bulwark-protected ones. Fixed at cast time; every
+    one of them must be pushed."""
     enemy = 'blue' if color == 'red' else 'red'
     return [n for n in NODE_ORDER
-            if stones[n] == enemy and any(stones[nb] == color for nb in ADJACENCY[n])]
+            if stones[n] == enemy and n not in protected
+            and any(stones[nb] == color for nb in ADJACENCY[n])]
 
 
-def resolve_rock_slide(stones, pushes):
+def resolve_rock_slide(stones, pushes, protected=()):
     """Resolve Rock Slide's pushes ([{'from', 'to'}, ...]) simultaneously.
 
     Pure: returns (final, lost) without mutating `stones`. `final` maps each
@@ -145,7 +205,9 @@ def resolve_rock_slide(stones, pushes):
       - a stationary stone on a destination is destroyed;
       - two or more stones pushed into the same node are all destroyed;
       - two stones pushed onto each other's nodes (a swap) are both destroyed;
-      - a stone pushed into a wall is destroyed; the wall stays a wall.
+      - a stone pushed into a wall is destroyed; the wall stays a wall;
+      - a Bulwark-protected stone on a destination acts as a wall: the
+        arriving stone is destroyed and the protected stone stays.
     Mirrors resolveRockSlide in constants.js.
     """
     dest_of = {p['from']: p['to'] for p in pushes}
@@ -156,12 +218,17 @@ def resolve_rock_slide(stones, pushes):
     lost = []
     for dest, srcs in arrivals.items():
         occ = stones[dest]
-        if dest not in dest_of and occ in ('red', 'blue'):
+        shielded = dest in protected and dest not in dest_of
+        if dest not in dest_of and occ in ('red', 'blue') and not shielded:
             lost.append((dest, occ))
             final[dest] = None
-        if occ == DESTROYED or len(srcs) >= 2 or dest_of.get(dest) == srcs[0]:
+        if (occ == DESTROYED or shielded or len(srcs) >= 2
+                or dest_of.get(dest) == srcs[0]):
+            # A stone stopped by a shield dies where it stood: recording it at
+            # the shield would put the shielded node in `destroyed`, and
+            # rock_slide_replay_protected would then read the shield as absent.
             for src in srcs:
-                lost.append((dest, stones[src]))
+                lost.append((src if shielded else dest, stones[src]))
         else:
             final[dest] = stones[srcs[0]]
     return final, lost
@@ -207,7 +274,20 @@ def _rock_slide_order(comp, opts):
     return order
 
 
-def _rock_slide_component(stones, color, comp, opts, src_set, limit):
+def rock_slide_replay_protected(stones, pushes, destroyed):
+    """The Bulwark-shielded destinations of a RECORDED Rock Slide: a
+    stationary stone on a destination that the recorded outcome did not
+    destroy. Replayers use this instead of re-deriving protection, because
+    the caster's lock (and so their own shield) changes with the cast."""
+    sources = {p['from'] for p in pushes}
+    dead = set(destroyed or ())
+    return {p['to'] for p in pushes
+            if p['to'] not in sources and p['to'] not in dead
+            and stones.get(p['to']) in ('red', 'blue')}
+
+
+def _rock_slide_component(stones, color, comp, opts, src_set, limit,
+                          protected=()):
     """Exact max-net search over one interaction component.
 
     Returns (best_net, [dest dict, ...]): one assignment per distinct
@@ -233,6 +313,8 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit):
                 kind[d] = 'mover'
             elif stones[d] == DESTROYED:
                 kind[d] = 'wall'
+            elif d in protected:
+                kind[d] = 'shield'   # Bulwark: arrivals die, occupant stays
             elif stones[d] == enemy:
                 kind[d] = 'enemy'
             elif stones[d] == color:
@@ -260,7 +342,7 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit):
         f = dict(frontier)
         kd = kind[d]
         gain = 0
-        if kd == 'wall':
+        if kd in ('wall', 'shield'):
             gain = 1
         else:
             cnt, arriver, dst = f.get(d, (0, None, None))
@@ -315,6 +397,8 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit):
         for d, srcs in arrivals.items():
             if kind[d] == 'wall':
                 vals[d] = DESTROYED
+            elif kind[d] == 'shield':
+                vals[d] = stones[d]
             elif len(srcs) >= 2 or (kind[d] == 'mover' and dest.get(d) == srcs[0]):
                 vals[d] = None
             else:
@@ -342,8 +426,8 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit):
     return best, out
 
 
-def _rock_slide_solve(stones, color, pinned, limit):
-    sources = rock_slide_sources(stones, color)
+def _rock_slide_solve(stones, color, pinned, limit, protected=()):
+    sources = rock_slide_sources(stones, color, protected)
     src_set = set(sources)
     opts = {s: [pinned[s]] if s in pinned else list(ADJACENCY[s]) for s in sources}
     parent = {s: s for s in sources}
@@ -379,13 +463,15 @@ def _rock_slide_solve(stones, color, pinned, limit):
         comps[index[r]].append(s)
     total, per_comp = 0, []
     for comp in comps:
-        net, assigns = _rock_slide_component(stones, color, comp, opts, src_set, limit)
+        net, assigns = _rock_slide_component(stones, color, comp, opts, src_set,
+                                             limit, protected)
         total += net
         per_comp.append(assigns)
     return sources, total, per_comp
 
 
-def rock_slide_optimal_pushes(stones, color, override_pushes=None, limit=None):
+def rock_slide_optimal_pushes(stones, color, override_pushes=None, limit=None,
+                              protected=()):
     """Every Rock Slide push set with the maximum net gain (enemy stones
     destroyed minus own stones destroyed), one per distinct resolved board.
 
@@ -396,18 +482,23 @@ def rock_slide_optimal_pushes(stones, color, override_pushes=None, limit=None):
     optima; component optima multiply lazily, stopping at `limit`.
     Components touch disjoint nodes, so per-component outcome dedupe makes
     every combination a different board. `override_pushes` pins valid
-    {'from', 'to'} choices. Mirrors rockSlideOptimalPushes in constants.js.
+    {'from', 'to'} choices. `protected`: Bulwark-shielded nodes (never
+    pushed; arrivals on them die). Mirrors rockSlideOptimalPushes in
+    constants.js.
     """
-    sources = rock_slide_sources(stones, color)
+    protected = frozenset(protected)
+    sources = rock_slide_sources(stones, color, protected)
     pinned = _rock_slide_pinned(sources, override_pushes)
     # Memo per position; a solve with a larger limit serves smaller ones
     # (the outcome lists are prefix-consistent).
-    key = (tuple(stones[n] for n in NODE_ORDER), color, tuple(sorted(pinned.items())))
+    key = (tuple(stones[n] for n in NODE_ORDER), color, tuple(sorted(pinned.items())),
+           tuple(sorted(protected)))
     hit = _ROCK_SLIDE_MEMO.get(key)
     if hit is None or not (hit[0] is None or (limit is not None and hit[0] >= limit)):
         if len(_ROCK_SLIDE_MEMO) >= _ROCK_SLIDE_MEMO_MAX:
             _ROCK_SLIDE_MEMO.clear()
-        hit = _ROCK_SLIDE_MEMO[key] = (limit, _rock_slide_solve(stones, color, pinned, limit))
+        hit = _ROCK_SLIDE_MEMO[key] = (limit, _rock_slide_solve(stones, color, pinned, limit,
+                                                                protected))
     sources, best, per_comp = hit[1]
     out = []
     for combo in itertools.product(*per_comp):
@@ -420,10 +511,11 @@ def rock_slide_optimal_pushes(stones, color, override_pushes=None, limit=None):
     return best, out
 
 
-def rock_slide_greedy_pushes(stones, color, override_pushes=None):
+def rock_slide_greedy_pushes(stones, color, override_pushes=None, protected=()):
     """The canonical first max-net Rock Slide push set (see
     rock_slide_optimal_pushes). Mirrors rockSlideGreedyPushes in constants.js."""
-    return rock_slide_optimal_pushes(stones, color, override_pushes, limit=1)[1][0]
+    return rock_slide_optimal_pushes(stones, color, override_pushes, limit=1,
+                                     protected=protected)[1][0]
 
 
 # Maps a 5-node ritual position to its "opposite" 1-node and 3-node positions.
@@ -433,8 +525,8 @@ SYZYGY_OPPOSITE = {1: (8, 5), 2: (9, 6), 3: (7, 4)}
 class Action:
     """A single sub-action within a turn."""
     __slots__ = ('type', 'node', 'pushed_to', 'spell', 'sacrificed', 'kept',
-                 'node2', 'destroyed', 'converted', 'wall', 'pushes', 'turns',
-                 'nodes')
+                 'node2', 'destroyed', 'converted', 'wall', 'pushes', 'banked',
+                 'providence', 'nodes')
 
     def __init__(self, type, **kwargs):
         self.type = type
@@ -451,14 +543,16 @@ class Action:
         self.wall = kwargs.get('wall')
         # Rock Slide pushes: list of {'from', 'to'} dicts (resolved simultaneously).
         self.pushes = kwargs.get('pushes')
-        # Providence schedule_moves: extra-move turns scheduled by this cast.
-        self.turns = kwargs.get('turns')
+        # Providence bank_stones: stones this cast added to the caster's bank.
+        self.banked = kwargs.get('banked')
+        # Providence: True on the move that placed a stone from the bank.
+        self.providence = kwargs.get('providence')
 
     def __repr__(self):
         parts = [f"Action({self.type!r}"]
         for attr in ('node', 'pushed_to', 'spell', 'sacrificed', 'kept',
                      'node2', 'destroyed', 'converted', 'wall', 'pushes',
-                     'turns'):
+                     'banked', 'providence'):
             val = getattr(self, attr)
             if val is not None:
                 parts.append(f"{attr}={val!r}")
@@ -500,7 +594,7 @@ class SimBoard:
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
                  'springlock', 'totalstones', 'mana', 'charged_spells',
                  'variant', 'all_looping_snapshot_counts',
-                 'pending_moves', 'extra_moves_this_turn')
+                 'prov_bank')
 
     def __init__(self, spell_names=None, variant='standard'):
         if variant not in self.VARIANTS:
@@ -522,11 +616,10 @@ class SimBoard:
         self.charged_spells = {'red': [], 'blue': []}
         self.variant = variant
         self.all_looping_snapshot_counts = {}
-        # Providence: pending_moves[color][i] = extra moves granted at the
-        # start of that player's i-th upcoming turn. extra_moves_this_turn =
-        # extras popped for the current side-to-move by advance_turn.
-        self.pending_moves = {'red': [], 'blue': []}
-        self.extra_moves_this_turn = 0
+        # Providence: stones banked by Dividend/Annuity/Endowment. They count
+        # toward the owner's stone total; a turn that starts with a nonempty
+        # bank may place one of them after the regular move.
+        self.prov_bank = {'red': 0, 'blue': 0}
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -546,9 +639,7 @@ class SimBoard:
                             'blue': list(self.charged_spells['blue'])}
         b.variant = self.variant
         b.all_looping_snapshot_counts = dict(self.all_looping_snapshot_counts)
-        b.pending_moves = {'red': list(self.pending_moves['red']),
-                           'blue': list(self.pending_moves['blue'])}
-        b.extra_moves_this_turn = self.extra_moves_this_turn
+        b.prov_bank = dict(self.prov_bank)
         return b
 
     def looping_snapshot(self):
@@ -572,7 +663,7 @@ class SimBoard:
         or late. Do not "fix" this by appending to the key casually: the format is
         byte-compatible with game.py's take_snapshot and with dicts carried over
         from live Boards, so a change has to be made on both sides together, or
-        suffixed the way the |P and |B schedule suffixes below are — non-empty
+        suffixed the way the |P bank suffix below is — non-empty
         only, so legacy keys stay identical.
 
         The Rust engine does NOT inherit this bug: `zobrist.rs::key_js` folds in
@@ -584,20 +675,11 @@ class SimBoard:
             key += str(self.stones[nodename])
         key += self.lock['red'] if self.lock['red'] else 'None'
         key += self.lock['blue'] if self.lock['blue'] else 'None'
-        # Providence: positions with different pending schedules are NOT the
-        # same position. Suffix only when non-empty so legacy keys (and dicts
-        # carried over from live Boards) stay byte-identical. Canonical form
-        # is the PRE-SHIFT schedule: live boards snapshot before shifting, so
-        # re-prepend the popped extras counter to the mover's list — at a
-        # turn boundary [extras] + remaining == the pre-shift schedule.
-        sched = {'red': list(self.pending_moves['red']),
-                 'blue': list(self.pending_moves['blue'])}
-        if self.extra_moves_this_turn:
-            sched[self.whose_turn] = ([self.extra_moves_this_turn]
-                                      + sched[self.whose_turn])
-        if sched['red'] or sched['blue']:
-            key += ('|P' + ','.join(map(str, sched['red']))
-                    + '/' + ','.join(map(str, sched['blue'])))
+        # Providence: positions with different banks are NOT the same
+        # position. Suffix only when a bank is nonempty so legacy keys (and
+        # dicts carried over from live Boards) stay byte-identical.
+        if self.prov_bank['red'] or self.prov_bank['blue']:
+            key += '|P%d/%d' % (self.prov_bank['red'], self.prov_bank['blue'])
         return key
 
     def setup_initial(self):
@@ -628,12 +710,10 @@ class SimBoard:
         self.totalstones['blue'] = blue_count
 
         # Score: blue gets +1 phantom stone (a counter token off the
-        # playable board — counts toward score only). Providence pending
-        # stones display in the score for both sides; the side to move also
-        # shows extras granted this turn (correct at turn boundaries, which
-        # is when score is read — mid-replay values are transient).
-        redscore = red_count + self.pending_stones('red')
-        bluescore = blue_count + 1 + self.pending_stones('blue')
+        # playable board — counts toward score only). Providence banked
+        # stones count for their owner.
+        redscore = red_count + self.prov_bank['red']
+        bluescore = blue_count + 1 + self.prov_bank['blue']
         if redscore == bluescore:
             self.score = 'tied'
         elif redscore > bluescore:
@@ -696,37 +776,16 @@ class SimBoard:
                 self.charged_spells[first].append(
                     base_spell_name(spell_name) if info and info['static'] else spell_name)
 
-    def pending_sum(self, color):
-        """Total extra stones still scheduled for color's future turns."""
-        return sum(self.pending_moves[color])
-
-    def pending_stones(self, color):
-        """Providence phantom stones for `color`: scheduled extras plus, for
-        the side to move, extras granted this turn but not yet placed."""
-        p = self.pending_sum(color)
-        if self.whose_turn == color:
-            p += self.extra_moves_this_turn
-        return p
-
     def effective_stones(self, color):
-        """Real stones plus Providence phantoms (no blue +1 token)."""
-        return self.totalstones[color] + self.pending_stones(color)
+        """Board stones plus Providence banked stones (no blue +1 token)."""
+        return self.totalstones[color] + self.prov_bank[color]
 
     def check_game_over(self, active_color):
         """Check win conditions after a turn. Returns True if game is over.
 
-        In the ±3-lead check, Providence phantoms count ASYMMETRICALLY
-        (defense only): a player's win claim uses their real placed stones,
-        but is checked against the opponent's real+pending total — you
-        can't win off stones you haven't placed, and you can't lose while
-        scheduled stones cover the deficit.
-
-        In the sixth-spell count, Providence phantoms count symmetrically
-        (2026-08 playtest ruling).
-
-        The mover's own extras-this-turn are NOT counted anywhere here:
-        placed ones are already real, unused ones forfeit at end of turn.
-        Elimination stays real-stones-only (handled in update()).
+        Providence banked stones count fully for their owner in both the
+        ±3-lead check and the sixth-spell count. Elimination stays
+        board-stones-only (handled in update()).
         """
         # update() may already have flagged immediate-loss (zero stones).
         if self.gameover:
@@ -747,25 +806,23 @@ class SimBoard:
                 return True
             return False
 
-        red_real = self.totalstones['red']
-        blue_real = self.totalstones['blue'] + 1  # phantom counter token
-        red_prov = self.pending_sum('red')
-        blue_prov = self.pending_sum('blue')
+        red_total = self.effective_stones('red')
+        blue_total = self.effective_stones('blue') + 1  # phantom counter token
 
-        if red_real > blue_real + blue_prov + 2:
+        if red_total > blue_total + 2:
             self.gameover = True
             self.winner = 'red'
             return True
-        if blue_real > red_real + red_prov + 2:
+        if blue_total > red_total + 2:
             self.gameover = True
             self.winner = 'blue'
             return True
 
         if self.spell_counter[active_color] >= 6:
             self.gameover = True
-            if red_real + red_prov > blue_real + blue_prov:
+            if red_total > blue_total:
                 self.winner = 'red'
-            elif blue_real + blue_prov > red_real + red_prov:
+            elif blue_total > red_total:
                 self.winner = 'blue'
             else:
                 self.winner = 'blue' if active_color == 'red' else 'red'
@@ -774,17 +831,9 @@ class SimBoard:
         return False
 
     def advance_turn(self):
-        """Switch to the next player's turn and pop their scheduled extras.
-
-        Putting the Providence shift here makes every turn driver (search,
-        arena, self-play, MCTS...) correct without per-driver edits, and
-        makes end-of-turn forfeit implicit: the pop overwrites whatever the
-        previous mover left unused.
-        """
+        """Switch to the next player's turn."""
         self.turn_counter += 1
         self.whose_turn = 'blue' if self.whose_turn == 'red' else 'red'
-        sched = self.pending_moves[self.whose_turn]
-        self.extra_moves_this_turn = sched.pop(0) if sched else 0
 
     # ---- Move helpers ----
 
@@ -793,6 +842,26 @@ class SimBoard:
 
     def _adjacent_nodes(self, node_name):
         return ADJACENCY.get(node_name, [])
+
+    def _bulwark_protected(self):
+        """Set of nodes shielded by Bulwark right now (both colors)."""
+        return bulwark_protected_nodes(self.stones, self.spell_names,
+                                       self.lock, self.charged_spells)
+
+    def _bulwark_unshielded_by_removing(self, node_name):
+        """Nodes whose Bulwark shield would drop if the stone at node_name
+        were removed (it is the owner's Bulwark charm stone). Used by
+        sequential effects (Corrupt, Storm Front) and the enumerators to
+        take the Bulwark stone first and then hit the locked spell."""
+        if self.stones[node_name] not in ('red', 'blue'):
+            return set()
+        shielded = self._bulwark_protected()
+        if not shielded or node_name in shielded:
+            return set()
+        b = self.copy()
+        b.stones[node_name] = None
+        b.update()
+        return shielded - b._bulwark_protected()
 
     def _is_bulwark_protected(self, color, node_name):
         """Return True if the stone at node_name belongs to color and is protected by Bulwark."""
@@ -1073,8 +1142,9 @@ class SimBoard:
 
         elif resolve_type == 'fireblast':
             destroyed = []
+            prot = self._bulwark_protected()
             for name in NODE_ORDER:
-                if self.stones[name] == enemy:
+                if self.stones[name] == enemy and name not in prot:
                     for nb in self._adjacent_nodes(name):
                         if self.stones[nb] == color:
                             self.stones[name] = None
@@ -1104,10 +1174,11 @@ class SimBoard:
 
         elif resolve_type == 'hail_storm':
             destroyed = []
+            prot = self._bulwark_protected()
             for pos_idx in range(1, 7):
                 nodes = POSITIONS[pos_idx]
                 for n in nodes:
-                    if self.stones[n] == enemy:
+                    if self.stones[n] == enemy and n not in prot:
                         self.stones[n] = None
                         destroyed.append(n)
                         self.update()
@@ -1119,10 +1190,12 @@ class SimBoard:
             # Convert two adjacent enemy stones. Override picks a specific
             # pair; otherwise fall back to first-found by NODE_ORDER.
             override = overrides.get('bewitch_pair')
+            prot = self._bulwark_protected()
             if override is not None:
                 n1, n2 = override
                 if (self.stones[n1] == enemy
                         and self.stones[n2] == enemy
+                        and n1 not in prot and n2 not in prot
                         and n2 in self._adjacent_nodes(n1)):
                     self.stones[n1] = color
                     self.stones[n2] = color
@@ -1130,9 +1203,9 @@ class SimBoard:
                     self.update()
                     return actions
             for name in NODE_ORDER:
-                if self.stones[name] == enemy:
+                if self.stones[name] == enemy and name not in prot:
                     for nb in self._adjacent_nodes(name):
-                        if self.stones[nb] == enemy:
+                        if self.stones[nb] == enemy and nb not in prot:
                             self.stones[name] = color
                             self.stones[nb] = color
                             actions.append(Action('bewitch', node=name, node2=nb))
@@ -1159,6 +1232,7 @@ class SimBoard:
                 # destruction elsewhere because losing mana stalls the
                 # opponent's spell tempo.
                 best_score = (-1, -1)
+                prot = self._bulwark_protected()
                 for name in NODE_ORDER:
                     if self.stones[name] is not None:
                         continue
@@ -1168,7 +1242,8 @@ class SimBoard:
                         neighbors_union = (set(self._adjacent_nodes(name))
                                            | set(self._adjacent_nodes(nb)))
                         enemy_targets = [n for n in neighbors_union
-                                         if self.stones[n] == enemy]
+                                         if self.stones[n] == enemy
+                                         and n not in prot]
                         enemy_count = len(enemy_targets)
                         mana_kills = sum(1 for n in enemy_targets if n in MANA_NODES)
                         score = (enemy_count, mana_kills)
@@ -1180,9 +1255,10 @@ class SimBoard:
                 self.stones[n1] = color
                 self.stones[n2] = color
                 destroyed = []
+                prot = self._bulwark_protected()
                 neighbors_union = set(self._adjacent_nodes(n1)) | set(self._adjacent_nodes(n2))
                 for n in neighbors_union:
-                    if self.stones[n] == enemy:
+                    if self.stones[n] == enemy and n not in prot:
                         self.stones[n] = None
                         destroyed.append(n)
                 actions.append(Action('starfall', node=n1, node2=n2, destroyed=destroyed))
@@ -1204,6 +1280,7 @@ class SimBoard:
                 # via crush of a mana-occupant or via the adjacent-kill
                 # falling on a mana node.
                 best_score = (-1, -1)
+                prot_now = self._bulwark_protected()
                 for t in targets:
                     crush = (self.stones[t] == enemy
                              and self.is_crushable(t, color))
@@ -1214,7 +1291,7 @@ class SimBoard:
                     # iteration order), preferring one on a mana node.
                     adj_enemies = [
                         nb for nb in self._adjacent_nodes(t)
-                        if self.stones[nb] == enemy
+                        if self.stones[nb] == enemy and nb not in prot_now
                     ]
                     if adj_enemies:
                         kill = 1
@@ -1239,9 +1316,10 @@ class SimBoard:
                 self.update()
                 # Destroy 1 adjacent enemy — prefer one on a mana node so
                 # the heuristic's mana-tiebreak choice is realized.
+                prot = self._bulwark_protected()
                 adj_enemies = [
                     nb for nb in self._adjacent_nodes(chosen)
-                    if self.stones[nb] == enemy
+                    if self.stones[nb] == enemy and nb not in prot
                 ]
                 kill_target = None
                 for nb in adj_enemies:
@@ -1415,7 +1493,8 @@ class SimBoard:
             if opp is not None:
                 charm_idx, sorcery_idx = opp
                 charm_node = POSITIONS[charm_idx][0]
-                if self.stones[charm_node] != color and self.stones[charm_node] != DESTROYED:
+                if (self.stones[charm_node] != color and self.stones[charm_node] != DESTROYED
+                        and not self._is_bulwark_protected(enemy, charm_node)):
                     if self.stones[charm_node] == enemy:
                         dest = self._push_enemy(charm_node, color)
                         actions.append(Action('blink', node=charm_node, pushed_to=dest))
@@ -1425,7 +1504,8 @@ class SimBoard:
                     self.update()
                 for _ in range(3):
                     target = next((n for n in POSITIONS[sorcery_idx]
-                                   if self.stones[n] != color and self.stones[n] != DESTROYED), None)
+                                   if self.stones[n] != color and self.stones[n] != DESTROYED
+                                   and not self._is_bulwark_protected(enemy, n)), None)
                     if target is None:
                         break
                     if self.stones[target] == enemy:
@@ -1526,8 +1606,9 @@ class SimBoard:
             # Pick up every enemy stone touching one of our stones, then place
             # them (one at a time) on any empty node.
             picked = []
+            prot = self._bulwark_protected()
             for n in NODE_ORDER:
-                if self.stones[n] != enemy:
+                if self.stones[n] != enemy or n in prot:
                     continue
                 for nb in self._adjacent_nodes(n):
                     if self.stones[nb] == color:
@@ -1562,7 +1643,10 @@ class SimBoard:
 
         elif resolve_type == 'hurricane':
             # Destroy the smallest contiguous enemy group (ties: caster picks).
-            visited = set()
+            # Bulwark-protected stones are ignored: groups are formed from
+            # the destroyable enemy stones only.
+            prot = self._bulwark_protected()
+            visited = set(prot)
             groups = []
             for start in NODE_ORDER:
                 if start in visited or self.stones[start] != enemy:
@@ -1681,6 +1765,11 @@ class SimBoard:
             # converted stone is never eligible). Greedy converts the first 3
             # eligible by NODE_ORDER; 'corrupt_targets' override picks specific
             # ones, 'corrupt_sacrifice' picks the stone to give up.
+            #
+            # Conversions happen one at a time, so Bulwark is checked before
+            # each one: converting the enemy's Bulwark stone first exposes
+            # their locked spell to the remaining conversions. Greedy
+            # therefore takes such a "Bulwark breaker" first, when eligible.
             eligible = []
             for name in NODE_ORDER:
                 if self.stones[name] != enemy:
@@ -1688,21 +1777,22 @@ class SimBoard:
                 if any(self.stones[nb] == color
                        for nb in self._adjacent_nodes(name)):
                     eligible.append(name)
-            target_override = list(overrides.get('corrupt_targets') or [])
-            chosen_targets = []
-            for cand in target_override:
-                if cand in eligible and cand not in chosen_targets:
-                    chosen_targets.append(cand)
-            for cand in eligible:
-                if len(chosen_targets) >= 3:
-                    break
-                if cand not in chosen_targets:
-                    chosen_targets.append(cand)
+            breakers = [n for n in eligible
+                        if self._bulwark_unshielded_by_removing(n) & set(eligible)]
+            order = []
+            for cand in list(overrides.get('corrupt_targets') or []) + breakers + eligible:
+                if cand in eligible and cand not in order:
+                    order.append(cand)
             converted = []
-            for name in chosen_targets[:3]:
-                if self.stones[name] == enemy:
-                    self.stones[name] = color
-                    converted.append(name)
+            while len(converted) < 3 and not self.gameover:
+                prot = self._bulwark_protected()
+                pick = next((n for n in order if n not in converted
+                             and self.stones[n] == enemy and n not in prot), None)
+                if pick is None:
+                    break
+                self.stones[pick] = color
+                converted.append(pick)
+                self.update()
             if converted:
                 actions.append(Action('corrupt', converted=converted))
             self.update()
@@ -1737,43 +1827,23 @@ class SimBoard:
                 self.update()
 
         elif resolve_type == 'fissure':
+            prot = self._bulwark_protected()
             target = overrides.get('fissure_target')
-            if not target or target not in NODE_ORDER:
-                # Greedy default: pick the target with the greatest net
-                # stone-count advantage. Target term: +1 enemy / 0 empty /
-                # -1 own (destroying our own stone). Blast term: +1 per
-                # adjacent enemy stone (these are destroyed too).
-                best_score = None
-                best_target = NODE_ORDER[0]
-                for node in NODE_ORDER:
-                    if self.stones[node] == enemy:
-                        score = 1
-                    elif self.stones[node] == color:
-                        score = -1
-                    else:
-                        score = 0
-                    for n in self._adjacent_nodes(node):
-                        if self.stones[n] == enemy:
-                            score += 1
-                    if best_score is None or score > best_score:
-                        best_score = score
-                        best_target = node
-                target = best_target
-            destroyed = []
-            # Adjacent nodes: destroy enemy stones only (revert to normal empty).
-            for n in self._adjacent_nodes(target):
-                if self.stones[n] == enemy:
+            if (not target or target not in NODE_ORDER
+                    or self.stones[target] == DESTROYED):
+                # Greedy default: the target with the greatest net
+                # stone-count swing (see fissure_score).
+                ranked = fissure_ranked_targets(self.stones, color, prot)
+                target = ranked[0] if ranked else None
+            if target is not None:
+                destroyed, wall = fissure_blast(self.stones, target, prot)
+                for n in destroyed:
                     self.stones[n] = None
-                    destroyed.append(n)
-            # Target node: permanently destroyed (a wall), regardless of
-            # what occupied it. The occupant stone (enemy, own, or none)
-            # is removed and the node becomes impassable.
-            if self.stones[target] in (color, enemy):
-                destroyed.append(target)
-            self.stones[target] = DESTROYED
-            actions.append(Action('fissure', node=target, destroyed=destroyed,
-                                  wall=target))
-            self.update()
+                if wall:
+                    self.stones[wall] = DESTROYED
+                actions.append(Action('fissure', node=target, destroyed=destroyed,
+                                      wall=wall))
+                self.update()
 
         elif resolve_type == 'rock_slide':
             # Every push is chosen first, then all resolve at once, with one
@@ -1781,35 +1851,32 @@ class SimBoard:
             # 'rock_slide_variant' i > 0 (exhaustive enumerator) picks the
             # i-th distinct max-net outcome on this post-cast board.
             variant = overrides.get('rock_slide_variant') or 0
+            prot = self._bulwark_protected()
             if variant:
                 # One generous solve serves the enumerator's whole run of
                 # variants through the memo.
                 _, options = rock_slide_optimal_pushes(
                     self.stones, color, overrides.get('rock_slide_pushes'),
-                    limit=max(16, variant + 1))
+                    limit=max(16, variant + 1), protected=prot)
                 if variant >= len(options):
                     raise RockSlideVariantUnavailable(variant)
                 pushes = options[variant]
             else:
                 pushes = rock_slide_greedy_pushes(self.stones, color,
-                                                  overrides.get('rock_slide_pushes'))
-            final, lost = resolve_rock_slide(self.stones, pushes)
+                                                  overrides.get('rock_slide_pushes'),
+                                                  protected=prot)
+            final, lost = resolve_rock_slide(self.stones, pushes, prot)
             self.stones.update(final)
             destroyed = list(dict.fromkeys(n for n, _ in lost))
             actions.append(Action('rock_slide', pushes=pushes,
                                   destroyed=destroyed or None))
             self.update()
 
-        elif resolve_type == 'schedule_moves':
-            # Providence: schedule 1 extra move at the start of each of the
-            # caster's next `turns` turns (additive stacking).
-            turns = info.get('turns', 1)
-            sched = self.pending_moves[color]
-            while len(sched) < turns:
-                sched.append(0)
-            for i in range(turns):
-                sched[i] += 1
-            actions.append(Action('schedule_moves', spell=spell_name, turns=turns))
+        elif resolve_type == 'bank_stones':
+            # Providence: add stones to the caster's bank.
+            n = info.get('stones', 1)
+            self.prov_bank[color] += n
+            actions.append(Action('bank_stones', spell=spell_name, banked=n))
             self.update()
 
         return actions
@@ -1819,9 +1886,10 @@ class SimBoard:
         nodes. Membership is computed against the pre-destruction board, then
         applied simultaneously. Appends a 'decay' Action and updates."""
         enemy = self._enemy(color)
+        prot = self._bulwark_protected()
         doomed = []
         for name in NODE_ORDER:
-            if self.stones[name] != enemy:
+            if self.stones[name] != enemy or name in prot:
                 continue
             empties = sum(1 for nb in self._adjacent_nodes(name)
                           if self.stones[nb] is None)
@@ -1843,14 +1911,17 @@ class SimBoard:
         chosen = list(chosen or [])
         destroyed = []
         for _ in range(count):
+            # One stone at a time: destroying the enemy's Bulwark stone
+            # first exposes their locked spell to the next pick.
+            prot = self._bulwark_protected()
             target = None
             while chosen and target is None:
                 cand = chosen.pop(0)
-                if self.stones.get(cand) == enemy:
+                if self.stones.get(cand) == enemy and cand not in prot:
                     target = cand
             if target is None:
                 for name in NODE_ORDER:
-                    if self.stones[name] == enemy:
+                    if self.stones[name] == enemy and name not in prot:
                         target = name
                         break
             if target is None:
@@ -1870,9 +1941,10 @@ class SimBoard:
         if 'Seal_of_Destruction' not in self.charged_spells[color]:
             return []
         enemy = self._enemy(color)
+        prot = self._bulwark_protected()
         destroyed = []
         for name in NODE_ORDER:
-            if self.stones[name] != enemy:
+            if self.stones[name] != enemy or name in prot:
                 continue
             for nb in self._adjacent_nodes(name):
                 if self.stones[nb] == color:
@@ -1996,8 +2068,10 @@ class SimBoard:
             move_targets = self._all_moveable(color)
 
         if not move_targets:
-            # Must pass if no moves available
+            # Must pass if no moves available (a Providence placement, which
+            # ignores Stone's soft-only rule, may still be possible).
             yield CompleteTurn([Action('pass')])
+            yield from self._enumerate_providence_step(color, [])
             return
 
         for move_target in move_targets:
@@ -2011,35 +2085,45 @@ class SimBoard:
                 continue
             board_after_move.update()
 
-            # Phase 2: remaining Providence base moves, then dash/cast/pass.
-            yield from board_after_move._enumerate_move_phase(
-                color, [move_action], self.extra_moves_this_turn)
+            # Phase 2: optional Providence placement, then dash/cast/pass.
+            yield from board_after_move._enumerate_post_move(
+                color, [move_action], can_dash=True, can_spell=True, can_summer=True)
+            yield from board_after_move._enumerate_providence_step(
+                color, [move_action])
 
-    def _enumerate_move_phase(self, color, actions_so_far, extras_left):
-        """Providence move phase: at each step, either stop taking base
-        moves (proceed to dash/cast/pass — remaining extras forfeit at end
-        of turn) or take one more. Greedy engine: a single target per extra
-        step (matching the greedy dash convention); the exhaustive
-        enumerator branches over top-K targets instead. With extras_left ==
-        0 this is exactly the pre-Providence flow.
+    def _do_providence_move(self, color, node_name):
+        """Place one banked stone at node_name (soft or hard move, never a
+        blink). Returns the Action flagged providence=True, or None."""
+        act = self._do_move(color, node_name)
+        if act is None:
+            return None
+        act.providence = True
+        self.prov_bank[color] -= 1
+        self.update()
+        return act
+
+    def _enumerate_providence_step(self, color, actions_so_far):
+        """Providence: with a nonempty bank, the mover may place one banked
+        stone after the regular move, then proceed to dash/cast/pass.
+        (Skipping it is the caller's plain post-move branch.) Greedy engine:
+        a single target, matching the greedy dash convention; the exhaustive
+        enumerator branches over top-K targets instead.
 
         Wind's blink privilege and Stone's soft-move restriction apply only
-        to the turn's FIRST move, so extra steps use _all_moveable.
+        to the regular move, so the placement uses _all_moveable.
         """
-        yield from self._enumerate_post_move(
-            color, actions_so_far, can_dash=True, can_spell=True, can_summer=True)
-        if extras_left <= 0 or self.gameover:
+        if self.prov_bank[color] <= 0 or self.gameover:
             return
         targets = self._all_moveable(color)
         if not targets:
             return
         b = self.copy()
-        act = b._do_move(color, targets[0])
+        act = b._do_providence_move(color, targets[0])
         if act is None:
             return
-        b.update()
-        yield from b._enumerate_move_phase(color, actions_so_far + [act],
-                                           extras_left - 1)
+        yield from b._enumerate_post_move(
+            color, actions_so_far + [act], can_dash=True, can_spell=True,
+            can_summer=True)
 
     def _enumerate_post_move(self, color, actions_so_far, can_dash, can_spell, can_summer):
         """Enumerate post-move options: dash, spell, or pass."""
@@ -2241,8 +2325,7 @@ class SimBoard:
             board.redplayer.springlock.name = self.springlock['red']
         if board.blueplayer.springlock:
             board.blueplayer.springlock.name = self.springlock['blue']
-        board.pending_moves = {'red': list(self.pending_moves['red']),
-                               'blue': list(self.pending_moves['blue'])}
+        board.prov_bank = dict(self.prov_bank)
         return _to_sfn_func(board)
 
     @classmethod
@@ -2257,12 +2340,8 @@ class SimBoard:
         b.lock = {'red': d['red_lock'], 'blue': d['blue_lock']}
         b.springlock = {'red': d['red_springlock'], 'blue': d['blue_springlock']}
         b.score = d['score']
-        # Providence schedules ride the optional pm: token; the
-        # turn-scoped extras counter is NOT in SFN — callers that rebuild a
-        # board mid-way through a granted turn (e.g. the AI worker) must
-        # set it themselves.
-        b.pending_moves = {'red': list(d.get('red_pending') or []),
-                           'blue': list(d.get('blue_pending') or [])}
+        # Providence banks ride the optional pm: token.
+        b.prov_bank = {'red': d.get('red_bank', 0), 'blue': d.get('blue_bank', 0)}
         b.update()
         return b
 
@@ -2283,6 +2362,8 @@ def apply_sim_turn(board, turn, color):
     enemy = board._enemy(color)
     for action in turn.actions:
         t = action.type
+        if action.providence:
+            board.prov_bank[color] -= 1
         if t == 'move':
             board.stones[action.node] = color
         elif t == 'hard_move':
@@ -2366,15 +2447,13 @@ def apply_sim_turn(board, turn, color):
             if action.wall:
                 board.stones[action.wall] = DESTROYED
         elif t == 'rock_slide':
-            final, _ = resolve_rock_slide(board.stones, action.pushes or [])
+            pushes = action.pushes or []
+            final, _ = resolve_rock_slide(
+                board.stones, pushes,
+                rock_slide_replay_protected(board.stones, pushes, action.destroyed))
             board.stones.update(final)
-        elif t == 'schedule_moves':
-            sched = board.pending_moves[color]
-            n = action.turns or 0
-            while len(sched) < n:
-                sched.append(0)
-            for i in range(n):
-                sched[i] += 1
+        elif t == 'bank_stones':
+            board.prov_bank[color] += action.banked or 0
         board.update()
     # Seal of Destruction end-of-turn trigger (the start-of-turn loss is
     # applied by the turn driver, e.g. minimax _apply_turn / live loops).

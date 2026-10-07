@@ -170,6 +170,23 @@ class Spell():
 #####  ACTUAL SPELLS HERE
 
 
+def _bulwark_protected(player):
+	### Node names whose stone is shielded by its owner's Bulwark: a player
+	### holding Bulwark charged protects their own stones in their locked
+	### spell from enemy hard moves, conversion, and destruction by any
+	### effect (their own Fissure included). Sacrifices are unaffected.
+	### Mirrors simboard.bulwark_protected_nodes.
+	out = set()
+	for p in (player, getattr(player, 'opp', None)):
+		if (p is None or not getattr(p, 'lock', None)
+				or 'Bulwark' not in [s.name for s in getattr(p, 'charged_spells', [])]):
+			continue
+		for node in p.lock.position:
+			if node.stone == p.color:
+				out.add(node.name)
+	return out
+
+
 class Sprout(Spell):
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
@@ -239,9 +256,10 @@ class Fireblast(Spell):
 		self.text = "Destroy all enemy stones which are touching you, then sacrifice a stone."
 
 	def resolve(self, player):
+		prot = _bulwark_protected(player)
 		for name in player.board.nodes:
 			node = player.board.nodes[name]
-			if node.stone == player.enemy:
+			if node.stone == player.enemy and name not in prot:
 				for neighbor in node.neighbors:
 					if neighbor.stone == player.color:
 						node.stone = None
@@ -332,6 +350,7 @@ class Hail_Storm(Spell):
 		self.text = "Destroy 1 enemy stone in each 3-node and 5-node spell."
 
 	def resolve(self, player):
+		prot = _bulwark_protected(player)
 		if player.ishuman:
 			hailablespells = []
 			### We will use the notation of board.positions to refer to spells.
@@ -340,7 +359,7 @@ class Hail_Storm(Spell):
 			for i in range(1,7):
 				innernodelist = player.board.positions[i]
 				for node in innernodelist:
-					if node.stone == player.enemy:
+					if node.stone == player.enemy and node.name not in prot:
 						hailablespells.append(i)
 						break
 
@@ -353,7 +372,7 @@ class Hail_Storm(Spell):
 				if actualmessage in player.board.nodes:
 					node = player.board.nodes[actualmessage]
 
-					if node.stone != player.enemy:
+					if node.stone != player.enemy or node.name in prot:
 						continue
 
 					validstone = False
@@ -370,7 +389,7 @@ class Hail_Storm(Spell):
 			for i in range(1,7):
 				innernodelist = player.board.positions[i]
 				for node in innernodelist:
-					if node.stone == player.enemy:
+					if node.stone == player.enemy and node.name not in prot:
 						node.stone = None
 						if (player.board.last_play == node.name):
 								player.board.last_play = None
@@ -388,6 +407,7 @@ class Bewitch(Spell):
 		self.text = "Choose 2 enemy stones touching each other. Convert them to your color."
 
 	def resolve(self, player):
+		prot = _bulwark_protected(player)
 
 		if player.ishuman:
 
@@ -398,10 +418,10 @@ class Bewitch(Spell):
 				convert_one_options = {}
 				for nodename in self.board.nodes:
 					node = self.board.nodes[nodename]
-					if node.stone == player.enemy:
+					if node.stone == player.enemy and nodename not in prot:
 						adjacent_to_enemy = False
 						for neighbor in node.neighbors:
-							if neighbor.stone == player.enemy:
+							if neighbor.stone == player.enemy and neighbor.name not in prot:
 								adjacent_to_enemy = True
 
 						if adjacent_to_enemy:
@@ -437,7 +457,7 @@ class Bewitch(Spell):
 			while True:
 				convert_two_options = {}
 				for neighbor in node.neighbors:
-					if neighbor.stone == player.enemy:
+					if neighbor.stone == player.enemy and neighbor.name not in prot:
 						convert_two_options[neighbor.name] = player.color
 
 				egress =  {"type": "message", "message": "", "awaiting": "node", "moveoptions": convert_two_options}
@@ -467,9 +487,9 @@ class Bewitch(Spell):
 		else:
 			for name in player.bewitch_priority_order:
 				node = player.board.nodes[name]
-				if node.stone == player.enemy:
+				if node.stone == player.enemy and name not in prot:
 					for neighbor in node.neighbors:
-						if neighbor.stone == player.enemy:
+						if neighbor.stone == player.enemy and neighbor.name not in prot:
 							# Potential targets. Make sure they're not surrounded.
 							surrounded = True
 							for other_neighbor in node.neighbors:
@@ -626,15 +646,16 @@ class Meteor(Spell):
 						player.board.update()
 						break
 
+			prot = _bulwark_protected(player)
 			adjacent_enemy_count = 0
 			for neighbor in node.neighbors:
-				if neighbor.stone == player.opp.color:
+				if neighbor.stone == player.opp.color and neighbor.name not in prot:
 					adjacent_enemy_count += 1
 			if adjacent_enemy_count == 0:
 				return
 			if adjacent_enemy_count == 1:
 				for neighbor in node.neighbors:
-					if neighbor.stone == player.opp.color:
+					if neighbor.stone == player.opp.color and neighbor.name not in prot:
 						neighbor.stone = None
 						player.board.update()
 
@@ -646,7 +667,7 @@ class Meteor(Spell):
 
 					if actualmessage in player.board.nodes:
 						enemy_node = player.board.nodes[actualmessage]
-						if enemy_node.stone != player.opp.color:
+						if enemy_node.stone != player.opp.color or enemy_node.name in prot:
 							continue
 						is_adjacent = False
 						for neighbor in node.neighbors:
@@ -683,8 +704,9 @@ class Meteor(Spell):
 				player.opp.ws.send(json.dumps(egress))
 				player.board.update()
 				time.sleep(1)
+			prot = _bulwark_protected(player)
 			for neighbor in node.neighbors:
-				if neighbor.stone == player.enemy:
+				if neighbor.stone == player.enemy and neighbor.name not in prot:
 					neighbor.stone = None
 					player.board.update()
 					break
@@ -781,11 +803,13 @@ class Starfall(Spell):
 				if new:
 					neighbor_union.append(neighbor)
 
+			prot = _bulwark_protected(player)
 			for neighbor in neighbor_union:
-				if neighbor.stone == player.opp.color:
+				if neighbor.stone == player.opp.color and neighbor.name not in prot:
 					neighbor.stone = None
-					player.board.update()
+			player.board.update()
 		else:
+			prot = _bulwark_protected(player)
 			potential_targets = []
 			for name in player.priority_order:
 				node = player.board.nodes[name]
@@ -797,13 +821,13 @@ class Starfall(Spell):
 							adjacent_enemy_count = 0
 							for first_neighbor in node.neighbors:
 								alreadyvisited.add(first_neighbor)
-								if first_neighbor.stone == player.enemy:
+								if first_neighbor.stone == player.enemy and first_neighbor.name not in prot:
 									adjacent_enemy_count += 1
 							for second_neighbor in neighbor.neighbors:
 								if second_neighbor in alreadyvisited:
 									continue
 								else:
-									if second_neighbor.stone == player.enemy:
+									if second_neighbor.stone == player.enemy and second_neighbor.name not in prot:
 										adjacent_enemy_count += 1
 							if adjacent_enemy_count > 1:
 								potential_targets.append([adjacent_enemy_count, node, neighbor])
@@ -826,10 +850,10 @@ class Starfall(Spell):
 					time.sleep(1)
 
 					for first_neighbor in node.neighbors:
-						if first_neighbor.stone == player.enemy:
+						if first_neighbor.stone == player.enemy and first_neighbor.name not in prot:
 							first_neighbor.stone = None
 					for second_neighbor in neighbor.neighbors:
-						if second_neighbor.stone == player.enemy:
+						if second_neighbor.stone == player.enemy and second_neighbor.name not in prot:
 							second_neighbor.stone = None
 					player.board.update()
 					break
@@ -1108,8 +1132,10 @@ class Syzygy(Spell):
 		charm_node = player.board.positions[charm_idx][0]
 		sorcery_nodes = player.board.positions[sorcery_idx]
 
-		# Step 1: 1 blink move into the opposite 1-node spell.
-		if charm_node.stone != player.color:
+		# Step 1: 1 blink move into the opposite 1-node spell. A
+		# Bulwark-protected enemy stone can't be pushed; walls can't be entered.
+		if (charm_node.stone != player.color and charm_node.stone != 'X'
+				and not player.violates_bulwark(charm_node.name)):
 			if player.ishuman:
 				opts = {charm_node.name: player.color}
 				egress = {"type": "message", "message": "Blink into the opposite 1-node spell.",
@@ -1126,7 +1152,9 @@ class Syzygy(Spell):
 
 		# Step 2: up to 3 blink moves into the opposite 3-node spell.
 		for move in range(3):
-			opts = {n.name: player.color for n in sorcery_nodes if n.stone != player.color}
+			opts = {n.name: player.color for n in sorcery_nodes
+			        if n.stone != player.color and n.stone != 'X'
+			        and not player.violates_bulwark(n.name)}
 			if not opts:
 				return
 			if player.ishuman:
@@ -1291,9 +1319,10 @@ class Gust(Spell):
 		# Gust's own charm node was already cleared by cast(). Pick up every
 		# enemy stone adjacent to one of our surviving stones.
 		picked = []
+		prot = _bulwark_protected(player)
 		for name in player.board.nodes:
 			node = player.board.nodes[name]
-			if node.stone != player.enemy:
+			if node.stone != player.enemy or name in prot:
 				continue
 			if any(nb.stone == player.color for nb in node.neighbors):
 				picked.append(node)
@@ -1350,8 +1379,9 @@ class Storm_Front(Spell):
 
 # BFS the enemy stones into contiguous groups (over node adjacency).
 def _enemy_stone_groups(player):
+	### Bulwark-protected stones are ignored (they can't be destroyed).
 	enemy = player.enemy
-	visited = set()
+	visited = set(_bulwark_protected(player))
 	groups = []
 	for name in player.board.nodes:
 		start = player.board.nodes[name]
@@ -1547,10 +1577,11 @@ class Rapids(Spell):
 # Helper: destroy every enemy stone touching 2+ empty nodes. Membership is
 # computed against the pre-destruction board, then applied simultaneously.
 def _destroy_exposed(player):
+	prot = _bulwark_protected(player)
 	doomed = []
 	for name in player.board.nodes:
 		node = player.board.nodes[name]
-		if node.stone != player.enemy:
+		if node.stone != player.enemy or name in prot:
 			continue
 		empties = sum(1 for nb in node.neighbors if nb.stone is None)
 		if empties >= 2:
@@ -1567,8 +1598,11 @@ def _destroy_exposed(player):
 # The AI fallback greedily destroys the first available enemy stone.
 def _destroy_chosen(player, count):
 	for i in range(count):
+		### One stone at a time: Bulwark is re-checked before each pick, so
+		### destroying the Bulwark stone first exposes the locked spell.
+		prot = _bulwark_protected(player)
 		enemies = [n for n in player.board.nodes
-		           if player.board.nodes[n].stone == player.enemy]
+		           if player.board.nodes[n].stone == player.enemy and n not in prot]
 		if not enemies:
 			return
 		if player.ishuman:
@@ -1579,7 +1613,7 @@ def _destroy_chosen(player, count):
 				if resp not in player.board.nodes:
 					continue
 				cand = player.board.nodes[resp]
-				if cand.stone == player.enemy:
+				if cand.stone == player.enemy and resp not in prot:
 					node = cand
 		else:
 			time.sleep(1)
@@ -1614,6 +1648,8 @@ class Corrupt(Spell):
 		### Computed ONCE, against the board as it stands when Corrupt is cast,
 		### so conversions cannot chain — a stone that only touches a freshly
 		### converted stone (and no original caster stone) is never eligible.
+		### Conversions happen one at a time, so Bulwark is re-checked before
+		### each: converting the Bulwark stone first exposes the locked spell.
 		eligible = []
 		for nodename in player.board.nodes:
 			node = player.board.nodes[nodename]
@@ -1625,8 +1661,9 @@ class Corrupt(Spell):
 
 		if player.ishuman:
 			while len(converted) < 3:
+				prot = _bulwark_protected(player)
 				remaining = {n: player.color for n in eligible
-				             if n not in converted
+				             if n not in converted and n not in prot
 				             and player.board.nodes[n].stone == player.enemy}
 				if not remaining:
 					break
@@ -1659,7 +1696,7 @@ class Corrupt(Spell):
 				if len(converted) >= 3:
 					break
 				node = player.board.nodes[nodename]
-				if node.stone != player.enemy:
+				if node.stone != player.enemy or nodename in _bulwark_protected(player):
 					continue
 				node.stone = player.color
 				converted.append(nodename)
@@ -1790,55 +1827,44 @@ class Fissure(Spell):
 		self.text = ("Choose a target node. It is permanently destroyed: its stone is "
 			"removed and it becomes an impassable void that stones cannot move into, "
 			"retreat into, or be pushed through, disabling any spell that includes it. "
-			"Also destroy all enemy stones on adjacent nodes.")
+			"Also destroy all stones on adjacent nodes, including your own.")
 
 	def resolve(self, player):
+		### The pure rules live in simboard.fissure_blast (shared with the
+		### AI sim and constants.js's fissureBlast).
+		from simboard import fissure_blast, fissure_ranked_targets
+		nodes = player.board.nodes
+		stones = {name: nodes[name].stone for name in nodes}
+		prot = _bulwark_protected(player)
 		if player.ishuman:
 			player.jmessage("Choose a target node for Fissure.", "node")
 			target_name = None
 			while target_name is None:
 				resp = player.receivemessage()
 				### A node already destroyed (a wall) is not a legal target.
-				if resp in player.board.nodes and player.board.nodes[resp].stone != 'X':
+				if resp in nodes and nodes[resp].stone != 'X':
 					target_name = resp
 		else:
 			time.sleep(1)
-			### Greedy: pick the target with the greatest net stone-count
-			### advantage. Target term: +1 enemy / 0 empty / -1 own. Blast
-			### term: +1 per adjacent enemy stone (also destroyed).
-			best_score = None
-			best_target = 'a1'
-			for node_name in player.board.nodes:
-				node = player.board.nodes[node_name]
-				if node.stone == 'X':
-					continue
-				if node.stone == player.enemy:
-					score = 1
-				elif node.stone == player.color:
-					score = -1
-				else:
-					score = 0
-				for nb in node.neighbors:
-					if nb.stone == player.enemy:
-						score += 1
-				if best_score is None or score > best_score:
-					best_score = score
-					best_target = node_name
-			target_name = best_target
+			### Greedy: the target with the greatest net stone swing.
+			ranked = fissure_ranked_targets(stones, player.color, prot)
+			if not ranked:
+				return
+			target_name = ranked[0]
 
-		node = player.board.nodes[target_name]
-		### Adjacent nodes: destroy enemy stones only (revert to normal empty).
-		for nb in node.neighbors:
-			if nb.stone == player.enemy:
-				nb.stone = None
-				if player.board.last_play == nb.name:
-					player.board.last_play = None
-					player.board.last_player = None
-		### Target node: permanently destroyed (a wall), regardless of occupant.
-		node.stone = 'X'
-		if player.board.last_play == target_name:
-			player.board.last_play = None
-			player.board.last_player = None
+		destroyed, wall = fissure_blast(stones, target_name, prot)
+		for name in destroyed:
+			nodes[name].stone = None
+			if player.board.last_play == name:
+				player.board.last_play = None
+				player.board.last_player = None
+		if wall:
+			nodes[wall].stone = 'X'
+			if player.board.last_play == wall:
+				player.board.last_play = None
+				player.board.last_player = None
+		elif player.ishuman:
+			player.jmessage("Bulwark shields the stone on {}: no void forms.".format(target_name))
 		player.board.update()
 
 
@@ -1854,7 +1880,8 @@ class Rock_Slide(Spell):
 		from simboard import rock_slide_sources, rock_slide_greedy_pushes, resolve_rock_slide
 		nodes = player.board.nodes
 		stones = {name: nodes[name].stone for name in nodes}
-		sources = rock_slide_sources(stones, player.color)
+		prot = _bulwark_protected(player)
+		sources = rock_slide_sources(stones, player.color, prot)
 		if not sources:
 			if player.ishuman:
 				player.jmessage("No enemy stones border you.")
@@ -1885,9 +1912,9 @@ class Rock_Slide(Spell):
 				pushes.append({'from': chosen_from, 'to': target_to})
 		else:
 			time.sleep(1)
-			pushes = rock_slide_greedy_pushes(stones, player.color)
+			pushes = rock_slide_greedy_pushes(stones, player.color, protected=prot)
 
-		final, lost = resolve_rock_slide(stones, pushes)
+		final, lost = resolve_rock_slide(stones, pushes, prot)
 		for name, value in final.items():
 			nodes[name].stone = value
 		if player.board.last_play in final:
@@ -1907,59 +1934,51 @@ class Bulwark(Spell):
 		super().__init__(board, position, name)
 		self.ischarm = True
 		self.static = True
-		self.text = "STATIC: Stones in your locked spell cannot be targeted by enemy hard moves."
+		self.text = ("STATIC: Stones in your locked spell cannot be targeted by enemy hard "
+			"moves, converted, or destroyed.")
 
 
-class _ScheduleMovesSpell(Spell):
-	### Providence base: schedule 1 extra move at the beginning of each of
-	### the caster's next TURNS turns. Pending stones count toward the
-	### caster's stone count asymmetrically (defense only) in the ±3-lead
-	### check, but SYMMETRICALLY in the sixth-spell count (2026-08 playtest
-	### ruling) — see Board.pending_stones / eot_triggers.
-	TURNS = 1
+class _BankStonesSpell(Spell):
+	### Providence base: add STONES stones to the caster's Providence bank.
+	### Banked stones count toward the caster's stone total (±3 lead and
+	### sixth-spell count, not elimination); a turn that starts with a
+	### nonempty bank may place one of them after the regular move.
+	STONES = 1
 
 	def resolve(self, player):
-		sched = self.board.pending_moves[player.color]
-		while len(sched) < self.TURNS:
-			sched.append(0)
-		for i in range(self.TURNS):
-			sched[i] += 1
-		if self.TURNS == 1:
-			effect = "1 extra move at the beginning of your next turn"
-			opp_effect = "1 extra move at the beginning of their next turn"
-		else:
-			effect = ("1 extra move at the beginning of each of your next {} turns"
-			          .format(self.TURNS))
-			opp_effect = ("1 extra move at the beginning of each of their next {} turns"
-			              .format(self.TURNS))
+		self.board.prov_bank[player.color] += self.STONES
+		plural = '' if self.STONES == 1 else 's'
+		bank = self.board.prov_bank[player.color]
 		if player.ishuman:
-			player.jmessage("You will make " + effect + ".")
+			player.jmessage("You bank {} stone{} (Providence bank: {}).".format(
+				self.STONES, plural, bank))
 		if player.opp.ishuman:
 			pname = player.color[0].upper() + player.color[1:]
-			player.opp.jmessage(pname + " will make " + opp_effect + ".")
+			player.opp.jmessage("{} banks {} stone{} (Providence bank: {}).".format(
+				pname, self.STONES, plural, bank))
 		self.board.update()
 
 
-class Dividend(_ScheduleMovesSpell):
-	TURNS = 1
+class Dividend(_BankStonesSpell):
+	STONES = 1
 
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
 		self.ischarm = True
-		self.text = "Make 1 extra move at the beginning of your next turn."
+		self.text = "Add 1 stone to your Providence bank."
 
 
-class Annuity(_ScheduleMovesSpell):
-	TURNS = 2
-
-	def __init__(self, board, position, name):
-		super().__init__(board, position, name)
-		self.text = "Make 1 extra move at the beginning of each of your next 2 turns."
-
-
-class Endowment(_ScheduleMovesSpell):
-	TURNS = 4
+class Annuity(_BankStonesSpell):
+	STONES = 2
 
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
-		self.text = "Make 1 extra move at the beginning of each of your next 4 turns."
+		self.text = "Add 2 stones to your Providence bank."
+
+
+class Endowment(_BankStonesSpell):
+	STONES = 4
+
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.text = "Add 4 stones to your Providence bank."

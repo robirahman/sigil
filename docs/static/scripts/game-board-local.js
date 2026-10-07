@@ -54,6 +54,9 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
+			// Providence bank sizes (badge beside the dice).
+			redBank: 0,
+			blueBank: 0,
 			score: 'unset',
 			// Deathmatch removes spell counters; hides the dice in the UI.
 			isDeathmatch: false,
@@ -603,6 +606,8 @@ document.addEventListener('alpine:init', () => {
 				}
 				this.redSpellCounter = state.red_spellcounter || 0;
 				this.blueSpellCounter = state.blue_spellcounter || 0;
+				this.redBank = state.red_bank || 0;
+				this.blueBank = state.blue_bank || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
 				this.score = state.score || 'unset';
@@ -621,6 +626,11 @@ document.addEventListener('alpine:init', () => {
 
 			handleDash() {
 				this.sendEvent('dash');
+				this.actionList = [];
+			},
+
+			handleSkipProvidence() {
+				this.sendEvent('skip_providence');
 				this.actionList = [];
 			},
 
@@ -726,7 +736,7 @@ document.addEventListener('alpine:init', () => {
 				if (this.awaiting === 'node') {
 					this.sendEvent(node);
 				} else if (this.awaiting === 'action') {
-					if (this.actionList.includes('move')) {
+					if (this.actionList.includes('move') || this.actionList.includes('providence')) {
 						this.sendEvent(node);
 					}
 				}
@@ -1011,11 +1021,11 @@ document.addEventListener('alpine:init', () => {
 					// it) BEFORE tier dispatch, so a hand-off to the JS engine tier
 					// carries through to the AI record, saves and labels.
 					//
-					// The engine implements the 39 OFFICIAL spells only and keys casts
-					// and locks by spell id, resolving a cast at the FIRST slot holding
-					// that id (engine/src/cast.rs). So it cannot play the unofficial
-					// packs (Tectonic / Providence / Panda / Experimental) and cannot
-					// hold two copies of one spell. Rules:
+					// The engine implements the 39 core spells plus Tectonic and
+					// Providence, and keys casts and locks by spell id, resolving a
+					// cast at the FIRST slot holding that id (engine/src/cast.rs). So
+					// it cannot play the unofficial packs (Panda / Experimental) and
+					// cannot hold two copies of one spell. Rules:
 					//   1. Allow Duplicates variant -> the JS tier with the same time
 					//      budget plays; the normal draw applies (repeats from the
 					//      player's packs).
@@ -1030,7 +1040,8 @@ document.addEventListener('alpine:init', () => {
 						rust_deep: 'very_hard', rust_native: 'very_hard',
 					};
 					const _RUST_PACKS = ['core', ...CORE_SUBPACK_KEYS, 'springtime', 'celestial', 'fury',
-					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant',
+					                     'tectonic', 'providence'];
 					// The Cataclysm pentagon board (65 nodes) is JS-engine only: the
 					// Rust engine's bitboards are 64-bit and the NN models are
 					// trained on the 39-node core board. Hand its Rust / NN tiers to
@@ -1806,8 +1817,8 @@ document.addEventListener('alpine:init', () => {
 						score,
 						// Non-node payload fields must be destructured OUT
 						// here or the ...nodes rest treats them as node names.
-						redpending,
-						bluepending,
+						redbank,
+						bluebank,
 						...nodes
 					} = changedBoardState;
 
@@ -1831,6 +1842,12 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (isValidStateKey(score)) {
 						_this.score = score;
+					}
+					if (isValidStateKey(redbank)) {
+						_this.redBank = redbank;
+					}
+					if (isValidStateKey(bluebank)) {
+						_this.blueBank = bluebank;
 					}
 
 					_this.previousBoardState = payload;

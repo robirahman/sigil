@@ -233,14 +233,14 @@ def main():
             "name_font_size": 10.5,
             "desc_lines": [
                 {
-                    "text": "Make 1 extra move at the beginning",
+                    "text": "Add 4 stones to your",
                     "radius": 138,
                     "center_deg": 54,
                     "font_size": 6.2,
                     "spacing": 0.88
                 },
                 {
-                    "text": "of each of your next 4 turns.",
+                    "text": "Providence bank.",
                     "radius": 118,
                     "center_deg": 54,
                     "font_size": 6.0,
@@ -268,14 +268,14 @@ def main():
             "name_font_size": 11.5,
             "desc_lines": [
                 {
-                    "text": "Make 1 extra move at the beginning",
+                    "text": "Add 2 stones to your",
                     "radius": 106,
                     "center_deg": 45,
                     "font_size": 6.2,
                     "spacing": 0.88
                 },
                 {
-                    "text": "of each of your next 2 turns.",
+                    "text": "Providence bank.",
                     "radius": 90,
                     "center_deg": 45,
                     "font_size": 6.0,
@@ -298,14 +298,14 @@ def main():
             "name_font_size": 9.5,
             "desc_lines": [
                 {
-                    "text": "Make 1 extra move at the",
+                    "text": "Add 1 stone to your",
                     "radius": 58,
                     "center_deg": 45,
                     "font_size": 4.6,
                     "spacing": 0.88
                 },
                 {
-                    "text": "beginning of your next turn.",
+                    "text": "Providence bank.",
                     "radius": 46,
                     "center_deg": 45,
                     "font_size": 4.6,

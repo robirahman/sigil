@@ -549,11 +549,13 @@
 								<div class="die__face die__face--6"><div class="die__pip die__pip--bl"></div><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--ml"></div><div class="die__pip die__pip--mr"></div><div class="die__pip die__pip--tl"></div><div class="die__pip die__pip--tr"></div></div>
 								<div class="die__face die__face--0"><div class="die__pip die__pip--br"></div><div class="die__pip die__pip--mm"></div><div class="die__pip die__pip--tl"></div></div>
 							</div>
+						<div class="providence-bank" x-show="redBank || blueBank" x-bind:title="`Providence bank: Red ${redBank}, Blue ${blueBank}`"><span class="providence-bank__label">Bank</span><span class="providence-bank__count providence-bank__count--red" x-text="redBank"></span><span class="providence-bank__count providence-bank__count--blue" x-text="blueBank"></span></div>
 					</div>
 					<!-- Visible whenever a live game is on (not only mid-own-turn): the Forfeit button must be reachable during the opponent's turn too. -->
-					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('pass') || actionList.includes('submit') || (whoseTurn && !winner && !reviewMode))}">
+					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('skip_providence') || actionList.includes('pass') || actionList.includes('submit') || (whoseTurn && !winner && !reviewMode))}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
 						<button class="action-button action-button--dash" x-bind:class="{ 'is-hidden': !actionList.includes('dash') }" x-on:click="handleDash">Dash</button>
+						<button class="action-button action-button--skip-providence" x-bind:class="{ 'is-hidden': !actionList.includes('skip_providence') }" x-on:click="handleSkipProvidence">Skip Providence</button>
 						<button class="action-button action-button--submit" x-bind:class="{ 'is-hidden': isSpectator || !actionList.includes('submit') }" x-on:click="handleSubmit">Submit</button>
 						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
 						<!-- Concede: first click arms and asks for confirmation, second declares the game a win for the opponent. -->

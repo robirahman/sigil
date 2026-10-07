@@ -57,7 +57,7 @@ TECTONIC_RITUALS = ['Fissure']
 TECTONIC_SORCERIES = ['Rock_Slide']
 TECTONIC_CHARMS = ['Bulwark']
 
-# Providence expansion (scheduled extra moves).
+# Providence expansion (stones banked into a per-player Providence bank).
 PROVIDENCE_RITUALS = ['Endowment']
 PROVIDENCE_SORCERIES = ['Annuity']
 PROVIDENCE_CHARMS = ['Dividend']

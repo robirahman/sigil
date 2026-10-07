@@ -9,11 +9,11 @@ can't silently disagree:
     score = (effDiff + mana*manaDiff - voidPenalty*voidDiff
              + mapControl*mcDiff) / 39     (mover POV, non-terminal)
 
-where effDiff uses effectiveStones = real stones + Providence phantoms
-(scheduled extras, plus this-turn extras for the side to move).
+where effDiff uses effectiveStones = board stones + Providence banked
+stones.
 
 Checks several weight sets (zeros = legacy behavior, a capped set, an
-asymmetric set) on synthetic fixtures (including schedule-bearing
+asymmetric set) on synthetic fixtures (including bank-bearing
 boards) + sampled selfplay positions, for both colors,
 asserting equality within 1e-12 and the negamax antisymmetry
 leaf(red) == -leaf(blue).
@@ -69,17 +69,14 @@ def _stones(**kw):
     return s
 
 
-# Fixtures: 'stones' is required; schedule fields are optional and
-# default to empty.
+# Fixtures: 'stones' is required; 'bank' is optional and defaults to empty.
 SYNTHETIC_FIXTURES = [
     {'stones': _stones(a1='red', b1='blue')},
     {'stones': _stones(a1='red', b1='blue', c1='red', a11='red', b11='blue', b12='blue')},
     {'stones': _stones(a1='red', b1='blue', a2='X', a11='X', c5='red', c6='blue')},
-    # Providence phantoms (scheduled + this-turn extras) for both sides
-    # join effectiveStones.
+    # Providence banked stones for both sides join effectiveStones.
     {'stones': _stones(a1='red', a2='red', b1='blue', b2='blue'),
-     'pendingMoves': {'red': [1, 1], 'blue': [2]},
-     'whoseTurn': 'red', 'extraMoves': 1},
+     'bank': {'red': 3, 'blue': 2}, 'whoseTurn': 'red'},
 ]
 
 
@@ -87,9 +84,7 @@ def caveman_leaf_ref(fix, color, w):
     """Python reference of the non-terminal JS leaf formula."""
     enemy = 'blue' if color == 'red' else 'red'
     stones = fix['stones']
-    pending = fix.get('pendingMoves') or {}
-    whose = fix.get('whoseTurn', 'red')
-    extra = fix.get('extraMoves', 0)
+    bank = fix.get('bank') or {}
 
     def diff(nodes):
         d = 0
@@ -102,13 +97,9 @@ def caveman_leaf_ref(fix, color, w):
         return d
 
     def effective(side):
-        # Mirrors SimBoard.effectiveStones: real stones + Providence
-        # phantoms.
+        # Mirrors SimBoard.effectiveStones: board stones + Providence bank.
         e = sum(1 for n in NODE_ORDER if stones[n] == side)
-        e += sum(pending.get(side) or [])
-        if whose == side:
-            e += extra
-        return e
+        return e + (bank.get(side) or 0)
 
     score = float(effective(color) - effective(enemy))
     score += w['mana'] * diff(MANA_NODES)
@@ -139,7 +130,7 @@ def build_node_runner():
     parts.append(R"""
 // --- Test driver: evaluate _cavemanLeaf on each (fixture, weights) ---
 // Boards are built via SimBoard + update() so totalStones/mana are
-// populated exactly as in play; schedule fixture fields restore
+// populated exactly as in play; the bank fixture field is restored
 // onto the board before update(). Terminal boards report null (the
 // Python reference covers non-terminal positions only).
 let buf = '';
@@ -150,12 +141,8 @@ process.stdin.on('end', () => {
     for (const fix of input.fixtures) {
         const board = new SimBoard(null);
         for (const n of NODE_ORDER) board.stones[n] = fix.stones[n] || null;
-        if (fix.pendingMoves) {
-            board.pendingMoves = { red: (fix.pendingMoves.red || []).slice(),
-                                   blue: (fix.pendingMoves.blue || []).slice() };
-        }
+        if (fix.bank) board.providenceBank = { red: fix.bank.red || 0, blue: fix.bank.blue || 0 };
         if (fix.whoseTurn) board.whoseTurn = fix.whoseTurn;
-        board.extraMovesThisTurn = fix.extraMoves || 0;
         board.update();
         if (board.gameover) { out.push(null); continue; }
         const row = [];

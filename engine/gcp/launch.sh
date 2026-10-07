@@ -24,23 +24,34 @@ SHARD_BASE=${SHARD_BASE:-0}
 # means the arms never launch at all.
 SMOKE_TIMEOUT=${SMOKE_TIMEOUT:-900}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
+# SPOT=1 runs the VM on the Spot provisioning model: roughly a third of the
+# on-demand price, drawn from the PREEMPTIBLE_CPUS quota (5,000 per region, not the
+# 300-vCPU C3 one), but the VM can be reclaimed at any time. Use it for harnesses
+# whose shards checkpoint (the runner ships .npz and logs every 2 minutes), so a
+# preemption costs at most the unshipped tail; a preempted VM is deleted, not resumed.
+SPOT_FLAGS=()
+if [ "${SPOT:-0}" = 1 ]; then
+  SPOT_FLAGS=(--provisioning-model=SPOT --instance-termination-action=DELETE)
+fi
 BRANCH=${BRANCH:-main}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-RUN=$(date -u +%Y%m%dT%H%M%SZ)
+# The VM name is part of the run id: two fleets launched in parallel can start a
+# VM in the same second, and a bare timestamp then puts both in one GCS prefix.
+RUN=$(date -u +%Y%m%dT%H%M%SZ)-$NAME
 
 SMOKE_FILE=$(mktemp); printf '%s' "$SMOKE" > "$SMOKE_FILE"
 echo "RUN=$RUN  name=$NAME  harness=$HARNESS  workers=$WORKERS  zone=$ZONE \
-cap=${MAXH}h  machine=$MACHINE  shard_base=$SHARD_BASE"
+cap=${MAXH}h  machine=$MACHINE  shard_base=$SHARD_BASE  spot=${SPOT:-0}"
 echo "arms: $(cat "$ARMS_FILE")"
 
 gcloud compute instances create "$NAME" \
   --project="$PROJECT" --zone="$ZONE" \
-  --machine-type="$MACHINE" \
+  --machine-type="$MACHINE" "${SPOT_FLAGS[@]}" \
   --boot-disk-size=25GB --boot-disk-type=pd-balanced --boot-disk-auto-delete \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE,smoke-timeout=$SMOKE_TIMEOUT,variant=${SIGIL_VARIANT:-standard},require-spell=${SIGIL_REQUIRE_SPELL:-}" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,harness=$HARNESS,max-hours=$MAXH,shard-base=$SHARD_BASE,smoke-timeout=$SMOKE_TIMEOUT,variant=${SIGIL_VARIANT:-standard},require-spell=${SIGIL_REQUIRE_SPELL:-},base-branch=${BASE_BRANCH:-}" \
   --metadata-from-file="startup-script=$HERE/runner.sh,arms=$ARMS_FILE,smoke=$SMOKE_FILE" \
   --format="value(name,status)"
 rm -f "$SMOKE_FILE"

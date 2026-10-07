@@ -55,10 +55,9 @@ const ENUM_CAPS = {
 	splash: 6,
 	// Tectonic expansion caps.
 	fissure: 6,
-	// Providence expansion caps: extra-move targets branched per granted
-	// move (the chain also always offers "stop here", so branching per
-	// extra is extra_move + 1).
-	extra_move: 2,
+	// Providence expansion caps: placement targets branched for the
+	// optional banked-stone placement (skipping it is always offered too).
+	providence_move: 2,
 	// Rock Slide (Tectonic): distinct max-net push outcomes, incl. greedy.
 	rock_slide: 12,
 	// Panda expansion caps.
@@ -71,13 +70,15 @@ const ENUM_CAPS = {
 };
 
 function _adjacentEnemyPairs(board, color) {
+	// Bulwark-shielded stones can't be converted, so they never pair.
 	const enemy = board._enemy(color);
+	const shielded = bulwarkProtectedNodes(board);
 	const seen = new Set();
 	const out = [];
 	for (const n of NODE_ORDER) {
-		if (board.stones[n] !== enemy) continue;
+		if (board.stones[n] !== enemy || shielded.has(n)) continue;
 		for (const nb of (ADJACENCY[n] || [])) {
-			if (board.stones[nb] !== enemy) continue;
+			if (board.stones[nb] !== enemy || shielded.has(nb)) continue;
 			const a = n < nb ? n : nb;
 			const b = n < nb ? nb : n;
 			const key = a + '|' + b;
@@ -97,6 +98,7 @@ function _adjacentEnemyPairs(board, color) {
  */
 function _starfallPairsRanked(board, color) {
 	const enemy = board._enemy(color);
+	const shielded = bulwarkProtectedNodes(board);
 	const seen = new Set();
 	const cand = [];
 	for (const n of NODE_ORDER) {
@@ -113,7 +115,7 @@ function _starfallPairsRanked(board, color) {
 				...(ADJACENCY[b] || []),
 			]);
 			let score = 0;
-			for (const x of neighbors) if (board.stones[x] === enemy) score++;
+			for (const x of neighbors) if (board.stones[x] === enemy && !shielded.has(x)) score++;
 			cand.push([score, [a, b]]);
 		}
 	}
@@ -405,7 +407,8 @@ function _spellOverrides(board, color, spellName, caps) {
 		}
 	} else if (rt === 'storm_front') {
 		const enemy = board._enemy(color);
-		const enemies = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		const shielded = bulwarkProtectedNodes(board);
+		const enemies = NODE_ORDER.filter(n => board.stones[n] === enemy && !shielded.has(n));
 		let added = 0;
 		outer: for (let i = 0; i < enemies.length; i++) {
 			for (let j = i + 1; j < enemies.length; j++) {
@@ -414,9 +417,18 @@ function _spellOverrides(board, color, spellName, caps) {
 				added++;
 			}
 		}
+		// Storm Front picks one stone at a time and Bulwark is re-checked
+		// before each pick: destroying the Bulwark stone first exposes the
+		// locked spell to the second pick.
+		for (const brk of enemies) {
+			const unshielded = bulwarkUnshieldedByRemoving(board, brk);
+			const freed = NODE_ORDER.filter(n => unshielded.has(n));
+			for (const u of freed.slice(0, caps.storm_front)) out.push({ storm_front_pair: [brk, u] });
+		}
 	} else if (rt === 'hurricane') {
 		const enemy = board._enemy(color);
-		const visited = new Set();
+		// Shielded stones are ignored, matching the resolver.
+		const visited = new Set(bulwarkProtectedNodes(board));
 		const groups = [];
 		for (const start of NODE_ORDER) {
 			if (visited.has(start) || board.stones[start] !== enemy) continue;
@@ -481,23 +493,12 @@ function _spellOverrides(board, color, spellName, caps) {
 		const cap = caps.rock_slide !== undefined ? caps.rock_slide : ENUM_CAPS.rock_slide;
 		for (let i = 1; i < cap; i++) out.push({ rock_slide_variant: i });
 	} else if (rt === 'fissure') {
-		// Branch over which node to permanently destroy, scored by net
-		// stone-count advantage so the strongest walls are explored first:
-		//   target term: +1 enemy / 0 empty / -1 own
-		//   blast term:  +1 per adjacent enemy stone (also destroyed)
-		const enemy = board._enemy(color);
-		const scored = [];
-		for (const node of NODE_ORDER) {
-			let score = board.stones[node] === enemy ? 1
-				: (board.stones[node] === color ? -1 : 0);
-			for (const nb of (ADJACENCY[node] || [])) {
-				if (board.stones[nb] === enemy) score++;
-			}
-			scored.push([score, node]);
-		}
-		scored.sort((a, b) => b[0] - a[0]);
-		for (let i = 0; i < scored.length && i < caps.fissure; i++) {
-			out.push({ fissure_target: scored[i][1] });
+		// Branch over which node to blast, best net stone swing first (enemy
+		// stones destroyed minus own; see fissureScore in constants.js), so
+		// the strongest blasts are explored first.
+		const ranked = fissureRankedTargets(board.stones, color, bulwarkProtectedNodes(board));
+		for (let i = 0; i < ranked.length && i < caps.fissure; i++) {
+			out.push({ fissure_target: ranked[i] });
 		}
 	} else if (rt === 'surge_move' && baseSpellName(spellName) === 'Splash') {
 		// Splash enumerates each possible move destination. (Surge — the
@@ -517,8 +518,9 @@ function _spellOverrides(board, color, spellName, caps) {
 	} else if (rt === 'shiver') {
 		// Enumerate own↔enemy swaps (the impactful ones).
 		const enemy = board._enemy(color);
-		const own = NODE_ORDER.filter(n => board.stones[n] === color);
-		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		const shielded = bulwarkProtectedNodes(board);
+		const own = NODE_ORDER.filter(n => board.stones[n] === color && !shielded.has(n));
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy && !shielded.has(n));
 		let added = 0;
 		outer: for (const o of own) {
 			for (const f of foe) {
@@ -535,7 +537,7 @@ function _spellOverrides(board, color, spellName, caps) {
 		}
 	} else if (rt === 'moth_plague') {
 		const enemy = board._enemy(color);
-		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy && !board._isBulwarkProtected(enemy, n));
 		for (let i = 0; i < foe.length && i < caps.moth_plague; i++) {
 			out.push({ moth_targets: [foe[i]] });
 		}
@@ -546,7 +548,8 @@ function _spellOverrides(board, color, spellName, caps) {
 		}
 	} else if (rt === 'residue_mixture') {
 		const enemy = board._enemy(color);
-		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy);
+		const shielded = bulwarkProtectedNodes(board);
+		const foe = NODE_ORDER.filter(n => board.stones[n] === enemy && !shielded.has(n));
 		for (let i = 0; i < foe.length && i < caps.residue_mixture; i++) {
 			out.push({ residue_target: foe[i] });
 		}
@@ -716,7 +719,7 @@ function getLegalTurnsExhaustive(board, color, caps) {
 
 /**
  * The move root: enumerate first-move targets (with push
- * destination branching), then the Providence move-phase chain and
+ * destination branching), then the optional Providence placement and
  * everything downstream.
  */
 function _enumerateMoveRootExhaustive(board, color, prefix, caps, out) {
@@ -737,10 +740,13 @@ function _enumerateMoveRootExhaustive(board, color, prefix, caps, out) {
 		// engine `enumerate_turns_capped`): dash, casts and the bare pass
 		// remain, and the pass is the first turn pushed below.
 		_enumeratePostMoveExhaustive(board, color, prefix, caps, true, true, true, out);
+		// A Providence placement ignores Stone's soft-only rule, so it may
+		// still be possible.
+		_enumerateProvidenceStepExhaustive(board, color, prefix, caps, new Set(), out);
 		return;
 	}
-	// Cross-branch dedup for Providence multi-move prefixes: two orders of
-	// the same base-move placements produce the same stones, so their
+	// Cross-branch dedup for (regular move, Providence placement) prefixes:
+	// two orders of the same placements produce the same stones, so their
 	// continuations are identical.
 	const seenMovePrefixes = new Set();
 	for (const moveTarget of moveTargets) {
@@ -756,29 +762,28 @@ function _enumerateMoveRootExhaustive(board, color, prefix, caps, out) {
 			const moveAct = ba._doMove(color, moveTarget, isBlink, pushDest);
 			if (!moveAct) continue;
 			ba.update();
-			_enumerateMovePhaseExhaustive(ba, color, prefix.concat([moveAct]), caps,
-				board.extraMovesThisTurn, seenMovePrefixes, out);
+			const pre = prefix.concat([moveAct]);
+			_enumeratePostMoveExhaustive(ba, color, pre, caps, true, true, true, out);
+			_enumerateProvidenceStepExhaustive(ba, color, pre, caps, seenMovePrefixes, out);
 		}
 	}
 }
 
 /**
- * Providence move phase for the exhaustive enumerator: at each step, either
- * stop taking base moves (remaining extras forfeit at end of turn) or take
- * one more, branching over the top-`caps.extra_move` ranked targets with
- * stone-map dedup across orderings. With extrasLeft === 0 this is exactly
- * the pre-Providence flow. Wind/Stone gating applies only to the turn's
- * first move, so extra steps draw from _allMoveable.
+ * Optional Providence placement for the exhaustive enumerator (the skip
+ * branch is the caller's plain post-move): with a nonempty bank, place one
+ * banked stone on each of the top-`caps.providence_move` ranked targets,
+ * deduped by stone map across orderings, then dash/cast/pass. Wind/Stone
+ * gating applies only to the regular move, so targets come from
+ * _allMoveable.
  */
-function _enumerateMovePhaseExhaustive(board, color, prefix, caps, extrasLeft, seen, out) {
-	_enumeratePostMoveExhaustive(board, color, prefix, caps, true, true, true, out);
-	if (extrasLeft <= 0 || board.gameover) return;
+function _enumerateProvidenceStepExhaustive(board, color, prefix, caps, seen, out) {
+	if (board.providenceBank[color] <= 0 || board.gameover) return;
 	const targets = _rankDashTargets(board, color, board._allMoveable(color));
-	for (const t of targets.slice(0, caps.extra_move)) {
+	for (const t of targets.slice(0, caps.providence_move)) {
 		const b = board.copy();
-		const act = b._doMove(color, t, false);
+		const act = b._doProvidenceMove(color, t);
 		if (!act) continue;
-		b.update();
 		let key = '';
 		for (const n of NODE_ORDER) {
 			const s = b.stones[n];
@@ -786,7 +791,6 @@ function _enumerateMovePhaseExhaustive(board, color, prefix, caps, extrasLeft, s
 		}
 		if (seen.has(key)) continue;
 		seen.add(key);
-		_enumerateMovePhaseExhaustive(b, color, prefix.concat([act]), caps,
-			extrasLeft - 1, seen, out);
+		_enumeratePostMoveExhaustive(b, color, prefix.concat([act]), caps, true, true, true, out);
 	}
 }

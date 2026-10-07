@@ -33,7 +33,7 @@ MERGE_OFF = 1 << 62
 # and a harness that hardcoded 1 would silently test every other knob under the old,
 # far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
 BASE_WS = se.DEFAULT_WIDTH_SCALE
-KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
+KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
          'rank_oversample', 'width_shape',
          # §1.2 booleans: arm value 1 = on, 0 = off (engine default).
@@ -100,7 +100,15 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width',
          #   24 resolutions, 4 keeps, for the SEL_SPELLS_DEFAULT spells); 0 = off.
          # speed = 1/0: the tree-identical node-rate switch (turn_iter::set_speed_v1).
          # lead_min = skip the stone-lead pre-pass below this many plies left (2 = shipped since v18, 0 = v17).
-         'outcome_sel', 'speed', 'lead_min')
+         'outcome_sel', 'speed', 'lead_min',
+         # preset: an EVAL A/B on the shipped search. Pass the eval argument as
+         # `<arm_eval>:<base_eval>` (e.g. tfit_spell:tfit); the side whose knob
+         # value is non-zero plays the left one. Arm 1, base 0.
+         'preset',
+         # threads = search threads*10 + mode (2026-10 step 6; mode 0 = Lazy SMP,
+         # 1 = parallel root), base 10 = one thread. Give each shard as many vCPUs as
+         # its arm's threads: WORKERS = vCPUs // threads.
+         'threads')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -113,6 +121,12 @@ DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the s
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
+    if ':' in ev:
+        # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
+        # val != 0) plays the left eval, the base (policy off) the right one.
+        if knob not in ('preset', 'policy'):
+            sys.exit(f"an `arm:base` eval pair needs knob=preset or policy, got {knob!r}")
+        ev = ev.split(':')[0 if val else 1]
     ws = val if knob == 'width_scale' else BASE_WS
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
@@ -201,6 +215,21 @@ def play(b, ms, ev, hist, knob, val):
         se.set_speed_v1(bool(val))
     if knob == 'lead_min':
         se.set_lead_min_remaining(val)
+    if knob == 'policy':
+        # Step 4 learned generator policy (engine/src/policy.rs), BOTH arms at the
+        # SHIPPED adaptive widening (0.10, 2, 6) unless the arm overrides it.
+        # val = ws*10^8 + easy*10^7 + hard*10^6 + penalty*1000 + min_width; 0 =
+        # shipped engine (policy off). penalty in 1/256 nat; easy/hard 0 = shipped
+        # (2, 6); ws 0 = BASE_WS (the policy may let width_scale come down).
+        se.set_policy(bool(val), val % 1000)
+        ws = (val // 10 ** 8) % 10 or ws
+        se.set_policy_cost((val // 1000) % 1000, 1 << 30)
+        e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
+        sp = tuple(se.SHIPPED_ADAPTIVE)
+        adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
+    if knob == 'threads' and val // 10 > 1:
+        extra['threads'] = val // 10
+        extra['smp_mode'] = val % 10
     if knob == 'key_dash_v2':
         # val = moves*100 + combos*10 + extra: a wider key-dash scan (8 sacrifice
         # stones) feeding the additive path with reasons CRUSH|SPELL_CRUSH|FILLS.
@@ -223,11 +252,33 @@ if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('openi
     sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
 # SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
 # (the seed is stepped deterministically until its draw does), so a knob that
-# acts in one spell's draws is measured where it acts.
+# acts in one spell's draws is measured where it acts. `legal_draw` draws the 39
+# core spells only, so for an EXPANSION id (39-44, Tectonic/Providence) the draw
+# comes from the 15-spell-per-role pool instead (core plus the two expansion
+# spells of each role, as selfplay_v2.py's all-45 draws), stepped until it holds
+# the spell; -1 means "any expansion spell". The GAME lines carry the draw, so
+# split_by_draw.py never has to reconstruct it.
 REQUIRE_SPELL = int(os.environ['SIGIL_REQUIRE_SPELL']) if os.environ.get('SIGIL_REQUIRE_SPELL') else None
+_CORE_POOLS = ([0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36],
+               [5, 6, 7, 8, 9, 16, 19, 22, 25, 28, 31, 34, 37],
+               [10, 11, 12, 13, 14, 17, 20, 23, 26, 29, 32, 35, 38])
+_EXPANSION_POOLS = ([39, 44], [40, 43], [41, 42])
+
+
+def _expansion_draw(seed, want):
+    import random
+    rng = random.Random(seed * 1_000_003 + 45)
+    while True:
+        d = []
+        for role in range(3):
+            d += rng.sample(_CORE_POOLS[role] + _EXPANSION_POOLS[role], 3)
+        if (want == -1 and any(x >= 39 for x in d)) or want in d:
+            return d
 
 
 def draw_for(seed):
+    if REQUIRE_SPELL is not None and (REQUIRE_SPELL < 0 or REQUIRE_SPELL >= 39):
+        return _expansion_draw(seed, REQUIRE_SPELL)
     d = se.Board.legal_draw(seed)
     if REQUIRE_SPELL is None:
         return d
@@ -253,6 +304,77 @@ def ms_for(sched, ply):
     return open_ms if ply // 2 < n else ms
 
 
+# Position saving (2026-10). With $SIGIL_ARENA_DATA set (runner.sh sets it to the
+# directory it ships to gs://...-sigil/runs/<run>/data/), every arena position is
+# kept as training data: the SFN, the 9 spell ids, full/hand features from the side
+# to move, the mover's search result (depth, nodes, score, seconds) and, once the
+# game ends, the winner from the mover's side (`y`; 255 = unfinished). The played
+# move is the next row's SFN. There are no root-candidate scores (selfplay_v2.py
+# has those); these rows add outcome labels and start positions from engines of
+# release strength. One npz per shard and arm, rewritten atomically after every
+# game, so a watchdog kill loses at most the game in progress.
+class ArenaRecorder:
+    COLS = ('sfn', 'spells', 'full', 'hand', 'is_red', 'ply', 'game', 'is_arm',
+            'ms', 'depth', 'nodes', 'score', 'secs', 'y')
+
+    def __init__(self, path, meta):
+        self.path, self.meta = path, meta
+        self.rows = {c: [] for c in self.COLS}
+
+    @classmethod
+    def from_env(cls, knob, arm_val, base_val, ms_spec, ev, off):
+        d = os.environ.get('SIGIL_ARENA_DATA')
+        if not d:
+            return None
+        os.makedirs(d, exist_ok=True)
+        tag = ''.join(ch if ch.isalnum() else '_' for ch in f"{knob}{arm_val}v{base_val}_{ms_spec}")
+        meta = dict(harness='ab_search', knob=knob, arm=arm_val, base=base_val, ms=ms_spec,
+                    eval=ev, variant=VARIANT, require_spell=REQUIRE_SPELL, shard_off=off,
+                    engine_version=getattr(se, 'ENGINE_VERSION', None),
+                    shipped_eval=getattr(se, 'SHIPPED_EVAL', None))
+        return cls(os.path.join(d, f"arena_{tag}_{off}.npz"), meta)
+
+    def before(self, b, side, ply, gid, is_arm, ms):
+        R = self.rows
+        R['sfn'].append(b.to_sfn()); R['spells'].append(b.spell_ids())
+        R['full'].append(b.full_features(side)); R['hand'].append(b.hand_features(side))
+        R['is_red'].append(side == 'red'); R['ply'].append(ply); R['game'].append(gid)
+        R['is_arm'].append(is_arm); R['ms'].append(ms)
+
+    def after(self, r):
+        R = self.rows
+        R['depth'].append(r[0]); R['nodes'].append(r[1]); R['secs'].append(r[2])
+        R['score'].append(r[5]); R['y'].append(255)
+
+    def end_game(self, gid, winner):
+        R = self.rows
+        for i in range(len(R['game']) - 1, -1, -1):
+            if R['game'][i] != gid:
+                break
+            if winner is not None:
+                R['y'][i] = 1 if (winner == 'red') == bool(R['is_red'][i]) else 0
+        self.write()
+
+    def write(self):
+        import json
+        import numpy as np
+        R = self.rows
+        tmp = self.path + '.tmp.npz'
+        np.savez_compressed(
+            tmp, sfn=np.asarray(R['sfn']), spells=np.asarray(R['spells'], np.uint8),
+            full=np.asarray(R['full'], np.float32), hand=np.asarray(R['hand'], np.int32),
+            is_red=np.asarray(R['is_red'], np.uint8), ply=np.asarray(R['ply'], np.int16),
+            game=np.asarray(R['game'], np.int64), is_arm=np.asarray(R['is_arm'], np.uint8),
+            ms=np.asarray(R['ms'], np.int32), depth=np.asarray(R['depth'], np.int8),
+            nodes=np.asarray(R['nodes'], np.int64), score=np.asarray(R['score'], np.int32),
+            secs=np.asarray(R['secs'], np.float32), y=np.asarray(R['y'], np.uint8),
+            meta=np.asarray(json.dumps(self.meta)))
+        os.replace(tmp, self.path)
+
+
+RECORDER = None
+
+
 def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
     b = se.Board(draw_for(seed), VARIANT)
     b.setup_initial()
@@ -265,11 +387,20 @@ def game(seed, arm_color, ms, ev, knob, arm_val, base_val, max_plies=140):
         side = 'red' if b.to_sfn().split()[1] == 'r' else 'blue'
         is_arm = (side == arm_color)
         hist.append(b.key_js)
+        gid = seed * 2 + (arm_color == 'blue')
+        if RECORDER:
+            RECORDER.before(b, side, ply, gid, is_arm, ms_for(ms, ply))
         r = play(b, ms_for(ms, ply), ev, hist, knob, arm_val if is_arm else base_val)
+        if RECORDER:
+            RECORDER.after(r)
         dep['arm' if is_arm else 'base'].append(r[0])
         secs['arm' if is_arm else 'base'].append(r[2])
         if r[3]:
+            if RECORDER:
+                RECORDER.end_game(gid, r[4])
             return r[4], ply + 1, dep, secs
+    if RECORDER:
+        RECORDER.end_game(seed * 2 + (arm_color == 'blue'), None)
     return None, max_plies, dep, secs
 
 
@@ -278,7 +409,15 @@ if __name__ == "__main__":
     knob = sys.argv[4]; arm_val = int(sys.argv[5]); base_val = int(sys.argv[6])
     if knob not in KNOBS:
         sys.exit(f"unknown knob {knob!r}; expected one of {KNOBS}")
+    if knob == 'policy' and ':' in ev and base_val != 0:
+        sys.exit("knob=policy with an eval pair needs base value 0 (policy off)")
+    if knob == 'preset' and (':' not in ev or arm_val == base_val):
+        sys.exit("knob=preset needs eval=<arm>:<base> and arm/base values 1 0")
+    for e in ev.split(':'):
+        if e not in se.EVAL_NAMES:
+            sys.exit(f"unknown eval {e!r}; expected one of {se.EVAL_NAMES}")
     off = shard_offset()
+    RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
     print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
@@ -302,7 +441,8 @@ if __name__ == "__main__":
             ma = statistics.mean(sc['arm']) if sc['arm'] else 0.0
             mb = statistics.mean(sc['base']) if sc['base'] else 0.0
             print(f"GAME seed={6_000_000+off+i} arm={arm} winner={w} plies={n} "
-                  f"arm_s={ma:.3f} base_s={mb:.3f}", flush=True)
+                  f"arm_s={ma:.3f} base_s={mb:.3f} "
+                  f"draw={','.join(map(str, draw_for(6_000_000 + off + i)))}", flush=True)
         if s.verdict != 'continue':
             break
     print(f"SHARD knob={knob} arm={arm_val} base={base_val} eval={ev} ms={ms_spec} "

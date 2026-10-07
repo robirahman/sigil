@@ -160,6 +160,18 @@ let wasm_bindgen = (function(exports) {
             }
         }
         /**
+         * Step 6 option A (prototype, off unless rust-ai.js's multi-worker flag is
+         * set): search only part `part` of a `parts`-way split of the root list, so
+         * several workers, each with its own Engine, share one move's root.
+         * `parts <= 1` restores the whole root. Applies to the searches that follow,
+         * pondering included; the worker resets it before a ponder.
+         * @param {number} part
+         * @param {number} parts
+         */
+        set_root_split(part, parts) {
+            wasm.engine_set_root_split(this.__wbg_ptr, part, parts);
+        }
+        /**
          * Slots in use, for the smoke test's "the table survived the move" check.
          * @returns {number}
          */
@@ -170,6 +182,36 @@ let wasm_bindgen = (function(exports) {
     }
     if (Symbol.dispose) Engine.prototype[Symbol.dispose] = Engine.prototype.free;
     exports.Engine = Engine;
+
+    /**
+     * Parity gate for the policy-ordered search (tools/policy-wasm-parity.js): one
+     * clockless fixed-depth search on a fresh table, hashed exactly as
+     * `examples/bench.rs` hashes a position (FNV-1a of `nodes|score|{best:?}`), so a
+     * file of positions gives the same combined HASH natively and in wasm iff the
+     * trees are identical.
+     * @param {string} sfn
+     * @param {number} depth
+     * @param {string} eval_name
+     * @param {number} tt_bits
+     * @returns {string}
+     */
+    function bench_hash(sfn, depth, eval_name, tt_bits) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(sfn, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ptr1 = passStringToWasm0(eval_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            const ret = wasm.bench_hash(ptr0, len0, depth, ptr1, len1, tt_bits);
+            deferred3_0 = ret[0];
+            deferred3_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    exports.bench_hash = bench_hash;
 
     /**
      * @returns {string}
@@ -236,10 +278,6 @@ let wasm_bindgen = (function(exports) {
     exports.judge_move = judge_move;
 
     /**
-     * Sanity handle for the loader: confirms the module initialised.
-     * Game clock allocation, see `search::move_budget_ms`. Exported for the
-     * smoke test's parity check against rust-ai.js's mirror and for callers that
-     * prefer the engine's number.
      * @param {number} remaining_ms
      * @param {number} inc_ms
      * @param {number} my_moves_played
@@ -250,6 +288,43 @@ let wasm_bindgen = (function(exports) {
         return ret >>> 0;
     }
     exports.move_budget_ms = move_budget_ms;
+
+    /**
+     * The Step 5 network's raw output (centistones, before the cap is added to the
+     * hand eval) for one input. Exported only so `tools/nn-wasm-parity.js` can check
+     * the wasm build against `engine/nets/nnue_spell_golden.txt`, the vectors that
+     * pin Python == native; the play path never calls it.
+     * @param {Uint8Array} spells
+     * @param {bigint} mine
+     * @param {bigint} theirs
+     * @param {boolean} red
+     * @returns {number}
+     */
+    function nn_eval_raw(spells, mine, theirs, red) {
+        const ptr0 = passArray8ToWasm0(spells, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.nn_eval_raw(ptr0, len0, mine, theirs, red);
+        return ret;
+    }
+    exports.nn_eval_raw = nn_eval_raw;
+
+    /**
+     * Sanity handle for the loader: confirms the module initialised.
+     * Game clock allocation, see `search::move_budget_ms`. Exported for the
+     * smoke test's parity check against rust-ai.js's mirror and for callers that
+     * prefer the engine's number.
+     * Step 4 learned generator policy (`policy.rs`): on at nodes whose width budget
+     * is at least `min_width`. The site plays `policy::SHIPPED_POLICY` (on since v25),
+     * applied once when the first `Engine` (or `judge_move`) starts; an explicit call
+     * here overrides it for the rest of the module's life (tools/wasm-smoke.js
+     * SIGIL_SMOKE_POLICY, tools/policy-wasm-parity.js).
+     * @param {boolean} on
+     * @param {number} min_width
+     */
+    function set_policy(on, min_width) {
+        wasm.set_policy(on, min_width);
+    }
+    exports.set_policy = set_policy;
     function __wbg_get_imports() {
         const import0 = {
             __proto__: null,
@@ -334,6 +409,13 @@ let wasm_bindgen = (function(exports) {
 
     function isLikeNone(x) {
         return x === undefined || x === null;
+    }
+
+    function passArray8ToWasm0(arg, malloc) {
+        const ptr = malloc(arg.length * 1, 1) >>> 0;
+        getUint8ArrayMemory0().set(arg, ptr / 1);
+        WASM_VECTOR_LEN = arg.length;
+        return ptr;
     }
 
     function passArrayJsValueToWasm0(array, malloc) {

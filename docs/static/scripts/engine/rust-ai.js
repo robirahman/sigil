@@ -29,15 +29,15 @@
  * index. That was safe but capped the engine at the browser's `ENUM_CAPS`, which
  * offers on the order of 4,000x fewer turns per position.
  *
- * Only the 39 official spells are supported: the engine does not implement
- * Tectonic, Providence, the fan-made Panda pack or the Experimental playtest
- * pack and rejects positions containing them rather than mis-resolving.
+ * The 39 core spells plus Tectonic and Providence are supported: the engine
+ * does not implement the fan-made Panda pack or the Experimental playtest pack
+ * and rejects positions containing them rather than mis-resolving.
  */
 
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 21;
+const RUST_ENGINE_VERSION = 25;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -135,10 +135,51 @@ class RustEngineWorker {
 	}
 }
 
-let _rustEngineWorker = null;
-function getRustEngineWorker() {
-	if (!_rustEngineWorker) _rustEngineWorker = new RustEngineWorker();
-	return _rustEngineWorker;
+// Worker 0 is the one engine every tier uses. Step 6 option A (a PROTOTYPE, off
+// by default) adds more: `rustWorkerCount` > 1 splits each move's root across
+// that many workers, each with its own Engine and table (no shared memory, so
+// it works on GitHub Pages as-is).
+const _rustEnginePool = [];
+function getRustEnginePool(n) {
+	while (_rustEnginePool.length < n) _rustEnginePool.push(new RustEngineWorker());
+	return _rustEnginePool.slice(0, Math.max(1, n));
+}
+function getRustEngineWorker() { return getRustEnginePool(1)[0]; }
+
+/**
+ * How many root-split workers to use: `requested` (RustAI's `workers` option,
+ * else `window.SIGIL_RUST_WORKERS`), capped at hardwareConcurrency - 1 so the
+ * page keeps a core; 1 (the shipped single worker) when unset or unknown.
+ */
+function rustWorkerCount(requested, hardwareConcurrency) {
+	const want = Math.floor(Number(requested) || 1);
+	const hc = Math.floor(Number(hardwareConcurrency) || 0);
+	const cap = Math.max(1, hc - 1);
+	return Math.max(1, Math.min(want, cap));
+}
+
+/**
+ * Combine the per-part results of a root-split search into one /api/move
+ * result: the best root score among the parts that completed a depth (scores
+ * of different parts are from the same root and mover, so comparable; a part
+ * one iteration shallower is the price of the prototype), ties to the deeper
+ * part. `nodes` becomes the total; `split` records the per-part view.
+ */
+function pickSplitResult(results) {
+	const ok = results.filter((r) => r && r.ok && Array.isArray(r.actions) && r.actions.length);
+	if (!ok.length) return results.find((r) => r) || { ok: false, error: 'no part returned a move' };
+	const done = ok.filter((r) => (r.depth || 0) > 0);
+	const pool = done.length ? done : ok;
+	let best = pool[0];
+	for (const r of pool) {
+		if (r.score > best.score || (r.score === best.score && (r.depth || 0) > (best.depth || 0))) best = r;
+	}
+	const out = Object.assign({}, best);
+	out.nodes = ok.reduce((s, r) => s + (r.nodes || 0), 0);
+	out.split = { parts: results.length, chosen: results.indexOf(best),
+		depths: results.map((r) => (r && r.depth) || 0),
+		scores: results.map((r) => (r && r.ok) ? r.score : null) };
+	return out;
 }
 
 class RustAI {
@@ -167,7 +208,7 @@ class RustAI {
 		// these is a measured strength loss (see py.rs's warnings on eval).
 		this.ttBits = options.ttBits || 20;
 		this.widthScale = options.widthScale || 4;
-		this.evalName = options.evalName || 'tfit';
+		this.evalName = options.evalName || 'nnue_spell';  // eval.rs SHIPPED_EVAL
 		this.adaptive = options.adaptive || [0.10, 2, 6];
 		// Pondering: while the human thinks, the worker searches the position
 		// they are looking at and primes the persistent table (TT priming, as
@@ -180,12 +221,22 @@ class RustAI {
 		this.ponderMaxDepth = options.ponderMaxDepth || 12;
 		this.lastMeta = null;
 		this._historySfns = [];
-		// One RustAI per game: reset the worker's persistent table so a previous
+		// Step 6 option A root split (prototype): 1 = the shipped single worker.
+		const hc = (typeof navigator !== 'undefined') ? navigator.hardwareConcurrency : 0;
+		const req = (options.workers !== undefined) ? options.workers
+			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || 1);
+		this.workers = (this.transport === 'worker') ? rustWorkerCount(req, hc) : 1;
+		// One RustAI per game: reset the workers' persistent tables so a previous
 		// game's entries cannot leak into this one.
 		if (this.transport === 'worker') {
-			try { getRustEngineWorker().post({ type: 'new_game', ttBits: this.ttBits }); }
-			catch (e) { /* surfaced on first move */ }
+			this._postAll({ type: 'new_game', ttBits: this.ttBits });
 		}
+	}
+
+	/** Fire-and-forget to every worker this AI uses. */
+	_postAll(msg) {
+		try { for (const w of getRustEnginePool(this.workers)) w.post(msg); }
+		catch (e) { /* surfaced on first move */ }
 	}
 
 	/** Per-move budget from a game clock: `search::move_budget_ms`, same
@@ -250,7 +301,9 @@ class RustAI {
 		} catch (e) { return; }
 		if (this._historySfns[this._historySfns.length - 1] !== sfn) this._historySfns.push(sfn);
 		if (!this.pondering) return;
-		getRustEngineWorker().post({
+		// Every worker ponders the whole position (the worker drops any root
+		// split for a ponder), so each one's table is primed for its next part.
+		this._postAll({
 			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale,
 			historySfns: this._historySfns.slice(-64), evalName: this.evalName,
 			adaptive: this.adaptive, sliceMs: this.ponderSliceMs, maxDepth: this.ponderMaxDepth,
@@ -259,7 +312,7 @@ class RustAI {
 
 	cancelPonder() {
 		if (this.transport !== 'worker') return;
-		getRustEngineWorker().post({ type: 'ponder_stop' });
+		this._postAll({ type: 'ponder_stop' });
 	}
 
 	async _send(sfn, onProgress) {
@@ -291,7 +344,7 @@ class RustAI {
 			}
 		}
 		const t0 = Date.now();
-		return getRustEngineWorker().search({
+		const req = {
 			sfn: sfn,
 			timeMs: budgetMs,
 			ttBits: this.ttBits,
@@ -299,7 +352,8 @@ class RustAI {
 			historySfns: history,
 			evalName: this.evalName,
 			adaptive: this.adaptive,
-		}, (msg) => {
+		};
+		const progress = (msg) => {
 			// Per-completed-depth ticks; same fields the caveman meter renders.
 			if (onProgress) onProgress({
 				depth: msg.depth, score: msg.score, nodes: msg.nodes,
@@ -307,7 +361,14 @@ class RustAI {
 				budgetMs: budgetMs,
 				clockMs: this.clockMs,
 			});
-		});
+		};
+		if (this.workers <= 1) return getRustEngineWorker().search(req, progress);
+		// Root split: every worker searches its part with the same clock; the
+		// meter follows part 0.
+		const pool = getRustEnginePool(this.workers);
+		const results = await Promise.all(pool.map((w, i) => w.search(
+			Object.assign({}, req, { split: [i, pool.length] }), i === 0 ? progress : null)));
+		return pickSplitResult(results);
 	}
 
 	async pickTurn(board, color, onProgress) {
@@ -335,7 +396,7 @@ class RustAI {
 		if (!res || !res.ok) {
 			throw new Error('Rust engine error: ' + ((res && res.error) || 'unknown') +
 				'\nIf this mentions an out-of-scope spell, the draw includes a pack the ' +
-				'engine does not implement (Tectonic / Providence / Panda / Experimental).');
+				'engine does not implement (Panda / Experimental).');
 		}
 
 		const turn = await rustActionsToTurn(sim, color, res.actions, res.expected_sfn);
@@ -383,7 +444,6 @@ async function rustActionsToTurn(sim, color, actions, expectedSfn) {
 		const probe = sim.copy();
 		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
 		probe.getBoardStatePayload = () => ({});
-		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
 		try {
 			await applyAITurn(probe, { actions: actions }, color, () => {});
 			probe.update();
@@ -394,7 +454,10 @@ async function rustActionsToTurn(sim, color, actions, expectedSfn) {
 		} catch (e) {
 			throw new Error('Rust engine action replay threw: ' + e);
 		}
-		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+		// Includes the Providence banks (the optional `pm:` token), which the
+		// stone field does not show.
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5],
+			p.find(t => t.startsWith('pm:')) || ''].join(' '); };
 		if (key(boardToSfn(probe)) !== key(expectedSfn)) {
 			throw new Error(
 				'Rust engine action list did not reproduce its own position — refusing ' +
@@ -419,5 +482,9 @@ RustAI.judgeMove = async function (board, plies, timeMs) {
 	res.turn = await rustActionsToTurn(sim, board.whoseTurn, res.actions, res.expected_sfn);
 	return res;
 };
+
+// Exposed for tools/wasm-smoke.js, which drives the same combination headless.
+RustAI.pickSplitResult = pickSplitResult;
+RustAI.rustWorkerCount = rustWorkerCount;
 
 if (typeof window !== 'undefined') window.RustAI = RustAI;

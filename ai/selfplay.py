@@ -88,15 +88,8 @@ def play_game(red_policy, blue_policy, spell_names=None, variant='standard'):
 
         board.whose_turn = color
 
-        # Record position before the turn (pre-shift, like the live loops).
+        # Record position before the turn.
         positions.append((board.to_sfn(), color))
-
-        # Providence start-of-turn shift. This loop assigns whose_turn
-        # directly instead of calling advance_turn(), so it must pop the
-        # schedule head itself (advance_turn covers every other
-        # driver).
-        sched = board.pending_moves[color]
-        board.extra_moves_this_turn = sched.pop(0) if sched else 0
 
         # Record turn start
         recorder.start_turn(color, display_num)

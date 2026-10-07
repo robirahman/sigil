@@ -21,6 +21,38 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-07: engine v25 (cache v65) -- learned generator policy + `nnue_spell` network eval.** `policy::SHIPPED_POLICY`
+(on, min_width 96) and `eval::SHIPPED_EVAL = "nnue_spell"` are what the site plays (wasm applies the policy once per
+module; `serve.py --policy`; Lazy SMP / parallel-root helper threads now inherit the policy). Release A/B, v25 vs v24,
+10 s/move, colour-swapped, 4 x c3d-highcpu-90: core draws +188.7 Elo [+171.8, +205.6] (2,160 games), draws holding a
+Tectonic/Providence spell +167.2 [+150.8, +183.6] (2,160). Components: policy +94 at 10 s on `tfit`, +118 on
+`tfit_spell_v2` (`reports/2026-10-step4.md`); network +79 [+64, +93] at 10 s over `tfit_spell_v2` (`reports/2026-10-step5.md`).
+Native/wasm tree parity: `tools/policy-wasm-parity.js` HASH 5a13846bc3228203 over 76 positions at depth 4 equals
+`examples/bench.rs`; `tools/nn-wasm-parity.js` 264/264. Tests 181/181, wasm smoke 5/5 + policy-off. wasm 1.11 MB (357 KB gzipped; v24 740 KB / 240 KB).
+
+**2026-10-06: engine v24 (cache v64) -- eval `tfit_spell_v2` shipped.** `eval::SHIPPED_EVAL` now names the site's eval
+(wasm default, puzzle judge, mate nominator, `serve.py`); harness defaults stay `tfit`. Per-spell sigil terms: the
+original fit `tfit_spell` scored +59 [+45, +72] at 3 s (2,580 games) and +50 [+33, +66] at 10 s (1,806) over `tfit`
+(`reports/2026-10-step2.md`); the v2 refit on Step 3 data ties it at 10 s, -4.8 [-25, +15] on core draws and
+-3.0 [-23, +17] on Tectonic/Providence draws (1,168 each, `reports/2026-10-step2b.md`), and covers ids 39-44.
+Same release fixes a Rock Slide x Bulwark replay bug (396e49b0): a stone stopped by a shield was recorded as
+dying AT the shield, so the replay's shield inference killed the shielded stone. Tests 173/173, wasm smoke 5/5.
+
+**2026-10-03: engine v23 (cache v62) -- v22 shipped; shield check skipped when Bulwark is not drawn.** Version
+A/B (`harness/ab_version.py`, new `runner.sh` `base-branch` build), v22 vs main's v21 on core-only draws, shipped
+config, 3 x c3d-highcpu-90: 1 s/move -10.5 Elo [-27, +6], 3 s/move -6.6 [-24, +11], pooled ~-9 [-21, +4] over
+1,056 games; depth -0.03 ply at both. v23 caches Bulwark's position on the Board so `shielded()` is one compare in
+games without it. Tests 168/168, wasm smoke green, parity harness 0 mismatches.
+
+**2026-10-03: engine v22 (cache v61) -- Tectonic and Providence.** Ids 39..44 are in scope: Fissure (every
+target; the blast takes both colours, the caster's own included), Rock Slide (every maximum-net outcome, exact DP
+port of `rock_slide_optimal_pushes`), Bulwark (shield vs enemy hard moves, conversion and destruction; step-by-step
+effects re-check it, simultaneous ones read it once), and the Providence bank (Dividend/Annuity/Endowment add 1/2/4;
+banked stones count as material; `Action::Place`, at most one optional placement per turn). SFN `x` walls and the
+`pm:` token round-trip. Tests 168/168, `wasm-smoke.js` green including three replay-verified Tectonic+Providence
+games, `harness/parity_tectonic_providence.py` against simboard.py. Not arena-tested; the eval has no positional
+terms for walls or banks beyond material.
+
 **2026-10-02: engine v21 (cache v56) -- Seal of Winter, not Autumn.** The conditional Syzygy charm targets
 (Splash, Charge, Lurk, Azimuth, Sprout, Comet) depend on Seal of Winter being the charm touching Syzygy: Winter
 forbids casting 1-node spells, so the charm cannot be cast to move its stone out. v20 used Seal of Autumn by

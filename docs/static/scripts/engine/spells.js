@@ -35,9 +35,9 @@ function spellPositionOfNode(nodeName) {
 
 // BFS flood-fill: return contiguous groups of stones of `targetColor`.
 // Each group is an array of node names.
-function findStoneGroups(board, targetColor) {
+function findStoneGroups(board, targetColor, exclude) {
 	const groups = [];
-	const visited = new Set();
+	const visited = new Set(exclude || []);
 	for (const start of NODE_ORDER) {
 		if (visited.has(start)) continue;
 		if (board.stones[start] !== targetColor) continue;
@@ -120,8 +120,9 @@ const SpellResolvers = {
 	// --- Fireblast ---
 	async fireblast(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
+		const shielded = bulwarkProtectedNodes(board);
 		for (const name of NODE_ORDER) {
-			if (board.stones[name] === enemy) {
+			if (board.stones[name] === enemy && !shielded.has(name)) {
 				for (const nb of ADJACENCY[name]) {
 					if (board.stones[nb] === color) {
 						board.stones[name] = null;
@@ -168,12 +169,14 @@ const SpellResolvers = {
 	// --- Hail Storm ---
 	async hail_storm(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
-		// Find which of the 6 non-charm spell positions have enemy stones
+		const shielded = bulwarkProtectedNodes(board);
+		// Find which of the 6 non-charm spell positions have destroyable
+		// (not Bulwark-shielded) enemy stones.
 		const hailableSpells = [];
 		for (let i = 1; i <= 2 * BOARD.perType; i++) {
 			const nodes = POSITIONS[i];
 			for (const n of nodes) {
-				if (board.stones[n] === enemy) {
+				if (board.stones[n] === enemy && !shielded.has(n)) {
 					hailableSpells.push(i);
 					break;
 				}
@@ -190,6 +193,7 @@ const SpellResolvers = {
 			});
 			const nodeName = resp;
 			if (!board.stones[nodeName] || board.stones[nodeName] !== enemy) continue;
+			if (shielded.has(nodeName)) continue;
 
 			let found = false;
 			for (let j = 0; j < hailableSpells.length; j++) {
@@ -214,15 +218,17 @@ const SpellResolvers = {
 	async bewitch(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
 
-		// Step 1: pick first enemy stone (must be adjacent to another enemy)
+		// Step 1: pick first enemy stone (must be adjacent to another enemy).
+		// Bulwark-shielded stones can't be converted.
+		const shielded = bulwarkProtectedNodes(board);
 		let firstNode = null;
 		while (true) {
 			const convertOneOptions = {};
 			for (const name of NODE_ORDER) {
-				if (board.stones[name] === enemy) {
+				if (board.stones[name] === enemy && !shielded.has(name)) {
 					let adjToEnemy = false;
 					for (const nb of ADJACENCY[name]) {
-						if (board.stones[nb] === enemy) { adjToEnemy = true; break; }
+						if (board.stones[nb] === enemy && !shielded.has(nb)) { adjToEnemy = true; break; }
 					}
 					if (adjToEnemy) convertOneOptions[name] = color;
 				}
@@ -251,7 +257,7 @@ const SpellResolvers = {
 		while (true) {
 			const convertTwoOptions = {};
 			for (const nb of ADJACENCY[firstNode]) {
-				if (board.stones[nb] === enemy) {
+				if (board.stones[nb] === enemy && !shielded.has(nb)) {
 					convertTwoOptions[nb] = color;
 				}
 			}
@@ -329,13 +335,14 @@ const SpellResolvers = {
 			}
 		}
 
-		// Destroy all adjacent enemies
+		// Destroy all adjacent enemies (Bulwark-shielded ones survive)
+		const shielded = bulwarkProtectedNodes(board);
 		const neighborUnion = new Set([
 			...ADJACENCY[firstNode],
 			...ADJACENCY[secondNode],
 		]);
 		for (const nb of neighborUnion) {
-			if (board.stones[nb] === enemy) {
+			if (board.stones[nb] === enemy && !shielded.has(nb)) {
 				board.stones[nb] = null;
 			}
 		}
@@ -373,8 +380,9 @@ const SpellResolvers = {
 			}
 		}
 
-		// Step 2: destroy 1 adjacent enemy
-		const adjEnemies = ADJACENCY[landedNode].filter(nb => board.stones[nb] === enemy);
+		// Step 2: destroy 1 adjacent enemy (not a Bulwark-shielded one)
+		const shielded = bulwarkProtectedNodes(board);
+		const adjEnemies = ADJACENCY[landedNode].filter(nb => board.stones[nb] === enemy && !shielded.has(nb));
 		if (adjEnemies.length === 0) return;
 		if (adjEnemies.length === 1) {
 			board.stones[adjEnemies[0]] = null;
@@ -646,7 +654,8 @@ const SpellResolvers = {
 
 		// Step 1: 1 blink move into the 1-node opposite spell
 		const charmNode = POSITIONS[opp.charm][0];
-		if (board.stones[charmNode] !== color && board.stones[charmNode] !== DESTROYED) {
+		if (board.stones[charmNode] !== color && board.stones[charmNode] !== DESTROYED
+		    && !violatesBulwark(board, color, charmNode)) {
 			const targets = { [charmNode]: color };
 			while (true) {
 				const resp = await getInput({
@@ -675,7 +684,8 @@ const SpellResolvers = {
 		for (let move = 0; move < 3; move++) {
 			const targets = {};
 			for (const n of sorceryNodes) {
-				if (board.stones[n] !== color && board.stones[n] !== DESTROYED) targets[n] = color;
+				if (board.stones[n] !== color && board.stones[n] !== DESTROYED
+				    && !violatesBulwark(board, color, n)) targets[n] = color;
 			}
 			if (Object.keys(targets).length === 0) {
 				emit({ type: 'message', message: 'Opposite 3-node spell fully yours; Syzygy ends.', awaiting: null });
@@ -894,9 +904,10 @@ const SpellResolvers = {
 		// Gust's own position has already been cleared by _castSpell
 		// before resolve runs. Pick up every enemy stone that touches a
 		// surviving caster stone.
+		const shielded = bulwarkProtectedNodes(board);
 		const picked = [];
 		for (const n of NODE_ORDER) {
-			if (board.stones[n] !== enemy) continue;
+			if (board.stones[n] !== enemy || shielded.has(n)) continue;
 			for (const nb of ADJACENCY[n]) {
 				if (board.stones[nb] === color) { picked.push(n); break; }
 			}
@@ -947,7 +958,10 @@ const SpellResolvers = {
 	async storm_front(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
 		for (let i = 0; i < 2; i++) {
-			const remaining = NODE_ORDER.some(n => board.stones[n] === enemy);
+			// One stone at a time: Bulwark is re-checked before each pick, so
+			// destroying the Bulwark stone first exposes the locked spell.
+			const shielded = bulwarkProtectedNodes(board);
+			const remaining = NODE_ORDER.some(n => board.stones[n] === enemy && !shielded.has(n));
 			if (!remaining) return;
 			while (true) {
 				const resp = await getInput({
@@ -955,7 +969,7 @@ const SpellResolvers = {
 					message: `Choose an enemy stone to destroy (${i + 1} of 2).`,
 					awaiting: 'node', moveoptions: {},
 				});
-				if (board.stones[resp] === enemy) {
+				if (board.stones[resp] === enemy && !shielded.has(resp)) {
 					board.stones[resp] = null;
 					if (board.lastPlay === resp) {
 						board.lastPlay = null;
@@ -973,7 +987,8 @@ const SpellResolvers = {
 	// --- Hurricane (destroy smallest contiguous enemy group) ---
 	async hurricane(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
-		const groups = findStoneGroups(board, enemy);
+		// Bulwark-shielded stones are ignored: groups form from destroyable stones.
+		const groups = findStoneGroups(board, enemy, bulwarkProtectedNodes(board));
 		if (groups.length === 0) return;
 
 		const minSize = Math.min(...groups.map(g => g.length));
@@ -1120,9 +1135,10 @@ const SpellResolvers = {
 	// --- Gloom: Decay (destroy every enemy stone touching 2+ empty nodes) ---
 	async destroy_exposed(board, color, spellName, getInput, emit) {
 		const enemy = board.enemy(color);
+		const shielded = bulwarkProtectedNodes(board);
 		const doomed = [];
 		for (const name of NODE_ORDER) {
-			if (board.stones[name] !== enemy) continue;
+			if (board.stones[name] !== enemy || shielded.has(name)) continue;
 			let empties = 0;
 			for (const nb of ADJACENCY[name]) if (board.stones[nb] === null) empties++;
 			if (empties >= 2) doomed.push(name);
@@ -1153,7 +1169,11 @@ const SpellResolvers = {
 
 		const converted = [];
 		while (converted.length < 3) {
-			const remaining = eligible.filter(n => !converted.includes(n) && board.stones[n] === enemy);
+			// One conversion at a time: Bulwark is re-checked before each, so
+			// converting the Bulwark stone first exposes the locked spell.
+			const shielded = bulwarkProtectedNodes(board);
+			const remaining = eligible.filter(n => !converted.includes(n) && board.stones[n] === enemy
+				&& !shielded.has(n));
 			if (remaining.length === 0) break;
 			const options = {};
 			for (const n of remaining) options[n] = color;
@@ -1255,16 +1275,20 @@ const SpellResolvers = {
 
 	// --- Panda: Shiver (swap the positions of any two stones) ---
 	async shiver(board, color, spellName, getInput, emit) {
-		const occupied = () => NODE_ORDER.filter(n => board.stones[n] !== null);
+		const occupied = () => NODE_ORDER.filter(n => board.stones[n] !== null && board.stones[n] !== DESTROYED
+			&& !bulwarkProtectedNodes(board).has(n));
 		if (occupied().length < 2) {
 			emit({ type: 'message', message: 'Need at least two stones to swap.', awaiting: null });
 			return;
 		}
+		// Bulwark-shielded stones can't be swapped (that would convert them).
+		const shielded = bulwarkProtectedNodes(board);
 		const pick = async (message, exclude) => {
 			while (true) {
 				const moveoptions = {};
 				for (const n of NODE_ORDER) {
-					if (board.stones[n] !== null && n !== exclude) moveoptions[n] = board.stones[n];
+					if (board.stones[n] !== null && board.stones[n] !== DESTROYED
+					    && n !== exclude && !shielded.has(n)) moveoptions[n] = board.stones[n];
 				}
 				const resp = await getInput({ type: 'message', message, awaiting: 'node', moveoptions });
 				if (moveoptions[resp]) return resp;
@@ -1379,16 +1403,17 @@ const SpellResolvers = {
 			emit({ type: 'message', message: 'Your lock is not higher than the enemy lock; Residue Mixture fizzles.', awaiting: null });
 			return;
 		}
-		const hasEnemy = NODE_ORDER.some(n => board.stones[n] === enemy);
+		const shielded = bulwarkProtectedNodes(board);
+		const hasEnemy = NODE_ORDER.some(n => board.stones[n] === enemy && !shielded.has(n));
 		if (hasEnemy) {
 			while (true) {
 				const moveoptions = {};
-				for (const n of NODE_ORDER) if (board.stones[n] === enemy) moveoptions[n] = enemy;
+				for (const n of NODE_ORDER) if (board.stones[n] === enemy && !shielded.has(n)) moveoptions[n] = enemy;
 				const resp = await getInput({
 					type: 'message', message: 'Choose an enemy stone to convert to your color.',
 					awaiting: 'node', moveoptions,
 				});
-				if (board.stones[resp] === enemy) {
+				if (moveoptions[resp]) {
 					board.stones[resp] = color;
 					emit({ type: 'new_stone_animation', color, node: resp });
 					board.update();
@@ -1485,19 +1510,20 @@ const SpellResolvers = {
 	async moth_plague(board, color, spellName, getInput, emit) {
 		for (let i = 0; i < 3; i++) {
 			const enemy = board.enemy(color);
-			if (!NODE_ORDER.some(n => board.stones[n] === enemy)) {
+			const pushable = n => board.stones[n] === enemy && !violatesBulwark(board, color, n);
+			if (!NODE_ORDER.some(pushable)) {
 				emit({ type: 'message', message: 'No enemy stones remain.', awaiting: null });
 				break;
 			}
 			let chosen = null;
 			while (chosen === null) {
 				const moveoptions = {};
-				for (const n of NODE_ORDER) if (board.stones[n] === enemy) moveoptions[n] = enemy;
+				for (const n of NODE_ORDER) if (pushable(n)) moveoptions[n] = enemy;
 				const resp = await getInput({
 					type: 'message', message: `Choose an enemy stone to push (${i + 1} of 3).`,
 					awaiting: 'node', moveoptions,
 				});
-				if (board.stones[resp] === enemy) chosen = resp;
+				if (moveoptions[resp]) chosen = resp;
 			}
 			await doPushEnemy(board, chosen, color, getInput, emit);
 			board.update();
@@ -1569,29 +1595,27 @@ const SpellResolvers = {
 			}
 		}
 
-		const enemy = board.enemy(color);
-		// Adjacent nodes: destroy enemy stones only (revert to normal empty).
-		for (const n of ADJACENCY[target]) {
-			if (board.stones[n] === enemy) {
-				board.stones[n] = null;
-				emit({ type: 'crush_animation', crushed_color: enemy, node: n });
-				if (board.lastPlay === n) {
-					board.lastPlay = null;
-					board.lastPlayer = null;
-				}
+		// Adjacent stones of either color are destroyed; a Bulwark-shielded
+		// target keeps its stone and no wall forms (fissureBlast, constants.js).
+		const { destroyed, wall } = fissureBlast(board.stones, target, bulwarkProtectedNodes(board));
+		for (const n of destroyed) {
+			emit({ type: 'crush_animation', crushed_color: board.stones[n], node: n });
+			board.stones[n] = null;
+			if (board.lastPlay === n) {
+				board.lastPlay = null;
+				board.lastPlayer = null;
 			}
 		}
-		// Target node: permanently destroyed (a wall), regardless of occupant.
-		const occupant = board.stones[target];
-		if (occupant === 'red' || occupant === 'blue') {
-			emit({ type: 'crush_animation', crushed_color: occupant, node: target });
+		if (wall) {
+			board.stones[wall] = DESTROYED;
+			if (board.lastPlay === wall) {
+				board.lastPlay = null;
+				board.lastPlayer = null;
+			}
+			emit({ type: 'fissure_wall', node: wall });
+		} else {
+			emit({ type: 'message', message: 'Bulwark shields the stone on ' + target + ': no void forms.', awaiting: null });
 		}
-		board.stones[target] = DESTROYED;
-		if (board.lastPlay === target) {
-			board.lastPlay = null;
-			board.lastPlayer = null;
-		}
-		emit({ type: 'fissure_wall', node: target });
 		board.update();
 		emit(board.getBoardStatePayload());
 	},
@@ -1604,7 +1628,10 @@ const SpellResolvers = {
 	// pushes resolve at once via resolveRockSlide (constants.js), with one
 	// update() at the end.
 	async rock_slide(board, color, spellName, getInput, emit) {
-		const sources = rockSlideSources(board.stones, color);
+		// Bulwark-shielded stones are never pushed, and act as walls for
+		// stones pushed into them.
+		const shielded = bulwarkProtectedNodes(board);
+		const sources = rockSlideSources(board.stones, color, shielded);
 		if (!sources.length) {
 			emit({ type: 'message', message: 'No enemy stones border you.', awaiting: null });
 			return;
@@ -1643,7 +1670,7 @@ const SpellResolvers = {
 		emit({ type: 'push_arrows', arrows: [] });
 
 		const before = Object.assign({}, board.stones);
-		const { final, lost } = resolveRockSlide(before, pushes);
+		const { final, lost } = resolveRockSlide(before, pushes, shielded);
 		Object.assign(board.stones, final);
 		for (const p of pushes) {
 			emit({ type: 'push_animation', pushed_color: before[p.from], starting_node: p.from, ending_node: p.to });
@@ -1663,17 +1690,13 @@ const SpellResolvers = {
 		emit(board.getBoardStatePayload());
 	},
 
-	// --- Providence: Dividend / Annuity / Endowment (scheduled extra moves) ---
-	async schedule_moves(board, color, spellName, getInput, emit) {
-		const turns = (CORE_SPELLS[spellName] && CORE_SPELLS[spellName].turns) || 1;
-		const sched = board.pendingMoves[color];
-		while (sched.length < turns) sched.push(0);
-		for (let i = 0; i < turns; i++) sched[i] += 1;
+	// --- Providence: Dividend / Annuity / Endowment (bank 1 / 2 / 4 stones) ---
+	async bank_stones(board, color, spellName, getInput, emit) {
+		const n = (CORE_SPELLS[spellName] && CORE_SPELLS[spellName].stones) || 1;
+		board.providenceBank[color] += n;
 		const pname = color === 'red' ? 'Red' : 'Blue';
-		const when = turns === 1
-			? 'at the beginning of their next turn'
-			: 'at the beginning of each of their next ' + turns + ' turns';
-		emit({ type: 'message', message: pname + ' will make 1 extra move ' + when + '.', awaiting: null });
+		emit({ type: 'message', message: pname + ' banks ' + n + ' stone' + (n === 1 ? '' : 's')
+			+ ' (Providence bank: ' + board.providenceBank[color] + ').', awaiting: null });
 		board.update();
 		emit(board.getBoardStatePayload());
 	},

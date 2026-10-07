@@ -1,10 +1,14 @@
 //! Compound turns: generation, enumeration and application.
 //!
-//! Turn shape in this scope (Aftershock's mandatory burn phase and Providence's
-//! extra-move phase both belong to deferred packs):
+//! Turn shape (Aftershock's mandatory burn phase belongs to a retired pack):
 //!
 //!   competitive opening (turn_counter <= 2): one free blink onto any EMPTY node
-//!   otherwise: move -> { pass | dash -> { pass | cast } | cast -> recurse }
+//!   otherwise: move -> [place] -> { pass | dash -> { pass | cast } | cast -> recurse }
+//!
+//! `place` is Providence's optional placement: a turn that starts with a
+//! nonempty bank may place ONE banked stone after the regular move (or, when no
+//! regular move is legal, in its stead) -- an ordinary adjacent soft or hard
+//! move that Seal of Wind / the enemy Seal of Stone do not touch.
 //!
 //! Up to TWO casts per turn: the first freely, the second only while the caster
 //! holds Seal of Summer charged. `can_spell` gates CHARMS only — non-charms remain
@@ -52,6 +56,8 @@ pub enum Action {
     /// `Board::keep_options`. `keep = 0` is that order, so a Turn built before
     /// this field existed still means what it meant.
     Cast { pos: u8, keep: u8, outcome: u16 },
+    /// Providence: place one banked stone (an ordinary adjacent move).
+    Place { node: u8, push_to: Option<u8> },
     Pass,
 }
 
@@ -198,6 +204,10 @@ impl Board {
                 Action::Blink { node, push_to } | Action::Move { node, push_to } => {
                     self.do_move_with(node, push_to, c);
                 }
+                Action::Place { node, push_to } => {
+                    self.bank[c.idx()] = self.bank[c.idx()].saturating_sub(1);
+                    self.do_move_with(node, push_to, c);
+                }
                 Action::Dash { sacs, n_sacs, node, push_to } => {
                     for i in 0..n_sacs as usize {
                         self.stones[c.idx()] &= !(1u64 << sacs[i]);
@@ -210,7 +220,7 @@ impl Board {
                     self.cast_clear_and_keep(pos as usize, c, keep as usize);
                     let (outs, _) = self.resolve_outcomes(pos as usize, c, OUTCOME_CAP);
                     if let Some(b) = outs.get(outcome as usize) {
-                        self.stones = b.stones;
+                        self.adopt(&b);
                     } else {
                         // Fall back to the greedy resolution rather than silently
                         // applying nothing, and only if the index is out of range.
@@ -269,9 +279,9 @@ impl Board {
             // No legal first move (enemy Seal of Stone forcing soft moves with
             // nowhere soft to go) only invalidates the MOVE. A turn is
             // move + optional dash + optional cast (Robi's ruling, 2026-08-26),
-            // so the dash and cast options — and the bare pass — remain.
-            base.enumerate_post_move(c, Turn::new(), true, true, true,
-                                     &mut out, cap, &mut st);
+            // so the dash and cast options — and the bare pass — remain, as
+            // does a Providence placement (which Stone does not restrict).
+            base.enumerate_with_placement(c, Turn::new(), &mut out, cap, &mut st);
             st.turns = out.len();
             st.turns_with_greedy_cast = out.iter().filter(|t| t.greedy_casts > 0).count();
             return (out, st);
@@ -286,13 +296,40 @@ impl Board {
             } else {
                 Action::Move { node, push_to }
             });
-            b.enumerate_post_move(c, first, true, true, true, &mut out, cap, &mut st);
+            b.enumerate_with_placement(c, first, &mut out, cap, &mut st);
             if st.truncated { break; }
         }
 
         st.turns = out.len();
         st.turns_with_greedy_cast = out.iter().filter(|t| t.greedy_casts > 0).count();
         (out, st)
+    }
+
+    /// Every legal Providence placement for `c` on this (post-move) board, with
+    /// push destinations: none unless the bank holds a stone.
+    pub fn placement_variants(&self, c: Color) -> Vec<(u8, Option<u8>)> {
+        if self.bank[c.idx()] == 0 || self.outcome != Outcome::Ongoing { return Vec::new(); }
+        self.move_variants(self.all_moveable(c), c)
+    }
+
+    /// Apply a Providence placement.
+    pub fn do_placement(&mut self, node: u8, push_to: Option<u8>, c: Color) {
+        self.bank[c.idx()] = self.bank[c.idx()].saturating_sub(1);
+        self.do_move_with(node, push_to, c);
+    }
+
+    /// Post-move continuation, without and then with the optional placement.
+    fn enumerate_with_placement(&self, c: Color, so_far: Turn,
+                                out: &mut Vec<Turn>, cap: usize, st: &mut EnumStats) {
+        self.enumerate_post_move(c, so_far, true, true, true, out, cap, st);
+        if st.truncated { return; }
+        for (node, push_to) in self.placement_variants(c) {
+            let mut b = *self;
+            b.do_placement(node, push_to, c);
+            b.enumerate_post_move(c, so_far.push(Action::Place { node, push_to }),
+                                  true, true, true, out, cap, st);
+            if st.truncated { return; }
+        }
     }
 
     /// Convenience with a generous cap.
@@ -370,7 +407,7 @@ impl Board {
                     if trunc { st.resolver_truncated = true; }
                     for (i, ob) in outs.iter().enumerate() {
                         let mut bs = cleared;
-                        bs.stones = ob.stones;
+                        bs.adopt(&ob);
                         bs.update();
                         bs.finish_cast(id, c);
                         bs.update();
@@ -429,7 +466,7 @@ impl Board {
                     // with the nearest enumerated turn being the same
                     // move+dash+cast ending in Pass.
                     let mut bs = cleared;
-                    bs.stones = ob.stones;
+                    bs.adopt(&ob);
                     bs.update();
                     bs.finish_cast(id, c);
                     bs.update();
@@ -461,6 +498,7 @@ pub const TURN_LEVEL_COMPLETE: &[&str] = &[
     "dash sacrifice selection (all 1- or 2-subsets, Seal of Autumn aware)",
     "dash move target and its push destination",
     "spell selection, and second cast via Seal of Summer",
+    "Providence placement: whether to place, where, and its push destination",
 ];
 
 /// Resolver-level choice points, now ALSO enumerated (see `cast_enum.rs`).
@@ -502,6 +540,11 @@ impl Board {
                     acts.push(JsAct::mv(node, push_to, is_enemy, blink));
                     b.do_move_with_pub(node, push_to, c);
                 }
+                Action::Place { node, push_to } => {
+                    let is_enemy = b.theirs(c) & (1u64 << node) != 0;
+                    acts.push(JsAct::providence_mv(node, push_to, is_enemy));
+                    b.do_placement(node, push_to, c);
+                }
                 Action::Dash { sacs, n_sacs, node, push_to } => {
                     let cost = b.dash_cost(c);
                     let list = sacs[..n_sacs as usize].to_vec();
@@ -537,7 +580,7 @@ impl Board {
                     let (outs, _tr) = b.resolve_outcomes_logged(pos as usize, c, OUTCOME_CAP);
                     if let Some((ob, log)) = outs.get(outcome as usize) {
                         acts.extend(log.iter().cloned());
-                        b.stones = ob.stones;
+                        b.adopt(&ob);
                     }
                     b.update();
                     b.finish_cast(id, c);

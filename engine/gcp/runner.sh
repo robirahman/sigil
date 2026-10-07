@@ -85,6 +85,43 @@ python3 -m venv $WORK/venv
 $WORK/venv/bin/pip -q install --upgrade pip maturin numpy 2>&1 | tail -1
 cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2
 export SCRATCH=$WORK
+# Arena harnesses (ab_search.py) keep every position as training data when this is
+# set; the uploader below ships out/data/*.npz to runs/<run>/data/. The smoke arm
+# runs with it unset so its file cannot collide with shard 0's.
+export SIGIL_ARENA_DATA=$WORK/out/data
+mkdir -p $SIGIL_ARENA_DATA
+
+# Optional BASE build for engine-version A/Bs (harness ab_version.py): the
+# `base-branch` metadata names a branch whose engine is built into a second
+# extension module, exported as $SIGIL_BASE_MODULE.
+BASE_BRANCH=$(md base-branch || true)
+if [ -n "$BASE_BRANCH" ]; then
+  cd $WORK
+  git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$BASE_BRANCH" \
+    https://github.com/robirahman/sigil.git base >/dev/null 2>&1 \
+    || { echo "FATAL: base clone failed"; shutdown -h now; exit 1; }
+  cd base && git sparse-checkout init --cone >/dev/null 2>&1
+  git sparse-checkout set engine >/dev/null 2>&1
+  git checkout >/dev/null 2>&1
+  echo "base at $(git log --oneline -1)"
+  echo "BASE $(git log --oneline -1)" >> $WORK/out/COMMIT.txt
+  cd engine && cargo build --release 2>&1 | tail -1
+  export SIGIL_BASE_MODULE=$WORK/base/engine/target/release/libsigil_engine.so
+  [ -f "$SIGIL_BASE_MODULE" ] || { echo "FATAL: base build failed"; shutdown -h now; exit 1; }
+fi
+
+# Ship an .npz only if it changed since it was last shipped. A data run writes
+# thousands of immutable chunk files per VM (selfplay_v2.py), and re-sending every
+# one each cycle -- and again, serially, after the last shard -- kept a 40-VM
+# fleet idle for ~30 minutes after its shards had finished. The stamp copies the
+# file's mtime from BEFORE the upload, so a file rewritten mid-upload ships again.
+SHIPPED=$WORK/out/.shipped; mkdir -p "$SHIPPED"
+ship_npz() {
+  local f=$1 st="$SHIPPED/$(basename "$1").$(dirname "$1" | tr '/' '_')"
+  [ -e "$st" ] && [ ! "$f" -nt "$st" ] && return 0
+  touch -r "$f" "$st.tmp"
+  gcs_put "$f" "runs/$RUN/data/$(basename "$f")" && mv "$st.tmp" "$st"
+}
 
 # Uploads .npz as well as logs. Data-generation shards checkpoint their npz in
 # place, so shipping them continuously is what makes a watchdog kill survivable:
@@ -94,7 +131,7 @@ export SCRATCH=$WORK
     for f in $WORK/out/*.log $WORK/out/*.txt; do [ -e "$f" ] || continue
       gcs_put "$f" "runs/$RUN/live/$(basename "$f")" 2>/dev/null || true; done
     for f in $WORK/out/*.npz $WORK/out/data/*.npz; do [ -e "$f" ] || continue
-      gcs_put "$f" "runs/$RUN/data/$(basename "$f")" 2>/dev/null || true; done
+      ship_npz "$f" 2>/dev/null || true; done
     sleep 120; done ) &
 UPLOADER=$!
 
@@ -108,7 +145,7 @@ if [ -n "$SMOKE" ]; then
   # smoke cannot burn the VM, not that every harness fits one number.
   SMOKE_TIMEOUT=$(md smoke-timeout); : "${SMOKE_TIMEOUT:=900}"
   echo "smoke timeout ${SMOKE_TIMEOUT}s"
-  if ! timeout "$SMOKE_TIMEOUT" $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
+  if ! SIGIL_ARENA_DATA= timeout "$SMOKE_TIMEOUT" $WORK/venv/bin/python "$WORK/repo/engine/harness/$HARNESS" \
        $(echo "$SMOKE" | tr ',' ' ') > $WORK/out/smoke.log 2>&1; then
     echo "FATAL: smoke failed"; sed -n '1,40p' $WORK/out/smoke.log
     gcs_put "$WORK/out/smoke.log" "runs/$RUN/smoke_FAILED.log"; shutdown -h now; exit 1
@@ -160,7 +197,7 @@ done
 # data-generation shards emit .npz artefacts
 for f in $WORK/out/*.npz $WORK/out/data/*.npz; do
   [ -e "$f" ] || continue
-  gcs_put "$f" "runs/$RUN/data/$(basename "$f")" || true
+  ship_npz "$f" || true
 done
 gcs_put "$WORK/out/summary.txt" "runs/$RUN/summary.txt" || true
 echo "DONE $(date -u +%FT%TZ) $COMMIT" > $WORK/out/COMPLETE

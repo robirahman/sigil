@@ -119,14 +119,10 @@ function _minimaxPosHash(board, color) {
 	s += '|' + board.spellCounter.red + ',' + board.spellCounter.blue;
 	s += '|' + (board.lock.red || '-') + ',' + (board.lock.blue || '-');
 	s += '|' + (board.springlock.red || '-') + ',' + (board.springlock.blue || '-');
-	// Providence: pending schedules and the popped extras counter change
-	// legal moves and evaluation — hash them. Suffix only when non-empty so
-	// legacy positions keep their exact keys.
-	if (board.pendingMoves.red.length || board.pendingMoves.blue.length
-			|| board.extraMovesThisTurn) {
-		s += '|P' + board.pendingMoves.red.join(',')
-			+ '/' + board.pendingMoves.blue.join(',')
-			+ '/' + board.extraMovesThisTurn;
+	// Providence: banks change legal moves and evaluation — hash them.
+	// Suffix only when nonempty so legacy positions keep their exact keys.
+	if (board.providenceBank.red || board.providenceBank.blue) {
+		s += '|P' + board.providenceBank.red + '/' + board.providenceBank.blue;
 	}
 	return s;
 }
@@ -151,7 +147,7 @@ function _turnSig(turn) {
 		parts.push([
 			a.type, a.node || '', a.pushed_to || '', a.spell || '',
 			sac, kept, a.node2 || '', dest,
-			conv, a.wall || '', pushes, a.turns || '', nds,
+			conv, a.wall || '', pushes, a.banked || '', a.providence ? 'P' : '', nds,
 		].join(':'));
 	}
 	return parts.join(';');
@@ -212,6 +208,7 @@ function _minimaxApplyTurn(board, turn, color) {
 	sim.crushedThisTurn = false;
 	for (const action of turn.actions) {
 		const t = action.type;
+		if (action.providence) sim.providenceBank[color]--;
 		if (t === 'move') sim.stones[action.node] = color;
 		else if (t === 'hard_move') sim._pushEnemy(action.node, color, action.pushed_to);
 		else if (t === 'blink') {
@@ -278,15 +275,14 @@ function _minimaxApplyTurn(board, turn, color) {
 			if (action.wall) sim.stones[action.wall] = DESTROYED;
 		}
 		else if (t === 'rock_slide') {
-			const { final, lost } = resolveRockSlide(sim.stones, action.pushes || []);
+			const pushes = action.pushes || [];
+			const { final, lost } = resolveRockSlide(sim.stones, pushes,
+				rockSlideReplayShielded(sim.stones, pushes, action.destroyed));
 			Object.assign(sim.stones, final);
 			if (lost.length) sim.crushedThisTurn = true;
 		}
-		else if (t === 'schedule_moves') {
-			const sched = sim.pendingMoves[color];
-			const n = action.turns || 0;
-			while (sched.length < n) sched.push(0);
-			for (let i = 0; i < n; i++) sched[i] += 1;
+		else if (t === 'bank_stones') {
+			sim.providenceBank[color] += action.banked || 0;
 		}
 		sim.update();
 	}
