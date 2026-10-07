@@ -2,7 +2,7 @@
 
     selfplay_v2.py <games> <depth> <out_dir> [explore_pct=0.10] [random_ply_pct=0.08]
                    [human_frac=0.5] [lines=-] [stop_after_s=0] [explore_k=8]
-                   [comp_frac=-1]
+                   [comp_frac=0.67]
 
 The shard offset comes from $SIGIL_SHARD_OFF (never argv), so the argument list
 composes with `gcp/runner.sh`. Every position of every game is searched at the
@@ -41,12 +41,15 @@ repetition history. The rest are fresh draws: a quarter competitive, and half
 drawn from all 45 spells the engine plays (core + Tectonic + Providence), half
 from the 39 core spells.
 
-`comp_frac` (round 3, 2026-10-07): when >= 0, the competitive variant's share
-of ALL games. Fresh draws are competitive with that probability, and a human
-start is drawn from the competitive human games (competitive and
-competitive_deathmatch) with that probability, else from the others. The
-default -1 keeps rounds 1-2: a quarter of fresh draws competitive, human
-starts drawn from all games (37% of them competitive). The opening book is
+`comp_frac` (round 3, 2026-10-07): the competitive variant's share of ALL
+games. POLICY (Robi, 2026-10-07): the competitive variant must always be a
+strict MAJORITY of self-play training data (the goal is superhuman play in
+competitive games too), so the default is COMP_FRAC_DEFAULT = 0.67. Fresh draws
+are competitive with that probability, and a human start is drawn from the
+competitive human games (competitive and competitive_deathmatch) with that
+probability, else from the others. Pass -1 only to reproduce rounds 1-2 (a
+quarter of fresh draws competitive, human starts drawn from all games, about
+30% competitive overall). The opening book is
 off, as shipped since v27 (set explicitly). A share `random_ply_pct` of plies plays a uniformly
 random legal turn instead of the searched one (the position is still labelled).
 
@@ -86,6 +89,7 @@ CORE = ([0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36],
 NEW_PACKS = ([39, 44], [40, 43], [41, 42])
 OLD_RULES = {'Fissure', 'Rock_Slide', 'Bulwark', 'Dividend', 'Annuity', 'Endowment'}
 KIND_FRESH_STD, KIND_FRESH_COMP, KIND_HUMAN = 0, 1, 2
+COMP_FRAC_DEFAULT = 0.67     # competitive majority, always (see the docstring)
 
 
 def engine_version():
@@ -282,7 +286,7 @@ def main():
     lines = a[6] if len(a) > 6 and a[6] != '-' else None
     stop_after = float(a[7]) if len(a) > 7 else 0.0
     explore_k = int(a[8]) if len(a) > 8 else 8
-    comp_frac = float(a[9]) if len(a) > 9 else -1.0
+    comp_frac = float(a[9]) if len(a) > 9 else COMP_FRAC_DEFAULT
     off = shard_offset()
     # Thread-local and off by default in Python: set it explicitly, every run.
     se.set_policy(*POLICY)
