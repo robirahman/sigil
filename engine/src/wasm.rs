@@ -392,6 +392,16 @@ pub fn nn_eval_raw(spells: Vec<u8>, mine: u64, theirs: u64, red: bool) -> i32 {
     crate::nn::NNUE_SPELL.net().eval_raw(&sp, mine, theirs, c)
 }
 
+/// `nn_eval_raw` for any baked network by preset name (i32::MIN if unknown), for
+/// `tools/nn-wasm-parity.js NET GOLDEN`.
+#[wasm_bindgen]
+pub fn nn_eval_raw_net(name: &str, spells: Vec<u8>, mine: u64, theirs: u64, red: bool) -> i32 {
+    let Some(spec) = crate::nn::by_name(name) else { return i32::MIN };
+    let sp: [u8; 9] = match spells.try_into() { Ok(a) => a, Err(_) => return i32::MIN };
+    let c = if red { crate::board::Color::Red } else { crate::board::Color::Blue };
+    spec.net().eval_raw(&sp, mine, theirs, c)
+}
+
 #[wasm_bindgen]
 pub fn engine_info() -> String {
     format!("{{\"spells\":{},\"nodes\":{},\"candidates\":{:?}}}",
