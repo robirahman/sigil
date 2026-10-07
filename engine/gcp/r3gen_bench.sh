@@ -48,18 +48,21 @@ P=harness/positions_midgame.txt
 N=$(nproc)
 if [ "$JOBS" = all ] || [ "$JOBS" = bench ]; then
   # node cost: each config twice per depth, at most N/2 at a time (c3d vCPUs are hyperthreads)
-  i=0
+  # wait on the bench PIDs only: a bare `wait` also waits for the uploader loop and
+  # the watchdog, which never exit (the first run hung here)
+  i=0; BP=()
   for rep in 1 2; do
     for d in 4 5; do
       for cfg in off $EXPLORE; do
         name=$(echo "$cfg" | tr ',' '_')
         if [ "$cfg" = off ]; then args=""; else args="--explore $cfg"; fi
         ( $B $P $d --eval nnue_spell3 --policy 96 $args | grep -E "TOTAL|SMP" > $W/out/bench_${name}_d${d}_r${rep}.txt ) &
-        i=$((i+1)); if [ $((i % (N / 2))) = 0 ]; then wait; fi
+        BP+=($!)
+        i=$((i+1)); if [ $((i % (N / 2))) = 0 ]; then wait "${BP[@]}"; BP=(); fi
       done
     done
   done
-  wait
+  [ ${#BP[@]} -gt 0 ] && wait "${BP[@]}"
 fi
 if [ "$JOBS" = all ] || [ "$JOBS" = sees ]; then
   cd $W/repo
