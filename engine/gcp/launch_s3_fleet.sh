@@ -19,6 +19,7 @@ DEPTH=$1; STOP=$2; MAXH=$3; shift 3
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LINES=${LINES_GS:-gs://focus-surfer-494820-g0-sigil/data/s3/human_starts_2026-10-06.json}
 FIRST=${FIRST_VM:-0}
+PREFIX=${VM_PREFIX:-sigil-s3}   # round 2 (v25 data): VM_PREFIX=sigil-r2d FIRST_VM=100
 ARMS=$(mktemp)
 printf '%s' "1000,$DEPTH,/opt/sigil/out/data,0.10,0.08,0.5,$LINES,$STOP,8" > "$ARMS"
 SMOKE="2,3,/opt/sigil/out/smoke,0.5,0.08,0.5,$LINES,0,4"
@@ -29,8 +30,8 @@ for spec in "$@"; do
   vcpus=${machine##*-}
   for ((k=0; k<count; k++)); do
     SPOT=1 BRANCH=${BRANCH:-train-s3-data-v2} SHARD_BASE=$((i * 200)) SMOKE_TIMEOUT=900 \
-      bash "$HERE/launch.sh" "sigil-s3-$i" selfplay_v2.py "$ARMS" "$SMOKE" "$vcpus" "$zone" "$MAXH" "$machine" \
-      2>&1 | grep -E '^RUN=|RUNNING|ERROR|^[0-9]{8}T' || echo "LAUNCH FAILED sigil-s3-$i $zone"
+      bash "$HERE/launch.sh" "$PREFIX-$i" selfplay_v2.py "$ARMS" "$SMOKE" "$vcpus" "$zone" "$MAXH" "$machine" \
+      2>&1 | grep -E '^RUN=|RUNNING|ERROR|^[0-9]{8}T' || echo "LAUNCH FAILED $PREFIX-$i $zone"
     i=$((i + 1))
   done
 done

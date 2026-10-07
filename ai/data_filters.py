@@ -139,6 +139,26 @@ def sfn_spell_names(sfn):
     return [s.split('~')[0] for s in head.split('/', 1)[1].split(',') if s]
 
 
+# The rule change went live with PR #10 (merged 2026-10-07 00:23 UTC; the
+# Firebase purge of old-rule games ran right after). Records holding one of the
+# spells above are old-rules only if they predate this; later ones are valid.
+OCT2026_RULE_CHANGE_LIVE = datetime(2026, 10, 7, 0, 30)   # UTC
+OCT2026_RULE_CHANGE_LIVE_MS = int(
+    (OCT2026_RULE_CHANGE_LIVE - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+
 def has_oct2026_rule_change_spell(sfn):
     """True iff the SFN's draw holds a spell the 2026-10 rule change rewrote."""
     return any(s in OCT2026_RULE_CHANGE_SPELLS for s in sfn_spell_names(sfn))
+
+
+def is_pre_oct2026_rule_change_record(sfn, played_ms):
+    """True iff the record holds a rewritten spell AND was played before the
+    change went live (`played_ms`: the game's epoch-ms timestamp). A record
+    with no timestamp counts as old: the old-rule games were purged, so an
+    undated one is suspect."""
+    if not has_oct2026_rule_change_spell(sfn):
+        return False
+    if not played_ms:
+        return True
+    return int(played_ms) < OCT2026_RULE_CHANGE_LIVE_MS
