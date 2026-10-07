@@ -617,7 +617,8 @@ impl PyBoard {
                         force_hints=None, root_resort=None, aspiration_steps=None,
                         adopt_partial=None, elastic=None, pvs=None, lmr=None,
                         use_history=None, exact_clock=None, nmp=None, lmr_quiet=None,
-                        tact_ext=None, singular=None, threads=None, smp_mode=None))]
+                        tact_ext=None, singular=None, threads=None, smp_mode=None,
+                        split_workers=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -642,24 +643,53 @@ impl PyBoard {
                  tact_ext: Option<(u8, i32)>, singular: Option<i32>,
                  // Search threads; None leaves the engine default (1). `smp_mode`
                  // 0 = Lazy SMP, 1 = parallel root (Search::set_smp_mode).
-                 threads: Option<usize>, smp_mode: Option<u8>)
+                 threads: Option<usize>, smp_mode: Option<u8>,
+                 // Browser option A emulation (2026-10 round 2): k independent
+                 // engines, each with its own table, searching root part i of k
+                 // (`Search::set_root_split`) on its own thread for the same time,
+                 // merged exactly as rust-ai.js `pickSplitResult` merges. None or
+                 // 1 = the ordinary single search.
+                 split_workers: Option<usize>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
         let c = self.b.to_move;
-        let mut s = crate::search::Search::new(tt_bits);
-        configure_search(&mut s, window, width_scale, eval_name, legacy_order,
-                         merge_min_width, key_dash_reasons, key_dash_min_width,
-                         key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
-                         rank_oversample, width_shape, keep_window, mate_guard,
-                         force_hints, root_resort, aspiration_steps, adopt_partial,
-                         elastic, pvs, lmr, use_history, exact_clock, nmp, lmr_quiet,
-                         tact_ext, singular)?;
-        if let Some(n) = threads { s.set_threads(n); }
-        if let Some(m) = smp_mode { s.set_smp_mode(m); }
-        for k in history { s.add_history(k); }
+        let mk = || -> PyResult<crate::search::Search> {
+            let mut s = crate::search::Search::new(tt_bits);
+            configure_search(&mut s, window, width_scale, eval_name, legacy_order,
+                             merge_min_width, key_dash_reasons, key_dash_min_width,
+                             key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
+                             rank_oversample, width_shape, keep_window, mate_guard,
+                             force_hints, root_resort, aspiration_steps, adopt_partial,
+                             elastic, pvs, lmr, use_history, exact_clock, nmp, lmr_quiet,
+                             tact_ext, singular)?;
+            if let Some(n) = threads { s.set_threads(n); }
+            if let Some(m) = smp_mode { s.set_smp_mode(m); }
+            for &k in &history { s.add_history(k); }
+            Ok(s)
+        };
         let t = Instant::now();
-        let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);
+        let k = split_workers.unwrap_or(1);
+        let (best, score, st) = if k > 1 {
+            let mut parts: Vec<crate::search::Search> = (0..k)
+                .map(|i| { let mut s = mk()?; s.set_root_split(i as u32, k as u32); Ok(s) })
+                .collect::<PyResult<_>>()?;
+            // Every generator switch (incl. the thread-local policy) is copied
+            // into each worker thread, as each browser worker applies the
+            // shipped policy in its own module.
+            let sw = crate::search::ThreadSwitches::capture();
+            let b = self.b;
+            let results: Vec<_> = std::thread::scope(|sc| {
+                let hs: Vec<_> = parts.iter_mut().map(|s| {
+                    let sw = sw.clone();
+                    sc.spawn(move || { sw.apply(); s.go(&b, c, max_depth, time_ms) })
+                }).collect();
+                hs.into_iter().map(|h| h.join().expect("split worker panicked")).collect()
+            });
+            split_pick(results)
+        } else {
+            mk()?.go(&self.b, c, max_depth, time_ms)
+        };
         let dt = t.elapsed().as_secs_f64();
         if let Some(turn) = best {
             self.b.apply_turn(&turn, c);
@@ -2152,6 +2182,29 @@ fn human_move_dash_turn(sfn: &str, result_sfn: &str)
 // ---------------------------------------------------------------------------
 
 use crate::turn::{Action as PAction, Turn as PTurn};
+/// rust-ai.js `pickSplitResult`, natively: among the parts that returned a move,
+/// prefer those that completed a depth; take the highest root score, ties to the
+/// deeper part; nodes are summed over every part that returned a move.
+fn split_pick(results: Vec<(Option<crate::turn::Turn>, i32, crate::search::SearchStats)>)
+    -> (Option<crate::turn::Turn>, i32, crate::search::SearchStats)
+{
+    let total: u64 = results.iter().filter(|r| r.0.is_some()).map(|r| r.2.nodes).sum();
+    let ok: Vec<usize> = (0..results.len()).filter(|&i| results[i].0.is_some()).collect();
+    if ok.is_empty() {
+        return results.into_iter().next().expect("at least one split part");
+    }
+    let done: Vec<usize> = ok.iter().copied().filter(|&i| results[i].2.depth_completed > 0).collect();
+    let pool = if done.is_empty() { ok } else { done };
+    let mut best = pool[0];
+    for &i in &pool {
+        let (r, b) = (&results[i], &results[best]);
+        if r.1 > b.1 || (r.1 == b.1 && r.2.depth_completed > b.2.depth_completed) { best = i; }
+    }
+    let mut out = results.into_iter().nth(best).unwrap();
+    out.2.nodes = total;
+    out
+}
+
 fn turn_from_packed(packed: &[u32]) -> PTurn {
     let mut acts = packed.iter().filter_map(|&v| crate::search::unpack_action(v));
     let mut t = match acts.next() { Some(a) => PTurn::single(a), None => return PTurn::single(PAction::Pass) };
