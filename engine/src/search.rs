@@ -830,6 +830,13 @@ impl Search {
                 Action::Blink { node, .. } if force & (1u64 << node) != 0)).collect();
             if !v.is_empty() { return Some(v); }
         }
+        if crate::opening_learned::opening_learned_enabled() {
+            if let Some(mask) = crate::opening_learned::learned_mask(b, c) {
+                let v: Vec<Turn> = b.turns_ordered(c).filter(|t| matches!(t.slice()[0],
+                    Action::Blink { node, .. } if mask & (1u64 << node) != 0)).collect();
+                if !v.is_empty() { return Some(v); }
+            }
+        }
         if !crate::opening::opening_book_enabled() { return None; }
         let pick = crate::opening::choose_opening(b, c)?;
         let mask = pick.node_mask;

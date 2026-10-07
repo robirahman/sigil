@@ -1491,6 +1491,10 @@ fn set_opening_book(on: bool) { crate::opening::set_opening_book(on); }
 #[pyfunction]
 fn set_opening_force(mask: u64) { crate::opening::set_opening_force(mask); }
 
+/// A/B switch for the learned opening selector (`opening_learned.rs`), default off.
+#[pyfunction]
+fn set_opening_learned(on: bool) { crate::opening_learned::set_opening_learned(on); }
+
 /// A/B switch for the selector's Syzygy rules (`opening::set_opening_syzygy`:
 /// veto of the exposed opposite slots, forced Syzygy reply, blue's strength
 /// substitution); default on, per thread.
@@ -2300,6 +2304,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_force, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_learned, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_syzygy, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_contest, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_carnage, m)?)?;

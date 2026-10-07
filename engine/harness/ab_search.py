@@ -76,6 +76,8 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
          # opening_book: the competitive opening selector (opening.rs), 1/0;
          # only meaningful with SIGIL_VARIANT=competitive.
          'opening_book',
+         # opening_learned: 1 learned selector / 0 shipped book / 2 no selector; competitive only.
+         'opening_learned',
          # opening_syzygy: the selector's Syzygy rules (opening::set_opening_syzygy:
          # never start opposite Syzygy, take Syzygy when the enemy did, blue values
          # Syzygy by the spells across from it), 1/0; competitive only.
@@ -182,6 +184,11 @@ def play(b, ms, ev, hist, knob, val):
         se.set_lead_bounds_v2(bool(val))
     if knob == 'opening_book':
         se.set_opening_book(bool(val))
+    if knob == 'opening_learned':
+        # 1 = the learned selector (opening_learned.rs), 0 = the shipped book;
+        # 2 = neither (search + eval pick the first placement).
+        se.set_opening_learned(val == 1)
+        se.set_opening_book(val != 2)
     if knob == 'opening_syzygy':
         se.set_opening_syzygy(bool(val))
     if knob == 'opening_contest':
@@ -258,7 +265,7 @@ def play(b, ms, ev, hist, knob, val):
 # harness board starts at 0 and `play_best` increments AFTER the move, so it
 # must start at 1 or red gets a SECOND free blink at counter 2.
 VARIANT = os.environ.get('SIGIL_VARIANT', 'standard')
-if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_syzygy', 'opening_contest', 'opening_carnage'):
+if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_learned', 'opening_syzygy', 'opening_contest', 'opening_carnage'):
     sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
 # SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
 # (the seed is stepped deterministically until its draw does), so a knob that

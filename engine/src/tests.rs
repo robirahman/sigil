@@ -3273,6 +3273,29 @@ fn opening_force_restricts_the_first_placement() {
     }
 }
 
+/// The learned opening selector: integer-only (so wasm agrees by construction),
+/// deterministic, always one sigil's empty nodes, red and blue alike, and it
+/// restricts the root when switched on.
+#[test]
+fn learned_opening_pick_is_one_sigil_and_restricts_the_root() {
+    let b = competitive_board([15, 0, 27, 7, 5, 28, 10, 38, 26]);
+    let m = crate::opening_learned::learned_mask(&b, Color::Red).expect("applies");
+    assert_eq!(m, crate::opening_learned::learned_mask(&b, Color::Red).unwrap());
+    assert!((0..9).any(|s| crate::topology::SIGIL[s] == m), "red: one whole empty sigil");
+    let blue = after_red_opening([15, 0, 27, 7, 5, 28, 10, 38, 26], "a1");
+    let mb = crate::opening_learned::learned_mask(&blue, Color::Blue).expect("applies");
+    assert!(mb != 0 && (0..9).any(|s| crate::topology::SIGIL[s] & mb == mb));
+    crate::opening_learned::set_opening_learned(true);
+    let mut s = crate::search::Search::new(14);
+    s.weights = crate::eval::weights_by_name("tfit").unwrap();
+    let (best, _, _) = s.go(&b, Color::Red, 2, 0);
+    crate::opening_learned::set_opening_learned(false);
+    match best.expect("a turn").slice()[0] {
+        Action::Blink { node, .. } => assert!(m & (1u64 << node) != 0),
+        ref a => panic!("not a blink: {a:?}"),
+    }
+}
+
 fn competitive_board(draw: [u8; 9]) -> Board {
     let mut b = Board::new(draw, Variant::Competitive);
     b.setup_initial();
