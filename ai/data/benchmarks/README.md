@@ -45,3 +45,21 @@ September cases and 17 of the 33 v23 cases. The suite is deliberately not cut to
 "confirmed" uses the engine's own depth-4 value, so the confirmed subset is by construction
 the cases v25 misses at depth 4, and a sees-rate over it would be biased against v25.
 `surprise_cases.json` is untouched.
+
+## Guest-game surprise cases (2026-10-07)
+
+`guest_2026-10_cases.json` (32 cases): opponent-turn falls CONFIRMED by `surprise_audit.py` in
+Robi's 24 guest-vs-AI games of 2026-10-06/07 (competitive variant, Rust Hard tier; v23 played the
+Oct 6 games, v25 the Oct 7 ones). Each game was audited with the build that played it (runs
+20261007T161343Z = v23 at 2b7a6d7c, 20261007T161356Z = v25 at a3771ed0, each at its own shipped
+eval and policy via `SIGIL_AUDIT_ENGINE=shipped`) and with v27 (20261007T161407Z). A case is in the
+suite if either audit confirmed it.
+
+Fields follow the other surprise suites (`g`, `i`, `ai`, `sfn`, `sfn_after`, `history`, `kind`,
+`target`, `v4_i`, `cls`). `target` / `v4_i` / `cls` come from the build that played the game when it
+confirmed the case, else from v27. Per-build values are kept as `v23_*` / `v25_*` / `v27_*`, plus:
+* `confirmed_by`;
+* `played_by`;
+* `ai_won`: 13 cases come from games the AI won, 19 from its losses.
+
+Report: `engine/reports/2026-10-guest-audit.md`. The frozen suites above are untouched.

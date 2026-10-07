@@ -56,7 +56,25 @@ sys.path.insert(0, REPO)
 DB_URL = 'https://sigil-js-default-rtdb.firebaseio.com'
 EVAL_NAME = 'tfit'
 ENGINE_TAG = 'rust-v10'
-DEFERRED_PREFIXES = ('pm:', 'ab:', 'sn:')
+# Packs the Rust engine cannot play: Aftershock / Ambush tokens (retired spells).
+# Providence banks (`pm:`) and Fissure walls (`x`) are in scope since engine v22.
+DEFERRED_PREFIXES = ('ab:', 'sn:')
+
+# SIGIL_AUDIT_ENGINE=shipped: search with the BUILD's own shipped configuration --
+# its SHIPPED_EVAL (tfit before v24 exported one) and SHIPPED_POLICY (the v25+
+# generator policy, thread-local and off by default in Python, so it is set before
+# every search). Without it every audit measures the pre-v24 search, whatever the
+# build. The opening book follows the build's compiled default (on before v27).
+AUDIT_SHIPPED = os.environ.get('SIGIL_AUDIT_ENGINE') == 'shipped'
+
+
+def engine_eval(se):
+    """The eval to search with; applies the shipped policy when auditing shipped."""
+    if not AUDIT_SHIPPED:
+        return EVAL_NAME
+    if hasattr(se, 'SHIPPED_POLICY') and hasattr(se, 'set_policy'):
+        se.set_policy(*se.SHIPPED_POLICY)
+    return getattr(se, 'SHIPPED_EVAL', EVAL_NAME)
 
 
 # ---------------------------------------------------------------- firebase ---
@@ -90,7 +108,7 @@ def cmd_download(a):
 
 def _deferred(sfn):
     toks = sfn.split()
-    return any(t.startswith(DEFERRED_PREFIXES) for t in toks) or 'x' in toks[0]
+    return any(t.startswith(DEFERRED_PREFIXES) for t in toks)
 
 
 def position_key(sfn):
@@ -189,7 +207,7 @@ def eval_game(item):
             continue
         t0 = time.time()
         try:
-            r = se.analyze(sfn, EVAL_NAME, history_sfns=positions[:i], **kw)
+            r = se.analyze(sfn, engine_eval(se), history_sfns=positions[:i], **kw)
         except Exception as e:  # noqa: BLE001
             rows.append({'g': gid, 'i': i, 'error': f'{type(e).__name__}: {e}'})
             continue
@@ -255,7 +273,7 @@ def cmd_eval(a):
         sample = sample[::step][:a.sample]
         secs = []
         for sfn, hist in sample:
-            t0 = time.time(); r = se.analyze(sfn, EVAL_NAME, history_sfns=hist, **kw); secs.append(time.time() - t0)
+            t0 = time.time(); r = se.analyze(sfn, engine_eval(se), history_sfns=hist, **kw); secs.append(time.time() - t0)
             print(f'  {secs[-1]:6.2f}s depth {r["depth"]} nodes {r["nodes"]:>9,} stones {r["stones"]} mate {r["mate_in_turns"]}', flush=True)
         total = sum(len(g['positions']) - 1 for _k, g in items)
         print(f'depth {a.depth}: n={len(secs)} mean {statistics.mean(secs):.2f}s median {statistics.median(secs):.2f}s '
