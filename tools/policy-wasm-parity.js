@@ -38,6 +38,13 @@ function fnv(h, s) {
 	if (typeof wasm_bindgen.bench_hash !== 'function') throw new Error('this build has no bench_hash');
 	let combined = 0xcbf29ce484222325n;
 	let n = 0, nodes = 0;
+	// EXPLORE=mode,cast_window,dash_limit,dash_per,dash_tried,base,step[,slot_first,slot_every]:
+	// the round 3 exploration tail (native: bench --explore with the same list).
+	if (process.env.EXPLORE) {
+		const v = process.env.EXPLORE.split(',').map((x) => parseInt(x, 10));
+		while (v.length < 9) v.push(0);
+		wasm_bindgen.set_policy_explore(...v);
+	}
 	for (const raw of fs.readFileSync(POSITIONS, 'utf8').split('\n')) {
 		const line = raw.trim();
 		if (!line || line.startsWith('#')) continue;

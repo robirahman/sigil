@@ -340,6 +340,17 @@ pub fn set_policy(on: bool, min_width: u32) {
 
 thread_local! { static POLICY_SET: std::cell::Cell<bool> = std::cell::Cell::new(false); }
 
+/// Round 3 exploration tail of the policy stream (`policy::Explore`; mode 0 =
+/// off, the shipped setting). For tools/policy-wasm-parity.js `EXPLORE=...`.
+#[wasm_bindgen]
+pub fn set_policy_explore(mode: u32, cast_window: u32, dash_limit: u32, dash_per: u32, dash_tried: u32,
+                          base: i32, step: i32, slot_first: u32, slot_every: u32) {
+    crate::policy::set_policy_explore(crate::policy::Explore {
+        mode: mode as u8, cast_window: cast_window as usize, dash_limit: dash_limit as usize,
+        dash_per: dash_per as usize, dash_tried: dash_tried as usize, base, step,
+        slot_first: slot_first as usize, slot_every: slot_every as usize });
+}
+
 fn ensure_shipped_policy() {
     POLICY_SET.with(|c| if !c.get() {
         let (on, w) = crate::policy::SHIPPED_POLICY;

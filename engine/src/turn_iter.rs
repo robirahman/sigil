@@ -901,6 +901,16 @@ impl Board {
     pub fn dash_branches_by_landing(&self, c: Color, limit: usize, per_target: usize)
         -> Vec<(Turn, Board)>
     {
+        self.dash_branches_by_landing_tried(c, limit, per_target, DASH_COMBOS_TRIED)
+    }
+
+    /// `dash_branches_by_landing` with the per-landing sacrifice-pair scan depth
+    /// (`tried`, `DASH_COMBOS_TRIED` in the shipped generator) as a parameter: the
+    /// round 3 exploration tail (`policy::set_policy_explore`) looks further down
+    /// the cheapest-first pair list.
+    pub fn dash_branches_by_landing_tried(&self, c: Color, limit: usize, per_target: usize, max_tried: usize)
+        -> Vec<(Turn, Board)>
+    {
         if limit == 0 || self.total[c.idx()] <= 2 { return Vec::new(); }
         let cost = self.dash_cost(c) as usize;
         let mut cands: Vec<u8> = Vec::new();
@@ -957,7 +967,7 @@ impl Board {
             let mut found = 0usize;
             let mut tried = 0usize;
             for (ci, &(sacs, n_sacs, _)) in combos.iter().enumerate() {
-                if tried >= DASH_COMBOS_TRIED { break; }
+                if tried >= max_tried { break; }
                 tried += 1;
                 if boards[ci].is_none() {
                     let mut bd = *self;

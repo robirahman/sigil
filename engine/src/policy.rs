@@ -210,6 +210,52 @@ thread_local! {
     static COST_PEN: Cell<(i32, usize)> = Cell::new((0, 0));
 }
 
+thread_local! {
+    /// Round 3 exploration tail (`set_policy_explore`); off by default.
+    static EXPLORE: Cell<Explore> = Cell::new(Explore::OFF);
+}
+
+/// The exploration tail of the policy stream (round 3, 2026-10). The policy can
+/// only rank what the shipped candidate SETS hold, and the guest-game audit found
+/// the decisive casts and dash+casts missing from those sets: a keep outside the
+/// keep window, a resolution outside the outcome window, a dash landing past the
+/// branch cap, a sacrifice pair past the cheapest few. With the tail on, every
+/// cast stub and dash stub the stream expands also pushes ONE lazy tail node,
+/// `base` (1/256 nat) below its least likely sibling. Popping it builds the wider
+/// set (every keep and `cast_window` resolutions per cast; `dash_limit` branches
+/// with `dash_per` pairs per landing from the `dash_tried` cheapest pairs), drops
+/// every candidate whose resolved board a sibling already yields (dedupe by
+/// outcome), and pushes the rest `step` apart in the generator's own order.
+/// The policy's probabilities for the shipped candidates are untouched (the tail
+/// is not renormalised against them), the features are unchanged, and the tail
+/// costs nothing until the stream's width reaches it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Explore {
+    /// bit 0 = cast tail, bit 1 = dash tail
+    pub mode: u8,
+    pub cast_window: usize,
+    pub dash_limit: usize,
+    pub dash_per: usize,
+    pub dash_tried: usize,
+    pub base: i32,
+    pub step: i32,
+    /// Exploration SLOTS: with `slot_every > 0` the tails go to a separate
+    /// heap ordered by the static value of the child (the eval the search
+    /// would give it at a leaf), and after the first `slot_first` turns every
+    /// `slot_every`-th turn the stream yields comes from that heap. A tail dash
+    /// popped there also queues its post-dash casts. 0 = tails stay in the
+    /// probability order (`base` / `step`).
+    pub slot_first: usize,
+    pub slot_every: usize,
+}
+
+impl Explore {
+    pub const OFF: Explore = Explore { mode: 0, cast_window: 0, dash_limit: 0, dash_per: 0, dash_tried: 0, base: 0, step: 0, slot_first: 0, slot_every: 0 };
+}
+
+pub fn set_policy_explore(e: Explore) { EXPLORE.with(|c| c.set(e)); }
+pub fn policy_explore() -> Explore { EXPLORE.with(|c| c.get()) }
+
 pub fn set_policy_cost(penalty: i32, free_width: usize) { COST_PEN.with(|c| c.set((penalty, free_width))); }
 pub fn policy_cost() -> (i32, usize) { COST_PEN.with(|c| c.get()) }
 
@@ -475,7 +521,7 @@ pub const CK_SECOND: u8 = 2;
 /// to decide it (the keep board and the resolved board). The Summer check
 /// (`finish_cast`, two `update`s, a castable scan) runs only for candidates the
 /// stream actually pops.
-pub struct CastOpt { pub f: Feats, pub act: Action, pub pending: Option<(Board, Board)> }
+pub struct CastOpt { pub f: Feats, pub act: Action, pub pending: Option<(Board, Board)>, pub key: (u64, u64) }
 
 impl CastOpt {
     /// The board after the cast plus Z features, when a Summer second cast can
@@ -581,7 +627,7 @@ pub fn cast_opts(b: &Board, c: Color, pos: usize, kind: u8, window: usize, keep_
         }
         let act = Action::Cast { pos: pos as u8, keep: ki as u8, outcome: raw as u16 };
         let pending = if summer_ok { Some((cl, ob)) } else { None };
-        out.push(CastOpt { f, act, pending });
+        out.push(CastOpt { f, act, pending, key: ob.state_key() });
     }
     out
 }
@@ -603,9 +649,24 @@ enum Node {
     CastCand { t: Turn, cl: Board, ob: Board, post_dash: bool },
     PostDash { prefix: Turn, bd: Board },
     Summer { prefix: Turn, bs: Board, post_dash: bool },
+    /// Exploration tails (`Explore`): the wider candidate set of a cast or dash
+    /// stub, minus the resolved boards its shipped set (`seen`) already holds.
+    CastTail { prefix: Turn, b: Board, pos: u8, kind: u8, seen: Box<Vec<(u64, u64)>> },
+    DashTail { prefix: Turn, bm: Board, seen: Box<Vec<(u64, u64)>> },
 }
 
 struct Entry { lp: i32, seq: u32, node: Node }
+
+/// An exploration-slot candidate: a whole turn, its child's static value, and
+/// for a dash the post-dash board whose casts are queued when it is popped.
+struct XEntry { sc: i32, seq: u32, t: Turn, cont: Option<Board> }
+
+impl PartialEq for XEntry { fn eq(&self, o: &Self) -> bool { self.sc == o.sc && self.seq == o.seq } }
+impl Eq for XEntry {}
+impl PartialOrd for XEntry { fn partial_cmp(&self, o: &Self) -> Option<Ordering> { Some(self.cmp(o)) } }
+impl Ord for XEntry {
+    fn cmp(&self, o: &Self) -> Ordering { self.sc.cmp(&o.sc).then(o.seq.cmp(&self.seq)) }
+}
 
 impl PartialEq for Entry { fn eq(&self, o: &Self) -> bool { self.lp == o.lp && self.seq == o.seq } }
 impl Eq for Entry {}
@@ -633,6 +694,14 @@ pub struct PolicyIter<'a> {
     /// Cost penalty (1/256 nat) on the expensive branches: continuing after the
     /// move, choosing the dash, casting after a dash.
     pen: i32,
+    explore: Explore,
+    /// Eval for ordering the exploration tail (`Explore` mode bit 2); the
+    /// shipped preset when the caller sets none.
+    ev: Option<crate::eval::Weights>,
+    xheap: BinaryHeap<XEntry>,
+    since_x: usize,
+    /// Turns yielded from the exploration slots.
+    pub explored: usize,
 }
 
 impl Board {
@@ -649,7 +718,67 @@ impl Board {
     }
 }
 
+thread_local! {
+    static SHIPPED_W: Cell<Option<crate::eval::Weights>> = Cell::new(None);
+}
+
+fn shipped_weights() -> crate::eval::Weights {
+    SHIPPED_W.with(|c| match c.get() {
+        Some(w) => w,
+        None => {
+            let w = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap_or_default();
+            c.set(Some(w));
+            w
+        }
+    })
+}
+
 impl<'a> PolicyIter<'a> {
+    fn xpush(&mut self, sc: i32, t: Turn, cont: Option<Board>) {
+        self.seq += 1;
+        self.xheap.push(XEntry { sc, seq: self.seq, t, cont });
+    }
+
+    /// Pop one exploration-slot turn; a dash queues its post-dash casts first.
+    fn xpop(&mut self) -> Option<Turn> {
+        let x = self.xheap.pop()?;
+        if let Some(bd) = x.cont {
+            let c = self.c;
+            let ri = self.ri.as_ref().unwrap();
+            let opts = postdash_opts(&bd, c, ri);
+            for (_, pos) in opts {
+                let mut wd = false;
+                for o in cast_opts(&bd, c, pos as usize, CK_DASH, self.window, self.keep_window, &mut wd) {
+                    let t2 = x.t.push_pub(o.act);
+                    let sc = self.tail_score(&t2);
+                    self.xpush(sc, t2, None);
+                }
+            }
+        }
+        self.explored += 1;
+        self.since_x = 0;
+        Some(x.t.push_pub(Action::Pass))
+    }
+
+    /// The eval that orders the exploration tail (the search passes its own).
+    pub fn with_eval(mut self, w: crate::eval::Weights) -> Self { self.ev = Some(w); self }
+
+    /// The mover's static value of the position a whole turn leads to, as the
+    /// search would score that child at a leaf.
+    fn tail_score(&self, t: &Turn) -> i32 {
+        let mut ch = *self.board;
+        ch.apply_turn(t, self.c);
+        match (ch.outcome, self.c) {
+            (crate::board::Outcome::Ongoing, _) => {}
+            (crate::board::Outcome::RedWins, Color::Red) | (crate::board::Outcome::BlueWins, Color::Blue) => return 1 << 24,
+            _ => return -(1 << 24),
+        }
+        ch.turn_counter += 1;
+        ch.to_move = self.c.other();
+        let w = match self.ev { Some(w) => w, None => shipped_weights() };
+        -ch.evaluate(self.c.other(), &w)
+    }
+
     fn new(board: &'a Board, c: Color, window: usize, keep_window: usize, pen: i32) -> Self {
         let w = policy_weights();
         let mut b = *board;
@@ -657,7 +786,8 @@ impl<'a> PolicyIter<'a> {
         let mut it = PolicyIter {
             board, c, window, keep_window, fallback: None, front: VecDeque::new(),
             steps: Vec::new(), ri: None, w, heap: BinaryHeap::new(), seq: 0,
-            windowed: false, yielded: 0, expanded: 0, pen,
+            windowed: false, yielded: 0, expanded: 0, pen, explore: policy_explore(), ev: None,
+            xheap: BinaryHeap::new(), since_x: 0, explored: 0,
         };
         it.heap.reserve(256);
         if b.variant.has_competitive() && b.turn_counter <= 2 {
@@ -758,6 +888,11 @@ impl<'a> PolicyIter<'a> {
                 if opts.is_empty() { return; }
                 let qs: Vec<i32> = opts.iter().map(|o| quant(self.w.logit(&o.f, &z))).collect();
                 let ls = log_softmax_q(&qs);
+                if self.explore.mode & 2 != 0 {
+                    let floor = ls.iter().copied().min().unwrap_or(0);
+                    let seen: Vec<(u64, u64)> = opts.iter().map(|o| o.bd.state_key()).collect();
+                    self.push(lp + floor - self.explore.base, Node::DashTail { prefix, bm, seen: Box::new(seen) });
+                }
                 for (o, l) in opts.into_iter().zip(ls) {
                     self.push(lp + l, Node::DashCand { t: prefix.push_pub(o.act), bd: o.bd });
                 }
@@ -775,6 +910,56 @@ impl<'a> PolicyIter<'a> {
                     s.push(l, Node::CastStub { prefix, b: bs, pos, kind: CK_SECOND })
                 });
             }
+            Node::CastTail { prefix, b, pos, kind, seen } => {
+                let e = self.explore;
+                let mut wd = false;
+                let wide = cast_opts(&b, c, pos as usize, kind, e.cast_window.max(1), MAX_KEEP_WINDOW, &mut wd);
+                let mut keys: Vec<(u64, u64)> = *seen;
+                let mut items: Vec<(i32, Turn, Option<(Board, Board)>)> = Vec::new();
+                for o in wide {
+                    if keys.contains(&o.key) { continue; }
+                    keys.push(o.key);
+                    let t = prefix.push_pub(o.act);
+                    let sc = if e.mode & 4 != 0 || e.slot_every > 0 { self.tail_score(&t) } else { 0 };
+                    items.push((sc, t, o.pending));
+                }
+                if e.slot_every > 0 {
+                    for (sc, t, _) in items { self.xpush(sc, t, None); }
+                    return;
+                }
+                if e.mode & 4 != 0 { items.sort_by_key(|x| -x.0); }
+                for (j, (_, t, pending)) in items.into_iter().enumerate() {
+                    let l = lp - e.step * j as i32;
+                    match pending {
+                        Some((cl, ob)) => self.push(l, Node::CastCand { t, cl, ob, post_dash: kind == CK_DASH }),
+                        None => self.push(l, Node::Leaf(t)),
+                    }
+                }
+            }
+            Node::DashTail { prefix, bm, seen } => {
+                let e = self.explore;
+                let mut keys: Vec<(u64, u64)> = *seen;
+                let mut items: Vec<(i32, Turn, Board)> = Vec::new();
+                for (t, bd) in bm.dash_branches_by_landing_tried(c, e.dash_limit, e.dash_per.max(1), e.dash_tried.max(1)) {
+                    let k = bd.state_key();
+                    if keys.contains(&k) { continue; }
+                    keys.push(k);
+                    let t = prefix.push_pub(t.slice()[0]);
+                    let sc = if e.mode & 4 != 0 || e.slot_every > 0 { self.tail_score(&t) } else { 0 };
+                    items.push((sc, t, bd));
+                }
+                if e.slot_every > 0 {
+                    for (sc, t, bd) in items {
+                        let cont = if dash_p2(&bd, c).is_some() { Some(bd) } else { None };
+                        self.xpush(sc, t, cont);
+                    }
+                    return;
+                }
+                if e.mode & 4 != 0 { items.sort_by_key(|x| -x.0); }
+                for (j, (_, t, bd)) in items.into_iter().enumerate() {
+                    self.push(lp - e.step * j as i32, Node::DashCand { t, bd });
+                }
+            }
             Node::CastStub { prefix, b, pos, kind } => {
                 let mut windowed = false;
                 let opts = cast_opts(&b, c, pos as usize, kind, self.window, self.keep_window, &mut windowed);
@@ -782,6 +967,12 @@ impl<'a> PolicyIter<'a> {
                 if opts.is_empty() { return; }
                 let qs: Vec<i32> = opts.iter().map(|o| quant(self.w.logit(&o.f, &z))).collect();
                 let ls = log_softmax_q(&qs);
+                if self.explore.mode & 1 != 0 && kind != CK_SECOND {
+                    let floor = ls.iter().copied().min().unwrap_or(0);
+                    let seen: Vec<(u64, u64)> = opts.iter().map(|o| o.key).collect();
+                    self.push(lp + floor - self.explore.base,
+                              Node::CastTail { prefix, b, pos, kind, seen: Box::new(seen) });
+                }
                 for (o, l) in opts.into_iter().zip(ls) {
                     let t = prefix.push_pub(o.act);
                     match o.pending {
@@ -807,6 +998,13 @@ impl<'a> Iterator for PolicyIter<'a> {
             self.yielded += 1;
             return Some(t.push_pub(Action::Pass));
         }
+        let ev = self.explore.slot_every;
+        if ev > 0 && !self.xheap.is_empty()
+           && (self.heap.is_empty() || (self.yielded >= self.explore.slot_first && self.since_x + 1 >= ev)) {
+            self.yielded += 1;
+            return self.xpop();
+        }
+        self.since_x += 1;
         while let Some(e) = self.heap.pop() {
             match e.node {
                 Node::Leaf(t) => {
@@ -844,6 +1042,7 @@ impl<'a> Iterator for PolicyIter<'a> {
                 node => self.expand(e.lp, node),
             }
         }
+        if !self.xheap.is_empty() { self.yielded += 1; return self.xpop(); }
         None
     }
 }
@@ -858,7 +1057,7 @@ impl<'a> PolicyIter<'a> {
     pub fn has_more(&self) -> bool {
         match &self.fallback {
             Some(_) => true,
-            None => !self.front.is_empty() || !self.heap.is_empty(),
+            None => !self.front.is_empty() || !self.heap.is_empty() || !self.xheap.is_empty(),
         }
     }
 }
@@ -1010,4 +1209,89 @@ pub fn policy_example(board: &Board, c: Color, target: &Turn, window: usize, kee
         kind = CK_SECOND;
     }
     Some((ri.z, levels))
+}
+
+// ---------------------------------------------------------------------------
+// Diagnosis (round 3 generator audit)
+// ---------------------------------------------------------------------------
+
+/// Why the policy stream does or does not build `target`: per level on its path
+/// `[level, options, target index, target log-prob, best log-prob]` (1/256 nat),
+/// the path's total log-probability, and, at the level where the path breaks
+/// (target index -1: the candidate SET lacks it), where the target sits in a
+/// widened candidate set. JSON, for `engine/harness/r3_gen_diag.py`.
+pub fn policy_diag(board: &Board, c: Color, target: &Turn, window: usize, keep_window: usize) -> String {
+    let Some((z, levels)) = policy_example(board, c, target, window, keep_window) else {
+        return "{\"fallback\":true}".to_string();
+    };
+    let w = policy_weights();
+    let mut total = 0i32;
+    let mut out = Vec::new();
+    let mut broken: Option<u8> = None;
+    for l in &levels {
+        let qs: Vec<i32> = l.opts.iter().map(|f| quant(w.logit(f, &z))).collect();
+        let ls = log_softmax_q(&qs);
+        let lp = if l.target >= 0 { ls[l.target as usize] } else { 0 };
+        if l.target >= 0 { total += lp; } else { broken = Some(l.level); }
+        let best = ls.iter().copied().max().unwrap_or(0);
+        out.push(format!("[{},{},{},{},{}]", l.level, l.opts.len(), l.target, lp, best));
+    }
+    let mut extra = String::new();
+    let acts: Vec<Action> = target.slice().iter().copied().filter(|a| !matches!(a, Action::Pass)).collect();
+    if broken.is_some() && !acts.is_empty() {
+        let rest_start = if matches!(acts.get(1), Some(Action::Place { .. })) { 2 } else { 1 };
+        let mut bm = *board;
+        if let Action::Move { node, push_to } | Action::Blink { node, push_to } = acts[0] {
+            bm.do_move_with_pub(node, push_to, c);
+        }
+        if let Some(Action::Place { node, push_to }) = acts.get(1) { bm.do_placement(*node, *push_to, c); }
+        let rest = &acts[rest_start.min(acts.len())..];
+        if broken == Some(L_D) {
+            let ta = rest[0];
+            let tbd = dash_board(&bm, &ta, c);
+            let (mode, gw, per) = crate::turn_iter::dash_gen();
+            let all = bm.dash_branches_by_landing(c, 100_000, 64);
+            let hit = |t: &Turn, bd: &Board| t.slice()[0] == ta || Some(*bd) == tbd;
+            let r_exact = all.iter().position(|(t, bd)| hit(t, bd));
+            let Action::Dash { node, push_to, .. } = ta else { unreachable!() };
+            let mut landings: Vec<(u8, Option<u8>)> = Vec::new();
+            let mut pr = -1i64;
+            let mut k = 0i64;
+            for (t, bd) in &all {
+                if let Action::Dash { node: n, push_to: p, .. } = t.slice()[0] {
+                    if !landings.contains(&(n, p)) { landings.push((n, p)); }
+                    if (n, p) == (node, push_to) && pr < 0 {
+                        if hit(t, bd) { pr = k; } else { k += 1; }
+                    }
+                }
+            }
+            let lr = landings.iter().position(|x| *x == (node, push_to));
+            extra = format!(",\"dash\":{{\"rank_all\":{},\"landing_rank\":{},\"pair_rank\":{},\"n_all\":{},\"n_land\":{},\"gen\":[{},{},{}]}}",
+                r_exact.map(|x| x as i64).unwrap_or(-1), lr.map(|x| x as i64).unwrap_or(-1), pr,
+                all.len(), landings.len(), mode, gw, per);
+        } else if broken == Some(L_C) {
+            let mut cur = bm;
+            let mut kind = CK_MOVE;
+            let mut i = 0usize;
+            if matches!(rest.first(), Some(Action::Dash { .. })) {
+                if let Some(bd) = dash_board(&bm, &rest[0], c) { cur = bd; }
+                kind = CK_DASH;
+                i = 1;
+            }
+            if let Some(&Action::Cast { pos, keep, .. }) = rest.get(i) {
+                let mut wd = false;
+                let wide = cast_opts(&cur, c, pos as usize, kind, 4096, MAX_KEEP_WINDOW, &mut wd);
+                let tb = cast_board(&cur, &rest[i], c).map(|x| x.state_key());
+                let r = wide.iter().position(|o| o.act == rest[i]
+                    || cast_board(&cur, &o.act, c).map(|x| x.state_key()) == tb);
+                let (kis, _) = cur.keep_indices_ordered(pos as usize, c, MAX_KEEP_WINDOW);
+                let kr = kis.iter().position(|&k| k == keep as usize).map(|x| x as i64).unwrap_or(-1);
+                extra = format!(",\"cast\":{{\"spell\":{},\"wide_rank\":{},\"n_wide\":{},\"keep\":{},\"keep_rank\":{},\"n_keeps\":{},\"kind\":{}}}",
+                    cur.spells[pos as usize], r.map(|x| x as i64).unwrap_or(-1), wide.len(), keep, kr, kis.len(), kind);
+            }
+        }
+    }
+    format!("{{\"levels\":[{}],\"logp\":{},\"broken\":{}{}}}", out.join(","),
+            if broken.is_some() { "null".to_string() } else { total.to_string() },
+            broken.map(|x| x.to_string()).unwrap_or_else(|| "null".into()), extra)
 }
