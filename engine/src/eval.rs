@@ -659,11 +659,11 @@ pub const SHIPPED_EVAL: &str = "nnue_spell3";
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 25] = [
+pub const EVAL_NAMES: [&str; 24] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
-    "nnue_spell2", "nnue_spell3",
+    "nnue_spell3",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -690,7 +690,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         // Step 5: the network residual on top of `tfit_spell` (default OFF).
         "nnue_spell" => Weights { nn: Some(&crate::nn::NNUE_SPELL), ..TFIT_SPELL },
         // Round 2: residuals on `tfit_spell_v2`, cap 256 (default OFF).
-        "nnue_spell2" => Weights { nn: Some(&crate::nn::NNUE_SPELL2), ..TFIT_SPELL_V2 },
         "nnue_spell3" => Weights { nn: Some(&crate::nn::NNUE_SPELL3), ..TFIT_SPELL_V2 },
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
@@ -709,6 +708,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell2, nnue_spell3, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }
