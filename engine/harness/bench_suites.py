@@ -194,6 +194,11 @@ def job_sees(item):
             'depth': r.get('depth'), 'nodes': r.get('nodes')}
 
 
+def is_competitive(sfn):
+    """The SFN's last token names the variant when it is not standard."""
+    return sfn.split(' ')[-1].startswith('competitive')
+
+
 def _result_key(sfn):
     """The position part of an SFN for a "same result" test: the side-to-move token dropped,
     as in the coverage metric's exact-result match."""
@@ -283,6 +288,10 @@ def run_config(cfg, suites, a):
             sees[str(nodes)] = {'n': n, 'rate': round(sum(r['sees'] for r in rs) / n, 4) if n else None,
                                 'mean_depth': round(sum(r['depth'] or 0 for r in rs) / max(n, 1), 2),
                                 'secs': round(time.time() - t, 1)}
+            # The competitive variant (incl. deathmatch) on its own: the release target.
+            rc = [r for r, c in zip(rs, suites['surprise']) if is_competitive(c['sfn'])]
+            sees[str(nodes)]['competitive'] = {'n': len(rc), 'rate': round(sum(r['sees'] for r in rc) / len(rc), 4)
+                                               if rc else None}
             if suites['final']:
                 rf = list(ex.map(job_final, [(c, nodes) for c in suites['final']], chunksize=1))
                 final[str(nodes)] = {'n': len(rf), 'rate': round(sum(r['sees'] for r in rf) / len(rf), 4)}
@@ -350,7 +359,7 @@ def main():
             continue
         cov = '  '.join(f"{k} " + ' '.join(f"{w}={v:.3f}" for w, v in c.items() if w != 'n')
                         for k, c in r['coverage'].items())
-        sees = '  '.join(f"{n}:{s['rate']:.3f}(d{s['mean_depth']})" for n, s in r['sees'].items())
+        sees = '  '.join(f"{n}:{s['rate']:.3f}(d{s['mean_depth']}; comp {s['competitive']['rate']})" for n, s in r['sees'].items())
         fin = '  '.join(f"{n}:{s['rate']:.3f}" for n, s in r['final'].items())
         print(f"[{cfg['name']}] coverage {cov}\n[{cfg['name']}] sees {sees}   final {fin}   ({r['secs']}s)",
               flush=True)
