@@ -211,7 +211,8 @@ thread_local! {
 }
 
 thread_local! {
-    /// Round 3 exploration tail (`set_policy_explore`); off by default.
+    /// Round 3 exploration tail (`set_policy_explore`); off by default (the
+    /// shipped engine applies `SHIPPED_EXPLORE` explicitly, as SHIPPED_POLICY).
     static EXPLORE: Cell<Explore> = Cell::new(Explore::OFF);
 }
 
@@ -295,6 +296,20 @@ pub fn policy_weights_override() -> Option<Vec<f32>> {
 /// `tfit`, +118 on `tfit_spell_v2`; engine/reports/2026-10-step4.md). The wasm
 /// `configure` and `serve.py` read this, never a literal.
 pub const SHIPPED_POLICY: (bool, usize) = (true, 96);
+
+/// The site's exploration tail since engine v28: round 3 preset 3 (casts and
+/// dashes, every keep and 64 resolutions per cast, 128 dash branches with 8 pairs
+/// per landing from the 48 cheapest, tail 2 nats below the stub's last sibling,
+/// 1/16 nat apart). +29 Elo pooled over v27 at 10 s (3,293 games) and passes the
+/// guest gate (engine/reports/2026-10-r3-gen.md). Like SHIPPED_POLICY it is applied
+/// explicitly wherever the shipped engine runs (wasm `ensure_shipped_policy`,
+/// Python `SHIPPED_EXPLORE`, serve.py, `bench --shipped`); the thread-local
+/// default stays `Explore::OFF` so the knob-off path remains for A/Bs. It acts
+/// only on the policy stream, so it needs SHIPPED_POLICY on.
+pub const SHIPPED_EXPLORE: Explore = Explore {
+    mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8, dash_tried: 48, base: 512, step: 16,
+    slot_first: 0, slot_every: 0,
+};
 
 pub fn set_policy(on: bool, min_width: usize) { POLICY.with(|c| c.set((on, min_width))); }
 pub fn policy_setting() -> (bool, usize) { POLICY.with(|c| c.get()) }

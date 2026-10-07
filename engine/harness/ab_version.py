@@ -54,6 +54,10 @@ def apply_shipped_policy(se):
     # Thread-local in each module's own statics; set before every search.
     if hasattr(se, 'SHIPPED_POLICY') and hasattr(se, 'set_policy'):
         se.set_policy(*se.SHIPPED_POLICY)
+    # v28+: the exploration tail. Builds before v28 export no SHIPPED_EXPLORE and
+    # play the tail off (their thread default), which is how they shipped.
+    if hasattr(se, 'SHIPPED_EXPLORE') and hasattr(se, 'set_policy_explore'):
+        se.set_policy_explore(*se.SHIPPED_EXPLORE)
 
 
 def adaptive(se):
@@ -87,8 +91,10 @@ if __name__ == "__main__":
     pairs = int(sys.argv[1]); ms = int(sys.argv[2])
     off = shard_offset()
     print(f"  VERSION A/B  arm={arm_se.__file__}  base={base_se.__file__}  ms={ms}  "
-          f"arm_eval={shipped_eval(arm_se)} arm_policy={getattr(arm_se, 'SHIPPED_POLICY', None)}  "
-          f"base_eval={shipped_eval(base_se)} base_policy={getattr(base_se, 'SHIPPED_POLICY', None)}  "
+          f"arm_eval={shipped_eval(arm_se)} arm_policy={getattr(arm_se, 'SHIPPED_POLICY', None)} "
+          f"arm_explore={getattr(arm_se, 'SHIPPED_EXPLORE', None)}  "
+          f"base_eval={shipped_eval(base_se)} base_policy={getattr(base_se, 'SHIPPED_POLICY', None)} "
+          f"base_explore={getattr(base_se, 'SHIPPED_EXPLORE', None)}  "
           f"require_spell={REQUIRE_SPELL}", flush=True)
     print(f"  SEEDS  {6_000_000+off}..{6_000_000+off+pairs-1} (shard offset {off})", flush=True)
     s = Sprt(elo0=-25.0, elo1=0.0)

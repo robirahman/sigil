@@ -4368,6 +4368,13 @@ fn shipped_eval_is_a_known_preset_and_named_in_eval_names() {
     assert!(crate::eval::EVAL_NAMES.contains(&crate::eval::SHIPPED_EVAL));
     let (on, w) = crate::policy::SHIPPED_POLICY;
     assert!(on && w > 0, "v25 ships the generator policy");
+    let x = crate::policy::SHIPPED_EXPLORE;
+    assert!(x.mode & 3 == 3 && x.cast_window > 0 && x.dash_limit > 0 && x.base > 0 && x.step > 0,
+            "v28 ships the exploration tail (casts and dashes)");
+    assert_eq!(x, crate::policy::Explore { mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8,
+               dash_tried: 48, base: 512, step: 16, slot_first: 0, slot_every: 0 }, "round 3 preset 3");
+    // The thread default stays off: the shipped setting is applied explicitly.
+    assert_eq!(crate::policy::policy_explore(), crate::policy::Explore::OFF);
 }
 
 /// Step 4: every turn the learned-policy stream yields is one the shipped

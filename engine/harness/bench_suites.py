@@ -46,7 +46,8 @@ Metrics (per config):
 Config spec: `name:key=val;key=val`. Keys:
   eval=<preset>           eval preset name (`se.eval_weights` must know it); default tfit.
                           `eval=shipped` = the loaded build's own SHIPPED_EVAL AND its
-                          SHIPPED_POLICY (unless a call=set_policy(...) overrides it), i.e.
+                          SHIPPED_POLICY (unless a call=set_policy(...) overrides it) and, v28+,
+                          SHIPPED_EXPLORE (unless a call=set_policy_explore(...) does), i.e.
                           the engine exactly as that build ships (SIGIL_AUDIT_ENGINE=shipped)
   width_scale=<int>       default: the engine's DEFAULT_WIDTH_SCALE (ignored while adaptive is on:
                           the adaptive scales replace it, so pair it with adaptive=none)
@@ -109,8 +110,9 @@ def parse_config(spec):
 
 
 def _resolve_shipped(cfg, se):
-    """`eval=shipped`: the build's SHIPPED_EVAL, and its SHIPPED_POLICY unless the config sets
-    a policy itself (the policy is thread-local and OFF by default in Python)."""
+    """`eval=shipped`: the build's SHIPPED_EVAL, its SHIPPED_POLICY unless the config sets
+    a policy itself, and (v28+) its SHIPPED_EXPLORE unless the config calls set_policy_explore
+    (both are thread-local and OFF by default in Python)."""
     if cfg.get('eval') != 'shipped':
         return cfg
     # Builds before v24 export no SHIPPED_EVAL (they shipped tfit), before v25 no policy.
@@ -120,6 +122,10 @@ def _resolve_shipped(cfg, se):
         cfg['calls'].insert(0, ('set_policy', (bool(on), int(w))))
         if on and 'stream' not in cfg:
             cfg['stream'] = 'policy'
+    # v28+: the shipped exploration tail, unless the config sets one itself. Builds
+    # before v28 export no SHIPPED_EXPLORE (they shipped it off, the thread default).
+    if hasattr(se, 'SHIPPED_EXPLORE') and not any(fn == 'set_policy_explore' for fn, _ in cfg['calls']):
+        cfg['calls'].append(('set_policy_explore', tuple(int(x) for x in se.SHIPPED_EXPLORE)))
     return cfg
 
 

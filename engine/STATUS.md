@@ -21,6 +21,27 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-07: engine v28 (cache v69) -- generator exploration tail ON (round 3 preset 3).** New
+`policy::SHIPPED_EXPLORE` = `set_policy_explore(3,64,128,8,48,512,16)`: every cast/dash stub the policy stream
+expands also pushes one lazy tail (every keep and 64 resolutions per cast; 128 dash branches, 8 pairs per landing
+from the 48 cheapest), deduped by outcome, 2 nats below the stub's last sibling (`reports/2026-10-r3-gen.md`).
+Applied like SHIPPED_POLICY, never as the thread default (which stays `Explore::OFF`, the knob-off A/B path):
+wasm `ensure_shipped_policy`, Python `se.SHIPPED_EXPLORE` (ab_search `SIGIL_AB_BASE`/`SIGIL_POLICY=shipped`,
+ab_version, bench_suites `eval=shipped`, `SIGIL_AUDIT_ENGINE=shipped`, serve.py `--explore shipped`),
+`bench --shipped`. Arena vs v27 at 10 s (both arms shipped policy + nnue_spell3): core **+51.8**, expansion +11.2,
+competitive +21.7, **about +29 pooled over 3,293 games**; passes the guest gate (`reports/2026-10-r3-gate.md`).
+Policy weights: unchanged from v26/v27 (placeholder: a retrained policy may land in v28 -- fill in here).
+Tests 185/185, policy-wasm HASH 717fb1cae5d3adaf (shipped defaults; `EXPLORE=0` still 55a10a3b6c3b7ef9),
+nn-wasm 264/264 for nnue_spell3 and nnue_spell, wasm smoke 5/5 + policy-off 2/2 (an earlier batch had 3 failures of 9 runs; the one logged was
+the random-draw "even opening reads ~0 stones" check, which the v27 wasm also trips -- 4/30 openings vs v28 0/30).
+wasm 1.39 MB unoptimised.
+Browser Hard-tier depth (10 s, fresh table, node 18 wasm on the Chromebook, v28 and v27 interleaved in one process,
+114 positions: 32 guest pre, 32 guest sfn, 10 own, 40 surprise-v25 game positions): v28 is never deeper and 1 ply
+shallower on 18/114 (16%); total nodes equal (x1.01), time to d4 x1.06 and to d5 x1.16 (medians). >= d5: 62 vs 73.
+Decisive positions: before the 10 MATE blows d4 7 vs 8, d5 1 vs 2 (median d4 both); MATE positions themselves
+d5 1 vs 2, each build reports one forced loss (different cases); own blunders d4/d5 identical (8/2), avoids 10/10
+vs 9/10. The arena result already pays the same node cost (native, 10 s).
+
 **2026-10-07: engine v27 (cache v68) -- competitive opening selector OFF.** `opening::set_opening_book` now defaults
 to false: in the competitive variant the search and `nnue_spell` place the first stone. Arena (v25, both arms at the
 shipped policy, competitive, 10 s/move, colour-swapped): book OFF vs book ON **+90.5 [+75.3, +105.6]** (2,160 games);

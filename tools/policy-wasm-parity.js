@@ -7,8 +7,10 @@
 // (wasm `bench_hash`), hashed exactly as engine/examples/bench.rs hashes one, and
 // the per-position hashes are combined the same way. Compare against
 //   (cd engine && cargo run --release --no-default-features --example bench -- \
-//      harness/positions_midgame.txt DEPTH --eval nnue_spell --policy 96)
-// which prints `... HASH <hex>` on its TOTAL line.
+//      harness/positions_midgame.txt DEPTH --shipped)
+// which prints `... HASH <hex>` on its TOTAL line. The wasm applies the shipped policy
+// AND (v28+) the shipped exploration tail (policy::SHIPPED_EXPLORE) by default;
+// EXPLORE=0 here matches `bench ... --shipped --explore off`.
 //
 //   node tools/policy-wasm-parity.js EXPECTED_HASH [DEPTH=4] [EVAL=nnue_spell]
 //        [POSITIONS=engine/harness/positions_midgame.txt] [WASM_DIR=docs/static/wasm]
