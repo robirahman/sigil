@@ -6,7 +6,7 @@
 
     # the round-3 release gate (guest suite only, the build exactly as it ships):
     python engine/harness/bench_suites.py --guest-only --nodes 50000,300000,600000,1500000 \
-        --guest-depths 5,6 --config "cand:eval=shipped" --json guest_gate_cand.json
+        --guest-depths 4,5,6 --config "cand:eval=shipped" --json guest_gate_cand.json
 
 Every metric is at a FIXED NODE BUDGET or a fixed candidate count, never a clock, so a
 change that only spends more nodes cannot flatter itself and the numbers do not depend on
@@ -38,7 +38,7 @@ Metrics (per config):
              (guest_2026-10_own.json, 10 avoidable own-move falls from near-level positions),
              where a case is AVOIDED when the searched move's result differs from the move the
              AI played. Each at every --nodes budget and at every fixed depth in
-             --guest-depths (default 5,6: what the browser's 10 s reaches, see the r3 report).
+             --guest-depths (default 4,5,6: what the browser's 10 s reaches, see the r3 report).
              Also the policy-stream coverage of the 32 replies. Per-case results go to the
              --json output, so a candidate can be compared case by case with the baseline
              (ai/data/benchmarks/guest_gate_v27.json).
@@ -334,7 +334,7 @@ def main():
     ap.add_argument('--guest', nargs='?', const='guest_2026-10', default=None,
                     help='also score the guest gate: <prefix>_cases.json + <prefix>_own.json under --suites '
                          '(default prefix guest_2026-10)')
-    ap.add_argument('--guest-depths', default='5,6', help='fixed depths the guest gate also searches')
+    ap.add_argument('--guest-depths', default='4,5,6', help='fixed depths the guest gate also searches')
     ap.add_argument('--guest-only', action='store_true', help='score only the guest gate (implies --guest)')
     ap.add_argument('--json')
     a = ap.parse_args()

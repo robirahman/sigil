@@ -111,8 +111,13 @@ def main():
         if not rows:
             continue
         sec = {}
-        for v in ('competitive', 'standard', 'all'):
-            rv = [r for r in rows if v == 'all' or variant(r.get('expected')) == v]
+        mate_keys = {(c['g'], c['i']) for c in guest if c['target'] <= -19.5 and not c.get('ai_won')}
+        subsets = ['competitive', 'standard', 'all'] + (['MATE blow in a loss'] if name.startswith('guest') else [])
+        for v in subsets:
+            if v == 'MATE blow in a loss':
+                rv = [r for r in rows if (r['g'], r['i']) in mate_keys]
+            else:
+                rv = [r for r in rows if v == 'all' or variant(r.get('expected')) == v]
             if not rv:
                 continue
             sec[v] = {f'x{s:g}': dist([depth_at(r, 10000 * s) for r in rv]) for s in speeds}
