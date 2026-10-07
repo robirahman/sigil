@@ -64,7 +64,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from eval_games import load_rows, position_key, EVAL_NAME  # noqa: E402
+from eval_games import load_rows, position_key, EVAL_NAME, engine_eval, AUDIT_SHIPPED  # noqa: E402
 
 MATE_V = 20.0
 LEAF_SHAPE = 6
@@ -153,7 +153,7 @@ def _analyze(se, sfn, hist, depth, time_ms, **over):
               width_scale=se.DEFAULT_WIDTH_SCALE, adaptive=se.SHIPPED_ADAPTIVE)
     kw.update(over)
     t0 = time.time()
-    r = se.analyze(sfn, EVAL_NAME, **kw)
+    r = se.analyze(sfn, engine_eval(se), **kw)
     return r, time.time() - t0
 
 
@@ -255,6 +255,13 @@ def probe_case(item):
             t0 = time.time()
             rank, gen, _acts = se.rank_of_result(pos_i, positions[i + 1], cap=5000)
             out['rank'] = {'rank': rank, 'generated': gen, 'sec': round(time.time() - t0, 2)}
+            # A build that searches with the learned generator policy (v25+, when
+            # auditing its shipped config) generates in the POLICY stream, so that
+            # rank is the one its search actually faces.
+            pol = getattr(se, 'SHIPPED_POLICY', None) if AUDIT_SHIPPED else None
+            if hasattr(se, 'policy_rank_of_result') and pol and pol[0]:
+                pr = se.policy_rank_of_result(pos_i, positions[i + 1], cap=5000)
+                out['policy_rank'] = {'rank': pr[0], 'generated': pr[1]}
             # Position i is ply 1 of the AI's own search of i-1: was the reply
             # inside that node's list with 3 (depth-4 search) or 4 (depth-5)
             # plies left? (index, full-depth width, LMR-band pull, length)

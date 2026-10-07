@@ -30,6 +30,8 @@ CORPUS=${CORPUS:-data/eval_lines_2026-09-21.json}
 DEPTH=${DEPTH:-4}; TIME_MS=${TIME_MS:-300000}; PROBE_TIME_MS=${PROBE_TIME_MS:-300000}; SIDE=${SIDE:-opp}; MODE=${MODE:-surprise}
 SPOT=${SPOT:-1}
 RESUME=${RESUME:-}
+ENGINE_REF=${ENGINE_REF:-}       # build the engine from this branch/tag (harness from BRANCH)
+AUDIT_ENGINE=${AUDIT_ENGINE:-}   # shipped = search with that build's shipped eval + policy
 SHARD=${SHARD:-}            # k/n to split the corpus across VMs (distinct k per VM!)
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
@@ -45,7 +47,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=surprise \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,depth=$DEPTH,time-ms=$TIME_MS,resume=$RESUME,shard=$SHARD,probe-time-ms=$PROBE_TIME_MS,side=$SIDE,mode=$MODE" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,depth=$DEPTH,time-ms=$TIME_MS,resume=$RESUME,shard=$SHARD,probe-time-ms=$PROBE_TIME_MS,side=$SIDE,mode=$MODE,engine-ref=$ENGINE_REF,audit-engine=$AUDIT_ENGINE" \
   --metadata-from-file="startup-script=$HERE/runner_surprise.sh" \
   --format="value(name,status)"
 echo "$RUN"
