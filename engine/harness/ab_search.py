@@ -33,7 +33,7 @@ MERGE_OFF = 1 << 62
 # and a harness that hardcoded 1 would silently test every other knob under the old,
 # far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
 BASE_WS = se.DEFAULT_WIDTH_SCALE
-KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
+KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy', 'policy_weights',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
          'rank_oversample', 'width_shape',
          # §1.2 booleans: arm value 1 = on, 0 = off (engine default).
@@ -117,6 +117,23 @@ BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
 # one-knob-one-integer shape of this harness.
 ADAPTIVE_P = 0.10
 DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the switch takes the cap too
+
+
+_ARM_PW = None
+
+
+def _arm_policy_weights():
+    """Flat weights for the policy_weights knob's arm, loaded once."""
+    global _ARM_PW
+    if _ARM_PW is None:
+        import numpy as np
+        p = os.environ.get('SIGIL_POLICY_WEIGHTS')
+        if not p:
+            sys.exit("knob=policy_weights needs $SIGIL_POLICY_WEIGHTS (.npy)")
+        if not os.path.isabs(p):
+            p = os.path.join(os.path.dirname(os.path.dirname(_HERE)), p)
+        _ARM_PW = np.load(p).astype(np.float32).ravel().tolist()
+    return _ARM_PW
 
 
 def play(b, ms, ev, hist, knob, val):
@@ -227,6 +244,17 @@ def play(b, ms, ev, hist, knob, val):
         e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
         sp = tuple(se.SHIPPED_ADAPTIVE)
         adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
+    if knob == 'policy_weights':
+        # Round 2: a retrained generator policy against the shipped one. BOTH arms
+        # play the SHIPPED policy setting (se.SHIPPED_POLICY); the arm (val 1) uses
+        # the weights in $SIGIL_POLICY_WEIGHTS (.npy, repo-relative or absolute),
+        # the base (val 0) the compiled weights.
+        se.set_policy(*se.SHIPPED_POLICY)
+        se.set_policy_cost(0, 0)
+        if val:
+            se.set_policy_weights(_arm_policy_weights())
+        else:
+            se.set_policy_weights()
     if knob == 'threads' and val // 10 > 1:
         extra['threads'] = val // 10
         extra['smp_mode'] = val % 10
