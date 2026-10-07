@@ -105,6 +105,16 @@ thread_local! {
 pub fn set_opening_carnage(on: bool) { OPENING_CARNAGE.with(|c| c.set(on)); }
 pub fn opening_carnage_enabled() -> bool { OPENING_CARNAGE.with(|c| c.get()) }
 
+thread_local! {
+    static OPENING_FORCE: std::cell::Cell<u64> = std::cell::Cell::new(0);
+}
+/// Data-generation hook (harness/opening_rollouts.py): a non-zero node mask
+/// restricts the competitive first placement to those nodes, overriding the
+/// selector, so a rollout can play out one chosen sigil. 0 = off (default).
+/// Per thread; never set by the site.
+pub fn set_opening_force(mask: u64) { OPENING_FORCE.with(|c| c.set(mask)); }
+pub fn opening_force() -> u64 { OPENING_FORCE.with(|c| c.get()) }
+
 /// Carnage's engine id (`spells_meta.rs`; pinned by a test).
 pub const CARNAGE: u8 = 1;
 /// What Carnage adds on top of the best of the sorceries beside it, so it wins the tie.

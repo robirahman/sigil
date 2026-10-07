@@ -1486,6 +1486,11 @@ fn rank_of_landing(sfn: &str, result_sfn: &str, cap: usize, enum_cap: usize,
 #[pyfunction]
 fn set_opening_book(on: bool) { crate::opening::set_opening_book(on); }
 
+/// Restrict the competitive first placement to `mask`'s nodes (0 = off); see
+/// `opening::set_opening_force`.
+#[pyfunction]
+fn set_opening_force(mask: u64) { crate::opening::set_opening_force(mask); }
+
 /// A/B switch for the selector's Syzygy rules (`opening::set_opening_syzygy`:
 /// veto of the exposed opposite slots, forced Syzygy reply, blue's strength
 /// substitution); default on, per thread.
@@ -2294,6 +2299,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;
     m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_force, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_syzygy, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_contest, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_carnage, m)?)?;
@@ -2336,6 +2342,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("REASONS_ALL", crate::key_dash::REASONS_ALL)?;
     m.add("OUTCOME_CAP", crate::turn::OUTCOME_CAP)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
+    m.add("SIGIL_MASKS", crate::topology::SIGIL.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("TURN_FEATURE_NAMES", crate::features::TURN_NAMES.to_vec())?;
     m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()
