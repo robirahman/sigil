@@ -234,8 +234,10 @@ def play(b, ms, ev, hist, knob, val):
         adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
     if knob == 'split':
         se.set_policy(*se.SHIPPED_POLICY)
-        if val > 1:
-            extra['split_workers'] = val
+        # val = merge*10 + k (merge 0 = rust-ai.js pickSplitResult, 1 = common depth)
+        if val % 10 > 1:
+            extra['split_workers'] = val % 10
+            extra['split_merge'] = val // 10
     if knob == 'threads' and val // 10 > 1:
         extra['threads'] = val // 10
         extra['smp_mode'] = val % 10

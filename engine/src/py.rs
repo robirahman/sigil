@@ -618,7 +618,7 @@ impl PyBoard {
                         adopt_partial=None, elastic=None, pvs=None, lmr=None,
                         use_history=None, exact_clock=None, nmp=None, lmr_quiet=None,
                         tact_ext=None, singular=None, threads=None, smp_mode=None,
-                        split_workers=None))]
+                        split_workers=None, split_merge=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -649,7 +649,12 @@ impl PyBoard {
                  // (`Search::set_root_split`) on its own thread for the same time,
                  // merged exactly as rust-ai.js `pickSplitResult` merges. None or
                  // 1 = the ordinary single search.
-                 split_workers: Option<usize>)
+                 split_workers: Option<usize>,
+                 // How the split parts are merged: 0 = rust-ai.js pickSplitResult
+                 // (best final score); 1 = compare parts at the deepest depth EVERY
+                 // part completed (scores of different depths are not comparable),
+                 // then play the winning part's final move.
+                 split_merge: Option<u8>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
@@ -682,11 +687,17 @@ impl PyBoard {
             let results: Vec<_> = std::thread::scope(|sc| {
                 let hs: Vec<_> = parts.iter_mut().map(|s| {
                     let sw = sw.clone();
-                    sc.spawn(move || { sw.apply(); s.go(&b, c, max_depth, time_ms) })
+                    sc.spawn(move || {
+                        sw.apply();
+                        let mut per_depth: Vec<(i32, i32)> = Vec::new();
+                        let mut cb = |d: i32, sc: i32, _n: u64| per_depth.push((d, sc));
+                        let r = s.go_with_progress(&b, c, max_depth, time_ms, Some(&mut cb));
+                        (r, per_depth)
+                    })
                 }).collect();
                 hs.into_iter().map(|h| h.join().expect("split worker panicked")).collect()
             });
-            split_pick(results)
+            split_pick(results, split_merge.unwrap_or(0))
         } else {
             mk()?.go(&self.b, c, max_depth, time_ms)
         };
@@ -2182,25 +2193,40 @@ fn human_move_dash_turn(sfn: &str, result_sfn: &str)
 // ---------------------------------------------------------------------------
 
 use crate::turn::{Action as PAction, Turn as PTurn};
-/// rust-ai.js `pickSplitResult`, natively: among the parts that returned a move,
-/// prefer those that completed a depth; take the highest root score, ties to the
-/// deeper part; nodes are summed over every part that returned a move.
-fn split_pick(results: Vec<(Option<crate::turn::Turn>, i32, crate::search::SearchStats)>)
+/// Merge root-split parts. Mode 0 is rust-ai.js `pickSplitResult`, natively:
+/// among the parts that returned a move, prefer those that completed a depth;
+/// take the highest final root score, ties to the deeper part. Mode 1 compares
+/// the parts at the deepest depth every completed part reached (`per_depth`
+/// holds each part's (depth, score) per completed iteration), ties to the part
+/// that went deeper, and plays the winner's final move. Nodes are summed over
+/// every part that returned a move.
+#[allow(clippy::type_complexity)]
+fn split_pick(results: Vec<((Option<crate::turn::Turn>, i32, crate::search::SearchStats), Vec<(i32, i32)>)>,
+              mode: u8)
     -> (Option<crate::turn::Turn>, i32, crate::search::SearchStats)
 {
-    let total: u64 = results.iter().filter(|r| r.0.is_some()).map(|r| r.2.nodes).sum();
-    let ok: Vec<usize> = (0..results.len()).filter(|&i| results[i].0.is_some()).collect();
+    let total: u64 = results.iter().filter(|r| r.0.0.is_some()).map(|r| r.0.2.nodes).sum();
+    let ok: Vec<usize> = (0..results.len()).filter(|&i| results[i].0.0.is_some()).collect();
     if ok.is_empty() {
-        return results.into_iter().next().expect("at least one split part");
+        return results.into_iter().next().expect("at least one split part").0;
     }
-    let done: Vec<usize> = ok.iter().copied().filter(|&i| results[i].2.depth_completed > 0).collect();
+    let done: Vec<usize> = ok.iter().copied().filter(|&i| results[i].0.2.depth_completed > 0).collect();
     let pool = if done.is_empty() { ok } else { done };
+    let key = |i: usize| -> (i32, i32) {
+        let r = &results[i];
+        if mode == 1 {
+            let common = pool.iter().map(|&j| results[j].1.iter().map(|x| x.0).max().unwrap_or(0)).min().unwrap_or(0);
+            let at = r.1.iter().rev().find(|x| x.0 == common).map(|x| x.1);
+            (at.unwrap_or(r.0.1), r.0.2.depth_completed)
+        } else {
+            (r.0.1, r.0.2.depth_completed)
+        }
+    };
     let mut best = pool[0];
     for &i in &pool {
-        let (r, b) = (&results[i], &results[best]);
-        if r.1 > b.1 || (r.1 == b.1 && r.2.depth_completed > b.2.depth_completed) { best = i; }
+        if key(i) > key(best) { best = i; }
     }
-    let mut out = results.into_iter().nth(best).unwrap();
+    let mut out = results.into_iter().nth(best).unwrap().0;
     out.2.nodes = total;
     out
 }
