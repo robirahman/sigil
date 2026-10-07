@@ -118,7 +118,8 @@ for cfg in "v27:eval=shipped" "v25:eval=shipped;module=$WORK/mods/audit-v25.so" 
            "v23:eval=shipped;module=$WORK/mods/audit-v23.so"; do
   name=${cfg%%:*}
   [ -s $OUT/guest_gate_$name.json ] && continue
-  $WORK/venv/bin/python -u engine/harness/bench_suites.py --guest-only --nodes $NODES --guest-depths 5,6 \
+  nodes=$NODES; [ "$name" = v23 ] && nodes=""   # v23's analyze has no node_limit: fixed depths only
+  $WORK/venv/bin/python -u engine/harness/bench_suites.py --guest-only --nodes "$nodes" --guest-depths 4,5,6 \
     --workers $(nproc) --config "$cfg" --json $OUT/guest_gate_$name.json >> $OUT/gate.log 2>&1
   tail -1 $OUT/gate.log
 done
