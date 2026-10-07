@@ -12,7 +12,7 @@
 set -euo pipefail
 NAME=$1; ZONE=$2; MAXH=${3:-5}; MACHINE=${4:-g2-standard-16}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
-BRANCH=${BRANCH:-providence-bank}
+BRANCH=${BRANCH:-engine-improvement}
 DATA=${DATA:-gs://focus-surfer-494820-g0-sigil/data/s3/v2_2026-10-06/d4}
 PREP=${PREP:-gs://focus-surfer-494820-g0-sigil/data/s5/prep_v2_d4.npz}
 LAMS=${LAMS:-0 0.25 0.5 0.75 1}
