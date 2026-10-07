@@ -16,6 +16,10 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
 RUN=$(md run-id); BRANCH=$(md branch); MAXH=$(md max-hours); DATA=$(md data)
 PREP=$(md prep); LAMS=$(md lams); EPOCHS=$(md epochs)
 DEVICE=$(md device || true); SMOKE=$(md smoke || true)
+# Optional: EVALS = prep eval columns (comma list); JOBS = explicit training jobs,
+# one per line, `<tag> <nn_eval.py train args...>`, replacing the lambda sweep.
+EVALS=$(md evals || true); : "${EVALS:=tfit,tfit_spell,tfit_spell2}"
+JOBS=$(md jobs || true)
 : "${MAXH:=4}" "${LAMS:=0 0.25 0.5 0.75 1}" "${EPOCHS:=6}" "${DEVICE:=cuda}" "${SMOKE:=0}"
 ( sleep $((MAXH * 3600)); echo "WATCHDOG"; shutdown -h now ) &
 WATCHDOG=$!
@@ -70,7 +74,7 @@ if [ "$SMOKE" = 1 ]; then
   mkdir -p $WORK/data
   gcloud storage ls "$DATA/" | head -8 > $WORK/smoke_list.txt
   gcloud storage cp -q $(cat $WORK/smoke_list.txt) $WORK/data/ || fail "smoke data"
-  $NN prep $WORK/data $WORK/prep.npz --workers $(nproc) --evals tfit,tfit_spell,tfit_spell2 || fail "smoke prep"
+  $NN prep $WORK/data $WORK/prep.npz --workers $(nproc) --evals "$EVALS" || fail "smoke prep"
   $NN train $WORK/prep.npz $WORK/out/smoke --lam 0.5 --epochs 1 --split game --device "$DEVICE" \
     --batch 256 > $WORK/out/smoke.log 2>&1 || fail "smoke train"
   tail -1 $WORK/out/smoke.log
@@ -87,17 +91,31 @@ else
   mkdir -p $WORK/data
   gcloud storage cp -q -r "$DATA/*" $WORK/data/ || fail "data download"
   echo "downloaded $(ls $WORK/data | wc -l) chunks"
-  $NN prep $WORK/data $WORK/prep.npz --workers $(nproc) --evals tfit,tfit_spell,tfit_spell2 \
+  $NN prep $WORK/data $WORK/prep.npz --workers $(nproc) --evals "$EVALS" \
     || fail prep
   gcloud storage cp -q $WORK/prep.npz "$PREP"
   rm -rf $WORK/data
 fi
 
+if [ "$JOBS" = prep-only ]; then
+  # Prep on a wide CPU VM (the GPU VM has 12 vCPUs), then train elsewhere.
+  echo "prep-only: $PREP"; JOBS=""; LAMS=""; SKIP_FOLDS=1
+elif [ -n "$JOBS" ]; then
+  while read -r TAG ARGS; do
+    [ -n "$TAG" ] || continue
+    $NN train $WORK/prep.npz $WORK/out/$TAG $ARGS --epochs $EPOCHS --device "$DEVICE" \
+      > $WORK/out/$TAG.log 2>&1 || echo "train $TAG failed"
+    echo "$TAG: $(tail -1 $WORK/out/$TAG.log | cut -c1-300)"
+    gcloud storage rsync -q -r $WORK/out $DEST/out 2>/dev/null
+  done <<< "$JOBS"
+  LAMS=""
+fi
 for L in $LAMS; do
   $NN train $WORK/prep.npz $WORK/out/game_l$L --lam $L --epochs $EPOCHS --split game --device "$DEVICE" \
     > $WORK/out/game_l$L.log 2>&1 || echo "train lam=$L failed"
   tail -1 $WORK/out/game_l$L.log
 done
+if [ -z "$JOBS" ] && [ -z "${SKIP_FOLDS:-}" ]; then
 BEST=$($WORK/venv/bin/python - "$WORK/out" <<'EOF'
 import json, glob, sys
 r = []
@@ -115,6 +133,7 @@ done
 $NN train $WORK/prep.npz $WORK/out/game_l${BEST}_h256 --lam $BEST --epochs $EPOCHS --split game \
   --device "$DEVICE" --hidden 256 > $WORK/out/game_h256.log 2>&1 || echo "h256 failed"
 tail -1 $WORK/out/game_h256.log
+fi
 
 kill $UPLOADER 2>/dev/null
 gcloud storage rsync -q -r $WORK/out $DEST/out
