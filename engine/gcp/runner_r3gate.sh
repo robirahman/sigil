@@ -79,7 +79,7 @@ gcs_get data/guest-audit-2026-10/lines_all.json $WORK/lines_all.json || { echo "
 # ---- calibration: native vs wasm on identical trees (fixed depth, one process) ----
 cd $WORK/repo
 P=engine/harness/positions_midgame.txt
-for d in 4 5; do
+for d in ${CALIB_DEPTHS:-4}; do
   grep -q RESULT $OUT/calib_wasm_d$d.txt 2>/dev/null && continue
   engine/target/release/examples/bench $P $d --eval nnue_spell3 --policy 96 > $OUT/calib_native_d$d.txt 2>&1
   H=$(grep -o 'HASH [0-9a-f]*' $OUT/calib_native_d$d.txt | tail -1 | awk '{print $2}')
