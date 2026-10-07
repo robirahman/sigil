@@ -1,0 +1,1 @@
+6,3000,nnue_spell3,policy_weights,1,0
