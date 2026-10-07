@@ -326,6 +326,16 @@
 				</div>
 			</div>
 
+			<div class="settings-card">
+				<label class="settings-card__row">
+					<input type="checkbox" x-model="aiMultiCore" x-on:change="saveAiMultiCore" />
+					<span>Let the AI use more than one CPU core (this device)</span>
+				</label>
+				<div class="settings-card__hint">
+					When on, the Rust AI splits each move across <span x-text="aiMultiCoreWorkers"></span> background workers instead of one, so it searches deeper in the same time. Uses about 30 MB of memory per extra worker and more CPU. Saved on this device only, since every device has a different number of cores.
+				</div>
+			</div>
+
 			<p class="success-msg" x-text="successMsg"></p>
 			<p class="error-msg" x-text="error"></p>
 
@@ -377,6 +387,13 @@
 				showAiEval: false,
 				showMapControl: false,
 				enablePondering: false,
+				// Device-level, not account-level: core count is a property of
+				// the device. rust-ai.js reads the same localStorage key.
+				aiMultiCore: (() => { try { return localStorage.getItem('sigil.rustWorkers') === 'auto'; } catch (e) { return false; } })(),
+				get aiMultiCoreWorkers() {
+					const hc = Math.floor(Number(navigator.hardwareConcurrency) || 0);
+					return Math.max(1, Math.min(4, hc - 1));
+				},
 
 				get needsRename() {
 					if (!this.profile) return false;
@@ -503,6 +520,20 @@
 						this.showMapControl = !this.showMapControl;
 					}
 					this.busy = false;
+				},
+
+				saveAiMultiCore() {
+					this.error = '';
+					try {
+						if (this.aiMultiCore) localStorage.setItem('sigil.rustWorkers', 'auto');
+						else localStorage.removeItem('sigil.rustWorkers');
+						this.successMsg = this.aiMultiCore
+							? 'The AI will use ' + this.aiMultiCoreWorkers + ' workers on this device.'
+							: 'The AI will use one worker on this device.';
+					} catch (e) {
+						this.error = 'Could not save on this device: ' + (e.message || e);
+						this.aiMultiCore = !this.aiMultiCore;
+					}
 				},
 
 				async saveEnablePondering() {

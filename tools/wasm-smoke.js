@@ -313,6 +313,10 @@ async function driver() {
 		if (wc(undefined, 8) !== 1 || wc(4, 8) !== 4 || wc(16, 8) !== 7 || wc(4, 1) !== 1 || wc(4, undefined) !== 1) {
 			throw new Error('rustWorkerCount cap is wrong');
 		}
+		// The account page's device setting ('auto'): min(4, hardwareConcurrency - 1).
+		if (wc('auto', 8) !== 4 || wc('auto', 4) !== 3 || wc('auto', 2) !== 1 || wc('auto', undefined) !== 1) {
+			throw new Error("rustWorkerCount('auto') is wrong");
+		}
 		if (typeof wasm_bindgen.Engine.prototype.set_root_split === 'function') {
 			const PARTS = parseInt(process.env.SIGIL_SMOKE_SPLIT || '4', 10);
 			const engines = Array.from({ length: PARTS }, () => new wasm_bindgen.Engine(18));

@@ -147,11 +147,28 @@ function getRustEnginePool(n) {
 function getRustEngineWorker() { return getRustEnginePool(1)[0]; }
 
 /**
+ * The device setting's worker count ('auto'): up to 4, leaving a core for the
+ * page. Measured 2026-10 (engine/reports/2026-10-r2-multicore.md).
+ */
+function recommendedRustWorkers(hardwareConcurrency) {
+	const hc = Math.floor(Number(hardwareConcurrency) || 0);
+	return Math.max(1, Math.min(4, hc - 1));
+}
+
+/** The account page's device setting (localStorage 'sigil.rustWorkers'):
+ *  'auto' or unset (one worker). Never throws (private mode, blocked storage). */
+function rustWorkersSetting() {
+	try { return (typeof localStorage !== 'undefined' && localStorage.getItem('sigil.rustWorkers')) || undefined; }
+	catch (e) { return undefined; }
+}
+
+/**
  * How many root-split workers to use: `requested` (RustAI's `workers` option,
  * else `window.SIGIL_RUST_WORKERS`), capped at hardwareConcurrency - 1 so the
  * page keeps a core; 1 (the shipped single worker) when unset or unknown.
  */
 function rustWorkerCount(requested, hardwareConcurrency) {
+	if (requested === 'auto') return recommendedRustWorkers(hardwareConcurrency);
 	const want = Math.floor(Number(requested) || 1);
 	const hc = Math.floor(Number(hardwareConcurrency) || 0);
 	const cap = Math.max(1, hc - 1);
@@ -224,7 +241,7 @@ class RustAI {
 		// Step 6 option A root split (prototype): 1 = the shipped single worker.
 		const hc = (typeof navigator !== 'undefined') ? navigator.hardwareConcurrency : 0;
 		const req = (options.workers !== undefined) ? options.workers
-			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || 1);
+			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || rustWorkersSetting() || 1);
 		this.workers = (this.transport === 'worker') ? rustWorkerCount(req, hc) : 1;
 		// One RustAI per game: reset the workers' persistent tables so a previous
 		// game's entries cannot leak into this one.
@@ -486,5 +503,6 @@ RustAI.judgeMove = async function (board, plies, timeMs) {
 // Exposed for tools/wasm-smoke.js, which drives the same combination headless.
 RustAI.pickSplitResult = pickSplitResult;
 RustAI.rustWorkerCount = rustWorkerCount;
+RustAI.recommendedRustWorkers = recommendedRustWorkers;
 
 if (typeof window !== 'undefined') window.RustAI = RustAI;
