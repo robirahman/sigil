@@ -50,6 +50,11 @@ async function driver() {
 	const fs = require('fs');
 	const path = require('path');
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
+	// Play with the eval the site plays (rust-ai.js's default, which mirrors
+	// eval.rs SHIPPED_EVAL), not a literal: until v25 this smoke searched with
+	// 'tfit' whatever the site shipped.
+	const EVAL = process.env.SIGIL_SMOKE_EVAL || new RustAI({ transport: 'http' }).evalName;
+	console.log('eval ' + EVAL);
 	// SIGIL_SMOKE_POLICY=<min_width> overrides the shipped generator policy.
 	// The shipped engine has it on (policy::SHIPPED_POLICY); 'off' replays without it.
 	if (process.env.SIGIL_SMOKE_POLICY === 'off') {
@@ -114,7 +119,7 @@ async function driver() {
 	const smokeEngine = new wasm_bindgen.Engine(18);
 	function pick(sfn, history, budgetMs, onDepth) {
 		return JSON.parse(smokeEngine.search(
-			sfn, budgetMs, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6,
+			sfn, budgetMs, 4, history.concat([sfn]), EVAL, 0.10, 2, 6,
 			onDepth || undefined));
 	}
 
@@ -250,7 +255,7 @@ async function driver() {
 		b.setupInitial();
 		const sfn = boardToSfn(b).replace(b.spellNames[0], 'Lifesap');
 		const bad = JSON.parse(smokeEngine.search(
-			sfn, 50, 4, [], 'tfit', 0, 0, 0, undefined));
+			sfn, 50, 4, [], EVAL, 0, 0, 0, undefined));
 		if (bad.ok) throw new Error('out-of-scope spell was not refused');
 	}
 	// Persistent Engine: the table survives a move, a ponder primes it, and the
@@ -265,7 +270,7 @@ async function driver() {
 		const eng = new wasm_bindgen.Engine(18);
 		if (eng.tt_filled() !== 0) throw new Error('fresh Engine has a non-empty table');
 		const esearch = (s, ms) => JSON.parse(eng.search(
-			s, ms, 4, history.concat([s]), 'tfit', 0.10, 2, 6, undefined));
+			s, ms, 4, history.concat([s]), EVAL, 0.10, 2, 6, undefined));
 		// Move 1: ordinary search.
 		let res = esearch(sfn, BUDGET_MS);
 		if (!res.ok) throw new Error('Engine.search: ' + res.error);
@@ -273,7 +278,7 @@ async function driver() {
 		if (filled1 === 0) throw new Error('Engine table empty after a search');
 		await verify(sfn, res); history.push(sfn); sfn = res.expected_sfn; engineMoves++;
 		// Human "thinks": ponder the position they are looking at in slices.
-		const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6));
+		const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), EVAL, 0.10, 2, 6));
 		if (!pb.ok) throw new Error('ponder_begin: ' + pb.error);
 		let steps = 0, last = null;
 		for (; steps < 20; steps++) {
@@ -308,25 +313,35 @@ async function driver() {
 		if (wc(undefined, 8) !== 1 || wc(4, 8) !== 4 || wc(16, 8) !== 7 || wc(4, 1) !== 1 || wc(4, undefined) !== 1) {
 			throw new Error('rustWorkerCount cap is wrong');
 		}
+		// The account page's device setting ('auto'): min(4, hardwareConcurrency - 1).
+		if (wc('auto', 8) !== 4 || wc('auto', 4) !== 3 || wc('auto', 2) !== 1 || wc('auto', undefined) !== 1) {
+			throw new Error("rustWorkerCount('auto') is wrong");
+		}
 		if (typeof wasm_bindgen.Engine.prototype.set_root_split === 'function') {
-			const PARTS = 3;
+			const PARTS = parseInt(process.env.SIGIL_SMOKE_SPLIT || '4', 10);
 			const engines = Array.from({ length: PARTS }, () => new wasm_bindgen.Engine(18));
 			const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
 			b.setupInitial();
 			let sfn = boardToSfn(b);
 			const history = [];
 			for (let ply = 0; ply < 8; ply++) {
+				const perDepth = engines.map(() => []);
 				const results = engines.map((eng, i) => {
 					eng.set_root_split(i, PARTS);
-					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6, undefined));
+					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), EVAL, 0.10, 2, 6,
+						(d, s) => perDepth[i].push([d, s])));
 				});
-				const res = RustAI.pickSplitResult(results);
+				const res = RustAI.pickSplitResult(results, perDepth);
+				if (results.every((r) => r.ok && r.depth > 0) && res.split.common_depth == null) {
+					throw new Error('split ply ' + ply + ': common-depth merge not used');
+				}
 				if (!res.ok) throw new Error('split ply ' + ply + ': ' + res.error);
 				if (!res.split || res.split.parts !== PARTS) throw new Error('split report missing');
-				// Parts are disjoint: two completed parts never choose the same turn
-				// (an empty part falls back to the list's first turn, so allow that).
-				const keys = results.filter((r) => r.ok && r.depth > 0).map((r) => JSON.stringify(r.actions));
-				if (new Set(keys).size < keys.length - 1) throw new Error('parts chose the same turn: ' + keys.join(' | '));
+				// Disjointness is pinned in Rust (root_split_parts_are_disjoint_and_cover_the_root).
+				// It is not checkable from here: a part whose hash range is empty
+				// searches the list's first turn, so with a small root (the opening
+				// plies) several parts legitimately report the same turn.
+				if (!results.some((r) => r.ok && r.depth > 0)) throw new Error('split ply ' + ply + ': no part completed a depth');
 				const over = await verify(sfn, res);
 				splitMoves++;
 				history.push(sfn);
@@ -336,13 +351,13 @@ async function driver() {
 				// exactly as rust-worker.js does.
 				for (const eng of engines) {
 					eng.set_root_split(0, 1);
-					const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6));
+					const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), EVAL, 0.10, 2, 6));
 					if (!pb.ok) throw new Error('split ponder_begin: ' + pb.error);
 					const st = JSON.parse(eng.ponder_step(20, 8));
 					if (!st.ok) throw new Error('split ponder_step failed');
 					eng.ponder_end();
 				}
-				const reply = JSON.parse(engines[0].search(sfn, 100, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6, undefined));
+				const reply = JSON.parse(engines[0].search(sfn, 100, 4, history.concat([sfn]), EVAL, 0.10, 2, 6, undefined));
 				if (!reply.ok) throw new Error('split reply: ' + reply.error);
 				const over2 = await verify(sfn, reply);
 				history.push(sfn);

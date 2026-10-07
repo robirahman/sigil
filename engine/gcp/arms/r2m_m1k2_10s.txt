@@ -1,0 +1,1 @@
+12,10000,nnue_spell,split,12,1
