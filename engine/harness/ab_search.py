@@ -76,6 +76,8 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy', 'p
          # opening_book: the competitive opening selector (opening.rs), 1/0;
          # only meaningful with SIGIL_VARIANT=competitive.
          'opening_book',
+         # opening_learned: 1 learned selector / 0 shipped book / 2 no selector; competitive only.
+         'opening_learned',
          # opening_syzygy: the selector's Syzygy rules (opening::set_opening_syzygy:
          # never start opposite Syzygy, take Syzygy when the enemy did, blue values
          # Syzygy by the spells across from it), 1/0; competitive only.
@@ -149,11 +151,18 @@ def _arm_policy_weights():
     return _ARM_PW
 
 
+# SIGIL_POLICY=shipped plays BOTH arms with the shipped generator policy
+# (se.SHIPPED_POLICY, on since v25) unless the knob under test is the policy
+# itself. The policy is a thread-local engine setting that is OFF by default in
+# Python, so without this an arena of any other knob measures the pre-v25 search.
+# Default off keeps the older arms files reproducible.
+POLICY_MODE = os.environ.get('SIGIL_POLICY', 'off')
+
+
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
-    if AB_BASE == 'shipped' and knob != 'policy':
-        on, mw = se.SHIPPED_POLICY
-        se.set_policy(on, mw)
+    if (AB_BASE == 'shipped' or POLICY_MODE == 'shipped') and knob != 'policy':
+        se.set_policy(*se.SHIPPED_POLICY)
     if ':' in ev:
         # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
         # val != 0) plays the left eval, the base (policy off) the right one.
@@ -205,6 +214,11 @@ def play(b, ms, ev, hist, knob, val):
         se.set_lead_bounds_v2(bool(val))
     if knob == 'opening_book':
         se.set_opening_book(bool(val))
+    if knob == 'opening_learned':
+        # 1 = the learned selector (opening_learned.rs), 0 = the shipped book;
+        # 2 = neither (search + eval pick the first placement).
+        se.set_opening_learned(val == 1)
+        se.set_opening_book(val != 2)
     if knob == 'opening_syzygy':
         se.set_opening_syzygy(bool(val))
     if knob == 'opening_contest':
@@ -298,7 +312,7 @@ def play(b, ms, ev, hist, knob, val):
 # harness board starts at 0 and `play_best` increments AFTER the move, so it
 # must start at 1 or red gets a SECOND free blink at counter 2.
 VARIANT = os.environ.get('SIGIL_VARIANT', 'standard')
-if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_syzygy', 'opening_contest', 'opening_carnage'):
+if 'competitive' not in VARIANT and len(sys.argv) > 4 and sys.argv[4] in ('opening_book', 'opening_learned', 'opening_syzygy', 'opening_contest', 'opening_carnage'):
     sys.exit(f'the {sys.argv[4]} knob only acts in the competitive variant: set SIGIL_VARIANT=competitive')
 # SIGIL_REQUIRE_SPELL=<engine spell id>: only play draws that contain this spell
 # (the seed is stepped deterministically until its draw does), so a knob that
@@ -470,7 +484,7 @@ if __name__ == "__main__":
     RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  ab_base={AB_BASE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  ab_base={AB_BASE} policy_mode={POLICY_MODE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "

@@ -22,6 +22,8 @@ pub mod features;
 pub mod search;
 pub mod opening_data;
 pub mod opening;
+pub mod opening_learned;
+pub mod opening_learned_weights;
 pub mod prior;
 pub mod policy;
 pub mod policy_lse;
