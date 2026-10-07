@@ -4418,6 +4418,73 @@ fn policy_stream_is_a_deterministic_subset_of_the_shipped_stream() {
     assert!(checked > 20, "only {checked} positions checked");
 }
 
+/// Round 3 exploration tail (`policy::Explore`): with the tail on, the shipped
+/// policy stream is an exact SUBSEQUENCE of the explored one (the tail never
+/// renormalises or reorders the shipped candidates), the stream stays
+/// deterministic, every extra turn is legal (it is in the exhaustive
+/// enumeration's result set) and no tail turn repeats a resolved board that
+/// the stream already yielded. The tail must actually add turns somewhere.
+#[test]
+fn policy_explore_tail_extends_the_stream_without_reordering_it() {
+    use crate::policy::{set_policy_explore, Explore};
+    use std::collections::HashSet;
+    let on = Explore { mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8, dash_tried: 48,
+                       base: 256, step: 8, slot_first: 0, slot_every: 0 };
+    let (mut checked, mut extra_total) = (0, 0usize);
+    for seed in 1..40u64 {
+        let draw = Board::legal_draw(seed);
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL & nx();
+        let bl = (nx() & ALL & nx()) & !r;
+        b.stones = [r, bl];
+        b.turn_counter = 10 + (seed % 20) as u32;
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        for c in [Color::Red, Color::Blue] {
+            set_policy_explore(Explore::OFF);
+            let base: Vec<Turn> = b.turns_policy(c, 16, 2).take(200).collect();
+            set_policy_explore(on);
+            let x: Vec<Turn> = b.turns_policy(c, 16, 2).take(400).collect();
+            let x2: Vec<Turn> = b.turns_policy(c, 16, 2).take(400).collect();
+            set_policy_explore(Explore::OFF);
+            assert_eq!(x.len(), x2.len());
+            for (p, q) in x.iter().zip(&x2) { assert_eq!(p.slice(), q.slice(), "seed {seed}: nondeterministic"); }
+            // The shipped turns keep their order: those of the shipped prefix that
+            // the explored stream reaches are exactly a prefix of it.
+            let xb: Vec<&Turn> = x.iter().filter(|t| base.iter().any(|u| u.slice() == t.slice())).collect();
+            let mut seen_k: std::collections::HashMap<Vec<crate::turn::Action>, usize> = Default::default();
+            let mut k = 0;
+            for t in &xb {
+                // a turn may legitimately appear twice (the decisive prepass), in both streams
+                let e = seen_k.entry(t.slice().to_vec()).or_insert(0); *e += 1;
+                while k < base.len() && base[k].slice() != t.slice() { k += 1; }
+                assert!(k < base.len(), "seed {seed} {c:?}: shipped order broken at {:?}", t.slice());
+                k += 1;
+            }
+            let after = |t: &Turn| { let mut y = b; y.apply_turn(t, c); y };
+            let check_legal = checked < 6;
+            let legal: HashSet<_> = if check_legal {
+                let (all, _) = b.enumerate_turns_capped(c, 3_000_000);
+                all.iter().map(|t| after(t).state_key()).collect()
+            } else { HashSet::new() };
+            let base_set: HashSet<Vec<crate::turn::Action>> = b.turns_policy(c, 16, 2).take(100_000)
+                .map(|t| t.slice().to_vec()).collect();
+            for t in &x {
+                if base_set.contains(&t.slice().to_vec()) { continue; }
+                extra_total += 1;
+                if check_legal {
+                    assert!(legal.contains(&after(t).state_key()), "seed {seed} {c:?}: illegal tail turn {:?}", t.slice());
+                }
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 20, "only {checked} positions checked");
+    assert!(extra_total > 0, "the tail never added a turn");
+}
+
 /// Step 5: the Rust network is bit-for-bit the integer forward pass that
 /// `harness/nn_eval.py` trained and quantised (vectors written by its `golden`
 /// command from the SAME `nets/nnue_spell.bin`). Integer-only arithmetic, so

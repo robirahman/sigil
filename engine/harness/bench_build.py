@@ -9,6 +9,9 @@
     python engine/harness/bench_build.py freeze --lines work/lines.json --old-lines <corpus of the old audit> \
         --audit ai/data/surprise_audit_2026-09-26.json [--new-rows report_rows.json] \
         --drops ai/data/human_turn_drops_2026-09-23.json --final work/final_probe.jsonl --out ai/data/benchmarks
+    # 4. the own-turn half of a guest suite (bench_suites.py --guest):
+    python engine/harness/bench_build.py guest-own --lines lines_all.json --rows v23:<run>/report_rows_own.json \
+        --rows v25:... --rows v27:... --out ai/data/benchmarks/guest_2026-10_own.json
 
 Every case in a frozen suite carries its own SFNs (and the game history up to the position,
 for threefold repetition), so `bench_suites.py` needs nothing but the suite file.
@@ -177,6 +180,42 @@ def cmd_freeze(a):
     _write(os.path.join(a.out, 'build_report.json'), report)
 
 
+def cmd_guest_own(a):
+    """Own-turn falls of a surprise audit that started NEAR LEVEL: the run's depth-4 value
+    before the AI's move is >= --min-v4 (default -1.0), that run confirmed the fall, and its
+    depth-6 alternative beats the played move by >= --min-gain stones (default 0.25). These
+    are the avoidable blunders; from a lost position every move loses, and "avoids" means
+    nothing there. One case per (game, position). The first run listed sets the base fields,
+    and every run's values are kept as `<tag>_*`. `sfn` is the AI's decision position,
+    `sfn_after` the move it actually played, `history` the game before `sfn`."""
+    lines = json.load(open(a.lines, encoding='utf-8'))
+    cases = {}
+    for spec in a.rows:
+        tag, _, path = spec.partition(':')
+        for r in json.load(open(path, encoding='utf-8')):
+            if not r.get('confirmed') or r.get('v4_i') is None or r['v4_i'] < a.min_v4:
+                continue
+            # The depth-6 alternative must be better than the played move by --min-gain
+            # (alt6_v None = depth 6 plays the blunder too: kept, a blind case).
+            if r.get('alt6_v') is not None and r['alt6_v'] - r['target'] < a.min_gain:
+                continue
+            P = lines[r['g']]['positions']
+            key = (r['g'], r['i'])
+            c = cases.get(key)
+            if c is None:
+                c = cases[key] = {'g': r['g'], 'i': r['i'], 'ai': r['ai'], 'room': r.get('room'),
+                                  'sfn': P[r['i']], 'sfn_after': P[r['i'] + 1], 'history': P[:r['i']],
+                                  'kind': r.get('kind'), 'target': r['target'], 'v4_i': r['v4_i'],
+                                  'alt6_v': r.get('alt6_v'), 'ai_won': r.get('winner') == r['ai'],
+                                  'confirmed_by': []}
+            c['confirmed_by'].append(tag)
+            for k in ('target', 'v4_i', 'alt6_v', 'avoids_d4_i', 'avoids_d5_i', 'avoids_d6_i'):
+                c[f'{tag}_{k}'] = r.get(k)
+    out = sorted(cases.values(), key=lambda c: (lines[c['g']]['timestamp'], c['i']))
+    print(f'{len(out)} own-turn cases (v4_i >= {a.min_v4}, alt6 gain >= {a.min_gain})')
+    _write(a.out, out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -189,8 +228,13 @@ def main():
     z.add_argument('--new-tag', default='surprise_audit_2026-10'); z.add_argument('--drops', required=True)
     z.add_argument('--final', required=True); z.add_argument('--final-tag', default='final_blow_probe_2026-10')
     z.add_argument('--out', required=True)
+    o = sub.add_parser('guest-own'); o.add_argument('--lines', required=True)
+    o.add_argument('--rows', action='append', required=True, help='TAG:report_rows_own.json (repeatable)')
+    o.add_argument('--min-v4', type=float, default=-1.0); o.add_argument('--min-gain', type=float, default=0.25)
+    o.add_argument('--out', required=True)
     a = ap.parse_args()
-    {'filter': cmd_filter, 'newgames': cmd_newgames, 'freeze': cmd_freeze}[a.cmd](a)
+    {'filter': cmd_filter, 'newgames': cmd_newgames, 'freeze': cmd_freeze,
+     'guest-own': cmd_guest_own}[a.cmd](a)
 
 
 if __name__ == '__main__':

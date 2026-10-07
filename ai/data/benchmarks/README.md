@@ -63,3 +63,23 @@ confirmed the case, else from v27. Per-build values are kept as `v23_*` / `v25_*
 * `ai_won`: 13 cases come from games the AI won, 19 from its losses.
 
 Report: `engine/reports/2026-10-guest-audit.md`. The frozen suites above are untouched.
+
+## Guest gate: own-turn cases and the v27 baseline (2026-10-07, round 3)
+
+`guest_2026-10_own.json` (10 cases): own-turn falls from the same 24 guest games, built by
+`engine/harness/bench_build.py guest-own` from the three audit runs' `report_rows_own.json`.
+A case is kept when the run confirmed the fall, the run's depth-4 value before the AI's move
+was >= -1.0 (near level: from a lost position every move loses), and the run's depth-6
+alternative beats the played move by >= 0.25 stones (or depth 6 also plays it: kept as a blind
+case). `sfn` is the AI's decision position, `sfn_after` the move the AI played, `history` the
+game before `sfn`. Per-run values are kept as `v23_*` / `v25_*` / `v27_*`. All 10 are
+competitive-variant positions, like the 32 opponent-turn cases.
+
+`bench_suites.py --guest-only --config "<name>:eval=shipped"` scores both files (gate
+definition and pass rule: `engine/reports/2026-10-r3-gate.md`). `guest_gate_v27.json` is the
+v27 baseline output, per case, for case-by-case comparison.
+
+Variant mix of the suites (competitive incl. deathmatch / all): surprise 299/317, human finds
+118/120, final-blow misses 17/26, guest 32/32 + 10/10. The engine position files used for
+node-rate and parity work are mostly STANDARD: `positions_midgame.txt` 0/76,
+`positions_prof12.txt` 0/12, `positions_expansion.txt` 4/25 (`positions_rust_games.txt` 58/60).
