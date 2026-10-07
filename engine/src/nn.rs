@@ -59,6 +59,20 @@ impl NnSpec {
 
 /// `nets/nnue_spell.bin`, written by `nn_eval.py train` (see engine/reports/2026-10-step5.md).
 pub static NNUE_SPELL: NnSpec = NnSpec::new("nnue_spell", include_bytes!("../nets/nnue_spell.bin"));
+/// Round 2 (engine/reports/2026-10-r2-nn.md): residual on `tfit_spell_v2`, cap 256,
+/// lambda 0.5, quantisation-aware last 2 epochs; v26's shipped eval. Its lambda 0.25
+/// sibling `nnue_spell2` measured +1.9 Elo and was dropped from the build in v26 (its
+/// net stays in nets/ for reference) to keep the wasm small.
+pub static NNUE_SPELL3: NnSpec = NnSpec::new("nnue_spell3", include_bytes!("../nets/nnue_spell3.bin"));
+
+/// A network by preset name (wasm parity export, tests).
+pub fn by_name(name: &str) -> Option<&'static NnSpec> {
+    match name {
+        "nnue_spell" => Some(&NNUE_SPELL),
+        "nnue_spell3" => Some(&NNUE_SPELL3),
+        _ => None,
+    }
+}
 
 pub struct Net {
     pub h: usize,

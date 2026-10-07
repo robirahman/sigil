@@ -12,15 +12,21 @@
 set -euo pipefail
 NAME=$1; ZONE=$2; MAXH=${3:-5}; MACHINE=${4:-g2-standard-16}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
-BRANCH=${BRANCH:-train-s5-nneval}
+BRANCH=${BRANCH:-providence-bank}
 DATA=${DATA:-gs://focus-surfer-494820-g0-sigil/data/s3/v2_2026-10-06/d4}
 PREP=${PREP:-gs://focus-surfer-494820-g0-sigil/data/s5/prep_v2_d4.npz}
 LAMS=${LAMS:-0 0.25 0.5 0.75 1}
 EPOCHS=${EPOCHS:-6}
 SMOKE=${SMOKE:-0}; DEVICE=${DEVICE:-cuda}; GPU=${GPU:-1}
+# EVALS: prep eval columns. JOBS_FILE: one training job per line,
+# `<tag> <nn_eval.py train args>`, replacing the default lambda sweep.
+EVALS=${EVALS:-tfit,tfit_spell,tfit_spell2}
+JOBS_FILE=${JOBS_FILE:-}
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+FROM_FILE="startup-script=$HERE/runner_nn.sh"
+[ -n "$JOBS_FILE" ] && FROM_FILE="$FROM_FILE,jobs=$JOBS_FILE"
 DRIVER=""; [ "$GPU" = 1 ] && DRIVER=",install-nvidia-driver=True"
 MAINT=(--maintenance-policy=TERMINATE)
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)-$NAME
 echo "RUN=$RUN zone=$ZONE machine=$MACHINE cap=${MAXH}h"
 gcloud compute instances create "$NAME" \
@@ -32,7 +38,7 @@ gcloud compute instances create "$NAME" \
   --boot-disk-size=200GB --boot-disk-type=pd-balanced --boot-disk-auto-delete \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="run-id=$RUN,branch=$BRANCH,max-hours=$MAXH,data=$DATA,prep=$PREP,lams=$LAMS,epochs=$EPOCHS,device=$DEVICE,smoke=$SMOKE$DRIVER" \
-  --metadata-from-file="startup-script=$HERE/runner_nn.sh" \
+  --metadata="^|^run-id=$RUN|branch=$BRANCH|max-hours=$MAXH|data=$DATA|prep=$PREP|lams=$LAMS|epochs=$EPOCHS|device=$DEVICE|smoke=$SMOKE|evals=$EVALS${DRIVER//,/|}" \
+  --metadata-from-file="$FROM_FILE" \
   --format="value(name,status)"
 echo "$RUN"

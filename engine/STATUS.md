@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-07: engine v26 (cache v67) -- `nnue_spell3` + retrained generator policy.** `SHIPPED_EVAL = "nnue_spell3"`
+(residual on `tfit_spell_v2`, cap 256, lambda 0.5, quantisation-aware; `reports/2026-10-r2-nn.md`: +40.1 [+19.2, +60.9]
+at 10 s over `nnue_spell` with the shipped policy) and the policy retrained on 1.42M v25 self-play examples
+(`reports/2026-10-r2-data.md`: +8.5 [-1.9, +18.8] pooled over 4,317 games, not significant on its own). Release A/B
+`ab_version.py` (each build plays its own shipped eval + policy), v26 vs v25, 10 s/move, colour-swapped, 4 x
+c3d-highcpu-90: core draws **+30.6 [+15.9, +45.3]** (2,160 games), Tectonic/Providence draws **+51.5 [+36.7, +66.3]**
+(2,160). `nnue_spell2` dropped from the build. Parity: policy-wasm HASH 55a10a3b6c3b7ef9 (76 positions, d4) = bench.rs;
+nn-wasm 264/264 for nnue_spell3 and nnue_spell. Tests 182/182, wasm smoke 5/5 + policy-off. wasm 1.36 MB (417 KB gz).
+
 **2026-10-07: engine v25 (cache v65) -- learned generator policy + `nnue_spell` network eval.** `policy::SHIPPED_POLICY`
 (on, min_width 96) and `eval::SHIPPED_EVAL = "nnue_spell"` are what the site plays (wasm applies the policy once per
 module; `serve.py --policy`; Lazy SMP / parallel-root helper threads now inherit the policy). Release A/B, v25 vs v24,

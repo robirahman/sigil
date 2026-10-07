@@ -33,7 +33,7 @@ MERGE_OFF = 1 << 62
 # and a harness that hardcoded 1 would silently test every other knob under the old,
 # far-too-narrow budget -- which is exactly the confound this re-test exists to remove.
 BASE_WS = se.DEFAULT_WIDTH_SCALE
-KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
+KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy', 'policy_weights',
          'key_dash_extra', 'key_dash_min_width', 'adaptive',
          'rank_oversample', 'width_shape',
          # §1.2 booleans: arm value 1 = on, 0 = off (engine default).
@@ -124,8 +124,36 @@ ADAPTIVE_P = 0.10
 DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the switch takes the cap too
 
 
+# SIGIL_AB_BASE=shipped: both arms start from the SHIPPED engine (the release's
+# adaptive widening and generator policy, `se.SHIPPED_ADAPTIVE` / `se.SHIPPED_POLICY`)
+# instead of the harness's historical defaults (adaptive off, policy off). Since v25
+# the site plays both, so an eval or knob A/B meant to gate a release sets this.
+# The `policy` and `adaptive` knobs still override their own setting on the arm.
+AB_BASE = os.environ.get('SIGIL_AB_BASE', 'legacy')
+
+
+_ARM_PW = None
+
+
+def _arm_policy_weights():
+    """Flat weights for the policy_weights knob's arm, loaded once."""
+    global _ARM_PW
+    if _ARM_PW is None:
+        import numpy as np
+        p = os.environ.get('SIGIL_POLICY_WEIGHTS')
+        if not p:
+            sys.exit("knob=policy_weights needs $SIGIL_POLICY_WEIGHTS (.npy)")
+        if not os.path.isabs(p):
+            p = os.path.join(os.path.dirname(os.path.dirname(_HERE)), p)
+        _ARM_PW = np.load(p).astype(np.float32).ravel().tolist()
+    return _ARM_PW
+
+
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
+    if AB_BASE == 'shipped' and knob != 'policy':
+        on, mw = se.SHIPPED_POLICY
+        se.set_policy(on, mw)
     if ':' in ev:
         # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
         # val != 0) plays the left eval, the base (policy off) the right one.
@@ -136,7 +164,7 @@ def play(b, ms, ev, hist, knob, val):
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
     merge = val if knob == 'merge_min_width' else MERGE_OFF
-    adaptive = None
+    adaptive = tuple(se.SHIPPED_ADAPTIVE) if AB_BASE == 'shipped' else None
     if knob == 'adaptive' and val > 0:
         adaptive = (ADAPTIVE_P, val // 100, val % 100)
     # key_dash needs BOTH its reason mask and its slot count to do anything, so the
@@ -232,6 +260,17 @@ def play(b, ms, ev, hist, knob, val):
         e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
         sp = tuple(se.SHIPPED_ADAPTIVE)
         adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
+    if knob == 'policy_weights':
+        # Round 2: a retrained generator policy against the shipped one. BOTH arms
+        # play the SHIPPED policy setting (se.SHIPPED_POLICY); the arm (val 1) uses
+        # the weights in $SIGIL_POLICY_WEIGHTS (.npy, repo-relative or absolute),
+        # the base (val 0) the compiled weights.
+        se.set_policy(*se.SHIPPED_POLICY)
+        se.set_policy_cost(0, 0)
+        if val:
+            se.set_policy_weights(_arm_policy_weights())
+        else:
+            se.set_policy_weights()
     if knob == 'split':
         se.set_policy(*se.SHIPPED_POLICY)
         # val = merge*10 + k (merge 0 = rust-ai.js pickSplitResult, 1 = common depth)
@@ -431,7 +470,7 @@ if __name__ == "__main__":
     RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  ab_base={AB_BASE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "

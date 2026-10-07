@@ -1,0 +1,1 @@
+8,3000,nnue_spell3:nnue_spell,preset,1,0

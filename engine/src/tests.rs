@@ -4415,3 +4415,36 @@ fn nnue_spell_is_tfit_spell_plus_the_network() {
         }
     }
 }
+
+/// Round 2 networks: bit-for-bit the Python integer forward pass (vectors from
+/// `nn_eval.py golden`), and each preset is `tfit_spell_v2` plus its clamped term.
+#[test]
+fn round2_networks_match_python_and_sit_on_tfit_spell_v2() {
+    for (name, golden) in [("nnue_spell3", include_str!("../nets/nnue_spell3_golden.txt"))] {
+        let net = crate::nn::by_name(name).unwrap().net();
+        let mut n = 0;
+        for line in golden.lines() {
+            let f: Vec<&str> = line.split(' ').collect();
+            let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+            let spells: [u8; 9] = sp.try_into().unwrap();
+            let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+            assert_eq!(net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
+                       f[4].parse::<i32>().unwrap(), "{name} {line}");
+            n += 1;
+        }
+        assert!(n >= 200, "{name}: only {n} golden vectors");
+        let w = crate::eval::weights_by_name(name).unwrap();
+        let base = crate::eval::TFIT_SPELL_V2;
+        for seed in 0..20u64 {
+            let mut b = Board::new(Board::legal_draw(seed % 5), Variant::Standard);
+            b.stones[0] = (0x2468_ace0_1357u64 ^ (seed * 2654435761)) & ALL;
+            b.stones[1] = (0x0bad_f00d_cafeu64 ^ (seed * 40503)) & ALL & !b.stones[0];
+            b.update();
+            for c in [Color::Red, Color::Blue] {
+                let nn = net.eval_raw(&b.spells, b.mine(c), b.theirs(c), c);
+                assert!(nn.abs() <= net.cap);
+                assert_eq!(b.evaluate(c, &w), b.evaluate(c, &base) + nn, "{name} seed {seed}");
+            }
+        }
+    }
+}

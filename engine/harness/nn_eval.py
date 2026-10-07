@@ -228,8 +228,16 @@ def build_model(H, L2, L3, cap):
             nn.init.zeros_(self.l4.weight)
             nn.init.zeros_(self.l4.bias)
             self.cap = cap
+            # Quantisation-aware training: when set, the forward pass reproduces the
+            # integer net of `qforward` (weights on their int grids, every hidden
+            # layer floored to 1/64, the output floored to whole centistones) with
+            # straight-through gradients, so the float net trains towards what
+            # src/nn.rs will actually compute.
+            self.fq = False
 
         def forward(self, x, eidx, gidx, pov):
+            if self.fq:
+                return self.forward_q(x, eidx, gidx, pov)
             acc = x @ self.base
             acc = acc + F.embedding_bag(eidx, self.E, per_sample_weights=x, mode='sum')
             acc = acc + F.embedding_bag(gidx, self.G, mode='sum')
@@ -238,6 +246,19 @@ def build_model(H, L2, L3, cap):
             h = self.l2(h).clamp(0, 1)
             h = self.l3(h).clamp(0, 1)
             return (100 * self.l4(h).squeeze(1)).clamp(-self.cap, self.cap)
+
+        def forward_q(self, x, eidx, gidx, pov):
+            rnd = lambda t, sc: t + (torch.round(t * sc) / sc - t).detach()
+            flo = lambda t, sc: t + (torch.floor(t * sc) / sc - t).detach()
+            acc = x @ rnd(self.base, Q)
+            acc = acc + F.embedding_bag(eidx, rnd(self.E, Q), per_sample_weights=x, mode='sum')
+            acc = acc + F.embedding_bag(gidx, rnd(self.G, Q), mode='sum')
+            acc = acc + rnd(self.pov, Q)[pov]
+            h = acc.clamp(0, 1)
+            h = flo(F.linear(h, rnd(self.l2.weight, Q), rnd(self.l2.bias, Q * Q)), Q).clamp(0, 1)
+            h = flo(F.linear(h, rnd(self.l3.weight, Q), rnd(self.l3.bias, Q * Q)), Q).clamp(0, 1)
+            o = F.linear(h, rnd(self.l4.weight, Q), rnd(self.l4.bias, Q * Q)).squeeze(1)
+            return flo(100 * o, 1).clamp(-self.cap, self.cap)
 
         def clamp_(self):
             with torch.no_grad():
@@ -393,6 +414,7 @@ def cmd_train(a):
     steps_per_epoch = len(idx_tr) // a.batch
     hist = []
     for ep in range(a.epochs):
+        net.fq = ep >= a.epochs - a.qat
         perm = rng.permutation(idx_tr)
         lr = a.lr * (0.5 ** max(0, ep - a.epochs // 2))
         for gp in opt.param_groups:
@@ -412,7 +434,7 @@ def cmd_train(a):
         pte = predict(np.flatnonzero(te))
         zte = k * (e0[te] + pte) / 100 + b
         m = nonmate[te]
-        r = {'epoch': ep, 'train_loss': tot / max(1, steps_per_epoch),
+        r = {'epoch': ep, 'qat': net.fq, 'train_loss': tot / max(1, steps_per_epoch),
              'test_outcome_ll': xent(zte, y[te]),
              'test_score_xent': xent(zte[m], ts[te][m]), 's': time.time() - t0}
         hist.append(r)
@@ -424,8 +446,9 @@ def cmd_train(a):
     write_bin(q, os.path.join(a.out, 'net.bin'))
 
     # ---- held-out report: baselines (k, b refitted on their own train rows) vs net
+    net.fq = False
     res = {'split': a.split, 'lam': lam, 'k': k, 'b': b, 'base': a.base, 'hidden': a.hidden,
-           'cap': a.cap, 'n_train': int(tr.sum()), 'n_test': int(te.sum()),
+           'cap': a.cap, 'qat': a.qat, 'n_train': int(tr.sum()), 'n_test': int(te.sum()),
            'n_test_games': int(len(np.unique(D['game'][te]))), 'history': hist}
     m = nonmate[te]
     for name in [kk for kk in D if kk.startswith('ev_')]:
@@ -487,6 +510,8 @@ def main():
     p.add_argument('--l2reg', type=float, default=1.0)
     p.add_argument('--split', default='game')
     p.add_argument('--base', default='tfit_spell')
+    p.add_argument('--qat', type=int, default=0,
+                   help='train the last N epochs quantisation-aware (fake-quant, STE)')
     p.add_argument('--device', default='cuda')
     p = sub.add_parser('golden')
     p.add_argument('net'); p.add_argument('prep'); p.add_argument('out')

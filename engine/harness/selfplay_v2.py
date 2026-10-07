@@ -5,9 +5,11 @@
 
 The shard offset comes from $SIGIL_SHARD_OFF (never argv), so the argument list
 composes with `gcp/runner.sh`. Every position of every game is searched at the
-FIXED depth `depth` with the shipped config (eval tfit, engine-default width,
-`SHIPPED_ADAPTIVE`, engine-default keep window), so labels do not depend on the
-VM's speed; the searched turn is then played.
+FIXED depth `depth` with the SHIPPED config -- `se.SHIPPED_EVAL` and the generator
+policy `se.SHIPPED_POLICY` (nnue_spell + policy 96 since engine v25), engine-default
+width, `SHIPPED_ADAPTIVE`, engine-default keep window -- so labels do not depend on
+the VM's speed and track what the site plays; the searched turn is then played.
+(Round 1, 2026-10-06, ran with eval tfit and no policy.)
 
 Per position we record (`load_v2` below reads it back):
   * the position: SFN, spell ids (slot order), `full_features` and
@@ -40,8 +42,10 @@ from the 39 core spells. A share `random_ply_pct` of plies plays a uniformly
 random legal turn instead of the searched one (the position is still labelled).
 
 Human games holding Fissure, Rock Slide, Bulwark or a Providence spell are
-excluded: their rules changed on 2026-10-03, so the recorded lines encode the
-old ones. Fresh draws use the current rules.
+excluded if played before the rule change went live
+(`data_filters.OCT2026_RULE_CHANGE_LIVE`, the 2026-10-07 deploy): those lines
+encode the old rules. Later games with them are used. Fresh draws use the
+current rules.
 
 Output: one npz per CHUNK_GAMES games, `<out_dir>/v2d<depth>_<off>_<chunk>.npz`, written
 atomically (temp + rename), so a shard killed by the watchdog or a Spot
@@ -54,13 +58,16 @@ os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
 from sprt import shard_offset
+sys.path.insert(0, os.path.join(_HERE, '..', '..', 'ai'))
+from data_filters import OCT2026_RULE_CHANGE_LIVE_MS
 
 SEED_BASE = 20_000_000
 CHUNK_GAMES = 10
 MAX_PLIES = 140
 MAX_ACTS = 8                 # packed actions per turn (longest seen is 5)
 UNIVERSE_CAP = 600          # > the widest depth-4 root (432 measured), so every searched root move gets a urank
-EVAL = 'tfit'
+EVAL = se.SHIPPED_EVAL
+POLICY = tuple(se.SHIPPED_POLICY)
 AD = tuple(se.SHIPPED_ADAPTIVE)
 # Slot pools by role, from spells_meta.rs (RITUALS/SORCERIES/CHARMS are the 39
 # core ids; Tectonic and Providence add one spell of each role apiece).
@@ -121,7 +128,7 @@ def load_starts(path):
         if len(pos) < 8:
             skipped += 1; continue
         names = pos[0].split(' ', 1)[0].split('/', 1)[1].split(',')
-        if OLD_RULES & set(names):
+        if OLD_RULES & set(names) and (g.get('timestamp') or 0) < OCT2026_RULE_CHANGE_LIVE_MS:
             skipped += 1; continue
         try:
             se.Board.from_sfn(pos[0])
@@ -263,6 +270,8 @@ def main():
     stop_after = float(a[7]) if len(a) > 7 else 0.0
     explore_k = int(a[8]) if len(a) > 8 else 8
     off = shard_offset()
+    # Thread-local and off by default in Python: set it explicitly, every run.
+    se.set_policy(*POLICY)
     assert games <= 1000, "seeds are SEED_BASE + off + i with off stepping by 1000"
     os.makedirs(out_dir, exist_ok=True)
     rng = random.Random(SEED_BASE + off)
@@ -275,7 +284,7 @@ def main():
         print(f"  human starts: {len(starts)} games usable, {skipped} skipped", flush=True)
     if not starts:
         human_frac = 0.0
-    meta = dict(engine=engine_version(), depth=depth, eval=EVAL, adaptive=list(AD),
+    meta = dict(engine=engine_version(), depth=depth, eval=EVAL, policy=list(POLICY), adaptive=list(AD),
                 width_scale=int(se.DEFAULT_WIDTH_SCALE), universe_cap=UNIVERSE_CAP,
                 explore_pct=explore_pct, explore_k=explore_k, random_pct=random_pct,
                 human_frac=human_frac, lines=lines, shard_off=off)

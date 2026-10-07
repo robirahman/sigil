@@ -2,7 +2,7 @@
 
     policy_train.py extract <out.npz> <chunk.npz>... [--workers 8] [--max-pos N]
     policy_train.py train   <examples.npz> <weights.npy> [--epochs 30] [--l2 1e-4] [--holdout 0.1]
-    policy_train.py gate0   <weights.npy|zero> <chunk.npz>... [--n 3000] [--cap 600]
+    policy_train.py gate0   <weights.npy|zero|compiled> <chunk.npz>... [--n 3000] [--cap 600]
     policy_train.py export  <weights.npy>          # writes engine/src/policy_weights.rs
     policy_train.py lse-table                     # writes engine/src/policy_lse.rs
 
@@ -220,10 +220,13 @@ def cmd_train(a):
     Bho = _batches(d, ho, max(1, a.batches // 8))
     n_tr = sum(T['n_grp'] for T in Btr)
     print(f'train: {tr.sum()} examples, {n_tr} levels in {len(Btr)} batches; held-out {ho.sum()} examples')
-    W = torch.zeros(NF, PW, requires_grad=True)
+    Wc = torch.tensor(compiled_weights())
+    shipped = _eval(Wc, Bho) if tuple(Wc.shape) == (NF, PW) else None
+    print('shipped held', json.dumps(shipped))
+    W = torch.tensor(load_weights(a.init), requires_grad=True)
     opt = torch.optim.Adam([W], lr=a.lr)
     base = _eval(W, Bho)
-    print('zero held', json.dumps(base))
+    print(f'{a.init} held', json.dumps(base))
     hist = []
     for ep in range(a.epochs):
         for T in Btr:
@@ -241,7 +244,8 @@ def cmd_train(a):
     print('final train', json.dumps(final_tr))
     np.save(a.weights, W.detach().numpy().astype(np.float32))
     meta = dict(examples=a.examples, epochs=a.epochs, l2=a.l2, lr=a.lr, holdout=a.holdout,
-                batches=a.batches, zero_held=base, final_held=final, final_train=final_tr, hist=hist)
+                batches=a.batches, init=a.init, init_held=base, shipped_held=shipped,
+                final_held=final, final_train=final_tr, hist=hist)
     with open(a.weights + '.json', 'w') as f:
         json.dump(meta, f, indent=1)
     print('WROTE', a.weights)
@@ -251,13 +255,30 @@ def cmd_train(a):
 # gate 0
 # ---------------------------------------------------------------------------
 
+def compiled_weights():
+    """The shipped weights, parsed from the generated `policy_weights.rs`."""
+    rows = []
+    for line in open(os.path.join(ENGINE, 'src', 'policy_weights.rs')):
+        line = line.strip()
+        if line.startswith('[') and line.endswith('],'):
+            rows.append([float(x) for x in line[1:-2].split(',')])
+    return np.asarray(rows, np.float32)
+
+
+def load_weights(wpath):
+    """`zero`, `compiled` (the shipped weights) or a .npy path."""
+    if wpath == 'compiled':
+        return compiled_weights()
+    if wpath == 'zero':
+        NF, PW, _ = _se().policy_layout()
+        return np.zeros((NF, PW), np.float32)
+    return np.load(wpath).astype(np.float32)
+
+
 def _gate_file(args):
     path, wpath, n, cap = args
     se = _se()
-    if wpath != 'zero':
-        se.set_policy_weights(np.load(wpath).astype(np.float32).ravel().tolist())
-    else:
-        se.set_policy_weights([0.0] * (se.policy_layout()[0] * se.policy_layout()[1]))
+    se.set_policy_weights(load_weights(wpath).ravel().tolist())
     z = np.load(path)
     out = []
     for i, ch in _chosen_rows(z)[:n]:
@@ -334,6 +355,7 @@ def main():
     p.add_argument('--epochs', type=int, default=12); p.add_argument('--l2', type=float, default=1e-5)
     p.add_argument('--lr', type=float, default=0.05); p.add_argument('--holdout', type=float, default=0.1)
     p.add_argument('--batches', type=int, default=20); p.add_argument('--lr-decay', type=float, default=0.85)
+    p.add_argument('--init', default='zero', help="zero | compiled (warm-start from the shipped weights) | .npy")
     p = sub.add_parser('gate0'); p.add_argument('weights'); p.add_argument('chunks', nargs='+')
     p.add_argument('--n', type=int, default=3000); p.add_argument('--cap', type=int, default=600)
     p.add_argument('--workers', type=int, default=os.cpu_count()); p.add_argument('--out', default='')

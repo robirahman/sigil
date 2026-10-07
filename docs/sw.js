@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v66';
+const CACHE_VERSION = 'v67';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -54,7 +54,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/game-board-local.js?v=17',
-	'./static/scripts/engine/rust-ai.js?v=25',
+	'./static/scripts/engine/rust-ai.js?v=26',
 	'./static/scripts/game-board-multiplayer.js',
 	'./static/scripts/help.js',
 	'./static/scripts/offline-queue.js',
@@ -79,9 +79,9 @@ const SAME_ORIGIN_PRECACHE = [
 	// ?v=<RUST_ENGINE_VERSION> (rust-ai.js), so the versioned URLs are what
 	// must be precached — bump the ?v= here in lockstep with rust-ai.js and
 	// CACHE_VERSION on every engine rebuild (engine/build-wasm.sh reminds).
-	'./static/scripts/engine/rust-worker.js?v=25',
-	'./static/wasm/sigil_engine.js?v=25',
-	'./static/wasm/sigil_engine_bg.wasm?v=25',
+	'./static/scripts/engine/rust-worker.js?v=26',
+	'./static/wasm/sigil_engine.js?v=26',
+	'./static/wasm/sigil_engine_bg.wasm?v=26',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',

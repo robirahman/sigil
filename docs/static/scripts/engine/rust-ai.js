@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 25;
+const RUST_ENGINE_VERSION = 26;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -239,7 +239,7 @@ class RustAI {
 		// these is a measured strength loss (see py.rs's warnings on eval).
 		this.ttBits = options.ttBits || 20;
 		this.widthScale = options.widthScale || 4;
-		this.evalName = options.evalName || 'nnue_spell';  // eval.rs SHIPPED_EVAL
+		this.evalName = options.evalName || 'nnue_spell3';  // eval.rs SHIPPED_EVAL
 		this.adaptive = options.adaptive || [0.10, 2, 6];
 		// Pondering: while the human thinks, the worker searches the position
 		// they are looking at and primes the persistent table (TT priming, as
