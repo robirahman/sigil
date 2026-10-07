@@ -119,6 +119,14 @@ ADAPTIVE_P = 0.10
 DECISIVE_LEAD_CAP = se.DECISIVE_LEAD_CAP   # the engine's, never restated; the switch takes the cap too
 
 
+# SIGIL_AB_BASE=shipped: both arms start from the SHIPPED engine (the release's
+# adaptive widening and generator policy, `se.SHIPPED_ADAPTIVE` / `se.SHIPPED_POLICY`)
+# instead of the harness's historical defaults (adaptive off, policy off). Since v25
+# the site plays both, so an eval or knob A/B meant to gate a release sets this.
+# The `policy` and `adaptive` knobs still override their own setting on the arm.
+AB_BASE = os.environ.get('SIGIL_AB_BASE', 'legacy')
+
+
 _ARM_PW = None
 
 
@@ -138,6 +146,9 @@ def _arm_policy_weights():
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
+    if AB_BASE == 'shipped' and knob != 'policy':
+        on, mw = se.SHIPPED_POLICY
+        se.set_policy(on, mw)
     if ':' in ev:
         # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
         # val != 0) plays the left eval, the base (policy off) the right one.
@@ -148,7 +159,7 @@ def play(b, ms, ev, hist, knob, val):
     qd = val if knob == 'q_depth' else None
     asp = val if knob == 'aspiration' else None
     merge = val if knob == 'merge_min_width' else MERGE_OFF
-    adaptive = None
+    adaptive = tuple(se.SHIPPED_ADAPTIVE) if AB_BASE == 'shipped' else None
     if knob == 'adaptive' and val > 0:
         adaptive = (ADAPTIVE_P, val // 100, val % 100)
     # key_dash needs BOTH its reason mask and its slot count to do anything, so the
@@ -448,7 +459,7 @@ if __name__ == "__main__":
     RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  ab_base={AB_BASE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "

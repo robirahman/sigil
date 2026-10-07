@@ -16,21 +16,26 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const WASM_DIR = path.resolve(process.argv[2] || path.join(ROOT, 'docs/static/wasm'));
+// Optional NET (a baked network's preset name): checks engine/nets/<NET>_golden.txt
+// through nn_eval_raw_net. Default nnue_spell through nn_eval_raw.
+const NET = process.argv[3] || 'nnue_spell';
 const glue = fs.readFileSync(path.join(WASM_DIR, 'sigil_engine.js'), 'utf8');
 const wasm_bindgen = new Function(glue + '\n;return wasm_bindgen;')();
 (async () => {
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
-	if (typeof wasm_bindgen.nn_eval_raw !== 'function') throw new Error('this build has no nn_eval_raw');
-	const lines = fs.readFileSync(path.join(ROOT, 'engine/nets/nnue_spell_golden.txt'), 'utf8')
+	const evalRaw = NET === 'nnue_spell' ? wasm_bindgen.nn_eval_raw
+		: (wasm_bindgen.nn_eval_raw_net && ((...a) => wasm_bindgen.nn_eval_raw_net(NET, ...a)));
+	if (typeof evalRaw !== 'function') throw new Error('this build has no nn_eval_raw for ' + NET);
+	const lines = fs.readFileSync(path.join(ROOT, 'engine/nets/' + NET + '_golden.txt'), 'utf8')
 		.split('\n').filter(Boolean);
 	let bad = 0;
 	for (const line of lines) {
 		const [mine, theirs, sp, red, want] = line.split(' ');
-		const got = wasm_bindgen.nn_eval_raw(Uint8Array.from(sp.split(',').map(Number)),
+		const got = evalRaw(Uint8Array.from(sp.split(',').map(Number)),
 			BigInt(mine), BigInt(theirs), red === '1');
 		if (got !== Number(want)) { bad++; if (bad <= 5) console.error('MISMATCH ' + line + ' got ' + got); }
 	}
 	if (lines.length < 50) throw new Error('only ' + lines.length + ' golden vectors');
 	if (bad) { console.error(bad + ' of ' + lines.length + ' differ'); process.exit(1); }
-	console.log('nn wasm parity OK: ' + lines.length + ' golden vectors match');
+	console.log('nn wasm parity OK (' + NET + '): ' + lines.length + ' golden vectors match');
 })().catch((e) => { console.error(e); process.exit(1); });
