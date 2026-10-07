@@ -24,3 +24,24 @@ count is the same for every config.
 | `final_blow_misses.json` | 26 | The winner's final position, where the exhaustive solver finds an immediate win and the shipped depth-2 search (v23) reports no forced win. Source: `final_blow_probe.py` over the 2,020 filtered games, run 20261006T070147Z. 1,885 positions were probed, 1,272 have a solver-counted immediate win, and 26 of those were missed (61 in the 2026-09 report on older engines). 28 more depth-2 misses are left out because the solver hit its enumeration cap there (`turn_cap`), so a win could not be confirmed. |
 
 `build_report.json` has the per-suite counts from the build.
+
+## v25 re-scored surprise suite (2026-10-07)
+
+`surprise_cases.json` carries targets from the engines of its source runs (the September
+`tfit` engine for 284 cases, v23 for 33), which makes its sees-rate unfair to an eval change.
+`engine/harness/bench_rescore.py` scored every case again with the engine as shipped in v25
+(`SHIPPED_EVAL` = `nnue_spell`, `SHIPPED_POLICY` = generator policy on at width >= 96,
+`DEFAULT_WIDTH_SCALE`, `SHIPPED_ADAPTIVE`, 300 s cap, surprise_audit.py's definitions). Run
+20261007T003058Z (branch `r2-bench`, f6f8fadb).
+
+| file | cases | what |
+|---|---|---|
+| `surprise_cases_v25.json` | 317 | The same 317 cases and fields; `target` / `v4_i` are the v25 depth-6 / depth-4 values, the old ones kept as `target_old` / `v4_i_old`, plus `confirmed_v25`. Score with `bench_suites.py --surprise-file surprise_cases_v25.json`. |
+| `surprise_rescore_v25.json` | 317 | Per-case provenance: old and new target and depth-4 value, search depth/nodes/seconds. |
+
+The case SELECTION is unchanged (the older engines' flags). 211 of 317 cases are still
+confirmed by v25 (its own depth-4 value minus the v25 depth-6 target > 1.0): 194 of the 284
+September cases and 17 of the 33 v23 cases. The suite is deliberately not cut to those 211:
+"confirmed" uses the engine's own depth-4 value, so the confirmed subset is by construction
+the cases v25 misses at depth 4, and a sees-rate over it would be biased against v25.
+`surprise_cases.json` is untouched.

@@ -108,7 +108,12 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy',
          # threads = search threads*10 + mode (2026-10 step 6; mode 0 = Lazy SMP,
          # 1 = parallel root), base 10 = one thread. Give each shard as many vCPUs as
          # its arm's threads: WORKERS = vCPUs // threads.
-         'threads')
+         'threads',
+         # split = browser option A emulation (2026-10 round 2): k independent
+         # engines with root parts merged like rust-ai.js; base 1 = one engine.
+         # BOTH arms play the shipped generator policy (se.SHIPPED_POLICY). Give
+         # each shard k vCPUs' worth of cores: WORKERS = physical cores // k.
+         'split')
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -227,6 +232,12 @@ def play(b, ms, ev, hist, knob, val):
         e_, h_ = (val // 10 ** 7) % 10, (val // 10 ** 6) % 10
         sp = tuple(se.SHIPPED_ADAPTIVE)
         adaptive = (sp[0], e_ or sp[1], h_ or sp[2])
+    if knob == 'split':
+        se.set_policy(*se.SHIPPED_POLICY)
+        # val = merge*10 + k (merge 0 = rust-ai.js pickSplitResult, 1 = common depth)
+        if val % 10 > 1:
+            extra['split_workers'] = val % 10
+            extra['split_merge'] = val // 10
     if knob == 'threads' and val // 10 > 1:
         extra['threads'] = val // 10
         extra['smp_mode'] = val % 10

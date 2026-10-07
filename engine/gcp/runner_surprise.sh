@@ -88,7 +88,24 @@ fi
 
 cd $WORK/repo
 H=engine/harness
-if [ "$MODE" = final ]; then
+if [ "$MODE" = r2bench ]; then
+  # Round 2: re-score the surprise targets with the shipped engine, then the release
+  # table (v23 / v24 / v25 configs) against the old and the re-scored targets.
+  B=ai/data/benchmarks
+  echo "=== rescore: $WORKERS workers ==="
+  $WORK/venv/bin/python -u $H/bench_rescore.py --suites $B --workers "$WORKERS" \
+    --out-all $WORK/out/rescore_all.json --out-suite $B/surprise_cases_v25.json > $WORK/out/rescore.log 2>&1
+  cp $B/surprise_cases_v25.json $WORK/out/surprise_cases_v25.json
+  tail -2 $WORK/out/rescore.log
+  CFGS=(--config "v23:eval=tfit" --config "v24:eval=tfit_spell_v2"
+        --config "v25:eval=nnue_spell;call=set_policy(True,96)")
+  for sf in surprise_cases.json surprise_cases_v25.json; do
+    echo "=== bench_suites $sf ==="
+    $WORK/venv/bin/python -u $H/bench_suites.py --suites $B --surprise-file $sf --workers "$WORKERS" \
+      "${CFGS[@]}" --json $WORK/out/bench_${sf%.json}.txt > $WORK/out/bench_${sf%.json}.log 2>&1
+    tail -6 $WORK/out/bench_${sf%.json}.log
+  done
+elif [ "$MODE" = final ]; then
   echo "=== final_blow_probe: $WORKERS workers ==="
   $WORK/venv/bin/python -u $H/final_blow_probe.py --lines $WORK/lines.json \
     --out $WORK/out/final_probe.jsonl --workers "$WORKERS" > $WORK/out/final.log 2>&1

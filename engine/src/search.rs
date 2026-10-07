@@ -1281,7 +1281,7 @@ pub fn root_part(t: &Turn, parts: u32) -> u32 {
 /// set a switch would search with it on one thread and off on the others.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone)]
-struct ThreadSwitches {
+pub(crate) struct ThreadSwitches {
     decisive_lead: (bool, usize),
     lead_bounds_v2: bool,
     outcome_order_v2: bool,
@@ -1300,7 +1300,7 @@ struct ThreadSwitches {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl ThreadSwitches {
-    fn capture() -> ThreadSwitches {
+    pub(crate) fn capture() -> ThreadSwitches {
         use crate::turn_iter as ti;
         use crate::opening as op;
         ThreadSwitches {
@@ -1322,7 +1322,7 @@ impl ThreadSwitches {
         }
     }
 
-    fn apply(self) {
+    pub(crate) fn apply(self) {
         use crate::turn_iter as ti;
         use crate::opening as op;
         ti::set_decisive_lead(self.decisive_lead.0, self.decisive_lead.1);
