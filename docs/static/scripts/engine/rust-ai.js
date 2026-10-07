@@ -182,20 +182,34 @@ function rustWorkerCount(requested, hardwareConcurrency) {
  * one iteration shallower is the price of the prototype), ties to the deeper
  * part. `nodes` becomes the total; `split` records the per-part view.
  */
-function pickSplitResult(results) {
+function pickSplitResult(results, perDepth) {
 	const ok = results.filter((r) => r && r.ok && Array.isArray(r.actions) && r.actions.length);
 	if (!ok.length) return results.find((r) => r) || { ok: false, error: 'no part returned a move' };
 	const done = ok.filter((r) => (r.depth || 0) > 0);
 	const pool = done.length ? done : ok;
+	// Scores of different depths are not comparable (2026-10 round 2: comparing
+	// final scores lost -27 Elo at 2 parts and -90 at 4). With the per-part
+	// progress history (`perDepth[i]` = [[depth, uiScore], ...]) the parts are
+	// compared at the deepest depth every one of them completed.
+	const hist = (r) => (perDepth && perDepth[results.indexOf(r)]) || null;
+	const useCommon = !!perDepth && pool.every((r) => hist(r) && hist(r).length);
+	const common = useCommon ? Math.min(...pool.map((r) => Math.max(...hist(r).map((x) => x[0])))) : 0;
+	const key = (r) => {
+		if (!useCommon) return r.score;
+		const at = hist(r).filter((x) => x[0] === common);
+		return at.length ? at[at.length - 1][1] : r.score_ui;
+	};
 	let best = pool[0];
 	for (const r of pool) {
-		if (r.score > best.score || (r.score === best.score && (r.depth || 0) > (best.depth || 0))) best = r;
+		const kr = key(r), kb = key(best);
+		if (kr > kb || (kr === kb && (r.depth || 0) > (best.depth || 0))) best = r;
 	}
 	const out = Object.assign({}, best);
 	out.nodes = ok.reduce((s, r) => s + (r.nodes || 0), 0);
 	out.split = { parts: results.length, chosen: results.indexOf(best),
 		depths: results.map((r) => (r && r.depth) || 0),
-		scores: results.map((r) => (r && r.ok) ? r.score : null) };
+		scores: results.map((r) => (r && r.ok) ? r.score : null),
+		common_depth: useCommon ? common : null };
 	return out;
 }
 
@@ -383,9 +397,13 @@ class RustAI {
 		// Root split: every worker searches its part with the same clock; the
 		// meter follows part 0.
 		const pool = getRustEnginePool(this.workers);
+		const perDepth = pool.map(() => []);
 		const results = await Promise.all(pool.map((w, i) => w.search(
-			Object.assign({}, req, { split: [i, pool.length] }), i === 0 ? progress : null)));
-		return pickSplitResult(results);
+			Object.assign({}, req, { split: [i, pool.length] }), (msg) => {
+				perDepth[i].push([msg.depth, msg.score]);
+				if (i === 0 && progress) progress(msg);
+			})));
+		return pickSplitResult(results, perDepth);
 	}
 
 	async pickTurn(board, color, onProgress) {

@@ -325,11 +325,16 @@ async function driver() {
 			let sfn = boardToSfn(b);
 			const history = [];
 			for (let ply = 0; ply < 8; ply++) {
+				const perDepth = engines.map(() => []);
 				const results = engines.map((eng, i) => {
 					eng.set_root_split(i, PARTS);
-					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), EVAL, 0.10, 2, 6, undefined));
+					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), EVAL, 0.10, 2, 6,
+						(d, s) => perDepth[i].push([d, s])));
 				});
-				const res = RustAI.pickSplitResult(results);
+				const res = RustAI.pickSplitResult(results, perDepth);
+				if (results.every((r) => r.ok && r.depth > 0) && res.split.common_depth == null) {
+					throw new Error('split ply ' + ply + ': common-depth merge not used');
+				}
 				if (!res.ok) throw new Error('split ply ' + ply + ': ' + res.error);
 				if (!res.split || res.split.parts !== PARTS) throw new Error('split report missing');
 				// Disjointness is pinned in Rust (root_split_parts_are_disjoint_and_cover_the_root).
