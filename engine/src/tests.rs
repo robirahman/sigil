@@ -3254,6 +3254,48 @@ fn a_mate_in_one_is_proven_even_when_widened() {
 /// A competitive board with the given draw (slot order: rituals, sorceries,
 /// charms), red to move on the free-placement turn (the browser's counter is
 /// 1 there: it pre-increments).
+/// R2-OPEN data hook: a forced opening mask restricts the competitive first
+/// placement to those nodes whatever the selector says, and 0 restores it.
+#[test]
+fn opening_force_restricts_the_first_placement() {
+    let b = competitive_board([15, 0, 27, 7, 5, 28, 10, 38, 26]);
+    for slot in [0usize, 4, 8] {
+        let mask = crate::topology::SIGIL[slot];
+        crate::opening::set_opening_force(mask);
+        let mut s = crate::search::Search::new(14);
+        s.weights = crate::eval::weights_by_name("tfit").unwrap();
+        let (best, _, _) = s.go(&b, Color::Red, 2, 0);
+        crate::opening::set_opening_force(0);
+        match best.expect("a turn").slice()[0] {
+            Action::Blink { node, .. } => assert!(mask & (1u64 << node) != 0, "slot {slot}: node {node} outside the forced sigil"),
+            ref a => panic!("not a blink: {a:?}"),
+        }
+    }
+}
+
+/// The learned opening selector: integer-only (so wasm agrees by construction),
+/// deterministic, always one sigil's empty nodes, red and blue alike, and it
+/// restricts the root when switched on.
+#[test]
+fn learned_opening_pick_is_one_sigil_and_restricts_the_root() {
+    let b = competitive_board([15, 0, 27, 7, 5, 28, 10, 38, 26]);
+    let m = crate::opening_learned::learned_mask(&b, Color::Red).expect("applies");
+    assert_eq!(m, crate::opening_learned::learned_mask(&b, Color::Red).unwrap());
+    assert!((0..9).any(|s| crate::topology::SIGIL[s] == m), "red: one whole empty sigil");
+    let blue = after_red_opening([15, 0, 27, 7, 5, 28, 10, 38, 26], "a1");
+    let mb = crate::opening_learned::learned_mask(&blue, Color::Blue).expect("applies");
+    assert!(mb != 0 && (0..9).any(|s| crate::topology::SIGIL[s] & mb == mb));
+    crate::opening_learned::set_opening_learned(true);
+    let mut s = crate::search::Search::new(14);
+    s.weights = crate::eval::weights_by_name("tfit").unwrap();
+    let (best, _, _) = s.go(&b, Color::Red, 2, 0);
+    crate::opening_learned::set_opening_learned(false);
+    match best.expect("a turn").slice()[0] {
+        Action::Blink { node, .. } => assert!(m & (1u64 << node) != 0),
+        ref a => panic!("not a blink: {a:?}"),
+    }
+}
+
 fn competitive_board(draw: [u8; 9]) -> Board {
     let mut b = Board::new(draw, Variant::Competitive);
     b.setup_initial();
@@ -3529,6 +3571,9 @@ fn opening_book_is_a_noop_outside_the_competitive_opening() {
 
 #[test]
 fn opening_book_restricts_the_root_to_the_chosen_sigil() {
+    // The book is OFF by default since v27; this pins its behaviour when on.
+    assert!(!crate::opening::opening_book_enabled(), "v27 ships the opening book off");
+    crate::opening::set_opening_book(true);
     let b = competitive_board(Board::legal_draw(3));
     let pick = crate::opening::choose_opening(&b, Color::Red).expect("applies");
     let mut s = crate::search::Search::new(16);

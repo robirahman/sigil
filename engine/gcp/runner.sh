@@ -26,6 +26,8 @@ HARNESS=$(md harness); ARMS=$(md arms); SMOKE=$(md smoke); MAXH=$(md max-hours)
 VARIANT=$(md variant); : "${VARIANT:=standard}"   # SIGIL_VARIANT for the harness (competitive opening arenas)
 export SIGIL_VARIANT="$VARIANT"   # the smoke arm reads it too, not only the shards
 SIGIL_AB_BASE=$(md ab-base || true); export SIGIL_AB_BASE="${SIGIL_AB_BASE:-legacy}"   # ab_search.py baseline engine
+POLICY_MODE=$(md policy-mode || true); : "${POLICY_MODE:=off}"
+export SIGIL_POLICY="$POLICY_MODE"   # ab_search: shipped = both arms at se.SHIPPED_POLICY
 REQUIRE_SPELL=$(md require-spell || true)   # SIGIL_REQUIRE_SPELL: play only draws holding this spell id
 if [ -n "$REQUIRE_SPELL" ]; then export SIGIL_REQUIRE_SPELL="$REQUIRE_SPELL"; fi
 POLICY_WEIGHTS=$(md policy-weights || true)   # SIGIL_POLICY_WEIGHTS: ab_search knob=policy_weights arm weights (.npy, repo-relative)

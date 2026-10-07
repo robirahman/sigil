@@ -21,6 +21,14 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-07: engine v27 (cache v68) -- competitive opening selector OFF.** `opening::set_opening_book` now defaults
+to false: in the competitive variant the search and `nnue_spell` place the first stone. Arena (v25, both arms at the
+shipped policy, competitive, 10 s/move, colour-swapped): book OFF vs book ON **+90.5 [+75.3, +105.6]** (2,160 games);
+without the book the first stone lands in the book's sigil only 12% of the time, and 10.5% go outside any sigil. A
+learned selector fitted to 77k v25 rollout games lost to book-off, -40.4 [-55.1, -25.6] (2,160), and stays off
+(`opening_learned.rs`; `reports/2026-10-r2-opening.md`). Not re-measured on v26 (Robi's call). Tests 184/184,
+policy-wasm HASH 55a10a3b6c3b7ef9, nn-wasm 264/264, wasm smoke 5/5 (incl. competitive openings).
+
 **2026-10-07: engine v26 (cache v67) -- `nnue_spell3` + retrained generator policy.** `SHIPPED_EVAL = "nnue_spell3"`
 (residual on `tfit_spell_v2`, cap 256, lambda 0.5, quantisation-aware; `reports/2026-10-r2-nn.md`: +40.1 [+19.2, +60.9]
 at 10 s over `nnue_spell` with the shipped policy) and the policy retrained on 1.42M v25 self-play examples

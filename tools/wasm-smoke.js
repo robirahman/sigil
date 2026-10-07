@@ -206,8 +206,10 @@ async function driver() {
 			if (!res.ok) throw new Error('competitive ply ' + ply + ': ' + res.error);
 			if (ply < 2) {
 				if (res.actions[0].type !== 'blink') throw new Error('competitive opening should be a blink: ' + JSON.stringify(res.actions));
-				if (!res.opening || res.opening.node !== res.actions[0].node) throw new Error('opening report missing or mismatched: ' + JSON.stringify(res.opening));
-				if (!b.spellNames.includes(res.opening.spell)) throw new Error('opening names a spell not in the draw: ' + res.opening.spell);
+				// The selector is off since v27 (the search places the first stone);
+				// when a build turns it on, its report must name the node it played.
+				if (res.opening && res.opening.node !== res.actions[0].node) throw new Error('opening report mismatched: ' + JSON.stringify(res.opening));
+				if (res.opening && !b.spellNames.includes(res.opening.spell)) throw new Error('opening names a spell not in the draw: ' + res.opening.spell);
 			} else if (res.opening !== null) {
 				throw new Error('turn 3 must carry no opening report: ' + JSON.stringify(res.opening));
 			}
