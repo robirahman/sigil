@@ -52,6 +52,16 @@ fn main() {
                 sigil_engine::policy::set_policy(true, args[i + 1].parse().unwrap());
                 i += 2;
             }
+            "--explore" => {
+                // round 3 exploration tail: mode,cast_window,dash_limit,dash_per,dash_tried,base,step[,slot_first,slot_every]
+                let v: Vec<i64> = args[i + 1].split(',').map(|x| x.parse().unwrap()).collect();
+                let g = |k: usize| v.get(k).copied().unwrap_or(0);
+                sigil_engine::policy::set_policy_explore(sigil_engine::policy::Explore {
+                    mode: g(0) as u8, cast_window: g(1) as usize, dash_limit: g(2) as usize,
+                    dash_per: g(3) as usize, dash_tried: g(4) as usize, base: g(5) as i32, step: g(6) as i32,
+                    slot_first: g(7) as usize, slot_every: g(8) as usize });
+                i += 2;
+            }
             "--threads" => { threads = args[i + 1].parse().unwrap(); i += 2; }
             "--ms" => { ms_budget = args[i + 1].parse().unwrap(); i += 2; }
             "--mode" => { smp_mode = args[i + 1].parse().unwrap(); i += 2; }

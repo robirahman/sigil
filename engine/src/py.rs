@@ -2284,6 +2284,16 @@ fn set_policy_weights(flat: Option<Vec<f32>>) -> PyResult<()> {
 #[pyo3(signature = (on, min_width=0))]
 fn set_policy(on: bool, min_width: usize) { crate::policy::set_policy(on, min_width); }
 
+/// Round 3 exploration tail of the policy stream (`policy::Explore`), per
+/// thread: mode bit 0 = cast tail, bit 1 = dash tail; mode 0 = off (shipped).
+#[pyfunction]
+#[pyo3(signature = (mode, cast_window=32, dash_limit=64, dash_per=4, dash_tried=32, base=256, step=16, slot_first=0, slot_every=0))]
+fn set_policy_explore(mode: u8, cast_window: usize, dash_limit: usize, dash_per: usize, dash_tried: usize,
+                      base: i32, step: i32, slot_first: usize, slot_every: usize) {
+    crate::policy::set_policy_explore(crate::policy::Explore {
+        mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first, slot_every });
+}
+
 /// Continuation penalty (1/256 nat) at nodes whose width is below `free_width`.
 #[pyfunction]
 #[pyo3(signature = (penalty, free_width=usize::MAX))]
@@ -2348,6 +2358,35 @@ fn policy_vs_stream_rank(sfn: &str, packed: Vec<u32>, cap: usize, window: usize,
     Ok((rp, rs))
 }
 
+/// Generator diagnosis for one recorded turn (round 3): every exhaustively
+/// enumerated turn reaching `result_sfn` (at most `max_turns`), each with its
+/// packed actions and `policy::policy_diag`. A JSON list.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, enum_cap=2_000_000, max_turns=64, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
+fn policy_diag(sfn: &str, result_sfn: &str, enum_cap: usize, max_turns: usize, window: usize, keep_window: usize)
+    -> PyResult<String>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let (turns, _st) = b.enumerate_turns_capped(c, enum_cap);
+    let mut out = Vec::new();
+    for t in &turns {
+        let mut ch = b; ch.apply_turn(t, c);
+        if key(&ch.to_sfn()) != want { continue; }
+        let packed: Vec<String> = t.slice().iter().map(|a| crate::search::pack_action(*a).to_string()).collect();
+        let d = crate::policy::policy_diag(&b, c, t, window, keep_window);
+        out.push(format!("{{\"packed\":[{}],\"diag\":{}}}", packed.join(","), d));
+        if out.len() >= max_turns { break; }
+    }
+    Ok(format!("[{}]", out.join(",")))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
@@ -2358,6 +2397,8 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(policy_layout, m)?)?;
     m.add_function(wrap_pyfunction!(policy_rank_of_result, m)?)?;
     m.add_function(wrap_pyfunction!(policy_vs_stream_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_diag, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_explore, m)?)?;
     m.add_class::<SearchSession>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;

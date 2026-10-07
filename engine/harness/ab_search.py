@@ -115,7 +115,19 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy', 'p
          # engines with root parts merged like rust-ai.js; base 1 = one engine.
          # BOTH arms play the shipped generator policy (se.SHIPPED_POLICY). Give
          # each shard k vCPUs' worth of cores: WORKERS = physical cores // k.
-         'split')
+         'split',
+         # policy_explore (2026-10 round 3): the generator policy's exploration
+         # tail (policy::Explore, se.set_policy_explore). BOTH arms play the shipped
+         # policy setting; val = a preset index into EXPLORE_PRESETS, 0 = off.
+         'policy_explore')
+# (mode, cast_window, dash_limit, dash_per, dash_tried, base, step[, slot_first, slot_every])
+EXPLORE_PRESETS = {
+    1: (3, 64, 128, 8, 48, 256, 8),     # casts + dashes, tail 1 nat below the stub's last sibling
+    2: (3, 32, 64, 4, 32, 256, 16),     # narrower tail
+    3: (3, 64, 128, 8, 48, 512, 16),    # tail 2 nats down, steeper
+    4: (1, 64, 128, 8, 48, 256, 8),     # casts only
+    5: (2, 64, 128, 8, 48, 256, 8),     # dashes only
+}
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -285,6 +297,12 @@ def play(b, ms, ev, hist, knob, val):
             se.set_policy_weights(_arm_policy_weights())
         else:
             se.set_policy_weights()
+    if knob == 'policy_explore':
+        se.set_policy(*se.SHIPPED_POLICY)
+        if val:
+            se.set_policy_explore(*EXPLORE_PRESETS[val])
+        else:
+            se.set_policy_explore(0)
     if knob == 'split':
         se.set_policy(*se.SHIPPED_POLICY)
         # val = merge*10 + k (merge 0 = rust-ai.js pickSplitResult, 1 = common depth)
