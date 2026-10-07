@@ -21,6 +21,15 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-07: engine v25 (cache v65) -- learned generator policy + `nnue_spell` network eval.** `policy::SHIPPED_POLICY`
+(on, min_width 96) and `eval::SHIPPED_EVAL = "nnue_spell"` are what the site plays (wasm applies the policy once per
+module; `serve.py --policy`; Lazy SMP / parallel-root helper threads now inherit the policy). Release A/B, v25 vs v24,
+10 s/move, colour-swapped, 4 x c3d-highcpu-90: core draws +188.7 Elo [+171.8, +205.6] (2,160 games), draws holding a
+Tectonic/Providence spell +167.2 [+150.8, +183.6] (2,160). Components: policy +94 at 10 s on `tfit`, +118 on
+`tfit_spell_v2` (`reports/2026-10-step4.md`); network +79 [+64, +93] at 10 s over `tfit_spell_v2` (`reports/2026-10-step5.md`).
+Native/wasm tree parity: `tools/policy-wasm-parity.js` HASH 5a13846bc3228203 over 76 positions at depth 4 equals
+`examples/bench.rs`; `tools/nn-wasm-parity.js` 264/264. Tests 181/181, wasm smoke 5/5 + policy-off. wasm 1.11 MB (357 KB gzipped; v24 740 KB / 240 KB).
+
 **2026-10-06: engine v24 (cache v64) -- eval `tfit_spell_v2` shipped.** `eval::SHIPPED_EVAL` now names the site's eval
 (wasm default, puzzle judge, mate nominator, `serve.py`); harness defaults stay `tfit`. Per-spell sigil terms: the
 original fit `tfit_spell` scored +59 [+45, +72] at 3 s (2,580 games) and +50 [+33, +66] at 10 s (1,806) over `tfit`

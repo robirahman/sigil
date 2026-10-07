@@ -235,6 +235,21 @@ pub fn reset_policy_weights() {
 
 pub fn policy_weights() -> Rc<PolicyWeights> { WEIGHTS.with(|x| x.borrow().clone()) }
 
+/// This thread's weights as a flat vector when they differ from the compiled
+/// ones (a training experiment), else None. Lets search helper threads inherit
+/// an override.
+pub fn policy_weights_override() -> Option<Vec<f32>> {
+    let w = policy_weights();
+    let compiled = PolicyWeights::compiled();
+    if w.w == compiled.w { None } else { Some(w.w.iter().flat_map(|r| r.iter().copied()).collect()) }
+}
+
+/// The site's setting since engine v25: the learned generator policy at every node
+/// whose width budget is at least 96 (+94 Elo at 10 s over the shipped stream on
+/// `tfit`, +118 on `tfit_spell_v2`; engine/reports/2026-10-step4.md). The wasm
+/// `configure` and `serve.py` read this, never a literal.
+pub const SHIPPED_POLICY: (bool, usize) = (true, 96);
+
 pub fn set_policy(on: bool, min_width: usize) { POLICY.with(|c| c.set((on, min_width))); }
 pub fn policy_setting() -> (bool, usize) { POLICY.with(|c| c.get()) }
 

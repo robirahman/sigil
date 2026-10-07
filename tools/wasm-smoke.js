@@ -50,8 +50,12 @@ async function driver() {
 	const fs = require('fs');
 	const path = require('path');
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
-	// SIGIL_SMOKE_POLICY=<min_width> replays with the Step 4 generator policy on.
-	if (process.env.SIGIL_SMOKE_POLICY) {
+	// SIGIL_SMOKE_POLICY=<min_width> overrides the shipped generator policy.
+	// The shipped engine has it on (policy::SHIPPED_POLICY); 'off' replays without it.
+	if (process.env.SIGIL_SMOKE_POLICY === 'off') {
+		wasm_bindgen.set_policy(false, 0);
+		console.log('generator policy OFF');
+	} else if (process.env.SIGIL_SMOKE_POLICY) {
 		wasm_bindgen.set_policy(true, parseInt(process.env.SIGIL_SMOKE_POLICY, 10));
 		console.log('generator policy ON, min_width ' + process.env.SIGIL_SMOKE_POLICY);
 	}

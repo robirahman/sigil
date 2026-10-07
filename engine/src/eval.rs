@@ -649,9 +649,10 @@ impl Board {
 
 /// The eval the site plays: every browser tier (wasm `Engine` default, the puzzle
 /// judge) and the mate solver's nominator read this, never a literal.
-/// `tfit_spell_v2` since engine v24 (2026-10-06): per-spell sigil terms, +50 Elo at
-/// 10 s over `tfit` (engine/reports/2026-10-step2.md, -2b.md).
-pub const SHIPPED_EVAL: &str = "tfit_spell_v2";
+/// `nnue_spell` since engine v25 (2026-10-06): the spell-conditioned network,
+/// +79 Elo at 10 s over `tfit_spell_v2` (engine/reports/2026-10-step5.md), which was
+/// v24's (per-spell sigil terms, +50 at 10 s over `tfit`, 2026-10-step2.md).
+pub const SHIPPED_EVAL: &str = "nnue_spell";
 
 /// Every accepted preset name, in one place. Exported (via py.rs) as
 /// `EVAL_NAMES` so callers (argparse `choices`, harnesses, docs) enumerate

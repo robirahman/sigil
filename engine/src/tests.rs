@@ -4321,6 +4321,8 @@ fn record_root_is_inert_deterministic_and_round_trips() {
 fn shipped_eval_is_a_known_preset_and_named_in_eval_names() {
     assert!(crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).is_ok());
     assert!(crate::eval::EVAL_NAMES.contains(&crate::eval::SHIPPED_EVAL));
+    let (on, w) = crate::policy::SHIPPED_POLICY;
+    assert!(on && w > 0, "v25 ships the generator policy");
 }
 
 /// Step 4: every turn the learned-policy stream yields is one the shipped

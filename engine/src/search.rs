@@ -1139,6 +1139,7 @@ impl Search {
         let best_thread = self.smp_vote;
         let (mut best, mut best_score, helper_nodes, deeper) = std::thread::scope(|sc| {
             let handles: Vec<_> = helpers.iter_mut().map(|h| {
+                let switches = switches.clone();
                 sc.spawn(move || {
                     switches.apply();
                     let ms = match deadline { Some(d) => (d - now_ms()).max(1.0) as u64, None => 0 };
@@ -1237,6 +1238,7 @@ impl Search {
         std::thread::scope(|sc| {
             for h in pool.iter_mut() {
                 let work = &work;
+                let switches = switches.clone();
                 sc.spawn(move || { switches.apply(); work(h); });
             }
             work(self);
@@ -1278,7 +1280,7 @@ pub fn root_part(t: &Turn, parts: u32) -> u32 {
 /// copies the main thread's values into each helper; otherwise an arena arm that
 /// set a switch would search with it on one thread and off on the others.
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct ThreadSwitches {
     decisive_lead: (bool, usize),
     lead_bounds_v2: bool,
@@ -1291,6 +1293,9 @@ struct ThreadSwitches {
     dash_gen: (u8, usize, usize),
     key_dash_scan: (usize, usize, usize),
     opening: (bool, bool, bool, bool),
+    policy: (bool, usize),
+    policy_cost: (i32, usize),
+    policy_weights: Option<Vec<f32>>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1311,6 +1316,9 @@ impl ThreadSwitches {
             key_dash_scan: crate::key_dash::key_dash_scan(),
             opening: (op::opening_book_enabled(), op::opening_syzygy_enabled(),
                       op::opening_contest_enabled(), op::opening_carnage_enabled()),
+            policy: crate::policy::policy_setting(),
+            policy_cost: crate::policy::policy_cost(),
+            policy_weights: crate::policy::policy_weights_override(),
         }
     }
 
@@ -1341,6 +1349,11 @@ impl ThreadSwitches {
         op::set_opening_syzygy(self.opening.1);
         op::set_opening_contest(self.opening.2);
         op::set_opening_carnage(self.opening.3);
+        crate::policy::set_policy(self.policy.0, self.policy.1);
+        crate::policy::set_policy_cost(self.policy_cost.0, self.policy_cost.1);
+        if let Some(w) = self.policy_weights {
+            let _ = crate::policy::set_policy_weights(&w);
+        }
     }
 }
 
