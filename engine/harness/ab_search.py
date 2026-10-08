@@ -119,6 +119,8 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy', 'p
          # policy_explore (2026-10 round 3): the generator policy's exploration
          # tail (policy::Explore, se.set_policy_explore). BOTH arms play the shipped
          # policy setting; val = a preset index into EXPLORE_PRESETS, 0 = off.
+         # Since v28 the shipped engine plays preset 3 (se.SHIPPED_EXPLORE), so with
+         # SIGIL_AB_BASE=shipped val 0 is the knob-OFF arm, not the shipped one.
          'policy_explore')
 # (mode, cast_window, dash_limit, dash_per, dash_tried, base, step[, slot_first, slot_every])
 EXPLORE_PRESETS = {
@@ -167,6 +169,7 @@ def _arm_policy_weights():
 # (se.SHIPPED_POLICY, on since v25) unless the knob under test is the policy
 # itself. The policy is a thread-local engine setting that is OFF by default in
 # Python, so without this an arena of any other knob measures the pre-v25 search.
+# Since v28 it also applies the shipped exploration tail (se.SHIPPED_EXPLORE).
 # Default off keeps the older arms files reproducible.
 POLICY_MODE = os.environ.get('SIGIL_POLICY', 'off')
 # SIGIL_BASE_EXPLORE=<preset>: BOTH arms play the policy exploration tail
@@ -178,6 +181,12 @@ def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
     if (AB_BASE == 'shipped' or POLICY_MODE == 'shipped') and knob != 'policy':
         se.set_policy(*se.SHIPPED_POLICY)
+    if AB_BASE == 'shipped' or POLICY_MODE == 'shipped':
+        # v28: the shipped exploration tail too (inert while the policy is off,
+        # so the policy knob's off arm is unaffected). knob=policy_explore
+        # overrides it below; val 0 there is the knob-off path.
+        if hasattr(se, 'SHIPPED_EXPLORE'):
+            se.set_policy_explore(*se.SHIPPED_EXPLORE)
     if BASE_EXPLORE and knob != 'policy_explore':
         se.set_policy_explore(*EXPLORE_PRESETS[BASE_EXPLORE])
     if ':' in ev:

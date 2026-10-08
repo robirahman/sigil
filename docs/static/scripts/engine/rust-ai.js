@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 27;
+const RUST_ENGINE_VERSION = 28;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's

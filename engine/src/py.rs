@@ -2285,7 +2285,8 @@ fn set_policy_weights(flat: Option<Vec<f32>>) -> PyResult<()> {
 fn set_policy(on: bool, min_width: usize) { crate::policy::set_policy(on, min_width); }
 
 /// Round 3 exploration tail of the policy stream (`policy::Explore`), per
-/// thread: mode bit 0 = cast tail, bit 1 = dash tail; mode 0 = off (shipped).
+/// thread: mode bit 0 = cast tail, bit 1 = dash tail; mode 0 = off (the thread
+/// default). The shipped setting since v28 is `SHIPPED_EXPLORE`.
 #[pyfunction]
 #[pyo3(signature = (mode, cast_window=32, dash_limit=64, dash_per=4, dash_tried=32, base=256, step=16, slot_first=0, slot_every=0))]
 fn set_policy_explore(mode: u8, cast_window: usize, dash_limit: usize, dash_per: usize, dash_tried: usize,
@@ -2444,6 +2445,12 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // hardcoded it, which is fine historically but would confound any future test.
     m.add("SHIPPED_EVAL", crate::eval::SHIPPED_EVAL)?;
     m.add("SHIPPED_POLICY", crate::policy::SHIPPED_POLICY)?;
+    // v28: the exploration tail as the argument tuple of `set_policy_explore`
+    // (mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first,
+    // slot_every), so `se.set_policy_explore(*se.SHIPPED_EXPLORE)` applies it.
+    let x = crate::policy::SHIPPED_EXPLORE;
+    m.add("SHIPPED_EXPLORE", (x.mode, x.cast_window, x.dash_limit, x.dash_per, x.dash_tried, x.base, x.step,
+                              x.slot_first, x.slot_every))?;
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
     // The shipped adaptive-widening point, exported for the same reason: a
     // harness that wants the shipped search must pass it, and every literal

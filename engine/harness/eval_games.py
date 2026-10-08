@@ -63,7 +63,7 @@ DEFERRED_PREFIXES = ('ab:', 'sn:')
 # SIGIL_AUDIT_ENGINE=shipped: search with the BUILD's own shipped configuration --
 # its SHIPPED_EVAL (tfit before v24 exported one) and SHIPPED_POLICY (the v25+
 # generator policy, thread-local and off by default in Python, so it is set before
-# every search). Without it every audit measures the pre-v24 search, whatever the
+# every search) and, v28+, its SHIPPED_EXPLORE tail. Without it every audit measures the pre-v24 search, whatever the
 # build. The opening book follows the build's compiled default (on before v27).
 AUDIT_SHIPPED = os.environ.get('SIGIL_AUDIT_ENGINE') == 'shipped'
 
@@ -74,6 +74,9 @@ def engine_eval(se):
         return EVAL_NAME
     if hasattr(se, 'SHIPPED_POLICY') and hasattr(se, 'set_policy'):
         se.set_policy(*se.SHIPPED_POLICY)
+    # v28+: the exploration tail (absent before v28, which shipped it off).
+    if hasattr(se, 'SHIPPED_EXPLORE') and hasattr(se, 'set_policy_explore'):
+        se.set_policy_explore(*se.SHIPPED_EXPLORE)
     return getattr(se, 'SHIPPED_EVAL', EVAL_NAME)
 
 
