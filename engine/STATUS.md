@@ -30,7 +30,7 @@ wasm `ensure_shipped_policy`, Python `se.SHIPPED_EXPLORE` (ab_search `SIGIL_AB_B
 ab_version, bench_suites `eval=shipped`, `SIGIL_AUDIT_ENGINE=shipped`, serve.py `--explore shipped`),
 `bench --shipped`. Arena vs v27 at 10 s (both arms shipped policy + nnue_spell3): core **+51.8**, expansion +11.2,
 competitive +21.7, **about +29 pooled over 3,293 games**; passes the guest gate (`reports/2026-10-r3-gate.md`).
-Policy weights: unchanged from v26/v27 (placeholder: a retrained policy may land in v28 -- fill in here).
+Policy weights: unchanged from v26/v27. The round-3 retrain on v27 data (65.9% competitive) was not shipped: r3_warm stacked on preset 3 scored +8.0 [-3.9, +20.0] over 3,239 games, r3_wtd -7.5 (engine/reports/2026-10-r3-data.md).
 Tests 185/185, policy-wasm HASH 717fb1cae5d3adaf (shipped defaults; `EXPLORE=0` still 55a10a3b6c3b7ef9),
 nn-wasm 264/264 for nnue_spell3 and nnue_spell, wasm smoke 5/5 + policy-off 2/2 (an earlier batch had 3 failures of 9 runs; the one logged was
 the random-draw "even opening reads ~0 stones" check, which the v27 wasm also trips -- 4/30 openings vs v28 0/30).
