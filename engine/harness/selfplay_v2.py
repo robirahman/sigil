@@ -2,6 +2,7 @@
 
     selfplay_v2.py <games> <depth> <out_dir> [explore_pct=0.10] [random_ply_pct=0.08]
                    [human_frac=0.5] [lines=-] [stop_after_s=0] [explore_k=8]
+                   [comp_frac=0.67]
 
 The shard offset comes from $SIGIL_SHARD_OFF (never argv), so the argument list
 composes with `gcp/runner.sh`. Every position of every game is searched at the
@@ -38,7 +39,18 @@ human game (`lines`, an eval_games.py `hydrate` file, local path or gs:// URL),
 weighted 4:1 towards turn 20 and later, with the game's earlier positions as
 repetition history. The rest are fresh draws: a quarter competitive, and half
 drawn from all 45 spells the engine plays (core + Tectonic + Providence), half
-from the 39 core spells. A share `random_ply_pct` of plies plays a uniformly
+from the 39 core spells.
+
+`comp_frac` (round 3, 2026-10-07): the competitive variant's share of ALL
+games. POLICY (Robi, 2026-10-07): the competitive variant must always be a
+strict MAJORITY of self-play training data (the goal is superhuman play in
+competitive games too), so the default is COMP_FRAC_DEFAULT = 0.67. Fresh draws
+are competitive with that probability, and a human start is drawn from the
+competitive human games (competitive and competitive_deathmatch) with that
+probability, else from the others. Pass -1 only to reproduce rounds 1-2 (a
+quarter of fresh draws competitive, human starts drawn from all games, about
+30% competitive overall). The opening book is
+off, as shipped since v27 (set explicitly). A share `random_ply_pct` of plies plays a uniformly
 random legal turn instead of the searched one (the position is still labelled).
 
 Human games holding Fissure, Rock Slide, Bulwark or a Providence spell are
@@ -77,6 +89,7 @@ CORE = ([0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36],
 NEW_PACKS = ([39, 44], [40, 43], [41, 42])
 OLD_RULES = {'Fissure', 'Rock_Slide', 'Bulwark', 'Dividend', 'Annuity', 'Endowment'}
 KIND_FRESH_STD, KIND_FRESH_COMP, KIND_HUMAN = 0, 1, 2
+COMP_FRAC_DEFAULT = 0.67     # competitive majority, always (see the docstring)
 
 
 def engine_version():
@@ -138,6 +151,10 @@ def load_starts(path):
         w = [0 if i < 6 else (4 if i >= 20 else 1) for i in range(len(pos) - 1)]
         starts.append((pos, w))
     return starts, skipped
+
+
+def is_comp_start(pos):
+    return pos[0].split()[-1].startswith('competitive') or ' competitive' in pos[0]
 
 
 def pick_human(rng, starts, cum):
@@ -269,25 +286,36 @@ def main():
     lines = a[6] if len(a) > 6 and a[6] != '-' else None
     stop_after = float(a[7]) if len(a) > 7 else 0.0
     explore_k = int(a[8]) if len(a) > 8 else 8
+    comp_frac = float(a[9]) if len(a) > 9 else COMP_FRAC_DEFAULT
     off = shard_offset()
     # Thread-local and off by default in Python: set it explicitly, every run.
     se.set_policy(*POLICY)
+    se.set_opening_book(False)   # shipped off since v27
     assert games <= 1000, "seeds are SEED_BASE + off + i with off stepping by 1000"
     os.makedirs(out_dir, exist_ok=True)
     rng = random.Random(SEED_BASE + off)
     starts, cum = [], []
     if lines and human_frac > 0:
         starts, skipped = load_starts(lines)
-        tot = 0
-        for _pos, w in starts:
-            tot += sum(w); cum.append(tot)
         print(f"  human starts: {len(starts)} games usable, {skipped} skipped", flush=True)
     if not starts:
         human_frac = 0.0
+    # pools: [all] by default; [non-competitive, competitive] with comp_frac
+    pools = [starts] if comp_frac < 0 else [[s for s in starts if not is_comp_start(s[0])],
+                                            [s for s in starts if is_comp_start(s[0])]]
+    pool_cum = []
+    for pl in pools:
+        tot, c = 0, []
+        for _pos, w in pl:
+            tot += sum(w); c.append(tot)
+        pool_cum.append(c)
+    if comp_frac >= 0 and starts:
+        print(f"  human starts by variant: {len(pools[0])} other, {len(pools[1])} competitive", flush=True)
     meta = dict(engine=engine_version(), depth=depth, eval=EVAL, policy=list(POLICY), adaptive=list(AD),
                 width_scale=int(se.DEFAULT_WIDTH_SCALE), universe_cap=UNIVERSE_CAP,
                 explore_pct=explore_pct, explore_k=explore_k, random_pct=random_pct,
-                human_frac=human_frac, lines=lines, shard_off=off)
+                human_frac=human_frac, lines=lines, shard_off=off, comp_frac=comp_frac,
+                opening_book=False)
     print(f"  CONFIG {json.dumps(meta)}", flush=True)
     t0 = time.time()
     ch = Chunk(); chunk_i = 0; npos = ncand = nx = 0; kinds = [0, 0, 0]; unfinished = 0
@@ -298,13 +326,17 @@ def main():
         seed = SEED_BASE + off + g
         grng = random.Random(seed)
         start = None
+        want_comp = comp_frac >= 0 and grng.random() < comp_frac
         if rng.random() < human_frac:
-            r = pick_human(grng, starts, cum)
+            pi = (1 if want_comp else 0) if comp_frac >= 0 else 0
+            if not pools[pi]:
+                pi = 0 if comp_frac < 0 else 1 - pi
+            r = pick_human(grng, pools[pi], pool_cum[pi]) if pools[pi] else None
             if r:
                 b, hist, i = r
                 start = (b, hist, KIND_HUMAN, i)
         if start is None:
-            comp = grng.random() < 0.25
+            comp = want_comp if comp_frac >= 0 else grng.random() < 0.25
             b = se.Board(fresh_draw(grng, grng.random() < 0.5),
                          'competitive' if comp else 'standard')
             b.setup_initial()

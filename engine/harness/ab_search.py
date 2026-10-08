@@ -115,7 +115,21 @@ KNOBS = ('q_depth', 'aspiration', 'width_scale', 'merge_min_width', 'policy', 'p
          # engines with root parts merged like rust-ai.js; base 1 = one engine.
          # BOTH arms play the shipped generator policy (se.SHIPPED_POLICY). Give
          # each shard k vCPUs' worth of cores: WORKERS = physical cores // k.
-         'split')
+         'split',
+         # policy_explore (2026-10 round 3): the generator policy's exploration
+         # tail (policy::Explore, se.set_policy_explore). BOTH arms play the shipped
+         # policy setting; val = a preset index into EXPLORE_PRESETS, 0 = off.
+         # Since v28 the shipped engine plays preset 3 (se.SHIPPED_EXPLORE), so with
+         # SIGIL_AB_BASE=shipped val 0 is the knob-OFF arm, not the shipped one.
+         'policy_explore')
+# (mode, cast_window, dash_limit, dash_per, dash_tried, base, step[, slot_first, slot_every])
+EXPLORE_PRESETS = {
+    1: (3, 64, 128, 8, 48, 256, 8),     # casts + dashes, tail 1 nat below the stub's last sibling
+    2: (3, 32, 64, 4, 32, 256, 16),     # narrower tail
+    3: (3, 64, 128, 8, 48, 512, 16),    # tail 2 nats down, steeper
+    4: (1, 64, 128, 8, 48, 256, 8),     # casts only
+    5: (2, 64, 128, 8, 48, 256, 8),     # dashes only
+}
 BOOL_KNOBS = ('force_hints', 'root_resort', 'aspiration_steps', 'adopt_partial',
               'pvs', 'history')
 
@@ -155,14 +169,26 @@ def _arm_policy_weights():
 # (se.SHIPPED_POLICY, on since v25) unless the knob under test is the policy
 # itself. The policy is a thread-local engine setting that is OFF by default in
 # Python, so without this an arena of any other knob measures the pre-v25 search.
+# Since v28 it also applies the shipped exploration tail (se.SHIPPED_EXPLORE).
 # Default off keeps the older arms files reproducible.
 POLICY_MODE = os.environ.get('SIGIL_POLICY', 'off')
+# SIGIL_BASE_EXPLORE=<preset>: BOTH arms play the policy exploration tail
+# EXPLORE_PRESETS[preset] (round 3: stack a policy_weights A/B on explore preset 3).
+BASE_EXPLORE = int(os.environ.get('SIGIL_BASE_EXPLORE') or 0)
 
 
 def play(b, ms, ev, hist, knob, val):
     """One move with `knob` set to `val`; everything else at engine defaults."""
     if (AB_BASE == 'shipped' or POLICY_MODE == 'shipped') and knob != 'policy':
         se.set_policy(*se.SHIPPED_POLICY)
+    if AB_BASE == 'shipped' or POLICY_MODE == 'shipped':
+        # v28: the shipped exploration tail too (inert while the policy is off,
+        # so the policy knob's off arm is unaffected). knob=policy_explore
+        # overrides it below; val 0 there is the knob-off path.
+        if hasattr(se, 'SHIPPED_EXPLORE'):
+            se.set_policy_explore(*se.SHIPPED_EXPLORE)
+    if BASE_EXPLORE and knob != 'policy_explore':
+        se.set_policy_explore(*EXPLORE_PRESETS[BASE_EXPLORE])
     if ':' in ev:
         # preset: an eval-only A/B. policy: a release A/B -- the arm (policy on,
         # val != 0) plays the left eval, the base (policy off) the right one.
@@ -285,6 +311,12 @@ def play(b, ms, ev, hist, knob, val):
             se.set_policy_weights(_arm_policy_weights())
         else:
             se.set_policy_weights()
+    if knob == 'policy_explore':
+        se.set_policy(*se.SHIPPED_POLICY)
+        if val:
+            se.set_policy_explore(*EXPLORE_PRESETS[val])
+        else:
+            se.set_policy_explore(0)
     if knob == 'split':
         se.set_policy(*se.SHIPPED_POLICY)
         # val = merge*10 + k (merge 0 = rust-ai.js pickSplitResult, 1 = common depth)
@@ -484,7 +516,7 @@ if __name__ == "__main__":
     RECORDER = ArenaRecorder.from_env(knob, arm_val, base_val, ms_spec, ev, off)
 
     cfg = se.search_defaults()
-    print(f"  ENGINE CONFIG  ab_base={AB_BASE} policy_mode={POLICY_MODE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
+    print(f"  ENGINE CONFIG  ab_base={AB_BASE} policy_mode={POLICY_MODE} base_explore={BASE_EXPLORE} variant={VARIANT} require_spell={REQUIRE_SPELL} eval={ev} knob={knob} arm={arm_val} base={base_val} "
           f"base_width_scale={BASE_WS} "
           f"ms={ms_spec} merge_min_width="
           f"{'OFF' if cfg['merge_min_width'] >= (1 << 63) else cfg['merge_min_width']} "

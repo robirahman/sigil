@@ -180,8 +180,12 @@ async function driver() {
 	}
 
 	// The display report (search::report): present on every completed search,
-	// and an even opening reads ~0 stones, not the raw eval's -0.5 (blue's +1
-	// token plus the mover's tempo). Pins the 2026-09-21 refactor.
+	// with numeric stones and no mate at the opening. The even-position offset
+	// itself (an even opening reads ~0, not the raw eval's -0.5) is pinned in
+	// Rust (tests.rs, the report() tests). Here only a gross wiring error is
+	// caught: the spell-aware evals genuinely rate some opening draws near one
+	// stone for the mover (0.2-1.1 seen with nnue_spell3), so a tight bound
+	// here was flaky on v27 and v28 alike.
 	{
 		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
 		b.setupInitial();
@@ -189,7 +193,7 @@ async function driver() {
 		if (typeof res.stones !== 'number') throw new Error('search result lacks numeric "stones": ' + JSON.stringify(res));
 		if (!(res.mate_in === null || Number.isInteger(res.mate_in))) throw new Error('mate_in must be null or an integer');
 		if (typeof res.mate_proven !== 'boolean') throw new Error('mate_proven must be a boolean');
-		if (Math.abs(res.stones) >= 0.5) throw new Error('even opening reads ' + res.stones + ' stones; expected ~0 (the raw eval is -0.5)');
+		if (Math.abs(res.stones) >= 2) throw new Error('opening reads ' + res.stones + ' stones; expected within a stone or so of 0');
 		if (res.mate_in !== null) throw new Error('the opening is not a mate: ' + JSON.stringify(res));
 	}
 	// Competitive opening book: red's and blue's free placements are blinks on

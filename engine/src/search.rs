@@ -1309,6 +1309,7 @@ pub(crate) struct ThreadSwitches {
     policy: (bool, usize),
     policy_cost: (i32, usize),
     policy_weights: Option<Vec<f32>>,
+    policy_explore: crate::policy::Explore,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1332,6 +1333,7 @@ impl ThreadSwitches {
             policy: crate::policy::policy_setting(),
             policy_cost: crate::policy::policy_cost(),
             policy_weights: crate::policy::policy_weights_override(),
+            policy_explore: crate::policy::policy_explore(),
         }
     }
 
@@ -1364,6 +1366,7 @@ impl ThreadSwitches {
         op::set_opening_carnage(self.opening.3);
         crate::policy::set_policy(self.policy.0, self.policy.1);
         crate::policy::set_policy_cost(self.policy_cost.0, self.policy_cost.1);
+        crate::policy::set_policy_explore(self.policy_explore);
         if let Some(w) = self.policy_weights {
             let _ = crate::policy::set_policy_weights(&w);
         }
@@ -2077,7 +2080,7 @@ impl Search {
             // most probable turns, built best-first; the stream's own prepass
             // (stone-lead and Destruction mates) still comes first.
             let pen = crate::policy::cost_penalty_for(width);
-            let mut it = b.turns_policy_pen(c, self.window, self.keep_window, pen);
+            let mut it = b.turns_policy_pen(c, self.window, self.keep_window, pen).with_eval(self.weights);
             v = it.by_ref().take(width).collect();
             if it.has_more() { self.stats.widened = true; }
             if it.windowed { self.stats.windowed = true; }

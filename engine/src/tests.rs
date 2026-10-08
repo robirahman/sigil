@@ -4368,6 +4368,13 @@ fn shipped_eval_is_a_known_preset_and_named_in_eval_names() {
     assert!(crate::eval::EVAL_NAMES.contains(&crate::eval::SHIPPED_EVAL));
     let (on, w) = crate::policy::SHIPPED_POLICY;
     assert!(on && w > 0, "v25 ships the generator policy");
+    let x = crate::policy::SHIPPED_EXPLORE;
+    assert!(x.mode & 3 == 3 && x.cast_window > 0 && x.dash_limit > 0 && x.base > 0 && x.step > 0,
+            "v28 ships the exploration tail (casts and dashes)");
+    assert_eq!(x, crate::policy::Explore { mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8,
+               dash_tried: 48, base: 512, step: 16, slot_first: 0, slot_every: 0 }, "round 3 preset 3");
+    // The thread default stays off: the shipped setting is applied explicitly.
+    assert_eq!(crate::policy::policy_explore(), crate::policy::Explore::OFF);
 }
 
 /// Step 4: every turn the learned-policy stream yields is one the shipped
@@ -4416,6 +4423,73 @@ fn policy_stream_is_a_deterministic_subset_of_the_shipped_stream() {
         }
     }
     assert!(checked > 20, "only {checked} positions checked");
+}
+
+/// Round 3 exploration tail (`policy::Explore`): with the tail on, the shipped
+/// policy stream is an exact SUBSEQUENCE of the explored one (the tail never
+/// renormalises or reorders the shipped candidates), the stream stays
+/// deterministic, every extra turn is legal (it is in the exhaustive
+/// enumeration's result set) and no tail turn repeats a resolved board that
+/// the stream already yielded. The tail must actually add turns somewhere.
+#[test]
+fn policy_explore_tail_extends_the_stream_without_reordering_it() {
+    use crate::policy::{set_policy_explore, Explore};
+    use std::collections::HashSet;
+    let on = Explore { mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8, dash_tried: 48,
+                       base: 256, step: 8, slot_first: 0, slot_every: 0 };
+    let (mut checked, mut extra_total) = (0, 0usize);
+    for seed in 1..40u64 {
+        let draw = Board::legal_draw(seed);
+        let mut b = Board::new(draw, Variant::Standard);
+        let mut s = seed | 1;
+        let mut nx = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+        let r = nx() & ALL & nx();
+        let bl = (nx() & ALL & nx()) & !r;
+        b.stones = [r, bl];
+        b.turn_counter = 10 + (seed % 20) as u32;
+        b.update();
+        if b.outcome != crate::board::Outcome::Ongoing { continue; }
+        for c in [Color::Red, Color::Blue] {
+            set_policy_explore(Explore::OFF);
+            let base: Vec<Turn> = b.turns_policy(c, 16, 2).take(200).collect();
+            set_policy_explore(on);
+            let x: Vec<Turn> = b.turns_policy(c, 16, 2).take(400).collect();
+            let x2: Vec<Turn> = b.turns_policy(c, 16, 2).take(400).collect();
+            set_policy_explore(Explore::OFF);
+            assert_eq!(x.len(), x2.len());
+            for (p, q) in x.iter().zip(&x2) { assert_eq!(p.slice(), q.slice(), "seed {seed}: nondeterministic"); }
+            // The shipped turns keep their order: those of the shipped prefix that
+            // the explored stream reaches are exactly a prefix of it.
+            let xb: Vec<&Turn> = x.iter().filter(|t| base.iter().any(|u| u.slice() == t.slice())).collect();
+            let mut seen_k: std::collections::HashMap<Vec<crate::turn::Action>, usize> = Default::default();
+            let mut k = 0;
+            for t in &xb {
+                // a turn may legitimately appear twice (the decisive prepass), in both streams
+                let e = seen_k.entry(t.slice().to_vec()).or_insert(0); *e += 1;
+                while k < base.len() && base[k].slice() != t.slice() { k += 1; }
+                assert!(k < base.len(), "seed {seed} {c:?}: shipped order broken at {:?}", t.slice());
+                k += 1;
+            }
+            let after = |t: &Turn| { let mut y = b; y.apply_turn(t, c); y };
+            let check_legal = checked < 6;
+            let legal: HashSet<_> = if check_legal {
+                let (all, _) = b.enumerate_turns_capped(c, 3_000_000);
+                all.iter().map(|t| after(t).state_key()).collect()
+            } else { HashSet::new() };
+            let base_set: HashSet<Vec<crate::turn::Action>> = b.turns_policy(c, 16, 2).take(100_000)
+                .map(|t| t.slice().to_vec()).collect();
+            for t in &x {
+                if base_set.contains(&t.slice().to_vec()) { continue; }
+                extra_total += 1;
+                if check_legal {
+                    assert!(legal.contains(&after(t).state_key()), "seed {seed} {c:?}: illegal tail turn {:?}", t.slice());
+                }
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 20, "only {checked} positions checked");
+    assert!(extra_total > 0, "the tail never added a turn");
 }
 
 /// Step 5: the Rust network is bit-for-bit the integer forward pass that
@@ -4492,4 +4566,49 @@ fn round2_networks_match_python_and_sit_on_tfit_spell_v2() {
             }
         }
     }
+}
+
+/// Exploration slots (`Explore::slot_every > 0`) must keep a slotted cast's
+/// Seal of Summer continuation (PR #15 review: slotted cast tails dropped the
+/// pending boards, so their second casts never appeared).
+#[test]
+fn policy_explore_slots_keep_summer_second_casts() {
+    use crate::policy::{set_policy_explore, Explore};
+    use std::collections::HashSet;
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SEAL_OF_SUMMER, 10, 11], Variant::Deathmatch);
+    b.stones[0] = 1 << n("a1");
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    charge(&mut b, SEAL_OF_SUMMER, Color::Red);
+    charge(&mut b, 10, Color::Red);
+    charge(&mut b, 11, Color::Red);
+    assert_eq!(b.outcome, Outcome::Ongoing);
+    let two_casts = |t: &crate::turn::Turn|
+        t.slice().iter().filter(|a| matches!(a, Action::Cast { .. })).count() == 2;
+    let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
+    let tail = Explore { mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8, dash_tried: 48,
+                         base: 256, step: 8, slot_first: 0, slot_every: 0 };
+    let slots = Explore { slot_first: 0, slot_every: 1, ..tail };
+    let stream = |e: Explore| -> Vec<crate::turn::Turn> {
+        set_policy_explore(e);
+        let v: Vec<_> = b.turns_policy(Color::Red, 1, 1).take(200_000).collect();
+        set_policy_explore(Explore::OFF);
+        v
+    };
+    let (off, plain, slot) = (stream(Explore::OFF), stream(tail), stream(slots));
+    let set = |v: &Vec<crate::turn::Turn>| -> HashSet<String> { v.iter().map(key).collect() };
+    let (off_s, plain_s, slot_s) = (set(&off), set(&plain), set(&slot));
+    let plain2: HashSet<String> = plain.iter().filter(|t| two_casts(t)).map(key).collect();
+    let slot2: HashSet<String> = slot.iter().filter(|t| two_casts(t)).map(key).collect();
+    assert!(plain_s.len() > off_s.len(), "the tail must add turns in this position");
+    assert!(plain2.iter().any(|k| !off_s.contains(k)),
+            "the tail must add a Summer second cast here, or the test proves nothing");
+    // Turns under a slotted DASH differ by design: a slot queues the dash's
+    // post-dash casts at the shipped windows, without their own cast tail. The
+    // Summer continuation of a slotted cast must match the plain tail exactly.
+    let nodash = |k: &&String| !k.contains("Dash");
+    let missing: Vec<_> = plain2.difference(&slot2).filter(nodash).collect();
+    assert!(slot_s.is_subset(&plain_s), "slots must not invent turns the plain tail lacks");
+    assert!(slot2.iter().any(|k| k.contains("Dash")), "a slotted dash's cast must keep its Summer second cast too");
+    assert!(missing.is_empty(), "slot stream drops {} Summer turns, e.g. {:?}", missing.len(), missing.first());
 }

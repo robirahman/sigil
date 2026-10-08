@@ -32,6 +32,8 @@ REQUIRE_SPELL=$(md require-spell || true)   # SIGIL_REQUIRE_SPELL: play only dra
 if [ -n "$REQUIRE_SPELL" ]; then export SIGIL_REQUIRE_SPELL="$REQUIRE_SPELL"; fi
 POLICY_WEIGHTS=$(md policy-weights || true)   # SIGIL_POLICY_WEIGHTS: ab_search knob=policy_weights arm weights (.npy, repo-relative)
 if [ -n "$POLICY_WEIGHTS" ]; then export SIGIL_POLICY_WEIGHTS="$POLICY_WEIGHTS"; fi
+BASE_EXPLORE=$(md base-explore || true)   # SIGIL_BASE_EXPLORE: ab_search explore preset on BOTH arms
+if [ -n "$BASE_EXPLORE" ]; then export SIGIL_BASE_EXPLORE="$BASE_EXPLORE"; fi
 SHARD_BASE=$(md shard-base)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=main}" \
   "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \

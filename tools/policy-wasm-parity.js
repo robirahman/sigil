@@ -7,8 +7,10 @@
 // (wasm `bench_hash`), hashed exactly as engine/examples/bench.rs hashes one, and
 // the per-position hashes are combined the same way. Compare against
 //   (cd engine && cargo run --release --no-default-features --example bench -- \
-//      harness/positions_midgame.txt DEPTH --eval nnue_spell --policy 96)
-// which prints `... HASH <hex>` on its TOTAL line.
+//      harness/positions_midgame.txt DEPTH --shipped)
+// which prints `... HASH <hex>` on its TOTAL line. The wasm applies the shipped policy
+// AND (v28+) the shipped exploration tail (policy::SHIPPED_EXPLORE) by default;
+// EXPLORE=0 here matches `bench ... --shipped --explore off`.
 //
 //   node tools/policy-wasm-parity.js EXPECTED_HASH [DEPTH=4] [EVAL=nnue_spell]
 //        [POSITIONS=engine/harness/positions_midgame.txt] [WASM_DIR=docs/static/wasm]
@@ -38,6 +40,13 @@ function fnv(h, s) {
 	if (typeof wasm_bindgen.bench_hash !== 'function') throw new Error('this build has no bench_hash');
 	let combined = 0xcbf29ce484222325n;
 	let n = 0, nodes = 0;
+	// EXPLORE=mode,cast_window,dash_limit,dash_per,dash_tried,base,step[,slot_first,slot_every]:
+	// the round 3 exploration tail (native: bench --explore with the same list).
+	if (process.env.EXPLORE) {
+		const v = process.env.EXPLORE.split(',').map((x) => parseInt(x, 10));
+		while (v.length < 9) v.push(0);
+		wasm_bindgen.set_policy_explore(...v);
+	}
 	for (const raw of fs.readFileSync(POSITIONS, 'utf8').split('\n')) {
 		const line = raw.trim();
 		if (!line || line.startsWith('#')) continue;

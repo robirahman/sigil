@@ -345,6 +345,26 @@ let wasm_bindgen = (function(exports) {
         wasm.set_policy(on, min_width);
     }
     exports.set_policy = set_policy;
+
+    /**
+     * Round 3 exploration tail of the policy stream (`policy::Explore`; mode 0 =
+     * off). The site plays `policy::SHIPPED_EXPLORE` (on since v28), applied with
+     * the shipped policy; an explicit call here overrides it for the rest of the
+     * module's life (tools/policy-wasm-parity.js `EXPLORE=...`, `EXPLORE=0` = off).
+     * @param {number} mode
+     * @param {number} cast_window
+     * @param {number} dash_limit
+     * @param {number} dash_per
+     * @param {number} dash_tried
+     * @param {number} base
+     * @param {number} step
+     * @param {number} slot_first
+     * @param {number} slot_every
+     */
+    function set_policy_explore(mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first, slot_every) {
+        wasm.set_policy_explore(mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first, slot_every);
+    }
+    exports.set_policy_explore = set_policy_explore;
     function __wbg_get_imports() {
         const import0 = {
             __proto__: null,

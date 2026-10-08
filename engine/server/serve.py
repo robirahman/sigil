@@ -30,6 +30,7 @@ os.environ.setdefault('SCRATCH', os.path.dirname(os.path.dirname(_HERE)))
 import sigil_engine as se
 
 ARGS = None
+EXPLORE = (0,)   # set_policy_explore arguments, from --explore (main)
 ADAPTIVE = None
 STATS = {'moves': 0, 'nodes': 0, 'seconds': 0.0}
 
@@ -50,6 +51,7 @@ class Handler(SimpleHTTPRequestHandler):
         # The generator policy is a per-thread engine setting and every request
         # runs on a fresh ThreadingHTTPServer thread, so set it per request.
         se.set_policy(ARGS.policy > 0, ARGS.policy)
+        se.set_policy_explore(*EXPLORE)
         if route == '/api/move': return self._do_move()
         if route != '/api/pick':
             self.send_error(404, 'unknown endpoint'); return
@@ -130,7 +132,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 def main():
-    global ARGS
+    global ARGS, EXPLORE
     ap = argparse.ArgumentParser()
     ap.add_argument('--docs', default=None, help="path to the repo's docs/ directory")
     ap.add_argument('--port', type=int, default=8000)
@@ -155,8 +157,14 @@ def main():
     ap.add_argument('--policy', type=int, default=se.SHIPPED_POLICY[1] if se.SHIPPED_POLICY[0] else 0,
                     help="learned generator policy at nodes whose width budget is at "
                          "least this (engine SHIPPED_POLICY, 96 since v25); 0 = off")
+    ap.add_argument('--explore', default='shipped',
+                    help="the generator policy's exploration tail: 'shipped' (the engine's "
+                         "SHIPPED_EXPLORE, round 3 preset 3 since v28), 'off', or the "
+                         "set_policy_explore arguments as a comma list")
     ap.add_argument('--verbose', action='store_true')
     ARGS = ap.parse_args()
+    EXPLORE = (tuple(se.SHIPPED_EXPLORE) if ARGS.explore == 'shipped' else (0,) if ARGS.explore == 'off'
+               else tuple(int(x) for x in ARGS.explore.split(',')))
     if ARGS.docs is None:
         guess = os.path.join(os.path.dirname(os.path.dirname(_HERE)), 'docs')
         ARGS.docs = guess

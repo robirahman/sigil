@@ -4,6 +4,10 @@
         [--cover 10,24,96,500] [--workers 4] [--json out.json]
         --config shipped:eval=tfit  --config spell:eval=tfit_spell  ...
 
+    # the round-3 release gate (guest suite only, the build exactly as it ships):
+    python engine/harness/bench_suites.py --guest-only --nodes 50000,300000,600000,1500000 \
+        --guest-depths 4,5,6 --config "cand:eval=shipped" --json guest_gate_cand.json
+
 Every metric is at a FIXED NODE BUDGET or a fixed candidate count, never a clock, so a
 change that only spends more nodes cannot flatter itself and the numbers do not depend on
 the machine. Each `--config` runs in its own worker processes, because the generator knobs
@@ -25,8 +29,26 @@ Metrics (per config):
              ending turn one ply ahead (final_blow_misses.json), the share where a node-budget
              search reports a forced win for the mover.
 
+  guest      GUEST GATE (--guest; the release gate since round 3, engine/reports/2026-10-r3-gate.md).
+             Two suites from Robi's 2026-10-06/07 guest games against the browser Hard tier:
+             `opp` (guest_2026-10_cases.json, 32 opponent replies the playing build did not
+             expect) scored as `sees` above, and on its MATE-band subset (target <= -19.5:
+             the reply left a forced loss, so seeing it means the search reports the forced
+             loss, which does not depend on the eval's scale); and `own`
+             (guest_2026-10_own.json, 10 avoidable own-move falls from near-level positions),
+             where a case is AVOIDED when the searched move's result differs from the move the
+             AI played. Each at every --nodes budget and at every fixed depth in
+             --guest-depths (default 4,5,6: what the browser's 10 s reaches, see the r3 report).
+             Also the policy-stream coverage of the 32 replies. Per-case results go to the
+             --json output, so a candidate can be compared case by case with the baseline
+             (ai/data/benchmarks/guest_gate_v27.json).
+
 Config spec: `name:key=val;key=val`. Keys:
-  eval=<preset>           eval preset name (`se.eval_weights` must know it); default tfit
+  eval=<preset>           eval preset name (`se.eval_weights` must know it); default tfit.
+                          `eval=shipped` = the loaded build's own SHIPPED_EVAL AND its
+                          SHIPPED_POLICY (unless a call=set_policy(...) overrides it) and, v28+,
+                          SHIPPED_EXPLORE (unless a call=set_policy_explore(...) does), i.e.
+                          the engine exactly as that build ships (SIGIL_AUDIT_ENGINE=shipped)
   width_scale=<int>       default: the engine's DEFAULT_WIDTH_SCALE (ignored while adaptive is on:
                           the adaptive scales replace it, so pair it with adaptive=none)
   adaptive=<p,e,h>        default: the engine's SHIPPED_ADAPTIVE; `adaptive=none` disables
@@ -87,6 +109,26 @@ def parse_config(spec):
     return cfg
 
 
+def _resolve_shipped(cfg, se):
+    """`eval=shipped`: the build's SHIPPED_EVAL, its SHIPPED_POLICY unless the config sets
+    a policy itself, and (v28+) its SHIPPED_EXPLORE unless the config calls set_policy_explore
+    (both are thread-local and OFF by default in Python)."""
+    if cfg.get('eval') != 'shipped':
+        return cfg
+    # Builds before v24 export no SHIPPED_EVAL (they shipped tfit), before v25 no policy.
+    cfg = dict(cfg, eval=getattr(se, 'SHIPPED_EVAL', 'tfit'), calls=list(cfg['calls']))
+    if hasattr(se, 'set_policy') and not any(fn == 'set_policy' for fn, _ in cfg['calls']):
+        on, w = getattr(se, 'SHIPPED_POLICY', (False, 0))
+        cfg['calls'].insert(0, ('set_policy', (bool(on), int(w))))
+        if on and 'stream' not in cfg:
+            cfg['stream'] = 'policy'
+    # v28+: the shipped exploration tail, unless the config sets one itself. Builds
+    # before v28 export no SHIPPED_EXPLORE (they shipped it off, the thread default).
+    if hasattr(se, 'SHIPPED_EXPLORE') and not any(fn == 'set_policy_explore' for fn, _ in cfg['calls']):
+        cfg['calls'].append(('set_policy_explore', tuple(int(x) for x in se.SHIPPED_EXPLORE)))
+    return cfg
+
+
 def _load_engine(module):
     if not module:
         import sigil_engine
@@ -100,6 +142,7 @@ def _load_engine(module):
 def _init(cfg):
     global _se, _cfg
     _se = _load_engine(cfg.get('module'))
+    cfg = _resolve_shipped(cfg, _se)
     _cfg = dict(cfg)
     _cfg.setdefault('width_scale', _se.DEFAULT_WIDTH_SCALE)
     if 'adaptive' not in cfg:
@@ -126,6 +169,10 @@ def _value(r, pov):
 
 
 def _search(sfn, history, nodes):
+    """`nodes`: a node budget (the deepest completed depth is kept), or 'dN': fixed depth N."""
+    if isinstance(nodes, str):
+        return _se.analyze(sfn, _cfg['eval'], max_depth=int(nodes[1:]), time_ms=0, history_sfns=history or [],
+                           width_scale=_cfg['width_scale'], adaptive=_cfg['adaptive'])
     return _se.analyze(sfn, _cfg['eval'], max_depth=40, time_ms=0, history_sfns=history or [],
                        width_scale=_cfg['width_scale'], adaptive=_cfg['adaptive'], node_limit=nodes)
 
@@ -153,6 +200,69 @@ def job_sees(item):
             'depth': r.get('depth'), 'nodes': r.get('nodes')}
 
 
+def is_competitive(sfn):
+    """A non-standard variant is named by an SFN token (a Providence `pm:` token may follow it)."""
+    return any(t.startswith('competitive') for t in sfn.split(' ')[1:])
+
+
+def _result_key(sfn):
+    """The position part of an SFN for a "same result" test: the side-to-move token dropped,
+    as in the coverage metric's exact-result match."""
+    if not sfn:
+        return None
+    f = sfn.split(' ')
+    return ' '.join(f[:1] + f[2:])
+
+
+def job_guest_opp(item):
+    case, budget = item
+    t = time.time()
+    r = _search(case['sfn'], case.get('history'), budget)
+    v = _value(r, case['ai'])
+    return {'g': case['g'], 'i': case['i'], 'sees': v is not None and v <= case['target'] + TOLERANCE,
+            'v': v, 'depth': r.get('depth'), 'nodes': r.get('nodes'), 'secs': round(time.time() - t, 2)}
+
+
+def job_guest_own(item):
+    case, budget = item
+    t = time.time()
+    r = _search(case['sfn'], case.get('history'), budget)
+    played = _result_key(r.get('expected_sfn'))
+    return {'g': case['g'], 'i': case['i'],
+            'avoids': played is not None and played != _result_key(case['sfn_after']),
+            'v': _value(r, case['ai']), 'depth': r.get('depth'), 'nodes': r.get('nodes'),
+            'secs': round(time.time() - t, 2)}
+
+
+MATE_BAND = MATE_V - TOLERANCE
+
+
+def run_guest(ex, guest, a):
+    """The guest gate (module docstring): every --nodes budget, then 'dN' per --guest-depths."""
+    opp, own = guest['opp'], guest['own']
+    out = {'n_opp': len(opp), 'n_opp_mate': sum(c['target'] <= -MATE_BAND for c in opp), 'n_own': len(own)}
+    cap = max(a.cover)
+    ranks = list(ex.map(job_cover, [(c['sfn'], c['sfn_after'], cap) for c in opp], chunksize=1))
+    out['coverage'] = {f'w{k}': sum(0 <= r < k for r in ranks) for k in a.cover}
+    out['coverage_ranks'] = ranks
+    by = {}
+    for budget in list(a.nodes) + [f'd{d}' for d in a.guest_depths]:
+        t = time.time()
+        ro = list(ex.map(job_guest_opp, [(c, budget) for c in opp], chunksize=1))
+        rw = list(ex.map(job_guest_own, [(c, budget) for c in own], chunksize=1))
+        mate = [r for r, c in zip(ro, opp) if c['target'] <= -MATE_BAND]
+        by[str(budget)] = {
+            'opp_sees': sum(r['sees'] for r in ro), 'opp_mate_sees': sum(r['sees'] for r in mate),
+            'own_avoids': sum(r['avoids'] for r in rw),
+            'mean_depth': round(sum(r['depth'] or 0 for r in ro + rw) / max(len(ro + rw), 1), 2),
+            'mean_nodes': int(sum(r['nodes'] or 0 for r in ro + rw) / max(len(ro + rw), 1)),
+            'secs': round(time.time() - t, 1), 'opp': ro, 'own': rw}
+        print(f"  guest {budget}: opp {by[str(budget)]['opp_sees']} own {by[str(budget)]['own_avoids']} "
+              f"({by[str(budget)]['secs']}s)", flush=True)
+    out['by_budget'] = by
+    return out
+
+
 def job_final(item):
     case, nodes = item
     r = _search(case['sfn'], case.get('history'), nodes)
@@ -164,6 +274,10 @@ def run_config(cfg, suites, a):
     out = {'config': {k: v for k, v in cfg.items() if k != 'calls'} | {'calls': [f'{f}{a_}' for f, a_ in cfg['calls']]}}
     cap = max(a.cover)
     with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(cfg,)) as ex:
+        if suites.get('guest'):
+            out['guest'] = run_guest(ex, suites['guest'], a)
+        if a.guest_only:
+            return out
         cov = {}
         for setname, cases in (('finds', suites['finds']), ('replies', suites['surprise'])):
             items = [(c['sfn'], c['sfn_after'], cap) for c in cases if c.get('sfn_after')]
@@ -180,6 +294,10 @@ def run_config(cfg, suites, a):
             sees[str(nodes)] = {'n': n, 'rate': round(sum(r['sees'] for r in rs) / n, 4) if n else None,
                                 'mean_depth': round(sum(r['depth'] or 0 for r in rs) / max(n, 1), 2),
                                 'secs': round(time.time() - t, 1)}
+            # The competitive variant (incl. deathmatch) on its own: the release target.
+            rc = [r for r, c in zip(rs, suites['surprise']) if is_competitive(c['sfn'])]
+            sees[str(nodes)]['competitive'] = {'n': len(rc), 'rate': round(sum(r['sees'] for r in rc) / len(rc), 4)
+                                               if rc else None}
             if suites['final']:
                 rf = list(ex.map(job_final, [(c, nodes) for c in suites['final']], chunksize=1))
                 final[str(nodes)] = {'n': len(rf), 'rate': round(sum(r['sees'] for r in rf) / len(rf), 4)}
@@ -188,13 +306,24 @@ def run_config(cfg, suites, a):
     return out
 
 
-def load_suites(d, limit=0, surprise_file='surprise_cases.json'):
+def load_suites(d, limit=0, surprise_file='surprise_cases.json', guest=None):
     def ld(name):
         p = os.path.join(d, name)
         x = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else []
         return x[:limit] if limit else x
-    return {'surprise': ld(surprise_file), 'finds': ld('human_finds.json'),
-            'final': ld('final_blow_misses.json')}
+    out = {'surprise': ld(surprise_file), 'finds': ld('human_finds.json'),
+           'final': ld('final_blow_misses.json')}
+    if guest:
+        out['guest'] = {'opp': ld(guest + '_cases.json'), 'own': ld(guest + '_own.json')}
+    return out
+
+
+def guest_line(g):
+    def one(b, s):
+        return (f"{b}: opp {s['opp_sees']}/{g['n_opp']} mate {s['opp_mate_sees']}/{g['n_opp_mate']} "
+                f"own {s['own_avoids']}/{g['n_own']} (d{s['mean_depth']})")
+    cov = ' '.join(f'{k}={v}' for k, v in g['coverage'].items())
+    return f"coverage {cov} of {g['n_opp']}  " + '  '.join(one(b, s) for b, s in g['by_budget'].items())
 
 
 def main():
@@ -208,12 +337,20 @@ def main():
     ap.add_argument('--cover', default='10,24,96,500')
     ap.add_argument('--workers', type=int, default=os.cpu_count() or 2)
     ap.add_argument('--limit', type=int, default=0, help='first N cases of each suite (smoke runs)')
+    ap.add_argument('--guest', nargs='?', const='guest_2026-10', default=None,
+                    help='also score the guest gate: <prefix>_cases.json + <prefix>_own.json under --suites '
+                         '(default prefix guest_2026-10)')
+    ap.add_argument('--guest-depths', default='4,5,6', help='fixed depths the guest gate also searches')
+    ap.add_argument('--guest-only', action='store_true', help='score only the guest gate (implies --guest)')
     ap.add_argument('--json')
     a = ap.parse_args()
     a.nodes = [int(x) for x in a.nodes.split(',') if x]
     a.cover = [int(x) for x in a.cover.split(',') if x]
+    a.guest_depths = [int(x) for x in a.guest_depths.split(',') if x]
+    if a.guest_only and not a.guest:
+        a.guest = 'guest_2026-10'
     cfgs = [parse_config(s) for s in (a.config or ['shipped:eval=tfit'])]
-    suites = load_suites(a.suites, a.limit, a.surprise_file)
+    suites = load_suites(a.suites, a.limit, a.surprise_file, a.guest)
     print(f"suites: {len(suites['surprise'])} surprise ({a.surprise_file}), {len(suites['finds'])} human finds, "
           f"{len(suites['final'])} final-blow misses; nodes {a.nodes}; cover {a.cover}", flush=True)
     results = []
@@ -222,9 +359,13 @@ def main():
         r = run_config(cfg, suites, a)
         r['secs'] = round(time.time() - t, 1)
         results.append(r)
+        if 'guest' in r:
+            print(f"[{cfg['name']}] guest {guest_line(r['guest'])}", flush=True)
+        if a.guest_only:
+            continue
         cov = '  '.join(f"{k} " + ' '.join(f"{w}={v:.3f}" for w, v in c.items() if w != 'n')
                         for k, c in r['coverage'].items())
-        sees = '  '.join(f"{n}:{s['rate']:.3f}(d{s['mean_depth']})" for n, s in r['sees'].items())
+        sees = '  '.join(f"{n}:{s['rate']:.3f}(d{s['mean_depth']}; comp {s['competitive']['rate']})" for n, s in r['sees'].items())
         fin = '  '.join(f"{n}:{s['rate']:.3f}" for n, s in r['final'].items())
         print(f"[{cfg['name']}] coverage {cov}\n[{cfg['name']}] sees {sees}   final {fin}   ({r['secs']}s)",
               flush=True)

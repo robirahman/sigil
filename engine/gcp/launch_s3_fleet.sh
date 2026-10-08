@@ -20,9 +20,11 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 LINES=${LINES_GS:-gs://focus-surfer-494820-g0-sigil/data/s3/human_starts_2026-10-06.json}
 FIRST=${FIRST_VM:-0}
 PREFIX=${VM_PREFIX:-sigil-s3}   # round 2 (v25 data): VM_PREFIX=sigil-r2d FIRST_VM=100
+# Round 3 (v27 data): VM_PREFIX=sigil-r3d FIRST_VM=200 COMP_FRAC=0.67 LINES_GS=…/human_starts_2026-10-07.json
+COMP=${COMP_FRAC:-0.67}   # competitive share of all games (selfplay_v2.py comp_frac); must stay > 0.5
 ARMS=$(mktemp)
-printf '%s' "1000,$DEPTH,/opt/sigil/out/data,0.10,0.08,0.5,$LINES,$STOP,8" > "$ARMS"
-SMOKE="2,3,/opt/sigil/out/smoke,0.5,0.08,0.5,$LINES,0,4"
+printf '%s' "1000,$DEPTH,/opt/sigil/out/data,0.10,0.08,0.5,$LINES,$STOP,8,$COMP" > "$ARMS"
+SMOKE="2,3,/opt/sigil/out/smoke,0.5,0.08,0.5,$LINES,0,4,$COMP"
 i=$FIRST
 for spec in "$@"; do
   IFS=: read -r zone count machine <<< "$spec"
