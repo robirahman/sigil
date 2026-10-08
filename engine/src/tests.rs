@@ -4567,3 +4567,48 @@ fn round2_networks_match_python_and_sit_on_tfit_spell_v2() {
         }
     }
 }
+
+/// Exploration slots (`Explore::slot_every > 0`) must keep a slotted cast's
+/// Seal of Summer continuation (PR #15 review: slotted cast tails dropped the
+/// pending boards, so their second casts never appeared).
+#[test]
+fn policy_explore_slots_keep_summer_second_casts() {
+    use crate::policy::{set_policy_explore, Explore};
+    use std::collections::HashSet;
+    let mut b = Board::new([0, 1, 2, 5, 6, 7, SEAL_OF_SUMMER, 10, 11], Variant::Deathmatch);
+    b.stones[0] = 1 << n("a1");
+    b.stones[1] = 1 << n("b1");
+    b.update();
+    charge(&mut b, SEAL_OF_SUMMER, Color::Red);
+    charge(&mut b, 10, Color::Red);
+    charge(&mut b, 11, Color::Red);
+    assert_eq!(b.outcome, Outcome::Ongoing);
+    let two_casts = |t: &crate::turn::Turn|
+        t.slice().iter().filter(|a| matches!(a, Action::Cast { .. })).count() == 2;
+    let key = |t: &crate::turn::Turn| format!("{:?}", t.slice());
+    let tail = Explore { mode: 3, cast_window: 64, dash_limit: 128, dash_per: 8, dash_tried: 48,
+                         base: 256, step: 8, slot_first: 0, slot_every: 0 };
+    let slots = Explore { slot_first: 0, slot_every: 1, ..tail };
+    let stream = |e: Explore| -> Vec<crate::turn::Turn> {
+        set_policy_explore(e);
+        let v: Vec<_> = b.turns_policy(Color::Red, 1, 1).take(200_000).collect();
+        set_policy_explore(Explore::OFF);
+        v
+    };
+    let (off, plain, slot) = (stream(Explore::OFF), stream(tail), stream(slots));
+    let set = |v: &Vec<crate::turn::Turn>| -> HashSet<String> { v.iter().map(key).collect() };
+    let (off_s, plain_s, slot_s) = (set(&off), set(&plain), set(&slot));
+    let plain2: HashSet<String> = plain.iter().filter(|t| two_casts(t)).map(key).collect();
+    let slot2: HashSet<String> = slot.iter().filter(|t| two_casts(t)).map(key).collect();
+    assert!(plain_s.len() > off_s.len(), "the tail must add turns in this position");
+    assert!(plain2.iter().any(|k| !off_s.contains(k)),
+            "the tail must add a Summer second cast here, or the test proves nothing");
+    // Turns under a slotted DASH differ by design: a slot queues the dash's
+    // post-dash casts at the shipped windows, without their own cast tail. The
+    // Summer continuation of a slotted cast must match the plain tail exactly.
+    let nodash = |k: &&String| !k.contains("Dash");
+    let missing: Vec<_> = plain2.difference(&slot2).filter(nodash).collect();
+    assert!(slot_s.is_subset(&plain_s), "slots must not invent turns the plain tail lacks");
+    assert!(slot2.iter().any(|k| k.contains("Dash")), "a slotted dash's cast must keep its Summer second cast too");
+    assert!(missing.is_empty(), "slot stream drops {} Summer turns, e.g. {:?}", missing.len(), missing.first());
+}

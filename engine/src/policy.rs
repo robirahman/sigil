@@ -672,9 +672,18 @@ enum Node {
 
 struct Entry { lp: i32, seq: u32, node: Node }
 
+/// What an exploration-slot turn can still be continued with when it is popped
+/// (the slot analogue of `DashCand` / `CastCand`'s lazy splits).
+enum XCont {
+    /// A dash: the post-dash board whose casts are queued.
+    Dash(Board),
+    /// A cast that may trigger Seal of Summer: the boards `summer_after` needs.
+    Cast { cl: Board, ob: Board, post_dash: bool },
+}
+
 /// An exploration-slot candidate: a whole turn, its child's static value, and
-/// for a dash the post-dash board whose casts are queued when it is popped.
-struct XEntry { sc: i32, seq: u32, t: Turn, cont: Option<Board> }
+/// its pending continuation, queued when it is popped.
+struct XEntry { sc: i32, seq: u32, t: Turn, cont: Option<XCont> }
 
 impl PartialEq for XEntry { fn eq(&self, o: &Self) -> bool { self.sc == o.sc && self.seq == o.seq } }
 impl Eq for XEntry {}
@@ -749,29 +758,45 @@ fn shipped_weights() -> crate::eval::Weights {
 }
 
 impl<'a> PolicyIter<'a> {
-    fn xpush(&mut self, sc: i32, t: Turn, cont: Option<Board>) {
+    fn xpush(&mut self, sc: i32, t: Turn, cont: Option<XCont>) {
         self.seq += 1;
         self.xheap.push(XEntry { sc, seq: self.seq, t, cont });
     }
 
-    /// Pop one exploration-slot turn; a dash queues its post-dash casts first.
+    /// Pop one exploration-slot turn; a dash queues its post-dash casts and a
+    /// cast its Seal of Summer second casts first.
     fn xpop(&mut self) -> Option<Turn> {
         let x = self.xheap.pop()?;
-        if let Some(bd) = x.cont {
-            let c = self.c;
-            let ri = self.ri.as_ref().unwrap();
-            let opts = postdash_opts(&bd, c, ri);
-            let by_eval = self.explore.mode & 4 != 0;
-            let step = self.explore.step.max(1);
-            let mut j = 0i32;
-            for (_, pos) in opts {
-                let mut wd = false;
-                for o in cast_opts(&bd, c, pos as usize, CK_DASH, self.window, self.keep_window, &mut wd) {
-                    let t2 = x.t.push_pub(o.act);
-                    j += 1;
-                    let sc = if by_eval { self.tail_score(&t2) } else { x.sc - step * j };
-                    self.xpush(sc, t2, None);
+        let c = self.c;
+        let by_eval = self.explore.mode & 4 != 0;
+        let step = self.explore.step.max(1);
+        // (board, position, cast kind, post_dash) of the casts to queue
+        let mut casts: Vec<(Board, u8, u8, bool)> = Vec::new();
+        match x.cont {
+            None => {}
+            Some(XCont::Dash(bd)) => {
+                let ri = self.ri.as_ref().unwrap();
+                for (_, pos) in postdash_opts(&bd, c, ri) { casts.push((bd, pos, CK_DASH, true)); }
+            }
+            Some(XCont::Cast { cl, ob, post_dash }) => {
+                let id = match x.t.slice().last() {
+                    Some(Action::Cast { pos, .. }) => cl.spells[*pos as usize],
+                    _ => unreachable!(),
+                };
+                if let Some((bs, _)) = summer_after(&cl, &ob, id, c, post_dash) {
+                    for (_, pos) in summer_opts(&bs, c, post_dash) { casts.push((bs, pos, CK_SECOND, post_dash)); }
                 }
+            }
+        }
+        let mut j = 0i32;
+        for (bd, pos, kind, post_dash) in casts {
+            let mut wd = false;
+            for o in cast_opts(&bd, c, pos as usize, kind, self.window, self.keep_window, &mut wd) {
+                let t2 = x.t.push_pub(o.act);
+                j += 1;
+                let sc = if by_eval { self.tail_score(&t2) } else { x.sc - step * j };
+                let cont = o.pending.map(|(cl, ob)| XCont::Cast { cl, ob, post_dash });
+                self.xpush(sc, t2, cont);
             }
         }
         self.explored += 1;
@@ -944,9 +969,10 @@ impl<'a> PolicyIter<'a> {
                 }
                 if e.slot_every > 0 {
                     // slot heap: by eval (mode bit 2) or by the tail's own probability order
-                    for (j, (sc, t, _)) in items.into_iter().enumerate() {
+                    for (j, (sc, t, pending)) in items.into_iter().enumerate() {
                         let k = if e.mode & 4 != 0 { sc } else { lp - e.step * j as i32 };
-                        self.xpush(k, t, None);
+                        let cont = pending.map(|(cl, ob)| XCont::Cast { cl, ob, post_dash: kind == CK_DASH });
+                        self.xpush(k, t, cont);
                     }
                     return;
                 }
@@ -973,7 +999,7 @@ impl<'a> PolicyIter<'a> {
                 }
                 if e.slot_every > 0 {
                     for (j, (sc, t, bd)) in items.into_iter().enumerate() {
-                        let cont = if dash_p2(&bd, c).is_some() { Some(bd) } else { None };
+                        let cont = if dash_p2(&bd, c).is_some() { Some(XCont::Dash(bd)) } else { None };
                         let k = if e.mode & 4 != 0 { sc } else { lp - e.step * j as i32 };
                         self.xpush(k, t, cont);
                     }

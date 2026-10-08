@@ -80,8 +80,8 @@ gcs_get data/guest-audit-2026-10/lines_all.json $WORK/lines_all.json || { echo "
 cd $WORK/repo
 P=engine/harness/positions_midgame.txt
 for d in ${CALIB_DEPTHS:-4}; do
-  grep -q RESULT $OUT/calib_wasm_d$d.txt 2>/dev/null && continue
-  engine/target/release/examples/bench $P $d --eval nnue_spell3 --policy 96 > $OUT/calib_native_d$d.txt 2>&1
+  grep -q "parity OK" $OUT/calib_wasm_d$d.txt 2>/dev/null && continue   # a failed parity reruns
+  engine/target/release/examples/bench $P $d --shipped > $OUT/calib_native_d$d.txt 2>&1
   H=$(grep -o 'HASH [0-9a-f]*' $OUT/calib_native_d$d.txt | tail -1 | awk '{print $2}')
   node tools/policy-wasm-parity.js "$H" $d nnue_spell3 > $OUT/calib_wasm_d$d.txt 2>&1
   node tools/browser/wasm-speed.js node $d >> $OUT/calib_wasm_d$d.txt 2>&1   # same trees, timed
