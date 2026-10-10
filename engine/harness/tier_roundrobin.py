@@ -15,7 +15,7 @@ opponent's think; the per-move budgets themselves are exact.
 
 Each game ends with one `RECORD {json}` line: tiers, seed, draw, winner and every
 position (`positions[i]` is the SFN before ply i+1, the last one is final) with the
-per-ply search stats; they are uploaded to Firebase `ai_arena_games/` as training
+per-ply search stats; upload_arena_games.py writes them to Firebase `ai_arena_games/` as training
 data (the per-ply log lines alone cannot reconstruct a game).
 
 Used for the 2026-09-24 and 2026-10-10 round-robins that re-anchored the tier ratings (FINDINGS
