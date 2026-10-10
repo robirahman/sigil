@@ -102,6 +102,10 @@
         ".write": "auth !== null && newData.child('aiTrainingExempt').val() === true"
       }
     },
+    "ai_arena_games": {
+      ".read": false,
+      ".write": false
+    },
     "game_evals": {
       "$gameId": {
         ".read": true,
