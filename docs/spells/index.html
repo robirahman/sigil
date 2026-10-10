@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="../static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="../static/css/layout.css" rel="stylesheet" />
+	<link href="../static/css/styles.css" rel="stylesheet" />
+	<link href="../static/css/compendium.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="../static/scripts/theme-manager.js"></script>
+	<title>Spells Directory - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="../"><span class="visually-hidden">Sigil Online</span><img alt="" src="../static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+	<div class="main">
+
+		<div class="compendium-container">
+			<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+				<a href="../">Home</a>
+				<span class="breadcrumb-separator">/</span>
+				<span class="breadcrumb-current">Spells</span>
+			</nav>
+
+			<div class="page-header">
+				<h1 class="page-title">Spells Directory</h1>
+				<p class="page-subtitle">Every official spell in Sigil: rules, mechanics, strategic tier rankings, synergies, and head-to-head matchups.</p>
+				<div class="badge-row">
+					<span class="badge badge-charm">45 Official Spells</span>
+					<a class="badge badge-static" href="../packs/">11 Official Packs</a>
+					<a class="badge" href="../spells.html">Interactive Tier List &amp; Matrix &rarr;</a>
+				</div>
+			</div>
+
+			<div class="filter-bar">
+				<div class="filter-group">
+					<label for="search-input">Search:</label>
+					<input class="search-input" id="search-input" type="text" placeholder="Filter by name or effect…" oninput="filterSpells()" />
+				</div>
+				<div class="filter-group">
+					<label for="type-select">Type:</label>
+					<select class="filter-select" id="type-select" onchange="filterSpells()">
+						<option value="all">All Types</option>
+						<option value="ritual">Ritual (5 Nodes)</option>
+						<option value="sorcery">Sorcery (3 Nodes)</option>
+						<option value="charm">Charm (1 Node)</option>
+					</select>
+				</div>
+				<div class="filter-group">
+					<label for="pack-select">Pack:</label>
+					<select class="filter-select" id="pack-select" onchange="filterSpells()">
+						<option value="all">All Packs</option>
+    <option value="core">Core</option>
+<option value="springtime">Springtime</option>
+<option value="celestial">Celestial</option>
+<option value="inferno">Inferno</option>
+<option value="tempest">Tempest</option>
+<option value="flood">Flood</option>
+<option value="autumn">Autumn</option>
+<option value="gloom">Gloom</option>
+<option value="covenant">Covenant</option>
+<option value="tectonic">Tectonic</option>
+<option value="providence">Providence</option>
+
+					</select>
+				</div>
+			</div>
+
+			<div class="spells-grid" id="spells-grid">
+    
+				<a class="spell-grid-item" href="flourish.html" data-name="flourish" data-pack="core" data-type="ritual" data-text="make 4 soft moves.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Flourish.webp" alt="Flourish" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Flourish</div>
+							<div class="spell-grid-meta">Core · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="carnage.html" data-name="carnage" data-pack="core" data-type="ritual" data-text="make 4 hard moves.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Carnage.webp" alt="Carnage" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Carnage</div>
+							<div class="spell-grid-meta">Core · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="bewitch.html" data-name="bewitch" data-pack="core" data-type="ritual" data-text="choose 2 enemy stones touching each other. convert them to your color.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Bewitch.webp" alt="Bewitch" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Bewitch</div>
+							<div class="spell-grid-meta">Core · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="starfall.html" data-name="starfall" data-pack="core" data-type="ritual" data-text="make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Starfall.webp" alt="Starfall" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Starfall</div>
+							<div class="spell-grid-meta">Core · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-b">Tier B</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-lightning.html" data-name="seal of lightning" data-pack="core" data-type="ritual" data-text="static: your dash only requires 1 sacrifice.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Lightning.webp" alt="Seal of Lightning" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Lightning</div>
+							<div class="spell-grid-meta">Core · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="grow.html" data-name="grow" data-pack="core" data-type="sorcery" data-text="make 2 soft moves.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Grow.webp" alt="Grow" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Grow</div>
+							<div class="spell-grid-meta">Core · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-f">Tier F</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="fireblast.html" data-name="fireblast" data-pack="core" data-type="sorcery" data-text="destroy all enemy stones which are touching you, then sacrifice a stone.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Fireblast.webp" alt="Fireblast" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Fireblast</div>
+							<div class="spell-grid-meta">Core · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-s">Tier S</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="hail-storm.html" data-name="hail storm" data-pack="core" data-type="sorcery" data-text="destroy 1 enemy stone in each 3-node and 5-node spell.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Hail_Storm.webp" alt="Hail Storm" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Hail Storm</div>
+							<div class="spell-grid-meta">Core · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="meteor.html" data-name="meteor" data-pack="core" data-type="sorcery" data-text="make 1 blink move, then destroy 1 enemy stone touching it.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Meteor.webp" alt="Meteor" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Meteor</div>
+							<div class="spell-grid-meta">Core · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-b">Tier B</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-wind.html" data-name="seal of wind" data-pack="core" data-type="sorcery" data-text="static: your first move each turn is a blink move.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Wind.webp" alt="Seal of Wind" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Wind</div>
+							<div class="spell-grid-meta">Core · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="sprout.html" data-name="sprout" data-pack="core" data-type="charm" data-text="make 1 soft move.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Sprout.webp" alt="Sprout" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Sprout</div>
+							<div class="spell-grid-meta">Core · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="slash.html" data-name="slash" data-pack="core" data-type="charm" data-text="make 1 hard move.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Slash.webp" alt="Slash" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Slash</div>
+							<div class="spell-grid-meta">Core · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="surge.html" data-name="surge" data-pack="core" data-type="charm" data-text="if you dashed this turn, make 1 move.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Surge.webp" alt="Surge" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Surge</div>
+							<div class="spell-grid-meta">Core · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-c">Tier C</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="comet.html" data-name="comet" data-pack="core" data-type="charm" data-text="make 1 blink move, then sacrifice a stone.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Comet.webp" alt="Comet" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Comet</div>
+							<div class="spell-grid-meta">Core · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-c">Tier C</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-summer.html" data-name="seal of summer" data-pack="core" data-type="charm" data-text="static: you may cast 2 spells on your turn.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Summer.webp" alt="Seal of Summer" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Summer</div>
+							<div class="spell-grid-meta">Core · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-f">Tier F</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="blossom.html" data-name="blossom" data-pack="springtime" data-type="ritual" data-text="make 1 soft blink move into each other 3-node and 5-node spell.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Blossom.webp" alt="Blossom" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Blossom</div>
+							<div class="spell-grid-meta">Springtime · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-s">Tier S</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="scatter.html" data-name="scatter" data-pack="springtime" data-type="sorcery" data-text="make 1 soft blink move into each of 2 spells.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Scatter.webp" alt="Scatter" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Scatter</div>
+							<div class="spell-grid-meta">Springtime · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-s">Tier S</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-spring.html" data-name="seal of spring" data-pack="springtime" data-type="charm" data-text="static: you may cast your locked spells a second time.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Spring.webp" alt="Seal of Spring" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Spring</div>
+							<div class="spell-grid-meta">Springtime · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="syzygy.html" data-name="syzygy" data-pack="celestial" data-type="ritual" data-text="make 1 blink move into the 1-node spell opposite syzygy, then 3 into the 3-node spell.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Syzygy.webp" alt="Syzygy" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Syzygy</div>
+							<div class="spell-grid-meta">Celestial · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-f">Tier F</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="eclipse.html" data-name="eclipse" data-pack="celestial" data-type="sorcery" data-text="make 2 moves into a spell where you control all but 2 nodes.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Eclipse.webp" alt="Eclipse" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Eclipse</div>
+							<div class="spell-grid-meta">Celestial · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-f">Tier F</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="azimuth.html" data-name="azimuth" data-pack="celestial" data-type="charm" data-text="make 1 move into a spell where you control all but 1 node.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Azimuth.webp" alt="Azimuth" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Azimuth</div>
+							<div class="spell-grid-meta">Celestial · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-c">Tier C</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="erupt.html" data-name="erupt" data-pack="inferno" data-type="ritual" data-text="make 2 moves into every spell, except erupt, in which you have a stone.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Erupt.webp" alt="Erupt" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Erupt</div>
+							<div class="spell-grid-meta">Inferno · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-b">Tier B</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="fury.html" data-name="fury" data-pack="inferno" data-type="sorcery" data-text="sacrifice 1 stone, then make 3 hard moves.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Fury.webp" alt="Fury" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Fury</div>
+							<div class="spell-grid-meta">Inferno · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="charge.html" data-name="charge" data-pack="inferno" data-type="charm" data-text="make 1 move into a 3- or 5-node spell.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Charge.webp" alt="Charge" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Charge</div>
+							<div class="spell-grid-meta">Inferno · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="hurricane.html" data-name="hurricane" data-pack="tempest" data-type="ritual" data-text="destroy the smallest contiguous group of enemy stones. if tied, you choose which.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Hurricane.webp" alt="Hurricane" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Hurricane</div>
+							<div class="spell-grid-meta">Tempest · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-b">Tier B</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="storm-front.html" data-name="storm front" data-pack="tempest" data-type="sorcery" data-text="destroy any 2 enemy stones of your choice.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Storm_Front.webp" alt="Storm Front" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Storm Front</div>
+							<div class="spell-grid-meta">Tempest · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-b">Tier B</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="gust.html" data-name="gust" data-pack="tempest" data-type="charm" data-text="pick up every enemy stone touching one of your stones, then place them on any empty nodes.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Gust.webp" alt="Gust" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Gust</div>
+							<div class="spell-grid-meta">Tempest · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-f">Tier F</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="tsunami.html" data-name="tsunami" data-pack="flood" data-type="ritual" data-text="make 2 soft moves, then 2 hard moves.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Tsunami.webp" alt="Tsunami" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Tsunami</div>
+							<div class="spell-grid-meta">Flood · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="torrent.html" data-name="torrent" data-pack="flood" data-type="sorcery" data-text="make 1 soft move, then 1 hard move.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Torrent.webp" alt="Torrent" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Torrent</div>
+							<div class="spell-grid-meta">Flood · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-f">Tier F</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="splash.html" data-name="splash" data-pack="flood" data-type="charm" data-text="if you did not dash this turn, make 1 move.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Splash.webp" alt="Splash" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Splash</div>
+							<div class="spell-grid-meta">Flood · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-c">Tier C</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="harvest.html" data-name="harvest" data-pack="autumn" data-type="ritual" data-text="make 5 moves into your locked spell or into harvest.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Harvest.webp" alt="Harvest" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Harvest</div>
+							<div class="spell-grid-meta">Autumn · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="gather.html" data-name="gather" data-pack="autumn" data-type="sorcery" data-text="make 3 moves into your locked spell or into gather.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Gather.webp" alt="Gather" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Gather</div>
+							<div class="spell-grid-meta">Autumn · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-s">Tier S</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-autumn.html" data-name="seal of autumn" data-pack="autumn" data-type="charm" data-text="static: opponent cannot sacrifice stones in spells to dash.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Autumn.webp" alt="Seal of Autumn" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Autumn</div>
+							<div class="spell-grid-meta">Autumn · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="corrupt.html" data-name="corrupt" data-pack="gloom" data-type="ritual" data-text="choose up to 3 enemy stones touching your stones. convert them to your color, then sacrifice a stone.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Corrupt.webp" alt="Corrupt" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Corrupt</div>
+							<div class="spell-grid-meta">Gloom · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							<span class="badge badge-tier-a">Tier A</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="decay.html" data-name="decay" data-pack="gloom" data-type="sorcery" data-text="destroy all enemy stones touching 2 or more empty nodes.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Decay.webp" alt="Decay" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Decay</div>
+							<div class="spell-grid-meta">Gloom · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="lurk.html" data-name="lurk" data-pack="gloom" data-type="charm" data-text="make 1 move into a 1-node spell or a node outside of a spell.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Lurk.webp" alt="Lurk" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Lurk</div>
+							<div class="spell-grid-meta">Gloom · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-destruction.html" data-name="seal of destruction" data-pack="covenant" data-type="ritual" data-text="static: if filled at the end of your turn, destroy all enemy stones touching you. if filled at the start of your turn, you lose.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Destruction.webp" alt="Seal of Destruction" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Destruction</div>
+							<div class="spell-grid-meta">Covenant · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-stone.html" data-name="seal of stone" data-pack="covenant" data-type="sorcery" data-text="static: your opponent's first move each turn must be soft.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Stone.webp" alt="Seal of Stone" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Stone</div>
+							<div class="spell-grid-meta">Covenant · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-c">Tier C</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="seal-of-winter.html" data-name="seal of winter" data-pack="covenant" data-type="charm" data-text="static: your opponent cannot cast 1-node spells (charms).">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Seal_of_Winter.webp" alt="Seal of Winter" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Seal of Winter</div>
+							<div class="spell-grid-meta">Covenant · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							<span class="badge badge-static">Static</span>
+							<span class="badge badge-tier-d">Tier D</span>
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="fissure.html" data-name="fissure" data-pack="tectonic" data-type="ritual" data-text="choose a target node. it is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. also destroy all stones on adjacent nodes, including your own.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Fissure.webp" alt="Fissure" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Fissure</div>
+							<div class="spell-grid-meta">Tectonic · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="rock-slide.html" data-name="rock slide" data-pack="tectonic" data-type="sorcery" data-text="push each enemy stone bordering you into an adjacent node. all pushes happen simultaneously. stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Rock_Slide.webp" alt="Rock Slide" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Rock Slide</div>
+							<div class="spell-grid-meta">Tectonic · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="bulwark.html" data-name="bulwark" data-pack="tectonic" data-type="charm" data-text="static: stones in your locked spell cannot be targeted by enemy hard moves, converted, or destroyed.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Bulwark.webp" alt="Bulwark" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Bulwark</div>
+							<div class="spell-grid-meta">Tectonic · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							<span class="badge badge-static">Static</span>
+							
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="endowment.html" data-name="endowment" data-pack="providence" data-type="ritual" data-text="add 4 stones to your providence bank.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Endowment.webp" alt="Endowment" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Endowment</div>
+							<div class="spell-grid-meta">Providence · Ritual</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-ritual">5n</span>
+							
+							
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="annuity.html" data-name="annuity" data-pack="providence" data-type="sorcery" data-text="add 2 stones to your providence bank.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Annuity.webp" alt="Annuity" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Annuity</div>
+							<div class="spell-grid-meta">Providence · Sorcery</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-sorcery">3n</span>
+							
+							
+						</div>
+					</div>
+				</a>
+        
+				<a class="spell-grid-item" href="dividend.html" data-name="dividend" data-pack="providence" data-type="charm" data-text="add 1 stone to your providence bank.">
+					<img class="spell-grid-thumb" src="../static/images/spells/art_only/Dividend.webp" alt="Dividend" loading="lazy" />
+					<div class="spell-grid-body">
+						<div>
+							<div class="spell-grid-title">Dividend</div>
+							<div class="spell-grid-meta">Providence · Charm</div>
+						</div>
+						<div class="spell-grid-badges">
+							<span class="badge badge-charm">1n</span>
+							
+							
+						</div>
+					</div>
+				</a>
+        
+			</div>
+
+			<script>
+				function filterSpells() {
+					const query = document.getElementById('search-input').value.toLowerCase().trim();
+					const type = document.getElementById('type-select').value;
+					const pack = document.getElementById('pack-select').value;
+					const items = document.querySelectorAll('.spell-grid-item');
+					
+					items.forEach(el => {
+						const name = el.dataset.name;
+						const p = el.dataset.pack;
+						const t = el.dataset.type;
+						const text = el.dataset.text;
+						
+						const matchesQuery = !query || name.includes(query) || text.includes(query);
+						const matchesType = (type === 'all') || (t === type);
+						const matchesPack = (pack === 'all') || (p === pack);
+						
+						el.style.display = (matchesQuery && matchesType && matchesPack) ? 'flex' : 'none';
+					});
+				}
+			</script>
+		</div>
+    
+	</div>
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="../static/scripts/auth-status.js"></script>
+</body>
+</html>

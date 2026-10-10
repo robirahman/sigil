@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="../static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="../static/css/layout.css" rel="stylesheet" />
+	<link href="../static/css/styles.css" rel="stylesheet" />
+	<link href="../static/css/compendium.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="../static/scripts/theme-manager.js"></script>
+	<title>Tectonic Pack - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="../"><span class="visually-hidden">Sigil Online</span><img alt="" src="../static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+	<div class="main">
+
+		<div class="compendium-container">
+			<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+				<a href="../">Home</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="./">Packs</a>
+				<span class="breadcrumb-separator">/</span>
+				<span class="breadcrumb-current">Tectonic</span>
+			</nav>
+
+			<div class="page-header">
+				<h1 class="page-title">Tectonic Pack</h1>
+				<p class="page-subtitle">Permanent catastrophic seismic terraforming, simultaneous pushes, and unbreakable wards.</p>
+				<div class="badge-row">
+					<span class="badge badge-static">Official Expansion</span>
+					<span class="badge badge-charm">Rated in Competitive Play</span>
+					<span class="badge">3 Spells</span>
+				</div>
+			</div>
+
+			<div class="content-section" style="margin-bottom:32px;">
+				<h3>Pack Overview &amp; Identity</h3>
+				<p>The Tectonic expansion shatters the physical board. Fissure permanently obliterates a target node into an impassable void, destroying bordering units and permanently severing any spell traversing it. Rock Slide triggers simultaneous multi-directional avalanches with deadly collision physics, while Bulwark renders locked spells completely immune to hard moves, destruction, and conversion.</p>
+			</div>
+    
+			<h2 style="font-family:'Arvo',serif; color:var(--color-text-warm); margin:36px 0 16px;">Spells in the Tectonic Pack</h2>
+        <div class="pack-spells-container">
+			<div class="pack-spell-detail-card">
+				<img src="../static/images/spells/Fissure.webp" alt="Fissure" loading="lazy" />
+				<h3>Fissure</h3>
+				<div class="badge-row" style="margin-bottom:8px;">
+					<span class="badge badge-ritual">Ritual (5n)</span>
+					
+					
+				</div>
+				<div class="spell-text">"Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own."</div>
+				<a class="view-spell-btn" href="../spells/fissure.html">View Spell Details &rarr;</a>
+			</div>
+        
+			<div class="pack-spell-detail-card">
+				<img src="../static/images/spells/Rock_Slide.webp" alt="Rock Slide" loading="lazy" />
+				<h3>Rock Slide</h3>
+				<div class="badge-row" style="margin-bottom:8px;">
+					<span class="badge badge-sorcery">Sorcery (3n)</span>
+					
+					
+				</div>
+				<div class="spell-text">"Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed."</div>
+				<a class="view-spell-btn" href="../spells/rock-slide.html">View Spell Details &rarr;</a>
+			</div>
+        
+			<div class="pack-spell-detail-card">
+				<img src="../static/images/spells/Bulwark.webp" alt="Bulwark" loading="lazy" />
+				<h3>Bulwark</h3>
+				<div class="badge-row" style="margin-bottom:8px;">
+					<span class="badge badge-charm">Charm (1n)</span>
+					<span class="badge badge-static">Static</span>
+					
+				</div>
+				<div class="spell-text">"STATIC: Stones in your locked spell cannot be targeted by enemy hard moves, converted, or destroyed."</div>
+				<a class="view-spell-btn" href="../spells/bulwark.html">View Spell Details &rarr;</a>
+			</div>
+        </div>
+			<div style="text-align:center; margin-top:40px;">
+				<a class="view-spell-btn" href="./">&larr; Browse All Spell Packs</a>
+				<span style="display:inline-block; width:12px;"></span>
+				<a class="view-spell-btn" href="../spells.html">Interactive Spell Charts &rarr;</a>
+			</div>
+		</div>
+    
+	</div>
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="../static/scripts/auth-status.js"></script>
+</body>
+</html>

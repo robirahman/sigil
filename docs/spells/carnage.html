@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="../static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="../static/css/layout.css" rel="stylesheet" />
+	<link href="../static/css/styles.css" rel="stylesheet" />
+	<link href="../static/css/compendium.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="../static/scripts/theme-manager.js"></script>
+	<title>Carnage (Core Ritual) - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="../"><span class="visually-hidden">Sigil Online</span><img alt="" src="../static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+	<div class="main">
+
+		<div class="compendium-container">
+			<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+				<a href="../">Home</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="./">Spells</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="../packs/core.html">Core Pack</a>
+				<span class="breadcrumb-separator">/</span>
+				<span class="breadcrumb-current">Carnage</span>
+			</nav>
+
+			<div class="quick-nav-bar">
+				<div class="quick-nav-links">
+					<a class="quick-nav-link" href="flourish.html">&larr; Flourish</a>
+					<a class="quick-nav-link" href="bewitch.html">Bewitch &rarr;</a>
+				</div>
+				<div class="quick-nav-links">
+					<a class="quick-nav-link" href="../packs/core.html">View Core Pack</a>
+					<a class="quick-nav-link" href="../spells.html">Interactive Tier List &amp; Matrix</a>
+				</div>
+			</div>
+
+			<div class="spell-showcase">
+				<div class="card-column">
+					<div class="spell-card-frame ritual-glow">
+						<img id="card-image" class="spell-card-img" src="../static/images/spells/Carnage.webp" alt="Carnage Spell Card" />
+					</div>
+					<button class="art-toggle-btn" id="art-toggle" onclick="toggleArt()">View Card Art Only</button>
+					<script>
+						let artOnly = false;
+						function toggleArt() {
+							artOnly = !artOnly;
+							const img = document.getElementById('card-image');
+							const btn = document.getElementById('art-toggle');
+							img.src = artOnly ? '../static/images/spells/art_only/Carnage.webp' : '../static/images/spells/Carnage.webp';
+							btn.textContent = artOnly ? 'View Full Spell Card' : 'View Card Art Only';
+						}
+					</script>
+					<div class="badge-row">
+						<span class="badge badge-ritual">Ritual (5 Nodes)</span>
+						<span class="badge">Action Spell</span>
+						<a class="badge badge-tier-a" href="../spells.html#tiers">Tier A (Strong) · #8</a>
+					</div>
+				</div>
+
+				<div class="details-column">
+					<div class="page-header" style="text-align:left; margin-bottom:12px;">
+						<h1 class="page-title">Carnage</h1>
+						<div class="page-subtitle">From the <a style="color:var(--color-accent); text-decoration:none;" href="../packs/core.html"><strong>Core</strong> Pack</a> (Havoc)</div>
+					</div>
+
+					<div class="card-text-box">
+						Make 4 hard moves.
+					</div>
+
+					<div class="stats-grid">
+						<div class="stat-card">
+							<div class="stat-label">Sigil Size</div>
+							<div class="stat-value">5 Nodes</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Spell Category</div>
+							<div class="stat-value">Ritual</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Activation</div>
+							<div class="stat-value">Instant Action</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Board State</div>
+							<div class="stat-value" style="font-size:0.95em;">Better on a crowded board</div>
+						</div>
+					</div>
+
+					<div class="content-section">
+						<h3>Rules &amp; Kernel Mechanics</h3>
+						<p>Allows the caster to make four hard moves. A hard move pushes an adjacent enemy stone into an unoccupied node behind it. If the destination node is occupied or off the board, the pushed stone is crushed and destroyed!</p>
+					</div>
+
+					<div class="content-section">
+						<h3>Tactical Strategy &amp; Play Advice</h3>
+						<p>Carnage is one of the most dominant combat rituals in the game (ranked #8, Strong tier). It shreds enemy defensive lines, crushes clustered defenders, and seizes the contested center. Carnage beats Fireblast head-to-head because it establishes immediate physical superiority before Fireblast can assemble its contact network.</p>
+					</div>
+				</div>
+			</div>
+    
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Synergies &amp; Combos</h3>
+				<p>Holding both spells enables powerful combinational tactics. The rated synergies below are judged from competitive play:</p>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="seal-of-destruction.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Destruction.webp" alt="Seal of Destruction" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Destruction</div>
+							<span class="relation-tag tag-synergy">+ Synergy</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-summer.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Summer.webp" alt="Seal of Summer" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Summer</div>
+							<span class="relation-tag tag-synergy">+ Synergy</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-wind.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Wind.webp" alt="Seal of Wind" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Wind</div>
+							<span class="relation-tag tag-synergy">+ Synergy</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="syzygy.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Syzygy.webp" alt="Syzygy" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Syzygy</div>
+							<span class="relation-tag tag-synergy">+ Synergy</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="bewitch.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Bewitch.webp" alt="Bewitch" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Bewitch</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="comet.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Comet.webp" alt="Comet" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Comet</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="fireblast.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Fireblast.webp" alt="Fireblast" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Fireblast</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="grow.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Grow.webp" alt="Grow" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Grow</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Head-to-Head Matchups</h3>
+				<p>How this spell contends when you build toward it against an opponent developing a rival spell:</p>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="fireblast.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Fireblast.webp" alt="Fireblast" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Fireblast</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="grow.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Grow.webp" alt="Grow" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Grow</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-destruction.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Destruction.webp" alt="Seal of Destruction" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Seal of Destruction</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-lightning.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Lightning.webp" alt="Seal of Lightning" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Seal of Lightning</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="bewitch.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Bewitch.webp" alt="Bewitch" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Bewitch</div>
+							<span class="relation-tag tag-even">= Even Matchup</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="hail-storm.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Hail_Storm.webp" alt="Hail Storm" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Hail Storm</div>
+							<span class="relation-tag tag-even">= Even Matchup</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="comet.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Comet.webp" alt="Comet" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Comet</div>
+							<span class="relation-tag tag-unfavoured">- Unfavoured</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Other Spells in the Core Pack</h3>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="flourish.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Flourish.webp" alt="Flourish" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Flourish</div>
+							<span class="relation-tag tag-even">Ritual (5n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="bewitch.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Bewitch.webp" alt="Bewitch" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Bewitch</div>
+							<span class="relation-tag tag-even">Ritual (5n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="starfall.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Starfall.webp" alt="Starfall" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Starfall</div>
+							<span class="relation-tag tag-even">Ritual (5n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-lightning.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Lightning.webp" alt="Seal of Lightning" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Lightning</div>
+							<span class="relation-tag tag-even">Ritual (5n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="grow.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Grow.webp" alt="Grow" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Grow</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="fireblast.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Fireblast.webp" alt="Fireblast" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Fireblast</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="hail-storm.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Hail_Storm.webp" alt="Hail Storm" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Hail Storm</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="meteor.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Meteor.webp" alt="Meteor" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Meteor</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-wind.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Wind.webp" alt="Seal of Wind" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Wind</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="sprout.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Sprout.webp" alt="Sprout" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Sprout</div>
+							<span class="relation-tag tag-even">Charm (1n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="slash.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Slash.webp" alt="Slash" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Slash</div>
+							<span class="relation-tag tag-even">Charm (1n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="surge.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Surge.webp" alt="Surge" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Surge</div>
+							<span class="relation-tag tag-even">Charm (1n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="comet.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Comet.webp" alt="Comet" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Comet</div>
+							<span class="relation-tag tag-even">Charm (1n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-summer.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Summer.webp" alt="Seal of Summer" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Summer</div>
+							<span class="relation-tag tag-even">Charm (1n)</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<div style="text-align:center; margin-top:32px;">
+				<a class="view-spell-btn" href="../packs/core.html">&larr; Explore All Core Spells</a>
+				<span style="display:inline-block; width:12px;"></span>
+				<a class="view-spell-btn" href="./">Browse Spells Directory &rarr;</a>
+			</div>
+		</div>
+    
+	</div>
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="../static/scripts/auth-status.js"></script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="../static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="../static/css/layout.css" rel="stylesheet" />
+	<link href="../static/css/styles.css" rel="stylesheet" />
+	<link href="../static/css/compendium.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="../static/scripts/theme-manager.js"></script>
+	<title>Hurricane (Tempest Ritual) - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="../"><span class="visually-hidden">Sigil Online</span><img alt="" src="../static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+	<div class="main">
+
+		<div class="compendium-container">
+			<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+				<a href="../">Home</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="./">Spells</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="../packs/tempest.html">Tempest Pack</a>
+				<span class="breadcrumb-separator">/</span>
+				<span class="breadcrumb-current">Hurricane</span>
+			</nav>
+
+			<div class="quick-nav-bar">
+				<div class="quick-nav-links">
+					<a class="quick-nav-link" href="charge.html">&larr; Charge</a>
+					<a class="quick-nav-link" href="storm-front.html">Storm Front &rarr;</a>
+				</div>
+				<div class="quick-nav-links">
+					<a class="quick-nav-link" href="../packs/tempest.html">View Tempest Pack</a>
+					<a class="quick-nav-link" href="../spells.html">Interactive Tier List &amp; Matrix</a>
+				</div>
+			</div>
+
+			<div class="spell-showcase">
+				<div class="card-column">
+					<div class="spell-card-frame ritual-glow">
+						<img id="card-image" class="spell-card-img" src="../static/images/spells/Hurricane.webp" alt="Hurricane Spell Card" />
+					</div>
+					<button class="art-toggle-btn" id="art-toggle" onclick="toggleArt()">View Card Art Only</button>
+					<script>
+						let artOnly = false;
+						function toggleArt() {
+							artOnly = !artOnly;
+							const img = document.getElementById('card-image');
+							const btn = document.getElementById('art-toggle');
+							img.src = artOnly ? '../static/images/spells/art_only/Hurricane.webp' : '../static/images/spells/Hurricane.webp';
+							btn.textContent = artOnly ? 'View Full Spell Card' : 'View Card Art Only';
+						}
+					</script>
+					<div class="badge-row">
+						<span class="badge badge-ritual">Ritual (5 Nodes)</span>
+						<span class="badge">Action Spell</span>
+						<a class="badge badge-tier-b" href="../spells.html#tiers">Tier B (Solid) · #19</a>
+					</div>
+				</div>
+
+				<div class="details-column">
+					<div class="page-header" style="text-align:left; margin-bottom:12px;">
+						<h1 class="page-title">Hurricane</h1>
+						<div class="page-subtitle">From the <a style="color:var(--color-accent); text-decoration:none;" href="../packs/tempest.html"><strong>Tempest</strong> Pack</a></div>
+					</div>
+
+					<div class="card-text-box">
+						Destroy the smallest contiguous group of enemy stones. If tied, you choose which.
+					</div>
+
+					<div class="stats-grid">
+						<div class="stat-card">
+							<div class="stat-label">Sigil Size</div>
+							<div class="stat-value">5 Nodes</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Spell Category</div>
+							<div class="stat-value">Ritual</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Activation</div>
+							<div class="stat-value">Instant Action</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Board State</div>
+							<div class="stat-value" style="font-size:0.95em;">Flexible across board states</div>
+						</div>
+					</div>
+
+					<div class="content-section">
+						<h3>Rules &amp; Kernel Mechanics</h3>
+						<p>Calculates all contiguous connected groups of enemy stones on the board. The group with the fewest stones is completely destroyed. If there is a tie for smallest size, the caster chooses which group to destroy.</p>
+					</div>
+
+					<div class="content-section">
+						<h3>Tactical Strategy &amp; Play Advice</h3>
+						<p>Ranked #24 (Middling tier). Hurricane surgically cleanses isolated enemy scouts, single-node infiltrators, and small clusters. Opponents must keep their stones connected to avoid losing units for free.</p>
+					</div>
+				</div>
+			</div>
+    
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Synergies &amp; Combos</h3>
+				<p>Holding both spells enables powerful combinational tactics. The rated synergies below are judged from competitive play:</p>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="decay.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Decay.webp" alt="Decay" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Decay</div>
+							<span class="relation-tag tag-synergy">+ Synergy</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="flourish.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Flourish.webp" alt="Flourish" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Flourish</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="surge.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Surge.webp" alt="Surge" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Surge</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Head-to-Head Matchups</h3>
+				<p>How this spell contends when you build toward it against an opponent developing a rival spell:</p>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="decay.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Decay.webp" alt="Decay" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Decay</div>
+							<span class="relation-tag tag-even">= Even Matchup</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="azimuth.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Azimuth.webp" alt="Azimuth" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Azimuth</div>
+							<span class="relation-tag tag-unfavoured">-- Countered By</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="charge.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Charge.webp" alt="Charge" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Charge</div>
+							<span class="relation-tag tag-unfavoured">-- Countered By</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="lurk.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Lurk.webp" alt="Lurk" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Lurk</div>
+							<span class="relation-tag tag-unfavoured">-- Countered By</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="splash.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Splash.webp" alt="Splash" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Splash</div>
+							<span class="relation-tag tag-unfavoured">-- Countered By</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Other Spells in the Tempest Pack</h3>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="storm-front.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Storm_Front.webp" alt="Storm Front" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Storm Front</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="gust.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Gust.webp" alt="Gust" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Gust</div>
+							<span class="relation-tag tag-even">Charm (1n)</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<div style="text-align:center; margin-top:32px;">
+				<a class="view-spell-btn" href="../packs/tempest.html">&larr; Explore All Tempest Spells</a>
+				<span style="display:inline-block; width:12px;"></span>
+				<a class="view-spell-btn" href="./">Browse Spells Directory &rarr;</a>
+			</div>
+		</div>
+    
+	</div>
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="../static/scripts/auth-status.js"></script>
+</body>
+</html>

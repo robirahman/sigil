@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="../static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="../static/css/layout.css" rel="stylesheet" />
+	<link href="../static/css/styles.css" rel="stylesheet" />
+	<link href="../static/css/compendium.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="../static/scripts/theme-manager.js"></script>
+	<title>Gloom Pack - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="../"><span class="visually-hidden">Sigil Online</span><img alt="" src="../static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+	<div class="main">
+
+		<div class="compendium-container">
+			<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+				<a href="../">Home</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="./">Packs</a>
+				<span class="breadcrumb-separator">/</span>
+				<span class="breadcrumb-current">Gloom</span>
+			</nav>
+
+			<div class="page-header">
+				<h1 class="page-title">Gloom Pack</h1>
+				<p class="page-subtitle">Shadowy corruption, punishing overextension, and opportunistic infiltration.</p>
+				<div class="badge-row">
+					<span class="badge badge-static">Official Expansion</span>
+					<span class="badge badge-charm">Rated in Competitive Play</span>
+					<span class="badge">3 Spells</span>
+				</div>
+			</div>
+
+			<div class="content-section" style="margin-bottom:32px;">
+				<h3>Pack Overview &amp; Identity</h3>
+				<p>The Gloom expansion preys on vulnerable formations. Corrupt turns up to three bordering enemy stones into your color in a game-ending swing, Decay vaporizes any exposed stone bordering two or more empty nodes, and Lurk slips stones into 1-node charms or void nodes unhindered. Gloom punishes loose play and rewards tight defensive encirclement.</p>
+			</div>
+    
+			<h2 style="font-family:'Arvo',serif; color:var(--color-text-warm); margin:36px 0 16px;">Spells in the Gloom Pack</h2>
+        <div class="pack-spells-container">
+			<div class="pack-spell-detail-card">
+				<img src="../static/images/spells/Corrupt.webp" alt="Corrupt" loading="lazy" />
+				<h3>Corrupt</h3>
+				<div class="badge-row" style="margin-bottom:8px;">
+					<span class="badge badge-ritual">Ritual (5n)</span>
+					
+					<span class="badge badge-tier-a">Tier A</span>
+				</div>
+				<div class="spell-text">"Choose up to 3 enemy stones touching your stones. Convert them to your color, then sacrifice a stone."</div>
+				<a class="view-spell-btn" href="../spells/corrupt.html">View Spell Details &rarr;</a>
+			</div>
+        
+			<div class="pack-spell-detail-card">
+				<img src="../static/images/spells/Decay.webp" alt="Decay" loading="lazy" />
+				<h3>Decay</h3>
+				<div class="badge-row" style="margin-bottom:8px;">
+					<span class="badge badge-sorcery">Sorcery (3n)</span>
+					
+					<span class="badge badge-tier-d">Tier D</span>
+				</div>
+				<div class="spell-text">"Destroy all enemy stones touching 2 or more empty nodes."</div>
+				<a class="view-spell-btn" href="../spells/decay.html">View Spell Details &rarr;</a>
+			</div>
+        
+			<div class="pack-spell-detail-card">
+				<img src="../static/images/spells/Lurk.webp" alt="Lurk" loading="lazy" />
+				<h3>Lurk</h3>
+				<div class="badge-row" style="margin-bottom:8px;">
+					<span class="badge badge-charm">Charm (1n)</span>
+					
+					<span class="badge badge-tier-d">Tier D</span>
+				</div>
+				<div class="spell-text">"Make 1 move into a 1-node spell or a node outside of a spell."</div>
+				<a class="view-spell-btn" href="../spells/lurk.html">View Spell Details &rarr;</a>
+			</div>
+        </div>
+			<div style="text-align:center; margin-top:40px;">
+				<a class="view-spell-btn" href="./">&larr; Browse All Spell Packs</a>
+				<span style="display:inline-block; width:12px;"></span>
+				<a class="view-spell-btn" href="../spells.html">Interactive Spell Charts &rarr;</a>
+			</div>
+		</div>
+    
+	</div>
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="../static/scripts/auth-status.js"></script>
+</body>
+</html>
