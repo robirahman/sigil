@@ -154,7 +154,7 @@ OCT2026_RULE_CHANGE_LIVE_MS = int(
 # (ai/purge_spell_games.py --spells Rock_Slide), and self-play data holding
 # Rock Slide from earlier engines (<= v28) encodes the old rule.
 ROCK_SLIDE_PILEUP_SPELLS = frozenset({'Rock_Slide'})
-ROCK_SLIDE_PILEUP_LIVE = datetime(2026, 10, 11, 6, 0)   # UTC
+ROCK_SLIDE_PILEUP_LIVE = datetime(2026, 10, 11, 4, 25)   # UTC (PR #17 merge + Firebase purge)
 ROCK_SLIDE_PILEUP_LIVE_MS = int(
     (ROCK_SLIDE_PILEUP_LIVE - datetime(1970, 1, 1)).total_seconds() * 1000)
 
