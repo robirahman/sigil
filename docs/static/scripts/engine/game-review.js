@@ -68,7 +68,7 @@ function reviewModeLabel(mode) {
  * live review renders exactly like a stored one. Throws when the engine cannot
  * play the position (out-of-scope packs) -- the caller falls back to Caveman.
  */
-async function reviewGameRust(gameLog, mode, onProgress) {
+async function reviewGameRust(gameLog, mode, onProgress, winner) {
 	mode = mode === 'deep' ? 'deep' : 'quick';
 	const p = RUST_REVIEW_PRESETS[mode];
 	const n = gameLog.length;
@@ -83,14 +83,13 @@ async function reviewGameRust(gameLog, mode, onProgress) {
 	worker.post({ type: 'new_game', ttBits: p.ttBits });   // a fresh table per review
 	// The final position: a finished game is decided; its side token is the
 	// last mover's (browser convention), as eval_games.py reads it.
+	// A resignation or timeout leaves a non-terminal board: the recorded
+	// result (`winner`) decides it, as stored game_evals documents do.
 	const last = sfnToSimBoard(sfns[n]);
+	movers[n] = other(tokenSide(sfns[n]));
 	let terminal;
-	if (last.gameover) {
-		movers[n] = other(tokenSide(sfns[n]));
-		terminal = { winner: last.winner || null };
-	} else {
-		movers[n] = tokenSide(sfns[n]);   // resigned / timed out: left unevaluated
-	}
+	if (last.gameover) terminal = { winner: last.winner || null };
+	else if (winner === 'red' || winner === 'blue') terminal = { winner };
 	for (let i = n - 1; i >= 0; i--) {
 		if (onProgress) onProgress(n - 1 - i, n);
 		const mover = tokenSide(sfns[i]);
@@ -218,9 +217,12 @@ async function reviewGame(gameLog, opts, onProgress) {
 		const mover = i === n ? (_sfnSide(searchSfns[n]) === 'red' ? 'blue' : 'red') : sim.whoseTurn;
 		moverPerPly[i] = mover;
 
-		// If the position is already a terminal state, eval is decided.
-		if (sim.gameover) {
-			evalPerPly[i] = sim.winner === mover ? 100 : sim.winner === null ? 0 : -100;
+		// A terminal board, or the final position of a resigned / timed-out
+		// game (the recorded result), is decided.
+		const decided = sim.gameover ? sim.winner
+			: (i === n && (opts.winner === 'red' || opts.winner === 'blue')) ? opts.winner : undefined;
+		if (decided !== undefined) {
+			evalPerPly[i] = decided === mover ? 100 : decided === null ? 0 : -100;
 			winPctPerPly[i] = scoreToWinPct(evalPerPly[i], opts.sigmoidK, opts.forcedWinFloor);
 			bestTurnPerPly[i] = null;
 			continue;
@@ -568,14 +570,14 @@ function aiReviewMixin() {
 				let result = null;
 				if (useRust) {
 					try {
-						result = await reviewGameRust(gameLog, mode, progress);
+						result = await reviewGameRust(gameLog, mode, progress, this.winner);
 					} catch (e) {
 						// e.g. a pack the Rust engine does not play: review with Caveman.
 						console.warn('Rust review failed; falling back to the JS engine:', e);
 						this.aiReviewProgress = 0;
 					}
 				}
-				if (!result) result = await reviewGame(gameLog, { mode }, progress);
+				if (!result) result = await reviewGame(gameLog, { mode, winner: this.winner }, progress);
 				this.aiReview = result;
 				if (db && gameId && typeof saveGameReview === 'function') {
 					saveGameReview(db, gameId, result).catch(e => console.warn('saveGameReview failed:', e));
