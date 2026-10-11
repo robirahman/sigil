@@ -86,7 +86,7 @@ Refined spell concepts developed in design sessions based on gameplay balance an
 | Slot | Spell | Effect |
 |---|---|---|
 | Ritual | Fissure | Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own. |
-| Sorcery | Rock Slide | Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed. |
+| Sorcery | Rock Slide | Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. A stone pushed alone onto an occupied node destroys the stone there. Stones pushed into the same node, or onto each other's nodes, are destroyed; a stone already in that node survives. |
 | Charm | Bulwark | STATIC: Stones in your locked spell cannot be moved, crushed, converted, or destroyed by the opponent. |
 
 Fissure and Bulwark were rebalanced on 2026-10-03. Fissure's blast now also

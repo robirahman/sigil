@@ -34,6 +34,8 @@ POLICY_WEIGHTS=$(md policy-weights || true)   # SIGIL_POLICY_WEIGHTS: ab_search 
 if [ -n "$POLICY_WEIGHTS" ]; then export SIGIL_POLICY_WEIGHTS="$POLICY_WEIGHTS"; fi
 BASE_EXPLORE=$(md base-explore || true)   # SIGIL_BASE_EXPLORE: ab_search explore preset on BOTH arms
 if [ -n "$BASE_EXPLORE" ]; then export SIGIL_BASE_EXPLORE="$BASE_EXPLORE"; fi
+SPELL_SCHEDULE=$(md spell-schedule || true)   # SIGIL_SPELL_SCHEDULE: selfplay_v2 draw schedule (gs:// JSON)
+if [ -n "$SPELL_SCHEDULE" ]; then export SIGIL_SPELL_SCHEDULE="$SPELL_SCHEDULE"; fi
 SHARD_BASE=$(md shard-base)
 : "${RUN:=unknown}" "${WORKERS:=4}" "${BRANCH:=main}" \
   "${HARNESS:=ab_eval.py}" "${ARMS:=}" "${SMOKE:=}" "${MAXH:=4}" \

@@ -147,18 +147,41 @@ OCT2026_RULE_CHANGE_LIVE_MS = int(
     (OCT2026_RULE_CHANGE_LIVE - datetime(1970, 1, 1)).total_seconds() * 1000)
 
 
+# Second 2026-10 change: Rock Slide's pile-up nerf (two or more stones pushed
+# into an occupied node now die and the stationary stone SURVIVES, so Rock
+# Slide never destroys more enemy stones than Fireblast). Every stored game
+# with Rock Slide from before it went live was purged from Firebase
+# (ai/purge_spell_games.py --spells Rock_Slide), and self-play data holding
+# Rock Slide from earlier engines (<= v28) encodes the old rule.
+ROCK_SLIDE_PILEUP_SPELLS = frozenset({'Rock_Slide'})
+ROCK_SLIDE_PILEUP_LIVE = datetime(2026, 10, 11, 4, 25)   # UTC (PR #17 merge + Firebase purge)
+ROCK_SLIDE_PILEUP_LIVE_MS = int(
+    (ROCK_SLIDE_PILEUP_LIVE - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+# (spells, epoch-ms the new rules went live) for every 2026-10 rule change.
+RULE_CHANGES = ((OCT2026_RULE_CHANGE_SPELLS, OCT2026_RULE_CHANGE_LIVE_MS),
+                (ROCK_SLIDE_PILEUP_SPELLS, ROCK_SLIDE_PILEUP_LIVE_MS))
+
+
+def is_old_rules_game(spell_names, played_ms):
+    """True iff a game with base spell names `spell_names` played at
+    `played_ms` (epoch ms; falsy = undated, counted as old) holds a spell
+    whose rules changed after it was played."""
+    names = {str(s).split('~')[0] for s in spell_names or ()}
+    for spells, live_ms in RULE_CHANGES:
+        if names & spells and (not played_ms or int(played_ms) < live_ms):
+            return True
+    return False
+
+
 def has_oct2026_rule_change_spell(sfn):
     """True iff the SFN's draw holds a spell the 2026-10 rule change rewrote."""
     return any(s in OCT2026_RULE_CHANGE_SPELLS for s in sfn_spell_names(sfn))
 
 
 def is_pre_oct2026_rule_change_record(sfn, played_ms):
-    """True iff the record holds a rewritten spell AND was played before the
-    change went live (`played_ms`: the game's epoch-ms timestamp). A record
-    with no timestamp counts as old: the old-rule games were purged, so an
-    undated one is suspect."""
-    if not has_oct2026_rule_change_spell(sfn):
-        return False
-    if not played_ms:
-        return True
-    return int(played_ms) < OCT2026_RULE_CHANGE_LIVE_MS
+    """True iff the record holds a rewritten spell (either 2026-10 change,
+    RULE_CHANGES) AND was played before that change went live (`played_ms`:
+    the game's epoch-ms timestamp). A record with no timestamp counts as old:
+    the old-rule games were purged, so an undated one is suspect."""
+    return is_old_rules_game(sfn_spell_names(sfn), played_ms)

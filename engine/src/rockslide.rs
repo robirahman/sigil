@@ -7,8 +7,11 @@
 //! Resolution rules (simultaneous):
 //!   * a node whose stone is pushed away counts as vacated, so chains slide and
 //!     closed loops of 3+ rotate;
-//!   * a stationary stone on a destination is destroyed;
-//!   * two or more stones pushed into the same node all die;
+//!   * a stationary stone on a destination is destroyed when exactly one
+//!     stone is pushed onto it;
+//!   * two or more stones pushed into the same node all die, and a
+//!     stationary stone there SURVIVES (2026-10 nerf: Rock Slide never
+//!     destroys more enemy stones than Fireblast / Seal of Destruction);
 //!   * a swap (two stones pushed onto each other's nodes) kills both;
 //!   * a stone pushed into a wall, or onto a shielded stone, dies and the
 //!     wall / shielded stone stays.
@@ -76,7 +79,7 @@ impl Board {
             let occ = color_at(&before, d);
             let is_src = dest_of[d as usize] != NONE;
             let shielded = shield & dbit != 0 && !is_src;
-            if !is_src && !shielded {
+            if !is_src && !shielded && srcs.len() == 1 {
                 if let Some(oc) = occ {
                     lost[oc] += 1;
                     if !lost_nodes.contains(&d) { lost_nodes.push(d); }
@@ -259,7 +262,10 @@ impl Board {
                     gain = match kd { Kind::Enemy => 1, Kind::Own => -1, _ => 0 };
                     set(&mut f, d, (1, src, dst));
                 } else {
-                    gain = if cnt == 1 { 2 } else { 1 };
+                    // Second arrival: both arrivals die and the stationary
+                    // stone survives, refunding the first arrival's hit.
+                    let first = match kd { Kind::Enemy => 1, Kind::Own => -1, _ => 0 };
+                    gain = if cnt == 1 { 2 - first } else { 1 };
                     set(&mut f, d, (2, NONE, dst));
                 }
             }
@@ -299,61 +305,83 @@ impl Board {
         let mut dest: HashMap<u8, u8> = HashMap::new();
         let mut out: Vec<HashMap<u8, u8>> = Vec::new();
         let mut keys: Vec<Vec<(u8, u8)>> = Vec::new();
-        let outcome_key = |dest: &HashMap<u8, u8>| -> Vec<(u8, u8)> {
-            // value per touched node: 0 empty, 1 red, 2 blue, 3 wall
+        let val_of = |b: &Board, n: u8| -> u8 {
+            let bit = 1u64 << n;
+            if b.stones[0] & bit != 0 { 1 } else if b.stones[1] & bit != 0 { 2 }
+            else if b.walls & bit != 0 { 3 } else { 0 }
+        };
+        // Final value (0 empty, 1 red, 2 blue, 3 wall) of each of `nodes`
+        // given the arrivals of the first `n` sources of `seq`.
+        let node_vals = |dest: &HashMap<u8, u8>, n: usize, nodes: &[u8]| -> Vec<u8> {
             let mut arrivals: Vec<(u8, Vec<u8>)> = Vec::new();
-            for &s in &seq {
+            for &s in &seq[..n] {
                 let d = dest[&s];
                 match arrivals.iter_mut().find(|(x, _)| *x == d) {
                     Some((_, v)) => v.push(s),
                     None => arrivals.push((d, vec![s])),
                 }
             }
-            let val_of = |b: &Board, n: u8| -> u8 {
-                let bit = 1u64 << n;
-                if b.stones[0] & bit != 0 { 1 } else if b.stones[1] & bit != 0 { 2 }
-                else if b.walls & bit != 0 { 3 } else { 0 }
-            };
-            let mut vals: Vec<(u8, u8)> = kind.keys()
-                .map(|&d| (d, if src_mask & (1u64 << d) != 0 { 0 } else { val_of(self, d) }))
-                .collect();
-            for (d, srcs) in &arrivals {
-                let v = match kind[d] {
+            nodes.iter().map(|d| {
+                let srcs = match arrivals.iter().find(|(x, _)| x == d) {
+                    Some((_, v)) => v,
+                    None => return if src_mask & (1u64 << d) != 0 { 0 } else { val_of(self, *d) },
+                };
+                match kind[d] {
                     Kind::Wall => 3,
                     Kind::Shield => val_of(self, *d),
+                    Kind::Enemy | Kind::Own if srcs.len() >= 2 => val_of(self, *d),
                     _ if srcs.len() >= 2 || (kind[d] == Kind::Mover && dest.get(d) == Some(&srcs[0])) => 0,
                     _ => (enemy + 1) as u8,
-                };
-                if let Some(e) = vals.iter_mut().find(|(n, _)| n == d) { e.1 = v; }
-            }
-            vals.sort();
-            vals
+                }
+            }).collect()
         };
+        let mut all_nodes: Vec<u8> = kind.keys().copied().collect();
+        all_nodes.sort();
+        let outcome_key = |dest: &HashMap<u8, u8>| -> Vec<(u8, u8)> {
+            all_nodes.iter().copied().zip(node_vals(dest, seq.len(), &all_nodes)).collect()
+        };
+        // Nodes settled before seq[i] is assigned. Two optimal prefixes with
+        // the same frontier and the same settled values complete to the same
+        // set of outcomes, so the tie walk explores each (i, frontier,
+        // settled) state once -- without this, pile-up / swap ties make the
+        // walk exponential in the sources.
+        let closed_before: Vec<Vec<u8>> = (0..=seq.len())
+            .map(|i| all_nodes.iter().copied().filter(|d| close_at[d] < i).collect())
+            .collect();
+        let mut visited: std::collections::HashSet<(usize, Front, Vec<u8>)> =
+            std::collections::HashSet::new();
         fn walk(i: usize, key: &Front, acc: i32, best: i32, seq: &[u8],
                 opts: &HashMap<u8, Vec<u8>>,
                 step: &dyn Fn(&Front, usize, u8) -> (i32, Front),
                 memo: &mut HashMap<(usize, Front), i32>,
                 dest: &mut HashMap<u8, u8>, out: &mut Vec<HashMap<u8, u8>>,
                 keys: &mut Vec<Vec<(u8, u8)>>,
-                outcome_key: &dyn Fn(&HashMap<u8, u8>) -> Vec<(u8, u8)>, limit: usize) {
+                outcome_key: &dyn Fn(&HashMap<u8, u8>) -> Vec<(u8, u8)>, limit: usize,
+                node_vals: &dyn Fn(&HashMap<u8, u8>, usize, &[u8]) -> Vec<u8>,
+                closed_before: &[Vec<u8>],
+                visited: &mut std::collections::HashSet<(usize, Front, Vec<u8>)>) {
             if out.len() >= limit { return; }
             if i == seq.len() {
                 let k = outcome_key(dest);
                 if !keys.contains(&k) { keys.push(k); out.push(dest.clone()); }
                 return;
             }
+            if i > 0 {
+                let sig = (i, key.clone(), node_vals(dest, i, &closed_before[i]));
+                if !visited.insert(sig) { return; }
+            }
             for &d in &opts[&seq[i]] {
                 let (gain, nkey) = step(key, i, d);
                 if acc + gain + dp(i + 1, &nkey, seq, opts, step, memo) == best {
                     dest.insert(seq[i], d);
                     walk(i + 1, &nkey, acc + gain, best, seq, opts, step, memo, dest, out,
-                         keys, outcome_key, limit);
+                         keys, outcome_key, limit, node_vals, closed_before, visited);
                     dest.remove(&seq[i]);
                 }
             }
         }
         walk(0, &Vec::new(), 0, best, &seq, opts, &step, &mut memo, &mut dest, &mut out,
-             &mut keys, &outcome_key, limit);
+             &mut keys, &outcome_key, limit, &node_vals, &closed_before, &mut visited);
         (best, out)
     }
 }

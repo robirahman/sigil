@@ -702,7 +702,7 @@ SPELLS_DATA = {
         'pack': 'tectonic', 'type': 'sorcery', 'nodes': 3, 'static': False,
         'text': (
             'Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. '
-            'Stones already occupying a destination are destroyed; stones pushed onto each other\'s nodes, or into the same node, are destroyed.'
+            'A stone pushed alone onto an occupied node destroys the stone there. Stones pushed into the same node, or onto each other\'s nodes, are destroyed; a stone already in that node survives.'
         ),
         'mechanics': (
             'Triggers simultaneous pushes on all bordering enemy units. Complex collision physics crush overlapping and colliding enemy units.'
