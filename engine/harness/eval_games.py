@@ -24,7 +24,10 @@ The widening and adaptive knobs are the engine's exported constants, never
 literals restated here. `history_sfns` carries the game so far so threefold
 repetition is scored as in live play.
 
-Walk order (`--walk`). `backward` (the default since 2026-10-03) analyses each
+Walk order (`--walk`). `fresh` (the default) is order-independent: a new table
+per position, which the surprise audit's V(i) -> V(i+1) fall definition relies
+on. `backward` (stored game_evals since 2026-10-03: runner_evals.sh passes it;
+deep_review.py's scan) analyses each
 game from its LAST position to its first on ONE persistent table
 (`SearchSession.analyze`), as chess post-game analysis does: position i+1 is
 one ply below position i, so the value of the move actually played arrives
@@ -37,8 +40,12 @@ depend on the walk order, so a game is always one work item (`--split` is for
 `--walk fresh` only). The root searches the move actually played first
 (`probe_first`): its value is already in the table, one ply deeper, so the
 rest of the root list runs against a tight window. `backward-plain` keeps the
-generator's order (A/B only). `fresh` is the old walk: `sigil_engine.analyze` on a new
-table per position, order-independent.
+generator's order (A/B only).
+
+Resuming (`--out` already has rows): only rows written with the same walk, eval
+and requested depth count as done; any other row is recomputed (the newer row
+wins in `upload`), and `upload` refuses a game whose rows mix walks, evals or
+engine builds. Every row carries the engine tag of the build that computed it.
 
 What is stored (red POV, so the review panel needs no flipping):
   evalPerPly[i]   stones with the even-game offset applied (search::report);
@@ -228,7 +235,7 @@ def _red_pov(mover, v):
     return v if mover == 'red' else -v
 
 
-def eval_row(gid, i, r, t0, walk, ev=None):
+def eval_row(gid, i, r, t0, walk, ev=None, req_depth=None):
     """`analyze` dict -> one stored row (red POV). `probe` is where the turn
     actually played sat in the root list of the last completed iteration:
     (depth, index, list length, score from the mover's side in centistones,
@@ -242,7 +249,7 @@ def eval_row(gid, i, r, t0, walk, ev=None):
             'best': json.loads(r['actions_json']) if r.get('actions_json') else None,
             'exp': r.get('expected_sfn'),
             'probe': list(r['probe']) if r.get('probe') is not None else None, 'walk': walk,
-            'eval': ev or EVAL_NAME}
+            'eval': ev or EVAL_NAME, 'd': req_depth, 'engine': ENGINE_TAG}
 
 
 def eval_game(item):
@@ -275,13 +282,29 @@ def eval_game(item):
         except Exception as e:  # noqa: BLE001
             rows.append({'g': gid, 'i': i, 'error': f'{type(e).__name__}: {e}'})
             continue
-        rows.append(eval_row(gid, i, r, t0, walk, ev))
+        rows.append(eval_row(gid, i, r, t0, walk, ev, depth))
     rows.sort(key=lambda r: r['i'])
     return gid, rows
 
 
-def _done_keys(path):
-    done = set()
+def _requested_eval():
+    """The eval `eval` will search with (engine_eval without touching policy)."""
+    if not AUDIT_SHIPPED:
+        return EVAL_NAME
+    import sigil_engine as se
+    return getattr(se, 'SHIPPED_EVAL', EVAL_NAME)
+
+
+def _row_matches(d, walk, ev, depth):
+    """A saved row counts as done only for the same walk, eval and requested
+    depth (rows before these fields existed: fresh walk, EVAL_NAME, any depth)."""
+    return (d.get('walk', 'fresh') == walk and d.get('eval', EVAL_NAME) == ev
+            and d.get('d', depth) == depth)
+
+
+def _done_keys(path, walk='fresh', ev=None, depth=None):
+    done, stale = set(), 0
+    ev = ev or EVAL_NAME
     if os.path.exists(path):
         with open(path, encoding='utf-8') as fh:
             for line in fh:
@@ -289,8 +312,14 @@ def _done_keys(path):
                     d = json.loads(line)
                 except ValueError:
                     continue
-                if 'error' not in d:
+                if 'error' in d:
+                    continue
+                if _row_matches(d, walk, ev, depth):
                     done.add((d['g'], d['i']))
+                else:
+                    stale += 1
+    if stale:
+        print(f'{stale} saved rows were computed with another walk / eval / depth: recomputing them', flush=True)
     return done
 
 
@@ -337,7 +366,7 @@ def cmd_eval(a):
         print(f'depth {a.depth}: n={len(secs)} mean {statistics.mean(secs):.2f}s median {statistics.median(secs):.2f}s '
               f'max {max(secs):.2f}s; {total} positions -> ~{total * statistics.mean(secs) / 3600:.1f} CPU-hours')
         return
-    done = _done_keys(a.out)
+    done = _done_keys(a.out, a.walk, _requested_eval(), a.depth)
     todo = []
     for gid, g in items:
         n = len(g['positions']) - 1
@@ -396,6 +425,10 @@ def build_docs(lines, evals_paths):
         got = [rows.get((gid, i)) for i in range(n)]
         if any(r is None for r in got):
             incomplete.append((gid, sum(r is None for r in got), n)); continue
+        cfgs = {(r.get('walk', 'fresh'), r.get('eval', EVAL_NAME), r.get('engine')) for r in got}
+        if len(cfgs) > 1:
+            print(f'  {gid}: rows mix walks / evals / engine builds {sorted(map(str, cfgs))}; not uploaded', flush=True)
+            incomplete.append((gid, 0, n)); continue
         movers = [r['mover'] for r in got]
         walk = got[0].get('walk', 'fresh')         # rows before 2026-10-03 carry none: fresh tables
         last_tok = g['positions'][-1].split()[1]
@@ -405,7 +438,8 @@ def build_docs(lines, evals_paths):
         winner = g.get('winner') if g.get('winner') in ('red', 'blue') else None
         docs[gid] = {
             'gameId': gid, 'roomCode': g['roomCode'], 'finalSfn': g['finalSfn'],
-            'engine': ENGINE_TAG, 'walk': walk, 'eval': got[0].get('eval', EVAL_NAME), 'depth': max(r['depth'] for r in got),
+            'engine': got[0].get('engine') or 'rust-unknown', 'walk': walk,
+            'eval': got[0].get('eval', EVAL_NAME), 'depth': max(r['depth'] for r in got),
             'computedAt': int(time.time() * 1000), 'plies': n,
             'moverPerPly': movers,
             'evalPerPly': [r['stones'] for r in got] + [None],
@@ -473,9 +507,10 @@ def main():
     e.add_argument('--depth', type=int, default=6); e.add_argument('--time-ms', type=int, default=0, help='0 = untimed fixed depth')
     e.add_argument('--workers', type=int, default=os.cpu_count() or 2); e.add_argument('--limit-games', type=int, default=0)
     e.add_argument('--split', type=int, default=0, help='--walk fresh only: work items of this many positions instead of whole games (0 = whole games)')
-    e.add_argument('--walk', choices=('backward', 'backward-plain', 'fresh'), default='backward',
-                   help='backward: last position to first on one persistent table, the played move searched first '
-                        '(default); backward-plain: the same walk in generator order; fresh: a new table per position')
+    e.add_argument('--walk', choices=('backward', 'backward-plain', 'fresh'), default='fresh',
+                   help='fresh (default): a new table per position; backward: last position to first on one '
+                        'persistent table, the played move searched first (stored game_evals); backward-plain: '
+                        'the same walk in generator order')
     e.add_argument('--time-only', action='store_true'); e.add_argument('--sample', type=int, default=50)
     e.add_argument('--shard', default='', help='k/n: evaluate every n-th game starting at k (games sorted by timestamp)')
     e.add_argument('--exclude', action='append', default=[], help='lines.json of a corpus already evaluated; its games are skipped')

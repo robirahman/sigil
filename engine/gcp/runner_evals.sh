@@ -85,8 +85,11 @@ fi
 
 cd $WORK/repo
 echo "=== eval: depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
-$WORK/venv/bin/python -u engine/harness/eval_games.py eval --lines $WORK/lines.json \
-  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
+# Stored game_evals use the backward walk (one table per game, played move first;
+# eval_games.py's default is the order-independent fresh walk). --split applies
+# to fresh walks only.
+$WORK/venv/bin/python -u engine/harness/eval_games.py eval --walk backward --lines $WORK/lines.json \
+  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
 STATUS=$?; FAILED_STAGE=eval
 tail -3 $WORK/out/eval.log
 
