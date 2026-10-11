@@ -310,6 +310,8 @@ def main():
         if off // 1000 in schedule['shards']:
             human_frac = 0.0
             sched_block = list(schedule['shards']).index(off // 1000)
+            assert sched_games <= games, (
+                f"schedule block of {sched_games} games > this shard's {games}: draws would go unplayed")
             print(f"  spell schedule: {len(schedule['draws'])} draws, block {sched_block} "
                   f"x {sched_games} games", flush=True)
         else:   # e.g. the runner's smoke arm: not a scheduled shard

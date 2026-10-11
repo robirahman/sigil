@@ -15,7 +15,8 @@ list), then games are shuffled and the slot order within a role is
 randomized. A share --comp of games is competitive (exact count).
 
 The N games are split over the listed shard numbers (off // 1000 in
-selfplay_v2.py, i.e. SHARD_BASE + worker) at ceil(N / shards) games each.
+selfplay_v2.py, i.e. SHARD_BASE + worker) at ceil(N / shards) games each,
+which must not exceed selfplay_v2's 1000-game shard cap.
 """
 import argparse, json, math, random
 from collections import Counter
@@ -95,6 +96,10 @@ def main():
     draws, comp = build(d, N, a.comp, a.seed)
     shards = parse_shards(a.shards)
     per = math.ceil(N / len(shards))
+    if per > 1000:
+        # selfplay_v2 plays at most 1000 games a shard (seed offsets step by
+        # 1000), so a bigger block would leave scheduled draws unplayed.
+        raise SystemExit(f'{N} games need >= {math.ceil(N / 1000)} shards; got {len(shards)}')
     final = Counter(c)
     for g in draws:
         final.update(g)
