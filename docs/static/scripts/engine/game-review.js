@@ -73,6 +73,13 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 	const p = RUST_REVIEW_PRESETS[mode];
 	const n = gameLog.length;
 	const sfns = _reviewPositions(gameLog);
+	// Variants the Rust engine reads as standard (RustAI.pickTurn refuses them
+	// too): review those with the Caveman engine instead.
+	const variant = (sfnToDict(sfns[0]).variant) || 'standard';
+	if ((typeof variantHasDuplicates === 'function' && variantHasDuplicates(variant))
+		|| (typeof variantHasScramble === 'function' && variantHasScramble(variant))) {
+		throw new Error('the Rust engine does not play the ' + variant + ' variant');
+	}
 	const other = c => (c === 'red' ? 'blue' : 'red');
 	const tokenSide = _sfnSide;
 	const movers = new Array(n + 1), evals = new Array(n + 1).fill(null);
@@ -94,12 +101,22 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 		if (onProgress) onProgress(n - 1 - i, n);
 		const mover = tokenSide(sfns[i]);
 		movers[i] = mover;
-		const res = await worker.search(Object.assign({
-			sfn: sfns[i], timeMs: p.timeMs, ttBits: p.ttBits,
-			historySfns: sfns.slice(Math.max(0, i - 64), i),
-		}, RUST_REVIEW_SEARCH));
-		if (!res || res.ok === false) {
-			throw new Error('Rust engine cannot review this position: ' + ((res && res.error) || 'no result'));
+		// A search that completes no depth reports no value (stones and mate
+		// null); it must not read as an even position. Retry with more time,
+		// then give up on the Rust review.
+		let res = null;
+		for (let tms = p.timeMs, k = 0; k < 4; k++, tms *= 4) {
+			res = await worker.search(Object.assign({
+				sfn: sfns[i], timeMs: tms, ttBits: p.ttBits,
+				historySfns: sfns.slice(Math.max(0, i - 64), i),
+			}, RUST_REVIEW_SEARCH));
+			if (!res || res.ok === false) {
+				throw new Error('Rust engine cannot review this position: ' + ((res && res.error) || 'no result'));
+			}
+			if (typeof res.stones === 'number' || typeof res.mate_in === 'number') break;
+		}
+		if (typeof res.stones !== 'number' && typeof res.mate_in !== 'number') {
+			throw new Error('Rust engine found no evaluation for position ' + i);
 		}
 		const sign = mover === 'red' ? 1 : -1;            // mover POV -> red POV
 		if (typeof res.mate_in === 'number' && res.mate_in !== 0) mates[i] = res.mate_in * sign;
