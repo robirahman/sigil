@@ -68,6 +68,10 @@ if [ -n "$SRC" ]; then
   gcs_get "$SRC" $WORK/src.tgz && tar -xzf $WORK/src.tgz -C $WORK/repo \
     || { echo "FATAL: source tarball"; shutdown -h now; exit 1; }
   echo "source tarball $SRC" > $WORK/out/COMMIT.txt
+  # No git work tree here: name the build by the tarball's content so rows from
+  # different uploads never share an engine tag (eval_games._engine_tag).
+  export SIGIL_ENGINE_TAG="rust-src@$(sha1sum $WORK/src.tgz | cut -c1-12)"
+  echo "engine tag $SIGIL_ENGINE_TAG" >> $WORK/out/COMMIT.txt
 else
   rmdir $WORK/repo
   git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$BRANCH" \

@@ -612,8 +612,8 @@ pub struct Search {
     /// (bound, nodes spent on that child). bound 0 = exact, 1 = upper (the move
     /// failed low against the root's alpha), 2 = lower (failed high on beta).
     root_detail_out: Vec<(u8, u64)>,
-    /// Audit hook (`surprise_audit.py`, py `analyze(probe_sfn=)`): the board +
-    /// mana key of a position one root turn might produce. `root_search`
+    /// Audit hook (`surprise_audit.py`, py `analyze(probe_sfn=)`): the
+    /// `probe_key` of a position one root turn might produce. `root_search`
     /// records where that turn sat in the root list and what it scored.
     pub root_probe: Option<String>,
     /// (iteration depth, index in the root list, root list length, score from
@@ -1658,9 +1658,7 @@ impl Search {
                     child.apply_turn(t, c);
                     child.turn_counter += 1;
                     child.to_move = c.other();
-                    let sfn = child.to_sfn();
-                    let p: Vec<&str> = sfn.split_whitespace().collect();
-                    p.len() >= 4 && format!("{} {}", p[0], p[3]) == pk
+                    probe_key(&child.to_sfn()) == pk
                 });
                 if let Some(ix) = probe_ix { let t = turns.remove(ix); turns.insert(0, t); }
             }
@@ -1690,9 +1688,7 @@ impl Search {
                                   &mut rep);
             let completed = !self.stats.timed_out;
             if completed && self.root_probe.is_some() {
-                let sfn = child.to_sfn();
-                let p: Vec<&str> = sfn.split_whitespace().collect();
-                if p.len() >= 4 && self.root_probe.as_deref() == Some(format!("{} {}", p[0], p[3]).as_str()) {
+                if self.root_probe.as_deref() == Some(probe_key(&child.to_sfn()).as_str()) {
                     // the index as generated, before `probe_first` moved it
                     let ix = match probe_ix { Some(px) if i == 0 => px, Some(px) if i <= px => i - 1, _ => i };
                     self.root_probe_hit = Some((depth, ix, n_root, v, alpha));
@@ -2405,6 +2401,17 @@ pub fn plies_to_turns(plies: i32) -> i32 {
 ///   "win in 2" for a repetition is correct by the ruling, not a bug.
 /// * otherwise `stones` is the material-equivalent lead after `even_offset`,
 ///   so an even game reads 0.0 for either side.
+/// Identity of a position for the root probe: every SFN token except the side
+/// to move and the turn counter (a recorded after-position carries different
+/// ones than a root child), so boards that differ only in lock, springlock,
+/// spell counters, variant or Providence bank never collide. Callers pass an
+/// engine-written SFN (`Board::to_sfn`), so the remaining tokens compare
+/// format-for-format.
+pub fn probe_key(sfn: &str) -> String {
+    sfn.split_whitespace().enumerate().filter(|(i, _)| *i != 1 && *i != 2)
+        .map(|(_, t)| t).collect::<Vec<_>>().join(" ")
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Report {
     pub stones: f64,

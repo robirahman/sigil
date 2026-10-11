@@ -42,8 +42,8 @@ depend on the walk order, so a game is always one work item (`--split` is for
 rest of the root list runs against a tight window. `backward-plain` keeps the
 generator's order (A/B only).
 
-Resuming (`--out` already has rows): only rows written with the same walk, eval
-and requested depth count as done; any other row is recomputed (the newer row
+Resuming (`--out` already has rows): only rows written with the same walk, eval,
+requested depth and engine build count as done; any other row is recomputed (the newer row
 wins in `upload`), and `upload` refuses a game whose rows mix walks, evals or
 engine builds. Every row carries the engine tag of the build that computed it.
 
@@ -311,10 +311,11 @@ def _requested_eval():
 
 
 def _row_matches(d, walk, ev, depth):
-    """A saved row counts as done only for the same walk, eval and requested
-    depth (rows before these fields existed: fresh walk, EVAL_NAME, any depth)."""
+    """A saved row counts as done only for the same walk, eval, requested
+    depth and engine build (rows before these fields existed: fresh walk,
+    EVAL_NAME, any depth; no engine tag, so they are recomputed)."""
     return (d.get('walk', 'fresh') == walk and d.get('eval', EVAL_NAME) == ev
-            and d.get('d', depth) == depth)
+            and d.get('d', depth) == depth and d.get('engine') == ENGINE_TAG)
 
 
 def _done_keys(path, walk='fresh', ev=None, depth=None):

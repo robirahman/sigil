@@ -1298,11 +1298,11 @@ fn analyze_on<'py>(py: Python<'py>, s: &mut crate::search::Search, b: &crate::bo
     // A reused `Search` must not report the last call's probe or history.
     s.root_probe_hit = None;
     s.clear_history();
-    // Board + mana key, as `rank_of_result`: the recorded after-position's
-    // turn number and side token differ from a root child's.
-    s.root_probe = probe_sfn.as_deref().map(|ps| {
-        let p: Vec<&str> = ps.split_whitespace().collect();
-        if p.len() < 4 { ps.to_string() } else { format!("{} {}", p[0], p[3]) }
+    // `search::probe_key` of the recorded after-position, re-written by the
+    // engine so its tokens are formatted exactly like a root child's.
+    s.root_probe = probe_sfn.as_deref().map(|ps| match crate::board::Board::from_sfn(ps) {
+        Ok(pb) => crate::search::probe_key(&pb.to_sfn()),
+        Err(_) => crate::search::probe_key(ps),
     });
     for h in history_sfns {
         if let Ok(hb) = crate::board::Board::from_sfn(&h) {

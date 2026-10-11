@@ -4612,3 +4612,13 @@ fn policy_explore_slots_keep_summer_second_casts() {
     assert!(slot2.iter().any(|k| k.contains("Dash")), "a slotted dash's cast must keep its Summer second cast too");
     assert!(missing.is_empty(), "slot stream drops {} Summer turns, e.g. {:?}", missing.len(), missing.first());
 }
+
+#[test]
+fn probe_key_ignores_side_and_turn_but_not_lock_or_counters() {
+    use crate::search::probe_key;
+    let a = "r.b..................................../Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge r 5 1:0 Grow:- -:- tied";
+    let b = "r.b..................................../Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge b 6 1:0 Grow:- -:- tied";
+    let c = "r.b..................................../Flourish,Carnage,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge b 6 1:0 Fireblast:- -:- tied";
+    assert_eq!(probe_key(a), probe_key(b));
+    assert_ne!(probe_key(b), probe_key(c));
+}

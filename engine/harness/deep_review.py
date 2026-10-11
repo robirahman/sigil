@@ -274,15 +274,28 @@ def cmd_probe(a):
     cases = json.load(open(a.cases, encoding='utf-8'))
     tasks, meta = plan_tasks(lines, cases, a.depth, a.time_ms, a.enum_cap, a.scan_depth)
     k, n = (int(x) for x in a.shard.split('/')) if a.shard else (0, 1)
-    done = {}
+    # Every result records the run's configuration and engine build; a resume
+    # reuses only results whose configuration matches this run's.
+    import hashlib
+    from eval_games import ENGINE_TAG
+    cfg = {'cfg': [a.depth, a.time_ms, a.enum_cap, a.scan_depth,
+                   hashlib.sha1(open(a.cases, 'rb').read()).hexdigest()[:12]],
+           'engine': ENGINE_TAG}
+    done, stale = {}, 0
     if os.path.exists(a.out):
         for ln in open(a.out, encoding='utf-8'):
             try:
                 d = json.loads(ln)
             except ValueError:
                 continue
-            if 'error' not in d:
+            if 'error' in d:
+                continue
+            if d.get('cfg') == cfg['cfg'] and d.get('engine') == cfg['engine']:
                 done[(d['g'], d['p'], d['kind'])] = d
+            else:
+                stale += 1
+    if stale:
+        print(f'{stale} saved results came from another configuration or engine build: recomputing them', flush=True)
     mine = {key: t for key, t in tasks.items() if _owner(key[0], key[1], n) == k}
     todo = [t for key, t in mine.items() if key not in done]
     # follow-ups of D results already on disk
@@ -303,7 +316,7 @@ def cmd_probe(a):
         while pending:
             fin, pending = wait(pending, return_when=FIRST_COMPLETED)
             for f in fin:
-                res = f.result()
+                res = dict(f.result(), **cfg)
                 fh.write(json.dumps(res, separators=(',', ':')) + '\n'); fh.flush(); nres += 1
                 for t in followups(res, tasks, meta, lines, a.depth, a.time_ms):
                     if not a.kinds or t['kind'] in a.kinds.split(','):
