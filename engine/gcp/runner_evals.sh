@@ -4,7 +4,8 @@
 # Clones the branch, builds the engine's Python module, downloads the
 # pre-hydrated corpus from GCS, runs engine/harness/eval_games.py eval over ONE
 # resumable work file, uploads it every two minutes so a preemption or the
-# watchdog keeps everything scored so far, writes COMPLETE, and shuts down.
+# watchdog keeps everything scored so far, writes COMPLETE (FAILED, with the
+# exit code, when the eval exits nonzero), and shuts down.
 #
 # Metadata attributes: run-id, branch, workers, max-hours, corpus (GCS object
 # under the sigil bucket), depth, time-ms (per-position cap, 0 = untimed),
@@ -41,6 +42,11 @@ gcs_get() {   # object, file
   curl -sf -m 600 -H "Authorization: Bearer $t" -o "$2" \
     "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")?alt=media"
 }
+gcs_del() {   # object (absent is fine)
+  local t; t=$(tok) || return 1
+  curl -s -m 60 -X DELETE -H "Authorization: Bearer $t" \
+    "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")" >/dev/null || true
+}
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
@@ -48,6 +54,9 @@ apt-get -qq install -y build-essential curl git python3-venv >/dev/null 2>&1
 WORK=/opt/sigil
 rm -rf $WORK/repo
 mkdir -p $WORK/out && cd $WORK
+rm -f $WORK/out/COMPLETE $WORK/out/FAILED   # a restarted VM must not re-upload the last boot's marker
+# ...and the bucket's: same run id, so a stale COMPLETE would mask a FAILED rerun.
+for m in COMPLETE FAILED; do gcs_del "runs/$RUN/$m"; done
 export RUSTUP_HOME=$WORK/rustup CARGO_HOME=$WORK/cargo PATH=$WORK/cargo/bin:$PATH
 [ -x $WORK/cargo/bin/rustc ] || curl -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
@@ -83,12 +92,20 @@ fi
 
 cd $WORK/repo
 echo "=== eval: depth $DEPTH, cap ${TMS} ms/position, $WORKERS workers ==="
-$WORK/venv/bin/python -u engine/harness/eval_games.py eval --lines $WORK/lines.json \
-  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" --split 6 ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
+# Stored game_evals use the backward walk (one table per game, played move first;
+# eval_games.py's default is the order-independent fresh walk). --split applies
+# to fresh walks only.
+$WORK/venv/bin/python -u engine/harness/eval_games.py eval --walk backward --lines $WORK/lines.json \
+  --out $WORK/out/evals.jsonl --depth "$DEPTH" --time-ms "$TMS" --workers "$WORKERS" ${SHARD:+--shard "$SHARD"} > $WORK/out/eval.log 2>&1
+STATUS=$?; FAILED_STAGE=eval
 tail -3 $WORK/out/eval.log
 
+# The partial work file is uploaded either way (a RESUME can pick it up), but
+# only a run whose stages all exited 0 earns COMPLETE; otherwise FAILED.
+if [ "$STATUS" -eq 0 ]; then MARK=COMPLETE; else MARK=FAILED; echo "FATAL: eval exited $STATUS"; fi
+echo "$(date -u +%FT%TZ) exit $STATUS${FAILED_STAGE:+ in $FAILED_STAGE}" > $WORK/out/$MARK
 for f in $WORK/out/*; do gcs_put "$f" "runs/$RUN/live/$(basename "$f")" || true; done
 gcs_put /var/log/sigil-evals.log "runs/$RUN/live/runner.log" || true
-date -u +%FT%TZ > $WORK/out/COMPLETE; gcs_put $WORK/out/COMPLETE "runs/$RUN/COMPLETE" || true
-echo "=== done $(date -u +%FT%TZ); shutting down ==="
+gcs_put $WORK/out/$MARK "runs/$RUN/$MARK" || true
+echo "=== $MARK $(date -u +%FT%TZ); shutting down ==="
 shutdown -h now

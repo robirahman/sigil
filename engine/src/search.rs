@@ -612,14 +612,21 @@ pub struct Search {
     /// (bound, nodes spent on that child). bound 0 = exact, 1 = upper (the move
     /// failed low against the root's alpha), 2 = lower (failed high on beta).
     root_detail_out: Vec<(u8, u64)>,
-    /// Audit hook (`surprise_audit.py`, py `analyze(probe_sfn=)`): the board +
-    /// mana key of a position one root turn might produce. `root_search`
+    /// Audit hook (`surprise_audit.py`, py `analyze(probe_sfn=)`): the
+    /// `probe_key` of a position one root turn might produce. `root_search`
     /// records where that turn sat in the root list and what it scored.
     pub root_probe: Option<String>,
     /// (iteration depth, index in the root list, root list length, score from
     /// the root mover's side, alpha when it was searched) for the last
     /// iteration that searched it; `None` if no root turn produced it.
     pub root_probe_hit: Option<(i32, usize, usize, i32, i32)>,
+    /// Post-game analysis: search the `root_probe` turn (the move actually
+    /// played) FIRST at the root of every iteration. On a table a backward walk
+    /// filled, its value is already stored one ply deeper, so it costs almost
+    /// nothing and opens the window at the played move's true value. Ordering
+    /// only: a probe turn the root list lacks is not added, and
+    /// `root_probe_hit` still reports its index in the list as generated.
+    pub probe_first: bool,
     /// The competitive opening selector's pick for the last `go`, when it
     /// applied (`opening.rs`; switch `opening::set_opening_book`).
     opening_pick: Option<crate::opening::OpeningPick>,
@@ -772,6 +779,7 @@ impl Search {
             root_detail_out: Vec::new(),
             root_probe: None,
             root_probe_hit: None,
+            probe_first: false,
             opening_pick: None,
             pvs: false,
             lmr_ext: 2,
@@ -1639,10 +1647,25 @@ impl Search {
             turns.retain(|t| root_part(t, parts) == part);
             if turns.is_empty() { turns.extend(first); }
         }
+        // Post-game review: the played turn first (after the SMP rotation and
+        // the root split, so a split engine only promotes it when it owns it).
+        let n_root = turns.len();
+        let mut probe_ix: Option<usize> = None;
+        if self.probe_first {
+            if let Some(pk) = self.root_probe.clone() {
+                probe_ix = turns.iter().position(|t| {
+                    let mut child = *b;
+                    child.apply_turn(t, c);
+                    child.turn_counter += 1;
+                    child.to_move = c.other();
+                    probe_key(&child.to_sfn()) == pk
+                });
+                if let Some(ix) = probe_ix { let t = turns.remove(ix); turns.insert(0, t); }
+            }
+        }
         // `adopt_partial` bookkeeping: did a move whose subtree COMPLETED beat
         // the seed (which is searched first and therefore completes first)?
-        let seed = best_local;
-        let n_root = turns.len();
+        let seed = if probe_ix.is_some() { turns.first().copied() } else { best_local };
         let mut seed_completed = false;
         let mut completed_beat_seed = false;
         let mut i = 0usize;
@@ -1665,10 +1688,10 @@ impl Search {
                                   &mut rep);
             let completed = !self.stats.timed_out;
             if completed && self.root_probe.is_some() {
-                let sfn = child.to_sfn();
-                let p: Vec<&str> = sfn.split_whitespace().collect();
-                if p.len() >= 4 && self.root_probe.as_deref() == Some(format!("{} {}", p[0], p[3]).as_str()) {
-                    self.root_probe_hit = Some((depth, i, n_root, v, alpha));
+                if self.root_probe.as_deref() == Some(probe_key(&child.to_sfn()).as_str()) {
+                    // the index as generated, before `probe_first` moved it
+                    let ix = match probe_ix { Some(px) if i == 0 => px, Some(px) if i <= px => i - 1, _ => i };
+                    self.root_probe_hit = Some((depth, ix, n_root, v, alpha));
                 }
             }
             if completed {
@@ -2378,6 +2401,17 @@ pub fn plies_to_turns(plies: i32) -> i32 {
 ///   "win in 2" for a repetition is correct by the ruling, not a bug.
 /// * otherwise `stones` is the material-equivalent lead after `even_offset`,
 ///   so an even game reads 0.0 for either side.
+/// Identity of a position for the root probe: every SFN token except the side
+/// to move and the turn counter (a recorded after-position carries different
+/// ones than a root child), so boards that differ only in lock, springlock,
+/// spell counters, variant or Providence bank never collide. Callers pass an
+/// engine-written SFN (`Board::to_sfn`), so the remaining tokens compare
+/// format-for-format.
+pub fn probe_key(sfn: &str) -> String {
+    sfn.split_whitespace().enumerate().filter(|(i, _)| *i != 1 && *i != 2)
+        .map(|(_, t)| t).collect::<Vec<_>>().join(" ")
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Report {
     pub stones: f64,
