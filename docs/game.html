@@ -774,12 +774,12 @@
 							x-on:click="startAiReview('quick')"
 							x-show="reviewSfns.length > 0 && rematchStage !== 'rematch' && (!aiReview || aiReview.mode === 'quick')"
 							x-bind:disabled="aiReviewComputing"
-							x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'quick' ? 'Open Quick Review' : 'Quick Review (1s/ply)')"></button>
+							x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'quick' ? 'Open Quick Review' : aiReviewModeLabel('quick'))"></button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('deep')"
 							x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'"
 							x-bind:disabled="aiReviewComputing"
-							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : 'Deep Review (8 ply)')"></button>
+							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : aiReviewModeLabel('deep'))"></button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<a class="win-modal__btn" href="./" x-show="rematchStage !== 'rematch'">Main Menu</a>
 						<button class="win-modal__btn"
@@ -819,28 +819,29 @@
 					<button class="ai-review-trigger__btn"
 						x-on:click="startAiReview('quick')"
 						x-bind:disabled="aiReviewComputing"
-						x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'Quick AI Review (1s/ply)'"></button>
+						x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : aiReviewModeLabel('quick')"></button>
 					<button class="ai-review-trigger__btn"
 						x-on:click="startAiReview('deep')"
 						x-bind:disabled="aiReviewComputing"
-						x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'Deep AI Review (10 ply)'"></button>
+						x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : aiReviewModeLabel('deep')"></button>
+				</div>
+				<div class="ai-review-trigger ai-review-error" x-show="aiReviewError" x-cloak role="alert">
+					<span x-text="aiReviewError"></span>
 				</div>
 
 				<div class="ai-review-panel" x-show="reviewMode && aiReview" x-cloak>
 					<div class="ai-review-eval" x-text="aiReviewCurrentEvalText()"></div>
-					<div class="ai-review-stats" x-show="aiReview && aiReview.source === 'rust'" x-cloak>
-						<span>Rust engine, depth <strong x-text="aiReview && aiReview.engineDepth"></strong> at every position</span>
+					<div class="ai-review-stats" x-show="aiReviewEngineText()" x-cloak>
+						<span x-text="aiReviewEngineText()"></span>
 					</div>
 					<svg class="ai-review-graph" viewBox="0 0 480 80" preserveAspectRatio="none">
 						<line x1="0" y1="40" x2="480" y2="40" class="ai-review-graph__zero" />
 						<rect x="0" y="0" width="480" height="40" class="ai-review-graph__bg-red" />
 						<rect x="0" y="40" width="480" height="40" class="ai-review-graph__bg-blue" />
 						<polyline class="ai-review-graph__line" x-bind:points="aiReviewGraphPoints()" />
-						<template x-for="dot in aiReviewGraphDots()" x-bind:key="dot.ply">
-							<circle x-bind:cx="dot.x" x-bind:cy="dot.y" r="3.5"
-								x-bind:class="`ai-review-graph__dot ai-review-graph__dot--${dot.cls}`"
-								x-on:click="jumpToReviewPly(dot.ply + 1)" />
-						</template>
+						<!-- Blunder dots. Rendered as markup: a <template x-for> inside <svg> is not
+						     an HTML template, so Alpine evaluated its <circle> with no `dot`. -->
+						<g x-html="aiReviewGraphDotsSvg()" x-on:click="onReviewGraphDotClick($event)"></g>
 						<line x-bind:x1="aiReview && aiReview.winPctPerPly.length > 1 ? (reviewIndex / (aiReview.winPctPerPly.length - 1) * 480) : 0"
 							x-bind:x2="aiReview && aiReview.winPctPerPly.length > 1 ? (reviewIndex / (aiReview.winPctPerPly.length - 1) * 480) : 0"
 							y1="0" y2="80" class="ai-review-graph__cursor" />
@@ -933,6 +934,8 @@
 		<script src="static/scripts/engine/game-clock.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
 		<script src="static/scripts/engine/game-review.js"></script>
+		<!-- Review caching (game_reviews) and stored Rust evals (game_evals). -->
+		<script src="static/scripts/engine/firebase-sync.js"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js"></script>
 		<script src="static/scripts/offline-queue.js"></script>

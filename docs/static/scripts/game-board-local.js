@@ -215,6 +215,12 @@ document.addEventListener('alpine:init', () => {
 				this.spells.text = text;
 				this.reviewSfns = payload.sfns.slice();
 				this.reviewTurnLabels = (payload.turnLabels || []).slice();
+				// A legacy v1 export carries its per-turn log (`gameLog`): keep it so
+				// the AI review can run (it needs each turn's sfnBefore/sfnAfter).
+				if (Array.isArray(payload.gameLog) && payload.gameLog.length
+					&& payload.gameLog.every(t => t && t.sfnBefore && t.sfnAfter)) {
+					this._gameLogForExport = payload.gameLog;
+				}
 				this.winner = payload.winner || '';
 				this._spellNamesForExport = spellNames.slice();
 				this._redNameForExport = payload.redName || 'Red';

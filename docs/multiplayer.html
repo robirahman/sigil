@@ -578,7 +578,7 @@
 							</template>
 						</div>
 					</div>
-				</div></div>
+				</div>
 				<div class="tooltip" x-bind:class="{ 'is-visible': spells.text[activeSpell] }" x-ref="spellTooltip"><div class="tooltip__inner"><h2 class="tooltip__heading" x-text="spells.text[activeSpell]?.name"></h2><p class="tooltip__content" x-text="spells.text[activeSpell]?.text"></p><button class="tooltip-button" x-on:click="handleCastSpell(activeSpell)" x-show="hasTouchScreen && activeSpellIsCastable">Cast Spell</button></div></div>
 				<div class="win-modal" x-bind:class="{ 'is-visible': winner && !reviewMode }">
 					<div class="win-modal__result">
@@ -595,12 +595,12 @@
 							x-on:click="startAiReview('quick')"
 							x-show="reviewSfns.length > 0 && (!aiReview || aiReview.mode === 'quick')"
 							x-bind:disabled="aiReviewComputing"
-							x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'quick' ? 'Open Quick Review' : 'Quick AI Review (1s/ply)')"></button>
+							x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'quick' ? 'Open Quick Review' : aiReviewModeLabel('quick'))"></button>
 						<button class="win-modal__btn"
 							x-on:click="startAiReview('deep')"
 							x-show="reviewSfns.length > 0"
 							x-bind:disabled="aiReviewComputing"
-							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : 'Deep AI Review (10 ply)')"></button>
+							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : aiReviewModeLabel('deep'))"></button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<button class="win-modal__btn" x-on:click="copyGameLink" x-show="shareUrl" x-text="linkCopied ? 'Link Copied!' : 'Copy Share Link'"></button>
 						<a class="win-modal__btn" href="./">Main Menu</a>
@@ -627,30 +627,31 @@
 					<button class="ai-review-trigger__btn"
 						x-on:click="startAiReview('quick')"
 						x-bind:disabled="aiReviewComputing"
-						x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'Quick AI Review (1s/ply)'"></button>
+						x-text="aiReviewComputing && aiReviewActiveMode === 'quick' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : aiReviewModeLabel('quick')"></button>
 					<button class="ai-review-trigger__btn"
 						x-on:click="startAiReview('deep')"
 						x-bind:disabled="aiReviewComputing"
-						x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : 'Deep AI Review (10 ply)'"></button>
+						x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : aiReviewModeLabel('deep')"></button>
+				</div>
+				<div class="ai-review-trigger ai-review-error" x-show="aiReviewError" x-cloak role="alert">
+					<span x-text="aiReviewError"></span>
 				</div>
 
 				<!-- AI Review panel: identical structure to game.html so the same
 				     CSS rules apply. -->
 				<div class="ai-review-panel" x-show="reviewMode && aiReview" x-cloak>
 					<div class="ai-review-eval" x-text="aiReviewCurrentEvalText()"></div>
-					<div class="ai-review-stats" x-show="aiReview && aiReview.source === 'rust'" x-cloak>
-						<span>Rust engine, depth <strong x-text="aiReview && aiReview.engineDepth"></strong> at every position</span>
+					<div class="ai-review-stats" x-show="aiReviewEngineText()" x-cloak>
+						<span x-text="aiReviewEngineText()"></span>
 					</div>
 					<svg class="ai-review-graph" viewBox="0 0 480 80" preserveAspectRatio="none">
 						<line x1="0" y1="40" x2="480" y2="40" class="ai-review-graph__zero" />
 						<rect x="0" y="0" width="480" height="40" class="ai-review-graph__bg-red" />
 						<rect x="0" y="40" width="480" height="40" class="ai-review-graph__bg-blue" />
 						<polyline class="ai-review-graph__line" x-bind:points="aiReviewGraphPoints()" />
-						<template x-for="dot in aiReviewGraphDots()" x-bind:key="dot.ply">
-							<circle x-bind:cx="dot.x" x-bind:cy="dot.y" r="3.5"
-								x-bind:class="`ai-review-graph__dot ai-review-graph__dot--${dot.cls}`"
-								x-on:click="jumpToReviewPly(dot.ply + 1)" />
-						</template>
+						<!-- Blunder dots. Rendered as markup: a <template x-for> inside <svg> is not
+						     an HTML template, so Alpine evaluated its <circle> with no `dot`. -->
+						<g x-html="aiReviewGraphDotsSvg()" x-on:click="onReviewGraphDotClick($event)"></g>
 						<line x-bind:x1="aiReview && aiReview.winPctPerPly.length > 1 ? (reviewIndex / (aiReview.winPctPerPly.length - 1) * 480) : 0"
 							x-bind:x2="aiReview && aiReview.winPctPerPly.length > 1 ? (reviewIndex / (aiReview.winPctPerPly.length - 1) * 480) : 0"
 							y1="0" y2="80" class="ai-review-graph__cursor" />
@@ -1188,6 +1189,8 @@
 	<script src="static/scripts/engine/mcts.js"></script>
 	<script src="static/scripts/engine/minimax-ai.js"></script>
 	<script src="static/scripts/engine/caveman-ai.js"></script>
+	<!-- The Rust wasm engine runs the Quick/Deep AI reviews (game-review.js). -->
+	<script src="static/scripts/engine/rust-ai.js"></script>
 	<script src="static/scripts/engine/ai-player.js"></script>
 	<script src="static/scripts/engine/game-controller.js"></script>
 	<script src="static/scripts/engine/game-review.js"></script>
