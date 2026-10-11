@@ -281,7 +281,8 @@ def cmd_probe(a):
     cfg = {'cfg': [a.depth, a.time_ms, a.enum_cap, a.scan_depth,
                    hashlib.sha1(open(a.cases, 'rb').read()).hexdigest()[:12]],
            'engine': ENGINE_TAG}
-    done, stale = {}, 0
+    # Decided on the LAST row per task: that is the one the report reads.
+    last = {}
     if os.path.exists(a.out):
         for ln in open(a.out, encoding='utf-8'):
             try:
@@ -290,10 +291,10 @@ def cmd_probe(a):
                 continue
             if 'error' in d:
                 continue
-            if d.get('cfg') == cfg['cfg'] and d.get('engine') == cfg['engine']:
-                done[(d['g'], d['p'], d['kind'])] = d
-            else:
-                stale += 1
+            last[(d['g'], d['p'], d['kind'])] = d
+    done = {key: d for key, d in last.items()
+            if d.get('cfg') == cfg['cfg'] and d.get('engine') == cfg['engine']}
+    stale = len(last) - len(done)
     if stale:
         print(f'{stale} saved results came from another configuration or engine build: recomputing them', flush=True)
     mine = {key: t for key, t in tasks.items() if _owner(key[0], key[1], n) == k}

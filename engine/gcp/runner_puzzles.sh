@@ -58,6 +58,11 @@ gcs_get() {   # object, file
   curl -sf -m 600 -H "Authorization: Bearer $t" -o "$2" \
     "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")?alt=media"
 }
+gcs_del() {   # object (absent is fine)
+  local t; t=$(tok) || return 1
+  curl -s -m 60 -X DELETE -H "Authorization: Bearer $t" \
+    "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")" >/dev/null || true
+}
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
@@ -66,6 +71,8 @@ WORK=/opt/sigil
 rm -rf $WORK/repo
 mkdir -p $WORK/out && cd $WORK
 rm -f $WORK/out/COMPLETE $WORK/out/FAILED   # a restarted VM must not re-upload the last boot's marker
+# ...and the bucket's: same run id, so a stale COMPLETE would mask a FAILED rerun.
+for m in COMPLETE FAILED; do gcs_del "runs/$RUN/$m"; done
 export RUSTUP_HOME=$WORK/rustup CARGO_HOME=$WORK/cargo PATH=$WORK/cargo/bin:$PATH
 [ -x $WORK/cargo/bin/rustc ] || curl -sSf https://sh.rustup.rs \
   | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
