@@ -40,6 +40,17 @@ impl PyBoard {
 
     fn setup_initial(&mut self) { self.b.setup_initial(); }
 
+    /// Experiment-only spell access (spell_access_arena.py): bit p of `red` /
+    /// `blue` = that colour may use the spell in sigil slot p (0x1FF = all, the
+    /// real game). A slot a colour may not use never counts as charged for it.
+    fn set_access(&mut self, red: u16, blue: u16) {
+        self.b.access = [red & 0x1FF, blue & 0x1FF];
+        self.b.update();
+    }
+
+    #[getter]
+    fn access(&self) -> (u16, u16) { (self.b.access[0], self.b.access[1]) }
+
     fn set_stones(&mut self, red: Vec<u8>, blue: Vec<u8>) {
         self.b.stones = [0, 0];
         for i in red { self.b.stones[0] |= 1u64 << i; }
