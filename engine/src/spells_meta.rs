@@ -1,7 +1,8 @@
 // GENERATED from docs/static/scripts/engine/constants.js CORE_SPELLS + pack lists.
-// Scope: the 39 OFFICIAL spells, ids 0..38 (contiguous - verified).
-//   deferred playtest packs = 39..50 (Tectonic, Providence, Aftershock, Ambush)
-//   PANDA (fan-made, excluded per Robi) has NO ids in ai/config.py at all.
+// Scope: the 39 core spells (ids 0..38) plus Tectonic (39..41: Fissure, Rock
+// Slide, Bulwark) and Providence (42..44: Dividend, Annuity, Endowment), the ids
+// ai/config.py SPELL_TO_ID assigns. Retired packs = 45..50 (Aftershock,
+// Ambush). PANDA (fan-made, excluded per Robi) has NO ids in ai/config.py.
 
 /// Which sigil sizes a spell may be drawn into. The three roles have exactly
 /// 13 spells each (13+13+13 = 39), and `Charm` coincides EXACTLY with the
@@ -44,6 +45,12 @@ pub enum Resolve {
     Corrupt,
     DestroyExposed,
     RestrictedMove,
+    /// Tectonic: blast a node (wall) and every stone around it.
+    Fissure,
+    /// Tectonic: push every bordering enemy stone, all at once.
+    RockSlide,
+    /// Providence: add `count` stones to the caster's bank.
+    BankStones,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -57,7 +64,10 @@ pub struct SpellInfo {
     pub is_charm: bool,
 }
 
-pub const NUM_OFFICIAL_SPELLS: usize = 39;
+/// The core spells (ids 0..38): legal draws, opening tables and per-spell
+/// statistics are built for these only.
+pub const CORE_SPELL_COUNT: usize = 39;
+pub const NUM_OFFICIAL_SPELLS: usize = 45;
 pub const SPELLS: [SpellInfo; NUM_OFFICIAL_SPELLS] = [
     SpellInfo { name: "Flourish", resolve: Resolve::SoftMoves, role: Role::Ritual, count: 4, counts: (0, 0), is_static: false, is_charm: false }, // 0
     SpellInfo { name: "Carnage", resolve: Resolve::HardMoves, role: Role::Ritual, count: 4, counts: (0, 0), is_static: false, is_charm: false }, // 1
@@ -98,9 +108,15 @@ pub const SPELLS: [SpellInfo; NUM_OFFICIAL_SPELLS] = [
     SpellInfo { name: "Seal_of_Destruction", resolve: Resolve::None_, role: Role::Ritual, count: 0, counts: (0, 0), is_static: true, is_charm: false }, // 36
     SpellInfo { name: "Seal_of_Stone", resolve: Resolve::None_, role: Role::Sorcery, count: 0, counts: (0, 0), is_static: true, is_charm: false }, // 37
     SpellInfo { name: "Seal_of_Winter", resolve: Resolve::None_, role: Role::Charm, count: 0, counts: (0, 0), is_static: true, is_charm: true }, // 38
+    SpellInfo { name: "Fissure", resolve: Resolve::Fissure, role: Role::Ritual, count: 0, counts: (0, 0), is_static: false, is_charm: false }, // 39
+    SpellInfo { name: "Rock_Slide", resolve: Resolve::RockSlide, role: Role::Sorcery, count: 0, counts: (0, 0), is_static: false, is_charm: false }, // 40
+    SpellInfo { name: "Bulwark", resolve: Resolve::None_, role: Role::Charm, count: 0, counts: (0, 0), is_static: true, is_charm: true }, // 41
+    SpellInfo { name: "Dividend", resolve: Resolve::BankStones, role: Role::Charm, count: 1, counts: (0, 0), is_static: false, is_charm: true }, // 42
+    SpellInfo { name: "Annuity", resolve: Resolve::BankStones, role: Role::Sorcery, count: 2, counts: (0, 0), is_static: false, is_charm: false }, // 43
+    SpellInfo { name: "Endowment", resolve: Resolve::BankStones, role: Role::Ritual, count: 4, counts: (0, 0), is_static: false, is_charm: false }, // 44
 ];
 
-/// Spell ids by role, for building legal draws.
+/// Core spell ids by role, for building legal draws.
 pub const RITUALS: [u8; 13] = [0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36];
 pub const SORCERIES: [u8; 13] = [5, 6, 7, 8, 9, 16, 19, 22, 25, 28, 31, 34, 37];
 pub const CHARMS: [u8; 13] = [10, 11, 12, 13, 14, 17, 20, 23, 26, 29, 32, 35, 38];
@@ -131,3 +147,9 @@ pub const DECAY: u8 = 34;
 pub const HURRICANE: u8 = 24;
 pub const HAIL_STORM: u8 = 7;
 pub const GUST: u8 = 26;
+pub const FISSURE: u8 = 39;
+pub const ROCK_SLIDE: u8 = 40;
+pub const BULWARK: u8 = 41;
+pub const DIVIDEND: u8 = 42;
+pub const ANNUITY: u8 = 43;
+pub const ENDOWMENT: u8 = 44;

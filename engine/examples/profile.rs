@@ -15,6 +15,7 @@ fn main() {
     let depth: i32 = args[2].parse().expect("depth");
     let top: usize = args.get(3).map(|s| s.parse().unwrap()).unwrap_or(40);
     let text = std::fs::read_to_string(path).expect("positions file");
+    if let Ok(w) = std::env::var("POLICY_MIN") { sigil_engine::policy::set_policy(true, w.parse().unwrap()); }
     let guard = pprof::ProfilerGuardBuilder::default().frequency(997).build().expect("profiler");
     let mut nodes = 0u64;
     let t0 = std::time::Instant::now();

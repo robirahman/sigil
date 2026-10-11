@@ -143,9 +143,20 @@ impl Board {
         if k == 0 { return (out, 1); }
 
         // JS priority: 5-node -> [2,3,4,0,1]; 3-node -> [2,1,0]; singleton -> [0].
+        // A Fissure wall is never refilled (the sigil cannot be charged with
+        // one, so this only guards hand-built positions).
         let order: &[usize] = match n { 5 => &[2, 3, 4, 0, 1], 3 => &[2, 1, 0], _ => &[0] };
+        let open = mask & !self.walls;
+        let k = k.min(open.count_ones() as usize);
+        if k == 0 { return (out, 1); }
         let mut prio = 0u64;
-        for &i in &order[..k] { prio |= 1u64 << nodes[i]; }
+        let mut taken = 0;
+        for &i in order {
+            if taken == k { break; }
+            if open & (1u64 << nodes[i]) == 0 { continue; }
+            prio |= 1u64 << nodes[i];
+            taken += 1;
+        }
         out[0] = prio;
         let mut cnt = 1;
 
@@ -155,7 +166,7 @@ impl Board {
             for i in 0..n {
                 if bits & (1 << i) != 0 { mk |= 1u64 << nodes[i]; }
             }
-            if mk == prio { continue; }
+            if mk == prio || mk & self.walls != 0 { continue; }
             if cnt < MAX_KEEPS { out[cnt] = mk; cnt += 1; }
         }
         (out, cnt)
@@ -166,10 +177,10 @@ impl Board {
     pub fn keep_count(&self, pos: usize, c: Color) -> usize {
         let id = self.spells[pos];
         if (id as usize) < NUM_OFFICIAL_SPELLS && SPELLS[id as usize].is_charm { return 1; }
-        let n = SIGIL[pos].count_ones() as usize;
+        let n = (SIGIL[pos] & !self.walls).count_ones() as usize;
         let k = (self.mana[c.idx()] as usize).min(n);
         if k == 0 { return 1; }
-        // C(n, k) for n in {1,3,5}: never above C(5,2) = 10.
+        // C(n, k) for n in {1,3,5} (walls never refill): never above C(5,2) = 10.
         let mut num = 1usize;
         let mut den = 1usize;
         for i in 0..k { num *= n - i; den *= i + 1; }

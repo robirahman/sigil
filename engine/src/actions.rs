@@ -24,6 +24,10 @@
 //!   corrupt       converted[]                place own (converting)
 //!   starfall      node, node2, destroyed[]   place own x2, clear enemy
 //!   gust          destroyed[], kept[]        clear enemy, then place ENEMY at kept
+//!   fissure       node, destroyed[], wall    clear both colours, then wall (or none)
+//!   rock_slide    pushes[], destroyed[]      simultaneous pushes (applier re-resolves)
+//!   bank_stones   spell, banked              Providence: add to the caster's bank
+//!   move/hard_move providence: true          Providence placement (bank - 1)
 //!
 //! Because `hard_move` lets the applier recompute the push, the ORDER of actions
 //! matters: a later action must not depend on a board state the applier reached
@@ -42,32 +46,69 @@ pub struct JsAct {
     pub nodes: Vec<u8>,
     pub kept: Vec<u8>,
     pub spell: Option<&'static str>,
+    /// Fissure: the node turned into a wall (None when Bulwark shielded it).
+    pub wall: Option<u8>,
+    /// Rock Slide: every (from, to) push.
+    pub pushes: Vec<(u8, u8)>,
+    /// Providence: stones banked by this cast.
+    pub banked: Option<u8>,
+    /// Providence: this move placed a banked stone.
+    pub providence: bool,
 }
 
 impl JsAct {
     pub fn simple(t: &'static str, node: u8) -> Self {
         JsAct { t, node: Some(node), node2: None, pushed_to: None,
-                nodes: vec![], kept: vec![], spell: None }
+                nodes: vec![], kept: vec![], spell: None,
+                wall: None, pushes: vec![], banked: None, providence: false }
     }
     pub fn mv(node: u8, push_to: Option<u8>, is_enemy: bool, blink: bool) -> Self {
         let t = if blink { "blink" } else if is_enemy { "hard_move" } else { "move" };
         JsAct { t, node: Some(node), node2: None, pushed_to: push_to,
-                nodes: vec![], kept: vec![], spell: None }
+                nodes: vec![], kept: vec![], spell: None,
+                wall: None, pushes: vec![], banked: None, providence: false }
     }
     pub fn list(t: &'static str, nodes: Vec<u8>) -> Self {
-        JsAct { t, node: None, node2: None, pushed_to: None, nodes, kept: vec![], spell: None }
+        JsAct { t, node: None, node2: None, pushed_to: None, nodes, kept: vec![], spell: None,
+                wall: None, pushes: vec![], banked: None, providence: false }
     }
     pub fn pair(t: &'static str, a: u8, b: Option<u8>, destroyed: Vec<u8>) -> Self {
         JsAct { t, node: Some(a), node2: b, pushed_to: None,
-                nodes: destroyed, kept: vec![], spell: None }
+                nodes: destroyed, kept: vec![], spell: None,
+                wall: None, pushes: vec![], banked: None, providence: false }
     }
     pub fn cast(spell: &'static str, kept: Vec<u8>) -> Self {
         JsAct { t: "cast", node: None, node2: None, pushed_to: None,
-                nodes: vec![], kept, spell: Some(spell) }
+                nodes: vec![], kept, spell: Some(spell),
+                wall: None, pushes: vec![], banked: None, providence: false }
     }
     pub fn gust(destroyed: Vec<u8>, kept: Vec<u8>) -> Self {
         JsAct { t: "gust", node: None, node2: None, pushed_to: None,
-                nodes: destroyed, kept, spell: None }
+                nodes: destroyed, kept, spell: None,
+                wall: None, pushes: vec![], banked: None, providence: false }
+    }
+
+    pub fn fissure(target: u8, destroyed: Vec<u8>, wall: Option<u8>) -> Self {
+        let mut a = JsAct::pair("fissure", target, None, destroyed);
+        a.wall = wall;
+        a
+    }
+    pub fn rock_slide(pushes: &[crate::rockslide::Push], destroyed: Vec<u8>) -> Self {
+        let mut a = JsAct::list("rock_slide", destroyed);
+        a.pushes = pushes.iter().map(|p| (p.from, p.to)).collect();
+        a
+    }
+    pub fn bank(spell: &'static str, banked: u8) -> Self {
+        let mut a = JsAct::list("bank_stones", vec![]);
+        a.spell = Some(spell);
+        a.banked = Some(banked);
+        a
+    }
+    /// A Providence placement: an ordinary move/hard move flagged `providence`.
+    pub fn providence_mv(node: u8, push_to: Option<u8>, is_enemy: bool) -> Self {
+        let mut a = JsAct::mv(node, push_to, is_enemy, false);
+        a.providence = true;
+        a
     }
 
     /// The field name `nodes` maps to for this action type.
@@ -95,6 +136,19 @@ impl JsAct {
             let l: Vec<String> = self.kept.iter().map(|&n| format!("\"{}\"", NAMES[n as usize])).collect();
             parts.push(format!("\"kept\":[{}]", l.join(",")));
         }
+        if self.t == "fissure" {
+            match self.wall {
+                Some(w) => parts.push(format!("\"wall\":\"{}\"", NAMES[w as usize])),
+                None => parts.push("\"wall\":null".to_string()),
+            }
+        }
+        if self.t == "rock_slide" {
+            let l: Vec<String> = self.pushes.iter().map(|&(f, t)| format!(
+                "{{\"from\":\"{}\",\"to\":\"{}\"}}", NAMES[f as usize], NAMES[t as usize])).collect();
+            parts.push(format!("\"pushes\":[{}]", l.join(",")));
+        }
+        if let Some(b) = self.banked { parts.push(format!("\"banked\":{}", b)); }
+        if self.providence { parts.push("\"providence\":true".to_string()); }
         format!("{{{}}}", parts.join(","))
     }
 }

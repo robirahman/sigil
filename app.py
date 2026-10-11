@@ -686,12 +686,10 @@ def playgame(ws):
 					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
-					### Providence: restore the pre-turn schedules and zero the
-					### turn-scoped counters; the re-run turn re-shifts.
-					board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
-					                       'blue': list(snapshot.get("blue_pending", []))}
-					board.moves_left_this_turn = 0
-					board.moves_granted_this_turn = 0
+					### Providence: restore the pre-turn banks; the re-run turn
+					### re-opens the placement.
+					board.prov_bank = {'red': snapshot.get("red_bank", 0),
+					                  'blue': snapshot.get("blue_bank", 0)}
 
 					board.update(True)
 					reset_this_turn = True
@@ -904,12 +902,10 @@ def playprivategame(ws, privategamename):
 					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
-					### Providence: restore the pre-turn schedules and zero the
-					### turn-scoped counters; the re-run turn re-shifts.
-					board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
-					                       'blue': list(snapshot.get("blue_pending", []))}
-					board.moves_left_this_turn = 0
-					board.moves_granted_this_turn = 0
+					### Providence: restore the pre-turn banks; the re-run turn
+					### re-opens the placement.
+					board.prov_bank = {'red': snapshot.get("red_bank", 0),
+					                  'blue': snapshot.get("blue_bank", 0)}
 
 					board.update(True)
 					reset_this_turn = True
@@ -1098,8 +1094,8 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 			red.springlock = board.spelldict[state['red_springlock']]
 		if state['blue_springlock']:
 			blue.springlock = board.spelldict[state['blue_springlock']]
-		board.pending_moves = {'red': list(state.get('red_pending') or []),
-		                       'blue': list(state.get('blue_pending') or [])}
+		board.prov_bank = {'red': state.get('red_bank', 0),
+		                  'blue': state.get('blue_bank', 0)}
 		next_turn = 'Red' if state['turncounter'] % 2 == 0 else 'Blue'
 		red.jmessage("Imported position — " + next_turn + "'s turn.")
 	else:
@@ -1214,12 +1210,10 @@ def _run_local_1v1_game(ws, load_sfn=None, variant='standard'):
 					blue.spellcounter = snapshot["bluespellcounter"]
 					board.last_play = snapshot["last_play"]
 					board.last_player = snapshot["last_player"]
-					### Providence: restore the pre-turn schedules and zero the
-					### turn-scoped counters; the re-run turn re-shifts.
-					board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
-					                       'blue': list(snapshot.get("blue_pending", []))}
-					board.moves_left_this_turn = 0
-					board.moves_granted_this_turn = 0
+					### Providence: restore the pre-turn banks; the re-run turn
+					### re-opens the placement.
+					board.prov_bank = {'red': snapshot.get("red_bank", 0),
+					                  'blue': snapshot.get("blue_bank", 0)}
 
 					board.update(True)
 					send_sfn()
@@ -1355,8 +1349,8 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 			red.springlock = board.spelldict[state['red_springlock']]
 		if state['blue_springlock']:
 			blue.springlock = board.spelldict[state['blue_springlock']]
-		board.pending_moves = {'red': list(state.get('red_pending') or []),
-		                       'blue': list(state.get('blue_pending') or [])}
+		board.prov_bank = {'red': state.get('red_bank', 0),
+		                  'blue': state.get('blue_bank', 0)}
 		board.update()
 		human.jmessage("Resuming saved game...")
 
@@ -1501,12 +1495,10 @@ def _run_singleplayer_game(ws, ai_class=AIPlayer, difficulty='easy',
 				blue.spellcounter = snapshot["bluespellcounter"]
 				board.last_play = snapshot["last_play"]
 				board.last_player = snapshot["last_player"]
-				### Providence: restore the pre-turn schedules and zero the
-				### turn-scoped counters; the re-run turn re-shifts.
-				board.pending_moves = {'red': list(snapshot.get("red_pending", [])),
-				                       'blue': list(snapshot.get("blue_pending", []))}
-				board.moves_left_this_turn = 0
-				board.moves_granted_this_turn = 0
+				### Providence: restore the pre-turn banks; the re-run turn
+				### re-opens the placement.
+				board.prov_bank = {'red': snapshot.get("red_bank", 0),
+				                  'blue': snapshot.get("blue_bank", 0)}
 
 				board.update(True)
 				reset_this_turn = True

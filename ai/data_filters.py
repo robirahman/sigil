@@ -1,8 +1,8 @@
 """Filters applied at training data load time.
 
-The cutoff date for the Fireblast rule change is 2026-05-07. See
-TRAINING.md ("Rule changes and training-data hygiene") for the full
-explanation: any self-play / human game whose board includes Fireblast
+The cutoff date for the Fireblast rule change is 2026-05-07 (the
+explanation used to live in the since-deleted TRAINING.md; see git
+history and 2026-10-training-plan.md): any self-play / human game whose board includes Fireblast
 and was played before that date encodes the OLD (un-nerfed) value of
 the spell, and training the network on those positions teaches it the
 wrong cost-benefit for casting Fireblast.
@@ -116,3 +116,72 @@ def is_pre_competitive_fix_record(path, sfn,
     if file_date is None:
         return False
     return file_date < cutoff
+
+
+# Spells whose rules the providence-bank branch (2026-10) changes: the
+# Providence pack moves from per-turn extra-move schedules to a stone bank,
+# Fissure's blast also destroys the caster's stones, Bulwark also shields
+# against conversion and destruction. Every record holding one of them was
+# played under the OLD rules (the branch purges them from Firebase at deploy,
+# ai/purge_spell_games.py), so benchmarks and training data drop them.
+OCT2026_RULE_CHANGE_SPELLS = frozenset(
+    {'Fissure', 'Bulwark', 'Dividend', 'Annuity', 'Endowment'})
+
+
+def sfn_spell_names(sfn):
+    """Base spell names in an SFN's spell list (duplicate-variant aliases such
+    as 'Annuity~2' collapse to 'Annuity')."""
+    if not sfn:
+        return []
+    head = sfn.split(' ', 1)[0]
+    if '/' not in head:
+        return []
+    return [s.split('~')[0] for s in head.split('/', 1)[1].split(',') if s]
+
+
+# The rule change went live with PR #10 (merged 2026-10-07 00:23 UTC; the
+# Firebase purge of old-rule games ran right after). Records holding one of the
+# spells above are old-rules only if they predate this; later ones are valid.
+OCT2026_RULE_CHANGE_LIVE = datetime(2026, 10, 7, 0, 30)   # UTC
+OCT2026_RULE_CHANGE_LIVE_MS = int(
+    (OCT2026_RULE_CHANGE_LIVE - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+
+# Second 2026-10 change: Rock Slide's pile-up nerf (two or more stones pushed
+# into an occupied node now die and the stationary stone SURVIVES, so Rock
+# Slide never destroys more enemy stones than Fireblast). Every stored game
+# with Rock Slide from before it went live was purged from Firebase
+# (ai/purge_spell_games.py --spells Rock_Slide), and self-play data holding
+# Rock Slide from earlier engines (<= v28) encodes the old rule.
+ROCK_SLIDE_PILEUP_SPELLS = frozenset({'Rock_Slide'})
+ROCK_SLIDE_PILEUP_LIVE = datetime(2026, 10, 11, 4, 25)   # UTC (PR #17 merge + Firebase purge)
+ROCK_SLIDE_PILEUP_LIVE_MS = int(
+    (ROCK_SLIDE_PILEUP_LIVE - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+# (spells, epoch-ms the new rules went live) for every 2026-10 rule change.
+RULE_CHANGES = ((OCT2026_RULE_CHANGE_SPELLS, OCT2026_RULE_CHANGE_LIVE_MS),
+                (ROCK_SLIDE_PILEUP_SPELLS, ROCK_SLIDE_PILEUP_LIVE_MS))
+
+
+def is_old_rules_game(spell_names, played_ms):
+    """True iff a game with base spell names `spell_names` played at
+    `played_ms` (epoch ms; falsy = undated, counted as old) holds a spell
+    whose rules changed after it was played."""
+    names = {str(s).split('~')[0] for s in spell_names or ()}
+    for spells, live_ms in RULE_CHANGES:
+        if names & spells and (not played_ms or int(played_ms) < live_ms):
+            return True
+    return False
+
+
+def has_oct2026_rule_change_spell(sfn):
+    """True iff the SFN's draw holds a spell the 2026-10 rule change rewrote."""
+    return any(s in OCT2026_RULE_CHANGE_SPELLS for s in sfn_spell_names(sfn))
+
+
+def is_pre_oct2026_rule_change_record(sfn, played_ms):
+    """True iff the record holds a rewritten spell (either 2026-10 change,
+    RULE_CHANGES) AND was played before that change went live (`played_ms`:
+    the game's epoch-ms timestamp). A record with no timestamp counts as old:
+    the old-rule games were purged, so an undated one is suspect."""
+    return is_old_rules_game(sfn_spell_names(sfn), played_ms)

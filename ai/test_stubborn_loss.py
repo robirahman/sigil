@@ -137,7 +137,7 @@ function sfnBoard(sfn) {
 	sb.lock = { red: state.red_lock, blue: state.blue_lock };
 	sb.springlock = { red: state.red_springlock, blue: state.blue_springlock };
 	sb.score = state.score;
-	sb.pendingMoves = { red: state.red_pending || [], blue: state.blue_pending || [] };
+	sb.providenceBank = { red: state.red_bank || 0, blue: state.blue_bank || 0 };
 	sb.update();
 	return sb;
 }

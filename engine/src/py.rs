@@ -176,6 +176,7 @@ impl PyBoard {
                 crate::turn::Action::Blink { .. } => "blink",
                 crate::turn::Action::Dash { .. } => "dash",
                 crate::turn::Action::Cast { .. } => "cast",
+                crate::turn::Action::Place { .. } => "place",
                 crate::turn::Action::Pass => "pass",
             }).collect::<Vec<_>>().join("+")
         }).collect()
@@ -430,6 +431,170 @@ impl PyBoard {
             stubs, ranks, packed, trunc))
     }
 
+    /// Step 3 training label (`harness/selfplay_v2.py`): search THIS position at
+    /// a fixed depth with the shipped config (eval, engine-default width,
+    /// `SHIPPED_ADAPTIVE` unless given), recording every root move the final
+    /// iteration completed, then (if `play`) play the chosen turn.
+    ///
+    /// Returns (sfn_before, score, nodes, depth_completed, chosen packed,
+    /// candidates, n_universe, universe_truncated). Each candidate is
+    /// (packed actions, parts, score, bound, child nodes, urank): `bound` is
+    /// 0 exact / 1 upper / 2 lower (`exact` makes every score exact); `urank`
+    /// is the turn's index in `prior_dataset(universe_cap)` -- the generator's
+    /// ordered stream -- or -1 when the search reached it some other way
+    /// (opening book, pre-pass). Universe turns that carry no candidate entry
+    /// were NOT searched: they lie past the root width, which says nothing
+    /// about their quality.
+    #[pyo3(signature = (max_depth=4, eval_name="tfit", exact=false, universe_cap=400,
+                        history=vec![], play=true, width_scale=None, adaptive=None,
+                        keep_window=None, tt_bits=20))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn root_scores_and_play(&mut self, max_depth: i32, eval_name: &str, exact: bool,
+                            universe_cap: usize, history: Vec<u64>, play: bool,
+                            width_scale: Option<usize>,
+                            adaptive: Option<(f32, usize, usize)>,
+                            keep_window: Option<usize>, tt_bits: u32)
+        -> PyResult<(String, i32, u64, i32, Vec<u32>,
+                     Vec<(Vec<u32>, Vec<u16>, i32, u8, u64, i32)>, usize, bool)>
+    {
+        let c = self.b.to_move;
+        let before = self.b.to_sfn();
+        let (urows, _stubs, _ranks, upacked, trunc) = self.b.dataset_rows(c, universe_cap);
+        let index: std::collections::HashMap<&[u32], usize> =
+            upacked.iter().enumerate().map(|(i, p)| (p.as_slice(), i)).collect();
+        let mut s = crate::search::Search::new(tt_bits);
+        if let Some(w) = width_scale { s.set_width_scale(w); }
+        let (p, e, h) = adaptive.unwrap_or(crate::search::SHIPPED_ADAPTIVE);
+        s.set_adaptive(p, e, h);
+        if let Some(k) = keep_window { s.set_keep_window(k); }
+        s.weights = weights_by_name(eval_name)?;
+        s.set_record_root(true, exact);
+        for k in history { s.add_history(k); }
+        let (best, score, st) = s.go(&self.b, c, max_depth, 0);
+        let mut cands = Vec::with_capacity(s.root_scores().len());
+        for ((t, v), (bound, n)) in s.root_scores().iter().zip(s.root_details()) {
+            let packed: Vec<u32> = t.slice().iter().map(|a| crate::search::pack_action(*a)).collect();
+            let (parts, ur) = match index.get(packed.as_slice()) {
+                Some(&i) => (urows[i], i as i32),
+                None => (self.b.parts_outside_stream(t, c), -1),
+            };
+            cands.push((packed, parts.to_vec(), *v, *bound, *n, ur));
+        }
+        let chosen: Vec<u32> = best.map(|t| t.slice().iter()
+            .map(|a| crate::search::pack_action(*a)).collect()).unwrap_or_default();
+        if play {
+            if let Some(t) = best { self.b.apply_turn(&t, c); }
+            self.b.turn_counter += 1;
+            self.b.to_move = c.other();
+            self.b.update();
+        }
+        Ok((before, score, st.nodes, st.depth_completed, chosen, cands, upacked.len(), trunc))
+    }
+
+    /// Step 3.2 exploration: turns of the FULL enumeration whose resulting
+    /// position the ordered stream (drained to `stream_cap`) never produces,
+    /// deduplicated by result. Up to `k` are drawn round-robin over three
+    /// classes (dash with sacrifices, cast, other), shuffled by `seed` within
+    /// each class, so the sacrifice pairs -- by far the most numerous missing
+    /// turns -- cannot crowd out the cast outcomes and keeps. Turns that lose on
+    /// the spot (e.g. sacrificing the last stones) are counted but never drawn:
+    /// their value needs no search. Each draw is scored by a fixed depth `depth - 1` search of its resulting
+    /// position, negated to the mover's view (the same scale as a root score of
+    /// `root_scores_and_play(depth)`).
+    ///
+    /// Returns (picked, n_enumerated, n_stream, n_missing, n_suicide, enum_truncated);
+    /// each pick is (packed, parts, score, nodes, class) with class 0 = dash
+    /// with sacrifices, 1 = cast (no dash), 2 = other.
+    #[pyo3(signature = (depth=4, k=8, seed=0, enum_cap=20000, stream_cap=5000,
+                        eval_name="tfit", history=vec![], tt_bits=18))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn explore_unemitted(&self, depth: i32, k: usize, seed: u64, enum_cap: usize,
+                         stream_cap: usize, eval_name: &str, history: Vec<u64>, tt_bits: u32)
+        -> PyResult<(Vec<(Vec<u32>, Vec<u16>, i32, u64, u8)>, usize, usize, usize, usize, bool)>
+    {
+        use crate::turn::Action;
+        let c = self.b.to_move;
+        let child_of = |t: &crate::turn::Turn| {
+            let mut ch = self.b;
+            ch.apply_turn(t, c);
+            ch.turn_counter += 1;
+            ch.to_move = c.other();
+            ch.update();
+            ch
+        };
+        let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
+        let mut n_stream = 0usize;
+        for t in self.b.turns_ordered(c).take(stream_cap) {
+            seen.insert(ZOBRIST.key_js(&child_of(&t)));
+            n_stream += 1;
+        }
+        let (all, est) = self.b.enumerate_turns_capped(c, enum_cap);
+        let mut missing: [Vec<(crate::turn::Turn, Board)>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+        let mut n_missing = 0usize;
+        let mut n_suicide = 0usize;
+        let lost = if c == Color::Red { Outcome::BlueWins } else { Outcome::RedWins };
+        for t in all.iter() {
+            let ch = child_of(t);
+            if !seen.insert(ZOBRIST.key_js(&ch)) { continue; }
+            n_missing += 1;
+            if ch.outcome == lost { n_suicide += 1; continue; }
+            let acts = t.slice();
+            let class = if acts.iter().any(|a| matches!(a, Action::Dash { n_sacs, .. } if *n_sacs > 0)) { 0 }
+                        else if acts.iter().any(|a| matches!(a, Action::Cast { .. })) { 1 } else { 2 };
+            missing[class].push((*t, ch));
+        }
+        // xorshift, seeded through SplitMix64 so adjacent seeds differ
+        let mut x = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        x ^= x >> 31;
+        if x == 0 { x = 1; }
+        let mut next = || { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x };
+        for v in missing.iter_mut() {
+            for i in (1..v.len()).rev() {
+                let j = (next() % (i as u64 + 1)) as usize;
+                v.swap(i, j);
+            }
+        }
+        let mut picks: Vec<(crate::turn::Turn, Board, u8)> = Vec::new();
+        let mut at = [0usize; 3];
+        while picks.len() < k && (0..3).any(|cl| at[cl] < missing[cl].len()) {
+            for cl in 0..3 {
+                if picks.len() < k && at[cl] < missing[cl].len() {
+                    let (t, ch) = missing[cl][at[cl]];
+                    picks.push((t, ch, cl as u8));
+                    at[cl] += 1;
+                }
+            }
+        }
+        let mut s = crate::search::Search::new(tt_bits);
+        let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+        s.set_adaptive(p, e, h);
+        s.weights = weights_by_name(eval_name)?;
+        let mut out = Vec::with_capacity(picks.len());
+        for (t, ch, class) in picks {
+            let packed: Vec<u32> = t.slice().iter().map(|a| crate::search::pack_action(*a)).collect();
+            let parts = self.b.parts_outside_stream(&t, c).to_vec();
+            let (v, n) = match ch.outcome {
+                Outcome::Ongoing => {
+                    s.clear_history();
+                    // `history` already holds this position's own key, as the
+                    // other bindings' callers pass it (the game so far, inclusive).
+                    for key in history.iter() { s.add_history(*key); }
+                    let (_b, sc, st) = s.go(&ch, c.other(), (depth - 1).max(1), 0);
+                    (-sc, st.nodes)
+                }
+                // A turn that ends the game: the mover's own terminal score at ply 1.
+                o => {
+                    let won = (o == Outcome::RedWins) == (c == Color::Red);
+                    (if won { crate::search::WIN - 1 } else { -(crate::search::WIN - 1) }, 0)
+                }
+            };
+            out.push((packed, parts, v, n, class));
+        }
+        Ok((out, all.len(), n_stream, n_missing, n_suicide, est.truncated))
+    }
+
     /// Rich, close-to-the-board features for the offline learnability test.
     fn full_features(&self, c: &str) -> PyResult<Vec<f32>> {
         Ok(self.b.full_features(color(c)?))
@@ -452,7 +617,8 @@ impl PyBoard {
                         force_hints=None, root_resort=None, aspiration_steps=None,
                         adopt_partial=None, elastic=None, pvs=None, lmr=None,
                         use_history=None, exact_clock=None, nmp=None, lmr_quiet=None,
-                        tact_ext=None, singular=None))]
+                        tact_ext=None, singular=None, threads=None, smp_mode=None,
+                        split_workers=None, split_merge=None))]
     fn play_best(&mut self, time_ms: u64, max_depth: i32, tt_bits: u32, window: usize,
                  width_scale: Option<usize>, history: Vec<u64>, eval_name: &str,
                  legacy_order: bool, merge_min_width: Option<usize>,
@@ -474,22 +640,67 @@ impl PyBoard {
                  // §1.4: PVS on/off, LMR (ext, r) with 0 = off, history on/off
                  pvs: Option<bool>, lmr: Option<(usize, i32)>, use_history: Option<bool>,
                  exact_clock: Option<bool>, nmp: Option<(i32, u8)>, lmr_quiet: Option<usize>,
-                 tact_ext: Option<(u8, i32)>, singular: Option<i32>)
+                 tact_ext: Option<(u8, i32)>, singular: Option<i32>,
+                 // Search threads; None leaves the engine default (1). `smp_mode`
+                 // 0 = Lazy SMP, 1 = parallel root (Search::set_smp_mode).
+                 threads: Option<usize>, smp_mode: Option<u8>,
+                 // Browser option A emulation (2026-10 round 2): k independent
+                 // engines, each with its own table, searching root part i of k
+                 // (`Search::set_root_split`) on its own thread for the same time,
+                 // merged exactly as rust-ai.js `pickSplitResult` merges. None or
+                 // 1 = the ordinary single search.
+                 split_workers: Option<usize>,
+                 // How the split parts are merged: 0 = rust-ai.js pickSplitResult
+                 // (best final score); 1 = compare parts at the deepest depth EVERY
+                 // part completed (scores of different depths are not comparable),
+                 // then play the winning part's final move.
+                 split_merge: Option<u8>)
         -> PyResult<(i32, u64, f64, bool, Option<&'static str>, i32, bool)>
     {
         use std::time::Instant;
         let c = self.b.to_move;
-        let mut s = crate::search::Search::new(tt_bits);
-        configure_search(&mut s, window, width_scale, eval_name, legacy_order,
-                         merge_min_width, key_dash_reasons, key_dash_min_width,
-                         key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
-                         rank_oversample, width_shape, keep_window, mate_guard,
-                         force_hints, root_resort, aspiration_steps, adopt_partial,
-                         elastic, pvs, lmr, use_history, exact_clock, nmp, lmr_quiet,
-                         tact_ext, singular)?;
-        for k in history { s.add_history(k); }
+        let mk = || -> PyResult<crate::search::Search> {
+            let mut s = crate::search::Search::new(tt_bits);
+            configure_search(&mut s, window, width_scale, eval_name, legacy_order,
+                             merge_min_width, key_dash_reasons, key_dash_min_width,
+                             key_dash_extra, q_depth, q_cast_moves, aspiration, adaptive,
+                             rank_oversample, width_shape, keep_window, mate_guard,
+                             force_hints, root_resort, aspiration_steps, adopt_partial,
+                             elastic, pvs, lmr, use_history, exact_clock, nmp, lmr_quiet,
+                             tact_ext, singular)?;
+            if let Some(n) = threads { s.set_threads(n); }
+            if let Some(m) = smp_mode { s.set_smp_mode(m); }
+            for &k in &history { s.add_history(k); }
+            Ok(s)
+        };
         let t = Instant::now();
-        let (best, score, st) = s.go(&self.b, c, max_depth, time_ms);
+        let k = split_workers.unwrap_or(1);
+        let (best, score, st) = if k > 1 {
+            let mut parts: Vec<crate::search::Search> = (0..k)
+                .map(|i| { let mut s = mk()?; s.set_root_split(i as u32, k as u32); Ok(s) })
+                .collect::<PyResult<_>>()?;
+            // Every generator switch (incl. the thread-local policy) is copied
+            // into each worker thread, as each browser worker applies the
+            // shipped policy in its own module.
+            let sw = crate::search::ThreadSwitches::capture();
+            let b = self.b;
+            let results: Vec<_> = std::thread::scope(|sc| {
+                let hs: Vec<_> = parts.iter_mut().map(|s| {
+                    let sw = sw.clone();
+                    sc.spawn(move || {
+                        sw.apply();
+                        let mut per_depth: Vec<(i32, i32)> = Vec::new();
+                        let mut cb = |d: i32, sc: i32, _n: u64| per_depth.push((d, sc));
+                        let r = s.go_with_progress(&b, c, max_depth, time_ms, Some(&mut cb));
+                        (r, per_depth)
+                    })
+                }).collect();
+                hs.into_iter().map(|h| h.join().expect("split worker panicked")).collect()
+            });
+            split_pick(results, split_merge.unwrap_or(0))
+        } else {
+            mk()?.go(&self.b, c, max_depth, time_ms)
+        };
         let dt = t.elapsed().as_secs_f64();
         if let Some(turn) = best {
             self.b.apply_turn(&turn, c);
@@ -556,6 +767,7 @@ impl PyBoard {
             Some(crate::turn::Action::Blink { node, .. }) => ("blink".to_string(), node as i32),
             Some(crate::turn::Action::Dash { node, .. }) => ("dash".to_string(), node as i32),
             Some(crate::turn::Action::Cast { pos, .. }) => ("cast".to_string(), pos as i32),
+            Some(crate::turn::Action::Place { node, .. }) => ("place".to_string(), node as i32),
             Some(crate::turn::Action::Pass) | None => ("pass".to_string(), -1),
         };
         Ok((score, st.depth_completed, st.nodes, st.tt_hits, st.cutoffs,
@@ -600,7 +812,9 @@ impl PyBoard {
                  sacs[..n_sacs as usize].to_vec(), -1),
             crate::turn::Action::Cast { pos, keep, outcome } =>
                 ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
-            crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
+            crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
+                crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
         }).collect()).collect())
     }
 
@@ -629,6 +843,8 @@ impl PyBoard {
                 // so `keep` rides that slot and the arity is unchanged.
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -662,6 +878,8 @@ impl PyBoard {
                      sacs[..n_sacs as usize].to_vec(), -1),
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -684,6 +902,8 @@ impl PyBoard {
                      sacs[..n_sacs as usize].to_vec(), -1),
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect()).collect())
     }
@@ -814,6 +1034,8 @@ impl PyBoard {
                 // so `keep` rides that slot and the arity is unchanged.
                 crate::turn::Action::Cast { pos, keep, outcome } =>
                     ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+                crate::turn::Action::Place { node, push_to } =>
+                    ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
                 crate::turn::Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
             }).collect(),
         };
@@ -828,6 +1050,33 @@ impl PyBoard {
 
     /// Distinct resulting positions after casting the spell at `pos`, as
     /// (red_mask, blue_mask) pairs. Post clear-and-refill, pre finish_cast.
+    /// Resolved states (39 stone chars incl. walls, then `|red bank:blue bank`)
+    /// for casting at `pos` after the priority keep -- the differential
+    /// harnesses compare these against simboard.py.
+    fn outcome_states(&self, pos: usize, c: &str) -> PyResult<Vec<String>> {
+        let col = color(c)?;
+        let mut b = self.b;
+        b.cast_clear_and_refill(pos, col);
+        let (outs, _t) = b.resolve_outcomes(pos, col, crate::turn::OUTCOME_CAP);
+        Ok(outs.iter().map(state_string).collect())
+    }
+
+    /// The state each exhaustively enumerated turn leaves (see `outcome_states`).
+    fn turn_states(&self) -> PyResult<Vec<String>> {
+        let c = self.b.to_move;
+        let (turns, _st) = self.b.enumerate_turns(c);
+        Ok(turns.iter().map(|t| { let mut b = self.b; b.apply_turn(t, c); state_string(&b) }).collect())
+    }
+
+    #[setter] fn set_walls(&mut self, w: Vec<u8>) {
+        self.b.walls = 0;
+        for i in w { self.b.walls |= 1u64 << i; }
+        self.b.update();
+    }
+    #[setter] fn set_bank(&mut self, bk: (u8, u8)) { self.b.bank = [bk.0, bk.1]; }
+    #[getter] fn bank(&self) -> (u8, u8) { (self.b.bank[0], self.b.bank[1]) }
+    fn shielded(&self) -> Vec<u8> { mask_to_vec(self.b.shielded()) }
+
     fn cast_outcomes(&self, pos: usize, c: &str) -> PyResult<Vec<(u64, u64)>> {
         let col = color(c)?;
         let mut b = self.b;
@@ -848,6 +1097,7 @@ impl PyBoard {
             let a = match kind.as_str() {
                 "blink" => Action::Blink { node: node as u8, push_to: pt },
                 "move"  => Action::Move { node: node as u8, push_to: pt },
+                "place" => Action::Place { node: node as u8, push_to: pt },
                 "dash"  => {
                     let mut s = [0u8; 2];
                     for (i, v) in sacs.iter().enumerate().take(2) { s[i] = *v; }
@@ -984,6 +1234,8 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 ///   defaults; a harness that wants the shipped search passes
 ///   `se.DEFAULT_WIDTH_SCALE` / `se.SHIPPED_ADAPTIVE`.
 /// * `time_ms=0` = untimed, deepen to exactly `max_depth`.
+/// * `node_limit=N` stops the search at N nodes and keeps the last COMPLETED
+///   depth: a deterministic, machine-independent budget (`bench_suites.py`).
 /// * A fresh table per call, so results do not depend on the walk order.
 /// * A finished position is NOT searched (`over=True`): a terminal root would
 ///   score every child as a mate and report "win in 1".
@@ -996,12 +1248,12 @@ fn pick_move_actions(sfn: &str, time_ms: u64, max_depth: i32, tt_bits: u32,
 #[pyfunction]
 #[pyo3(signature = (sfn, eval_name, max_depth=6, time_ms=0, tt_bits=20,
                     history_sfns=vec![], width_scale=None, adaptive=None, width_shape=None,
-                    probe_sfn=None))]
+                    probe_sfn=None, node_limit=None))]
 #[allow(clippy::too_many_arguments)]
 fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, time_ms: u64,
                 tt_bits: u32, history_sfns: Vec<String>, width_scale: Option<usize>,
                 adaptive: Option<(f32, usize, usize)>, width_shape: Option<usize>,
-                probe_sfn: Option<String>)
+                probe_sfn: Option<String>, node_limit: Option<u64>)
     -> PyResult<Bound<'py, pyo3::types::PyDict>>
 {
     use std::time::Instant;
@@ -1030,6 +1282,7 @@ fn analyze<'py>(py: Python<'py>, sfn: &str, eval_name: &str, max_depth: i32, tim
     s.weights = w;
     if let Some((p, e, h)) = adaptive { s.set_adaptive(p, e, h); }
     if let Some(w) = width_shape { s.set_width_shape(w); }
+    s.node_limit = node_limit;
     // Board + mana key, as `rank_of_result`: the recorded after-position's
     // turn number and side token differ from a root child's.
     s.root_probe = probe_sfn.as_deref().map(|ps| {
@@ -1273,6 +1526,15 @@ fn rank_of_landing(sfn: &str, result_sfn: &str, cap: usize, enum_cap: usize,
 /// default on, per thread.
 #[pyfunction]
 fn set_opening_book(on: bool) { crate::opening::set_opening_book(on); }
+
+/// Restrict the competitive first placement to `mask`'s nodes (0 = off); see
+/// `opening::set_opening_force`.
+#[pyfunction]
+fn set_opening_force(mask: u64) { crate::opening::set_opening_force(mask); }
+
+/// A/B switch for the learned opening selector (`opening_learned.rs`), default off.
+#[pyfunction]
+fn set_opening_learned(on: bool) { crate::opening_learned::set_opening_learned(on); }
 
 /// A/B switch for the selector's Syzygy rules (`opening::set_opening_syzygy`:
 /// veto of the exposed opposite slots, forced Syzygy reply, blue's strength
@@ -1777,6 +2039,7 @@ fn turn_from_tuples(acts: &[(String, i32, i32, Vec<u8>, i32)]) -> crate::turn::T
         let a = match kind.as_str() {
             "blink" => Action::Blink { node: *node as u8, push_to: pt },
             "move"  => Action::Move { node: *node as u8, push_to: pt },
+            "place" => Action::Place { node: *node as u8, push_to: pt },
             "dash"  => {
                 let mut s = [0u8; 2];
                 for (i, v) in sacs.iter().enumerate().take(2) { s[i] = *v; }
@@ -1790,6 +2053,11 @@ fn turn_from_tuples(acts: &[(String, i32, i32, Vec<u8>, i32)]) -> crate::turn::T
     t
 }
 
+fn state_string(b: &crate::board::Board) -> String {
+    let sfn = b.to_sfn();
+    format!("{}|{}:{}", &sfn[..crate::topology::N], b.bank[0], b.bank[1])
+}
+
 fn turn_to_tuples(t: &crate::turn::Turn) -> Vec<(String, i32, i32, Vec<u8>, i32)> {
     use crate::turn::Action;
     t.slice().iter().map(|a| match *a {
@@ -1798,6 +2066,7 @@ fn turn_to_tuples(t: &crate::turn::Turn) -> Vec<(String, i32, i32, Vec<u8>, i32)
         Action::Dash { sacs, n_sacs, node, push_to } =>
             ("dash".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), sacs[..n_sacs as usize].to_vec(), -1),
         Action::Cast { pos, keep, outcome } => ("cast".to_string(), outcome as i32, keep as i32, vec![], pos as i32),
+        Action::Place { node, push_to } => ("place".to_string(), node as i32, push_to.map_or(-1, |x| x as i32), vec![], -1),
         Action::Pass => ("pass".to_string(), -1, -1, vec![], -1),
     }).collect()
 }
@@ -1927,9 +2196,210 @@ fn human_move_dash_turn(sfn: &str, result_sfn: &str)
     Ok(Vec::new())
 }
 
+
+// ---------------------------------------------------------------------------
+// Step 4: the learned generator policy (policy.rs)
+// ---------------------------------------------------------------------------
+
+use crate::turn::{Action as PAction, Turn as PTurn};
+/// Merge root-split parts. Mode 0 is rust-ai.js `pickSplitResult`, natively:
+/// among the parts that returned a move, prefer those that completed a depth;
+/// take the highest final root score, ties to the deeper part. Mode 1 compares
+/// the parts at the deepest depth every completed part reached (`per_depth`
+/// holds each part's (depth, score) per completed iteration), ties to the part
+/// that went deeper, and plays the winner's final move. Nodes are summed over
+/// every part that returned a move.
+#[allow(clippy::type_complexity)]
+fn split_pick(results: Vec<((Option<crate::turn::Turn>, i32, crate::search::SearchStats), Vec<(i32, i32)>)>,
+              mode: u8)
+    -> (Option<crate::turn::Turn>, i32, crate::search::SearchStats)
+{
+    let total: u64 = results.iter().filter(|r| r.0.0.is_some()).map(|r| r.0.2.nodes).sum();
+    let ok: Vec<usize> = (0..results.len()).filter(|&i| results[i].0.0.is_some()).collect();
+    if ok.is_empty() {
+        return results.into_iter().next().expect("at least one split part").0;
+    }
+    let done: Vec<usize> = ok.iter().copied().filter(|&i| results[i].0.2.depth_completed > 0).collect();
+    let pool = if done.is_empty() { ok } else { done };
+    let key = |i: usize| -> (i32, i32) {
+        let r = &results[i];
+        if mode == 1 {
+            let common = pool.iter().map(|&j| results[j].1.iter().map(|x| x.0).max().unwrap_or(0)).min().unwrap_or(0);
+            let at = r.1.iter().rev().find(|x| x.0 == common).map(|x| x.1);
+            (at.unwrap_or(r.0.1), r.0.2.depth_completed)
+        } else {
+            (r.0.1, r.0.2.depth_completed)
+        }
+    };
+    let mut best = pool[0];
+    for &i in &pool {
+        if key(i) > key(best) { best = i; }
+    }
+    let mut out = results.into_iter().nth(best).unwrap().0;
+    out.2.nodes = total;
+    out
+}
+
+fn turn_from_packed(packed: &[u32]) -> PTurn {
+    let mut acts = packed.iter().filter_map(|&v| crate::search::unpack_action(v));
+    let mut t = match acts.next() { Some(a) => PTurn::single(a), None => return PTurn::single(PAction::Pass) };
+    for a in acts { t = t.push_pub(a); }
+    t
+}
+
+/// Training example for the generator policy: walk the policy tree along the
+/// packed turn and return (z, levels, targets, n_opts per level, n_feats per
+/// option, flat feature ids), or None for a position the policy stream hands
+/// to the shipped stream (competitive opening, no legal first move).
+#[pyfunction]
+#[pyo3(signature = (sfn, packed, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
+fn policy_example(sfn: &str, packed: Vec<u32>, window: usize, keep_window: usize)
+    -> PyResult<Option<(Vec<f32>, Vec<u8>, Vec<i32>, Vec<u32>, Vec<u8>, Vec<u16>)>>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let t = turn_from_packed(&packed);
+    let Some((z, levels)) = crate::policy::policy_example(&b, b.to_move, &t, window, keep_window) else { return Ok(None) };
+    let (mut lv, mut tg, mut no, mut nf, mut ff) = (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for l in levels {
+        lv.push(l.level); tg.push(l.target); no.push(l.opts.len() as u32);
+        for o in &l.opts { nf.push(o.n); ff.extend_from_slice(o.slice()); }
+    }
+    Ok(Some((z.to_vec(), lv, tg, no, nf, ff)))
+}
+
+/// Install policy weights for this thread (flat NF x PW, row-major); `None`
+/// restores the compiled ones.
+#[pyfunction]
+#[pyo3(signature = (flat=None))]
+fn set_policy_weights(flat: Option<Vec<f32>>) -> PyResult<()> {
+    match flat {
+        Some(v) => crate::policy::set_policy_weights(&v).map_err(pyo3::exceptions::PyValueError::new_err),
+        None => { crate::policy::reset_policy_weights(); Ok(()) }
+    }
+}
+
+/// Search switch: use the policy stream at nodes whose width budget is at
+/// least `min_width` (per thread; off by default).
+#[pyfunction]
+#[pyo3(signature = (on, min_width=0))]
+fn set_policy(on: bool, min_width: usize) { crate::policy::set_policy(on, min_width); }
+
+/// Round 3 exploration tail of the policy stream (`policy::Explore`), per
+/// thread: mode bit 0 = cast tail, bit 1 = dash tail; mode 0 = off (the thread
+/// default). The shipped setting since v28 is `SHIPPED_EXPLORE`.
+#[pyfunction]
+#[pyo3(signature = (mode, cast_window=32, dash_limit=64, dash_per=4, dash_tried=32, base=256, step=16, slot_first=0, slot_every=0))]
+fn set_policy_explore(mode: u8, cast_window: usize, dash_limit: usize, dash_per: usize, dash_tried: usize,
+                      base: i32, step: i32, slot_first: usize, slot_every: usize) {
+    crate::policy::set_policy_explore(crate::policy::Explore {
+        mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first, slot_every });
+}
+
+/// Continuation penalty (1/256 nat) at nodes whose width is below `free_width`.
+#[pyfunction]
+#[pyo3(signature = (penalty, free_width=usize::MAX))]
+fn set_policy_cost(penalty: i32, free_width: usize) { crate::policy::set_policy_cost(penalty, free_width); }
+
+/// (NF, PW, feature groups [(name, base, size)]).
+#[pyfunction]
+fn policy_layout() -> (usize, usize, Vec<(String, u16, u16)>) {
+    (crate::policy::NF, crate::policy::PW,
+     crate::policy::FEATURE_GROUPS.iter().map(|&(n, b, s)| (n.to_string(), b, s)).collect())
+}
+
+/// Rank of the turn producing `result_sfn` in the POLICY stream of `sfn`
+/// (-1 if not within `cap`), turns generated, and internal nodes expanded
+/// when it was found (or at the end).
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW, pen=0))]
+fn policy_rank_of_result(sfn: &str, result_sfn: &str, cap: usize, window: usize, keep_window: usize, pen: i32)
+    -> PyResult<(i64, usize, usize)>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let mut it = b.turns_policy_pen(c, window, keep_window, pen);
+    let (mut rank, mut generated, mut exp) = (-1i64, 0usize, 0usize);
+    while generated < cap {
+        let Some(t) = it.next() else { break };
+        generated += 1;
+        let mut ch = b; ch.apply_turn(&t, c);
+        if key(&ch.to_sfn()) == want { rank = (generated - 1) as i64; exp = it.expanded; break; }
+    }
+    if rank < 0 { exp = it.expanded; }
+    Ok((rank, generated, exp))
+}
+
+/// Same-budget rank in BOTH streams for a packed target turn: (policy rank,
+/// shipped-stream rank), each -1 past `cap`. Matching is by resulting board.
+#[pyfunction]
+#[pyo3(signature = (sfn, packed, cap=600, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW, pen=0))]
+fn policy_vs_stream_rank(sfn: &str, packed: Vec<u32>, cap: usize, window: usize, keep_window: usize, pen: i32)
+    -> PyResult<(i64, i64)>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let t = turn_from_packed(&packed);
+    let mut want = b; want.apply_turn(&t, c);
+    let wk = want.state_key();
+    let find = |it: &mut dyn Iterator<Item = PTurn>| -> i64 {
+        for (i, x) in it.take(cap).enumerate() {
+            let mut ch = b; ch.apply_turn(&x, c);
+            if ch.state_key() == wk && ch.outcome == want.outcome { return i as i64; }
+        }
+        -1
+    };
+    let rp = find(&mut b.turns_policy_pen(c, window, keep_window, pen));
+    let rs = find(&mut b.turns_ordered_keeps(c, window, 0, keep_window));
+    Ok((rp, rs))
+}
+
+/// Generator diagnosis for one recorded turn (round 3): every exhaustively
+/// enumerated turn reaching `result_sfn` (at most `max_turns`), each with its
+/// packed actions and `policy::policy_diag`. A JSON list.
+#[pyfunction]
+#[pyo3(signature = (sfn, result_sfn, enum_cap=2_000_000, max_turns=64, window=crate::search::DEFAULT_WINDOW, keep_window=crate::turn_iter::DEFAULT_KEEP_WINDOW))]
+fn policy_diag(sfn: &str, result_sfn: &str, enum_cap: usize, max_turns: usize, window: usize, keep_window: usize)
+    -> PyResult<String>
+{
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let c = b.to_move;
+    let key = |s: &str| -> String {
+        let p: Vec<&str> = s.split_whitespace().collect();
+        if p.len() < 4 { return s.to_string(); }
+        format!("{} {}", p[0], p[3])
+    };
+    let want = key(result_sfn);
+    let (turns, _st) = b.enumerate_turns_capped(c, enum_cap);
+    let mut out = Vec::new();
+    for t in &turns {
+        let mut ch = b; ch.apply_turn(t, c);
+        if key(&ch.to_sfn()) != want { continue; }
+        let packed: Vec<String> = t.slice().iter().map(|a| crate::search::pack_action(*a).to_string()).collect();
+        let d = crate::policy::policy_diag(&b, c, t, window, keep_window);
+        out.push(format!("{{\"packed\":[{}],\"diag\":{}}}", packed.join(","), d));
+        if out.len() >= max_turns { break; }
+    }
+    Ok(format!("[{}]", out.join(",")))
+}
+
 #[pymodule]
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
+    m.add_function(wrap_pyfunction!(policy_example, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_weights, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_cost, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_layout, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_rank_of_result, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_vs_stream_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(policy_diag, m)?)?;
+    m.add_function(wrap_pyfunction!(set_policy_explore, m)?)?;
     m.add_class::<SearchSession>()?;
     m.add_function(wrap_pyfunction!(bench_primitives, m)?)?;
     m.add_function(wrap_pyfunction!(pick_successor, m)?)?;
@@ -1954,6 +2424,8 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_decisive_lead, m)?)?;
     m.add_function(wrap_pyfunction!(set_lead_bounds_v2, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_book, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_force, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_learned, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_syzygy, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_contest, m)?)?;
     m.add_function(wrap_pyfunction!(set_opening_carnage, m)?)?;
@@ -1971,6 +2443,14 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Exported so a harness uses the SHIPPED widening scale as its baseline rather
     // than restating 1. Every eval arena so far ran at scale 1 because the harness
     // hardcoded it, which is fine historically but would confound any future test.
+    m.add("SHIPPED_EVAL", crate::eval::SHIPPED_EVAL)?;
+    m.add("SHIPPED_POLICY", crate::policy::SHIPPED_POLICY)?;
+    // v28: the exploration tail as the argument tuple of `set_policy_explore`
+    // (mode, cast_window, dash_limit, dash_per, dash_tried, base, step, slot_first,
+    // slot_every), so `se.set_policy_explore(*se.SHIPPED_EXPLORE)` applies it.
+    let x = crate::policy::SHIPPED_EXPLORE;
+    m.add("SHIPPED_EXPLORE", (x.mode, x.cast_window, x.dash_limit, x.dash_per, x.dash_tried, x.base, x.step,
+                              x.slot_first, x.slot_every))?;
     m.add("DEFAULT_WIDTH_SCALE", crate::search::DEFAULT_WIDTH_SCALE)?;
     // The shipped adaptive-widening point, exported for the same reason: a
     // harness that wants the shipped search must pass it, and every literal
@@ -1994,6 +2474,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("REASONS_ALL", crate::key_dash::REASONS_ALL)?;
     m.add("OUTCOME_CAP", crate::turn::OUTCOME_CAP)?;
     m.add("NODE_NAMES", crate::topology::NAMES.to_vec())?;
+    m.add("SIGIL_MASKS", crate::topology::SIGIL.to_vec())?;
     m.add("HAND_FEATURE_NAMES", crate::features::HAND_NAMES.to_vec())?;
     m.add("TURN_FEATURE_NAMES", crate::features::TURN_NAMES.to_vec())?;
     m.add("SPELL_NAMES", crate::spells_meta::SPELLS.iter()

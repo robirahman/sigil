@@ -166,6 +166,8 @@
 			<h2>Spells</h2>
 			<p class="intro">How the 39 official spells stack up: a tier list, which spells beat which head to head, and which work well together. These are the developers' judgements from play, not statistics.</p>
 			<nav class="jump" aria-label="Sections">
+				<a href="spells/">Spells Directory</a>
+				<a href="packs/">Spell Packs</a>
 				<a href="#tiers">Tier list</a>
 				<a href="#matchups">Matchups</a>
 				<a href="#synergies">Synergies</a>
@@ -218,6 +220,25 @@
 				</div>
 				<div class="mx-wrap"><div id="synergy-chart" class="msg">Loading…</div></div>
 				<div class="info" id="synergy-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it.</span></div>
+			</section>
+
+			<section class="chart-section" id="packs-overview">
+				<h3>Official Spell Packs</h3>
+				<div class="sec-links"><a href="packs/">View All Spell Packs &rarr;</a> · <a href="spells/">View All 45 Official Spells &rarr;</a></div>
+				<p class="note">Explore the full roster of spells, lore, and card mechanics for each official pack:</p>
+				<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">
+					<a href="packs/core.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Core</a>
+					<a href="packs/springtime.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Springtime</a>
+					<a href="packs/celestial.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Celestial</a>
+					<a href="packs/inferno.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Inferno</a>
+					<a href="packs/tempest.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Tempest</a>
+					<a href="packs/flood.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Flood</a>
+					<a href="packs/autumn.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Autumn</a>
+					<a href="packs/gloom.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Gloom</a>
+					<a href="packs/covenant.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Covenant</a>
+					<a href="packs/tectonic.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Tectonic</a>
+					<a href="packs/providence.html" class="quick-nav-link" style="padding:6px 14px; background:var(--color-surface-raised); border:1px solid var(--color-border); border-radius:6px; color:var(--color-text-warm); text-decoration:none;">Providence</a>
+				</div>
 			</section>
 
 			<p class="method" id="method"></p>
@@ -299,15 +320,19 @@
 			applyFocus();
 		}
 
+		const slug = n => n.toLowerCase().replace(/_/g, '-');
+
 		function cellInfo(kind, r, c) {
-			if (r === c) return `<b>${pretty(r)}</b>`;
+			const rLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html"><b>${pretty(r)}</b></a>`;
+			if (r === c) return `${rLink} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} Page &rarr;</a>`;
+			const cLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(c)}.html"><b>${pretty(c)}</b></a>`;
 			const k = r + '|' + c, m = match[k], s = syn[k];
 			const mTxt = m === undefined ? 'matchup not rated yet' : m === 0 ? 'even matchup'
 				: m > 0 ? `<b>${pretty(r)}</b> favoured (${m > 1 ? '++' : '+'})` : `<b>${pretty(c)}</b> favoured (${m < -1 ? '++' : '+'})`;
 			const sTxt = s === undefined ? 'synergy not rated yet' : SYN_WORDS[s] + (s ? ` (${SYM[MATCH_CLS[s]]})` : '');
 			return kind === 'match'
-				? `<b>${pretty(r)}</b> vs <b>${pretty(c)}</b>: ${mTxt}<div class="t">Held together: ${sTxt}.</div>`
-				: `<b>${pretty(r)}</b> + <b>${pretty(c)}</b>: ${sTxt}<div class="t">Head to head: ${mTxt.replace(/<\/?b>/g, '')}.</div>`;
+				? `${rLink} vs ${cLink}: ${mTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} &rarr;</a><div class="t">Held together: ${sTxt}.</div>`
+				: `${rLink} + ${cLink}: ${sTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} &rarr;</a><div class="t">Head to head: ${mTxt.replace(/<\/?b>/g, '')}.</div>`;
 		}
 
 		function wire(target, infoId, kind) {

@@ -2911,3 +2911,44 @@ widen what the generator can produce, and each costs about 0.1 ply: `dash4` meas
 loses 34 Elo. The surprise audit's generator-gap class (102 of 284 falls) is real, but a blanket budget increase
 pays for it at every node; the v16 lesson repeats -- coverage has to arrive as a few targeted key moves, not as a
 wider stream. **`nmp` (3, 1)**: no difference from (2, 1); stays (2, 1).
+
+## Rust AI tier ratings, re-anchored on engine v28 (2026-10-10)
+
+The four Rust tiers were re-rated on the engine the site now ships (v28: `nnue_spell3`, the learned generator
+policy and the round 3 exploration tail). **Hard is pinned at 1600**; the other three come from the
+maximum-likelihood Elo fit over a 60-game round-robin, the same design and fit as the 2026-09-24 run:
+each pair of tiers played 5 draws twice with colours swapped, competitive variant, each tier as the site plays
+it (0.1 / 1 / 10 / 60 s per move, table 2^16 / 2^18 / 2^20 / 2^21, one table per game, pondering for Hard and Very
+Hard). Fresh draws, seeds `7_100_000 + 100*pair + k` (arms `engine/gcp/arms/tier_roundrobin_2026-10.txt`), runs
+20261010T222851Z-sigil-tier-rr-a and -b (2 x c3d-highcpu-60, one game per physical core).
+
+`tier_roundrobin.py` had gone stale since the September run: it still searched with `tfit` and never set the
+generator policy, so it measured the v17-era search rather than the site's. It now takes `se.SHIPPED_EVAL`,
+`SHIPPED_POLICY` and `SHIPPED_EXPLORE` from the module (PR #16). Every game's CONFIG line was checked against them.
+
+No game was drawn or unfinished. Red won 37 of 60.
+
+| winner \ loser | Easy | Medium | Hard | Very Hard | total |
+|---|---|---|---|---|---|
+| Easy | | 4 | 3 | 0 | 7-23 |
+| Medium | 6 | | 4 | 1 | 11-19 |
+| Hard | 7 | 6 | | 5 | 18-12 |
+| Very Hard | 10 | 9 | 5 | | 24-6 |
+
+| tier | before | new | 95% |
+|---|---|---|---|
+| Easy | 786 | **1371** | +-182 |
+| Medium | 1315 | **1458** | +-171 |
+| Hard | 1590 | **1600** | pinned |
+| Very Hard | 1440 | **1733** | +-178 |
+
+Written to `users/` and `leaderboard/` for `__ai_rust_{easy,medium,hard,very_hard}__` with the service account.
+The short-budget tiers closed most of the gap: Easy (0.1 s) went from 2-28 in September to 7-23, including 3-7
+against Hard. The v25-v28 eval and generator gains are worth more per node at shallow depth. Ten games per pair
+still cannot order Easy against Medium or Hard against Very Hard with confidence (the intervals overlap). As in
+September, the arena runs the native engine, so every tier searches somewhat faster than its wasm build does in
+the browser.
+
+The games are kept as training data: each one ends with a `RECORD` line (every position plus per-ply search
+stats), and `engine/harness/upload_arena_games.py` wrote all 60 to Firebase `ai_arena_games/rr20261010_*`, a
+node closed to clients by `database.rules.json`.

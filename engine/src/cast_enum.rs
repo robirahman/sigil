@@ -14,8 +14,9 @@
 //! zero-stones immediate-loss rule on an intermediate state. Recording what the
 //! resolver actually did avoids both hazards.
 //!
-//! Mid-resolution nothing outside `stones` changes, so `stones` alone identifies a
-//! state and is a sound dedupe key.
+//! Mid-resolution nothing outside `stones`, `walls` (Fissure) and `bank`
+//! (Providence) changes, so `Board::state_key` identifies a state and is a
+//! sound dedupe key.
 
 use std::collections::HashSet;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -103,17 +104,19 @@ impl<L: Log> Frontier<L> {
     /// so callers that already derived are unaffected.
     fn push(&mut self, mut b: Board, log: L) {
         if self.items.len() >= self.cap { self.truncated = true; return; }
-        let key = (b.stones[0], b.stones[1]);
+        // Stones, walls and banks: Fissure outcomes can share stones and
+        // differ only in the wall.
+        let key = b.state_key();
         match self.seen.as_mut() {
             Some(set) => { if set.insert(key) { b.update(); self.items.push((b, log)); } }
             None => {
-                if self.items.iter().any(|(x, _)| x.stones == b.stones) { return; }
+                if self.items.iter().any(|(x, _)| x.state_key() == key) { return; }
                 b.update();
                 self.items.push((b, log));
                 if self.items.len() > LINEAR_DEDUPE_MAX {
                     let mut set = StoneSet::with_capacity_and_hasher(
                         self.items.len() * 4, Default::default());
-                    for (x, _) in &self.items { set.insert((x.stones[0], x.stones[1])); }
+                    for (x, _) in &self.items { set.insert(x.state_key()); }
                     self.seen = Some(set);
                 }
             }
@@ -238,7 +241,7 @@ impl Board {
             Resolve::DestroyExposed => {
                 let empty = self.empty();
                 let mut doomed = 0u64;
-                let mut m = enemy_of(self);
+                let mut m = enemy_of(self) & !self.shielded();
                 while m != 0 {
                     let i = m.trailing_zeros() as usize; m &= m - 1;
                     if (ADJ[i] & empty).count_ones() >= 2 { doomed |= 1u64 << i; }
@@ -254,7 +257,7 @@ impl Board {
             Resolve::Gust => {
                 // Pickup is forced; where each lands is the caster's choice, and the
                 // outcome depends only on the SET of landing nodes.
-                let picked = enemy_of(self) & Board::dilate(self.mine(c));
+                let picked = enemy_of(self) & Board::dilate(self.mine(c)) & !self.shielded();
                 if picked == 0 { return (start, false); }
                 let n = picked.count_ones() as usize;
                 let mut b0 = *self;
@@ -375,12 +378,14 @@ impl Board {
                     else { return (start, false) };
                 let charm_node = SIGIL[charm].trailing_zeros() as u8;
                 let mut f = Frontier::new(cap);
-                if self.mine(c) & (1u64 << charm_node) == 0 {
+                // Bulwark-shielded stones can't be pushed; walls can't be entered.
+                if (self.mine(c) | self.walls | self.shielded()) & (1u64 << charm_node) == 0 {
                     self.branch_move(&L::default(), 1u64 << charm_node, c, &mut f);
                 } else { f.push(*self, L::default()); }
                 let mid = f.take();
                 let m = SIGIL[sorcery];
-                Board::branch_move_n(mid, 3, c, cap, move |b| m & !b.mine(c))
+                Board::branch_move_n(mid, 3, c, cap,
+                                     move |b| m & !b.mine(c) & !b.walls & !b.shielded())
             }
             Resolve::Scatter => {
                 let mut f = Frontier::new(cap);
@@ -424,11 +429,12 @@ impl Board {
             Resolve::HailStorm => {
                 let mut cur = start;
                 let mut trunc = false;
+                let shield = self.shielded();
                 for p in 0..6 {
-                    if SIGIL[p] & enemy_of(self) == 0 { continue; }
+                    if SIGIL[p] & enemy_of(self) & !shield == 0 { continue; }
                     let mut next = Frontier::new(cap);
                     for (b, log) in &cur {
-                        let victims = SIGIL[p] & b.theirs(c);
+                        let victims = SIGIL[p] & b.theirs(c) & !shield;
                         if victims == 0 { next.push(*b, log.clone()); continue; }
                         let mut m = victims;
                         while m != 0 {
@@ -462,7 +468,8 @@ impl Board {
                 for (a, b_) in self.starfall_pairs(c) {
                     let mut b = *self;
                     b.stones[c.idx()] |= (1u64 << a) | (1u64 << b_);
-                    let kills = (ADJ[a as usize] | ADJ[b_ as usize]) & b.theirs(c);
+                    b.update();
+                    let kills = (ADJ[a as usize] | ADJ[b_ as usize]) & b.theirs(c) & !b.shielded();
                     b.stones[c.other().idx()] &= !kills;
                     f.push(b, L::default().plus_with(|| JsAct::pair("starfall", a, Some(b_), mask_vec(kills))));
                 }
@@ -482,8 +489,10 @@ impl Board {
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::StormFront => {
+                // One stone at a time: Bulwark is re-checked before each pick,
+                // so taking the Bulwark stone first exposes the locked spell.
                 let mut f = Frontier::new(cap);
-                let mut ea = enemy_of(self);
+                let mut ea = enemy_of(self) & !self.shielded();
                 if ea == 0 { return (start, false); }
                 while ea != 0 {
                     let a = ea.trailing_zeros() as u8; ea &= ea - 1;
@@ -493,7 +502,7 @@ impl Board {
                     if b1.outcome != Outcome::Ongoing {
                         f.push(b1, L::default().plus_with(|| JsAct::list("storm_front", vec![a]))); continue;
                     }
-                    let mut eb = b1.theirs(c);
+                    let mut eb = b1.theirs(c) & !b1.shielded();
                     if eb == 0 { f.push(b1, L::default().plus_with(|| JsAct::list("storm_front", vec![a]))); continue; }
                     while eb != 0 {
                         let b_ = eb.trailing_zeros() as u8; eb &= eb - 1;
@@ -507,19 +516,53 @@ impl Board {
             Resolve::Corrupt => {
                 let eligible = enemy_of(self) & Board::dilate(self.mine(c));
                 let el = mask_vec(eligible);
-                let k = el.len().min(3);
+                // Conversions are one at a time and Bulwark is re-checked
+                // before each, so a set is legal iff some order converts every
+                // member unshielded at its turn: convert the currently
+                // unshielded members until none is left. `order` (filled when
+                // legal) is that sequence, which `applyAITurn` replays.
+                fn legal_order(base: &Board, set: &[u8], c: Color) -> Option<Vec<u8>> {
+                    let mut b = *base;
+                    let mut left: Vec<u8> = set.to_vec();
+                    let mut order = Vec::with_capacity(set.len());
+                    while !left.is_empty() {
+                        let sh = b.shielded();
+                        let i = left.iter().position(|&n| sh & (1u64 << n) == 0)?;
+                        let n = left.remove(i);
+                        b.stones[c.other().idx()] &= !(1u64 << n);
+                        b.stones[c.idx()] |= 1u64 << n;
+                        b.update();
+                        order.push(n);
+                    }
+                    Some(order)
+                }
+                // The largest convertible set size (up to three).
+                let mut k = el.len().min(3);
                 let mut f = Frontier::new(cap);
                 let mut acc: Vec<u8> = Vec::new();
+                fn any_legal(el: &[u8], k: usize, s: usize, acc: &mut Vec<u8>, base: &Board,
+                             c: Color) -> bool {
+                    if acc.len() == k { return legal_order(base, acc, c).is_some(); }
+                    for i in s..el.len() {
+                        acc.push(el[i]);
+                        let ok = any_legal(el, k, i + 1, acc, base, c);
+                        acc.pop();
+                        if ok { return true; }
+                    }
+                    false
+                }
+                while k > 0 && !any_legal(&el, k, 0, &mut acc, self, c) { k -= 1; }
                 fn rec<L: Log>(el: &[u8], k: usize, s: usize, acc: &mut Vec<u8>,
                                base: &Board, c: Color, f: &mut Frontier<L>) {
                     if acc.len() == k {
+                        let Some(order) = legal_order(base, acc, c) else { return };
                         let mut b = *base;
                         let mut bits = 0u64;
                         for &n in acc.iter() { bits |= 1u64 << n; }
                         b.stones[c.other().idx()] &= !bits;
                         b.stones[c.idx()] |= bits;
                         b.update();
-                        let log0 = L::default().plus_with(|| JsAct::list("corrupt", acc.clone()));
+                        let log0 = L::default().plus_with(|| JsAct::list("corrupt", order.clone()));
                         if b.outcome != Outcome::Ongoing { f.push(b, log0); return; }
                         let mut own = b.mine(c);
                         if own == 0 { f.push(b, log0); return; }
@@ -543,7 +586,7 @@ impl Board {
                 let tr = f.truncated; (f.take(), tr)
             }
             Resolve::Fireblast => {
-                let doomed = enemy_of(self) & Board::dilate(self.mine(c));
+                let doomed = enemy_of(self) & Board::dilate(self.mine(c)) & !self.shielded();
                 let mut b0 = *self;
                 b0.stones[c.other().idx()] &= !doomed;
                 b0.update();
@@ -588,7 +631,7 @@ impl Board {
                     let mut lands = Frontier::new(cap);
                     self.branch_move(&L::default(), 1u64 << node, c, &mut lands);
                     for (b, l) in lands.take() {
-                        let adj = ADJ[node as usize] & b.theirs(c);
+                        let adj = ADJ[node as usize] & b.theirs(c) & !b.shielded();
                         if adj == 0 { f.push(b, l); continue; }
                         let mut a = adj;
                         while a != 0 {
@@ -622,6 +665,42 @@ impl Board {
                 }
                 if f.is_empty() { return (start, false); }
                 let tr = f.truncated; (f.take(), tr)
+            }
+
+            // ---- Tectonic / Providence ----
+            Resolve::Fissure => {
+                // Every legal target (any node not already a wall), deduped by
+                // the resulting position.
+                let mut f = Frontier::new(cap);
+                for t in 0..crate::topology::N as u8 {
+                    if self.walls & (1u64 << t) != 0 { continue; }
+                    let mut b = *self;
+                    let (d, wall) = b.apply_fissure(t);
+                    f.push(b, L::default().plus_with(|| JsAct::fissure(t, mask_vec(d), wall)));
+                }
+                if f.is_empty() { return (start, false); }
+                let tr = f.truncated; (f.take(), tr)
+            }
+            Resolve::RockSlide => {
+                // Only the maximum-net outcomes, one per distinct board -- the
+                // set the JS and Python enumerators offer.
+                let shield = self.shielded();
+                let (_, opts) = self.rock_slide_optimal_pushes(c, cap.min(256));
+                let mut f = Frontier::new(cap);
+                for pushes in opts {
+                    let mut b = *self;
+                    let (lost, _) = b.apply_rock_slide(&pushes, shield);
+                    f.push(b, L::default().plus_with(|| JsAct::rock_slide(&pushes, lost.clone())));
+                }
+                if f.is_empty() { return (start, false); }
+                let tr = f.truncated; (f.take(), tr)
+            }
+            Resolve::BankStones => {
+                let mut b = *self;
+                b.bank[c.idx()] = b.bank[c.idx()].saturating_add(info.count);
+                b.update();
+                let n = info.count;
+                (vec![(b, L::default().plus_with(|| JsAct::bank(info.name, n)))], false)
             }
         }
     }

@@ -30,7 +30,7 @@ def test_fissure():
     assert board.stones['a11'] == DESTROYED, "Target node should become a permanent wall"
     assert board.stones['a1'] is None, "Adjacent node 'a1' enemy stone should be destroyed (normal empty)"
     assert board.stones['c10'] is None, "Adjacent node 'c10' enemy stone should be destroyed (normal empty)"
-    assert board.stones['a6'] == 'red', "Caster stone on 'a6' should NOT be destroyed"
+    assert board.stones['a6'] is None, "Caster's own adjacent stone on 'a6' is destroyed too (2026-10 nerf)"
     print("Fissure test passed!")
 
 def test_fissure_target_regardless_of_occupant():

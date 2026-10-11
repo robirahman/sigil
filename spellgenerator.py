@@ -57,16 +57,16 @@ TECTONIC_RITUALS = ['Fissure']
 TECTONIC_SORCERIES = ['Rock_Slide']
 TECTONIC_CHARMS = ['Bulwark']
 
-# Providence expansion (scheduled extra moves).
+# Providence expansion (stones banked into a per-player Providence bank).
 PROVIDENCE_RITUALS = ['Endowment']
 PROVIDENCE_SORCERIES = ['Annuity']
 PROVIDENCE_CHARMS = ['Dividend']
 
 # Experimental expansion: the unofficial, permanently unrated home for spells
 # still being playtested before release. It need not fill all three slots.
-EXPERIMENTAL_RITUALS = []
-EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids']
-EXPERIMENTAL_CHARMS = []
+EXPERIMENTAL_RITUALS = ['Shatter', 'Petrify', 'Fulgurite']
+EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak']
+EXPERIMENTAL_CHARMS = ['Silence']
 EXPERIMENTAL_SPELLS = set(EXPERIMENTAL_RITUALS + EXPERIMENTAL_SORCERIES + EXPERIMENTAL_CHARMS)
 
 # Spells whose games stay unrated (Experimental, permanently); app.py's

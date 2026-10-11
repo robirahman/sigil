@@ -1,0 +1,21 @@
+{
+ "surprise": {
+  "old_confirmed": 284,
+  "old_kept": 284,
+  "old_dropped": {},
+  "old_missing_game": 0,
+  "new_confirmed": 33,
+  "total": 317
+ },
+ "human_finds": {
+  "confirmed": 120,
+  "kept": 120,
+  "dropped": {},
+  "without_history": 0
+ },
+ "final_blow": {
+  "games_probed": 1885,
+  "misses_kept": 26,
+  "dropped": {}
+ }
+}

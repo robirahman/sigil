@@ -25,6 +25,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 EVAL_NAME = 'tfit'
+from eval_games import engine_eval  # noqa: E402  (SIGIL_AUDIT_ENGINE=shipped)
 
 
 def probe(item):
@@ -41,7 +42,7 @@ def probe(item):
            'root_successors': sol.get('root_successors'), 'solver_s': round(time.time() - t0, 2),
            'solver_ok': bool(sol.get('ok'))}
     for d in (1, 2):
-        r = se.analyze(sfn, EVAL_NAME, max_depth=d, time_ms=0, history_sfns=hist, **kw)
+        r = se.analyze(sfn, engine_eval(se), max_depth=d, time_ms=0, history_sfns=hist, **kw)
         m = r['mate_in_turns']
         out[f'd{d}_sees'] = bool(m and m > 0)
         out[f'd{d}_stones'] = r['stones']

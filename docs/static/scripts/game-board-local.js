@@ -54,6 +54,9 @@ document.addEventListener('alpine:init', () => {
 			previousBoardState: {},
 			redSpellCounter: 0,
 			redLock: '',
+			// Providence bank sizes (badge beside the dice).
+			redBank: 0,
+			blueBank: 0,
 			score: 'unset',
 			// Deathmatch removes spell counters; hides the dice in the UI.
 			isDeathmatch: false,
@@ -465,6 +468,16 @@ document.addEventListener('alpine:init', () => {
 				// Each rematch is a new game: drop the persistence id so it
 				// mints a fresh one instead of reusing the finished game's slot.
 				params.delete('id');
+				if (this.aiMode) {
+					params.set('ai', this.aiMode);
+				}
+				if (this.gameVariant && this.gameVariant !== 'standard') {
+					params.set('variant', this.gameVariant);
+				}
+				if (this.clockOpt && typeof GameClock !== 'undefined') {
+					const lbl = GameClock.label(this.clockOpt);
+					if (lbl) params.set('clock', lbl);
+				}
 				const qs = params.toString();
 				window.location.href = window.location.pathname + (qs ? '?' + qs : '');
 			},
@@ -532,6 +545,9 @@ document.addEventListener('alpine:init', () => {
 
 			rematchStage: 'idle',  // 'idle' | 'rematch'
 			isAiGame: !!new URLSearchParams(window.location.search).get('ai'),
+			aiMode: new URLSearchParams(window.location.search).get('ai') || null,
+			gameVariant: 'standard',
+			clockOpt: null,
 
 			openRematchMenu() {
 				this.rematchStage = this.rematchStage === 'rematch' ? 'idle' : 'rematch';
@@ -637,6 +653,8 @@ document.addEventListener('alpine:init', () => {
 				}
 				this.redSpellCounter = state.red_spellcounter || 0;
 				this.blueSpellCounter = state.blue_spellcounter || 0;
+				this.redBank = state.red_bank || 0;
+				this.blueBank = state.blue_bank || 0;
 				this.redLock = state.red_lock || '';
 				this.blueLock = state.blue_lock || '';
 				this.score = state.score || 'unset';
@@ -655,6 +673,11 @@ document.addEventListener('alpine:init', () => {
 
 			handleDash() {
 				this.sendEvent('dash');
+				this.actionList = [];
+			},
+
+			handleSkipProvidence() {
+				this.sendEvent('skip_providence');
 				this.actionList = [];
 			},
 
@@ -760,7 +783,7 @@ document.addEventListener('alpine:init', () => {
 				if (this.awaiting === 'node') {
 					this.sendEvent(node);
 				} else if (this.awaiting === 'action') {
-					if (this.actionList.includes('move')) {
+					if (this.actionList.includes('move') || this.actionList.includes('providence')) {
 						this.sendEvent(node);
 					}
 				}
@@ -911,12 +934,32 @@ document.addEventListener('alpine:init', () => {
 					}
 				}
 
-				// Auth manager for rated AI games + community annotations from AI review.
+				_this.aiMode = aiMode || null;
+				_this.isAiGame = !puzzle && !!aiMode;
+				_this.gameVariant = gameVariant;
+				_this.clockOpt = clockOpt;
+
+				if (!puzzle) {
+					try {
+						const u = new URL(window.location.href);
+						if (_gameId) u.searchParams.set('id', _gameId);
+						if (aiMode) u.searchParams.set('ai', aiMode);
+						if (gameVariant && gameVariant !== 'standard') u.searchParams.set('variant', gameVariant);
+						if (clockOpt && typeof GameClock !== 'undefined') {
+							const lbl = GameClock.label(clockOpt);
+							if (lbl) u.searchParams.set('clock', lbl);
+						}
+						history.replaceState(null, '', u.toString());
+					} catch (e) { /* ignore */ }
+				}
+
+				// Auth manager for rated AI games, the finished-game upload (vs AI
+				// and local 1v1) and community annotations from AI review.
 				let _aiAuthManager = null;
-				if (aiMode && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
+				if (!puzzle && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
 					_aiAuthManager = new AuthManager();
 					_aiAuthManager.onAuthChanged(async (user) => {
-						if (user && !user.isAnonymous) {
+						if (aiMode && user && !user.isAnonymous) {
 							try {
 								await _aiAuthManager.loadProfile(firebase.database());
 								_this.annotationMode = !!_aiAuthManager.annotationMode;
@@ -948,8 +991,19 @@ document.addEventListener('alpine:init', () => {
 				if (!puzzle && typeof OfflineGameQueue !== 'undefined') {
 					OfflineGameQueue.installAutoflush({
 						onFlush: (result) => {
-							if (result.uploaded > 0) {
-								_this.messageHistory.push('Synced ' + result.uploaded + ' offline game' + (result.uploaded === 1 ? '' : 's') + '.');
+							// Filter out any game currently being finished on this board,
+							// as _recordFinishedGame handles its own rating/post-game message.
+							const nonLocalResults = (result.results || []).filter((r) => r.id !== _this._activeFinishingQueuedId && r.ok);
+							if (nonLocalResults.length > 0) {
+								const rated = nonLocalResults.filter((r) => r.eloResult && typeof r.eloResult.delta === 'number');
+								if (rated.length > 0) {
+									const totalDelta = rated.reduce((sum, r) => sum + r.eloResult.delta, 0);
+									const sign = totalDelta >= 0 ? '+' : '';
+									const latestElo = rated[rated.length - 1].eloResult.newElo;
+									_this.messageHistory.push('Synced ' + nonLocalResults.length + ' offline game' + (nonLocalResults.length === 1 ? '' : 's') + '. Rating: ' + sign + totalDelta + ' (' + latestElo + ').');
+								} else {
+									_this.messageHistory.push('Synced ' + nonLocalResults.length + ' offline game' + (nonLocalResults.length === 1 ? '' : 's') + '.');
+								}
 							}
 						},
 					});
@@ -1044,11 +1098,11 @@ document.addEventListener('alpine:init', () => {
 					// it) BEFORE tier dispatch, so a hand-off to the JS engine tier
 					// carries through to the AI record, saves and labels.
 					//
-					// The engine implements the 39 OFFICIAL spells only and keys casts
-					// and locks by spell id, resolving a cast at the FIRST slot holding
-					// that id (engine/src/cast.rs). So it cannot play the unofficial
-					// packs (Tectonic / Providence / Panda / Experimental) and cannot
-					// hold two copies of one spell. Rules:
+					// The engine implements the 39 core spells plus Tectonic and
+					// Providence, and keys casts and locks by spell id, resolving a
+					// cast at the FIRST slot holding that id (engine/src/cast.rs). So
+					// it cannot play the unofficial packs (Panda / Experimental) and
+					// cannot hold two copies of one spell. Rules:
 					//   1. Allow Duplicates variant -> the JS tier with the same time
 					//      budget plays; the normal draw applies (repeats from the
 					//      player's packs).
@@ -1063,7 +1117,8 @@ document.addEventListener('alpine:init', () => {
 						rust_deep: 'very_hard', rust_native: 'very_hard',
 					};
 					const _RUST_PACKS = ['core', ...CORE_SUBPACK_KEYS, 'springtime', 'celestial', 'fury',
-					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+					                     'tempest', 'flood', 'autumn', 'gloom', 'covenant',
+					                     'tectonic', 'providence'];
 					// The Cataclysm pentagon board (65 nodes) is JS-engine only: the
 					// Rust engine's bitboards are 64-bit and the NN models are
 					// trained on the 39-node core board. Hand its Rust / NN tiers to
@@ -1839,8 +1894,8 @@ document.addEventListener('alpine:init', () => {
 						score,
 						// Non-node payload fields must be destructured OUT
 						// here or the ...nodes rest treats them as node names.
-						redpending,
-						bluepending,
+						redbank,
+						bluebank,
 						...nodes
 					} = changedBoardState;
 
@@ -1864,6 +1919,12 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (isValidStateKey(score)) {
 						_this.score = score;
+					}
+					if (isValidStateKey(redbank)) {
+						_this.redBank = redbank;
+					}
+					if (isValidStateKey(bluebank)) {
+						_this.blueBank = bluebank;
 					}
 
 					_this.previousBoardState = payload;
@@ -2029,13 +2090,24 @@ document.addEventListener('alpine:init', () => {
 						}
 					}
 
-					// Process Elo for rated AI games
-					if (aiMode) {
-						_processAiElo(payload.winner, aiMode);
+					// Save the finished game (and rate it, for AI games). Puzzles
+					// are never recorded.
+					if (!puzzle) {
+						_recordFinishedGame(payload.winner, aiMode);
 					}
 				}
 
-				async function _processAiElo(winner, difficulty) {
+				/**
+				 * Queue the finished game for upload to Firebase, then try to
+				 * upload it. The record goes to localStorage before anything
+				 * touches the network, so a game finished offline (or a tab
+				 * closed mid-upload) syncs the next time the site is reachable.
+				 * `difficulty` is the AI tier, or null for a local 1v1 game
+				 * (stored unranked under the player for both colors). With no
+				 * one signed in it is saved as an unranked guest game under this
+				 * device's guest id.
+				 */
+				async function _recordFinishedGame(winner, difficulty) {
 					// Wait for auth state to resolve if needed
 					if (_aiAuthManager && !_aiAuthManager.currentUser) {
 						await new Promise(resolve => {
@@ -2044,14 +2116,13 @@ document.addEventListener('alpine:init', () => {
 						});
 					}
 
-					if (!_aiAuthManager || !_aiAuthManager.isAuthenticated) {
-						_this.messageHistory.push('Sign in to track your rating.');
+					if (typeof OfflineGameQueue === 'undefined' || typeof firebase === 'undefined') {
+						if (difficulty) _this.messageHistory.push('Rating update unavailable.');
 						return;
 					}
-
-					if (typeof processEloClientSide !== 'function' || typeof OfflineGameQueue === 'undefined') {
-						_this.messageHistory.push('Rating update unavailable.');
-						return;
+					const isGuest = !_aiAuthManager || !_aiAuthManager.isAuthenticated;
+					if (isGuest && difficulty) {
+						_this.messageHistory.push('Sign in to track your rating. This game is saved as a guest game.');
 					}
 
 					// Unrated spell sets: the unofficial Panda expansion and the
@@ -2061,14 +2132,11 @@ document.addEventListener('alpine:init', () => {
 
 					try {
 						const db = firebase.database();
-						const aiUid = '__ai_' + difficulty + '__';
-						const humanUid = _aiAuthManager.uid;
-
-						// Try to bootstrap the human's profile, but don't block on it —
-						// if we're offline, the queue will retry later.
-						if (navigator.onLine !== false) {
-							try { await _aiAuthManager.ensureUserProfile(db); } catch (e) { /* offline; flush later */ }
-						}
+						const humanUid = isGuest ? OfflineGameQueue.guestId() : _aiAuthManager.uid;
+						// Local 1v1: the signed-in player sits on both sides.
+						const aiUid = difficulty ? '__ai_' + difficulty + '__' : humanUid;
+						// (The human's /users profile is bootstrapped by the queue
+						// at upload time, so nothing here waits on the network.)
 
 						const spellNamesArr = _engineRef && _engineRef.board ? _engineRef.board.spellNames : ['none'];
 						const gameTurns = _engineRef ? _engineRef._gameLog : [];
@@ -2081,8 +2149,8 @@ document.addEventListener('alpine:init', () => {
 						const finalSfnForRecord = (_engineRef && _engineRef.board)
 							? boardToSfn(_engineRef.board) : null;
 						const aiLabel = _aiAuthManager && _aiAuthManager.userProfile && _aiAuthManager.userProfile.displayName;
-						const humanName = aiLabel || _aiAuthManager.displayName || 'You';
-						const aiName = _aiNameFor(difficulty);
+						const humanName = isGuest ? 'Guest' : (aiLabel || _aiAuthManager.displayName || 'You');
+						const aiName = difficulty ? _aiNameFor(difficulty) : humanName;
 						// Variant the engine actually played under (read from the
 						// live board so we don't drift from the URL query param
 						// in edge cases like rematch/reconnect).
@@ -2091,7 +2159,7 @@ document.addEventListener('alpine:init', () => {
 						const _isDuplicates = variantHasDuplicates(recordVariant);
 						const _isScramble = variantHasScramble(recordVariant);
 						const _isPentagon = variantHasPentagon(recordVariant);
-						const _unrated = _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
+						const _unrated = isGuest || !difficulty || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2131,6 +2199,8 @@ document.addEventListener('alpine:init', () => {
 							timeControl: (typeof GameClock !== 'undefined') ? GameClock.toTimeControl(clockOpt) : { type: 'none' },
 							endReason: _this._lastEndReason || 'play',
 						};
+						if (!difficulty) gameRecord.mode = 'local_1v1';
+						if (isGuest) gameRecord.guest = true;
 
 						// Attach any annotations the human made during the game.
 						if (_this.annotations && Object.keys(_this.annotations).length > 0) {
@@ -2143,16 +2213,25 @@ document.addEventListener('alpine:init', () => {
 						// Persist the game to localStorage first so a crash or close
 						// during upload never loses the result. The flush is then
 						// best-effort: if we're offline, it just stays queued.
-						const queuedId = OfflineGameQueue.enqueue({
+						const queuedId = OfflineGameQueue.enqueue(Object.assign({
+							uid: humanUid,
+							guest: isGuest,
 							roomCode: roomCode,
 							roomRecord: roomRecord,
 							gameRecord: gameRecord,
+						}, difficulty ? {
 							aiUid: aiUid,
 							aiName: aiName,
 							difficulty: difficulty,
-						});
+						} : {}));
+						if (!queuedId) {
+							_this.messageHistory.push('Could not save this game: browser storage is full.');
+							return;
+						}
 
-						if (_isDeathmatch) {
+						if (!difficulty || isGuest) {
+							// Local 1v1 and guest games are never rated; no notice needed.
+						} else if (_isDeathmatch) {
 							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
 						} else if (_isScramble) {
 							_this.messageHistory.push('Unrated: Scramble games do not affect rating.');
@@ -2164,12 +2243,24 @@ document.addEventListener('alpine:init', () => {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 
-						const flushResult = await OfflineGameQueue.flushAll(db, processEloClientSide);
+						_this._activeFinishingQueuedId = queuedId;
+						let flushResult;
+						try {
+							flushResult = await OfflineGameQueue.flushAll(db,
+								typeof processEloClientSide === 'function' ? processEloClientSide : null);
+						} finally {
+							_this._activeFinishingQueuedId = null;
+						}
 						const mine = flushResult.results.find((r) => r.id === queuedId);
 						const stillQueued = OfflineGameQueue.peek().some((it) => it.id === queuedId);
 						if (stillQueued) {
-							if (navigator.onLine === false) {
-								_this.messageHistory.push('Offline — game saved. Rating will sync when you reconnect.');
+							// No result for it: the flush did not reach it (nothing
+							// attempted), same as offline from the player's view.
+							const offline = !mine || mine.error === 'offline' || mine.error === 'unreachable';
+							if (offline) {
+								_this.messageHistory.push(difficulty && !isGuest
+									? 'Offline — game saved. It will upload and your rating will sync when you reconnect.'
+									: 'Offline — game saved. It will upload when you reconnect.');
 							} else {
 								_this.messageHistory.push('Upload failed; will retry automatically.');
 							}
@@ -2184,9 +2275,18 @@ document.addEventListener('alpine:init', () => {
 						}
 
 						// If older offline games rode along on this flush, note that.
-						const olderUploaded = flushResult.results.filter((r) => r.id !== queuedId && r.ok).length;
+						const olderResults = flushResult.results.filter((r) => r.id !== queuedId && r.ok);
+						const olderUploaded = olderResults.length;
 						if (olderUploaded > 0) {
-							_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '.');
+							const olderRated = olderResults.filter((r) => r.eloResult && typeof r.eloResult.delta === 'number');
+							if (olderRated.length > 0) {
+								const olderDelta = olderRated.reduce((sum, r) => sum + r.eloResult.delta, 0);
+								const olderSign = olderDelta >= 0 ? '+' : '';
+								const olderLatestElo = olderRated[olderRated.length - 1].eloResult.newElo;
+								_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '. Rating: ' + olderSign + olderDelta + ' (' + olderLatestElo + ').');
+							} else {
+								_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '.');
+							}
 						}
 					} catch (e) {
 						console.error('Failed to process AI Elo:', e);

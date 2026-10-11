@@ -76,10 +76,14 @@
 use crate::board::{Board, Color, Outcome};
 
 thread_local! {
-    static OPENING_BOOK: std::cell::Cell<bool> = std::cell::Cell::new(true);
+    static OPENING_BOOK: std::cell::Cell<bool> = std::cell::Cell::new(false);
 }
-/// A/B switch for the opening selector (default on), per thread like the
-/// pre-pass switches: the arena sets it before every move.
+/// A/B switch for the opening selector, per thread like the pre-pass switches: the
+/// arena sets it before every move. OFF by default since engine v27 (2026-10-07):
+/// with the spell-conditioned network eval the search places the first stone itself,
+/// and v25 without the selector beat v25 with it by +90.5 Elo [+75.3, +105.6] at
+/// 10 s in the competitive variant (engine/reports/2026-10-r2-opening.md). The
+/// selector stays for A/Bs and for a weaker eval that needs it.
 pub fn set_opening_book(on: bool) { OPENING_BOOK.with(|c| c.set(on)); }
 pub fn opening_book_enabled() -> bool { OPENING_BOOK.with(|c| c.get()) }
 thread_local! {
@@ -105,12 +109,22 @@ thread_local! {
 pub fn set_opening_carnage(on: bool) { OPENING_CARNAGE.with(|c| c.set(on)); }
 pub fn opening_carnage_enabled() -> bool { OPENING_CARNAGE.with(|c| c.get()) }
 
+thread_local! {
+    static OPENING_FORCE: std::cell::Cell<u64> = std::cell::Cell::new(0);
+}
+/// Data-generation hook (harness/opening_rollouts.py): a non-zero node mask
+/// restricts the competitive first placement to those nodes, overriding the
+/// selector, so a rollout can play out one chosen sigil. 0 = off (default).
+/// Per thread; never set by the site.
+pub fn set_opening_force(mask: u64) { OPENING_FORCE.with(|c| c.set(mask)); }
+pub fn opening_force() -> u64 { OPENING_FORCE.with(|c| c.get()) }
+
 /// Carnage's engine id (`spells_meta.rs`; pinned by a test).
 pub const CARNAGE: u8 = 1;
 /// What Carnage adds on top of the best of the sorceries beside it, so it wins the tie.
 pub const NEIGHBOUR_EDGE: f32 = 0.01;
 use crate::opening_data::{BOARD_PREF, MATCHUP, PUSH_CHARMS, STRENGTH, SYNERGY};
-use crate::spells_meta::{AZIMUTH, CHARGE, COMET, GUST, HURRICANE, LURK, NUM_OFFICIAL_SPELLS, SEAL_OF_AUTUMN,
+use crate::spells_meta::{AZIMUTH, CHARGE, COMET, GUST, HURRICANE, LURK, CORE_SPELL_COUNT, SEAL_OF_AUTUMN,
                          SEAL_OF_DESTRUCTION, SEAL_OF_SPRING, SEAL_OF_SUMMER, SEAL_OF_WINTER, SLASH, SPELLS, SPLASH,
                          SPROUT, SURGE, SYZYGY};
 use crate::topology::{ADJ, SIGIL, VOID};
@@ -366,7 +380,7 @@ fn hard_countered(spells: &[u8; 9], s: usize, candidates: &[usize]) -> bool {
 pub fn applies(b: &Board, c: Color) -> bool {
     b.variant.has_competitive() && b.turn_counter <= 2 && b.outcome == Outcome::Ongoing
         && b.mine(c) == 0 && b.theirs(c).count_ones() <= 1
-        && b.spells.iter().all(|&id| (id as usize) < NUM_OFFICIAL_SPELLS)
+        && b.spells.iter().all(|&id| (id as usize) < CORE_SPELL_COUNT)
 }
 
 /// The pick for `c`, or `None` when the selector does not apply.

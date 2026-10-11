@@ -20,7 +20,9 @@ const fs = require('fs');
 const path = require('path');
 const REPO = path.dirname(__dirname);
 const ENGINE = path.join(REPO, 'docs', 'static', 'scripts', 'engine');
-const WASM_DIR = path.join(REPO, 'docs', 'static', 'wasm');
+// SIGIL_WASM_DIR points the smoke at an unshipped build (engine/build-wasm.sh
+// with WASM_OUT=<dir>), e.g. a prototype that must not replace docs/static/wasm.
+const WASM_DIR = process.env.SIGIL_WASM_DIR || path.join(REPO, 'docs', 'static', 'wasm');
 
 // Superset of ai/replay_bridge.py's list: sim-board for the probe boards,
 // features/enumerator because sim-board's evaluation hooks reference them.
@@ -48,6 +50,20 @@ async function driver() {
 	const fs = require('fs');
 	const path = require('path');
 	await wasm_bindgen({ module_or_path: fs.readFileSync(path.join(WASM_DIR, 'sigil_engine_bg.wasm')) });
+	// Play with the eval the site plays (rust-ai.js's default, which mirrors
+	// eval.rs SHIPPED_EVAL), not a literal: until v25 this smoke searched with
+	// 'tfit' whatever the site shipped.
+	const EVAL = process.env.SIGIL_SMOKE_EVAL || new RustAI({ transport: 'http' }).evalName;
+	console.log('eval ' + EVAL);
+	// SIGIL_SMOKE_POLICY=<min_width> overrides the shipped generator policy.
+	// The shipped engine has it on (policy::SHIPPED_POLICY); 'off' replays without it.
+	if (process.env.SIGIL_SMOKE_POLICY === 'off') {
+		wasm_bindgen.set_policy(false, 0);
+		console.log('generator policy OFF');
+	} else if (process.env.SIGIL_SMOKE_POLICY) {
+		wasm_bindgen.set_policy(true, parseInt(process.env.SIGIL_SMOKE_POLICY, 10));
+		console.log('generator policy ON, min_width ' + process.env.SIGIL_SMOKE_POLICY);
+	}
 	const info = JSON.parse(wasm_bindgen.engine_info());
 	if (info.nodes !== 39) throw new Error('engine_info nodes != 39');
 	// Game clock: the JS allocation must equal the engine's for every input.
@@ -70,7 +86,10 @@ async function driver() {
 	}
 
 	// rust-ai.js's partial-SFN key: everything except the turn counter.
-	const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5]].join(' '); };
+	// Includes the Providence banks (the optional `pm:` token), which the
+		// stone field does not show.
+		const key = (x) => { const p = x.split(' '); return [p[0], p[1], p[3], p[4], p[5],
+			p.find(t => t.startsWith('pm:')) || ''].join(' '); };
 	const OFFICIAL = ['core', 'springtime', 'celestial', 'fury', 'tempest',
 	                  'flood', 'autumn', 'gloom', 'covenant'];
 
@@ -81,7 +100,6 @@ async function driver() {
 		const probe = sfnToSimBoard(sfn);
 		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
 		probe.getBoardStatePayload = () => ({});
-		if (probe.movesLeftThisTurn === undefined) probe.movesLeftThisTurn = 1;
 		await applyAITurn(probe, { actions: res.actions }, color, () => {});
 		probe.update();
 		probe.checkGameOver(color);
@@ -90,7 +108,9 @@ async function driver() {
 		probe.update();
 		if (key(boardToSfn(probe)) !== key(res.expected_sfn)) {
 			throw new Error('replay mismatch:\n  replayed: ' + key(boardToSfn(probe)) +
-			                '\n  expected: ' + key(res.expected_sfn));
+			                '\n  expected: ' + key(res.expected_sfn) +
+			                '\n  before:   ' + sfn +
+			                '\n  actions:  ' + JSON.stringify(res.actions));
 		}
 		return probe.gameover;
 	}
@@ -99,7 +119,7 @@ async function driver() {
 	const smokeEngine = new wasm_bindgen.Engine(18);
 	function pick(sfn, history, budgetMs, onDepth) {
 		return JSON.parse(smokeEngine.search(
-			sfn, budgetMs, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6,
+			sfn, budgetMs, 4, history.concat([sfn]), EVAL, 0.10, 2, 6,
 			onDepth || undefined));
 	}
 
@@ -127,9 +147,45 @@ async function driver() {
 	}
 	if (progressTicks === 0) throw new Error('on_depth progress callback never fired');
 
+	// Tectonic + Providence: draws holding all six spells, every ply
+	// replay-verified (walls, shields, Rock Slide pushes, banks, placements).
+	const seen = { fissure: 0, rock_slide: 0, bank_stones: 0, providence: 0 };
+	{
+		const core = generateSpellList(['core']);
+		const draws = [
+			['Fissure', 'Endowment', core[0], 'Rock_Slide', 'Annuity', core[3], 'Bulwark', 'Dividend', core[6]],
+			['Endowment', core[1], 'Fissure', 'Annuity', core[4], 'Rock_Slide', 'Dividend', core[7], 'Bulwark'],
+			[core[0], 'Fissure', 'Endowment', core[3], 'Rock_Slide', 'Annuity', 'Bulwark', core[6], 'Dividend'],
+		];
+		for (let g = 0; g < draws.length; g++) {
+			const b = new SigilBoard(draws[g].slice(), 'standard');
+			b.setupInitial();
+			let sfn = boardToSfn(b);
+			const history = [];
+			for (let ply = 0; ply < 60; ply++) {
+				const res = pick(sfn, history, 150);
+				if (!res.ok) throw new Error('tectonic game ' + g + ' ply ' + ply + ': ' + res.error);
+				for (const a of res.actions) {
+					if (a.type in seen) seen[a.type]++;
+					if (a.providence) seen.providence++;
+				}
+				const over = await verify(sfn, res);
+				plies++;
+				history.push(sfn);
+				sfn = res.expected_sfn;
+				if (over) break;
+			}
+		}
+		console.log('tectonic/providence games: ' + JSON.stringify(seen));
+	}
+
 	// The display report (search::report): present on every completed search,
-	// and an even opening reads ~0 stones, not the raw eval's -0.5 (blue's +1
-	// token plus the mover's tempo). Pins the 2026-09-21 refactor.
+	// with numeric stones and no mate at the opening. The even-position offset
+	// itself (an even opening reads ~0, not the raw eval's -0.5) is pinned in
+	// Rust (tests.rs, the report() tests). Here only a gross wiring error is
+	// caught: the spell-aware evals genuinely rate some opening draws near one
+	// stone for the mover (0.2-1.1 seen with nnue_spell3), so a tight bound
+	// here was flaky on v27 and v28 alike.
 	{
 		const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
 		b.setupInitial();
@@ -137,7 +193,7 @@ async function driver() {
 		if (typeof res.stones !== 'number') throw new Error('search result lacks numeric "stones": ' + JSON.stringify(res));
 		if (!(res.mate_in === null || Number.isInteger(res.mate_in))) throw new Error('mate_in must be null or an integer');
 		if (typeof res.mate_proven !== 'boolean') throw new Error('mate_proven must be a boolean');
-		if (Math.abs(res.stones) >= 0.5) throw new Error('even opening reads ' + res.stones + ' stones; expected ~0 (the raw eval is -0.5)');
+		if (Math.abs(res.stones) >= 2) throw new Error('opening reads ' + res.stones + ' stones; expected within a stone or so of 0');
 		if (res.mate_in !== null) throw new Error('the opening is not a mate: ' + JSON.stringify(res));
 	}
 	// Competitive opening book: red's and blue's free placements are blinks on
@@ -154,8 +210,10 @@ async function driver() {
 			if (!res.ok) throw new Error('competitive ply ' + ply + ': ' + res.error);
 			if (ply < 2) {
 				if (res.actions[0].type !== 'blink') throw new Error('competitive opening should be a blink: ' + JSON.stringify(res.actions));
-				if (!res.opening || res.opening.node !== res.actions[0].node) throw new Error('opening report missing or mismatched: ' + JSON.stringify(res.opening));
-				if (!b.spellNames.includes(res.opening.spell)) throw new Error('opening names a spell not in the draw: ' + res.opening.spell);
+				// The selector is off since v27 (the search places the first stone);
+				// when a build turns it on, its report must name the node it played.
+				if (res.opening && res.opening.node !== res.actions[0].node) throw new Error('opening report mismatched: ' + JSON.stringify(res.opening));
+				if (res.opening && !b.spellNames.includes(res.opening.spell)) throw new Error('opening names a spell not in the draw: ' + res.opening.spell);
 			} else if (res.opening !== null) {
 				throw new Error('turn 3 must carry no opening report: ' + JSON.stringify(res.opening));
 			}
@@ -203,7 +261,7 @@ async function driver() {
 		b.setupInitial();
 		const sfn = boardToSfn(b).replace(b.spellNames[0], 'Lifesap');
 		const bad = JSON.parse(smokeEngine.search(
-			sfn, 50, 4, [], 'tfit', 0, 0, 0, undefined));
+			sfn, 50, 4, [], EVAL, 0, 0, 0, undefined));
 		if (bad.ok) throw new Error('out-of-scope spell was not refused');
 	}
 	// Persistent Engine: the table survives a move, a ponder primes it, and the
@@ -218,7 +276,7 @@ async function driver() {
 		const eng = new wasm_bindgen.Engine(18);
 		if (eng.tt_filled() !== 0) throw new Error('fresh Engine has a non-empty table');
 		const esearch = (s, ms) => JSON.parse(eng.search(
-			s, ms, 4, history.concat([s]), 'tfit', 0.10, 2, 6, undefined));
+			s, ms, 4, history.concat([s]), EVAL, 0.10, 2, 6, undefined));
 		// Move 1: ordinary search.
 		let res = esearch(sfn, BUDGET_MS);
 		if (!res.ok) throw new Error('Engine.search: ' + res.error);
@@ -226,7 +284,7 @@ async function driver() {
 		if (filled1 === 0) throw new Error('Engine table empty after a search');
 		await verify(sfn, res); history.push(sfn); sfn = res.expected_sfn; engineMoves++;
 		// Human "thinks": ponder the position they are looking at in slices.
-		const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), 'tfit', 0.10, 2, 6));
+		const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), EVAL, 0.10, 2, 6));
 		if (!pb.ok) throw new Error('ponder_begin: ' + pb.error);
 		let steps = 0, last = null;
 		for (; steps < 20; steps++) {
@@ -249,6 +307,74 @@ async function driver() {
 		const idle = JSON.parse(eng.ponder_step(10, 4));
 		if (!idle.ok || !idle.done) throw new Error('idle ponder_step: ' + JSON.stringify(idle));
 		eng.free();
+	}
+	// Step 6 option A (prototype): root split across several Engines, combined
+	// by rust-ai.js's own pickSplitResult, every move replay-verified; then a
+	// ponder (which must read the whole root) and a split search after it. Runs
+	// only against a wasm that has set_root_split (SIGIL_WASM_DIR=<proto build>).
+	let splitMoves = 0;
+	{
+		// The worker-count cap: hardwareConcurrency - 1, at least 1, default 1.
+		const wc = RustAI.rustWorkerCount;
+		if (wc(undefined, 8) !== 1 || wc(4, 8) !== 4 || wc(16, 8) !== 7 || wc(4, 1) !== 1 || wc(4, undefined) !== 1) {
+			throw new Error('rustWorkerCount cap is wrong');
+		}
+		// The account page's device setting ('auto'): min(4, hardwareConcurrency - 1).
+		if (wc('auto', 8) !== 4 || wc('auto', 4) !== 3 || wc('auto', 2) !== 1 || wc('auto', undefined) !== 1) {
+			throw new Error("rustWorkerCount('auto') is wrong");
+		}
+		if (typeof wasm_bindgen.Engine.prototype.set_root_split === 'function') {
+			const PARTS = parseInt(process.env.SIGIL_SMOKE_SPLIT || '4', 10);
+			const engines = Array.from({ length: PARTS }, () => new wasm_bindgen.Engine(18));
+			const b = new SigilBoard(generateSpellList(OFFICIAL).slice(), 'standard');
+			b.setupInitial();
+			let sfn = boardToSfn(b);
+			const history = [];
+			for (let ply = 0; ply < 8; ply++) {
+				const perDepth = engines.map(() => []);
+				const results = engines.map((eng, i) => {
+					eng.set_root_split(i, PARTS);
+					return JSON.parse(eng.search(sfn, 150, 4, history.concat([sfn]), EVAL, 0.10, 2, 6,
+						(d, s) => perDepth[i].push([d, s])));
+				});
+				const res = RustAI.pickSplitResult(results, perDepth);
+				if (results.every((r) => r.ok && r.depth > 0) && res.split.common_depth == null) {
+					throw new Error('split ply ' + ply + ': common-depth merge not used');
+				}
+				if (!res.ok) throw new Error('split ply ' + ply + ': ' + res.error);
+				if (!res.split || res.split.parts !== PARTS) throw new Error('split report missing');
+				// Disjointness is pinned in Rust (root_split_parts_are_disjoint_and_cover_the_root).
+				// It is not checkable from here: a part whose hash range is empty
+				// searches the list's first turn, so with a small root (the opening
+				// plies) several parts legitimately report the same turn.
+				if (!results.some((r) => r.ok && r.depth > 0)) throw new Error('split ply ' + ply + ': no part completed a depth');
+				const over = await verify(sfn, res);
+				splitMoves++;
+				history.push(sfn);
+				sfn = res.expected_sfn;
+				if (over) break;
+				// The opponent's turn: ponder on every engine with the split dropped,
+				// exactly as rust-worker.js does.
+				for (const eng of engines) {
+					eng.set_root_split(0, 1);
+					const pb = JSON.parse(eng.ponder_begin(sfn, 4, history.concat([sfn]), EVAL, 0.10, 2, 6));
+					if (!pb.ok) throw new Error('split ponder_begin: ' + pb.error);
+					const st = JSON.parse(eng.ponder_step(20, 8));
+					if (!st.ok) throw new Error('split ponder_step failed');
+					eng.ponder_end();
+				}
+				const reply = JSON.parse(engines[0].search(sfn, 100, 4, history.concat([sfn]), EVAL, 0.10, 2, 6, undefined));
+				if (!reply.ok) throw new Error('split reply: ' + reply.error);
+				const over2 = await verify(sfn, reply);
+				history.push(sfn);
+				sfn = reply.expected_sfn;
+				if (over2) break;
+			}
+			for (const eng of engines) eng.free();
+			console.log('root split: ' + splitMoves + ' moves across ' + PARTS + ' engines replay-verified');
+		} else {
+			console.log('root split: skipped (this wasm has no set_root_split)');
+		}
 	}
 	console.log('wasm smoke OK: ' + GAMES + ' games, ' + plies +
 	            ' plies replay-verified, ' + progressTicks + ' progress ticks, ' +

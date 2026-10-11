@@ -152,11 +152,9 @@ function _cavemanLeaf(board, color, w, ply) {
 		return -(CAVEMAN_WIN - d);
 	}
 	const enemy = color === 'red' ? 'blue' : 'red';
-	// Material includes Providence phantoms (effectiveStones): a scheduled
-	// extra move is credited as a full stone at the leaf where the cast
-	// happens, so a shallow search still values Annuity/Endowment whose
-	// payoffs land beyond its horizon. The exact win semantics live in
-	// checkGameOver, which the search hits directly.
+	// Material includes Providence banked stones (effectiveStones), which
+	// count toward the stone total exactly like placed stones. The exact
+	// win semantics live in checkGameOver, which the search hits directly.
 	let score = board.effectiveStones(color) - board.effectiveStones(enemy);
 	if (variantHasScramble(board.variant)) {
 		const k = Number.isFinite(w.scrambleSpell) ? w.scrambleSpell : CAVEMAN_SCRAMBLE_SPELL_WEIGHT;
@@ -213,9 +211,7 @@ function _cavemanOrderedTurns(board, color, exhaustiveCaps, w, orderMc) {
 	const scored = [];
 	for (let i = 0; i < turns.length; i++) {
 		const sim = _minimaxApplyTurn(board, turns[i], color);
-		// Effective stones mirror the leaf (Providence phantoms included);
-		// `sim` is post-advanceTurn, so the opponent's freshly popped
-		// extras are correctly credited to them.
+		// Effective stones mirror the leaf (Providence banks included).
 		let diff = sim.effectiveStones(color) - sim.effectiveStones(enemy);
 		// Positional terms mirror the leaf eval so ordering agrees with
 		// what the search maximizes (mis-ordering costs time, never
@@ -890,10 +886,6 @@ class CavemanAI {
 		const positionHistory = board.allLoopingSnapshotCounts || {};
 		const opts = {
 			positionHistory,
-			// Providence: the SFN carries only the future schedule (the
-			// live loop already popped this turn's head into the move
-			// counters), so pass the current turn's extras separately.
-			extraMoves: Math.max(0, (board.movesLeftThisTurn || 1) - 1),
 			timeLimit: Infinity,
 			// Bounded ponder depth so a single iteration can't grow
 			// past ~1s of work — cancel latency is bounded by current
@@ -943,16 +935,7 @@ class CavemanAI {
 	async pickTurn(board, color, onProgress) {
 		const sfn = boardToSfn(board);
 		const positionHistory = board.allLoopingSnapshotCounts || {};
-		const opts = Object.assign(
-			{
-				positionHistory,
-				// Providence: the SFN carries only the future schedule (the
-				// live loop already popped this turn's head into the move
-				// counters), so pass the current turn's extras separately.
-				extraMoves: Math.max(0, (board.movesLeftThisTurn || 1) - 1),
-			},
-			this.options,
-		);
+		const opts = Object.assign({ positionHistory }, this.options);
 
 		const worker = getSharedAiWorker();
 		const promise = worker.search(sfn, color, opts, onProgress);
@@ -1014,7 +997,8 @@ function _reviveTurn(turnPayload) {
 		if (a.converted !== undefined) sa.converted = a.converted;
 		if (a.wall !== undefined) sa.wall = a.wall;
 		if (a.pushes !== undefined) sa.pushes = a.pushes;
-		if (a.turns !== undefined) sa.turns = a.turns;
+		if (a.banked !== undefined) sa.banked = a.banked;
+		if (a.providence !== undefined) sa.providence = a.providence;
 		if (a.nodes !== undefined) sa.nodes = a.nodes;
 		if (a.target !== undefined) sa.target = a.target;
 		if (a.val !== undefined) sa.val = a.val;

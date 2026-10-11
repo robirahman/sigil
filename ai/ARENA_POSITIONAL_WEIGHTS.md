@@ -1,5 +1,9 @@
 # Positional eval weights for the Caveman AI — 2026-08-02 campaign
 
+> **Historical (2026-08).** This campaign tested hand-chosen weights on the retired JS
+> Caveman engine. The Rust engine ships the texel-fitted `tfit` eval, which beats
+> material by ~+50 Elo (engine/FINDINGS.md). Kept as a record, not as current guidance.
+
 Conclusion: **no positional weight set beat the pure stone-count
 baseline; `CAVEMAN_EVAL_WEIGHTS` ships as zeros.** The wiring
 (`cavemanSearch` `opts.evalWeights`, arena spec keys, parity tests)

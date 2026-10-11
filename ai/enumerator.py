@@ -26,7 +26,7 @@ from collections import deque
 from itertools import combinations
 
 from notation import NODE_ORDER, POSITIONS, base_spell_name
-from simboard import Action, CompleteTurn, CORE_SPELLS
+from simboard import Action, CompleteTurn, CORE_SPELLS, fissure_ranked_targets
 
 
 # Caps on enumeration size. Tuned so a worst-case position with two
@@ -50,7 +50,7 @@ DEFAULT_SOFT_HARD_HARD_CAP = 4  # Torrent/Tsunami first-hard-target variants (×
 DEFAULT_SOFT_HARD_SAC_CAP = 3   # Spring Tide trailing-sacrifice SET variants (beyond greedy)
 DEFAULT_SPLASH_CAP = 6          # Splash move-target variants
 DEFAULT_FISSURE_CAP = 4         # Fissure wall-target variants
-DEFAULT_EXTRA_MOVE_CAP = 3      # Providence extra-move targets per step
+DEFAULT_PROVIDENCE_MOVE_CAP = 3 # Providence placement targets
 DEFAULT_ROCK_SLIDE_CAP = 12     # Rock Slide distinct max-net outcomes (incl. greedy)
 
 # Every cap key with its package default. get_legal_turns_exhaustive merges
@@ -77,7 +77,7 @@ DEFAULT_CAPS = {
     'soft_hard_hard': DEFAULT_SOFT_HARD_HARD_CAP,
     'splash': DEFAULT_SPLASH_CAP,
     'fissure': DEFAULT_FISSURE_CAP,
-    'extra_move': DEFAULT_EXTRA_MOVE_CAP,
+    'providence_move': DEFAULT_PROVIDENCE_MOVE_CAP,
     'rock_slide': DEFAULT_ROCK_SLIDE_CAP,
 }
 
@@ -102,7 +102,7 @@ BALANCED_CAPS = {
     'soft_hard_soft': 2,
     'soft_hard_hard': 2,
     'splash': 3,
-    'extra_move': 2,
+    'providence_move': 2,
 }
 
 # Surgical caps: only expand the choice points that empirically matter
@@ -131,7 +131,7 @@ NARROW_CAPS = {
     'soft_hard_hard': 1,
     'splash': 2,
     'fissure': 2,
-    'extra_move': 1,
+    'providence_move': 1,
 }
 
 
@@ -161,20 +161,22 @@ OPPONENT_CAPS = {
     'soft_hard_hard': 2,
     'splash': 2,
     'fissure': 3,
-    'extra_move': 1,
+    'providence_move': 1,
 }
 
 
 def _adjacent_enemy_pairs(board, color):
-    """Unique unordered pairs of adjacent enemy stones."""
+    """Unique unordered pairs of adjacent enemy stones (Bulwark-protected
+    stones can't be converted, so they never pair)."""
     enemy = board._enemy(color)
+    prot = board._bulwark_protected()
     seen = set()
     out = []
     for n in NODE_ORDER:
-        if board.stones[n] != enemy:
+        if board.stones[n] != enemy or n in prot:
             continue
         for nb in board._adjacent_nodes(n):
-            if board.stones[nb] != enemy:
+            if board.stones[nb] != enemy or nb in prot:
                 continue
             key = tuple(sorted([n, nb]))
             if key in seen:
@@ -187,6 +189,7 @@ def _adjacent_enemy_pairs(board, color):
 def _adjacent_empty_pairs_ranked(board, color):
     """Unique adjacent empty-empty pairs, ranked by enemy-stone destruction."""
     enemy = board._enemy(color)
+    prot = board._bulwark_protected()
     seen = set()
     cand = []
     for n in NODE_ORDER:
@@ -200,16 +203,18 @@ def _adjacent_empty_pairs_ranked(board, color):
                 continue
             seen.add(key)
             neighbors = set(board._adjacent_nodes(n)) | set(board._adjacent_nodes(nb))
-            score = sum(1 for x in neighbors if board.stones[x] == enemy)
+            score = sum(1 for x in neighbors
+                        if board.stones[x] == enemy and x not in prot)
             cand.append((score, key))
     cand.sort(key=lambda c: -c[0])
     return [k for _, k in cand]
 
 
 def _enemy_groups(board, color):
-    """Contiguous groups of enemy stones (BFS over adjacency)."""
+    """Contiguous groups of destroyable enemy stones (BFS over adjacency;
+    Bulwark-protected stones are ignored, matching the Hurricane resolver)."""
     enemy = board._enemy(color)
-    visited = set()
+    visited = set(board._bulwark_protected())
     groups = []
     for start in NODE_ORDER:
         if start in visited or board.stones[start] != enemy:
@@ -321,7 +326,9 @@ def _spell_overrides(board, color, spell_name, caps):
             for t in targets:
                 out.append({'fury_sacrifice': sac, 'hard_move_targets': [t]})
     elif rt == 'storm_front':
-        enemies = [n for n in NODE_ORDER if board.stones[n] == enemy]
+        prot = board._bulwark_protected()
+        enemies = [n for n in NODE_ORDER
+                   if board.stones[n] == enemy and n not in prot]
         added = 0
         for i in range(len(enemies)):
             if added >= caps['storm_front']:
@@ -331,6 +338,13 @@ def _spell_overrides(board, color, spell_name, caps):
                     break
                 out.append({'storm_front_pair': [enemies[i], enemies[j]]})
                 added += 1
+        # Storm Front picks one stone at a time and Bulwark is re-checked
+        # before each pick: destroying the Bulwark stone first exposes the
+        # locked spell to the second pick.
+        for brk in enemies:
+            for u in sorted(board._bulwark_unshielded_by_removing(brk),
+                            key=NODE_ORDER.index)[:caps['storm_front']]:
+                out.append({'storm_front_pair': [brk, u]})
     elif rt == 'hurricane':
         for group in _enemy_groups(board, color):
             out.append({'hurricane_group': group})
@@ -373,26 +387,13 @@ def _spell_overrides(board, color, spell_name, caps):
         for i in range(1, caps.get('rock_slide', DEFAULT_ROCK_SLIDE_CAP)):
             out.append({'rock_slide_variant': i})
     elif rt == 'fissure':
-        # Branch over which node to permanently destroy. Each candidate is
-        # scored by its net stone-count advantage so the search explores the
-        # most damaging walls first (and models the opponent's best Fissure):
-        #   target term: +1 if it holds an enemy stone, 0 if empty,
-        #                 -1 if it holds our own stone (self-inflicted loss)
-        #   blast term:  +1 per adjacent enemy stone (also destroyed)
-        scored = []
-        for node in NODE_ORDER:
-            if board.stones[node] == enemy:
-                score = 1
-            elif board.stones[node] == color:
-                score = -1
-            else:
-                score = 0
-            for nb in board._adjacent_nodes(node):
-                if board.stones[nb] == enemy:
-                    score += 1
-            scored.append((score, node))
-        scored.sort(key=lambda s: -s[0])
-        for _, t in scored[:caps['fissure']]:
+        # Branch over which node to blast, best net stone swing first (enemy
+        # stones destroyed minus own stones destroyed; see
+        # simboard.fissure_score), so the search explores the most damaging
+        # walls first and models the opponent's best Fissure.
+        ranked = fissure_ranked_targets(board.stones, color,
+                                        board._bulwark_protected())
+        for t in ranked[:caps['fissure']]:
             out.append({'fissure_target': t})
     elif rt == 'surge_move' and base_spell_name(spell_name) == 'Splash':
         # Splash: 1 move (only castable when not dashed — see castability).
@@ -481,8 +482,8 @@ def get_legal_turns_exhaustive(board, color, caps=None):
 
 
 def _exhaustive_move_root(board, color, prefix, caps):
-    """The move root: enumerate first-move targets, then the
-    Providence move-phase chain and everything downstream."""
+    """The move root: enumerate first-move targets, then the optional
+    Providence placement and everything downstream."""
     has_seal_of_wind = 'Seal_of_Wind' in board.charged_spells.get(color, [])
     # Seal of Stone (enemy-held) forces a SOFT opening move — no pushes.
     # Wind's blink privilege survives it on EMPTY nodes (a soft blink is a
@@ -500,15 +501,19 @@ def _exhaustive_move_root(board, color, prefix, caps):
     else:
         move_targets = board._all_moveable(color)
 
+    # Cross-branch dedup for (regular move, Providence placement) prefixes:
+    # two orders of the same placements produce the same stones, so their
+    # continuations are identical. Safe because every move adds exactly one
+    # own stone (pushes are deterministic given the stone map).
+    seen_move_prefixes = set()
+
     if not move_targets:
         yield CompleteTurn(prefix + [Action('pass')])
+        # A Providence placement ignores Stone's soft-only rule, so it may
+        # still be possible.
+        yield from _exhaustive_providence_step(
+            board, color, prefix, caps, seen_move_prefixes)
         return
-
-    # Cross-branch dedup for Providence multi-move prefixes: two orders of
-    # the same base-move placements produce the same stones, so their
-    # continuations are identical. Safe because every base move adds exactly
-    # one own stone (pushes are deterministic given the stone map).
-    seen_move_prefixes = set()
 
     for move_target in move_targets:
         board_after = board.copy()
@@ -521,37 +526,36 @@ def _exhaustive_move_root(board, color, prefix, caps):
             continue
         board_after.update()
 
-        yield from _exhaustive_move_phase(
+        yield from _exhaustive_post_move(
             board_after, color, prefix + [move_action], caps,
-            board.extra_moves_this_turn, seen_move_prefixes,
+            can_dash=True, can_spell=True, can_summer=True,
         )
+        yield from _exhaustive_providence_step(
+            board_after, color, prefix + [move_action], caps,
+            seen_move_prefixes)
 
 
-def _exhaustive_move_phase(board, color, prefix, caps, extras_left, seen):
-    """Providence move phase for the exhaustive enumerator: at each step,
-    either stop taking base moves (remaining extras forfeit at end of turn)
-    or take one more, branching over the top-`extra_move`-cap targets with
-    stone-map dedup across orderings. With extras_left == 0 this is exactly
-    the pre-Providence flow."""
-    yield from _exhaustive_post_move(
-        board, color, prefix, caps,
-        can_dash=True, can_spell=True, can_summer=True,
-    )
-    if extras_left <= 0 or board.gameover:
+def _exhaustive_providence_step(board, color, prefix, caps, seen):
+    """Optional Providence placement for the exhaustive enumerator (the
+    skip branch is the caller's plain post-move): with a nonempty bank,
+    place one banked stone on each of the top-`providence_move`-cap
+    targets, deduped by stone map across orderings, then dash/cast/pass."""
+    if board.prov_bank[color] <= 0 or board.gameover:
         return
     targets = board._all_moveable(color)
-    for t in targets[:caps['extra_move']]:
+    for t in targets[:caps['providence_move']]:
         b = board.copy()
-        act = b._do_move(color, t)
+        act = b._do_providence_move(color, t)
         if act is None:
             continue
-        b.update()
         key = tuple(b.stones[n] for n in NODE_ORDER)
         if key in seen:
             continue
         seen.add(key)
-        yield from _exhaustive_move_phase(b, color, prefix + [act], caps,
-                                          extras_left - 1, seen)
+        yield from _exhaustive_post_move(
+            b, color, prefix + [act], caps,
+            can_dash=True, can_spell=True, can_summer=True,
+        )
 
 
 def _exhaustive_post_move(board, color, prefix, caps,

@@ -142,7 +142,7 @@ def simboard_to_features(board, side_to_move=None):
         features.append(1.0 if own_lock == sn else 0.0)
         features.append(1.0 if enemy_lock == sn else 0.0)
 
-    # Effective stones: real plus Providence pending phantoms, so the legacy
+    # Effective stones: real plus Providence banked stones, so the legacy
     # eval paths see rules-faithful material on Providence boards (identical
     # to raw counts everywhere else — this net never saw Providence).
     own_stones = board.effective_stones(side_to_move)

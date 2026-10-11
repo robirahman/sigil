@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="../static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="../static/css/layout.css" rel="stylesheet" />
+	<link href="../static/css/styles.css" rel="stylesheet" />
+	<link href="../static/css/compendium.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="../static/scripts/theme-manager.js"></script>
+	<title>Seal of Autumn (Autumn Charm) - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="../"><span class="visually-hidden">Sigil Online</span><img alt="" src="../static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+	<div class="main">
+
+		<div class="compendium-container">
+			<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+				<a href="../">Home</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="./">Spells</a>
+				<span class="breadcrumb-separator">/</span>
+				<a href="../packs/autumn.html">Autumn Pack</a>
+				<span class="breadcrumb-separator">/</span>
+				<span class="breadcrumb-current">Seal of Autumn</span>
+			</nav>
+
+			<div class="quick-nav-bar">
+				<div class="quick-nav-links">
+					<a class="quick-nav-link" href="gather.html">&larr; Gather</a>
+					<a class="quick-nav-link" href="corrupt.html">Corrupt &rarr;</a>
+				</div>
+				<div class="quick-nav-links">
+					<a class="quick-nav-link" href="../packs/autumn.html">View Autumn Pack</a>
+					<a class="quick-nav-link" href="../spells.html">Interactive Tier List &amp; Matrix</a>
+				</div>
+			</div>
+
+			<div class="spell-showcase">
+				<div class="card-column">
+					<div class="spell-card-frame charm-glow">
+						<img id="card-image" class="spell-card-img" src="../static/images/spells/Seal_of_Autumn.webp" alt="Seal of Autumn Spell Card" />
+					</div>
+					<button class="art-toggle-btn" id="art-toggle" onclick="toggleArt()">View Card Art Only</button>
+					<script>
+						let artOnly = false;
+						function toggleArt() {
+							artOnly = !artOnly;
+							const img = document.getElementById('card-image');
+							const btn = document.getElementById('art-toggle');
+							img.src = artOnly ? '../static/images/spells/art_only/Seal_of_Autumn.webp' : '../static/images/spells/Seal_of_Autumn.webp';
+							btn.textContent = artOnly ? 'View Full Spell Card' : 'View Card Art Only';
+						}
+					</script>
+					<div class="badge-row">
+						<span class="badge badge-charm">Charm (1 Node)</span>
+						<span class="badge badge-static">Static Seal</span>
+						<a class="badge badge-tier-d" href="../spells.html#tiers">Tier D (Weak) · #27</a>
+					</div>
+				</div>
+
+				<div class="details-column">
+					<div class="page-header" style="text-align:left; margin-bottom:12px;">
+						<h1 class="page-title">Seal of Autumn</h1>
+						<div class="page-subtitle">From the <a style="color:var(--color-accent); text-decoration:none;" href="../packs/autumn.html"><strong>Autumn</strong> Pack</a></div>
+					</div>
+
+					<div class="card-text-box">
+						STATIC: Opponent cannot sacrifice stones in spells to dash.
+					</div>
+
+					<div class="stats-grid">
+						<div class="stat-card">
+							<div class="stat-label">Sigil Size</div>
+							<div class="stat-value">1 Node</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Spell Category</div>
+							<div class="stat-value">Charm</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Activation</div>
+							<div class="stat-value">Static Seal</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-label">Board State</div>
+							<div class="stat-value" style="font-size:0.95em;">Flexible across board states</div>
+						</div>
+					</div>
+
+					<div class="content-section">
+						<h3>Rules &amp; Kernel Mechanics</h3>
+						<p>While this seal is active, the opponent is forbidden from sacrificing any stone occupying a spell sigil when dashing. They can only sacrifice stones on mana or void nodes.</p>
+					</div>
+
+					<div class="content-section">
+						<h3>Tactical Strategy &amp; Play Advice</h3>
+						<p>Ranked #27 (Weak tier). A crippling counter against dash-dependent opponents on crowded boards where stones are mostly situated within spell nodes.</p>
+					</div>
+				</div>
+			</div>
+    
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Synergies &amp; Combos</h3>
+				<p>Holding both spells enables powerful combinational tactics. The rated synergies below are judged from competitive play:</p>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="bewitch.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Bewitch.webp" alt="Bewitch" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Bewitch</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="fireblast.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Fireblast.webp" alt="Fireblast" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Fireblast</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="flourish.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Flourish.webp" alt="Flourish" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Flourish</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="gather.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Gather.webp" alt="Gather" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Gather</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="grow.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Grow.webp" alt="Grow" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Grow</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="harvest.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Harvest.webp" alt="Harvest" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Harvest</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="meteor.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Meteor.webp" alt="Meteor" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Meteor</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-winter.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Winter.webp" alt="Seal of Winter" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Seal of Winter</div>
+							<span class="relation-tag tag-even">Neutral</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Head-to-Head Matchups</h3>
+				<p>How this spell contends when you build toward it against an opponent developing a rival spell:</p>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="fireblast.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Fireblast.webp" alt="Fireblast" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Fireblast</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-winter.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Winter.webp" alt="Seal of Winter" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Seal of Winter</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="syzygy.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Syzygy.webp" alt="Syzygy" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Syzygy</div>
+							<span class="relation-tag tag-favoured">+ Favoured</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="bewitch.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Bewitch.webp" alt="Bewitch" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Bewitch</div>
+							<span class="relation-tag tag-even">= Even Matchup</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="flourish.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Flourish.webp" alt="Flourish" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Flourish</div>
+							<span class="relation-tag tag-even">= Even Matchup</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="seal-of-wind.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Seal_of_Wind.webp" alt="Seal of Wind" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">vs Seal of Wind</div>
+							<span class="relation-tag tag-unfavoured">- Unfavoured</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<section class="content-section" style="margin-bottom:28px;">
+				<h3>Other Spells in the Autumn Pack</h3>
+				<div class="chips-grid">
+        
+					<a class="relation-card" href="harvest.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Harvest.webp" alt="Harvest" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Harvest</div>
+							<span class="relation-tag tag-even">Ritual (5n)</span>
+						</div>
+					</a>
+            
+					<a class="relation-card" href="gather.html">
+						<img class="relation-thumb" src="../static/images/spells/art_only/Gather.webp" alt="Gather" loading="lazy" />
+						<div class="relation-info">
+							<div class="relation-name">Gather</div>
+							<span class="relation-tag tag-even">Sorcery (3n)</span>
+						</div>
+					</a>
+            
+				</div>
+			</section>
+        
+			<div style="text-align:center; margin-top:32px;">
+				<a class="view-spell-btn" href="../packs/autumn.html">&larr; Explore All Autumn Spells</a>
+				<span style="display:inline-block; width:12px;"></span>
+				<a class="view-spell-btn" href="./">Browse Spells Directory &rarr;</a>
+			</div>
+		</div>
+    
+	</div>
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="../static/scripts/auth-status.js"></script>
+</body>
+</html>

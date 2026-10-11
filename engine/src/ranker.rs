@@ -82,7 +82,7 @@ impl Board {
                     f[2] = 1.0; n_sacs = ns as f32; node = n; push = push_to;
                 }
                 Action::Cast { .. } => { f[3] = 1.0; is_cast = true; }
-                Action::Pass => {}
+                Action::Place { .. } | Action::Pass => {}
             }
         }
         let bit = 1u64 << node;

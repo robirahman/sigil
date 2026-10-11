@@ -44,10 +44,12 @@ async function processEloClientSide(db, gameId, game) {
 	const winnerUid = game.winner === 'red' ? game.redUid : game.blueUid;
 	const loserUid = game.winner === 'red' ? game.blueUid : game.redUid;
 
-	// Read both profiles
-	const [winnerSnap, loserSnap] = await Promise.all([
+	// Read both profiles, and whether each has a leaderboard name
+	const [winnerSnap, loserSnap, winnerLbName, loserLbName] = await Promise.all([
 		db.ref('users/' + winnerUid).once('value'),
 		db.ref('users/' + loserUid).once('value'),
+		db.ref('leaderboard/' + winnerUid + '/displayName').once('value'),
+		db.ref('leaderboard/' + loserUid + '/displayName').once('value'),
 	]);
 
 	const winnerData = winnerSnap.val() || {};
@@ -80,6 +82,20 @@ async function processEloClientSide(db, gameId, game) {
 
 	updates['leaderboard/' + loserUid + '/elo'] = newLoserElo;
 	updates['leaderboard/' + loserUid + '/gamesPlayed'] = (loserData.gamesPlayed || 0) + 1;
+
+	// Inactive AIs are pruned from the leaderboard while their profiles stay.
+	// When one plays again, restore its name from the profile so it does not
+	// come back as a nameless row. Only when the name is missing (so a corrupt
+	// profile name cannot overwrite a good one), and only for AI records: the
+	// rules let any signed-in client write __ai_*__ leaderboard entries but not
+	// another human's, and one denied path would fail the whole update.
+	[[winnerUid, winnerData, winnerLbName], [loserUid, loserData, loserLbName]].forEach(([uid, data, lbName]) => {
+		const name = data.displayName;
+		if (lbName.exists() || !data.isAI || !/^__ai_[a-z0-9_]+__$/.test(uid)) return;
+		if (typeof name !== 'string' || name.length < 1 || name.length > 30) return;
+		updates['leaderboard/' + uid + '/displayName'] = name;
+		updates['leaderboard/' + uid + '/isAI'] = true;
+	});
 
 	// Mark as processed
 	updates['completed_games/' + gameId + '/eloProcessed'] = true;

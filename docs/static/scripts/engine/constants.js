@@ -84,7 +84,7 @@ const SIGIL_ASSET_EPOCH = 1;
 
 // Per-layout rules. `spellTarget`: casting this many spells ends the game
 // (the stone leader wins). `winLead`: a real-stone lead of this much over the
-// opponent's total (blue's +1 phantom and Providence pendings included) wins
+// opponent's total (blue's +1 phantom and Providence banks included) wins
 // outright. Pentagon values are first guesses pending self-play calibration.
 const BOARD_LAYOUT_RULES = {
 	core:     { zones: 3, spellTarget: 6, winLead: 3, name: 'Core' },
@@ -311,10 +311,10 @@ const CORE_SPELLS = {
 	// simultaneously (see resolveRockSlide).
 	Rock_Slide:        { resolve: 'rock_slide',      static: false, ischarm: false },
 	Bulwark:           { resolve: null,              static: true,  ischarm: true },
-	// Providence expansion (scheduled extra moves)
-	Dividend:          { resolve: 'schedule_moves', turns: 1, static: false, ischarm: true },
-	Annuity:           { resolve: 'schedule_moves', turns: 2, static: false, ischarm: false },
-	Endowment:         { resolve: 'schedule_moves', turns: 4, static: false, ischarm: false },
+	// Providence expansion (stones banked into the caster's Providence bank)
+	Dividend:          { resolve: 'bank_stones', stones: 1, static: false, ischarm: true },
+	Annuity:           { resolve: 'bank_stones', stones: 2, static: false, ischarm: false },
+	Endowment:         { resolve: 'bank_stones', stones: 4, static: false, ischarm: false },
 	// Experimental expansion (unofficial, unrated: unreleased spells under
 	// playtest). Spring Tide rides the Flood soft_hard_chain resolver with
 	// `hard_first` (pushes before placements) and an optional trailing
@@ -324,6 +324,12 @@ const CORE_SPELLS = {
 	// spell window once (one more cast, no dash), the way Seal of Summer's
 	// second cast works. Consumed by the turn drivers, not the resolver.
 	Rapids:            { resolve: 'soft_hard_chain', counts: [1, 1], extra_cast: true, static: false, ischarm: false },
+	Silence:           { resolve: 'silence',    static: false, ischarm: true  },
+	Vitrify:           { resolve: null,         static: true,  ischarm: false },
+	Spellbreak:        { resolve: 'spellbreak', static: false, ischarm: false },
+	Shatter:           { resolve: 'shatter',    static: false, ischarm: false },
+	Petrify:           { resolve: null,         static: true,  ischarm: false },
+	Fulgurite:         { resolve: 'fulgurite',  static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -378,14 +384,20 @@ const SPELL_TEXTS = {
 	Seal_of_Winter:    'STATIC: Your opponent cannot cast 1-node spells (charms).',
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
-	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all enemy stones on adjacent nodes.',
-	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
-	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves.',
-	Dividend:          'Make 1 extra move at the beginning of your next turn.',
-	Annuity:           'Make 1 extra move at the beginning of each of your next 2 turns.',
-	Endowment:         'Make 1 extra move at the beginning of each of your next 4 turns.',
+	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own.',
+	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. A stone pushed alone onto an occupied node destroys the stone there. Stones pushed into the same node, or onto each other's nodes, are destroyed; a stone already in that node survives.",
+	Bulwark:           'STATIC: Stones in your locked spell cannot be moved, crushed, converted, or destroyed by the opponent.',
+	Dividend:          'Add 1 stone to your Providence bank.',
+	Annuity:           'Add 2 stones to your Providence bank.',
+	Endowment:         'Add 4 stones to your Providence bank.',
 	Spring_Tide:       'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.',
 	Rapids:            'Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn.',
+	Silence:           'Opponent may not cast spells on their next turn.',
+	Vitrify:           'STATIC: The enemy cannot dash as long as you have this seal filled.',
+	Spellbreak:        "Unlock the opponent's locked spell and destroy 1 stone on that sigil. Then make 1 soft move.",
+	Shatter:           'Make 1 hard move, then destroy all enemy stones touching 2 or more of your stones.',
+	Petrify:           'STATIC: Opponent cannot make hard moves.',
+	Fulgurite:         'Make 1 blink move, then 2 hard moves.',
 };
 
 // ---- Duplicate-copy aliases (the "allow duplicates" variant) ----
@@ -424,11 +436,13 @@ const CORE_CHARMS = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer'];
 const CORE_SUBPACKS = {
 	core_growth: { name: 'Growth', rituals: ['Flourish'],          sorceries: ['Grow'],         charms: ['Sprout'] },
 	core_havoc:  { name: 'Havoc',  rituals: ['Carnage'],           sorceries: ['Fireblast'],    charms: ['Slash'] },
-	core_impact: { name: 'Impact', rituals: ['Starfall'],          sorceries: ['Meteor'],       charms: ['Comet'] },
+	core_crater: { name: 'Crater', rituals: ['Starfall'],          sorceries: ['Meteor'],       charms: ['Comet'] },
 	core_tempo:  { name: 'Tempo',  rituals: ['Seal_of_Lightning'], sorceries: ['Seal_of_Wind'], charms: ['Seal_of_Summer'] },
 	core_hex:    { name: 'Hex',    rituals: ['Bewitch'],           sorceries: ['Hail_Storm'],   charms: ['Surge'] },
 };
-const CORE_SUBPACK_KEYS = Object.keys(CORE_SUBPACKS);
+// Backward compatibility alias for any stored selections
+CORE_SUBPACKS.core_impact = CORE_SUBPACKS.core_crater;
+const CORE_SUBPACK_KEYS = ['core_growth', 'core_havoc', 'core_crater', 'core_tempo', 'core_hex'];
 
 const SPRINGTIME_RITUALS = ['Blossom'];
 const SPRINGTIME_SORCERIES = ['Scatter'];
@@ -474,9 +488,9 @@ const PROVIDENCE_CHARMS = ['Dividend'];
 // still being playtested before release. Unlike the official packs it need
 // not fill all three slots — the pool check only requires core + selected
 // packs to reach 3 spells per category.
-const EXPERIMENTAL_RITUALS = [];
-const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids'];
-const EXPERIMENTAL_CHARMS = [];
+const EXPERIMENTAL_RITUALS = ['Shatter', 'Petrify', 'Fulgurite'];
+const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak'];
+const EXPERIMENTAL_CHARMS = ['Silence'];
 
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
@@ -545,25 +559,110 @@ function isUnratedSpell(name) {
 	return isPandaSpell(name) || isExperimentalSpell(name);
 }
 
+// ---- Bulwark (Tectonic) ----
+// Nodes whose stone is shielded by its owner's Bulwark: a player holding
+// Bulwark charged protects their own stones in their locked spell from enemy
+// hard moves, conversion, and destruction by any effect (their own Fissure
+// included); sacrifices are unaffected. Works on the live SigilBoard and the
+// SimBoard alike. Mirrors bulwark_protected_nodes in simboard.py.
+function bulwarkProtectedNodes(board) {
+	const out = new Set();
+	for (const c of ['red', 'blue']) {
+		const lock = board.lock[c];
+		if (!lock || !board.chargedSpells[c].includes('Bulwark')) continue;
+		const idx = board.spellNames.indexOf(lock);
+		if (idx < 0) continue;
+		for (const n of POSITIONS[idx + 1] || []) {
+			if (board.stones[n] === c) out.add(n);
+		}
+	}
+	return out;
+}
+
+// The nodes whose shield would drop if the stone at `node` were removed (it
+// is its owner's Bulwark charm stone). Sequential effects (Carnage-style hard
+// moves, Storm Front, Corrupt) re-check Bulwark before every step, so taking
+// the Bulwark stone first exposes the locked spell to the later steps.
+// Mirrors SimBoard._bulwark_unshielded_by_removing in simboard.py.
+function bulwarkUnshieldedByRemoving(board, node) {
+	const out = new Set();
+	const owner = board.stones[node];
+	if (owner !== 'red' && owner !== 'blue') return out;
+	const cur = bulwarkProtectedNodes(board);
+	if (!cur.size || cur.has(node)) return out;
+	// Is `owner` still holding a charged Bulwark without this stone?
+	const stillCharged = board.spellNames.some((sn, i) => {
+		if (baseSpellName(sn) !== 'Bulwark') return false;
+		const nodes = POSITIONS[i + 1] || [];
+		return nodes.length > 0 && nodes.every(n => n !== node && board.stones[n] === owner);
+	});
+	if (stillCharged) return out;
+	for (const n of cur) if (board.stones[n] === owner) out.add(n);
+	return out;
+}
+
+// ---- Fissure (Tectonic) ----
+// Fissure's outcome at `target`: { destroyed, wall }. Every unshielded stone
+// of EITHER color on an adjacent node is destroyed. The target becomes a
+// permanent wall (its stone, if any, destroyed) unless it holds a
+// Bulwark-shielded stone, in which case the stone stays and no wall forms
+// (wall === null). Mirrors fissure_blast in simboard.py.
+function fissureBlast(stones, target, shielded) {
+	shielded = shielded || new Set();
+	const occupied = (n) => stones[n] === 'red' || stones[n] === 'blue';
+	const destroyed = ADJACENCY[target].filter(n => occupied(n) && !shielded.has(n));
+	if (occupied(target) && shielded.has(target)) return { destroyed, wall: null };
+	if (occupied(target)) destroyed.push(target);
+	return { destroyed, wall: target };
+}
+
+// Net stone swing of Fissure at `target` for `color` (+1 per enemy stone
+// destroyed, -1 per own); null for an existing wall. Mirrors fissure_score.
+function fissureScore(stones, color, target, shielded) {
+	if (stones[target] === DESTROYED) return null;
+	const { destroyed } = fissureBlast(stones, target, shielded);
+	let score = 0;
+	for (const n of destroyed) score += stones[n] === color ? -1 : 1;
+	return score;
+}
+
+// Legal Fissure targets, best net swing first (NODE_ORDER on ties).
+// Mirrors fissure_ranked_targets.
+function fissureRankedTargets(stones, color, shielded) {
+	const scored = [];
+	NODE_ORDER.forEach((n, i) => {
+		const sc = fissureScore(stones, color, n, shielded);
+		if (sc !== null) scored.push([sc, i, n]);
+	});
+	scored.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+	return scored.map(x => x[2]);
+}
+
 // ---- Rock Slide (Tectonic) ----
 // Pure helpers shared by the interactive resolver (spells.js), the AI sim
 // (sim-board.js), replay/playback (applySimTurn, minimax-ai.js,
 // ai-player.js). Mirrors rock_slide_sources / resolve_rock_slide /
 // rock_slide_greedy_pushes in simboard.py.
 
-// Every enemy stone touching a `color` stone, in NODE_ORDER. Fixed at cast
-// time; every one of them must be pushed.
-function rockSlideSources(stones, color) {
+// Every enemy stone touching a `color` stone, in NODE_ORDER, except
+// Bulwark-shielded ones. Fixed at cast time; every one of them must be pushed.
+function rockSlideSources(stones, color, shielded) {
 	const enemy = color === 'red' ? 'blue' : 'red';
-	return NODE_ORDER.filter(n => stones[n] === enemy && ADJACENCY[n].some(nb => stones[nb] === color));
+	shielded = shielded || new Set();
+	return NODE_ORDER.filter(n => stones[n] === enemy && !shielded.has(n)
+		&& ADJACENCY[n].some(nb => stones[nb] === color));
 }
 
 // Resolve pushes ([{from, to}]) simultaneously without mutating `stones`.
 // Returns { final: {node: value}, lost: [[node, color]] }. A pushed-away
 // node counts as vacated (chains slide, loops of 3+ rotate); a stationary
-// stone on a destination is destroyed; 2+ stones into one node all die; a
-// swap kills both; a stone pushed into a wall dies and the wall stays.
-function resolveRockSlide(stones, pushes) {
+// stone on a destination is destroyed when exactly one stone is pushed onto
+// it; 2+ stones into one node all die and a stationary stone there SURVIVES
+// (2026-10 nerf: Rock Slide never out-destroys Fireblast); a swap kills both; a stone pushed into a wall dies and the wall stays; a
+// Bulwark-shielded stone on a destination acts as a wall (arrivals die, it
+// stays).
+function resolveRockSlide(stones, pushes, shielded) {
+	shielded = shielded || new Set();
 	const destOf = {};
 	const arrivals = new Map();
 	for (const p of pushes) {
@@ -576,17 +675,38 @@ function resolveRockSlide(stones, pushes) {
 	const lost = [];
 	for (const [dest, srcs] of arrivals) {
 		const occ = stones[dest];
-		if (!(dest in destOf) && (occ === 'red' || occ === 'blue')) {
+		const shield = shielded.has(dest) && !(dest in destOf);
+		if (!(dest in destOf) && (occ === 'red' || occ === 'blue') && !shield
+			&& srcs.length === 1) {
 			lost.push([dest, occ]);
 			final[dest] = null;
 		}
-		if (occ === DESTROYED || srcs.length >= 2 || destOf[dest] === srcs[0]) {
-			for (const src of srcs) lost.push([dest, stones[src]]);
+		if (occ === DESTROYED || shield || srcs.length >= 2 || destOf[dest] === srcs[0]) {
+			// A stone stopped by a shield dies where it stood: recording it at
+			// the shield would put the shielded node in `destroyed`, and the
+			// replay (rockSlideReplayShielded) would then read the shield as
+			// absent and kill the stone it protects.
+			for (const src of srcs) lost.push([shield ? src : dest, stones[src]]);
 		} else {
 			final[dest] = stones[srcs[0]];
 		}
 	}
 	return { final, lost };
+}
+
+// The Bulwark-shielded destinations of a RECORDED Rock Slide: a stationary
+// stone on a destination the recorded outcome did not destroy. Replayers use
+// this instead of re-deriving protection (the caster's lock changes with the
+// cast). Mirrors rock_slide_replay_protected.
+function rockSlideReplayShielded(stones, pushes, destroyed) {
+	const sources = new Set(pushes.map(p => p.from));
+	const dead = new Set(destroyed || []);
+	const out = new Set();
+	for (const p of pushes) {
+		if (!sources.has(p.to) && !dead.has(p.to)
+			&& (stones[p.to] === 'red' || stones[p.to] === 'blue')) out.add(p.to);
+	}
+	return out;
 }
 
 // Thrown for an `rock_slide_variant` override past the number of distinct
@@ -635,13 +755,15 @@ function _rockSlideOrder(comp, opts) {
 // Returns [bestNet, [destMap, ...]] — one assignment per distinct resolved
 // outcome, first in canonical order, at most `limit` (null = all).
 // Mirrors _rock_slide_component in simboard.py (see there for the scoring).
-function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
+function _rockSlideComponent(stones, color, comp, opts, srcSet, limit, shielded) {
+	shielded = shielded || new Set();
 	const enemy = color === 'red' ? 'blue' : 'red';
 	const kind = {};
 	for (const src of comp) {
 		for (const d of [...opts[src], src]) {
 			if (srcSet.has(d)) kind[d] = 'mover';
 			else if (stones[d] === DESTROYED) kind[d] = 'wall';
+			else if (shielded.has(d)) kind[d] = 'shield';   // Bulwark: arrivals die, occupant stays
 			else if (stones[d] === enemy) kind[d] = 'enemy';
 			else if (stones[d] === color) kind[d] = 'own';
 			else kind[d] = 'empty';
@@ -667,7 +789,7 @@ function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
 		const f = Object.assign({}, frontier);
 		const kd = kind[d];
 		let gain = 0;
-		if (kd === 'wall') {
+		if (kd === 'wall' || kd === 'shield') {
 			gain = 1;
 		} else {
 			const [cnt, , dst] = f[d] || [0, null, null];
@@ -675,7 +797,9 @@ function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
 				gain = firstHit[kd] || 0;
 				f[d] = [1, src, dst];
 			} else {
-				gain = cnt === 1 ? 2 : 1;
+				// Second arrival: both arrivals die and the stationary stone
+				// survives, refunding the first arrival's hit.
+				gain = cnt === 1 ? 2 - (firstHit[kd] || 0) : 1;
 				f[d] = [2, null, dst];
 			}
 		}
@@ -710,25 +834,45 @@ function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
 	const best = dp(0, {});
 	const dest = {};
 	const out = [], keys = new Set();
-	function outcomeKey() {
-		const arrivals = {};
-		for (const src of seq) (arrivals[dest[src]] = arrivals[dest[src]] || []).push(src);
-		const vals = {};
-		for (const d of Object.keys(kind)) vals[d] = srcSet.has(d) ? null : stones[d];
-		for (const d of Object.keys(arrivals)) {
-			const srcs = arrivals[d];
-			if (kind[d] === 'wall') vals[d] = DESTROYED;
-			else if (srcs.length >= 2 || (kind[d] === 'mover' && dest[d] === srcs[0])) vals[d] = null;
-			else vals[d] = enemy;
-		}
-		return Object.keys(vals).sort().map(n => n + '=' + vals[n]).join(';');
+	// Final value of touched node `d` given its arrivals `srcs`.
+	function nodeVal(d, srcs) {
+		if (!srcs || !srcs.length) return srcSet.has(d) ? null : stones[d];
+		if (kind[d] === 'wall') return DESTROYED;
+		if (kind[d] === 'shield') return stones[d];
+		if (srcs.length >= 2) return (kind[d] === 'enemy' || kind[d] === 'own') ? stones[d] : null;
+		if (kind[d] === 'mover' && dest[d] === srcs[0]) return null;
+		return enemy;
 	}
+	function arrivalsOf(n) {
+		const arrivals = {};
+		for (let j = 0; j < n; j++) (arrivals[dest[seq[j]]] = arrivals[dest[seq[j]]] || []).push(seq[j]);
+		return arrivals;
+	}
+	function outcomeKey() {
+		const arrivals = arrivalsOf(seq.length);
+		return Object.keys(kind).sort().map(n => n + '=' + nodeVal(n, arrivals[n])).join(';');
+	}
+	// Nodes settled before seq[i] is assigned. Two optimal prefixes with the
+	// same frontier and the same settled values complete to the same set of
+	// outcomes, so the tie walk explores each (i, frontier, settled) state
+	// once -- without this, pile-up / swap ties make it exponential.
+	const closedBefore = [];
+	for (let i = 0; i <= seq.length; i++) {
+		closedBefore.push(Object.keys(kind).filter(d => closeAt[d] < i).sort());
+	}
+	const visited = new Set();
 	function walk(i, f, acc) {
 		if (limit !== null && out.length >= limit) return;
 		if (i === seq.length) {
 			const k = outcomeKey();
 			if (!keys.has(k)) { keys.add(k); out.push(Object.assign({}, dest)); }
 			return;
+		}
+		if (i) {
+			const arrivals = arrivalsOf(i);
+			const sig = i + '|' + keyOf(f) + '|' + closedBefore[i].map(d => nodeVal(d, arrivals[d])).join(',');
+			if (visited.has(sig)) return;
+			visited.add(sig);
 		}
 		for (const d of opts[seq[i]]) {
 			const [gain, nf] = step(f, i, d);
@@ -743,8 +887,8 @@ function _rockSlideComponent(stones, color, comp, opts, srcSet, limit) {
 	return [best, out];
 }
 
-function _rockSlideSolve(stones, color, pinned, limit) {
-	const sources = rockSlideSources(stones, color);
+function _rockSlideSolve(stones, color, pinned, limit, shielded) {
+	const sources = rockSlideSources(stones, color, shielded);
 	const srcSet = new Set(sources);
 	const opts = {};
 	for (const s of sources) opts[s] = s in pinned ? [pinned[s]] : ADJACENCY[s].slice();
@@ -768,7 +912,7 @@ function _rockSlideSolve(stones, color, pinned, limit) {
 	let total = 0;
 	const perComp = [];
 	for (const comp of comps) {
-		const [net, assigns] = _rockSlideComponent(stones, color, comp, opts, srcSet, limit);
+		const [net, assigns] = _rockSlideComponent(stones, color, comp, opts, srcSet, limit, shielded);
 		total += net;
 		perComp.push(assigns);
 	}
@@ -781,18 +925,20 @@ function _rockSlideSolve(stones, color, pinned, limit) {
 // independent interaction components, each solved exactly by DP; component
 // optima multiply lazily (last component fastest), stopping at `limit`.
 // Mirrors rock_slide_optimal_pushes in simboard.py.
-function rockSlideOptimalPushes(stones, color, overridePushes, limit) {
+function rockSlideOptimalPushes(stones, color, overridePushes, limit, shielded) {
 	limit = limit === undefined ? null : limit;
-	const sources = rockSlideSources(stones, color);
+	shielded = shielded || new Set();
+	const sources = rockSlideSources(stones, color, shielded);
 	const pinned = _rockSlidePinned(sources, overridePushes);
 	// Memo per position; a solve with a larger limit serves smaller ones
 	// (the outcome lists are prefix-consistent).
 	const key = NODE_ORDER.map(n => stones[n]).join(',') + '|' + color + '|'
-		+ Object.keys(pinned).sort().map(k => k + '>' + pinned[k]).join(',');
+		+ Object.keys(pinned).sort().map(k => k + '>' + pinned[k]).join(',')
+		+ '|' + [...shielded].sort().join(',');
 	let hit = _ROCK_SLIDE_MEMO.get(key);
 	if (!hit || !(hit[0] === null || (limit !== null && hit[0] >= limit))) {
 		if (_ROCK_SLIDE_MEMO.size >= _ROCK_SLIDE_MEMO_MAX) _ROCK_SLIDE_MEMO.clear();
-		hit = [limit, _rockSlideSolve(stones, color, pinned, limit)];
+		hit = [limit, _rockSlideSolve(stones, color, pinned, limit, shielded)];
 		_ROCK_SLIDE_MEMO.set(key, hit);
 	}
 	const [srcs, best, perComp] = hit[1];
@@ -812,8 +958,8 @@ function rockSlideOptimalPushes(stones, color, overridePushes, limit) {
 }
 
 // The canonical first max-net push set. Mirrors rock_slide_greedy_pushes.
-function rockSlideGreedyPushes(stones, color, overridePushes) {
-	return rockSlideOptimalPushes(stones, color, overridePushes, 1)[1][0];
+function rockSlideGreedyPushes(stones, color, overridePushes, shielded) {
+	return rockSlideOptimalPushes(stones, color, overridePushes, 1, shielded)[1][0];
 }
 
 // Game variants. Orthogonal dimensions encoded in a single string:
@@ -966,7 +1112,7 @@ function normalizeSfnString(sfn) {
 
 // Pack keys renamed over the project's history; stored selections
 // (localStorage, env vars) may still carry the old key.
-const LEGACY_PACK_KEYS = { tsunami: 'flood' };
+const LEGACY_PACK_KEYS = { tsunami: 'flood', core_impact: 'core_crater' };
 
 // A pack key's spell lists: an expansion (including 'core') or a Core sub-pack.
 function packDefinition(key) {
@@ -1058,3 +1204,6 @@ function generateSpellList(selection, allowDuplicates = false) {
 	const picks = poolByCat.map(cat => shuffleArray(cat).slice(0, perType));
 	return [...picks[0], ...picks[1], ...picks[2]];
 }
+
+// Expiration duration for unjoined game invite rooms (status 'waiting').
+const ROOM_INVITE_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours

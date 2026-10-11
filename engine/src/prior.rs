@@ -88,7 +88,7 @@ impl Board {
         for p in 0..9 { x[i] = (self.uncontrolled_count(p, c) == 1) as i16; i += 1; }
         for p in 0..9 { x[i] = (self.uncontrolled_count(p, c.other()) == 1) as i16; i += 1; }
         // 20 scalars
-        let red = self.total[0] as i32; let blue = self.total[1] as i32;
+        let red = self.material(Color::Red) as i32; let blue = self.material(Color::Blue) as i32;
         let lead = if c == Color::Red { red - (blue + 1) } else { (blue + 1) - red };
         let (own0, own1) = self.liberty_census_pub(c);
         let (en0, en1) = self.liberty_census_pub(c.other());
@@ -144,6 +144,7 @@ impl Board {
                         post.do_move_with_pub(node, push_to, c);
                     }
                 }
+                Action::Place { node, push_to } => post.do_placement(node, push_to, c),
                 Action::Dash { sacs, n_sacs, node, push_to } => {
                     has_dash = true;
                     push(P_DASH, &mut parts);
@@ -174,6 +175,18 @@ impl Board {
                                                   (true, false) => 2, (true, true) => 3 };
         push(P_CLASS + class, &mut parts);
         parts
+    }
+
+    /// `turn_parts` for a turn that is NOT in the ordered universe (an
+    /// exploration turn): the move score is recomputed as `dataset_rows` does,
+    /// and the within-stub rank, which such a turn does not have, is 0.
+    pub fn parts_outside_stream(&self, t: &Turn, c: Color) -> [u16; MAX_PARTS] {
+        let ms = match t.slice().first() {
+            Some(Action::Move { node, push_to }) | Some(Action::Blink { node, push_to }) =>
+                self.move_score_goal(*node, *push_to, c, self.placement_goal(c)),
+            _ => 0,
+        };
+        self.turn_parts(t, c, ms, 0)
     }
 
     /// The ordered candidate universe of this position (the shipped generator,

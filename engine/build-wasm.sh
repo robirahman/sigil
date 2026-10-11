@@ -27,7 +27,11 @@ fi
 
 cargo build --release --target wasm32-unknown-unknown --no-default-features --features wasm
 
-OUT=../docs/static/wasm
+# WASM_OUT=<dir> builds a prototype somewhere else (e.g. for
+# `SIGIL_WASM_DIR=<dir> node tools/wasm-smoke.js`) without touching the shipped
+# artifacts, which are served under the current ?v= and must not change without
+# a version bump.
+OUT=${WASM_OUT:-../docs/static/wasm}
 mkdir -p "$OUT"
 wasm-bindgen --target no-modules --no-typescript \
     --out-dir "$OUT" --out-name sigil_engine \

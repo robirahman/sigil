@@ -1,0 +1,1 @@
+6,10000,nnue_spell,opening_learned,1,2

@@ -33,9 +33,10 @@ SPELLS = ['Flourish', 'Carnage', 'Bewitch',
           'Sprout', 'Slash', 'Surge']
 
 TEXT = ("Push each enemy stone bordering you into an adjacent node. All pushes "
-        "happen simultaneously. Stones already occupying a destination are "
-        "destroyed; stones pushed onto each other's nodes, or into the same "
-        "node, are destroyed.")
+        "happen simultaneously. A stone pushed alone onto an occupied node "
+        "destroys the stone there. Stones pushed into the same node, or onto "
+        "each other's nodes, are destroyed; a stone already in that node "
+        "survives.")
 
 
 def _empty(**placed):
@@ -61,7 +62,7 @@ def test_registration():
     assert 'Avalanche' not in CORE_SPELLS
     import spellgenerator as g
     assert g.EXPANSIONS['tectonic']['sorceries'] == ['Rock_Slide']
-    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids']
+    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak']
     assert 'Rock_Slide' not in g.UNRATED_SPELLS
     import spellfile
     assert spellfile.Rock_Slide(None, [], 'Rock_Slide').text == TEXT
@@ -86,9 +87,13 @@ def test_resolver_rules():
     out, lost = _apply(_empty(a8='blue', a10='blue'), _p(('a8', 'a9'), ('a10', 'a9')))
     assert out['a8'] is None and out['a9'] is None and out['a10'] is None
     assert lost == [('a9', 'blue'), ('a9', 'blue')]
-    # ...and onto a stationary stone: all three destroyed.
+    # ...and onto a stationary stone: the pushed stones die, the stationary
+    # stone survives (2026-10 pile-up nerf).
     out, lost = _apply(_empty(a8='blue', a10='blue', a9='red'), _p(('a8', 'a9'), ('a10', 'a9')))
-    assert out['a9'] is None and lost == [('a9', 'blue'), ('a9', 'blue'), ('a9', 'red')]
+    assert out['a9'] == 'red' and out['a8'] is None and out['a10'] is None
+    assert lost == [('a9', 'blue'), ('a9', 'blue')]
+    out, lost = _apply(_empty(a8='blue', a10='blue', a9='blue'), _p(('a8', 'a9'), ('a10', 'a9')))
+    assert out['a9'] == 'blue' and lost == [('a9', 'blue'), ('a9', 'blue')]
     # Chain A->B->C ending on a stationary stone: only C's stone dies.
     out, lost = _apply(_empty(a7='blue', a8='blue', a9='red'), _p(('a7', 'a8'), ('a8', 'a9')))
     assert (out['a7'], out['a8'], out['a9']) == (None, 'blue', 'blue') and lost == [('a9', 'red')]
@@ -126,12 +131,19 @@ def _sim(**placed):
 
 def test_greedy():
     print("Testing rock_slide_greedy_pushes...")
-    # Red a9 borders blue a8 + a10 (a8-a10 adjacent). Best is the swap
-    # (+2); dumping both on a9 is only +1 (kills red a9 too).
+    # Red a9 borders blue a8 + a10 (a8-a10 adjacent). The swap and dumping
+    # both on a9 are both +2: a pile-up spares the stationary red a9
+    # (2026-10 nerf). Both leave the same board, so the pile-up (canonical
+    # first) is the only distinct option.
     stones = _empty(a9='red', a8='blue', a10='blue', c5='red', b1='blue')
     assert rock_slide_sources(stones, 'red') == ['a8', 'a10']
     pushes = rock_slide_greedy_pushes(stones, 'red')
-    assert pushes == _p(('a8', 'a10'), ('a10', 'a8')), pushes
+    assert pushes == _p(('a8', 'a9'), ('a10', 'a9')), pushes
+    final, lost = resolve_rock_slide(stones, pushes)
+    assert final.get('a9', 'red') == 'red' and sorted(lost) == [('a9', 'blue'), ('a9', 'blue')]
+    best, options = rock_slide_optimal_pushes(stones, 'red')
+    assert best == 2 and options == [pushes], options
+    assert resolve_rock_slide(stones, _p(('a8', 'a10'), ('a10', 'a8')))[0] == {'a8': None, 'a10': None}
     # Forced own loss: blue a1 only borders red a2 / red a11.
     stones = _empty(a1='blue', a2='red', a11='red', b1='blue')
     pushes = rock_slide_greedy_pushes(stones, 'red')
@@ -204,10 +216,11 @@ def test_optimal_matches_brute_force():
 
 def test_optimal_shapes():
     print("Testing optimal Rock Slide shapes (pair, triangle, 5-cycle, 5-chain, sinks)...")
-    # Touching pair: swap them (+2).
+    # Touching pair: swap them, or pile both onto red a9 (which survives the
+    # pile-up) -- +2 and the same board either way, so one option.
     st = _empty(a9='red', a8='blue', a10='blue', b4='blue')
     best, opts = rock_slide_optimal_pushes(st, 'red')
-    assert best == 2 and opts == [_p(('a8', 'a10'), ('a10', 'a8'))], (best, opts)
+    assert best == 2 and opts == [_p(('a8', 'a9'), ('a10', 'a9'))], (best, opts)
     # Triangle a8/a9/a10, each bordering red: all three destroyed, one board.
     st = _empty(a7='red', a13='red', b11='red', a8='blue', a9='blue', a10='blue', b4='blue')
     best, opts = rock_slide_optimal_pushes(st, 'red')
@@ -228,10 +241,15 @@ def test_optimal_shapes():
     n_optimal = sum(1 for combo in itertools.product(*[ADJACENCY[s] for s in srcs])
                     if _net_and_board(st, [{'from': s, 'to': d} for s, d in zip(srcs, combo)])[0] == 5)
     assert n_optimal > 1, n_optimal
-    # Two pushes into a stationary enemy stone: +3 (beats the +2 swap).
+    # Two pushes into a stationary enemy stone: the pushed pair dies and the
+    # stationary stone survives (2026-10 nerf), +2 -- no better than the
+    # swap, and the same board, so one option. Before the nerf this was +3,
+    # one more than Fireblast's 2.
     st = _empty(a7='red', b11='red', a8='blue', a10='blue', a9='blue', b4='blue')
     best, opts = rock_slide_optimal_pushes(st, 'red')
-    assert best == 3 and opts == [_p(('a8', 'a9'), ('a10', 'a9'))], (best, opts)
+    assert best == 2 and len(opts) == 1, (best, opts)
+    final, lost = resolve_rock_slide(st, _p(('a8', 'a9'), ('a10', 'a9')))
+    assert final.get('a9', 'blue') == 'blue' and len(lost) == 2
     # Wall sink.
     st = _empty(a9='red', a8='blue', a7=DESTROYED, b4='blue')
     best, opts = rock_slide_optimal_pushes(st, 'red')
@@ -352,9 +370,13 @@ def test_sim_cast_and_replay():
     before = b.copy()
     acts = b._resolve_spell('Rock_Slide', 'red', POSITIONS[4])
     assert len(acts) == 1 and acts[0].type == 'rock_slide'
-    assert acts[0].pushes == _p(('a8', 'a10'), ('a10', 'a8'))
-    assert sorted(acts[0].destroyed) == ['a10', 'a8']
-    assert b.stones['a8'] is None and b.stones['a10'] is None
+    # Piling both onto red a9 ties the swap (+2, same board) and is the
+    # canonical first option; the pile-up spares a9 (2026-10 nerf), and the
+    # pushed stones are recorded as dying at a9, so the replay never reads
+    # the surviving a9 as Bulwark-shielded.
+    assert acts[0].pushes == _p(('a8', 'a9'), ('a10', 'a9'))
+    assert acts[0].destroyed == ['a9']
+    assert b.stones['a8'] is None and b.stones['a10'] is None and b.stones['a9'] == 'red'
     apply_sim_turn(before, CompleteTurn([acts[0]]), 'red')
     assert all(before.stones[n] == b.stones[n] for n in NODE_ORDER)
     # Nothing bordering: an empty action, board unchanged.
@@ -499,7 +521,7 @@ const out = POS.map(stones => {
   if (JSON.stringify(acts[0].pushes) !== JSON.stringify(pushes)) throw new Error('sim pushes differ');
   return { best, options, pushes, final, lost };
 });
-if (isUnratedSpell('Rock_Slide') || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids') throw new Error('pack');
+if (isUnratedSpell('Rock_Slide') || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids,Vitrify,Spellbreak') throw new Error('pack');
 if (EXPANSIONS.tectonic.sorceries.join() !== 'Rock_Slide' || 'Avalanche' in CORE_SPELLS) throw new Error('tectonic');
 if (SPELL_TEXTS.Rock_Slide !== %s) throw new Error('text');
 console.log('JS_RESULT ' + JSON.stringify(out));

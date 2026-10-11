@@ -4,15 +4,15 @@
 //!   `<39 stone chars>/<spell1,..,spell9> <r|b> <turncounter> <rsc>:<bsc>
 //!    <rlock>:<block> <rspring>:<bspring> <score> [variant] [pm:..] [ab:..] [sn:..]`
 //!
-//! Stone chars are `r` / `b` / `.` and — for Tectonic, which is out of scope — `x`
-//! for a node destroyed by Fissure. Locks and springlocks are spell NAMES or `-`.
-//! `score` is derived state (`tied` / `r1..r3` / `b1..b3`), so it is written but
-//! ignored on read.
+//! Stone chars are `r` / `b` / `.` and `x` for a node destroyed by Fissure (a
+//! wall). Locks and springlocks are spell NAMES or `-`. `score` is derived state
+//! (`tied` / `r1..r3` / `b1..b3`, Providence banks included), so it is written
+//! but ignored on read.
 //!
-//! The optional trailing `pm:` / `ab:` / `sn:` tokens carry Providence, Aftershock
-//! and Ambush state. All three are deferred packs, so this reader REFUSES an SFN
-//! that contains them rather than silently dropping state — a position we cannot
-//! represent must not be mistaken for one we can.
+//! The optional trailing `pm:<red bank>:<blue bank>` token carries the
+//! Providence banks, written only when one is nonzero. `ab:` / `sn:` carry
+//! Aftershock and Ambush state; those packs are retired, so this reader REFUSES
+//! an SFN that contains them rather than silently dropping state.
 
 use crate::board::{Board, Color, Variant, NO_SPELL};
 use crate::spells_meta::{SPELLS, NUM_OFFICIAL_SPELLS};
@@ -33,6 +33,7 @@ impl Board {
             let bit = 1u64 << i;
             stones.push(if self.stones[0] & bit != 0 { 'r' }
                         else if self.stones[1] & bit != 0 { 'b' }
+                        else if self.walls & bit != 0 { 'x' }
                         else { '.' });
         }
         let spells: Vec<&str> = self.spells.iter().map(|&id| spell_name(id)).collect();
@@ -40,9 +41,10 @@ impl Board {
         let lock = |i: usize| if self.lock[i] == NO_SPELL { "-" } else { spell_name(self.lock[i]) };
         let spring = |i: usize| if self.springlock[i] == NO_SPELL { "-" }
                                 else { spell_name(self.springlock[i]) };
-        // Score mirrors update(): blue carries a +1 phantom counter token.
-        let red = self.total[0] as i32;
-        let blue = self.total[1] as i32 + 1;
+        // Score mirrors update(): blue carries a +1 phantom counter token, and
+        // Providence banked stones count for their owner.
+        let red = self.material(Color::Red) as i32;
+        let blue = self.material(Color::Blue) as i32 + 1;
         let score = if red == blue { "tied".to_string() }
             else if red > blue { format!("r{}", (red - blue).min(3)) }
             else { format!("b{}", (blue - red).min(3)) };
@@ -57,6 +59,9 @@ impl Board {
             Variant::CompetitiveDeathmatch => "competitive_deathmatch",
         };
         if !v.is_empty() { out.push(' '); out.push_str(v); }
+        if self.bank[0] != 0 || self.bank[1] != 0 {
+            out.push_str(&format!(" pm:{}:{}", self.bank[0], self.bank[1]));
+        }
         out
     }
 
@@ -65,9 +70,14 @@ impl Board {
         if toks.len() < 7 {
             return Err(format!("SFN needs at least 7 tokens, got {}", toks.len()));
         }
-        // Deferred-pack state must not be silently dropped.
+        // Retired-pack state must not be silently dropped.
+        let mut bank = [0u8; 2];
         for t in &toks {
-            if t.starts_with("pm:") { return Err("SFN carries Providence state (pm:), out of scope".into()); }
+            if let Some(rest) = t.strip_prefix("pm:") {
+                let (r, b) = rest.split_once(':').ok_or("bad pm: token")?;
+                bank = [r.parse().map_err(|_| "bad red bank")?,
+                        b.parse().map_err(|_| "bad blue bank")?];
+            }
             if t.starts_with("ab:") { return Err("SFN carries Aftershock state (ab:), out of scope".into()); }
             if t.starts_with("sn:") { return Err("SFN carries Ambush state (sn:), out of scope".into()); }
         }
@@ -78,13 +88,13 @@ impl Board {
         }
         let mut red = 0u64;
         let mut blue = 0u64;
+        let mut walls = 0u64;
         for (i, ch) in stones_s.chars().enumerate() {
             match ch {
                 'r' => red |= 1u64 << i,
                 'b' => blue |= 1u64 << i,
                 '.' => {}
-                'x' => return Err(format!("node {} destroyed by Fissure (Tectonic), out of scope",
-                                          NAMES[i])),
+                'x' => walls |= 1u64 << i,
                 other => return Err(format!("bad stone char {:?} at {}", other, NAMES[i])),
             }
         }
@@ -95,7 +105,10 @@ impl Board {
             spells[i] = spell_id(nm)
                 .ok_or_else(|| format!("unknown or out-of-scope spell {:?}", nm))?;
         }
-        let variant = match toks.get(7).copied().unwrap_or("standard") {
+        // The variant token, if any, is the first trailing token that is not
+        // self-tagged (`pm:` etc.).
+        let vtok = toks[7..].iter().copied().find(|t| !t.contains(':')).unwrap_or("standard");
+        let variant = match vtok {
             "competitive" => Variant::Competitive,
             "deathmatch" => Variant::Deathmatch,
             "competitive_deathmatch" => Variant::CompetitiveDeathmatch,
@@ -103,6 +116,8 @@ impl Board {
         };
         let mut b = Board::new(spells, variant);
         b.stones = [red, blue];
+        b.walls = walls;
+        b.bank = bank;
         b.to_move = if toks[1] == "b" { Color::Blue } else { Color::Red };
         b.turn_counter = toks[2].parse().map_err(|_| "bad turn counter")?;
         let (rsc, bsc) = toks[3].split_once(':').ok_or("bad spell counters")?;

@@ -14,8 +14,8 @@ format entirely.
 Every converted game is then verified END-TO-END through the node
 replay bridge (ai/replay_bridge.py -> reconstructGameLog): the replayed
 transcript must reproduce every stored sfnBefore/sfnAfter byte-for-byte,
-including the start-of-turn preamble (Destruction check, Providence
-shift). Only fully-verified records are rewritten;
+including the start-of-turn preamble (Destruction check). Only
+fully-verified records are rewritten;
 everything else stays fat and is listed in the report.
 
 Ambiguity is fine: if two different action sequences produce the same
@@ -113,13 +113,9 @@ def _action_to_dict(a):
 
 
 def _prepare_turn_start(board, color, turn_number):
-    """Mirror the reconstructGameLog start-of-turn preamble on a sim:
-    the schedule pops BEFORE the move phase, so enumeration sees this
-    turn's extra moves."""
+    """Mirror the reconstructGameLog start-of-turn preamble on a sim."""
     board.turn_counter = turn_number
     board.whose_turn = color
-    sched = board.pending_moves[color]
-    board.extra_moves_this_turn = sched.pop(0) if sched else 0
     board.update()
 
 

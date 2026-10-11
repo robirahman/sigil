@@ -94,11 +94,9 @@ _TTEntry = namedtuple('_TTEntry', ['depth', 'score', 'bound', 'best_move', 'age'
 # Cap on `spell_counter`; the engine resets at 6 (simboard.py:174) so any
 # value past 7 collapses to the same Zobrist bucket harmlessly.
 _HASH_MAX_SPELL_COUNTER = 8
-# Providence pending-move hashing bounds: 4 slots (Endowment horizon) and a
-# per-slot count cap (stacked casts saturate at the cap — positions beyond
-# it hash together, which only costs TT precision in absurd stacking cases).
-_HASH_PENDING_SLOTS = 4
-_HASH_MAX_PENDING = 8
+# Providence bank hashing cap: banks past it hash together, which only
+# costs TT precision in absurd stacking cases.
+_HASH_MAX_BANK = 16
 
 # Zobrist tables are deterministic across runs: the hash for the same
 # game state must collide between processes so that TT entries from
@@ -141,15 +139,10 @@ class _PositionHasher:
         self._springlock = {(c, s): rnd()
                             for c in ('red', 'blue') for s in lock_states}
         self._side = {'red': rnd(), 'blue': rnd()}
-        # Providence: pending schedules and the popped extras counter change
-        # legal moves and evaluation, so they must hash — otherwise the TT
-        # returns scores across positions that differ only in scheduled
-        # moves. Empty schedules XOR nothing, keeping legacy hashes stable.
-        self._pending = {(c, i, k): rnd() for c in ('red', 'blue')
-                         for i in range(_HASH_PENDING_SLOTS)
-                         for k in range(1, _HASH_MAX_PENDING)}
-        self._extra_now = {(c, k): rnd() for c in ('red', 'blue')
-                           for k in range(1, _HASH_MAX_PENDING)}
+        # Providence: banks change legal moves and evaluation, so they must
+        # hash. Empty banks XOR nothing, keeping legacy hashes stable.
+        self._bank = {(c, k): rnd() for c in ('red', 'blue')
+                      for k in range(1, _HASH_MAX_BANK)}
 
     def hash(self, board, side_to_move):
         h = self._side[side_to_move]
@@ -164,15 +157,9 @@ class _PositionHasher:
             h ^= self._spell_counter[(color, sc)]
             h ^= self._lock[(color, board.lock[color])]
             h ^= self._springlock[(color, board.springlock[color])]
-            for i, k in enumerate(board.pending_moves[color]):
-                if k:
-                    h ^= self._pending[(color,
-                                        min(i, _HASH_PENDING_SLOTS - 1),
-                                        min(k, _HASH_MAX_PENDING - 1))]
-        e = board.extra_moves_this_turn
-        if e:
-            h ^= self._extra_now[(board.whose_turn,
-                                  min(e, _HASH_MAX_PENDING - 1))]
+            k = board.prov_bank[color]
+            if k:
+                h ^= self._bank[(color, min(k, _HASH_MAX_BANK - 1))]
         return h
 
 
@@ -277,7 +264,7 @@ def _turn_signature(turn):
                   if a.pushes else ())
         parts.append((a.type, a.node, a.pushed_to, a.spell,
                       sac, kept, a.node2, dest, conv, a.wall, pushes,
-                      a.turns))
+                      a.banked, a.providence))
     return tuple(parts)
 
 

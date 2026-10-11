@@ -1,0 +1,25 @@
+r.....bbbbr..b.........b........rrrr.../Erupt,Blossom,Harvest,Rock_Slide,Decay,Eclipse,Slash,Seal_of_Winter,Charge r 10 0:0 -:- -:- b1
+r.......bbr..bb.................rrrr.../Bewitch,Hurricane,Corrupt,Annuity,Meteor,Seal_of_Stone,Slash,Surge,Comet r 10 0:0 -:- -:- r1
+b.....rrrrb..r.........r..r......bbb.../Fissure,Syzygy,Harvest,Grow,Decay,Fury,Seal_of_Summer,Surge,Slash b 11 1:0 Grow:- -:- r1 competitive
+r.r...bbbbrr.b.....r...bb.......r..r.../Harvest,Hurricane,Fissure,Grow,Gather,Scatter,Gust,Seal_of_Winter,Surge r 12 1:0 Scatter:- -:- b1
+r.....bbbbrr.b.........b........rrrr.../Blossom,Seal_of_Lightning,Flourish,Annuity,Scatter,Gather,Seal_of_Winter,Splash,Seal_of_Spring b 11 0:0 -:- -:- tied
+rrbbrrrbbbr.b......r...b..b.....r..r.../Harvest,Corrupt,Endowment,Seal_of_Wind,Seal_of_Stone,Scatter,Slash,Dividend,Seal_of_Spring b 31 3:0 Scatter:- -:- tied
+r.....b..br..bbbbbb........rrrrr.rrr.../Tsunami,Hurricane,Harvest,Eclipse,Rock_Slide,Decay,Lurk,Splash,Azimuth b 23 1:1 Decay:Eclipse -:- r1
+r..bb....brb.brr.......bb.r..r..brrr.../Starfall,Hurricane,Endowment,Torrent,Annuity,Seal_of_Wind,Sprout,Comet,Slash b 15 0:1 -:Torrent -:- tied
+r......bbbr..b.........b........rrrr.../Syzygy,Seal_of_Lightning,Endowment,Torrent,Gather,Decay,Charge,Sprout,Seal_of_Summer r 10 0:0 -:- -:- tied
+bbb.r.brrrbrbrrbbrr....rrbrr.....bbb.bb/Hurricane,Fissure,Blossom,Grow,Torrent,Annuity,Gust,Slash,Surge r 32 1:1 Grow:Annuity -:- b2 competitive
+rrrb.rb.bbrrbb.........b..bbb...rrrr.../Endowment,Starfall,Syzygy,Torrent,Scatter,Seal_of_Stone,Comet,Splash,Seal_of_Autumn b 19 0:1 -:Torrent -:- b1
+.rbb.rrr.rr.brbbbbb...rrb............../Endowment,Seal_of_Lightning,Flourish,Scatter,Seal_of_Wind,Grow,Sprout,Splash,Seal_of_Summer b 19 1:0 Scatter:- -:- b1 competitive
+rr.bbrbb.brr.b.........b........rrrr..r/Bewitch,Blossom,Flourish,Annuity,Seal_of_Wind,Gather,Slash,Seal_of_Winter,Bulwark b 17 0:0 -:- -:- r2
+r.....bbbbrr.b.........b........rrrr.../Corrupt,Endowment,Carnage,Gather,Storm_Front,Fireblast,Bulwark,Lurk,Sprout b 11 0:0 -:- -:- tied
+rrrr.r....r.rbbbbbbb...bb........rr..b./Fissure,Endowment,Flourish,Storm_Front,Seal_of_Stone,Fireblast,Splash,Comet,Sprout r 18 0:0 -:- -:- b2
+r.b....bbbrrbb.........b........rrrr.../Flourish,Hurricane,Carnage,Annuity,Gather,Meteor,Seal_of_Autumn,Seal_of_Spring,Gust b 13 0:0 -:- -:- b1
+rrbbrrbbbbrrbb.bbbb....b..rrrrr....r.../Endowment,Harvest,Fissure,Grow,Fury,Annuity,Splash,Lurk,Dividend r 28 1:1 Annuity:Grow -:- b1 pm:1:0
+r.....bbbbr..b.........b........rrrr.../Flourish,Erupt,Seal_of_Destruction,Decay,Fury,Grow,Bulwark,Surge,Splash r 10 0:0 -:- -:- b1
+bbbrbb.rrrbrrr....r....rr.r.....rrbb..b/Harvest,Flourish,Seal_of_Lightning,Torrent,Annuity,Eclipse,Charge,Surge,Dividend b 25 1:2 Torrent:Harvest -:- r2 competitive pm:0:1
+.bbb.....brr.bbb................rrrr.../Bewitch,Fissure,Carnage,Fireblast,Decay,Eclipse,Lurk,Gust,Splash r 22 0:1 -:Fireblast -:- b2
+r.....bbbbrrbb.........b........rrrr.../Erupt,Blossom,Hurricane,Fireblast,Meteor,Fury,Seal_of_Summer,Surge,Bulwark r 12 0:0 -:- -:- b1
+r.....bbbbr..b.........b........rrrr.../Harvest,Hurricane,Syzygy,Gather,Eclipse,Hail_Storm,Gust,Charge,Bulwark r 10 0:0 -:- -:- b1
+rr.b....bbrr.b.........bb.bbrr.brrrr..r/Fissure,Bewitch,Hurricane,Hail_Storm,Storm_Front,Seal_of_Stone,Comet,Bulwark,Seal_of_Spring r 20 0:0 -:- -:- r1
+rr.b.r.b..b..b.........bb.rrrrr..rrb.../Fissure,Erupt,Hurricane,Eclipse,Fireblast,Grow,Slash,Charge,Seal_of_Winter b 21 1:0 Grow:- -:- r2
+r......bbbrr.b....b....b.....r..rrrr.../Blossom,Hurricane,Seal_of_Destruction,Hail_Storm,Seal_of_Stone,Decay,Bulwark,Seal_of_Autumn,Seal_of_Summer b 13 0:0 -:- -:- r1

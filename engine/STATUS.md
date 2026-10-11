@@ -21,6 +21,76 @@ the puzzle still needs (`2 x turns left`). Verdicts `mate` / `mate_slow` / `like
 always plays on; a win within the count after an `escape` verdict is flagged as an engine
 misjudgement with the position. `RUST_ENGINE_VERSION` 7, cache v32.
 
+**2026-10-07: engine v28 (cache v69) -- generator exploration tail ON (round 3 preset 3).** New
+`policy::SHIPPED_EXPLORE` = `set_policy_explore(3,64,128,8,48,512,16)`: every cast/dash stub the policy stream
+expands also pushes one lazy tail (every keep and 64 resolutions per cast; 128 dash branches, 8 pairs per landing
+from the 48 cheapest), deduped by outcome, 2 nats below the stub's last sibling (`reports/2026-10-r3-gen.md`).
+Applied like SHIPPED_POLICY, never as the thread default (which stays `Explore::OFF`, the knob-off A/B path):
+wasm `ensure_shipped_policy`, Python `se.SHIPPED_EXPLORE` (ab_search `SIGIL_AB_BASE`/`SIGIL_POLICY=shipped`,
+ab_version, bench_suites `eval=shipped`, `SIGIL_AUDIT_ENGINE=shipped`, serve.py `--explore shipped`),
+`bench --shipped`. Arena vs v27 at 10 s (both arms shipped policy + nnue_spell3): core **+51.8**, expansion +11.2,
+competitive +21.7, **about +29 pooled over 3,293 games**; passes the guest gate (`reports/2026-10-r3-gate.md`).
+Policy weights: unchanged from v26/v27. The round-3 retrain on v27 data (65.9% competitive) was not shipped: r3_warm stacked on preset 3 scored +8.0 [-3.9, +20.0] over 3,239 games, r3_wtd -7.5 (engine/reports/2026-10-r3-data.md).
+Tests 185/185, policy-wasm HASH 717fb1cae5d3adaf (shipped defaults; `EXPLORE=0` still 55a10a3b6c3b7ef9),
+nn-wasm 264/264 for nnue_spell3 and nnue_spell, wasm smoke 5/5 + policy-off 2/2 (an earlier batch had 3 failures of 9 runs; the one logged was
+the random-draw "even opening reads ~0 stones" check, which the v27 wasm also trips -- 4/30 openings vs v28 0/30).
+wasm 1.39 MB unoptimised.
+Browser Hard-tier depth (10 s, fresh table, node 18 wasm on the Chromebook, v28 and v27 interleaved in one process,
+114 positions: 32 guest pre, 32 guest sfn, 10 own, 40 surprise-v25 game positions): v28 is never deeper and 1 ply
+shallower on 18/114 (16%); total nodes equal (x1.01), time to d4 x1.06 and to d5 x1.16 (medians). >= d5: 62 vs 73.
+Decisive positions: before the 10 MATE blows d4 7 vs 8, d5 1 vs 2 (median d4 both); MATE positions themselves
+d5 1 vs 2, each build reports one forced loss (different cases); own blunders d4/d5 identical (8/2), avoids 10/10
+vs 9/10. The arena result already pays the same node cost (native, 10 s).
+
+**2026-10-07: engine v27 (cache v68) -- competitive opening selector OFF.** `opening::set_opening_book` now defaults
+to false: in the competitive variant the search and `nnue_spell` place the first stone. Arena (v25, both arms at the
+shipped policy, competitive, 10 s/move, colour-swapped): book OFF vs book ON **+90.5 [+75.3, +105.6]** (2,160 games);
+without the book the first stone lands in the book's sigil only 12% of the time, and 10.5% go outside any sigil. A
+learned selector fitted to 77k v25 rollout games lost to book-off, -40.4 [-55.1, -25.6] (2,160), and stays off
+(`opening_learned.rs`; `reports/2026-10-r2-opening.md`). Not re-measured on v26 (Robi's call). Tests 184/184,
+policy-wasm HASH 55a10a3b6c3b7ef9, nn-wasm 264/264, wasm smoke 5/5 (incl. competitive openings).
+
+**2026-10-07: engine v26 (cache v67) -- `nnue_spell3` + retrained generator policy.** `SHIPPED_EVAL = "nnue_spell3"`
+(residual on `tfit_spell_v2`, cap 256, lambda 0.5, quantisation-aware; `reports/2026-10-r2-nn.md`: +40.1 [+19.2, +60.9]
+at 10 s over `nnue_spell` with the shipped policy) and the policy retrained on 1.42M v25 self-play examples
+(`reports/2026-10-r2-data.md`: +8.5 [-1.9, +18.8] pooled over 4,317 games, not significant on its own). Release A/B
+`ab_version.py` (each build plays its own shipped eval + policy), v26 vs v25, 10 s/move, colour-swapped, 4 x
+c3d-highcpu-90: core draws **+30.6 [+15.9, +45.3]** (2,160 games), Tectonic/Providence draws **+51.5 [+36.7, +66.3]**
+(2,160). `nnue_spell2` dropped from the build. Parity: policy-wasm HASH 55a10a3b6c3b7ef9 (76 positions, d4) = bench.rs;
+nn-wasm 264/264 for nnue_spell3 and nnue_spell. Tests 182/182, wasm smoke 5/5 + policy-off. wasm 1.36 MB (417 KB gz).
+
+**2026-10-07: engine v25 (cache v65) -- learned generator policy + `nnue_spell` network eval.** `policy::SHIPPED_POLICY`
+(on, min_width 96) and `eval::SHIPPED_EVAL = "nnue_spell"` are what the site plays (wasm applies the policy once per
+module; `serve.py --policy`; Lazy SMP / parallel-root helper threads now inherit the policy). Release A/B, v25 vs v24,
+10 s/move, colour-swapped, 4 x c3d-highcpu-90: core draws +188.7 Elo [+171.8, +205.6] (2,160 games), draws holding a
+Tectonic/Providence spell +167.2 [+150.8, +183.6] (2,160). Components: policy +94 at 10 s on `tfit`, +118 on
+`tfit_spell_v2` (`reports/2026-10-step4.md`); network +79 [+64, +93] at 10 s over `tfit_spell_v2` (`reports/2026-10-step5.md`).
+Native/wasm tree parity: `tools/policy-wasm-parity.js` HASH 5a13846bc3228203 over 76 positions at depth 4 equals
+`examples/bench.rs`; `tools/nn-wasm-parity.js` 264/264. Tests 181/181, wasm smoke 5/5 + policy-off. wasm 1.11 MB (357 KB gzipped; v24 740 KB / 240 KB).
+
+**2026-10-06: engine v24 (cache v64) -- eval `tfit_spell_v2` shipped.** `eval::SHIPPED_EVAL` now names the site's eval
+(wasm default, puzzle judge, mate nominator, `serve.py`); harness defaults stay `tfit`. Per-spell sigil terms: the
+original fit `tfit_spell` scored +59 [+45, +72] at 3 s (2,580 games) and +50 [+33, +66] at 10 s (1,806) over `tfit`
+(`reports/2026-10-step2.md`); the v2 refit on Step 3 data ties it at 10 s, -4.8 [-25, +15] on core draws and
+-3.0 [-23, +17] on Tectonic/Providence draws (1,168 each, `reports/2026-10-step2b.md`), and covers ids 39-44.
+Same release fixes a Rock Slide x Bulwark replay bug (396e49b0): a stone stopped by a shield was recorded as
+dying AT the shield, so the replay's shield inference killed the shielded stone. Tests 173/173, wasm smoke 5/5.
+
+**2026-10-03: engine v23 (cache v62) -- v22 shipped; shield check skipped when Bulwark is not drawn.** Version
+A/B (`harness/ab_version.py`, new `runner.sh` `base-branch` build), v22 vs main's v21 on core-only draws, shipped
+config, 3 x c3d-highcpu-90: 1 s/move -10.5 Elo [-27, +6], 3 s/move -6.6 [-24, +11], pooled ~-9 [-21, +4] over
+1,056 games; depth -0.03 ply at both. v23 caches Bulwark's position on the Board so `shielded()` is one compare in
+games without it. Tests 168/168, wasm smoke green, parity harness 0 mismatches.
+
+**2026-10-03: engine v22 (cache v61) -- Tectonic and Providence.** Ids 39..44 are in scope: Fissure (every
+target; the blast takes both colours, the caster's own included), Rock Slide (every maximum-net outcome, exact DP
+port of `rock_slide_optimal_pushes`), Bulwark (shield vs enemy hard moves, conversion and destruction; step-by-step
+effects re-check it, simultaneous ones read it once), and the Providence bank (Dividend/Annuity/Endowment add 1/2/4;
+banked stones count as material; `Action::Place`, at most one optional placement per turn). SFN `x` walls and the
+`pm:` token round-trip. Tests 168/168, `wasm-smoke.js` green including three replay-verified Tectonic+Providence
+games, `harness/parity_tectonic_providence.py` against simboard.py. Not arena-tested; the eval has no positional
+terms for walls or banks beyond material.
+
 **2026-10-02: engine v21 (cache v56) -- Seal of Winter, not Autumn.** The conditional Syzygy charm targets
 (Splash, Charge, Lurk, Azimuth, Sprout, Comet) depend on Seal of Winter being the charm touching Syzygy: Winter
 forbids casting 1-node spells, so the charm cannot be cast to move its stone out. v20 used Seal of Autumn by
@@ -365,7 +435,9 @@ unreachable), and seven pyo3 signatures no longer restate `width_scale`.
 
 ## Where the next Elo is not
 
-Closed by measurement, do not re-open without new evidence: a learned leaf
+Closed by measurement, do not re-open without new evidence (**except the learned
+leaf eval, which `2026-10-training-plan.md` reopens:** the test behind the verdict
+below was spell-blind and fit noisy game outcomes, see that plan's §2): a learned leaf
 eval (GBM extracts nothing beyond linear over 8.2M on-policy positions,
 ceiling ~+15-25 Elo before cost), a wider linear eval (`full_features` is
 9-12% of a node against a 5% gate), retuning adaptive widening (the shipped
@@ -430,7 +502,7 @@ own slot, and the soft-move avoidance mask is the casting sigil.)
 
 Harvest / Gather / Seal_of_Autumn are excluded from that sweep because they are
 **absent from simboard.py's `CORE_SPELLS` entirely** — confirmed by KeyError, matching
-`ai/RETRAINING_FISSURE.md`. They have no Python reference and are covered instead by
+the since-deleted `ai/RETRAINING_FISSURE.md` (git history). They have no Python reference and are covered instead by
 unit tests written from the live JS spec.
 
 ## Compound turns, openings and full enumeration: DONE

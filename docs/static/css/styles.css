@@ -853,6 +853,40 @@ html[data-theme="volcanic"].webp {
 	}
 }
 
+/* Providence bank sizes, shown beside the dice while either bank is nonempty. */
+.providence-bank {
+	align-items: center;
+	align-self: center;
+	background: rgb(0 0 0 / 35%);
+	border: 1px solid #d4af37;
+	border-radius: 4px;
+	color: #fff;
+	display: flex;
+	font-family: mrs-eaves-xl-serif, serif;
+	font-size: 14px;
+	gap: 6px;
+	height: 30px;
+	padding: 0 8px;
+}
+
+.providence-bank__label {
+	color: #d4af37;
+}
+
+.providence-bank__count {
+	font-weight: bold;
+	min-width: 10px;
+	text-align: center;
+}
+
+.providence-bank__count--red {
+	color: var(--color-red-player);
+}
+
+.providence-bank__count--blue {
+	color: #8a9bff; /* lighter than --color-blue-player for contrast on the dark badge */
+}
+
 .die {
 	border-radius: 4px;
 	height: 30px;
@@ -1048,6 +1082,18 @@ html[data-theme="volcanic"].webp {
 .action-button--dash:focus,
 .action-button--dash:hover {
 	background: var(--color-btn-dash-hover);
+}
+
+/* Providence: skip the optional banked-stone placement. Royal purple to
+   match the pack's card art; deliberately distinct from Dash. */
+.action-button--skip-providence {
+	background: #6b3fa0;
+	font-size: 15px;
+}
+
+.action-button--skip-providence:focus,
+.action-button--skip-providence:hover {
+	background: #7d4fb5;
 }
 
 .action-button--end-turn,

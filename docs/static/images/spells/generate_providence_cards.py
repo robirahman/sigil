@@ -10,8 +10,18 @@ art_only_dir = os.path.join(spells_dir, "art_only")
 static_art_only_dir = os.path.join(static_spells_dir, "art_only")
 brain_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/8329cbca-5b02-42da-a449-9091923cd0ee"
 
-font_bold_path = "/usr/share/fonts/chromeos/croscore/Tinos-Bold.ttf"
-font_reg_path = "/usr/share/fonts/chromeos/croscore/Tinos-Regular.ttf"
+font_bold_path = next(
+    (p for p in ("/usr/share/fonts/truetype/croscore/Tinos-Bold.ttf",
+                 "/usr/share/fonts/chromeos/croscore/Tinos-Bold.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf") if os.path.exists(p)),
+    "Tinos-Bold.ttf"
+)
+font_reg_path = next(
+    (p for p in ("/usr/share/fonts/truetype/croscore/Tinos-Regular.ttf",
+                 "/usr/share/fonts/chromeos/croscore/Tinos-Regular.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf") if os.path.exists(p)),
+    "Tinos-Regular.ttf"
+)
 
 def apply_circular_mask(im, radius):
     width, height = im.size
@@ -233,14 +243,14 @@ def main():
             "name_font_size": 10.5,
             "desc_lines": [
                 {
-                    "text": "Make 1 extra move at the beginning",
+                    "text": "Add 4 stones to your",
                     "radius": 138,
                     "center_deg": 54,
                     "font_size": 6.2,
                     "spacing": 0.88
                 },
                 {
-                    "text": "of each of your next 4 turns.",
+                    "text": "Providence bank.",
                     "radius": 118,
                     "center_deg": 54,
                     "font_size": 6.0,
@@ -268,14 +278,14 @@ def main():
             "name_font_size": 11.5,
             "desc_lines": [
                 {
-                    "text": "Make 1 extra move at the beginning",
+                    "text": "Add 2 stones to your",
                     "radius": 106,
                     "center_deg": 45,
                     "font_size": 6.2,
                     "spacing": 0.88
                 },
                 {
-                    "text": "of each of your next 2 turns.",
+                    "text": "Providence bank.",
                     "radius": 90,
                     "center_deg": 45,
                     "font_size": 6.0,
@@ -298,14 +308,14 @@ def main():
             "name_font_size": 9.5,
             "desc_lines": [
                 {
-                    "text": "Make 1 extra move at the",
+                    "text": "Add 1 stone to your",
                     "radius": 58,
                     "center_deg": 45,
                     "font_size": 4.6,
                     "spacing": 0.88
                 },
                 {
-                    "text": "beginning of your next turn.",
+                    "text": "Providence bank.",
                     "radius": 46,
                     "center_deg": 45,
                     "font_size": 4.6,
