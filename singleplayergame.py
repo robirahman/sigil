@@ -480,6 +480,8 @@ class AIPlayer():
 		### player.opp will be the opponent player object.
 		self.opp = None
 
+		self.silenced = False
+
 		if self.color == 'red':
 			self.priority_order = ['b1','c1','a1',
 			'b10','b8','b9', 'b2','b3','b4','b6','b5','b7',
@@ -559,13 +561,15 @@ class AIPlayer():
 			actions.append('move')
 		else:
 			if (candash & canspell & (not extracast) & (self.totalstones > 2)):
-				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
+				if 'Autumn' not in [s.name for s in self.opp.charged_spells] and 'Vitrify' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
 			if ('Seal_of_Summer' in [s.name for s in self.charged_spells]) and cansummer:
 				summer_active = True
 
-			if (canspell) or (not canspell and summer_active):
+			if getattr(self, 'silenced', False):
+				pass
+			elif (canspell) or (not canspell and summer_active):
 				self.board.update()
 				for spell in self.charged_spells:
 
@@ -662,6 +666,8 @@ class AIPlayer():
 
 
 		elif action == 'pass':
+			if getattr(self, 'silenced', False):
+				self.silenced = False
 			return None
 
 	def bot_triggers(self):
@@ -752,6 +758,8 @@ class AIPlayer():
 		return node_name in lock_nodes
 
 	def allmoveablenodes(self):
+		if 'Petrify' in [s.name for s in self.opp.charged_spells]:
+			return self.allsoftmoveablenodes()
 		answer = []
 		for name in self.priority_order:
 			if self.violates_bulwark(name):
@@ -782,6 +790,8 @@ class AIPlayer():
 
 
 	def allhardmoveablenodes(self,hardmove_spell_nodes=[]):
+		if 'Petrify' in [s.name for s in self.opp.charged_spells]:
+			return []
 		answer = []
 		for name in self.priority_order:
 			if self.violates_bulwark(name):
@@ -800,11 +810,15 @@ class AIPlayer():
 
 	def allblinkablenodes(self):
 		answer = []
+		has_petrify = 'Petrify' in [s.name for s in self.opp.charged_spells]
 		for name in self.priority_order:
 			if self.violates_bulwark(name):
 				continue
 			node = self.board.nodes[name]
-			if node.stone != self.color:
+			if has_petrify:
+				if node.stone is None:
+					answer.append(node)
+			elif node.stone != self.color:
 				answer.append(node)
 		return answer
 

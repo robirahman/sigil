@@ -61,7 +61,7 @@ def test_registration():
     assert 'Avalanche' not in CORE_SPELLS
     import spellgenerator as g
     assert g.EXPANSIONS['tectonic']['sorceries'] == ['Rock_Slide']
-    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids']
+    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak']
     assert 'Rock_Slide' not in g.UNRATED_SPELLS
     import spellfile
     assert spellfile.Rock_Slide(None, [], 'Rock_Slide').text == TEXT
@@ -499,7 +499,7 @@ const out = POS.map(stones => {
   if (JSON.stringify(acts[0].pushes) !== JSON.stringify(pushes)) throw new Error('sim pushes differ');
   return { best, options, pushes, final, lost };
 });
-if (isUnratedSpell('Rock_Slide') || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids') throw new Error('pack');
+if (isUnratedSpell('Rock_Slide') || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids,Vitrify,Spellbreak') throw new Error('pack');
 if (EXPANSIONS.tectonic.sorceries.join() !== 'Rock_Slide' || 'Avalanche' in CORE_SPELLS) throw new Error('tectonic');
 if (SPELL_TEXTS.Rock_Slide !== %s) throw new Error('text');
 console.log('JS_RESULT ' + JSON.stringify(out));

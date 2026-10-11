@@ -60,6 +60,7 @@ class SimBoard {
 		// toward the owner's stone total; a turn that starts with a nonempty
 		// bank may place one of them after the regular move.
 		this.providenceBank = { red: 0, blue: 0 };
+		this.silenced = { red: false, blue: false };
 	}
 
 	static fromSigilBoard(board) {
@@ -78,6 +79,7 @@ class SimBoard {
 		sb.chargedSpells = { red: [...board.chargedSpells.red], blue: [...board.chargedSpells.blue] };
 		sb.crushedThisTurn = !!board.crushedThisTurn;
 		sb.providenceBank = { red: 0, blue: 0, ...(board.providenceBank || {}) };
+		sb.silenced = { red: false, blue: false, ...(board.silenced || {}) };
 		return sb;
 	}
 
@@ -97,10 +99,12 @@ class SimBoard {
 		b.chargedSpells = { red: [...this.chargedSpells.red], blue: [...this.chargedSpells.blue] };
 		b.crushedThisTurn = this.crushedThisTurn;
 		b.providenceBank = { ...this.providenceBank };
+		b.silenced = { ...this.silenced };
 		return b;
 	}
 
 	_enemy(color) { return color === 'red' ? 'blue' : 'red'; }
+	enemy(color) { return color === 'red' ? 'blue' : 'red'; }
 
 	effectiveStones(color) {
 		// Board stones plus Providence banked stones (no blue +1 token).
@@ -199,6 +203,9 @@ class SimBoard {
 		if (this.providenceBank.red || this.providenceBank.blue) {
 			key += '|P' + this.providenceBank.red + '/' + this.providenceBank.blue;
 		}
+		if (this.silenced.red || this.silenced.blue) {
+			key += '|S' + (this.silenced.red ? 1 : 0) + '/' + (this.silenced.blue ? 1 : 0);
+		}
 		return key;
 	}
 
@@ -236,6 +243,7 @@ class SimBoard {
 	}
 
 	advanceTurn() {
+		this.silenced[this.whoseTurn] = false;
 		this.turnCounter++;
 		this.whoseTurn = this.whoseTurn === 'red' ? 'blue' : 'red';
 	}
@@ -266,6 +274,7 @@ class SimBoard {
 
 	_hardMoveable(color) {
 		const enemy = this._enemy(color);
+		if (this.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify')) return [];
 		const result = [];
 		for (const name of NODE_ORDER) {
 			if (this.stones[name] === enemy && !this._isBulwarkProtected(enemy, name)) {
@@ -279,11 +288,12 @@ class SimBoard {
 
 	_allMoveable(color) {
 		const enemy = this._enemy(color);
+		const hasPetrify = this.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify');
 		const result = [];
 		for (const name of NODE_ORDER) {
 			if (this.stones[name] === DESTROYED) continue; // walls are impassable
 			if (this.stones[name] !== color) {
-				if (this.stones[name] === enemy && this._isBulwarkProtected(enemy, name)) {
+				if (this.stones[name] === enemy && (hasPetrify || this._isBulwarkProtected(enemy, name))) {
 					continue;
 				}
 				for (const nb of ADJACENCY[name]) {
@@ -296,10 +306,11 @@ class SimBoard {
 
 	_blinkable(color) {
 		const enemy = this._enemy(color);
+		const hasPetrify = this.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify');
 		return NODE_ORDER.filter(n => {
 			if (this.stones[n] === color) return false;
 			if (this.stones[n] === DESTROYED) return false; // walls are impassable
-			if (this.stones[n] === enemy && this._isBulwarkProtected(enemy, n)) return false;
+			if (this.stones[n] === enemy && (hasPetrify || this._isBulwarkProtected(enemy, n))) return false;
 			return true;
 		});
 	}
@@ -1369,6 +1380,88 @@ class SimBoard {
 					this.update();
 				}
 			}
+		} else if (rt === 'silence') {
+			this.silenced[enemy] = true;
+			actions.push(new SimAction('silence'));
+		} else if (rt === 'spellbreak') {
+			const lockSpell = this.lock[enemy];
+			let destroyedStone = null;
+			if (lockSpell) {
+				const prot = bulwarkProtectedNodes(this);
+				const lockIdx = this.spellNames.indexOf(lockSpell);
+				const lockNodes = (lockIdx >= 0) ? (POSITIONS[lockIdx + 1] || []) : [];
+				const sigilEnemies = lockNodes.filter(n => this.stones[n] === enemy && !prot.has(n));
+				this.lock[enemy] = null;
+				this.springlock[enemy] = null;
+				if (sigilEnemies.length > 0) {
+					const override = overrides.spellbreak_target;
+					if (override && sigilEnemies.includes(override)) {
+						destroyedStone = override;
+					} else {
+						destroyedStone = sigilEnemies[0];
+					}
+					this.stones[destroyedStone] = null;
+				}
+			}
+			actions.push(new SimAction('spellbreak', { node: destroyedStone }));
+			this.update();
+			if (!this.gameover) {
+				const targets = this._softMoveable(color);
+				if (targets.length > 0) {
+					const overrideSoft = overrides.spellbreak_soft;
+					const chosen = (overrideSoft && targets.includes(overrideSoft)) ? overrideSoft : targets[0];
+					actions.push(this._doSoftMove(color, chosen));
+					this.update();
+				}
+			}
+		} else if (rt === 'shatter') {
+			const hardTargets = this._hardMoveable(color);
+			if (hardTargets.length > 0) {
+				const overrideHard = overrides.shatter_hard;
+				const chosen = (overrideHard && hardTargets.includes(overrideHard)) ? overrideHard : hardTargets[0];
+				actions.push(this._doHardMove(color, chosen));
+				this.update();
+			}
+			if (this.gameover) return actions;
+			const prot = bulwarkProtectedNodes(this);
+			const doomed = [];
+			for (const name of NODE_ORDER) {
+				if (this.stones[name] === enemy && !prot.has(name)) {
+					let friendlyCount = 0;
+					for (const nb of ADJACENCY[name]) {
+						if (this.stones[nb] === color) friendlyCount++;
+					}
+					if (friendlyCount >= 2) doomed.push(name);
+				}
+			}
+			for (const name of doomed) {
+				this.stones[name] = null;
+			}
+			actions.push(new SimAction('shatter', { destroyed: doomed }));
+			this.update();
+		} else if (rt === 'fulgurite') {
+			const blinkTargets = this._blinkable(color);
+			if (blinkTargets.length > 0) {
+				const overrideBlink = overrides.fulgurite_blink;
+				const chosen = (overrideBlink && blinkTargets.includes(overrideBlink)) ? overrideBlink : blinkTargets[0];
+				actions.push(this._doMove(color, chosen, true));
+				this.update();
+			}
+			if (this.gameover) return actions;
+			const overrideHard = [...(overrides.fulgurite_hard || overrides.hard_move_targets || [])];
+			for (let i = 0; i < 2; i++) {
+				if (this.gameover) break;
+				const hardTargets = this._hardMoveable(color);
+				if (hardTargets.length === 0) break;
+				let chosen = null;
+				while (overrideHard.length > 0 && chosen === null) {
+					const cand = overrideHard.shift();
+					if (hardTargets.includes(cand)) chosen = cand;
+				}
+				if (chosen === null) chosen = hardTargets[0];
+				actions.push(this._doHardMove(color, chosen));
+				this.update();
+			}
 		}
 		return actions;
 	}
@@ -1424,6 +1517,7 @@ class SimBoard {
 
 	// --- Legal turn enumeration ---
 	_getCastableSpells(color, canSpell, canSummer, postDash) {
+		if (this.silenced && this.silenced[color]) return [];
 		const enemy = this._enemy(color);
 		const hasWinter = this.chargedSpells[enemy].includes('Seal_of_Winter');
 		const hasSummer = this.chargedSpells[color].includes('Seal_of_Summer');
@@ -1470,12 +1564,13 @@ class SimBoard {
 		const hasSummer = this.chargedSpells[color].includes('Seal_of_Summer');
 		// Seal of Autumn (held by the enemy) bars sacrificing in-sigil stones.
 		const hasAutumnSeal = this.chargedSpells[enemy].includes('Seal_of_Autumn');
+		const hasVitrify = this.chargedSpells[enemy].some(s => baseSpellName(s) === 'Vitrify');
 		const canSac = (b, name) => b.stones[name] === color && (!hasAutumnSeal || !isSpellNode(name));
 
 		yield new SimTurn([...actionsSoFar, new SimAction('pass')]);
 
 		// Dash
-		if (canDash && canSpell && this.totalStones[color] > 2) {
+		if (canDash && canSpell && this.totalStones[color] > 2 && !hasVitrify) {
 			const dashTargets = this._allMoveable(color);
 			if (dashTargets.length) {
 				const bd = this.copy();
@@ -1572,8 +1667,9 @@ class SimBoard {
 		// be SOFT — no pushes. Wind's blink privilege survives it on EMPTY
 		// nodes (a soft blink is a soft move); only hard blinks onto
 		// occupied nodes are barred (2026-08 clarification).
-		const enemyHasStone = this.chargedSpells[this._enemy(color)].includes('Seal_of_Stone');
-		const moveTargets = enemyHasStone
+		const enemyHasStone = this.chargedSpells[this._enemy(color)].some(s => baseSpellName(s) === 'Seal_of_Stone');
+		const enemyHasPetrify = this.chargedSpells[this._enemy(color)].some(s => baseSpellName(s) === 'Petrify');
+		const moveTargets = (enemyHasStone || enemyHasPetrify)
 			? (hasWind ? this._softBlinkable(color) : this._softMoveable(color))
 			: (hasWind ? this._blinkable(color) : this._allMoveable(color));
 
@@ -1715,8 +1811,17 @@ function applySimTurn(board, turn, color) {
 		}
 		else if (action.type === 'fireblast' || action.type === 'hail_storm'
 		         || action.type === 'storm_front' || action.type === 'hurricane'
-		         || action.type === 'bear_trap' || action.type === 'decay') {
+		         || action.type === 'bear_trap' || action.type === 'decay'
+		         || action.type === 'shatter') {
 			if (action.destroyed) for (const n of action.destroyed) board.stones[n] = null;
+		}
+		else if (action.type === 'silence') {
+			board.silenced[enemy] = true;
+		}
+		else if (action.type === 'spellbreak') {
+			board.lock[enemy] = null;
+			board.springlock[enemy] = null;
+			if (action.node) board.stones[action.node] = null;
 		}
 		else if (action.type === 'perfect_heist') {
 			if (action.placed) for (const n of action.placed) board.stones[n] = color;
@@ -1763,6 +1868,7 @@ function applySimTurn(board, turn, color) {
 		}
 		board.update();
 	}
+	board.silenced[color] = false;
 	// Seal of Destruction end-of-turn trigger (the start-of-turn loss is applied
 	// by the turn driver, e.g. _minimaxApplyTurn / the live controllers).
 	destructionEndOfTurn(board, color);

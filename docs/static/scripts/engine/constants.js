@@ -324,6 +324,12 @@ const CORE_SPELLS = {
 	// spell window once (one more cast, no dash), the way Seal of Summer's
 	// second cast works. Consumed by the turn drivers, not the resolver.
 	Rapids:            { resolve: 'soft_hard_chain', counts: [1, 1], extra_cast: true, static: false, ischarm: false },
+	Silence:           { resolve: 'silence',    static: false, ischarm: true  },
+	Vitrify:           { resolve: null,         static: true,  ischarm: false },
+	Spellbreak:        { resolve: 'spellbreak', static: false, ischarm: false },
+	Shatter:           { resolve: 'shatter',    static: false, ischarm: false },
+	Petrify:           { resolve: null,         static: true,  ischarm: false },
+	Fulgurite:         { resolve: 'fulgurite',  static: false, ischarm: false },
 };
 
 const SPELL_TEXTS = {
@@ -380,12 +386,18 @@ const SPELL_TEXTS = {
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
 	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own.',
 	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
-	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves, converted, or destroyed.',
+	Bulwark:           'STATIC: Stones in your locked spell cannot be moved, crushed, converted, or destroyed by the opponent.',
 	Dividend:          'Add 1 stone to your Providence bank.',
 	Annuity:           'Add 2 stones to your Providence bank.',
 	Endowment:         'Add 4 stones to your Providence bank.',
 	Spring_Tide:       'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.',
 	Rapids:            'Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn.',
+	Silence:           'Opponent may not cast spells on their next turn.',
+	Vitrify:           'STATIC: The enemy cannot dash as long as you have this seal filled.',
+	Spellbreak:        "Unlock the opponent's locked spell and destroy 1 stone on that sigil. Then make 1 soft move.",
+	Shatter:           'Make 1 hard move, then destroy all enemy stones touching 2 or more of your stones.',
+	Petrify:           'STATIC: Opponent cannot make hard moves.',
+	Fulgurite:         'Make 1 blink move, then 2 hard moves.',
 };
 
 // ---- Duplicate-copy aliases (the "allow duplicates" variant) ----
@@ -424,11 +436,13 @@ const CORE_CHARMS = ['Sprout', 'Slash', 'Surge', 'Comet', 'Seal_of_Summer'];
 const CORE_SUBPACKS = {
 	core_growth: { name: 'Growth', rituals: ['Flourish'],          sorceries: ['Grow'],         charms: ['Sprout'] },
 	core_havoc:  { name: 'Havoc',  rituals: ['Carnage'],           sorceries: ['Fireblast'],    charms: ['Slash'] },
-	core_impact: { name: 'Impact', rituals: ['Starfall'],          sorceries: ['Meteor'],       charms: ['Comet'] },
+	core_crater: { name: 'Crater', rituals: ['Starfall'],          sorceries: ['Meteor'],       charms: ['Comet'] },
 	core_tempo:  { name: 'Tempo',  rituals: ['Seal_of_Lightning'], sorceries: ['Seal_of_Wind'], charms: ['Seal_of_Summer'] },
 	core_hex:    { name: 'Hex',    rituals: ['Bewitch'],           sorceries: ['Hail_Storm'],   charms: ['Surge'] },
 };
-const CORE_SUBPACK_KEYS = Object.keys(CORE_SUBPACKS);
+// Backward compatibility alias for any stored selections
+CORE_SUBPACKS.core_impact = CORE_SUBPACKS.core_crater;
+const CORE_SUBPACK_KEYS = ['core_growth', 'core_havoc', 'core_crater', 'core_tempo', 'core_hex'];
 
 const SPRINGTIME_RITUALS = ['Blossom'];
 const SPRINGTIME_SORCERIES = ['Scatter'];
@@ -474,9 +488,9 @@ const PROVIDENCE_CHARMS = ['Dividend'];
 // still being playtested before release. Unlike the official packs it need
 // not fill all three slots — the pool check only requires core + selected
 // packs to reach 3 spells per category.
-const EXPERIMENTAL_RITUALS = [];
-const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids'];
-const EXPERIMENTAL_CHARMS = [];
+const EXPERIMENTAL_RITUALS = ['Shatter', 'Petrify', 'Fulgurite'];
+const EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak'];
+const EXPERIMENTAL_CHARMS = ['Silence'];
 
 const PANDA_RITUALS = ['Perfect_Heist', 'Moth_Plague', 'Ripples', 'Lifesap'];
 const PANDA_SORCERIES = ['Stampede', 'Choke'];
@@ -1075,7 +1089,7 @@ function normalizeSfnString(sfn) {
 
 // Pack keys renamed over the project's history; stored selections
 // (localStorage, env vars) may still carry the old key.
-const LEGACY_PACK_KEYS = { tsunami: 'flood' };
+const LEGACY_PACK_KEYS = { tsunami: 'flood', core_impact: 'core_crater' };
 
 // A pack key's spell lists: an expansion (including 'core') or a Core sub-pack.
 function packDefinition(key) {
@@ -1167,3 +1181,6 @@ function generateSpellList(selection, allowDuplicates = false) {
 	const picks = poolByCat.map(cat => shuffleArray(cat).slice(0, perType));
 	return [...picks[0], ...picks[1], ...picks[2]];
 }
+
+// Expiration duration for unjoined game invite rooms (status 'waiting').
+const ROOM_INVITE_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours

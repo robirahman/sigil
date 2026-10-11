@@ -64,18 +64,34 @@ def test_metadata_and_texts():
         assert 'hard_first' not in CORE_SPELLS[name]
 
     import spellgenerator as g
-    assert g.EXPANSIONS['experimental'] == {'rituals': [], 'sorceries': ['Spring_Tide', 'Rapids'], 'charms': []}
+    assert g.EXPANSIONS['experimental'] == {
+        'rituals': ['Shatter', 'Petrify', 'Fulgurite'],
+        'sorceries': ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak'],
+        'charms': ['Silence'],
+    }
     assert 'experimental' in g.EXPANSION_KEYS
-    assert 'Spring_Tide' in g.UNRATED_SPELLS
+    for name in ('Spring_Tide', 'Rapids', 'Silence', 'Vitrify', 'Spellbreak', 'Shatter', 'Petrify', 'Fulgurite'):
+        assert name in g.UNRATED_SPELLS
     r, s, c = g.spell_pool(['experimental'])
-    assert 'Spring_Tide' in s and len(r) == 5 and len(c) == 5
-    # A sorcery-only pack on top of core still fills a board.
+    assert 'Spring_Tide' in s and len(r) == 8 and len(c) == 6
     names = g.generate_spell_list(expansions=['core', 'experimental'])
     assert len(names) == 9
 
     import spellfile
     assert spellfile.Spring_Tide(None, [], 'Spring_Tide').text == \
         'Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones.'
+    assert spellfile.Silence(None, [], 'Silence').text == \
+        'Opponent may not cast spells on their next turn.'
+    assert spellfile.Vitrify(None, [], 'Vitrify').text == \
+        'STATIC: The enemy cannot dash as long as you have this seal filled.'
+    assert spellfile.Spellbreak(None, [], 'Spellbreak').text == \
+        "Unlock the opponent's locked spell and destroy 1 stone on that sigil. Then make 1 soft move."
+    assert spellfile.Shatter(None, [], 'Shatter').text == \
+        'Make 1 hard move, then destroy all enemy stones touching 2 or more of your stones.'
+    assert spellfile.Petrify(None, [], 'Petrify').text == \
+        'STATIC: Opponent cannot make hard moves.'
+    assert spellfile.Fulgurite(None, [], 'Fulgurite').text == \
+        'Make 1 blink move, then 2 hard moves.'
     print("  PASS")
 
 
@@ -241,7 +257,7 @@ const acts = b._castSpell('Spring_Tide', 'red');
 const seq = acts.filter(a => a.type !== 'cast').map(a => [a.type, a.node]);
 const stones = {}; for (const n of NODE_ORDER) stones[n] = b.stones[n];
 // Pack registration on the JS side.
-if (!EXPANSIONS.experimental || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids') throw new Error('pack');
+if (!EXPANSIONS.experimental || EXPANSIONS.experimental.sorceries.join() !== 'Spring_Tide,Rapids,Vitrify,Spellbreak') throw new Error('pack');
 if (!EXPANSION_KEYS.includes('experimental')) throw new Error('keys');
 if (!isUnratedSpell('Spring_Tide') || !isExperimentalSpell('Spring_Tide')) throw new Error('unrated');
 if (isUnratedSpell('Torrent')) throw new Error('Torrent must stay rated');
@@ -329,7 +345,7 @@ def test_rapids_metadata():
                                      'extra_cast': True, 'static': False, 'ischarm': False}
     assert 'extra_cast' not in CORE_SPELLS['Torrent']
     import spellgenerator as g
-    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids']
+    assert g.EXPANSIONS['experimental']['sorceries'] == ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak']
     assert 'Rapids' in g.UNRATED_SPELLS
     import spellfile
     sp = spellfile.Rapids(None, [], 'Rapids')
@@ -549,6 +565,463 @@ async function run(summer, script) {
     print("  PASS")
 
 
+def test_silence():
+    print("Testing Silence (shuts down opponent spellcasting for 1 turn)...")
+    spells = ['Flourish', 'Carnage', 'Bewitch',
+              'Grow', 'Fireblast', 'Hail_Storm',
+              'Silence', 'Slash', 'Surge']
+    b = SimBoard(spells)
+    b.setup_initial()
+    # Red charges Silence on a7 (slot 7 charm -> POSITIONS[7] = ['a7'])
+    b.stones['a7'] = 'red'
+    # Blue charges Grow on a8, a9, a10 (slot 4 sorcery -> POSITIONS[4])
+    for n in POSITIONS[4]:
+        b.stones[n] = 'blue'
+    b.stones['b1'] = 'blue'
+    b.stones['a1'] = 'red'
+    b.update()
+    b.whose_turn = 'red'
+
+    assert 'Silence' in b.charged_spells['red']
+    assert 'Grow' in b.charged_spells['blue']
+    assert not b.silenced['blue']
+
+    # Red casts Silence
+    acts = b._cast_spell('Silence', 'red')
+    assert any(a.type == 'silence' for a in acts)
+    assert b.silenced['blue'] is True
+
+    # Blue's turn begins
+    b.whose_turn = 'blue'
+    assert b._get_castable_spells('blue', True, False) == []
+    blue_turns = list(b.get_legal_turns('blue'))
+    assert blue_turns, "Blue must have legal moves"
+    assert not any(any(a.type == 'cast' for a in t.actions) for t in blue_turns)
+
+    # Blue makes a move and passes -> silence clears
+    turn = blue_turns[0]
+    apply_sim_turn(b, turn, 'blue')
+    assert b.silenced['blue'] is False
+
+    # Blue can cast again
+    b.whose_turn = 'blue'
+    assert 'Grow' in b._get_castable_spells('blue', True, False)
+
+    # Spellfile class check
+    import spellfile
+    class DummyPlayer:
+        def __init__(self, color='red'):
+            self.color = color
+            self.opp = None
+            self.silenced = False
+            self.stones = []
+            self.game = None
+        def jmessage(self, *args, **kwargs):
+            pass
+    dp = DummyPlayer('red')
+    dp.opp = DummyPlayer('blue')
+    sp = spellfile.Silence(None, ['a7'], 'Silence')
+    assert sp.ischarm is True
+    sp.resolve(dp)
+    assert dp.opp.silenced is True
+
+    print("  PASS")
+
+
+def test_vitrify():
+    print("Testing Vitrify (static: enemy cannot dash)...")
+    spells = ['Flourish', 'Carnage', 'Bewitch',
+              'Vitrify', 'Grow', 'Hail_Storm',
+              'Sprout', 'Slash', 'Surge']
+    b = SimBoard(spells)
+    b.setup_initial()
+    # Red charges Vitrify (slot 4 sorcery -> POSITIONS[4])
+    for n in POSITIONS[4]:
+        b.stones[n] = 'red'
+    b.stones['a1'] = 'red'
+    b.stones['b1'] = 'blue'
+    b.stones['c1'] = 'blue'
+    b.update()
+    b.whose_turn = 'blue'
+
+    assert 'Vitrify' in b.charged_spells['red']
+
+    # Blue generates turns: dash must not be available
+    blue_turns = list(b.get_legal_turns('blue'))
+    assert not any(any(a.type in ('dash', 'dash_lightning') for a in t.actions) for t in blue_turns)
+
+    # If Red loses a stone on Vitrify, dash returns
+    b.stones[POSITIONS[4][0]] = None
+    b.update()
+    assert 'Vitrify' not in b.charged_spells['red']
+    blue_turns_restored = list(b.get_legal_turns('blue'))
+    assert any(any(a.type in ('dash', 'dash_lightning') for a in t.actions) for t in blue_turns_restored)
+
+    # Game.py player check
+    import game
+    p_red = game.Player(None, 'red')
+    p_blue = game.Player(None, 'blue')
+    p_red.opp = p_blue
+    p_blue.opp = p_red
+    import spellfile
+    v_spell = spellfile.Vitrify(None, POSITIONS[4], 'Vitrify')
+    p_red.charged_spells = [v_spell]
+    assert 'Vitrify' in [s.name for s in p_blue.opp.charged_spells]
+    print("  PASS")
+
+
+def test_spellbreak():
+    print("Testing Spellbreak (unlock opp locked spell, destroy 1 stone, 1 soft move)...")
+    spells = ['Flourish', 'Carnage', 'Bewitch',
+              'Spellbreak', 'Fireblast', 'Hail_Storm',
+              'Sprout', 'Slash', 'Bulwark']
+    b = SimBoard(spells)
+    b.setup_initial()
+
+    # Red charges Spellbreak (slot 4 sorcery -> POSITIONS[4])
+    for n in POSITIONS[4]:
+        b.stones[n] = 'red'
+    b.stones['a1'] = 'red'
+    b.stones['a4'] = 'red'
+    b.stones['a5'] = None  # target for soft move from a4
+
+    # Blue locks Fireblast (slot 5 sorcery -> POSITIONS[5])
+    b.lock['blue'] = 'Fireblast'
+    b.springlock['blue'] = 'Fireblast'
+    for n in POSITIONS[5]:
+        b.stones[n] = 'blue'
+    b.stones['b1'] = 'blue'
+    b.update()
+    b.whose_turn = 'red'
+
+    blue_stones_before = sum(1 for n in POSITIONS[5] if b.stones[n] == 'blue')
+    assert blue_stones_before == 3
+
+    # Red casts Spellbreak
+    acts = b._cast_spell('Spellbreak', 'red')
+    assert b.lock['blue'] is None
+    assert b.springlock['blue'] is None
+    blue_stones_after = sum(1 for n in POSITIONS[5] if b.stones[n] == 'blue')
+    assert blue_stones_after == 2, blue_stones_after
+    assert any(a.type == 'spellbreak' for a in acts)
+    assert any(a.type == 'move' for a in acts)
+
+    # Replay equivalence
+    b_rep = SimBoard(spells)
+    b_rep.setup_initial()
+    for n in POSITIONS[4]:
+        b_rep.stones[n] = 'red'
+    b_rep.stones['a1'] = 'red'
+    b_rep.stones['a4'] = 'red'
+    b_rep.stones['a5'] = None
+    b_rep.lock['blue'] = 'Fireblast'
+    b_rep.springlock['blue'] = 'Fireblast'
+    for n in POSITIONS[5]:
+        b_rep.stones[n] = 'blue'
+    b_rep.stones['b1'] = 'blue'
+    b_rep.update()
+    b_rep.whose_turn = 'red'
+    apply_sim_turn(b_rep, CompleteTurn(acts), 'red')
+    assert b_rep.to_sfn() == b.to_sfn()
+
+    # Bulwark test: If Blue has Bulwark charged (slot 9 charm -> POSITIONS[9] = ['c7']),
+    # Blue's stones in locked spell are protected, so 0 stones are destroyed.
+    b2 = SimBoard(spells)
+    b2.setup_initial()
+    for n in POSITIONS[4]:
+        b2.stones[n] = 'red'
+    b2.stones['a1'] = 'red'
+    b2.stones['a4'] = 'red'
+    b2.stones['a5'] = None
+    b2.lock['blue'] = 'Fireblast'
+    for n in POSITIONS[5]:
+        b2.stones[n] = 'blue'
+    b2.stones['c7'] = 'blue'  # Bulwark charged
+    b2.stones['b1'] = 'blue'
+    b2.update()
+    b2.whose_turn = 'red'
+    assert 'Bulwark' in b2.charged_spells['blue']
+
+    acts2 = b2._cast_spell('Spellbreak', 'red')
+    assert b2.lock['blue'] is None
+    # All 3 Fireblast stones survived because Bulwark protected them!
+    assert sum(1 for n in POSITIONS[5] if b2.stones[n] == 'blue') == 3
+
+    # When Blue has NO locked spell
+    b3 = SimBoard(spells)
+    b3.setup_initial()
+    for n in POSITIONS[4]:
+        b3.stones[n] = 'red'
+    b3.stones['a1'] = 'red'
+    b3.stones['a4'] = 'red'
+    b3.stones['a5'] = None
+    b3.lock['blue'] = None
+    b3.stones['b1'] = 'blue'
+    b3.update()
+    b3.whose_turn = 'red'
+    acts3 = b3._cast_spell('Spellbreak', 'red')
+    assert b3.lock['blue'] is None
+    assert any(a.type == 'move' for a in acts3)
+    print("  PASS")
+
+
+def test_shatter():
+    print("Testing Shatter (1 hard move, then destroy enemy stones touching >= 2 friendly)...")
+    spells = ['Shatter', 'Carnage', 'Bewitch',
+              'Grow', 'Fireblast', 'Hail_Storm',
+              'Sprout', 'Slash', 'Bulwark']
+    b = SimBoard(spells)
+    b.setup_initial()
+
+    # Red charges Shatter (slot 1 ritual -> POSITIONS[1])
+    for n in POSITIONS[1]:
+        b.stones[n] = 'red'
+    b.stones['a1'] = 'red'
+
+    # Hard move setup: Red stone on b3, Blue stone on b4, b5 empty
+    b.stones['b3'] = 'red'
+    b.stones['b4'] = 'blue'
+    b.stones['b5'] = None
+
+    # Blue stone touching >= 2 Red stones:
+    # c3 touches c2 and c4
+    b.stones['c3'] = 'blue'
+    b.stones['c2'] = 'red'
+    b.stones['c4'] = 'red'
+
+    # Isolated Blue stone touching 0 Red stones:
+    b.stones['a13'] = 'blue'
+    b.stones['b1'] = 'blue'
+    b.update()
+    b.whose_turn = 'red'
+
+    acts = b._cast_spell('Shatter', 'red')
+    assert any(a.type == 'hard_move' for a in acts)
+    shat_act = next(a for a in acts if a.type == 'shatter')
+    assert 'c3' in shat_act.destroyed
+    assert b.stones['c3'] is None
+    assert b.stones['a13'] == 'blue'
+
+    # Bulwark interaction: protected stones in locked spell survive Shatter
+    # Slot 3 is Bewitch, which contains c3!
+    b2 = SimBoard(spells)
+    b2.setup_initial()
+    for n in POSITIONS[1]:
+        b2.stones[n] = 'red'
+    b2.stones['a1'] = 'red'
+    b2.stones['b3'] = 'red'
+    b2.stones['b4'] = 'blue'
+    b2.stones['b5'] = None
+    b2.lock['blue'] = 'Bewitch'
+    b2.stones['c7'] = 'blue'  # Bulwark
+    b2.stones['c3'] = 'blue'
+    b2.stones['c2'] = 'red'
+    b2.stones['c4'] = 'red'
+    b2.stones['b1'] = 'blue'
+    b2.update()
+    b2.whose_turn = 'red'
+    acts2 = b2._cast_spell('Shatter', 'red')
+    shat_act2 = next(a for a in acts2 if a.type == 'shatter')
+    assert 'c3' not in shat_act2.destroyed
+    assert b2.stones['c3'] == 'blue'
+    print("  PASS")
+
+
+def test_petrify():
+    print("Testing Petrify (static: opponent cannot make hard moves)...")
+    spells = ['Petrify', 'Carnage', 'Bewitch',
+              'Grow', 'Fireblast', 'Hail_Storm',
+              'Sprout', 'Slash', 'Surge']
+    b = SimBoard(spells)
+    b.setup_initial()
+
+    # Red charges Petrify (slot 1 ritual -> POSITIONS[1])
+    for n in POSITIONS[1]:
+        b.stones[n] = 'red'
+    b.stones['a1'] = 'red'
+
+    # Blue stone on b4, Red stone on b3, b2 empty: Blue would normally be able to hard-move b4 -> b3 -> b2
+    b.stones['b4'] = 'blue'
+    b.stones['b3'] = 'red'
+    b.stones['b2'] = None
+    b.stones['b1'] = 'blue'
+    b.update()
+    b.whose_turn = 'blue'
+
+    assert 'Petrify' in b.charged_spells['red']
+    assert b._hard_moveable('blue') == []
+
+    blue_turns = list(b.get_legal_turns('blue'))
+    assert blue_turns
+    for t in blue_turns:
+        assert not any(a.type == 'hard_move' for a in t.actions)
+
+    # When Petrify is broken, hard moves are restored
+    b.stones[POSITIONS[1][0]] = None
+    b.update()
+    assert 'Petrify' not in b.charged_spells['red']
+    assert b._hard_moveable('blue') != []
+    blue_turns_restored = list(b.get_legal_turns('blue'))
+    assert any(any(a.type == 'hard_move' for a in t.actions) for t in blue_turns_restored)
+
+    # Player class check in game.py
+    import game
+    p_red = game.Player(None, 'red')
+    p_blue = game.Player(None, 'blue')
+    p_red.opp = p_blue
+    p_blue.opp = p_red
+    import spellfile
+    pet_spell = spellfile.Petrify(None, POSITIONS[1], 'Petrify')
+    p_red.charged_spells = [pet_spell]
+    assert 'Petrify' in [s.name for s in p_blue.opp.charged_spells]
+    print("  PASS")
+
+
+def test_fulgurite():
+    print("Testing Fulgurite (1 blink move, then 2 hard moves)...")
+    spells = ['Fulgurite', 'Carnage', 'Bewitch',
+              'Grow', 'Fireblast', 'Hail_Storm',
+              'Sprout', 'Slash', 'Surge']
+    b = SimBoard(spells)
+    b.setup_initial()
+
+    for n in POSITIONS[1]:
+        b.stones[n] = 'red'
+    b.stones['a1'] = 'red'
+
+    # Ensure hard moves are available for Red
+    b.stones['b3'] = 'red'
+    b.stones['b4'] = 'blue'
+    b.stones['b5'] = None
+    b.stones['c3'] = 'red'
+    b.stones['c4'] = 'blue'
+    b.stones['c5'] = None
+    b.stones['a13'] = 'blue'  # Keeps Blue alive
+    b.stones['b1'] = 'blue'
+    b.update()
+    b.whose_turn = 'red'
+
+    acts = b._cast_spell('Fulgurite', 'red')
+    types = [a.type for a in acts if a.type != 'cast']
+    assert types[0] == 'blink', types
+    assert types.count('hard_move') == 2, types
+
+    # Replay equivalence
+    b_rep = SimBoard(spells)
+    b_rep.setup_initial()
+    for n in POSITIONS[1]:
+        b_rep.stones[n] = 'red'
+    b_rep.stones['a1'] = 'red'
+    b_rep.stones['b3'] = 'red'
+    b_rep.stones['b4'] = 'blue'
+    b_rep.stones['b5'] = None
+    b_rep.stones['c3'] = 'red'
+    b_rep.stones['c4'] = 'blue'
+    b_rep.stones['c5'] = None
+    b_rep.stones['a13'] = 'blue'
+    b_rep.stones['b1'] = 'blue'
+    b_rep.update()
+    b_rep.whose_turn = 'red'
+    apply_sim_turn(b_rep, CompleteTurn(acts), 'red')
+    assert b_rep.to_sfn() == b.to_sfn()
+    print("  PASS")
+
+
+def test_js_parity_new_spells():
+    print("Testing JS engine parity for 6 new experimental spells...")
+    js = _load_engine_js(('constants.js', 'notation.js', 'moves.js', 'spells.js',
+                          'sim-board.js', 'enumerator.js'))
+    js.append(r"""
+// 1. Silence
+{
+  const sp = ['Flourish', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Silence', 'Slash', 'Surge'];
+  const b = new SimBoard(sp);
+  b.stones.a7 = 'red';
+  for (const n of POSITIONS[4]) b.stones[n] = 'blue';
+  b.stones.a1 = 'red'; b.stones.b1 = 'blue';
+  b.update(); b.whoseTurn = 'red';
+  const acts = b._castSpell('Silence', 'red');
+  if (!b.silenced.blue) throw new Error('Silence did not silence blue');
+  b.whoseTurn = 'blue';
+  if (b._getCastableSpells('blue', true, false).length !== 0) throw new Error('Silence did not suppress spells');
+  b.silenced.blue = false;
+}
+
+// 2. Vitrify
+{
+  const sp = ['Flourish', 'Carnage', 'Bewitch', 'Vitrify', 'Grow', 'Hail_Storm', 'Sprout', 'Slash', 'Surge'];
+  const b = new SimBoard(sp);
+  for (const n of POSITIONS[4]) b.stones[n] = 'red';
+  b.stones.a1 = 'red'; b.stones.b1 = 'blue'; b.stones.c1 = 'blue'; b.stones.a13 = 'blue';
+  b.update(); b.whoseTurn = 'blue';
+  if (canDash(b, 'blue')) throw new Error('Vitrify did not prevent dash');
+  b.stones[POSITIONS[4][0]] = null; b.update();
+  if (!canDash(b, 'blue')) throw new Error('Breaking Vitrify did not restore dash');
+}
+
+// 3. Petrify
+{
+  const sp = ['Petrify', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Surge'];
+  const b = new SimBoard(sp);
+  for (const n of POSITIONS[1]) b.stones[n] = 'red';
+  b.stones.b4 = 'blue'; b.stones.b3 = 'red'; b.stones.b2 = null; b.stones.b1 = 'blue';
+  b.update(); b.whoseTurn = 'blue';
+  const targets = Object.keys(getHardMoveTargets(b, 'blue'));
+  if (targets.length !== 0) throw new Error('Petrify did not prevent hard move targets');
+}
+
+// 4. Spellbreak
+{
+  const sp = ['Flourish', 'Carnage', 'Bewitch', 'Spellbreak', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Bulwark'];
+  const b = new SimBoard(sp);
+  for (const n of POSITIONS[4]) b.stones[n] = 'red';
+  b.stones.a1 = 'red'; b.stones.a4 = 'red'; b.stones.a5 = null;
+  b.lock.blue = 'Fireblast';
+  for (const n of POSITIONS[5]) b.stones[n] = 'blue';
+  b.stones.b1 = 'blue';
+  b.update(); b.whoseTurn = 'red';
+  const acts = b._castSpell('Spellbreak', 'red');
+  if (b.lock.blue !== null) throw new Error('Spellbreak did not clear lock');
+  const remaining = POSITIONS[5].filter(n => b.stones[n] === 'blue').length;
+  if (remaining !== 2) throw new Error('Spellbreak did not destroy 1 stone: ' + remaining);
+}
+
+// 5. Shatter
+{
+  const sp = ['Shatter', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Bulwark'];
+  const b = new SimBoard(sp);
+  for (const n of POSITIONS[1]) b.stones[n] = 'red';
+  b.stones.b3 = 'red'; b.stones.b4 = 'blue'; b.stones.b5 = null;
+  b.stones.c3 = 'blue'; b.stones.c2 = 'red'; b.stones.c4 = 'red';
+  b.stones.a13 = 'blue'; b.stones.b1 = 'blue';
+  b.update(); b.whoseTurn = 'red';
+  const acts = b._castSpell('Shatter', 'red');
+  if (b.stones.c3 !== null) throw new Error('Shatter did not destroy multi-adjacent stone');
+  if (b.stones.a13 !== 'blue') throw new Error('Shatter destroyed unaffected stone');
+}
+
+// 6. Fulgurite
+{
+  const sp = ['Fulgurite', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Surge'];
+  const b = new SimBoard(sp);
+  for (const n of POSITIONS[1]) b.stones[n] = 'red';
+  b.stones.b3 = 'red'; b.stones.b4 = 'blue'; b.stones.b5 = null;
+  b.stones.c3 = 'red'; b.stones.c4 = 'blue'; b.stones.c5 = null;
+  b.stones.a13 = 'blue'; b.stones.b1 = 'blue';
+  b.update(); b.whoseTurn = 'red';
+  const acts = b._castSpell('Fulgurite', 'red');
+  const types = acts.filter(a => a.type !== 'cast').map(a => a.type);
+  if (types[0] !== 'blink') throw new Error('Fulgurite first move not blink: ' + types[0]);
+  if (types.slice(1).filter(t => t === 'hard_move').length !== 2) throw new Error('Fulgurite did not do 2 hard moves');
+}
+
+console.log('JS_RESULT ' + JSON.stringify({ ok: true }));
+""")
+    res = _run_node(js, 'JS_RESULT')
+    assert res.get('ok') is True
+    print("  PASS")
+
+
 def main():
     test_metadata_and_texts()
     test_greedy_resolution()
@@ -564,8 +1037,16 @@ def main():
     test_rapids_exhaustive_and_replay()
     test_rapids_js_sim_parity()
     test_rapids_live_controller()
+    test_silence()
+    test_vitrify()
+    test_spellbreak()
+    test_shatter()
+    test_petrify()
+    test_fulgurite()
+    test_js_parity_new_spells()
     print("All Experimental tests passed.")
 
 
 if __name__ == '__main__':
     main()
+

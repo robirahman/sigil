@@ -64,9 +64,9 @@ PROVIDENCE_CHARMS = ['Dividend']
 
 # Experimental expansion: the unofficial, permanently unrated home for spells
 # still being playtested before release. It need not fill all three slots.
-EXPERIMENTAL_RITUALS = []
-EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids']
-EXPERIMENTAL_CHARMS = []
+EXPERIMENTAL_RITUALS = ['Shatter', 'Petrify', 'Fulgurite']
+EXPERIMENTAL_SORCERIES = ['Spring_Tide', 'Rapids', 'Vitrify', 'Spellbreak']
+EXPERIMENTAL_CHARMS = ['Silence']
 EXPERIMENTAL_SPELLS = set(EXPERIMENTAL_RITUALS + EXPERIMENTAL_SORCERIES + EXPERIMENTAL_CHARMS)
 
 # Spells whose games stay unrated (Experimental, permanently); app.py's

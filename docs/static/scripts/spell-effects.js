@@ -53,6 +53,12 @@ const SPELL_FX = {
 	// Experimental expansion (unreleased playtest spells)
 	Spring_Tide:          { type: 'burst', color: '#3fa7d6', shake: true  },
 	Rapids:               { type: 'flash', color: '#2fc4c9', shake: false },
+	Silence:              { type: 'pulse', color: '#8899cc', shake: false },
+	Vitrify:              { type: 'pulse', color: '#88ddee', shake: false },
+	Spellbreak:           { type: 'flash', color: '#ff66aa', shake: true  },
+	Shatter:              { type: 'burst', color: '#eef8ff', shake: true  },
+	Petrify:              { type: 'pulse', color: '#778877', shake: false },
+	Fulgurite:            { type: 'burst', color: '#ffe066', shake: true  },
 };
 
 function playSpellEffect(overlayEl, containerEl, spellName) {

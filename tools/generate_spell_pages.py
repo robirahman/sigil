@@ -41,7 +41,7 @@ PACKS = [
         'tagline': 'The foundational terrain of Sigil — five elemental disciplines governing growth, destruction, impact, speed, and deception.',
         'description': (
             'The Core spell set forms the printed foundation of Sigil. Spanning fifteen spells across five thematic trios '
-            '(Growth, Havoc, Impact, Tempo, and Hex), the core set establishes the fundamental game dynamics: soft movement '
+            '(Growth, Havoc, Crater, Tempo, and Hex), the core set establishes the fundamental game dynamics: soft movement '
             'expansion, aggressive hard-move pushing, long-range blink strikes, dash mobility, and mind-control conversions. '
             'Every standard match draws from this rich pool, balancing raw power with intricate counter-play.'
         ),
@@ -51,7 +51,7 @@ PACKS = [
         'subpacks': [
             {'key': 'core_growth', 'name': 'Growth', 'slug': 'growth', 'rituals': ['Flourish'], 'sorceries': ['Grow'], 'charms': ['Sprout']},
             {'key': 'core_havoc', 'name': 'Havoc', 'slug': 'havoc', 'rituals': ['Carnage'], 'sorceries': ['Fireblast'], 'charms': ['Slash']},
-            {'key': 'core_impact', 'name': 'Impact', 'slug': 'impact', 'rituals': ['Starfall'], 'sorceries': ['Meteor'], 'charms': ['Comet']},
+            {'key': 'core_crater', 'name': 'Crater', 'slug': 'crater', 'rituals': ['Starfall'], 'sorceries': ['Meteor'], 'charms': ['Comet']},
             {'key': 'core_tempo', 'name': 'Tempo', 'slug': 'tempo', 'rituals': ['Seal_of_Lightning'], 'sorceries': ['Seal_of_Wind'], 'charms': ['Seal_of_Summer']},
             {'key': 'core_hex', 'name': 'Hex', 'slug': 'hex', 'rituals': ['Bewitch'], 'sorceries': ['Hail_Storm'], 'charms': ['Surge']},
         ]
@@ -279,9 +279,9 @@ SPELLS_DATA = {
         ),
     },
 
-    # --- CORE: Impact ---
+    # --- CORE: Crater ---
     'Starfall': {
-        'pack': 'core', 'subpack': 'Impact', 'type': 'ritual', 'nodes': 5, 'static': False,
+        'pack': 'core', 'subpack': 'Crater', 'type': 'ritual', 'nodes': 5, 'static': False,
         'text': 'Make 2 soft blink moves that touch each other, then destroy all enemy stones touching them.',
         'mechanics': (
             'The caster places two friendly stones on any two empty nodes that are adjacent to each other anywhere on the board '
@@ -293,7 +293,7 @@ SPELLS_DATA = {
         ),
     },
     'Meteor': {
-        'pack': 'core', 'subpack': 'Impact', 'type': 'sorcery', 'nodes': 3, 'static': False,
+        'pack': 'core', 'subpack': 'Crater', 'type': 'sorcery', 'nodes': 3, 'static': False,
         'text': 'Make 1 blink move, then destroy 1 enemy stone touching it.',
         'mechanics': (
             'The caster places one stone onto any empty node on the board (blink move). Then, one enemy stone adjacent to '
@@ -305,7 +305,7 @@ SPELLS_DATA = {
         ),
     },
     'Comet': {
-        'pack': 'core', 'subpack': 'Impact', 'type': 'charm', 'nodes': 1, 'static': False,
+        'pack': 'core', 'subpack': 'Crater', 'type': 'charm', 'nodes': 1, 'static': False,
         'text': 'Make 1 blink move, then sacrifice a stone.',
         'mechanics': (
             'The caster places a stone onto any empty node across the board via blink, then chooses and sacrifices one friendly stone.'
@@ -713,7 +713,7 @@ SPELLS_DATA = {
     },
     'Bulwark': {
         'pack': 'tectonic', 'type': 'charm', 'nodes': 1, 'static': True,
-        'text': 'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves, converted, or destroyed.',
+        'text': 'STATIC: Stones in your locked spell cannot be moved, crushed, converted, or destroyed by the opponent.',
         'mechanics': (
             'While Bulwark is active, stones occupying your currently locked spell become completely invulnerable to enemy hard moves, '
             'conversions (Bewitch/Corrupt), and destructive spells (Fireblast, Hail Storm, Starfall).'
@@ -1398,6 +1398,15 @@ def main():
                 sp_path = os.path.join(PACKS_DIR, f"{sp['slug']}.html")
                 with open(sp_path, 'w', encoding='utf-8') as f:
                     f.write(sp_html)
+                if sp['slug'] == 'crater':
+                    legacy_impact = os.path.join(PACKS_DIR, "impact.html")
+                    try:
+                        if os.path.exists(legacy_impact) or os.path.islink(legacy_impact):
+                            os.unlink(legacy_impact)
+                        os.symlink("crater.html", legacy_impact)
+                    except Exception:
+                        with open(legacy_impact, 'w', encoding='utf-8') as f:
+                            f.write(sp_html)
 
     # Packs directory index
     packs_index_html = generate_packs_index()

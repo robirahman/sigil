@@ -551,6 +551,9 @@ class Player():
 		### The timer ticks down only while this is true.
 		self.timer_running = False
 
+		### Silenced status (Silence charm)
+		self.silenced = False
+
 
 
 	def jmessage(self, message, awaiting= None):
@@ -579,6 +582,8 @@ class Player():
 		return node_name in lock_nodes
 
 	def allmoveablenodes(self):
+		if 'Petrify' in [s.name for s in self.opp.charged_spells]:
+			return self.allsoftmoveablenodes()
 		answer = {}
 		for nodename in self.board.nodes:
 			if self.violates_bulwark(nodename):
@@ -609,6 +614,8 @@ class Player():
 		return answer
 
 	def allhardmoveablenodes(self):
+		if 'Petrify' in [s.name for s in self.opp.charged_spells]:
+			return {}
 		answer = {}
 		for nodename in self.board.nodes:
 			if self.violates_bulwark(nodename):
@@ -625,6 +632,8 @@ class Player():
 
 
 	def allblinkablenodes(self):
+		if 'Petrify' in [s.name for s in self.opp.charged_spells]:
+			return {name: self.color for name, node in self.board.nodes.items() if node.stone is None}
 		answer = {}
 		for nodename in self.board.nodes:
 			if self.violates_bulwark(nodename):
@@ -699,13 +708,15 @@ class Player():
 		else:
 			moveoptions = {}
 			if (candash & canspell & (not extracast) & (self.totalstones > 2)):
-				if 'Autumn' not in [s.name for s in self.opp.charged_spells]:
+				if 'Autumn' not in [s.name for s in self.opp.charged_spells] and 'Vitrify' not in [s.name for s in self.opp.charged_spells]:
 					actions.append('dash')
 			summer_active = False
 			if ('Seal_of_Summer' in [s.name for s in self.charged_spells]) and cansummer:
 				summer_active = True
 
-			if (canspell) or (not canspell and summer_active):
+			if getattr(self, 'silenced', False):
+				pass
+			elif (canspell) or (not canspell and summer_active):
 				self.board.update()
 				for spell in self.charged_spells:
 					if not spell.static:
@@ -789,6 +800,8 @@ class Player():
 
 
 		elif action == 'pass':
+			if getattr(self, 'silenced', False):
+				self.silenced = False
 			return None
 
 	def providence_step(self):

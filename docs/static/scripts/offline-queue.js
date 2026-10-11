@@ -95,6 +95,8 @@
 	// between the start and end of an earlier flush ride along on the next
 	// link in the chain.
 	let _flushChain = Promise.resolve({ uploaded: 0, failed: 0, results: [] });
+	let _activeFlushPromise = null;
+	let _activeFlushItemIds = null;
 
 	const OfflineGameQueue = {
 		/** Store a finished game. Returns the queue id, or null if storage failed. */
@@ -149,10 +151,33 @@
 		 * @returns {Promise<{uploaded, failed, results}>}
 		 */
 		flushAll(db, processEloFn) {
-			const link = _flushChain.then(
-				() => _doFlush(db, processEloFn),
-				() => _doFlush(db, processEloFn),
-			);
+			const user = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : null;
+			const uid = user && !user.isAnonymous ? user.uid : null;
+			const pendingItems = _read().filter((it) => _uploadable(it, uid));
+
+			// If an active flush is already processing all currently queued items,
+			// callers awaiting flushAll can safely share its promise rather than
+			// running an empty second flush.
+			if (_activeFlushPromise && _activeFlushItemIds && pendingItems.length > 0) {
+				const allPendingInFlight = pendingItems.every((it) => _activeFlushItemIds.has(it.id));
+				if (allPendingInFlight) {
+					return _activeFlushPromise;
+				}
+			}
+
+			const runFlush = async () => {
+				const itemsToProcess = _read().filter((it) => _uploadable(it, uid));
+				_activeFlushItemIds = new Set(itemsToProcess.map((it) => it.id));
+				try {
+					return await _doFlush(db, processEloFn);
+				} finally {
+					_activeFlushItemIds = null;
+					_activeFlushPromise = null;
+				}
+			};
+
+			const link = _flushChain.then(runFlush, runFlush);
+			_activeFlushPromise = link;
 			_flushChain = link.catch(() => {});
 			return link;
 		},
@@ -187,6 +212,16 @@
 		});
 	}
 
+	function _gameEndTimestamp(item) {
+		if (item && item.gameRecord && typeof item.gameRecord.timestamp === 'number') {
+			return item.gameRecord.timestamp;
+		}
+		if (item && typeof item.queuedAt === 'number') {
+			return item.queuedAt;
+		}
+		return 0;
+	}
+
 	async function _doFlush(db, processEloFn) {
 		const user = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : null;
 		const uid = user && !user.isAnonymous ? user.uid : null;
@@ -194,6 +229,9 @@
 		if (items.length === 0) {
 			return { uploaded: 0, failed: 0, results: [] };
 		}
+		// Process queued games into Firebase one at a time, in order of their game-end datetime.
+		items.sort((a, b) => _gameEndTimestamp(a) - _gameEndTimestamp(b));
+
 		const offlineResult = (error) => ({
 			uploaded: 0,
 			failed: items.length,
@@ -213,7 +251,13 @@
 				const eloResult = await _uploadOne(db, processEloFn, item, user);
 				OfflineGameQueue.remove(item.id);
 				uploaded++;
-				results.push({ id: item.id, ok: true, eloResult: eloResult });
+				const ts = _gameEndTimestamp(item);
+				results.push({ id: item.id, ok: true, gameId: item.gameId, timestamp: ts, eloResult: eloResult });
+				if (eloResult && typeof eloResult.delta === 'number') {
+					const sign = eloResult.delta >= 0 ? '+' : '';
+					const timeStr = ts ? new Date(ts).toLocaleTimeString() : 'unknown';
+					console.log(`[OfflineQueue] Uploaded game (${timeStr}): rating change ${sign}${eloResult.delta} (${eloResult.newElo})`);
+				}
 			} catch (e) {
 				failed++;
 				results.push({ id: item.id, ok: false, error: (e && e.message) || String(e) });
@@ -221,6 +265,13 @@
 				// Remaining items stay queued for the next attempt.
 				break;
 			}
+		}
+		const ratedResults = results.filter((r) => r.ok && r.eloResult && typeof r.eloResult.delta === 'number');
+		if (ratedResults.length > 0) {
+			const totalDelta = ratedResults.reduce((sum, r) => sum + r.eloResult.delta, 0);
+			const totalSign = totalDelta >= 0 ? '+' : '';
+			const latestElo = ratedResults[ratedResults.length - 1].eloResult.newElo;
+			console.log(`[OfflineQueue] Rating change over ${ratedResults.length} newly uploaded game${ratedResults.length === 1 ? '' : 's'}: ${totalSign}${totalDelta} (${latestElo})`);
 		}
 		return { uploaded, failed, results };
 	}
@@ -253,7 +304,22 @@
 		// the tab closed — must not be rated twice.
 		if (ranked) {
 			const done = await db.ref('user_games/' + user.uid + '/' + gameId).once('value');
-			if (done.exists()) return null;
+			if (done.exists()) {
+				const d = done.val();
+				if (d && typeof d.eloChange === 'number') {
+					const pts = Math.abs(d.eloChange);
+					return {
+						points: pts,
+						newWinnerElo: d.result === 'win' ? d.eloAfter : d.eloBefore,
+						newLoserElo: d.result === 'loss' ? d.eloAfter : d.eloBefore,
+						userWon: d.result === 'win',
+						delta: d.eloChange,
+						oldElo: d.eloBefore,
+						newElo: d.eloAfter,
+					};
+				}
+				return null;
+			}
 		}
 
 		await _ensureHumanProfile(db, user);
@@ -269,7 +335,25 @@
 		}
 		await db.ref('completed_games/' + gameId).set(record);
 		if (ranked) {
-			return await processEloFn(db, gameId, record);
+			const rawElo = await processEloFn(db, gameId, record);
+			if (rawElo && typeof rawElo.points === 'number') {
+				const userUid = item.uid || (user && user.uid) || _ownerUid(item);
+				const winnerUid = record.winner === 'red' ? record.redUid : record.blueUid;
+				const userWon = (winnerUid === userUid);
+				const delta = userWon ? rawElo.points : -rawElo.points;
+				const newElo = userWon ? rawElo.newWinnerElo : rawElo.newLoserElo;
+				const oldElo = userWon ? (newElo - rawElo.points) : (newElo + rawElo.points);
+				return {
+					points: rawElo.points,
+					newWinnerElo: rawElo.newWinnerElo,
+					newLoserElo: rawElo.newLoserElo,
+					userWon: userWon,
+					delta: delta,
+					oldElo: oldElo,
+					newElo: newElo,
+				};
+			}
+			return rawElo;
 		}
 		return null;
 	}
@@ -312,6 +396,7 @@
 	let _autoflushInstalled = false;
 	let _onFlush = null;
 	let _watchingConnection = false;
+	let _lastConnected = null;
 
 	async function _attempt() {
 		if (typeof firebase === 'undefined' || !firebase.apps || firebase.apps.length === 0) return;
@@ -338,7 +423,12 @@
 		if (typeof firebase === 'undefined' || !firebase.apps || firebase.apps.length === 0) return;
 		_watchingConnection = true;
 		firebase.database().ref('.info/connected').on('value', (snap) => {
-			if (snap.val() === true) _attempt();
+			const connected = snap.val() === true;
+			const wasDisconnected = (_lastConnected === false);
+			_lastConnected = connected;
+			if (connected && wasDisconnected) {
+				_attempt();
+			}
 		});
 	}
 

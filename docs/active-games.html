@@ -191,6 +191,8 @@
 	<script src="static/scripts/auth-status.js"></script>
 
 	<script>
+		const ROOM_INVITE_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
+
 		document.addEventListener('alpine:init', () => {
 			Alpine.data('activeGamesPage', () => ({
 				loading: true,
@@ -291,6 +293,7 @@
 						sortKey: Infinity,
 						urgencyLevel: 'normal',
 						timeControlLabel: this._formatTimeControl({ type: tcType }),
+						created: entry.created || 0,
 					};
 				},
 
@@ -301,15 +304,23 @@
 						const idx = this.games.findIndex(g => g.roomCode === code);
 						if (idx === -1) return;
 
-						if (!room || room.status === 'finished') {
-							// Game finished — drop from list and clean up the index.
+						const now = this._now + this._serverTimeOffset;
+						const created = (room && room.created) || (this.games[idx] && this.games[idx].created) || 0;
+						const isExpiredWaiting = room && room.status === 'waiting' && created && (now - created > ROOM_INVITE_EXPIRY_MS);
+
+						if (!room || room.status === 'finished' || room.status === 'expired' || isExpiredWaiting) {
+							// Game finished or invite expired — drop from list and clean up the index.
 							this.games.splice(idx, 1);
 							ref.off();
 							db.ref('user_active_games/' + uid + '/' + code).remove().catch(() => {});
+							if (isExpiredWaiting) {
+								db.ref('rooms/' + code).remove().catch(() => {});
+							}
 							return;
 						}
 
 						const g = this.games[idx];
+						g.created = (room && room.created) || g.created || 0;
 						const opponentColor = g.myColor === 'red' ? 'blue' : 'red';
 						const opp = room[opponentColor] || {};
 						const tc = room.timeControl || { type: g.timeControlType };
@@ -343,12 +354,21 @@
 				_refreshDerivedFields() {
 					const now = this._now + this._serverTimeOffset;
 					const PHASE = 1e15;
-					for (const g of this.games) {
+					for (let i = this.games.length - 1; i >= 0; i--) {
+						const g = this.games[i];
 						const tc = g.timeControl || { type: g.timeControlType };
 						const timer = g.timer;
 						const status = g.status;
 
 						if (status === 'waiting') {
+							if (g.created && (now - g.created > ROOM_INVITE_EXPIRY_MS)) {
+								this.games.splice(i, 1);
+								if (this.authUser) {
+									firebase.database().ref('user_active_games/' + this.authUser.uid + '/' + g.roomCode).remove().catch(() => {});
+								}
+								firebase.database().ref('rooms/' + g.roomCode).remove().catch(() => {});
+								continue;
+							}
 							g.isYourTurn = false;
 							g.clockText = tc.type === 'none' ? '∞' : this._formatStored(tc, g.myColor);
 							g.statusText = 'Waiting';

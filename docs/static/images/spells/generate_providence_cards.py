@@ -10,8 +10,18 @@ art_only_dir = os.path.join(spells_dir, "art_only")
 static_art_only_dir = os.path.join(static_spells_dir, "art_only")
 brain_dir = "/home/robirahman94/.gemini/antigravity-cli/brain/8329cbca-5b02-42da-a449-9091923cd0ee"
 
-font_bold_path = "/usr/share/fonts/chromeos/croscore/Tinos-Bold.ttf"
-font_reg_path = "/usr/share/fonts/chromeos/croscore/Tinos-Regular.ttf"
+font_bold_path = next(
+    (p for p in ("/usr/share/fonts/truetype/croscore/Tinos-Bold.ttf",
+                 "/usr/share/fonts/chromeos/croscore/Tinos-Bold.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf") if os.path.exists(p)),
+    "Tinos-Bold.ttf"
+)
+font_reg_path = next(
+    (p for p in ("/usr/share/fonts/truetype/croscore/Tinos-Regular.ttf",
+                 "/usr/share/fonts/chromeos/croscore/Tinos-Regular.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf") if os.path.exists(p)),
+    "Tinos-Regular.ttf"
+)
 
 def apply_circular_mask(im, radius):
     width, height = im.size

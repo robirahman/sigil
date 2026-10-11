@@ -1570,6 +1570,163 @@ class Rapids(Spell):
 		_soft_hard_chain(player, self, 1, 1)
 
 
+def _blink_move(player):
+	if player.ishuman:
+		while True:
+			moveoptions = player.allblinkablenodes()
+			if not moveoptions:
+				return
+			egress = {"type": "message", "message": "Make 1 blink move.",
+			          "awaiting": "node", "moveoptions": moveoptions}
+			player.ws.send(json.dumps(egress))
+			actualmessage = player.receivemessage()
+			if actualmessage in player.board.nodes:
+				node = player.board.nodes[actualmessage]
+				if node.stone == player.color:
+					player.jmessage("Invalid option")
+					continue
+				if node.stone == player.opp.color:
+					player.pushenemy(node)
+					break
+				else:
+					node.stone = player.color
+					player.board.last_play = node.name
+					player.board.last_player = player.color
+					if hasattr(player.board, 'record'):
+						player.board.record('blink', node=node.name)
+					egress = {"type": "new_stone_animation", "color": player.color, "node": node.name}
+					player.ws.send(json.dumps(egress))
+					if player.opp.ishuman:
+						player.opp.ws.send(json.dumps(egress))
+					player.board.update()
+					break
+	else:
+		legalmoves = player.allblinkablenodes()
+		if not legalmoves:
+			return
+		node = legalmoves[0]
+		if node.stone == player.enemy:
+			player.pushenemy(node)
+		else:
+			node.stone = player.color
+			player.board.last_play = node.name
+			player.board.last_player = player.color
+			if hasattr(player.board, 'record'):
+				player.board.record('blink', node=node.name)
+			egress = {"type": "new_stone_animation", "color": player.color, "node": node.name}
+			if hasattr(player, 'opp') and hasattr(player.opp, 'ws') and player.opp.ws:
+				player.opp.ws.send(json.dumps(egress))
+			player.board.update()
+
+
+class Silence(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = True
+		self.text = "Opponent may not cast spells on their next turn."
+
+	def resolve(self, player):
+		player.opp.silenced = True
+		player.jmessage(f"{player.opp.color.capitalize()} is silenced and cannot cast spells on their next turn.")
+
+
+class Vitrify(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = False
+		self.static = True
+		self.text = "STATIC: The enemy cannot dash as long as you have this seal filled."
+
+
+class Spellbreak(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = False
+		self.text = "Unlock the opponent's locked spell and destroy 1 stone on that sigil. Then make 1 soft move."
+
+	def resolve(self, player):
+		locked_spell = getattr(player.opp, 'lock', None)
+		if locked_spell:
+			prot = _bulwark_protected(player)
+			sigil_enemies = [n for n in locked_spell.position if n.stone == player.enemy and n.name not in prot]
+			player.opp.lock = None
+			if hasattr(player.opp, 'springlock'):
+				player.opp.springlock = None
+			if sigil_enemies:
+				if player.ishuman:
+					player.jmessage("Choose an enemy stone on the broken sigil to destroy.", "node")
+					chosen = None
+					while chosen is None:
+						resp = player.receivemessage()
+						candidates = [n for n in sigil_enemies if n.name == resp]
+						if candidates:
+							chosen = candidates[0]
+				else:
+					chosen = sigil_enemies[0]
+				chosen.stone = None
+				if player.board.last_play == chosen.name:
+					player.board.last_play = None
+					player.board.last_player = None
+				player.board.update()
+		if player.board.gameover:
+			return
+		if player.ishuman:
+			player.softmove()
+		else:
+			player.softmove(self.position.copy())
+
+
+class Shatter(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = False
+		self.text = "Make 1 hard move, then destroy all enemy stones touching 2 or more of your stones."
+
+	def resolve(self, player):
+		if player.allhardmoveablenodes():
+			player.hardmove()
+		if player.board.gameover:
+			return
+		prot = _bulwark_protected(player)
+		doomed = []
+		for name, node in player.board.nodes.items():
+			if node.stone == player.enemy and name not in prot:
+				friendly_count = sum(1 for nb in node.neighbors if nb.stone == player.color)
+				if friendly_count >= 2:
+					doomed.append(node)
+		for node in doomed:
+			node.stone = None
+			if player.board.last_play == node.name:
+				player.board.last_play = None
+				player.board.last_player = None
+		player.board.update()
+
+
+class Petrify(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = False
+		self.static = True
+		self.text = "STATIC: Opponent cannot make hard moves."
+
+
+class Fulgurite(Spell):
+	def __init__(self, board, position, name):
+		super().__init__(board, position, name)
+		self.ischarm = False
+		self.text = "Make 1 blink move, then 2 hard moves."
+
+	def resolve(self, player):
+		_blink_move(player)
+		if player.board.gameover:
+			return
+		for i in range(2):
+			if player.board.gameover:
+				break
+			if player.allhardmoveablenodes():
+				player.hardmove()
+
+
 ###############################################################################################
 #####  EXPANSION SPELLS: Gloom + Covenant
 
@@ -1934,8 +2091,8 @@ class Bulwark(Spell):
 		super().__init__(board, position, name)
 		self.ischarm = True
 		self.static = True
-		self.text = ("STATIC: Stones in your locked spell cannot be targeted by enemy hard "
-			"moves, converted, or destroyed.")
+		self.text = ("STATIC: Stones in your locked spell cannot be moved, crushed, "
+			"converted, or destroyed by the opponent.")
 
 
 class _BankStonesSpell(Spell):

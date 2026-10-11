@@ -41,8 +41,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [ ] **Add in-game chat or preset emotes.**
 - [ ] **Add a friends / follow list** with "challenge" from a profile.
 - [ ] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
-- [ ] **Clean up stale rooms.** Waiting rooms and their `user_active_games` entries are never cleaned up.
-  Finished rooms are pruned only when someone opens `docs/active-games.html` (`:304-308`).
+- [x] **Clean up stale rooms.** Game invite rooms (unjoined waiting rooms) expire after 72 hours and are pruned from rooms/ and user_active_games/. Finished rooms are pruned when someone opens `docs/active-games.html` (`:304-308`), and `ai/purge_stale_rooms.py` is available for maintenance.
 
 ## Showing data the site already stores
 

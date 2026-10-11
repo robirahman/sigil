@@ -32,6 +32,9 @@ function violatesBulwark(board, color, nodeName) {
 function getHardMoveTargets(board, color) {
 	// Returns dict of enemy nodes adjacent to color's stones => color
 	const enemy = board.enemy(color);
+	if (board.chargedSpells && board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify')) {
+		return {};
+	}
 	const result = {};
 	for (const name of NODE_ORDER) {
 		if (board.stones[name] === enemy && !violatesBulwark(board, color, name)) {
@@ -48,10 +51,13 @@ function getHardMoveTargets(board, color) {
 
 function getAllMoveTargets(board, color) {
 	// Returns dict of all nodes (empty or enemy) adjacent to color's stones => color
+	const enemy = board.enemy(color);
+	const hasPetrify = board.chargedSpells && board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify');
 	const result = {};
 	for (const name of NODE_ORDER) {
 		if (board.stones[name] === DESTROYED) continue; // walls are impassable
 		if (board.stones[name] !== color && !violatesBulwark(board, color, name)) {
+			if (hasPetrify && board.stones[name] === enemy) continue;
 			for (const nb of ADJACENCY[name]) {
 				if (board.stones[nb] === color) {
 					result[name] = color;
@@ -65,10 +71,13 @@ function getAllMoveTargets(board, color) {
 
 function getBlinkTargets(board, color) {
 	// Returns dict of all nodes not occupied by color => color
+	const enemy = board.enemy(color);
+	const hasPetrify = board.chargedSpells && board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify');
 	const result = {};
 	for (const name of NODE_ORDER) {
 		if (board.stones[name] === DESTROYED) continue; // walls are impassable
 		if (board.stones[name] !== color && !violatesBulwark(board, color, name)) {
+			if (hasPetrify && board.stones[name] === enemy) continue;
 			result[name] = color;
 		}
 	}
@@ -94,13 +103,15 @@ function getSoftBlinkTargets(board, color) {
 // ignore these seals.
 function getStandardMoveTargets(board, color, standardMove) {
 	const enemy = board.enemy(color);
-	if (standardMove && board.chargedSpells[enemy].includes('Seal_of_Stone')) {
-		if (board.chargedSpells[color].includes('Seal_of_Wind')) {
+	const hasStone = board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Seal_of_Stone');
+	const hasPetrify = board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify');
+	if (standardMove && (hasStone || hasPetrify)) {
+		if (board.chargedSpells[color] && board.chargedSpells[color].some(s => baseSpellName(s) === 'Seal_of_Wind')) {
 			return getSoftBlinkTargets(board, color);
 		}
 		return getSoftMoveTargets(board, color);
 	}
-	if (standardMove && board.chargedSpells[color].includes('Seal_of_Wind')) {
+	if (standardMove && board.chargedSpells[color] && board.chargedSpells[color].some(s => baseSpellName(s) === 'Seal_of_Wind')) {
 		return getBlinkTargets(board, color);
 	}
 	return getAllMoveTargets(board, color);
@@ -111,11 +122,14 @@ function getStandardMoveTargets(board, color, standardMove) {
 // A Wind holder may still soft-blink to any EMPTY node; without Wind, the
 // target must be empty AND adjacent to one of `color`'s own stones.
 function violatesSealOfStone(board, color, nodeName, standardMove) {
-	if (!standardMove) return false;
 	const enemy = board.enemy(color);
-	if (!board.chargedSpells[enemy].includes('Seal_of_Stone')) return false;
+	if (board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Petrify') && board.stones[nodeName] === enemy) {
+		return true;
+	}
+	if (!standardMove) return false;
+	if (!board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Seal_of_Stone')) return false;
 	if (board.stones[nodeName] !== null) return true; // would push (hard move)
-	if (board.chargedSpells[color].includes('Seal_of_Wind')) return false; // soft blink
+	if (board.chargedSpells[color].some(s => baseSpellName(s) === 'Seal_of_Wind')) return false; // soft blink
 	for (const nb of ADJACENCY[nodeName]) {
 		if (board.stones[nb] === color) return false; // soft move: empty + adjacent
 	}
@@ -195,6 +209,8 @@ function dashSacrificeOptions(board, color) {
 // Whether `color` can dash: more than 2 stones total (so at least one survives)
 // and enough eligible stones to pay the sacrifice cost.
 function canDash(board, color) {
+	const enemy = board.enemy(color);
+	if (board.chargedSpells && board.chargedSpells[enemy] && board.chargedSpells[enemy].some(s => baseSpellName(s) === 'Vitrify')) return false;
 	if (board.totalStones[color] <= 2) return false;
 	return dashSacrificeOptions(board, color).length >= dashCost(board, color);
 }

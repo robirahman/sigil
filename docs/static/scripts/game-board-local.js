@@ -468,6 +468,16 @@ document.addEventListener('alpine:init', () => {
 				// Each rematch is a new game: drop the persistence id so it
 				// mints a fresh one instead of reusing the finished game's slot.
 				params.delete('id');
+				if (this.aiMode) {
+					params.set('ai', this.aiMode);
+				}
+				if (this.gameVariant && this.gameVariant !== 'standard') {
+					params.set('variant', this.gameVariant);
+				}
+				if (this.clockOpt && typeof GameClock !== 'undefined') {
+					const lbl = GameClock.label(this.clockOpt);
+					if (lbl) params.set('clock', lbl);
+				}
 				const qs = params.toString();
 				window.location.href = window.location.pathname + (qs ? '?' + qs : '');
 			},
@@ -501,6 +511,9 @@ document.addEventListener('alpine:init', () => {
 
 			rematchStage: 'idle',  // 'idle' | 'rematch'
 			isAiGame: !!new URLSearchParams(window.location.search).get('ai'),
+			aiMode: new URLSearchParams(window.location.search).get('ai') || null,
+			gameVariant: 'standard',
+			clockOpt: null,
 
 			openRematchMenu() {
 				this.rematchStage = this.rematchStage === 'rematch' ? 'idle' : 'rematch';
@@ -887,6 +900,25 @@ document.addEventListener('alpine:init', () => {
 					}
 				}
 
+				_this.aiMode = aiMode || null;
+				_this.isAiGame = !puzzle && !!aiMode;
+				_this.gameVariant = gameVariant;
+				_this.clockOpt = clockOpt;
+
+				if (!puzzle) {
+					try {
+						const u = new URL(window.location.href);
+						if (_gameId) u.searchParams.set('id', _gameId);
+						if (aiMode) u.searchParams.set('ai', aiMode);
+						if (gameVariant && gameVariant !== 'standard') u.searchParams.set('variant', gameVariant);
+						if (clockOpt && typeof GameClock !== 'undefined') {
+							const lbl = GameClock.label(clockOpt);
+							if (lbl) u.searchParams.set('clock', lbl);
+						}
+						history.replaceState(null, '', u.toString());
+					} catch (e) { /* ignore */ }
+				}
+
 				// Auth manager for rated AI games, the finished-game upload (vs AI
 				// and local 1v1) and community annotations from AI review.
 				let _aiAuthManager = null;
@@ -925,8 +957,19 @@ document.addEventListener('alpine:init', () => {
 				if (!puzzle && typeof OfflineGameQueue !== 'undefined') {
 					OfflineGameQueue.installAutoflush({
 						onFlush: (result) => {
-							if (result.uploaded > 0) {
-								_this.messageHistory.push('Synced ' + result.uploaded + ' offline game' + (result.uploaded === 1 ? '' : 's') + '.');
+							// Filter out any game currently being finished on this board,
+							// as _recordFinishedGame handles its own rating/post-game message.
+							const nonLocalResults = (result.results || []).filter((r) => r.id !== _this._activeFinishingQueuedId && r.ok);
+							if (nonLocalResults.length > 0) {
+								const rated = nonLocalResults.filter((r) => r.eloResult && typeof r.eloResult.delta === 'number');
+								if (rated.length > 0) {
+									const totalDelta = rated.reduce((sum, r) => sum + r.eloResult.delta, 0);
+									const sign = totalDelta >= 0 ? '+' : '';
+									const latestElo = rated[rated.length - 1].eloResult.newElo;
+									_this.messageHistory.push('Synced ' + nonLocalResults.length + ' offline game' + (nonLocalResults.length === 1 ? '' : 's') + '. Rating: ' + sign + totalDelta + ' (' + latestElo + ').');
+								} else {
+									_this.messageHistory.push('Synced ' + nonLocalResults.length + ' offline game' + (nonLocalResults.length === 1 ? '' : 's') + '.');
+								}
 							}
 						},
 					});
@@ -2166,8 +2209,14 @@ document.addEventListener('alpine:init', () => {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
 						}
 
-						const flushResult = await OfflineGameQueue.flushAll(db,
-							typeof processEloClientSide === 'function' ? processEloClientSide : null);
+						_this._activeFinishingQueuedId = queuedId;
+						let flushResult;
+						try {
+							flushResult = await OfflineGameQueue.flushAll(db,
+								typeof processEloClientSide === 'function' ? processEloClientSide : null);
+						} finally {
+							_this._activeFinishingQueuedId = null;
+						}
 						const mine = flushResult.results.find((r) => r.id === queuedId);
 						const stillQueued = OfflineGameQueue.peek().some((it) => it.id === queuedId);
 						if (stillQueued) {
@@ -2192,9 +2241,18 @@ document.addEventListener('alpine:init', () => {
 						}
 
 						// If older offline games rode along on this flush, note that.
-						const olderUploaded = flushResult.results.filter((r) => r.id !== queuedId && r.ok).length;
+						const olderResults = flushResult.results.filter((r) => r.id !== queuedId && r.ok);
+						const olderUploaded = olderResults.length;
 						if (olderUploaded > 0) {
-							_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '.');
+							const olderRated = olderResults.filter((r) => r.eloResult && typeof r.eloResult.delta === 'number');
+							if (olderRated.length > 0) {
+								const olderDelta = olderRated.reduce((sum, r) => sum + r.eloResult.delta, 0);
+								const olderSign = olderDelta >= 0 ? '+' : '';
+								const olderLatestElo = olderRated[olderRated.length - 1].eloResult.newElo;
+								_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '. Rating: ' + olderSign + olderDelta + ' (' + olderLatestElo + ').');
+							} else {
+								_this.messageHistory.push('Synced ' + olderUploaded + ' earlier offline game' + (olderUploaded === 1 ? '' : 's') + '.');
+							}
 						}
 					} catch (e) {
 						console.error('Failed to process AI Elo:', e);

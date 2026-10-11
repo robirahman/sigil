@@ -151,7 +151,8 @@
 		/* Menu groups: Play on top (big buttons + Game options), then Learn,
 		   Community and Settings as three columns of links (stacked on phones). */
 		.menu-group { text-align: left; }
-		.menu-group--play { margin-bottom: 32px; color: var(--color-text); }
+		.menu-group--play,
+		.menu-group--extras { margin-bottom: 32px; color: var(--color-text); }
 		.menu-group__title {
 			font-family: 'Overlock', sans-serif;
 			font-size: 0.85em;
@@ -161,12 +162,14 @@
 			color: var(--color-text-muted);
 			margin: 0 0 10px;
 		}
-		.play-grid {
+		.play-grid,
+		.extras-grid {
 			display: grid;
 			grid-template-columns: 1fr 1fr;
 			gap: 12px;
 		}
-		.play-grid .mode-button {
+		.play-grid .mode-button,
+		.extras-grid .mode-button {
 			margin: 0;
 			text-align: center;
 			padding: 16px 12px;
@@ -244,6 +247,7 @@
 		}
 		@media (max-width: 640px) {
 			.menu-columns { grid-template-columns: 1fr; gap: 22px; }
+			.extras-grid { grid-template-columns: 1fr; }
 		}
 		.menu-link {
 			display: block;
@@ -341,7 +345,16 @@
 						var card = document.createElement('div');
 						card.className = 'resume-card';
 						var a = document.createElement('a');
-						a.href = 'game.html?id=' + encodeURIComponent(s.id);
+						var resumeHref = 'game.html?id=' + encodeURIComponent(s.id);
+						if (s.aiMode) resumeHref += '&ai=' + encodeURIComponent(s.aiMode);
+						if (s.variant && s.variant !== 'standard') resumeHref += '&variant=' + encodeURIComponent(s.variant);
+						if (s.clock && s.clock.baseMs > 0) {
+							var min = s.clock.baseMs / 60000;
+							var inc = (s.clock.incMs || 0) / 1000;
+							var fmt = function(x) { return Math.abs(x - Math.round(x)) < 1e-9 ? String(Math.round(x)) : String(x); };
+							resumeHref += '&clock=' + encodeURIComponent(fmt(min) + '+' + fmt(inc));
+						}
+						a.href = resumeHref;
 						a.style.color = 'inherit';
 						a.style.textDecoration = 'none';
 						a.innerHTML = '<strong>Resume ' + modeLabel + '</strong>' +
@@ -368,26 +381,22 @@
 			<section class="menu-group menu-group--play" aria-labelledby="menu-play">
 				<h3 class="menu-group__title" id="menu-play">Play</h3>
 				<div class="play-grid">
-				<a class="mode-button" id="vs-ai-btn" href="#" aria-expanded="false" aria-controls="ai-difficulty-row">
-					vs AI
-					<small>Play against the computer</small>
-				</a>
+					<a class="mode-button" id="vs-ai-btn" href="#" aria-expanded="false" aria-controls="ai-difficulty-row">
+						vs AI
+						<small>Play against the computer</small>
+					</a>
 					<a class="mode-button" href="multiplayer.html">
-					Online Multiplayer
-					<small>Play with a friend over the internet</small>
-				</a>
-				<a class="mode-button" href="game.html">
-					Local 1v1
-					<small>Play on the same screen with a friend</small>
-				</a>
-				<a class="mode-button" href="active-games.html">
-					Active Games
-					<small>Resume your ongoing online games</small>
-				</a>
-				<a class="mode-button" href="cataclysm.html">
-					Cataclysm
-					<small>Playtest the expanded 5-zone board</small>
-				</a>
+						Online Multiplayer
+						<small>Play with a friend over the internet</small>
+					</a>
+					<a class="mode-button" href="game.html">
+						Local 1v1
+						<small>Play on the same screen with a friend</small>
+					</a>
+					<a class="mode-button" href="active-games.html">
+						Active Games
+						<small>Resume your ongoing online games</small>
+					</a>
 				</div>
 			<div class="ai-difficulty-row" id="ai-difficulty-row">
 				<!-- All four tiers are the Rust engine (WebAssembly, in-browser),
@@ -509,7 +518,7 @@
 								<div class="pack-group__children pack-group__children--compact" id="core-subpacks">
 									<label title="Sprout, Grow, Flourish"><input type="checkbox" data-core-sub value="core_growth" /> <span>Growth</span></label>
 									<label title="Slash, Fireblast, Carnage"><input type="checkbox" data-core-sub value="core_havoc" /> <span>Havoc</span></label>
-									<label title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_impact" /> <span>Impact</span></label>
+									<label title="Comet, Meteor, Starfall"><input type="checkbox" data-core-sub value="core_crater" /> <span>Crater</span></label>
 									<label title="Seal of Summer, Seal of Wind, Seal of Lightning"><input type="checkbox" data-core-sub value="core_tempo" /> <span>Tempo</span></label>
 									<label title="Surge, Hail Storm, Bewitch"><input type="checkbox" data-core-sub value="core_hex" /> <span>Hex</span></label>
 								</div>
@@ -568,6 +577,7 @@
 						// Core sub-packs (CORE_SUBPACKS in constants.js): one of each type.
 						core_growth: { rituals: 1, sorceries: 1, charms: 1 },
 						core_havoc:  { rituals: 1, sorceries: 1, charms: 1 },
+						core_crater: { rituals: 1, sorceries: 1, charms: 1 },
 						core_impact: { rituals: 1, sorceries: 1, charms: 1 },
 						core_tempo:  { rituals: 1, sorceries: 1, charms: 1 },
 						core_hex:    { rituals: 1, sorceries: 1, charms: 1 },
@@ -583,7 +593,7 @@
 						tectonic:  { rituals: 1, sorceries: 1, charms: 1 },
 						providence:{ rituals: 1, sorceries: 1, charms: 1 },
 						// Experimental only holds what is under playtest right now.
-						experimental: { rituals: 0, sorceries: 2, charms: 0 }
+						experimental: { rituals: 3, sorceries: 4, charms: 1 }
 					};
 
 					function isValidSelection(keys) {
@@ -780,6 +790,16 @@
 				</script>
 			</section>
 
+			<section class="menu-group menu-group--extras" aria-labelledby="menu-extras">
+				<h3 class="menu-group__title" id="menu-extras">Extras</h3>
+				<div class="extras-grid">
+					<a class="mode-button" href="cataclysm.html">
+						Cataclysm
+						<small>Playtest the expanded 5-zone board</small>
+					</a>
+				</div>
+			</section>
+
 			<div class="menu-columns">
 				<section class="menu-group" aria-labelledby="menu-learn">
 					<h3 class="menu-group__title" id="menu-learn">Learn</h3>
@@ -860,10 +880,21 @@
 		(function() {
 			if (typeof OfflineGameQueue === 'undefined') return;
 			var note = document.getElementById('offline-sync-note');
-			function render(synced) {
+			function render(synced, result) {
 				var n = OfflineGameQueue.count();
 				if (synced) {
+					var ratingMsg = '';
+					if (result && result.results) {
+						var rated = result.results.filter(function(r) { return r.ok && r.eloResult && typeof r.eloResult.delta === 'number'; });
+						if (rated.length > 0) {
+							var totalDelta = rated.reduce(function(sum, r) { return sum + r.eloResult.delta; }, 0);
+							var sign = totalDelta >= 0 ? '+' : '';
+							var latestElo = rated[rated.length - 1].eloResult.newElo;
+							ratingMsg = ' Rating: ' + sign + totalDelta + ' (' + latestElo + ').';
+						}
+					}
 					note.textContent = 'Uploaded ' + synced + ' game' + (synced === 1 ? '' : 's') + ' played offline.'
+						+ ratingMsg
 						+ (n ? ' ' + n + ' still waiting.' : '');
 				} else if (n) {
 					note.textContent = n + ' finished game' + (n === 1 ? '' : 's') + ' saved on this device, waiting to upload'
@@ -872,7 +903,7 @@
 				note.style.display = note.textContent ? '' : 'none';
 			}
 			render(0);
-			OfflineGameQueue.installAutoflush({ onFlush: function(r) { render(r.uploaded); } });
+			OfflineGameQueue.installAutoflush({ onFlush: function(r) { render(r.uploaded, r); } });
 		})();
 	</script>
 	<script>

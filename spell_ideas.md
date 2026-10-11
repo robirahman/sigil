@@ -87,12 +87,11 @@ Refined spell concepts developed in design sessions based on gameplay balance an
 |---|---|---|
 | Ritual | Fissure | Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own. |
 | Sorcery | Rock Slide | Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed. |
-| Charm | Bulwark | STATIC: Stones in your locked spell cannot be pushed by enemy hard moves. |
+| Charm | Bulwark | STATIC: Stones in your locked spell cannot be moved, crushed, converted, or destroyed by the opponent. |
 
 Fissure and Bulwark were rebalanced on 2026-10-03. Fissure's blast now also
-destroys the caster's own adjacent stones. Bulwark now reads "Stones in your
-locked spell cannot be targeted by enemy hard moves, converted, or
-destroyed." Rulings: the shield covers destruction from any source, so it
+destroys the caster's own adjacent stones. Bulwark now reads "STATIC: Stones in your
+locked spell cannot be moved, crushed, converted, or destroyed by the opponent." Rulings: the shield covers destruction from any source, so it
 protects its owner's stones from their own Fissure too, but never blocks a
 sacrifice the owner chooses. Fissure may target a node holding a shielded
 stone: its unshielded neighbors are destroyed, but the stone stays and no
@@ -188,8 +187,44 @@ encode as ID 0, like Panda) and from the Rust engine, which rejects them.*
 
 | Slot | Spell | Effect |
 |---|---|---|
+| Ritual | Shatter | Make 1 hard move, then destroy all enemy stones touching 2 or more of your stones. |
+| Ritual | Petrify | STATIC: Opponent cannot make hard moves. |
+| Ritual | Fulgurite | Make 1 blink move, then 2 hard moves. |
 | Sorcery | Spring Tide | Make 2 hard moves, then 2 soft moves, then sacrifice 2 stones. |
 | Sorcery | Rapids | Make 1 soft move, then 1 hard move. You may cast 1 additional spell this turn. |
+| Sorcery | Vitrify | STATIC: The enemy cannot dash as long as you have this seal filled. |
+| Sorcery | Spellbreak | Unlock the opponent's locked spell and destroy 1 stone on that sigil. Then make 1 soft move. |
+| Charm | Silence | Opponent may not cast spells on their next turn. |
+
+Silence (added 2026-10-11) is a 1-node Charm that disables the opponent's
+spell window for their entire next turn (`board.silenced[enemy] = true`). The
+opponent retains the ability to make opening moves, dash, and pass. The
+suppression expires automatically when the opponent ends their turn.
+
+Vitrify (added 2026-10-11) is a 3-node static Sorcery seal that suppresses
+the enemy's ability to dash for as long as the seal is held filled. Dash
+buttons and dash turn options are completely withheld.
+
+Spellbreak (added 2026-10-11) is a 3-node Sorcery that targets the opponent's
+locked spell. Because each player can hold at most one locked spell at any
+time, Spellbreak requires no target selection: it unlocks `board.lock[enemy]`
+(and any associated springlock) and destroys 1 stone on that sigil (respecting
+Bulwark protection). If the opponent has no locked spell, the unlock and
+destruction phases do nothing. The caster then makes 1 soft move.
+
+Shatter (added 2026-10-11) is a 5-node Ritual: the caster executes 1 hard
+move, followed by the immediate destruction of all enemy stones bordering two
+or more of the caster's stones. Destruction is simultaneous and respects
+Bulwark.
+
+Petrify (added 2026-10-11) is a 5-node static Ritual seal: while charged, the
+opponent cannot make hard moves under any circumstances. Their standard
+opening move must be soft, and any hard moves offered by spells have empty
+target sets.
+
+Fulgurite (added 2026-10-11) is a 5-node Ritual: the caster makes 1 blink move
+(which can blink into an empty node or execute a blink push), followed by 2
+hard moves.
 
 Spring Tide (added 2026-09-07; phases flipped to pushes-first the same day)
 is Tsunami's chain with the hard moves ahead of the soft ones, at sorcery

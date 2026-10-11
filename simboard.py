@@ -108,6 +108,12 @@ CORE_SPELLS = {
     # spell window once (one more cast, no dash), like Seal of Summer's
     # second cast. Consumed by the turn enumerators, not the resolver.
     'Rapids': {'resolve': 'soft_hard_chain', 'counts': [1, 1], 'extra_cast': True, 'static': False, 'ischarm': False},
+    'Silence': {'resolve': 'silence', 'static': False, 'ischarm': True},
+    'Vitrify': {'resolve': None, 'static': True, 'ischarm': False},
+    'Spellbreak': {'resolve': 'spellbreak', 'count': 1, 'static': False, 'ischarm': False},
+    'Shatter': {'resolve': 'shatter', 'static': False, 'ischarm': False},
+    'Petrify': {'resolve': None, 'static': True, 'ischarm': False},
+    'Fulgurite': {'resolve': 'fulgurite', 'static': False, 'ischarm': False},
 }
 
 # Duplicate-copy aliases (allow-duplicates variant): X~2 and X~3 share X's
@@ -594,7 +600,7 @@ class SimBoard:
                  'gameover', 'winner', 'score', 'spell_counter', 'lock',
                  'springlock', 'totalstones', 'mana', 'charged_spells',
                  'variant', 'all_looping_snapshot_counts',
-                 'prov_bank')
+                 'prov_bank', 'silenced')
 
     def __init__(self, spell_names=None, variant='standard'):
         if variant not in self.VARIANTS:
@@ -620,6 +626,7 @@ class SimBoard:
         # toward the owner's stone total; a turn that starts with a nonempty
         # bank may place one of them after the regular move.
         self.prov_bank = {'red': 0, 'blue': 0}
+        self.silenced = {'red': False, 'blue': False}
 
     def copy(self):
         b = SimBoard.__new__(SimBoard)
@@ -640,6 +647,7 @@ class SimBoard:
         b.variant = self.variant
         b.all_looping_snapshot_counts = dict(self.all_looping_snapshot_counts)
         b.prov_bank = dict(self.prov_bank)
+        b.silenced = dict(self.silenced)
         return b
 
     def looping_snapshot(self):
@@ -680,6 +688,8 @@ class SimBoard:
         # dicts carried over from live Boards) stay byte-identical.
         if self.prov_bank['red'] or self.prov_bank['blue']:
             key += '|P%d/%d' % (self.prov_bank['red'], self.prov_bank['blue'])
+        if self.silenced['red'] or self.silenced['blue']:
+            key += '|S%d/%d' % (1 if self.silenced['red'] else 0, 1 if self.silenced['blue'] else 0)
         return key
 
     def setup_initial(self):
@@ -832,6 +842,7 @@ class SimBoard:
 
     def advance_turn(self):
         """Switch to the next player's turn."""
+        self.silenced[self.whose_turn] = False
         self.turn_counter += 1
         self.whose_turn = 'blue' if self.whose_turn == 'red' else 'red'
 
@@ -893,6 +904,8 @@ class SimBoard:
     def _hard_moveable(self, color, exclude_nodes=None):
         """Return list of enemy nodes adjacent to color's stones."""
         enemy = self._enemy(color)
+        if 'Petrify' in self.charged_spells[enemy]:
+            return []
         exclude = set(exclude_nodes) if exclude_nodes else set()
         result = []
         for name in NODE_ORDER:
@@ -906,12 +919,13 @@ class SimBoard:
     def _all_moveable(self, color):
         """Return list of nodes (empty or enemy) adjacent to color's stones."""
         enemy = self._enemy(color)
+        has_petrify = 'Petrify' in self.charged_spells[enemy]
         result = []
         for name in NODE_ORDER:
             if self.stones[name] == DESTROYED:
                 continue  # walls are impassable
             if self.stones[name] != color:
-                if self.stones[name] == enemy and self._is_bulwark_protected(enemy, name):
+                if self.stones[name] == enemy and (has_petrify or self._is_bulwark_protected(enemy, name)):
                     continue
                 for nb in self._adjacent_nodes(name):
                     if self.stones[nb] == color:
@@ -922,7 +936,8 @@ class SimBoard:
     def _blinkable(self, color):
         """Return list of all nodes not occupied by color (walls excluded)."""
         enemy = self._enemy(color)
-        return [n for n in NODE_ORDER if self.stones[n] != color and self.stones[n] != DESTROYED and not (self.stones[n] == enemy and self._is_bulwark_protected(enemy, n))]
+        has_petrify = 'Petrify' in self.charged_spells[enemy]
+        return [n for n in NODE_ORDER if self.stones[n] != color and self.stones[n] != DESTROYED and not (self.stones[n] == enemy and (has_petrify or self._is_bulwark_protected(enemy, n)))]
 
     def _soft_blinkable(self, color):
         """All EMPTY nodes (walls excluded): Wind's blink targets while the
@@ -1879,6 +1894,87 @@ class SimBoard:
             actions.append(Action('bank_stones', spell=spell_name, banked=n))
             self.update()
 
+        elif resolve_type == 'silence':
+            self.silenced[enemy] = True
+            actions.append(Action('silence'))
+
+        elif resolve_type == 'spellbreak':
+            lock_spell = self.lock[enemy]
+            destroyed_stone = None
+            if lock_spell:
+                prot = self._bulwark_protected()
+                try:
+                    lock_idx = self.spell_names.index(lock_spell)
+                except ValueError:
+                    lock_idx = -1
+                lock_nodes = POSITIONS.get(lock_idx + 1, []) if lock_idx >= 0 else []
+                enemy_stones = [n for n in lock_nodes if self.stones[n] == enemy and n not in prot]
+                self.lock[enemy] = None
+                self.springlock[enemy] = None
+                if enemy_stones:
+                    override = overrides.get('spellbreak_target')
+                    if override and override in enemy_stones:
+                        destroyed_stone = override
+                    else:
+                        destroyed_stone = enemy_stones[0]
+                    self.stones[destroyed_stone] = None
+            actions.append(Action('spellbreak', node=destroyed_stone))
+            self.update()
+            if not self.gameover:
+                targets = self._soft_moveable(color)
+                if targets:
+                    override_soft = overrides.get('spellbreak_soft')
+                    chosen = override_soft if override_soft in targets else targets[0]
+                    actions.append(self._do_soft_move(color, chosen))
+                    self.update()
+
+        elif resolve_type == 'shatter':
+            override_hard = overrides.get('shatter_hard')
+            hard_targets = self._hard_moveable(color)
+            if hard_targets:
+                chosen = override_hard if override_hard in hard_targets else hard_targets[0]
+                actions.append(self._do_hard_move(color, chosen))
+                self.update()
+            if self.gameover:
+                return actions
+            prot = self._bulwark_protected()
+            doomed = []
+            for name in NODE_ORDER:
+                if self.stones[name] == enemy and name not in prot:
+                    friendly_count = sum(1 for nb in self._adjacent_nodes(name) if self.stones[nb] == color)
+                    if friendly_count >= 2:
+                        doomed.append(name)
+            for name in doomed:
+                self.stones[name] = None
+            actions.append(Action('shatter', destroyed=doomed))
+            self.update()
+
+        elif resolve_type == 'fulgurite':
+            blink_targets = self._blinkable(color)
+            if blink_targets:
+                override_blink = overrides.get('fulgurite_blink')
+                chosen = override_blink if override_blink in blink_targets else blink_targets[0]
+                actions.append(self._do_move(color, chosen, is_blink=True))
+                self.update()
+            if self.gameover:
+                return actions
+            override_hard = list(overrides.get('fulgurite_hard') or overrides.get('hard_move_targets') or [])
+            for _ in range(2):
+                if self.gameover:
+                    break
+                hard_targets = self._hard_moveable(color)
+                if not hard_targets:
+                    break
+                chosen = None
+                while override_hard and chosen is None:
+                    candidate = override_hard.pop(0)
+                    if candidate in hard_targets:
+                        chosen = candidate
+                if chosen is None:
+                    chosen = hard_targets[0]
+                actions.append(self._do_hard_move(color, chosen))
+                self.update()
+
         return actions
 
     def _destroy_exposed(self, color, actions):
@@ -2058,9 +2154,10 @@ class SimBoard:
         # EMPTY nodes (a soft blink is a soft move); only hard blinks onto
         # occupied nodes are barred (2026-08 clarification).
         enemy_has_stone = 'Seal_of_Stone' in self.charged_spells[self._enemy(color)]
-        if enemy_has_stone and has_seal_of_wind:
+        enemy_has_petrify = 'Petrify' in self.charged_spells[self._enemy(color)]
+        if (enemy_has_stone or enemy_has_petrify) and has_seal_of_wind:
             move_targets = self._soft_blinkable(color)
-        elif enemy_has_stone:
+        elif enemy_has_stone or enemy_has_petrify:
             move_targets = self._soft_moveable(color)
         elif has_seal_of_wind:
             move_targets = self._blinkable(color)
@@ -2131,12 +2228,13 @@ class SimBoard:
         has_seal_of_lightning = 'Seal_of_Lightning' in self.charged_spells[color]
         has_seal_of_summer = 'Seal_of_Summer' in self.charged_spells[color]
         has_autumn = 'Autumn' in self.charged_spells[enemy]
+        has_vitrify = 'Vitrify' in self.charged_spells[enemy]
 
         # Option: pass (always available)
         yield CompleteTurn(actions_so_far + [Action('pass')])
 
         # Option: dash (if allowed and enough stones)
-        if can_dash and can_spell and self.totalstones[color] > 2 and not has_autumn:
+        if can_dash and can_spell and self.totalstones[color] > 2 and not has_autumn and not has_vitrify:
             dash_targets = self._all_moveable(color)
             if dash_targets:
                 # For each possible dash, we do it greedily (one dash variant)
@@ -2241,6 +2339,8 @@ class SimBoard:
         (and is not modeled in the sim — see below), Splash only when the
         caster has NOT dashed.
         """
+        if self.silenced[color]:
+            return []
         enemy = self._enemy(color)
         has_winter = 'Seal_of_Winter' in self.charged_spells[enemy]
         has_spring = 'Seal_of_Spring' in self.charged_spells[color]
@@ -2409,10 +2509,17 @@ def apply_sim_turn(board, turn, color):
             if action.node:
                 board.stones[action.node] = None
         elif t in ('fireblast', 'hail_storm', 'storm_front', 'hurricane',
-                   'decay'):
+                   'decay', 'shatter'):
             if action.destroyed:
                 for n in action.destroyed:
                     board.stones[n] = None
+        elif t == 'silence':
+            board.silenced[enemy] = True
+        elif t == 'spellbreak':
+            board.lock[enemy] = None
+            board.springlock[enemy] = None
+            if action.node:
+                board.stones[action.node] = None
         elif t == 'bewitch':
             if action.node:
                 board.stones[action.node] = color
@@ -2455,6 +2562,7 @@ def apply_sim_turn(board, turn, color):
         elif t == 'bank_stones':
             board.prov_bank[color] += action.banked or 0
         board.update()
+    board.silenced[color] = False
     # Seal of Destruction end-of-turn trigger (the start-of-turn loss is
     # applied by the turn driver, e.g. minimax _apply_turn / live loops).
     board._destruction_end_of_turn(color)
