@@ -79,17 +79,32 @@ sys.path.insert(0, REPO)
 DB_URL = 'https://sigil-js-default-rtdb.firebaseio.com'
 EVAL_NAME = 'tfit'
 def _engine_tag():
-    """'rust-v<RUST_ENGINE_VERSION>' (rust-ai.js): the engine build stored
-    evaluations came from (was a hand-kept constant, stuck at rust-v10)."""
-    js = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'docs',
-                      'static', 'scripts', 'engine', 'rust-ai.js')
+    """The engine build stored evaluations come from: 'rust-v<RUST_ENGINE_VERSION>'
+    (rust-ai.js) plus '@<commit>' when the checkout is a git work tree, so rows
+    from different builds never look alike. The GCP evaluators sparse-check out
+    only engine/ and ai/ (no rust-ai.js), which still yields 'rust@<commit>';
+    a source tarball without .git can name itself via $SIGIL_ENGINE_TAG."""
+    if os.environ.get('SIGIL_ENGINE_TAG'):
+        return os.environ['SIGIL_ENGINE_TAG']
+    here = os.path.dirname(os.path.abspath(__file__))
+    ver = ''
     try:
-        for line in open(js):
+        for line in open(os.path.join(here, '..', '..', 'docs', 'static', 'scripts', 'engine', 'rust-ai.js')):
             if 'const RUST_ENGINE_VERSION' in line:
-                return 'rust-v' + line.split('=')[1].strip().rstrip(';')
+                ver = '-v' + line.split('=')[1].strip().rstrip(';')
+                break
     except OSError:
         pass
-    return 'rust-unknown'
+    sha = ''
+    try:
+        import subprocess
+        out = subprocess.run(['git', '-C', here, 'rev-parse', '--short', 'HEAD'],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            sha = '@' + out.stdout.strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return ('rust' + ver + sha) if (ver or sha) else 'rust-unknown'
 
 
 ENGINE_TAG = _engine_tag()
@@ -303,7 +318,9 @@ def _row_matches(d, walk, ev, depth):
 
 
 def _done_keys(path, walk='fresh', ev=None, depth=None):
-    done, stale = set(), 0
+    """Positions whose EFFECTIVE row (the last one per (g, i), which is what
+    `upload` reads) was computed with this walk, eval and requested depth."""
+    last = {}
     ev = ev or EVAL_NAME
     if os.path.exists(path):
         with open(path, encoding='utf-8') as fh:
@@ -314,12 +331,11 @@ def _done_keys(path, walk='fresh', ev=None, depth=None):
                     continue
                 if 'error' in d:
                     continue
-                if _row_matches(d, walk, ev, depth):
-                    done.add((d['g'], d['i']))
-                else:
-                    stale += 1
+                last[(d['g'], d['i'])] = d
+    done = {k for k, d in last.items() if _row_matches(d, walk, ev, depth)}
+    stale = len(last) - len(done)
     if stale:
-        print(f'{stale} saved rows were computed with another walk / eval / depth: recomputing them', flush=True)
+        print(f'{stale} saved positions were computed with another walk / eval / depth: recomputing them', flush=True)
     return done
 
 
