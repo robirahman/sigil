@@ -606,7 +606,8 @@ function _enumeratePostMoveExhaustive(board, color, prefix, caps, canDash, canSp
 	// Dash: enumerate sacrifice combos × top-K move targets, both
 	// smart-ordered. Sacrifices ranked by escape-distance (dead stones
 	// first); destinations ranked by enemy-adjacency (impact first).
-	if (canDash && canSpell && board.totalStones[color] > 2) {
+	const hasVitrify = (board.chargedSpells[enemy] || []).some(s => baseSpellName(s) === 'Vitrify');
+	if (canDash && canSpell && board.totalStones[color] > 2 && !hasVitrify) {
 		const hasLightning = (board.chargedSpells[color] || []).includes('Seal_of_Lightning');
 		// With Lightning, dash sacrifices are single stones and destinations
 		// are at most ~6 per stone — total ~60 combos. Cheap enough to
@@ -725,14 +726,12 @@ function getLegalTurnsExhaustive(board, color, caps) {
 function _enumerateMoveRootExhaustive(board, color, prefix, caps, out) {
 	const enemy = board._enemy(color);
 	const hasSeal = (board.chargedSpells[color] || []).includes('Seal_of_Wind');
-	// Seal of Stone (enemy-held): this color's opening move must be SOFT —
-	// no pushes. Wind's blink privilege survives it on EMPTY nodes (a soft
-	// blink is a soft move); only hard blinks onto occupied nodes are
-	// barred (2026-08 clarification).
-	const enemyHasStone = (board.chargedSpells[enemy] || []).includes('Seal_of_Stone');
+	// Seal of Stone or Petrify (enemy-held): opening move must be SOFT — no pushes.
+	const enemyHasStone = (board.chargedSpells[enemy] || []).some(s => baseSpellName(s) === 'Seal_of_Stone');
+	const enemyHasPetrify = (board.chargedSpells[enemy] || []).some(s => baseSpellName(s) === 'Petrify');
 	let moveTargets;
-	if (enemyHasStone && hasSeal) moveTargets = board._softBlinkable(color);
-	else if (enemyHasStone) moveTargets = board._softMoveable(color);
+	if ((enemyHasStone || enemyHasPetrify) && hasSeal) moveTargets = board._softBlinkable(color);
+	else if (enemyHasStone || enemyHasPetrify) moveTargets = board._softMoveable(color);
 	else if (hasSeal) moveTargets = board._blinkable(color);
 	else moveTargets = board._allMoveable(color);
 	if (!moveTargets.length) {

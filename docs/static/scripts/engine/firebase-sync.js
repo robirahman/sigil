@@ -9,6 +9,10 @@
  * 5. Each player listens for opponent's turns and replays them locally
  */
 
+const _INVITE_EXPIRY_MS = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined'
+	? ROOM_INVITE_EXPIRY_MS
+	: (72 * 60 * 60 * 1000);
+
 class FirebaseSync {
 	constructor(db) {
 		this.db = db;
@@ -63,6 +67,7 @@ class FirebaseSync {
 		const code = _generateRoomCode();
 		this.roomCode = code;
 		this.myColor = 'red';
+		this.created = Date.now();
 
 		this.redUid = userInfo?.uid || null;
 		this.redDisplayName = userInfo?.displayName || 'Guest';
@@ -73,7 +78,7 @@ class FirebaseSync {
 		const roomData = {
 			spellNames: spellNames,
 			status: 'waiting',
-			created: Date.now(),
+			created: this.created,
 			red: { connected: true, uid: this.redUid, displayName: this.redDisplayName },
 			blue: { connected: false },
 			ranked: false,
@@ -114,6 +119,7 @@ class FirebaseSync {
 		const snap = await roomRef.once('value');
 		const data = snap.val();
 		if (!data) throw new Error('Room not found');
+		if (data.status === 'expired') throw new Error('This game invite has expired');
 
 		this.timeControl = data.timeControl || { type: 'none' };
 		this.allowSpectators = data.allowSpectators !== false;
@@ -121,6 +127,7 @@ class FirebaseSync {
 		// creator picked. Default 'standard' for older rooms whose
 		// data was written before the field existed.
 		this.variant = normalizeVariant(data.variant);
+		this.created = data.created || Date.now();
 
 		// Store player info from room data
 		if (data.red) {
@@ -129,6 +136,15 @@ class FirebaseSync {
 		}
 
 		if (data.status === 'waiting') {
+			const created = data.created || 0;
+			if (created && (Date.now() - created > _INVITE_EXPIRY_MS)) {
+				roomRef.remove().catch(() => {});
+				if (data.red && data.red.uid) {
+					this.db.ref('user_active_games/' + data.red.uid + '/' + code).remove().catch(() => {});
+				}
+				throw new Error('This game invite has expired');
+			}
+
 			// Normal first join as blue
 			this.myColor = 'blue';
 			this.blueUid = userInfo?.uid || null;
@@ -579,8 +595,18 @@ class FirebaseSync {
 	 * Caller must have already verified that userInfo.uid matches data.red.uid.
 	 */
 	async reconnectAsCreator(code, userInfo, roomData) {
+		const created = roomData.created || 0;
+		if (roomData.status === 'expired' || (roomData.status === 'waiting' && created && (Date.now() - created > _INVITE_EXPIRY_MS))) {
+			this.db.ref('rooms/' + code).remove().catch(() => {});
+			if (roomData.red && roomData.red.uid) {
+				this.db.ref('user_active_games/' + roomData.red.uid + '/' + code).remove().catch(() => {});
+			}
+			throw new Error('This game invite has expired');
+		}
+
 		this.roomCode = code;
 		this.myColor = 'red';
+		this.created = roomData.created || Date.now();
 		this.redUid = userInfo?.uid || null;
 		this.redDisplayName = userInfo?.displayName || (roomData.red && roomData.red.displayName) || 'Guest';
 		this.timeControl = roomData.timeControl || { type: 'none' };
@@ -653,7 +679,7 @@ class FirebaseSync {
 			opponentUid: opponentUid || null,
 			opponentDisplayName: opponentName || null,
 			timeControlType: (this.timeControl && this.timeControl.type) || 'none',
-			created: Date.now(),
+			created: this.created || Date.now(),
 		};
 		this.db.ref('user_active_games/' + myUid + '/' + this.roomCode).set(entry).catch((e) => {
 			console.warn('Failed to write user_active_games entry:', e);

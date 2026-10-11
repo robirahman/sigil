@@ -515,7 +515,9 @@ class MultiplayerController {
 			}
 			let summerActive = false;
 			if (board.chargedSpells[color].includes('Seal_of_Summer') && cansummer) summerActive = true;
-			if (canspell || (!canspell && summerActive)) {
+			if (board.silenced && board.silenced[color]) {
+				// Silenced: cannot cast spells on this turn
+			} else if (canspell || (!canspell && summerActive)) {
 				board.update();
 				for (const spellName of board.chargedSpells[color]) {
 					const info = CORE_SPELLS[spellName];
@@ -855,6 +857,7 @@ class MultiplayerController {
 		const board = this.board;
 		const enemy = board.enemy(color);
 		board.providenceOpen = false;
+		if (board.silenced) board.silenced[color] = false;
 		// Seal of Destruction end-of-turn effect.
 		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
 			const shielded = bulwarkProtectedNodes(board);

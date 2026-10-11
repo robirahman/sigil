@@ -37,6 +37,7 @@ class SigilBoard {
 		// placement has been offered. It never serializes.
 		this.providenceBank = { red: 0, blue: 0 };
 		this.providenceOpen = false;
+		this.silenced = { red: false, blue: false };
 		this.snapshot = null;
 		this.allLoopingSnapshotCounts = {};
 		this.variant = normalizeVariant(variant);
@@ -165,6 +166,8 @@ class SigilBoard {
 			lastPlayer: this.lastPlayer,
 			bankRed: this.providenceBank.red,
 			bankBlue: this.providenceBank.blue,
+			silencedRed: this.silenced.red,
+			silencedBlue: this.silenced.blue,
 			stones: {},
 		};
 		for (const n of NODE_ORDER) {
@@ -194,6 +197,9 @@ class SigilBoard {
 		if (this.providenceBank.red || this.providenceBank.blue) {
 			loopKey += '|P' + this.providenceBank.red + '/' + this.providenceBank.blue;
 		}
+		if (this.silenced.red || this.silenced.blue) {
+			loopKey += '|S' + (this.silenced.red ? 1 : 0) + '/' + (this.silenced.blue ? 1 : 0);
+		}
 
 		if (this.allLoopingSnapshotCounts[loopKey]) {
 			this.allLoopingSnapshotCounts[loopKey]++;
@@ -220,6 +226,7 @@ class SigilBoard {
 		this.lastPlayer = snap.lastPlayer;
 		// Restore the pre-turn banks; the re-run turn re-opens the placement.
 		this.providenceBank = { red: snap.bankRed || 0, blue: snap.bankBlue || 0 };
+		this.silenced = { red: !!snap.silencedRed, blue: !!snap.silencedBlue };
 		for (const n of NODE_ORDER) {
 			this.stones[n] = snap.stones[n];
 		}

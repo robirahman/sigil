@@ -880,7 +880,23 @@
 							this._startReviewMode(code, roomData);
 							return;
 						}
+						if (roomData.status === 'expired') {
+							this.lobbyError = 'This game invite has expired.';
+							return;
+						}
 						if (roomData.status === 'waiting') {
+							const expiryMs = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined' ? ROOM_INVITE_EXPIRY_MS : (72 * 60 * 60 * 1000);
+							const created = roomData.created || 0;
+							if (created && (Date.now() - created > expiryMs)) {
+								try {
+									_firebaseSync.db.ref('rooms/' + code).remove();
+									if (roomData.red && roomData.red.uid) {
+										_firebaseSync.db.ref('user_active_games/' + roomData.red.uid + '/' + code).remove();
+									}
+								} catch (e) {}
+								this.lobbyError = 'This game invite has expired.';
+								return;
+							}
 							// If the user IS the creator (matched by uid), reattach
 							// to red rather than auto-joining as blue.
 							const userInfo = _authManager ? _authManager.getUserInfo() : null;
@@ -1106,7 +1122,9 @@
 						try {
 							const snap = await db.ref('rooms/' + game.roomCode).once('value');
 							const data = snap.val();
-							if (!data || data.status === 'finished') continue;
+							if (!data || data.status === 'finished' || data.status === 'expired') continue;
+							const expiryMs = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined' ? ROOM_INVITE_EXPIRY_MS : (72 * 60 * 60 * 1000);
+							if (data.status === 'waiting' && data.created && (Date.now() - data.created > expiryMs)) continue;
 							stillAlive.push(game);
 							const isYourTurn = data.timer && data.timer.activeColor === game.myColor;
 							active.push({

@@ -1700,6 +1700,174 @@ const SpellResolvers = {
 		board.update();
 		emit(board.getBoardStatePayload());
 	},
+
+	// --- Experimental: Silence (opponent may not cast spells on next turn) ---
+	async silence(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		board.silenced[enemy] = true;
+		const ename = enemy === 'red' ? 'Red' : 'Blue';
+		emit({ type: 'message', message: `${ename} is silenced and cannot cast spells on their next turn.`, awaiting: null });
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Experimental: Spellbreak (unlock opp locked spell, destroy 1 stone on that sigil, 1 soft move) ---
+	async spellbreak(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const lockedSpell = board.lock[enemy];
+		if (lockedSpell) {
+			const prot = bulwarkProtectedNodes(board);
+			const lockIdx = board.spellNames.indexOf(lockedSpell);
+			const lockNodes = (lockIdx >= 0) ? (POSITIONS[lockIdx + 1] || []) : [];
+			const sigilEnemies = lockNodes.filter(n => board.stones[n] === enemy && !prot.has(n));
+			board.lock[enemy] = null;
+			board.springlock[enemy] = null;
+			if (sigilEnemies.length > 0) {
+				let chosen = null;
+				if (sigilEnemies.length === 1) {
+					chosen = sigilEnemies[0];
+				} else {
+					while (chosen === null) {
+						const moveoptions = {};
+						for (const n of sigilEnemies) moveoptions[n] = enemy;
+						const resp = await getInput({
+							type: 'message',
+							message: "Choose an enemy stone on the broken sigil to destroy.",
+							awaiting: 'node',
+							moveoptions,
+						});
+						if (sigilEnemies.includes(resp)) chosen = resp;
+					}
+				}
+				board.stones[chosen] = null;
+				emit({ type: 'crush_animation', crushed_color: enemy, node: chosen });
+				if (board.lastPlay === chosen) {
+					board.lastPlay = null;
+					board.lastPlayer = null;
+				}
+			}
+			emit({ type: 'message', message: `Broke ${enemy === 'red' ? 'Red' : 'Blue'}'s locked spell!`, awaiting: null });
+			board.update();
+			emit(board.getBoardStatePayload());
+		}
+		if (board.gameover) return;
+		const targets = getSoftMoveTargets(board, color);
+		if (Object.keys(targets).length > 0) {
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: 'Make 1 soft move.',
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				board.stones[resp] = color;
+				emit({ type: 'new_stone_animation', color, node: resp });
+				board.lastPlay = resp;
+				board.lastPlayer = color;
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
+
+	// --- Experimental: Shatter (1 hard move, then destroy enemy stones touching >=2 friendly) ---
+	async shatter(board, color, spellName, getInput, emit) {
+		const hardTargets = getHardMoveTargets(board, color);
+		if (Object.keys(hardTargets).length > 0) {
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: 'Make 1 hard move.',
+					awaiting: 'node',
+					moveoptions: hardTargets,
+				});
+				if (!hardTargets[resp]) continue;
+				await doPushEnemy(board, resp, color, getInput, emit);
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+		if (board.gameover) return;
+		const enemy = board.enemy(color);
+		const prot = bulwarkProtectedNodes(board);
+		const doomed = [];
+		for (const name of NODE_ORDER) {
+			if (board.stones[name] === enemy && !prot.has(name)) {
+				let friendlyCount = 0;
+				for (const nb of ADJACENCY[name]) {
+					if (board.stones[nb] === color) friendlyCount++;
+				}
+				if (friendlyCount >= 2) doomed.push(name);
+			}
+		}
+		for (const name of doomed) {
+			board.stones[name] = null;
+			emit({ type: 'crush_animation', crushed_color: enemy, node: name });
+			if (board.lastPlay === name) {
+				board.lastPlay = null;
+				board.lastPlayer = null;
+			}
+		}
+		if (doomed.length > 0) {
+			board.crushedThisTurn = true;
+			emit({ type: 'message', message: `${doomed.length} stone${doomed.length === 1 ? '' : 's'} shattered!`, awaiting: null });
+		}
+		board.update();
+		emit(board.getBoardStatePayload());
+	},
+
+	// --- Experimental: Fulgurite (1 blink move, then 2 hard moves) ---
+	async fulgurite(board, color, spellName, getInput, emit) {
+		const enemy = board.enemy(color);
+		const blinkTargets = getBlinkTargets(board, color);
+		if (Object.keys(blinkTargets).length > 0) {
+			while (true) {
+				const resp = await getInput({
+					type: 'message', message: 'Make 1 blink move.',
+					awaiting: 'node', moveoptions: blinkTargets,
+				});
+				if (!blinkTargets[resp]) continue;
+				const node = resp;
+				if (board.stones[node] === enemy) {
+					await doPushEnemy(board, node, color, getInput, emit);
+					break;
+				} else if (board.stones[node] === null) {
+					board.stones[node] = color;
+					emit({ type: 'new_stone_animation', color, node });
+					board.lastPlay = node;
+					board.lastPlayer = color;
+					board.update();
+					emit(board.getBoardStatePayload());
+					break;
+				}
+			}
+		}
+		if (board.gameover) return;
+		for (let i = 0; i < 2; i++) {
+			if (board.gameover) break;
+			const targets = getHardMoveTargets(board, color);
+			if (Object.keys(targets).length === 0) {
+				emit({ type: 'message', message: 'No legal hard moves.', awaiting: null });
+				break;
+			}
+			while (true) {
+				const resp = await getInput({
+					type: 'message',
+					message: `Make 1 hard move (${i + 1} of 2).`,
+					awaiting: 'node',
+					moveoptions: targets,
+				});
+				if (!targets[resp]) continue;
+				await doPushEnemy(board, resp, color, getInput, emit);
+				board.update();
+				emit(board.getBoardStatePayload());
+				break;
+			}
+		}
+	},
 };
 
 /**

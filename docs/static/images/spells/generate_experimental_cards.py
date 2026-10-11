@@ -157,6 +157,271 @@ def rapids_rune(diameter):
     return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
 
 
+def silence_rune(diameter):
+    """Muted bell: a resonance dome with radiating sound waves struck through
+    by a heavy vertical sealing bar."""
+    s = diameter * 4
+    im = parchment(s, seed=41)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 16)
+
+    # Central bell dome
+    br = s * 0.22
+    by = cy - s * 0.04
+    d.arc((cx - br, by - br, cx + br, by + br), start=180, end=360, fill=ink, width=w)
+    # Bell flare / rim
+    d.line([(cx - br, by), (cx - br * 1.25, by + s * 0.22)], fill=ink, width=w)
+    d.line([(cx + br, by), (cx + br * 1.25, by + s * 0.22)], fill=ink, width=w)
+    d.arc((cx - br * 1.35, by + s * 0.14, cx + br * 1.35, by + s * 0.28), start=10, end=170, fill=ink, width=w)
+    # Small clapper
+    d.ellipse((cx - s * 0.04, by + s * 0.24, cx + s * 0.04, by + s * 0.32), fill=ink)
+
+    # Radiating acoustic arcs (fading sound)
+    for off, r_span in [(-s * 0.32, 0.16), (-s * 0.42, 0.25), (s * 0.32, 0.16), (s * 0.42, 0.25)]:
+        sign = 1 if off > 0 else -1
+        ang_start = 320 if sign > 0 else 140
+        ang_end = 40 if sign > 0 else 220
+        d.arc((cx + off - s * r_span, cy - s * r_span, cx + off + s * r_span, cy + s * r_span),
+              start=ang_start, end=ang_end, fill=ink_soft, width=max(2, w // 2))
+
+    # Heavy vertical sealing slash cutting through the bell and silence
+    d.line([(cx, cy - s * 0.38), (cx, cy + s * 0.38)], fill=ink, width=int(w * 1.6))
+    # Seal crossbars at the tips
+    d.line([(cx - s * 0.08, cy - s * 0.38), (cx + s * 0.08, cy - s * 0.38)], fill=ink, width=w)
+    d.line([(cx - s * 0.08, cy + s * 0.38), (cx + s * 0.08, cy + s * 0.38)], fill=ink, width=w)
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
+def vitrify_rune(diameter):
+    """Vitrified lattice: sharp crystalline needles and a faceted diamond
+    freezing motion into solid glass."""
+    s = diameter * 4
+    im = parchment(s, seed=53)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 18)
+
+    # Central faceted rhombus / diamond
+    rx, ry = s * 0.22, s * 0.34
+    d.polygon([(cx, cy - ry), (cx + rx, cy), (cx, cy + ry), (cx - rx, cy)], outline=ink, width=w)
+    # Inner facet lines
+    d.line([(cx, cy - ry), (cx, cy + ry)], fill=ink_soft, width=max(2, w // 2))
+    d.line([(cx - rx, cy), (cx + rx, cy)], fill=ink_soft, width=max(2, w // 2))
+    # Concentric inner crystal
+    irx, iry = rx * 0.5, ry * 0.5
+    d.polygon([(cx, cy - iry), (cx + irx, cy), (cx, cy + iry), (cx - irx, cy)], fill=ink_soft)
+
+    # Radiating crystal shards & frozen lattice needles
+    angles = [30, 60, 120, 150, 210, 240, 300, 330]
+    for ang in angles:
+        rad = math.radians(ang)
+        x0 = cx + math.cos(rad) * s * 0.24
+        y0 = cy + math.sin(rad) * s * 0.24
+        x1 = cx + math.cos(rad) * s * 0.42
+        y1 = cy + math.sin(rad) * s * 0.42
+        d.line([(x0, y0), (x1, y1)], fill=ink, width=max(2, w - 2))
+        # Needle barb
+        bx = x1 + math.cos(rad + 0.5) * s * 0.05
+        by = y1 + math.sin(rad + 0.5) * s * 0.05
+        d.line([(x1, y1), (bx, by)], fill=ink, width=max(2, w // 2))
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
+def spellbreak_rune(diameter):
+    """Broken sigil: a fractured seal ring cleaved apart by a sharp ray,
+    with shattered shards dispersing."""
+    s = diameter * 4
+    im = parchment(s, seed=67)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 18)
+
+    # Outer split ring (left half shifted slightly up-left, right half down-right)
+    r = s * 0.32
+    d.arc((cx - r - s * 0.03, cy - r - s * 0.03, cx + r - s * 0.03, cy + r - s * 0.03),
+          start=125, end=305, fill=ink, width=w)
+    d.arc((cx - r + s * 0.03, cy - r + s * 0.03, cx + r + s * 0.03, cy + r + s * 0.03),
+          start=305, end=125, fill=ink, width=w)
+
+    # Inner concentric split ring
+    ir = s * 0.20
+    d.arc((cx - ir - s * 0.02, cy - ir - s * 0.02, cx + ir - s * 0.02, cy + ir - s * 0.02),
+          start=130, end=300, fill=ink_soft, width=max(2, w - 2))
+    d.arc((cx - ir + s * 0.02, cy - ir + s * 0.02, cx + ir + s * 0.02, cy + ir + s * 0.02),
+          start=310, end=120, fill=ink_soft, width=max(2, w - 2))
+
+    # Diagonal fracture cleaving line
+    d.line([(cx - s * 0.40, cy + s * 0.38), (cx + s * 0.38, cy - s * 0.40)],
+           fill=ink, width=int(w * 1.5))
+
+    # Flying shards around the fracture
+    shards = [
+        [(cx - s * 0.12, cy - s * 0.05), (cx - s * 0.06, cy - s * 0.14), (cx - s * 0.16, cy - s * 0.18)],
+        [(cx + s * 0.12, cy + s * 0.05), (cx + s * 0.06, cy + s * 0.14), (cx + s * 0.16, cy + s * 0.18)],
+        [(cx - s * 0.22, cy + s * 0.10), (cx - s * 0.28, cy + s * 0.15), (cx - s * 0.26, cy + s * 0.05)],
+        [(cx + s * 0.22, cy - s * 0.10), (cx + s * 0.28, cy - s * 0.15), (cx + s * 0.26, cy - s * 0.05)],
+    ]
+    for poly in shards:
+        d.polygon(poly, fill=ink)
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
+def shatter_rune(diameter):
+    """Shatter: a central stone violently collapsing and fragmenting into shards
+    under inward compression from surrounding stones."""
+    s = diameter * 4
+    im = parchment(s, seed=79)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 18)
+
+    # 3 flanking stones pressing inward
+    flank_r = s * 0.09
+    for ang in (30, 150, 270):
+        rad = math.radians(ang)
+        fx = cx + math.cos(rad) * s * 0.32
+        fy = cy + math.sin(rad) * s * 0.32
+        d.ellipse((fx - flank_r, fy - flank_r, fx + flank_r, fy + flank_r), fill=ink)
+        # Pressure line pushing into center
+        d.line([(fx, fy), (cx + math.cos(rad) * s * 0.18, cy + math.sin(rad) * s * 0.18)],
+               fill=ink, width=w)
+
+    # Shattered core shards
+    shards = [
+        [(cx - s * 0.12, cy - s * 0.12), (cx - s * 0.02, cy - s * 0.16), (cx - s * 0.04, cy - s * 0.04)],
+        [(cx + s * 0.12, cy - s * 0.10), (cx + s * 0.15, cy + s * 0.02), (cx + s * 0.03, cy - s * 0.02)],
+        [(cx - s * 0.14, cy + s * 0.08), (cx - s * 0.02, cy + s * 0.15), (cx - s * 0.04, cy + s * 0.02)],
+        [(cx + s * 0.05, cy + s * 0.14), (cx + s * 0.13, cy + s * 0.09), (cx + s * 0.04, cy + s * 0.04)],
+        [(cx - s * 0.06, cy - s * 0.02), (cx + s * 0.02, cy - s * 0.05), (cx - s * 0.01, cy + s * 0.03)],
+    ]
+    for poly in shards:
+        d.polygon(poly, fill=ink)
+
+    # Shockwave / fracture cracks bursting out
+    for ang in (0, 75, 120, 195, 240, 315):
+        rad = math.radians(ang)
+        pts = [(cx + math.cos(rad) * s * 0.12, cy + math.sin(rad) * s * 0.12)]
+        pts.append((cx + math.cos(rad + 0.1) * s * 0.22, cy + math.sin(rad + 0.1) * s * 0.22))
+        pts.append((cx + math.cos(rad - 0.1) * s * 0.35, cy + math.sin(rad - 0.1) * s * 0.35))
+        d.line(pts, fill=ink_soft, width=max(2, w // 2))
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
+def petrify_rune(diameter):
+    """Petrify: an unyielding stone monolith and concentric masonry warding
+    freezing motion into immovable basalt."""
+    s = diameter * 4
+    im = parchment(s, seed=89)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 18)
+
+    # Heavy stone stele / monolith
+    mw = s * 0.26
+    mh = s * 0.36
+    d.rectangle((cx - mw, cy - mh, cx + mw, cy + mh), outline=ink, width=w)
+    # Masonry courses (horizontal mortar joints)
+    for frac in (-0.18, 0.0, 0.18):
+        y = cy + s * frac
+        d.line([(cx - mw, y), (cx + mw, y)], fill=ink, width=max(2, w - 2))
+    # Vertical mortar staggered joints
+    d.line([(cx - mw * 0.4, cy - mh), (cx - mw * 0.4, cy - s * 0.18)], fill=ink, width=max(2, w - 2))
+    d.line([(cx + mw * 0.4, cy - mh), (cx + mw * 0.4, cy - s * 0.18)], fill=ink, width=max(2, w - 2))
+    d.line([(cx, cy - s * 0.18), (cx, cy)], fill=ink, width=max(2, w - 2))
+    d.line([(cx - mw * 0.4, cy), (cx - mw * 0.4, cy + s * 0.18)], fill=ink, width=max(2, w - 2))
+    d.line([(cx + mw * 0.4, cy), (cx + mw * 0.4, cy + s * 0.18)], fill=ink, width=max(2, w - 2))
+    d.line([(cx, cy + s * 0.18), (cx, cy + mh)], fill=ink, width=max(2, w - 2))
+
+    # Outer concentric square ward
+    ow = mw + s * 0.08
+    oh = mh + s * 0.06
+    d.rectangle((cx - ow, cy - oh, cx + ow, cy + oh), outline=ink_soft, width=max(2, w // 2))
+
+    # Heavy corner rivets / stone corner studs
+    for dx in (-1, 1):
+        for dy in (-1, 1):
+            px = cx + dx * (ow + s * 0.03)
+            py = cy + dy * (oh + s * 0.03)
+            d.ellipse((px - s * 0.03, py - s * 0.03, px + s * 0.03, py + s * 0.03), fill=ink)
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
+def fulgurite_rune(diameter):
+    """Fulgurite: a lightning bolt descending into earth, fusing sand into
+    intricate branching root-like glass conduits."""
+    s = diameter * 4
+    im = parchment(s, seed=97)
+    d = ImageDraw.Draw(im, 'RGBA')
+    ink = (12, 38, 96, 255)
+    ink_soft = (24, 76, 140, 235)
+    cx, cy = s / 2, s / 2
+    w = max(6, s // 18)
+
+    # Ground horizon line
+    gy = cy + s * 0.02
+    d.line([(cx - s * 0.36, gy), (cx + s * 0.36, gy)], fill=ink_soft, width=w)
+
+    # Jagged lightning bolt striking downward from top-right to center
+    bolt = [
+        (cx + s * 0.15, cy - s * 0.38),
+        (cx + s * 0.04, cy - s * 0.22),
+        (cx + s * 0.10, cy - s * 0.20),
+        (cx - s * 0.02, cy - s * 0.06),
+        (cx + s * 0.04, cy - s * 0.04),
+        (cx - s * 0.01, gy),
+    ]
+    d.line(bolt, fill=ink, width=int(w * 1.4), joint='miter')
+
+    # Branching subterranean fulgurite roots (fused glass dendrites)
+    branches = [
+        # Main trunk continuing down
+        [(cx - s * 0.01, gy), (cx - s * 0.03, cy + s * 0.14), (cx - s * 0.02, cy + s * 0.26), (cx - s * 0.05, cy + s * 0.36)],
+        # Left main branch
+        [(cx - s * 0.03, cy + s * 0.14), (cx - s * 0.14, cy + s * 0.22), (cx - s * 0.22, cy + s * 0.30)],
+        # Sub-branch off left
+        [(cx - s * 0.14, cy + s * 0.22), (cx - s * 0.16, cy + s * 0.34)],
+        # Right main branch
+        [(cx - s * 0.02, cy + s * 0.18), (cx + s * 0.12, cy + s * 0.24), (cx + s * 0.18, cy + s * 0.32)],
+        # Sub-branch off right
+        [(cx + s * 0.12, cy + s * 0.24), (cx + s * 0.08, cy + s * 0.35)],
+        # Secondary shallow roots
+        [(cx - s * 0.01, gy), (cx - s * 0.10, cy + s * 0.08), (cx - s * 0.20, cy + s * 0.12)],
+        [(cx - s * 0.01, gy), (cx + s * 0.10, cy + s * 0.08), (cx + s * 0.18, cy + s * 0.11)],
+    ]
+    for path in branches:
+        d.line(path, fill=ink, width=max(2, w - 2), joint='curve')
+
+    # Vitrified sand nodules at branch tips
+    for (nx, ny) in [
+        (cx - s * 0.05, cy + s * 0.36),
+        (cx - s * 0.22, cy + s * 0.30),
+        (cx - s * 0.16, cy + s * 0.34),
+        (cx + s * 0.18, cy + s * 0.32),
+        (cx + s * 0.08, cy + s * 0.35),
+        (cx - s * 0.20, cy + s * 0.12),
+        (cx + s * 0.18, cy + s * 0.11),
+    ]:
+        d.ellipse((nx - s * 0.02, ny - s * 0.02, nx + s * 0.02, ny + s * 0.02), fill=ink)
+
+    return im.resize((diameter, diameter), Image.Resampling.LANCZOS)
+
+
 def build_card(cfg):
     name, size = cfg['name'], cfg['size']
     cx, cy = size // 2, size // 2
@@ -188,8 +453,8 @@ def build_card(cfg):
         rune.save(os.path.join(art_dir, f'{name}.webp'), 'WEBP')
 
     spots = ImageDraw.Draw(im)
-    r = cfg['spot_radius']
-    for sx, sy in cfg['spots']:
+    r = cfg.get('spot_radius', 0)
+    for sx, sy in cfg.get('spots', []):
         spots.ellipse((sx - r, sy - r, sx + r, sy + r), fill=(255, 255, 255, 255))
 
     render_centered_arc_text(im, cfg['title'], (cx, cy), radius=cfg['name_radius'],
@@ -254,6 +519,133 @@ CARDS = [
              'center_deg': 45, 'font_size': 6.2, 'spacing': 0.88},
             {'text': 'You may cast 1 additional spell this turn.', 'radius': 90,
              'center_deg': 45, 'font_size': 6.0, 'spacing': 0.88},
+        ],
+    },
+    {
+        'name': 'Silence',
+        'size': 148,
+        'inner_r': 23,
+        'outer_r': 73,
+        'bottom_bg': (12, 20, 38, 255),
+        'border_color': (140, 180, 220, 255),
+        'rune': silence_rune,
+        'spots': [],
+        'title': 'SILENCE',
+        'name_radius': 58,
+        'name_center_deg': 135,
+        'name_font_size': 9.5,
+        'desc_lines': [
+            {'text': 'Opponent may not cast spells', 'radius': 58,
+             'center_deg': 45, 'font_size': 4.3, 'spacing': 0.88},
+            {'text': 'on their next turn.', 'radius': 46,
+             'center_deg': 45, 'font_size': 4.3, 'spacing': 0.88},
+        ],
+    },
+    {
+        'name': 'Vitrify',
+        'size': 260,
+        'inner_r': 56,
+        'outer_r': 128,
+        'bottom_bg': (8, 24, 44, 255),
+        'border_color': (120, 200, 240, 255),
+        'rune': vitrify_rune,
+        'spot_radius': 31,
+        'spots': [(130.0, 196.3), (72.5, 97.0), (187.5, 97.0)],
+        'title': 'VITRIFY',
+        'name_radius': 105,
+        'name_center_deg': 138,
+        'name_font_size': 11.5,
+        'desc_lines': [
+            {'text': 'STATIC: The enemy cannot dash as', 'radius': 106,
+             'center_deg': 45, 'font_size': 5.8, 'spacing': 0.88},
+            {'text': 'long as you have this seal filled.', 'radius': 90,
+             'center_deg': 45, 'font_size': 5.8, 'spacing': 0.88},
+        ],
+    },
+    {
+        'name': 'Spellbreak',
+        'size': 260,
+        'inner_r': 56,
+        'outer_r': 128,
+        'bottom_bg': (28, 14, 36, 255),
+        'border_color': (220, 140, 190, 255),
+        'rune': spellbreak_rune,
+        'spot_radius': 31,
+        'spots': [(130.0, 196.3), (72.5, 97.0), (187.5, 97.0)],
+        'title': 'SPELLBREAK',
+        'name_radius': 105,
+        'name_center_deg': 138,
+        'name_font_size': 11.5,
+        'desc_lines': [
+            {'text': "Unlock the opponent's locked spell and", 'radius': 112,
+             'center_deg': 45, 'font_size': 5.1, 'spacing': 0.86},
+            {'text': 'destroy 1 stone on that sigil.', 'radius': 99,
+             'center_deg': 45, 'font_size': 5.1, 'spacing': 0.86},
+            {'text': 'Then make 1 soft move.', 'radius': 86,
+             'center_deg': 45, 'font_size': 5.1, 'spacing': 0.86},
+        ],
+    },
+    {
+        'name': 'Shatter',
+        'size': 322,
+        'inner_r': 86,
+        'outer_r': 160,
+        'bottom_bg': (18, 26, 36, 255),
+        'border_color': (180, 220, 245, 255),
+        'rune': shatter_rune,
+        'spot_radius': 32,
+        'spots': [(161.0, 258.6), (68.3, 191.3), (253.7, 191.3), (103.7, 82.1), (218.3, 82.1)],
+        'title': 'SHATTER',
+        'name_radius': 136,
+        'name_center_deg': 126,
+        'name_font_size': 10.5,
+        'desc_lines': [
+            {'text': 'Make 1 hard move, then destroy all enemy', 'radius': 138,
+             'center_deg': 54, 'font_size': 5.8, 'spacing': 0.88},
+            {'text': 'stones touching 2 or more of your stones.', 'radius': 120,
+             'center_deg': 54, 'font_size': 5.8, 'spacing': 0.88},
+        ],
+    },
+    {
+        'name': 'Petrify',
+        'size': 322,
+        'inner_r': 86,
+        'outer_r': 160,
+        'bottom_bg': (24, 28, 26, 255),
+        'border_color': (160, 180, 160, 255),
+        'rune': petrify_rune,
+        'spot_radius': 32,
+        'spots': [(161.0, 258.6), (68.3, 191.3), (253.7, 191.3), (103.7, 82.1), (218.3, 82.1)],
+        'title': 'PETRIFY',
+        'name_radius': 136,
+        'name_center_deg': 126,
+        'name_font_size': 10.5,
+        'desc_lines': [
+            {'text': 'STATIC: Opponent cannot', 'radius': 138,
+             'center_deg': 54, 'font_size': 6.2, 'spacing': 0.88},
+            {'text': 'make hard moves.', 'radius': 120,
+             'center_deg': 54, 'font_size': 6.2, 'spacing': 0.88},
+        ],
+    },
+    {
+        'name': 'Fulgurite',
+        'size': 322,
+        'inner_r': 86,
+        'outer_r': 160,
+        'bottom_bg': (28, 24, 16, 255),
+        'border_color': (245, 215, 110, 255),
+        'rune': fulgurite_rune,
+        'spot_radius': 32,
+        'spots': [(161.0, 258.6), (68.3, 191.3), (253.7, 191.3), (103.7, 82.1), (218.3, 82.1)],
+        'title': 'FULGURITE',
+        'name_radius': 136,
+        'name_center_deg': 126,
+        'name_font_size': 10.5,
+        'desc_lines': [
+            {'text': 'Make 1 blink move,', 'radius': 138,
+             'center_deg': 54, 'font_size': 6.4, 'spacing': 0.88},
+            {'text': 'then 2 hard moves.', 'radius': 120,
+             'center_deg': 54, 'font_size': 6.4, 'spacing': 0.88},
         ],
     },
 ]
