@@ -18,18 +18,133 @@ const REVIEW_DEFAULTS = {
 	// Bump when the search semantics change so cached reviews recompute
 	// instead of being served stale. v2: deep mode is now a 60s/ply time
 	// budget (was a depth-8 cap). v3: mate-distance scores + stubborn
-	// (slowest-loss/trappiness) search.
-	modelVersion: 'caveman-v3',
+	// (slowest-loss/trappiness) search. v4: plies after the first were searched
+	// from the recorded sfnAfter, whose side token is the mover's -- the wrong
+	// side to move; now each turn's sfnBefore (_reviewPositions).
+	modelVersion: 'caveman-v4',
 	mode: 'quick',
 };
 
-// Mode presets: both run the Caveman search under a per-ply time cap with
-// effectively unlimited depth (iterative deepening stops when the clock
-// runs out). 'quick' spends 1s per position; 'deep' spends 60s.
+// Mode presets for the JS Caveman FALLBACK (browsers without Worker/wasm):
+// a per-ply time cap with effectively unlimited depth.
 const REVIEW_MODE_PRESETS = {
 	quick: { timeLimitPerPly: 1.0, maxDepth: 64 },
 	deep:  { timeLimitPerPly: 60.0, maxDepth: 64 },
 };
+
+// The review engine: the Rust wasm engine at the site's AI difficulty settings
+// (game-board-local.js _RUST_TIERS): quick = Easy (0.1 s/position, 2^16 table),
+// deep = Hard (10 s/position, 2^20 table). Shipped eval / widening as RustAI.
+const RUST_REVIEW_PRESETS = {
+	quick: { tier: 'Easy', timeMs: 100, ttBits: 16 },
+	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
+};
+const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_spell3', adaptive: [0.10, 2, 6] };
+
+/** Cache identity of a live Rust review: a new engine build recomputes. */
+function rustReviewModelVersion() {
+	return 'rust-live-v' + (typeof RUST_ENGINE_VERSION !== 'undefined' ? RUST_ENGINE_VERSION : '?');
+}
+
+/** True when this page can run the wasm engine (rust-ai.js loaded, Worker + wasm). */
+function rustReviewAvailable() {
+	return typeof getRustEngineWorker === 'function'
+		&& typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
+}
+
+/** Button label for a review mode, e.g. "Deep Review (Hard engine, 10 s/position)". */
+function reviewModeLabel(mode) {
+	const p = RUST_REVIEW_PRESETS[mode === 'deep' ? 'deep' : 'quick'];
+	return (mode === 'deep' ? 'Deep' : 'Quick') + ' Review (' + p.tier + ' engine, '
+		+ (p.timeMs / 1000) + ' s/position)';
+}
+
+/**
+ * Review a game with the Rust engine: every position from the last to the
+ * first (the persistent table carries later positions' results back, as the
+ * offline eval_games.py backward walk does), each searched for the preset's
+ * fixed time. The results are packed as a `game_evals` document (red-POV
+ * stones, mates in the winner's turns) and adapted by `rustEvalsToReview`, so a
+ * live review renders exactly like a stored one. Throws when the engine cannot
+ * play the position (out-of-scope packs) -- the caller falls back to Caveman.
+ */
+async function reviewGameRust(gameLog, mode, onProgress, winner) {
+	mode = mode === 'deep' ? 'deep' : 'quick';
+	const p = RUST_REVIEW_PRESETS[mode];
+	const n = gameLog.length;
+	const sfns = _reviewPositions(gameLog);
+	// Variants the Rust engine reads as standard (RustAI.pickTurn refuses them
+	// too): review those with the Caveman engine instead.
+	const variant = (sfnToDict(sfns[0]).variant) || 'standard';
+	if ((typeof variantHasDuplicates === 'function' && variantHasDuplicates(variant))
+		|| (typeof variantHasScramble === 'function' && variantHasScramble(variant))) {
+		throw new Error('the Rust engine does not play the ' + variant + ' variant');
+	}
+	const other = c => (c === 'red' ? 'blue' : 'red');
+	const tokenSide = _sfnSide;
+	const movers = new Array(n + 1), evals = new Array(n + 1).fill(null);
+	const mates = new Array(n + 1).fill(null), proven = new Array(n + 1).fill(true);
+	const best = new Array(n + 1).fill(null);
+	let depthMax = 0;
+	const worker = getRustEngineWorker();
+	worker.post({ type: 'new_game', ttBits: p.ttBits });   // a fresh table per review
+	// The final position: a finished game is decided; its side token is the
+	// last mover's (browser convention), as eval_games.py reads it.
+	// A resignation or timeout leaves a non-terminal board: the recorded
+	// result (`winner`) decides it, as stored game_evals documents do.
+	const last = sfnToSimBoard(sfns[n]);
+	movers[n] = other(tokenSide(sfns[n]));
+	let terminal;
+	if (last.gameover) terminal = { winner: last.winner || null };
+	else if (winner === 'red' || winner === 'blue') terminal = { winner };
+	for (let i = n - 1; i >= 0; i--) {
+		if (onProgress) onProgress(n - 1 - i, n);
+		const mover = tokenSide(sfns[i]);
+		movers[i] = mover;
+		// A search that completes no depth reports no value (stones and mate
+		// null); it must not read as an even position. Retry with more time,
+		// then give up on the Rust review.
+		let res = null;
+		for (let tms = p.timeMs, k = 0; k < 4; k++, tms *= 4) {
+			res = await worker.search(Object.assign({
+				sfn: sfns[i], timeMs: tms, ttBits: p.ttBits,
+				// The position itself is part of the history, as RustAI._send
+				// sends it: threefold repetition counts it.
+				historySfns: sfns.slice(Math.max(0, i - 63), i + 1),
+			}, RUST_REVIEW_SEARCH));
+			if (!res || res.ok === false) {
+				throw new Error('Rust engine cannot review this position: ' + ((res && res.error) || 'no result'));
+			}
+			if (typeof res.stones === 'number' || typeof res.mate_in === 'number') break;
+		}
+		if (typeof res.stones !== 'number' && typeof res.mate_in !== 'number') {
+			throw new Error('Rust engine found no evaluation for position ' + i);
+		}
+		const sign = mover === 'red' ? 1 : -1;            // mover POV -> red POV
+		if (typeof res.mate_in === 'number' && res.mate_in !== 0) mates[i] = res.mate_in * sign;
+		if (typeof res.stones === 'number') evals[i] = res.stones * sign;
+		proven[i] = res.mate_in == null ? true : !!res.mate_proven;
+		best[i] = Array.isArray(res.actions) ? res.actions : null;
+		depthMax = Math.max(depthMax, res.depth || 0);
+	}
+	if (onProgress) onProgress(n, n);
+	const doc = {
+		engine: rustReviewModelVersion(), depth: depthMax, finalSfn: sfns[n], plies: n,
+		moverPerPly: movers, evalPerPly: evals, matePerPly: mates, provenPerPly: proven,
+		bestPerPly: best, terminal,
+	};
+	const review = rustEvalsToReview(doc, gameLog);
+	if (!review) throw new Error('Rust review did not match the game record');
+	return Object.assign(review, {
+		source: 'rust-live',
+		mode,
+		modelVersion: rustReviewModelVersion(),
+		engineTier: p.tier,
+		timeLimitPerPly: p.timeMs / 1000,
+		engineDepth: depthMax,
+		computedAt: Date.now(),
+	});
+}
 
 /** Convert minimax score to win% from the mover's perspective. */
 function scoreToWinPct(s, k, forcedWinFloor) {
@@ -96,6 +211,8 @@ async function reviewGame(gameLog, opts, onProgress) {
 
 	sfnPerPly[0] = gameLog[0].sfnBefore;
 	for (let i = 0; i < n; i++) sfnPerPly[i + 1] = gameLog[i].sfnAfter;
+	// What is searched: the side-to-move-correct positions (see _reviewPositions).
+	const searchSfns = _reviewPositions(gameLog);
 
 	// Route the per-ply searches through the shared AI Web Worker so a Deep
 	// review (8-ply, no time limit per ply) doesn't freeze the page. The
@@ -114,13 +231,17 @@ async function reviewGame(gameLog, opts, onProgress) {
 	// via the shared transposition table.
 	for (let i = n; i >= 0; i--) {
 		if (onProgress) onProgress(n - i, n + 1);
-		const sim = sfnToSimBoard(sfnPerPly[i]);
-		const mover = sim.whoseTurn;
+		const sim = sfnToSimBoard(searchSfns[i]);
+		// The final position's token is the last mover's: the side to move is the other.
+		const mover = i === n ? (_sfnSide(searchSfns[n]) === 'red' ? 'blue' : 'red') : sim.whoseTurn;
 		moverPerPly[i] = mover;
 
-		// If the position is already a terminal state, eval is decided.
-		if (sim.gameover) {
-			evalPerPly[i] = sim.winner === mover ? 100 : sim.winner === null ? 0 : -100;
+		// A terminal board, or the final position of a resigned / timed-out
+		// game (the recorded result), is decided.
+		const decided = sim.gameover ? sim.winner
+			: (i === n && (opts.winner === 'red' || opts.winner === 'blue')) ? opts.winner : undefined;
+		if (decided !== undefined) {
+			evalPerPly[i] = decided === mover ? 100 : decided === null ? 0 : -100;
 			winPctPerPly[i] = scoreToWinPct(evalPerPly[i], opts.sigmoidK, opts.forcedWinFloor);
 			bestTurnPerPly[i] = null;
 			continue;
@@ -138,7 +259,7 @@ async function reviewGame(gameLog, opts, onProgress) {
 			};
 			let msg;
 			try {
-				msg = await worker.search(sfnPerPly[i], mover, searchOpts);
+				msg = await worker.search(searchSfns[i], mover, searchOpts);
 			} catch (e) {
 				// Worker crash: fall back to a fresh main-thread search for
 				// the remaining plies. Re-seed a local TT so the rest of the
@@ -241,6 +362,26 @@ function _classifyMoves(n, moverPerPly, winPctPerPly) {
 		redAcpl: meanDelta(redDeltas),
 		blueAcpl: meanDelta(blueDeltas),
 	};
+}
+
+/**
+ * The positions to evaluate, 0..n: each turn's `sfnBefore`, then the last
+ * turn's `sfnAfter`. A recorded `sfnAfter` keeps the MOVER's side token and
+ * turn counter (browser convention), so ply i's position must come from turn
+ * i's sfnBefore, not turn i-1's sfnAfter: searching the sfnAfter searched the
+ * wrong side to move at every ply after the first. For the final position the
+ * side to move is the token's opposite.
+ */
+function _reviewPositions(gameLog) {
+	const n = gameLog.length;
+	const out = new Array(n + 1);
+	for (let i = 0; i < n; i++) out[i] = gameLog[i].sfnBefore;
+	out[n] = gameLog[n - 1].sfnAfter;
+	return out;
+}
+
+function _sfnSide(sfn) {
+	return String(sfn || '').trim().split(/\s+/)[1] === 'b' ? 'blue' : 'red';
 }
 
 /** Position identity without the side-to-move and turn-counter tokens. */
@@ -364,13 +505,21 @@ function aiReviewMixin() {
 		aiReviewComputing: false,
 		aiReviewProgress: 0,
 		aiReviewActiveMode: null,
+		aiReviewError: '',
 		_roomCodeForReview: '',
+
+		/** Button text for a review mode (engine tier and time per position). */
+		aiReviewModeLabel(mode) { return reviewModeLabel(mode); },
 
 		async startAiReview(mode) {
 			if (this.aiReviewComputing) return;
 			if (typeof reviewGame !== 'function') return;
 			const gameLog = this._gameLogForExport;
-			if (!gameLog || gameLog.length === 0) return;
+			if (!gameLog || gameLog.length === 0) {
+				this.aiReviewError = 'AI review needs the game\'s move record, which this game does not have '
+					+ '(an old export or a final-position-only replay).';
+				return;
+			}
 			mode = (mode === 'deep') ? 'deep' : 'quick';
 
 			// A stored Rust-engine review is complete: always just open it.
@@ -379,10 +528,18 @@ function aiReviewMixin() {
 				this.reviewFirst();
 				return;
 			}
+			// The version a fresh review would carry: the live Rust engine when
+			// this browser can run it, else the Caveman fallback.
+			const useRust = rustReviewAvailable();
+			// A Rust review, or the Caveman review that replaced it for a game the
+			// Rust engine cannot play (Scramble, Duplicates, unsupported packs).
+			const okVersions = useRust ? [rustReviewModelVersion(), REVIEW_DEFAULTS.modelVersion]
+				: [REVIEW_DEFAULTS.modelVersion];
+			this.aiReviewError = '';
 			// In-memory hit: already loaded a review good enough for the
 			// requested mode → just open it, skip cache RTT and compute.
 			// Stale-version reviews (different modelVersion) are never reused.
-			if (this.aiReview && this.aiReview.modelVersion === REVIEW_DEFAULTS.modelVersion) {
+			if (this.aiReview && okVersions.includes(this.aiReview.modelVersion)) {
 				const haveMode = this.aiReview.mode || 'quick';
 				if (haveMode === 'deep' || mode === 'quick') {
 					if (!this.reviewMode) this.startReview();
@@ -415,7 +572,7 @@ function aiReviewMixin() {
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
 					const cached = await loadGameReview(db, gameId);
-					if (cached && cached.modelVersion === REVIEW_DEFAULTS.modelVersion) {
+					if (cached && okVersions.includes(cached.modelVersion)) {
 						const cachedMode = cached.mode || 'quick';
 						if (cachedMode === 'deep' || mode === 'quick') {
 							this.aiReview = cached;
@@ -431,9 +588,18 @@ function aiReviewMixin() {
 			this.aiReviewActiveMode = mode;
 			this.aiReviewProgress = 0;
 			try {
-				const result = await reviewGame(gameLog, { mode }, (done, total) => {
-					this.aiReviewProgress = total ? done / total : 0;
-				});
+				const progress = (done, total) => { this.aiReviewProgress = total ? done / total : 0; };
+				let result = null;
+				if (useRust) {
+					try {
+						result = await reviewGameRust(gameLog, mode, progress, this.winner);
+					} catch (e) {
+						// e.g. a pack the Rust engine does not play: review with Caveman.
+						console.warn('Rust review failed; falling back to the JS engine:', e);
+						this.aiReviewProgress = 0;
+					}
+				}
+				if (!result) result = await reviewGame(gameLog, { mode, winner: this.winner }, progress);
 				this.aiReview = result;
 				if (db && gameId && typeof saveGameReview === 'function') {
 					saveGameReview(db, gameId, result).catch(e => console.warn('saveGameReview failed:', e));
@@ -442,6 +608,7 @@ function aiReviewMixin() {
 				this.reviewFirst();
 			} catch (e) {
 				console.error('AI review failed:', e);
+				this.aiReviewError = 'The AI review failed: ' + ((e && e.message) || e);
 			} finally {
 				this.aiReviewComputing = false;
 				this.aiReviewActiveMode = null;
@@ -458,11 +625,22 @@ function aiReviewMixin() {
 			return this.aiReview.moverPerPly[i] === 'red' ? s : -s;
 		},
 
+		/** The engine line under the eval readout (Rust reviews only). */
+		aiReviewEngineText() {
+			const r = this.aiReview;
+			if (!r) return '';
+			if (r.source === 'rust-live') {
+				return 'Rust engine, ' + r.engineTier + ' (' + r.timeLimitPerPly + ' s/position), depth up to ' + r.engineDepth;
+			}
+			if (r.source === 'rust') return 'Rust engine, depth ' + r.engineDepth + ' at every position';
+			return '';
+		},
+
 		aiReviewCurrentEvalText() {
 			if (!this.aiReview || !this.aiReview.evalPerPly.length) return '';
 			const idx = Math.min(this.reviewIndex, this.aiReview.evalPerPly.length - 1);
-			if (this.aiReview.source === 'rust') {
-				// Stored Rust evals: forced results in the winner's own turns
+			if (this.aiReview.source === 'rust' || this.aiReview.source === 'rust-live') {
+				// Rust evals (stored or computed in this browser): forced results in the winner's own turns
 				// ("likely" when the search was width-limited), else red-POV
 				// stones with the even-game offset already applied.
 				const m = this.aiReview.matePerPly[idx];
@@ -563,6 +741,18 @@ function aiReviewMixin() {
 				dots.push({ x: x.toFixed(1), y: y.toFixed(1), cls, ply: i });
 			}
 			return dots;
+		},
+
+		/** The blunder dots as SVG markup (see the graph in game.html). */
+		aiReviewGraphDotsSvg() {
+			return this.aiReviewGraphDots().map(d =>
+				`<circle cx="${d.x}" cy="${d.y}" r="3.5" data-ply="${d.ply}" `
+				+ `class="ai-review-graph__dot ai-review-graph__dot--${d.cls}"></circle>`).join('');
+		},
+
+		onReviewGraphDotClick(ev) {
+			const ply = ev && ev.target && ev.target.getAttribute && ev.target.getAttribute('data-ply');
+			if (ply !== null && ply !== undefined && ply !== '') this.jumpToReviewPly(Number(ply) + 1);
 		},
 
 		jumpToReviewPly(plyIdx) {
