@@ -108,7 +108,9 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 		for (let tms = p.timeMs, k = 0; k < 4; k++, tms *= 4) {
 			res = await worker.search(Object.assign({
 				sfn: sfns[i], timeMs: tms, ttBits: p.ttBits,
-				historySfns: sfns.slice(Math.max(0, i - 64), i),
+				// The position itself is part of the history, as RustAI._send
+				// sends it: threefold repetition counts it.
+				historySfns: sfns.slice(Math.max(0, i - 63), i + 1),
 			}, RUST_REVIEW_SEARCH));
 			if (!res || res.ok === false) {
 				throw new Error('Rust engine cannot review this position: ' + ((res && res.error) || 'no result'));
@@ -529,12 +531,15 @@ function aiReviewMixin() {
 			// The version a fresh review would carry: the live Rust engine when
 			// this browser can run it, else the Caveman fallback.
 			const useRust = rustReviewAvailable();
-			const wantVersion = useRust ? rustReviewModelVersion() : REVIEW_DEFAULTS.modelVersion;
+			// A Rust review, or the Caveman review that replaced it for a game the
+			// Rust engine cannot play (Scramble, Duplicates, unsupported packs).
+			const okVersions = useRust ? [rustReviewModelVersion(), REVIEW_DEFAULTS.modelVersion]
+				: [REVIEW_DEFAULTS.modelVersion];
 			this.aiReviewError = '';
 			// In-memory hit: already loaded a review good enough for the
 			// requested mode → just open it, skip cache RTT and compute.
 			// Stale-version reviews (different modelVersion) are never reused.
-			if (this.aiReview && this.aiReview.modelVersion === wantVersion) {
+			if (this.aiReview && okVersions.includes(this.aiReview.modelVersion)) {
 				const haveMode = this.aiReview.mode || 'quick';
 				if (haveMode === 'deep' || mode === 'quick') {
 					if (!this.reviewMode) this.startReview();
@@ -567,7 +572,7 @@ function aiReviewMixin() {
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
 					const cached = await loadGameReview(db, gameId);
-					if (cached && cached.modelVersion === wantVersion) {
+					if (cached && okVersions.includes(cached.modelVersion)) {
 						const cachedMode = cached.mode || 'quick';
 						if (cachedMode === 'deep' || mode === 'quick') {
 							this.aiReview = cached;
