@@ -22,6 +22,8 @@ FIRST=${FIRST_VM:-0}
 PREFIX=${VM_PREFIX:-sigil-s3}   # round 2 (v25 data): VM_PREFIX=sigil-r2d FIRST_VM=100
 # Round 3 (v27 data): VM_PREFIX=sigil-r3d FIRST_VM=200 COMP_FRAC=0.67 LINES_GS=…/human_starts_2026-10-07.json
 COMP=${COMP_FRAC:-0.67}   # competitive share of all games (selfplay_v2.py comp_frac); must stay > 0.5
+# Round 4 (v29, 2026-10-11): SIGIL_SPELL_SCHEDULE=gs://…/schedule.json (spell_schedule.py) makes every
+# game a scheduled fresh draw; the smoke arm's shard is not in the schedule, so it plays random draws.
 ARMS=$(mktemp)
 printf '%s' "1000,$DEPTH,/opt/sigil/out/data,0.10,0.08,0.5,$LINES,$STOP,8,$COMP" > "$ARMS"
 SMOKE="2,3,/opt/sigil/out/smoke,0.5,0.08,0.5,$LINES,0,4,$COMP"

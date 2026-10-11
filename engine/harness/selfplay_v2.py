@@ -55,9 +55,20 @@ random legal turn instead of the searched one (the position is still labelled).
 
 Human games holding Fissure, Rock Slide, Bulwark or a Providence spell are
 excluded if played before the rule change went live
-(`data_filters.OCT2026_RULE_CHANGE_LIVE`, the 2026-10-07 deploy): those lines
-encode the old rules. Later games with them are used. Fresh draws use the
-current rules.
+(`data_filters.OCT2026_RULE_CHANGE_LIVE`, the 2026-10-07 deploy), and games
+holding Rock Slide before its pile-up nerf (`ROCK_SLIDE_PILEUP_LIVE`, engine
+v29): those lines encode the old rules. Later games with them are used. Fresh
+draws use the current rules.
+
+Spell schedule (round 4, 2026-10-11): with $SIGIL_SPELL_SCHEDULE set (a JSON
+file, local or gs://, from engine/harness/spell_schedule.py), every game is a
+fresh draw taken from the schedule instead of the random draw, so the round
+can bring every official spell to the same number of games in the training
+set: {"games_per_shard": G, "shards": [shard numbers], "draws": [[9 spell
+ids, slot order], ...], "comp": [0/1, ...]}. Game g of the shard numbered
+s = off // 1000 plays entry shards.index(s) * G + g; the shard stops when its
+G games are played or the draws run out. human_frac is forced to 0 and the
+variant comes from "comp".
 
 Output: one npz per CHUNK_GAMES games, `<out_dir>/v2d<depth>_<off>_<chunk>.npz`, written
 atomically (temp + rename), so a shard killed by the watchdog or a Spot
@@ -71,7 +82,7 @@ sys.path.insert(0, _HERE)
 import sigil_engine as se
 from sprt import shard_offset
 sys.path.insert(0, os.path.join(_HERE, '..', '..', 'ai'))
-from data_filters import OCT2026_RULE_CHANGE_LIVE_MS
+from data_filters import is_old_rules_game
 
 SEED_BASE = 20_000_000
 CHUNK_GAMES = 10
@@ -81,13 +92,13 @@ UNIVERSE_CAP = 600          # > the widest depth-4 root (432 measured), so every
 EVAL = se.SHIPPED_EVAL
 POLICY = tuple(se.SHIPPED_POLICY)
 AD = tuple(se.SHIPPED_ADAPTIVE)
+EXPLORE = tuple(se.SHIPPED_EXPLORE)
 # Slot pools by role, from spells_meta.rs (RITUALS/SORCERIES/CHARMS are the 39
 # core ids; Tectonic and Providence add one spell of each role apiece).
 CORE = ([0, 1, 2, 3, 4, 15, 18, 21, 24, 27, 30, 33, 36],
         [5, 6, 7, 8, 9, 16, 19, 22, 25, 28, 31, 34, 37],
         [10, 11, 12, 13, 14, 17, 20, 23, 26, 29, 32, 35, 38])
 NEW_PACKS = ([39, 44], [40, 43], [41, 42])
-OLD_RULES = {'Fissure', 'Rock_Slide', 'Bulwark', 'Dividend', 'Annuity', 'Endowment'}
 KIND_FRESH_STD, KIND_FRESH_COMP, KIND_HUMAN = 0, 1, 2
 COMP_FRAC_DEFAULT = 0.67     # competitive majority, always (see the docstring)
 
@@ -141,7 +152,7 @@ def load_starts(path):
         if len(pos) < 8:
             skipped += 1; continue
         names = pos[0].split(' ', 1)[0].split('/', 1)[1].split(',')
-        if OLD_RULES & set(names) and (g.get('timestamp') or 0) < OCT2026_RULE_CHANGE_LIVE_MS:
+        if is_old_rules_game(names, g.get('timestamp')):
             skipped += 1; continue
         try:
             se.Board.from_sfn(pos[0])
@@ -290,7 +301,20 @@ def main():
     off = shard_offset()
     # Thread-local and off by default in Python: set it explicitly, every run.
     se.set_policy(*POLICY)
+    se.set_policy_explore(*EXPLORE)   # the v28 generator exploration tail
     se.set_opening_book(False)   # shipped off since v27
+    schedule = None
+    if os.environ.get('SIGIL_SPELL_SCHEDULE'):
+        schedule = json.loads(_fetch(os.environ['SIGIL_SPELL_SCHEDULE']))
+        sched_games = int(schedule['games_per_shard'])
+        if off // 1000 in schedule['shards']:
+            human_frac = 0.0
+            sched_block = list(schedule['shards']).index(off // 1000)
+            print(f"  spell schedule: {len(schedule['draws'])} draws, block {sched_block} "
+                  f"x {sched_games} games", flush=True)
+        else:   # e.g. the runner's smoke arm: not a scheduled shard
+            print(f"  spell schedule: shard {off // 1000} not scheduled, random draws", flush=True)
+            schedule = None
     assert games <= 1000, "seeds are SEED_BASE + off + i with off stepping by 1000"
     os.makedirs(out_dir, exist_ok=True)
     rng = random.Random(SEED_BASE + off)
@@ -315,7 +339,8 @@ def main():
                 width_scale=int(se.DEFAULT_WIDTH_SCALE), universe_cap=UNIVERSE_CAP,
                 explore_pct=explore_pct, explore_k=explore_k, random_pct=random_pct,
                 human_frac=human_frac, lines=lines, shard_off=off, comp_frac=comp_frac,
-                opening_book=False)
+                opening_book=False, explore=list(EXPLORE),
+                spell_schedule=os.environ.get('SIGIL_SPELL_SCHEDULE'))
     print(f"  CONFIG {json.dumps(meta)}", flush=True)
     t0 = time.time()
     ch = Chunk(); chunk_i = 0; npos = ncand = nx = 0; kinds = [0, 0, 0]; unfinished = 0
@@ -335,6 +360,15 @@ def main():
             if r:
                 b, hist, i = r
                 start = (b, hist, KIND_HUMAN, i)
+        if start is None and schedule is not None:
+            if g >= sched_games or sched_block * sched_games + g >= len(schedule['draws']):
+                print(f"  schedule exhausted after {g} games", flush=True)
+                break
+            idx = sched_block * sched_games + g
+            comp = bool(schedule['comp'][idx])
+            b = se.Board(list(schedule['draws'][idx]), 'competitive' if comp else 'standard')
+            b.setup_initial()
+            start = (b, [], KIND_FRESH_COMP if comp else KIND_FRESH_STD, 0)
         if start is None:
             comp = want_comp if comp_frac >= 0 else grng.random() < 0.25
             b = se.Board(fresh_draw(grng, grng.random() < 0.5),

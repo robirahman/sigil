@@ -379,7 +379,7 @@ const SPELL_TEXTS = {
 	Seal_of_Stone:     "STATIC: Your opponent's first move each turn must be soft.",
 	Seal_of_Destruction: 'STATIC: If filled at the end of your turn, destroy all enemy stones touching you. If filled at the start of your turn, you lose.',
 	Fissure:           'Choose a target node. It is permanently destroyed: its stone is removed and it becomes an impassable void that stones cannot move into, retreat into, or be pushed through, disabling any spell that includes it. Also destroy all stones on adjacent nodes, including your own.',
-	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed.",
+	Rock_Slide:        "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. A stone pushed alone onto an occupied node destroys the stone there. Stones pushed into the same node, or onto each other's nodes, are destroyed; a stone already in that node survives.",
 	Bulwark:           'STATIC: Stones in your locked spell cannot be targeted by enemy hard moves, converted, or destroyed.',
 	Dividend:          'Add 1 stone to your Providence bank.',
 	Annuity:           'Add 2 stones to your Providence bank.',
@@ -642,8 +642,9 @@ function rockSlideSources(stones, color, shielded) {
 // Resolve pushes ([{from, to}]) simultaneously without mutating `stones`.
 // Returns { final: {node: value}, lost: [[node, color]] }. A pushed-away
 // node counts as vacated (chains slide, loops of 3+ rotate); a stationary
-// stone on a destination is destroyed; 2+ stones into one node all die; a
-// swap kills both; a stone pushed into a wall dies and the wall stays; a
+// stone on a destination is destroyed when exactly one stone is pushed onto
+// it; 2+ stones into one node all die and a stationary stone there SURVIVES
+// (2026-10 nerf: Rock Slide never out-destroys Fireblast); a swap kills both; a stone pushed into a wall dies and the wall stays; a
 // Bulwark-shielded stone on a destination acts as a wall (arrivals die, it
 // stays).
 function resolveRockSlide(stones, pushes, shielded) {
@@ -661,7 +662,8 @@ function resolveRockSlide(stones, pushes, shielded) {
 	for (const [dest, srcs] of arrivals) {
 		const occ = stones[dest];
 		const shield = shielded.has(dest) && !(dest in destOf);
-		if (!(dest in destOf) && (occ === 'red' || occ === 'blue') && !shield) {
+		if (!(dest in destOf) && (occ === 'red' || occ === 'blue') && !shield
+			&& srcs.length === 1) {
 			lost.push([dest, occ]);
 			final[dest] = null;
 		}
@@ -781,7 +783,9 @@ function _rockSlideComponent(stones, color, comp, opts, srcSet, limit, shielded)
 				gain = firstHit[kd] || 0;
 				f[d] = [1, src, dst];
 			} else {
-				gain = cnt === 1 ? 2 : 1;
+				// Second arrival: both arrivals die and the stationary stone
+				// survives, refunding the first arrival's hit.
+				gain = cnt === 1 ? 2 - (firstHit[kd] || 0) : 1;
 				f[d] = [2, null, dst];
 			}
 		}
@@ -816,26 +820,45 @@ function _rockSlideComponent(stones, color, comp, opts, srcSet, limit, shielded)
 	const best = dp(0, {});
 	const dest = {};
 	const out = [], keys = new Set();
-	function outcomeKey() {
-		const arrivals = {};
-		for (const src of seq) (arrivals[dest[src]] = arrivals[dest[src]] || []).push(src);
-		const vals = {};
-		for (const d of Object.keys(kind)) vals[d] = srcSet.has(d) ? null : stones[d];
-		for (const d of Object.keys(arrivals)) {
-			const srcs = arrivals[d];
-			if (kind[d] === 'wall') vals[d] = DESTROYED;
-			else if (kind[d] === 'shield') vals[d] = stones[d];
-			else if (srcs.length >= 2 || (kind[d] === 'mover' && dest[d] === srcs[0])) vals[d] = null;
-			else vals[d] = enemy;
-		}
-		return Object.keys(vals).sort().map(n => n + '=' + vals[n]).join(';');
+	// Final value of touched node `d` given its arrivals `srcs`.
+	function nodeVal(d, srcs) {
+		if (!srcs || !srcs.length) return srcSet.has(d) ? null : stones[d];
+		if (kind[d] === 'wall') return DESTROYED;
+		if (kind[d] === 'shield') return stones[d];
+		if (srcs.length >= 2) return (kind[d] === 'enemy' || kind[d] === 'own') ? stones[d] : null;
+		if (kind[d] === 'mover' && dest[d] === srcs[0]) return null;
+		return enemy;
 	}
+	function arrivalsOf(n) {
+		const arrivals = {};
+		for (let j = 0; j < n; j++) (arrivals[dest[seq[j]]] = arrivals[dest[seq[j]]] || []).push(seq[j]);
+		return arrivals;
+	}
+	function outcomeKey() {
+		const arrivals = arrivalsOf(seq.length);
+		return Object.keys(kind).sort().map(n => n + '=' + nodeVal(n, arrivals[n])).join(';');
+	}
+	// Nodes settled before seq[i] is assigned. Two optimal prefixes with the
+	// same frontier and the same settled values complete to the same set of
+	// outcomes, so the tie walk explores each (i, frontier, settled) state
+	// once -- without this, pile-up / swap ties make it exponential.
+	const closedBefore = [];
+	for (let i = 0; i <= seq.length; i++) {
+		closedBefore.push(Object.keys(kind).filter(d => closeAt[d] < i).sort());
+	}
+	const visited = new Set();
 	function walk(i, f, acc) {
 		if (limit !== null && out.length >= limit) return;
 		if (i === seq.length) {
 			const k = outcomeKey();
 			if (!keys.has(k)) { keys.add(k); out.push(Object.assign({}, dest)); }
 			return;
+		}
+		if (i) {
+			const arrivals = arrivalsOf(i);
+			const sig = i + '|' + keyOf(f) + '|' + closedBefore[i].map(d => nodeVal(d, arrivals[d])).join(',');
+			if (visited.has(sig)) return;
+			visited.add(sig);
 		}
 		for (const d of opts[seq[i]]) {
 			const [gain, nf] = step(f, i, d);

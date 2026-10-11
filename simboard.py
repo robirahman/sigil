@@ -202,8 +202,12 @@ def resolve_rock_slide(stones, pushes, protected=()):
     stone, at the node where it died. Rules:
       - a node whose stone is pushed away counts as vacated, so chains slide
         and closed loops of 3+ rotate;
-      - a stationary stone on a destination is destroyed;
-      - two or more stones pushed into the same node are all destroyed;
+      - a stationary stone on a destination is destroyed when exactly one
+        stone is pushed onto it;
+      - two or more stones pushed into the same node are all destroyed, and
+        a stationary stone there SURVIVES (2026-10 nerf: a pile-up kills
+        only the pushed stones, so Rock Slide never destroys more enemy
+        stones than Fireblast / Seal of Destruction would);
       - two stones pushed onto each other's nodes (a swap) are both destroyed;
       - a stone pushed into a wall is destroyed; the wall stays a wall;
       - a Bulwark-protected stone on a destination acts as a wall: the
@@ -219,7 +223,8 @@ def resolve_rock_slide(stones, pushes, protected=()):
     for dest, srcs in arrivals.items():
         occ = stones[dest]
         shielded = dest in protected and dest not in dest_of
-        if dest not in dest_of and occ in ('red', 'blue') and not shielded:
+        if (dest not in dest_of and occ in ('red', 'blue') and not shielded
+                and len(srcs) == 1):
             lost.append((dest, occ))
             final[dest] = None
         if (occ == DESTROYED or shielded or len(srcs) >= 2
@@ -298,7 +303,8 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit,
     Net = sources destroyed + stationary enemy stones hit - own stones hit,
     accrued per arrival: into a wall +1; the first arrival on a stationary
     enemy / own stone +1 / -1; the second arrival anywhere +2 (both die),
-    each later one +1. A lone arrival on a pushed-away node dies only in a
+    minus the first arrival's stationary hit (a pile-up spares the
+    stationary stone), each later one +1. A lone arrival on a pushed-away node dies only in a
     swap, settled when the node closes. Sources are assigned in
     _rock_slide_order and a node "closes" once every source that can touch it is
     assigned, so the open-node state is a small frontier: dp(i, frontier)
@@ -350,7 +356,9 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit,
                 gain = first_hit.get(kd, 0)
                 f[d] = (1, src, dst)
             else:
-                gain = 2 if cnt == 1 else 1
+                # The second arrival: both arrivals die and the stationary
+                # stone survives, refunding the first arrival's hit.
+                gain = 2 - first_hit.get(kd, 0) if cnt == 1 else 1
                 f[d] = (2, None, dst)
         if src in close_at and kind.get(src) == 'mover':
             cnt, arriver, _ = f.get(src, (0, None, None))
@@ -385,25 +393,42 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit,
     dest = {}
     out, keys = [], set()
 
+    def node_val(d, srcs):
+        """Final value of touched node `d` given its arrivals `srcs`."""
+        if not srcs:
+            return None if d in src_set else stones[d]
+        if kind[d] == 'wall':
+            return DESTROYED
+        if kind[d] == 'shield':
+            return stones[d]
+        if len(srcs) >= 2:
+            return stones[d] if kind[d] in ('enemy', 'own') else None
+        if kind[d] == 'mover' and dest.get(d) == srcs[0]:
+            return None
+        return enemy
+
+    def arrivals_of(n):
+        arrivals = {}
+        for src in seq[:n]:
+            arrivals.setdefault(dest[src], []).append(src)
+        return arrivals
+
     def outcome_key():
         # Key over every node the component can touch (not just this
         # assignment's destinations): landing on a stationary enemy stone
         # leaves an enemy stone there either way, so C->B vs C->D can be
         # the same board.
-        arrivals = {}
-        for src in seq:
-            arrivals.setdefault(dest[src], []).append(src)
-        vals = {d: (None if d in src_set else stones[d]) for d in kind}
-        for d, srcs in arrivals.items():
-            if kind[d] == 'wall':
-                vals[d] = DESTROYED
-            elif kind[d] == 'shield':
-                vals[d] = stones[d]
-            elif len(srcs) >= 2 or (kind[d] == 'mover' and dest.get(d) == srcs[0]):
-                vals[d] = None
-            else:
-                vals[d] = enemy
-        return tuple(sorted(vals.items()))
+        arrivals = arrivals_of(len(seq))
+        return tuple(sorted((d, node_val(d, arrivals.get(d, []))) for d in kind))
+
+    # Nodes settled before seq[i] is assigned (every source that can touch
+    # them already chose). Two optimal prefixes with the same frontier and
+    # the same settled values complete to the same set of outcomes, so the
+    # tie walk explores each (i, frontier, settled) state once -- without
+    # this, pile-up / swap ties make the walk exponential in the sources.
+    closed_before = [sorted(d for d in kind if close_at[d] < i)
+                     for i in range(len(seq) + 1)]
+    visited = set()
 
     def walk(i, key, acc):
         if limit is not None and len(out) >= limit:
@@ -414,6 +439,13 @@ def _rock_slide_component(stones, color, comp, opts, src_set, limit,
                 keys.add(k)
                 out.append(dict(dest))
             return
+        if i:
+            arrivals = arrivals_of(i)
+            sig = (i, key, tuple(node_val(d, arrivals.get(d, []))
+                                 for d in closed_before[i]))
+            if sig in visited:
+                return
+            visited.add(sig)
         frontier = dict(key)
         for d in opts[seq[i]]:
             gain, nkey = step(frontier, i, d)

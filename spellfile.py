@@ -1874,7 +1874,7 @@ class Rock_Slide(Spell):
 	### (shared with the AI sim and constants.js's resolveRockSlide).
 	def __init__(self, board, position, name):
 		super().__init__(board, position, name)
-		self.text = "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. Stones already occupying a destination are destroyed; stones pushed onto each other's nodes, or into the same node, are destroyed."
+		self.text = "Push each enemy stone bordering you into an adjacent node. All pushes happen simultaneously. A stone pushed alone onto an occupied node destroys the stone there. Stones pushed into the same node, or onto each other's nodes, are destroyed; a stone already in that node survives."
 
 	def resolve(self, player):
 		from simboard import rock_slide_sources, rock_slide_greedy_pushes, resolve_rock_slide
