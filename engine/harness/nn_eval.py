@@ -1,6 +1,7 @@
 """Step 5 of the 2026-10 plan: a small spell-conditioned network eval (`nnue_spell`).
 
     nn_eval.py prep  <chunk-dir|list-file> <out.npz> [--workers N] [--evals tfit,tfit_spell]
+                     [--drop-spells 40]
     nn_eval.py train <prep.npz> <out-dir> [--lam 0.5] [--hidden 128] [--epochs 6]
                      [--split game|fold0|fold1|fold2] [--cap 96] [--device cuda]
     nn_eval.py golden <net.bin> <prep.npz> <out.txt> [--n 64]
@@ -81,9 +82,14 @@ FOLDS = [[0, 15, 5, 16, 10, 17], [1, 18, 6, 19, 11, 20], [2, 21, 7, 22, 12, 23]]
 
 # --------------------------------------------------------------------------- prep
 def _prep_file(args):
-    path, evals = args
+    path, evals, drop = args
     import sigil_engine as se
     z = np.load(path)
+    if drop:
+        # Whole games go: the draw is fixed per game, so a position-level mask
+        # on the spell ids drops every position of a game holding one of them.
+        keep = ~np.isin(z['spells'], list(drop)).any(axis=1)
+        z = {k: z[k][keep] for k in _POS_KEYS if k in z.files}
     sfn = z['sfn']
     n = len(sfn)
     if n == 0:
@@ -121,22 +127,29 @@ def _prep_file(args):
     return out
 
 
+# Per-position arrays of a selfplay_v2 chunk (the ones _prep_file reads).
+_POS_KEYS = ('sfn', 'spells', 'is_red', 'score', 'y', 'game', 'ply', 'kind', 'full')
+
+
 def cmd_prep(a):
     if os.path.isdir(a.src):
         files = sorted(glob.glob(os.path.join(a.src, '*.npz')))
     else:
         files = [l.strip() for l in open(a.src) if l.strip()]
     evals = a.evals.split(',')
+    drop = tuple(int(x) for x in a.drop_spells.split(',') if x)
     from multiprocessing import Pool
     t0 = time.time()
     parts = []
     with Pool(a.workers) as pool:
-        for i, r in enumerate(pool.imap_unordered(_prep_file, [(f, evals) for f in files],
+        for i, r in enumerate(pool.imap_unordered(_prep_file, [(f, evals, drop) for f in files],
                                                   chunksize=8)):
             if r is not None:
                 parts.append(r)
             if i % 2000 == 0:
                 print(f"prep {i}/{len(files)} {time.time() - t0:.0f}s", flush=True)
+    if not parts:
+        raise SystemExit('prep: no positions left (all chunks empty or dropped)')
     out = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     tmp = a.out + '.tmp.npz'
     np.savez(tmp, **out)
@@ -497,6 +510,9 @@ def main():
     p.add_argument('src'); p.add_argument('out')
     p.add_argument('--workers', type=int, default=os.cpu_count())
     p.add_argument('--evals', default='tfit,tfit_spell')
+    p.add_argument('--drop-spells', default='',
+                   help='comma-separated spell ids: drop every game holding one '
+                        '(e.g. 40 = Rock Slide, whose rules changed in engine v29)')
     p = sub.add_parser('train')
     p.add_argument('prep'); p.add_argument('out')
     p.add_argument('--lam', type=float, default=0.5)
