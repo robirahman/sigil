@@ -39,7 +39,7 @@ ALL = 0x1FF
 ROCK_SLIDE = 40
 OLD_RULE_GAMES_BELOW = 80_000_000   # round-4 self-play seeds start at 80M
 # The plan the GCP runner uses (it passes no extra environment).
-DEFAULT_PLAN = 'gs://focus-surfer-494820-g0-sigil/data/spell_values/plan_2026-10-12.json'
+DEFAULT_PLAN = 'gs://focus-surfer-494820-g0-sigil/data/spell_values/plan_v27_2026-10-12.json'   # round 4 used plan_2026-10-12.json
 EVAL = se.SHIPPED_EVAL
 AD = tuple(se.SHIPPED_ADAPTIVE)
 
