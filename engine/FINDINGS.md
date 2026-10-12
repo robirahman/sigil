@@ -3047,3 +3047,19 @@ the browser.
 The games are kept as training data: each one ends with a `RECORD` line (every position plus per-ply search
 stats), and `engine/harness/upload_arena_games.py` wrote all 60 to Firebase `ai_arena_games/rr20261010_*`, a
 node closed to clients by `database.rules.json`.
+
+## Engine spell values from real self-play positions (2026-10-12)
+
+Counterfactual probes on 294,626 self-play positions (no rule changes): each spell is made
+unusable for one side in a depth-4 search, and the drop in win probability is its value.
+* **Top:** Seal of Lightning +1.66 pp, Seal of Stone +1.36, Slash +1.26, Splash +1.17, Hail Storm +1.16.
+* **Bottom:** Erupt +0.13, Comet −0.04, Seal of Destruction −0.06.
+* **Versus the players' chart:** Spearman 0.23.
+* **Matchups:** 56 clear.
+* **Synergies:** none measurable (largest ~0.2 pp).
+* **Depth 6:** re-probing the biggest disagreements raises every value about 1.5-2.5x but
+  keeps the order, so the disagreement is not a depth-4 horizon artifact.
+
+The earlier exclusive-access games were rejected: changing who may use a spell changes the
+game. Report: `engine/reports/2026-10-spell-values.md`.
+
