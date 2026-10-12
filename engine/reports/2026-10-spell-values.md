@@ -19,8 +19,8 @@ The measurement here keeps the rules intact (`engine/harness/spell_value_probe.p
 
   Together these games hold every official spell equally often. 294,626 positions from
   264,410 games: 183,434 from round 4 and 111,192 from v27.
-* **Probes.** Each position is searched at depth 4 with the shipped configuration (eval
-  `nnue_spell3`/`nnue_spell4` as in the data, policy 96, exploration tail):
+* **Probes.** Each position is searched at depth 4 with the shipped engine-v30 configuration
+  (eval `nnue_spell4`, policy 96, exploration tail):
   * once as played;
   * once with each of the 9 drawn spells made unusable for each side (18 probes);
   * once with 8 random same-side pairs removed (synergy).
