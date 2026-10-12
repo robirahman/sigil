@@ -32,7 +32,7 @@ const N_NODES: usize = 39;
 const NSP: usize = crate::spells_meta::NUM_OFFICIAL_SPELLS;
 const NPLACE: usize = 5;
 const Q: i32 = 64;
-const MAX_H: usize = 256;
+const MAX_H: usize = 512;
 const MAX_L: usize = 64;
 
 /// A network file baked into the binary, parsed on first use.
@@ -69,6 +69,9 @@ pub static NNUE_SPELL3: NnSpec = NnSpec::new("nnue_spell3", include_bytes!("../n
 /// Rock Slide game (old pile-up rule) plus 635,169 engine-v29 games whose spell draws
 /// bring all 45 official spells to 252,845 games each.
 pub static NNUE_SPELL4: NnSpec = NnSpec::new("nnue_spell4", include_bytes!("../nets/nnue_spell4.bin"));
+/// 2026-10-12 width test (default OFF): nnue_spell4's recipe and data at hidden 256 / 512.
+pub static NNUE_WIDE256: NnSpec = NnSpec::new("nnue_wide256", include_bytes!("../nets/nnue_wide256.bin"));
+pub static NNUE_WIDE512: NnSpec = NnSpec::new("nnue_wide512", include_bytes!("../nets/nnue_wide512.bin"));
 
 /// A network by preset name (wasm parity export, tests).
 pub fn by_name(name: &str) -> Option<&'static NnSpec> {
@@ -76,6 +79,8 @@ pub fn by_name(name: &str) -> Option<&'static NnSpec> {
         "nnue_spell" => Some(&NNUE_SPELL),
         "nnue_spell3" => Some(&NNUE_SPELL3),
         "nnue_spell4" => Some(&NNUE_SPELL4),
+        "nnue_wide256" => Some(&NNUE_WIDE256),
+        "nnue_wide512" => Some(&NNUE_WIDE512),
         _ => None,
     }
 }
