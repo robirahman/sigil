@@ -231,7 +231,7 @@ function pickSplitResult(results, perDepth) {
 		if (kr > kb || (kr === kb && (r.depth || 0) > (best.depth || 0))) best = r;
 	}
 	const out = Object.assign({}, best);
-	out.nodes = ok.reduce((s, r) => s + (r.nodes || 0), 0);
+	out.nodes = ok.reduce((s, r) => s + (r.all_nodes || r.nodes || 0), 0);
 	out.split = { parts: results.length, chosen: results.indexOf(best),
 		depths: results.map((r) => (r && r.depth) || 0),
 		scores: results.map((r) => (r && r.ok) ? r.score : null),
@@ -367,7 +367,7 @@ class RustAI {
 		// Every worker ponders the whole position (the worker drops any root
 		// split for a ponder), so each one's table is primed for its next part.
 		this._postAll({
-			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale,
+			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale, threads: this.threads,
 			historySfns: this._historySfns.slice(-64), evalName: this.evalName,
 			adaptive: this.adaptive, sliceMs: this.ponderSliceMs, maxDepth: this.ponderMaxDepth,
 		});
@@ -476,7 +476,8 @@ class RustAI {
 		// was width- or window-limited ("likely win in N"). `score_ui` is the
 		// legacy Caveman-unit field, kept for the fallback formatter.
 		this.lastMeta = {
-			depth: res.depth, nodes: res.nodes,
+			// `all_nodes` counts every search thread; `nodes` only the caller's.
+			depth: res.depth, nodes: res.all_nodes || res.nodes,
 			// Selective depth (deepest ply the search reached) and, when the
 			// root finished early, how deep the reply position was read with
 			// the rest of the clock (v15 `exact_clock`).

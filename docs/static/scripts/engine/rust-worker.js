@@ -18,7 +18,7 @@
  *          historySfns, evalName, adaptive: [p, easy, hard],
  *          split?: [part, parts] }       // step 6 root split (prototype, off by default)
  *   in:  { type:'new_game', ttBits }                    // forget the last game
- *   in:  { type:'ponder', sfn, ttBits, widthScale, historySfns, evalName,
+ *   in:  { type:'ponder', sfn, ttBits, widthScale, threads?, historySfns, evalName,
  *          adaptive, sliceMs, maxDepth }                // prime the TT while the human thinks
  *   in:  { type:'ponder_stop' }
  *   in:  { type:'judge', id, sfn, plies, timeMs, ttBits }   // puzzles: verdict + reply
@@ -102,11 +102,16 @@ function engineFor(ttBits) {
 	const bits = (ttBits || 20) >>> 0;
 	if (!_engine || _engineTtBits !== bits) {
 		if (_engine && typeof _engine.free === 'function') _engine.free();
-		_engine = new api.Engine(bits);
-		if (_threads > 1) _engine.set_threads(_threads);
+		_engine = new api.Engine(bits);       // one thread until a search/ponder asks
 		_engineTtBits = bits;
 	}
 	return _engine;
+}
+
+// Threaded engine: the thread count a search or ponder asked for, at most the
+// pool's (a request without one gets a single thread).
+function applyThreads(eng, want) {
+	if (_threads > 1) eng.set_threads(Math.max(1, Math.min(_threads, (want | 0) || 1)));
 }
 
 // Pondering state. `active` is cleared by a search or a ponder_stop; the loop
@@ -156,6 +161,7 @@ self.onmessage = async (e) => {
 			if (_busy) return;                 // a real search owns the engine
 			const a = msg.adaptive || [0, 0, 0];
 			const eng = engineFor(msg.ttBits);
+			applyThreads(eng, msg.threads);
 			// A ponder always reads the whole root, whatever split the last search used.
 			if (typeof eng.set_root_split === 'function') eng.set_root_split(0, 1);
 			const r = JSON.parse(eng.ponder_begin(
@@ -198,8 +204,7 @@ self.onmessage = async (e) => {
 				self.postMessage({ type: 'progress', id, depth, score, nodes });
 			};
 			const eng = engineFor(msg.ttBits);
-			// Threaded engine: this search's thread count, at most the pool's.
-			if (_threads > 1) eng.set_threads(Math.max(1, Math.min(_threads, (msg.threads | 0) || 1)));
+			applyThreads(eng, msg.threads);
 			// Step 6 option A (prototype): `split: [part, parts]` searches one part
 			// of the root; absent = the whole root, as before. An older wasm without
 			// the method searches the whole root and the coordinator still works.
