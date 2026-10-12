@@ -36,7 +36,7 @@ if (NPOS > SFNS.length) {
   const out = await page.evaluate(async (SFNS, NS, MS) => {
     const iso = self.crossOriginIsolated;
     const run = (threads) => new Promise((resolve, reject) => {
-      const w = new Worker('/static/scripts/engine/rust-worker.js?v=30');
+      const w = new Worker('/static/scripts/engine/rust-worker.js?v=31');
       let id = 1; const pend = new Map();
       w.onmessage = e => { const m = e.data; const p = pend.get(m.id); if (!p) return;
         if (m.type === 'progress') return; pend.delete(m.id);

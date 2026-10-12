@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 30;
+const RUST_ENGINE_VERSION = 31;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -286,6 +286,9 @@ class RustAI {
 		const req = (options.workers !== undefined) ? options.workers
 			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || rustWorkersSetting() || 1);
 		this.workers = (this.transport === 'worker') ? rustWorkerCount(req, hc) : 1;
+		// The root-split prototype (several workers) and the threaded engine
+		// would oversubscribe the cores together: split workers run one thread.
+		if (this.workers > 1) this.threads = 1;
 		// One RustAI per game: reset the workers' persistent tables so a previous
 		// game's entries cannot leak into this one.
 		if (this.transport === 'worker') {
