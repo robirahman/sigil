@@ -1288,6 +1288,12 @@ impl Search {
         // `work` leaves this thread's flag describing its last item only; the
         // merge in `root_search` decides from the results.
         self.stats.timed_out = main_timed_out;
+        // `widened` / `windowed` are search-wide (the mate-proof guard reads them),
+        // so a helper's selective branch makes the whole iteration selective.
+        for h in pool.iter() {
+            self.stats.widened |= h.stats.widened;
+            self.stats.windowed |= h.stats.windowed;
+        }
         let mut res = out.into_inner().unwrap();
         res.sort_unstable_by_key(|r| r.0);
         if !cut.load(Relaxed) && res.len() < rest.len() { self.stats.timed_out = true; }
