@@ -61,7 +61,7 @@ def main():
         dst = os.path.join(out_dir, name)
         if os.path.exists(dst):
             continue
-        tmp = '/tmp/_relabel_in.npz'
+        tmp = f'/tmp/_relabel_in_{os.getpid()}.npz'   # one per shard process
         open(tmp, 'wb').write(_fetch(path))
         z = np.load(tmp)
         out = {k: z[k] for k in KEEP}
