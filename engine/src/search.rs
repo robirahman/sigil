@@ -1541,7 +1541,10 @@ impl Search {
             prev = score;
             best_score = score;
             self.stats.depth_completed = depth;
-            if let Some(p) = progress.as_deref_mut() { p(depth, score, self.stats.nodes); }
+            // Parallel root: the pool's helpers are idle between iterations, so
+            // their counts are current here (Lazy SMP helpers run on and are not).
+            let helper_nodes: u64 = self.smp_pool.as_ref().map_or(0, |p| p.iter().map(|h| h.stats.nodes).sum());
+            if let Some(p) = progress.as_deref_mut() { p(depth, score, self.stats.nodes + helper_nodes); }
             // A MATE SCORE IS A PROOF ONLY IF THE SEARCH THAT FOUND IT SAW
             // EVERY MOVE -- the full argument is on `pick_successor`, which is
             // where this guard was FIRST written, and only there. That was the

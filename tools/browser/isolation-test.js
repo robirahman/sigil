@@ -8,7 +8,7 @@
 // adds COOP/COEP; then the page must report crossOriginIsolated, the engine
 // worker must start its thread pool, Firebase must connect, fonts and the CDN
 // scripts must load, and a threaded search must count more nodes than its main
-// thread alone. Exits 1 on any failure.
+// thread alone (and its live progress ticks count the helpers too). Exits 1 on any failure.
 'use strict';
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://127.0.0.1:8771';
@@ -33,9 +33,11 @@ const BASE = process.argv[2] || 'http://127.0.0.1:8771';
     const out = { iso: self.crossOriginIsolated, threads: rustThreadCount() };
     const info = await getRustEngineWorker().init();
     out.engine = { threads: info.threads, err: info.threads_error };
+    let lastTick = 0;
     const r = await getRustEngineWorker().search({ sfn: 'r.........r...bb...................r.../Seal_of_Destruction,Blossom,Hurricane,Storm_Front,Seal_of_Stone,Scatter,Seal_of_Winter,Seal_of_Summer,Gust r 4 0:0 -:- -:- tied',
-      timeMs: 2000, ttBits: 20, widthScale: 4, historySfns: [], evalName: 'nnue_spell4', adaptive: [0.1, 2, 6], threads: out.threads });
-    out.search = { ok: r.ok, depth: r.depth, nodes: r.nodes, all: r.all_nodes };
+      timeMs: 2000, ttBits: 20, widthScale: 4, historySfns: [], evalName: 'nnue_spell4', adaptive: [0.1, 2, 6], threads: out.threads },
+      (m) => { lastTick = m.nodes || 0; });
+    out.search = { ok: r.ok, depth: r.depth, nodes: r.nodes, all: r.all_nodes, lastTick };
     out.fbConnected = await new Promise(res => { firebase.database().ref('.info/connected').on('value', s => { if (s.val()) res(true); }); setTimeout(() => res(false), 15000); });
     out.fonts = [...document.fonts].filter(f => f.status === 'loaded').length;
     out.alpine = !!window.Alpine;
@@ -45,6 +47,7 @@ const BASE = process.argv[2] || 'http://127.0.0.1:8771';
   console.log('after reload:', JSON.stringify(st));
   console.log('problems:', logs.length ? '\n  ' + logs.join('\n  ') : 'none');
   const ok = !first.iso && st.iso && st.engine.threads > 1 && st.search.ok && st.search.all > st.search.nodes
+    && st.search.lastTick > 0 && st.search.lastTick <= st.search.all
     && st.fbConnected === true && st.fonts > 0 && st.alpine && logs.length === 0;
   console.log(ok ? 'ISOLATION TEST OK' : 'ISOLATION TEST FAILED');
   if (!ok) process.exitCode = 1;
