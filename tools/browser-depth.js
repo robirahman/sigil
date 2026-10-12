@@ -22,7 +22,7 @@
 //   AI's own decision).
 //
 // Tier settings mirror docs/static/scripts/game-board-local.js (rust_hard:
-// time 10, ttBits 20) and rust-ai.js (widthScale 4, eval nnue_spell3,
+// time 10, ttBits 20) and rust-ai.js (widthScale 4, eval nnue_spell4,
 // adaptive [0.10, 2, 6], one worker).
 'use strict';
 const fs = require('fs');
@@ -46,7 +46,7 @@ const TT_BITS = parseInt(opt('--tt-bits', '20'), 10);
 const AI_UID = opt('--ai-uid', '__ai_rust_hard__');
 const FIELD = opt('--field', 'sfn');
 const [shardK, shardN] = (opt('--shard', '0/1')).split('/').map((x) => parseInt(x, 10));
-const EVAL = 'nnue_spell3', WIDTH = 4, ADAPT = [0.10, 2, 6];
+const EVAL = 'nnue_spell4', WIDTH = 4, ADAPT = [0.10, 2, 6];
 
 const glue = fs.readFileSync(path.join(WASM_DIR, 'sigil_engine.js'), 'utf8');
 const wasm_bindgen = new Function(glue + '\n;return wasm_bindgen;')();

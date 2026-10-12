@@ -652,7 +652,10 @@ impl Board {
 /// `nnue_spell` since engine v25 (2026-10-06): the spell-conditioned network,
 /// +79 Elo at 10 s over `tfit_spell_v2` (engine/reports/2026-10-step5.md), which was
 /// v24's (per-spell sigil terms, +50 at 10 s over `tfit`, 2026-10-step2.md).
-pub const SHIPPED_EVAL: &str = "nnue_spell3";
+/// `nnue_spell4` since engine v30 (2026-10-12): the round-4 network (equal-spell
+/// self-play, Rock Slide pile-up rule), +38.1 Elo [+17.3, +58.9] over `nnue_spell3` at
+/// 10 s on core draws, +8.4 [-12.3, +29.1] on draws holding Rock Slide (1,080 games each).
+pub const SHIPPED_EVAL: &str = "nnue_spell4";
 
 /// Every accepted preset name, in one place. Exported (via py.rs) as
 /// `EVAL_NAMES` so callers (argparse `choices`, harnesses, docs) enumerate
