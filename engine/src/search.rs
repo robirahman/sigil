@@ -1089,7 +1089,7 @@ impl Search {
         if self.use_history { self.hist_decay(); }
 
         let t_start = now_ms();
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-threads"))]
         if self.threads > 1 && self.helper_id == 0 {
             return self.go_smp(root, c, max_depth, time_ms, progress, t_start);
         }
@@ -1116,11 +1116,15 @@ impl Search {
     /// `smp_mode` 1 (parallel root) instead keeps the helpers in a pool that
     /// `root_search` shares each iteration's root turns with: this thread searches
     /// the first turn, then every thread takes turns from a shared counter.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-threads"))]
     fn go_smp(&mut self, root: &Board, c: Color, max_depth: i32, time_ms: u64,
               mut progress: Option<&mut dyn FnMut(i32, i32, u64)>, t_start: f64)
         -> (Option<Turn>, i32, SearchStats)
     {
+        // The wasm build (rayon over Web Workers) runs the parallel root only:
+        // Lazy SMP's joined helper results need std threads.
+        #[cfg(target_arch = "wasm32")]
+        { self.smp_mode = 1; }
         if self.smp_mode == 1 {
             let pool: Vec<Search> = (1..self.threads).map(|k| {
                 let mut h = self.clone();
@@ -1142,6 +1146,10 @@ impl Search {
             self.stats.elapsed_ms = now_ms() - t_start;
             return (best, best_score, self.stats);
         }
+        #[cfg(target_arch = "wasm32")]
+        unreachable!("wasm runs smp_mode 1");
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let stop = Arc::new(AtomicBool::new(false));
         let mut helpers: Vec<Search> = (1..self.threads).map(|k| {
             let mut h = self.clone();
@@ -1201,6 +1209,7 @@ impl Search {
         self.stats.smp_nodes = self.stats.nodes + helper_nodes;
         self.stats.elapsed_ms = now_ms() - t_start;
         (best, best_score, self.stats)
+        }
     }
 
     /// Parallel root (`smp_mode` 1): search `rest` (the root turns after the first)
@@ -1208,7 +1217,7 @@ impl Search {
     /// from a shared counter and searching it against the best alpha found so far.
     /// Returns `(index into rest, score, completed)` sorted by index; marks the
     /// iteration timed out when the clock cut it short.
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-threads"))]
     #[allow(clippy::too_many_arguments)]
     fn root_parallel(&mut self, pool: &mut [Search], b: &Board, c: Color, depth: i32,
                      alpha: i32, beta: i32, rest: &[Turn]) -> Vec<(usize, i32, bool)>
@@ -1256,11 +1265,23 @@ impl Search {
             }
         };
         let main_timed_out = self.stats.timed_out;
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::scope(|sc| {
             for h in pool.iter_mut() {
                 let work = &work;
                 let switches = switches.clone();
                 sc.spawn(move || { switches.apply(); work(h); });
+            }
+            work(self);
+        });
+        // Browser threads: rayon's pool of Web Workers (wasm-bindgen-rayon), on
+        // shared wasm memory, so the helpers share the table like native threads.
+        #[cfg(target_arch = "wasm32")]
+        rayon::scope(|sc| {
+            for h in pool.iter_mut() {
+                let work = &work;
+                let switches = switches.clone();
+                sc.spawn(move |_| { switches.apply(); work(h); });
             }
             work(self);
         });
@@ -1300,7 +1321,7 @@ pub fn root_part(t: &Turn, parts: u32) -> u32 {
 /// A helper thread starts with every switch at its default, so a Lazy SMP search
 /// copies the main thread's values into each helper; otherwise an arena arm that
 /// set a switch would search with it on one thread and off on the others.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "wasm-threads"))]
 #[derive(Clone)]
 pub(crate) struct ThreadSwitches {
     decisive_lead: (bool, usize),
@@ -1320,7 +1341,7 @@ pub(crate) struct ThreadSwitches {
     policy_explore: crate::policy::Explore,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(any(not(target_arch = "wasm32"), feature = "wasm-threads"))]
 impl ThreadSwitches {
     pub(crate) fn capture() -> ThreadSwitches {
         use crate::turn_iter as ti;
@@ -1716,7 +1737,7 @@ impl Search {
             if !completed { stopped = true; }
             i += 1;
         }
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(not(target_arch = "wasm32"), feature = "wasm-threads"))]
         if !stopped && seq_n < n_root {
             if let Some(mut pool) = self.smp_pool.take() {
                 let results = self.root_parallel(&mut pool, b, c, depth, alpha, beta, &turns[seq_n..]);
