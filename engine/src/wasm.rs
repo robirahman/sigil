@@ -442,3 +442,30 @@ pub fn engine_info() -> String {
             crate::spells_meta::NUM_OFFICIAL_SPELLS, crate::topology::N,
             crate::candidates::CANDIDATES)
 }
+
+/// Threaded build only (diagnostic): `n` INDEPENDENT searches of `sfn` (each its
+/// own table) at once on the rayon pool for `time_ms`; returns the total nodes.
+/// Parallel scaling of this isolates contention (allocator, memory) from the
+/// parallel root's own overheads.
+#[cfg(feature = "wasm-threads")]
+#[wasm_bindgen]
+pub fn bench_independent(n: u32, time_ms: u32, sfn: &str) -> f64 {
+    ensure_shipped_policy();
+    let b = match Board::from_sfn(sfn) { Ok(b) => b, Err(_) => return -1.0 };
+    let total = std::sync::atomic::AtomicU64::new(0);
+    let switches = crate::search::ThreadSwitches::capture();
+    rayon::scope(|sc| {
+        for _ in 0..n.max(1) {
+            let total = &total;
+            let switches = switches.clone();
+            sc.spawn(move |_| {
+                switches.apply();
+                let mut s = Search::new(18);
+                s.weights = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+                let (_, _, st) = s.go(&b, b.to_move, 64, time_ms as u64);
+                total.fetch_add(st.nodes, std::sync::atomic::Ordering::Relaxed);
+            });
+        }
+    });
+    total.load(std::sync::atomic::Ordering::Relaxed) as f64
+}

@@ -40,6 +40,10 @@ const RUST_REVIEW_PRESETS = {
 	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
 };
 const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_spell4', adaptive: [0.10, 2, 6] };
+/** Deep review (Hard) searches on every thread the page can give it. */
+function rustReviewThreads(mode) {
+	return (mode === 'deep' && typeof rustThreadCount === 'function') ? rustThreadCount() : 1;
+}
 
 /** Cache identity of a live Rust review: a new engine build recomputes. */
 function rustReviewModelVersion() {
@@ -107,7 +111,7 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 		let res = null;
 		for (let tms = p.timeMs, k = 0; k < 4; k++, tms *= 4) {
 			res = await worker.search(Object.assign({
-				sfn: sfns[i], timeMs: tms, ttBits: p.ttBits,
+				sfn: sfns[i], timeMs: tms, ttBits: p.ttBits, threads: rustReviewThreads(mode),
 				// The position itself is part of the history, as RustAI._send
 				// sends it: threefold repetition counts it.
 				historySfns: sfns.slice(Math.max(0, i - 63), i + 1),

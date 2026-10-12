@@ -218,6 +218,23 @@ export function bench_hash(sfn, depth, eval_name, tt_bits) {
 }
 
 /**
+ * Threaded build only (diagnostic): `n` INDEPENDENT searches of `sfn` (each its
+ * own table) at once on the rayon pool for `time_ms`; returns the total nodes.
+ * Parallel scaling of this isolates contention (allocator, memory) from the
+ * parallel root's own overheads.
+ * @param {number} n
+ * @param {number} time_ms
+ * @param {string} sfn
+ * @returns {number}
+ */
+export function bench_independent(n, time_ms, sfn) {
+    const ptr0 = passStringToWasm0(sfn, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.bench_independent(n, time_ms, ptr0, len0);
+    return ret;
+}
+
+/**
  * @returns {string}
  */
 export function engine_info() {

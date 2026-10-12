@@ -64,6 +64,9 @@ class RustEngineWorker {
 		this._worker = new Worker(base + '?v=' + RUST_ENGINE_VERSION);
 		this._worker.onmessage = (e) => this._onMessage(e.data || {});
 		this._worker.onerror = (e) => this._onWorkerError(e);
+		// First message, before any new_game / ponder / search that would load
+		// the engine: how many threads its pool may start.
+		this._worker.postMessage({ type: 'configure', threads: rustThreadCount() });
 		return this._worker;
 	}
 
@@ -95,7 +98,10 @@ class RustEngineWorker {
 		this._readyPromise = null;                    // rebuild + re-init next call
 	}
 
-	/** Fetch+compile the wasm once, off the critical path. Memoized. */
+	/** Fetch+compile the wasm once, off the critical path. Memoized. The
+	 *  worker starts its thread pool here (`rustThreadCount()`: more than one
+	 *  only on a cross-origin-isolated page); searches then pick their own
+	 *  count up to that. */
 	init() {
 		if (!this._readyPromise) {
 			this._readyPromise = new Promise((resolve, reject) => {
@@ -157,6 +163,26 @@ function recommendedRustWorkers(hardwareConcurrency) {
 
 /** The account page's device setting (localStorage 'sigil.rustWorkers'):
  *  'auto' or unset (one worker). Never throws (private mode, blocked storage). */
+/**
+ * Search threads for the threaded engine (2026-10-12, engine/build-wasm-mt.sh):
+ * the native parallel root, +58 Elo at 10 s and +50 at 60 s natively with 4
+ * threads. It needs SharedArrayBuffer, i.e. a cross-origin-isolated page (the
+ * service worker isolates game.html); everywhere else 1. The account setting
+ * localStorage 'sigil.rustThreads' = '1' turns it off, a number caps it;
+ * default min(4, hardwareConcurrency - 1), leaving a core for the page.
+ */
+function rustThreadCount() {
+	const g = (typeof self !== 'undefined') ? self : {};
+	if (!g.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') return 1;
+	let setting;
+	try { setting = (typeof localStorage !== 'undefined' && localStorage.getItem('sigil.rustThreads')) || 'auto'; }
+	catch (e) { setting = 'auto'; }
+	const hc = Math.floor(Number((typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 0));
+	const auto = Math.max(1, Math.min(4, hc - 1));
+	if (setting === 'auto') return auto;
+	return Math.max(1, Math.min(auto, Math.floor(Number(setting) || 1)));
+}
+
 function rustWorkersSetting() {
 	try { return (typeof localStorage !== 'undefined' && localStorage.getItem('sigil.rustWorkers')) || undefined; }
 	catch (e) { return undefined; }
@@ -241,6 +267,9 @@ class RustAI {
 		this.widthScale = options.widthScale || 4;
 		this.evalName = options.evalName || 'nnue_spell4';  // eval.rs SHIPPED_EVAL
 		this.adaptive = options.adaptive || [0.10, 2, 6];
+		// Search threads for this AI's moves (capped by the worker's pool; 1 on
+		// a page that is not cross-origin isolated). The quick tiers stay at 1.
+		this.threads = Math.max(1, Math.floor(Number(options.threads) || 1));
 		// Pondering: while the human thinks, the worker searches the position
 		// they are looking at and primes the persistent table (TT priming, as
 		// caveman-ai.js does). Set by game-board-local.js from the account
@@ -383,6 +412,7 @@ class RustAI {
 			historySfns: history,
 			evalName: this.evalName,
 			adaptive: this.adaptive,
+			threads: this.threads,
 		};
 		const progress = (msg) => {
 			// Per-completed-depth ticks; same fields the caveman meter renders.

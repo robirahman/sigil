@@ -44,13 +44,14 @@ if (NPOS > SFNS.length) {
       w.onerror = e => reject(new Error('worker error ' + (e.message || '')));
       const call = (msg) => new Promise((res, rej) => { const i = id++; pend.set(i, { resolve: res, reject: rej }); w.postMessage(Object.assign({ id: i }, msg)); });
       (async () => {
-        const info = await call({ type: 'init', threads });
+        w.postMessage({ type: 'configure', threads });
+        const info = await call({ type: 'init' });
         const rows = [];
         for (const sfn of SFNS) {
           w.postMessage({ type: 'new_game', ttBits: 20 });
           const t = performance.now();
           const r = await call({ type: 'search', sfn, timeMs: MS, ttBits: 20, widthScale: 4, historySfns: [],
-                                 evalName: 'nnue_spell4', adaptive: [0.10, 2, 6] });
+                                 evalName: 'nnue_spell4', adaptive: [0.10, 2, 6], threads });
           rows.push({ depth: r.depth, nodes: r.all_nodes || r.nodes, secs: +((performance.now() - t) / 1000).toFixed(2), ok: r.ok });
         }
         w.terminate();

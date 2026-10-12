@@ -1,6 +1,8 @@
 //! Sigil bitboard engine — the 39 core spells (ids 0..38) plus Tectonic
 //! (39..41) and Providence (42..44). The retired packs (Aftershock/Ambush,
 //! 45..50) and the unofficial fan-made Panda pack are out of scope.
+#[cfg(all(target_arch = "wasm32", feature = "wasm-threads"))]
+mod tcalloc;
 pub mod topology;
 pub mod board;
 pub mod zobrist;
