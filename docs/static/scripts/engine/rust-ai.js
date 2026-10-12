@@ -231,7 +231,7 @@ function pickSplitResult(results, perDepth) {
 		if (kr > kb || (kr === kb && (r.depth || 0) > (best.depth || 0))) best = r;
 	}
 	const out = Object.assign({}, best);
-	out.nodes = ok.reduce((s, r) => s + (r.all_nodes || r.nodes || 0), 0);
+	out.nodes = out.all_nodes = ok.reduce((s, r) => s + (r.all_nodes || r.nodes || 0), 0);
 	out.split = { parts: results.length, chosen: results.indexOf(best),
 		depths: results.map((r) => (r && r.depth) || 0),
 		scores: results.map((r) => (r && r.ok) ? r.score : null),
