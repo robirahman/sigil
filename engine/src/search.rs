@@ -1289,10 +1289,12 @@ impl Search {
         // merge in `root_search` decides from the results.
         self.stats.timed_out = main_timed_out;
         // `widened` / `windowed` are search-wide (the mate-proof guard reads them),
-        // so a helper's selective branch makes the whole iteration selective.
+        // so a helper's selective branch makes the whole iteration selective; and
+        // the reported seldepth is the deepest ply any thread reached.
         for h in pool.iter() {
             self.stats.widened |= h.stats.widened;
             self.stats.windowed |= h.stats.windowed;
+            self.stats.max_ply_seen = self.stats.max_ply_seen.max(h.stats.max_ply_seen);
         }
         let mut res = out.into_inner().unwrap();
         res.sort_unstable_by_key(|r| r.0);
