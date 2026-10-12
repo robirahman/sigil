@@ -2,8 +2,9 @@
 
     spell_value_probe.py <rows_per_chunk> <depth> [pairs_per_side=4]
 
-Positions come from the round-4 self-play corpus (engine v29, every official spell
-drawn equally often, real rules). For each sampled position the shipped search
+Positions come from the self-play training corpus (the v27 set, minus its
+old-rule Rock Slide games, plus round 4; together every official spell is drawn
+equally often), all under the current rules. For each sampled position the shipped search
 (fixed depth, no clock) scores it as played, then again with ONE spell made
 unusable for ONE side (`PyBoard.set_access`: the slot never counts as charged
 for that side, so it can neither be cast nor give its static effect, anywhere in
@@ -35,6 +36,8 @@ import sigil_engine as se
 from sprt import shard_offset
 
 ALL = 0x1FF
+ROCK_SLIDE = 40
+OLD_RULE_GAMES_BELOW = 80_000_000   # round-4 self-play seeds start at 80M
 # The plan the GCP runner uses (it passes no extra environment).
 DEFAULT_PLAN = 'gs://focus-surfer-494820-g0-sigil/data/spell_values/plan_2026-10-12.json'
 EVAL = se.SHIPPED_EVAL
@@ -101,8 +104,11 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f'skip {path}: {e}', flush=True); continue
         rng = random.Random(hash(path) & 0xffffffff)
+        # Skip the competitive opening blinks, and Rock Slide games from rounds
+        # before 4 (game ids below 80M): they were played under the old pile-up rule.
         rows = [i for i in range(len(z['sfn']))
-                if not (int(z['kind'][i]) == 1 and int(z['ply'][i]) <= 2)]
+                if not (int(z['kind'][i]) == 1 and int(z['ply'][i]) <= 2)
+                and not (int(z['game'][i]) < OLD_RULE_GAMES_BELOW and ROCK_SLIDE in z['spells'][i])]
         for r in rng.sample(rows, min(per_chunk, len(rows))):
             sfn = str(z['sfn'][r])
             if se.Board.from_sfn(sfn).gameover:
