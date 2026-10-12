@@ -21,6 +21,7 @@ DEVICE=$(md device || true); SMOKE=$(md smoke || true)
 EVALS=$(md evals || true); : "${EVALS:=tfit,tfit_spell,tfit_spell2}"
 JOBS=$(md jobs || true)
 DROP_SPELLS=$(md drop-spells || true)   # prep: drop games holding these spell ids (e.g. 40)
+DROP_BEFORE=$(md drop-before-game || true)   # ...only games with id below this (older rounds)
 : "${MAXH:=4}" "${LAMS:=0 0.25 0.5 0.75 1}" "${EPOCHS:=6}" "${DEVICE:=cuda}" "${SMOKE:=0}"
 ( sleep $((MAXH * 3600)); echo "WATCHDOG"; shutdown -h now ) &
 WATCHDOG=$!
@@ -92,12 +93,17 @@ else
   mkdir -p $WORK/data
   # DATA may list several chunk prefixes (space-separated); chunk names carry
   # the shard offset, so prefixes from different rounds never collide.
+  # One download per prefix, concurrently (each is many small files).
+  DL_PIDS=()
   for D in $DATA; do
-    gcloud storage cp -q -r "$D/*" $WORK/data/ || fail "data download $D"
+    ( gcloud storage cp -q -r "$D/*" $WORK/data/ || touch "$WORK/dl_failed" ) &
+    DL_PIDS+=($!)
   done
+  wait "${DL_PIDS[@]}"
+  [ -e "$WORK/dl_failed" ] && fail "data download"
   echo "downloaded $(ls $WORK/data | wc -l) chunks"
   $NN prep $WORK/data $WORK/prep.npz --workers $(nproc) --evals "$EVALS" \
-    --drop-spells "$DROP_SPELLS" || fail prep
+    --drop-spells "$DROP_SPELLS" --drop-before-game "$DROP_BEFORE" || fail prep
   gcloud storage cp -q $WORK/prep.npz "$PREP"
   rm -rf $WORK/data
 fi

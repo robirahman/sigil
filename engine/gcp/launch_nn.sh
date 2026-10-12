@@ -19,7 +19,7 @@ LAMS=${LAMS:-0 0.25 0.5 0.75 1}
 EPOCHS=${EPOCHS:-6}
 SMOKE=${SMOKE:-0}; DEVICE=${DEVICE:-cuda}; GPU=${GPU:-1}
 # EVALS: prep eval columns. DROP_SPELLS: prep drops games holding these spell
-# ids (comma-separated). DATA may list several prefixes (space-separated). JOBS_FILE: one training job per line,
+# ids (comma-separated); DROP_BEFORE: only games with id below it (older rounds). DATA may list several prefixes (space-separated). JOBS_FILE: one training job per line,
 # `<tag> <nn_eval.py train args>`, replacing the default lambda sweep.
 EVALS=${EVALS:-tfit,tfit_spell,tfit_spell2}
 JOBS_FILE=${JOBS_FILE:-}
@@ -39,7 +39,7 @@ gcloud compute instances create "$NAME" \
   --boot-disk-size=200GB --boot-disk-type=pd-balanced --boot-disk-auto-delete \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil \
-  --metadata="^|^run-id=$RUN|branch=$BRANCH|max-hours=$MAXH|data=$DATA|prep=$PREP|lams=$LAMS|epochs=$EPOCHS|device=$DEVICE|smoke=$SMOKE|evals=$EVALS|drop-spells=${DROP_SPELLS:-}${DRIVER//,/|}" \
+  --metadata="^|^run-id=$RUN|branch=$BRANCH|max-hours=$MAXH|data=$DATA|prep=$PREP|lams=$LAMS|epochs=$EPOCHS|device=$DEVICE|smoke=$SMOKE|evals=$EVALS|drop-spells=${DROP_SPELLS:-}|drop-before-game=${DROP_BEFORE:-}${DRIVER//,/|}" \
   --metadata-from-file="$FROM_FILE" \
   --format="value(name,status)"
 echo "$RUN"

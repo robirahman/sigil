@@ -4539,7 +4539,8 @@ fn nnue_spell_is_tfit_spell_plus_the_network() {
 /// `nn_eval.py golden`), and each preset is `tfit_spell_v2` plus its clamped term.
 #[test]
 fn round2_networks_match_python_and_sit_on_tfit_spell_v2() {
-    for (name, golden) in [("nnue_spell3", include_str!("../nets/nnue_spell3_golden.txt"))] {
+    for (name, golden) in [("nnue_spell3", include_str!("../nets/nnue_spell3_golden.txt")),
+                           ("nnue_spell4", include_str!("../nets/nnue_spell4_golden.txt"))] {
         let net = crate::nn::by_name(name).unwrap().net();
         let mut n = 0;
         for line in golden.lines() {
