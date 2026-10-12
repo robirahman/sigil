@@ -20,7 +20,21 @@ OUT=${WASM_OUT:-../docs/static/wasm-mt}
 mkdir -p "$OUT"
 wasm-bindgen --target web --no-typescript --out-dir "$OUT" --out-name sigil_engine_mt \
   target/wasm32-unknown-unknown/release/sigil_engine.wasm
-if command -v wasm-opt >/dev/null; then
-  wasm-opt -O3 --enable-threads --enable-bulk-memory "$OUT/sigil_engine_mt_bg.wasm" -o "$OUT/sigil_engine_mt_bg.wasm"
+# wasm-opt: the same rules as build-wasm.sh (name every feature wasm-bindgen's
+# output uses, or binaryen drops one and the module dies at init; never overwrite
+# the only good copy), plus threads for the shared memory. SKIP_WASM_OPT=1 skips it.
+W="$OUT/sigil_engine_mt_bg.wasm"
+if [ "${SKIP_WASM_OPT:-0}" != "1" ] && command -v wasm-opt >/dev/null 2>&1; then
+  if wasm-opt -O2 --enable-threads \
+       --enable-reference-types --enable-bulk-memory \
+       --enable-mutable-globals --enable-nontrapping-float-to-int \
+       --enable-sign-ext \
+       -o "$W.opt" "$W"; then
+    mv "$W.opt" "$W"
+    echo "wasm-opt applied. VERIFY WITH tools/browser/isolation-test.js BEFORE COMMITTING."
+  else
+    echo "wasm-opt FAILED; keeping the unoptimised module." >&2
+    rm -f "$W.opt"
+  fi
 fi
 ls -la "$OUT"
