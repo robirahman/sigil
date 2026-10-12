@@ -1,0 +1,14 @@
+4136 tasks done
+spell              group             n  d4 value  d6 value          d6-d4 [95%] d6 nonzero  s/task
+Charge             control         355     +0.93     +1.56    +0.62 [+0.43,+0.81]        29%    67.9
+Seal_of_Lightning  control         337     +0.84     +1.74    +0.90 [+0.67,+1.19]        18%   356.9
+Seal_of_Stone      engine higher   337     +1.36     +2.16    +0.80 [+0.61,+0.97]        10%   288.9
+Splash             engine higher   342     +1.19     +1.87    +0.68 [+0.47,+0.89]        22%   137.9
+Syzygy             engine higher   349     +0.83     +1.49    +0.66 [+0.45,+0.91]        18%    83.1
+Torrent            engine higher   338     +0.74     +1.52    +0.78 [+0.58,+1.02]        14%   215.8
+Tsunami            engine higher   346     +0.58     +1.44    +0.86 [+0.53,+1.33]        14%   279.1
+Blossom            engine lower    335     +0.42     +0.70    +0.28 [+0.20,+0.36]         6%   187.5
+Corrupt            engine lower    342     +0.18     +0.38    +0.20 [+0.07,+0.43]         7%   230.5
+Fireblast          engine lower    352     +0.30     +0.54    +0.24 [+0.14,+0.37]         7%   324.0
+Harvest            engine lower    357     +0.26     +0.40    +0.14 [+0.03,+0.28]         5%   152.8
+Scatter            engine lower    346     +0.51     +1.06    +0.55 [+0.39,+0.75]        19%   278.2
