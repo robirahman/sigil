@@ -144,13 +144,31 @@ Harvest            engine lower    357     +0.26     +0.40    +0.14 [+0.03,+0.28
 Scatter            engine lower    346     +0.51     +1.06    +0.55 [+0.39,+0.75]        19%   278.2
 ```
 
-* **Every value rises with depth,** about 1.5-2.5x.
-* **The order holds:**
-  * the "engine higher" spells stay at or above the controls;
-  * the "engine lower" spells gain least (Blossom, Fireblast, Harvest, Corrupt);
-  * only Scatter moves noticeably toward the players' view, and it remains below the controls.
-* **Conclusion:** the depth-4 ranking is not a short-horizon artifact for these spells. A
-  horizon longer than 6 plies remains untested.
+* **Every value rises with depth,** about 1.5-2.5x on the completed tasks.
+* **The two groups stay apart:**
+  * the "engine higher" spells read +1.44 to +2.16 at depth 6. Seal of Stone and Splash are
+    above both controls. Syzygy, Torrent and Tsunami are slightly below Charge (+1.56) and
+    below Seal of Lightning (+1.74).
+  * the "engine lower" spells read +0.38 to +1.06, below every "engine higher" spell and both
+    controls. Blossom, Fireblast, Harvest and Corrupt gain least.
+  * only Scatter moves noticeably toward the players' view (+0.51 to +1.06), and it remains
+    below the controls.
+* **Missing tasks (censoring).** The 664 unfinished tasks (11-16% per spell) are not a random
+  subsample: some are one preempted VM's share, and the rest are the slowest searches, which
+  were stopped. Reweighting the strata does not correct for that. As a rough sensitivity check,
+  which ignores the stratum weights, fill each spell's missing tasks with a pessimistic value:
+  * *Missing tasks did not change from depth 4.* Each rise shrinks by the completed share
+    (n/400). The rises stay positive: +0.55 to +0.76 for the controls and "engine higher" spells,
+    +0.12 to +0.48 for the "engine lower" ones.
+  * *Missing tasks were worth nothing at depth 6.* The depth-6 values become: "engine higher"
+    +1.25 to +1.82, controls +1.38 and +1.47, "engine lower" +0.33 to +0.92. Every value is still
+    above its depth-4 value, and the groups still do not overlap.
+
+  Neither bound is a proof: a missing task could also have gone the other way. Finishing the
+  stopped tasks would settle it.
+* **Conclusion:** on the tasks that finished, and under both pessimistic fills above, the
+  depth-4 ranking of these spells is not a short-horizon artifact. A horizon longer than 6 plies
+  remains untested.
 
 ## Caveats
 
