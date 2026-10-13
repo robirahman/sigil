@@ -73,7 +73,14 @@ pub struct Board {
     pub total: [u32; 2],
     pub mana: [u32; 2],
     pub charged: [u16; 2],
+    /// Experiment-only (spell_access_arena.py): bit p set = colour may use the
+    /// spell in sigil slot p. A slot a colour may not use never counts as
+    /// charged for it, so it can neither cast it nor benefit from its static
+    /// (every rule reads `charged`). All ones in real games; never in the SFN.
+    pub access: [u16; 2],
 }
+
+pub const ACCESS_ALL: u16 = 0x1FF;
 
 impl Board {
     pub fn new(spells: [u8; 9], variant: Variant) -> Self {
@@ -85,6 +92,7 @@ impl Board {
             lock: [NO_SPELL, NO_SPELL], springlock: [NO_SPELL, NO_SPELL],
             turn_counter: 0, to_move: Color::Red, variant, outcome: Outcome::Ongoing,
             total: [0, 0], mana: [0, 0], charged: [0, 0],
+            access: [ACCESS_ALL, ACCESS_ALL],
         }
     }
 
@@ -210,7 +218,9 @@ impl Board {
         for p in 0..9 {
             let m = SIGIL[p];
             for c in 0..2 {
-                if self.stones[c] & m == m { self.charged[c] |= 1 << p; }
+                if self.stones[c] & m == m && self.access[c] & (1 << p) != 0 {
+                    self.charged[c] |= 1 << p;
+                }
             }
         }
     }
