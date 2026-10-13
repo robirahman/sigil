@@ -96,6 +96,16 @@ pub struct Weights {
     /// flagged Flourish casts were exactly the ones that packed stones back in
     /// instead of walking out.
     pub mobility: i32,
+    /// Centistones credited to RED, UNSCALED (interpretability experiment 6,
+    /// 2026-10): red wins about 54% of equal-strength self-play despite blue's
+    /// +1 token, and the net learned a +29 cs per sd colour term the hand
+    /// evaluation lacks. 0 in every shipped preset.
+    pub colour: i32,
+    /// Candidate principles from the interpretability experiments (2026-10), all
+    /// UNSCALED centistones per unit, side-to-move-agnostic (c's POV). `None` in
+    /// every shipped preset; the `tfit_x_*` presets exist only for experiment 6's
+    /// arena (hand evaluation with one term, no net, against the hand evaluation).
+    pub extra: Option<&'static ExtraTerms>,
     /// Per-SPELL sigil weights, added inside the positional sum on top of the
     /// shared `sigil_stone` / `sigil_charged`: slot p contributes
     /// `stone[spell_p] * stone_p + charged[spell_p] * charged_p` (the same per-slot
@@ -105,6 +115,35 @@ pub struct Weights {
     /// already clamped to the net's own cap. `None` for every preset but `nnue_*`.
     pub nn: Option<&'static crate::nn::NnSpec>,
 }
+
+/// Experiment 6 terms (see `Weights::extra`). Each is mine minus theirs.
+#[derive(Clone, Copy, Debug)]
+pub struct ExtraTerms {
+    /// Stones on the three mana nodes.
+    pub mana: i32,
+    /// Stones on the nine void nodes.
+    pub void: i32,
+    /// Stones on the three 3-node (sorcery) sigils.
+    pub sorcery_sigil: i32,
+    /// Sorcery sigils one stone short of charged with no enemy stone on them.
+    pub one_short_sorcery: i32,
+    /// `control_diff` (a flood fill: only when non-zero).
+    pub control: i32,
+}
+
+pub const X_COLOUR: Weights = Weights { colour: 42, ..TFIT_SPELL_V2 };
+pub const X_MOBILITY: Weights = Weights { mobility: 14, ..TFIT_SPELL_V2 };
+pub const X_MANA: Weights = Weights { extra: Some(&ExtraTerms { mana: 22, void: 0, sorcery_sigil: 0, one_short_sorcery: 0, control: 0 }), ..TFIT_SPELL_V2 };
+pub const X_VOID: Weights = Weights { extra: Some(&ExtraTerms { mana: 0, void: -16, sorcery_sigil: 0, one_short_sorcery: 0, control: 0 }), ..TFIT_SPELL_V2 };
+pub const X_SORCERY: Weights = Weights { extra: Some(&ExtraTerms { mana: 0, void: 0, sorcery_sigil: 13, one_short_sorcery: 0, control: 0 }), ..TFIT_SPELL_V2 };
+pub const X_ONESHORT: Weights = Weights { extra: Some(&ExtraTerms { mana: 0, void: 0, sorcery_sigil: 0, one_short_sorcery: 15, control: 0 }), ..TFIT_SPELL_V2 };
+/// Every candidate at once, jointly fitted (selfplay sample A, 16k positions).
+pub const X_ALL: Weights = Weights {
+    colour: 35, mobility: 5,
+    extra: Some(&ExtraTerms { mana: -3, void: -13, sorcery_sigil: 5, one_short_sorcery: 3, control: 1 }),
+    ..TFIT_SPELL_V2
+};
+pub const X_CONTROL: Weights = Weights { extra: Some(&ExtraTerms { mana: 0, void: 0, sorcery_sigil: 0, one_short_sorcery: 0, control: 3 }), ..TFIT_SPELL_V2 };
 
 /// Raw positional weights per spell id (`spells_meta::SPELLS` order), in the same
 /// units as the other positional terms. `mult` scales the whole table, so one fitted
@@ -168,7 +207,7 @@ impl Weights {
             pos_num: 1,
             pos_den: 1,
             tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
+    cast_pace: 0, mobility: 0, colour: 0, extra: None, spell_sigil: None, nn: None,
 }
     }
 }
@@ -189,7 +228,7 @@ pub const CLASSIC: Weights = Weights {
     sigil_stone: 0, sigil_charged: 0,
     mana: 30, sixth_spell_danger: 0, control: 5, void_penalty: 0,
     pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
+    cast_pace: 0, mobility: 0, colour: 0, extra: None, spell_sigil: None, nn: None,
 };
 
 /// Mana term only, to separate the two contributions.
@@ -204,7 +243,7 @@ pub const MATERIAL_ONLY: Weights = Weights {
     enemy_zero_liberty: 0, enemy_one_liberty: 0,
     sigil_stone: 0, sigil_charged: 0, mana: 0, sixth_spell_danger: 0, control: 0,
     void_penalty: 0, pos_num: 1, pos_den: 1, tempo: 0,
-    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
+    cast_pace: 0, mobility: 0, colour: 0, extra: None, spell_sigil: None, nn: None,
 };
 
 /// Material only PLUS the tempo correction: the minimal change that removes the
@@ -261,7 +300,7 @@ pub const fn cap(mana: i32, void_penalty: i32, map_control: i32) -> Weights {
         sigil_stone: 0, sigil_charged: 0,
         mana: m, sixth_spell_danger: 0, control: c, void_penalty: v,
         pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
+    cast_pace: 0, mobility: 0, colour: 0, extra: None, spell_sigil: None, nn: None,
 }
 }
 
@@ -356,7 +395,7 @@ pub const FIT_SHAPE: Weights = Weights {
     mana: 82, sixth_spell_danger: 64,
     control: 3, void_penalty: -22,
     pos_num: 1, pos_den: 1, tempo: 50,
-    cast_pace: 0, mobility: 0, spell_sigil: None, nn: None,
+    cast_pace: 0, mobility: 0, colour: 0, extra: None, spell_sigil: None, nn: None,
 };
 
 /// The hand shape with only the four disputed SIGNS flipped, magnitudes untouched.
@@ -620,6 +659,28 @@ impl Board {
         if w.mobility != 0 {
             mat += w.mobility * self.mobility_feature(c);
         }
+        if w.colour != 0 {
+            mat += if c == Color::Red { w.colour } else { -w.colour };
+        }
+        if let Some(x) = w.extra {
+            let (mine, theirs) = (self.mine(c), self.theirs(c));
+            let d = |m: u64| (mine & m).count_ones() as i32 - (theirs & m).count_ones() as i32;
+            if x.mana != 0 { mat += x.mana * d(MANA); }
+            if x.void != 0 { mat += x.void * d(crate::topology::VOID); }
+            if x.sorcery_sigil != 0 || x.one_short_sorcery != 0 {
+                let mut stones = 0i32;
+                let mut short = 0i32;
+                for p in 3..6 {
+                    let m = SIGIL[p];
+                    let n = m.count_ones();
+                    let (a, o) = ((mine & m).count_ones(), (theirs & m).count_ones());
+                    stones += a as i32 - o as i32;
+                    short += (a == n - 1 && o == 0) as i32 - (o == n - 1 && a == 0) as i32;
+                }
+                mat += x.sorcery_sigil * stones + x.one_short_sorcery * short;
+            }
+            if x.control != 0 { mat += x.control * self.control_diff(c); }
+        }
         if let Some(net) = w.nn {
             mat += crate::nn::eval(net, self, c);
         }
@@ -662,11 +723,13 @@ pub const SHIPPED_EVAL: &str = "nnue_spell4";
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 25] = [
+pub const EVAL_NAMES: [&str; 33] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
     "nnue_spell3", "nnue_spell4",
+    "tfit_x_colour", "tfit_x_mobility", "tfit_x_mana", "tfit_x_void", "tfit_x_sorcery",
+    "tfit_x_oneshort", "tfit_x_control", "tfit_x_all",
 ];
 
 /// Resolve an eval preset by name. **Deliberately errors on an unknown name.**
@@ -696,6 +759,16 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "nnue_spell3" => Weights { nn: Some(&crate::nn::NNUE_SPELL3), ..TFIT_SPELL_V2 },
         // Round 4: equal-spell data, Rock Slide pile-up rule (engine v29).
         "nnue_spell4" => Weights { nn: Some(&crate::nn::NNUE_SPELL4), ..TFIT_SPELL_V2 },
+        // Interpretability experiment 6 (2026-10): the hand evaluation plus one
+        // candidate principle each (all: every one, jointly fitted). Default OFF.
+        "tfit_x_colour" => X_COLOUR,
+        "tfit_x_mobility" => X_MOBILITY,
+        "tfit_x_mana" => X_MANA,
+        "tfit_x_void" => X_VOID,
+        "tfit_x_sorcery" => X_SORCERY,
+        "tfit_x_oneshort" => X_ONESHORT,
+        "tfit_x_control" => X_CONTROL,
+        "tfit_x_all" => X_ALL,
         "tflip" => FLIP_AT_BUDGET,
         "s01" => STRUCT_01,
         "s02" => STRUCT_02,
@@ -713,6 +786,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, nnue_spell4, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, nnue_spell4, tfit_x_*, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }
