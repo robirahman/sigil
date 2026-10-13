@@ -69,6 +69,10 @@ pub static NNUE_SPELL3: NnSpec = NnSpec::new("nnue_spell3", include_bytes!("../n
 /// Rock Slide game (old pile-up rule) plus 635,169 engine-v29 games whose spell draws
 /// bring all 45 official spells to 252,845 games each.
 pub static NNUE_SPELL4: NnSpec = NnSpec::new("nnue_spell4", include_bytes!("../nets/nnue_spell4.bin"));
+/// 2026-10-13 label-depth test (default OFF): nnue_spell4's recipe on the same 1.2M
+/// round-4 positions, labelled by depth-4 / depth-5 searches.
+pub static NNUE_LD4: NnSpec = NnSpec::new("nnue_ld4", include_bytes!("../nets/nnue_ld4.bin"));
+pub static NNUE_LD5: NnSpec = NnSpec::new("nnue_ld5", include_bytes!("../nets/nnue_ld5.bin"));
 
 /// A network by preset name (wasm parity export, tests).
 pub fn by_name(name: &str) -> Option<&'static NnSpec> {
@@ -76,6 +80,8 @@ pub fn by_name(name: &str) -> Option<&'static NnSpec> {
         "nnue_spell" => Some(&NNUE_SPELL),
         "nnue_spell3" => Some(&NNUE_SPELL3),
         "nnue_spell4" => Some(&NNUE_SPELL4),
+        "nnue_ld4" => Some(&NNUE_LD4),
+        "nnue_ld5" => Some(&NNUE_LD5),
         _ => None,
     }
 }
