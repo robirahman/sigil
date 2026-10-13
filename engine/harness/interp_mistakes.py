@@ -49,6 +49,10 @@ def turn_actions(t):
             acts = json.loads(acts)
         except Exception:  # noqa: BLE001
             acts = None
+    if acts and all(isinstance(x, str) for x in acts):
+        # 'input' transcripts: lower-case node names and verbs, capitalised spell names.
+        casts = [x for x in acts if x[:1].isupper()]
+        return {'kinds': dict(collections.Counter(acts)), 'casts': casts, 'dash': 'dash' in acts}
     if not acts or not all(isinstance(x, dict) for x in acts):
         return None
     kinds = collections.Counter(x.get('type') for x in acts)
