@@ -9,7 +9,8 @@ value of the position changes for the side to move.
 `source` is `selfplay` (round-4 games: every official spell drawn equally often,
 current Rock Slide rule; the chunk list of plan_2026-10-12.json) or `human` (the
 recorded human games, hydrated by eval_games.py; standard variant only).
-`depths` is a comma list of fixed search depths, e.g. `2` or `2,4`; the static
+`depths` is a colon list of fixed search depths, e.g. `2` or `2:4` (colons, because
+the runner splits an arm's arguments on commas); the static
 evaluations are always recorded. This shard (k = SIGIL_SHARD_OFF // 1000 -
 shard_base) takes every n_shards-th game or chunk starting at k and samples
 `positions` positions; a shard outside 0..n_shards-1 is the runner's smoke and
@@ -159,7 +160,7 @@ def human_positions(k, n_shards, want, rng):
 
 def main():
     a = sys.argv[1:]
-    source, depths = a[0], [int(x) for x in a[1].split(',') if x]
+    source, depths = a[0], [int(x) for x in a[1].replace(',', ':').split(':') if x]
     want, n_shards, base = int(a[2]), int(a[3]), int(a[4])
     se.set_policy(*se.SHIPPED_POLICY)
     se.set_policy_explore(*se.SHIPPED_EXPLORE)
