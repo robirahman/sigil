@@ -175,7 +175,10 @@ def main():
     t0 = time.time(); n = 0
     for meta in gen(k, n_shards, want, rng):
         sfn = meta['sfn']
-        if se.Board.from_sfn(sfn).gameover:
+        try:
+            if se.Board.from_sfn(sfn).gameover:
+                continue
+        except ValueError:                     # a retired or out-of-scope spell
             continue
         res = probe(sfn, depths)
         res.update(meta)
