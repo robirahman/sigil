@@ -8,7 +8,8 @@ value of the position changes for the side to move.
 
 `source` is `selfplay` (round-4 games: every official spell drawn equally often,
 current Rock Slide rule; the chunk list of plan_2026-10-12.json) or `human` (the
-recorded human games, hydrated by eval_games.py; standard variant only).
+recorded human games, hydrated by eval_games.py; standard and competitive-opening
+variants, the ones the engine plays).
 `depths` is a colon list of fixed search depths, e.g. `2` or `2:4` (colons, because
 the runner splits an arm's arguments on commas); the static
 evaluations are always recorded. This shard (k = SIGIL_SHARD_OFF // 1000 -
@@ -147,13 +148,13 @@ def human_positions(k, n_shards, want, rng):
     rng.shuffle(games)
     for code in games:
         g = lines[code]
-        if g.get('variant', 'standard') != 'standard':
+        if g.get('variant', 'standard') not in ('standard', 'competitive'):
             continue
         pos = g['positions']
         if isinstance(pos, str):
             pos = json.loads(pos.replace("'", '"'))
         idx = list(range(2, len(pos)))
-        for i in rng.sample(idx, min(3, len(idx))):
+        for i in rng.sample(idx, min(6, len(idx))):
             yield {'src': 'human', 'game': code, 'ply': i, 'winner': g.get('winner'),
                    'red_uid': g.get('redUid'), 'blue_uid': g.get('blueUid'), 'sfn': pos[i]}
 
