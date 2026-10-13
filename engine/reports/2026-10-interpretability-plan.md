@@ -98,8 +98,12 @@ positions, change exactly one thing and record how much the evaluation changes, 
   sigil node and side) and `G[spell, slot]`.
 * Compare spells by cosine similarity of these weights and cluster them. Compare the clusters
   with the players' types, packs and tier list, and with the engine tier list.
-* `G[spell, slot]` shows whether the engine values a spell differently by sigil size (5, 3 or
-  1 node), which is a direct strategy question: is Splash better in a large sigil?
+* `G[spell, slot]` can compare only the three legal slots of a spell's role. A legal draw puts
+  rituals in the 5-node sigils, sorceries in the 3-node ones and charms in the 1-node ones
+  (`spells_meta.rs`, `Board::draw_is_legal`). So a spell's rows for other slots are never
+  trained, and the weights cannot say whether a spell would be better at another size. Within
+  its role they can show whether the engine values a spell differently by which slot it fills
+  (for example, which of the three 5-node sigils). Check that against experiment 2.
 * Check each weight-level claim against experiment 2's measured values for the same spell. The
   layers after the first are nonlinear, so weights alone can mislead.
 * Cost: an afternoon, CPU only.
@@ -131,6 +135,8 @@ on X when Y is drawn"). Cost: a day of log processing.
 
 **6. Test each candidate principle.**
 * Write each candidate from experiments 2, 3, 5, 7 and 8 as one extra hand-evaluation term.
+  It runs in two passes: first on the candidates from experiments 2, 3 and 5 (Phase B), then
+  again on those from experiments 7 and 8 (after Phase C).
 * Refit the hand evaluation with it (`fit_spell_eval_v2.py` method).
 * A principle is confirmed only if all three hold:
   1. it improves held-out outcome log-loss, replicated on a second sample;
@@ -184,7 +190,7 @@ on X when Y is drawn"). Cost: a day of log processing.
 Real-rules versions:
 * first-move advantage (also in experiment 4);
 * whether any spell pair or draw composition decides games, from the spell values data;
-* how decisive each sigil size is.
+* how decisive each role is (ritual, sorcery, charm), which fixes the sigil size.
 
 Altered-rule experiments, such as training under a proposed rule change, belong only to
 evaluating a specific proposed change (as with the Rock Slide pile-up rule), and only with
@@ -196,9 +202,12 @@ Robi's approval.
    that version in this plan.
 2. **Phase A** (experiments 1-4). These produce Spells page and strategy guide material, and the
    node and spell values experiment 6 needs.
-3. **Phase B** (experiments 5-6). The main payoff: principles that are both new and confirmed.
-4. **Phase C** (experiments 7-9) where Phase B points. Experiment 9 can run any time on idle
+3. **Phase B** (experiment 5, then the first pass of experiment 6 on the candidates from
+   experiments 2, 3 and 5). The main payoff: principles that are both new and confirmed.
+4. **Phase C** (experiments 7-9), where Phase B points. Experiment 9 can run any time on idle
    capacity.
+5. **Second pass of experiment 6** on the candidates from experiments 7 and 8. No principle
+   from Phase C goes into a report or the strategy guide until it passes the same three tests.
 
 Each experiment gets a report in `engine/reports/` and its harness in `engine/harness/`. The
 spell-values probe harness and the `PyBoard.set_access` hook it uses are still only on branch
