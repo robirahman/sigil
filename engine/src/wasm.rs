@@ -17,6 +17,9 @@
 //! reference now.
 
 use wasm_bindgen::prelude::*;
+// Threaded build: `initThreadPool(n)` (JS) starts rayon's Web Worker pool.
+#[cfg(feature = "wasm-threads")]
+pub use wasm_bindgen_rayon::init_thread_pool;
 use crate::board::Board;
 use crate::search::Search;
 
@@ -71,9 +74,10 @@ fn move_json(b: &Board, best: Option<crate::turn::Turn>, score: i32,
     format!(
         "{{\"ok\":true,\"actions\":{},\"expected_sfn\":{:?},\"depth\":{},\"seldepth\":{},\
           \"overflow_depth\":{},\"overflow_ms\":{:.0},\
-          \"nodes\":{},\"score\":{},\"score_ui\":{},{},\"opening\":{},\"seconds\":{:.2}}}",
+          \"nodes\":{},\"all_nodes\":{},\"score\":{},\"score_ui\":{},{},\"opening\":{},\"seconds\":{:.2}}}",
         crate::actions::acts_to_json(&acts), after.to_sfn(),
-        st.depth_completed, st.max_ply_seen, st.overflow_depth, st.overflow_ms, st.nodes, score,
+        st.depth_completed, st.max_ply_seen, st.overflow_depth, st.overflow_ms, st.nodes,
+        st.smp_nodes.max(st.nodes), score,
         crate::search::ui_score(score), report_json(rep), opening_json, dt)
 }
 
@@ -127,6 +131,16 @@ impl Engine {
         ensure_shipped_policy();
         Engine { s: Search::new(tt_bits.clamp(10, 22)), ponder: None, ponder_depth: 0,
                  ponder_nodes: 0 }
+    }
+
+    /// Search threads (the threaded build only; 1 = single-threaded, and the
+    /// single-threaded build ignores it). Helpers run the parallel root on the
+    /// thread pool `initThreadPool` started, sharing this engine's table.
+    pub fn set_threads(&mut self, n: u32) {
+        #[cfg(feature = "wasm-threads")]
+        { self.s.set_threads(n.max(1) as usize); self.s.set_smp_mode(1); }
+        #[cfg(not(feature = "wasm-threads"))]
+        let _ = n;
     }
 
     /// Forget the previous game (table, killers, history).
@@ -427,4 +441,31 @@ pub fn engine_info() -> String {
     format!("{{\"spells\":{},\"nodes\":{},\"candidates\":{:?}}}",
             crate::spells_meta::NUM_OFFICIAL_SPELLS, crate::topology::N,
             crate::candidates::CANDIDATES)
+}
+
+/// Threaded build only (diagnostic): `n` INDEPENDENT searches of `sfn` (each its
+/// own table) at once on the rayon pool for `time_ms`; returns the total nodes.
+/// Parallel scaling of this isolates contention (allocator, memory) from the
+/// parallel root's own overheads.
+#[cfg(feature = "wasm-threads")]
+#[wasm_bindgen]
+pub fn bench_independent(n: u32, time_ms: u32, sfn: &str) -> f64 {
+    ensure_shipped_policy();
+    let b = match Board::from_sfn(sfn) { Ok(b) => b, Err(_) => return -1.0 };
+    let total = std::sync::atomic::AtomicU64::new(0);
+    let switches = crate::search::ThreadSwitches::capture();
+    rayon::scope(|sc| {
+        for _ in 0..n.max(1) {
+            let total = &total;
+            let switches = switches.clone();
+            sc.spawn(move |_| {
+                switches.apply();
+                let mut s = Search::new(18);
+                s.weights = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+                let (_, _, st) = s.go(&b, b.to_move, 64, time_ms as u64);
+                total.fetch_add(st.nodes, std::sync::atomic::Ordering::Relaxed);
+            });
+        }
+    });
+    total.load(std::sync::atomic::Ordering::Relaxed) as f64
 }

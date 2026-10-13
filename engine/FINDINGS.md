@@ -3047,3 +3047,39 @@ the browser.
 The games are kept as training data: each one ends with a `RECORD` line (every position plus per-ply search
 stats), and `engine/harness/upload_arena_games.py` wrote all 60 to Firebase `ai_arena_games/rr20261010_*`, a
 node closed to clients by `database.rules.json`.
+
+## Threaded browser engine: the native parallel root on Web Workers (2026-10-12)
+
+Question: the native parallel root (4 threads vs 1, v30) measured **+58.5 Elo [+28.4, +88.5] at 10 s**
+(528 games) and **+49.6 [+6.5, +92.6] at 60 s** (254 games). Can the browser tiers get it?
+
+Build (`engine/build-wasm-mt.sh`, feature `wasm-threads`): nightly with `-Z build-std` (+atomics, shared
+imported memory, 1 GiB max), `wasm-bindgen --target web`, rayon on wasm-bindgen-rayon's Web Worker pool
+(`no-bundler`). `root_parallel` spawns its helpers with `rayon::scope` instead of `std::thread::scope`;
+the lock-free table is shared as natively. Lazy SMP stays native-only.
+
+**The allocator was the bottleneck.** wasm's dlmalloc takes one global lock per allocation once std has
+atomics, and the search allocates per node. Two INDEPENDENT searches ran at 0.68x each, three at 0.28x.
+`tcalloc.rs` (threaded build only) puts per-thread size-class free lists in front of dlmalloc: 1.00x each.
+
+Headless Chrome on a c3d-highcpu-16 (8 cores), 12 positions (4 fixed + 8 guest benchmark cases), same
+time per position, all threads' nodes:
+
+| threads | 3 s: nodes/s | x1 thread | 10 s: nodes/s | x1 thread | 10 s: mean depth |
+|---|---|---|---|---|---|
+| 1 | 40k | 1.00 | 34k | 1.00 | 4.55 |
+| 2 | 60k | 1.52 | 58k | 1.71 | 4.64 |
+| 4 | 83k | 2.10 | 80k | 2.38 | 5.00 |
+| 6 | 108k | 2.72 | 104k | 3.06 | 5.00 |
+| 8 | 124k | 3.13 | 124k | 3.67 | 5.18 |
+
+(Mean depth over the 11 non-mate positions.) The native parallel root's time-to-depth speedups were 1.6x /
+2.3x / 3.1x at 2 / 4 / 8 threads (2026-10-step6.md), so the browser scales about as well as native.
+
+Site wiring: the service worker adds COOP `same-origin` + COEP `credentialless` to `game.html` (no sign-in
+there, so the Google popup is untouched) and COEP to the engine's worker scripts; `rust-worker.js` loads the
+threaded engine by dynamic import when its worker is cross-origin isolated, else the single-threaded one.
+Hard, Very Hard, clocked games and the Deep review use `rustThreadCount()` = min(4, cores - 1); Easy, Medium
+and the Quick review stay single-threaded. Safari (no `credentialless`) and a first visit before the service
+worker installs stay single-threaded. `tools/browser/isolation-test.js` checks the page end to end;
+`tools/browser/wasm-mt-bench.js` reproduces the table.

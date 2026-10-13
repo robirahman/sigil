@@ -1221,6 +1221,9 @@ document.addEventListener('alpine:init', () => {
 							options.ai = new RustAI({
 								transport: 'worker', timeLimit: t.time, ttBits: t.ttBits,
 								clock: clock,
+								// Hard and Very Hard search on every thread the page
+								// can give them (1 unless cross-origin isolated).
+								threads: (t.time >= 10 || clock) ? rustThreadCount() : 1,
 								// The two top tiers ponder unless the account setting
 								// is explicitly off; the quick tiers follow the setting.
 								ponderPolicy: (t.time >= 10 || clock) ? 'default-on' : 'setting',

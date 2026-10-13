@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 30;
+const RUST_ENGINE_VERSION = 31;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -64,6 +64,9 @@ class RustEngineWorker {
 		this._worker = new Worker(base + '?v=' + RUST_ENGINE_VERSION);
 		this._worker.onmessage = (e) => this._onMessage(e.data || {});
 		this._worker.onerror = (e) => this._onWorkerError(e);
+		// First message, before any new_game / ponder / search that would load
+		// the engine: how many threads its pool may start.
+		this._worker.postMessage({ type: 'configure', threads: rustThreadCount() });
 		return this._worker;
 	}
 
@@ -95,7 +98,10 @@ class RustEngineWorker {
 		this._readyPromise = null;                    // rebuild + re-init next call
 	}
 
-	/** Fetch+compile the wasm once, off the critical path. Memoized. */
+	/** Fetch+compile the wasm once, off the critical path. Memoized. The
+	 *  worker starts its thread pool here (`rustThreadCount()`: more than one
+	 *  only on a cross-origin-isolated page); searches then pick their own
+	 *  count up to that. */
 	init() {
 		if (!this._readyPromise) {
 			this._readyPromise = new Promise((resolve, reject) => {
@@ -157,6 +163,26 @@ function recommendedRustWorkers(hardwareConcurrency) {
 
 /** The account page's device setting (localStorage 'sigil.rustWorkers'):
  *  'auto' or unset (one worker). Never throws (private mode, blocked storage). */
+/**
+ * Search threads for the threaded engine (2026-10-12, engine/build-wasm-mt.sh):
+ * the native parallel root, +58 Elo at 10 s and +50 at 60 s natively with 4
+ * threads. It needs SharedArrayBuffer, i.e. a cross-origin-isolated page (the
+ * service worker isolates game.html); everywhere else 1. The account setting
+ * localStorage 'sigil.rustThreads' = '1' turns it off, a number caps it;
+ * default min(4, hardwareConcurrency - 1), leaving a core for the page.
+ */
+function rustThreadCount() {
+	const g = (typeof self !== 'undefined') ? self : {};
+	if (!g.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') return 1;
+	let setting;
+	try { setting = (typeof localStorage !== 'undefined' && localStorage.getItem('sigil.rustThreads')) || 'auto'; }
+	catch (e) { setting = 'auto'; }
+	const hc = Math.floor(Number((typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 0));
+	const auto = Math.max(1, Math.min(4, hc - 1));
+	if (setting === 'auto') return auto;
+	return Math.max(1, Math.min(auto, Math.floor(Number(setting) || 1)));
+}
+
 function rustWorkersSetting() {
 	try { return (typeof localStorage !== 'undefined' && localStorage.getItem('sigil.rustWorkers')) || undefined; }
 	catch (e) { return undefined; }
@@ -205,7 +231,7 @@ function pickSplitResult(results, perDepth) {
 		if (kr > kb || (kr === kb && (r.depth || 0) > (best.depth || 0))) best = r;
 	}
 	const out = Object.assign({}, best);
-	out.nodes = ok.reduce((s, r) => s + (r.nodes || 0), 0);
+	out.nodes = out.all_nodes = ok.reduce((s, r) => s + (r.all_nodes || r.nodes || 0), 0);
 	out.split = { parts: results.length, chosen: results.indexOf(best),
 		depths: results.map((r) => (r && r.depth) || 0),
 		scores: results.map((r) => (r && r.ok) ? r.score : null),
@@ -241,6 +267,9 @@ class RustAI {
 		this.widthScale = options.widthScale || 4;
 		this.evalName = options.evalName || 'nnue_spell4';  // eval.rs SHIPPED_EVAL
 		this.adaptive = options.adaptive || [0.10, 2, 6];
+		// Search threads for this AI's moves (capped by the worker's pool; 1 on
+		// a page that is not cross-origin isolated). The quick tiers stay at 1.
+		this.threads = Math.max(1, Math.floor(Number(options.threads) || 1));
 		// Pondering: while the human thinks, the worker searches the position
 		// they are looking at and primes the persistent table (TT priming, as
 		// caveman-ai.js does). Set by game-board-local.js from the account
@@ -257,6 +286,9 @@ class RustAI {
 		const req = (options.workers !== undefined) ? options.workers
 			: ((typeof window !== 'undefined' && window.SIGIL_RUST_WORKERS) || rustWorkersSetting() || 1);
 		this.workers = (this.transport === 'worker') ? rustWorkerCount(req, hc) : 1;
+		// The root-split prototype (several workers) and the threaded engine
+		// would oversubscribe the cores together: split workers run one thread.
+		if (this.workers > 1) this.threads = 1;
 		// One RustAI per game: reset the workers' persistent tables so a previous
 		// game's entries cannot leak into this one.
 		if (this.transport === 'worker') {
@@ -335,7 +367,7 @@ class RustAI {
 		// Every worker ponders the whole position (the worker drops any root
 		// split for a ponder), so each one's table is primed for its next part.
 		this._postAll({
-			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale,
+			type: 'ponder', sfn: sfn, ttBits: this.ttBits, widthScale: this.widthScale, threads: this.threads,
 			historySfns: this._historySfns.slice(-64), evalName: this.evalName,
 			adaptive: this.adaptive, sliceMs: this.ponderSliceMs, maxDepth: this.ponderMaxDepth,
 		});
@@ -383,6 +415,7 @@ class RustAI {
 			historySfns: history,
 			evalName: this.evalName,
 			adaptive: this.adaptive,
+			threads: this.threads,
 		};
 		const progress = (msg) => {
 			// Per-completed-depth ticks; same fields the caveman meter renders.
@@ -443,7 +476,8 @@ class RustAI {
 		// was width- or window-limited ("likely win in N"). `score_ui` is the
 		// legacy Caveman-unit field, kept for the fallback formatter.
 		this.lastMeta = {
-			depth: res.depth, nodes: res.nodes,
+			// `all_nodes` counts every search thread; `nodes` only the caller's.
+			depth: res.depth, nodes: res.all_nodes || res.nodes,
 			// Selective depth (deepest ply the search reached) and, when the
 			// root finished early, how deep the reply position was read with
 			// the rest of the clock (v15 `exact_clock`).

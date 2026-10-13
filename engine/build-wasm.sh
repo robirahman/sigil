@@ -7,7 +7,8 @@
 # an ES-module glue (`--target web`) cannot be loaded there.
 #
 # After any engine change that ships:
-#   1. run this script;
+#   1. run this script AND build-wasm-mt.sh (the threaded engine, loaded on
+#      cross-origin-isolated pages; same version);
 #   2. bump RUST_ENGINE_VERSION in docs/static/scripts/engine/rust-ai.js;
 #   3. bump CACHE_VERSION in docs/sw.js and update the ?v= precache entries.
 # The version query strings are what make a stale service-worker-cached wasm

@@ -172,6 +172,15 @@ let wasm_bindgen = (function(exports) {
             wasm.engine_set_root_split(this.__wbg_ptr, part, parts);
         }
         /**
+         * Search threads (the threaded build only; 1 = single-threaded, and the
+         * single-threaded build ignores it). Helpers run the parallel root on the
+         * thread pool `initThreadPool` started, sharing this engine's table.
+         * @param {number} n
+         */
+        set_threads(n) {
+            wasm.engine_set_threads(this.__wbg_ptr, n);
+        }
+        /**
          * Slots in use, for the smoke test's "the table survived the move" check.
          * @returns {number}
          */

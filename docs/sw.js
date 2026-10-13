@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v75';
+const CACHE_VERSION = 'v76';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -57,7 +57,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/game-board-local.js?v=17',
-	'./static/scripts/engine/rust-ai.js?v=30',
+	'./static/scripts/engine/rust-ai.js?v=31',
 	'./static/scripts/game-board-multiplayer.js',
 	'./static/scripts/help.js',
 	'./static/scripts/offline-queue.js',
@@ -82,9 +82,9 @@ const SAME_ORIGIN_PRECACHE = [
 	// ?v=<RUST_ENGINE_VERSION> (rust-ai.js), so the versioned URLs are what
 	// must be precached — bump the ?v= here in lockstep with rust-ai.js and
 	// CACHE_VERSION on every engine rebuild (engine/build-wasm.sh reminds).
-	'./static/scripts/engine/rust-worker.js?v=30',
-	'./static/wasm/sigil_engine.js?v=30',
-	'./static/wasm/sigil_engine_bg.wasm?v=30',
+	'./static/scripts/engine/rust-worker.js?v=31',
+	'./static/wasm/sigil_engine.js?v=31',
+	'./static/wasm/sigil_engine_bg.wasm?v=31',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
@@ -201,7 +201,44 @@ async function cachedPage(url) {
 	return hit || null;
 }
 
+// Cross-origin isolation for the pages that run the threaded engine (2026-10-12).
+// GitHub Pages cannot send headers, so this worker adds COOP/COEP to those pages
+// (the coi-serviceworker pattern) and COEP to the engine's worker scripts.
+// `credentialless` (not require-corp) keeps the CDN scripts, fonts and Firebase
+// loading without CORP headers; browsers without it (Safari) simply stay
+// un-isolated and the engine runs on one thread, as before. game.html has no
+// sign-in (COOP same-origin would break the Google sign-in popup), so only the
+// game page is isolated. The first visit, before this worker controls the page,
+// is never isolated.
+const ISOLATED_PAGES = ['/game.html'];
+function isIsolatedPage(url) {
+	return ISOLATED_PAGES.some((p) => url.pathname.endsWith(p));
+}
+function isEngineWorkerScript(url) {
+	return url.pathname.endsWith('/static/scripts/engine/rust-worker.js')
+		|| url.pathname.includes('/static/wasm-mt/');
+}
+function withHeaders(resp, extra) {
+	if (!resp || resp.status === 0 || resp.type === 'opaqueredirect') return resp;
+	const h = new Headers(resp.headers);
+	for (const [k, v] of Object.entries(extra)) h.set(k, v);
+	return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers: h });
+}
+const ISOLATION_HEADERS = {
+	'Cross-Origin-Opener-Policy': 'same-origin',
+	'Cross-Origin-Embedder-Policy': 'credentialless',
+};
+const WORKER_ISOLATION_HEADERS = {
+	'Cross-Origin-Embedder-Policy': 'credentialless',
+	'Cross-Origin-Resource-Policy': 'same-origin',
+};
+
 async function handleNavigation(req, url, event) {
+	const resp = await handleNavigationRaw(req, url, event);
+	return isIsolatedPage(url) ? withHeaders(resp, ISOLATION_HEADERS) : resp;
+}
+
+async function handleNavigationRaw(req, url, event) {
 	const network = fetch(req).then((resp) => {
 		if (resp && resp.ok) {
 			const copy = resp.clone();
@@ -267,25 +304,32 @@ self.addEventListener('fetch', (event) => {
 	}
 	if (isNavigation) return;
 
-	// Same-origin static: stale-while-revalidate.
+	// Same-origin static: stale-while-revalidate. The engine's worker scripts
+	// carry COEP so a worker started by an isolated page is isolated too.
 	if (sameOrigin) {
+		const workerHeaders = isEngineWorkerScript(url) ? WORKER_ISOLATION_HEADERS : null;
 		event.respondWith((async () => {
-			const cache = await caches.open(CACHE_NAME);
-			const cached = await cache.match(req);
-			const networkPromise = fetch(req).then((resp) => {
-				if (resp && resp.ok) cache.put(req, resp.clone()).catch(() => {});
-				return resp;
-			}).catch(() => null);
-			if (cached) {
-				// Kick off background revalidation but return cached immediately.
-				networkPromise.catch(() => {});
-				return cached;
-			}
-			const network = await networkPromise;
-			if (network) return network;
-			return new Response('Offline', { status: 504, headers: { 'Content-Type': 'text/plain' } });
+			const resp = await staticResponse();
+			return workerHeaders ? withHeaders(resp, workerHeaders) : resp;
 		})());
 		return;
+	}
+	// (declared after the early return above, hoisted)
+	async function staticResponse() {
+		const cache = await caches.open(CACHE_NAME);
+		const cached = await cache.match(req);
+		const networkPromise = fetch(req).then((resp) => {
+			if (resp && resp.ok) cache.put(req, resp.clone()).catch(() => {});
+			return resp;
+		}).catch(() => null);
+		if (cached) {
+			// Kick off background revalidation but return cached immediately.
+			networkPromise.catch(() => {});
+			return cached;
+		}
+		const network = await networkPromise;
+		if (network) return network;
+		return new Response('Offline', { status: 504, headers: { 'Content-Type': 'text/plain' } });
 	}
 
 	// Cross-origin: cache-first when the asset is one we precached (CDN
