@@ -41,6 +41,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./packs/index.html',
 	'./strategy-guide.html',
 	'./static/data/spell-charts.json',
+	'./static/data/spell-charts-engine.json',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',

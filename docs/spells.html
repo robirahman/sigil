@@ -57,6 +57,16 @@
 			text-decoration: none;
 		}
 		.jump a:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		/* Players' survey vs engine measurements */
+		.source-toggle { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px; margin: -8px 0 24px; color: var(--color-text-muted); font-size: 0.95em; }
+		.source-toggle .seg { display: inline-flex; border: 2px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+		.source-toggle button {
+			font: 0.95em 'Arvo', serif; padding: 6px 14px; border: 0; cursor: pointer;
+			background: var(--color-surface-raised); color: var(--color-text-warm);
+		}
+		.source-toggle button + button { border-left: 2px solid var(--color-border); }
+		.source-toggle button:hover { background: var(--color-surface-hover); }
+		.source-toggle button[aria-pressed="true"] { background: var(--color-btn-menu, #34506e); color: #fff; }
 		.chart-section {
 			background: var(--color-surface);
 			border: 2px solid var(--color-border);
@@ -164,7 +174,7 @@
 	<div class="main">
 		<div class="spells-page">
 			<h2>Spells</h2>
-			<p class="intro">How the 39 official spells stack up: a tier list, which spells beat which head to head, and which work well together. These are the developers' judgements from play, not statistics.</p>
+			<p class="intro" id="intro">How the official spells stack up: a tier list, which spells beat which head to head, and which work well together.</p>
 			<nav class="jump" aria-label="Sections">
 				<a href="spells/">Spells Directory</a>
 				<a href="packs/">Spell Packs</a>
@@ -172,18 +182,25 @@
 				<a href="#matchups">Matchups</a>
 				<a href="#synergies">Synergies</a>
 			</nav>
+			<div class="source-toggle" role="group" aria-label="Whose ratings to show">
+				<span>Ratings from</span>
+				<span class="seg">
+					<button type="button" data-source="players" aria-pressed="true">Players</button>
+					<button type="button" data-source="engine" aria-pressed="false">Engine</button>
+				</span>
+			</div>
 
 			<section class="chart-section" id="tiers">
 				<h3>Tier list</h3>
 				<div class="sec-links">Also: <a href="#matchups">Matchups</a> · <a href="#synergies">Synergies</a></div>
-				<p class="note">Within a tier, spells run best to worst from left to right. Hover a card for its text; click one to highlight it in the charts below.</p>
+				<p class="note" id="tier-note"></p>
 				<div id="tier-list"><div class="msg">Loading…</div></div>
 			</section>
 
 			<section class="chart-section" id="matchups">
 				<h3>Matchups</h3>
 				<div class="sec-links">Also: <a href="#tiers">Tier list</a> · <a href="#synergies">Synergies</a></div>
-				<p class="note">Read each row against each column: if you build toward the row spell and your opponent toward the column spell, who is favoured? Blank cells are pairs we have not rated yet.</p>
+				<p class="note" id="matchup-note"></p>
 				<div class="chart-controls"><label>Order <select class="order">
 					<option value="rank">tier rank</option>
 					<option value="type">type, then rank</option>
@@ -204,7 +221,7 @@
 			<section class="chart-section" id="synergies">
 				<h3>Synergies</h3>
 				<div class="sec-links">Also: <a href="#tiers">Tier list</a> · <a href="#matchups">Matchups</a></div>
-				<p class="note">Does holding both spells let you do something neither does alone? The chart is symmetric. Blank cells are pairs we have not rated yet.</p>
+				<p class="note" id="synergy-note"></p>
 				<div class="chart-controls"><label>Order <select class="order">
 					<option value="rank">tier rank</option>
 					<option value="type">type, then rank</option>
@@ -249,11 +266,36 @@
 	<script src="static/scripts/engine/constants.js"></script>
 	<script>
 	(() => {
-		// Data: tools/export_spell_charts_data.py writes this from the spell survey.
-		const DATA_URL = 'static/data/spell-charts.json';
+		// Two sources in one schema. Players: tools/export_spell_charts_data.py writes it
+		// from the spell survey. Engine: engine/harness/fit_spell_values.py (report
+		// engine/reports/2026-10-spell-values.md); its spells, matchups and synergies also
+		// carry the measured values in percentage points of win probability.
+		const REPORT_URL = 'https://github.com/robirahman/sigil/blob/main/engine/reports/2026-10-spell-values.md';
+		const SOURCES = {
+			players: {
+				url: 'static/data/spell-charts.json',
+				intro: n => `How the ${n} official spells stack up: a tier list, which spells beat which head to head, and which work well together. These are the developers' judgements from play, not statistics.`,
+				tierNote: 'Within a tier, spells run best to worst from left to right. Hover a card for its text; click one to highlight it in the charts below.',
+				matchNote: 'Read each row against each column: if you build toward the row spell and your opponent toward the column spell, who is favoured? Blank cells are pairs we have not rated yet.',
+				synNote: 'Does holding both spells let you do something neither does alone? The chart is symmetric. Blank cells are pairs we have not rated yet.',
+				method: D => `The order comes from ${D.comparisons} head-to-head "which spell is better?" judgements, fitted with a Bradley-Terry model. `
+					+ `${D.matchups.length} of the ${pairPairs()} spell pairs have a matchup rating and ${D.synergies.length} have a synergy rating so far. `
+					+ `Last updated ${(D.surveyExportedAt || '').slice(0, 10)}.`,
+			},
+			engine: {
+				url: 'static/data/spell-charts-engine.json',
+				intro: n => `How the ${n} official spells stack up for the Sigil engine. It measures each spell by how much a player's chance of winning drops when that player cannot use it, in ${D.positions.toLocaleString()} positions from its own games.`,
+				tierNote: 'Spells run best to worst, left to right and down the tiers. Hover a card for its measured value; click one to highlight it in the charts below.',
+				matchNote: 'Each cell is the row spell\'s value to one player minus the column spell\'s value to the other. A side is favoured when the difference is at least 1 point of win probability and its 95% interval excludes zero; every other pair reads even. Hover a cell for the measured difference.',
+				synNote: 'The engine found no pair whose combined value differs measurably from the two spells\' separate values, so every cell reads none. Its search looks only a few moves ahead, which rarely shows two spells combining. Hover a cell for the measured difference.',
+				method: D => `Measured by the engine (eval nnue_spell4, depth 4) on ${D.positions.toLocaleString()} positions from ${D.games.toLocaleString()} self-play games in which every official spell was drawn equally often. `
+					+ `Values are percentage points of win probability with 95% intervals bootstrapped over games. `,
+			},
+		};
+		const pairPairs = () => names.length * (names.length - 1) / 2;
 		const TIER_COLORS = { S: '#ff7f7f', A: '#ffbf7f', B: '#ffdf7f', C: '#ffff7f', D: '#bfff7f', F: '#7fff7f', '?': '#bbbbbb' };
 		const TYPE_ORDER = ['ritual', 'sorcery', 'charm'];
-		const PACK_ORDER = [...CORE_SUBPACK_KEYS, 'core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+		const PACK_ORDER = [...CORE_SUBPACK_KEYS, 'core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'tectonic', 'providence'];
 		const SUBPACK_OF = {};
 		for (const [k, v] of Object.entries(CORE_SUBPACKS)) for (const n of [...v.rituals, ...v.sorceries, ...v.charms]) SUBPACK_OF[n] = k;
 		const MATCH_CLS = { 2: 'pp', 1: 'p', 0: 'e', '-1': 'n', '-2': 'nn' };
@@ -266,11 +308,15 @@
 		const art = n => `static/images/spells/art_only/${n}.webp`;
 		const BOARD = { empty: 'Better on an emptier board.', crowded: 'Better on a crowded board.' };
 
-		let D = null, names = [], tierOf = {}, match = {}, syn = {}, focus = null;
+		let D = null, names = [], tierOf = {}, match = {}, syn = {}, matchPP = {}, synPP = {}, focus = null;
+		let source = 'players';
+		const fmtPP = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
 
 		function describe(n) {
 			const s = D.spells[n] || {};
 			const lines = [`${s.rank ? '#' + s.rank + ' ' : ''}${pretty(n)} · ${s.type || ''} · ${packDisplayName(SUBPACK_OF[n] || s.pack)}`];
+			if (typeof s.value === 'number') lines.push(`Engine value: ${fmtPP(s.value)} points of win probability`
+				+ (s.value95 ? ` [${fmtPP(s.value95[0])}, ${fmtPP(s.value95[1])}]` : '') + '.');
 			if (SPELL_TEXTS[n]) lines.push(SPELL_TEXTS[n]);
 			if (BOARD[s.board]) lines.push(BOARD[s.board]);
 			return lines.join('\n');
@@ -327,9 +373,11 @@
 			if (r === c) return `${rLink} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} Page &rarr;</a>`;
 			const cLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(c)}.html"><b>${pretty(c)}</b></a>`;
 			const k = r + '|' + c, m = match[k], s = syn[k];
-			const mTxt = m === undefined ? 'matchup not rated yet' : m === 0 ? 'even matchup'
-				: m > 0 ? `<b>${pretty(r)}</b> favoured (${m > 1 ? '++' : '+'})` : `<b>${pretty(c)}</b> favoured (${m < -1 ? '++' : '+'})`;
-			const sTxt = s === undefined ? 'synergy not rated yet' : SYN_WORDS[s] + (s ? ` (${SYM[MATCH_CLS[s]]})` : '');
+			const mpp = matchPP[k] === undefined ? '' : ` · ${fmtPP(matchPP[k])} points for ${pretty(r)}`;
+			const spp = synPP[k] === undefined ? '' : ` · ${fmtPP(synPP[k])} points`;
+			const mTxt = (m === undefined ? 'matchup not rated yet' : m === 0 ? 'even matchup'
+				: m > 0 ? `<b>${pretty(r)}</b> favoured (${m > 1 ? '++' : '+'})` : `<b>${pretty(c)}</b> favoured (${m < -1 ? '++' : '+'})`) + mpp;
+			const sTxt = (s === undefined ? 'synergy not rated yet' : SYN_WORDS[s] + (s ? ` (${SYM[MATCH_CLS[s]]})` : '')) + spp;
 			return kind === 'match'
 				? `${rLink} vs ${cLink}: ${mTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} &rarr;</a><div class="t">Held together: ${sTxt}.</div>`
 				: `${rLink} + ${cLink}: ${sTxt} · <a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(r)}.html">View ${pretty(r)} &rarr;</a><div class="t">Head to head: ${mTxt.replace(/<\/?b>/g, '')}.</div>`;
@@ -362,30 +410,66 @@
 		}
 		function setFocus(n) { focus = focus === n ? null : n; applyFocus(); }
 
-		fetch(DATA_URL).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(data => {
+		const cache = {};
+		const load = src => cache[src] || (cache[src] = fetch(SOURCES[src].url)
+			.then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+			.catch(err => { delete cache[src]; throw err; }));
+		const selects = document.querySelectorAll('select.order');
+		const draw = () => {
+			renderMatrix('matchup-chart', match, 'match', selects[0].value);
+			renderMatrix('synergy-chart', syn, 'syn', selects[1].value);
+		};
+
+		function use(data) {
+			const S = SOURCES[source];
 			D = data;
 			names = Object.keys(D.spells);
+			tierOf = {}; match = {}; syn = {}; matchPP = {}; synPP = {};
 			for (const t of D.tiers) for (const n of t.spells) tierOf[n] = t.key;
-			for (const [a, b, v] of D.matchups) { match[a + '|' + b] = v; match[b + '|' + a] = -v; }
-			for (const [a, b, v] of D.synergies) { syn[a + '|' + b] = v; syn[b + '|' + a] = v; }
+			for (const [a, b, v, pp] of D.matchups) {
+				match[a + '|' + b] = v; match[b + '|' + a] = -v;
+				if (typeof pp === 'number') { matchPP[a + '|' + b] = pp; matchPP[b + '|' + a] = -pp; }
+			}
+			for (const [a, b, v, pp] of D.synergies) {
+				syn[a + '|' + b] = v; syn[b + '|' + a] = v;
+				if (typeof pp === 'number') { synPP[a + '|' + b] = pp; synPP[b + '|' + a] = pp; }
+			}
+			el('intro').textContent = S.intro(names.length);
+			el('tier-note').textContent = S.tierNote;
+			el('matchup-note').textContent = S.matchNote;
+			el('synergy-note').textContent = S.synNote;
 			renderTiers();
-			const selects = document.querySelectorAll('select.order');
-			const draw = () => {
-				renderMatrix('matchup-chart', match, 'match', selects[0].value);
-				renderMatrix('synergy-chart', syn, 'syn', selects[1].value);
-			};
-			selects.forEach(s => s.addEventListener('change', draw));
 			draw();
-			el('tier-list').addEventListener('click', e => { const t = e.target.closest('.tile'); if (t) setFocus(t.dataset.spell); });
-			wire('matchup-chart', 'matchup-info', 'match');
-			wire('synergy-chart', 'synergy-info', 'syn');
-			const pairs = names.length * (names.length - 1) / 2;
-			el('method').textContent = `The order comes from ${D.comparisons} head-to-head "which spell is better?" judgements, fitted with a Bradley-Terry model. `
-				+ `${D.matchups.length} of the ${pairs} spell pairs have a matchup rating and ${D.synergies.length} have a synergy rating so far. `
-				+ `Last updated ${(D.surveyExportedAt || '').slice(0, 10)}.`;
-		}).catch(err => {
-			for (const id of ['tier-list', 'matchup-chart', 'synergy-chart']) el(id).innerHTML = `<div class="msg">Could not load the spell charts (${esc(err.message)}).</div>`;
+			el('method').textContent = S.method(D);
+			if (source === 'engine') el('method').insertAdjacentHTML('beforeend', `<a href="${REPORT_URL}" style="color:var(--color-accent)">Full report</a>.`);
+		}
+
+		function setSource(src, remember) {
+			if (!SOURCES[src]) src = 'players';
+			source = src;
+			document.querySelectorAll('.source-toggle button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.source === src)));
+			if (remember) {
+				try { localStorage.setItem('sigil.spellChartsSource', src); } catch (e) { /* private mode */ }
+				const u = new URL(location.href);
+				if (src === 'players') u.searchParams.delete('ratings'); else u.searchParams.set('ratings', src);
+				history.replaceState(null, '', u);
+			}
+			return load(src).then(data => { if (source === src) use(data); }).catch(err => {
+				for (const id of ['tier-list', 'matchup-chart', 'synergy-chart']) el(id).innerHTML = `<div class="msg">Could not load the spell charts (${esc(err.message)}).</div>`;
+			});
+		}
+
+		selects.forEach(s => s.addEventListener('change', () => { if (D) draw(); }));
+		el('tier-list').addEventListener('click', e => { const t = e.target.closest('.tile'); if (t) setFocus(t.dataset.spell); });
+		wire('matchup-chart', 'matchup-info', 'match');
+		wire('synergy-chart', 'synergy-info', 'syn');
+		document.querySelector('.source-toggle').addEventListener('click', e => {
+			const b = e.target.closest('button[data-source]');
+			if (b && b.dataset.source !== source) setSource(b.dataset.source, true);
 		});
+		let initial = new URLSearchParams(location.search).get('ratings');
+		if (!initial) { try { initial = localStorage.getItem('sigil.spellChartsSource'); } catch (e) { /* private mode */ } }
+		setSource(initial || 'players', false);
 	})();
 	</script>
 
