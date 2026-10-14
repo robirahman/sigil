@@ -53,6 +53,19 @@ move. 1 stone = 100 centistones (cs).
    two it encodes better than a linear read of the board. Its most influential units track
    game phase, enemy stones on 3-node sigils, mobility and which colour is to move.
 
+6. **The engine plays faster and sharper than humans.**
+   * It dashes on 36% of turns, against 15% for humans, and on 60% of turns when one
+     two-point swing from winning.
+   * It casts the movement charms (Splash, Slash, Charge, Lurk, Surge, Gust) 3-35× as often
+     as humans.
+   * Humans favour Corrupt, Scatter, Erupt, Harvest and Blossom.
+   * Red wins 54.9% of equal-strength games.
+7. **Humans lose games in the middle and late game, on dashes and casts.**
+   * A confirmed mistake (at least 1 stone, still there at depth 6) happens on 13% of human
+     turns: 3% early, 23-28% later, 26% of dash turns.
+   * Rating barely changes this rate.
+   * 28% of what depth 5 calls a mistake is really the engine's blind spot.
+
 ## 1. The hand evaluation in plain units (`interp_hand_eval.py`)
 
 Each part of the shipped evaluation, using the shipped weights read with `se.weights_json`.
@@ -172,7 +185,77 @@ when the opponent does; cs.
 
 ## 4. How the engine plays (`interp_behaviour.py`)
 
-PENDING_E4
+**The v31 engine's own games** (3,470 games, played for this report on Spot c3d-highcpu-90 VMs):
+* fixed depth 5, `nnue_spell4`, no exploration turns and no random plies;
+* fresh draws, two thirds in the competitive variant.
+
+They are compared with the human side of 1,635 recorded games. Only 13 of those are human
+against human; the rest are against our AI tiers. Data: `e4_behaviour_v31.json`.
+
+**Who wins and how games end**
+
+| | Engine against itself | Humans |
+|---|---|---|
+| Red wins | **54.9%** [53.2, 56.6] (standard 55.0, competitive 54.8) | the same humans win 3.6 points more as red than as blue against the same AI [0.4, 6.9] |
+| Game length, turns | mean 33.9, median 32 | mean 28.1, median 26 |
+| Ended by the sixth spell | 16.9% | 6.4% |
+
+Moving first is worth about 5 points of win rate, despite blue's +1 token. The rest end on the
+score lead.
+
+**Casting and dashing**
+
+| | Engine | Humans |
+|---|---|---|
+| Turns with a cast | 30% | 21% |
+| Turns with a cast, when a spell is castable at the start of the turn | 41% | 32% (29% under 1300 Elo → 36% at 1450+) |
+| Turns with a dash | 36% | 15% |
+
+**When one two-point swing from winning (lead +1)**, both go for it, but the engine much harder:
+
+| | Engine | Humans |
+|---|---|---|
+| Dashes at lead +1 | **60%** of turns | 27% |
+| Casts at lead +1 | 43% | 35% |
+| Dashes when even | 37% | 14% |
+
+**Which spells each side uses**, in casts per 10 of the holder's turns:
+* **The engine leans on the movement charms:**
+  * Gust 0.32 against 0.01: humans almost never cast it.
+  * Splash 1.39 against 0.37, and Slash 1.09 against 0.32.
+  * Charge, Lurk and Surge about 2.8×.
+  * Torrent, Tsunami and Decay about 2×.
+* **Humans cast the slow, big spells more:**
+  * Corrupt 0.27 against 0.10, Scatter 0.74 against 0.31, Erupt 0.16 against 0.07.
+  * Harvest and Blossom about 2×.
+* **Holding seals:**
+  * Humans keep Seal of Wind charged on 24% of their turns, the engine on 10%; for Seal of
+    Lightning 12% against 6%.
+  * The engine holds Seal of Stone, Seal of Spring and Seal of Summer longer (16-17% against
+    11%).
+
+**Openings**
+* **Competitive, first stone:**
+
+  | Node | Engine | Humans |
+  |---|---|---|
+  | 3-node sigil | 38% | 38% |
+  | 1-node sigil (charm) | **29%** | 9% |
+  | 5-node sigil | 18% | **43%** |
+  | Mana node | 14% | 10% |
+
+* **Competitive, the engine's second stone:** a 1-node sigil 30% of the time, against 4.5%
+  for humans.
+* **Standard opening, first move:** the engine plays a2 60% and a11 40%; humans the reverse,
+  a11 59% and a2 40%.
+* These are depth-5 choices with the opening selector off: candidates for an arena, not advice.
+
+**Not measured:**
+* "Castable at the start of the turn" stands in for "could have cast".
+* Sacrifices other than dashes, and per-rating openings.
+
+The round-4 games (v29, with 8% random plies) give the same picture. There the random plies
+decided most games, which is why this section uses fresh v31 games.
 
 ## 5. Where the net overrules the hand evaluation (`interp_net_overrules.py`)
 
@@ -231,7 +314,7 @@ the correction).
 | 5-node and 1-node sigil stones, castable charms or 3-node spells, stones with no free neighbour | — | fail test 1 | — | not run |
 
 **Verdict: no candidate improves play.**
-* **Colour** is a true fact about value: red wins about 54% at equal strength (section 4).
+* **Colour** is a true fact about value: red wins 54.9% at equal strength (section 4).
   But it is the same for every leaf of one search, so it cannot change a move.
 * **The others predict who is winning more than they guide what to do.** Mobility and control
   are what a winning position looks like. Paying for them in the search buys nothing and costs
@@ -284,7 +367,48 @@ bits plus the side to move) and with a net whose weights are shuffled.
 
 ## 9. Human mistakes (`interp_mistakes.py`)
 
-PENDING_E9
+**Method.** Every human turn was scored with the shipped search at depth 5, using the
+game-review walk: last position first, one table per game. A turn is a **mistake** if it loses
+at least 1 stone and a **blunder** if it loses at least 3. Every mistake was then re-searched at
+depth 6, the position before and after; it counts as **confirmed** only if it still loses at
+least a stone. That was 4,270 of 4,277 turns; the 7 slowest cases were dropped. Data:
+`e9_cases.json`, `e9_report.json`.
+
+**Sample.** 23,310 human turns.
+
+| Turns | Mistake (depth 5) | Blunder (depth 5) | Confirmed at depth 6 |
+|---|---|---|---|
+| all | 18.3% | 6.8% | **13.2%** |
+| dash, no cast | 33.5% | 14.6% | **26.2%** |
+| with a cast | 24.2% | 9.9% | **18.7%** |
+| placement / move only | 14.5% | 4.7% | **9.9%** |
+| early (≤12 stones on the board) | 5.2% | 0.8% | **2.7%** |
+| middle (13-20) | 30.9% | 11.0% | **22.7%** |
+| late (21+) | 34.2% | 19.5% | **28.2%** |
+| rated under 1300 | 19.2% | 7.3% | 14.2% |
+| rated 1300-1449 | 18.8% | 6.9% | 13.6% |
+| rated 1450+ | 17.1% | 6.5% | 12.2% |
+
+* **28% of depth-5 "mistakes" vanish at depth 6.** In those cases the engine's own horizon was
+  wrong, and the human move was fine. This is the same blind spot the surprise audit found:
+  the engine misses many human dashes.
+* **Openings are safe; games are lost in the middle and late game.** Confirmed mistakes go
+  from 3% of early turns to 23-28% later.
+* **Dashes are the riskiest turns:** a quarter of human dashes lose a stone or more. Casts
+  come next.
+* **Rating barely changes the rate:** 14% against 12%. Stronger players err about as often
+  per turn.
+* **The riskiest casts** (share of casts that are confirmed mistakes, spells with at least 50 human casts):
+  Comet 42% (124 casts), Meteor 28%, Slash 25%, Carnage 21%, Grow, Flourish and Hail Storm 20%.
+  Gather (9%), Harvest (10%) and Splash (11%) are the safest.
+* **Missed casts.** On confirmed mistakes, the engine's preferred turn most often cast a spell
+  the human did not: Carnage (181), Slash (156), Surge (144), Fireblast (123), Sprout (109),
+  then Grow, Hail Storm, Starfall and Flourish (about 60 each).
+
+**What players can take from this:**
+* The engine's dashes at a +1 lead (section 4) and its use of Slash, Surge and the movement
+  charms are where human games diverge from it most, and where humans most often lose stones.
+* Comet and Meteor casts are the ones most worth double-checking.
 
 ## Caveats
 

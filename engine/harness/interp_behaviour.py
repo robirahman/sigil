@@ -722,7 +722,7 @@ def cmd_analyse(a):
                     'human_variants': dict(Counter(g['variant'] for g in H)),
                     'selfplay_variants': dict(Counter(g['variant'] for g in S)),
                     'ai_opponents': dict(Counter(p for g in hai for p in g['players'] if p != 'human')),
-                    'boot': a.boot, 'engine': ENGINE}}
+                    'boot': a.boot, 'engine': a.engine or ENGINE}}
     print('games', flush=True)
     out['games'] = {'selfplay': game_stats(S, bS, 'selfplay'), 'human_all': game_stats(H, bH, 'human')}
     if hh:
@@ -768,6 +768,7 @@ def main():
     p = sub.add_parser('extract-human'); p.add_argument('lines'); p.add_argument('raw'); p.add_argument('out')
     p = sub.add_parser('analyse'); p.add_argument('selfplay'); p.add_argument('human'); p.add_argument('out')
     p.add_argument('--boot', type=int, default=400)
+    p.add_argument('--engine', default='', help='describe the self-play engine (default: round 4)')
     a = ap.parse_args()
     {'extract-selfplay': cmd_extract_selfplay, 'extract-human': cmd_extract_human,
      'analyse': cmd_analyse}[a.cmd](a)
