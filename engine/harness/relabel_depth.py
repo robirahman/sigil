@@ -65,6 +65,13 @@ def main():
         open(tmp, 'wb').write(_fetch(path))
         z = np.load(tmp)
         out = {k: z[k] for k in KEEP}
+        # Games started from a recorded human position (kind 2, start_ply > 0) were
+        # searched with the human prefix as repetition history, which the chunk does
+        # not hold: drop them rather than relabel without it (PR #23 review).
+        if 'start_ply' in z.files:
+            keep = ~((z['kind'] == 2) & (z['start_ply'] > 0))
+            out = {k: v[keep] for k, v in out.items()}
+            z = {**{k: z[k] for k in z.files}, 'score': z['score'][keep]}
         scores = np.zeros(len(out['sfn']), np.int32)
         hist, last_game = [], None
         for i, sfn in enumerate(out['sfn']):

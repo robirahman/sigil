@@ -54,7 +54,7 @@ move. 1 stone = 100 centistones (cs).
    game phase, enemy stones on 3-node sigils, mobility and which colour is to move.
 
 6. **The engine casts more and leans on different spells.**
-   * It casts on 30% of turns, humans on 21%. It dashes only a little more often (19% of turns
+   * It casts on 30% of turns, humans on 20%. It dashes only a little more often (19% of turns
      against 15%), and when one two-point swing from winning both dash more (31% against 27%).
    * It casts the movement charms (Splash, Slash, Charge, Lurk, Surge, Gust) 2.6-35× as often
      as humans.
@@ -213,7 +213,7 @@ score lead.
 
 | | Engine | Humans |
 |---|---|---|
-| Turns with a cast | 30% | 21% |
+| Turns with a cast | 30% | 20% |
 | Turns with a cast, when a spell is castable at the start of the turn | 41% | 32% (29% under 1300 Elo → 36% at 1450+) |
 | Turns with a dash | 19% | 15% |
 
@@ -221,7 +221,7 @@ score lead.
 
 | | Engine | Humans |
 |---|---|---|
-| Casts at lead +1 | 43% | 35% |
+| Turns with a cast at lead +1 | 42% | 35% |
 | Dashes at lead +1 | 31% | 27% |
 | Dashes when even | 19% | 14% |
 
@@ -412,7 +412,7 @@ timeout are left out: their final position is not a finished board (PR #23 revie
   per turn.
 * **The riskiest casts** (share of casts that are confirmed mistakes, spells with at least 50 human casts):
   Comet 42% (124 casts), Meteor 28%, Slash 25%, Carnage 21%, Grow, Flourish and Hail Storm 20%.
-  Gather (9%), Harvest (10%) and Splash (11%) are the safest.
+  Gather and Harvest (10%) and Splash (11%) are the safest.
 * **Missed casts.** On confirmed mistakes, the engine's preferred turn most often cast a spell
   the human did not: Carnage (181), Slash (156), Surge (144), Fireblast (123), Sprout (109),
   then Grow, Hail Storm, Starfall and Flourish (about 60 each).

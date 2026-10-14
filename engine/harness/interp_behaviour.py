@@ -570,7 +570,7 @@ def turn_stats(games, boot):
                 DK[gi, k] += 1; D[gi, k] += dash
             if casts is None:
                 continue
-            T[gi, k] += 1; C[gi, k] += len(casts)
+            T[gi, k] += 1; C[gi, k] += bool(casts)   # turns with a cast, not cast actions
             if castable:
                 AV[gi, k] += 1
                 AVC[gi, k] += any(x in castable for x in casts)

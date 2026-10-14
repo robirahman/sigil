@@ -103,8 +103,8 @@ def main():
             buf['kind'].append(int(var == 'competitive'))
             buf['full'].append(b.full_features(mover)); buf['score'].append(int(r['score']))
             kept += 1
-            if len(buf['sfn']) >= a.per_chunk:
-                flush()
+        if len(buf['sfn']) >= a.per_chunk:
+            flush()                    # whole games only: repetition history stays in one chunk
         if kept:
             stats['games'] += 1; stats['positions'] += kept
         else:

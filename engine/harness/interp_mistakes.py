@@ -28,6 +28,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 MATE_V = 20.0
+SEAL_OF_DESTRUCTION = 36   # spells_meta id
 
 
 def _J(x):
@@ -53,7 +54,13 @@ def board_over(sfn):
     if b.gameover:
         return True
     red, blue = b.total[0] + b.bank[0], b.total[1] + b.bank[1]
-    return red - blue >= 4 or blue - red >= 2 or max(b.spell_counter) >= 6
+    if red - blue >= 4 or blue - red >= 2 or max(b.spell_counter) >= 6:
+        return True
+    # Seal of Destruction: "if filled at the start of your turn, you lose", which
+    # `update` (from_sfn) does not apply (PR #23 review).
+    mover = 'red' if sfn.split()[1] == 'r' else 'blue'
+    ids = list(b.spell_ids())
+    return any(ids[p - 1] == SEAL_OF_DESTRUCTION for p in b.charged(mover))   # charged() is 1-based
 
 
 def turn_actions(t):
@@ -179,7 +186,10 @@ def cmd_probe(a):
         if c['sfn_after'] is None:
             continue
         try:
-            vb, va = val(c['sfn'], c['mover']), val(c['sfn_after'], c['mover'])
+            vb = val(c['sfn'], c['mover'])
+            # A move that ends the game keeps its recorded result: from_sfn does not
+            # apply the score-lead, sixth-spell or Seal of Destruction endings.
+            va = 100 * c['v_after'] if c.get('terminal') and board_over(c['sfn_after']) else val(c['sfn_after'], c['mover'])
         except ValueError:
             continue
         print('MPROBE ' + json.dumps({'j': j, 'depth': depth, 'v_before': vb, 'v_after': va,
@@ -195,6 +205,12 @@ def cmd_report(a):
             if line.startswith('MPROBE '):
                 r = json.loads(line[7:]); deep[r['j']] = r
     T = d['turns']
+    # Probes logged before the fix searched a game-ending move's final board as an
+    # ordinary position; the recorded result replaces that value.
+    for j, r in deep.items():
+        c = T[j]
+        if c.get('terminal') and c.get('sfn_after') and board_over(c['sfn_after']):
+            r['loss_deep'] = round((r['v_before'] - 100 * c['v_after']) / 100, 3)
     # Cases flagged before the fix: a last turn valued by a resignation or timeout.
     drop = {j for j, c in enumerate(T) if c.get('terminal') and c.get('sfn_after') and not board_over(c['sfn_after'])}
     T = [dict(c, _skip=True) if j in drop else c for j, c in enumerate(T)]
