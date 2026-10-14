@@ -150,7 +150,8 @@ impl Net {
     /// `fold` with experiment-only spell access (`Board::access`): bit p of
     /// `use_rel[rel]` clear = the stones of relation `rel` (0 mine, 1 theirs, from the
     /// evaluating side) on slot p's sigil get the spell-blind row, as if that side
-    /// did not know the spell. All ones in real games.
+    /// did not know the spell; with `use_rel[0]` clear the draw term G[spell, p] is
+    /// dropped as well. All ones in real games.
     fn fold_masked(&self, spells: &[u8; 9], use_rel: [u16; 2]) -> Folded {
         let h = self.h;
         let mut rows = vec![0i32; 2 * N_NODES * h];
@@ -177,6 +178,9 @@ impl Net {
             for (p, &s) in spells.iter().enumerate() {
                 let s = s as usize;
                 if s >= NSP { continue; }
+                // G encodes the draw, not who holds what: an experiment that takes
+                // slot p from the evaluating side drops its term (PR #23 review).
+                if use_rel[0] >> p & 1 == 0 { continue; }
                 let gr = (s * 9 + p) * h;
                 for (d, &w) in v.iter_mut().zip(&self.g[gr..gr + h]) { *d += w as i32; }
             }

@@ -19,8 +19,9 @@ move's point of view (1 stone = 100 centistones):
   * exchange rates relative to an ordinary stone (a stone on a void node).
 
 Probes whose values are mate scores (|v| >= 4000 cs) are dropped for that
-valuation, and so is any probe that crosses the winning score lead (a finished
-game; interp_exchange.py skips them since the PR #23 review). 95% intervals come from a bootstrap over games.
+valuation, and so is any probe that crosses the winning score lead on material
+(stones plus Providence bank: a finished game) or adds a stone on a Fissure wall;
+interp_exchange.py skips both since the PR #23 review. 95% intervals come from a bootstrap over games.
 """
 import collections, glob, json, sys
 import numpy as np
@@ -38,6 +39,15 @@ for arm in range(3):
 SIGIL = [0x0000000003e, 0x0000007c000, 0x000f8000000, 0x00000000380, 0x00000700000,
          0x00e00000000, 0x00000000040, 0x00000080000, 0x00100000000]
 SLOT_OF = {n: p for p in range(9) for n in range(39) if SIGIL[p] >> n & 1}
+
+
+def bank_of(sfn, _cache={}):
+    """Providence banks (red, blue): they count in the score lead."""
+    if sfn not in _cache:
+        import sigil_engine as se
+        _cache.clear()
+        _cache[sfn] = tuple(se.Board.from_sfn(sfn).bank)
+    return _cache[sfn]
 
 
 def phase(total):
@@ -92,8 +102,12 @@ def main():
             ph = phase(d['total'])
             mover_i = 0 if d['mover'] == 'red' else 1
             own_charged = set(d['charged'][mover_i]); opp_charged = set(d['charged'][1 - mover_i])
-            nr, nb = len(d['red']), len(d['blue'])
+            bank = bank_of(d['sfn'])
+            nr, nb = len(d['red']) + bank[0], len(d['blue']) + bank[1]
+            walls = {i for i, c in enumerate(d['sfn'].split('/')[0]) if c == 'x'}
             for kind, n, v, ch in d['probes']:
+                if kind.startswith('add') and n in walls:
+                    continue                           # a Fissure wall is not an empty node
                 if kind != 'flip':
                     # Probes logged before interp_exchange.py skipped them: a change
                     # that crosses the winning score lead is a finished game.

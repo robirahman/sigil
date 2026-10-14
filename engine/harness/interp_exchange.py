@@ -24,7 +24,8 @@ Per position, the probes are, for the side to move ("own") and its opponent:
 Every probe is a legal board under the real rules: stones only, so mana, charges
 and the score lead are re-derived by `update`, exactly as play would derive them.
 A probe that would leave a side with no stones, or that crosses the winning score
-lead (red - blue >= 4, blue - red >= 2), is skipped: the game would be over.
+lead on material (stones plus bank; red - blue >= 4, blue - red >= 2), is skipped:
+the game would be over. Fissure walls are not empty nodes and get no add probe.
 The draw, counters, locks and bank are untouched.
 
 Each probe records, from the side to move's point of view, in centistones:
@@ -75,10 +76,16 @@ def flip_sfn(sfn):
 
 
 def lead_decided(n_red, n_blue):
-    """The score-lead win (red at red - blue >= 4, blue at blue - red >= 2, since blue
-    holds the +1 token). `update` only detects elimination, so a stone probe that
+    """The score-lead win on MATERIAL (stones plus any Providence bank, as
+    `Board::check_game_over`): red at red - blue >= 4, blue at blue - red >= 2, since
+    blue holds the +1 token. `update` only detects elimination, so a stone probe that
     crosses the threshold must be caught here: the game would already be over."""
     return n_red - n_blue >= 4 or n_blue - n_red >= 2
+
+
+def walls_of(sfn):
+    """Fissure walls ('x' in the SFN): destroyed nodes, never a place for a stone."""
+    return {i for i, ch in enumerate(sfn.split('/')[0]) if ch == 'x'}
 
 
 def values(sfn, depths, mover):
@@ -101,7 +108,9 @@ def probe(sfn, depths):
            'charged': [b.charged('red'), b.charged('blue')], 'mana': list(b.mana),
            'total': list(b.total), 'counter': list(b.spell_counter),
            'base': values(sfn, depths, mover), 'probes': []}
-    empty = [n for n in range(N_NODES) if n not in red and n not in blue]
+    walls = walls_of(sfn)
+    bank = list(b.bank)
+    empty = [n for n in range(N_NODES) if n not in red and n not in blue and n not in walls]
     plan = []
     for who, tag in ((own_i, 'own'), (1 - own_i, 'opp')):
         for n in side[who]:
@@ -116,7 +125,7 @@ def probe(sfn, depths):
             st[who].remove(n)
         else:
             st[who].append(n)
-        if lead_decided(len(st[0]), len(st[1])):
+        if lead_decided(len(st[0]) + bank[0], len(st[1]) + bank[1]):
             continue                           # past the winning lead: terminal
         bb = se.Board.from_sfn(sfn)
         bb.set_stones(st[0], st[1])
