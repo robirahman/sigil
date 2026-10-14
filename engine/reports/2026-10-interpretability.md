@@ -378,16 +378,17 @@ bits plus the side to move) and with a net whose weights are shuffled.
 game-review walk: last position first, one table per game. A turn is a **mistake** if it loses
 at least 1 stone and a **blunder** if it loses at least 3. Every mistake was then re-searched at
 depth 6, the position before and after; it counts as **confirmed** only if it still loses at
-least a stone. That was 4,270 of 4,277 turns; the 7 slowest cases were dropped. Data:
+least a stone. That was 4,267 of the 4,274 mistakes; the 7 slowest cases were dropped. Data:
 `e9_cases.json`, `e9_report.json`.
 
-**Sample.** 23,310 human turns.
+**Sample.** 23,298 human turns. Twelve last turns of games that ended by resignation or
+timeout are left out: their final position is not a finished board (PR #23 review).
 
 | Turns | Mistake (depth 5) | Blunder (depth 5) | Confirmed at depth 6 |
 |---|---|---|---|
 | all | 18.3% | 6.8% | **13.2%** |
-| dash, no cast | 33.5% | 14.6% | **26.2%** |
-| with a cast | 24.2% | 9.9% | **18.7%** |
+| dash, no cast | 33.6% | 14.7% | **26.3%** |
+| with a cast | 24.2% | 9.8% | **18.7%** |
 | placement / move only | 14.5% | 4.7% | **9.9%** |
 | early (≤12 stones on the board) | 5.2% | 0.8% | **2.7%** |
 | middle (13-20) | 30.9% | 11.0% | **22.7%** |

@@ -42,6 +42,20 @@ def red_value(row):
     return row.get('stones')
 
 
+def board_over(sfn):
+    """Whether a recorded final position is a finished game on the board: no stones
+    left for a side, or the winning score lead on material (Board::check_game_over)."""
+    import sigil_engine as se
+    try:
+        b = se.Board.from_sfn(sfn)
+    except ValueError:
+        return False
+    if b.gameover:
+        return True
+    red, blue = b.total[0] + b.bank[0], b.total[1] + b.bank[1]
+    return red - blue >= 4 or blue - red >= 2 or max(b.spell_counter) >= 6
+
+
 def turn_actions(t):
     acts = t.get('actions') if t else None
     if isinstance(acts, str):
@@ -108,8 +122,10 @@ def cmd_flag(a):
             if i + 1 < n:
                 vj = red_value(rj)
             else:
+                # The recorded winner is a board result only if the final position is
+                # terminal; a resignation or timeout leaves it ongoing (no value).
                 w = g.get('winner')
-                vj = None if w not in ('red', 'blue') else (MATE_V if w == 'red' else -MATE_V)
+                vj = (MATE_V if w == 'red' else -MATE_V) if w in ('red', 'blue') and board_over(pos[i + 1]) else None
             if vi is None or vj is None:
                 stats['missing eval'] += 1
                 continue
@@ -179,7 +195,11 @@ def cmd_report(a):
             if line.startswith('MPROBE '):
                 r = json.loads(line[7:]); deep[r['j']] = r
     T = d['turns']
-    res = {'turns': len(T), 'probed': len(deep)}
+    # Cases flagged before the fix: a last turn valued by a resignation or timeout.
+    drop = {j for j, c in enumerate(T) if c.get('terminal') and c.get('sfn_after') and not board_over(c['sfn_after'])}
+    T = [dict(c, _skip=True) if j in drop else c for j, c in enumerate(T)]
+    res = {'turns': len(T) - len(drop), 'probed': len([j for j in deep if j not in drop]),
+           'dropped_nonterminal_last_turns': len(drop)}
     def rate(sel, thr=1.0, confirmed=False):
         n = len(sel)
         if confirmed:
@@ -190,6 +210,8 @@ def cmd_report(a):
     allj = list(range(len(T)))
     groups = collections.defaultdict(list)
     for j, c in enumerate(T):
+        if c.get('_skip'):
+            continue
         groups['all'].append(j)
         groups[f"action: {c['label']}"].append(j)
         ph = 'early (<=12 stones)' if c['stones_on_board'] <= 12 else 'middle (13-20)' if c['stones_on_board'] <= 20 else 'late (21+)'
@@ -205,11 +227,13 @@ def cmd_report(a):
     missed = collections.Counter()
     for j in allj:
         c = T[j]
+        if c.get('_skip'):
+            continue
         if c['loss'] >= 1.0 and j in deep and deep[j]['loss_deep'] >= 1.0:
             for s in set(c['engine_casts']) - set(c['casts'] or []):
                 missed[s] += 1
     res['missed_casts_on_confirmed_mistakes'] = missed.most_common()
-    flagged = [j for j in allj if T[j]['loss'] >= 1.0 and j in deep]
+    flagged = [j for j in allj if T[j]['loss'] >= 1.0 and j in deep and not T[j].get('_skip')]
     res['engine_blind_spot_share'] = round(sum(deep[j]['loss_deep'] < 1.0 for j in flagged) / max(1, len(flagged)), 3)
     json.dump(res, open(out, 'w'), indent=1)
     print(f"{res['turns']} human turns, {res['probed']} re-searched; share of depth-5 mistakes NOT confirmed deeper: {res['engine_blind_spot_share']}")

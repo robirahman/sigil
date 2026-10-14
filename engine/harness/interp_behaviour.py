@@ -557,15 +557,19 @@ def turn_stats(games, boot):
     for gi, g in enumerate(games):
         for t in g['turns']:
             turn, c, meas, lead, castable, statics, casts, dash, new = t
-            if not meas or casts is None:
+            if not meas:
                 continue
             k = LEADS.index(lead_bucket(lead))
+            # Dashes and casts are known independently (a transcript can give the
+            # dash while its casts disagree with the counter): count each when known.
+            if dash is not None:
+                DK[gi, k] += 1; D[gi, k] += dash
+            if casts is None:
+                continue
             T[gi, k] += 1; C[gi, k] += len(casts)
             if castable:
                 AV[gi, k] += 1
                 AVC[gi, k] += any(x in castable for x in casts)
-            if dash is not None:
-                DK[gi, k] += 1; D[gi, k] += dash
         if g['winner'] is not None and all(t[2] for t in g['turns']):
             # weighted as in game_stats' pure_play_ipw (self-play only)
             w = (1 - RANDOM_PCT) ** (-g['n_turns']) if g['src'] == 'selfplay' else 1.0

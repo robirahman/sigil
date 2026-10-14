@@ -76,7 +76,8 @@ def concepts(b, c):
 def rows_selfplay(chunk_dir, per_chunk, rng):
     for path in sorted(glob.glob(os.path.join(chunk_dir, '*.npz'))):
         z = np.load(path)
-        rows = [i for i in range(len(z['sfn'])) if int(z['ply'][i]) >= 2]
+        # y == 255: the game hit the ply cap with no winner (selfplay_v2.py); no outcome.
+        rows = [i for i in range(len(z['sfn'])) if int(z['ply'][i]) >= 2 and int(z['y'][i]) != 255]
         for r in rng.sample(rows, min(per_chunk, len(rows))):
             yield 'selfplay', f"sp{int(z['game'][r])}", str(z['sfn'][r]), int(z['y'][r])
 

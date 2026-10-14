@@ -89,8 +89,9 @@ def decompose(b, c, W):
 def selfplay_rows(chunk_dir, per_chunk, rng):
     for path in sorted(glob.glob(os.path.join(chunk_dir, '*.npz'))):
         z = np.load(path)
+        # y == 255: the game hit the ply cap with no winner (selfplay_v2.py); no outcome.
         rows = [i for i in range(len(z['sfn']))
-                if int(z['ply'][i]) >= 2 and not (int(z['kind'][i]) == 1 and int(z['ply'][i]) <= 2)]
+                if int(z['ply'][i]) >= 2 and int(z['y'][i]) != 255 and not (int(z['kind'][i]) == 1 and int(z['ply'][i]) <= 2)]
         for r in rng.sample(rows, min(per_chunk, len(rows))):
             yield str(z['sfn'][r]), int(z['y'][r]), f"sp{int(z['game'][r])}"
 
