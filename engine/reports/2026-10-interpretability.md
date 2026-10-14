@@ -53,9 +53,9 @@ move. 1 stone = 100 centistones (cs).
    two it encodes better than a linear read of the board. Its most influential units track
    game phase, enemy stones on 3-node sigils, mobility and which colour is to move.
 
-6. **The engine plays faster and sharper than humans.**
-   * It dashes on 36% of turns, against 15% for humans, and on 60% of turns when one
-     two-point swing from winning.
+6. **The engine casts more and leans on different spells.**
+   * It casts on 30% of turns, humans on 21%. It dashes only a little more often (19% of turns
+     against 15%), and when one two-point swing from winning both dash more (31% against 27%).
    * It casts the movement charms (Splash, Slash, Charge, Lurk, Surge, Gust) 2.6-35× as often
      as humans.
    * Humans favour Corrupt, Scatter, Erupt, Harvest and Blossom.
@@ -215,15 +215,19 @@ score lead.
 |---|---|---|
 | Turns with a cast | 30% | 21% |
 | Turns with a cast, when a spell is castable at the start of the turn | 41% | 32% (29% under 1300 Elo → 36% at 1450+) |
-| Turns with a dash | 36% | 15% |
+| Turns with a dash | 19% | 15% |
 
-**When one two-point swing from winning (lead +1)**, both go for it, but the engine much harder:
+**When one two-point swing from winning (lead +1)**, both go for it:
 
 | | Engine | Humans |
 |---|---|---|
-| Dashes at lead +1 | **60%** of turns | 27% |
 | Casts at lead +1 | 43% | 35% |
-| Dashes when even | 37% | 14% |
+| Dashes at lead +1 | 31% | 27% |
+| Dashes when even | 19% | 14% |
+
+An earlier version of this table read the engine's dash count as a flag and counted most
+engine dashes twice, reporting 36% overall and 60% at a +1 lead. The PR #23 review caught it;
+the figures above are corrected.
 
 **Which spells each side uses**, in casts per 10 of the holder's turns. Human turns whose casts
 are unknown (no usable transcript, about 3%) are left out of these rates (PR #23 review).
@@ -414,8 +418,9 @@ timeout are left out: their final position is not a finished board (PR #23 revie
   then Grow, Hail Storm, Starfall and Flourish (about 60 each).
 
 **What players can take from this:**
-* The engine's dashes at a +1 lead (section 4) and its use of Slash, Surge and the movement
-  charms are where human games diverge from it most, and where humans most often lose stones.
+* The engine's use of Slash, Surge and the other movement charms (section 4) is where human
+  play diverges from it most. Those casts are also among the most often missed on human
+  mistakes.
 * Comet and Meteor casts are the ones most worth double-checking.
 
 ## Caveats

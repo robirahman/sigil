@@ -118,7 +118,11 @@ def side_of(sfn):
 def turn_start(b, c):
     """Castable spell ids (with or without a dash first) and charged statics."""
     col = 'red' if c == 0 else 'blue'
-    cast = set(b.castable(col, True, True, False)) | set(b.castable(col, True, True, True))
+    cast = set(b.castable(col, True, True, False))
+    # Post-dash spells (Surge) only when a dash is legal: `castable(post_dash=True)`
+    # assumes the dash happened (Board::can_dash, PR #23 review).
+    if len(b.dash_sacrificeable(col)) >= b.dash_cost(col):
+        cast |= set(b.castable(col, True, True, True))
     ids = b.spell_ids()
     statics = [ids[p - 1] for p in b.charged(col) if ids[p - 1] in STATICS]   # charged() is 1-based
     return sorted(cast), statics
@@ -139,7 +143,7 @@ def decode_chosen(packed, spells):
         if tag == 4:
             casts.append(int(spells[(v >> 3) & 0xF]))
         elif tag == 3:
-            dash = max(1, (v >> 28) & 3)
+            dash = 1                       # a dash happened; bits 28-29 hold its sacrifice count
     return casts, dash
 
 
