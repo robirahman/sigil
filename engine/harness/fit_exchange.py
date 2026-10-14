@@ -121,6 +121,8 @@ def main():
                     if abs(b0) >= MATE or abs(b1) >= MATE:
                         continue
                     if kind == 'flip':
+                        if any(d['spells'][p - 1] == 36 for p in d['charged'][1 - mover_i]):   # 1-based slots
+                            continue           # Seal of Destruction: the flipped side loses at once
                         add('move value', vk, b0 - b1, game)
                         add(f'move value | {ph}', vk, b0 - b1, game)
                         continue

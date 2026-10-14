@@ -346,7 +346,7 @@ LEADS = ['-2', '-1', '0', '+1', '+2']
 def spell_stats(games, boot):
     """Per-spell per-game sums for the statistics in the module docstring."""
     G = len(games)
-    keys = ['turns', 'casts', 'side_games', 'side_cast', 'avail', 'avail_cast', 'cast_known',
+    keys = ['turns', 'casts', 'casts_whole', 'side_games', 'side_cast', 'avail', 'avail_cast', 'cast_known',
             'same_turn', 'hold_sum', 'hold_n', 'runs', 'lapsed', 'at_end', 'static_turns',
             'static_held']
     A = {k: np.zeros((G, N_SPELLS)) for k in keys}
@@ -359,11 +359,17 @@ def spell_stats(games, boot):
             mt = [t for t in tt if t[2]]
             if not mt:
                 continue
+            # Cast rates count only turns whose casts are known (a human turn without a
+            # usable transcript has casts None), and a side-game enters the per-game
+            # rates only when every measured turn is known: an unknown turn is neither
+            # a cast nor a non-cast (PR #23 review).
+            known = [t for t in mt if t[6] is not None]
+            whole = len(known) == len(mt)
             for s in drawn:
                 if s >= N_SPELLS:
                     continue
-                A['side_games'][gi, s] += 1
-                A['turns'][gi, s] += len(mt)
+                A['side_games'][gi, s] += whole
+                A['turns'][gi, s] += len(known)
             firsts = {}
             run = {s: 0 for s in drawn}        # None = run tainted by an unmeasured turn
             for t in tt:
@@ -382,7 +388,9 @@ def spell_stats(games, boot):
                         run[s] = None if av else 0
                         continue
                     if s in cs:
-                        A['casts'][gi, s] += sum(1 for x in casts if x == s)
+                        k = sum(1 for x in casts if x == s)
+                        A['casts'][gi, s] += k
+                        A['casts_whole'][gi, s] += k * whole
                         A['cast_known'][gi, s] += 1
                         firsts.setdefault(s, turn)
                         if av:
@@ -406,7 +414,7 @@ def spell_stats(games, boot):
                 if s < N_SPELLS and s not in STATICS and run.get(s):
                     A['runs'][gi, s] += 1; A['at_end'][gi, s] += 1
             for s, tn in firsts.items():
-                A['side_cast'][gi, s] += 1
+                A['side_cast'][gi, s] += whole
                 first[s].append((tn, gi))
     out = {}
     for s in range(N_SPELLS):
@@ -419,7 +427,7 @@ def spell_stats(games, boot):
             row['held_share'] = fmt(boot.ratio(A['static_held'][:, s], A['static_turns'][:, s]))
             out[SPELL_NAMES[s]] = row; continue
         row['casts_per_10_turns'] = fmt(boot.ratio(A['casts'][:, s], A['turns'][:, s], 10))
-        row['casts_per_side_game'] = fmt(boot.ratio(A['casts'][:, s], A['side_games'][:, s]))
+        row['casts_per_side_game'] = fmt(boot.ratio(A['casts_whole'][:, s], A['side_games'][:, s]))
         row['p_cast'] = fmt(boot.ratio(A['side_cast'][:, s], A['side_games'][:, s]))
         row['avail_turns'] = int(A['avail'][:, s].sum())
         row['avail_cast'] = fmt(boot.ratio(A['avail_cast'][:, s], A['avail'][:, s]))

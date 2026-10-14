@@ -56,7 +56,7 @@ move. 1 stone = 100 centistones (cs).
 6. **The engine plays faster and sharper than humans.**
    * It dashes on 36% of turns, against 15% for humans, and on 60% of turns when one
      two-point swing from winning.
-   * It casts the movement charms (Splash, Slash, Charge, Lurk, Surge, Gust) 3-35× as often
+   * It casts the movement charms (Splash, Slash, Charge, Lurk, Surge, Gust) 2.6-35× as often
      as humans.
    * Humans favour Corrupt, Scatter, Erupt, Harvest and Blossom.
    * Red wins 54.9% of equal-strength games.
@@ -119,7 +119,8 @@ about 2 million probes. Every interval is within ±0.01 stones unless shown.
 
 Two kinds of probe are excluded (PR #23 review): those that cross the winning score lead on
 material (stones plus any Providence bank; red − blue ≥ 4 or blue − red ≥ 2), which are
-finished games, and stones added on a Fissure wall, which is not an empty node. Excluding
+finished games; stones added on a Fissure wall, which is not an empty node; and move-value
+probes that hand the move to a side holding a charged Seal of Destruction, which loses at once. Excluding
 them moved no figure by more than 0.02 stones.
 
 **Value of an own stone on each node, self-play, depth 4.** Each arm runs: node 1 = mana,
@@ -224,14 +225,15 @@ score lead.
 | Casts at lead +1 | 43% | 35% |
 | Dashes when even | 37% | 14% |
 
-**Which spells each side uses**, in casts per 10 of the holder's turns:
+**Which spells each side uses**, in casts per 10 of the holder's turns. Human turns whose casts
+are unknown (no usable transcript, about 3%) are left out of these rates (PR #23 review).
 * **The engine leans on the movement charms:**
   * Gust 0.32 against 0.01: humans almost never cast it.
-  * Splash 1.39 against 0.37, and Slash 1.09 against 0.32.
-  * Charge, Lurk and Surge about 2.8×.
-  * Torrent, Tsunami and Decay about 2×.
+  * Splash 1.39 against 0.39, and Slash 1.09 against 0.33.
+  * Charge, Lurk and Surge about 2.6-2.8×.
+  * Decay 2×, Tsunami and Torrent about 1.7-1.8×.
 * **Humans cast the slow, big spells more:**
-  * Corrupt 0.27 against 0.10, Scatter 0.74 against 0.31, Erupt 0.16 against 0.07.
+  * Corrupt 0.27 against 0.10, Scatter 0.78 against 0.31, Erupt 0.17 against 0.07.
   * Harvest and Blossom about 2×.
 * **Holding seals:**
   * Humans keep Seal of Wind charged on 24% of their turns, the engine on 10%; for Seal of

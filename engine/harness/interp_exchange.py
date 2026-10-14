@@ -50,6 +50,7 @@ EVAL = se.SHIPPED_EVAL
 HAND = 'tfit_spell_v2'
 AD = tuple(se.SHIPPED_ADAPTIVE)
 N_NODES = 39
+SEAL_OF_DESTRUCTION = 36   # spells_meta id
 
 
 def _fetch(path):
@@ -137,7 +138,12 @@ def probe(sfn, depths):
         res['probes'].append([kind, n, v, [bb.charged('red'), bb.charged('blue')]])
     fs = flip_sfn(sfn)
     fb = se.Board.from_sfn(fs)
-    if not fb.gameover:
+    # Seal of Destruction: "if filled at the start of your turn, you lose". Handing the
+    # move to a side that holds it charged is a finished game, which `update` (via
+    # from_sfn) does not detect (PR #23 review).
+    new_mover = 'blue' if mover == 'red' else 'red'
+    sod = SEAL_OF_DESTRUCTION in [res['spells'][p - 1] for p in fb.charged(new_mover)]   # charged() is 1-based
+    if not fb.gameover and not sod:
         # The other side to move, still scored from the ORIGINAL mover's POV.
         v = values(fs, depths, 'blue' if mover == 'red' else 'red')
         res['probes'].append(['flip', -1, {k: -x for k, x in v.items()}, res['charged']])
