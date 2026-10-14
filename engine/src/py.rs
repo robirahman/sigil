@@ -40,6 +40,17 @@ impl PyBoard {
 
     fn setup_initial(&mut self) { self.b.setup_initial(); }
 
+    /// Experiment-only spell access (spell_access_arena.py): bit p of `red` /
+    /// `blue` = that colour may use the spell in sigil slot p (0x1FF = all, the
+    /// real game). A slot a colour may not use never counts as charged for it.
+    fn set_access(&mut self, red: u16, blue: u16) {
+        self.b.access = [red & 0x1FF, blue & 0x1FF];
+        self.b.update();
+    }
+
+    #[getter]
+    fn access(&self) -> (u16, u16) { (self.b.access[0], self.b.access[1]) }
+
     fn set_stones(&mut self, red: Vec<u8>, blue: Vec<u8>) {
         self.b.stones = [0, 0];
         for i in red { self.b.stones[0] |= 1u64 << i; }
@@ -1401,6 +1412,27 @@ fn node_list_rank(sfn: &str, result_sfn: &str, remaining: i32, ply: usize)
     Ok((ix, w, pull, list.len()))
 }
 
+/// An eval preset's hand weights as JSON (interpretability, 2026-10): every
+/// `Weights` field plus the per-spell sigil table and the net's name, so analysis
+/// code reads the shipped numbers instead of restating them.
+#[pyfunction]
+fn weights_json(eval_name: &str) -> PyResult<String> {
+    let w = weights_by_name(eval_name)?;
+    let sp = match w.spell_sigil {
+        Some(t) => format!("{{\"stone\":{:?},\"charged\":{:?},\"mult\":{}}}", t.stone, t.charged, t.mult),
+        None => "null".to_string(),
+    };
+    let nn = match w.nn { Some(n) => format!("{:?}", n.name), None => "null".to_string() };
+    Ok(format!(
+        "{{\"lead\":{},\"near_threshold\":{},\"own_zero_liberty\":{},\"own_one_liberty\":{},\
+          \"enemy_zero_liberty\":{},\"enemy_one_liberty\":{},\"sigil_stone\":{},\"sigil_charged\":{},\
+          \"mana\":{},\"sixth_spell_danger\":{},\"control\":{},\"void_penalty\":{},\"pos_num\":{},\
+          \"pos_den\":{},\"tempo\":{},\"cast_pace\":{},\"mobility\":{},\"colour\":{},\"spell_sigil\":{},\"nn\":{}}}",
+        w.lead, w.near_threshold, w.own_zero_liberty, w.own_one_liberty, w.enemy_zero_liberty,
+        w.enemy_one_liberty, w.sigil_stone, w.sigil_charged, w.mana, w.sixth_spell_danger, w.control,
+        w.void_penalty, w.pos_num, w.pos_den, w.tempo, w.cast_pace, w.mobility, w.colour, sp, nn))
+}
+
 /// `search::even_offset` for a colour name and eval preset, in centistones:
 /// lets a caller normalise an already-recorded raw score without re-searching.
 #[pyfunction]
@@ -2439,6 +2471,7 @@ fn policy_diag(sfn: &str, result_sfn: &str, enum_cap: usize, max_turns: usize, w
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
     m.add_function(wrap_pyfunction!(policy_example, m)?)?;
+    m.add_function(wrap_pyfunction!(weights_json, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy_weights, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy_cost, m)?)?;

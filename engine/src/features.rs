@@ -66,8 +66,8 @@ impl Board {
             let mine = (m & self.mine(c)).count_ones() as i32;
             let theirs = (m & self.theirs(c)).count_ones() as i32;
             sigil_stone += mine * mine / n.max(1) - theirs * theirs / n.max(1);
-            if mine == n { sigil_charged += 1; }
-            if theirs == n { sigil_charged -= 1; }
+            if mine == n && self.can_use(c, p) { sigil_charged += 1; }
+            if theirs == n && self.can_use(c.other(), p) { sigil_charged -= 1; }
         }
 
         let mana = (self.mine(c) & MANA).count_ones() as i32
@@ -107,8 +107,9 @@ impl Board {
             let n = m.count_ones() as i32;
             let mine = (m & self.mine(c)).count_ones() as i32;
             let theirs = (m & self.theirs(c)).count_ones() as i32;
-            v[s] += mine * mine / n - theirs * theirs / n;
-            v[n_sp + s] += (mine == n) as i32 - (theirs == n) as i32;
+            let (ok, ok_o) = (self.can_use(c, p), self.can_use(c.other(), p));
+            v[s] += ok as i32 * (mine * mine / n) - ok_o as i32 * (theirs * theirs / n);
+            v[n_sp + s] += (mine == n && ok) as i32 - (theirs == n && ok_o) as i32;
         }
         v
     }

@@ -176,6 +176,16 @@ Scatter            engine lower    346     +0.51     +1.06    +0.55 [+0.39,+0.75
   game that holds it. That combines how often it matters with how much it matters when it does.
   The per-spell split is in the data file, as `samples`/values.
 * **Distribution:** the positions come from engine self-play, not human games.
+* **Leaf evaluation (found 2026-10-14, PR #23 review):** when these probes ran, `set_access`
+  stopped a disabled spell from being cast or giving its static anywhere in the search tree, but
+  the leaf evaluation still credited it:
+  * the hand evaluation's charged and per-spell sigil terms counted it;
+  * the net's spell rows still knew the spell.
+
+  A disabled spell charged near the horizon was therefore still valued as usable, so the
+  values here are biased toward zero, most for spells whose worth comes from charging them.
+  The leaf evaluation now honours the mask. The tier list and matchups should be re-measured
+  before they are treated as final.
 
 ## Files
 

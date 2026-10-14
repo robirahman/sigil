@@ -4623,3 +4623,55 @@ fn probe_key_ignores_side_and_turn_but_not_lock_or_counters() {
     assert_eq!(probe_key(a), probe_key(b));
     assert_ne!(probe_key(b), probe_key(c));
 }
+
+#[test]
+fn spell_access_mask_hides_a_charged_spell_from_one_colour() {
+    // Experiment-only access mask (spell_access_arena.py): a slot a colour may
+    // not use never counts as charged for it, so neither casts nor statics apply.
+    // Seal of Winter (static) in slot 6 and Fireblast in slot 3 (a sorcery).
+    let mut b = Board::new([0, 1, 2, 6, 5, 7, SEAL_OF_WINTER, 10, 11], Variant::Standard);
+    b.stones[0] = SIGIL[3] | SIGIL[6];
+    b.stones[1] = 1u64 << 38;
+    b.update();
+    assert!(b.is_charged(Color::Red, 3) && b.holds_charged(Color::Red, SEAL_OF_WINTER));
+    assert!(b.castable(Color::Red, true, true, false).contains(&6));
+    assert_eq!(b.access, [ACCESS_ALL, ACCESS_ALL]);
+    b.access[0] = ACCESS_ALL & !(1 << 3) & !(1 << 6);
+    b.update();
+    assert!(!b.is_charged(Color::Red, 3));
+    assert!(!b.holds_charged(Color::Red, SEAL_OF_WINTER));
+    assert!(!b.castable(Color::Red, true, true, false).contains(&6));
+    // Blue's access is untouched, and the mask survives a copy.
+    let c = b;
+    assert_eq!(c.access[1], ACCESS_ALL);
+    assert!(!c.is_charged(Color::Red, 3));
+}
+
+#[test]
+fn spell_access_mask_reaches_the_leaf_evaluation() {
+    // A counterfactual search (spell_value_probe.py) must not value a disabled spell
+    // at its horizon: the hand evaluation's charged and per-spell terms and the net's
+    // spell rows all honour `access` (PR #23 review).
+    let mut b = Board::new([0, 1, 2, 6, 5, 7, SEAL_OF_WINTER, 10, 11], Variant::Standard);
+    b.stones[0] = SIGIL[3] | SIGIL[6] | (1u64 << 30);
+    b.stones[1] = (1u64 << 38) | (1u64 << 37);
+    b.update();
+    let hand = crate::eval::weights_by_name("tfit_spell_v2").unwrap();
+    let full = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+    let (h0, f0) = (b.evaluate(Color::Red, &hand), b.evaluate(Color::Red, &full));
+    let feats0 = b.hand_features(Color::Red);
+    let mut d = b;
+    d.access[0] = ACCESS_ALL & !(1 << 3);
+    d.update();
+    let feats1 = d.hand_features(Color::Red);
+    // sigil_charged (index 7) drops by one; the evaluation still equals its dot product.
+    assert_eq!(feats1[7], feats0[7] - 1);
+    assert_ne!(d.evaluate(Color::Red, &hand), h0);
+    assert_ne!(d.evaluate(Color::Red, &full), f0);
+    // Blue's view of red's disabled slot changes too, and both colours agree in sign.
+    assert_eq!(d.evaluate(Color::Blue, &hand), -d.evaluate(Color::Red, &hand));
+    // Restoring access restores the evaluation exactly (and the net's cached fold).
+    d.access[0] = ACCESS_ALL;
+    d.update();
+    assert_eq!((d.evaluate(Color::Red, &hand), d.evaluate(Color::Red, &full)), (h0, f0));
+}
