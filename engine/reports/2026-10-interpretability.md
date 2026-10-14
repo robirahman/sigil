@@ -104,27 +104,30 @@ about 2 million probes. Every interval is within ±0.01 stones unless shown.
 
 | Probe | hand | full (static) | depth 2 | depth 4 | human, depth 4 |
 |---|---|---|---|---|---|
-| own stone | 1.01 | 1.30 | 1.38 | **1.49** | 1.65 |
-| enemy stone (cost to you) | 1.01 | 1.21 | 1.26 | **1.35** | 1.47 |
+| own stone | 1.01 | 1.30 | 1.38 | **1.49** | 1.64 |
+| enemy stone (cost to you) | 1.01 | 1.22 | 1.27 | **1.36** | 1.47 |
 | the move (same stones, you to move) | 1.00 | 1.58 | 1.64 | **1.73** | 1.96 |
-| own stone on a mana node | 1.01 | 1.47 | 1.58 | **1.71** | 1.82 |
-| own stone on a 3-node sigil | 1.01 | 1.40 | 1.50 | **1.62** | 1.73 |
+| own stone on a mana node | 1.01 | 1.48 | 1.58 | **1.71** | 1.81 |
+| own stone on a 3-node sigil | 1.01 | 1.41 | 1.51 | **1.63** | 1.73 |
 | own stone on a 1-node sigil | 1.01 | 1.40 | 1.49 | **1.62** | 1.75 |
 | own stone on a 5-node sigil | 1.01 | 1.25 | 1.32 | **1.42** | 1.62 |
 | own stone on a void node | 1.01 | 1.19 | 1.28 | **1.39** | 1.52 |
-| removing it breaks your charged sigil | 1.02 | 1.32 | 1.41 | **1.54** | 1.85 |
-| removing it breaks nothing | 1.01 | 1.26 | 1.31 | **1.41** | 1.67 |
+| removing it breaks your charged sigil | 1.02 | 1.34 | 1.41 | **1.54** | 1.84 |
+| removing it breaks nothing | 1.01 | 1.28 | 1.32 | **1.42** | 1.66 |
 | adding it completes your sigil | 1.01 | 1.41 | 1.50 | **1.63** | 1.76 |
 | adding it completes nothing | 1.01 | 1.29 | 1.38 | **1.49** | 1.62 |
+
+Probes that cross the winning score lead (red − blue ≥ 4 or blue − red ≥ 2) are finished games
+and are excluded (PR #23 review). Excluding them moved no figure by more than 0.01 stones.
 
 **Value of an own stone on each node, self-play, depth 4.** Each arm runs: node 1 = mana,
 2-6 = 5-node sigil, 7 = 1-node sigil, 8-10 = 3-node sigil, 11-13 = void.
 
 | arm | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| a | 1.69 | 1.42 | 1.37 | 1.42 | 1.33 | 1.38 | 1.61 | 1.64 | 1.57 | 1.65 | 1.48 | 1.31 | 1.26 |
-| b | 1.62 | 1.41 | 1.36 | 1.44 | 1.37 | 1.40 | 1.62 | 1.65 | 1.61 | 1.70 | 1.52 | 1.34 | 1.29 |
-| c | 1.79 | 1.53 | 1.45 | 1.46 | 1.41 | 1.48 | 1.62 | 1.62 | 1.56 | 1.63 | 1.66 | 1.37 | 1.31 |
+| a | 1.70 | 1.42 | 1.37 | 1.42 | 1.34 | 1.38 | 1.62 | 1.65 | 1.57 | 1.65 | 1.48 | 1.32 | 1.26 |
+| b | 1.63 | 1.41 | 1.36 | 1.44 | 1.37 | 1.40 | 1.62 | 1.65 | 1.61 | 1.70 | 1.52 | 1.34 | 1.29 |
+| c | 1.79 | 1.53 | 1.45 | 1.46 | 1.41 | 1.49 | 1.63 | 1.62 | 1.57 | 1.63 | 1.66 | 1.37 | 1.31 |
 
 **What the tables say:**
 * **Exchange rate.** An outer void stone (nodes 12-13) is the cheapest, at about 1.3 stones.
@@ -135,10 +138,10 @@ about 2 million probes. Every interval is within ±0.01 stones unless shown.
 * **Arm c is worth a little more everywhere.**
 * **The hand evaluation sees none of this.** It prices every stone at 1.01. The net adds about
   0.3 stones statically, and the search about another 0.2.
-* **Own stones count for more than enemy stones** (1.49 against 1.35): placing a stone gains
+* **Own stones count for more than enemy stones** (1.49 against 1.36): placing a stone gains
   more than removing an enemy stone.
 * **Charging a sigil** is worth about 0.13 stones on top of the stone itself.
-* **Stones gain value as the board fills** (1.46 early → 1.57 middle → 1.60 late). Human games
+* **Stones gain value as the board fills** (1.46 early → 1.58 middle → 1.61 late). Human games
   show bigger swings everywhere, because their positions are sharper.
 
 ## 3. What the net knows about each spell (`interp_spell_weights.py`)

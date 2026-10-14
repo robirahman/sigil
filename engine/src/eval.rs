@@ -595,8 +595,8 @@ impl Board {
                 let theirs = (m & self.theirs(c)).count_ones() as i32;
                 // Quadratic-ish: filling the last node of a sigil is what pays.
                 stone_feat += mine * mine / n.max(1) - theirs * theirs / n.max(1);
-                if mine == n { charged_feat += 1; }
-                if theirs == n { charged_feat -= 1; }
+                if mine == n && self.can_use(c, p) { charged_feat += 1; }
+                if theirs == n && self.can_use(c.other(), p) { charged_feat -= 1; }
             }
             pos += w.sigil_stone * stone_feat + w.sigil_charged * charged_feat;
         }
@@ -613,8 +613,9 @@ impl Board {
                 let n = m.count_ones() as i32;
                 let mine = (m & self.mine(c)).count_ones() as i32;
                 let theirs = (m & self.theirs(c)).count_ones() as i32;
-                let stone = mine * mine / n - theirs * theirs / n;
-                let charged = (mine == n) as i32 - (theirs == n) as i32;
+                let (ok, ok_o) = (self.can_use(c, p), self.can_use(c.other(), p));
+                let stone = ok as i32 * (mine * mine / n) - ok_o as i32 * (theirs * theirs / n);
+                let charged = (mine == n && ok) as i32 - (theirs == n && ok_o) as i32;
                 acc += t.stone[s] * stone + t.charged[s] * charged;
             }
             pos += t.mult * acc;

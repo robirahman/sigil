@@ -23,7 +23,8 @@ Per position, the probes are, for the side to move ("own") and its opponent:
   flip              the same stones with the other side to move (the move's value)
 Every probe is a legal board under the real rules: stones only, so mana, charges
 and the score lead are re-derived by `update`, exactly as play would derive them.
-A probe that would leave a side with no stones is skipped (the game would be over).
+A probe that would leave a side with no stones, or that crosses the winning score
+lead (red - blue >= 4, blue - red >= 2), is skipped: the game would be over.
 The draw, counters, locks and bank are untouched.
 
 Each probe records, from the side to move's point of view, in centistones:
@@ -73,6 +74,13 @@ def flip_sfn(sfn):
     return ' '.join(parts)
 
 
+def lead_decided(n_red, n_blue):
+    """The score-lead win (red at red - blue >= 4, blue at blue - red >= 2, since blue
+    holds the +1 token). `update` only detects elimination, so a stone probe that
+    crosses the threshold must be caught here: the game would already be over."""
+    return n_red - n_blue >= 4 or n_blue - n_red >= 2
+
+
 def values(sfn, depths, mover):
     """Static hand, static full and fixed-depth search values, mover's POV."""
     b = se.Board.from_sfn(sfn)
@@ -108,6 +116,8 @@ def probe(sfn, depths):
             st[who].remove(n)
         else:
             st[who].append(n)
+        if lead_decided(len(st[0]), len(st[1])):
+            continue                           # past the winning lead: terminal
         bb = se.Board.from_sfn(sfn)
         bb.set_stones(st[0], st[1])
         bb.update()

@@ -19,7 +19,8 @@ move's point of view (1 stone = 100 centistones):
   * exchange rates relative to an ordinary stone (a stone on a void node).
 
 Probes whose values are mate scores (|v| >= 4000 cs) are dropped for that
-valuation. 95% intervals come from a bootstrap over games.
+valuation, and so is any probe that crosses the winning score lead (a finished
+game; interp_exchange.py skips them since the PR #23 review). 95% intervals come from a bootstrap over games.
 """
 import collections, glob, json, sys
 import numpy as np
@@ -91,7 +92,16 @@ def main():
             ph = phase(d['total'])
             mover_i = 0 if d['mover'] == 'red' else 1
             own_charged = set(d['charged'][mover_i]); opp_charged = set(d['charged'][1 - mover_i])
+            nr, nb = len(d['red']), len(d['blue'])
             for kind, n, v, ch in d['probes']:
+                if kind != 'flip':
+                    # Probes logged before interp_exchange.py skipped them: a change
+                    # that crosses the winning score lead is a finished game.
+                    who = mover_i if kind.endswith('own') else 1 - mover_i
+                    dr = (1 if kind.startswith('add') else -1) * (who == 0)
+                    db = (1 if kind.startswith('add') else -1) * (who == 1)
+                    if (nr + dr) - (nb + db) >= 4 or (nb + db) - (nr + dr) >= 2:
+                        continue
                 for vk in vals_keys:
                     b0, b1 = d['base'][vk], v[vk]
                     if abs(b0) >= MATE or abs(b1) >= MATE:

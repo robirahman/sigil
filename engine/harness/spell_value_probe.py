@@ -28,7 +28,7 @@ access to slot p removed), opp[9] (with the opponent's removed), pairs [[side,
 p, q, score]] (side 0 mover, 1 opponent), charged [mover mask, opponent mask].
 fit_spell_values.py turns these into the tier list, matchup and synergy charts.
 """
-import io, json, os, random, sys, time, urllib.parse, urllib.request
+import io, json, os, random, sys, time, urllib.parse, urllib.request, zlib
 import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
@@ -103,7 +103,9 @@ def main():
             z = np.load(io.BytesIO(_fetch(path)))
         except Exception as e:  # noqa: BLE001
             print(f'skip {path}: {e}', flush=True); continue
-        rng = random.Random(hash(path) & 0xffffffff)
+        # A stable seed: hash() is salted per interpreter, so a retried shard would
+        # sample different rows and double-count (PR #23 review).
+        rng = random.Random(zlib.crc32(path.encode()))
         # Skip the competitive opening blinks, and Rock Slide games from rounds
         # before 4 (game ids below 80M): they were played under the old pile-up rule.
         rows = [i for i in range(len(z['sfn']))

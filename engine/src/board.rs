@@ -108,6 +108,10 @@ impl Board {
     #[inline] pub fn occupied(&self) -> u64 { self.stones[0] | self.stones[1] }
     #[inline] pub fn empty(&self) -> u64 { ALL & !self.occupied() & !self.walls }
     #[inline] pub fn mine(&self, c: Color) -> u64 { self.stones[c.idx()] }
+    /// Whether `c` may use the spell in sigil slot `p` (always true in real games;
+    /// the experiment-only `access` mask). The leaf evaluation honours it too, so a
+    /// counterfactual search never values a disabled spell at its horizon.
+    #[inline] pub fn can_use(&self, c: Color, p: usize) -> bool { self.access[c.idx()] >> p & 1 != 0 }
     #[inline] pub fn theirs(&self, c: Color) -> u64 { self.stones[c.other().idx()] }
 
     /// Union of the neighbours of every set bit. Replaces the per-node Python loop.

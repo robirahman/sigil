@@ -145,7 +145,13 @@ impl Net {
     }
 
     /// The per-draw fold: 78 first-layer rows and the two game biases.
-    fn fold(&self, spells: &[u8; 9]) -> Folded {
+    fn fold(&self, spells: &[u8; 9]) -> Folded { self.fold_masked(spells, [0x1FF, 0x1FF]) }
+
+    /// `fold` with experiment-only spell access (`Board::access`): bit p of
+    /// `use_rel[rel]` clear = the stones of relation `rel` (0 mine, 1 theirs, from the
+    /// evaluating side) on slot p's sigil get the spell-blind row, as if that side
+    /// did not know the spell. All ones in real games.
+    fn fold_masked(&self, spells: &[u8; 9], use_rel: [u16; 2]) -> Folded {
         let h = self.h;
         let mut rows = vec![0i32; 2 * N_NODES * h];
         for (p, &m) in SIGIL.iter().enumerate() {
@@ -155,6 +161,7 @@ impl Net {
                 if m >> n & 1 == 0 { continue; }
                 if s < NSP {
                     for rel in 0..2 {
+                        if use_rel[rel] >> p & 1 == 0 { continue; }
                         let er = (1 + (s * NPLACE + q) * 2 + rel) * h;
                         let dst = &mut rows[(2 * n + rel) * h..(2 * n + rel + 1) * h];
                         for (d, &w) in dst.iter_mut().zip(&self.e[er..er + h]) { *d += w as i32; }
@@ -174,7 +181,7 @@ impl Net {
                 for (d, &w) in v.iter_mut().zip(&self.g[gr..gr + h]) { *d += w as i32; }
             }
         }
-        Folded { key: (self as *const Net as usize, *spells), rows, gb }
+        Folded { key: (self as *const Net as usize, *spells, use_rel), rows, gb }
     }
 
     /// The network's output, in centistones, for side `c` (its own POV).
@@ -217,7 +224,7 @@ impl Net {
 }
 
 struct Folded {
-    key: (usize, [u8; 9]),
+    key: (usize, [u8; 9], [u16; 2]),
     rows: Vec<i32>,
     gb: [Vec<i32>; 2],
 }
@@ -229,11 +236,14 @@ thread_local! {
 /// The network term of `Board::evaluate` for side `c`.
 pub fn eval(spec: &'static NnSpec, b: &Board, c: Color) -> i32 {
     let net = spec.net();
-    let key = (net as *const Net as usize, b.spells);
+    // Experiment-only access: the evaluating side's own stones use its mask, the
+    // opponent's stones the opponent's (real games: both all ones, one cached fold).
+    let use_rel = [b.access[c.idx()], b.access[c.other().idx()]];
+    let key = (net as *const Net as usize, b.spells, use_rel);
     FOLD.with(|cell| {
         let mut slot = cell.borrow_mut();
         if slot.as_ref().map_or(true, |f| f.key != key) {
-            *slot = Some(net.fold(&b.spells));
+            *slot = Some(net.fold_masked(&b.spells, use_rel));
         }
         net.forward(slot.as_ref().unwrap(), b.mine(c), b.theirs(c), c)
     })
