@@ -76,6 +76,6 @@ fi
 ls -la "$OUT"
 echo
 echo "Built. Now bump RUST_ENGINE_VERSION (docs/static/scripts/engine/rust-ai.js), the"
-echo "rust-ai.js?v= script tags (game.html, multiplayer.html, puzzles.html)"
+echo "rust-ai.js?v= and game-review.js?v= script tags (game, multiplayer, puzzles, annotate, dev/engine-disputes)"
 echo "and CACHE_VERSION + the ?v= precache entries (docs/sw.js), then commit"
 echo "docs/static/wasm/sigil_engine.js and sigil_engine_bg.wasm."
