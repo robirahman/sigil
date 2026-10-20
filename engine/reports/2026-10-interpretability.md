@@ -40,7 +40,7 @@ move. 1 stone = 100 centistones (cs).
    | Outer void node | ≈1.3 | (baseline) |
 
    Charging a sigil adds a premium of about 0.13 stones.
-3. **The net's spell values agree with the spell-values report.** Spearman 0.72 over 41
+3. **The net's spell values agree with the spell-values report.** Spearman 0.94 over 41
    spells. Holding a charged Tsunami, Seal of Lightning, Carnage or Rock Slide is worth about
    +0.9 to +1.1 stones. A charged Comet, Bulwark, Erupt, Seal of Summer or Seal of Spring reads
    slightly negative.
@@ -180,7 +180,8 @@ when the opponent does; cs.
 | Comet | −21 | +8 |
 
 * **Agreement with the spell-values report.** Its own-minus-enemy difference ranks the spells
-  like the spell-values tier list: Spearman 0.72, 41 spells, p < 10⁻⁷.
+  like the spell-values tier list: Spearman 0.94 over 41 spells against the corrected re-run of
+  2026-10-14 (0.72 against the first run, which understated spell values).
 * **Spells that read negative when charged.** For these the net prefers the sigil one short of
   charged. This report does not establish why; the casts are rare in self-play (section 4).
 * **Which slot a spell sits in barely matters.** Within a role, the slot moves the net's spell
