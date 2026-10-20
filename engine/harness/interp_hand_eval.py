@@ -47,6 +47,24 @@ NAMES = ['Flourish', 'Carnage', 'Bewitch', 'Starfall', 'Seal_of_Lightning', 'Gro
          'Endowment']
 
 
+# The network presets the interpretability harnesses can read, and the hand base each
+# sits on (eval.rs weights_by_name): the net's correction is evaluate(net preset) -
+# evaluate(base). The 2026-10 report measured nnue_spell4; engine v32 ships nnue_mt256
+# on material + tempo. Pick with SIGIL_INTERP_EVAL; never follow SHIPPED_EVAL silently
+# (PR #25 review): a residual taken against the wrong base mixes two evaluations.
+NET_BASE = {'nnue_spell': 'tfit_spell', 'nnue_spell3': 'tfit_spell_v2',
+            'nnue_spell4': 'tfit_spell_v2', 'nnue_mt256': 'mtempo'}
+INTERP_EVAL_DEFAULT = 'nnue_spell4'
+
+
+def eval_pair(name=None):
+    """(network preset, its hand base) for the interpretability harnesses."""
+    name = name or os.environ.get('SIGIL_INTERP_EVAL') or INTERP_EVAL_DEFAULT
+    if name not in NET_BASE:
+        raise SystemExit(f'unknown network preset {name!r}; expected one of {sorted(NET_BASE)}')
+    return name, NET_BASE[name]
+
+
 def mask(nodes):
     m = 0
     for n in nodes:
@@ -66,7 +84,7 @@ def decompose(b, c, W):
         out[k] = raw * scale
     mine = mask(b.red if c == 'red' else b.blue)
     theirs = mask(b.blue if c == 'red' else b.red)
-    t = W['spell_sigil']
+    t = W['spell_sigil'] or {'stone': [0] * len(NAMES), 'charged': [0] * len(NAMES), 'mult': 0}
     sp_raw = 0
     for p, s in enumerate(b.spell_ids()):
         m = SIGIL[p]; n = bin(m).count('1')
@@ -80,8 +98,8 @@ def decompose(b, c, W):
     # The engine scales the positional SUM once, with integer truncation.
     rebuilt = out['lead'] + int(pos_raw * W['pos_num'] / W['pos_den']) + out['tempo'] \
         + sum(out[k] for k in UNSCALED)
-    hand = b.evaluate(c, 'tfit_spell_v2')
-    full = b.evaluate(c, se.SHIPPED_EVAL)
+    hand = b.evaluate(c, BASE)
+    full = b.evaluate(c, EVAL)
     out['net'] = full - hand
     return out, f, hand, full, rebuilt
 
@@ -181,11 +199,15 @@ def main():
     ap.add_argument('--per-chunk', type=int, default=12)
     ap.add_argument('--per-game', type=int, default=6)
     a = ap.parse_args()
-    W = json.loads(se.weights_json('tfit_spell_v2'))
+    global EVAL, BASE
+    EVAL, BASE = eval_pair()
+    W = json.loads(se.weights_json(BASE))
     rng = random.Random(1)
-    out = {'eval': se.SHIPPED_EVAL, 'hand': 'tfit_spell_v2', 'weights': W,
-           'spell_table_cs': {NAMES[s]: {'stone_per_unit_cs': W['spell_sigil']['stone'][s] * W['spell_sigil']['mult'] * W['pos_num'] / W['pos_den'],
-                                         'charged_cs': W['spell_sigil']['charged'][s] * W['spell_sigil']['mult'] * W['pos_num'] / W['pos_den']}
+    t = W['spell_sigil']
+    out = {'eval': EVAL, 'hand': BASE, 'weights': W,
+           'spell_table_cs': {} if t is None else
+                             {NAMES[s]: {'stone_per_unit_cs': t['stone'][s] * t['mult'] * W['pos_num'] / W['pos_den'],
+                                         'charged_cs': t['charged'][s] * t['mult'] * W['pos_num'] / W['pos_den']}
                               for s in range(len(NAMES))},
            'selfplay': summarise(list(selfplay_rows(a.chunks, a.per_chunk, rng)), W, 'selfplay'),
            'human': summarise(list(human_rows(a.human, a.per_game, rng)), W, 'human')}

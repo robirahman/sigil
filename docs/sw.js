@@ -83,6 +83,9 @@ const SAME_ORIGIN_PRECACHE = [
 	// ?v=<RUST_ENGINE_VERSION> (rust-ai.js), so the versioned URLs are what
 	// must be precached — bump the ?v= here in lockstep with rust-ai.js and
 	// CACHE_VERSION on every engine rebuild (engine/build-wasm.sh reminds).
+	// The pages load rust-ai.js itself as ?v=<RUST_ENGINE_VERSION> too (game.html,
+	// multiplayer.html, puzzles.html), so an old worker's cached loader is never
+	// served to a fresh page: bump those script tags as well.
 	'./static/scripts/engine/rust-worker.js?v=32',
 	'./static/wasm/sigil_engine.js?v=32',
 	'./static/wasm/sigil_engine_bg.wasm?v=32',

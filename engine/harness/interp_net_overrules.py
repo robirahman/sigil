@@ -25,7 +25,9 @@ import numpy as np
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
-from interp_hand_eval import SIGIL, logloss_of
+from interp_hand_eval import SIGIL, logloss_of, eval_pair
+
+EVAL, BASE = eval_pair()      # SIGIL_INTERP_EVAL picks the network; default nnue_spell4
 
 MANA = 0x4002001
 VOID = 0x7003801c00
@@ -106,7 +108,7 @@ def build(rows):
         if b.gameover:
             continue
         c = 'red' if sfn.split()[1] == 'r' else 'blue'
-        h = b.evaluate(c, 'tfit_spell_v2'); full = b.evaluate(c, se.SHIPPED_EVAL)
+        h = b.evaluate(c, BASE); full = b.evaluate(c, EVAL)
         X.append(concepts(b, c)); meta.append((src, game, sfn, y, h, full - h))
     return X, meta
 
@@ -183,7 +185,7 @@ def main():
     ap.add_argument('--per-chunk', type=int, default=1000)
     a = ap.parse_args()
     rng = random.Random(5)
-    out = {'eval': se.SHIPPED_EVAL}
+    out = {'eval': EVAL, 'hand': BASE}
     for label, rows in (('selfplay', rows_selfplay(a.chunks, a.per_chunk, rng)), ('human', rows_human(a.human, rng))):
         X, meta = build(rows)
         out[label] = analyse(X, meta, label, rng)

@@ -32,14 +32,14 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
 import nn_eval as nn
-from interp_hand_eval import NAMES, SIGIL
+from interp_hand_eval import NAMES, SIGIL, eval_pair
 
 SIZES = [5, 5, 5, 3, 3, 3, 1, 1, 1]
 ROLE_SLOTS = {'ritual': [0, 1, 2], 'sorcery': [3, 4, 5], 'charm': [6, 7, 8]}
 ROLE_SIZE = {'ritual': 5, 'sorcery': 3, 'charm': 1}
 
 
-def load_positions(chunk_dir, per_chunk, rng):
+def load_positions(chunk_dir, per_chunk, rng, full_ev, base_ev):
     sp, mine, theirs, is_red, check = [], [], [], [], []
     for path in sorted(glob.glob(os.path.join(chunk_dir, '*.npz'))):
         z = np.load(path)
@@ -55,7 +55,7 @@ def load_positions(chunk_dir, per_chunk, rng):
             theirs.append(blue if c == 'red' else red)
             is_red.append(1 if c == 'red' else 0)
             sp.append(list(b.spell_ids()))
-            check.append(b.evaluate(c, se.SHIPPED_EVAL) - b.evaluate(c, 'tfit_spell_v2'))
+            check.append(b.evaluate(c, full_ev) - b.evaluate(c, base_ev))
     return (np.array(sp, np.uint8), np.array(mine, np.uint64), np.array(theirs, np.uint64),
             np.array(is_red, np.uint8), np.array(check, np.int64))
 
@@ -81,7 +81,10 @@ def main():
     a = ap.parse_args()
     q = nn.read_bin(a.net)
     rng = random.Random(3)
-    spells, mine, theirs, is_red, check = load_positions(a.chunks, a.per_chunk, rng)
+    # The preset is the net file's name (nets/<preset>.bin); its residual is taken against
+    # that preset's own base, never the shipped eval's (PR #25 review).
+    full_ev, base_ev = eval_pair(os.path.basename(a.net)[:-len('.bin')])
+    spells, mine, theirs, is_red, check = load_positions(a.chunks, a.per_chunk, rng, full_ev, base_ev)
     base = nn.qforward(q, mine, theirs, spells, is_red).astype(np.int64)
     mism = int(np.sum(base != check))
     print(f'{len(base)} positions; qforward vs engine mismatches: {mism}', flush=True)

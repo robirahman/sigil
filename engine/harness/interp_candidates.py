@@ -26,7 +26,7 @@ from scipy.optimize import minimize
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 import sigil_engine as se
-from interp_net_overrules import concepts, rows_human
+from interp_net_overrules import concepts, rows_human, EVAL, BASE
 
 CANDIDATES = {
     'colour (red to move or not)':      lambda f: 2 * f['is_red'] - 1,
@@ -54,8 +54,8 @@ def load(rows):
         if b.gameover:
             continue
         c = 'red' if sfn.split()[1] == 'r' else 'blue'
-        h = b.evaluate(c, 'tfit_spell_v2')
-        H.append(h); R.append(b.evaluate(c, se.SHIPPED_EVAL) - h); Y.append(y); G.append(game)
+        h = b.evaluate(c, BASE)
+        H.append(h); R.append(b.evaluate(c, EVAL) - h); Y.append(y); G.append(game)
         F.append(concepts(b, c))
     X = {k: np.array([fn(f) for f in F], float) for k, fn in CANDIDATES.items()}
     return np.array(H, float), np.array(R, float), np.array(Y, float), np.array(G), X
