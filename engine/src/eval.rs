@@ -724,11 +724,11 @@ pub const SHIPPED_EVAL: &str = "nnue_spell4";
 /// rather than restate: a hardcoded copy in `serve.py` rejected `--eval s04`
 /// outright, which is the fourth instance of the same "list written down
 /// twice" failure in this codebase.
-pub const EVAL_NAMES: [&str; 34] = [
+pub const EVAL_NAMES: [&str; 36] = [
     "default", "structural", "material", "mtempo", "snotempo",
     "s01", "s02", "s04", "s06", "s08", "s12", "s25", "s50", "manavoid", "mc",
     "hand", "tfit", "tflip", "tfit2", "tfit_spell", "tfit_spell2", "tfit_spell_v2", "nnue_spell",
-    "nnue_spell3", "nnue_spell4", "nnue_spell4_mt",
+    "nnue_spell3", "nnue_spell4", "nnue_spell4_mt", "nnue_mt256", "nnue_mt512",
     "tfit_x_colour", "tfit_x_mobility", "tfit_x_mana", "tfit_x_void", "tfit_x_sorcery",
     "tfit_x_oneshort", "tfit_x_control", "tfit_x_all",
 ];
@@ -763,6 +763,9 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         // Eval simplification (engine/eval_simplification_plan.md, step 1): the same
         // net on material + tempo alone, no positional terms or spell table. Default OFF.
         "nnue_spell4_mt" => Weights { nn: Some(&crate::nn::NNUE_SPELL4), ..MATERIAL_TEMPO },
+        // Step 2: nets trained on the material + tempo base. Default OFF.
+        "nnue_mt256" => Weights { nn: Some(&crate::nn::NNUE_MT256), ..MATERIAL_TEMPO },
+        "nnue_mt512" => Weights { nn: Some(&crate::nn::NNUE_MT512), ..MATERIAL_TEMPO },
         // Interpretability experiment 6 (2026-10): the hand evaluation plus one
         // candidate principle each (all: every one, jointly fitted). Default OFF.
         "tfit_x_colour" => X_COLOUR,
@@ -790,6 +793,6 @@ pub fn weights_by_name(name: &str) -> Result<Weights, String> {
         "manavoid" => CAPPED_MANAVOID,
         other => return Err(format!(
             "unknown eval name {other:?}; expected one of default/structural, \
-             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, nnue_spell4, nnue_spell4_mt, tfit_x_*, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
+             material, mtempo, snotempo, tfit, tfit2, tflip, tfit_spell, tfit_spell2, tfit_spell_v2, nnue_spell, nnue_spell3, nnue_spell4, nnue_spell4_mt, nnue_mt256, nnue_mt512, tfit_x_*, hand, s01, s02, s04, s06, s08, s12, s25, s50, classic, mana, mc, manavoid, mix, control")),
     })
 }
