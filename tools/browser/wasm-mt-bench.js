@@ -51,7 +51,7 @@ if (NPOS > SFNS.length) {
           w.postMessage({ type: 'new_game', ttBits: 20 });
           const t = performance.now();
           const r = await call({ type: 'search', sfn, timeMs: MS, ttBits: 20, widthScale: 4, historySfns: [],
-                                 evalName: 'nnue_spell4', adaptive: [0.10, 2, 6], threads });
+                                 evalName: 'nnue_mt256', adaptive: [0.10, 2, 6], threads });
           rows.push({ depth: r.depth, nodes: r.all_nodes || r.nodes, secs: +((performance.now() - t) / 1000).toFixed(2), ok: r.ok });
         }
         w.terminate();

@@ -35,7 +35,7 @@ const BASE = process.argv[2] || 'http://127.0.0.1:8771';
     out.engine = { threads: info.threads, err: info.threads_error };
     let lastTick = 0;
     const r = await getRustEngineWorker().search({ sfn: 'r.........r...bb...................r.../Seal_of_Destruction,Blossom,Hurricane,Storm_Front,Seal_of_Stone,Scatter,Seal_of_Winter,Seal_of_Summer,Gust r 4 0:0 -:- -:- tied',
-      timeMs: 2000, ttBits: 20, widthScale: 4, historySfns: [], evalName: 'nnue_spell4', adaptive: [0.1, 2, 6], threads: out.threads },
+      timeMs: 2000, ttBits: 20, widthScale: 4, historySfns: [], evalName: 'nnue_mt256', adaptive: [0.1, 2, 6], threads: out.threads },
       (m) => { lastTick = m.nodes || 0; });
     out.search = { ok: r.ok, depth: r.depth, nodes: r.nodes, all: r.all_nodes, lastTick };
     out.fbConnected = await new Promise(res => { firebase.database().ref('.info/connected').on('value', s => { if (s.val()) res(true); }); setTimeout(() => res(false), 15000); });

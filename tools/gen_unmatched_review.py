@@ -92,7 +92,7 @@ def main():
             payload = json.load(fh)
         cases = payload['cases'][:args.max_cases]
         payload = {'cases': cases, 'totalUnmatched': len(cases)}
-        html = _PAGE.replace('__DATA__', json.dumps(payload))
+        html = _render(payload)
         os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
         with open(args.out, 'w', encoding='utf-8') as fh:
             fh.write(html)
@@ -237,7 +237,7 @@ def main():
 
     payload = {'cases': cases, 'totalUnmatched': sum(
         len(v) for v in clusters.values())}
-    html = _PAGE.replace('__DATA__', json.dumps(payload))
+    html = _render(payload)
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as f:
         f.write(html)
@@ -245,6 +245,22 @@ def main():
           f'{payload["totalUnmatched"]} unmatched turns, '
           f'{n_gaps} recording-gap + {len(merged)} merged-pair '
           f'+ {n_panda} panda turns excluded) -> {args.out}')
+
+
+def _engine_version():
+    """RUST_ENGINE_VERSION from rust-ai.js: the page loads game-review.js with it as a
+    cache-buster, like the site's own pages, so a returning visitor's old service
+    worker cannot serve a stale copy (PR #25 review). Read, never restated."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs', 'static',
+                        'scripts', 'engine', 'rust-ai.js')
+    m = re.search(r'const RUST_ENGINE_VERSION = (\d+);', open(path, encoding='utf-8').read())
+    if not m:
+        raise SystemExit('RUST_ENGINE_VERSION not found in rust-ai.js')
+    return m.group(1)
+
+
+def _render(payload):
+    return _PAGE.replace('__DATA__', json.dumps(payload)).replace('__ENGINE_V__', _engine_version())
 
 
 _PAGE = r'''<!DOCTYPE html>
@@ -337,7 +353,7 @@ _PAGE = r'''<!DOCTYPE html>
 <script src="../static/scripts/engine/spells.js"></script>
 <script src="../static/scripts/engine/ai-player.js"></script>
 <script src="../static/scripts/engine/game-controller.js"></script>
-<script src="../static/scripts/engine/game-review.js"></script>
+<script src="../static/scripts/engine/game-review.js?v=__ENGINE_V__"></script>
 <script>
 const DATA = __DATA__;
 const LS_KEY = 'sigil_solved_turns_v1';

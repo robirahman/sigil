@@ -46,8 +46,8 @@ from sprt import shard_offset
 
 PLAN = 'gs://focus-surfer-494820-g0-sigil/data/spell_values/plan_2026-10-12.json'
 HUMAN = 'gs://focus-surfer-494820-g0-sigil/data/interp/human_lines_2026-10-13.json'
-EVAL = se.SHIPPED_EVAL
-HAND = 'tfit_spell_v2'
+from interp_hand_eval import eval_pair
+EVAL, HAND = eval_pair()      # SIGIL_INTERP_EVAL picks the network; default nnue_spell4
 AD = tuple(se.SHIPPED_ADAPTIVE)
 N_NODES = 39
 SEAL_OF_DESTRUCTION = 36   # spells_meta id

@@ -3083,3 +3083,11 @@ Hard, Very Hard, clocked games and the Deep review use `rustThreadCount()` = min
 and the Quick review stay single-threaded. Safari (no `credentialless`) and a first visit before the service
 worker installs stay single-threaded. `tools/browser/isolation-test.js` checks the page end to end;
 `tools/browser/wasm-mt-bench.js` reproduces the table.
+
+## The shipped evaluation is material + tempo + net (engine v32, 2026-10-20)
+The hand evaluation's positional terms and per-spell table explained under 1.5% of the shipped
+eval's variance (material 47%, net 52%). Dropping them, with a net retrained on material + tempo
+(`nnue_mt256`, cap 256), plays level with `nnue_spell4`: −3.0 [−18.9, +12.8] core and +3.2 on
+Rock Slide draws, at 10 s. It also predicts held-out results as well (0.58115 vs 0.58139) and
+skips the per-leaf flood fill. Raising the cap to 512 changed nothing measurable. The display is
+unchanged: offset = lead − tempo. Details: `reports/2026-10-eval-simplification.md`.

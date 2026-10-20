@@ -4,7 +4,8 @@
 per-spell sigil table, so the shipped evaluation becomes material + tempo + the network.
 Also test raising the network's correction cap from ±256 to ±512 cs.
 
-**Status:** plan only, not yet run.
+**Status:** executed 2026-10-20. `nnue_mt256` shipped as engine v32; results in
+`engine/reports/2026-10-eval-simplification.md`.
 
 **Prerequisite:** merge PR #23 first. Its review fixes touch `eval.rs`, `features.rs` and
 `nn.rs`, and so does this plan.

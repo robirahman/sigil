@@ -39,15 +39,20 @@ const RUST_REVIEW_PRESETS = {
 	quick: { tier: 'Easy', timeMs: 100, ttBits: 16 },
 	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
 };
-const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_spell4', adaptive: [0.10, 2, 6] };
+const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_mt256', adaptive: [0.10, 2, 6] };
 /** Deep review (Hard) searches on every thread the page can give it. */
 function rustReviewThreads(mode) {
 	return (mode === 'deep' && typeof rustThreadCount === 'function') ? rustThreadCount() : 1;
 }
 
-/** Cache identity of a live Rust review: a new engine build recomputes. */
+/** Cache identity of a live Rust review: a new engine build, or a new evaluation,
+ *  recomputes. The eval is part of the key because this file and rust-ai.js can come
+ *  from different deploys for one session (an old service worker's cached copy of this
+ *  script with a fresh rust-ai.js): a review searched with an older eval must never be
+ *  stored under the new engine's identity (PR #25 review). */
 function rustReviewModelVersion() {
-	return 'rust-live-v' + (typeof RUST_ENGINE_VERSION !== 'undefined' ? RUST_ENGINE_VERSION : '?');
+	return 'rust-live-v' + (typeof RUST_ENGINE_VERSION !== 'undefined' ? RUST_ENGINE_VERSION : '?')
+		+ '-' + RUST_REVIEW_SEARCH.evalName;
 }
 
 /** True when this page can run the wasm engine (rust-ai.js loaded, Worker + wasm). */

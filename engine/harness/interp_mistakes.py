@@ -172,13 +172,15 @@ def cmd_probe(a):
     idx = d['flagged_index']
     mine = idx[k::n_shards] if 0 <= k < n_shards else idx[:1]
     ad = tuple(se.SHIPPED_ADAPTIVE)
+    from interp_hand_eval import eval_pair
+    EV = eval_pair()[0]           # the network the report measured unless SIGIL_INTERP_EVAL says otherwise
     def val(sfn, pov):
         b = se.Board.from_sfn(sfn)
         if b.gameover:
             w = b.winner
             return 100 * MATE_V * (1 if w == pov else -1)
         mover = 'red' if sfn.split()[1] == 'r' else 'blue'
-        v = b.root_scores_and_play(depth, se.SHIPPED_EVAL, False, 1, [], False, None, ad)[1]
+        v = b.root_scores_and_play(depth, EV, False, 1, [], False, None, ad)[1]
         return v if mover == pov else -v
     t0 = time.time()
     for j in (mine if 0 <= k < n_shards else mine[:1]):
