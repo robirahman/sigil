@@ -88,8 +88,8 @@
 <script src="../static/scripts/engine/constants.js"></script>
 <script>
 (() => {
-	// ---- Spell universe: the 39 official spells (core + 8 rated packs) ----
-	const OFFICIAL_PACKS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+	// ---- Spell universe: the 45 official spells (core + 10 official expansions) ----
+	const OFFICIAL_PACKS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'tectonic', 'providence'];
 	const SPELLS = [];   // {name, pack, type}
 	const push = (names, pack, type) => names.forEach(n => SPELLS.push({ name: n, pack, type }));
 	push(CORE_RITUALS, 'core', 'ritual'); push(CORE_SORCERIES, 'core', 'sorcery'); push(CORE_CHARMS, 'core', 'charm');

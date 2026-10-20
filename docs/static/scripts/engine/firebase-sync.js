@@ -159,7 +159,7 @@ class FirebaseSync {
 			roomRef.child('blue/connected').onDisconnect().set(false);
 
 			// Determine if ranked: both players authenticated, no unrated
-			// spells (Panda is unofficial; Providence is in playtest), and
+			// spells (Panda and Experimental are unofficial), and
 			// not a Deathmatch / Duplicates / Scramble game (always unrated).
 			const hasUnrated = (data.spellNames || []).some(s => isUnratedSpell(s));
 			const isDeathmatch = variantHasDeathmatch(data.variant);
