@@ -2134,8 +2134,8 @@ document.addEventListener('alpine:init', () => {
 						_this.messageHistory.push('Sign in to track your rating. This game is saved as a guest game.');
 					}
 
-					// Unrated spell sets: the unofficial Panda expansion and the
-					// in-playtest Providence expansion; everything else is rated.
+					// Unrated spell sets: the unofficial Panda and Experimental
+					// packs; everything else is rated.
 					const _spellNames = _engineRef && _engineRef.board ? _engineRef.board.spellNames : [];
 					const _isUnratedPack = _spellNames.some(s => isUnratedSpell(s));
 

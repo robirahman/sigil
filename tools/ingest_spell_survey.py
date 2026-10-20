@@ -72,6 +72,7 @@ if os.path.exists(STATS):
     st = json.load(open(STATS)); STATIC = {k for k in spells if spells[k].get('type') == 'charm' and False}
     lines += ['', '### Data tier fit vs Robi quality (log-odds per cast; seals: held ≥1 turn)', '', '| Spell | Robi | data c | flag |', '|---|---|---|---|']
     for k, v in sorted(spells.items(), key=lambda kv: -(st['coef_count'].get(kv[0], [0])[0])):
+        if k not in st['coef_count']: continue  # no legacy stats (Tectonic, Providence)
         c = st['coef_ind'][k][0] if k.startswith('Seal_') else st['coef_count'][k][0]
         q = v.get('quality'); flag = ''
         if q == 'bad' and c > 0.6: flag = 'data likes it more'

@@ -176,7 +176,7 @@
 		core_crater: ['Starfall', 'Meteor', 'Comet'], core_tempo: ['Seal_of_Lightning', 'Seal_of_Wind', 'Seal_of_Summer'],
 		core_hex: ['Bewitch', 'Hail_Storm', 'Surge'] };
 	for (const [k, v] of Object.entries(SUBPACK_DEF)) for (const n of Array.isArray(v) ? v : [...v.rituals, ...v.sorceries, ...v.charms]) SUBPACK_OF[n] = k;
-	const PACK_ORDER = [...Object.keys(SUBPACK_DEF), 'core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant'];
+	const PACK_ORDER = [...Object.keys(SUBPACK_DEF), 'core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'tectonic', 'providence'];
 	const TYPE_ORDER = ['ritual', 'sorcery', 'charm'];
 	const el = id => document.getElementById(id);
 	const pretty = n => n.replace(/_/g, ' ');
