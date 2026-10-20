@@ -4675,3 +4675,39 @@ fn spell_access_mask_reaches_the_leaf_evaluation() {
     d.update();
     assert_eq!((d.evaluate(Color::Red, &hand), d.evaluate(Color::Red, &full)), (h0, f0));
 }
+
+/// The engine-v32 network (eval simplification, 2026-10-20): bit-for-bit the Python
+/// integer forward pass, and the shipped preset is `mtempo` (material + tempo) plus
+/// its clamped term, with the display offset unchanged (lead - tempo = 50).
+#[test]
+fn mt_network_matches_python_and_sits_on_material_tempo() {
+    let net = crate::nn::by_name("nnue_mt256").unwrap().net();
+    let mut n = 0;
+    for line in include_str!("../nets/nnue_mt256_golden.txt").lines() {
+        let f: Vec<&str> = line.split(' ').collect();
+        let sp: Vec<u8> = f[2].split(',').map(|x| x.parse().unwrap()).collect();
+        let spells: [u8; 9] = sp.try_into().unwrap();
+        let c = if f[3] == "1" { Color::Red } else { Color::Blue };
+        assert_eq!(net.eval_raw(&spells, f[0].parse().unwrap(), f[1].parse().unwrap(), c),
+                   f[4].parse::<i32>().unwrap(), "nnue_mt256 {line}");
+        n += 1;
+    }
+    assert!(n >= 200, "only {n} golden vectors");
+    assert_eq!(crate::eval::SHIPPED_EVAL, "nnue_mt256");
+    let w = crate::eval::weights_by_name("nnue_mt256").unwrap();
+    let base = crate::eval::MATERIAL_TEMPO;
+    assert_eq!(crate::search::even_offset(Color::Red, &w), 50);
+    assert_eq!(crate::search::even_offset(Color::Red, &w),
+               crate::search::even_offset(Color::Red, &crate::eval::weights_by_name("nnue_spell4").unwrap()));
+    for seed in 0..20u64 {
+        let mut b = Board::new(Board::legal_draw(seed % 5), Variant::Standard);
+        b.stones[0] = (0x2468_ace0_1357u64 ^ (seed * 2654435761)) & ALL;
+        b.stones[1] = (0x0bad_f00d_cafeu64 ^ (seed * 40503)) & ALL & !b.stones[0];
+        b.update();
+        for c in [Color::Red, Color::Blue] {
+            let nn = net.eval_raw(&b.spells, b.mine(c), b.theirs(c), c);
+            assert!(nn.abs() <= net.cap && net.cap == 256);
+            assert_eq!(b.evaluate(c, &w), b.evaluate(c, &base) + nn, "seed {seed}");
+        }
+    }
+}

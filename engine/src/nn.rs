@@ -69,11 +69,9 @@ pub static NNUE_SPELL3: NnSpec = NnSpec::new("nnue_spell3", include_bytes!("../n
 /// Rock Slide game (old pile-up rule) plus 635,169 engine-v29 games whose spell draws
 /// bring all 45 official spells to 252,845 games each.
 pub static NNUE_SPELL4: NnSpec = NnSpec::new("nnue_spell4", include_bytes!("../nets/nnue_spell4.bin"));
-/// Eval simplification (engine/eval_simplification_plan.md, step 2): nnue_spell4's recipe
-/// and data (plus the round-5 human positions and v31 self-play) on the material + tempo
-/// base, at caps 256 and 512 cs. Default OFF.
+/// The engine-v32 network (2026-10-20): nnue_spell4's recipe and data (plus the round-5
+/// human positions and v31 self-play) on the material + tempo base, cap 256 cs.
 pub static NNUE_MT256: NnSpec = NnSpec::new("nnue_mt256", include_bytes!("../nets/nnue_mt256.bin"));
-pub static NNUE_MT512: NnSpec = NnSpec::new("nnue_mt512", include_bytes!("../nets/nnue_mt512.bin"));
 
 /// A network by preset name (wasm parity export, tests).
 pub fn by_name(name: &str) -> Option<&'static NnSpec> {
@@ -82,7 +80,6 @@ pub fn by_name(name: &str) -> Option<&'static NnSpec> {
         "nnue_spell3" => Some(&NNUE_SPELL3),
         "nnue_spell4" => Some(&NNUE_SPELL4),
         "nnue_mt256" => Some(&NNUE_MT256),
-        "nnue_mt512" => Some(&NNUE_MT512),
         _ => None,
     }
 }

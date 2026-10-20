@@ -521,7 +521,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:30,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:34,maximum:16384,shared:true}),
     };
     return {
         __proto__: null,

@@ -39,7 +39,7 @@ const RUST_REVIEW_PRESETS = {
 	quick: { tier: 'Easy', timeMs: 100, ttBits: 16 },
 	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
 };
-const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_spell4', adaptive: [0.10, 2, 6] };
+const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_mt256', adaptive: [0.10, 2, 6] };
 /** Deep review (Hard) searches on every thread the page can give it. */
 function rustReviewThreads(mode) {
 	return (mode === 'deep' && typeof rustThreadCount === 'function') ? rustThreadCount() : 1;

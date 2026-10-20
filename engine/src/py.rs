@@ -1427,10 +1427,10 @@ fn weights_json(eval_name: &str) -> PyResult<String> {
         "{{\"lead\":{},\"near_threshold\":{},\"own_zero_liberty\":{},\"own_one_liberty\":{},\
           \"enemy_zero_liberty\":{},\"enemy_one_liberty\":{},\"sigil_stone\":{},\"sigil_charged\":{},\
           \"mana\":{},\"sixth_spell_danger\":{},\"control\":{},\"void_penalty\":{},\"pos_num\":{},\
-          \"pos_den\":{},\"tempo\":{},\"cast_pace\":{},\"mobility\":{},\"colour\":{},\"spell_sigil\":{},\"nn\":{}}}",
+          \"pos_den\":{},\"tempo\":{},\"cast_pace\":{},\"mobility\":{},\"spell_sigil\":{},\"nn\":{}}}",
         w.lead, w.near_threshold, w.own_zero_liberty, w.own_one_liberty, w.enemy_zero_liberty,
         w.enemy_one_liberty, w.sigil_stone, w.sigil_charged, w.mana, w.sixth_spell_danger, w.control,
-        w.void_penalty, w.pos_num, w.pos_den, w.tempo, w.cast_pace, w.mobility, w.colour, sp, nn))
+        w.void_penalty, w.pos_num, w.pos_den, w.tempo, w.cast_pace, w.mobility, sp, nn))
 }
 
 /// `search::even_offset` for a colour name and eval preset, in centistones:
