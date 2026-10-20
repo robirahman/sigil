@@ -138,7 +138,8 @@
 	pp('Seal_of_Lightning', 'Surge', 'positive'); pp('Seal_of_Lightning', 'Splash', 'negative');
 	pp('Gust', 'Decay', 'positive'); pp('Carnage', 'Fireblast', 'none', 'Carnage');
 	pp('Hail_Storm', 'Blossom', undefined, 'Hail_Storm'); pp('Hail_Storm', 'Lurk', undefined, 'even');
-	const SEALS = SPELLS.filter(s => isStatic(s.name)).map(s => s.name);
+	// The real Seals only: Bulwark is static too, but these rulings are about Seals.
+	const SEALS = SPELLS.filter(s => s.name.startsWith('Seal_')).map(s => s.name);
 	for (const s of SEALS) { pp('Storm_Front', s, undefined, 'even'); pp('Meteor', s, undefined, 'even'); }
 	pp('Decay', 'Blossom', undefined, 'Decay'); pp('Decay', 'Scatter', undefined, 'Decay'); pp('Decay', 'Starfall', undefined, 'Decay');
 	for (const s of ['Carnage', 'Fury', 'Slash']) pp('Seal_of_Stone', s, undefined, 'even');
