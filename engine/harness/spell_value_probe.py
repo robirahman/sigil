@@ -1,6 +1,6 @@
 """Engine spell values from real self-play positions (counterfactual access probes).
 
-    spell_value_probe.py <rows_per_chunk> <depth> [pairs_per_side=4]
+    spell_value_probe.py <rows_per_chunk> <depth> [pairs_per_side=4] [plan]
 
 Positions come from the self-play training corpus (the v27 set, minus its
 old-rule Rock Slide games, plus round 4; together every official spell is drawn
@@ -17,7 +17,7 @@ The game itself is never altered: the probes are counterfactual searches of
 positions reached under the real rules, so a spell like Bulwark is valued in the
 positions where it actually matters, not in a game whose rules make it moot.
 
-Positions: $SIGIL_PROBE_PLAN (default DEFAULT_PLAN) is a JSON file (local or gs://) {"chunks": [gs://
+Positions: the `plan` argument, else $SIGIL_PROBE_PLAN, else DEFAULT_PLAN, is a JSON file (local or gs://) {"chunks": [gs://
 paths], "shards": [shard numbers]}. The shard numbered off // 1000 (gcp/runner.sh
 sets SIGIL_SHARD_OFF) takes chunks i with i % len(shards) == its index and
 samples `rows_per_chunk` positions from each (seeded by chunk index).
@@ -89,7 +89,8 @@ def main():
     se.set_policy_explore(*se.SHIPPED_EXPLORE)
     se.set_opening_book(False)
     off = shard_offset()
-    plan = json.loads(_fetch(os.environ.get('SIGIL_PROBE_PLAN', DEFAULT_PLAN)))
+    # The runner passes no environment, so a fleet names its plan as an argument.
+    plan = json.loads(_fetch(a[3] if len(a) > 3 else os.environ.get('SIGIL_PROBE_PLAN', DEFAULT_PLAN)))
     shards = list(plan['shards'])
     if off // 1000 not in shards:          # e.g. the runner's smoke arm
         chunks = plan['chunks'][:1]

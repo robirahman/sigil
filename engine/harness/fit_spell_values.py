@@ -168,6 +168,7 @@ def main():
                 f'values. Matchups favoured at >= {MATCH_MIN:g} pp (strong >= {MATCH_STRONG:g}), synergies at '
                 f'>= {SYN_MIN:g} pp (strong >= {SYN_STRONG:g}), each only when the 95% game-bootstrap interval '
                 'excludes 0.'),
+        thresholds={'matchup': [MATCH_MIN, MATCH_STRONG], 'synergy': [SYN_MIN, SYN_STRONG]},
         spells=out_spells, tiers=tiers, matchups=matchups, synergies=synergies)
     json.dump(out, open(a.out, 'w'), indent=1)
     print(f'{len(rows)} positions from {len(games)} games')

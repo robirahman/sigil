@@ -1,125 +1,180 @@
-# Engine spell values from real self-play positions (2026-10-12)
+# Engine spell values from real self-play positions (re-run 2026-10-14)
 
 **Question (Robi, 2026-10-11/12):** how do the 45 official spells rate under strong engine play,
 compared with the players' tier list, matchup chart and synergy chart
 (`docs/static/data/spell-charts.json`)?
 
+**This is the corrected re-run.** The first run (2026-10-12, PR #21) let the leaf evaluation keep
+crediting a spell that had been made unusable (PR #23 review), which biased every value toward
+zero. The engine now honours the mask everywhere, and the probes were repeated on the same
+positions with the same settings. The first run's data stays in
+`engine/reports/data/spell_values_2026-10-12.json` for comparison.
+
 ## Method
 
 A first attempt played games where each drawn spell was usable by only one player
 (`spell_access_arena.py`, `fit_spell_charts.py`). **Robi rejected it:** changing who may use
-which spell changes the game (it made Bulwark nearly useless). It was stopped after 23,530
-games and is not used here.
+which spell changes the game (it made Bulwark nearly useless). It is not used here.
 
-The measurement here keeps the rules intact (`engine/harness/spell_value_probe.py`):
+The measurement keeps the rules intact (`engine/harness/spell_value_probe.py`):
 
 * **Positions.** Sampled from the self-play training corpus of the shipped network:
   * the v27 set, minus its Rock Slide games, which used the old pile-up rule;
   * plus the round-4 games (engine v29).
 
-  Together these games hold every official spell equally often. 294,626 positions from
-  264,410 games: 183,434 from round 4 and 111,192 from v27.
-* **Probes.** Each position is searched at depth 4 with the shipped engine-v30 configuration
-  (eval `nnue_spell4`, policy 96, exploration tail):
+  Together these games hold every official spell equally often.
+* **Probes.** Each position is searched at depth 4 with the shipped configuration (eval
+  `nnue_spell4`, policy 96, exploration tail):
   * once as played;
   * once with each of the 9 drawn spells made unusable for each side (18 probes);
   * once with 8 random same-side pairs removed (synergy).
 
-  "Unusable" is `PyBoard.set_access`: the slot never counts as charged for that side,
-  anywhere in the search tree. The game itself is never altered.
+  "Unusable" is `PyBoard.set_access`. The slot never counts as charged for that side anywhere
+  in the search tree, and the leaf evaluation ignores it: the hand evaluation's charged and
+  per-spell terms, the net's spell rows and its draw term. The game itself is never altered.
 * **Values.** Scores become win probabilities, `1/(1+exp(-0.8 s/100))`. A spell's value to a
   side is the drop in that side's win probability when it cannot use the spell.
   * **Tier value:** the mean over every (position, side) whose draw holds the spell.
   * **Matchup A vs B:** A's value to one side minus B's value to the other.
   * **Synergy:** the value of the pair minus the two single values.
   * **Intervals:** 95% bootstrap over games (`fit_spell_values.py`).
-* **Cost.** About 4 + 3 Spot c3d-highcpu-90 VMs for about 3 h each, plus the depth-6 check
-  below. One VM of the v27 batch was preempted after 10,218 of its ~33,600 positions.
+* **Strength scale** (Spells page and the tables below): matchups ++ / −− at ≥ 3 points of
+  win probability, + / − at ≥ 1; synergy ++ / −− at ≥ 1.5, + / − at ≥ 0.5. Each counts only
+  when its 95% interval excludes zero; everything else reads 0.
+* **Sample and cost.** 8 Spot c3d-highcpu-90 VMs in us-central1, about 3 hours, roughly $20.
+  Preemptions cut 7 of the 8 short, so the fit uses **217,315 positions from
+  194,060 games**: 74% of the first run's 294,626. The positions lost are spread across
+  both corpora and every spell, so they widen the intervals slightly without biasing the
+  values.
+
+## What the fix changed
+
+* **Every value is 2-8× larger.** The bug understated the gap between "can use it" and "can't".
+* **The correction grows with the time a spell takes to charge.** Mean value: rituals 2.04 against 0.47 (4.3×); sorceries 1.83 against 0.71 (2.6×); charms 0.90 against 0.52 (1.7×).
+* **Order:** Spearman 0.83 against the first run.
+  * *Biggest risers:* Fissure (#32 → #14), Hurricane (#39 → #22), Bewitch (#23 → #9), Blossom (#31 → #19), Carnage (#13 → #2), Tsunami (#15 → #5), Starfall (#25 → #15), Fireblast (#26 → #17).
+  * *Biggest fallers:* Seal of Wind (#14 → #27), Charge (#6 → #18), Sprout (#21 → #31), Bulwark (#33 → #43), Gather (#11 → #20), Seal of Winter (#18 → #26).
 
 ## Tier list (percentage points of win probability)
 
-The intervals are about ±0.02-0.04, so neighbours are distinguishable only by more than that.
-The ranking is stable: v27-only versus pooled has Spearman 0.96.
+| # | tier | spell | value | 95% | positions | before the fix | players' rank |
+|---|---|---|---|---|---|---|---|
+| 1 | S | Seal of Lightning | +5.62 | [+5.53, +5.74] | 49,704 | #1 (S) | 6 |
+| 2 | S | Carnage | +5.03 | [+4.95, +5.11] | 52,366 | #13 (A) | 8 |
+| 3 | S | Rock Slide | +4.49 | [+4.46, +4.54] | 129,992 | #7 (A) | new |
+| 4 | S | Syzygy | +3.75 | [+3.70, +3.80] | 106,140 | #10 (A) | 34 |
+| 5 | S | Tsunami | +3.41 | [+3.36, +3.45] | 99,066 | #15 (A) | 33 |
+| 6 | A | Seal of Stone | +3.33 | [+3.28, +3.40] | 96,374 | #2 (S) | 22 |
+| 7 | A | Hail Storm | +3.27 | [+3.19, +3.35] | 41,398 | #5 (S) | 14 |
+| 8 | A | Fury | +2.73 | [+2.69, +2.77] | 97,406 | #8 (A) | 13 |
+| 9 | A | Bewitch | +2.45 | [+2.42, +2.50] | 52,628 | #23 (B) | 9 |
+| 10 | A | Slash | +2.23 | [+2.18, +2.27] | 49,792 | #3 (S) | 11 |
+| 11 | A | Splash | +2.14 | [+2.11, +2.18] | 98,942 | #4 (S) | 24 |
+| 12 | A | Flourish | +2.12 | [+2.07, +2.16] | 49,922 | #20 (B) | 30 |
+| 13 | A | Meteor | +1.81 | [+1.76, +1.86] | 48,938 | #9 (A) | 16 |
+| 14 | A | Fissure | +1.80 | [+1.77, +1.83] | 122,986 | #32 (D) | new |
+| 15 | A | Starfall | +1.77 | [+1.71, +1.83] | 43,772 | #25 (C) | 15 |
+| 16 | A | Torrent | +1.74 | [+1.71, +1.78] | 99,088 | #12 (A) | 39 |
+| 17 | A | Fireblast | +1.61 | [+1.57, +1.65] | 56,910 | #26 (C) | 2 |
+| 18 | B | Charge | +1.60 | [+1.58, +1.63] | 102,176 | #6 (A) | 7 |
+| 19 | B | Blossom | +1.58 | [+1.55, +1.62] | 95,292 | #31 (D) | 4 |
+| 20 | B | Gather | +1.45 | [+1.41, +1.49] | 103,520 | #11 (A) | 1 |
+| 21 | B | Grow | +1.42 | [+1.38, +1.46] | 50,702 | #17 (A) | 37 |
+| 22 | B | Hurricane | +1.23 | [+1.20, +1.26] | 94,340 | #39 (D) | 19 |
+| 23 | B | Storm Front | +1.21 | [+1.18, +1.24] | 96,920 | #16 (A) | 18 |
+| 24 | C | Scatter | +1.11 | [+1.08, +1.14] | 98,306 | #22 (B) | 3 |
+| 25 | C | Dividend | +1.07 | [+1.05, +1.10] | 121,036 | #19 (B) | new |
+| 26 | C | Seal of Winter | +1.03 | [+0.99, +1.06] | 98,610 | #18 (B) | 26 |
+| 27 | C | Seal of Wind | +1.03 | [+0.98, +1.08] | 52,766 | #14 (A) | 10 |
+| 28 | C | Azimuth | +1.00 | [+0.98, +1.02] | 104,350 | #24 (C) | 21 |
+| 29 | C | Eclipse | +0.89 | [+0.87, +0.91] | 105,640 | #27 (C) | 36 |
+| 30 | D | Gust | +0.88 | [+0.86, +0.91] | 93,646 | #37 (D) | 38 |
+| 31 | D | Sprout | +0.84 | [+0.81, +0.86] | 50,034 | #21 (B) | 25 |
+| 32 | D | Lurk | +0.82 | [+0.80, +0.84] | 103,500 | #28 (C) | 31 |
+| 33 | D | Surge | +0.79 | [+0.77, +0.83] | 56,968 | #29 (C) | 20 |
+| 34 | D | Corrupt | +0.73 | [+0.70, +0.75] | 108,172 | #41 (F) | 5 |
+| 35 | D | Decay | +0.72 | [+0.70, +0.75] | 104,880 | #30 (D) | 29 |
+| 36 | D | Annuity | +0.67 | [+0.66, +0.69] | 121,050 | #38 (D) | new |
+| 37 | D | Harvest | +0.57 | [+0.54, +0.59] | 105,698 | #34 (D) | 12 |
+| 38 | D | Seal of Autumn | +0.36 | [+0.34, +0.38] | 106,812 | #35 (D) | 27 |
+| 39 | D | Seal of Destruction | +0.31 | [+0.27, +0.35] | 100,402 | #45 (F) | 32 |
+| 40 | F | Seal of Spring | +0.29 | [+0.27, +0.31] | 97,804 | #36 (D) | 28 |
+| 41 | F | Endowment | +0.27 | [+0.25, +0.29] | 121,890 | #40 (F) | new |
+| 42 | F | Seal of Summer | +0.26 | [+0.23, +0.28] | 47,804 | #42 (F) | 35 |
+| 43 | F | Bulwark | +0.21 | [+0.19, +0.23] | 123,900 | #33 (D) | new |
+| 44 | F | Comet | -0.03 | [-0.06, -0.00] | 48,516 | #44 (F) | 23 |
+| 45 | F | Erupt | -0.04 | [-0.06, -0.02] | 101,512 | #43 (F) | 17 |
 
-| # | spell | value | 95% | positions | players' rank |
-|---|---|---|---|---|---|
-| 1 | Seal of Lightning | +1.66 | [+1.62, +1.70] | 84,752 | 6 |
-| 2 | Seal of Stone | +1.36 | [+1.32, +1.40] | 125,886 | 22 |
-| 3 | Slash | +1.26 | [+1.23, +1.29] | 86,342 | 11 |
-| 4 | Splash | +1.17 | [+1.15, +1.19] | 128,334 | 24 |
-| 5 | Hail Storm | +1.16 | [+1.11, +1.20] | 79,002 | 14 |
-| 6 | Charge | +1.07 | [+1.06, +1.10] | 132,106 | 7 |
-| 7 | Rock Slide | +0.94 | [+0.91, +0.96] | 149,518 | new |
-| 8 | Fury | +0.93 | [+0.90, +0.95] | 126,934 | 13 |
-| 9 | Meteor | +0.86 | [+0.82, +0.88] | 85,528 | 16 |
-| 10 | Syzygy | +0.78 | [+0.76, +0.80] | 136,752 | 34 |
-| 11 | Gather | +0.70 | [+0.68, +0.72] | 133,508 | 1 |
-| 12 | Torrent | +0.68 | [+0.66, +0.71] | 128,332 | 39 |
-| 13 | Carnage | +0.67 | [+0.64, +0.70] | 87,020 | 8 |
-| 14 | Seal of Wind | +0.67 | [+0.65, +0.69] | 88,932 | 10 |
-| 15 | Tsunami | +0.60 | [+0.58, +0.62] | 127,734 | 33 |
-| 16 | Storm Front | +0.60 | [+0.58, +0.62] | 127,544 | 18 |
-| 17 | Grow | +0.59 | [+0.57, +0.62] | 85,548 | 37 |
-| 18 | Seal of Winter | +0.59 | [+0.57, +0.62] | 127,716 | 26 |
-| 19 | Dividend | +0.55 | [+0.54, +0.56] | 144,182 | new |
-| 20 | Flourish | +0.55 | [+0.53, +0.58] | 86,244 | 30 |
-| 21 | Sprout | +0.52 | [+0.50, +0.54] | 85,920 | 25 |
-| 22 | Scatter | +0.52 | [+0.50, +0.54] | 127,478 | 3 |
-| 23 | Bewitch | +0.51 | [+0.49, +0.53] | 89,788 | 9 |
-| 24 | Azimuth | +0.50 | [+0.49, +0.52] | 134,704 | 21 |
-| 25 | Starfall | +0.49 | [+0.47, +0.51] | 82,214 | 15 |
-| 26 | Fireblast | +0.48 | [+0.46, +0.50] | 93,792 | 2 |
-| 27 | Eclipse | +0.47 | [+0.46, +0.49] | 135,714 | 36 |
-| 28 | Lurk | +0.44 | [+0.43, +0.46] | 133,420 | 31 |
-| 29 | Surge | +0.44 | [+0.42, +0.45] | 93,124 | 20 |
-| 30 | Decay | +0.41 | [+0.40, +0.43] | 135,246 | 29 |
-| 31 | Blossom | +0.40 | [+0.38, +0.42] | 124,182 | 4 |
-| 32 | Fissure | +0.39 | [+0.38, +0.41] | 146,834 | new |
-| 33 | Bulwark | +0.32 | [+0.31, +0.33] | 147,702 | new |
-| 34 | Harvest | +0.30 | [+0.28, +0.31] | 135,844 | 12 |
-| 35 | Seal of Autumn | +0.29 | [+0.27, +0.30] | 136,472 | 27 |
-| 36 | Seal of Spring | +0.28 | [+0.27, +0.29] | 127,284 | 28 |
-| 37 | Gust | +0.28 | [+0.26, +0.30] | 123,604 | 38 |
-| 38 | Annuity | +0.27 | [+0.26, +0.28] | 144,794 | new |
-| 39 | Hurricane | +0.26 | [+0.25, +0.28] | 124,346 | 19 |
-| 40 | Endowment | +0.22 | [+0.21, +0.23] | 145,104 | new |
-| 41 | Corrupt | +0.20 | [+0.19, +0.21] | 137,588 | 5 |
-| 42 | Seal of Summer | +0.15 | [+0.13, +0.17] | 83,366 | 35 |
-| 43 | Erupt | +0.13 | [+0.12, +0.14] | 131,328 | 17 |
-| 44 | Comet | -0.04 | [-0.06, -0.02] | 83,480 | 23 |
-| 45 | Seal of Destruction | -0.06 | [-0.09, -0.04] | 128,026 | 32 |
-
-* **Agreement with the players' chart is weak:** Spearman **0.23** over the 39 shared spells.
-* **Engine rates much higher:** Seal of Stone, Splash, Syzygy, Torrent, Tsunami, Grow.
-* **Engine rates much lower:** Fireblast (players #2), Scatter (#3), Blossom (#4), Corrupt (#5), Harvest (#12).
-* **Seal of Destruction is slightly negative:** holding it risks losing at the start of your own turn. Comet is also slightly negative.
+* **Agreement with the players' chart is still weak:** Spearman **0.25** over the
+  39 shared spells; the first run gave 0.23.
+* **The engine rates much higher than players:** Syzygy (#4, players #34), Tsunami (#5, #33),
+  Seal of Stone (#6, #22), Flourish (#12, #30), Torrent (#16, #39), Grow (#21, #37).
+* **The engine rates much lower:** Gather (#20, players #1), Scatter (#24, #3), Corrupt (#34, #5),
+  Harvest (#37, #12), Erupt (#45, #17) and Comet (#44, #23). Fireblast (#17, players #2) and
+  Blossom (#19, #4) are closer than before but still well below the players' view.
+* **Comet and Erupt are the only spells with no value**, both a hair below zero.
 
 ## Matchups
 
-56 of the 990 pairs clear the threshold (≥ 1 pp with an interval excluding 0). Almost all of
-them pit a top-tier spell against a bottom-tier one. The ten strongest:
+478 of the 990 pairs have a favourite: 109 strongly (++)
+and 369 clearly (+). The first run found 56. The favoured side is almost always the
+higher-tier spell. The most-favoured spells, by number of pairs won, are Carnage (42), Seal of Lightning (42), Fury (39), Syzygy (37), Tsunami (34). The
+least-favoured are Comet (32), Seal of Summer (29), Seal of Spring (27), Seal of Destruction (26), Bulwark (26).
 
-| favoured | over | pp |
-|---|---|---|
-| Seal of Lightning | Seal of Summer | +1.78 |
-| Seal of Lightning | Sprout | +1.60 |
-| Seal of Lightning | Comet | +1.56 |
-| Slash | Comet | +1.53 |
-| Seal of Stone | Comet | +1.53 |
-| Seal of Stone | Seal of Destruction | +1.53 |
-| Seal of Lightning | Erupt | +1.52 |
-| Seal of Lightning | Grow | +1.51 |
-| Seal of Lightning | Blossom | +1.48 |
-| Charge | Comet | +1.45 |
+The strongest edges:
 
-## Synergy: not measurable at this depth
+| favoured | over | points | strength |
+|---|---|---|---|
+| Seal of Lightning | Azimuth | +5.70 | ++ |
+| Seal of Lightning | Blossom | +5.59 | ++ |
+| Seal of Lightning | Sprout | +5.48 | ++ |
+| Seal of Lightning | Seal of Summer | +5.36 | ++ |
+| Carnage | Bulwark | +5.35 | ++ |
+| Seal of Lightning | Seal of Autumn | +5.33 | ++ |
+| Carnage | Erupt | +5.32 | ++ |
+| Carnage | Blossom | +5.29 | ++ |
+| Carnage | Seal of Autumn | +5.28 | ++ |
+| Seal of Lightning | Surge | +5.27 | ++ |
+| Seal of Lightning | Comet | +5.16 | ++ |
+| Seal of Lightning | Erupt | +5.12 | ++ |
 
-No pair clears the threshold (≥ 0.5 pp with an interval excluding 0), even with a median of 924
-samples per pair. The estimates have sd 0.04 pp; the largest is about 0.2 pp (Seal of
-Destruction + Seal of Winter, −0.22). A depth-4 probe rarely sees two spells combine within its
-window. **The engine cannot supply a synergy chart with this method.**
+## Synergies
 
-## Is the disagreement a horizon artifact? Depth 6 says no
+20 pairs clear the threshold, all positive (+); the first run found none. No pair reaches
+++, and no anti-synergy is measurable. The effects are small: 0.5-1.2 points. Many involve the
+Providence spells, whose banked stones count toward the score lead. Several rest on fewer than
+200 positions, so treat those as tentative; the best-sampled are Fissure + Rock Slide and
+Dividend + Endowment.
+
+| pair | points | strength | samples |
+|---|---|---|---|
+| Rock Slide + Dividend | +1.16 | + | 40 |
+| Meteor + Dividend | +0.95 | + | 127 |
+| Seal of Lightning + Endowment | +0.91 | + | 113 |
+| Fissure + Dividend | +0.83 | + | 166 |
+| Tsunami + Dividend | +0.72 | + | 143 |
+| Seal of Lightning + Annuity | +0.67 | + | 168 |
+| Hail Storm + Scatter | +0.66 | + | 395 |
+| Fury + Fissure | +0.65 | + | 207 |
+| Carnage + Annuity | +0.64 | + | 169 |
+| Starfall + Hail Storm | +0.64 | + | 2,080 |
+| Syzygy + Dividend | +0.64 | + | 2,404 |
+| Starfall + Annuity | +0.60 | + | 172 |
+| Tsunami + Annuity | +0.58 | + | 152 |
+| Fissure + Rock Slide | +0.58 | + | 12,866 |
+| Carnage + Seal of Wind | +0.55 | + | 1,497 |
+| Hail Storm + Seal of Stone | +0.55 | + | 337 |
+| Dividend + Endowment | +0.51 | + | 12,940 |
+| Fireblast + Scatter | +0.50 | + | 381 |
+| Hail Storm + Hurricane | +0.50 | + | 551 |
+| Hail Storm + Storm Front | +0.50 | + | 407 |
+
+## Depth-6 check (from the first run, not repeated)
+
+**Measured before the leaf-evaluation fix and not re-run** (Robi, 2026-10-20): its values
+carry the same bias toward zero as the first run's tier list, so read it only as evidence that
+the ranking holds from depth 4 to depth 6, not for its magnitudes. The "engine higher" and
+"engine lower" groups refer to the first run's ranking.
 
 `engine/harness/spell_depth_probe.py` re-probed the largest disagreements and two controls at
 depth 6, on the same positions:
@@ -176,24 +231,17 @@ Scatter            engine lower    346     +0.51     +1.06    +0.55 [+0.39,+0.75
   game that holds it. That combines how often it matters with how much it matters when it does.
   The per-spell split is in the data file, as `samples`/values.
 * **Distribution:** the positions come from engine self-play, not human games.
-* **Leaf evaluation (found 2026-10-14, PR #23 review):** when these probes ran, `set_access`
-  stopped a disabled spell from being cast or giving its static anywhere in the search tree, but
-  the leaf evaluation still credited it:
-  * the hand evaluation's charged and per-spell sigil terms counted it;
-  * the net's spell rows still knew the spell.
-
-  A disabled spell charged near the horizon was therefore still valued as usable, so the
-  values here are biased toward zero, most for spells whose worth comes from charging them.
-  The leaf evaluation now honours the mask. The tier list and matchups should be re-measured
-  before they are treated as final.
+* **Depth:** all values are from depth-4 probes. The depth-6 check above predates the fix.
 
 ## Files
 
-* `engine/reports/data/spell_values_2026-10-12.json`: tier list, matchups and synergies, in
-  the Spells page schema, plus values, intervals and sample counts.
-* `engine/reports/data/spell_values_depth6_2026-10-12.txt`: the depth-6 table.
-* Raw probe logs: `gs://focus-surfer-494820-g0-sigil/runs/*-sigil-sv-*`, `*-sigil-sv27-*`,
-  `*-sigil-d6-*`. Plans: `gs://…/data/spell_values/`.
-* Code: the probe harnesses (`spell_value_probe.py`, `fit_spell_values.py`,
-  `spell_depth_probe.py`) and the `PyBoard.set_access` engine hook are on branch
-  `spell-access-experiment`, not in main.
+* `engine/reports/data/spell_values_2026-10-14.json`: this run's tier list, matchups and
+  synergies in the Spells page schema, plus values, intervals, sample counts and the strength
+  thresholds. A minified copy is the Spells page's Engine view
+  (`docs/static/data/spell-charts-engine.json`).
+* `engine/reports/data/spell_values_2026-10-12.json`: the first run, before the fix.
+* `engine/reports/data/spell_values_depth6_2026-10-12.txt`: the depth-6 table (before the fix).
+* Raw probe logs: runs listed in `gs://focus-surfer-494820-g0-sigil/data/spell_values/runs_rerun_2026-10-14.txt`
+  (first run: `*-sigil-sv-*`, `*-sigil-sv27-*`, `*-sigil-d6-*`). Plans: `gs://…/data/spell_values/`.
+* Code: `engine/harness/spell_value_probe.py` (the plan is now an argument),
+  `fit_spell_values.py`, `spell_depth_probe.py`.

@@ -109,6 +109,7 @@
 		.tile:hover { background: var(--color-surface-hover); }
 		.tile.focused { background: var(--color-btn-menu, #34506e); }
 		.tile span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.tile small.tv { font-size: 10px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 		@media (max-width: 600px) {
 			.tier-label { flex-basis: 52px; } .tier-label b { font-size: 24px; } .tier-label small { display: none; }
 			.tile { width: 72px; } .tile img { width: 62px; height: 62px; } .tile span { font-size: 10px; max-width: 68px; }
@@ -207,13 +208,7 @@
 					<option value="pack">pack</option>
 					<option value="alpha">alphabetical</option>
 				</select></label></div>
-				<div class="legend">
-					<span><i style="background:var(--syn-pp)"></i>row strongly favoured (++)</span>
-					<span><i style="background:var(--syn-p)"></i>row favoured (+)</span>
-					<span><i style="background:var(--syn-e)"></i>even</span>
-					<span><i style="background:var(--syn-n)"></i>column favoured (−)</span>
-					<span><i style="background:var(--syn-nn)"></i>column strongly favoured (−−)</span>
-				</div>
+				<div class="legend" id="matchup-legend"></div>
 				<div class="mx-wrap"><div id="matchup-chart" class="msg">Loading…</div></div>
 				<div class="info" id="matchup-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it.</span></div>
 			</section>
@@ -228,13 +223,7 @@
 					<option value="pack">pack</option>
 					<option value="alpha">alphabetical</option>
 				</select></label></div>
-				<div class="legend">
-					<span><i style="background:var(--syn-pp)"></i>strong synergy (++)</span>
-					<span><i style="background:var(--syn-p)"></i>synergy (+)</span>
-					<span><i style="background:var(--syn-e)"></i>none</span>
-					<span><i style="background:var(--syn-n)"></i>anti-synergy (−)</span>
-					<span><i style="background:var(--syn-nn)"></i>strong anti-synergy (−−)</span>
-				</div>
+				<div class="legend" id="synergy-legend"></div>
 				<div class="mx-wrap"><div id="synergy-chart" class="msg">Loading…</div></div>
 				<div class="info" id="synergy-info"><span class="t">Hover or tap a cell for details. Click a spell name to highlight it.</span></div>
 			</section>
@@ -278,6 +267,9 @@
 				tierNote: 'Within a tier, spells run best to worst from left to right. Hover a card for its text; click one to highlight it in the charts below.',
 				matchNote: 'Read each row against each column: if you build toward the row spell and your opponent toward the column spell, who is favoured? Blank cells are pairs we have not rated yet.',
 				synNote: 'Does holding both spells let you do something neither does alone? The chart is symmetric. Blank cells are pairs we have not rated yet.',
+				neutral: '=',
+				matchLegend: () => ['row strongly favoured (++)', 'row favoured (+)', 'even (=)', 'column favoured (−)', 'column strongly favoured (−−)'],
+				synLegend: () => ['strong synergy (++)', 'synergy (+)', 'none (=)', 'anti-synergy (−)', 'strong anti-synergy (−−)'],
 				method: D => `The order comes from ${D.comparisons} head-to-head "which spell is better?" judgements, fitted with a Bradley-Terry model. `
 					+ `${D.matchups.length} of the ${pairPairs()} spell pairs have a matchup rating and ${D.synergies.length} have a synergy rating so far. `
 					+ `Last updated ${(D.surveyExportedAt || '').slice(0, 10)}.`,
@@ -286,8 +278,13 @@
 				url: 'static/data/spell-charts-engine.json',
 				intro: n => `How the ${n} official spells stack up for the Sigil engine. It measures each spell by how much a player's chance of winning drops when that player cannot use it, in ${D.positions.toLocaleString()} positions from its own games.`,
 				tierNote: 'Spells run best to worst, left to right and down the tiers. Hover a card for its measured value; click one to highlight it in the charts below.',
-				matchNote: 'Each cell is the row spell\'s value to one player minus the column spell\'s value to the other. A side is favoured when the difference is at least 1 point of win probability and its 95% interval excludes zero; every other pair reads even. Hover a cell for the measured difference.',
-				synNote: 'The engine found no pair whose combined value differs measurably from the two spells\' separate values, so every cell reads none. Its search looks only a few moves ahead, which rarely shows two spells combining. Hover a cell for the measured difference.',
+				matchNote: 'Each cell is the row spell\'s value to one player minus the column spell\'s value to the other, in points of win probability: ++ / −− a strong edge, + / − an edge, 0 even. An edge counts only when its 95% interval excludes zero. Hover a cell for the measured difference.',
+				synNote: 'Each cell is the value of holding both spells minus their two separate values, in points of win probability: ++ / −− strong synergy or anti-synergy, + / − synergy or anti-synergy, 0 none measurable. A pair counts only when its 95% interval excludes zero; pairs with few samples are uncertain. Hover a cell for the measured difference and sample count.',
+				neutral: '0',
+				matchLegend: D => { const [lo, hi] = (D.thresholds || {}).matchup || [1, 3];
+					return [`row strongly favoured (++, ≥${hi} points)`, `row favoured (+, ≥${lo})`, 'even (0)', `column favoured (−, ≥${lo})`, `column strongly favoured (−−, ≥${hi})`]; },
+				synLegend: D => { const [lo, hi] = (D.thresholds || {}).synergy || [0.5, 1.5];
+					return [`strong synergy (++, ≥${hi} points)`, `synergy (+, ≥${lo})`, 'none (0)', `anti-synergy (−, ≥${lo})`, `strong anti-synergy (−−, ≥${hi})`]; },
 				method: D => `Measured by the engine (eval nnue_spell4, depth 4) on ${D.positions.toLocaleString()} positions from ${D.games.toLocaleString()} self-play games in which every official spell was drawn equally often. `
 					+ `Values are percentage points of win probability with 95% intervals bootstrapped over games. `,
 			},
@@ -300,6 +297,7 @@
 		for (const [k, v] of Object.entries(CORE_SUBPACKS)) for (const n of [...v.rituals, ...v.sorceries, ...v.charms]) SUBPACK_OF[n] = k;
 		const MATCH_CLS = { 2: 'pp', 1: 'p', 0: 'e', '-1': 'n', '-2': 'nn' };
 		const SYM = { pp: '++', p: '+', e: '=', n: '−', nn: '−−' };
+		const sym = cls => cls === 'e' ? SOURCES[source].neutral : SYM[cls];
 		const SYN_WORDS = { 2: 'strong synergy', 1: 'synergy', 0: 'no synergy', '-1': 'anti-synergy', '-2': 'strong anti-synergy' };
 		const el = id => document.getElementById(id);
 		const pretty = n => n.replace(/_/g, ' ');
@@ -308,7 +306,7 @@
 		const art = n => `static/images/spells/art_only/${n}.webp`;
 		const BOARD = { empty: 'Better on an emptier board.', crowded: 'Better on a crowded board.' };
 
-		let D = null, names = [], tierOf = {}, match = {}, syn = {}, matchPP = {}, synPP = {}, focus = null;
+		let D = null, names = [], tierOf = {}, match = {}, syn = {}, matchPP = {}, synPP = {}, synN = {}, focus = null;
 		let source = 'players';
 		const fmtPP = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2);
 
@@ -328,7 +326,7 @@
 					<div class="tier-label" style="background:${TIER_COLORS[t.key] || '#bbb'}"><b>${t.key}</b><small>${t.name}</small></div>
 					<div class="tier-items">${t.spells.map(n => `
 						<button class="tile" data-spell="${n}" title="${esc(describe(n))}">
-							<img src="${card(n)}" alt="" loading="lazy" width="84" height="84"><span>${pretty(n)}</span>
+							<img src="${card(n)}" alt="" loading="lazy" width="84" height="84"><span>${pretty(n)}</span>${typeof (D.spells[n] || {}).value === 'number' ? `<small class="tv">${fmtPP(D.spells[n].value)}</small>` : ''}
 						</button>`).join('')}</div>
 				</div>`).join('') + '</div>';
 		}
@@ -357,7 +355,7 @@
 					if (r === c) { h += `<td class="c d" data-s="${idx(r)}" data-o="${idx(c)}"></td>`; continue; }
 					const v = lookup[r + '|' + c], cls = v === undefined ? '' : MATCH_CLS[v];
 					if (v > 0) up++; else if (v < 0) down++; else if (v === 0) even++;
-					h += `<td class="c ${cls}" data-s="${idx(r)}" data-o="${idx(c)}">${cls ? SYM[cls] : ''}</td>`;
+					h += `<td class="c ${cls}" data-s="${idx(r)}" data-o="${idx(c)}">${cls ? sym(cls) : ''}</td>`;
 				}
 				h += `<td class="sum">${kind === 'match' ? `${up} · ${even} · ${down}` : `${up} · ${down}`}</td></tr>`;
 			}
@@ -374,7 +372,7 @@
 			const cLink = `<a style="color:var(--color-accent); text-decoration:underline;" href="spells/${slug(c)}.html"><b>${pretty(c)}</b></a>`;
 			const k = r + '|' + c, m = match[k], s = syn[k];
 			const mpp = matchPP[k] === undefined ? '' : ` · ${fmtPP(matchPP[k])} points for ${pretty(r)}`;
-			const spp = synPP[k] === undefined ? '' : ` · ${fmtPP(synPP[k])} points`;
+			const spp = synPP[k] === undefined ? '' : ` · ${fmtPP(synPP[k])} points` + (synN[k] ? ` (${synN[k].toLocaleString()} samples)` : '');
 			const mTxt = (m === undefined ? 'matchup not rated yet' : m === 0 ? 'even matchup'
 				: m > 0 ? `<b>${pretty(r)}</b> favoured (${m > 1 ? '++' : '+'})` : `<b>${pretty(c)}</b> favoured (${m < -1 ? '++' : '+'})`) + mpp;
 			const sTxt = (s === undefined ? 'synergy not rated yet' : SYN_WORDS[s] + (s ? ` (${SYM[MATCH_CLS[s]]})` : '')) + spp;
@@ -424,20 +422,26 @@
 			const S = SOURCES[source];
 			D = data;
 			names = Object.keys(D.spells);
-			tierOf = {}; match = {}; syn = {}; matchPP = {}; synPP = {};
+			tierOf = {}; match = {}; syn = {}; matchPP = {}; synPP = {}; synN = {};
 			for (const t of D.tiers) for (const n of t.spells) tierOf[n] = t.key;
 			for (const [a, b, v, pp] of D.matchups) {
 				match[a + '|' + b] = v; match[b + '|' + a] = -v;
 				if (typeof pp === 'number') { matchPP[a + '|' + b] = pp; matchPP[b + '|' + a] = -pp; }
 			}
-			for (const [a, b, v, pp] of D.synergies) {
+			for (const [a, b, v, pp, n] of D.synergies) {
 				syn[a + '|' + b] = v; syn[b + '|' + a] = v;
 				if (typeof pp === 'number') { synPP[a + '|' + b] = pp; synPP[b + '|' + a] = pp; }
+				if (typeof n === 'number') { synN[a + '|' + b] = n; synN[b + '|' + a] = n; }
 			}
 			el('intro').textContent = S.intro(names.length);
 			el('tier-note').textContent = S.tierNote;
 			el('matchup-note').textContent = S.matchNote;
 			el('synergy-note').textContent = S.synNote;
+			const legend = (id, labels) => {
+				el(id).innerHTML = labels.map((t, i) => `<span><i style="background:var(--syn-${['pp', 'p', 'e', 'n', 'nn'][i]})"></i>${esc(t)}</span>`).join('');
+			};
+			legend('matchup-legend', S.matchLegend(D));
+			legend('synergy-legend', S.synLegend(D));
 			renderTiers();
 			draw();
 			el('method').textContent = S.method(D);
