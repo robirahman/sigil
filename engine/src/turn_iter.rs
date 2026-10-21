@@ -101,7 +101,7 @@ impl Board {
             if VOID & bit != 0 { v -= 10; }
             for p in 0..9 {
                 if SIGIL[p] & bit == 0 || SIGIL[p] == cleared { continue; }
-                v += match self.uncontrolled_count(p, c) { 1 => 70, 2 => 30, _ => 5 };
+                v += match self.fill_gap(p, c) { 1 => 70, 2 => 30, _ => 5 };
             }
         }
         let lib_before = (Board::dilate(self.mine(c)) & self.empty()).count_ones() as i32;
@@ -709,7 +709,7 @@ impl Board {
     /// own rules, so nothing here is a guess the search has to refute.
     pub fn decisive_destruction_turns(&self, c: Color) -> Vec<Turn> {
         let Some(pos) = self.position_of(SEAL_OF_DESTRUCTION) else { return Vec::new() };
-        let short = self.uncontrolled_count(pos, c);
+        let short = self.fill_gap(pos, c);
         let fill = self.destruction_fill_targets(c);
         let gust_fill = fill != 0 && self.position_of(GUST).map_or(false, |g| self.is_charged(c, g))
             && (self.theirs(c) & Board::dilate(self.mine(c))).count_ones() >= fill.count_ones();
@@ -736,7 +736,7 @@ impl Board {
             // Casts whose best resolution decides it (self-fill, or Gust onto theirs).
             for id in b.castable(c, true, true, false) {
                 let Some(cp) = b.position_of(id) else { continue };
-                if id != GUST && b.uncontrolled_count(pos, c) > 2 { continue; }
+                if id != GUST && b.fill_gap(pos, c) > 2 { continue; }
                 let mut cl = b;
                 cl.cast_clear_and_keep(cp, c, 0);
                 let (ranked, _) = cl.resolve_outcomes_ranked(cp, c, 1);
@@ -749,7 +749,7 @@ impl Board {
             }
             // A dash landing the seal's last node, paid with the two cheapest
             // stones that are not themselves on the seal.
-            if b.uncontrolled_count(pos, c) == 1 && b.can_dash(c) {
+            if b.fill_gap(pos, c) == 1 && b.can_dash(c) {
                 let mut cands: Vec<u8> = Vec::new();
                 let mut m = b.dash_sacrificeable(c) & !seal & !(1u64 << n);
                 while m != 0 { cands.push(m.trailing_zeros() as u8); m &= m - 1; }
@@ -1000,7 +1000,7 @@ impl Board {
         if crate::topology::MANA & bit != 0 { v += 100; }
         for p in 0..9 {
             if crate::topology::SIGIL[p] & bit == 0 { continue; }
-            match self.uncontrolled_count(p, c) {
+            match self.fill_gap(p, c) {
                 0 => v += 90,          // breaks a charged sigil
                 1 => v += 50,
                 2 => v += 20,
@@ -1500,7 +1500,7 @@ impl Board {
         // C: a placement can charge Seal of Lightning first, halving the dash.
         if lead_bounds_v2() && dash_cost > 1 {
             if let Some(pos) = self.position_of(crate::spells_meta::SEAL_OF_LIGHTNING) {
-                if self.uncontrolled_count(pos, c) <= placements { dash_cost = 1; }
+                if self.fill_gap(pos, c) <= placements { dash_cost = 1; }
             }
         }
         let dash_gain = if dash_ok { 2 - dash_cost } else { 0 };
@@ -1510,7 +1510,7 @@ impl Board {
             for pos in 0..9 {
                 let id = self.spells[pos];
                 if id as usize >= NUM_OFFICIAL_SPELLS || SPELLS[id as usize].is_static { continue; }
-                if self.uncontrolled_count(pos, c) > reach { continue; }
+                if self.fill_gap(pos, c) > reach { continue; }
                 best_cast = best_cast.max(self.cast_swing_bound(id, c, reach) - self.clear_loss_p(pos, c, reach));
             }
         }
@@ -1528,7 +1528,7 @@ impl Board {
         for pos in 0..9 {
             let id = self.spells[pos];
             if id as usize >= NUM_OFFICIAL_SPELLS || SPELLS[id as usize].is_static { continue; }
-            if self.uncontrolled_count(pos, c) != 1 { continue; }
+            if self.fill_gap(pos, c) != 1 { continue; }
             let gap = crate::topology::SIGIL[pos] & !self.mine(c);   // the single missing node
             let net = self.cast_swing_bound(id, c, 1) - self.clear_loss_p(pos, c, 1);
             // A: when an ENEMY stone stands on that node the filling move is a
@@ -1800,8 +1800,8 @@ impl Board {
         let them = c.other();
         let (mut broken, mut set_back) = (0, 0);
         for p in 0..9 {
-            let before = self.uncontrolled_count(p, them);
-            let after = o.uncontrolled_count(p, them);
+            let before = self.fill_gap(p, them);
+            let after = o.fill_gap(p, them);
             if before == 0 && after > 0 { broken += 1; }
             else if before == 1 && after > 1 { set_back += 1; }
         }

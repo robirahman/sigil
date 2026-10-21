@@ -112,6 +112,18 @@ impl Board {
     /// the experiment-only `access` mask). The leaf evaluation honours it too, so a
     /// counterfactual search never values a disabled spell at its horizon.
     #[inline] pub fn can_use(&self, c: Color, p: usize) -> bool { self.access[c.idx()] >> p & 1 != 0 }
+    /// Sigil slots holding a Fissure wall (bit p = slot p): those spells can never
+    /// charge again, for either colour. The leaf evaluation treats them as blocked
+    /// for both sides, the same as an `access` slot cleared on both.
+    #[inline]
+    pub fn dead_slots(&self) -> u16 {
+        if self.walls == 0 { return 0; }
+        let mut d = 0u16;
+        for (p, &m) in crate::topology::SIGIL.iter().enumerate() {
+            if self.walls & m != 0 { d |= 1 << p; }
+        }
+        d
+    }
     #[inline] pub fn theirs(&self, c: Color) -> u64 { self.stones[c.other().idx()] }
 
     /// Union of the neighbours of every set bit. Replaces the per-node Python loop.

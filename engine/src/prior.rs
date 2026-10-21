@@ -85,8 +85,8 @@ impl Board {
         }
         i += 9;
         // 18: one stone short of charged
-        for p in 0..9 { x[i] = (self.uncontrolled_count(p, c) == 1) as i16; i += 1; }
-        for p in 0..9 { x[i] = (self.uncontrolled_count(p, c.other()) == 1) as i16; i += 1; }
+        for p in 0..9 { x[i] = (self.fill_gap(p, c) == 1) as i16; i += 1; }
+        for p in 0..9 { x[i] = (self.fill_gap(p, c.other()) == 1) as i16; i += 1; }
         // 20 scalars
         let red = self.material(Color::Red) as i32; let blue = self.material(Color::Blue) as i32;
         let lead = if c == Color::Red { red - (blue + 1) } else { (blue + 1) - red };

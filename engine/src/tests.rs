@@ -4168,6 +4168,69 @@ fn bulwark_shields_the_locked_spell() {
     assert_eq!(nb.shielded(), 0, "no lock, nothing shielded");
 }
 
+// Flourish in slot 0 (a2..a6), Carnage in slot 1 (b2..b6). Red fills a2..a5 and a
+// Fissure wall stands on a6: Flourish is dead for both colours.
+fn dead_sigil_board() -> Board {
+    let mut b = Board::new([0, 1, 33, 40, 43, 25, 41, 42, 11], Variant::Standard);
+    for s in ["a2", "a3", "a4", "a5", "b8"] { b.stones[0] |= 1 << n(s); }
+    for s in ["b1", "b3", "c2", "c13"] { b.stones[1] |= 1 << n(s); }
+    b.walls = 1 << n("a6");
+    b.turn_counter = 12;
+    b.update();
+    b
+}
+
+#[test]
+fn a_walled_sigil_never_charges_and_never_looks_short() {
+    let b = dead_sigil_board();
+    assert_eq!(b.dead_slots(), 1);
+    assert_eq!(b.charged[0] & 1, 0, "four stones and a wall is not charged");
+    assert!(!b.castable(Color::Red, true, true, true).contains(&0));
+    // The rules' count still sees one uncontrolled node; the heuristics see a dead spell.
+    assert_eq!(b.uncontrolled_count(0, Color::Red), 1);
+    assert_eq!(b.fill_gap(0, Color::Red), crate::resolvers::DEAD_GAP);
+    assert_eq!(b.fill_gap(1, Color::Red), b.uncontrolled_count(1, Color::Red));
+    assert!(!b.is_threatening(Color::Red, 0));
+    let mut live = b;
+    live.walls = 0;
+    live.update();
+    assert_eq!(live.dead_slots(), 0);
+    assert!(live.is_threatening(Color::Red, 0));
+}
+
+#[test]
+fn ordering_gives_no_fill_credit_in_a_dead_sigil() {
+    // Red on a2..a4, wall on a6: a soft move to a5 used to score as "two short".
+    let mut b = dead_sigil_board();
+    b.stones[0] &= !(1 << n("a5"));
+    b.update();
+    let mut live = b;
+    live.walls = 0;
+    live.update();
+    assert_eq!(b.move_score(n("a5"), None, Color::Red) + 25, live.move_score(n("a5"), None, Color::Red));
+}
+
+#[test]
+fn the_net_sees_a_walled_slot_as_blocked_for_both_sides() {
+    // The net has no wall input, so a wall alone would leave its evaluation equal to
+    // the unwalled board's. With the dead mask it equals the board whose slot is
+    // access-blocked for both colours instead.
+    let full = crate::eval::weights_by_name(crate::eval::SHIPPED_EVAL).unwrap();
+    let b = dead_sigil_board();
+    let mut open = b;
+    open.walls = 0;
+    open.update();
+    let mut blocked = open;
+    blocked.access = [ACCESS_ALL & !1, ACCESS_ALL & !1];
+    blocked.update();
+    for c in [Color::Red, Color::Blue] {
+        assert_eq!(b.evaluate(c, &full), blocked.evaluate(c, &full), "{c:?}");
+    }
+    assert_ne!(b.evaluate(Color::Red, &full), open.evaluate(Color::Red, &full));
+    // No wall, no change: the ordinary fold still applies.
+    assert_eq!(open.dead_slots(), 0);
+}
+
 #[test]
 fn fissure_destroys_own_stones_and_spares_the_shield() {
     let b = tect_board();

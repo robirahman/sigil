@@ -45,7 +45,7 @@ impl Board {
     pub fn is_threatening(&self, c: Color, spell_id: u8) -> bool {
         match self.position_of(spell_id) {
             None => false,
-            Some(p) => self.is_charged(c, p) || self.uncontrolled_count(p, c) == 1,
+            Some(p) => self.is_charged(c, p) || self.fill_gap(p, c) == 1,
         }
     }
 
@@ -69,10 +69,10 @@ impl Board {
         // A stone inside a sigil the enemy is close to charging is dangerous.
         for p in 0..9 {
             if SIGIL[p] & bit == 0 { continue; }
-            let gaps = self.uncontrolled_count(p, c.other());
+            let gaps = self.fill_gap(p, c.other());
             if gaps == 0 { v += 60; } else if gaps == 1 { v += 45; } else if gaps == 2 { v += 20; }
             // Conversely, a sigil WE are close to charging: clearing it helps us.
-            let ours = self.uncontrolled_count(p, c);
+            let ours = self.fill_gap(p, c);
             if ours == 1 { v += 40; } else if ours == 2 { v += 15; }
         }
         // "Most dangerous": the stone is constricting one of our groups. Measured as
@@ -231,7 +231,7 @@ impl Board {
             if MANA & bit != 0 { v += 90; }
             for p in 0..9 {
                 if SIGIL[p] & bit == 0 { continue; }
-                match self.uncontrolled_count(p, c) {
+                match self.fill_gap(p, c) {
                     1 => v += 70,                        // this move charges it
                     2 => v += 30,
                     _ => v += 5,
@@ -420,7 +420,7 @@ impl Board {
                         if crate::topology::SIGIL[p] & (1u64 << node) == 0 { continue; }
                         // Landing the last stone of a sigil is the tempo play the
                         // search could not see: dash, fill, cast, all in one turn.
-                        match self.uncontrolled_count(p, c) { 1 => v += 120, 2 => v += 40, _ => {} }
+                        match self.fill_gap(p, c) { 1 => v += 120, 2 => v += 40, _ => {} }
                     }
                 }
                 Action::Cast { .. } => { v += 150 + 30 * self.mana[c.idx()] as i32; }
