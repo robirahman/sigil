@@ -7,7 +7,7 @@
  * P(red wins) is calibrated to the Very Hard AI (60 s a move) playing both
  * sides from the position (engine/harness/position_selfplay.py, fitted by
  * fit_position_winprob.py into static/data/position-winprob.json), one curve
- * per search depth: a live in-browser search reports the depth it completed,
+ * per search depth (and game phase): a live in-browser search reports the depth it completed,
  * and stored or Deep-review evals carry theirs. A PROVEN forced win is a
  * certainty (0 or 1); a "likely" mate gets its calibrated rate.
  *
@@ -25,7 +25,14 @@ let _positionModelPromise = null;
 function loadPositionModel() {
 	if (!_positionModelPromise) {
 		const url = new URL(POSITION_MODEL_URL, document.baseURI).href;
-		_positionModelPromise = fetch(url).then(r => (r.ok ? r.json() : null)).catch(() => null);
+		_positionModelPromise = fetch(url).then(r => (r.ok ? r.json() : null)).then((m) => {
+			// The curves belong to one eval; a new shipped eval needs a refit
+			// (engine/harness/fit_position_winprob.py).
+			if (m && m.evalName && typeof RUST_REVIEW_SEARCH !== 'undefined' && m.evalName !== RUST_REVIEW_SEARCH.evalName) {
+				console.warn('[position-rating] calibration is for ' + m.evalName + ', the engine plays ' + RUST_REVIEW_SEARCH.evalName);
+			}
+			return m;
+		}).catch(() => null);
 	}
 	return _positionModelPromise;
 }
@@ -71,7 +78,10 @@ function positionRedWinProb(model, info, sfn) {
 		return info.mateIn > 0 ? w : 1 - w;
 	}
 	if (typeof info.stones !== 'number') return null;
-	const z = curve.a + curve.b * info.stones + (_sfnRedToMove(sfn) ? curve.c : 0);
+	// Game phase: a stone is worth less late in the game (fitted terms).
+	const ph = Math.min(Number(String(sfn).split(' ')[2]) || 0, 60) / 60;
+	const z = curve.a + curve.b * info.stones + (_sfnRedToMove(sfn) ? curve.c : 0)
+		+ ph * ((curve.aPhase || 0) + (curve.bPhase || 0) * info.stones);
 	return 1 / (1 + Math.exp(-z));
 }
 

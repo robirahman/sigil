@@ -75,6 +75,12 @@ async function driver() {
 	assert(Math.abs(p4 - 1 / (1 + Math.exp(-0.6))) < 1e-12, 'd4 red to move');
 	const p7 = positionRedWinProb(model, { depth: 7, stones: 1, mateIn: null, proven: true }, blue);
 	assert(Math.abs(p7 - 1 / (1 + Math.exp(-1))) < 1e-12, 'd7 uses the d6 curve, blue to move');
+	const phased = { version: 't', depths: { '4': { a: 0, b: 1, c: 0, aPhase: -0.6, bPhase: -0.9, likelyMateWin: 0.9 } } };
+	const late = 'r....../Sprout r 90 0:0 -:- -:- b1';
+	const pl = positionRedWinProb(phased, { depth: 4, stones: 1 }, late);
+	assert(Math.abs(pl - 1 / (1 + Math.exp(-(1 - 0.6 - 0.9)))) < 1e-12, 'phase capped at turn 60');
+	const pm = positionRedWinProb(phased, { depth: 4, stones: 2 }, 'r....../Sprout r 30 0:0 -:- -:- b1');
+	assert(Math.abs(pm - 1 / (1 + Math.exp(-(2 + 0.5 * (-0.6 - 0.9 * 2))))) < 1e-12, 'phase 0.5');
 
 	// 4. The first turn's SFN.
 	const b = new SigilBoard(generateSpellList(['core']), 'standard');

@@ -6,10 +6,13 @@ Each <log> is a position_selfplay.py shard log (local path or gs:// URL); its
 `POSRESULT {json}` lines hold the start, the start's eval at each depth and the
 winner of Very Hard vs Very Hard from there. Per depth d the model is
 
-    logit P(red wins) = a + b * s + c * [red to move]
+    logit P(red wins) = a + b * s + c * [red to move] + (aPhase + bPhase * s) * phase
 
 with s the depth-d eval in stones from red's side (the even-game offset
-applied, so 0 is even). A proven mate is a certainty and is left out of the
+applied, so 0 is even) and phase = min(turn counter, 60) / 60 of the start
+SFN (the side to move's SFN, as the site prices it). The phase terms were
+kept because they won held-out log-loss in every one of five folds at each
+depth (2026-10 fit: a stone is worth less late in the game). A proven mate is a certainty and is left out of the
 fit (a proven mate that LOST is counted and reported: it is an engine bug); a
 "likely" mate gets the observed win rate of the side it favours
 (`likelyMateWin`, with one win and one loss of prior). Games that hit the ply
@@ -19,7 +22,7 @@ Held-out check: positions whose index i % 5 == 0 are held out of a second
 fit, and the report gives held-out log-loss against a constant, a reliability
 table (predicted vs observed red wins by bucket), and the mean of
 (score - expected score) for each side and bucket -- the quantity the rated
-payoffs need to be zero. CIs on a, b, c come from 400 bootstrap resamples of
+payoffs need to be zero. CIs on a, b, c come from 300 bootstrap resamples of
 starts. --v31 adds the cheap cross-check: the same slope fitted on depth-5
 self-play chunks (selfplay_v2 npz, score from the side to move, no offset).
 
@@ -51,7 +54,7 @@ def load(paths):
 
 
 def rows(recs, d):
-    """(i, s_red, red_to_move, y_red, kind) per start; kind 'eval' | 'proven' | 'likely'."""
+    """(i, s_red, red_to_move, y_red, kind, phase) per start; kind 'eval' | 'proven' | 'likely'."""
     out = []
     for r in recs:
         e = r['evals'].get(str(d))
@@ -60,11 +63,12 @@ def rows(recs, d):
         sign = 1 if e['mover'] == 'red' else -1
         y = 1 if r['winner'] == 'red' else 0
         rtm = 1 if e['mover'] == 'red' else 0
+        ph = min(int(r['sfn'].split()[2]), 60) / 60
         if e.get('mate'):
             out.append((r['i'], (1 if e['mate'] * sign > 0 else -1), rtm, y,
-                        'proven' if e.get('proven') else 'likely'))
+                        'proven' if e.get('proven') else 'likely', ph))
         elif e.get('stones') is not None:
-            out.append((r['i'], e['stones'] * sign, rtm, y, 'eval'))
+            out.append((r['i'], e['stones'] * sign, rtm, y, 'eval', ph))
     return out
 
 
@@ -89,7 +93,8 @@ def logloss(p, y):
 def design(R):
     s = np.array([r[1] for r in R], float)
     rtm = np.array([r[2] for r in R], float)
-    return np.column_stack([np.ones(len(R)), s, rtm]), np.array([r[3] for r in R], float)
+    ph = np.array([r[5] for r in R], float)
+    return np.column_stack([np.ones(len(R)), s, rtm, ph, s * ph]), np.array([r[3] for r in R], float)
 
 
 def fit_depth(recs, d, rng):
@@ -101,7 +106,7 @@ def fit_depth(recs, d, rng):
     w = fit_logistic(X, y)
     # bootstrap over starts
     boots = []
-    for _ in range(400):
+    for _ in range(300):
         idx = rng.integers(0, len(ev), len(ev))
         boots.append(fit_logistic(X[idx], y[idx]))
     lo, hi = np.percentile(boots, [2.5, 97.5], axis=0)
@@ -122,9 +127,13 @@ def fit_depth(recs, d, rng):
             rel.append(dict(bucket=f'{a_:.1f}-{min(b_, 1):.1f}', n=int(m.sum()),
                             pred=float(pt[m].mean()), obs=float(y[test][m].mean()),
                             red_s_minus_e=float((y[test][m] - pt[m]).mean())))
+    names = ('a', 'b', 'c', 'aPhase', 'bPhase')
+    # held-out side check: mean (score - expected) for red and for blue
+    side = dict(red=float((y[test] - pt).mean()), blue=float(((1 - y[test]) - (1 - pt)).mean()))
     return dict(
-        a=float(w[0]), b=float(w[1]), c=float(w[2]),
-        ci=dict(a=[float(lo[0]), float(hi[0])], b=[float(lo[1]), float(hi[1])], c=[float(lo[2]), float(hi[2])]),
+        **{k: float(w[j]) for j, k in enumerate(names)},
+        ci={k: [float(lo[j]), float(hi[j])] for j, k in enumerate(names)},
+        heldout_side_s_minus_e=side,
         likelyMateWin=lmw, n=len(ev), n_likely=len(likely), n_proven=len(proven), proven_lost=proven_lost,
         heldout=dict(n=int(test.sum()), logloss=logloss(pt, y[test]), const=logloss(base, y[test]),
                      red_rate=float(y.mean())),
@@ -170,7 +179,9 @@ def main():
         evalName=recs[0]['eval'] if recs else None,
         msPerMove=recs[0]['ms'] if recs else None,
         games=len(recs), capped=capped,
-        depths={d: dict(a=f['a'], b=f['b'], c=f['c'], likelyMateWin=f['likelyMateWin'], n=f['n'])
+        phase='min(turn counter, 60) / 60',
+        depths={d: dict(a=f['a'], b=f['b'], c=f['c'], aPhase=f['aPhase'], bPhase=f['bPhase'],
+                        likelyMateWin=f['likelyMateWin'], n=f['n'])
                 for d, f in fits.items()},
     )
     json.dump(model, open(out, 'w'), indent=1)
