@@ -45,6 +45,11 @@ history. The other 30% are a random ply of v31 depth-5 self-play.
 * Median length was 20 plies. Each game took about 23 minutes of one vCPU, evals included.
 * About 12 of the 4,950 shards were still on their 11th game when the 6-hour watchdog
   stopped the VMs, so those games are missing.
+* This run gave each human start the game's earlier positions as history, but a rated game
+  from the position starts with none. Only a history that repeats a position can change a
+  game, so the fit drops the 59 starts (50 played) whose history did
+  (`--exclude-hist-repeats`): 4,978 games are fitted. Dropping them moves no parameter by
+  more than 0.02. `position_selfplay.py` now passes no history.
 
 ## Fit
 
@@ -62,9 +67,9 @@ logit p_red = a + b·s + c·[red to move] + (aPhase + bPhase·s)·phase
 
 | depth | a | b (per stone) | c (red to move) | aPhase | bPhase | n | held-out log-loss (constant) |
 |---|---|---|---|---|---|---|---|
-| 4 | −0.07 | 1.42 | +0.21 | −0.66 | −0.84 | 4,495 | 0.542 (0.680) |
-| 5 | +0.24 | 1.46 | −0.46 | −0.59 | −0.95 | 4,386 | 0.526 (0.680) |
-| 6 | −0.08 | 1.48 | +0.16 | −0.55 | −1.06 | 4,300 | 0.520 (0.678) |
+| 4 | −0.08 | 1.42 | +0.21 | −0.65 | −0.86 | 4,457 | 0.542 (0.680) |
+| 5 | +0.24 | 1.46 | −0.47 | −0.58 | −0.96 | 4,352 | 0.526 (0.680) |
+| 6 | −0.08 | 1.48 | +0.16 | −0.55 | −1.06 | 4,268 | 0.519 (0.678) |
 
 Held out means positions whose index is a multiple of 5 (about 870 per depth), refitted
 without them.
@@ -74,7 +79,7 @@ without them.
   per stone) and the outcome fit of depth-4 self-play labels (0.65 per stone).
 * **The phase terms.** They cut held-out log-loss in all five folds at every depth (mean
   0.004–0.005 nats), and their bootstrap CIs exclude zero. For example, bPhase at depth 6 is
-  [−1.42, −0.70]. A stone is worth less late in the game: +1 at turn 6 is 78%, at turn 40
+  [−1.42, −0.70] (fitted on all 5,028). A stone is worth less late in the game: +1 at turn 6 is 78%, at turn 40
   58% (depth 6, blue to move).
 * **The red-to-move term.** It flips sign at depth 5 against depths 4 and 6, which is the
   odd/even horizon of the search (which side moves last). So each depth needs its own curve.
@@ -95,7 +100,7 @@ Payoffs at equal ratings (depth 6, red to move, turn 13):
 **One engine bug.** A depth-6 search proved mate-in-1 for red and red still lost. This is
 start 3137, a competitive draw holding Fissure:
 `rrrrrrrrb...b....b......b..bbbb.b..r.../Starfall,Seal_of_Destruction,Fissure,Hail_Storm,Seal_of_Stone,Fury,Gust,Seal_of_Summer,Comet r 24 1:0 Fury:- -:- b1 competitive`.
-No other proven mate was lost (655 proven-mate evals across the three depths). The Fissure work on `fissure-dead-spells` may
+No other proven mate was lost (634 proven-mate evals across the three depths). The Fissure work on `fissure-dead-spells` may
 already cover it; it is not investigated here.
 
 **Not done.** The planned cheap cross-check (the same slope on v31 depth-5 self-play chunks,

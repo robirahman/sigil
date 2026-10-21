@@ -1,6 +1,7 @@
 """Fit eval -> P(red wins) for rated games from a position.
 
-    fit_position_winprob.py <out.json> <log> [<log> ...] [--v31 'glob'] [--report report.md]
+    fit_position_winprob.py <out.json> <log> [<log> ...] [--v31 'glob'] [--report report.json]
+                            [--exclude-hist-repeats starts.json]
 
 Each <log> is a position_selfplay.py shard log (local path or gs:// URL); its
 `POSRESULT {json}` lines hold the start, the start's eval at each depth and the
@@ -25,6 +26,12 @@ table (predicted vs observed red wins by bucket), and the mean of
 payoffs need to be zero. CIs on a, b, c come from 300 bootstrap resamples of
 starts. --v31 adds the cheap cross-check: the same slope fitted on depth-5
 self-play chunks (selfplay_v2 npz, score from the side to move, no offset).
+
+--exclude-hist-repeats drops the starts whose recorded history repeats a
+position (or holds the start itself): position_selfplay.py runs before
+2026-10-21 played them WITH that history, which a rated game from the
+position does not have, so only those games could differ (50 of 5,028; the
+fit moves by under 0.02 in any parameter).
 
 Writes docs/static/data/position-winprob.json's shape: {version, target,
 evalName, depths: {"4": {a, b, c, likelyMateWin, n}, ...}, ...}.
@@ -158,7 +165,7 @@ def v31_slope(pattern):
 def main():
     a = sys.argv[1:]
     out = a[0]
-    v31 = report = None
+    v31 = report = excl_from = None
     logs = []
     i = 1
     while i < len(a):
@@ -166,9 +173,19 @@ def main():
             v31 = a[i + 1]; i += 2
         elif a[i] == '--report':
             report = a[i + 1]; i += 2
+        elif a[i] == '--exclude-hist-repeats':
+            excl_from = a[i + 1]; i += 2
         else:
             logs.append(a[i]); i += 1
     recs = load(logs)
+    if excl_from:
+        starts = json.loads(read(excl_from))
+        key = lambda x: ' '.join(x.split()[i] for i in (0, 3, 4, 5))
+        bad = {j for j, st in enumerate(starts) if st['hist'] and (
+            key(st['sfn']) in {key(h) for h in st['hist']}
+            or len({key(h) for h in st['hist']}) < len(st['hist']))}
+        recs = [r for r in recs if r['i'] not in bad]
+        print(f"excluded {len(bad)} starts with a repetition in their history", file=sys.stderr)
     rng = np.random.default_rng(1)
     depths = sorted({int(k) for r in recs for k in r['evals']})
     fits = {str(d): fit_depth(recs, d, rng) for d in depths}

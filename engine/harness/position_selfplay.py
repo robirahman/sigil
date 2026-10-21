@@ -7,7 +7,7 @@ comes from $SIGIL_SHARD_OFF (never argv), so the argument list composes with
 `gcp/runner.sh`: shard s = off // 1000 plays starts s*games .. s*games+games-1.
 
 Each start is first scored with `se.analyze` (a fresh table per call, the shipped
-eval, width and adaptive config, the start's history) at every depth in
+eval, width and adaptive config) at every depth in
 `depths`; those are the evals the site will hold for a position (the live
 in-browser search reports the depth it completed; stored game_evals are depth
 6), and fit_position_winprob.py fits one eval -> P(red wins) curve per depth.
@@ -16,6 +16,12 @@ Then both sides play as the site's Very Hard tier (tier_roundrobin.py's TIERS:
 without pondering: the two sides are identical, so the target is the result
 between equal, strongest-available players. A game that hits `max_plies` is
 reported with winner None and left out of the fit.
+
+No earlier history goes into either the evals or the game: a rated game from a
+position starts with no repetition counts (GameController loads only the SFN),
+so the calibration must not either. (The 2026-10-21 run passed the human
+games' history; fit_position_winprob.py --exclude drops the 50 starts whose
+history held a repetition, the only ones it could affect.)
 
 One `POSRESULT {json}` line per game (start, src, per-depth evals, winner,
 plies, seconds); the runner ships the logs.
@@ -82,8 +88,8 @@ def main():
             break
         st = starts[i]
         t0 = time.time()
-        ev = evals_at(st['sfn'], st['hist'], depths)
-        winner, plies = play(st['sfn'], st['hist'], ms, tt, max_plies)
+        ev = evals_at(st['sfn'], [], depths)
+        winner, plies = play(st['sfn'], [], ms, tt, max_plies)
         rec = dict(i=i, sfn=st['sfn'], src=st['src'], ply=st['ply'], evals=ev, winner=winner,
                    plies=plies, ms=ms, eval=EVAL, secs=round(time.time() - t0))
         print("POSRESULT " + json.dumps(rec, separators=(',', ':')), flush=True)
