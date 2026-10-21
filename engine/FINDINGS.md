@@ -3096,7 +3096,7 @@ unchanged: offset = lead − tempo. Details: `reports/2026-10-eval-simplificatio
 A game from a position ("Rematch from here", Import Position, online rooms from a position) is
 rated with the position as an Elo handicap: E_red = σ(logit p_red + ln10/400·ΔR), K 32, no
 1-point floor, a proven forced win certain. Then either side's expected change is zero. p_red
-comes from 5,028 Very Hard vs Very Hard games (60 s a move) from sampled human and self-play
+comes from 4,978 Very Hard vs Very Hard games (60 s a move) from sampled human and self-play
 positions, one curve per eval depth with a game-phase term. Held out, the mean of (result −
 expected) is under 0.01 per side, and the log-loss is 0.52–0.54 against 0.68 for a constant.
 At that strength a one-stone early lead wins about 77%. Unpriced starts are unrated (closing the
