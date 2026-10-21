@@ -3091,3 +3091,12 @@ eval's variance (material 47%, net 52%). Dropping them, with a net retrained on 
 Rock Slide draws, at 10 s. It also predicts held-out results as well (0.58115 vs 0.58139) and
 skips the per-leaf flood fill. Raising the cap to 512 changed nothing measurable. The display is
 unchanged: offset = lead − tempo. Details: `reports/2026-10-eval-simplification.md`.
+
+## Fissure-walled spells are dead to the net and the heuristics (engine v33, 2026-10-21)
+The net has no wall input and `uncontrolled_count` counted a wall as a missing stone, so the
+engine kept filling sigils Fissure had killed (12-13% of its new stones on such turns against
+humans' 4%). `Board::dead_slots` now clears walled slots from both sides' access in
+`nn::eval`, and `Board::fill_gap` (DEAD_GAP for a walled sigil) replaces `uncontrolled_count`
+at every heuristic site; the rules keep `uncontrolled_count`. +21.9 Elo [+10.0, +33.9] on
+Fissure draws at 10 s (3,285 games); identical moves without walls. A wall input plane is the
+round-5 follow-up. engine/reports/2026-10-fissure-dead-spells.md.
