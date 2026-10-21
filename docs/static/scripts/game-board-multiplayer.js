@@ -183,10 +183,14 @@ document.addEventListener('alpine:init', () => {
 				if (!this.canPlayFromPosition || this.reviewReplaying) return;
 				const sfn = this.reviewSfns[this.reviewIndex];
 				try {
-					const info = typeof reviewPositionEval === 'function'
+					// The review's eval saw the game's earlier positions (repetition);
+					// the new game starts without them, so a repeated position is
+					// re-searched fresh instead.
+					const earlier = this.reviewSfns.slice(0, this.reviewIndex);
+					const info = (typeof reviewPositionEval === 'function' && !positionRepeats(sfn, earlier))
 						? reviewPositionEval(this.aiReview, this.reviewIndex) : null;
 					sessionStorage.setItem('sigil_rematch_startpos', JSON.stringify({
-						sfn, info: info, hist: this.reviewSfns.slice(Math.max(0, this.reviewIndex - 63), this.reviewIndex),
+						sfn, info: info,
 					}));
 					if (this._roomCodeForReview && !this.isSpectator) {
 						sessionStorage.setItem('sigil_position_from_room',

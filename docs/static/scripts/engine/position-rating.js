@@ -86,6 +86,31 @@ function positionRedWinProb(model, info, sfn) {
 }
 
 /**
+ * Resolves once Firebase has restored (or ruled out) the signed-in session:
+ * its first auth-state notification. AuthManager.currentUser starts at null,
+ * which reads as "signed out" before then. Gives up after 5 s.
+ */
+function firebaseAuthSettled() {
+	return new Promise((resolve) => {
+		if (typeof firebase === 'undefined' || !firebase.auth) return resolve(null);
+		let off = null;
+		const t = setTimeout(() => { if (off) off(); resolve(firebase.auth().currentUser); }, 5000);
+		off = firebase.auth().onAuthStateChanged((user) => {
+			clearTimeout(t);
+			if (off) off();
+			resolve(user);
+		});
+	});
+}
+
+/** True when `sfn`'s position (stones, counters, locks) occurs in `earlier`. */
+function positionRepeats(sfn, earlier) {
+	const key = (x) => { const p = String(x || '').trim().split(/\s+/); return [p[0], p[3], p[4], p[5]].join(' '); };
+	const k = key(sfn);
+	return (earlier || []).some((e) => key(e) === k);
+}
+
+/**
  * Rating payoffs of each side at these ratings: { red: {win, loss}, blue:
  * {win, loss} }, loss negative. The same rounding as the real update.
  */
@@ -117,11 +142,13 @@ function describePositionEval(info) {
  * Search the position with the Rust engine (rust-ai.js worker, the review
  * settings) and return its eval info. The search runs for POSITION_EVAL_MS on
  * a fresh table; one that completes fewer than 4 plies is retried longer.
+ * No earlier history: the game it prices starts fresh, with no repetition
+ * counts carried over.
  */
-async function evaluateStartPosition(sfn, historySfns) {
+async function evaluateStartPosition(sfn) {
 	const worker = getRustEngineWorker();
 	worker.post({ type: 'new_game', ttBits: 20 });
-	const hist = (historySfns || []).slice(-63).concat([sfn]);
+	const hist = [sfn];
 	let res = null;
 	for (let tms = POSITION_EVAL_MS, k = 0; k < 3; k++, tms *= 3) {
 		res = await worker.search(Object.assign({

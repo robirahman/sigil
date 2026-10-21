@@ -539,10 +539,14 @@ document.addEventListener('alpine:init', () => {
 				// position when it is deep enough to use, and the history
 				// (threefold repetition counts earlier positions).
 				try {
-					const info = typeof reviewPositionEval === 'function'
+					// The review's eval saw the game's earlier positions (repetition);
+					// the new game starts without them, so a repeated position is
+					// re-searched fresh instead.
+					const earlier = this.reviewSfns.slice(0, this.reviewIndex);
+					const info = (typeof reviewPositionEval === 'function' && !positionRepeats(sfn, earlier))
 						? reviewPositionEval(this.aiReview, this.reviewIndex) : null;
 					sessionStorage.setItem('sigil_rematch_startpos', JSON.stringify({
-						sfn, info: info, hist: this.reviewSfns.slice(Math.max(0, this.reviewIndex - 63), this.reviewIndex),
+						sfn, info: info,
 					}));
 				} catch (e) { /* sessionStorage blocked */ }
 				warnBeforeUnload = false;
@@ -586,10 +590,14 @@ document.addEventListener('alpine:init', () => {
 				if (!this.canRematchFromPosition || this.reviewReplaying) return;
 				const sfn = this.reviewSfns[this.reviewIndex];
 				try {
-					const info = typeof reviewPositionEval === 'function'
+					// The review's eval saw the game's earlier positions (repetition);
+					// the new game starts without them, so a repeated position is
+					// re-searched fresh instead.
+					const earlier = this.reviewSfns.slice(0, this.reviewIndex);
+					const info = (typeof reviewPositionEval === 'function' && !positionRepeats(sfn, earlier))
 						? reviewPositionEval(this.aiReview, this.reviewIndex) : null;
 					sessionStorage.setItem('sigil_rematch_startpos', JSON.stringify({
-						sfn, info: info, hist: this.reviewSfns.slice(Math.max(0, this.reviewIndex - 63), this.reviewIndex),
+						sfn, info: info,
 					}));
 				} catch (e) { /* sessionStorage blocked */ }
 				warnBeforeUnload = false;
@@ -1457,14 +1465,13 @@ document.addEventListener('alpine:init', () => {
 						const h = raw ? JSON.parse(raw) : null;
 						if (h && h.sfn === _startSfnAtLoad) handed = h;
 					} catch (e) { /* sessionStorage blocked or bad payload */ }
-					const hist = (handed && Array.isArray(handed.hist)) ? handed.hist : [];
 					const model = typeof loadPositionModel === 'function' ? await loadPositionModel() : null;
 					let info = handed && handed.info, source = 'review', failed = sfn ? '' : 'unreadable position';
 					if (!info && sfn) {
 						source = 'live';
 						try {
 							info = (typeof evaluateStartPosition === 'function' && typeof getRustEngineWorker === 'function')
-								? await evaluateStartPosition(sfn, hist) : null;
+								? await evaluateStartPosition(sfn) : null;
 						} catch (e) { failed = e.message || String(e); info = null; }
 					}
 					_startPos = (model && info && sfn) ? makeStartPos(model, sfn, info, source) : null;
@@ -1473,14 +1480,9 @@ document.addEventListener('alpine:init', () => {
 					if (_startPos) {
 						offer.oddsText = describePositionOdds(_startPos.redWinProb) + ' with Very Hard AI play on both sides.';
 					}
-					// Ratings: wait briefly for auth, then read both records.
-					if (_aiAuthManager && !_aiAuthManager.currentUser) {
-						await new Promise(resolve => {
-							const t = setTimeout(resolve, 3000);
-							_aiAuthManager.onAuthChanged(() => { clearTimeout(t); resolve(); });
-						});
-					}
-					const signedIn = !!(_aiAuthManager && _aiAuthManager.isAuthenticated);
+					// Ratings: wait for Firebase to restore the session, then read both records.
+					const _user = await firebaseAuthSettled();
+					const signedIn = !!(_user && !_user.isAnonymous);
 					if (!_startPos) {
 						offer.note = 'Unrated: ' + (failed ? 'the engine could not evaluate this position (' + failed + ').'
 							: 'this position could not be priced.');
@@ -1493,7 +1495,7 @@ document.addEventListener('alpine:init', () => {
 								db.ref('users/' + uid + '/elo').once('value').then(v => v.val() || 1000),
 								new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
 							]);
-							const [me, ai] = await Promise.all([read(_aiAuthManager.uid), read('__ai_' + aiMode + '__')]);
+							const [me, ai] = await Promise.all([read(_user.uid), read('__ai_' + aiMode + '__')]);
 							offer.payoffs = {
 								red: positionPayoffs(_startPos.redWinProb, me, ai).red,
 								blue: positionPayoffs(_startPos.redWinProb, ai, me).blue,

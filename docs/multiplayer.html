@@ -1050,7 +1050,7 @@
 					const model = await loadPositionModel();
 					if (sfn && !info) {
 						source = 'live';
-						try { info = await evaluateStartPosition(sfn, (handed && handed.hist) || []); }
+						try { info = await evaluateStartPosition(sfn); }
 						catch (e) { offer.note = 'Unrated: the engine could not evaluate this position (' + (e.message || e) + ').'; }
 					}
 					if (info) offer.evalText = 'Engine: ' + describePositionEval(info);
@@ -1076,16 +1076,20 @@
 						offer.evalText = 'Engine: ' + describePositionEval(sp);
 						offer.oddsText = describePositionOdds(sp.redWinProb) + ' with Very Hard AI play on both sides.';
 						const creatorUid = roomData[creator] && roomData[creator].uid;
-						if (this.authUser && creatorUid) {
+						const user = await firebaseAuthSettled();
+						const signedIn = !!(user && !user.isAnonymous);
+						if (signedIn && creatorUid) {
 							try {
-								const snap = await firebase.database().ref('users/' + creatorUid + '/elo').once('value');
-								const them = snap.val() || 1000, me = this.authElo || 1000;
+								const db = firebase.database();
+								const [a, b] = await Promise.all([db.ref('users/' + creatorUid + '/elo').once('value'),
+									db.ref('users/' + user.uid + '/elo').once('value')]);
+								const them = a.val() || 1000, me = b.val() || 1000;
 								const pay = side === 'red' ? positionPayoffs(sp.redWinProb, me, them).red
 									: positionPayoffs(sp.redWinProb, them, me).blue;
 								offer.payoffs = pay;
 							} catch (e) { /* ratings unavailable: show the odds only */ }
 						} else {
-							offer.note = this.authUser ? 'Unrated: your opponent is a guest.' : 'Sign in to play this position rated.';
+							offer.note = signedIn ? 'Unrated: your opponent is a guest.' : 'Sign in to play this position rated.';
 						}
 					} else {
 						offer.note = 'Unrated: the start position was not priced.';
