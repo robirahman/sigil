@@ -85,6 +85,106 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [ ] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`).
   The `beforeunload` warning is disabled on Safari.
 
+## From a Lichess comparison (2026-10-21)
+
+Features Lichess has for chess that the site lacks for Sigil, from a review of `lichess-org/lila` against `docs/`.
+Items already listed above are not repeated; chess-only features (opening names, tablebases, chess variants, FIDE data, electronic boards) are left out.
+
+### Pairing & ratings
+
+- [ ] **Add matchmaking pools** that pair players automatically within a rating range, alongside the open-game lobby.
+- [ ] **Let a friend-challenge link choose colour** (random, red or blue).
+- [ ] **Let players choose rated or casual per game.**
+- [ ] **Split ratings by time control and variant** (bullet, blitz, rapid, correspondence; Cataclysm etc.) instead of one Elo.
+- [ ] **Move to Glicko-2** with a provisional `?` marker, and show rating ranges on open games.
+
+### During a game
+
+- [ ] **Add "ask for more time" and "give opponent +15 s".**
+- [ ] **Add pre-moves** (queue a move during the opponent's turn).
+- [ ] **Add a chat toggle** so players can hide chat (once chat exists).
+- [ ] **Add zen mode** that hides everything but the board and clocks.
+- [ ] **Add board flip** and a choice of which side the board is drawn from.
+- [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
+- [ ] **Add move input by typed notation**, and optionally by voice.
+- [ ] **Let players draw arrows and circles** on the board during play and analysis.
+- [ ] **Add volume, animation speed and move confirmation** to the in-game settings panel.
+
+### Analysis & study
+
+- [ ] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
+- [ ] **Add a board editor** to set up a position and play it against the AI or a friend.
+- [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
+- [ ] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
+- [ ] **Add an evaluation cache** so already-analysed positions load instantly.
+- [ ] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
+- [ ] **Add practice-from-position** against the AI with hints.
+- [ ] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player.
+- [ ] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase.
+
+### Puzzles
+
+- [ ] **Add a puzzle dashboard** (results by theme over time).
+- [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer).
+- [ ] **Generate puzzles from a player's own games** (positions where they missed a win).
+
+### Learning
+
+- [ ] **Add guided practice drills** (dashing, cast timing, pushes).
+- [ ] **Add a node-naming trainer** for the board coordinates.
+- [ ] **Add classes** where teachers manage students and track their progress.
+- [ ] **Add a coach directory and a video library.**
+- [ ] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.
+
+### Competitions
+
+- [ ] **Add arena tournaments** (scheduled and user-created), with berserk (halve your clock for a bonus point).
+- [ ] **Add Swiss tournaments.**
+- [ ] **Add simultaneous exhibitions** (one player against many).
+- [ ] **Add scheduled site events and announcements.**
+- [ ] **Add broadcasts** relaying games from over-the-board events.
+
+### Social
+
+- [ ] **Add blocking** alongside the friends / follow list.
+- [ ] **Add an activity feed / timeline** ("X won a game", "X joined a tournament").
+- [ ] **Add private messaging.**
+- [ ] **Add a notifications inbox** plus web push.
+- [ ] **Add teams** with team tournaments and team battles.
+- [ ] **Add forums.**
+- [ ] **Add user blogs and a site blog.**
+- [ ] **Add private notes on players** and bookmarking games.
+- [ ] **Add a streamer listing.**
+- [ ] **Add Sigil TV** showing the top-rated live game.
+- [ ] **Add an end-of-year recap** of each player's games.
+- [ ] **Add supporter patrons** with a badge.
+
+### Profile & account
+
+- [ ] **Add per-mode stats pages:** streaks, best wins, worst losses, opponents.
+- [ ] **Add game search** by player, result, spell layout and date.
+- [ ] **Add bulk export** of all a player's games.
+- [ ] **Add trophies, badges and verified titles.**
+- [ ] **Add account closing, two-factor authentication and an active-sessions list.**
+- [ ] **Add detailed preferences:** board and stone appearance, sounds, clock display, resignation confirmation, blind mode.
+- [ ] **Translate the interface** into multiple languages.
+
+### Fair play & moderation
+
+- [ ] **Add reporting** of players and games, and a moderation panel to handle reports.
+- [ ] **Add engine-correlation cheat detection** (Lichess's Irwin).
+- [ ] **Add profanity filters** on chat and names.
+- [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process.
+
+### Platform
+
+- [ ] **Add a public API with OAuth** (sign in to other apps with a site account).
+- [ ] **Add bot accounts** so outside engines can play on the site.
+- [ ] **Add an embeddable board widget** for games and puzzles.
+- [ ] **Add GIF / image export** of games and positions.
+- [ ] **Add a screen-reader mode** and full keyboard control.
+- [ ] **Ship a native mobile app.**
+
 ## Cleanup
 
 - [ ] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
