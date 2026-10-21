@@ -93,7 +93,7 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 	const tokenSide = _sfnSide;
 	const movers = new Array(n + 1), evals = new Array(n + 1).fill(null);
 	const mates = new Array(n + 1).fill(null), proven = new Array(n + 1).fill(true);
-	const best = new Array(n + 1).fill(null);
+	const best = new Array(n + 1).fill(null), depths = new Array(n + 1).fill(null);
 	let depthMax = 0;
 	const worker = getRustEngineWorker();
 	worker.post({ type: 'new_game', ttBits: p.ttBits });   // a fresh table per review
@@ -134,13 +134,14 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 		if (typeof res.stones === 'number') evals[i] = res.stones * sign;
 		proven[i] = res.mate_in == null ? true : !!res.mate_proven;
 		best[i] = Array.isArray(res.actions) ? res.actions : null;
+		depths[i] = res.depth || null;
 		depthMax = Math.max(depthMax, res.depth || 0);
 	}
 	if (onProgress) onProgress(n, n);
 	const doc = {
 		engine: rustReviewModelVersion(), depth: depthMax, finalSfn: sfns[n], plies: n,
 		moverPerPly: movers, evalPerPly: evals, matePerPly: mates, provenPerPly: proven,
-		bestPerPly: best, terminal,
+		bestPerPly: best, depthPerPly: depths, terminal,
 	};
 	const review = rustEvalsToReview(doc, gameLog);
 	if (!review) throw new Error('Rust review did not match the game record');
@@ -471,6 +472,9 @@ function rustEvalsToReview(doc, gameLog) {
 		stonesPerPly,
 		bestTurnPerPly: new Array(n + 1).fill(null),
 		bestActionsPerPly: doc.bestPerPly ? pad(doc.bestPerPly) : null,
+		// Per-ply search depth (stored game_evals and live reviews): prices a
+		// rated game from a reviewed position (position-rating.js).
+		depthPerPly: doc.depthPerPly ? pad(doc.depthPerPly) : null,
 		moverPerPly: movers.slice(),
 		playedTurnPerPly: gameLog.map(t => t.turnNotation || null),
 		terminalWinner: (doc.terminal && doc.terminal.winner) || null,

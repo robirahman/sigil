@@ -169,6 +169,33 @@ document.addEventListener('alpine:init', () => {
 			opponentOfferedRematch: false,
 			rematchOpponentDisconnected: false,
 			rematchPending: false,
+			// A room from a position the opponent opened from this game's
+			// review (rooms/<code>/rematch/positionRoom).
+			opponentPositionRoom: '',
+
+			// Review: open an online room from the reviewed position. The new
+			// room is offered to the opponent through this room's rematch node.
+			get canPlayFromPosition() {
+				if (!this.reviewMode || !this.reviewSfns[this.reviewIndex]) return false;
+				return !(this.winner && this.reviewIndex >= this.reviewSfns.length - 1);
+			},
+			playFromPosition() {
+				if (!this.canPlayFromPosition || this.reviewReplaying) return;
+				const sfn = this.reviewSfns[this.reviewIndex];
+				try {
+					const info = typeof reviewPositionEval === 'function'
+						? reviewPositionEval(this.aiReview, this.reviewIndex) : null;
+					sessionStorage.setItem('sigil_rematch_startpos', JSON.stringify({
+						sfn, info: info, hist: this.reviewSfns.slice(Math.max(0, this.reviewIndex - 63), this.reviewIndex),
+					}));
+					if (this._roomCodeForReview && !this.isSpectator) {
+						sessionStorage.setItem('sigil_position_from_room',
+							JSON.stringify({ code: this._roomCodeForReview, color: this.myColor }));
+					}
+				} catch (e) { /* sessionStorage blocked */ }
+				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
+			},
+
 			offerOrAcceptRematch() {
 				if (this.isSpectator || !this._engine) return;
 				if (this.rematchOpponentDisconnected || this.rematchPending) return;
@@ -629,7 +656,9 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					_this._engine = engine;
-					engine.startGame(reconnectSfn);
+					// A spectator who arrives before the first move of a room
+					// from a position replays from its start.
+					engine.startGame(reconnectSfn || (isSpectator && sync && sync.startSfn) || null);
 				}, 100);
 
 				// Keyboard shortcuts
@@ -788,6 +817,8 @@ document.addEventListener('alpine:init', () => {
 						_this.selfOfferedRematch = r[myColor] === 'offered';
 						_this.opponentOfferedRematch = r[opponentColor] === 'offered';
 						_this.rematchPending = !!r.newRoomCode;
+						const pr = r.positionRoom;
+						_this.opponentPositionRoom = (pr && pr.code && pr.by !== myColor) ? pr.code : '';
 					}
 					else if (type === 'rematch_room_ready') {
 						window.location.href = 'multiplayer.html?id=' + encodeURIComponent(rest.newRoomCode);

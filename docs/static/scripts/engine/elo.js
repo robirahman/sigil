@@ -18,15 +18,47 @@
  */
 
 /**
+ * Expected score of player A against B when A plays a side that wins with
+ * probability `posP` from the start position between equal players (games
+ * started from a position, engine/reports/2026-10-position-ratings.md). The
+ * position is an Elo handicap added to the rating gap in logit space, so if
+ * posP is calibrated, A's expected rating change is zero whichever side A
+ * picks. A forced win (posP 0 or 1) is certain whatever the ratings.
+ * @param {number} posP - P(A's side wins | position), 0..1
+ * @param {number} eloA
+ * @param {number} eloB
+ * @returns {number} expected score of A, 0..1
+ */
+function positionExpectedScore(posP, eloA, eloB) {
+	if (!(posP > 0)) return 0;
+	if (!(posP < 1)) return 1;
+	const logit = Math.log(posP / (1 - posP)) + Math.LN10 * (eloA - eloB) / 400;
+	return 1 / (1 + Math.exp(-logit));
+}
+
+/**
  * Compute Elo points exchanged. K-factor = 32.
  * @param {number} winnerElo
  * @param {number} loserElo
- * @returns {number} points gained by winner (and lost by loser), 1–32
+ * @param {number|null} [winnerPosP] - for a game from a position: P(the
+ *   winner's side wins | position). Omitted: the standard formula.
+ * @returns {number} points gained by winner (and lost by loser): 1–32 for a
+ *   standard game; 0–32 from a position, with no floor, since a floor of 1
+ *   would pay a sure profit for converting a won position.
  */
-function computeEloChange(winnerElo, loserElo) {
+function computeEloChange(winnerElo, loserElo, winnerPosP) {
+	if (typeof winnerPosP === 'number') {
+		return Math.round(32 * (1 - positionExpectedScore(winnerPosP, winnerElo, loserElo)));
+	}
 	const exponent = (winnerElo - loserElo) / 400;
 	const expectedScore = 1 / (1 + Math.pow(10, exponent));
 	return Math.max(1, Math.round(32 * expectedScore));
+}
+
+/** P(red wins | start position) of a game record, or null for a standard game. */
+function gameStartRedWinProb(game) {
+	const p = game && game.startPos && game.startPos.redWinProb;
+	return (typeof p === 'number' && p >= 0 && p <= 1) ? p : null;
 }
 
 /**
@@ -57,7 +89,9 @@ async function processEloClientSide(db, gameId, game) {
 
 	const winnerElo = winnerData.elo || 1000;
 	const loserElo = loserData.elo || 1000;
-	const points = computeEloChange(winnerElo, loserElo);
+	const pRed = gameStartRedWinProb(game);
+	const winnerPosP = pRed === null ? null : (game.winner === 'red' ? pRed : 1 - pRed);
+	const points = computeEloChange(winnerElo, loserElo, winnerPosP);
 
 	const newWinnerElo = winnerElo + points;
 	const newLoserElo = loserElo - points;
@@ -110,6 +144,9 @@ async function processEloClientSide(db, gameId, game) {
 	updates['completed_games/' + gameId + '/blueEloBefore'] = blueBefore;
 	updates['completed_games/' + gameId + '/redEloAfter'] = redAfter;
 	updates['completed_games/' + gameId + '/blueEloAfter'] = blueAfter;
+	if (pRed !== null) {
+		updates['completed_games/' + gameId + '/redExpected'] = positionExpectedScore(pRed, redBefore, blueBefore);
+	}
 
 	// Per-user game index for profile pages (one entry per player).
 	// Profile pages read /user_games/{uid} to list a player's games and
@@ -134,6 +171,7 @@ async function processEloClientSide(db, gameId, game) {
 		eloBefore: redBefore,
 		eloAfter: redAfter,
 		eloChange: redAfter - redBefore,
+		fromPosition: pRed !== null,
 	};
 	// Blue's entry (opponent is red)
 	updates['user_games/' + game.blueUid + '/' + gameId] = {
@@ -148,6 +186,7 @@ async function processEloClientSide(db, gameId, game) {
 		eloBefore: blueBefore,
 		eloAfter: blueAfter,
 		eloChange: blueAfter - blueBefore,
+		fromPosition: pRed !== null,
 	};
 
 	await db.ref().update(updates);

@@ -34,6 +34,11 @@ class FirebaseSync {
 		this.blueUid = null;
 		this.blueDisplayName = null;
 		this.ranked = false;
+		// A room from a position: the start SFN, its priced start
+		// (position-rating.js) and the creator's seat (red otherwise).
+		this.startSfn = null;
+		this.startPos = null;
+		this.creatorColor = 'red';
 
 		// Server time offset for clock synchronization
 		this._serverTimeOffset = 0;
@@ -62,45 +67,58 @@ class FirebaseSync {
 	 * @param {object} [timeControl] - { type, initialTime, increment, moveTimeout }
 	 * @param {boolean} [allowSpectators] - whether spectators can watch (default true)
 	 * @param {string} [variant] - 'standard' (default) or 'competitive'
+	 * @param {object} [fromPosition] - a room from a position: { startSfn,
+	 *   startPos (position-rating.js; absent = unrated), creatorColor }. The
+	 *   creator sits in creatorColor's slot; every other room is created by red.
 	 */
-	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant) {
+	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant, fromPosition) {
 		const code = _generateRoomCode();
+		const me = (fromPosition && fromPosition.creatorColor === 'blue') ? 'blue' : 'red';
+		const other = me === 'red' ? 'blue' : 'red';
 		this.roomCode = code;
-		this.myColor = 'red';
+		this.myColor = me;
+		this.creatorColor = me;
 		this.created = Date.now();
 
-		this.redUid = userInfo?.uid || null;
-		this.redDisplayName = userInfo?.displayName || 'Guest';
+		this[me + 'Uid'] = userInfo?.uid || null;
+		this[me + 'DisplayName'] = userInfo?.displayName || 'Guest';
 		this.timeControl = timeControl || { type: 'none' };
 		this.allowSpectators = allowSpectators !== false;
 		this.variant = normalizeVariant(variant);
+		this.startSfn = (fromPosition && fromPosition.startSfn) || null;
+		this.startPos = (fromPosition && fromPosition.startPos) || null;
 
 		const roomData = {
 			spellNames: spellNames,
 			status: 'waiting',
 			created: this.created,
-			red: { connected: true, uid: this.redUid, displayName: this.redDisplayName },
-			blue: { connected: false },
+			[me]: { connected: true, uid: this[me + 'Uid'], displayName: this[me + 'DisplayName'] },
+			[other]: { connected: false },
 			ranked: false,
 			timeControl: this.timeControl,
 			allowSpectators: this.allowSpectators,
 			variant: this.variant,
 		};
+		if (this.startSfn) {
+			roomData.startSfn = this.startSfn;
+			roomData.creatorColor = me;
+			if (this.startPos) roomData.startPos = this.startPos;
+		}
 
 		const roomRef = this.db.ref('rooms/' + code);
 		await roomRef.set(roomData);
 		this.roomRef = roomRef;
 
-		this._writeActiveGameIndex('red');
+		this._writeActiveGameIndex(me);
 
-		roomRef.child('blue/connected').on('value', (snap) => {
+		roomRef.child(other + '/connected').on('value', (snap) => {
 			if (snap.val() === true && this.onOpponentJoin) {
 				this.onOpponentJoin();
 			}
 		});
 
 		this._listenForTurns();
-		roomRef.child('red/connected').onDisconnect().set(false);
+		roomRef.child(me + '/connected').onDisconnect().set(false);
 		return code;
 	}
 
@@ -128,35 +146,41 @@ class FirebaseSync {
 		// data was written before the field existed.
 		this.variant = normalizeVariant(data.variant);
 		this.created = data.created || Date.now();
+		// A room from a position (createRoom's fromPosition).
+		this.startSfn = data.startSfn || null;
+		this.startPos = data.startPos || null;
+		this.creatorColor = data.creatorColor === 'blue' ? 'blue' : 'red';
+		const creator = this.creatorColor;
+		const joiner = creator === 'red' ? 'blue' : 'red';
 
-		// Store player info from room data
-		if (data.red) {
-			this.redUid = data.red.uid || null;
-			this.redDisplayName = data.red.displayName || 'Guest';
+		// Store the creator's info from room data
+		if (data[creator]) {
+			this[creator + 'Uid'] = data[creator].uid || null;
+			this[creator + 'DisplayName'] = data[creator].displayName || 'Guest';
 		}
 
 		if (data.status === 'waiting') {
 			const created = data.created || 0;
 			if (created && (Date.now() - created > _INVITE_EXPIRY_MS)) {
 				roomRef.remove().catch(() => {});
-				if (data.red && data.red.uid) {
-					this.db.ref('user_active_games/' + data.red.uid + '/' + code).remove().catch(() => {});
+				if (data[creator] && data[creator].uid) {
+					this.db.ref('user_active_games/' + data[creator].uid + '/' + code).remove().catch(() => {});
 				}
 				throw new Error('This game invite has expired');
 			}
 
-			// Normal first join as blue
-			this.myColor = 'blue';
-			this.blueUid = userInfo?.uid || null;
-			this.blueDisplayName = userInfo?.displayName || 'Guest';
+			// Normal first join, into the seat the creator left open
+			this.myColor = joiner;
+			this[joiner + 'Uid'] = userInfo?.uid || null;
+			this[joiner + 'DisplayName'] = userInfo?.displayName || 'Guest';
 
-			await roomRef.child('blue').set({
+			await roomRef.child(joiner).set({
 				connected: true,
-				uid: this.blueUid,
-				displayName: this.blueDisplayName,
+				uid: this[joiner + 'Uid'],
+				displayName: this[joiner + 'DisplayName'],
 			});
 			await roomRef.child('status').set('playing');
-			roomRef.child('blue/connected').onDisconnect().set(false);
+			roomRef.child(joiner + '/connected').onDisconnect().set(false);
 
 			// Determine if ranked: both players authenticated, no unrated
 			// spells (Panda and Experimental are unofficial), and
@@ -166,14 +190,16 @@ class FirebaseSync {
 			const isDuplicates = variantHasDuplicates(data.variant);
 			const isScramble = variantHasScramble(data.variant);
 			const isPentagon = variantHasPentagon(data.variant);
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isScramble && !isPentagon) {
+			// A room from a position is rated only when its start was priced.
+			const unpriced = !!this.startSfn && !(this.startPos && typeof this.startPos.redWinProb === 'number');
+			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isScramble && !isPentagon && !unpriced) {
 				this.ranked = true;
 				await roomRef.child('ranked').set(true);
 			}
 
-			this._writeActiveGameIndex('blue');
+			this._writeActiveGameIndex(joiner);
 
-			roomRef.child('red/connected').on('value', (snap) => {
+			roomRef.child(creator + '/connected').on('value', (snap) => {
 				if (snap.val() === false && this.onOpponentDisconnect) {
 					this.onOpponentDisconnect();
 				}
@@ -182,7 +208,8 @@ class FirebaseSync {
 			this._listenForTurns();
 			return {
 				spellNames: normalizeSpellNames(data.spellNames),
-				myColor: 'blue',
+				myColor: joiner,
+				startSfn: this.startSfn,
 				timeControl: this.timeControl,
 				variant: this.variant,
 				redDisplayName: this.redDisplayName,
@@ -243,9 +270,11 @@ class FirebaseSync {
 				return this._joinAsSpectator(data);
 			}
 
-			if (data.blue) {
-				this.blueUid = data.blue.uid || null;
-				this.blueDisplayName = data.blue.displayName || 'Guest';
+			for (const c of ['red', 'blue']) {
+				if (data[c]) {
+					this[c + 'Uid'] = data[c].uid || null;
+					this[c + 'DisplayName'] = data[c].displayName || 'Guest';
+				}
 			}
 			this.ranked = data.ranked || false;
 
@@ -267,6 +296,7 @@ class FirebaseSync {
 				spellNames: normalizeSpellNames(data.spellNames),
 				myColor: this.myColor,
 				sfn: data.currentSfn || null,
+				startSfn: this.startSfn,
 				timeControl: this.timeControl,
 				variant: this.variant,
 				redDisplayName: this.redDisplayName,
@@ -286,9 +316,11 @@ class FirebaseSync {
 			throw new Error('Spectators are not allowed in this game');
 		}
 		this.myColor = null;
-		if (data.blue) {
-			this.blueUid = data.blue.uid || null;
-			this.blueDisplayName = data.blue.displayName || 'Guest';
+		for (const c of ['red', 'blue']) {
+			if (data[c]) {
+				this[c + 'Uid'] = data[c].uid || null;
+				this[c + 'DisplayName'] = data[c].displayName || 'Guest';
+			}
 		}
 
 		// Register spectator presence
@@ -304,6 +336,7 @@ class FirebaseSync {
 			myColor: null,
 			isSpectator: true,
 			sfn: data.currentSfn || null,
+			startSfn: this.startSfn,
 			timeControl: this.timeControl,
 			variant: this.variant,
 			redDisplayName: this.redDisplayName,
@@ -405,25 +438,28 @@ class FirebaseSync {
 	}
 
 	/**
-	 * Initialize timer state when game starts (called by room creator).
+	 * Initialize timer state when game starts (called by red).
 	 * @param {object} config - timeControl from room
+	 * @param {string} [firstColor] - who moves first ('red' unless the room
+	 *   starts from a position with blue to move)
 	 */
-	async initTimer(config) {
+	async initTimer(config, firstColor) {
 		if (!this.roomRef || !config || config.type === 'none') return;
+		const first = firstColor === 'blue' ? 'blue' : 'red';
 
 		let timerData;
 		if (config.type === 'realtime') {
 			timerData = {
 				red: config.initialTime,
 				blue: config.initialTime,
-				activeColor: 'red', // Red goes first
+				activeColor: first,
 				lastUpdated: firebase.database.ServerValue.TIMESTAMP,
 			};
 		} else if (config.type === 'correspondence') {
 			timerData = {
 				red: 0, // Will be set to deadline on first turn
 				blue: 0,
-				activeColor: 'red',
+				activeColor: first,
 				lastUpdated: firebase.database.ServerValue.TIMESTAMP,
 			};
 		}
@@ -591,37 +627,43 @@ class FirebaseSync {
 	}
 
 	/**
-	 * Re-establish the creator (red) side of a waiting room after a page reload.
-	 * Caller must have already verified that userInfo.uid matches data.red.uid.
+	 * Re-establish the creator's side of a waiting room after a page reload
+	 * (red, or the creatorColor of a room from a position). Caller must have
+	 * already verified that userInfo.uid matches the creator's uid.
 	 */
 	async reconnectAsCreator(code, userInfo, roomData) {
+		const me = roomData.creatorColor === 'blue' ? 'blue' : 'red';
+		const other = me === 'red' ? 'blue' : 'red';
 		const created = roomData.created || 0;
 		if (roomData.status === 'expired' || (roomData.status === 'waiting' && created && (Date.now() - created > _INVITE_EXPIRY_MS))) {
 			this.db.ref('rooms/' + code).remove().catch(() => {});
-			if (roomData.red && roomData.red.uid) {
-				this.db.ref('user_active_games/' + roomData.red.uid + '/' + code).remove().catch(() => {});
+			if (roomData[me] && roomData[me].uid) {
+				this.db.ref('user_active_games/' + roomData[me].uid + '/' + code).remove().catch(() => {});
 			}
 			throw new Error('This game invite has expired');
 		}
 
 		this.roomCode = code;
-		this.myColor = 'red';
+		this.myColor = me;
+		this.creatorColor = me;
 		this.created = roomData.created || Date.now();
-		this.redUid = userInfo?.uid || null;
-		this.redDisplayName = userInfo?.displayName || (roomData.red && roomData.red.displayName) || 'Guest';
+		this[me + 'Uid'] = userInfo?.uid || null;
+		this[me + 'DisplayName'] = userInfo?.displayName || (roomData[me] && roomData[me].displayName) || 'Guest';
 		this.timeControl = roomData.timeControl || { type: 'none' };
 		this.allowSpectators = roomData.allowSpectators !== false;
 		this.variant = normalizeVariant(roomData.variant);
+		this.startSfn = roomData.startSfn || null;
+		this.startPos = roomData.startPos || null;
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
 
-		await roomRef.child('red/connected').set(true);
-		roomRef.child('red/connected').onDisconnect().set(false);
+		await roomRef.child(me + '/connected').set(true);
+		roomRef.child(me + '/connected').onDisconnect().set(false);
 
-		this._writeActiveGameIndex('red');
+		this._writeActiveGameIndex(me);
 
-		roomRef.child('blue/connected').on('value', (snap) => {
+		roomRef.child(other + '/connected').on('value', (snap) => {
 			if (snap.val() === true && this.onOpponentJoin) {
 				this.onOpponentJoin();
 			}
@@ -711,6 +753,8 @@ class FirebaseSync {
 		gameRecord.redUid = this.redUid || null;
 		gameRecord.blueUid = this.blueUid || null;
 		gameRecord.ranked = this.ranked || false;
+		// A room from a position: the priced start sets the Elo payoffs.
+		if (this.startPos && typeof this.startPos.redWinProb === 'number') gameRecord.startPos = this.startPos;
 		// Backfill the variant if the caller didn't set it (older builds
 		// / edge paths). Treats the room metadata as the source of truth.
 		if (!SIGIL_VARIANTS.includes(gameRecord.variant)) {
@@ -831,7 +875,7 @@ class FirebaseSync {
 	 * Skips the lobby join step so both clients can navigate straight in.
 	 * Returns the new 6-char room code.
 	 */
-	async createRematchRoom(spellNames, timeControl, allowSpectators, redInfo, blueInfo, ranked, variant) {
+	async createRematchRoom(spellNames, timeControl, allowSpectators, redInfo, blueInfo, ranked, variant, fromPosition) {
 		const code = _generateRoomCode();
 		const roomData = {
 			spellNames: spellNames,
@@ -844,6 +888,11 @@ class FirebaseSync {
 			allowSpectators: allowSpectators !== false,
 			variant: normalizeVariant(variant),
 		};
+		// A rematch of a room from a position replays the same start.
+		if (fromPosition && fromPosition.startSfn) {
+			roomData.startSfn = fromPosition.startSfn;
+			if (fromPosition.startPos) roomData.startPos = fromPosition.startPos;
+		}
 		await this.db.ref('rooms/' + code).set(roomData);
 		return code;
 	}

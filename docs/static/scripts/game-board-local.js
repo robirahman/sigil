@@ -74,6 +74,11 @@ document.addEventListener('alpine:init', () => {
 			currentSfn: '',
 			importSfn: initialImportSfn,
 			importGameText: '',
+			// Import Position's opponent: '' = Local 1v1, an AI tier, or 'online'.
+			importOpponent: '',
+			// The side picker of a game vs AI from a position (position-rating.js):
+			// { loading, evalText, oddsText, payoffs: {red, blue} | null, note }.
+			sideOffer: null,
 			exportCopied: false,
 			gameExportCopied: false,
 			winner: '',
@@ -529,11 +534,17 @@ document.addEventListener('alpine:init', () => {
 				if (!this.canRematchFromPosition || this.reviewReplaying) return;
 				this.reviewAutoplay = false;
 				const sfn = this.reviewSfns[this.reviewIndex];
-				if (this.isAiGame && (this.myColor === 'red' || this.myColor === 'blue')) {
-					try {
-						sessionStorage.setItem('sigil_rematch_human_color', this.myColor);
-					} catch (e) { /* sessionStorage blocked */ }
-				}
+				// The side is chosen in the next game's side picker, priced
+				// from the engine's eval; hand over the review's eval of this
+				// position when it is deep enough to use, and the history
+				// (threefold repetition counts earlier positions).
+				try {
+					const info = typeof reviewPositionEval === 'function'
+						? reviewPositionEval(this.aiReview, this.reviewIndex) : null;
+					sessionStorage.setItem('sigil_rematch_startpos', JSON.stringify({
+						sfn, info: info, hist: this.reviewSfns.slice(Math.max(0, this.reviewIndex - 63), this.reviewIndex),
+					}));
+				} catch (e) { /* sessionStorage blocked */ }
 				warnBeforeUnload = false;
 				const params = new URLSearchParams(window.location.search);
 				params.delete('review');
@@ -547,6 +558,42 @@ document.addEventListener('alpine:init', () => {
 				if (variant === 'standard') params.delete('variant');
 				else params.set('variant', variant);
 				window.location.href = window.location.pathname + '?' + params.toString();
+			},
+
+			// The side picker's buttons ('red' | 'blue' | 'random').
+			chooseSide(side) {
+				if (!this.sideOffer || this.sideOffer.loading || !this._sideOfferResolve) return;
+				const resolve = this._sideOfferResolve;
+				this._sideOfferResolve = null;
+				resolve(side);
+			},
+
+			// Import Position: start the pasted SFN against the chosen
+			// opponent (Local 1v1, an AI tier, or a new online room).
+			importPosition() {
+				const sfn = this.importSfn.trim();
+				if (!sfn) return;
+				if (this.importOpponent === 'online') {
+					window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
+					return;
+				}
+				const ai = this.importOpponent ? '&ai=' + encodeURIComponent(this.importOpponent) : '';
+				window.location.href = '?sfn=' + encodeURIComponent(sfn) + ai;
+			},
+
+			// Review: open an online room from the reviewed position.
+			playOnlineFromPosition() {
+				if (!this.canRematchFromPosition || this.reviewReplaying) return;
+				const sfn = this.reviewSfns[this.reviewIndex];
+				try {
+					const info = typeof reviewPositionEval === 'function'
+						? reviewPositionEval(this.aiReview, this.reviewIndex) : null;
+					sessionStorage.setItem('sigil_rematch_startpos', JSON.stringify({
+						sfn, info: info, hist: this.reviewSfns.slice(Math.max(0, this.reviewIndex - 63), this.reviewIndex),
+					}));
+				} catch (e) { /* sessionStorage blocked */ }
+				warnBeforeUnload = false;
+				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
 			},
 
 			rematchStage: 'idle',  // 'idle' | 'rematch'
@@ -866,6 +913,9 @@ document.addEventListener('alpine:init', () => {
 				const gameVariantParam = puzzle ? (puzzle.variant || 'standard')
 					: new URLSearchParams(window.location.search).get('variant');
 				let gameVariant = normalizeVariant(gameVariantParam);
+				// The position this page was opened on (?sfn=). Captured now:
+				// importSfn is bound to the Import Position box.
+				const _startSfnAtLoad = puzzle ? '' : (_this.importSfn || '');
 				// An imported SFN names its own layout (a pentagon stone field).
 				if (_this.importSfn) {
 					try {
@@ -898,6 +948,10 @@ document.addEventListener('alpine:init', () => {
 				// First turn's pre-turn SFN — persisted so slim saved logs of
 				// games that began from an imported position can be replayed.
 				let _savedSetupSfn = null;
+				// A game from a position (?sfn=, kept across resumes) and, when
+				// it is rated, its priced start (position-rating.js).
+				let _fromPosition = !!_startSfnAtLoad;
+				let _startPos = null;
 				if (_gameId && typeof LocalSaveStore !== 'undefined') {
 					const _save = LocalSaveStore.get(_gameId);
 					if (_save && _save.sfn) {
@@ -933,6 +987,10 @@ document.addEventListener('alpine:init', () => {
 							}
 							if (_save.setupSfn) {
 								_savedSetupSfn = _save.setupSfn;
+							}
+							if (_save.fromPosition) _fromPosition = true;
+							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
+								_startPos = _save.startPos;
 							}
 						} else {
 							LocalSaveStore.remove(_gameId);
@@ -1026,10 +1084,13 @@ document.addEventListener('alpine:init', () => {
 						sessionStorage.removeItem('sigil_rematch_human_color');
 					}
 				} catch (e) { /* sessionStorage blocked */ }
-				const _humanColor = puzzle ? puzzle.mover
+				let _humanColor = puzzle ? puzzle.mover
 					: (_forcedHumanColor || _savedHumanColor || (Math.random() < 0.5 ? 'blue' : 'red'));
-				const _aiColor = _humanColor === 'red' ? 'blue' : 'red';
+				let _aiColor = _humanColor === 'red' ? 'blue' : 'red';
 				_this.myColor = _humanColor;
+				// A new game vs AI from a position: the player picks a side in
+				// the side picker (below) before the engine starts.
+				const _offerSides = !!(aiMode && _startSfnAtLoad && !_saveLoadedSfn);
 
 				// "Play Again (Same Layout)" stashes the spell list in sessionStorage; pick it
 				// up here on next page load and feed it into the engine so the new match
@@ -1360,12 +1421,87 @@ document.addEventListener('alpine:init', () => {
 						humanColor: aiMode ? _humanColor : null,
 						gameLog: _persistedGameLog,
 						setupSfn: _setupSfn,
+						fromPosition: _fromPosition,
+						startPos: _startPos,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
 				}
 
-				initEngine();
+				/**
+				 * The side picker of a game vs AI from a position: evaluate the
+				 * start (or take the review's eval), price both sides at the
+				 * current ratings, and wait for the player's choice.
+				 */
+				async function _pickSideFromPosition() {
+					// The position as the game will start its first turn (the
+					// side to move and turn counter the engine searches).
+					let sfn;
+					try { sfn = positionTurnSfn(_startSfnAtLoad); } catch (e) { sfn = null; }
+					_this.sideOffer = { loading: true, evalText: 'Evaluating the position\u2026', oddsText: '', payoffs: null, note: '' };
+					let handed = null;
+					try {
+						const raw = sessionStorage.getItem('sigil_rematch_startpos');
+						sessionStorage.removeItem('sigil_rematch_startpos');
+						const h = raw ? JSON.parse(raw) : null;
+						if (h && h.sfn === _startSfnAtLoad) handed = h;
+					} catch (e) { /* sessionStorage blocked or bad payload */ }
+					const hist = (handed && Array.isArray(handed.hist)) ? handed.hist : [];
+					const model = typeof loadPositionModel === 'function' ? await loadPositionModel() : null;
+					let info = handed && handed.info, source = 'review', failed = sfn ? '' : 'unreadable position';
+					if (!info && sfn) {
+						source = 'live';
+						try {
+							info = (typeof evaluateStartPosition === 'function' && typeof getRustEngineWorker === 'function')
+								? await evaluateStartPosition(sfn, hist) : null;
+						} catch (e) { failed = e.message || String(e); info = null; }
+					}
+					_startPos = (model && info && sfn) ? makeStartPos(model, sfn, info, source) : null;
+					const offer = { loading: false, evalText: '', oddsText: '', payoffs: null, note: '' };
+					if (info) offer.evalText = 'Engine: ' + describePositionEval(info);
+					if (_startPos) {
+						offer.oddsText = describePositionOdds(_startPos.redWinProb) + ' with Very Hard AI play on both sides.';
+					}
+					// Ratings: wait briefly for auth, then read both records.
+					if (_aiAuthManager && !_aiAuthManager.currentUser) {
+						await new Promise(resolve => {
+							const t = setTimeout(resolve, 3000);
+							_aiAuthManager.onAuthChanged(() => { clearTimeout(t); resolve(); });
+						});
+					}
+					const signedIn = !!(_aiAuthManager && _aiAuthManager.isAuthenticated);
+					if (!_startPos) {
+						offer.note = 'Unrated: ' + (failed ? 'the engine could not evaluate this position (' + failed + ').'
+							: 'this position could not be priced.');
+					} else if (!signedIn) {
+						offer.note = 'Sign in to play this position rated.';
+					} else {
+						try {
+							const db = firebase.database();
+							const read = (uid) => Promise.race([
+								db.ref('users/' + uid + '/elo').once('value').then(v => v.val() || 1000),
+								new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+							]);
+							const [me, ai] = await Promise.all([read(_aiAuthManager.uid), read('__ai_' + aiMode + '__')]);
+							offer.payoffs = {
+								red: positionPayoffs(_startPos.redWinProb, me, ai).red,
+								blue: positionPayoffs(_startPos.redWinProb, ai, me).blue,
+								me, ai,
+							};
+						} catch (e) {
+							offer.note = 'Ratings are unavailable offline; the game is still rated when it syncs.';
+						}
+					}
+					_this.sideOffer = offer;
+					const side = await new Promise(resolve => { _this._sideOfferResolve = resolve; });
+					_this.sideOffer = null;
+					_humanColor = side === 'random' ? (Math.random() < 0.5 ? 'blue' : 'red') : side;
+					_aiColor = _humanColor === 'red' ? 'blue' : 'red';
+					_this.myColor = _humanColor;
+				}
+
+				if (_offerSides) _pickSideFromPosition().then(initEngine);
+				else initEngine();
 
 				// Keyboard shortcuts
 				document.addEventListener('keydown', (e) => {
@@ -2168,7 +2304,12 @@ document.addEventListener('alpine:init', () => {
 						const _isDuplicates = variantHasDuplicates(recordVariant);
 						const _isScramble = variantHasScramble(recordVariant);
 						const _isPentagon = variantHasPentagon(recordVariant);
-						const _unrated = isGuest || !difficulty || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon;
+						// A game from a position is rated only when its start was
+						// priced (position-rating.js); the Elo update then uses it.
+						const _recordSetup = _setupSfn || (gameTurns.length ? gameTurns[0].sfnBefore : null);
+						const _priced = !!(_startPos && _recordSetup && _startPos.sfn === _recordSetup);
+						const _unpricedStart = _fromPosition && !_priced;
+						const _unrated = isGuest || !difficulty || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon || _unpricedStart;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2210,6 +2351,10 @@ document.addEventListener('alpine:init', () => {
 						};
 						if (!difficulty) gameRecord.mode = 'local_1v1';
 						if (isGuest) gameRecord.guest = true;
+						if (_priced) {
+							gameRecord.startPos = _startPos;
+							roomRecord.startPos = _startPos;
+						}
 
 						// Attach any annotations the human made during the game.
 						if (_this.annotations && Object.keys(_this.annotations).length > 0) {
@@ -2250,6 +2395,8 @@ document.addEventListener('alpine:init', () => {
 							_this.messageHistory.push('Unrated: Cataclysm board games do not affect rating.');
 						} else if (_isUnratedPack) {
 							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
+						} else if (_unpricedStart) {
+							_this.messageHistory.push('Unrated: this game started from a position the engine did not price.');
 						}
 
 						_this._activeFinishingQueuedId = queuedId;

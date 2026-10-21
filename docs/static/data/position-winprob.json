@@ -1,0 +1,10 @@
+{
+ "version": "provisional",
+ "target": "P(red wins) with the Very Hard AI (60 s a move) playing both sides from the position",
+ "evalName": "nnue_mt256",
+ "depths": {
+  "4": {"a": 0.0, "b": 0.65, "c": 0.0, "likelyMateWin": 0.9},
+  "5": {"a": 0.0, "b": 0.65, "c": 0.0, "likelyMateWin": 0.9},
+  "6": {"a": 0.0, "b": 0.65, "c": 0.0, "likelyMateWin": 0.9}
+ }
+}
