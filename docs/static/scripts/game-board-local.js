@@ -917,11 +917,18 @@ document.addEventListener('alpine:init', () => {
 				// importSfn is bound to the Import Position box.
 				const _startSfnAtLoad = puzzle ? '' : (_this.importSfn || '');
 				// An imported SFN names its own layout (a pentagon stone field).
+				// An imported position names its own variant and spells; the AI
+				// hand-off below reads them (a pasted SFN's URL names neither).
+				let _importUnsupported = false;
 				if (_this.importSfn) {
 					try {
-						if (sfnToDict(_this.importSfn).layout === 'pentagon' && !variantHasPentagon(gameVariant)) {
+						const _imp = sfnToDict(_this.importSfn);
+						if (_imp.variant && _imp.variant !== 'standard') gameVariant = normalizeVariant(_imp.variant);
+						if (_imp.layout === 'pentagon' && !variantHasPentagon(gameVariant)) {
 							gameVariant = normalizeVariant(gameVariant + '_pentagon');
 						}
+						// Spells the Rust engine does not play (Panda, Experimental).
+						_importUnsupported = (_imp.spell_names || []).some(n => isUnratedSpell(n));
 					} catch (e) { /* bad SFN: the engine reports it */ }
 				}
 				let _engineRef = null;
@@ -1205,6 +1212,10 @@ document.addEventListener('alpine:init', () => {
 						if (variantHasDuplicates(gameVariant) || variantHasScramble(gameVariant)) {
 							const vName = variantHasDuplicates(gameVariant) ? 'Allow Duplicates' : 'Scramble';
 							_this.messageHistory.push('The Rust engine does not support the ' + vName + ' variant yet; '
+								+ 'playing the ' + jsLabel + ' JS engine tier (same time budget) instead.');
+							aiMode = jsTier;
+						} else if (_importUnsupported) {
+							_this.messageHistory.push('The Rust engine does not support this position\'s spells; '
 								+ 'playing the ' + jsLabel + ' JS engine tier (same time budget) instead.');
 							aiMode = jsTier;
 						} else if (!_rematchSpells && typeof generateSpellList === 'function') {

@@ -113,13 +113,33 @@ class FirebaseSync {
 
 		roomRef.child(other + '/connected').on('value', (snap) => {
 			if (snap.val() === true && this.onOpponentJoin) {
-				this.onOpponentJoin();
+				this._refreshPlayers().then(() => this.onOpponentJoin && this.onOpponentJoin());
 			}
 		});
 
 		this._listenForTurns();
 		roomRef.child(me + '/connected').onDisconnect().set(false);
 		return code;
+	}
+
+	/**
+	 * The creator's copy of the joiner's seat and the room's ranked flag,
+	 * which the joiner writes: red records the finished game, and when red
+	 * is the creator its record needs them.
+	 */
+	async _refreshPlayers() {
+		try {
+			const data = (await this.roomRef.once('value')).val() || {};
+			for (const c of ['red', 'blue']) {
+				if (c !== this.myColor && data[c]) {
+					this[c + 'Uid'] = data[c].uid || null;
+					this[c + 'DisplayName'] = data[c].displayName || 'Guest';
+				}
+			}
+			this.ranked = !!data.ranked;
+		} catch (e) {
+			console.warn('[Sync] could not read the joined room:', e);
+		}
 	}
 
 	/**
@@ -174,14 +194,6 @@ class FirebaseSync {
 			this[joiner + 'Uid'] = userInfo?.uid || null;
 			this[joiner + 'DisplayName'] = userInfo?.displayName || 'Guest';
 
-			await roomRef.child(joiner).set({
-				connected: true,
-				uid: this[joiner + 'Uid'],
-				displayName: this[joiner + 'DisplayName'],
-			});
-			await roomRef.child('status').set('playing');
-			roomRef.child(joiner + '/connected').onDisconnect().set(false);
-
 			// Determine if ranked: both players authenticated, no unrated
 			// spells (Panda and Experimental are unofficial), and
 			// not a Deathmatch / Duplicates / Scramble game (always unrated).
@@ -192,10 +204,16 @@ class FirebaseSync {
 			const isPentagon = variantHasPentagon(data.variant);
 			// A room from a position is rated only when its start was priced.
 			const unpriced = !!this.startSfn && !(this.startPos && typeof this.startPos.redWinProb === 'number');
-			if (this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isScramble && !isPentagon && !unpriced) {
-				this.ranked = true;
-				await roomRef.child('ranked').set(true);
-			}
+			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isScramble && !isPentagon && !unpriced);
+
+			// Seat, status and ranked in ONE write: the creator's join
+			// listener then reads them together (_refreshPlayers).
+			await roomRef.update({
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'] },
+				status: 'playing',
+				ranked: this.ranked,
+			});
+			roomRef.child(joiner + '/connected').onDisconnect().set(false);
 
 			this._writeActiveGameIndex(joiner);
 
@@ -665,7 +683,7 @@ class FirebaseSync {
 
 		roomRef.child(other + '/connected').on('value', (snap) => {
 			if (snap.val() === true && this.onOpponentJoin) {
-				this.onOpponentJoin();
+				this._refreshPlayers().then(() => this.onOpponentJoin && this.onOpponentJoin());
 			}
 		});
 

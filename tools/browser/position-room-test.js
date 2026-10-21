@@ -3,7 +3,9 @@
 //      Blue and creates the room (startSfn, startPos, creatorColor 'blue').
 //   2. B opens the room link: B sees the confirmation with B's side (Red) and
 //      the odds before joining; joining seats B as Red and A stays Blue.
-//   3. Both boards open on the start position; the side to move is the one the
+//   3. The creator's sync holds the joiner's uid and the ranked flag (red
+//      records the finished game, so a red creator needs them).
+//   4. Both boards open on the start position; the side to move is the one the
 //      start SFN's next turn gives.
 // The test room is deleted at the end.
 //
@@ -66,6 +68,9 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		check('Blue moves first', [a, b].every((x) => x.msgs.some((m) => m === 'Blue Turn 7')
 			&& x.msgs.some((m) => /Blue moves first/.test(m))), { a: a.msgs, b: b.msgs });
 		const st = await pageA.evaluate(async (c) => (await firebase.database().ref('rooms/' + c).once('value')).val(), code);
+		// The creator (Blue here; Red records the game, but a Red creator must) holds the joiner's seat.
+		const seen = await pageA.evaluate(() => ({ redUid: _firebaseSync.redUid, ranked: _firebaseSync.ranked }));
+		check('creator learned the joiner\'s seat', seen.redUid === ((st.red && st.red.uid) || null) && seen.ranked === !!st.ranked, { seen, red: st.red });
 		check('room playing, unrated (guests)', st.status === 'playing' && st.ranked === false);
 	} catch (e) {
 		console.log('ERROR', e.message);
