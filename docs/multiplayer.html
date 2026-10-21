@@ -262,6 +262,29 @@
 				</template>
 			</div>
 
+			<!-- A room from a position: the engine's price and the creator's side -->
+			<template x-if="positionSfn && positionOffer">
+				<div class="position-offer">
+					<div class="time-control__label">Starting position</div>
+					<div x-text="positionOffer.evalText"></div>
+					<div x-show="positionOffer.oddsText" x-text="positionOffer.oddsText"></div>
+					<table class="side-picker__payoffs" x-show="positionOffer.payoffs">
+						<tr><th></th><th>Win</th><th>Loss</th></tr>
+						<tr><td>Red</td><td x-text="positionOffer.payoffs ? '+' + positionOffer.payoffs.red.win : ''"></td>
+							<td x-text="positionOffer.payoffs ? positionOffer.payoffs.red.loss : ''"></td></tr>
+						<tr><td>Blue</td><td x-text="positionOffer.payoffs ? '+' + positionOffer.payoffs.blue.win : ''"></td>
+							<td x-text="positionOffer.payoffs ? positionOffer.payoffs.blue.loss : ''"></td></tr>
+					</table>
+					<small x-show="positionOffer.payoffs">Rating payoffs between equal ratings (the real ones use both players' ratings). Either side is worth the same on average.</small>
+					<small x-show="positionOffer.note" x-text="positionOffer.note"></small>
+					<div class="time-control__options" style="margin-top: 8px;">
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': positionSide === 'red' }" x-on:click="positionSide = 'red'">Play Red</button>
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': positionSide === 'blue' }" x-on:click="positionSide = 'blue'">Play Blue</button>
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': positionSide === 'random' }" x-on:click="positionSide = 'random'">Random</button>
+					</div>
+				</div>
+			</template>
+
 			<!-- Time control selection -->
 			<div class="time-control">
 				<div class="time-control__label">Time Control</div>
@@ -303,6 +326,7 @@
 				<span>Allow spectators</span>
 			</label>
 
+			<template x-if="!positionSfn"><div>
 			<label class="allow-spec">
 				<input type="checkbox" x-model="competitiveVariant" />
 				<span>Competitive variant</span>
@@ -342,6 +366,7 @@
 			<small style="display: block; color: var(--color-text-muted); opacity: 0.9; font-family: 'Overlock', sans-serif; margin: -8px 0 12px;">
 				The expanded 5-zone board: 65 nodes, five spells of each size. Unrated. Joiners inherit the creator's choice.
 			</small>
+			</div></template>
 
 			<label class="allow-spec">
 				<input type="checkbox" x-model="useArtOnlySpells" x-on:change="localStorage.setItem('sigilArtOnlySpellCircles', useArtOnlySpells ? 'true' : 'false')" />
@@ -351,7 +376,7 @@
 				Hide spell names and descriptions on the board circles (art only).
 			</small>
 
-			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline">Create Game</button>
+			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || (positionSfn && (!positionOffer || positionOffer.loading))" x-text="positionSfn ? 'Create Game from Position' : 'Create Game'">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" placeholder="ROOM CODE" maxlength="6" x-bind:disabled="isOffline" />
 			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="isOffline || joinCode.length < 4">Join Game</button>
@@ -384,6 +409,23 @@
 			</div>
 			<p class="status-msg" x-show="competitiveVariant || deathmatchVariant || scrambleVariant || duplicatesVariant || pentagonVariant" style="margin-top: 8px;">Variant: <strong x-text="[competitiveVariant ? 'Competitive' : null, deathmatchVariant ? 'Deathmatch' : null, scrambleVariant ? 'Scramble' : null, duplicatesVariant ? 'Duplicates' : null, pentagonVariant ? 'Cataclysm board' : null].filter(Boolean).join(' + ')"></strong></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
+		</div>
+
+		<!-- Joining a room from a position: its price first -->
+		<div class="lobby" x-show="phase === 'confirmJoin'" x-cloak>
+			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Game from a Position</h2>
+			<template x-if="joinOffer">
+				<div class="position-offer">
+					<p class="status-msg">You would play <strong x-text="joinOffer.side === 'red' ? 'Red' : 'Blue'"></strong>.</p>
+					<div x-text="joinOffer.evalText"></div>
+					<div x-show="joinOffer.oddsText" x-text="joinOffer.oddsText"></div>
+					<p class="status-msg" x-show="joinOffer.payoffs" x-text="joinOffer.payoffs ? 'Rating: win +' + joinOffer.payoffs.win + ' / loss ' + joinOffer.payoffs.loss : ''"></p>
+					<small x-show="joinOffer.note" x-text="joinOffer.note"></small>
+				</div>
+			</template>
+			<button class="lobby-button" x-on:click="confirmJoin()">Join Game</button>
+			<button class="lobby-button" x-on:click="cancelJoin()">Back to Lobby</button>
+			<p class="error-msg" x-text="lobbyError"></p>
 		</div>
 
 		<!-- Spectator-not-allowed error -->
@@ -588,6 +630,7 @@
 						<img alt="Red Wins" src="static/images/red-wins.svg" height="26" width="167" x-show="winner === 'red'" />
 					</div>
 					<div class="win-modal__actions">
+						<a class="win-modal__btn" x-show="opponentPositionRoom && !isSpectator" x-bind:href="'multiplayer.html?id=' + opponentPositionRoom">Opponent offers a rematch from a position</a>
 						<button class="win-modal__btn" x-on:click="playAgain()" x-show="!isSpectator">Play Again</button>
 						<button class="win-modal__btn" x-on:click="playAgainSameLayout()" x-show="!isSpectator && _rematchSpells.length === perType * 3">Play Again (Same Layout)</button>
 						<button class="win-modal__btn" x-on:click="startReview" x-show="reviewSfns.length > 0">Review Game</button>
@@ -618,6 +661,9 @@
 						x-text="reviewAutoplay ? '⏸' : '⏯'"></button>
 					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x25B6;</button>
 					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x23ED;</button>
+					<button class="review-bar__btn review-bar__btn--text" x-show="canPlayFromPosition"
+						x-on:click="playFromPosition" x-bind:disabled="reviewReplaying"
+						title="Open an online room from this position">Rematch from here</button>
 					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview" x-bind:disabled="reviewReplaying">&#x2715;</button>
 				</div>
 
@@ -741,6 +787,14 @@
 				// Active correspondence games
 				activeGames: [],
 
+				// A room from a position (?sfn=, from Import Position or a
+				// review's "from here"): the start, its engine price and the
+				// creator's side; and the joiner's confirmation of such a room.
+				positionSfn: '',
+				positionOffer: null,   // { loading, evalText, oddsText, payoffs, note, startPos, hist }
+				positionSide: 'random',
+				joinOffer: null,       // { code, side, evalText, oddsText, payoffs, note }
+
 				init() {
 					window.addEventListener('online', () => { this.isOffline = false; });
 					window.addEventListener('offline', () => { this.isOffline = true; });
@@ -762,6 +816,12 @@
 					});
 
 					this._loadActiveGames();
+
+					const urlSfn = new URLSearchParams(window.location.search).get('sfn');
+					if (urlSfn && !new URLSearchParams(window.location.search).get('id')) {
+						this.positionSfn = urlSfn;
+						this._pricePosition();
+					}
 
 					// "Play Again" from the win-modal returns here with a sessionStorage
 					// flag — auto-create a new room (optionally with the prior spells /
@@ -891,18 +951,20 @@
 							if (created && (Date.now() - created > expiryMs)) {
 								try {
 									_firebaseSync.db.ref('rooms/' + code).remove();
-									if (roomData.red && roomData.red.uid) {
-										_firebaseSync.db.ref('user_active_games/' + roomData.red.uid + '/' + code).remove();
+									const owner = roomData.creatorColor === 'blue' ? roomData.blue : roomData.red;
+									if (owner && owner.uid) {
+										_firebaseSync.db.ref('user_active_games/' + owner.uid + '/' + code).remove();
 									}
 								} catch (e) {}
 								this.lobbyError = 'This game invite has expired.';
 								return;
 							}
 							// If the user IS the creator (matched by uid), reattach
-							// to red rather than auto-joining as blue.
+							// to the creator's seat rather than auto-joining.
+							const creator = roomData.creatorColor === 'blue' ? 'blue' : 'red';
 							const userInfo = _authManager ? _authManager.getUserInfo() : null;
 							const isCreator = userInfo && userInfo.uid &&
-								roomData.red && roomData.red.uid === userInfo.uid;
+								roomData[creator] && roomData[creator].uid === userInfo.uid;
 							if (isCreator) {
 								await _firebaseSync.reconnectAsCreator(code, userInfo, roomData);
 								this.roomCode = code;
@@ -912,8 +974,13 @@
 								const timeControl = roomData.timeControl || { type: 'none' };
 								const variant = normalizeVariant(roomData.variant);
 								_firebaseSync.onOpponentJoin = () => {
-									this._startOnlineGame(spellNames, 'red', null, false, timeControl, variant);
+									this._startOnlineGame(spellNames, creator, null, false, timeControl, variant);
 								};
+								return;
+							}
+							// A room from a position: show the joiner its price first.
+							if (roomData.startSfn) {
+								await this._offerJoin(code, roomData);
 								return;
 							}
 						}
@@ -967,6 +1034,83 @@
 					};
 				},
 
+				/** Evaluate the start position (or take a review's eval) and price it. */
+				async _pricePosition() {
+					const raw = this.positionSfn;
+					this.positionOffer = { loading: true, evalText: 'Evaluating the position\u2026', oddsText: '', payoffs: null, note: '', startPos: null };
+					let handed = null;
+					try {
+						const h = JSON.parse(sessionStorage.getItem('sigil_rematch_startpos') || 'null');
+						sessionStorage.removeItem('sigil_rematch_startpos');
+						if (h && h.sfn === raw) handed = h;
+					} catch (e) { /* sessionStorage blocked or bad payload */ }
+					const offer = { loading: false, evalText: '', oddsText: '', payoffs: null, note: '', startPos: null };
+					let sfn = null, info = handed && handed.info, source = 'review';
+					try { sfn = positionTurnSfn(raw); } catch (e) { offer.note = 'This position could not be read.'; }
+					const model = await loadPositionModel();
+					if (sfn && !info) {
+						source = 'live';
+						try { info = await evaluateStartPosition(sfn); }
+						catch (e) { offer.note = 'Unrated: the engine could not evaluate this position (' + (e.message || e) + ').'; }
+					}
+					if (info) offer.evalText = 'Engine: ' + describePositionEval(info);
+					offer.startPos = (model && info && sfn) ? makeStartPos(model, sfn, info, source) : null;
+					if (offer.startPos) {
+						const p = offer.startPos.redWinProb;
+						offer.oddsText = describePositionOdds(p) + ' with Very Hard AI play on both sides.';
+						// The opponent is not known yet: payoffs between equal ratings.
+						offer.payoffs = { red: positionPayoffs(p, 1500, 1500).red, blue: positionPayoffs(p, 1500, 1500).blue };
+					} else if (!offer.note) {
+						offer.note = 'Unrated: this position could not be priced.';
+					}
+					this.positionOffer = offer;
+				},
+
+				/** Price a waiting room from a position for the player about to join it. */
+				async _offerJoin(code, roomData) {
+					const creator = roomData.creatorColor === 'blue' ? 'blue' : 'red';
+					const side = creator === 'red' ? 'blue' : 'red';
+					const sp = roomData.startPos && typeof roomData.startPos.redWinProb === 'number' ? roomData.startPos : null;
+					const offer = { code, side, evalText: '', oddsText: '', payoffs: null, note: '' };
+					if (sp) {
+						offer.evalText = 'Engine: ' + describePositionEval(sp);
+						offer.oddsText = describePositionOdds(sp.redWinProb) + ' with Very Hard AI play on both sides.';
+						const creatorUid = roomData[creator] && roomData[creator].uid;
+						const user = await firebaseAuthSettled();
+						const signedIn = !!(user && !user.isAnonymous);
+						if (signedIn && creatorUid) {
+							try {
+								const db = firebase.database();
+								const [a, b] = await Promise.all([db.ref('users/' + creatorUid + '/elo').once('value'),
+									db.ref('users/' + user.uid + '/elo').once('value')]);
+								const them = a.val() || 1000, me = b.val() || 1000;
+								const pay = side === 'red' ? positionPayoffs(sp.redWinProb, me, them).red
+									: positionPayoffs(sp.redWinProb, them, me).blue;
+								offer.payoffs = pay;
+							} catch (e) { /* ratings unavailable: show the odds only */ }
+						} else {
+							offer.note = signedIn ? 'Unrated: your opponent is a guest.' : 'Sign in to play this position rated.';
+						}
+					} else {
+						offer.note = 'Unrated: the start position was not priced.';
+					}
+					this.joinOffer = offer;
+					this.phase = 'confirmJoin';
+				},
+
+				async confirmJoin() {
+					const offer = this.joinOffer;
+					if (!offer) return;
+					this.joinOffer = null;
+					this.joinCode = offer.code;
+					await this.joinRoom(true);
+				},
+
+				cancelJoin() {
+					this.joinOffer = null;
+					this.phase = 'lobby';
+				},
+
 				setTimePreset(preset) {
 					this.tcPreset = preset;
 				},
@@ -1013,22 +1157,46 @@
 						}
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
 						const timeControl = this._getTimeControl();
-						const variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
-						// Persist the lobby choice across visits (mirrors the
-						// localStorage key used by the static index page).
-						try {
-							localStorage.setItem('sigilVariant', variant);
-						} catch (e) {}
-						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant);
+						let variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
+						let fromPosition = null, creatorColor = 'red';
+						if (this.positionSfn) {
+							// The start position names its spells and variant.
+							if (!this.positionOffer || this.positionOffer.loading) return;
+							const d = sfnToDict(this.positionSfn);
+							spellNames = d.spell_names;
+							variant = normalizeVariant(d.variant);
+							setBoardLayout(variantBoardLayout(variant));
+							creatorColor = this.positionSide === 'random'
+								? (Math.random() < 0.5 ? 'red' : 'blue') : this.positionSide;
+							fromPosition = { startSfn: this.positionSfn, startPos: this.positionOffer.startPos, creatorColor };
+						} else {
+							// Persist the lobby choice across visits (mirrors the
+							// localStorage key used by the static index page).
+							try {
+								localStorage.setItem('sigilVariant', variant);
+							} catch (e) {}
+						}
+						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant, fromPosition);
 						this.shareUrl = this._buildShareUrl(this.roomCode);
 						this.phase = 'waiting';
+						// From a finished game's review: offer the room to that opponent.
+						if (fromPosition) {
+							try {
+								const old = JSON.parse(sessionStorage.getItem('sigil_position_from_room') || 'null');
+								sessionStorage.removeItem('sigil_position_from_room');
+								if (old && /^[A-Z0-9]{4,10}$/.test(old.code || '') && (old.color === 'red' || old.color === 'blue')) {
+									firebase.database().ref('rooms/' + old.code + '/rematch/positionRoom')
+										.set({ code: this.roomCode, by: old.color }).catch(() => {});
+								}
+							} catch (e) { /* sessionStorage blocked */ }
+						}
 						// Reflect the room code in the URL bar so the creator can copy it.
 						try {
 							window.history.replaceState({}, '', '?id=' + this.roomCode);
 						} catch (e) {}
 
 						_firebaseSync.onOpponentJoin = () => {
-							this._startOnlineGame(spellNames, 'red', null, false, timeControl, variant);
+							this._startOnlineGame(spellNames, creatorColor, null, false, timeControl, variant);
 						};
 					} catch (e) {
 						this.lobbyError = 'Failed to create room: ' + e.message;
@@ -1036,11 +1204,22 @@
 					}
 				},
 
-				async joinRoom() {
+				async joinRoom(confirmed) {
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
 						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						// A waiting room from a position is priced for the joiner first.
+						if (confirmed !== true) {
+							const code = this.joinCode.toUpperCase();
+							const roomData = await _firebaseSync.getRoomSnapshot(code);
+							const creator = roomData && roomData.creatorColor === 'blue' ? 'blue' : 'red';
+							const mine = roomData && userInfo && userInfo.uid && roomData[creator] && roomData[creator].uid === userInfo.uid;
+							if (roomData && roomData.status === 'waiting' && roomData.startSfn && !mine) {
+								await this._offerJoin(code, roomData);
+								return;
+							}
+						}
 						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo);
 						if (result.isSpectator) {
 							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl, result.variant);
@@ -1195,14 +1374,15 @@
 	<script src="static/scripts/engine/game-controller.js"></script>
 	<script src="static/scripts/engine/game-review.js?v=33"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
-	<script src="static/scripts/engine/elo.js"></script>
-	<script src="static/scripts/engine/firebase-sync.js"></script>
-	<script src="static/scripts/engine/multiplayer-controller.js"></script>
+	<script src="static/scripts/engine/elo.js?v=33"></script>
+	<script src="static/scripts/engine/position-rating.js?v=33"></script>
+	<script src="static/scripts/engine/firebase-sync.js?v=33"></script>
+	<script src="static/scripts/engine/multiplayer-controller.js?v=33"></script>
 	<script src="static/scripts/engine/spectator-controller.js"></script>
 	<script src="static/scripts/sound-manager.js"></script>
 	<script src="static/scripts/spell-effects.js"></script>
 	<script src="static/scripts/board-geometry.js"></script>
-	<script src="static/scripts/game-board-multiplayer.js"></script>
+	<script src="static/scripts/game-board-multiplayer.js?v=33"></script>
 	<script src="static/scripts/help.js"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

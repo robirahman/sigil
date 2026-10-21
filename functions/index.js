@@ -36,9 +36,22 @@ exports.processElo = functions.database
 		const winnerElo = winnerData.elo || 1000;
 		const loserElo = loserData.elo || 1000;
 
-		const exponent = (winnerElo - loserElo) / 400;
-		const expectedScore = 1 / (1 + Math.pow(10, exponent));
-		const points = Math.max(1, Math.round(32 * expectedScore));
+		// Same rule as computeEloChange in docs/static/scripts/engine/elo.js: a
+		// game from a position (startPos.redWinProb) adds the position to the
+		// rating gap in logit space, with no 1-point floor.
+		const pRed = game.startPos && typeof game.startPos.redWinProb === 'number'
+			? game.startPos.redWinProb : null;
+		let points;
+		if (pRed !== null) {
+			const p = game.winner === 'red' ? pRed : 1 - pRed;
+			const e = !(p > 0) ? 0 : !(p < 1) ? 1
+				: 1 / (1 + Math.exp(-(Math.log(p / (1 - p)) + Math.LN10 * (winnerElo - loserElo) / 400)));
+			points = Math.round(32 * (1 - e));
+		} else {
+			const exponent = (winnerElo - loserElo) / 400;
+			const expectedScore = 1 / (1 + Math.pow(10, exponent));
+			points = Math.max(1, Math.round(32 * expectedScore));
+		}
 
 		const newWinnerElo = winnerElo + points;
 		const newLoserElo = loserElo - points;

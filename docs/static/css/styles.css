@@ -2500,3 +2500,16 @@ html[data-theme="volcanic"] .stone-nodes {
 .push-arrow__head {
 	fill: var(--color-push-arrow, #ffd21f);
 }
+
+/* Side picker of a game from a position (position-rating.js) */
+.side-picker { color: #fff; top: calc(50% - 160px); text-align: center; }
+.side-picker__body { width: 100%; }
+.side-picker__title { font-family: 'Arvo', serif; font-size: 1.15rem; margin-bottom: 6px; }
+.side-picker__eval, .side-picker__odds { font-size: 0.95rem; }
+.side-picker__payoffs { border-collapse: collapse; margin: 10px auto 4px; }
+.side-picker__payoffs th, .side-picker__payoffs td { padding: 2px 12px; }
+.side-picker__note { font-size: 0.8rem; opacity: 0.85; margin-top: 6px; }
+.import-form__opponent { margin: 4px 0; }
+html[data-theme="parchment"] .side-picker { color: inherit; }
+.position-offer { margin: 8px auto 16px; max-width: 420px; color: #e0d0b0; }
+.position-offer small { display: block; opacity: 0.85; margin-top: 4px; }
