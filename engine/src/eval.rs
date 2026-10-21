@@ -549,7 +549,10 @@ impl Board {
             // `evaluate == dot(weights, hand_features)` holds exactly.
             let mut stone_feat = 0i32;
             let mut charged_feat = 0i32;
+            // A Fissure-walled sigil can never charge: no credit for filling it.
+            let dead = self.dead_slots();
             for p in 0..9 {
+                if dead >> p & 1 != 0 { continue; }
                 let m = SIGIL[p];
                 let n = m.count_ones() as i32;
                 let mine = (m & self.mine(c)).count_ones() as i32;
@@ -567,6 +570,7 @@ impl Board {
             // the spell sitting in the slot; `spell_sigil_features` is its feature
             // vector and the dot-product test pins the two together.
             let mut acc = 0i32;
+            let dead = self.dead_slots();
             for p in 0..9 {
                 let s = self.spells[p] as usize;
                 if s >= t.stone.len() { continue; }
@@ -574,7 +578,8 @@ impl Board {
                 let n = m.count_ones() as i32;
                 let mine = (m & self.mine(c)).count_ones() as i32;
                 let theirs = (m & self.theirs(c)).count_ones() as i32;
-                let (ok, ok_o) = (self.can_use(c, p), self.can_use(c.other(), p));
+                let live = dead >> p & 1 == 0;
+                let (ok, ok_o) = (live && self.can_use(c, p), live && self.can_use(c.other(), p));
                 let stone = ok as i32 * (mine * mine / n) - ok_o as i32 * (theirs * theirs / n);
                 let charged = (mine == n && ok) as i32 - (theirs == n && ok_o) as i32;
                 acc += t.stone[s] * stone + t.charged[s] * charged;

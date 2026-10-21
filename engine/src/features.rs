@@ -60,7 +60,9 @@ impl Board {
 
         let mut sigil_stone = 0i32;
         let mut sigil_charged = 0i32;
+        let dead = self.dead_slots();   // as `evaluate`: a walled sigil earns nothing
         for p in 0..9 {
+            if dead >> p & 1 != 0 { continue; }
             let m = SIGIL[p];
             let n = m.count_ones() as i32;
             let mine = (m & self.mine(c)).count_ones() as i32;
@@ -100,6 +102,7 @@ impl Board {
     pub fn spell_sigil_features(&self, c: Color) -> Vec<i32> {
         let n_sp = crate::spells_meta::NUM_OFFICIAL_SPELLS;
         let mut v = vec![0i32; 2 * n_sp];
+        let dead = self.dead_slots();
         for p in 0..9 {
             let s = self.spells[p] as usize;
             if s >= n_sp { continue; }
@@ -107,7 +110,8 @@ impl Board {
             let n = m.count_ones() as i32;
             let mine = (m & self.mine(c)).count_ones() as i32;
             let theirs = (m & self.theirs(c)).count_ones() as i32;
-            let (ok, ok_o) = (self.can_use(c, p), self.can_use(c.other(), p));
+            let live = dead >> p & 1 == 0;
+            let (ok, ok_o) = (live && self.can_use(c, p), live && self.can_use(c.other(), p));
             v[s] += ok as i32 * (mine * mine / n) - ok_o as i32 * (theirs * theirs / n);
             v[n_sp + s] += (mine == n && ok) as i32 - (theirs == n && ok_o) as i32;
         }

@@ -1667,6 +1667,13 @@ fn evaluate_is_exactly_the_dot_product_of_the_hand_features() {
         b.stones[1] = (0x0fed_cba9_8765u64 ^ (seed * 40503)) & crate::topology::ALL & !b.stones[0];
         b.spell_counter = [(seed % 7) as u8, ((seed / 7) % 7) as u8];
         b.to_move = if seed % 2 == 0 { Color::Red } else { Color::Blue };
+        // Every fifth seed walls one node of a sigil, so the dead-slot masks of
+        // `evaluate` and the feature vectors are held to the same invariant.
+        if seed % 5 == 4 {
+            let m = crate::topology::SIGIL[(seed % 9) as usize];
+            b.stones[0] &= !m;
+            b.walls = m & m.wrapping_neg();
+        }
         b.update();
         for c in [Color::Red, Color::Blue] {
             let f = b.hand_features(c);
@@ -4229,6 +4236,21 @@ fn the_net_sees_a_walled_slot_as_blocked_for_both_sides() {
     assert_ne!(b.evaluate(Color::Red, &full), open.evaluate(Color::Red, &full));
     // No wall, no change: the ordinary fold still applies.
     assert_eq!(open.dead_slots(), 0);
+}
+
+#[test]
+fn hand_terms_give_no_credit_in_a_dead_sigil() {
+    // The hand presets (tfit, tfit_spell*, nnue_spell*) price sigil fill too (PR #29
+    // review): a walled sigil's stones earn nothing there either. The dot-product
+    // test above holds `evaluate` to the same masks on walled boards.
+    let b = dead_sigil_board();
+    let mut fewer = b;
+    fewer.stones[0] &= !(1 << n("a5"));
+    fewer.update();
+    assert_eq!(b.hand_features(Color::Red)[6], fewer.hand_features(Color::Red)[6]);
+    let n_sp = crate::spells_meta::NUM_OFFICIAL_SPELLS;
+    let f = b.spell_sigil_features(Color::Red);
+    assert_eq!((f[0], f[n_sp]), (0, 0), "Flourish is dead: no stone or charged feature");
 }
 
 #[test]
