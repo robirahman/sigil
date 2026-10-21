@@ -67,14 +67,20 @@ class MultiplayerController {
 
 	async _createRematchRoom() {
 		const sync = this.sync;
+		const red = { uid: sync.redUid, displayName: sync.redDisplayName };
+		const blue = { uid: sync.blueUid, displayName: sync.blueDisplayName };
+		// A rematch of a room from a position replays the start with the
+		// players' sides swapped.
+		const swap = !!sync.startSfn;
 		const code = await sync.createRematchRoom(
-			this.board.spellNames,
+			sync.startSfn ? normalizeSpellNames(sfnToDict(sync.startSfn).spell_names) : this.board.spellNames,
 			sync.timeControl,
 			sync.allowSpectators,
-			{ uid: sync.redUid, displayName: sync.redDisplayName },
-			{ uid: sync.blueUid, displayName: sync.blueDisplayName },
+			swap ? blue : red,
+			swap ? red : blue,
 			!!sync.ranked,
-			sync.variant || 'standard'
+			sync.variant || 'standard',
+			sync.startSfn ? { startSfn: sync.startSfn, startPos: sync.startPos } : null
 		);
 		await sync.setRematchNewRoomCode(code);
 	}
@@ -262,11 +268,17 @@ class MultiplayerController {
 		// is set during createRoom / joinRoom / reconnectAsCreator.
 		const variant = normalizeVariant(this.sync && this.sync.variant);
 		this.board = new SigilBoard(this.spellNames, variant);
+		// A room from a position opens on its start SFN (sync.startSfn).
+		const startSfn = (this.sync && this.sync.startSfn) || null;
 		if (reconnectSfn) {
 			this.board.loadFromSfn(reconnectSfn);
+		} else if (startSfn) {
+			this.board.loadFromSfn(startSfn);
 		} else {
 			this.board.setupInitial();
 		}
+		// The loop gives the first turn to the parity of the next counter.
+		const firstColor = (this.board.turnCounter + 1) % 2 === 1 ? 'red' : 'blue';
 
 		this._subscribeToRematch();
 
@@ -302,13 +314,16 @@ class MultiplayerController {
 		const colorName = this.myColor[0].toUpperCase() + this.myColor.slice(1);
 		if (reconnectSfn) {
 			this.emit({ type: 'message', message: 'Reconnected as ' + colorName + '.', awaiting: null });
+		} else if (startSfn) {
+			this.emit({ type: 'message', message: 'You are ' + colorName + '. The game starts from a position; '
+				+ (firstColor === 'red' ? 'Red' : 'Blue') + ' moves first.', awaiting: null });
 		} else {
 			this.emit({ type: 'message', message: 'You are ' + colorName + '. Red goes first.', awaiting: null });
 		}
 
-		// Initialize timer (room creator only, on fresh games)
+		// Initialize timer (red, on fresh games)
 		if (this.myColor === 'red' && !reconnectSfn) {
-			await this.sync.initTimer(this._timeControl);
+			await this.sync.initTimer(this._timeControl, firstColor);
 		}
 		this._startTimer();
 

@@ -222,7 +222,10 @@
 								<p>
 									<strong>Rematch From Here</strong><br />
 									In review, step to any position and press &ldquo;Rematch from here&rdquo; to
-									start a new game from it, against the same opponent, on the same side.
+									start a new game from it against the same opponent, or &ldquo;Play online
+									from here&rdquo; to open an online room from it. Against the AI or online you
+									pick your side: the engine evaluates the position, and a rated game's payoffs
+									are adjusted so that neither side is worth more on average.
 								</p>
 								<br />
 								<p>
@@ -536,9 +539,17 @@
 								x-model="importSfn"
 								placeholder="Paste an SFN string to import a position..."
 							></textarea>
+							<select class="import-form__opponent" x-model="importOpponent" aria-label="Opponent">
+								<option value="">Local 1v1</option>
+								<option value="rust_easy">vs AI: Easy</option>
+								<option value="rust_medium">vs AI: Medium</option>
+								<option value="rust_hard">vs AI: Hard</option>
+								<option value="rust_very_hard">vs AI: Very Hard</option>
+								<option value="online">Online (new room)</option>
+							</select>
 							<button
 								class="action-button"
-								x-on:click="window.location.href = '?sfn=' + encodeURIComponent(importSfn)"
+								x-on:click="importPosition()"
 								x-bind:disabled="!importSfn.trim()"
 							>
 								Import Position
@@ -794,6 +805,32 @@
 							x-show="rematchStage === 'rematch'">&larr; Back</button>
 					</div>
 				</div>
+				<!-- Side picker of a game vs AI from a position (position-rating.js). -->
+				<div class="win-modal side-picker" x-bind:class="{ 'is-visible': !!sideOffer }">
+					<template x-if="sideOffer">
+						<div class="side-picker__body">
+							<div class="side-picker__title">Play from this position</div>
+							<div class="side-picker__eval" x-text="sideOffer.evalText"></div>
+							<div class="side-picker__odds" x-show="sideOffer.oddsText" x-text="sideOffer.oddsText"></div>
+							<table class="side-picker__payoffs" x-show="sideOffer.payoffs">
+								<tr><th></th><th>Win</th><th>Loss</th></tr>
+								<tr><td>Red</td>
+									<td x-text="sideOffer.payoffs ? '+' + sideOffer.payoffs.red.win : ''"></td>
+									<td x-text="sideOffer.payoffs ? (sideOffer.payoffs.red.loss === 0 ? '0' : '\u2212' + (-sideOffer.payoffs.red.loss)) : ''"></td></tr>
+								<tr><td>Blue</td>
+									<td x-text="sideOffer.payoffs ? '+' + sideOffer.payoffs.blue.win : ''"></td>
+									<td x-text="sideOffer.payoffs ? (sideOffer.payoffs.blue.loss === 0 ? '0' : '\u2212' + (-sideOffer.payoffs.blue.loss)) : ''"></td></tr>
+							</table>
+							<div class="side-picker__note" x-show="sideOffer.payoffs">Rating payoffs at your rating and the AI's. Either side is worth the same on average.</div>
+							<div class="side-picker__note" x-show="sideOffer.note" x-text="sideOffer.note"></div>
+							<div class="win-modal__actions">
+								<button class="win-modal__btn" x-on:click="chooseSide('red')" x-bind:disabled="sideOffer.loading">Play Red</button>
+								<button class="win-modal__btn" x-on:click="chooseSide('blue')" x-bind:disabled="sideOffer.loading">Play Blue</button>
+								<button class="win-modal__btn" x-on:click="chooseSide('random')" x-bind:disabled="sideOffer.loading">Random</button>
+							</div>
+						</div>
+					</template>
+				</div>
 				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
 					<button class="review-bar__btn" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x23EE;</button>
 					<button class="review-bar__btn" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x25C0;</button>
@@ -810,6 +847,10 @@
 						x-on:click="rematchFromPosition"
 						x-bind:disabled="reviewReplaying"
 						title="Start a new game from this position">Rematch from here</button>
+					<button class="review-bar__btn review-bar__btn--text" x-show="canRematchFromPosition"
+						x-on:click="playOnlineFromPosition"
+						x-bind:disabled="reviewReplaying"
+						title="Open an online room from this position">Play online from here</button>
 					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
 				</div>
 
@@ -935,15 +976,16 @@
 		<script src="static/scripts/engine/game-controller.js"></script>
 		<script src="static/scripts/engine/game-review.js?v=32"></script>
 		<!-- Review caching (game_reviews) and stored Rust evals (game_evals). -->
-		<script src="static/scripts/engine/firebase-sync.js"></script>
+		<script src="static/scripts/engine/firebase-sync.js?v=33"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
-		<script src="static/scripts/engine/elo.js"></script>
+		<script src="static/scripts/engine/elo.js?v=33"></script>
+		<script src="static/scripts/engine/position-rating.js?v=33"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
 		<script src="static/scripts/board-geometry.js"></script>
-		<script src="static/scripts/game-board-local.js"></script>
+		<script src="static/scripts/game-board-local.js?v=33"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
