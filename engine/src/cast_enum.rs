@@ -190,7 +190,7 @@ impl Board {
     /// 0 when the seal is not drawn or nobody is that close.
     fn destruction_priority_targets(&self, c: Color) -> u64 {
         let Some(pos) = self.position_of(SEAL_OF_DESTRUCTION) else { return 0 };
-        if self.uncontrolled_count(pos, c) == 1 || self.uncontrolled_count(pos, c.other()) == 1 {
+        if self.fill_gap(pos, c) == 1 || self.fill_gap(pos, c.other()) == 1 {
             SIGIL[pos]
         } else { 0 }
     }

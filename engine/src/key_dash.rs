@@ -104,7 +104,7 @@ impl Board {
     fn fill_targets(&self, c: Color) -> u64 {
         let mut m = 0u64;
         for p in 0..9 {
-            if self.uncontrolled_count(p, c) == 1 { m |= SIGIL[p] & !self.mine(c); }
+            if self.fill_gap(p, c) == 1 { m |= SIGIL[p] & !self.mine(c); }
         }
         m
     }
@@ -210,7 +210,7 @@ impl Board {
             if reasons & REASON_MANA != 0 && MANA & bit != 0 { why |= REASON_MANA; }
             if reasons & REASON_FILLS != 0 {
                 for p in 0..9 {
-                    if SIGIL[p] & bit != 0 && bd.uncontrolled_count(p, c) == 1 { why |= REASON_FILLS; break; }
+                    if SIGIL[p] & bit != 0 && bd.fill_gap(p, c) == 1 { why |= REASON_FILLS; break; }
                 }
             }
             if reasons & REASON_DOOMED != 0 && sac.iter().all(|&s| self.is_doomed(s, c)) { why |= REASON_DOOMED; }
@@ -368,7 +368,7 @@ impl Board {
                 if reasons & REASON_MANA != 0 && MANA & bit != 0 { why |= REASON_MANA; }
                 if reasons & REASON_FILLS != 0 {
                     for p in 0..9 {
-                        if SIGIL[p] & bit != 0 && bd.uncontrolled_count(p, c) == 1 {
+                        if SIGIL[p] & bit != 0 && bd.fill_gap(p, c) == 1 {
                             why |= REASON_FILLS;
                             break;
                         }

@@ -246,7 +246,10 @@ pub fn eval(spec: &'static NnSpec, b: &Board, c: Color) -> i32 {
     let net = spec.net();
     // Experiment-only access: the evaluating side's own stones use its mask, the
     // opponent's stones the opponent's (real games: both all ones, one cached fold).
-    let use_rel = [b.access[c.idx()], b.access[c.other().idx()]];
+    // A slot Fissure has walled is dead for both: the net has no wall input, so
+    // without this its stones would keep their spell's charge-progress rows.
+    let live = !b.dead_slots();
+    let use_rel = [b.access[c.idx()] & live, b.access[c.other().idx()] & live];
     let key = (net as *const Net as usize, b.spells, use_rel);
     FOLD.with(|cell| {
         let mut slot = cell.borrow_mut();

@@ -96,7 +96,7 @@ impl Board {
         // does landing here complete a sigil we are one short of?
         let mut charges = 0.0f32;
         for p in 0..9 {
-            if SIGIL[p] & bit != 0 && self.uncontrolled_count(p, c) == 1 { charges = 1.0; break; }
+            if SIGIL[p] & bit != 0 && self.fill_gap(p, c) == 1 { charges = 1.0; break; }
         }
         f[9] = charges;
         f[10] = 1.0 - n_sacs;                       // d_my_total

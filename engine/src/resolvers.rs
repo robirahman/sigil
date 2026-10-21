@@ -489,11 +489,23 @@ const SYZYGY_OPPOSITE: [Option<(usize, usize)>; 9] = [
     None, None, None, None, None, None,
 ];
 
+/// `fill_gap` of a sigil holding a Fissure wall: more than any sigil's size.
+pub const DEAD_GAP: u32 = 64;
+
 impl Board {
     /// Nodes of sigil `pos` that `c` does not own — the "uncontrolled" set that
     /// Azimuth and Eclipse count.
     #[inline]
     pub fn uncontrolled_count(&self, pos: usize, c: Color) -> u32 { self.uncontrolled(pos, c) }
+
+    /// How many stones `c` is short of charging sigil `pos`, for the search's
+    /// heuristics (ordering, fill targets, generator features): `DEAD_GAP` when a
+    /// Fissure wall stands in it, so a dead spell never looks one or two short.
+    /// The rules (Azimuth, Eclipse) keep reading `uncontrolled_count`.
+    #[inline]
+    pub fn fill_gap(&self, pos: usize, c: Color) -> u32 {
+        if self.walls & crate::topology::SIGIL[pos] != 0 { DEAD_GAP } else { self.uncontrolled(pos, c) }
+    }
 
     #[inline]
     fn uncontrolled(&self, pos: usize, c: Color) -> u32 {

@@ -3102,3 +3102,12 @@ expected) is under 0.01 per side, and the log-loss is 0.52–0.54 against 0.68 f
 At that strength a one-stone early lead wins about 77%. Unpriced starts are unrated (closing the
 Rematch-from-here hole). One proven mate-in-1 was lost, on a Fissure draw.
 Details: `reports/2026-10-position-ratings.md`.
+
+## Fissure-walled spells are dead to the net and the heuristics (engine v33, 2026-10-21)
+The net has no wall input and `uncontrolled_count` counted a wall as a missing stone, so the
+engine kept filling sigils Fissure had killed (12-13% of its new stones on such turns against
+humans' 4%). `Board::dead_slots` now clears walled slots from both sides' access in
+`nn::eval`, and `Board::fill_gap` (DEAD_GAP for a walled sigil) replaces `uncontrolled_count`
+at every heuristic site; the rules keep `uncontrolled_count`. +21.9 Elo [+10.0, +33.9] on
+Fissure draws at 10 s (3,285 games); identical moves without walls. A wall input plane is the
+round-5 follow-up. engine/reports/2026-10-fissure-dead-spells.md.

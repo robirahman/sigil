@@ -122,9 +122,8 @@ impl Board {
     /// Charms never refill, and neither does a caster with no mana: one option,
     /// the empty mask.
     ///
-    /// The 39-official-spell scope is what makes the candidate set simply "the
-    /// sigil's nodes": `board.rs` has no `destroyed` mask, so unlike the JS
-    /// there is never a wall to exclude from `emptyNodes`.
+    /// The candidates are the sigil's nodes; Fissure walls never take a stone
+    /// (the refill below skips them).
     pub fn keep_options(&self, pos: usize, c: Color) -> ([u64; MAX_KEEPS], usize) {
         let mut out = [0u64; MAX_KEEPS];
         let mask = SIGIL[pos];
