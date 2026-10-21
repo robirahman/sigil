@@ -103,6 +103,23 @@ function firebaseAuthSettled() {
 	});
 }
 
+/**
+ * The SFN a game from review position i must load. Review positions after
+ * the start are after-turn SFNs (the game advances them); position 0 is the
+ * first turn's own SFN, already advanced, so it is stepped back one turn
+ * (counter - 1; the game hands the move out by parity, not by the token).
+ */
+function rematchSfnAt(reviewSfns, i) {
+	const sfn = reviewSfns[i];
+	if (i !== 0) return sfn;
+	const p = String(sfn).trim().split(/\s+/);
+	const n = Number(p[2]);
+	if (!(n >= 1)) return sfn;
+	p[2] = String(n - 1);
+	p[1] = (n - 1) % 2 === 1 ? 'r' : 'b';
+	return p.join(' ');
+}
+
 /** True when `sfn`'s position (stones, counters, locks) occurs in `earlier`. */
 function positionRepeats(sfn, earlier) {
 	const key = (x) => { const p = String(x || '').trim().split(/\s+/); return [p[0], p[3], p[4], p[5]].join(' '); };

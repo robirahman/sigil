@@ -120,5 +120,11 @@ async function driver() {
 	assert(db.updates['users/h/elo'] === 1500 + computeEloChange(1500, 1733), 'standard game unchanged');
 	assert(db.updates['completed_games/g2/redExpected'] === undefined, 'no redExpected on a standard game');
 
+	// 6. A rematch from the review's Start keeps the first mover.
+	const first = positionTurnSfn(s0);                    // the first turn's own SFN (Red, counter 1)
+	const again = positionTurnSfn(rematchSfnAt([first, 'x'], 0));
+	assert(again === first, 'rematch from Start: same first turn ' + again + ' vs ' + first);
+	assert(rematchSfnAt([first, 'x'], 1) === 'x', 'later positions unchanged');
+
 	console.log('position-rating-smoke: all checks passed');
 }

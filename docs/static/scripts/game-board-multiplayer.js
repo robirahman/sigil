@@ -181,7 +181,9 @@ document.addEventListener('alpine:init', () => {
 			},
 			playFromPosition() {
 				if (!this.canPlayFromPosition || this.reviewReplaying) return;
-				const sfn = this.reviewSfns[this.reviewIndex];
+				// Position 0 is a pre-turn SFN; the rest are after-turn SFNs.
+				const sfn = typeof rematchSfnAt === 'function'
+					? rematchSfnAt(this.reviewSfns, this.reviewIndex) : this.reviewSfns[this.reviewIndex];
 				try {
 					// The review's eval saw the game's earlier positions (repetition);
 					// the new game starts without them, so a repeated position is
