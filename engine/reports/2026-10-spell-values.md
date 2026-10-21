@@ -38,9 +38,12 @@ The measurement keeps the rules intact (`engine/harness/spell_value_probe.py`):
   * **Matchup A vs B:** A's value to one side minus B's value to the other.
   * **Synergy:** the value of the pair minus the two single values.
   * **Intervals:** 95% bootstrap over games (`fit_spell_values.py`).
-* **Strength scale** (Spells page and the tables below): matchups ++ / −− at ≥ 3 points of
-  win probability, + / − at ≥ 1; synergy ++ / −− at ≥ 1.5, + / − at ≥ 0.5. Each counts only
-  when its 95% interval excludes zero; everything else reads 0.
+* **Strength scale** (Spells page and the tables below): matchups ++ / −− at ≥ 1.5 points of
+  win probability, + / − at ≥ 0.6; synergy ++ / −− at ≥ 0.25, + / − at ≥ 0.1. Each counts only
+  when its 95% interval excludes zero; everything else reads 0. The cuts were lowered on
+  2026-10-21 (from 3 / 1 and 1.5 / 0.5) so the labels spread across the categories: matchups
+  now split about evenly between 0, + and ++. Synergies cannot be balanced the same way: most
+  pairs cannot be told apart from zero, and only 33 measure negative at all.
 * **Sample and cost.** 8 Spot c3d-highcpu-90 VMs in us-central1, about 3 hours, roughly $20.
   Preemptions cut 7 of the 8 short, so the fit uses **217,315 positions from
   194,060 games**: 74% of the first run's 294,626. The positions lost are spread across
@@ -116,10 +119,10 @@ The measurement keeps the rules intact (`engine/harness/spell_value_probe.py`):
 
 ## Matchups
 
-478 of the 990 pairs have a favourite: 109 strongly (++)
-and 369 clearly (+). The first run found 56. The favoured side is almost always the
-higher-tier spell. The most-favoured spells, by number of pairs won, are Carnage (42), Seal of Lightning (42), Fury (39), Syzygy (37), Tsunami (34). The
-least-favoured are Comet (32), Seal of Summer (29), Seal of Spring (27), Seal of Destruction (26), Bulwark (26).
+644 of the 990 pairs have a favourite: 313 strongly (++)
+and 331 clearly (+); 346 read even. The favoured side is almost always the
+higher-tier spell. The most-favoured spells, by number of pairs won, are Seal of Lightning (43), Carnage (42), Syzygy (39), Fury (39), Tsunami (38). The
+least-favoured are Comet (37), Seal of Summer (35), Seal of Spring (34), Seal of Destruction (34), Bulwark (29).
 
 The strongest edges:
 
@@ -140,34 +143,43 @@ The strongest edges:
 
 ## Synergies
 
-20 pairs clear the threshold, all positive (+); the first run found none. No pair reaches
-++, and no anti-synergy is measurable. The effects are small: 0.5-1.2 points. Many involve the
-Providence spells, whose banked stones count toward the score lead. Several rest on fewer than
-200 positions, so treat those as tentative; the best-sampled are Fissure + Rock Slide and
-Dividend + Endowment.
+296 pairs show a synergy (146 ++, 150 +) and 27 an anti-synergy (11 −−, 16 −); the other
+667 read 0. The effects are small: the largest is 1.2 points and almost all are under 0.5.
+Many of the strongest involve the Providence spells, whose banked stones count toward the score
+lead. Several rest on fewer than 200 positions, so treat those as tentative.
+
+The strongest synergies:
 
 | pair | points | strength | samples |
 |---|---|---|---|
-| Rock Slide + Dividend | +1.16 | + | 40 |
-| Meteor + Dividend | +0.95 | + | 127 |
-| Seal of Lightning + Endowment | +0.91 | + | 113 |
-| Fissure + Dividend | +0.83 | + | 166 |
-| Tsunami + Dividend | +0.72 | + | 143 |
-| Seal of Lightning + Annuity | +0.67 | + | 168 |
-| Hail Storm + Scatter | +0.66 | + | 395 |
-| Fury + Fissure | +0.65 | + | 207 |
-| Carnage + Annuity | +0.64 | + | 169 |
-| Starfall + Hail Storm | +0.64 | + | 2,080 |
-| Syzygy + Dividend | +0.64 | + | 2,404 |
-| Starfall + Annuity | +0.60 | + | 172 |
-| Tsunami + Annuity | +0.58 | + | 152 |
-| Fissure + Rock Slide | +0.58 | + | 12,866 |
-| Carnage + Seal of Wind | +0.55 | + | 1,497 |
-| Hail Storm + Seal of Stone | +0.55 | + | 337 |
-| Dividend + Endowment | +0.51 | + | 12,940 |
-| Fireblast + Scatter | +0.50 | + | 381 |
-| Hail Storm + Hurricane | +0.50 | + | 551 |
-| Hail Storm + Storm Front | +0.50 | + | 407 |
+| Rock Slide + Dividend | +1.16 | ++ | 40 |
+| Meteor + Dividend | +0.95 | ++ | 127 |
+| Seal of Lightning + Endowment | +0.91 | ++ | 113 |
+| Fissure + Dividend | +0.83 | ++ | 166 |
+| Tsunami + Dividend | +0.72 | ++ | 143 |
+| Seal of Lightning + Annuity | +0.67 | ++ | 168 |
+| Hail Storm + Scatter | +0.66 | ++ | 395 |
+| Fury + Fissure | +0.65 | ++ | 207 |
+| Carnage + Annuity | +0.64 | ++ | 169 |
+| Starfall + Hail Storm | +0.64 | ++ | 2,080 |
+| Syzygy + Dividend | +0.64 | ++ | 2,404 |
+| Starfall + Annuity | +0.60 | ++ | 172 |
+
+The strongest anti-synergies:
+
+| pair | points | strength | samples |
+|---|---|---|---|
+| Comet + Bulwark | -0.43 | −− | 100 |
+| Flourish + Gather | -0.39 | −− | 423 |
+| Storm Front + Harvest | -0.37 | −− | 421 |
+| Slash + Azimuth | -0.35 | −− | 344 |
+| Seal of Lightning + Surge | -0.31 | −− | 1,512 |
+| Seal of Lightning + Azimuth | -0.31 | −− | 544 |
+| Hail Storm + Harvest | -0.29 | −− | 473 |
+| Fireblast + Seal of Wind | -0.28 | −− | 1,182 |
+| Seal of Wind + Slash | -0.26 | −− | 1,591 |
+| Storm Front + Gather | -0.26 | −− | 329 |
+| Seal of Stone + Seal of Winter | -0.26 | −− | 8,111 |
 
 ## Depth-6 check (from the first run, not repeated)
 

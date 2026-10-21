@@ -281,9 +281,9 @@
 				matchNote: 'Each cell is the row spell\'s value to one player minus the column spell\'s value to the other, in points of win probability: ++ / −− a strong edge, + / − an edge, 0 even. An edge counts only when its 95% interval excludes zero. Hover a cell for the measured difference.',
 				synNote: 'Each cell is the value of holding both spells minus their two separate values, in points of win probability: ++ / −− strong synergy or anti-synergy, + / − synergy or anti-synergy, 0 none measurable. A pair counts only when its 95% interval excludes zero; pairs with few samples are uncertain. Hover a cell for the measured difference and sample count.',
 				neutral: '0',
-				matchLegend: D => { const [lo, hi] = (D.thresholds || {}).matchup || [1, 3];
+				matchLegend: D => { const [lo, hi] = (D.thresholds || {}).matchup || [0.6, 1.5];
 					return [`row strongly favoured (++, ≥${hi} points)`, `row favoured (+, ≥${lo})`, 'even (0)', `column favoured (−, ≥${lo})`, `column strongly favoured (−−, ≥${hi})`]; },
-				synLegend: D => { const [lo, hi] = (D.thresholds || {}).synergy || [0.5, 1.5];
+				synLegend: D => { const [lo, hi] = (D.thresholds || {}).synergy || [0.1, 0.25];
 					return [`strong synergy (++, ≥${hi} points)`, `synergy (+, ≥${lo})`, 'none (0)', `anti-synergy (−, ≥${lo})`, `strong anti-synergy (−−, ≥${hi})`]; },
 				method: D => `Measured by the engine (eval nnue_spell4, depth 4) on ${D.positions.toLocaleString()} positions from ${D.games.toLocaleString()} self-play games in which every official spell was drawn equally often. `
 					+ `Values are percentage points of win probability with 95% intervals bootstrapped over games. `,

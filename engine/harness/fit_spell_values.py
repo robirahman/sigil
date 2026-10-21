@@ -36,8 +36,11 @@ from count_spell_games import NAMES
 NS = 45
 TIERS = [('S', 'Top', 5), ('A', 'Strong', 12), ('B', 'Solid', 6), ('C', 'Middling', 6),
          ('D', 'Weak', 10), ('F', 'Bottom', None)]
-MATCH_MIN, MATCH_STRONG = 1.0, 3.0     # percentage points
-SYN_MIN, SYN_STRONG = 0.5, 1.5         # percentage points
+# Percentage points. Chosen (2026-10-21) so the labels spread over the categories:
+# matchups split about evenly into 0 / + / ++; synergies are mostly too small to
+# separate from zero, and only ~30 pairs measure negative at all.
+MATCH_MIN, MATCH_STRONG = 0.6, 1.5
+SYN_MIN, SYN_STRONG = 0.1, 0.25
 NEW_SPELLS = {'Fissure': ('ritual', 'tectonic'), 'Rock_Slide': ('sorcery', 'tectonic'),
               'Bulwark': ('charm', 'tectonic'), 'Endowment': ('ritual', 'providence'),
               'Annuity': ('sorcery', 'providence'), 'Dividend': ('charm', 'providence')}

@@ -4,15 +4,15 @@
  "positions": 217315,
  "games": 194060,
  "k": 0.8,
- "method": "Positions from real engine self-play (round 4: every official spell drawn equally often). Each position is searched as played and again with one spell (or pair) made unusable for one side; the drop in that side's win probability is the spell's value there. Tier value = mean value per position of a game holding the spell (percentage points); matchup = value of A to one side minus value of B to the other; synergy = value of both to one side minus the two single values. Matchups favoured at >= 1 pp (strong >= 3), synergies at >= 0.5 pp (strong >= 1.5), each only when the 95% game-bootstrap interval excludes 0.",
+ "method": "Positions from real engine self-play (round 4: every official spell drawn equally often). Each position is searched as played and again with one spell (or pair) made unusable for one side; the drop in that side's win probability is the spell's value there. Tier value = mean value per position of a game holding the spell (percentage points); matchup = value of A to one side minus value of B to the other; synergy = value of both to one side minus the two single values. Matchups favoured at >= 0.6 pp (strong >= 1.5), synergies at >= 0.1 pp (strong >= 0.25), each only when the 95% game-bootstrap interval excludes 0.",
  "thresholds": {
   "matchup": [
-   1.0,
-   3.0
+   0.6,
+   1.5
   ],
   "synergy": [
-   0.5,
-   1.5
+   0.1,
+   0.25
   ]
  },
  "spells": {
@@ -662,7 +662,7 @@
   [
    "Flourish",
    "Grow",
-   0,
+   1,
    0.67
   ],
   [
@@ -674,7 +674,7 @@
   [
    "Hail_Storm",
    "Flourish",
-   1,
+   2,
    1.81
   ],
   [
@@ -704,43 +704,43 @@
   [
    "Flourish",
    "Surge",
-   0,
+   1,
    0.78
   ],
   [
    "Flourish",
    "Comet",
-   1,
+   2,
    1.96
   ],
   [
    "Flourish",
    "Seal_of_Summer",
-   1,
+   2,
    1.64
   ],
   [
    "Flourish",
    "Blossom",
-   1,
+   2,
    1.61
   ],
   [
    "Flourish",
    "Scatter",
-   0,
+   1,
    0.62
   ],
   [
    "Flourish",
    "Seal_of_Spring",
-   1,
+   2,
    1.88
   ],
   [
    "Syzygy",
    "Flourish",
-   1,
+   2,
    2.46
   ],
   [
@@ -752,7 +752,7 @@
   [
    "Flourish",
    "Azimuth",
-   0,
+   1,
    0.98
   ],
   [
@@ -764,7 +764,7 @@
   [
    "Fury",
    "Flourish",
-   1,
+   2,
    2.3
   ],
   [
@@ -782,19 +782,19 @@
   [
    "Flourish",
    "Storm_Front",
-   0,
+   1,
    0.64
   ],
   [
    "Flourish",
    "Gust",
-   1,
+   2,
    1.55
   ],
   [
    "Tsunami",
    "Flourish",
-   1,
+   2,
    1.96
   ],
   [
@@ -824,7 +824,7 @@
   [
    "Flourish",
    "Seal_of_Autumn",
-   1,
+   2,
    1.58
   ],
   [
@@ -848,7 +848,7 @@
   [
    "Flourish",
    "Seal_of_Destruction",
-   1,
+   2,
    1.96
   ],
   [
@@ -902,20 +902,20 @@
   [
    "Carnage",
    "Bewitch",
-   1,
+   2,
    2.01
   ],
   [
    "Carnage",
    "Starfall",
-   1,
+   2,
    2.83
   ],
   [
-   "Carnage",
    "Seal_of_Lightning",
-   0,
-   -0.99
+   "Carnage",
+   1,
+   0.99
   ],
   [
    "Carnage",
@@ -938,7 +938,7 @@
   [
    "Carnage",
    "Meteor",
-   1,
+   2,
    2.74
   ],
   [
@@ -956,7 +956,7 @@
   [
    "Carnage",
    "Slash",
-   1,
+   2,
    2.77
   ],
   [
@@ -998,7 +998,7 @@
   [
    "Carnage",
    "Syzygy",
-   1,
+   2,
    2.73
   ],
   [
@@ -1112,7 +1112,7 @@
   [
    "Carnage",
    "Seal_of_Stone",
-   1,
+   2,
    2.24
   ],
   [
@@ -1124,7 +1124,7 @@
   [
    "Carnage",
    "Fissure",
-   1,
+   2,
    2.62
   ],
   [
@@ -1142,13 +1142,13 @@
   [
    "Carnage",
    "Dividend",
-   1,
+   2,
    2.68
   ],
   [
    "Carnage",
    "Annuity",
-   1,
+   2,
    2.67
   ],
   [
@@ -1160,7 +1160,7 @@
   [
    "Bewitch",
    "Starfall",
-   0,
+   1,
    0.62
   ],
   [
@@ -1178,7 +1178,7 @@
   [
    "Bewitch",
    "Fireblast",
-   0,
+   1,
    0.8
   ],
   [
@@ -1190,7 +1190,7 @@
   [
    "Bewitch",
    "Meteor",
-   0,
+   1,
    0.67
   ],
   [
@@ -1202,7 +1202,7 @@
   [
    "Bewitch",
    "Sprout",
-   1,
+   2,
    1.85
   ],
   [
@@ -1214,37 +1214,37 @@
   [
    "Bewitch",
    "Surge",
-   1,
+   2,
    1.64
   ],
   [
    "Bewitch",
    "Comet",
-   1,
+   2,
    2.69
   ],
   [
    "Bewitch",
    "Seal_of_Summer",
-   1,
+   2,
    2.17
   ],
   [
    "Bewitch",
    "Blossom",
-   1,
+   2,
    1.95
   ],
   [
    "Bewitch",
    "Scatter",
-   1,
+   2,
    1.71
   ],
   [
    "Bewitch",
    "Seal_of_Spring",
-   1,
+   2,
    2.45
   ],
   [
@@ -1268,7 +1268,7 @@
   [
    "Bewitch",
    "Erupt",
-   1,
+   2,
    2.12
   ],
   [
@@ -1286,7 +1286,7 @@
   [
    "Bewitch",
    "Hurricane",
-   0,
+   1,
    0.81
   ],
   [
@@ -1298,14 +1298,14 @@
   [
    "Bewitch",
    "Gust",
-   1,
+   2,
    1.66
   ],
   [
-   "Bewitch",
    "Tsunami",
-   0,
-   -0.76
+   "Bewitch",
+   1,
+   0.76
   ],
   [
    "Bewitch",
@@ -1316,7 +1316,7 @@
   [
    "Bewitch",
    "Splash",
-   0,
+   1,
    0.61
   ],
   [
@@ -1328,13 +1328,13 @@
   [
    "Bewitch",
    "Gather",
-   0,
+   1,
    0.8
   ],
   [
    "Bewitch",
    "Seal_of_Autumn",
-   1,
+   2,
    1.95
   ],
   [
@@ -1346,7 +1346,7 @@
   [
    "Bewitch",
    "Decay",
-   0,
+   1,
    0.85
   ],
   [
@@ -1358,7 +1358,7 @@
   [
    "Bewitch",
    "Seal_of_Destruction",
-   1,
+   2,
    2.26
   ],
   [
@@ -1370,7 +1370,7 @@
   [
    "Bewitch",
    "Seal_of_Winter",
-   1,
+   2,
    1.56
   ],
   [
@@ -1388,7 +1388,7 @@
   [
    "Bewitch",
    "Bulwark",
-   1,
+   2,
    1.86
   ],
   [
@@ -1406,7 +1406,7 @@
   [
    "Bewitch",
    "Endowment",
-   0,
+   1,
    0.65
   ],
   [
@@ -1430,7 +1430,7 @@
   [
    "Hail_Storm",
    "Starfall",
-   1,
+   2,
    1.7
   ],
   [
@@ -1442,7 +1442,7 @@
   [
    "Starfall",
    "Seal_of_Wind",
-   0,
+   1,
    0.67
   ],
   [
@@ -1452,27 +1452,27 @@
    1.3
   ],
   [
-   "Starfall",
    "Slash",
-   0,
-   -0.74
+   "Starfall",
+   1,
+   0.74
   ],
   [
    "Starfall",
    "Surge",
-   0,
+   1,
    0.62
   ],
   [
    "Starfall",
    "Comet",
-   1,
+   2,
    1.79
   ],
   [
    "Starfall",
    "Seal_of_Summer",
-   1,
+   2,
    1.75
   ],
   [
@@ -1490,13 +1490,13 @@
   [
    "Starfall",
    "Seal_of_Spring",
-   1,
+   2,
    1.62
   ],
   [
    "Syzygy",
    "Starfall",
-   1,
+   2,
    1.83
   ],
   [
@@ -1520,7 +1520,7 @@
   [
    "Fury",
    "Starfall",
-   1,
+   2,
    2.44
   ],
   [
@@ -1544,13 +1544,13 @@
   [
    "Starfall",
    "Gust",
-   0,
+   1,
    0.74
   ],
   [
    "Tsunami",
    "Starfall",
-   1,
+   2,
    1.93
   ],
   [
@@ -1572,22 +1572,22 @@
    -0.37
   ],
   [
-   "Starfall",
    "Gather",
-   0,
-   -0.66
+   "Starfall",
+   1,
+   0.66
   ],
   [
    "Starfall",
    "Seal_of_Autumn",
-   0,
+   1,
    0.95
   ],
   [
-   "Starfall",
    "Corrupt",
-   0,
-   -0.66
+   "Starfall",
+   1,
+   0.66
   ],
   [
    "Starfall",
@@ -1598,7 +1598,7 @@
   [
    "Starfall",
    "Lurk",
-   0,
+   1,
    0.67
   ],
   [
@@ -1610,13 +1610,13 @@
   [
    "Seal_of_Stone",
    "Starfall",
-   1,
+   2,
    1.7
   ],
   [
    "Starfall",
    "Seal_of_Winter",
-   0,
+   1,
    0.74
   ],
   [
@@ -1670,7 +1670,7 @@
   [
    "Seal_of_Lightning",
    "Hail_Storm",
-   1,
+   2,
    2.74
   ],
   [
@@ -1736,7 +1736,7 @@
   [
    "Seal_of_Lightning",
    "Syzygy",
-   1,
+   2,
    2.4
   ],
   [
@@ -1790,7 +1790,7 @@
   [
    "Seal_of_Lightning",
    "Tsunami",
-   1,
+   2,
    2.22
   ],
   [
@@ -1880,49 +1880,49 @@
   [
    "Seal_of_Lightning",
    "Dividend",
-   1,
+   2,
    2.48
   ],
   [
    "Seal_of_Lightning",
    "Annuity",
-   1,
+   2,
    2.06
   ],
   [
    "Seal_of_Lightning",
    "Endowment",
-   1,
+   2,
    2.91
   ],
   [
-   "Grow",
    "Fireblast",
-   0,
-   -0.71
+   "Grow",
+   1,
+   0.71
   ],
   [
    "Hail_Storm",
    "Grow",
-   1,
+   2,
    2.08
   ],
   [
-   "Grow",
    "Meteor",
-   0,
-   -0.9
+   "Grow",
+   1,
+   0.9
   ],
   [
    "Grow",
    "Seal_of_Wind",
-   0,
+   1,
    0.67
   ],
   [
    "Grow",
    "Sprout",
-   0,
+   1,
    0.62
   ],
   [
@@ -1940,7 +1940,7 @@
   [
    "Grow",
    "Comet",
-   1,
+   2,
    1.54
   ],
   [
@@ -1970,7 +1970,7 @@
   [
    "Syzygy",
    "Grow",
-   1,
+   2,
    2.59
   ],
   [
@@ -1994,7 +1994,7 @@
   [
    "Fury",
    "Grow",
-   1,
+   2,
    2.95
   ],
   [
@@ -2024,7 +2024,7 @@
   [
    "Tsunami",
    "Grow",
-   1,
+   2,
    2.17
   ],
   [
@@ -2040,28 +2040,28 @@
    1.03
   ],
   [
-   "Grow",
    "Harvest",
-   0,
-   -0.96
+   "Grow",
+   1,
+   0.96
   ],
   [
-   "Grow",
    "Gather",
-   0,
-   -0.68
+   "Grow",
+   1,
+   0.68
   ],
   [
    "Grow",
    "Seal_of_Autumn",
-   0,
+   1,
    0.93
   ],
   [
-   "Grow",
    "Corrupt",
-   0,
-   -0.66
+   "Grow",
+   1,
+   0.66
   ],
   [
    "Grow",
@@ -2078,13 +2078,13 @@
   [
    "Grow",
    "Seal_of_Destruction",
-   0,
+   1,
    0.88
   ],
   [
    "Seal_of_Stone",
    "Grow",
-   1,
+   2,
    1.97
   ],
   [
@@ -2112,27 +2112,27 @@
    1.07
   ],
   [
-   "Grow",
    "Dividend",
-   0,
-   -0.62
+   "Grow",
+   1,
+   0.62
   ],
   [
-   "Grow",
    "Annuity",
-   0,
-   -0.89
+   "Grow",
+   1,
+   0.89
   ],
   [
-   "Grow",
    "Endowment",
-   0,
-   -0.61
+   "Grow",
+   1,
+   0.61
   ],
   [
    "Hail_Storm",
    "Fireblast",
-   1,
+   2,
    2.02
   ],
   [
@@ -2162,25 +2162,25 @@
   [
    "Fireblast",
    "Surge",
-   0,
+   1,
    0.93
   ],
   [
    "Fireblast",
    "Comet",
-   1,
+   2,
    2.18
   ],
   [
    "Fireblast",
    "Seal_of_Summer",
-   1,
+   2,
    1.66
   ],
   [
    "Fireblast",
    "Blossom",
-   0,
+   1,
    0.9
   ],
   [
@@ -2192,7 +2192,7 @@
   [
    "Fireblast",
    "Seal_of_Spring",
-   1,
+   2,
    1.72
   ],
   [
@@ -2210,19 +2210,19 @@
   [
    "Fireblast",
    "Azimuth",
-   0,
+   1,
    0.91
   ],
   [
    "Fireblast",
    "Erupt",
-   0,
+   1,
    0.9
   ],
   [
    "Fury",
    "Fireblast",
-   1,
+   2,
    2.41
   ],
   [
@@ -2252,7 +2252,7 @@
   [
    "Tsunami",
    "Fireblast",
-   1,
+   2,
    1.63
   ],
   [
@@ -2300,7 +2300,7 @@
   [
    "Fireblast",
    "Lurk",
-   0,
+   1,
    0.71
   ],
   [
@@ -2312,7 +2312,7 @@
   [
    "Seal_of_Stone",
    "Fireblast",
-   1,
+   2,
    1.95
   ],
   [
@@ -2360,7 +2360,7 @@
   [
    "Hail_Storm",
    "Meteor",
-   1,
+   2,
    1.54
   ],
   [
@@ -2384,7 +2384,7 @@
   [
    "Hail_Storm",
    "Surge",
-   1,
+   2,
    2.45
   ],
   [
@@ -2402,19 +2402,19 @@
   [
    "Hail_Storm",
    "Blossom",
-   1,
+   2,
    2.46
   ],
   [
    "Hail_Storm",
    "Scatter",
-   1,
+   2,
    2.28
   ],
   [
    "Hail_Storm",
    "Seal_of_Spring",
-   1,
+   2,
    2.97
   ],
   [
@@ -2426,19 +2426,19 @@
   [
    "Hail_Storm",
    "Eclipse",
-   1,
+   2,
    1.58
   ],
   [
    "Hail_Storm",
    "Azimuth",
-   1,
+   2,
    1.51
   ],
   [
    "Hail_Storm",
    "Erupt",
-   1,
+   2,
    2.2
   ],
   [
@@ -2450,25 +2450,25 @@
   [
    "Hail_Storm",
    "Charge",
-   0,
+   1,
    0.78
   ],
   [
    "Hail_Storm",
    "Hurricane",
-   1,
+   2,
    2.25
   ],
   [
    "Hail_Storm",
    "Storm_Front",
-   0,
+   1,
    0.98
   ],
   [
    "Hail_Storm",
    "Gust",
-   1,
+   2,
    2.36
   ],
   [
@@ -2492,19 +2492,19 @@
   [
    "Hail_Storm",
    "Harvest",
-   0,
+   1,
    0.94
   ],
   [
    "Hail_Storm",
    "Gather",
-   0,
+   1,
    0.77
   ],
   [
    "Hail_Storm",
    "Seal_of_Autumn",
-   1,
+   2,
    2.24
   ],
   [
@@ -2522,31 +2522,31 @@
   [
    "Hail_Storm",
    "Lurk",
-   1,
+   2,
    1.75
   ],
   [
    "Hail_Storm",
    "Seal_of_Destruction",
-   1,
+   2,
    2.06
   ],
   [
    "Hail_Storm",
    "Seal_of_Stone",
-   0,
+   1,
    0.87
   ],
   [
    "Hail_Storm",
    "Seal_of_Winter",
-   1,
+   2,
    1.7
   ],
   [
    "Hail_Storm",
    "Fissure",
-   0,
+   1,
    0.98
   ],
   [
@@ -2558,7 +2558,7 @@
   [
    "Hail_Storm",
    "Bulwark",
-   1,
+   2,
    1.87
   ],
   [
@@ -2570,7 +2570,7 @@
   [
    "Hail_Storm",
    "Annuity",
-   0,
+   1,
    0.89
   ],
   [
@@ -2582,7 +2582,7 @@
   [
    "Meteor",
    "Seal_of_Wind",
-   0,
+   1,
    0.89
   ],
   [
@@ -2600,43 +2600,43 @@
   [
    "Meteor",
    "Surge",
-   0,
+   1,
    0.83
   ],
   [
    "Meteor",
    "Comet",
-   1,
+   2,
    2.06
   ],
   [
    "Meteor",
    "Seal_of_Summer",
-   1,
+   2,
    1.98
   ],
   [
    "Meteor",
    "Blossom",
-   0,
+   1,
    0.97
   ],
   [
    "Meteor",
    "Scatter",
-   0,
+   1,
    0.9
   ],
   [
    "Meteor",
    "Seal_of_Spring",
-   1,
+   2,
    1.73
   ],
   [
    "Syzygy",
    "Meteor",
-   1,
+   2,
    1.71
   ],
   [
@@ -2654,20 +2654,20 @@
   [
    "Meteor",
    "Erupt",
-   0,
+   1,
    0.98
   ],
   [
    "Fury",
    "Meteor",
-   1,
+   2,
    2.44
   ],
   [
-   "Meteor",
    "Charge",
-   0,
-   -0.62
+   "Meteor",
+   1,
+   0.62
   ],
   [
    "Meteor",
@@ -2684,13 +2684,13 @@
   [
    "Meteor",
    "Gust",
-   0,
+   1,
    0.74
   ],
   [
    "Tsunami",
    "Meteor",
-   1,
+   2,
    1.85
   ],
   [
@@ -2720,7 +2720,7 @@
   [
    "Meteor",
    "Seal_of_Autumn",
-   0,
+   1,
    0.8
   ],
   [
@@ -2738,7 +2738,7 @@
   [
    "Meteor",
    "Lurk",
-   0,
+   1,
    0.66
   ],
   [
@@ -2750,13 +2750,13 @@
   [
    "Seal_of_Stone",
    "Meteor",
-   1,
+   2,
    2.13
   ],
   [
    "Meteor",
    "Seal_of_Winter",
-   0,
+   1,
    0.66
   ],
   [
@@ -2804,7 +2804,7 @@
   [
    "Slash",
    "Seal_of_Wind",
-   1,
+   2,
    1.5
   ],
   [
@@ -2816,13 +2816,13 @@
   [
    "Seal_of_Wind",
    "Comet",
-   0,
+   1,
    0.92
   ],
   [
    "Seal_of_Wind",
    "Seal_of_Summer",
-   0,
+   1,
    0.77
   ],
   [
@@ -2846,7 +2846,7 @@
   [
    "Syzygy",
    "Seal_of_Wind",
-   1,
+   2,
    2.29
   ],
   [
@@ -2870,7 +2870,7 @@
   [
    "Fury",
    "Seal_of_Wind",
-   1,
+   2,
    2.83
   ],
   [
@@ -2900,7 +2900,7 @@
   [
    "Tsunami",
    "Seal_of_Wind",
-   1,
+   2,
    2.34
   ],
   [
@@ -2916,16 +2916,16 @@
    1.02
   ],
   [
-   "Seal_of_Wind",
    "Harvest",
-   0,
-   -0.71
+   "Seal_of_Wind",
+   1,
+   0.71
   ],
   [
-   "Seal_of_Wind",
    "Gather",
-   0,
-   -0.93
+   "Seal_of_Wind",
+   1,
+   0.93
   ],
   [
    "Seal_of_Wind",
@@ -2960,7 +2960,7 @@
   [
    "Seal_of_Stone",
    "Seal_of_Wind",
-   1,
+   2,
    2.95
   ],
   [
@@ -2994,21 +2994,21 @@
    -0.1
   ],
   [
-   "Seal_of_Wind",
    "Annuity",
-   0,
-   -0.89
+   "Seal_of_Wind",
+   1,
+   0.89
   ],
   [
-   "Seal_of_Wind",
    "Endowment",
-   0,
-   -0.73
+   "Seal_of_Wind",
+   1,
+   0.73
   ],
   [
    "Slash",
    "Sprout",
-   1,
+   2,
    1.81
   ],
   [
@@ -3020,7 +3020,7 @@
   [
    "Sprout",
    "Comet",
-   0,
+   1,
    0.89
   ],
   [
@@ -3050,14 +3050,14 @@
   [
    "Syzygy",
    "Sprout",
-   1,
+   2,
    2.75
   ],
   [
-   "Sprout",
    "Eclipse",
-   0,
-   -0.78
+   "Sprout",
+   1,
+   0.78
   ],
   [
    "Sprout",
@@ -3080,7 +3080,7 @@
   [
    "Charge",
    "Sprout",
-   1,
+   2,
    1.61
   ],
   [
@@ -3090,10 +3090,10 @@
    -0.22
   ],
   [
-   "Sprout",
    "Storm_Front",
-   0,
-   -0.82
+   "Sprout",
+   1,
+   0.82
   ],
   [
    "Sprout",
@@ -3104,14 +3104,14 @@
   [
    "Tsunami",
    "Sprout",
-   1,
+   2,
    2.62
   ],
   [
-   "Sprout",
    "Torrent",
-   0,
-   -0.71
+   "Sprout",
+   1,
+   0.71
   ],
   [
    "Splash",
@@ -3138,10 +3138,10 @@
    0.16
   ],
   [
-   "Sprout",
    "Corrupt",
-   0,
-   -0.9
+   "Sprout",
+   1,
+   0.9
   ],
   [
    "Sprout",
@@ -3164,7 +3164,7 @@
   [
    "Seal_of_Stone",
    "Sprout",
-   1,
+   2,
    2.49
   ],
   [
@@ -3192,10 +3192,10 @@
    0.53
   ],
   [
-   "Sprout",
    "Dividend",
-   0,
-   -0.65
+   "Sprout",
+   1,
+   0.65
   ],
   [
    "Annuity",
@@ -3204,10 +3204,10 @@
    1.02
   ],
   [
-   "Sprout",
    "Endowment",
-   0,
-   -0.68
+   "Sprout",
+   1,
+   0.68
   ],
   [
    "Slash",
@@ -3218,13 +3218,13 @@
   [
    "Slash",
    "Comet",
-   1,
+   2,
    2.57
   ],
   [
    "Slash",
    "Seal_of_Summer",
-   1,
+   2,
    2.28
   ],
   [
@@ -3242,7 +3242,7 @@
   [
    "Slash",
    "Seal_of_Spring",
-   1,
+   2,
    2.15
   ],
   [
@@ -3254,7 +3254,7 @@
   [
    "Slash",
    "Eclipse",
-   0,
+   1,
    0.99
   ],
   [
@@ -3272,7 +3272,7 @@
   [
    "Fury",
    "Slash",
-   1,
+   2,
    1.79
   ],
   [
@@ -3290,7 +3290,7 @@
   [
    "Slash",
    "Storm_Front",
-   0,
+   1,
    0.62
   ],
   [
@@ -3300,15 +3300,15 @@
    1.13
   ],
   [
-   "Slash",
    "Tsunami",
-   0,
-   -0.8
+   "Slash",
+   1,
+   0.8
   ],
   [
    "Slash",
    "Torrent",
-   0,
+   1,
    0.92
   ],
   [
@@ -3332,7 +3332,7 @@
   [
    "Slash",
    "Seal_of_Autumn",
-   1,
+   2,
    2.35
   ],
   [
@@ -3344,7 +3344,7 @@
   [
    "Slash",
    "Decay",
-   0,
+   1,
    0.64
   ],
   [
@@ -3356,14 +3356,14 @@
   [
    "Slash",
    "Seal_of_Destruction",
-   1,
+   2,
    1.71
   ],
   [
-   "Slash",
    "Seal_of_Stone",
-   0,
-   -0.88
+   "Slash",
+   1,
+   0.88
   ],
   [
    "Slash",
@@ -3374,7 +3374,7 @@
   [
    "Slash",
    "Fissure",
-   0,
+   1,
    0.76
   ],
   [
@@ -3386,7 +3386,7 @@
   [
    "Slash",
    "Bulwark",
-   1,
+   2,
    1.96
   ],
   [
@@ -3416,7 +3416,7 @@
   [
    "Surge",
    "Seal_of_Summer",
-   0,
+   1,
    0.92
   ],
   [
@@ -3440,7 +3440,7 @@
   [
    "Syzygy",
    "Surge",
-   1,
+   2,
    2.56
   ],
   [
@@ -3480,10 +3480,10 @@
    1.01
   ],
   [
-   "Surge",
    "Storm_Front",
-   0,
-   -0.84
+   "Surge",
+   1,
+   0.84
   ],
   [
    "Surge",
@@ -3494,7 +3494,7 @@
   [
    "Tsunami",
    "Surge",
-   1,
+   2,
    2.35
   ],
   [
@@ -3524,7 +3524,7 @@
   [
    "Surge",
    "Seal_of_Autumn",
-   0,
+   1,
    0.6
   ],
   [
@@ -3534,10 +3534,10 @@
    1.19
   ],
   [
-   "Surge",
    "Decay",
-   0,
-   -0.76
+   "Surge",
+   1,
+   0.76
   ],
   [
    "Surge",
@@ -3582,22 +3582,22 @@
    0.58
   ],
   [
-   "Surge",
    "Dividend",
-   0,
-   -0.66
+   "Surge",
+   1,
+   0.66
   ],
   [
-   "Surge",
    "Annuity",
-   0,
-   -0.9
+   "Surge",
+   1,
+   0.9
   ],
   [
-   "Surge",
    "Endowment",
-   0,
-   -0.84
+   "Surge",
+   1,
+   0.84
   ],
   [
    "Comet",
@@ -3606,10 +3606,10 @@
    -0.4
   ],
   [
-   "Comet",
    "Blossom",
-   0,
-   -0.84
+   "Comet",
+   1,
+   0.84
   ],
   [
    "Scatter",
@@ -3642,10 +3642,10 @@
    1.19
   ],
   [
-   "Comet",
    "Erupt",
-   0,
-   -0.95
+   "Comet",
+   1,
+   0.95
   ],
   [
    "Fury",
@@ -3656,7 +3656,7 @@
   [
    "Charge",
    "Comet",
-   1,
+   2,
    2.32
   ],
   [
@@ -3666,10 +3666,10 @@
    1.25
   ],
   [
-   "Comet",
    "Storm_Front",
-   0,
-   -0.74
+   "Comet",
+   1,
+   0.74
   ],
   [
    "Gust",
@@ -3680,7 +3680,7 @@
   [
    "Tsunami",
    "Comet",
-   1,
+   2,
    2.99
   ],
   [
@@ -3692,19 +3692,19 @@
   [
    "Splash",
    "Comet",
-   1,
+   2,
    2.2
   ],
   [
    "Harvest",
    "Comet",
-   1,
+   2,
    1.97
   ],
   [
    "Gather",
    "Comet",
-   1,
+   2,
    1.91
   ],
   [
@@ -3716,13 +3716,13 @@
   [
    "Corrupt",
    "Comet",
-   1,
+   2,
    1.73
   ],
   [
    "Decay",
    "Comet",
-   1,
+   2,
    1.54
   ],
   [
@@ -3792,10 +3792,10 @@
    1.09
   ],
   [
-   "Seal_of_Summer",
    "Scatter",
-   0,
-   -0.69
+   "Seal_of_Summer",
+   1,
+   0.69
   ],
   [
    "Seal_of_Summer",
@@ -3816,10 +3816,10 @@
    1.17
   ],
   [
-   "Seal_of_Summer",
    "Azimuth",
-   0,
-   -0.91
+   "Seal_of_Summer",
+   1,
+   0.91
   ],
   [
    "Seal_of_Summer",
@@ -3836,7 +3836,7 @@
   [
    "Charge",
    "Seal_of_Summer",
-   1,
+   2,
    2.08
   ],
   [
@@ -3852,10 +3852,10 @@
    1.14
   ],
   [
-   "Seal_of_Summer",
    "Gust",
-   0,
-   -0.87
+   "Seal_of_Summer",
+   1,
+   0.87
   ],
   [
    "Tsunami",
@@ -3866,25 +3866,25 @@
   [
    "Torrent",
    "Seal_of_Summer",
-   1,
+   2,
    1.55
   ],
   [
    "Splash",
    "Seal_of_Summer",
-   1,
+   2,
    2.03
   ],
   [
    "Harvest",
    "Seal_of_Summer",
-   1,
+   2,
    1.96
   ],
   [
    "Gather",
    "Seal_of_Summer",
-   1,
+   2,
    1.67
   ],
   [
@@ -3896,7 +3896,7 @@
   [
    "Corrupt",
    "Seal_of_Summer",
-   1,
+   2,
    1.6
   ],
   [
@@ -3906,10 +3906,10 @@
    1.17
   ],
   [
-   "Seal_of_Summer",
    "Lurk",
-   0,
-   -0.65
+   "Seal_of_Summer",
+   1,
+   0.65
   ],
   [
    "Seal_of_Summer",
@@ -3920,7 +3920,7 @@
   [
    "Seal_of_Stone",
    "Seal_of_Summer",
-   1,
+   2,
    2.96
   ],
   [
@@ -3980,7 +3980,7 @@
   [
    "Syzygy",
    "Blossom",
-   1,
+   2,
    2.82
   ],
   [
@@ -4004,7 +4004,7 @@
   [
    "Fury",
    "Blossom",
-   1,
+   2,
    2.9
   ],
   [
@@ -4034,7 +4034,7 @@
   [
    "Tsunami",
    "Blossom",
-   1,
+   2,
    1.89
   ],
   [
@@ -4056,10 +4056,10 @@
    1.04
   ],
   [
-   "Blossom",
    "Gather",
-   0,
-   -0.92
+   "Blossom",
+   1,
+   0.92
   ],
   [
    "Blossom",
@@ -4088,13 +4088,13 @@
   [
    "Blossom",
    "Seal_of_Destruction",
-   0,
+   1,
    0.9
   ],
   [
    "Seal_of_Stone",
    "Blossom",
-   1,
+   2,
    1.77
   ],
   [
@@ -4118,7 +4118,7 @@
   [
    "Blossom",
    "Bulwark",
-   1,
+   2,
    1.59
   ],
   [
@@ -4142,20 +4142,20 @@
   [
    "Scatter",
    "Seal_of_Spring",
-   0,
+   1,
    0.8
   ],
   [
    "Syzygy",
    "Scatter",
-   1,
+   2,
    2.72
   ],
   [
-   "Scatter",
    "Eclipse",
-   0,
-   -0.65
+   "Scatter",
+   1,
+   0.65
   ],
   [
    "Scatter",
@@ -4202,14 +4202,14 @@
   [
    "Tsunami",
    "Scatter",
-   1,
+   2,
    2.35
   ],
   [
-   "Scatter",
    "Torrent",
-   0,
-   -0.7
+   "Scatter",
+   1,
+   0.7
   ],
   [
    "Splash",
@@ -4224,10 +4224,10 @@
    1.15
   ],
   [
-   "Scatter",
    "Gather",
-   0,
-   -0.74
+   "Scatter",
+   1,
+   0.74
   ],
   [
    "Scatter",
@@ -4236,16 +4236,16 @@
    0.17
   ],
   [
-   "Scatter",
    "Corrupt",
-   0,
-   -0.94
+   "Scatter",
+   1,
+   0.94
   ],
   [
-   "Scatter",
    "Decay",
-   0,
-   -0.94
+   "Scatter",
+   1,
+   0.94
   ],
   [
    "Scatter",
@@ -4262,7 +4262,7 @@
   [
    "Seal_of_Stone",
    "Scatter",
-   1,
+   2,
    1.85
   ],
   [
@@ -4286,7 +4286,7 @@
   [
    "Scatter",
    "Bulwark",
-   0,
+   1,
    0.9
   ],
   [
@@ -4296,10 +4296,10 @@
    -0.29
   ],
   [
-   "Scatter",
    "Annuity",
-   0,
-   -0.69
+   "Scatter",
+   1,
+   0.69
   ],
   [
    "Scatter",
@@ -4314,22 +4314,22 @@
    3.88
   ],
   [
-   "Seal_of_Spring",
    "Eclipse",
-   0,
-   -0.97
+   "Seal_of_Spring",
+   1,
+   0.97
   ],
   [
-   "Seal_of_Spring",
    "Azimuth",
-   0,
-   -0.98
+   "Seal_of_Spring",
+   1,
+   0.98
   ],
   [
-   "Seal_of_Spring",
    "Erupt",
-   0,
-   -0.81
+   "Seal_of_Spring",
+   1,
+   0.81
   ],
   [
    "Fury",
@@ -4340,7 +4340,7 @@
   [
    "Charge",
    "Seal_of_Spring",
-   1,
+   2,
    2.16
   ],
   [
@@ -4352,7 +4352,7 @@
   [
    "Storm_Front",
    "Seal_of_Spring",
-   1,
+   2,
    1.71
   ],
   [
@@ -4376,7 +4376,7 @@
   [
    "Splash",
    "Seal_of_Spring",
-   1,
+   2,
    1.84
   ],
   [
@@ -4388,7 +4388,7 @@
   [
    "Gather",
    "Seal_of_Spring",
-   1,
+   2,
    2.0
   ],
   [
@@ -4400,20 +4400,20 @@
   [
    "Corrupt",
    "Seal_of_Spring",
-   1,
+   2,
    1.65
   ],
   [
    "Decay",
    "Seal_of_Spring",
-   1,
+   2,
    1.53
   ],
   [
-   "Seal_of_Spring",
    "Lurk",
-   0,
-   -0.85
+   "Seal_of_Spring",
+   1,
+   0.85
   ],
   [
    "Seal_of_Spring",
@@ -4424,14 +4424,14 @@
   [
    "Seal_of_Stone",
    "Seal_of_Spring",
-   1,
+   2,
    2.61
   ],
   [
-   "Seal_of_Spring",
    "Seal_of_Winter",
-   0,
-   -0.76
+   "Seal_of_Spring",
+   1,
+   0.76
   ],
   [
    "Fissure",
@@ -4452,10 +4452,10 @@
    0.12
   ],
   [
-   "Seal_of_Spring",
    "Dividend",
-   0,
-   -0.93
+   "Seal_of_Spring",
+   1,
+   0.93
   ],
   [
    "Annuity",
@@ -4478,13 +4478,13 @@
   [
    "Syzygy",
    "Azimuth",
-   1,
+   2,
    2.74
   ],
   [
    "Syzygy",
    "Erupt",
-   1,
+   2,
    2.73
   ],
   [
@@ -4514,7 +4514,7 @@
   [
    "Syzygy",
    "Gust",
-   1,
+   2,
    2.97
   ],
   [
@@ -4526,13 +4526,13 @@
   [
    "Syzygy",
    "Torrent",
-   1,
+   2,
    2.53
   ],
   [
    "Syzygy",
    "Splash",
-   1,
+   2,
    2.06
   ],
   [
@@ -4544,7 +4544,7 @@
   [
    "Syzygy",
    "Gather",
-   1,
+   2,
    2.43
   ],
   [
@@ -4556,19 +4556,19 @@
   [
    "Syzygy",
    "Corrupt",
-   1,
+   2,
    1.69
   ],
   [
    "Syzygy",
    "Decay",
-   1,
+   2,
    1.78
   ],
   [
    "Syzygy",
    "Lurk",
-   1,
+   2,
    2.49
   ],
   [
@@ -4580,19 +4580,19 @@
   [
    "Syzygy",
    "Seal_of_Stone",
-   0,
+   1,
    0.71
   ],
   [
    "Syzygy",
    "Seal_of_Winter",
-   1,
+   2,
    2.31
   ],
   [
    "Syzygy",
    "Fissure",
-   1,
+   2,
    2.22
   ],
   [
@@ -4610,19 +4610,19 @@
   [
    "Syzygy",
    "Dividend",
-   0,
+   1,
    0.83
   ],
   [
    "Syzygy",
    "Annuity",
-   1,
+   2,
    1.57
   ],
   [
    "Syzygy",
    "Endowment",
-   1,
+   2,
    1.97
   ],
   [
@@ -4634,20 +4634,20 @@
   [
    "Eclipse",
    "Erupt",
-   0,
+   1,
    1.0
   ],
   [
    "Fury",
    "Eclipse",
-   1,
+   2,
    2.84
   ],
   [
-   "Eclipse",
    "Charge",
-   0,
-   -0.73
+   "Eclipse",
+   1,
+   0.73
   ],
   [
    "Eclipse",
@@ -4656,21 +4656,21 @@
    0.43
   ],
   [
-   "Eclipse",
    "Storm_Front",
-   0,
-   -0.69
+   "Eclipse",
+   1,
+   0.69
   ],
   [
    "Eclipse",
    "Gust",
-   0,
+   1,
    0.84
   ],
   [
    "Tsunami",
    "Eclipse",
-   1,
+   2,
    1.86
   ],
   [
@@ -4704,10 +4704,10 @@
    0.44
   ],
   [
-   "Eclipse",
    "Corrupt",
-   0,
-   -0.69
+   "Eclipse",
+   1,
+   0.69
   ],
   [
    "Eclipse",
@@ -4724,7 +4724,7 @@
   [
    "Eclipse",
    "Seal_of_Destruction",
-   0,
+   1,
    0.96
   ],
   [
@@ -4736,7 +4736,7 @@
   [
    "Eclipse",
    "Seal_of_Winter",
-   0,
+   1,
    0.69
   ],
   [
@@ -4758,10 +4758,10 @@
    0.57
   ],
   [
-   "Eclipse",
    "Dividend",
-   0,
-   -0.62
+   "Eclipse",
+   1,
+   0.62
   ],
   [
    "Eclipse",
@@ -4778,19 +4778,19 @@
   [
    "Azimuth",
    "Erupt",
-   0,
+   1,
    0.69
   ],
   [
    "Fury",
    "Azimuth",
-   1,
+   2,
    2.46
   ],
   [
    "Charge",
    "Azimuth",
-   1,
+   2,
    1.57
   ],
   [
@@ -4800,21 +4800,21 @@
    0.15
   ],
   [
-   "Azimuth",
    "Storm_Front",
-   0,
-   -0.73
+   "Azimuth",
+   1,
+   0.73
   ],
   [
    "Azimuth",
    "Gust",
-   0,
+   1,
    0.71
   ],
   [
    "Tsunami",
    "Azimuth",
-   1,
+   2,
    2.52
   ],
   [
@@ -4832,7 +4832,7 @@
   [
    "Azimuth",
    "Harvest",
-   0,
+   1,
    0.64
   ],
   [
@@ -4844,7 +4844,7 @@
   [
    "Azimuth",
    "Seal_of_Autumn",
-   0,
+   1,
    0.64
   ],
   [
@@ -4874,7 +4874,7 @@
   [
    "Seal_of_Stone",
    "Azimuth",
-   1,
+   2,
    2.15
   ],
   [
@@ -4892,20 +4892,20 @@
   [
    "Rock_Slide",
    "Azimuth",
-   1,
+   2,
    2.81
   ],
   [
    "Azimuth",
    "Bulwark",
-   0,
+   1,
    0.85
   ],
   [
-   "Azimuth",
    "Dividend",
-   0,
-   -0.6
+   "Azimuth",
+   1,
+   0.6
   ],
   [
    "Azimuth",
@@ -4922,13 +4922,13 @@
   [
    "Fury",
    "Erupt",
-   1,
+   2,
    2.76
   ],
   [
    "Charge",
    "Erupt",
-   1,
+   2,
    1.69
   ],
   [
@@ -4938,10 +4938,10 @@
    0.29
   ],
   [
-   "Erupt",
    "Storm_Front",
-   0,
-   -0.85
+   "Erupt",
+   1,
+   0.85
   ],
   [
    "Erupt",
@@ -4952,7 +4952,7 @@
   [
    "Tsunami",
    "Erupt",
-   1,
+   2,
    2.74
   ],
   [
@@ -4968,10 +4968,10 @@
    1.31
   ],
   [
-   "Erupt",
    "Harvest",
-   0,
-   -0.81
+   "Erupt",
+   1,
+   0.81
   ],
   [
    "Gather",
@@ -4986,22 +4986,22 @@
    -0.25
   ],
   [
-   "Erupt",
    "Corrupt",
-   0,
-   -0.78
+   "Erupt",
+   1,
+   0.78
   ],
   [
-   "Erupt",
    "Decay",
-   0,
-   -0.81
+   "Erupt",
+   1,
+   0.81
   ],
   [
-   "Erupt",
    "Lurk",
-   0,
-   -0.93
+   "Erupt",
+   1,
+   0.93
   ],
   [
    "Erupt",
@@ -5012,7 +5012,7 @@
   [
    "Seal_of_Stone",
    "Erupt",
-   1,
+   2,
    1.71
   ],
   [
@@ -5046,10 +5046,10 @@
    1.24
   ],
   [
-   "Erupt",
    "Annuity",
-   0,
-   -0.9
+   "Erupt",
+   1,
+   0.9
   ],
   [
    "Erupt",
@@ -5072,7 +5072,7 @@
   [
    "Fury",
    "Storm_Front",
-   1,
+   2,
    2.02
   ],
   [
@@ -5096,43 +5096,43 @@
   [
    "Fury",
    "Splash",
-   1,
+   2,
    1.77
   ],
   [
    "Fury",
    "Harvest",
-   1,
+   2,
    2.05
   ],
   [
    "Fury",
    "Gather",
-   1,
+   2,
    1.66
   ],
   [
    "Fury",
    "Seal_of_Autumn",
-   1,
+   2,
    2.53
   ],
   [
    "Fury",
    "Corrupt",
-   1,
+   2,
    1.95
   ],
   [
    "Fury",
    "Decay",
-   1,
+   2,
    1.9
   ],
   [
    "Fury",
    "Lurk",
-   1,
+   2,
    1.8
   ],
   [
@@ -5144,7 +5144,7 @@
   [
    "Fury",
    "Seal_of_Stone",
-   1,
+   2,
    2.31
   ],
   [
@@ -5180,19 +5180,19 @@
   [
    "Fury",
    "Annuity",
-   1,
+   2,
    1.82
   ],
   [
    "Fury",
    "Endowment",
-   1,
+   2,
    2.25
   ],
   [
    "Charge",
    "Hurricane",
-   1,
+   2,
    1.52
   ],
   [
@@ -5204,19 +5204,19 @@
   [
    "Charge",
    "Gust",
-   1,
+   2,
    1.77
   ],
   [
-   "Charge",
    "Tsunami",
-   0,
-   -0.79
+   "Charge",
+   1,
+   0.79
   ],
   [
    "Charge",
    "Torrent",
-   0,
+   1,
    0.99
   ],
   [
@@ -5240,31 +5240,31 @@
   [
    "Charge",
    "Seal_of_Autumn",
-   1,
+   2,
    1.53
   ],
   [
    "Charge",
    "Corrupt",
-   0,
+   1,
    0.94
   ],
   [
    "Charge",
    "Decay",
-   0,
+   1,
    0.87
   ],
   [
    "Charge",
    "Lurk",
-   0,
+   1,
    0.76
   ],
   [
    "Charge",
    "Seal_of_Destruction",
-   1,
+   2,
    1.53
   ],
   [
@@ -5294,7 +5294,7 @@
   [
    "Charge",
    "Bulwark",
-   1,
+   2,
    1.91
   ],
   [
@@ -5306,7 +5306,7 @@
   [
    "Charge",
    "Annuity",
-   0,
+   1,
    0.83
   ],
   [
@@ -5330,14 +5330,14 @@
   [
    "Tsunami",
    "Hurricane",
-   1,
+   2,
    2.54
   ],
   [
-   "Hurricane",
    "Torrent",
-   0,
-   -0.72
+   "Hurricane",
+   1,
+   0.72
   ],
   [
    "Splash",
@@ -5370,10 +5370,10 @@
    -0.47
   ],
   [
-   "Hurricane",
    "Decay",
-   0,
-   -0.67
+   "Hurricane",
+   1,
+   0.67
   ],
   [
    "Hurricane",
@@ -5390,7 +5390,7 @@
   [
    "Seal_of_Stone",
    "Hurricane",
-   1,
+   2,
    2.01
   ],
   [
@@ -5424,10 +5424,10 @@
    1.2
   ],
   [
-   "Hurricane",
    "Annuity",
-   0,
-   -0.85
+   "Hurricane",
+   1,
+   0.85
   ],
   [
    "Hurricane",
@@ -5444,7 +5444,7 @@
   [
    "Tsunami",
    "Storm_Front",
-   1,
+   2,
    1.67
   ],
   [
@@ -5498,13 +5498,13 @@
   [
    "Storm_Front",
    "Seal_of_Destruction",
-   0,
+   1,
    0.99
   ],
   [
    "Seal_of_Stone",
    "Storm_Front",
-   1,
+   2,
    2.38
   ],
   [
@@ -5564,19 +5564,19 @@
   [
    "Splash",
    "Gust",
-   1,
+   2,
    1.83
   ],
   [
    "Harvest",
    "Gust",
-   1,
+   2,
    1.51
   ],
   [
    "Gather",
    "Gust",
-   1,
+   2,
    1.79
   ],
   [
@@ -5598,21 +5598,21 @@
    1.41
   ],
   [
-   "Gust",
    "Lurk",
-   0,
-   -0.61
+   "Gust",
+   1,
+   0.61
   ],
   [
    "Gust",
    "Seal_of_Destruction",
-   0,
+   1,
    0.98
   ],
   [
    "Seal_of_Stone",
    "Gust",
-   1,
+   2,
    2.39
   ],
   [
@@ -5646,10 +5646,10 @@
    1.19
   ],
   [
-   "Gust",
    "Annuity",
-   0,
-   -0.89
+   "Gust",
+   1,
+   0.89
   ],
   [
    "Gust",
@@ -5660,7 +5660,7 @@
   [
    "Tsunami",
    "Torrent",
-   1,
+   2,
    1.64
   ],
   [
@@ -5672,13 +5672,13 @@
   [
    "Tsunami",
    "Harvest",
-   1,
+   2,
    1.81
   ],
   [
    "Tsunami",
    "Gather",
-   1,
+   2,
    1.54
   ],
   [
@@ -5696,13 +5696,13 @@
   [
    "Tsunami",
    "Decay",
-   1,
+   2,
    1.79
   ],
   [
    "Tsunami",
    "Lurk",
-   1,
+   2,
    2.26
   ],
   [
@@ -5714,7 +5714,7 @@
   [
    "Tsunami",
    "Seal_of_Stone",
-   1,
+   2,
    1.7
   ],
   [
@@ -5732,31 +5732,31 @@
   [
    "Rock_Slide",
    "Tsunami",
-   1,
+   2,
    1.9
   ],
   [
    "Tsunami",
    "Bulwark",
-   1,
+   2,
    2.61
   ],
   [
    "Tsunami",
    "Dividend",
-   0,
+   1,
    0.97
   ],
   [
    "Tsunami",
    "Annuity",
-   1,
+   2,
    1.83
   ],
   [
    "Tsunami",
    "Endowment",
-   1,
+   2,
    1.73
   ],
   [
@@ -5772,10 +5772,10 @@
    -0.24
   ],
   [
-   "Torrent",
    "Gather",
-   0,
-   -0.69
+   "Torrent",
+   1,
+   0.69
   ],
   [
    "Torrent",
@@ -5808,10 +5808,10 @@
    1.44
   ],
   [
-   "Torrent",
    "Seal_of_Stone",
-   0,
-   -0.72
+   "Torrent",
+   1,
+   0.72
   ],
   [
    "Torrent",
@@ -5844,10 +5844,10 @@
    -0.1
   ],
   [
-   "Torrent",
    "Annuity",
-   0,
-   -0.69
+   "Torrent",
+   1,
+   0.69
   ],
   [
    "Torrent",
@@ -5870,7 +5870,7 @@
   [
    "Splash",
    "Seal_of_Autumn",
-   1,
+   2,
    1.65
   ],
   [
@@ -5882,7 +5882,7 @@
   [
    "Splash",
    "Decay",
-   0,
+   1,
    0.75
   ],
   [
@@ -5894,37 +5894,37 @@
   [
    "Splash",
    "Seal_of_Destruction",
-   0,
+   1,
    0.96
   ],
   [
-   "Splash",
    "Seal_of_Stone",
-   0,
-   -0.77
+   "Splash",
+   1,
+   0.77
   ],
   [
    "Splash",
    "Seal_of_Winter",
-   0,
+   1,
    0.63
   ],
   [
    "Splash",
    "Fissure",
-   0,
+   1,
    0.65
   ],
   [
    "Rock_Slide",
    "Splash",
-   1,
+   2,
    2.76
   ],
   [
    "Splash",
    "Bulwark",
-   1,
+   2,
    2.02
   ],
   [
@@ -5942,7 +5942,7 @@
   [
    "Splash",
    "Endowment",
-   0,
+   1,
    0.66
   ],
   [
@@ -5966,19 +5966,19 @@
   [
    "Harvest",
    "Decay",
-   0,
+   1,
    0.67
   ],
   [
    "Harvest",
    "Lurk",
-   0,
+   1,
    0.94
   ],
   [
    "Harvest",
    "Seal_of_Destruction",
-   1,
+   2,
    1.7
   ],
   [
@@ -5996,7 +5996,7 @@
   [
    "Fissure",
    "Harvest",
-   1,
+   2,
    1.77
   ],
   [
@@ -6032,7 +6032,7 @@
   [
    "Gather",
    "Seal_of_Autumn",
-   0,
+   1,
    0.95
   ],
   [
@@ -6080,7 +6080,7 @@
   [
    "Rock_Slide",
    "Gather",
-   1,
+   2,
    2.31
   ],
   [
@@ -6108,10 +6108,10 @@
    0.51
   ],
   [
-   "Seal_of_Autumn",
    "Corrupt",
-   0,
-   -0.67
+   "Seal_of_Autumn",
+   1,
+   0.67
   ],
   [
    "Seal_of_Autumn",
@@ -6120,10 +6120,10 @@
    -0.42
   ],
   [
-   "Seal_of_Autumn",
    "Lurk",
-   0,
-   -0.86
+   "Seal_of_Autumn",
+   1,
+   0.86
   ],
   [
    "Seal_of_Autumn",
@@ -6134,7 +6134,7 @@
   [
    "Seal_of_Stone",
    "Seal_of_Autumn",
-   1,
+   2,
    2.6
   ],
   [
@@ -6146,7 +6146,7 @@
   [
    "Fissure",
    "Seal_of_Autumn",
-   1,
+   2,
    1.66
   ],
   [
@@ -6194,19 +6194,19 @@
   [
    "Corrupt",
    "Seal_of_Destruction",
-   1,
+   2,
    1.53
   ],
   [
-   "Corrupt",
    "Seal_of_Stone",
-   0,
-   -0.71
+   "Corrupt",
+   1,
+   0.71
   ],
   [
    "Corrupt",
    "Seal_of_Winter",
-   0,
+   1,
    0.87
   ],
   [
@@ -6260,7 +6260,7 @@
   [
    "Seal_of_Stone",
    "Decay",
-   1,
+   2,
    2.1
   ],
   [
@@ -6308,7 +6308,7 @@
   [
    "Lurk",
    "Seal_of_Destruction",
-   0,
+   1,
    0.68
   ],
   [
@@ -6366,10 +6366,10 @@
    3.35
   ],
   [
-   "Seal_of_Destruction",
    "Seal_of_Winter",
-   0,
-   -0.78
+   "Seal_of_Destruction",
+   1,
+   0.78
   ],
   [
    "Fissure",
@@ -6410,7 +6410,7 @@
   [
    "Seal_of_Stone",
    "Seal_of_Winter",
-   1,
+   2,
    2.55
   ],
   [
@@ -6428,7 +6428,7 @@
   [
    "Seal_of_Stone",
    "Bulwark",
-   1,
+   2,
    2.37
   ],
   [
@@ -6480,21 +6480,21 @@
    1.05
   ],
   [
-   "Seal_of_Winter",
    "Endowment",
-   0,
-   -1.0
+   "Seal_of_Winter",
+   1,
+   1.0
   ],
   [
    "Rock_Slide",
    "Fissure",
-   1,
+   2,
    2.57
   ],
   [
    "Fissure",
    "Bulwark",
-   1,
+   2,
    1.62
   ],
   [
@@ -6524,7 +6524,7 @@
   [
    "Rock_Slide",
    "Dividend",
-   1,
+   2,
    1.67
   ],
   [
@@ -6536,14 +6536,14 @@
   [
    "Rock_Slide",
    "Endowment",
-   1,
+   2,
    2.48
   ],
   [
-   "Bulwark",
    "Dividend",
-   0,
-   -0.97
+   "Bulwark",
+   1,
+   0.97
   ],
   [
    "Annuity",
@@ -6566,7 +6566,7 @@
   [
    "Dividend",
    "Endowment",
-   0,
+   1,
    0.87
   ],
   [
@@ -6636,7 +6636,7 @@
   [
    "Flourish",
    "Seal_of_Wind",
-   0,
+   1,
    0.24,
    1614
   ],
@@ -6664,7 +6664,7 @@
   [
    "Flourish",
    "Comet",
-   0,
+   1,
    0.15,
    1679
   ],
@@ -6734,7 +6734,7 @@
   [
    "Flourish",
    "Charge",
-   0,
+   2,
    0.29,
    400
   ],
@@ -6748,7 +6748,7 @@
   [
    "Flourish",
    "Storm_Front",
-   0,
+   1,
    0.11,
    1865
   ],
@@ -6790,7 +6790,7 @@
   [
    "Flourish",
    "Gather",
-   0,
+   -2,
    -0.39,
    423
   ],
@@ -6811,7 +6811,7 @@
   [
    "Flourish",
    "Decay",
-   0,
+   1,
    0.2,
    484
   ],
@@ -6832,14 +6832,14 @@
   [
    "Flourish",
    "Seal_of_Stone",
-   0,
+   1,
    0.16,
    1802
   ],
   [
    "Flourish",
    "Seal_of_Winter",
-   0,
+   1,
    0.14,
    1097
   ],
@@ -6888,7 +6888,7 @@
   [
    "Carnage",
    "Bewitch",
-   0,
+   1,
    0.16,
    1322
   ],
@@ -6902,42 +6902,42 @@
   [
    "Carnage",
    "Seal_of_Lightning",
-   0,
+   2,
    0.34,
    1142
   ],
   [
    "Carnage",
    "Grow",
-   0,
+   -1,
    -0.24,
    1719
   ],
   [
    "Carnage",
    "Fireblast",
-   0,
+   2,
    0.37,
    3271
   ],
   [
    "Carnage",
    "Hail_Storm",
-   0,
+   2,
    0.49,
    1790
   ],
   [
    "Carnage",
    "Meteor",
-   0,
+   2,
    0.39,
    1515
   ],
   [
    "Carnage",
    "Seal_of_Wind",
-   1,
+   2,
    0.55,
    1497
   ],
@@ -6958,14 +6958,14 @@
   [
    "Carnage",
    "Surge",
-   0,
+   1,
    0.16,
    2134
   ],
   [
    "Carnage",
    "Comet",
-   0,
+   2,
    0.33,
    1469
   ],
@@ -6993,21 +6993,21 @@
   [
    "Carnage",
    "Seal_of_Spring",
-   0,
+   2,
    0.3,
    499
   ],
   [
    "Carnage",
    "Syzygy",
-   0,
+   2,
    0.34,
    329
   ],
   [
    "Carnage",
    "Eclipse",
-   0,
+   2,
    0.38,
    394
   ],
@@ -7021,7 +7021,7 @@
   [
    "Carnage",
    "Erupt",
-   0,
+   2,
    0.34,
    356
   ],
@@ -7042,28 +7042,28 @@
   [
    "Carnage",
    "Hurricane",
-   0,
+   1,
    0.17,
    2375
   ],
   [
    "Carnage",
    "Storm_Front",
-   0,
+   2,
    0.31,
    2521
   ],
   [
    "Carnage",
    "Gust",
-   0,
+   2,
    0.46,
    2400
   ],
   [
    "Carnage",
    "Tsunami",
-   0,
+   2,
    0.4,
    293
   ],
@@ -7084,7 +7084,7 @@
   [
    "Carnage",
    "Harvest",
-   0,
+   2,
    0.49,
    291
   ],
@@ -7105,14 +7105,14 @@
   [
    "Carnage",
    "Corrupt",
-   0,
+   2,
    0.45,
    308
   ],
   [
    "Carnage",
    "Decay",
-   0,
+   2,
    0.4,
    419
   ],
@@ -7126,14 +7126,14 @@
   [
    "Carnage",
    "Seal_of_Destruction",
-   0,
+   2,
    0.29,
    2154
   ],
   [
    "Carnage",
    "Seal_of_Stone",
-   0,
+   1,
    0.2,
    2342
   ],
@@ -7147,7 +7147,7 @@
   [
    "Carnage",
    "Fissure",
-   0,
+   2,
    0.45,
    134
   ],
@@ -7161,7 +7161,7 @@
   [
    "Carnage",
    "Bulwark",
-   0,
+   2,
    0.34,
    160
   ],
@@ -7175,21 +7175,21 @@
   [
    "Carnage",
    "Annuity",
-   1,
+   2,
    0.64,
    169
   ],
   [
    "Carnage",
    "Endowment",
-   0,
+   2,
    0.47,
    110
   ],
   [
    "Bewitch",
    "Starfall",
-   0,
+   1,
    0.17,
    1562
   ],
@@ -7203,35 +7203,35 @@
   [
    "Bewitch",
    "Grow",
-   0,
+   -1,
    -0.1,
    1568
   ],
   [
    "Bewitch",
    "Fireblast",
-   0,
+   1,
    0.23,
    2393
   ],
   [
    "Bewitch",
    "Hail_Storm",
-   0,
+   2,
    0.25,
    1974
   ],
   [
    "Bewitch",
    "Meteor",
-   0,
+   1,
    0.2,
    2886
   ],
   [
    "Bewitch",
    "Seal_of_Wind",
-   0,
+   2,
    0.28,
    1617
   ],
@@ -7259,7 +7259,7 @@
   [
    "Bewitch",
    "Comet",
-   0,
+   1,
    0.23,
    1633
   ],
@@ -7280,7 +7280,7 @@
   [
    "Bewitch",
    "Scatter",
-   0,
+   2,
    0.29,
    466
   ],
@@ -7294,21 +7294,21 @@
   [
    "Bewitch",
    "Syzygy",
-   0,
+   2,
    0.25,
    392
   ],
   [
    "Bewitch",
    "Eclipse",
-   0,
+   1,
    0.18,
    448
   ],
   [
    "Bewitch",
    "Azimuth",
-   0,
+   1,
    0.25,
    467
   ],
@@ -7329,28 +7329,28 @@
   [
    "Bewitch",
    "Charge",
-   0,
+   2,
    0.27,
    458
   ],
   [
    "Bewitch",
    "Hurricane",
-   0,
+   1,
    0.12,
    1980
   ],
   [
    "Bewitch",
    "Storm_Front",
-   0,
+   1,
    0.14,
    2134
   ],
   [
    "Bewitch",
    "Gust",
-   0,
+   1,
    0.23,
    2131
   ],
@@ -7406,7 +7406,7 @@
   [
    "Bewitch",
    "Decay",
-   0,
+   2,
    0.33,
    480
   ],
@@ -7420,7 +7420,7 @@
   [
    "Bewitch",
    "Seal_of_Destruction",
-   0,
+   1,
    0.13,
    1991
   ],
@@ -7462,7 +7462,7 @@
   [
    "Bewitch",
    "Dividend",
-   0,
+   2,
    0.48,
    143
   ],
@@ -7497,28 +7497,28 @@
   [
    "Starfall",
    "Fireblast",
-   0,
+   1,
    0.22,
    1625
   ],
   [
    "Starfall",
    "Hail_Storm",
-   1,
+   2,
    0.64,
    2080
   ],
   [
    "Starfall",
    "Meteor",
-   0,
+   1,
    0.15,
    2151
   ],
   [
    "Starfall",
    "Seal_of_Wind",
-   0,
+   1,
    0.12,
    1984
   ],
@@ -7532,7 +7532,7 @@
   [
    "Starfall",
    "Slash",
-   0,
+   1,
    0.11,
    1960
   ],
@@ -7560,14 +7560,14 @@
   [
    "Starfall",
    "Blossom",
-   0,
+   1,
    0.16,
    395
   ],
   [
    "Starfall",
    "Scatter",
-   0,
+   1,
    0.16,
    504
   ],
@@ -7637,7 +7637,7 @@
   [
    "Starfall",
    "Gust",
-   0,
+   2,
    0.27,
    829
   ],
@@ -7693,7 +7693,7 @@
   [
    "Starfall",
    "Decay",
-   0,
+   2,
    0.26,
    477
   ],
@@ -7714,7 +7714,7 @@
   [
    "Starfall",
    "Seal_of_Stone",
-   0,
+   2,
    0.3,
    795
   ],
@@ -7749,14 +7749,14 @@
   [
    "Starfall",
    "Dividend",
-   0,
+   2,
    0.35,
    165
   ],
   [
    "Starfall",
    "Annuity",
-   1,
+   2,
    0.6,
    172
   ],
@@ -7770,7 +7770,7 @@
   [
    "Seal_of_Lightning",
    "Grow",
-   0,
+   2,
    0.28,
    1648
   ],
@@ -7784,7 +7784,7 @@
   [
    "Seal_of_Lightning",
    "Hail_Storm",
-   0,
+   2,
    0.43,
    1759
   ],
@@ -7805,7 +7805,7 @@
   [
    "Seal_of_Lightning",
    "Sprout",
-   0,
+   2,
    0.28,
    1650
   ],
@@ -7819,21 +7819,21 @@
   [
    "Seal_of_Lightning",
    "Surge",
-   0,
+   -2,
    -0.31,
    1512
   ],
   [
    "Seal_of_Lightning",
    "Comet",
-   0,
+   2,
    0.33,
    2775
   ],
   [
    "Seal_of_Lightning",
    "Seal_of_Summer",
-   0,
+   2,
    0.36,
    1967
   ],
@@ -7854,7 +7854,7 @@
   [
    "Seal_of_Lightning",
    "Seal_of_Spring",
-   0,
+   2,
    0.36,
    509
   ],
@@ -7868,14 +7868,14 @@
   [
    "Seal_of_Lightning",
    "Eclipse",
-   0,
+   1,
    0.24,
    507
   ],
   [
    "Seal_of_Lightning",
    "Azimuth",
-   0,
+   -2,
    -0.31,
    544
   ],
@@ -7889,7 +7889,7 @@
   [
    "Seal_of_Lightning",
    "Fury",
-   0,
+   2,
    0.45,
    520
   ],
@@ -7903,21 +7903,21 @@
   [
    "Seal_of_Lightning",
    "Hurricane",
-   0,
+   1,
    0.13,
    1883
   ],
   [
    "Seal_of_Lightning",
    "Storm_Front",
-   0,
+   1,
    0.17,
    2045
   ],
   [
    "Seal_of_Lightning",
    "Gust",
-   0,
+   2,
    0.35,
    1912
   ],
@@ -7931,21 +7931,21 @@
   [
    "Seal_of_Lightning",
    "Torrent",
-   0,
+   2,
    0.33,
    502
   ],
   [
    "Seal_of_Lightning",
    "Splash",
-   0,
+   2,
    0.34,
    475
   ],
   [
    "Seal_of_Lightning",
    "Harvest",
-   0,
+   2,
    0.44,
    323
   ],
@@ -7966,7 +7966,7 @@
   [
    "Seal_of_Lightning",
    "Corrupt",
-   0,
+   2,
    0.42,
    400
   ],
@@ -8001,7 +8001,7 @@
   [
    "Seal_of_Lightning",
    "Seal_of_Winter",
-   0,
+   1,
    0.14,
    1957
   ],
@@ -8022,28 +8022,28 @@
   [
    "Seal_of_Lightning",
    "Bulwark",
-   0,
+   2,
    0.43,
    145
   ],
   [
    "Seal_of_Lightning",
    "Dividend",
-   0,
+   2,
    0.47,
    135
   ],
   [
    "Seal_of_Lightning",
    "Annuity",
-   1,
+   2,
    0.67,
    168
   ],
   [
    "Seal_of_Lightning",
    "Endowment",
-   1,
+   2,
    0.91,
    113
   ],
@@ -8057,7 +8057,7 @@
   [
    "Grow",
    "Hail_Storm",
-   0,
+   2,
    0.26,
    1496
   ],
@@ -8085,7 +8085,7 @@
   [
    "Grow",
    "Slash",
-   0,
+   1,
    0.14,
    1934
   ],
@@ -8176,14 +8176,14 @@
   [
    "Grow",
    "Hurricane",
-   0,
+   1,
    0.16,
    2130
   ],
   [
    "Grow",
    "Storm_Front",
-   0,
+   1,
    0.11,
    1907
   ],
@@ -8316,28 +8316,28 @@
   [
    "Grow",
    "Endowment",
-   0,
+   2,
    0.29,
    177
   ],
   [
    "Fireblast",
    "Hail_Storm",
-   0,
+   2,
    0.41,
    1428
   ],
   [
    "Fireblast",
    "Meteor",
-   0,
+   1,
    0.19,
    1380
   ],
   [
    "Fireblast",
    "Seal_of_Wind",
-   0,
+   -2,
    -0.28,
    1182
   ],
@@ -8351,14 +8351,14 @@
   [
    "Fireblast",
    "Slash",
-   0,
+   1,
    0.2,
    2878
   ],
   [
    "Fireblast",
    "Surge",
-   0,
+   1,
    0.15,
    2782
   ],
@@ -8372,7 +8372,7 @@
   [
    "Fireblast",
    "Seal_of_Summer",
-   0,
+   1,
    0.16,
    1655
   ],
@@ -8386,7 +8386,7 @@
   [
    "Fireblast",
    "Scatter",
-   1,
+   2,
    0.5,
    381
   ],
@@ -8428,42 +8428,42 @@
   [
    "Fireblast",
    "Fury",
-   0,
+   2,
    0.44,
    327
   ],
   [
    "Fireblast",
    "Charge",
-   0,
+   1,
    0.21,
    478
   ],
   [
    "Fireblast",
    "Hurricane",
-   0,
+   1,
    0.11,
    2951
   ],
   [
    "Fireblast",
    "Storm_Front",
-   0,
+   1,
    0.17,
    2871
   ],
   [
    "Fireblast",
    "Gust",
-   0,
+   1,
    0.24,
    2804
   ],
   [
    "Fireblast",
    "Tsunami",
-   0,
+   2,
    0.43,
    458
   ],
@@ -8484,14 +8484,14 @@
   [
    "Fireblast",
    "Harvest",
-   0,
+   2,
    0.28,
    443
   ],
   [
    "Fireblast",
    "Gather",
-   0,
+   2,
    0.37,
    307
   ],
@@ -8505,7 +8505,7 @@
   [
    "Fireblast",
    "Corrupt",
-   0,
+   1,
    0.2,
    494
   ],
@@ -8526,14 +8526,14 @@
   [
    "Fireblast",
    "Seal_of_Destruction",
-   0,
+   1,
    0.17,
    2700
   ],
   [
    "Fireblast",
    "Seal_of_Stone",
-   0,
+   1,
    0.16,
    2631
   ],
@@ -8589,14 +8589,14 @@
   [
    "Hail_Storm",
    "Meteor",
-   0,
+   1,
    0.19,
    1626
   ],
   [
    "Hail_Storm",
    "Seal_of_Wind",
-   0,
+   1,
    0.14,
    1447
   ],
@@ -8610,28 +8610,28 @@
   [
    "Hail_Storm",
    "Slash",
-   0,
+   1,
    0.19,
    1824
   ],
   [
    "Hail_Storm",
    "Surge",
-   0,
+   1,
    0.17,
    1828
   ],
   [
    "Hail_Storm",
    "Comet",
-   0,
+   1,
    0.2,
    1932
   ],
   [
    "Hail_Storm",
    "Seal_of_Summer",
-   0,
+   1,
    0.21,
    2022
   ],
@@ -8645,7 +8645,7 @@
   [
    "Hail_Storm",
    "Scatter",
-   1,
+   2,
    0.66,
    395
   ],
@@ -8687,7 +8687,7 @@
   [
    "Hail_Storm",
    "Fury",
-   0,
+   2,
    0.3,
    475
   ],
@@ -8701,35 +8701,35 @@
   [
    "Hail_Storm",
    "Hurricane",
-   1,
+   2,
    0.5,
    551
   ],
   [
    "Hail_Storm",
    "Storm_Front",
-   1,
+   2,
    0.5,
    407
   ],
   [
    "Hail_Storm",
    "Gust",
-   0,
+   1,
    0.19,
    547
   ],
   [
    "Hail_Storm",
    "Tsunami",
-   0,
+   1,
    0.23,
    515
   ],
   [
    "Hail_Storm",
    "Torrent",
-   0,
+   2,
    0.33,
    341
   ],
@@ -8743,7 +8743,7 @@
   [
    "Hail_Storm",
    "Harvest",
-   0,
+   -2,
    -0.29,
    473
   ],
@@ -8757,14 +8757,14 @@
   [
    "Hail_Storm",
    "Seal_of_Autumn",
-   0,
+   1,
    0.22,
    450
   ],
   [
    "Hail_Storm",
    "Corrupt",
-   0,
+   2,
    0.46,
    460
   ],
@@ -8785,14 +8785,14 @@
   [
    "Hail_Storm",
    "Seal_of_Destruction",
-   0,
+   2,
    0.34,
    396
   ],
   [
    "Hail_Storm",
    "Seal_of_Stone",
-   1,
+   2,
    0.55,
    337
   ],
@@ -8806,7 +8806,7 @@
   [
    "Hail_Storm",
    "Fissure",
-   0,
+   2,
    0.32,
    201
   ],
@@ -8820,14 +8820,14 @@
   [
    "Hail_Storm",
    "Bulwark",
-   0,
+   2,
    0.28,
    163
   ],
   [
    "Hail_Storm",
    "Dividend",
-   0,
+   2,
    0.42,
    189
   ],
@@ -8841,7 +8841,7 @@
   [
    "Hail_Storm",
    "Endowment",
-   0,
+   2,
    0.44,
    151
   ],
@@ -8869,14 +8869,14 @@
   [
    "Meteor",
    "Surge",
-   0,
+   1,
    0.15,
    2812
   ],
   [
    "Meteor",
    "Comet",
-   0,
+   1,
    0.15,
    1776
   ],
@@ -8911,7 +8911,7 @@
   [
    "Meteor",
    "Syzygy",
-   0,
+   2,
    0.4,
    456
   ],
@@ -8925,7 +8925,7 @@
   [
    "Meteor",
    "Azimuth",
-   0,
+   1,
    0.14,
    552
   ],
@@ -8946,7 +8946,7 @@
   [
    "Meteor",
    "Charge",
-   0,
+   1,
    0.18,
    512
   ],
@@ -8960,7 +8960,7 @@
   [
    "Meteor",
    "Storm_Front",
-   0,
+   1,
    0.15,
    1528
   ],
@@ -9009,14 +9009,14 @@
   [
    "Meteor",
    "Seal_of_Autumn",
-   0,
+   1,
    0.17,
    467
   ],
   [
    "Meteor",
    "Corrupt",
-   0,
+   2,
    0.33,
    429
   ],
@@ -9044,7 +9044,7 @@
   [
    "Meteor",
    "Seal_of_Stone",
-   0,
+   1,
    0.24,
    1468
   ],
@@ -9079,7 +9079,7 @@
   [
    "Meteor",
    "Dividend",
-   1,
+   2,
    0.95,
    127
   ],
@@ -9093,7 +9093,7 @@
   [
    "Meteor",
    "Endowment",
-   0,
+   2,
    0.46,
    151
   ],
@@ -9107,7 +9107,7 @@
   [
    "Seal_of_Wind",
    "Slash",
-   0,
+   -2,
    -0.26,
    1591
   ],
@@ -9128,7 +9128,7 @@
   [
    "Seal_of_Wind",
    "Seal_of_Summer",
-   0,
+   1,
    0.16,
    2064
   ],
@@ -9149,7 +9149,7 @@
   [
    "Seal_of_Wind",
    "Seal_of_Spring",
-   0,
+   1,
    0.18,
    497
   ],
@@ -9198,7 +9198,7 @@
   [
    "Seal_of_Wind",
    "Hurricane",
-   0,
+   -1,
    -0.25,
    2369
   ],
@@ -9219,14 +9219,14 @@
   [
    "Seal_of_Wind",
    "Tsunami",
-   0,
+   2,
    0.28,
    499
   ],
   [
    "Seal_of_Wind",
    "Torrent",
-   0,
+   1,
    0.24,
    348
   ],
@@ -9240,7 +9240,7 @@
   [
    "Seal_of_Wind",
    "Harvest",
-   0,
+   2,
    0.27,
    452
   ],
@@ -9289,7 +9289,7 @@
   [
    "Seal_of_Wind",
    "Seal_of_Stone",
-   0,
+   -1,
    -0.16,
    2170
   ],
@@ -9338,14 +9338,14 @@
   [
    "Seal_of_Wind",
    "Endowment",
-   0,
+   2,
    0.34,
    175
   ],
   [
    "Sprout",
    "Slash",
-   0,
+   1,
    0.11,
    1399
   ],
@@ -9387,7 +9387,7 @@
   [
    "Sprout",
    "Seal_of_Spring",
-   0,
+   -1,
    -0.22,
    302
   ],
@@ -9415,7 +9415,7 @@
   [
    "Sprout",
    "Erupt",
-   0,
+   1,
    0.12,
    457
   ],
@@ -9471,7 +9471,7 @@
   [
    "Sprout",
    "Splash",
-   0,
+   1,
    0.19,
    377
   ],
@@ -9513,7 +9513,7 @@
   [
    "Sprout",
    "Lurk",
-   0,
+   -1,
    -0.15,
    1031
   ],
@@ -9541,7 +9541,7 @@
   [
    "Sprout",
    "Fissure",
-   0,
+   2,
    0.44,
    156
   ],
@@ -9583,7 +9583,7 @@
   [
    "Slash",
    "Surge",
-   0,
+   1,
    0.2,
    1312
   ],
@@ -9639,7 +9639,7 @@
   [
    "Slash",
    "Azimuth",
-   0,
+   -2,
    -0.35,
    344
   ],
@@ -9653,7 +9653,7 @@
   [
    "Slash",
    "Fury",
-   0,
+   2,
    0.32,
    511
   ],
@@ -9681,14 +9681,14 @@
   [
    "Slash",
    "Gust",
-   0,
+   2,
    0.26,
    1598
   ],
   [
    "Slash",
    "Tsunami",
-   0,
+   2,
    0.25,
    489
   ],
@@ -9884,7 +9884,7 @@
   [
    "Surge",
    "Charge",
-   0,
+   2,
    0.29,
    321
   ],
@@ -9905,14 +9905,14 @@
   [
    "Surge",
    "Gust",
-   0,
+   1,
    0.25,
    2542
   ],
   [
    "Surge",
    "Tsunami",
-   0,
+   2,
    0.33,
    456
   ],
@@ -9954,7 +9954,7 @@
   [
    "Surge",
    "Corrupt",
-   0,
+   1,
    0.25,
    486
   ],
@@ -10080,7 +10080,7 @@
   [
    "Comet",
    "Azimuth",
-   0,
+   2,
    0.27,
    330
   ],
@@ -10150,7 +10150,7 @@
   [
    "Comet",
    "Harvest",
-   0,
+   2,
    0.34,
    417
   ],
@@ -10171,14 +10171,14 @@
   [
    "Comet",
    "Corrupt",
-   0,
+   2,
    0.29,
    415
   ],
   [
    "Comet",
    "Decay",
-   0,
+   1,
    0.21,
    465
   ],
@@ -10192,21 +10192,21 @@
   [
    "Comet",
    "Seal_of_Destruction",
-   0,
+   -1,
    -0.12,
    1859
   ],
   [
    "Comet",
    "Seal_of_Stone",
-   0,
+   1,
    0.17,
    1893
   ],
   [
    "Comet",
    "Seal_of_Winter",
-   0,
+   1,
    0.12,
    1757
   ],
@@ -10227,7 +10227,7 @@
   [
    "Comet",
    "Bulwark",
-   0,
+   -2,
    -0.43,
    100
   ],
@@ -10241,7 +10241,7 @@
   [
    "Comet",
    "Annuity",
-   0,
+   2,
    0.37,
    152
   ],
@@ -10402,21 +10402,21 @@
   [
    "Seal_of_Summer",
    "Seal_of_Destruction",
-   0,
+   1,
    0.18,
    1532
   ],
   [
    "Seal_of_Summer",
    "Seal_of_Stone",
-   0,
+   1,
    0.21,
    1608
   ],
   [
    "Seal_of_Summer",
    "Seal_of_Winter",
-   0,
+   1,
    0.14,
    1446
   ],
@@ -10465,7 +10465,7 @@
   [
    "Blossom",
    "Scatter",
-   0,
+   1,
    0.11,
    8670
   ],
@@ -10493,7 +10493,7 @@
   [
    "Blossom",
    "Azimuth",
-   0,
+   2,
    0.25,
    482
   ],
@@ -10542,7 +10542,7 @@
   [
    "Blossom",
    "Tsunami",
-   0,
+   1,
    0.12,
    8633
   ],
@@ -10591,7 +10591,7 @@
   [
    "Blossom",
    "Decay",
-   0,
+   2,
    0.31,
    501
   ],
@@ -10605,7 +10605,7 @@
   [
    "Blossom",
    "Seal_of_Destruction",
-   0,
+   1,
    0.11,
    3206
   ],
@@ -10633,7 +10633,7 @@
   [
    "Blossom",
    "Rock_Slide",
-   0,
+   -1,
    -0.16,
    6919
   ],
@@ -10675,7 +10675,7 @@
   [
    "Scatter",
    "Syzygy",
-   0,
+   2,
    0.32,
    954
   ],
@@ -10717,7 +10717,7 @@
   [
    "Scatter",
    "Hurricane",
-   0,
+   1,
    0.24,
    590
   ],
@@ -10745,7 +10745,7 @@
   [
    "Scatter",
    "Torrent",
-   0,
+   1,
    0.18,
    8898
   ],
@@ -10787,7 +10787,7 @@
   [
    "Scatter",
    "Decay",
-   0,
+   2,
    0.42,
    312
   ],
@@ -10808,7 +10808,7 @@
   [
    "Scatter",
    "Seal_of_Stone",
-   0,
+   1,
    0.1,
    1766
   ],
@@ -10843,7 +10843,7 @@
   [
    "Scatter",
    "Dividend",
-   0,
+   2,
    0.36,
    151
   ],
@@ -10878,7 +10878,7 @@
   [
    "Seal_of_Spring",
    "Azimuth",
-   0,
+   1,
    0.18,
    342
   ],
@@ -10962,7 +10962,7 @@
   [
    "Seal_of_Spring",
    "Seal_of_Autumn",
-   0,
+   1,
    0.23,
    335
   ],
@@ -10997,7 +10997,7 @@
   [
    "Seal_of_Spring",
    "Seal_of_Stone",
-   0,
+   1,
    0.19,
    1097
   ],
@@ -11011,7 +11011,7 @@
   [
    "Seal_of_Spring",
    "Fissure",
-   0,
+   1,
    0.13,
    7028
   ],
@@ -11053,14 +11053,14 @@
   [
    "Syzygy",
    "Eclipse",
-   0,
+   1,
    0.18,
    9608
   ],
   [
    "Syzygy",
    "Azimuth",
-   0,
+   1,
    0.1,
    9156
   ],
@@ -11088,7 +11088,7 @@
   [
    "Syzygy",
    "Hurricane",
-   0,
+   1,
    0.18,
    374
   ],
@@ -11102,14 +11102,14 @@
   [
    "Syzygy",
    "Gust",
-   0,
+   2,
    0.29,
    440
   ],
   [
    "Syzygy",
    "Tsunami",
-   0,
+   2,
    0.29,
    1041
   ],
@@ -11123,14 +11123,14 @@
   [
    "Syzygy",
    "Splash",
-   0,
+   -1,
    -0.17,
    2098
   ],
   [
    "Syzygy",
    "Harvest",
-   0,
+   1,
    0.18,
    9329
   ],
@@ -11144,35 +11144,35 @@
   [
    "Syzygy",
    "Seal_of_Autumn",
-   0,
+   1,
    0.2,
    8493
   ],
   [
    "Syzygy",
    "Corrupt",
-   0,
+   2,
    0.26,
    293
   ],
   [
    "Syzygy",
    "Decay",
-   0,
+   2,
    0.45,
    446
   ],
   [
    "Syzygy",
    "Lurk",
-   0,
+   2,
    0.25,
    421
   ],
   [
    "Syzygy",
    "Seal_of_Destruction",
-   0,
+   2,
    0.39,
    269
   ],
@@ -11193,42 +11193,42 @@
   [
    "Syzygy",
    "Fissure",
-   0,
+   2,
    0.25,
    7655
   ],
   [
    "Syzygy",
    "Rock_Slide",
-   0,
+   -1,
    -0.11,
    7408
   ],
   [
    "Syzygy",
    "Bulwark",
-   0,
+   1,
    0.24,
    7602
   ],
   [
    "Syzygy",
    "Dividend",
-   1,
+   2,
    0.64,
    2404
   ],
   [
    "Syzygy",
    "Annuity",
-   0,
+   2,
    0.3,
    2321
   ],
   [
    "Syzygy",
    "Endowment",
-   0,
+   2,
    0.34,
    2382
   ],
@@ -11242,14 +11242,14 @@
   [
    "Eclipse",
    "Erupt",
-   0,
+   -1,
    -0.12,
    837
   ],
   [
    "Eclipse",
    "Fury",
-   0,
+   1,
    0.21,
    319
   ],
@@ -11270,7 +11270,7 @@
   [
    "Eclipse",
    "Storm_Front",
-   0,
+   1,
    0.2,
    365
   ],
@@ -11298,7 +11298,7 @@
   [
    "Eclipse",
    "Splash",
-   0,
+   1,
    0.18,
    1556
   ],
@@ -11326,7 +11326,7 @@
   [
    "Eclipse",
    "Corrupt",
-   0,
+   1,
    0.17,
    440
   ],
@@ -11375,7 +11375,7 @@
   [
    "Eclipse",
    "Rock_Slide",
-   0,
+   2,
    0.25,
    6889
   ],
@@ -11389,7 +11389,7 @@
   [
    "Eclipse",
    "Dividend",
-   0,
+   1,
    0.23,
    2831
   ],
@@ -11417,7 +11417,7 @@
   [
    "Azimuth",
    "Fury",
-   0,
+   1,
    0.17,
    872
   ],
@@ -11438,14 +11438,14 @@
   [
    "Azimuth",
    "Storm_Front",
-   0,
+   2,
    0.29,
    516
   ],
   [
    "Azimuth",
    "Gust",
-   0,
+   1,
    0.24,
    311
   ],
@@ -11536,14 +11536,14 @@
   [
    "Azimuth",
    "Fissure",
-   0,
+   1,
    0.11,
    6399
   ],
   [
    "Azimuth",
    "Rock_Slide",
-   0,
+   1,
    0.18,
    6213
   ],
@@ -11557,21 +11557,21 @@
   [
    "Azimuth",
    "Dividend",
-   0,
+   1,
    0.1,
    3153
   ],
   [
    "Azimuth",
    "Annuity",
-   0,
+   1,
    0.21,
    3280
   ],
   [
    "Azimuth",
    "Endowment",
-   0,
+   1,
    0.14,
    3363
   ],
@@ -11718,7 +11718,7 @@
   [
    "Erupt",
    "Dividend",
-   0,
+   1,
    0.18,
    9352
   ],
@@ -11739,7 +11739,7 @@
   [
    "Fury",
    "Charge",
-   0,
+   1,
    0.14,
    8818
   ],
@@ -11753,14 +11753,14 @@
   [
    "Fury",
    "Storm_Front",
-   0,
+   2,
    0.46,
    360
   ],
   [
    "Fury",
    "Gust",
-   0,
+   2,
    0.33,
    474
   ],
@@ -11781,7 +11781,7 @@
   [
    "Fury",
    "Splash",
-   0,
+   2,
    0.31,
    472
   ],
@@ -11802,14 +11802,14 @@
   [
    "Fury",
    "Seal_of_Autumn",
-   0,
+   1,
    0.13,
    1720
   ],
   [
    "Fury",
    "Corrupt",
-   0,
+   1,
    0.18,
    8863
   ],
@@ -11837,7 +11837,7 @@
   [
    "Fury",
    "Seal_of_Stone",
-   0,
+   2,
    0.28,
    363
   ],
@@ -11851,7 +11851,7 @@
   [
    "Fury",
    "Fissure",
-   1,
+   2,
    0.65,
    207
   ],
@@ -11872,7 +11872,7 @@
   [
    "Fury",
    "Dividend",
-   0,
+   2,
    0.29,
    8829
   ],
@@ -11886,7 +11886,7 @@
   [
    "Fury",
    "Endowment",
-   0,
+   1,
    0.16,
    8841
   ],
@@ -11900,7 +11900,7 @@
   [
    "Charge",
    "Storm_Front",
-   0,
+   1,
    0.21,
    1383
   ],
@@ -11956,7 +11956,7 @@
   [
    "Charge",
    "Corrupt",
-   0,
+   1,
    0.1,
    9741
   ],
@@ -11977,14 +11977,14 @@
   [
    "Charge",
    "Seal_of_Destruction",
-   0,
+   1,
    0.23,
    419
   ],
   [
    "Charge",
    "Seal_of_Stone",
-   0,
+   2,
    0.31,
    552
   ],
@@ -12019,7 +12019,7 @@
   [
    "Charge",
    "Dividend",
-   0,
+   1,
    0.17,
    9206
   ],
@@ -12033,28 +12033,28 @@
   [
    "Charge",
    "Endowment",
-   0,
+   1,
    0.12,
    9173
   ],
   [
    "Hurricane",
    "Storm_Front",
-   0,
+   1,
    0.11,
    8699
   ],
   [
    "Hurricane",
    "Gust",
-   0,
+   1,
    0.1,
    7814
   ],
   [
    "Hurricane",
    "Tsunami",
-   0,
+   2,
    0.3,
    384
   ],
@@ -12082,28 +12082,28 @@
   [
    "Hurricane",
    "Gather",
-   0,
+   1,
    0.18,
    466
   ],
   [
    "Hurricane",
    "Seal_of_Autumn",
-   0,
+   -1,
    -0.14,
    475
   ],
   [
    "Hurricane",
    "Corrupt",
-   0,
+   1,
    0.18,
    1868
   ],
   [
    "Hurricane",
    "Decay",
-   0,
+   -1,
    -0.24,
    1433
   ],
@@ -12131,7 +12131,7 @@
   [
    "Hurricane",
    "Seal_of_Winter",
-   0,
+   1,
    0.12,
    6673
   ],
@@ -12173,14 +12173,14 @@
   [
    "Hurricane",
    "Endowment",
-   0,
+   1,
    0.12,
    1398
   ],
   [
    "Storm_Front",
    "Gust",
-   0,
+   1,
    0.16,
    8029
   ],
@@ -12208,14 +12208,14 @@
   [
    "Storm_Front",
    "Harvest",
-   0,
+   -2,
    -0.37,
    421
   ],
   [
    "Storm_Front",
    "Gather",
-   0,
+   -2,
    -0.26,
    329
   ],
@@ -12229,7 +12229,7 @@
   [
    "Storm_Front",
    "Corrupt",
-   0,
+   1,
    0.19,
    2024
   ],
@@ -12243,21 +12243,21 @@
   [
    "Storm_Front",
    "Lurk",
-   0,
+   1,
    0.15,
    2615
   ],
   [
    "Storm_Front",
    "Seal_of_Destruction",
-   0,
+   1,
    0.21,
    7326
   ],
   [
    "Storm_Front",
    "Seal_of_Stone",
-   0,
+   1,
    0.17,
    7686
   ],
@@ -12292,7 +12292,7 @@
   [
    "Storm_Front",
    "Dividend",
-   0,
+   2,
    0.27,
    1487
   ],
@@ -12313,14 +12313,14 @@
   [
    "Gust",
    "Tsunami",
-   0,
+   2,
    0.41,
    1442
   ],
   [
    "Gust",
    "Torrent",
-   0,
+   1,
    0.23,
    1281
   ],
@@ -12355,7 +12355,7 @@
   [
    "Gust",
    "Corrupt",
-   0,
+   2,
    0.28,
    1116
   ],
@@ -12383,7 +12383,7 @@
   [
    "Gust",
    "Seal_of_Stone",
-   0,
+   2,
    0.28,
    8605
   ],
@@ -12397,7 +12397,7 @@
   [
    "Gust",
    "Fissure",
-   0,
+   2,
    0.34,
    165
   ],
@@ -12418,21 +12418,21 @@
   [
    "Gust",
    "Dividend",
-   0,
+   1,
    0.24,
    493
   ],
   [
    "Gust",
    "Annuity",
-   0,
+   1,
    0.14,
    540
   ],
   [
    "Gust",
    "Endowment",
-   0,
+   1,
    0.17,
    557
   ],
@@ -12453,7 +12453,7 @@
   [
    "Tsunami",
    "Harvest",
-   0,
+   2,
    0.37,
    287
   ],
@@ -12474,14 +12474,14 @@
   [
    "Tsunami",
    "Corrupt",
-   0,
+   2,
    0.26,
    319
   ],
   [
    "Tsunami",
    "Decay",
-   0,
+   2,
    0.45,
    403
   ],
@@ -12495,56 +12495,56 @@
   [
    "Tsunami",
    "Seal_of_Destruction",
-   0,
+   1,
    0.12,
    3030
   ],
   [
    "Tsunami",
    "Seal_of_Stone",
-   0,
+   2,
    0.35,
    1802
   ],
   [
    "Tsunami",
    "Seal_of_Winter",
-   0,
+   1,
    0.12,
    3179
   ],
   [
    "Tsunami",
    "Fissure",
-   0,
+   1,
    0.2,
    6386
   ],
   [
    "Tsunami",
    "Rock_Slide",
-   0,
+   2,
    0.35,
    7502
   ],
   [
    "Tsunami",
    "Bulwark",
-   0,
+   1,
    0.14,
    6496
   ],
   [
    "Tsunami",
    "Dividend",
-   1,
+   2,
    0.72,
    143
   ],
   [
    "Tsunami",
    "Annuity",
-   1,
+   2,
    0.58,
    152
   ],
@@ -12614,7 +12614,7 @@
   [
    "Torrent",
    "Seal_of_Stone",
-   0,
+   1,
    0.16,
    1475
   ],
@@ -12628,14 +12628,14 @@
   [
    "Torrent",
    "Fissure",
-   0,
+   1,
    0.14,
    6519
   ],
   [
    "Torrent",
    "Rock_Slide",
-   0,
+   2,
    0.26,
    7713
   ],
@@ -12656,14 +12656,14 @@
   [
    "Torrent",
    "Annuity",
-   0,
+   2,
    0.25,
    131
   ],
   [
    "Torrent",
    "Endowment",
-   0,
+   2,
    0.33,
    174
   ],
@@ -12691,7 +12691,7 @@
   [
    "Splash",
    "Corrupt",
-   0,
+   2,
    0.28,
    439
   ],
@@ -12719,7 +12719,7 @@
   [
    "Splash",
    "Seal_of_Stone",
-   0,
+   2,
    0.28,
    794
   ],
@@ -12733,21 +12733,21 @@
   [
    "Splash",
    "Fissure",
-   0,
+   1,
    0.14,
    7397
   ],
   [
    "Splash",
    "Rock_Slide",
-   0,
+   1,
    0.12,
    8556
   ],
   [
    "Splash",
    "Bulwark",
-   0,
+   1,
    0.1,
    7376
   ],
@@ -12775,7 +12775,7 @@
   [
    "Harvest",
    "Gather",
-   0,
+   2,
    0.26,
    10016
   ],
@@ -12789,7 +12789,7 @@
   [
    "Harvest",
    "Corrupt",
-   0,
+   2,
    0.28,
    321
   ],
@@ -12817,7 +12817,7 @@
   [
    "Harvest",
    "Seal_of_Stone",
-   0,
+   2,
    0.4,
    447
   ],
@@ -12838,7 +12838,7 @@
   [
    "Harvest",
    "Rock_Slide",
-   0,
+   1,
    0.15,
    6767
   ],
@@ -12852,7 +12852,7 @@
   [
    "Harvest",
    "Dividend",
-   0,
+   1,
    0.15,
    3124
   ],
@@ -12866,7 +12866,7 @@
   [
    "Harvest",
    "Endowment",
-   0,
+   1,
    0.16,
    3112
   ],
@@ -12880,7 +12880,7 @@
   [
    "Gather",
    "Corrupt",
-   0,
+   2,
    0.33,
    445
   ],
@@ -12908,7 +12908,7 @@
   [
    "Gather",
    "Seal_of_Stone",
-   0,
+   2,
    0.38,
    326
   ],
@@ -12922,14 +12922,14 @@
   [
    "Gather",
    "Fissure",
-   0,
+   -1,
    -0.15,
    6947
   ],
   [
    "Gather",
    "Rock_Slide",
-   0,
+   1,
    0.12,
    6639
   ],
@@ -12943,7 +12943,7 @@
   [
    "Gather",
    "Dividend",
-   0,
+   1,
    0.21,
    3097
   ],
@@ -13013,7 +13013,7 @@
   [
    "Seal_of_Autumn",
    "Rock_Slide",
-   0,
+   1,
    0.13,
    5827
   ],
@@ -13104,21 +13104,21 @@
   [
    "Corrupt",
    "Dividend",
-   0,
+   2,
    0.44,
    9699
   ],
   [
    "Corrupt",
    "Annuity",
-   0,
+   1,
    0.17,
    9951
   ],
   [
    "Corrupt",
    "Endowment",
-   0,
+   1,
    0.17,
    9690
   ],
@@ -13174,7 +13174,7 @@
   [
    "Decay",
    "Dividend",
-   0,
+   1,
    0.14,
    9773
   ],
@@ -13237,7 +13237,7 @@
   [
    "Lurk",
    "Dividend",
-   0,
+   1,
    0.16,
    8843
   ],
@@ -13265,7 +13265,7 @@
   [
    "Seal_of_Destruction",
    "Seal_of_Winter",
-   0,
+   -1,
    -0.14,
    9288
   ],
@@ -13279,7 +13279,7 @@
   [
    "Seal_of_Destruction",
    "Rock_Slide",
-   0,
+   2,
    0.37,
    1419
   ],
@@ -13300,7 +13300,7 @@
   [
    "Seal_of_Destruction",
    "Annuity",
-   0,
+   2,
    0.41,
    147
   ],
@@ -13314,7 +13314,7 @@
   [
    "Seal_of_Stone",
    "Seal_of_Winter",
-   0,
+   -2,
    -0.26,
    8111
   ],
@@ -13342,14 +13342,14 @@
   [
    "Seal_of_Stone",
    "Dividend",
-   0,
+   2,
    0.36,
    462
   ],
   [
    "Seal_of_Stone",
    "Annuity",
-   0,
+   1,
    0.2,
    390
   ],
@@ -13370,14 +13370,14 @@
   [
    "Seal_of_Winter",
    "Rock_Slide",
-   0,
+   1,
    0.18,
    1413
   ],
   [
    "Seal_of_Winter",
    "Bulwark",
-   0,
+   -1,
    -0.24,
    118
   ],
@@ -13405,7 +13405,7 @@
   [
    "Fissure",
    "Rock_Slide",
-   1,
+   2,
    0.58,
    12866
   ],
@@ -13419,7 +13419,7 @@
   [
    "Fissure",
    "Dividend",
-   1,
+   2,
    0.83,
    166
   ],
@@ -13433,21 +13433,21 @@
   [
    "Fissure",
    "Endowment",
-   0,
+   2,
    0.35,
    89
   ],
   [
    "Rock_Slide",
    "Bulwark",
-   0,
+   1,
    0.17,
    13161
   ],
   [
    "Rock_Slide",
    "Dividend",
-   1,
+   2,
    1.16,
    40
   ],
@@ -13489,21 +13489,21 @@
   [
    "Dividend",
    "Annuity",
-   0,
+   2,
    0.34,
    12825
   ],
   [
    "Dividend",
    "Endowment",
-   1,
+   2,
    0.51,
    12940
   ],
   [
    "Annuity",
    "Endowment",
-   0,
+   2,
    0.31,
    12916
   ]
