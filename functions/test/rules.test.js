@@ -212,3 +212,14 @@ test('rooms: lobby settings (public, casual, the creator\'s colour) are fixed at
 		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/L3')));
 });
+
+test('rooms: the lobby lists waiting and playing rooms by status, and nothing wider', async () => {
+	const { query, orderByChild, equalTo, get } = require('firebase/database');
+	await seed({ rooms: { W1: waiting, P1: Object.assign({}, waiting, { status: 'playing' }) } });
+	const rooms = ref(db(null), 'rooms');
+	await assertSucceeds(get(query(rooms, orderByChild('status'), equalTo('waiting'))));
+	await assertSucceeds(get(query(rooms, orderByChild('status'), equalTo('playing'))));
+	await assertFails(get(query(rooms, orderByChild('status'), equalTo('finished'))));
+	await assertFails(get(query(rooms, orderByChild('created'))));
+	await assertFails(get(rooms));
+});
