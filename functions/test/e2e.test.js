@@ -111,7 +111,10 @@ test('an abort before both players move has no result; after, it is a forfeit', 
 	assert.deepStrictEqual([e.status, e.gameId, e.winner], ['aborted', undefined, undefined]);
 
 	const late = await playRoom(alice, bob, 6);
-	await update(ref(bob.db, 'rooms/' + late), { abortedBy: 'blue', status: 'aborted' });
+	// Written apart: the abort is still settled from the status change.
+	await update(ref(bob.db, 'rooms/' + late), { abortedBy: 'blue' });
+	await new Promise((r) => setTimeout(r, 2000));
+	await update(ref(bob.db, 'rooms/' + late), { status: 'aborted' });
 	const gameId = await waitFor(alice.db, `rooms/${late}/gameId`);
 	const room = (await get(ref(alice.db, 'rooms/' + late))).val();
 	assert.deepStrictEqual([room.status, room.winner, room.forfeitedBy], ['finished', 'red', 'blue']);
@@ -157,6 +160,8 @@ test('the server ends a game whose clock ran out with nobody watching', async ()
 	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
 	const room = (await get(ref(alice.db, 'rooms/' + code))).val();
 	assert.deepStrictEqual([room.status, room.winner, room.endReason], ['finished', 'red', 'time']);
+	// The server left the transcript for the review.
+	assert.strictEqual((room.gameLog || []).length, 3);
 	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
 	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
 });

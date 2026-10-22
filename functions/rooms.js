@@ -4,7 +4,7 @@
  * Kept apart from index.js so the emulator tests can call them directly.
  */
 
-const { flagged, sideToMove, CLOCK_GRACE_MS } = require('./rating');
+const { flagged, sideToMove, onlineTranscript, CLOCK_GRACE_MS } = require('./rating');
 
 /**
  * End a room the server decided (a flag nobody's tab saw, an abort after
@@ -20,7 +20,14 @@ async function finishRoom(db, code, from, result) {
 	const res = await ref.transaction((room) => {
 		if (room === null) return null;
 		if (room.status !== from) return undefined;
-		return Object.assign(room, result, { status: 'finished', closedAt: now, finishedAt: now });
+		const done = Object.assign(room, result, { status: 'finished', closedAt: now, finishedAt: now });
+		// No tab wrote the review fields (writeRoomFinalState): leave the
+		// transcript from the turns, which the review replays.
+		if (!Array.isArray(done.gameLog)) {
+			done.gameLog = onlineTranscript(done);
+			if (!done.setupSfn && done.startSfn) done.setupSfn = done.startSfn;
+		}
+		return done;
 	});
 	return !!(res.committed && res.snapshot.val() && res.snapshot.val().closedAt === now);
 }
