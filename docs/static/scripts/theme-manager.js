@@ -274,10 +274,17 @@ class ThemeManager {
 		try { saved = localStorage.getItem('sigil_theme'); } catch (e) { /* storage blocked */ }
 		this.current = saved && THEMES[saved] ? saved : 'default';
 		this.apply(this.current);
-		// The board <img> is not parsed yet when this runs in <head>.
-		if (document.readyState === 'loading') {
-			document.addEventListener('DOMContentLoaded', () => this.applyBoard());
-		}
+		// The board <img> is not parsed yet when this runs in <head>, and some
+		// pages mount it later (multiplayer's x-if playing template), so theme
+		// every board as it is inserted.
+		const watch = () => {
+			this.applyBoard();
+			new MutationObserver((records) => {
+				if (records.some(r => r.addedNodes.length)) this.applyBoard();
+			}).observe(document.body, { childList: true, subtree: true });
+		};
+		if (document.body) watch();
+		else document.addEventListener('DOMContentLoaded', watch);
 	}
 
 	apply(themeId) {
@@ -311,6 +318,8 @@ class ThemeManager {
 	applyBoard() {
 		const theme = THEMES[this.current];
 		for (const img of document.querySelectorAll('img.game-board')) {
+			if (img.dataset.boardTheme === this.current) continue;
+			img.dataset.boardTheme = this.current;
 			const pic = img.parentElement && img.parentElement.tagName === 'PICTURE' ? img.parentElement : null;
 			const src = pic && pic.querySelector('source[type="image/webp"]');
 			if (!img.dataset.boardSrc) {
