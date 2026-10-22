@@ -67,21 +67,22 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 ## Game screen
 
 - [ ] **Add undo / takeback in local and AI games.** "Reset Turn" only rolls back within the current turn (`docs/game.html:461-467`).
-- [ ] **Add an in-game settings panel** for theme, volume (not just mute), art-only spell circles and animation level.
+- [x] **Add an in-game settings panel** for theme, volume (not just mute), art-only spell circles and animation level.
   These settings are spread across `docs/index.html` and `docs/account.html` today.
-- [ ] **Accessibility:**
-  - [ ] Add `aria-live` to the game log.
-  - [ ] Have board node labels announce what is on the node, whether it is a legal move, and whether it was the last play (currently `aria-label=node`, `docs/game.html:695`).
-  - [ ] Add `aria-label` or `title` to icon-only buttons: mute (`docs/game.html:239`) and the review arrows (`docs/game.html:775-786`).
-  - [ ] Give the win modal `role="dialog"` and focus management.
-  - [ ] Make spell tooltips open on keyboard focus.
-  - [ ] Make the AI-review graph dots reachable by keyboard.
-- [ ] **Add a colourblind mode.** Red and blue are told apart by colour alone in stones, glows and clocks. Add shape or pattern markers.
-- [ ] **Respect `prefers-reduced-motion`.** Screen shake (`docs/static/scripts/spell-effects.js`), pulsing and twinkle animations always run.
-- [ ] **Keyboard shortcuts:**
-  - [ ] Add a `?` overlay that lists them.
-  - [ ] Add Escape to close tooltips and reset.
-  - [ ] Stop Enter from firing when a button has focus (`docs/static/scripts/game-board-local.js:1274-1289`); it currently both clicks the button and passes the turn.
+- [x] **Accessibility:**
+  - [x] Add `aria-live` to the game log.
+  - [x] Have board node labels announce what is on the node, whether it is a legal move, and whether it was the last play (currently `aria-label=node`, `docs/game.html:695`).
+  - [x] Add `aria-label` or `title` to icon-only buttons: mute (`docs/game.html:239`) and the review arrows (`docs/game.html:775-786`).
+  - [x] Give the win modal `role="dialog"` and focus management.
+  - [x] Make spell tooltips open on keyboard focus.
+  - [x] Make the AI-review graph dots reachable by keyboard.
+- [x] **Add a colourblind mode.** Red and blue are told apart by colour alone in stones, glows and clocks. Add shape or pattern markers.
+- [x] **Respect `prefers-reduced-motion`.** Screen shake (`docs/static/scripts/spell-effects.js`), pulsing and twinkle animations always run.
+- [x] **Keyboard shortcuts:**
+  - [x] Add a `?` overlay that lists them.
+  - [x] Add Escape to close tooltips and reset.
+    Escape closes tooltips, dialogs and an armed End Turn / Forfeit; it does not reset the turn (never documented, and one stray key would undo a placed stone).
+  - [x] Stop Enter from firing when a button has focus (`docs/static/scripts/game-board-local.js:1274-1289`); it currently both clicks the button and passes the turn.
 - [ ] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`).
   The `beforeunload` warning is disabled on Safari.
 
@@ -108,7 +109,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
 - [ ] **Add move input by typed notation**, and optionally by voice.
 - [ ] **Let players draw arrows and circles** on the board during play and analysis.
-- [ ] **Add volume, animation speed and move confirmation** to the in-game settings panel.
+- [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
+  Animation speed is the full / reduced / off level; move confirmation asks before End Turn.
 
 ### Analysis & study
 
@@ -187,7 +189,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ## Cleanup
 
-- [ ] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
+- [x] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
 - [ ] **Move the inline styles** in `docs/game.html:51-89` into the stylesheet.
 - [ ] **Pass the spell argument** to `handleSpellMouseOut()` on the sorcery `mouseout` (`docs/game.html:670`).
   It is harmless today because the parameter is unused.

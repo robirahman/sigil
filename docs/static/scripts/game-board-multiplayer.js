@@ -540,7 +540,11 @@ document.addEventListener('alpine:init', () => {
 			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
 			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
 			handleSkipProvidence() { if (this.isSpectator) return; this.sendEvent('skip_providence'); this.actionList = []; },
-			handleEndTurn() { if (this.isSpectator) return; this.sendEvent('pass'); this.actionList = []; },
+			// Armed by a first End Turn when "Confirm before ending a turn" is on (confirmEndTurn, game-keys.js).
+			endTurnArmed: false,
+			_endTurnTimer: null,
+			handleEndTurn() { if (this.isSpectator) return; if (!confirmEndTurn(this)) return; this.sendEvent('pass'); this.actionList = []; },
+			nodeLabel(node) { return nodeAriaLabel(this, node); },
 			handleSubmit() { if (this.isSpectator) return; this.sendEvent('submit'); this.actionList = []; },
 			// Two-click forfeit, mirroring game-board-local.js: first click arms
 			// (relabels to confirm), second concedes; arming decays on its own so
@@ -575,7 +579,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			handleSpellMouseOut() { if (!this.hasTouchScreen) { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); } },
 			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) this.showSpellTooltip(spell); },
-			handleReset() { if (this.isSpectator) return; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
+			handleReset() { if (this.isSpectator) return; this.endTurnArmed = false; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;
 				this.currentPlayer = this.whoseTurn;
@@ -593,6 +597,8 @@ document.addEventListener('alpine:init', () => {
 			init() {
 				const _this = this;
 				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
+				// A new prompt (Reset Turn, a cast) cancels an armed End Turn.
+				_this.$watch('actionList', () => { _this.endTurnArmed = false; });
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => { if (_this.$refs.messageHistory) _this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight; });
 				});
@@ -667,24 +673,8 @@ document.addEventListener('alpine:init', () => {
 					engine.startGame(reconnectSfn || (isSpectator && sync && sync.startSfn) || null);
 				}, 100);
 
-				// Keyboard shortcuts
-				document.addEventListener('keydown', (e) => {
-					if (_this.isSpectator) return;
-					const tag = document.activeElement?.tagName;
-					if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-					if (e.key === 'Enter' && _this.actionList.includes('pass')) {
-						e.preventDefault();
-						_this.handleEndTurn();
-					}
-					if (e.key === 'Enter' && _this.actionList.includes('submit')) {
-						e.preventDefault();
-						_this.handleSubmit();
-					}
-					if (e.key === 'd' && _this.actionList.includes('dash')) {
-						e.preventDefault();
-						_this.handleDash();
-					}
-				});
+				// Keyboard shortcuts (game-keys.js, shared with game.html)
+				bindGameKeys(_this, { disabled: () => _this.isSpectator });
 
 				let _turnCount = 0;
 				// A repeated turn header is a Reset Turn replay (the controller
@@ -803,7 +793,7 @@ document.addEventListener('alpine:init', () => {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
 					}
-					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
+					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: sigilScrollBehavior(), block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
 					else if (type === 'push_animation') {
 						_this.pushSourceNode = '';
 						if (typeof soundManager !== 'undefined') soundManager.play('stonePushed');

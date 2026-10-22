@@ -45,3 +45,17 @@ python3 tools/browser/board-dom-check.py docs
 No dependencies. Fails if a board page's `.stone-nodes` layer is not inside the square board
 frame (`position:relative`). Stones are sized and placed in percent of their containing block, so
 outside the frame they stretch and drift with the window (multiplayer.html, fixed 2026-10-22).
+
+## Settings panel and accessibility
+
+```sh
+node tools/browser/settings-a11y-test.js http://localhost:8765 [screenshot-dir]
+```
+
+Plays a local 1v1 on `game.html` (Firebase hosts blocked) and checks the in-game settings panel
+(focus trap, Escape, persistence across reload, the shared `sigil_theme` / `sigil_muted` /
+`sigilArtOnlySpellCircles` keys), the animation level (shake gated, `prefers-reduced-motion`
+default), colourblind markers on every theme and the Cataclysm board, node `aria-label`s, Enter on a
+focused button, "Confirm before ending a turn", the `?` overlay, the win-modal focus and 375 px
+layout. With a screenshot dir it saves the marked boards. A failed Firebase SDK download from
+gstatic is reported as a note, not a failure.
