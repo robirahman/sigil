@@ -105,6 +105,16 @@ class MultiplayerController {
 			}
 			return;
 		}
+		if (message === 'claim_win') {
+			this._endByRoom(this.myColor === 'red' ? 'blue' : 'red', 'abandon', true);
+			return;
+		}
+		if (message === 'abort') {
+			if (this._gameLog.length >= 2 || (this.board && this.board.gameover)) return;
+			this.sync.abortGame();
+			this._endByAbort();
+			return;
+		}
 		if (message === 'forfeit') {
 			// Never buffered — a forfeit is room state, not a turn action.
 			// Works on either player's turn: the game ends immediately here,
@@ -288,10 +298,18 @@ class MultiplayerController {
 		// A flag the OTHER client saw first (ours may have been asleep or
 		// behind): end the game here too, without writing anything.
 		this.sync.listenForFinish((winner, reason) => {
-			if (reason === 'time' && (winner === 'red' || winner === 'blue')) {
-				this._endByTimeout(winner === 'red' ? 'blue' : 'red', false);
+			if (reason === 'aborted') {
+				this._endByAbort();
+			} else if ((reason === 'time' || reason === 'abandon') && (winner === 'red' || winner === 'blue')) {
+				this._endByRoom(winner === 'red' ? 'blue' : 'red', reason, false);
 			}
 		});
+		// The opponent's connection (the claim-win countdown) and our own
+		// unsent moves (the reconnecting banner).
+		this.sync.listenToOpponentPresence((p) => {
+			this.emit({ type: 'opponent_presence', connected: p.connected, disconnectedAt: p.disconnectedAt });
+		});
+		this.sync.onSyncStatus = (st) => this.emit(Object.assign({ type: 'sync_status' }, st));
 
 		// Send spell setup
 		const posNames = spellSlotNames();
@@ -631,6 +649,16 @@ class MultiplayerController {
 	 * start of the turn; the board is closed so no further click can act.
 	 */
 	async _endByTimeout(loser, writeResult) {
+		return this._endByRoom(loser, 'time', writeResult);
+	}
+
+	/**
+	 * The game ends without a final move: `loser` flagged ('time') or left
+	 * ('abandon', claimed by the opponent after ABANDON_GRACE_MS). With
+	 * writeResult this client claims it in the room (the rules and the
+	 * rating function check the claim); otherwise it saw the room finish.
+	 */
+	async _endByRoom(loser, reason, writeResult) {
 		if (this._timedOut || this._forfeitHandled || (this.board && this.board.gameover)) return;
 		this._timedOut = true;
 		this._stopTimer();
@@ -647,11 +675,27 @@ class MultiplayerController {
 		}
 		this._turnBuffer = [];
 		this.emit({ type: 'message', awaiting: null,
-			message: (loser === 'red' ? 'Red' : 'Blue') + ' ran out of time.' });
-		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: 'time' });
+			message: (loser === 'red' ? 'Red' : 'Blue') + (reason === 'time' ? ' ran out of time.' : ' left the game.') });
+		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: reason });
 		if (!writeResult) return;
-		const committed = await this.sync.writeTimeout(winner);
+		const committed = reason === 'time'
+			? await this.sync.writeTimeout(winner)
+			: await this.sync.claimAbandoned(winner);
 		if (committed) this._saveGameRecord(winner);
+	}
+
+	/** The game was aborted (before both players moved): no result. */
+	_endByAbort() {
+		if (this._aborted || this._timedOut || this._forfeitHandled) return;
+		this._aborted = true;
+		this._stopTimer();
+		this._turnBuffer = [];
+		if (this.board) {
+			this.board.gameover = true;
+			this.board.winner = null;
+		}
+		this.emit({ type: 'message', awaiting: null, message: 'Game aborted.' });
+		this.emit({ type: 'game_aborted' });
 	}
 
 	/**

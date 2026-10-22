@@ -21,6 +21,13 @@ class FirebaseSync {
 		this.myColor = null;
 		this.onOpponentJoin = null;
 		this.onOpponentDisconnect = null;
+		// Connection and unsent writes, for the "reconnecting" banner:
+		// called with { connected, pending, error }.
+		this.onSyncStatus = null;
+		this._connected = true;
+		this._pending = 0;
+		this._writeError = null;
+		this._presenceColor = null;
 
 		// Queue of opponent actions received from Firebase, waiting to be consumed
 		this._incomingQueue = [];
@@ -46,6 +53,14 @@ class FirebaseSync {
 			this._serverTimeOffset = snap.val() || 0;
 		});
 
+		// The database connection: re-announce our seat after a drop (the
+		// server ran our onDisconnect while we were gone).
+		db.ref('.info/connected').on('value', (snap) => {
+			this._connected = snap.val() === true;
+			if (this._connected && this._presenceColor) this._goOnline(this._presenceColor).catch(() => {});
+			this._syncStatus();
+		});
+
 		// Time control config (set during createRoom/joinRoom)
 		this.timeControl = null;
 
@@ -53,6 +68,56 @@ class FirebaseSync {
 		// createRoom / joinRoom and replicated to the joining peer
 		// through the room metadata.
 		this.variant = 'standard';
+	}
+
+	/**
+	 * Mark our seat present, and arrange for the server to mark it gone
+	 * (with its own clock) if this connection drops: the opponent's grace
+	 * period counts from that `disconnectedAt` (functions/rating.js
+	 * abandoned).
+	 */
+	async _goOnline(color) {
+		if (!this.roomRef) return;
+		this._presenceColor = color;
+		const seat = this.roomRef.child(color);
+		await seat.onDisconnect().update({ connected: false, disconnectedAt: firebase.database.ServerValue.TIMESTAMP });
+		await seat.update({ connected: true, disconnectedAt: null });
+	}
+
+	/**
+	 * Watch the opponent's seat: callback({ connected, disconnectedAt }).
+	 * Fires at once with the current state.
+	 */
+	listenToOpponentPresence(callback) {
+		if (!this.roomRef || !this.myColor) return;
+		const opp = this.myColor === 'red' ? 'blue' : 'red';
+		this.roomRef.child(opp).on('value', (snap) => {
+			const s = snap.val() || {};
+			callback({ connected: s.connected !== false, disconnectedAt: typeof s.disconnectedAt === 'number' ? s.disconnectedAt : null });
+		});
+	}
+
+	/** Count a write until the server acknowledges it. */
+	async _track(promise) {
+		this._pending++;
+		this._syncStatus();
+		try {
+			const r = await promise;
+			this._writeError = null;
+			return r;
+		} catch (e) {
+			this._writeError = (e && (e.code || e.message)) || 'error';
+			throw e;
+		} finally {
+			this._pending--;
+			this._syncStatus();
+		}
+	}
+
+	_syncStatus() {
+		if (this.onSyncStatus) {
+			this.onSyncStatus({ connected: this._connected, pending: this._pending, error: this._writeError });
+		}
 	}
 
 	/** Get the current server time estimate. */
@@ -118,7 +183,7 @@ class FirebaseSync {
 		});
 
 		this._listenForTurns();
-		roomRef.child(me + '/connected').onDisconnect().set(false);
+		await this._goOnline(me);
 		return code;
 	}
 
@@ -208,7 +273,7 @@ class FirebaseSync {
 				status: 'playing',
 				ranked: this.ranked,
 			});
-			roomRef.child(joiner + '/connected').onDisconnect().set(false);
+			await this._goOnline(joiner);
 
 			this._writeActiveGameIndex(joiner);
 
@@ -291,8 +356,7 @@ class FirebaseSync {
 			}
 			this.ranked = data.ranked || false;
 
-			await roomRef.child(this.myColor + '/connected').set(true);
-			roomRef.child(this.myColor + '/connected').onDisconnect().set(false);
+			await this._goOnline(this.myColor);
 
 			this._writeActiveGameIndex(this.myColor);
 
@@ -407,7 +471,7 @@ class FirebaseSync {
 	async saveGameState(sfn) {
 		if (!this.roomRef) return;
 		try {
-			await this.roomRef.child('currentSfn').set(sfn);
+			await this._track(this.roomRef.child('currentSfn').set(sfn));
 		} catch (e) {
 			console.error('[Sync] saveGameState FAILED:', e);
 		}
@@ -436,13 +500,13 @@ class FirebaseSync {
 				updates['timer/blue'] = timerUpdate.blue;
 				updates['timer/activeColor'] = timerUpdate.activeColor;
 				updates['timer/lastUpdated'] = firebase.database.ServerValue.TIMESTAMP;
-				await this.roomRef.update(updates);
+				await this._track(this.roomRef.update(updates));
 			} else {
-				await this.roomRef.child('turns').push({
+				await this._track(this.roomRef.child('turns').push({
 					color: this.myColor,
 					actions: actions,
 					timestamp: firebase.database.ServerValue.TIMESTAMP,
-				});
+				}));
 			}
 			console.log('[Sync] sendTurn succeeded');
 		} catch (e) {
@@ -509,11 +573,11 @@ class FirebaseSync {
 			// forfeit path (with attribution) rather than the bare
 			// status-finished signal, and so the room never reads finished
 			// without a winner (the rules require one, and finishedBy).
-			await this.roomRef.update({
+			await this._track(this.roomRef.update({
 				forfeitedBy: color,
 				finishedBy: color,
 				winner: color === 'red' ? 'blue' : 'red',
-			});
+			}));
 			await this._closeRoom();
 			this._removeActiveGameIndex();
 		} catch (e) {
@@ -565,6 +629,10 @@ class FirebaseSync {
 	listenForFinish(callback) {
 		if (!this.roomRef) return;
 		this.roomRef.child('status').on('value', async (snap) => {
+			if (snap.val() === 'aborted') {
+				callback(null, 'aborted');
+				return;
+			}
 			if (snap.val() !== 'finished') return;
 			try {
 				const s = await this.roomRef.once('value');
@@ -669,8 +737,7 @@ class FirebaseSync {
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
 
-		await roomRef.child(me + '/connected').set(true);
-		roomRef.child(me + '/connected').onDisconnect().set(false);
+		await this._goOnline(me);
 
 		this._writeActiveGameIndex(me);
 
@@ -723,6 +790,39 @@ class FirebaseSync {
 			// The other client finished it first.
 		}
 		this._removeActiveGameIndex();
+	}
+
+	/**
+	 * Claim the game because the opponent left: allowed once their seat has
+	 * been gone for ABANDON_GRACE_MS and both players have moved (the
+	 * rating function checks both). Returns true if this client closed it.
+	 */
+	async claimAbandoned(winner) {
+		if (!this.roomRef) return false;
+		try {
+			await this.roomRef.update({ finishedBy: this.myColor, winner: winner, endReason: 'abandon' });
+			const done = await this._closeRoom();
+			if (done) this._removeActiveGameIndex();
+			return done;
+		} catch (e) {
+			console.error('[Sync] claimAbandoned FAILED:', e.code, e.message);
+			return false;
+		}
+	}
+
+	/**
+	 * Abort the game: no result, no rating. Offered before both players
+	 * have moved; later the server counts it as a forfeit (functions/
+	 * index.js settleAbort).
+	 */
+	async abortGame() {
+		if (!this.roomRef) return;
+		try {
+			await this.roomRef.update({ abortedBy: this.myColor, status: 'aborted' });
+			this._removeActiveGameIndex();
+		} catch (e) {
+			console.error('[Sync] abortGame FAILED:', e.code, e.message);
+		}
 	}
 
 	/**
@@ -818,6 +918,7 @@ class FirebaseSync {
 		if (this.roomRef) {
 			this.roomRef.off();
 			if (this.myColor) {
+				this._presenceColor = null;
 				this.roomRef.child(this.myColor + '/connected').set(false);
 			}
 		}

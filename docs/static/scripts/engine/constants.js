@@ -1207,3 +1207,7 @@ function generateSpellList(selection, allowDuplicates = false) {
 
 // Expiration duration for unjoined game invite rooms (status 'waiting').
 const ROOM_INVITE_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
+// How long an online player may be disconnected before the opponent can
+// claim the game (rooms without a correspondence clock). The rating
+// function checks the same span (functions/rating.js ABANDON_GRACE_MS).
+const ABANDON_GRACE_MS = 60 * 1000;

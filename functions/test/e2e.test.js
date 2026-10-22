@@ -8,7 +8,7 @@ const assert = require('node:assert');
 const { initializeApp } = require('firebase/app');
 const { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } = require('firebase/auth');
 const { getFunctions, connectFunctionsEmulator, httpsCallable } = require('firebase/functions');
-const { getDatabase, connectDatabaseEmulator, ref, set, update, push, get, onValue, serverTimestamp } = require('firebase/database');
+const { getDatabase, connectDatabaseEmulator, ref, set, update, push, get, onValue, onDisconnect, goOffline, serverTimestamp } = require('firebase/database');
 const ONLINE = require('./online-game.json');
 const AI = require('./ai-games.json');
 
@@ -49,12 +49,12 @@ function waitFor(db, path, ms = 30000) {
 	});
 }
 
-async function playRoom(alice, bob, upTo) {
+async function playRoom(alice, bob, upTo, timeControl) {
 	const code = 'E2E' + ++seq;
 	await set(ref(alice.db, 'rooms/' + code), {
 		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false,
 		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { connected: false },
-		timeControl: { type: 'none' }, allowSpectators: true, variant: 'standard',
+		timeControl: timeControl || { type: 'none' }, allowSpectators: true, variant: 'standard',
 	});
 	await update(ref(bob.db, 'rooms/' + code), {
 		blue: { uid: bob.uid, displayName: 'bob', connected: true }, status: 'playing', ranked: true,
@@ -99,6 +99,66 @@ test('finishing a game early with a false result is a resignation', async () => 
 	assert.deepStrictEqual([bobs.rated, bobs.result, bobs.eloChange], [true, 'win', 16]);
 	const room = (await get(ref(bob.db, 'rooms/' + code))).val();
 	assert.deepStrictEqual([room.winner, room.forfeitedBy], ['blue', 'red']);
+});
+
+test('an abort before both players move has no result; after, it is a forfeit', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const early = await playRoom(alice, bob, 1);
+	await update(ref(bob.db, 'rooms/' + early), { abortedBy: 'blue', status: 'aborted' });
+	await new Promise((r) => setTimeout(r, 8000));
+	const e = (await get(ref(alice.db, 'rooms/' + early))).val();
+	assert.deepStrictEqual([e.status, e.gameId, e.winner], ['aborted', undefined, undefined]);
+
+	const late = await playRoom(alice, bob, 6);
+	await update(ref(bob.db, 'rooms/' + late), { abortedBy: 'blue', status: 'aborted' });
+	const gameId = await waitFor(alice.db, `rooms/${late}/gameId`);
+	const room = (await get(ref(alice.db, 'rooms/' + late))).val();
+	assert.deepStrictEqual([room.status, room.winner, room.forfeitedBy], ['finished', 'red', 'blue']);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
+});
+
+test('a player gone for a minute loses on a claim; an early claim is the claimer\'s loss', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob, 4);
+	// What firebase-sync.js _goOnline arranges; then bob's connection drops.
+	await onDisconnect(ref(bob.db, 'rooms/' + code + '/blue')).update({ connected: false, disconnectedAt: serverTimestamp() });
+	goOffline(bob.db);
+	await new Promise((r) => setTimeout(r, 61_000));
+	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', endReason: 'abandon' });
+	await update(ref(alice.db, 'rooms/' + code), { status: 'finished' });
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
+
+	const carol = await player('carol');
+	const dave = await player('dave');
+	const code2 = await playRoom(carol, dave, 4);
+	await update(ref(carol.db, 'rooms/' + code2), { finishedBy: 'red', winner: 'red', endReason: 'abandon', status: 'finished' });
+	const g2 = await waitFor(carol.db, `rooms/${code2}/gameId`);
+	const c = await waitFor(carol.db, `user_games/${carol.uid}/${g2}`);
+	assert.deepStrictEqual([c.rated, c.result], [true, 'loss']);
+});
+
+test('the server ends a game whose clock ran out with nobody watching', async () => {
+	const { initializeApp: adminApp } = require('firebase-admin/app');
+	const { getDatabaseWithUrl } = require('firebase-admin/database');
+	const { expireRooms } = require('../rooms');
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin' + seq));
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob, 3, { type: 'realtime', initialTime: 3000, increment: 0 });
+	// Blue is to move with three seconds on the clock.
+	assert.strictEqual(await expireRooms(admin, Date.now()), 0);
+	await new Promise((r) => setTimeout(r, 6000));
+	assert.ok((await expireRooms(admin, Date.now())) >= 1);
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const room = (await get(ref(alice.db, 'rooms/' + code))).val();
+	assert.deepStrictEqual([room.status, room.winner, room.endReason], ['finished', 'red', 'time']);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
 });
 
 test('a forged win against the AI is recorded unrated', async () => {

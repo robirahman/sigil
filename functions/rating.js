@@ -30,6 +30,10 @@ const { freshEngine } = require('./engine-loader');
 const AI_UID = /^__ai_[a-z0-9_]+__$/;
 // Network slack allowed on a loss on time.
 const CLOCK_GRACE_MS = 2000;
+// How long a player may be gone before the opponent can claim the game
+// (rooms without a correspondence clock). Same as ABANDON_GRACE_MS in
+// docs/static/scripts/engine/constants.js.
+const ABANDON_GRACE_MS = 60 * 1000;
 const DEFAULT_ELO = 1000;
 
 const other = (c) => (c === 'red' ? 'blue' : 'red');
@@ -96,6 +100,28 @@ function flagged(room, loser, now) {
 		prevTs = t.timestamp;
 	}
 	return remaining - (now - last.timestamp) <= CLOCK_GRACE_MS;
+}
+
+/**
+ * May the opponent of `loser` claim the game because `loser` left? Their
+ * seat must be marked gone (onDisconnect writes it with the server's
+ * clock; only the seat's owner can clear it) for the grace period, and
+ * both players must have moved (before that the game can only be aborted).
+ */
+function abandoned(room, loser, now) {
+	const tc = room.timeControl || {};
+	const seat = room[loser] || {};
+	if (tc.type === 'correspondence') return false;
+	if (roomTurns(room).length < 2) return false;
+	return seat.connected === false && typeof seat.disconnectedAt === 'number'
+		&& now - seat.disconnectedAt >= ABANDON_GRACE_MS - CLOCK_GRACE_MS;
+}
+
+/** The side to move in a room: after the last turn, or the first mover. */
+function sideToMove(room) {
+	const turns = roomTurns(room);
+	if (turns.length) return other(turns[turns.length - 1].color);
+	return room.startSfn && room.startSfn.split(' ')[1] === 'b' ? 'blue' : 'red';
 }
 
 /**
@@ -204,6 +230,8 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		// the rules require it), not when this runs: a claim made early
 		// must not come true by waiting.
 		ok = typeof room.closedAt === 'number' && flagged(room, loser, room.closedAt);
+	} else if (room.endReason === 'abandon') {
+		ok = typeof room.closedAt === 'number' && abandoned(room, loser, room.closedAt);
 	} else {
 		const transcript = onlineTranscript(room);
 		ok = !!transcript && (await replayWinner(engine, room.spellNames, engine.normalizeVariant(room.variant),
@@ -340,5 +368,6 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 }
 
 module.exports = {
-	AI_UID, CLOCK_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged, onlineTranscript, roomTurns, freshEngine,
+	AI_UID, CLOCK_GRACE_MS, ABANDON_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged,
+	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine,
 };

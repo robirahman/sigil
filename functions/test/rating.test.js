@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { judgeGame, ratingUpdates, flagged, firstTurnNumber, freshEngine } = require('../rating');
+const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, ABANDON_GRACE_MS, freshEngine } = require('../rating');
 const AI = require('./ai-games.json');
 const ONLINE = require('./online-game.json');
 
@@ -212,6 +212,23 @@ test('turn numbers follow both start-SFN conventions', () => {
 	assert.strictEqual(firstTurnNumber(AI.W3ZZGX.setupSfn, 'red'), 17);
 	// A room's startSfn is the position before it (tools/browser/position-room-test.js: 'r 13', Blue moves at 14).
 	assert.strictEqual(firstTurnNumber('r..b/A,B r 13 0:0 -:- -:- b1', 'blue'), 14);
+});
+
+test('a game can be claimed only after the opponent has been gone for the grace period', async () => {
+	const t0 = 1_000_000;
+	const room = { timeControl: { type: 'realtime', initialTime: 600_000 },
+		turns: { a: { color: 'red', timestamp: t0 }, b: { color: 'blue', timestamp: t0 + 1000 } },
+		red: { uid: 'alice', connected: true }, blue: { uid: 'bob', connected: false, disconnectedAt: t0 + 2000 } };
+	assert.strictEqual(abandoned(room, 'blue', t0 + 2000 + 30_000), false);
+	assert.strictEqual(abandoned(room, 'blue', t0 + 2000 + ABANDON_GRACE_MS), true);
+	assert.strictEqual(abandoned(room, 'red', t0 + 10_000_000), false);
+	// Back again, or before both have moved, or by correspondence: no claim.
+	assert.strictEqual(abandoned(Object.assign({}, room, { blue: { connected: true } }), 'blue', t0 + 10_000_000), false);
+	assert.strictEqual(abandoned(Object.assign({}, room, { turns: { a: room.turns.a } }), 'blue', t0 + 10_000_000), false);
+	assert.strictEqual(abandoned(Object.assign({}, room, { timeControl: { type: 'correspondence', moveTimeout: 1 } }), 'blue', t0 + 10_000_000), false);
+	assert.strictEqual(sideToMove(room), 'red');
+	assert.strictEqual(sideToMove({ startSfn: 'x b 14 0:0' }), 'blue');
+	assert.strictEqual(sideToMove({}), 'red');
 });
 
 // ---- the writes ----
