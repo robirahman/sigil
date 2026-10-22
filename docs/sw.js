@@ -122,8 +122,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/images/send-icon.svg',
 	'./static/images/step-pointer.svg',
 	'./static/images/swoosh-separator.svg',
-	// Theme art (tools/themes/build_theme_assets.py). Only the .webp boards and
-	// stones: every browser that runs this worker decodes WebP.
+	// Theme art (tools/themes/build_theme_assets.py), with the .jpg/.png
+	// fallbacks browsers without WebP request, like the Arcane art above.
 	'./static/images/themes/tiled-background-frost.jpg?v3',
 	'./static/images/themes/tiled-background-parchment.jpg?v3',
 	'./static/images/themes/tiled-background-forest.jpg?v3',
@@ -140,6 +140,18 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/images/themes/stones/forest-blue.webp',
 	'./static/images/themes/stones/volcanic-red.webp',
 	'./static/images/themes/stones/volcanic-blue.webp',
+	'./static/images/themes/game-board-frost.jpg',
+	'./static/images/themes/game-board-parchment.jpg',
+	'./static/images/themes/game-board-forest.jpg',
+	'./static/images/themes/game-board-volcanic.jpg',
+	'./static/images/themes/stones/frost-red.png',
+	'./static/images/themes/stones/frost-blue.png',
+	'./static/images/themes/stones/parchment-red.png',
+	'./static/images/themes/stones/parchment-blue.png',
+	'./static/images/themes/stones/forest-red.png',
+	'./static/images/themes/stones/forest-blue.png',
+	'./static/images/themes/stones/volcanic-red.png',
+	'./static/images/themes/stones/volcanic-blue.png',
 	// Spell art is added by spellArtUrls() below.
 ];
 
