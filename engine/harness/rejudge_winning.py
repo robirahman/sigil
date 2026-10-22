@@ -20,15 +20,16 @@ import winning_turns
 
 def load(src):
     if src.startswith('gs://'):
-        import requests
+        import urllib.parse, urllib.request          # the VM venv has no requests
         bucket, name = src[5:].split('/', 1)
-        tok = requests.get('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-                           headers={'Metadata-Flavor': 'Google'}, timeout=10).json()['access_token']
-        r = requests.get(f'https://storage.googleapis.com/storage/v1/b/{bucket}/o/'
-                         + requests.utils.quote(name, safe='') + '?alt=media',
-                         headers={'Authorization': 'Bearer ' + tok}, timeout=120)
-        r.raise_for_status()
-        return r.json()
+        req = urllib.request.Request(
+            'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+            headers={'Metadata-Flavor': 'Google'})
+        tok = json.load(urllib.request.urlopen(req, timeout=10))['access_token']
+        req = urllib.request.Request(f'https://storage.googleapis.com/storage/v1/b/{bucket}/o/'
+                                     + urllib.parse.quote(name, safe='') + '?alt=media',
+                                     headers={'Authorization': 'Bearer ' + tok})
+        return json.load(urllib.request.urlopen(req, timeout=120))
     if not os.path.isabs(src) and not os.path.exists(src):
         src = os.path.join(_REPO, src)
     with open(src, encoding='utf-8') as fh:
