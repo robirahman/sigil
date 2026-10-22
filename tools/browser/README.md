@@ -35,3 +35,13 @@ node <repo>/tools/browser/resume-log-test.js http://localhost:8765   # reload mi
 `resume-log-test.js` plays three turns against the Easy AI, reloads, plays
 one more and checks that the turn log has no gap (the 2026-09 missing-turn
 records). Any Chrome works: `PUPPETEER_EXECUTABLE_PATH=<chrome>`.
+
+## Board nesting check
+
+```sh
+python3 tools/browser/board-dom-check.py docs
+```
+
+No dependencies. Fails if a board page's `.stone-nodes` layer is not inside the square board
+frame (`position:relative`). Stones are sized and placed in percent of their containing block, so
+outside the frame they stretch and drift with the window (multiplayer.html, fixed 2026-10-22).
