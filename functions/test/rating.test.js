@@ -226,6 +226,9 @@ test('a game can be claimed only after the opponent has been gone for the grace 
 	assert.strictEqual(abandoned(Object.assign({}, room, { blue: { connected: true } }), 'blue', t0 + 10_000_000), false);
 	assert.strictEqual(abandoned(Object.assign({}, room, { turns: { a: room.turns.a } }), 'blue', t0 + 10_000_000), false);
 	assert.strictEqual(abandoned(Object.assign({}, room, { timeControl: { type: 'correspondence', moveTimeout: 1 } }), 'blue', t0 + 10_000_000), false);
+	// Another tab of the same player still connected: not gone.
+	const twoTabs = Object.assign({}, room, { blue: Object.assign({}, room.blue, { conns: { c2: t0 } }) });
+	assert.strictEqual(abandoned(twoTabs, 'blue', t0 + 10_000_000), false);
 	assert.strictEqual(sideToMove(room), 'red');
 	assert.strictEqual(sideToMove({ startSfn: 'x b 14 0:0' }), 'blue');
 	assert.strictEqual(sideToMove({}), 'red');
