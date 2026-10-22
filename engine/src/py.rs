@@ -2320,13 +2320,16 @@ fn split_pick(results: Vec<((Option<crate::turn::Turn>, i32, crate::search::Sear
 }
 
 /// A packed root turn (`root_scores_and_play` candidates) as the page plays
-/// it: (applyAITurn actions JSON, after-SFN with the opponent to move).
+/// it: (applyAITurn actions JSON, after-SFN with the opponent to move). The
+/// after-position is the search's own child (`mate::child`, end-of-turn
+/// effects applied), NOT `emit_actions`' board, which is deliberately taken
+/// before the Seal of Destruction burn for the live client's replay check.
 #[pyfunction]
 fn turn_after(sfn: &str, packed: Vec<u32>) -> PyResult<(String, String)> {
     let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
     let t = turn_from_packed(&packed);
-    let (acts, after) = b.emit_actions(&t, b.to_move);
-    Ok((crate::actions::acts_to_json(&acts), after.to_sfn()))
+    let (acts, _pre_burn) = b.emit_actions(&t, b.to_move);
+    Ok((crate::actions::acts_to_json(&acts), crate::mate::child(&b, &t, b.to_move).to_sfn()))
 }
 
 fn turn_from_packed(packed: &[u32]) -> PTurn {
