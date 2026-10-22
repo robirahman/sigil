@@ -117,10 +117,19 @@ def main():
     for t in sorted(r, key=lambda t: -r[t]):
         s = '' if se[t] is None else f' (+-{se[t]:.0f})'
         print(f'  {t:10s} {r[t]:7.0f}{s}   {wl[t][0]}-{wl[t][1]}')
+    # Integer ratings; with --keep-sum, rounded by largest remainder so the
+    # integers keep the exact sum too.
+    rounded = {t: round(v) for t, v in r.items()}
+    if args.keep_sum:
+        target = round(sum(before.values()))
+        fl = {t: math.floor(r[t]) for t in before}
+        for t in sorted(before, key=lambda t: -(r[t] - fl[t]))[:target - sum(fl.values())]:
+            fl[t] += 1
+        rounded.update(fl)
     if args.out:
         with open(args.out, 'w', encoding='utf-8') as fh:
             json.dump({'games': len(games), **meta,
-                       'ratings': {t: round(v) for t, v in r.items()},
+                       'ratings': rounded,
                        'se': {t: (None if v is None else round(v)) for t, v in se.items()},
                        'wl': {t: v for t, v in wl.items()}}, fh, indent=1)
 
