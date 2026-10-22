@@ -128,7 +128,7 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	goOffline(bob.db);
 	await new Promise((r) => setTimeout(r, 61_000));
 	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', endReason: 'abandon' });
-	await update(ref(alice.db, 'rooms/' + code), { status: 'finished' });
+	await update(ref(alice.db, 'rooms/' + code), { status: 'finished', closedAt: serverTimestamp() });
 	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
 	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
 	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
@@ -136,7 +136,7 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	const carol = await player('carol');
 	const dave = await player('dave');
 	const code2 = await playRoom(carol, dave, 4);
-	await update(ref(carol.db, 'rooms/' + code2), { finishedBy: 'red', winner: 'red', endReason: 'abandon', status: 'finished' });
+	await update(ref(carol.db, 'rooms/' + code2), { finishedBy: 'red', winner: 'red', endReason: 'abandon', status: 'finished', closedAt: serverTimestamp() });
 	const g2 = await waitFor(carol.db, `rooms/${code2}/gameId`);
 	const c = await waitFor(carol.db, `user_games/${carol.uid}/${g2}`);
 	assert.deepStrictEqual([c.rated, c.result], [true, 'loss']);
