@@ -16,8 +16,8 @@ judge read one scale.
     judge    analyze(child, depth 4) on each, best root score first: P for
              the mover; stops at the first grey verdict or once more than
              MAX_SOLUTIONS results win
-    confirm  analyze(child, depth 5) on the winners and the best CONFIRM_TOP
-             losers; the verdict must hold at both depths
+    confirm  analyze(child, depth 5) on every judged candidate; the verdict
+             must hold at both depths
 
 A puzzle needs a best result at P >= WIN_P, at most MAX_SOLUTIONS results
 within BAND of it (the solutions), and every other candidate at least GAP
@@ -44,7 +44,6 @@ CHILD_DEPTH = 4       # each candidate's child position, searched by analyze()
 CONFIRM_DEPTH = 5     # the confirmation re-search of the winners and the best losers
 CHILD_MS = 30_000
 CONFIRM_MS = 120_000   # the depth-5 confirmation must complete; a capped one rejects the puzzle
-CONFIRM_TOP = 4
 MAX_SOLUTIONS = 3
 MAX_MATE = 3
 
@@ -203,16 +202,14 @@ def analyze_position(sfn, played_after=None, diag=False):
         out['verdict'] = verdict
         out['p_best'] = round(max([c['p4'] for c in judged] or [0]), 4)
         return out
-    # Confirm one ply deeper: the winners stay winning, the best losers stay
-    # at least GAP behind.
+    # Confirm one ply deeper, every judged candidate: the winners stay
+    # winning, and no loser climbs back within GAP of them.
     rest.sort(key=lambda c: -c['p4'])
-    deep = win + rest[:CONFIRM_TOP]
+    deep = win + rest
     for c in deep:
         c['p5'], c['i5'] = mover_prob(E, c['after'], mover, CONFIRM_DEPTH, CONFIRM_MS)
         if c['p5'] is not None and not reached(c['i5'], CONFIRM_DEPTH):
             c['p5'] = None        # the cap cut the confirmation short: not a depth-5 verdict
-    for c in rest[CONFIRM_TOP:]:
-        c['p5'] = c['p4']
     verdict, win5, rest5 = split([c for c in judged if c.get('p5') is not None], 'p5')
     if verdict or any(c.get('p5') is None for c in deep) or {c['key'] for c in win5} != {c['key'] for c in win}:
         out['verdict'] = 'unconfirmed'
