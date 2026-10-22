@@ -53,7 +53,11 @@ function installFakeFirebase(cfg) {
 		return {
 			child: (c) => ref(path + '/' + c),
 			once: async () => { rec('db.once', path); return snap(path); },
-			set: async (v) => { rec('db.set', path, v); put(path, v); },
+			set: async (v) => {
+				rec('db.set', path, v);
+				if (cfg.failSets > 0) { cfg.failSets--; throw err('PERMISSION_DENIED'); }
+				put(path, v);
+			},
 			remove: async () => { rec('db.remove', path); put(path, null); },
 			update: async (u) => {
 				rec('db.update', path, u);
@@ -281,6 +285,51 @@ async function typeInto(page, sel, text) {
 			const tab = await page.evaluate(() => Alpine.$data(document.querySelector('[x-data]')).tab);
 			const email = await page.$eval('#login-email', el => el.value);
 			check('guest: conflict button opens sign-in with the email filled', tab === 'login' && email === 'taken@example.com', { tab, email });
+			await page.__ctx.close();
+		}
+
+		// 2a. The link succeeds but the profile write fails: the page must not
+		// stay in guest mode (a retry would then create a second account).
+		{
+			const page = await openPage(browser, { user: { uid: 'anon-5', isAnonymous: true }, failSets: 99 });
+			await clickText(page, '.tab-bar__tab', 'Sign Up');
+			await typeInto(page, '#signup-name', 'Halfway');
+			await typeInto(page, '#signup-email', 'half@example.com');
+			await typeInto(page, '#signup-password', 'secret123');
+			await clickText(page, 'button', 'Create Account');
+			await sleep(300);
+			const st = await state(page);
+			const hdr = await page.$eval('#auth-status', el => el.textContent.trim());
+			check('link then failed profile write: signed-in view, not guest', st.user === 'anon-5' && st.guest === false, st);
+			check('link then failed profile write: says the account exists', /account was created/.test(st.error || ''), st.error);
+			check('link then failed profile write: header is not "Sign in"', hdr !== 'Sign in' && hdr !== '', hdr);
+			await page.__ctx.close();
+		}
+		{
+			// One failed write: the page's bootstrap retry creates the profile
+			// with the typed name.
+			const page = await openPage(browser, { user: { uid: 'anon-6', isAnonymous: true }, failSets: 1 });
+			await clickText(page, '.tab-bar__tab', 'Sign Up');
+			await typeInto(page, '#signup-name', 'Retried');
+			await typeInto(page, '#signup-email', 'retry@example.com');
+			await typeInto(page, '#signup-password', 'secret123');
+			await clickText(page, 'button', 'Create Account');
+			await sleep(300);
+			const st = await state(page);
+			const cs = await calls(page);
+			check('transient profile failure: profile bootstrapped with the typed name, no error',
+				st.user === 'anon-6' && st.profile && st.profile.displayName === 'Retried' && !st.error, st);
+			check('transient profile failure: linked once, no new account', named(cs, 'user.linkWithCredential').length === 1
+				&& named(cs, 'auth.createUserWithEmailAndPassword').length === 0);
+			await page.__ctx.close();
+		}
+		{
+			const page = await openPage(browser, { user: { uid: 'anon-7', isAnonymous: true }, failSets: 99 });
+			await clickText(page, 'button', 'Continue with Google');
+			await sleep(300);
+			const st = await state(page);
+			check('google link then failed profile write: signed-in view with an explanation',
+				st.user === 'anon-7' && st.guest === false && /account was created/.test(st.error || ''), st);
 			await page.__ctx.close();
 		}
 

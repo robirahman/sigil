@@ -467,6 +467,7 @@
 				guest: false,
 				linkConflict: '',
 				_linkCredential: null,
+				_upgrading: false,
 				deleteOpen: false,
 				deleteConfirm: '',
 				deleteError: '',
@@ -510,11 +511,19 @@
 
 				// Also called after a guest upgrade: linking keeps the same
 				// user, so onAuthStateChanged does not fire for it.
-				async _applyUser(user) {
+				// `name`: the display name to bootstrap a missing profile with
+				// (a guest upgrade whose profile write failed).
+				async _applyUser(user, name) {
 					this.guest = !!(user && user.isAnonymous);
 					this.user = user && !user.isAnonymous ? user : null;
 					if (this.user) {
 						await this._authManager.loadProfile(firebase.database());
+						// A linked account whose profile was never written (the
+						// write after the link failed): create it now. Not while
+						// an upgrade is still writing it (_upgrading).
+						if (!this._authManager.userProfile && !this.isOffline && !this._upgrading) {
+							try { await this._authManager.ensureUserProfile(firebase.database(), name || undefined); } catch (e) { /* shown by the caller */ }
+						}
 						this.profile = this._authManager.userProfile;
 						this.annotationMode = !!(this.profile && this.profile.annotationMode);
 						this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
@@ -692,11 +701,16 @@
 					this.linkConflict = '';
 					const wasGuest = this.guest;
 					this.busy = true;
+					this._upgrading = wasGuest;
 					try {
 						const user = await this._authManager.signUpWithEmail(this.signupEmail, this.signupPassword, this.signupName.trim());
 						if (wasGuest) await this._applyUser(user);
 					} catch (e) {
-						if (wasGuest && (e.code === 'auth/email-already-in-use' || e.code === 'auth/credential-already-in-use')) {
+						if (e && e.upgradedUser) {
+							this._upgrading = false;
+							await this._applyUser(e.upgradedUser, this.signupName.trim());
+							if (!this.profile) this.error = _upgradeSetupError(e);
+						} else if (wasGuest && (e.code === 'auth/email-already-in-use' || e.code === 'auth/credential-already-in-use')) {
 							this.error = 'That email already has a Sigil account, so this guest session can\'t be turned into it. You can sign in to it instead (this guest session\'s games stay with the guest).';
 							this.loginEmail = this.signupEmail;
 							this.linkConflict = 'email';
@@ -704,6 +718,7 @@
 							this.error = _friendlyError(e);
 						}
 					}
+					this._upgrading = false;
 					this.busy = false;
 				},
 
@@ -713,11 +728,16 @@
 					this.linkConflict = '';
 					const wasGuest = this.guest;
 					this.busy = true;
+					this._upgrading = wasGuest;
 					try {
 						const user = await this._authManager.signInWithGoogle();
 						if (wasGuest) await this._applyUser(user);
 					} catch (e) {
-						if (wasGuest && (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use')) {
+						if (e && e.upgradedUser) {
+							this._upgrading = false;
+							await this._applyUser(e.upgradedUser);
+							if (!this.profile) this.error = _upgradeSetupError(e);
+						} else if (wasGuest && (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use')) {
 							this.error = 'That Google account already has a Sigil account, so this guest session can\'t be turned into it. You can sign in to it instead (this guest session\'s games stay with the guest).';
 							this._linkCredential = e.credential || null;
 							this.linkConflict = 'google';
@@ -725,6 +745,7 @@
 							this.error = _friendlyError(e);
 						}
 					}
+					this._upgrading = false;
 					this.busy = false;
 				},
 
@@ -811,6 +832,12 @@
 				},
 			}));
 		});
+
+		// The guest was linked but its profile could not be written.
+		function _upgradeSetupError(e) {
+			return 'Your account was created, but its profile could not be saved yet (' + _friendlyError(e)
+				+ '). Reload this page to finish setting it up.';
+		}
 
 		function _friendlyError(e) {
 			const map = {

@@ -45,10 +45,14 @@ class AuthManager {
 		} else {
 			cred = await this.auth.createUserWithEmailAndPassword(email, password);
 		}
-		// Linking does not fire onAuthStateChanged; adopt the user directly.
 		this.currentUser = cred.user;
-		await cred.user.updateProfile({ displayName });
-		await this.ensureUserProfile(firebase.database(), displayName);
+		// The link has succeeded: publish it now, so a failure below still
+		// leaves the page showing the (no longer anonymous) account.
+		if (upgrading) this._adoptLinkedUser(cred.user);
+		await AuthManager._afterLink(cred.user, upgrading, async () => {
+			await cred.user.updateProfile({ displayName });
+			await this.ensureUserProfile(firebase.database(), displayName);
+		});
 		if (upgrading) AuthManager._notifyUpgrade();
 		return cred.user;
 	}
@@ -76,16 +80,22 @@ class AuthManager {
 		let cred;
 		if (upgrading) {
 			cred = await guest.linkWithPopup(provider);
-			// Linking keeps the guest's (empty) Auth profile; copy the Google name.
-			const g = (cred.user.providerData || []).find(p => p && p.providerId === 'google.com');
-			if (!cred.user.displayName && g && g.displayName) {
-				await cred.user.updateProfile({ displayName: g.displayName });
-			}
+			this.currentUser = cred.user;
+			this._adoptLinkedUser(cred.user);
 		} else {
 			cred = await this.auth.signInWithPopup(provider);
+			this.currentUser = cred.user;
 		}
-		this.currentUser = cred.user;
-		await this.ensureUserProfile(firebase.database());
+		await AuthManager._afterLink(cred.user, upgrading, async () => {
+			if (upgrading) {
+				// Linking keeps the guest's (empty) Auth profile; copy the Google name.
+				const g = (cred.user.providerData || []).find(p => p && p.providerId === 'google.com');
+				if (!cred.user.displayName && g && g.displayName) {
+					await cred.user.updateProfile({ displayName: g.displayName });
+				}
+			}
+			await this.ensureUserProfile(firebase.database());
+		});
 		if (upgrading) AuthManager._notifyUpgrade();
 		return cred.user;
 	}
@@ -175,6 +185,32 @@ class AuthManager {
 		this.userProfile = null;
 		// The Auth user is gone server-side; drop the cached session.
 		try { await this.auth.signOut(); } catch (e) { /* already invalid */ }
+	}
+
+	/**
+	 * A guest was just linked. Linking does not fire onAuthStateChanged, so
+	 * run this manager's auth callbacks and refresh the header as if it had.
+	 */
+	_adoptLinkedUser(user) {
+		this.currentUser = user;
+		for (const cb of this._onAuthChangedCallbacks) {
+			try { cb(user); } catch (e) { console.warn('auth callback failed:', e); }
+		}
+		AuthManager._notifyUpgrade();
+	}
+
+	/**
+	 * Run the profile setup that follows a sign-up or link. When a guest
+	 * link has already succeeded, a failure here must not read as a failed
+	 * upgrade: the error carries `upgradedUser` so callers keep the account.
+	 */
+	static async _afterLink(user, upgraded, setup) {
+		try {
+			await setup();
+		} catch (e) {
+			if (upgraded && e && typeof e === 'object') e.upgradedUser = user;
+			throw e;
+		}
 	}
 
 	/**
