@@ -193,6 +193,10 @@ document.addEventListener('alpine:init', () => {
 			},
 			// Completed turns so far (abort is offered until both players moved).
 			turnsPlayed() {
+				// The room's turns, not the controller's log: after a reload the
+				// log holds only the turns since.
+				const sync = this._engine && this._engine.sync;
+				if (sync && sync._turnKeys) return sync._turnKeys.length;
 				return (this._engine && this._engine._gameLog) ? this._engine._gameLog.length : 0;
 			},
 			get opponentAwayText() {

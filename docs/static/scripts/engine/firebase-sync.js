@@ -71,16 +71,23 @@ class FirebaseSync {
 	}
 
 	/**
-	 * Mark our seat present, and arrange for the server to mark it gone
-	 * (with its own clock) if this connection drops: the opponent's grace
-	 * period counts from that `disconnectedAt` (functions/rating.js
-	 * abandoned).
+	 * Mark our seat present. Each connection (tab) holds its own entry in
+	 * the seat's `conns`, removed by the server when that connection drops,
+	 * which also stamps `disconnectedAt` with the server's clock: the seat is
+	 * gone only when no connection is left, and the opponent's grace period
+	 * counts from the last drop (functions/rating.js abandoned).
 	 */
 	async _goOnline(color) {
 		if (!this.roomRef) return;
 		this._presenceColor = color;
 		const seat = this.roomRef.child(color);
-		await seat.onDisconnect().update({ connected: false, disconnectedAt: firebase.database.ServerValue.TIMESTAMP });
+		if (!this._connId) this._connId = seat.child('conns').push().key;
+		const conn = seat.child('conns/' + this._connId);
+		const ts = firebase.database.ServerValue.TIMESTAMP;
+		await conn.onDisconnect().remove();
+		await seat.child('disconnectedAt').onDisconnect().set(ts);
+		await seat.child('connected').onDisconnect().set(false);
+		await conn.set(ts);
 		await seat.update({ connected: true, disconnectedAt: null });
 	}
 
@@ -93,7 +100,9 @@ class FirebaseSync {
 		const opp = this.myColor === 'red' ? 'blue' : 'red';
 		this.roomRef.child(opp).on('value', (snap) => {
 			const s = snap.val() || {};
-			callback({ connected: s.connected !== false, disconnectedAt: typeof s.disconnectedAt === 'number' ? s.disconnectedAt : null });
+			// Seats of older clients have no conns: their flag decides.
+			const connected = s.conns ? Object.keys(s.conns).length > 0 : s.connected !== false;
+			callback({ connected, disconnectedAt: connected ? null : (typeof s.disconnectedAt === 'number' ? s.disconnectedAt : null) });
 		});
 	}
 
@@ -102,9 +111,9 @@ class FirebaseSync {
 		this._pending++;
 		this._syncStatus();
 		try {
-			const r = await promise;
-			this._writeError = null;
-			return r;
+			// A refused write stays reported until the page resyncs: a later
+			// accepted write does not mean the refused move arrived.
+			return await promise;
 		} catch (e) {
 			this._writeError = (e && (e.code || e.message)) || 'error';
 			throw e;
@@ -673,7 +682,11 @@ class FirebaseSync {
 		}
 
 		let skipped = 0;
+		// Every turn in the room, including those before a reload (the
+		// controller's log holds only the turns since).
+		this._turnKeys = [];
 		turnsRef.on('child_added', (snap) => {
+			this._turnKeys.push(snap.key);
 			if (skipped < existingCount) {
 				skipped++;
 				return;
