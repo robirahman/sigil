@@ -43,6 +43,7 @@ RANK_DEPTH = 3
 CHILD_DEPTH = 4       # each candidate's child position, searched by analyze()
 CONFIRM_DEPTH = 5     # the confirmation re-search of the winners and the best losers
 CHILD_MS = 30_000
+CONFIRM_MS = 120_000   # the depth-5 confirmation must complete; a capped one rejects the puzzle
 CONFIRM_TOP = 4
 MAX_SOLUTIONS = 3
 MAX_MATE = 3
@@ -104,6 +105,13 @@ def mover_prob(E, sfn, mover, depth, time_ms=0):
     return p, info
 
 
+def reached(info, depth):
+    """True when `mover_prob`'s search completed `depth` (or ended the
+    question: a finished game or a proven mate needs no further depth)."""
+    return bool(info.get('over') or info.get('proven') and info.get('mate')
+                or (info.get('depth') or 0) >= depth)
+
+
 def key_of(sfn):
     """Position identity (stones, counters, locks, springlocks, Providence
     banks), as gen_mate_puzzles.sfn_key and the page's puzzleSfnKey."""
@@ -163,7 +171,13 @@ def analyze_position(sfn, played_after=None, diag=False):
     for c in picks:
         c['p4'], c['i4'] = mover_prob(E, c['after'], mover, CHILD_DEPTH, CHILD_MS)
         if c['p4'] is None:
-            continue
+            if diag:
+                continue
+            # A candidate the child search could not score within its cap may
+            # win too: the gap is unproven, so is the puzzle.
+            out['verdict'] = 'unconfirmed'
+            out['reason'] = 'unscored candidate'
+            return out
         judged.append(c)
         if diag:
             continue
@@ -194,7 +208,9 @@ def analyze_position(sfn, played_after=None, diag=False):
     rest.sort(key=lambda c: -c['p4'])
     deep = win + rest[:CONFIRM_TOP]
     for c in deep:
-        c['p5'], c['i5'] = mover_prob(E, c['after'], mover, CONFIRM_DEPTH, CHILD_MS)
+        c['p5'], c['i5'] = mover_prob(E, c['after'], mover, CONFIRM_DEPTH, CONFIRM_MS)
+        if c['p5'] is not None and not reached(c['i5'], CONFIRM_DEPTH):
+            c['p5'] = None        # the cap cut the confirmation short: not a depth-5 verdict
     for c in rest[CONFIRM_TOP:]:
         c['p5'] = c['p4']
     verdict, win5, rest5 = split([c for c in judged if c.get('p5') is not None], 'p5')
