@@ -6,6 +6,8 @@
 //   2. Each player may push a turn only in their own colour.
 //   3. A third page may watch but not move.
 //   4. A resignation from the game screen finishes the room for the other side.
+//   5. Through the game screen: Abort until both have moved; the reconnecting
+//      banner; a minute after the opponent leaves, Claim win finishes it.
 //
 //   (cd docs && python3 -m http.server 8765) &
 //   cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
@@ -61,8 +63,10 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 	const check = (label, cond, extra) => { console.log((cond ? 'ok   ' : 'FAIL ') + label, extra === undefined ? '' : JSON.stringify(extra)); ok = ok && cond; };
 	try {
 		const pages = [];
-		for (let i = 0; i < 3; i++) {
+		const contexts = [];
+		for (let i = 0; i < 5; i++) {
 			const ctx = await browser.createBrowserContext();
+			contexts.push(ctx);
 			const p = await ctx.newPage();
 			await p.evaluateOnNewDocument(useEmulators);
 			// The service worker's cached CDN scripts race the emulator hook,
@@ -79,7 +83,7 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			p.on('requestfailed', (r) => console.log('requestfailed:', r.url(), r.failure() && r.failure().errorText));
 			pages.push(p);
 		}
-		const [pageA, pageB, pageC] = pages;
+		const [pageA, pageB, pageC, pageD, pageE] = pages;
 
 		await pageA.goto(`${BASE}/multiplayer.html`, { waitUntil: 'load', timeout: 90000 });
 		await pageA.waitForFunction(() => !!document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack, { timeout: 30000 });
@@ -145,6 +149,77 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			&& fin.forfeitedBy === 'red' && !!fin.finishedBy, { status: fin.status, winner: fin.winner, forfeitedBy: fin.forfeitedBy, finishedBy: fin.finishedBy });
 		await bluePage.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).winner === 'blue', { timeout: 20000 })
 			.then(() => check('blue\'s screen shows the win', true), () => check('blue\'s screen shows the win', false));
+
+		// ---- A second game, played through the game screen: abort, the
+		// reconnecting banner, and claiming the game when the opponent leaves.
+		// (Interval polling: background tabs get no animation frames.)
+		await pageD.goto(`${BASE}/multiplayer.html`, { waitUntil: 'load', timeout: 90000 });
+		await pageD.waitForFunction(() => !!document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack, { timeout: 30000, polling: 500 });
+		await pageD.evaluate(async () => { await document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0].createRoom(); });
+		await pageD.waitForFunction(() => document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0].phase === 'waiting', { timeout: 30000, polling: 500 });
+		const code2 = await pageD.evaluate(() => document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0].roomCode);
+		await pageE.goto(`${BASE}/multiplayer.html?id=${code2}`, { waitUntil: 'load', timeout: 90000 });
+		const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+		const isReady = () => {
+			const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+			return typeof g.sendEvent === 'function' && !!g.whoseTurn;
+		};
+		const ready = async (p) => {
+			for (let i = 0; i < 120; i++) {
+				if (await p.evaluate(isReady).catch(() => false)) return;
+				await new Promise((r) => setTimeout(r, 500));
+			}
+			throw new Error('game screen not ready');
+		};
+		const state = (p) => p.evaluate(() => {
+			const el = document.querySelector('[x-data^="gameBoard"]');
+			const l = document.querySelector('[x-data^="multiplayerLobby"]');
+			const g = el && window.Alpine ? Alpine.$data(el) : null;
+			return { phase: l && Alpine.$data(l).phase, err: l && Alpine.$data(l).lobbyError, send: g && typeof g.sendEvent, whoseTurn: g && g.whoseTurn, my: g && g.myColor, msgs: g && g.messageHistory.slice(-3) };
+		});
+		await ready(pageD).catch(async (e) => { console.log('debug D', JSON.stringify(await state(pageD))); throw e; });
+		await ready(pageE).catch(async (e) => { console.log('debug E', JSON.stringify(await state(pageE))); throw e; });
+		const st2 = await pageD.evaluate(async (c) => (await firebase.database().ref('rooms/' + c).once('value')).val(), code2);
+		const redP = st2.red.uid === await uidOf(pageD) ? pageD : pageE;
+		const blueP = redP === pageD ? pageE : pageD;
+		const blueCtx = contexts[pages.indexOf(blueP)];
+		check('abort is offered before anyone moves', await redP.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).canAbort));
+		const play = async (p, node) => {
+			await p.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).actionList.length > 0, { timeout: 30000, polling: 500 });
+			await p.evaluate((n) => { const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]')); g.sendEvent(n); }, node);
+			await p.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).actionList.includes('pass'), { timeout: 30000, polling: 500 });
+			await p.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).handleEndTurn());
+		};
+		await play(redP, 'a2');
+		await play(blueP, 'b11');
+		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).turnsPlayed() >= 2, { timeout: 30000, polling: 500 });
+		check('no abort once both have moved', !(await redP.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).canAbort)));
+
+		// Our own connection drops: the banner says so, and clears on return.
+		await redP.evaluate(() => firebase.database().goOffline());
+		await redP.waitForFunction(() => /Connection lost/.test(Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).syncBanner), { timeout: 15000, polling: 500 })
+			.then(() => check('banner while offline', true), () => check('banner while offline', false));
+		await redP.evaluate(() => firebase.database().goOnline());
+		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).syncBanner === '', { timeout: 15000, polling: 500 })
+			.then(() => check('banner clears on reconnect', true), () => check('banner clears on reconnect', false));
+		const seatBack = await redP.evaluate(async (c) => (await firebase.database().ref('rooms/' + c + '/red').once('value')).val(), code2);
+		check('seat marked present again', seatBack.connected === true && !seatBack.disconnectedAt, seatBack);
+
+		// Blue leaves for good.
+		await blueCtx.close();
+		await redP.waitForFunction(() => /disconnected/.test(Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).opponentAwayText), { timeout: 20000, polling: 500 })
+			.then(() => check('countdown shown when the opponent leaves', true), () => check('countdown shown when the opponent leaves', false));
+		check('no claim during the grace period', !(await redP.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).canClaimWin)));
+		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).canClaimWin, { timeout: 90000, polling: 1000 })
+			.then(() => check('claim offered after a minute', true), () => check('claim offered after a minute', false));
+		await redP.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).handleClaimWin());
+		let fin2 = null;
+		for (let i = 0; i < 40 && !(fin2 && fin2.status === 'finished'); i++) {
+			await new Promise((r) => setTimeout(r, 500));
+			fin2 = await redP.evaluate(async (c) => (await firebase.database().ref('rooms/' + c).once('value')).val(), code2);
+		}
+		check('the claim finishes the room', fin2.status === 'finished' && fin2.winner === 'red' && fin2.endReason === 'abandon'
+			&& fin2.blue.connected === false && typeof fin2.blue.disconnectedAt === 'number', { status: fin2.status, winner: fin2.winner, endReason: fin2.endReason, blue: fin2.blue });
 	} catch (e) {
 		console.log('FAIL exception', e.message);
 		ok = false;

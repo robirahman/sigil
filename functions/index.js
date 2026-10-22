@@ -9,6 +9,9 @@
  *                    and user_games.
  *   deleteUserData - removes a player's own records and their sign-in, for
  *                    "Delete account" on account.html.
+ *   expireClocks   - every minute, ends games whose clock ran out while no
+ *                    player's tab was open to see it.
+ *   settleAbort    - an abort after both players have moved is a forfeit.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -17,11 +20,13 @@
 
 const { onValueCreated, onValueWritten } = require('firebase-functions/v2/database');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabaseWithUrl } = require('firebase-admin/database');
-const { judgeGame, ratingUpdates, recordFromRoom, freshEngine } = require('./rating');
+const { judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = require('./rating');
+const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const crypto = require('crypto');
 
@@ -54,7 +59,7 @@ exports.recordRoom = onValueWritten({
 	// Retried on failure: every step below is safe to repeat.
 	retry: true,
 }, async (event) => {
-	if (event.data.before.val() !== 'playing' || event.data.after.val() !== 'finished') return;
+	if (event.data.after.val() !== 'finished' || event.data.before.val() === 'finished') return;
 	const db = event.data.after.ref.root.database;
 	const code = event.params.code;
 	await new Promise((r) => setTimeout(r, RECORD_DELAY_MS));
@@ -263,4 +268,26 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 	await getAuth().deleteUser(uid);
 	logger.info('deleteUserData', { uid, games: games.numChildren() });
 	return { ok: true };
+});
+
+exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION, timeoutSeconds: 120 }, async () => {
+	const ended = await expireRooms(database(), Date.now());
+	if (ended) logger.info('expireClocks', { ended });
+});
+
+exports.settleAbort = onValueCreated({
+	ref: '/rooms/{code}/abortedBy',
+	instance: DB_INSTANCE,
+	region: REGION,
+}, async (event) => {
+	const db = event.data.ref.root.database;
+	const code = event.params.code;
+	const by = event.data.val();
+	if (by !== 'red' && by !== 'blue') return;
+	const room = (await db.ref('rooms/' + code).once('value')).val();
+	// Each player may abort until both have moved; later it is a forfeit.
+	if (!room || room.status !== 'aborted' || roomTurns(room).length < 2) return;
+	await finishRoom(db, code, 'aborted',
+		{ winner: by === 'red' ? 'blue' : 'red', forfeitedBy: by, endReason: 'forfeit' });
+	logger.info('settleAbort', { code, by });
 });

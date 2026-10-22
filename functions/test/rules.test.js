@@ -142,6 +142,18 @@ test('rooms: create, join, play', async () => {
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/R1')));
 });
 
+test('rooms: an abort names the side that aborts', async () => {
+	await seed({ rooms: { R2: Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true } }) } });
+	await assertFails(update(ref(db('alice'), 'rooms/R2'), { status: 'aborted' }));
+	await assertFails(update(ref(db('alice'), 'rooms/R2'), { status: 'aborted', abortedBy: 'blue' }));
+	await assertFails(update(ref(db('mallory'), 'rooms/R2'), { status: 'aborted', abortedBy: 'red' }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R2'), { status: 'aborted', abortedBy: 'red' }));
+	await assertFails(update(ref(db('bob'), 'rooms/R2'), { status: 'finished', winner: 'blue', finishedBy: 'blue' }));
+	// A seat going offline: the server stamps the time on the owner's seat.
+	await assertSucceeds(update(ref(db('bob'), 'rooms/R2/blue'), { connected: false, disconnectedAt: serverTimestamp() }));
+	await assertFails(update(ref(db('alice'), 'rooms/R2/blue'), { connected: false, disconnectedAt: 1 }));
+});
+
 test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { OLD: Object.assign({}, waiting, { status: 'finished', ranked: true,
 		blue: { uid: 'bob', displayName: 'Bob' } }) } });
