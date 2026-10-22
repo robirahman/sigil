@@ -61,6 +61,12 @@
 		.leaderboard-table .name { font-weight: bold; }
 		.leaderboard-table .name--ai { color: var(--color-accent); }
 		.leaderboard-table .name--dev { color: #c8a8ff; }
+		/* Light theme: the medal and dev colours above are for a dark page. */
+		html[data-theme="parchment"] .leaderboard-table tr:nth-child(1) td:first-child { color: #8a6400; }
+		html[data-theme="parchment"] .leaderboard-table tr:nth-child(2) td:first-child { color: #5c5c5c; }
+		html[data-theme="parchment"] .leaderboard-table tr:nth-child(3) td:first-child { color: #8a4a12; }
+		html[data-theme="parchment"] .leaderboard-table .name--dev,
+		html[data-theme="parchment"] .name__dev-badge { color: #5b3a9a; }
 		.leaderboard-table .name__dev-badge {
 			margin-left: 0.4em;
 			font-family: 'Source Code Pro', monospace;

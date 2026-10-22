@@ -1,0 +1,334 @@
+{
+ "_doc": "Theme palettes: the one source for build_theme_assets.py (board, stones, tiles), check_themes.py (contrast rules) and the THEMES table in docs/static/scripts/theme-manager.js (written by build_theme_assets.py --tokens). board: luminance -> colour stops over the Arcane art. p1/p2: the red/blue player colours (stones, score track, tokens). node: empty-node disc fill, node_ring: its rim (null keeps the art's).",
+ "default": {
+  "name": "Arcane",
+  "assets": false,
+  "p1": "#e84c3b",
+  "p2": "#3b41e8",
+  "node": "#ffffff",
+  "wall": "#0a0a0a",
+  "outline": "#f3ec4e",
+  "vars": {}
+ },
+ "frost": {
+  "name": "Frost",
+  "assets": true,
+  "p1": "#e0304a",
+  "p2": "#3d7cf2",
+  "node": "#f2f8fc",
+  "wall": "#0a0f14",
+  "outline": "#ffe14d",
+  "board": [
+   [
+    0,
+    "#04090f"
+   ],
+   [
+    0.06,
+    "#0a1726"
+   ],
+   [
+    0.18,
+    "#1d3a57"
+   ],
+   [
+    0.45,
+    "#6f97b8"
+   ],
+   [
+    0.75,
+    "#c9def0"
+   ],
+   [
+    1,
+    "#f2f8fc"
+   ]
+  ],
+  "vars": {
+   "--color-bg": "#0a1520",
+   "--color-bg-dark": "#060e18",
+   "--color-bg-mid": "#0c1928",
+   "--color-header-bg": "#060e18",
+   "--color-red-player": "#cc4444",
+   "--color-blue-player": "#66bbee",
+   "--color-red-glow": "#dd5544",
+   "--color-blue-glow": "#44aadd",
+   "--color-red-lock": "#cc4444",
+   "--color-blue-lock": "#44aadd",
+   "--color-last-play-outline": "#aaeeff",
+   "--color-text": "#c8dde8",
+   "--color-text-light": "#ddeef5",
+   "--color-text-warm": "#b8ccd8",
+   "--color-text-bright": "#d0e8f5",
+   "--color-text-muted": "#7899aa",
+   "--color-text-dim": "#6688aa",
+   "--color-text-faint": "#557799",
+   "--color-surface": "#0e1e30",
+   "--color-surface-raised": "#162840",
+   "--color-surface-hover": "#1e3858",
+   "--color-border": "#2a4a68",
+   "--color-border-hover": "#4488aa",
+   "--color-accent": "#66bbee",
+   "--color-link": "#44aadd",
+   "--color-link-hover": "#66ccee",
+   "--color-error": "#dd6666",
+   "--color-success": "#66cc88",
+   "--color-btn-end-turn": "#1a3550",
+   "--color-btn-end-turn-hover": "#244868",
+   "--color-btn-dash": "#184858",
+   "--color-btn-dash-hover": "#226070",
+   "--color-btn-reset": "#4a1a1a",
+   "--color-btn-reset-hover": "#602828",
+   "--color-btn-rematch": "#186838",
+   "--color-btn-rematch-hover": "#1e8848",
+   "--color-btn-menu": "#1a4466",
+   "--color-btn-menu-hover": "#0d3355",
+   "--color-btn-menu-dark": "#162838",
+   "--color-btn-menu-dark-hover": "#0e1e2c",
+   "--color-win-modal-bg": "rgba(8, 16, 28, 0.92)",
+   "--color-spectator-banner": "rgba(10, 25, 50, 0.95)",
+   "--color-review-bar-bg": "rgba(6, 14, 24, 0.92)"
+  }
+ },
+ "parchment": {
+  "name": "Parchment",
+  "assets": true,
+  "p1": "#b3261e",
+  "p2": "#1f3f9a",
+  "node": "#fbf5e4",
+  "node_ring": "#3b2a18",
+  "wall": "#2a1d10",
+  "outline": "#f0b400",
+  "board": [
+   [
+    0,
+    "#dccaa2"
+   ],
+   [
+    0.08,
+    "#d2bd92"
+   ],
+   [
+    0.2,
+    "#b89c6c"
+   ],
+   [
+    0.45,
+    "#7d6440"
+   ],
+   [
+    0.75,
+    "#4e3a22"
+   ],
+   [
+    1,
+    "#3b2a18"
+   ]
+  ],
+  "vars": {
+   "--color-bg": "#d8c8a8",
+   "--color-bg-dark": "#b8a888",
+   "--color-bg-mid": "#c4b494",
+   "--color-header-bg": "#a89878",
+   "--color-red-player": "#b83a2a",
+   "--color-blue-player": "#2a4a8a",
+   "--color-red-glow": "#cc4433",
+   "--color-blue-glow": "#3358a0",
+   "--color-red-lock": "#b83a2a",
+   "--color-blue-lock": "#2a4a8a",
+   "--color-last-play-outline": "#8b6914",
+   "--color-text": "#2a2018",
+   "--color-text-light": "#1a1008",
+   "--color-text-warm": "#3a2a14",
+   "--color-text-bright": "#2a1a08",
+   "--color-text-muted": "#5a4a3a",
+   "--color-text-dim": "#4e3e2e",
+   "--color-text-faint": "#64543f",
+   "--color-surface": "#c8b898",
+   "--color-surface-raised": "#b8a888",
+   "--color-surface-hover": "#a89878",
+   "--color-border": "#9a8a6a",
+   "--color-border-hover": "#5a4a2e",
+   "--color-accent": "#6a4a1a",
+   "--color-link": "#5a3a10",
+   "--color-link-hover": "#3a2a08",
+   "--color-error": "#aa3322",
+   "--color-success": "#3a7a2a",
+   "--color-btn-end-turn": "#4a6a3a",
+   "--color-btn-end-turn-hover": "#5a7a4a",
+   "--color-btn-dash": "#5a6040",
+   "--color-btn-dash-hover": "#6a7050",
+   "--color-btn-reset": "#8a3020",
+   "--color-btn-reset-hover": "#a04030",
+   "--color-btn-rematch": "#3a7a2a",
+   "--color-btn-rematch-hover": "#4a8a3a",
+   "--color-btn-menu": "#56653f",
+   "--color-btn-menu-hover": "#5a6a4a",
+   "--color-btn-menu-dark": "#8a7a5a",
+   "--color-btn-menu-dark-hover": "#7a6a4a",
+   "--color-win-modal-bg": "rgba(200, 185, 155, 0.95)",
+   "--color-spectator-banner": "rgba(180, 165, 135, 0.95)",
+   "--color-review-bar-bg": "rgba(180, 160, 130, 0.95)"
+  }
+ },
+ "forest": {
+  "name": "Forest",
+  "assets": true,
+  "p1": "#e0662a",
+  "p2": "#6a5cf0",
+  "node": "#f1eedc",
+  "wall": "#0a0d08",
+  "outline": "#f4f06a",
+  "board": [
+   [
+    0,
+    "#040a05"
+   ],
+   [
+    0.06,
+    "#0b1a0e"
+   ],
+   [
+    0.18,
+    "#1f3f22"
+   ],
+   [
+    0.45,
+    "#6d8f58"
+   ],
+   [
+    0.75,
+    "#c8d8b0"
+   ],
+   [
+    1,
+    "#f1eedc"
+   ]
+  ],
+  "vars": {
+   "--color-bg": "#0c1a0c",
+   "--color-bg-dark": "#060f06",
+   "--color-bg-mid": "#0a160a",
+   "--color-header-bg": "#060f06",
+   "--color-red-player": "#cc5533",
+   "--color-blue-player": "#33aa77",
+   "--color-red-glow": "#dd6644",
+   "--color-blue-glow": "#2c9968",
+   "--color-red-lock": "#cc5533",
+   "--color-blue-lock": "#2c9968",
+   "--color-last-play-outline": "#ccdd44",
+   "--color-text": "#c8d8c0",
+   "--color-text-light": "#dde8d5",
+   "--color-text-warm": "#c0b890",
+   "--color-text-bright": "#d0c8a0",
+   "--color-text-muted": "#6a8a5a",
+   "--color-text-dim": "#5a7a4a",
+   "--color-text-faint": "#638c4e",
+   "--color-surface": "#102810",
+   "--color-surface-raised": "#183818",
+   "--color-surface-hover": "#204820",
+   "--color-border": "#2a5a2a",
+   "--color-border-hover": "#4a8a4a",
+   "--color-accent": "#88cc44",
+   "--color-link": "#66aa33",
+   "--color-link-hover": "#88cc44",
+   "--color-error": "#dd5533",
+   "--color-success": "#66cc44",
+   "--color-btn-end-turn": "#2a4a28",
+   "--color-btn-end-turn-hover": "#3a5a38",
+   "--color-btn-dash": "#3a4828",
+   "--color-btn-dash-hover": "#4a5838",
+   "--color-btn-reset": "#5a2010",
+   "--color-btn-reset-hover": "#6a3020",
+   "--color-btn-rematch": "#2a6a18",
+   "--color-btn-rematch-hover": "#3a8a28",
+   "--color-btn-menu": "#2a5a28",
+   "--color-btn-menu-hover": "#1a4a18",
+   "--color-btn-menu-dark": "#183818",
+   "--color-btn-menu-dark-hover": "#102810",
+   "--color-win-modal-bg": "rgba(10, 22, 10, 0.92)",
+   "--color-spectator-banner": "rgba(10, 30, 10, 0.95)",
+   "--color-review-bar-bg": "rgba(6, 15, 6, 0.92)"
+  }
+ },
+ "volcanic": {
+  "name": "Volcanic",
+  "assets": true,
+  "p1": "#d9530e",
+  "p2": "#1488ad",
+  "node": "#ece6e2",
+  "wall": "#050303",
+  "outline": "#fff9c4",
+  "board": [
+   [
+    0,
+    "#070505"
+   ],
+   [
+    0.06,
+    "#150b09"
+   ],
+   [
+    0.18,
+    "#34160e"
+   ],
+   [
+    0.45,
+    "#7a3a24"
+   ],
+   [
+    0.75,
+    "#d2aa98"
+   ],
+   [
+    1,
+    "#ece6e2"
+   ]
+  ],
+  "vars": {
+   "--color-bg": "#1a0a0a",
+   "--color-bg-dark": "#100505",
+   "--color-bg-mid": "#140808",
+   "--color-header-bg": "#100505",
+   "--color-red-player": "#ff5533",
+   "--color-blue-player": "#ff8844",
+   "--color-red-glow": "#ff6644",
+   "--color-blue-glow": "#ee7733",
+   "--color-red-lock": "#ff5533",
+   "--color-blue-lock": "#ee7733",
+   "--color-last-play-outline": "#ffcc22",
+   "--color-text": "#e8d0c0",
+   "--color-text-light": "#f0ddd0",
+   "--color-text-warm": "#e0c0a0",
+   "--color-text-bright": "#f0d0b0",
+   "--color-text-muted": "#b07a5c",
+   "--color-text-dim": "#aa6a4a",
+   "--color-text-faint": "#9a6a50",
+   "--color-surface": "#2a1010",
+   "--color-surface-raised": "#3a1818",
+   "--color-surface-hover": "#4a2222",
+   "--color-border": "#5a2a1a",
+   "--color-border-hover": "#b06a48",
+   "--color-accent": "#ff8844",
+   "--color-link": "#ee7733",
+   "--color-link-hover": "#ff9955",
+   "--color-error": "#ff4422",
+   "--color-success": "#cc8822",
+   "--color-btn-end-turn": "#4a2010",
+   "--color-btn-end-turn-hover": "#5a3020",
+   "--color-btn-dash": "#4a3010",
+   "--color-btn-dash-hover": "#5a4020",
+   "--color-btn-reset": "#6a1010",
+   "--color-btn-reset-hover": "#881818",
+   "--color-btn-rematch": "#6a4a10",
+   "--color-btn-rematch-hover": "#8a5a18",
+   "--color-btn-menu": "#5a2a10",
+   "--color-btn-menu-hover": "#4a1a08",
+   "--color-btn-menu-dark": "#3a1818",
+   "--color-btn-menu-dark-hover": "#2a1010",
+   "--color-win-modal-bg": "rgba(26, 10, 10, 0.92)",
+   "--color-spectator-banner": "rgba(40, 15, 10, 0.95)",
+   "--color-review-bar-bg": "rgba(16, 5, 5, 0.92)"
+  }
+ }
+}
