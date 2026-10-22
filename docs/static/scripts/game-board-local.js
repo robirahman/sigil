@@ -1530,7 +1530,8 @@ document.addEventListener('alpine:init', () => {
 				 * analysed line, so threefold repetition counts them as a game
 				 * that reached this node would. opts.turn: {color, turn} plays
 				 * that turn (a SimTurn, e.g. the engine's best) for the side to
-				 * move through the AI path, with its animations.
+				 * move through the AI path, with its animations. opts.silenced:
+				 * { red, blue } Silence flags, which SFN does not carry.
 				 */
 				function _analysisStart(sfn, opts) {
 					opts = opts || {};
@@ -1582,6 +1583,11 @@ document.addEventListener('alpine:init', () => {
 					// startGame builds its board before its first await, so the
 					// repetition counts can be seeded before the loop snapshots.
 					const started = engine.startGame(sfn);
+					// SFN does not record Silence: opts.silenced carries it
+					// from the turn that led here (analysisSilencedAfter).
+					if (engine.board && opts.silenced) {
+						engine.board.silenced = { red: !!opts.silenced.red, blue: !!opts.silenced.blue };
+					}
 					if (engine.board && Array.isArray(opts.history)) {
 						const counts = {};
 						for (const prev of opts.history) {

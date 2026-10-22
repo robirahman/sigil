@@ -310,6 +310,52 @@ async function key(page, k) {
 		check(dupOut.dup && dupOut.sfn === dup, 'the editor keeps the Allow Duplicates variant', dupOut.sfn);
 		check(/Allow Duplicates/.test(dupOut.blocker || ''), 'and the engine stays blocked for it', dupOut.blocker);
 
+		// ---------------- 3e. a running search stops for a decided node ----------------
+		await page.goto(`${BASE}/analysis.html?sfn=${encodeURIComponent(start)}`, { waitUntil: 'networkidle2', timeout: 60000 });
+		await waitFor(page, s => s.mode === 'analyse' && s.awaiting === 'action', 20000, 'the board for the cancel check');
+		const searching = await page.waitForFunction(() => {
+			const d = window.Alpine.$data(document.querySelector('#analysis-root'));
+			return d._anaSearching;
+		}, { timeout: 20000, polling: 100 }).then(() => true, () => false);
+		const cancel = await page.evaluate(() => {
+			const d = window.Alpine.$data(document.querySelector('#analysis-root'));
+			const w = getRustEngineWorker();
+			let n = 0;
+			const orig = w.cancel;
+			w.cancel = function () { n++; return orig.apply(this, arguments); };
+			d.anaTree[d.anaCur].winner = 'red';      // as if the selected node were decided
+			d.anaStartEval();
+			const out = { n, searching: d._anaSearching, status: d.anaEval.status };
+			w.cancel = orig;
+			d.anaTree[d.anaCur].winner = null;
+			return out;
+		});
+		check(searching && cancel.n === 1 && !cancel.searching && cancel.status === 'decided',
+			'selecting a decided node cancels the running search', JSON.stringify({ searching, cancel }));
+
+		// ---------------- 3f. Silence survives a restart ----------------
+		const silence = await page.evaluate(() => {
+			const spells = ['Flourish', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Silence'];
+			const b0 = new SigilBoard(spells); b0.setupInitial();
+			const s0 = boardToSfn(b0);
+			const b1 = new SigilBoard(spells); b1.setupInitial();
+			b1.turnCounter = 1; b1.whoseTurn = 'red'; b1.update();
+			const s1 = boardToSfn(b1);
+			const d = window.Alpine.$data(document.querySelector('#analysis-root'));
+			d.anaSetLine([s0, s1], [{ color: 'red', turnNumber: 1, kind: 'input', actions: ['a2', 'Silence', 'submit'] }], 1);
+			const after = d._engine && d._engine.board ? Object.assign({}, d._engine.board.silenced) : null;
+			d.anaGoto(0);
+			const before = d._engine && d._engine.board ? Object.assign({}, d._engine.board.silenced) : null;
+			return { after, before, node: Object.assign({}, d.anaTree[1].silenced) };
+		});
+		check(silence.after && silence.after.blue === true && silence.after.red === false && silence.node.blue === true,
+			'the position after a Silence cast restarts with blue silenced', JSON.stringify(silence));
+		check(silence.before && !silence.before.red && !silence.before.blue, 'and the position before it does not', JSON.stringify(silence.before));
+		check(await page.evaluate(() => {
+			const r = analysisSilencedAfter({ color: 'blue', kind: 'sim', actions: [{ type: 'cast', spell: 'Silence' }] });
+			return r.red === true && r.blue === false;
+		}), 'sim turns: a cast Silence action silences the enemy');
+
 		// ---------------- 4. phone width ----------------
 		await page.setViewport({ width: 375, height: 800, isMobile: true, hasTouch: true });
 		await page.goto(`${BASE}/analysis.html?sfn=${encodeURIComponent(start)}`, { waitUntil: 'networkidle2', timeout: 60000 });

@@ -59,6 +59,19 @@ function analysisTurnText(turn) {
 		.join(' ');
 }
 
+/** Who is silenced in the position after `turn`: casting Silence (an
+ *  Experimental charm) silences the enemy for their next turn. SFN does not
+ *  record it, so a restarted board needs it from the turn. Input turns list
+ *  cast spells by name, sim turns as { type: 'cast', spell }. */
+function analysisSilencedAfter(turn) {
+	const out = { red: false, blue: false };
+	if (!turn || !Array.isArray(turn.actions) || (turn.color !== 'red' && turn.color !== 'blue')) return out;
+	const isSilence = (n) => typeof n === 'string' && CORE_SPELLS[n] && CORE_SPELLS[n].resolve === 'silence';
+	const cast = turn.actions.some(a => isSilence(a) || (a && a.type === 'cast' && isSilence(a.spell)));
+	if (cast) out[turn.color === 'red' ? 'blue' : 'red'] = true;
+	return out;
+}
+
 /** A SigilBoard holding a loadable SFN (its own spells and variant). */
 function analysisBoardFromSfn(sfn) {
 	const d = sfnToDict(sfn);
@@ -292,6 +305,7 @@ function analysisMixin() {
 					children: k + 1 < sfns.length ? [k + 1] : [],
 					lastChild: k + 1 < sfns.length ? k + 1 : null,
 					winner: null, deleted: false,
+					silenced: analysisSilencedAfter(turn),
 				});
 			});
 			for (const n of tree) {
@@ -333,7 +347,7 @@ function analysisMixin() {
 			}
 			const path = this._anaPath(node.id);
 			const history = path.slice(0, -1).map(i => this.anaTree[i].sfn);
-			this._anaCtl.start(node.sfn, { history, turn: turn || null });
+			this._anaCtl.start(node.sfn, { history, turn: turn || null, silenced: node.silenced || null });
 		},
 
 		/** Render a loadable SFN without a controller (editor, decided nodes). */
@@ -386,6 +400,11 @@ function analysisMixin() {
 					children: [], lastChild: null,
 					winner: (board && board.gameover) ? (board.winner || null) : null,
 					deleted: false,
+					// The mover's own flag is cleared at the end of its turn;
+					// the enemy's (a Silence cast this turn) carries over.
+					silenced: (board && board.silenced)
+						? { red: turn.color === 'blue' && !!board.silenced.red, blue: turn.color === 'red' && !!board.silenced.blue }
+						: analysisSilencedAfter(slim),
 				};
 				this.anaTree.push(child);
 				parent.children.push(child.id);
@@ -527,14 +546,16 @@ function analysisMixin() {
 			const node = this._anaNode();
 			const sfn = node ? node.sfn : '';
 			this.anaEval = { status: 'idle', text: '', depth: 0, liveDepth: 0, timeMs: 0, best: null, bestText: '', expected: '', note: '', sfn };
-			if (!node || this.anaMode !== 'analyse') return;
+			if (!node || this.anaMode !== 'analyse') { this._anaCancelSearch(); return; }
 			if (node.winner) {
+				this._anaCancelSearch();
 				this.anaEval.status = 'decided';
 				this.anaEval.text = (node.winner === 'red' ? 'Red' : 'Blue') + ' won';
 				return;
 			}
 			const blocker = analysisEngineBlocker(sfn);
 			if (blocker) {
+				this._anaCancelSearch();
 				this.anaEval.status = 'unavailable';
 				this.anaEval.note = 'No engine evaluation: ' + blocker + '.';
 				return;
@@ -554,6 +575,12 @@ function analysisMixin() {
 		_anaStopEval() {
 			++this._anaGen;
 			clearTimeout(this._anaEvalTimer);
+			this._anaCancelSearch();
+		},
+
+		/** Stop the worker when a search (for any node) is still running: the
+		 *  generation bump only drops its result, the slice would run on. */
+		_anaCancelSearch() {
 			if (this._anaSearching && typeof getRustEngineWorker === 'function') {
 				const w = getRustEngineWorker();
 				if (typeof w.cancel === 'function') w.cancel();
