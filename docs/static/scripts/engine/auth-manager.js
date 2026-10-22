@@ -155,47 +155,28 @@ class AuthManager {
 	}
 
 	/**
-	 * The RTDB paths deleteAccount removes: everything under the user's own
-	 * uid that the rules let the owner delete, plus their usernames/ claim.
-	 * completed_games and other players' records are left alone (the rules
-	 * make them unreadable/unwritable to clients; anonymising names there
-	 * needs a server-side function).
-	 */
-	async accountDataPaths(db) {
-		const uid = this.auth.currentUser.uid;
-		const paths = ['users/' + uid, 'leaderboard/' + uid];
-		// user_games and user_active_games grant writes per child, not on the
-		// uid node, so each entry is removed by its own path.
-		for (const root of ['user_games/', 'user_active_games/']) {
-			const snap = await db.ref(root + uid).once('value');
-			snap.forEach(child => { paths.push(root + uid + '/' + child.key); });
-		}
-		const name = (this.userProfile && this.userProfile.displayName) || this.auth.currentUser.displayName || '';
-		if (AuthManager.isValidDisplayName(name)) {
-			const key = name.toLowerCase();
-			const owner = await db.ref('usernames/' + key).once('value');
-			if (owner.val() === uid) paths.push('usernames/' + key);
-		}
-		return paths;
-	}
-
-	/**
-	 * Delete the signed-in account: its own RTDB data in one atomic
-	 * multi-path update, then the Auth user. Throws auth/requires-recent-login
-	 * when Firebase wants a fresh sign-in; the caller re-authenticates and
-	 * calls again (the data removal is idempotent).
+	 * Delete the signed-in account through the deleteUserData callable
+	 * (functions/index.js). The server removes the player's own records,
+	 * anonymises their name in completed_games and opponents' user_games,
+	 * and deletes the Auth user; the client only signs out afterwards.
+	 * It refuses a sign-in older than five minutes with failed-precondition /
+	 * 'requires-recent-login' (see isRecentRequiredError): re-authenticate and
+	 * call again.
 	 */
 	async deleteAccount() {
-		const user = this.auth.currentUser;
-		if (!user) throw new Error('Not signed in');
-		const db = firebase.database();
-		const paths = await this.accountDataPaths(db);
-		const updates = {};
-		for (const p of paths) updates[p] = null;
-		await db.ref().update(updates);
-		await user.delete();
+		if (!this.auth.currentUser) throw new Error('Not signed in');
+		await firebase.functions().httpsCallable('deleteUserData')();
 		this.userProfile = null;
-		return paths;
+		// The Auth user is gone server-side; drop the cached session.
+		try { await this.auth.signOut(); } catch (e) { /* already invalid */ }
+	}
+
+	/** True for the "sign in again first" refusals from Auth or deleteUserData. */
+	static isRecentLoginError(e) {
+		if (!e) return false;
+		if (e.code === 'auth/requires-recent-login') return true;
+		const code = String(e.code || '').replace(/^functions\//, '');
+		return code === 'failed-precondition' && /requires-recent-login/.test(e.message || '');
 	}
 
 	/** Sign out. */

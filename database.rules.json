@@ -3,7 +3,7 @@
     "users": {
       "$uid": {
         ".read": true,
-        ".write": "auth !== null && (auth.uid === $uid || (newData.exists() && $uid.matches(/^__ai_[a-z0-9_]+__$/)))",
+        ".write": "auth !== null && newData.exists() && (auth.uid === $uid || $uid.matches(/^__ai_[a-z0-9_]+__$/))",
         "displayName": {
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
         },
@@ -53,7 +53,7 @@
       ".read": true,
       ".indexOn": ["elo"],
       "$uid": {
-        ".write": "auth !== null && (auth.uid === $uid || (newData.exists() && $uid.matches(/^__ai_[a-z0-9_]+__$/)))",
+        ".write": "auth !== null && newData.exists() && (auth.uid === $uid || $uid.matches(/^__ai_[a-z0-9_]+__$/))",
         "displayName": {
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
         },

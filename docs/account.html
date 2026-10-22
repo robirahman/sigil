@@ -404,7 +404,7 @@
 				<button class="account-button account-button--signout" id="delete-open" x-show="!deleteOpen" x-on:click="deleteOpen = true; deleteError = ''">Delete account&hellip;</button>
 				<div x-show="deleteOpen" x-cloak>
 					<div class="settings-card__hint" style="margin-bottom: 10px;">
-						This permanently deletes your sign-in, profile, rating, leaderboard entry, game list and active-game list, and frees your display name. It cannot be undone. Finished games stay in the shared game archive, where your opponents can still review them.
+						This permanently deletes your sign-in, profile, rating, leaderboard entry, game list and active-game list, and frees your display name. It cannot be undone. Finished games stay in the shared game archive and in your opponents' histories, with your name removed.
 					</div>
 					<label for="delete-confirm">Type <strong>DELETE</strong> to confirm</label>
 					<input id="delete-confirm" type="text" autocomplete="off" x-model="deleteConfirm" x-bind:disabled="busy" />
@@ -434,6 +434,7 @@
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 	<script>
 		firebase.initializeApp({
 			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
@@ -755,9 +756,10 @@
 						return;
 					}
 					this.busy = true;
+					let reauthed = false;
 					try {
-						// Re-authenticate before removing any data, so a stale
-						// session can't leave the data gone but the sign-in alive.
+						// deleteUserData refuses a sign-in older than five
+						// minutes, so re-authenticate first when it is stale.
 						// Stop after showing the prompt: a Google popup must open
 						// straight from a click, not after an await.
 						if (!this.reauthNeeded && !(await this._authManager.isRecentLogin())) {
@@ -775,6 +777,7 @@
 							await this._authManager.reauthenticate(this.reauthPassword);
 							this.reauthNeeded = false;
 							this.reauthPassword = '';
+							reauthed = true;
 						}
 						await this._authManager.deleteAccount();
 						this.cancelDelete();
@@ -783,13 +786,12 @@
 						this.successMsg = 'Your account has been deleted.';
 						this.error = '';
 					} catch (e) {
-						if (e.code === 'auth/requires-recent-login') {
+						if (AuthManager.isRecentLoginError(e) && !reauthed) {
+							// Retry once, after the user confirms it's them.
 							this._askReauth();
 							this.deleteError = 'Please confirm it\'s you, then press delete again.';
-						} else if (e.code === 'PERMISSION_DENIED' || /permission/i.test(e.message || '')) {
-							this.deleteError = 'The server refused to delete your data, so nothing was deleted. Please try again later.';
 						} else {
-							this.deleteError = _friendlyError(e);
+							this.deleteError = 'Your account could not be deleted (' + (e.message || e.code || 'unknown error') + '). Nothing was changed; please try again later.';
 						}
 					}
 					this.busy = false;

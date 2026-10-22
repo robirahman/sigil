@@ -1,7 +1,7 @@
 // Headless check of docs/account.html's account features with the Firebase
 // SDK stubbed out (no network calls to Firebase, nothing written anywhere):
 // password reset, guest -> full account upgrade by linking, and account
-// deletion (typed confirmation, data paths, re-authentication).
+// deletion (typed confirmation, the deleteUserData callable, re-authentication).
 //   node tools/browser/account-test.js <docs dir> [port]
 // The gstatic Firebase scripts are answered with an empty body and a fake
 // `firebase` global is installed with evaluateOnNewDocument before any page
@@ -68,7 +68,6 @@ function installFakeFirebase(cfg) {
 	// --- auth ---
 	const listeners = [];
 	let current = null;
-	let deleteFailures = cfg.deleteFailures || 0;
 	const makeUser = (u) => ({
 		uid: u.uid, isAnonymous: !!u.isAnonymous, email: u.email || null,
 		displayName: u.displayName || null,
@@ -95,7 +94,6 @@ function installFakeFirebase(cfg) {
 		async reauthenticateWithPopup(p) { rec('user.reauthenticateWithPopup', p.providerId); cfg.authAgeMs = 0; },
 		async delete() {
 			rec('user.delete');
-			if (deleteFailures > 0) { deleteFailures--; throw err('auth/requires-recent-login'); }
 			setUser(null);
 		},
 	});
@@ -134,6 +132,19 @@ function installFakeFirebase(cfg) {
 		initializeApp: () => ({}),
 		auth: authFn,
 		database: () => ({ ref }),
+		functions: () => ({
+			httpsCallable: (name) => async (data) => {
+				rec('functions.call', name);
+				if (cfg.callableFailures > 0) {
+					cfg.callableFailures--;
+					// What the compat SDK throws for HttpsError('failed-precondition', ...).
+					const e = err('functions/failed-precondition'); e.message = 'requires-recent-login'; throw e;
+				}
+				if (cfg.callableError) { const e = err('functions/' + cfg.callableError); e.message = 'internal'; throw e; }
+				// The server deleted the data and the Auth user.
+				return { data: { ok: true } };
+			},
+		}),
 	};
 	// Keep the SW out of the way.
 	try { Object.defineProperty(navigator, 'serviceWorker', { value: { register: () => Promise.resolve() } }); } catch (e) { /* ignore */ }
@@ -297,16 +308,14 @@ async function typeInto(page, sel, text) {
 			await page.__ctx.close();
 		}
 
-		// 3. Delete account.
+		// 3. Delete account: deleteUserData callable, no client-side deletes.
 		const db = {
-			users: { u1: { displayName: 'Deleter', elo: 1100, gamesPlayed: 3 }, other: { displayName: 'Other', elo: 1200 } },
-			leaderboard: { u1: { displayName: 'Deleter', elo: 1100 }, other: { displayName: 'Other', elo: 1200 } },
-			user_games: { u1: { g1: { timestamp: 1 }, g2: { timestamp: 2 } }, other: { g1: { timestamp: 1 } } },
-			user_active_games: { u1: { ROOM1: { opponent: 'x' } } },
-			usernames: { deleter: 'u1', other: 'other' },
+			users: { u1: { displayName: 'Deleter', elo: 1100, gamesPlayed: 3 } },
+			leaderboard: { u1: { displayName: 'Deleter', elo: 1100 } },
 		};
-		const expected = ['users/u1', 'leaderboard/u1', 'user_games/u1/g1', 'user_games/u1/g2', 'user_active_games/u1/ROOM1', 'usernames/deleter'].sort();
 		const emailUser = { uid: 'u1', email: 'del@example.com', displayName: 'Deleter', providers: ['password'] };
+		const noClientDeletes = (cs) => named(cs, 'db.update').length === 0 && named(cs, 'db.remove').length === 0
+			&& named(cs, 'db.set').length === 0 && named(cs, 'user.delete').length === 0;
 		{
 			const page = await openPage(browser, { user: emailUser, db });
 			await page.click('#delete-open');
@@ -315,30 +324,27 @@ async function typeInto(page, sel, text) {
 			check('delete: button disabled before typing', await disabled());
 			await typeInto(page, '#delete-confirm', 'delete');
 			check('delete: wrong confirmation keeps it disabled', await disabled());
-			// Force a click anyway: the handler must refuse too.
+			// Call the handler anyway: it must refuse too.
 			await page.evaluate(() => Alpine.$data(document.querySelector('[x-data]')).deleteAccount());
 			let cs = await calls(page);
-			check('delete: handler refuses without DELETE', named(cs, 'db.update').length === 0 && named(cs, 'user.delete').length === 0);
+			check('delete: handler refuses without DELETE', named(cs, 'functions.call').length === 0);
 			await typeInto(page, '#delete-confirm', 'DELETE');
 			check('delete: typed DELETE enables the button', !(await disabled()));
 			await page.click('#delete-submit');
 			await sleep(500);
 			cs = await calls(page);
-			const upd = named(cs, 'db.update');
-			const paths = upd.length ? Object.keys(upd[0].args[1]).sort() : [];
-			check('delete: one multi-path update of exactly the owner paths', upd.length === 1 && JSON.stringify(paths) === JSON.stringify(expected)
-				&& Object.values(upd[0].args[1]).every(v => v === null), paths);
-			const iUpd = cs.findIndex(c => c.name === 'db.update');
-			const iDel = cs.findIndex(c => c.name === 'user.delete');
-			check('delete: user.delete() called after the data removal', iUpd >= 0 && iDel > iUpd, { iUpd, iDel });
-			const tree = await page.evaluate(() => window.__dbTree);
-			check('delete: other users untouched', tree.users.other && tree.leaderboard.other && tree.user_games.other && tree.usernames.other === 'other', tree);
+			const fc = named(cs, 'functions.call');
+			check('delete: deleteUserData called once', fc.length === 1 && fc[0].args[0] === 'deleteUserData', fc);
+			check('delete: no client-side data deletes or user.delete()', noClientDeletes(cs), cs.map(c => c.name));
+			const iCall = cs.findIndex(c => c.name === 'functions.call');
+			const iOut = cs.findIndex(c => c.name === 'auth.signOut');
+			check('delete: signs out locally after the call', iCall >= 0 && iOut > iCall, { iCall, iOut });
 			const st = await state(page);
 			check('delete: page shows signed-out with confirmation', st.user === null && /deleted/.test(st.successMsg), st);
 			check('delete: no page errors', page.__errors.length === 0, page.__errors);
 			await page.__ctx.close();
 		}
-		// 3b. Stale sign-in: re-auth before any data is removed.
+		// 3b. Stale sign-in: re-auth before calling the function.
 		{
 			const page = await openPage(browser, { user: emailUser, db, authAgeMs: 30 * 60 * 1000 });
 			await page.click('#delete-open');
@@ -347,47 +353,68 @@ async function typeInto(page, sel, text) {
 			await sleep(400);
 			let cs = await calls(page);
 			let st = await state(page);
-			check('stale: re-auth prompt, nothing deleted yet', st.reauthNeeded && st.reauthMethod === 'password'
-				&& named(cs, 'db.update').length === 0 && named(cs, 'user.delete').length === 0, st);
+			check('stale: re-auth prompt, function not called yet', st.reauthNeeded && st.reauthMethod === 'password'
+				&& named(cs, 'functions.call').length === 0, st);
 			await typeInto(page, '#reauth-password', 'pw-123');
 			await page.click('#delete-submit');
 			await sleep(500);
 			cs = await calls(page);
 			const re = named(cs, 'user.reauthenticateWithCredential');
 			check('stale: reauthenticateWithCredential with the email and typed password', re.length === 1 && re[0].args[0].email === 'del@example.com' && re[0].args[0].password === 'pw-123', re);
-			check('stale: then data removed and user deleted', named(cs, 'db.update').length === 1 && named(cs, 'user.delete').length === 1, cs.map(c => c.name));
+			const iRe = cs.findIndex(c => c.name === 'user.reauthenticateWithCredential');
+			const iCall = cs.findIndex(c => c.name === 'functions.call');
+			check('stale: then deleteUserData called once', named(cs, 'functions.call').length === 1 && iCall > iRe, cs.map(c => c.name));
 			await page.__ctx.close();
 		}
-		// 3c. user.delete() itself says requires-recent-login (Google account).
+		// 3c. The function itself says requires-recent-login (Google account): re-auth, retry once.
 		{
-			const page = await openPage(browser, { user: { uid: 'u1', email: 'g@example.com', displayName: 'Deleter', providers: ['google.com'] }, db, deleteFailures: 1 });
+			const page = await openPage(browser, { user: { uid: 'u1', email: 'g@example.com', displayName: 'Deleter', providers: ['google.com'] }, db, callableFailures: 1 });
 			await page.click('#delete-open');
 			await typeInto(page, '#delete-confirm', 'DELETE');
 			await page.click('#delete-submit');
 			await sleep(400);
 			let st = await state(page);
 			let cs = await calls(page);
-			check('recent-login: error triggers the re-auth prompt', st.reauthNeeded && st.reauthMethod === 'google' && named(cs, 'user.delete').length === 1, st);
+			check('recent-login: failed-precondition triggers the re-auth prompt', st.reauthNeeded && st.reauthMethod === 'google'
+				&& named(cs, 'functions.call').length === 1 && named(cs, 'auth.signOut').length === 0 && st.user === 'u1', st);
 			const label = await page.$eval('#delete-submit', b => b.textContent.trim());
 			check('recent-login: button offers Google confirmation', label === 'Confirm with Google and delete', label);
 			await page.click('#delete-submit');
 			await sleep(500);
 			cs = await calls(page);
 			st = await state(page);
-			check('recent-login: reauthenticateWithPopup then delete succeeds', named(cs, 'user.reauthenticateWithPopup').length === 1
-				&& named(cs, 'user.delete').length === 2 && st.user === null, { st, calls: cs.map(c => c.name) });
+			check('recent-login: reauthenticateWithPopup then the retry succeeds', named(cs, 'user.reauthenticateWithPopup').length === 1
+				&& named(cs, 'functions.call').length === 2 && st.user === null && noClientDeletes(cs), { st, calls: cs.map(c => c.name) });
 			await page.__ctx.close();
 		}
-		// 3d. Rules not yet deployed: update is refused, the account is kept.
+		// 3d. Still refused after re-auth: only one retry, then an error.
 		{
-			const page = await openPage(browser, { user: emailUser, db, denyUpdate: true });
+			const page = await openPage(browser, { user: emailUser, db, callableFailures: 5 });
+			await page.click('#delete-open');
+			await typeInto(page, '#delete-confirm', 'DELETE');
+			await page.click('#delete-submit');
+			await sleep(400);
+			await typeInto(page, '#reauth-password', 'pw');
+			await page.click('#delete-submit');
+			await sleep(500);
+			const cs = await calls(page);
+			const st = await state(page);
+			check('retry-once: second refusal shows an error, no third call', named(cs, 'functions.call').length === 2
+				&& /could not be deleted/.test(st.deleteError) && st.user === 'u1', { st, calls: cs.map(c => c.name) });
+			await page.__ctx.close();
+		}
+		// 3e. Function error: the account stays signed in and intact.
+		{
+			const page = await openPage(browser, { user: emailUser, db, callableError: 'internal' });
 			await page.click('#delete-open');
 			await typeInto(page, '#delete-confirm', 'DELETE');
 			await page.click('#delete-submit');
 			await sleep(400);
 			const cs = await calls(page);
 			const st = await state(page);
-			check('denied: user.delete() not called when the data removal is refused', named(cs, 'user.delete').length === 0 && /nothing was deleted/.test(st.deleteError), st);
+			const tree = await page.evaluate(() => window.__dbTree);
+			check('error: account left intact and signed in', st.user === 'u1' && /could not be deleted/.test(st.deleteError)
+				&& named(cs, 'auth.signOut').length === 0 && noClientDeletes(cs) && tree.users.u1 && tree.leaderboard.u1, { st, calls: cs.map(c => c.name) });
 			await page.__ctx.close();
 		}
 	} catch (e) {

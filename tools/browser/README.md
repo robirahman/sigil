@@ -56,5 +56,6 @@ node <repo>/tools/browser/account-test.js <repo>/docs 8791
 installs a fake `firebase` (auth + in-memory RTDB) with `evaluateOnNewDocument`,
 so nothing touches the live project. It checks password reset, the guest ->
 account upgrade (`linkWithCredential` / `linkWithPopup`, never a new user) and
-account deletion (typed `DELETE`, exact owner paths, then `user.delete()`,
-re-authentication on a stale sign-in or `auth/requires-recent-login`).
+account deletion (typed `DELETE`, one `deleteUserData` callable call and no
+client-side deletes, re-authentication on a stale sign-in or the callable's
+`failed-precondition`, retried once; an error leaves the account intact).
