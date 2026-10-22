@@ -238,6 +238,78 @@ async function key(page, k) {
 		check(st.cur === 1 && st.tree[1].sfn === line.sfns[1] && st.tree[0].sfn !== line.sfns[0],
 			'openAnalysis() opens the game line at the reviewed position (start stepped back to a loadable SFN)');
 
+		// ---------------- 3b. final-only review: no rewind ----------------
+		// A review holding only the final (after-turn) position must open
+		// that position as is, not stepped back a turn.
+		const finalOnly = await page.evaluate(() => {
+			const b = new SigilBoard(['Flourish', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Surge']);
+			b.setupInitial();
+			b.turnCounter = 5; b.whoseTurn = 'red';
+			b.update();
+			return boardToSfn(b);
+		});
+		await page.goto(`${BASE}/game.html`, { waitUntil: 'networkidle2', timeout: 60000 });
+		await page.waitForFunction(() => window.Alpine && document.querySelector('[x-data]'), { timeout: 15000 });
+		await sleep(800);
+		await Promise.all([
+			page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }),
+			page.evaluate((sfn) => {
+				const d = window.Alpine.$data(document.querySelector('[x-data*="gameBoard"]'));
+				window.onbeforeunload = null;
+				d.reviewSfns = [sfn];
+				d.reviewTurnLabels = ['Final position'];
+				d._gameLogForExport = null;
+				d.openAnalysis(0);
+			}, finalOnly),
+		]);
+		st = await waitFor(page, s => s.mode === 'analyse' && s.tree.length === 1, 20000, 'the final-only review on the analysis board');
+		check(st.tree[0].sfn === finalOnly && st.whoseTurn === 'blue',
+			'openAnalysis() on a final-only review keeps the after-turn position (blue to move)', st.tree[0].sfn + ' / ' + st.whoseTurn);
+
+		// ---------------- 3c. spell-target endings load ----------------
+		const target = await page.evaluate(() => {
+			const mk = (red, blue, tc) => {
+				const b = new SigilBoard(['Flourish', 'Carnage', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Surge']);
+				b.setupInitial();
+				b.turnCounter = tc; b.whoseTurn = tc % 2 === 1 ? 'red' : 'blue';
+				b.spellCounter = { red, blue };
+				b.update();
+				return boardToSfn(b);
+			};
+			const t = BOARD.spellTarget;
+			const hit = mk(t, 2, 11), over = mk(t + 1, 2, 11), notMover = mk(2, t, 11);
+			return {
+				hit, hitErrs: analysisValidateSfn(hit).errors,
+				overErrs: analysisValidateSfn(over).errors,
+				notMoverErrs: analysisValidateSfn(notMover).errors,
+			};
+		});
+		check(target.hitErrs.length === 1 && /already decided/.test(target.hitErrs[0]),
+			'casting exactly the spell target is a decided, loadable position', JSON.stringify(target.hitErrs));
+		check(target.overErrs.some(e => /ends the game/.test(e)), 'more casts than the target are refused', JSON.stringify(target.overErrs));
+		check(target.notMoverErrs.some(e => /did not just move/.test(e)), 'the target on the side that did not just move is refused', JSON.stringify(target.notMoverErrs));
+		await page.goto(`${BASE}/analysis.html?sfn=${encodeURIComponent(target.hit)}`, { waitUntil: 'networkidle2', timeout: 60000 });
+		st = await waitFor(page, s => s.mode, 20000, 'the spell-target ending');
+		check(st.mode === 'analyse' && st.tree.length === 1 && st.tree[0].sfn === target.hit,
+			'a spell-target ending opens on the analysis board, not the editor', st.mode);
+
+		// ---------------- 3d. Allow Duplicates survives the editor ----------------
+		const dup = await page.evaluate(() => {
+			const v = composeVariant(false, false, true, false, false);
+			const b = new SigilBoard(['Flourish', 'Flourish~2', 'Bewitch', 'Grow', 'Fireblast', 'Hail_Storm', 'Sprout', 'Slash', 'Surge'], v);
+			b.setupInitial();
+			b.variant = v;
+			return boardToSfn(b);
+		});
+		await page.goto(`${BASE}/analysis.html?mode=edit&sfn=${encodeURIComponent(dup)}`, { waitUntil: 'networkidle2', timeout: 60000 });
+		st = await waitFor(page, s => s.mode === 'edit' && s.edSfn, 15000, 'the editor on a duplicates SFN');
+		const dupOut = await page.evaluate(() => {
+			const d = window.Alpine.$data(document.querySelector('#analysis-root'));
+			return { sfn: d.edSfn, dup: variantHasDuplicates(sfnToDict(d.edSfn).variant), blocker: analysisEngineBlocker(d.edSfn) };
+		});
+		check(dupOut.dup && dupOut.sfn === dup, 'the editor keeps the Allow Duplicates variant', dupOut.sfn);
+		check(/Allow Duplicates/.test(dupOut.blocker || ''), 'and the engine stays blocked for it', dupOut.blocker);
+
 		// ---------------- 4. phone width ----------------
 		await page.setViewport({ width: 375, height: 800, isMobile: true, hasTouch: true });
 		await page.goto(`${BASE}/analysis.html?sfn=${encodeURIComponent(start)}`, { waitUntil: 'networkidle2', timeout: 60000 });

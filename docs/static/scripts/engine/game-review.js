@@ -535,8 +535,13 @@ function aiReviewMixin() {
 			if (!sfns.length) return;
 			const i = Math.max(0, Math.min(sfns.length - 1,
 				typeof index === 'number' ? index : (this.reviewIndex || 0)));
-			// Position 0 is a pre-turn SFN; the board loads after-turn ones.
-			const loadable = sfns.map((s, k) => (typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, k) : s));
+			// Position 0 of a turn line is a pre-turn SFN; the board loads
+			// after-turn ones, so rewind it. A final-only review (an old
+			// export or a failed replay: one position, not labelled 'Start')
+			// already holds an after-turn SFN and must not be rewound.
+			const labels = this.reviewTurnLabels || [];
+			const preTurn0 = sfns.length > 1 || labels[0] === 'Start';
+			const loadable = sfns.map((s, k) => ((k > 0 || preTurn0) && typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, k) : s));
 			const log = this._gameLogForExport;
 			try {
 				sessionStorage.setItem('sigil_analysis_line', JSON.stringify({

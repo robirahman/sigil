@@ -155,7 +155,9 @@ function analysisValidateSfn(sfn) {
 		const count = d[c + '_spellcounter'];
 		const lock = d[c + '_lock'];
 		const spring = d[c + '_springlock'];
-		if (!deathmatch && count >= target) errors.push(C + ' has cast ' + count + ' spells; casting ' + target + ' ends the game.');
+		// Exactly the target is a finished game (judged below as decided);
+		// more than that cannot happen.
+		if (!deathmatch && count > target) errors.push(C + ' has cast ' + count + ' spells; casting ' + target + ' ends the game.');
 		if (lock) {
 			if (!spells.includes(lock)) errors.push(C + '\'s lock (' + displaySpellName(lock) + ') is not on the board.');
 			else if (CORE_SPELLS[lock] && CORE_SPELLS[lock].ischarm) errors.push(C + '\'s lock is a charm; only 3- and 5-node spells lock.');
@@ -163,6 +165,17 @@ function analysisValidateSfn(sfn) {
 		}
 		if (spring && spring !== lock) errors.push(C + '\'s springlock must be the spell ' + C + ' has locked.');
 		if (d[c + '_bank'] && !spells.some(n => isProvidenceSpell(n))) warnings.push(C + ' has banked stones but no Providence spell is on the board.');
+	}
+	// The target ends the game on the caster's own turn, so only the side
+	// that just moved (odd turn counter: red) can be sitting on it.
+	if (!deathmatch && /^\d+$/.test(parts[2])) {
+		const tc = Number(parts[2]);
+		const mover = tc === 0 ? null : (tc % 2 === 1 ? 'red' : 'blue');
+		for (const c of ['red', 'blue']) {
+			if (d[c + '_spellcounter'] === target && c !== mover) {
+				errors.push((c === 'red' ? 'Red' : 'Blue') + ' has cast ' + target + ' spells but did not just move; the game would have ended on that turn.');
+			}
+		}
 	}
 	if (errors.length) return { errors, warnings, board: null };
 
@@ -214,7 +227,7 @@ function analysisMixin() {
 
 		// Editor state. stones: node -> null | 'red' | 'blue' | 'X'.
 		ed: {
-			layout: 'core', end: 'standard', competitive: false,
+			layout: 'core', end: 'standard', competitive: false, duplicates: false,
 			stones: {}, spells: [], toMove: 'red', turnNo: 1,
 			redSc: 0, blueSc: 0, redLock: '', blueLock: '', redSpring: false, blueSpring: false,
 			redBank: 0, blueBank: 0,
@@ -686,6 +699,7 @@ function analysisMixin() {
 				ed.layout = 'core';
 				ed.end = 'standard';
 				ed.competitive = false;
+				ed.duplicates = false;
 				ed.spells = generateSpellList(['core']);
 				ed.stones = {};
 				for (const n of NODE_ORDER) ed.stones[n] = null;
@@ -703,6 +717,9 @@ function analysisMixin() {
 				this.applyBoardLayout(d.layout);
 				ed.end = variantHasDeathmatch(v) ? 'deathmatch' : (variantHasScramble(v) ? 'scramble' : 'standard');
 				ed.competitive = variantHasCompetitive(v);
+				// Not editable, but kept: the spell list may hold aliases
+				// (Spell~2) and the engine blocker reads the variant.
+				ed.duplicates = variantHasDuplicates(v);
 				ed.spells = (d.spell_names || []).slice(0, BOARD.positionCount);
 				while (ed.spells.length < BOARD.positionCount) ed.spells.push('');
 				const stones = {};
@@ -725,7 +742,7 @@ function analysisMixin() {
 
 		edVariant() {
 			const ed = this.ed;
-			return composeVariant(ed.competitive, ed.end === 'deathmatch', false, ed.end === 'scramble', ed.layout === 'pentagon');
+			return composeVariant(ed.competitive, ed.end === 'deathmatch', !!ed.duplicates, ed.end === 'scramble', ed.layout === 'pentagon');
 		},
 
 		/** The editor's loadable turn counter: red's Nth turn is turn counter
