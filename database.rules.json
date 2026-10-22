@@ -83,7 +83,7 @@
         },
         "status": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)",
-          ".validate": "newData.val() === 'waiting' || newData.val() === 'playing' || newData.val() === 'finished' || newData.val() === 'expired'"
+          ".validate": "!data.exists() || (data.val() === 'waiting' && (newData.val() === 'playing' || newData.val() === 'expired')) || (data.val() === 'playing' && newData.val() === 'finished' && newData.parent().child('winner').exists() && ((newData.parent().child('finishedBy').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.parent().child('finishedBy').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)))"
         },
         "ranked": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)",
@@ -96,7 +96,7 @@
           }
         },
         "forfeitedBy": {
-          ".write": "auth !== null && !data.exists() && ((newData.val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))"
+          ".write": "auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))"
         },
         "spectators": {
           "$specId": {
@@ -123,10 +123,11 @@
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)"
         },
         "winner": {
-          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)"
+          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
+          ".validate": "newData.val() === 'red' || newData.val() === 'blue'"
         },
         "endReason": {
-          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)"
+          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'playing'"
         },
         "annotations": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)"
@@ -136,13 +137,16 @@
         },
         "rematch": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)"
+        },
+        "finishedBy": {
+          ".write": "auth !== null && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))"
         }
       }
     },
     "completed_games": {
       ".read": false,
       "$gameId": {
-        ".write": "(auth !== null && (newData.child('redUid').val() === auth.uid || newData.child('blueUid').val() === auth.uid) && (!data.exists() || !data.child('eloProcessed').exists())) || (newData.child('guest').val() === true && newData.child('ranked').val() === false && (!data.exists() || data.child('guest').val() === true))",
+        ".write": "(auth !== null && (newData.child('redUid').val() === auth.uid || newData.child('blueUid').val() === auth.uid) && (newData.child('redUid').val() === newData.child('blueUid').val() || newData.child('redUid').val().matches(/^__ai_[a-z0-9_]+__$/) || newData.child('blueUid').val().matches(/^__ai_[a-z0-9_]+__$/)) && (!data.exists() || !data.child('eloProcessed').exists())) || (newData.child('guest').val() === true && newData.child('ranked').val() === false && (!data.exists() || data.child('guest').val() === true))",
         ".validate": "newData.hasChildren(['winner', 'timestamp'])",
         "annotations": {
           "$turnNumber": {

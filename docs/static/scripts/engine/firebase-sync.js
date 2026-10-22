@@ -505,15 +505,16 @@ class FirebaseSync {
 	async sendForfeit(color) {
 		if (!this.roomRef) return;
 		try {
-			// forfeitedBy FIRST, so the opponent ends the game through the
+			// The result FIRST, so the opponent ends the game through the
 			// forfeit path (with attribution) rather than the bare
-			// status-finished signal.
-			await this.roomRef.child('forfeitedBy').set(color);
-			await this.roomRef.child('status').transaction((current) => {
-				if (current === 'playing') return 'finished';
-				return; // abort if already finished
+			// status-finished signal, and so the room never reads finished
+			// without a winner (the rules require one, and finishedBy).
+			await this.roomRef.update({
+				forfeitedBy: color,
+				finishedBy: color,
+				winner: color === 'red' ? 'blue' : 'red',
 			});
-			await this.roomRef.child('winner').set(color === 'red' ? 'blue' : 'red');
+			await this._closeRoom();
 			this._removeActiveGameIndex();
 		} catch (e) {
 			console.error('[Sync] sendForfeit FAILED:', e.code, e.message);
@@ -543,14 +544,11 @@ class FirebaseSync {
 		if (!this.roomRef) return false;
 		let committed = false;
 		try {
-			const res = await this.roomRef.child('status').transaction((current) => {
-				if (current === 'playing') return 'finished';
-				return; // abort if already finished
-			});
-			committed = !!(res && res.committed);
-			// Only the client whose transaction closed the room writes the
-			// result (and records the game): the other one is a witness.
-			if (committed) await this.roomRef.update({ winner: winner, endReason: 'time' });
+			// The result before the status, which the rules allow only while
+			// the room is playing: a client that sees the flag late is refused
+			// here and is a witness, like the one whose transaction loses.
+			await this.roomRef.update({ finishedBy: this.myColor, winner: winner, endReason: 'time' });
+			committed = await this._closeRoom();
 		} catch (e) {
 			console.error('[Sync] writeTimeout FAILED:', e.code, e.message);
 		}
@@ -702,9 +700,9 @@ class FirebaseSync {
 		if (!this.roomRef) return;
 		const slim = slimGameLog(gameLog);
 		try {
+			// The record for review first: it may follow a forfeit or a flag
+			// that already finished the room.
 			await this.roomRef.update({
-				status: 'finished',
-				winner: winner,
 				gameLog: slim,
 				finalSfn: finalSfn || null,
 				setupSfn: setupSfn || null,
@@ -713,7 +711,29 @@ class FirebaseSync {
 		} catch (e) {
 			console.error('Failed to write room final state:', e);
 		}
+		try {
+			// A natural end, if no one has finished the room yet: the server
+			// replays the moves to check the winner (functions/rating.js).
+			const status = (await this.roomRef.child('status').once('value')).val();
+			if (status === 'playing') {
+				await this.roomRef.update({ finishedBy: this.myColor, winner: winner, status: 'finished' });
+			}
+		} catch (e) {
+			// The other client finished it first.
+		}
 		this._removeActiveGameIndex();
+	}
+
+	/**
+	 * playing -> finished, once: true if this client closed the room. The
+	 * caller has written finishedBy (and the winner) first.
+	 */
+	async _closeRoom() {
+		const res = await this.roomRef.child('status').transaction((current) => {
+			if (current === 'playing') return 'finished';
+			return; // abort if already finished
+		});
+		return !!(res && res.committed);
 	}
 
 	/**
@@ -754,56 +774,6 @@ class FirebaseSync {
 		this.db.ref().update(updates).catch((e) => {
 			console.warn('Failed to remove user_active_games entries:', e);
 		});
-	}
-
-	async saveCompletedGame(gameRecord, opts) {
-		if (!this.db) return;
-		// Red records by convention; `force` lets the client that won a
-		// time-forfeit transaction record when red's tab is gone.
-		if (this.myColor !== 'red' && !(opts && opts.force)) return;
-		if (!gameRecord.timeControl) gameRecord.timeControl = this.timeControl || { type: 'none' };
-		// Enrich with auth info
-		gameRecord.redUid = this.redUid || null;
-		gameRecord.blueUid = this.blueUid || null;
-		gameRecord.ranked = this.ranked || false;
-		// A room from a position: the priced start sets the Elo payoffs.
-		if (this.startPos && typeof this.startPos.redWinProb === 'number') gameRecord.startPos = this.startPos;
-		// Backfill the variant if the caller didn't set it (older builds
-		// / edge paths). Treats the room metadata as the source of truth.
-		if (!SIGIL_VARIANTS.includes(gameRecord.variant)) {
-			gameRecord.variant = normalizeVariant(this.variant);
-		}
-		// Merge any room-level annotations (written live by either player) into
-		// the game record before pushing.
-		try {
-			const annotSnap = await this.roomRef.child('annotations').once('value');
-			const roomAnnotations = annotSnap.val();
-			if (roomAnnotations) {
-				gameRecord.annotations = Object.assign(
-					{}, gameRecord.annotations || {}, roomAnnotations);
-			}
-		} catch (e) {
-			console.error('Failed to read room annotations:', e);
-		}
-		// Mirror the merge for the position-evaluation annotations
-		// ('red' | 'blue' | 'even') so both signals end up on the
-		// completed_games record.
-		try {
-			const evalSnap = await this.roomRef.child('eval_annotations').once('value');
-			const roomEvalAnnotations = evalSnap.val();
-			if (roomEvalAnnotations) {
-				gameRecord.eval_annotations = Object.assign(
-					{}, gameRecord.eval_annotations || {}, roomEvalAnnotations);
-			}
-		} catch (e) {
-			console.error('Failed to read room eval_annotations:', e);
-		}
-		try {
-			// The rateGame Cloud Function rates it (functions/rating.js).
-			await this.db.ref('completed_games').push(gameRecord);
-		} catch (e) {
-			console.error('Failed to save completed game:', e);
-		}
 	}
 
 	/** Write a single annotation to the shared room path. Either player can call. */

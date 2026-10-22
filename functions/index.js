@@ -2,6 +2,8 @@
 /**
  * Cloud Functions for Sigil Online (Firebase Blaze plan).
  *
+ *   recordRoom     - writes the completed_games record of each online room
+ *                    that finishes, and its id to rooms/{code}/gameId.
  *   rateGame       - checks and rates every new completed_games record
  *                    (rating.js); the only writer of Elo, the game counters
  *                    and user_games.
@@ -13,13 +15,13 @@
  * database.rules.json, which takes those writes away from the clients.
  */
 
-const { onValueCreated } = require('firebase-functions/v2/database');
+const { onValueCreated, onValueWritten } = require('firebase-functions/v2/database');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabaseWithUrl } = require('firebase-admin/database');
-const { judgeGame, ratingUpdates, freshEngine } = require('./rating');
+const { judgeGame, ratingUpdates, recordFromRoom, freshEngine } = require('./rating');
 
 initializeApp();
 
@@ -38,6 +40,29 @@ async function isFullAccount(uid) {
 		return false;
 	}
 }
+
+// How long recordRoom waits after a room finishes for the clients' review
+// fields (gameLog, finalSfn), which may follow a forfeit or a flag.
+const RECORD_DELAY_MS = 5000;
+
+exports.recordRoom = onValueWritten({
+	ref: '/rooms/{code}/status',
+	instance: DB_INSTANCE,
+	region: REGION,
+}, async (event) => {
+	if (event.data.before.val() !== 'playing' || event.data.after.val() !== 'finished') return;
+	const db = event.data.after.ref.root.database;
+	const code = event.params.code;
+	await new Promise((r) => setTimeout(r, RECORD_DELAY_MS));
+	const roomRef = db.ref('rooms/' + code);
+	const room = (await roomRef.once('value')).val();
+	if (!room || room.local === true || room.gameId) return;
+	const gameRef = db.ref('completed_games').push();
+	// Claim the room first, so a retried event cannot record it twice.
+	const claim = await roomRef.child('gameId').transaction((cur) => (cur ? undefined : gameRef.key));
+	if (!claim.committed) return;
+	await gameRef.set(recordFromRoom(room, code, Date.now()));
+});
 
 exports.rateGame = onValueCreated({
 	ref: '/completed_games/{gameId}',
@@ -78,6 +103,15 @@ exports.rateGame = onValueCreated({
 		db.ref('leaderboard/' + uids.red + '/displayName').once('value'),
 		db.ref('leaderboard/' + uids.blue + '/displayName').once('value'),
 	]);
+	// A result the room does not support was the finisher's resignation:
+	// the room shows the corrected result.
+	if (verdict.overturned && record.roomCode) {
+		await db.ref('rooms/' + record.roomCode).update({
+			winner: verdict.winner,
+			forfeitedBy: verdict.winner === 'red' ? 'blue' : 'red',
+			endReason: 'forfeit',
+		});
+	}
 	const updates = ratingUpdates(gameId, record, verdict,
 		{ red: redSnap.val(), blue: blueSnap.val() },
 		{ red: redLb.exists(), blue: blueLb.exists() },

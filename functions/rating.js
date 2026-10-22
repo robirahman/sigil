@@ -6,12 +6,15 @@
  * counters and user_games server-only). A finished game's completed_games
  * record triggers index.js `rateGame`, which calls `judgeGame` here:
  *
- *   - Online games are checked against their room, which only the two
- *     seated players can write: the seats must match the record, and the
+ *   - Online games are recorded by the server from their room (index.js
+ *     recordRoom), which only the two seated players can write, and the
  *     result must follow from the room. A natural end is replayed move by
  *     move with the site's own engine (engine-loader.js) and must end with
  *     the claimed winner. A forfeit is the loser's own `forfeitedBy` write.
  *     A loss on time is recomputed from the server timestamps of the turns.
+ *     A result that does not follow counts as a forfeit by the player who
+ *     wrote it (`finishedBy`), so finishing a lost game early cannot
+ *     escape the rating.
  *   - Games against the AI are replayed the same way. The engine's moves
  *     cannot be re-searched here, so a human win must end on the board; a
  *     resignation or flag is only rated when it is the AI that won.
@@ -96,6 +99,35 @@ function flagged(room, loser, now) {
 }
 
 /**
+ * The completed_games record for a finished online room, written by the
+ * server (index.js recordRoom). Same shape as the clients' AI-game records;
+ * room annotations come along for the training data.
+ */
+function recordFromRoom(room, code, now) {
+	const transcript = onlineTranscript(room);
+	const rec = {
+		spellNames: room.spellNames || [],
+		winner: room.winner,
+		turns: transcript || roomTurns(room).map((t) => ({ color: t.color, kind: 'input', actions: t.actions || [] })),
+		setupSfn: room.setupSfn || room.startSfn || null,
+		finalSfn: room.finalSfn || null,
+		roomCode: code,
+		timestamp: now,
+		variant: room.variant || 'standard',
+		timeControl: room.timeControl || { type: 'none' },
+		endReason: room.forfeitedBy ? 'forfeit' : (room.endReason || 'play'),
+		redUid: (room.red && room.red.uid) || null,
+		blueUid: (room.blue && room.blue.uid) || null,
+		ranked: room.ranked === true,
+		recordedBy: 'server',
+	};
+	if (room.startPos && typeof room.startPos.redWinProb === 'number') rec.startPos = room.startPos;
+	if (room.annotations) rec.annotations = room.annotations;
+	if (room.eval_annotations) rec.eval_annotations = room.eval_annotations;
+	return rec;
+}
+
+/**
  * Replay a transcript; resolves to the winner it ends with, or null. The
  * replayer takes each turn's number from the transcript, so the numbers are
  * checked here: they must start at the start position's turn (1 for the
@@ -173,14 +205,18 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		ok = !!transcript && (await replayWinner(engine, room.spellNames, engine.normalizeVariant(room.variant),
 			room.startSfn || null, transcript)) === record.winner;
 	}
-	if (!ok) return Object.assign(unrated('result-not-verified'), { kind });
-	return {
+	const verdict = {
 		rated: true,
 		kind,
 		winner: record.winner,
 		claimKey: 'room_' + record.roomCode,
 		startPos: room.startPos && typeof room.startPos.redWinProb === 'number' ? room.startPos : null,
 	};
+	if (ok) return verdict;
+	if (room.finishedBy !== 'red' && room.finishedBy !== 'blue') return Object.assign(unrated('result-not-verified'), { kind });
+	// The player who closed the room with a result that does not follow
+	// from it loses, as if they had resigned.
+	return Object.assign(verdict, { winner: other(room.finishedBy), overturned: true });
 }
 
 async function _judgeAiGame(engine, record, aiSide, spellNames, variant) {
@@ -229,6 +265,7 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 	const data = { red, blue };
 	const ts = typeof record.timestamp === 'number' ? record.timestamp : Date.now();
 	const fromPosition = !!(verdict.startPos);
+	const winner = verdict.rated ? verdict.winner : record.winner;
 	const entry = (c) => ({
 		timestamp: ts,
 		roomCode: record.roomCode || null,
@@ -237,13 +274,16 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 		opponentUid: uidOf[other(c)],
 		opponentIsAI: !!data[other(c)].isAI || AI_UID.test(uidOf[other(c)]),
 		color: c,
-		result: record.winner === c ? 'win' : 'loss',
+		result: winner === c ? 'win' : 'loss',
 		fromPosition,
 	});
 
 	if (!verdict.rated) {
 		updates['completed_games/' + gameId + '/eloProcessed'] = true;
 		updates['completed_games/' + gameId + '/unratedReason'] = verdict.reason;
+		// Another record of a game already rated: the players' histories
+		// list the game once.
+		if (verdict.reason === 'duplicate') return updates;
 		for (const c of ['red', 'blue']) {
 			if (AI_UID.test(uidOf[c])) continue;
 			updates['user_games/' + uidOf[c] + '/' + gameId] = Object.assign(entry(c), { rated: false, unratedReason: verdict.reason });
@@ -296,5 +336,5 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 }
 
 module.exports = {
-	AI_UID, CLOCK_GRACE_MS, judgeGame, ratingUpdates, flagged, onlineTranscript, roomTurns, freshEngine,
+	AI_UID, CLOCK_GRACE_MS, judgeGame, ratingUpdates, recordFromRoom, flagged, onlineTranscript, roomTurns, freshEngine,
 };

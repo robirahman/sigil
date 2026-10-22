@@ -49,10 +49,8 @@ function waitFor(db, path, ms = 30000) {
 	});
 }
 
-test('an online game is rated once, by the server', async () => {
-	const alice = await player('alice');
-	const bob = await player('bob');
-	const code = 'E2E' + seq;
+async function playRoom(alice, bob, upTo) {
+	const code = 'E2E' + ++seq;
 	await set(ref(alice.db, 'rooms/' + code), {
 		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false,
 		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { connected: false },
@@ -61,29 +59,46 @@ test('an online game is rated once, by the server', async () => {
 	await update(ref(bob.db, 'rooms/' + code), {
 		blue: { uid: bob.uid, displayName: 'bob', connected: true }, status: 'playing', ranked: true,
 	});
-	for (const t of ONLINE.turns) {
+	for (const t of ONLINE.turns.slice(0, upTo)) {
 		const p = t.color === 'red' ? alice : bob;
 		await push(ref(p.db, 'rooms/' + code + '/turns'), { color: t.color, actions: t.actions, timestamp: serverTimestamp() });
 	}
-	// A client may not rate it itself.
+	return code;
+}
+
+test('an online game is recorded and rated once, by the server', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob);
+	// A client may neither rate it nor record it.
 	await assert.rejects(set(ref(alice.db, 'users/' + alice.uid + '/elo'), 1016));
-	await update(ref(alice.db, 'rooms/' + code), { status: 'finished', winner: ONLINE.winner, gameLog: ONLINE.turns, finishedAt: Date.now() });
-	const record = { spellNames: ONLINE.spellNames, winner: ONLINE.winner, redUid: alice.uid, blueUid: bob.uid,
-		ranked: true, variant: 'standard', roomCode: code, timestamp: Date.now(), turns: ONLINE.turns, endReason: 'play' };
-	const g1 = push(ref(alice.db, 'completed_games'));
-	await set(g1, record);
-	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${g1.key}`);
+	await assert.rejects(set(push(ref(alice.db, 'completed_games')), { winner: 'red', timestamp: 1, redUid: alice.uid, blueUid: bob.uid, ranked: true }));
+	// What multiplayer-controller.js does at a natural end (firebase-sync.js writeRoomFinalState).
+	const fin = ONLINE.winner === 'red' ? alice : bob;
+	await update(ref(fin.db, 'rooms/' + code), { gameLog: ONLINE.turns, finishedAt: Date.now() });
+	await update(ref(fin.db, 'rooms/' + code), { finishedBy: ONLINE.winner, winner: ONLINE.winner, status: 'finished' });
+	// The other client's attempt is refused: the room is already finished.
+	const late = fin === alice ? bob : alice;
+	await assert.rejects(update(ref(late.db, 'rooms/' + code), { finishedBy: ONLINE.winner === 'red' ? 'blue' : 'red', winner: ONLINE.winner, status: 'finished' }));
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
 	const won = ONLINE.winner === 'red';
 	assert.deepStrictEqual([mine.rated, mine.eloChange, mine.result], [true, won ? 16 : -16, won ? 'win' : 'loss']);
 	assert.strictEqual((await get(ref(bob.db, `users/${bob.uid}/elo`))).val(), won ? 984 : 1016);
 	assert.strictEqual((await get(ref(bob.db, `leaderboard/${alice.uid}/gamesPlayed`))).val(), 1);
+});
 
-	// Blue recording the same game too changes nothing.
-	const g2 = push(ref(bob.db, 'completed_games'));
-	await set(g2, Object.assign({}, record, { timestamp: Date.now() }));
-	const dup = await waitFor(bob.db, `user_games/${bob.uid}/${g2.key}`);
-	assert.deepStrictEqual([dup.rated, dup.unratedReason], [false, 'duplicate']);
-	assert.strictEqual((await get(ref(bob.db, `users/${bob.uid}/elo`))).val(), won ? 984 : 1016);
+test('finishing a game early with a false result is a resignation', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	// Half the game, then red declares itself the winner.
+	const code = await playRoom(alice, bob, 20);
+	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', status: 'finished' });
+	const gameId = await waitFor(bob.db, `rooms/${code}/gameId`);
+	const bobs = await waitFor(bob.db, `user_games/${bob.uid}/${gameId}`);
+	assert.deepStrictEqual([bobs.rated, bobs.result, bobs.eloChange], [true, 'win', 16]);
+	const room = (await get(ref(bob.db, 'rooms/' + code))).val();
+	assert.deepStrictEqual([room.winner, room.forfeitedBy], ['blue', 'red']);
 });
 
 test('a forged win against the AI is recorded unrated', async () => {

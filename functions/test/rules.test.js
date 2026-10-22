@@ -58,10 +58,13 @@ test('game histories are server-only', async () => {
 });
 
 test('a game record is written by one of its players, and only before it is rated', async () => {
-	const rec = { winner: 'red', timestamp: 1, redUid: 'alice', blueUid: 'bob', ranked: true };
+	// Online games are recorded by the server; clients record AI and local games.
+	await assertFails(set(ref(db('alice'), 'completed_games/g0'), { winner: 'red', timestamp: 1, redUid: 'alice', blueUid: 'bob', ranked: true }));
+	const rec = { winner: 'red', timestamp: 1, redUid: 'alice', blueUid: '__ai_rust_hard__', ranked: true };
 	await assertFails(set(ref(db('mallory'), 'completed_games/g1'), rec));
 	await assertSucceeds(set(ref(db('alice'), 'completed_games/g1'), rec));
-	await assertSucceeds(set(ref(db('bob'), 'completed_games/g1'), rec));
+	await assertFails(set(ref(db('bob'), 'completed_games/g1'), rec));
+	await assertSucceeds(set(ref(db('alice'), 'completed_games/g6'), Object.assign({}, rec, { blueUid: 'alice' })));
 	await assertFails(set(ref(db('alice'), 'completed_games/g2'), Object.assign({ eloProcessed: true, eloChange: 32 }, rec)));
 	await seed({ completed_games: { g3: Object.assign({ eloProcessed: true }, rec) } });
 	await assertFails(set(ref(db('alice'), 'completed_games/g3'), rec));
@@ -102,7 +105,17 @@ test('rooms: create, join, play', async () => {
 	// A forfeit is written by the side that gives up.
 	await assertFails(set(ref(db('alice'), 'rooms/R1/forfeitedBy'), 'blue'));
 	await assertSucceeds(set(ref(db('bob'), 'rooms/R1/forfeitedBy'), 'blue'));
-	await assertSucceeds(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red' }));
+	// Finishing needs a winner and the finisher's own colour in finishedBy.
+	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished' }));
+	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'blue' }));
+	await assertFails(update(ref(db('mallory'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
+	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'waiting' }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
+	// Once finished the result is fixed, and only the server records it.
+	await assertFails(set(ref(db('bob'), 'rooms/R1/winner'), 'blue'));
+	await assertFails(set(ref(db('bob'), 'rooms/R1/status'), 'playing'));
+	await assertFails(set(ref(db('alice'), 'rooms/R1/gameId'), 'g1'));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'), { gameLog: [], finalSfn: 'x' }));
 	// Spectators need no account.
 	await assertSucceeds(set(ref(db(null), 'rooms/R1/spectators/s1'), { joined: 1 }));
 	await assertSucceeds(remove(ref(db(null), 'rooms/R1/spectators/s1')));

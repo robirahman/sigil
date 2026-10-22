@@ -139,6 +139,22 @@ test('an online result must match the room, its seats and its moves', async () =
 	assert.strictEqual((await judgeGame(rec, ctx({ room: short }))).reason, 'result-not-verified');
 });
 
+test('a result the room does not support is the finisher\'s resignation', async () => {
+	const loser = ONLINE.winner === 'red' ? 'blue' : 'red';
+	const room = Object.assign(onlineRoom(), { winner: loser, finishedBy: loser });
+	const v = await judgeGame(Object.assign(onlineRecord(room), { winner: loser }), ctx({ room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, ONLINE.winner, true]);
+	// The Elo and both histories follow the verdict, not the claim.
+	const u = ratingUpdates('G9', Object.assign(onlineRecord(room), { winner: loser }), v,
+		{ red: { elo: 1000 }, blue: { elo: 1000 } }, { red: true, blue: true }, freshEngine());
+	assert.strictEqual(u['user_games/' + (ONLINE.winner === 'red' ? 'alice' : 'bob') + '/G9'].result, 'win');
+	assert.strictEqual(u['users/' + (ONLINE.winner === 'red' ? 'alice' : 'bob') + '/elo'], 1016);
+	// A duplicate record leaves the histories alone.
+	assert.deepStrictEqual(Object.keys(ratingUpdates('G10', onlineRecord(room), { rated: false, reason: 'duplicate' },
+		{ red: {}, blue: {} }, { red: true, blue: true }, freshEngine())).sort(),
+	['completed_games/G10/eloProcessed', 'completed_games/G10/unratedReason']);
+});
+
 test('a forfeit counts only when the loser wrote it', async () => {
 	const room = Object.assign(onlineRoom(), { winner: 'red', forfeitedBy: 'blue' });
 	delete room.gameLog;

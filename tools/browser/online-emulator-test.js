@@ -5,6 +5,7 @@
 //      room is unrated (anon seats).
 //   2. Each player may push a turn only in their own colour.
 //   3. A third page may watch but not move.
+//   4. A resignation from the game screen finishes the room for the other side.
 //
 //   (cd docs && python3 -m http.server 8765) &
 //   cd functions && firebase emulators:exec --only auth,database --project demo-sigil \
@@ -35,6 +36,18 @@ function useEmulators() {
 	});
 }
 
+const _sdk = new Map();
+async function sdk(url) {
+	for (let i = 0; !_sdk.has(url) && i < 5; i++) {
+		try {
+			const r = await fetch(url);
+			if (r.ok) _sdk.set(url, await r.text());
+		} catch (e) { /* retry */ }
+	}
+	if (!_sdk.has(url)) throw new Error('could not fetch ' + url);
+	return _sdk.get(url);
+}
+
 const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0];
 
 (async () => {
@@ -52,7 +65,18 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			const ctx = await browser.createBrowserContext();
 			const p = await ctx.newPage();
 			await p.evaluateOnNewDocument(useEmulators);
+			// The service worker's cached CDN scripts race the emulator hook,
+			// and gstatic downloads flake here: serve the SDK from memory.
+			await p.setBypassServiceWorker(true);
+			await p.setRequestInterception(true);
+			p.on('request', (req) => {
+				const url = req.url();
+				if (!url.startsWith('https://www.gstatic.com/firebasejs/')) return req.continue();
+				sdk(url).then((body) => req.respond({ status: 200, contentType: 'text/javascript', body }),
+					() => req.continue());
+			});
 			p.on('pageerror', (e) => console.log('pageerror:', e.message));
+			p.on('requestfailed', (r) => console.log('requestfailed:', r.url(), r.failure() && r.failure().errorText));
 			pages.push(p);
 		}
 		const [pageA, pageB, pageC] = pages;
@@ -100,6 +124,27 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			try { await firebase.database().ref('rooms/' + c + '/blue').set({ uid: firebase.auth().currentUser.uid, connected: true }); return 'ok'; } catch (e) { return e.code; }
 		}, code);
 		check('a spectator may not take a seat', takeover !== 'ok');
+
+		// Red resigns through the game screen: the result goes in before the
+		// status (the rules require winner and finishedBy to finish a room).
+		// Alpine.$data: the merged proxy the component's own methods see
+		// (sendEvent is attached in init, not declared as data).
+		await redPage.waitForFunction(() => typeof Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).sendEvent === 'function', { timeout: 30000 });
+		await redPage.evaluate(() => {
+			const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+			g.handleForfeit();
+			g.handleForfeit();
+		});
+		let fin = null;
+		for (let i = 0; i < 40 && !(fin && fin.status === 'finished'); i++) {
+			await new Promise((r) => setTimeout(r, 500));
+			fin = await room();
+		}
+		check('a forfeit finishes the room for blue', fin.status === 'finished' && fin.winner === 'blue'
+			// Either client may close it: blue's sees the forfeit and finishes too.
+			&& fin.forfeitedBy === 'red' && !!fin.finishedBy, { status: fin.status, winner: fin.winner, forfeitedBy: fin.forfeitedBy, finishedBy: fin.finishedBy });
+		await bluePage.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).winner === 'blue', { timeout: 20000 })
+			.then(() => check('blue\'s screen shows the win', true), () => check('blue\'s screen shows the win', false));
 	} catch (e) {
 		console.log('FAIL exception', e.message);
 		ok = false;
