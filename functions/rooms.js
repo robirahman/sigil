@@ -8,21 +8,21 @@ const { flagged, sideToMove, CLOCK_GRACE_MS } = require('./rating');
 
 /**
  * End a room the server decided (a flag nobody's tab saw, an abort after
- * both players moved): the result, then the status, as the clients do
- * (firebase-sync.js). recordRoom records it from there.
+ * both players moved): the result, the status and closedAt in one
+ * transaction on the room, so it is never half finished. recordRoom
+ * records it from there.
  */
 async function finishRoom(db, code, from, result) {
 	const ref = db.ref('rooms/' + code);
+	const now = Date.now();
 	// A transaction first runs on the local cache, empty here (null): answer
-	// it too, and the server reruns it on the real status.
-	const res = await ref.child('status').transaction((cur) => (cur === from || cur === null ? 'finishing' : undefined));
-	if (res.snapshot.val() !== 'finishing') return false;
-	if (!res.committed) return false;
-	await ref.update(Object.assign({ finishedAt: Date.now() }, result));
-	// 'finishing' is never a client state: a client write in between is
-	// refused (status rules), and recordRoom fires on this last write.
-	await ref.child('status').set('finished');
-	return true;
+	// it unchanged, and the server reruns it on the real room.
+	const res = await ref.transaction((room) => {
+		if (room === null) return null;
+		if (room.status !== from) return undefined;
+		return Object.assign(room, result, { status: 'finished', closedAt: now, finishedAt: now });
+	});
+	return !!(res.committed && res.snapshot.val() && res.snapshot.val().closedAt === now);
 }
 
 /**

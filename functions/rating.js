@@ -113,7 +113,10 @@ function abandoned(room, loser, now) {
 	const seat = room[loser] || {};
 	if (tc.type === 'correspondence') return false;
 	if (roomTurns(room).length < 2) return false;
-	return seat.connected === false && typeof seat.disconnectedAt === 'number'
+	// Gone means no live connection (each tab holds one in `conns`); seats
+	// of older clients without conns go by their flag.
+	const live = seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected !== false;
+	return !live && typeof seat.disconnectedAt === 'number'
 		&& now - seat.disconnectedAt >= ABANDON_GRACE_MS - CLOCK_GRACE_MS;
 }
 
