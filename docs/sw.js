@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v82';
+const CACHE_VERSION = 'v83';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -46,6 +46,7 @@ const SAME_ORIGIN_PRECACHE = [
 	// The puzzle set (the page fetches it no-cache; this makes it work offline
 	// from the first visit).
 	'./static/puzzles/mate_puzzles.json',
+	'./static/scripts/puzzle-rating.js',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',

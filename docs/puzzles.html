@@ -94,6 +94,7 @@
 			}
 			.puzzle-panel__filter select option { color: #222; }
 			.puzzle-panel__daily { color: #f0d77a; }
+			.puzzle-panel__rating { margin-top: 4px; color: var(--color-text-warm, #eee); }
 			.puzzle-panel__tags { color: var(--color-text-muted, #aaa); font-size: 0.85em; margin: 0 0 6px; }
 			.puzzle-loading { padding: 80px 0; text-align: center; color: var(--color-text-muted, #aaa); }
 		</style>
@@ -164,11 +165,13 @@
 									<button class="action-button" x-on:click="puzzleShowSolution()" x-show="puzzleStatus !== 'solved' && puzzleStatus !== 'revealed'">Show solution</button>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.prev" x-show="window.SIGIL_PUZZLE_NAV.prev">&larr; Previous</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.next" x-show="window.SIGIL_PUZZLE_NAV.next">Next &rarr;</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.rated" title="An unattempted puzzle near your rating">Next rated</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random">Random</a>
 								</div>
 								<div class="puzzle-panel__progress">
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>
 									<span class="puzzle-panel__daily" id="puzzle-daily-status"></span>
+									<div class="puzzle-panel__rating" id="puzzle-rating-status"></div>
 									<div class="puzzle-panel__filters" x-html="window.SIGIL_PUZZLE_FILTER_HTML"></div>
 								</div>
 							</div>
@@ -359,6 +362,7 @@
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js"></script>
 		<script src="static/scripts/engine/position-rating.js?v=34"></script>
+		<script src="static/scripts/puzzle-rating.js"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
@@ -511,8 +515,18 @@
 				} else if (params.has('id')) {
 					pos = pool.findIndex(p => p.id === params.get('id'));
 				}
+				// The viewer's puzzle rating (Firebase when signed in, else this device).
+				let viewer = null;
+				try {
+					viewer = typeof firebaseAuthSettled === 'function' ? await firebaseAuthSettled() : null;
+					if (viewer && viewer.isAnonymous) viewer = null;
+				} catch (e) { viewer = null; }
+				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
+				try { rated = await loadPuzzleRating(viewer); } catch (e) { /* offline: defaults */ }
 				if (pos < 0) {
-					pos = pool.findIndex(p => !solved[p.id]);
+					// No pick: an unattempted puzzle near the player's rating.
+					const next = pickRatedPuzzle(pool, rated.rating, rated.attempts, solved);
+					pos = next ? pool.indexOf(next) : 0;
 					if (pos < 0) pos = 0;
 				}
 				const puzzle = pool[pos];
@@ -538,7 +552,10 @@
 					return r;
 				};
 				window.SIGIL_PUZZLE = puzzle;
-				window.SIGIL_PUZZLE_NAV = daily ? { prev: '', next: '', random: link(randomOther()) } : {
+				const ratedQuery = daily ? '' : query().toString();
+				const ratedLink = 'puzzles.html' + (ratedQuery ? '?' + ratedQuery : '');
+				window.SIGIL_PUZZLE_NAV = daily ? { prev: '', next: '', random: link(randomOther()), rated: 'puzzles.html' } : {
+					rated: ratedLink,
 					prev: pos > 0 ? link(pool[pos - 1]) : '',
 					next: pos < pool.length - 1 ? link(pool[pos + 1]) : '',
 					random: link(randomOther()),
@@ -584,8 +601,28 @@
 					+ '</span>';
 
 				// Daily puzzle bookkeeping (the board reports each result).
+				const ratingEl = document.getElementById('puzzle-rating-status');
+				const showRating = (extra) => {
+					ratingEl.textContent = 'Your puzzle rating: ' + rated.rating
+						+ (rated.signedIn ? '' : ' (this device; sign in to keep it)')
+						+ ' · this puzzle: ' + puzzleNow.rating + (extra || '');
+				};
+				let puzzleNow = { rating: Math.round(puzzle.rating || PUZZLE_RATING_START), plays: 0 };
+				showRating();
+				loadPuzzleCurrentRating(puzzle).then((r) => { puzzleNow = r; showRating(); }).catch(() => {});
+				let rating_recorded = false;
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
-					if (!daily || p.id !== puzzle.id) return;
+					if (p.id !== puzzle.id) return;
+					if (!rating_recorded) {
+						rating_recorded = true;
+						recordPuzzleResult(viewer, puzzle, status === 'solved').then((r) => {
+							if (!r) { showRating(' · already attempted, rating unchanged'); return; }
+							rated.rating = r.after;
+							puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
+							showRating(' · ' + (r.delta >= 0 ? '+' : '') + r.delta);
+						}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); });
+					}
+					if (!daily) return;
 					const d = recordDaily(today, status);
 					document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
 				};
