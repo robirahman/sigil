@@ -103,6 +103,44 @@
 		}
 		.signin-msg a { color: var(--color-accent); text-decoration: none; }
 		.signin-msg a:hover { text-decoration: underline; }
+		.games-section h3 {
+			font-family: 'Arvo', serif;
+			color: var(--color-text-warm);
+			font-size: 1.05em;
+			margin: 20px 0 8px;
+		}
+		.games-section__none {
+			color: var(--color-text-dim);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			margin: 0 0 8px;
+		}
+		.notify-controls {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px 16px;
+			align-items: center;
+			justify-content: center;
+			margin: 0 0 12px;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-dim);
+			font-size: 0.9em;
+		}
+		.notify-controls button {
+			padding: 6px 12px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			cursor: pointer;
+		}
+		.notify-controls label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+		@media (max-width: 480px) {
+			.active-games { padding: 16px; }
+			.game-card { grid-template-columns: 1fr auto; }
+			.game-card__resume { display: none; }
+		}
 		.back-link {
 			display: inline-block;
 			margin-top: 20px;
@@ -144,27 +182,68 @@
 				No ongoing games. <a class="back-link" href="multiplayer.html" style="margin: 0;">Start a new game &rarr;</a>
 			</p>
 
-			<div class="games-list" x-show="!loading && games.length > 0" x-cloak>
-				<template x-for="g in sortedGames" x-bind:key="g.roomCode">
-					<a class="game-card" x-bind:class="{ 'game-card--your-turn': g.isYourTurn }" x-bind:href="'multiplayer.html?id=' + g.roomCode">
-						<div class="game-card__main">
-							<div class="game-card__opp" x-text="g.opponentDisplayName || 'Waiting for opponent...'"></div>
-							<div class="game-card__meta">
-								Playing
-								<span class="game-card__color" x-bind:class="'game-card__color--' + g.myColor" x-text="g.myColor === 'red' ? 'Red' : 'Blue'"></span>
-								&middot;
-								<span x-text="g.timeControlLabel"></span>
-								&middot;
-								<span class="game-card__code" style="font-family: monospace;" x-text="g.roomCode"></span>
+			<div class="notify-controls" x-show="authUser && !isOffline" x-cloak>
+				<button type="button" class="notify-tab-btn" x-show="notifyPermission === 'default'" x-on:click="allowTabNotifications()">Notify me in open tabs</button>
+				<span x-show="notifyPermission === 'granted' && !pushOn">Open tabs will tell you when it's your move.</span>
+				<span x-show="notifyPermission === 'denied'">Notifications are blocked for this site in your browser.</span>
+				<label class="push-toggle" x-show="pushAvailable">
+					<input type="checkbox" x-bind:checked="pushOn" x-bind:disabled="pushBusy" x-on:change="togglePush($event.target.checked)" />
+					Notify me when it's my move
+				</label>
+				<span x-show="pushError" x-text="pushError"></span>
+			</div>
+
+			<div class="games-section games-section--yours" x-show="!loading && games.length > 0" x-cloak>
+				<h3>Your move (<span class="your-move-count" x-text="yourGames.length"></span>)</h3>
+				<p class="games-section__none" x-show="yourGames.length === 0">Nothing to play right now.</p>
+				<div class="games-list">
+					<template x-for="g in yourGames" x-bind:key="g.roomCode">
+						<a class="game-card" x-bind:class="{ 'game-card--your-turn': g.isYourTurn }" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-bind:data-room="g.roomCode">
+							<div class="game-card__main">
+								<div class="game-card__opp" x-text="g.opponentDisplayName || 'Waiting for opponent...'"></div>
+								<div class="game-card__meta">
+									Playing
+									<span class="game-card__color" x-bind:class="'game-card__color--' + g.myColor" x-text="g.myColor === 'red' ? 'Red' : 'Blue'"></span>
+									&middot;
+									<span x-text="g.timeControlLabel"></span>
+									&middot;
+									<span class="game-card__code" style="font-family: monospace;" x-text="g.roomCode"></span>
+								</div>
 							</div>
-						</div>
-						<div>
-							<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.isYourTurn && g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
-							<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
-						</div>
-						<span class="game-card__resume">Resume</span>
-					</a>
-				</template>
+							<div>
+								<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
+								<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+							</div>
+							<span class="game-card__resume" x-text="g.isYourTurn ? 'Play' : 'Open'"></span>
+						</a>
+					</template>
+				</div>
+			</div>
+
+			<div class="games-section games-section--waiting" x-show="!loading && waitingGames.length > 0" x-cloak>
+				<h3>Waiting for opponent</h3>
+				<div class="games-list">
+					<template x-for="g in waitingGames" x-bind:key="g.roomCode">
+						<a class="game-card" x-bind:class="{ 'game-card--your-turn': g.isYourTurn }" x-bind:href="'multiplayer.html?id=' + g.roomCode" x-bind:data-room="g.roomCode">
+							<div class="game-card__main">
+								<div class="game-card__opp" x-text="g.opponentDisplayName || 'Waiting for opponent...'"></div>
+								<div class="game-card__meta">
+									Playing
+									<span class="game-card__color" x-bind:class="'game-card__color--' + g.myColor" x-text="g.myColor === 'red' ? 'Red' : 'Blue'"></span>
+									&middot;
+									<span x-text="g.timeControlLabel"></span>
+									&middot;
+									<span class="game-card__code" style="font-family: monospace;" x-text="g.roomCode"></span>
+								</div>
+							</div>
+							<div>
+								<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
+								<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+							</div>
+							<span class="game-card__resume" x-text="g.isYourTurn ? 'Play' : 'Open'"></span>
+						</a>
+					</template>
+				</div>
 			</div>
 
 			<div style="text-align: center;">
@@ -177,6 +256,8 @@
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<!-- Web push for "Notify me when it's my move" (turn-notify.js). -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 	<script>
 		firebase.initializeApp({
 			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
@@ -188,6 +269,8 @@
 			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 		});
 	</script>
+	<!-- Whose move and how long they have, by the server's rule. -->
+	<script src="static/scripts/engine/room-clock.js"></script>
 	<script src="static/scripts/auth-status.js"></script>
 
 	<script>
@@ -203,11 +286,20 @@
 				_tickHandle: null,
 				_now: Date.now(),
 
-				get sortedGames() {
-					// Lower sortKey first; type 'none' / no clock pressure becomes Infinity.
-					const list = this.games.slice();
-					list.sort((a, b) => a.sortKey - b.sortKey);
-					return list;
+				notifyPermission: ('Notification' in window) ? Notification.permission : 'unsupported',
+				pushAvailable: false,
+				pushOn: false,
+				pushBusy: false,
+				pushError: '',
+
+				/** Games where it is your move, the least time left first. */
+				get yourGames() {
+					return this.games.filter((g) => g.isYourTurn).sort((a, b) => a.sortKey - b.sortKey);
+				},
+
+				/** Everything else: the opponent's move, then open invites. */
+				get waitingGames() {
+					return this.games.filter((g) => !g.isYourTurn).sort((a, b) => a.sortKey - b.sortKey);
 				},
 
 				init() {
@@ -233,6 +325,7 @@
 							return;
 						}
 						this.authUser = user;
+						this._refreshPushState();
 						await this._loadGames(db, user.uid);
 						this.loading = false;
 						// Tick once a second to update displayed clocks
@@ -244,6 +337,43 @@
 						}
 					});
 				},
+
+				// ---- Notifications (turn-notify.js) ----
+
+				async allowTabNotifications() {
+					if (!window.SigilTurns) return;
+					this.notifyPermission = await SigilTurns.requestPermission();
+				},
+
+				async _refreshPushState() {
+					// turn-notify.js is loaded by auth-status.js; wait for it.
+					for (let i = 0; i < 50 && !window.SigilTurns; i++) await new Promise((r) => setTimeout(r, 100));
+					if (!window.SigilTurns) return;
+					this.pushAvailable = SigilTurns.pushSupported();
+					this.pushOn = this.pushAvailable ? await SigilTurns.pushEnabled() : false;
+				},
+
+				async togglePush(on) {
+					this.pushBusy = true;
+					this.pushError = '';
+					try {
+						if (on) {
+							this.pushOn = await SigilTurns.enablePush();
+							if (!this.pushOn) this.pushError = 'Notifications were not allowed.';
+						} else {
+							await SigilTurns.disablePush();
+							this.pushOn = false;
+						}
+					} catch (e) {
+						console.warn('Push toggle failed:', e);
+						this.pushError = 'Could not turn notifications ' + (on ? 'on' : 'off') + '.';
+						this.pushOn = !on && this.pushOn;
+					}
+					if ('Notification' in window) this.notifyPermission = Notification.permission;
+					this.pushBusy = false;
+				},
+
+				// ---- Games ----
 
 				async _loadGames(db, uid) {
 					let entries = {};
@@ -284,9 +414,8 @@
 						opponentUid: entry.opponentUid || null,
 						timeControl: { type: tcType },
 						timeControlType: tcType,
-						timer: null,
+						room: null,
 						status: 'unknown',
-						nextTurnColor: 'red',
 						isYourTurn: false,
 						clockText: '',
 						statusText: 'Loading...',
@@ -308,8 +437,8 @@
 						const created = (room && room.created) || (this.games[idx] && this.games[idx].created) || 0;
 						const isExpiredWaiting = room && room.status === 'waiting' && created && (now - created > ROOM_INVITE_EXPIRY_MS);
 
-						if (!room || room.status === 'finished' || room.status === 'expired' || isExpiredWaiting) {
-							// Game finished or invite expired — drop from list and clean up the index.
+						if (!room || room.status === 'finished' || room.status === 'expired' || room.status === 'aborted' || isExpiredWaiting) {
+							// Game over or invite expired — drop from list and clean up the index.
 							this.games.splice(idx, 1);
 							ref.off();
 							db.ref('user_active_games/' + uid + '/' + code).remove().catch(() => {});
@@ -324,32 +453,28 @@
 						const opponentColor = g.myColor === 'red' ? 'blue' : 'red';
 						const opp = room[opponentColor] || {};
 						const tc = room.timeControl || { type: g.timeControlType };
-						const turnsPlayed = room.turns ? Object.keys(room.turns).length : 0;
 
 						g.opponentDisplayName = opp.displayName || g.opponentDisplayName || '';
 						g.opponentUid = opp.uid || g.opponentUid || null;
 						g.timeControl = tc;
 						g.timeControlType = tc.type || 'none';
 						g.timeControlLabel = this._formatTimeControl(tc);
-						g.timer = room.timer || null;
+						g.room = room;
 						g.status = room.status || 'unknown';
-						g.nextTurnColor = turnsPlayed % 2 === 0 ? 'red' : 'blue';
 
 						this._refreshDerivedFields();
 					});
 				},
 
 				/**
-				 * Recompute clock text, isYourTurn, sortKey for every game using the
-				 * current `_now` reading. Runs every second.
+				 * Whose move it is and the time left on the clock that is running,
+				 * for every game, at the current `_now`. Both come from the turns'
+				 * server timestamps (room-clock.js), the rule the server flags by
+				 * (functions/rating.js), not from the clients' timer node.
 				 *
-				 * Sort priority (ascending sortKey, lower = higher in list):
-				 *   phase 0  — my turn with a running clock (sorted by remaining ms)
-				 *   phase 1  — my turn but no clock pressure (correspondence opp moved, etc.)
-				 *   phase 2  — opponent's turn, my realtime clock has finite stored time
-				 *   phase 3  — opponent's turn under correspondence (no clock pressure)
-				 *   phase 4  — unlimited-time games (always last)
-				 *   phase 5  — waiting for opponent to join
+				 * sortKey (ascending, within each section): the running clock's
+				 * time left; untimed games, games before the first move and open
+				 * invites after every running clock.
 				 */
 				_refreshDerivedFields() {
 					const now = this._now + this._serverTimeOffset;
@@ -357,7 +482,6 @@
 					for (let i = this.games.length - 1; i >= 0; i--) {
 						const g = this.games[i];
 						const tc = g.timeControl || { type: g.timeControlType };
-						const timer = g.timer;
 						const status = g.status;
 
 						if (status === 'waiting') {
@@ -371,62 +495,31 @@
 							}
 							g.isYourTurn = false;
 							g.clockText = tc.type === 'none' ? '∞' : this._formatStored(tc, g.myColor);
-							g.statusText = 'Waiting';
-							g.sortKey = 5 * PHASE;
+							g.statusText = 'Invite open';
+							g.sortKey = 3 * PHASE;
 							g.urgencyLevel = 'normal';
 							continue;
 						}
+						if (!g.room) continue;
 
-						// Determine whose turn: prefer timer.activeColor, fall back to
-						// turns-played count (used for untimed games and games whose
-						// timer state hasn't been initialized yet).
-						const activeColor = (timer && timer.activeColor) || g.nextTurnColor;
-						const isYourTurn = activeColor === g.myColor;
+						const toMove = sideToMove(g.room);
+						const isYourTurn = toMove === g.myColor;
 						g.isYourTurn = isYourTurn;
-						g.statusText = isYourTurn ? 'Your turn' : "Opponent's turn";
+						g.statusText = isYourTurn ? 'Your move' : 'Their move';
+						const left = roomTimeLeft(g.room, toMove, now);
 
-						if (tc.type === 'none') {
-							g.clockText = '∞';
-							g.sortKey = 4 * PHASE + (isYourTurn ? 0 : 1);
+						if (left === null) {
+							// Untimed, or no move yet (the first move is never charged).
+							g.clockText = tc.type === 'none' ? '∞' : this._formatStored(tc, g.myColor);
+							g.sortKey = (tc.type === 'none' ? 2 : 1) * PHASE;
 							g.urgencyLevel = 'normal';
 							continue;
 						}
-
-						if (tc.type === 'realtime') {
-							const myStored = (timer && typeof timer[g.myColor] === 'number') ? timer[g.myColor] : (tc.initialTime || 0);
-							const elapsed = (timer && timer.lastUpdated) ? Math.max(0, now - timer.lastUpdated) : 0;
-							const myRemaining = isYourTurn ? Math.max(0, myStored - elapsed) : myStored;
-							g.clockText = this._formatRealtime(myRemaining);
-							g.sortKey = isYourTurn ? myRemaining : (2 * PHASE + myStored);
-							g.urgencyLevel = (isYourTurn && myRemaining < 30000) ? 'low' : 'normal';
-							continue;
-						}
-
-						if (tc.type === 'correspondence') {
-							if (isYourTurn) {
-								const myDeadline = (timer && timer[g.myColor]) || 0;
-								if (myDeadline > 0) {
-									const remaining = Math.max(0, myDeadline - now);
-									g.clockText = this._formatCorrespondence(remaining);
-									g.sortKey = remaining;
-									g.urgencyLevel = remaining < 60 * 60 * 1000 ? 'low' : 'normal';
-								} else {
-									// Deadline not yet recorded for this turn (e.g. opponent
-									// just made a move that didn't write timer state).
-									g.clockText = this._formatCorrespondence(tc.moveTimeout || 0);
-									g.sortKey = 1 * PHASE;
-									g.urgencyLevel = 'normal';
-								}
-							} else {
-								g.clockText = '—';
-								g.sortKey = 3 * PHASE;
-								g.urgencyLevel = 'normal';
-							}
-							continue;
-						}
-
-						g.clockText = '';
-						g.sortKey = 4 * PHASE;
+						const ms = Math.max(0, left);
+						g.clockText = tc.type === 'correspondence' ? this._formatCorrespondence(ms) : this._formatRealtime(ms);
+						g.sortKey = ms;
+						const low = tc.type === 'correspondence' ? 60 * 60 * 1000 : 30000;
+						g.urgencyLevel = isYourTurn && ms < low ? 'low' : 'normal';
 					}
 				},
 
@@ -435,7 +528,7 @@
 						return this._formatRealtime(tc.initialTime || 0);
 					}
 					if (tc.type === 'correspondence') {
-						return '—';
+						return this._formatCorrespondence(tc.moveTimeout || 0);
 					}
 					return '';
 				},

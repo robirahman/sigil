@@ -98,6 +98,9 @@
           ".validate": "newData.isBoolean()"
         },
         "turns": {
+          ".indexOn": [
+            "timestamp"
+          ],
           "$turnId": {
             ".write": "auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))",
             ".validate": "newData.hasChildren(['color', 'actions', 'timestamp']) && newData.child('timestamp').val() === now"
@@ -236,6 +239,18 @@
         ".read": true,
         "$roomCode": {
           ".write": "auth !== null && (auth.uid === $uid || (!newData.exists() && (root.child('rooms/' + $roomCode + '/red/uid').val() === auth.uid || root.child('rooms/' + $roomCode + '/blue/uid').val() === auth.uid)))"
+        }
+      }
+    },
+    "push_tokens": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        "$tokenHash": {
+          ".write": "auth !== null && auth.uid === $uid",
+          ".validate": "$tokenHash.matches(/^[0-9a-f]{32}$/) && newData.hasChildren(['token', 'created']) && newData.child('token').isString() && newData.child('token').val().length <= 4096 && newData.child('created').val() === now",
+          "$other": {
+            ".validate": "$other === 'token' || $other === 'created'"
+          }
         }
       }
     },

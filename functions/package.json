@@ -2,7 +2,7 @@
   "name": "sigil-functions",
   "description": "Firebase Cloud Functions for Sigil Online: server-side game rating and account deletion",
   "scripts": {
-    "test": "node --test test/rating.test.js",
+    "test": "node --test test/rating.test.js test/notify.test.js",
     "test:rules": "firebase emulators:exec --only database --project demo-sigil 'node --test test/rules.test.js'",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
