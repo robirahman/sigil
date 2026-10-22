@@ -51,6 +51,13 @@ document.addEventListener('alpine:init', () => {
 			blueTimer: 0,
 			timerType: 'none',
 			isSpectator: false,
+			// Rated / Casual badge, and why a casual room is unrated.
+			ranked: false,
+			unratedText: '',
+			// Spectators watching, shown to the players.
+			spectatorCount: 0,
+			// This player's rating line once the server has rated the game.
+			ratingText: '',
 
 			// Game review state
 			reviewMode: false,
@@ -612,6 +619,8 @@ document.addEventListener('alpine:init', () => {
 					_this.timerType = (timeControl && timeControl.type) || 'none';
 					_this.isSpectator = isSpectator || false;
 					_this.myColor = myColor || '';
+					_this.ranked = !!state.ranked;
+					_this.unratedText = state.ranked ? '' : describeUnratedReason(state.unratedWhy);
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
 					_this.isDeveloper = !!state.isDeveloper;
 					_this.showAiEval = !!state.showAiEval;
@@ -662,6 +671,7 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					_this._engine = engine;
+					if (!isSpectator && sync) sync.listenToSpectators((n) => { _this.spectatorCount = n; });
 					// A spectator who arrives before the first move of a room
 					// from a position replays from its start.
 					engine.startGame(reconnectSfn || (isSpectator && sync && sync.startSfn) || null);
@@ -828,6 +838,10 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'rematch_room_ready') {
 						window.location.href = 'multiplayer.html?id=' + encodeURIComponent(rest.newRoomCode);
+					}
+					else if (type === 'rating_result') {
+						_this.ratingText = rest.text;
+						_this.messageHistory.push(rest.text);
 					}
 					else if (type === 'opponent_disconnect') {
 						_this.rematchOpponentDisconnected = true;

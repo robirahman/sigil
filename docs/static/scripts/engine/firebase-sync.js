@@ -34,6 +34,8 @@ class FirebaseSync {
 		this.blueUid = null;
 		this.blueDisplayName = null;
 		this.ranked = false;
+		// Why the room is unrated (roomUnratedReason), null when rated.
+		this.unratedWhy = null;
 		// A room from a position: the start SFN, its priced start
 		// (position-rating.js) and the creator's seat (red otherwise).
 		this.startSfn = null;
@@ -137,6 +139,7 @@ class FirebaseSync {
 				}
 			}
 			this.ranked = !!data.ranked;
+			this.unratedWhy = this.ranked ? null : roomUnratedReason(data);
 		} catch (e) {
 			console.warn('[Sync] could not read the joined room:', e);
 		}
@@ -197,9 +200,8 @@ class FirebaseSync {
 			// Ranked: both players signed in to real accounts, and a game the
 			// shared rule (elo.js unratedReason) rates. The rating function
 			// checks both again.
-			const creatorAnon = !!(data[creator] && data[creator].anon);
-			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !creatorAnon
-				&& !unratedReason(data.spellNames, data.variant, this.startSfn, this.startPos));
+			this.unratedWhy = roomUnratedReason(data, userInfo);
+			this.ranked = !this.unratedWhy;
 
 			// Seat, status and ranked in ONE write: the creator's join
 			// listener then reads them together (_refreshPlayers).
@@ -290,6 +292,7 @@ class FirebaseSync {
 				}
 			}
 			this.ranked = data.ranked || false;
+			this.unratedWhy = this.ranked ? null : roomUnratedReason(data);
 
 			await roomRef.child(this.myColor + '/connected').set(true);
 			roomRef.child(this.myColor + '/connected').onDisconnect().set(false);
@@ -335,6 +338,8 @@ class FirebaseSync {
 				this[c + 'DisplayName'] = data[c].displayName || 'Guest';
 			}
 		}
+		this.ranked = !!data.ranked;
+		this.unratedWhy = this.ranked ? null : roomUnratedReason(data);
 
 		// Register spectator presence
 		const specRef = this.roomRef.child('spectators').push();
@@ -574,6 +579,38 @@ class FirebaseSync {
 			} catch (e) {
 				console.error('[Sync] listenForFinish read failed:', e);
 			}
+		});
+	}
+
+	/**
+	 * Follow the number of spectators watching this room.
+	 * @param {function} callback - receives the count
+	 */
+	listenToSpectators(callback) {
+		if (!this.roomRef) return;
+		this.roomRef.child('spectators').on('value', (snap) => callback(snap.numChildren()));
+	}
+
+	/**
+	 * Wait for the completed_games key of this finished room, which the
+	 * server writes to rooms/{code}/gameId when it records the game.
+	 * Resolves with the key, or null when it did not arrive in time.
+	 */
+	awaitGameId(timeoutMs) {
+		if (!this.roomRef) return Promise.resolve(null);
+		const ref = this.roomRef.child('gameId');
+		return new Promise((resolve) => {
+			let timer = null;
+			const done = (v) => {
+				clearTimeout(timer);
+				ref.off('value', onValue);
+				resolve(v);
+			};
+			const onValue = (snap) => {
+				if (typeof snap.val() === 'string') done(snap.val());
+			};
+			timer = setTimeout(() => done(null), timeoutMs || 60000);
+			ref.on('value', onValue, () => done(null));
 		});
 	}
 
@@ -887,6 +924,23 @@ class FirebaseSync {
 		if (!this.roomRef) return;
 		await this.roomRef.child('rematch/newRoomCode').set(code);
 	}
+}
+
+/**
+ * Why a room is (or would be) unrated, or null when it is rated: both seats
+ * need full (non-anonymous) accounts, and the game must pass the shared rule
+ * (elo.js unratedReason). `joiner` ({ uid, isAnonymous }, as userInfo) fills
+ * the open seat of a room not yet joined; omit it for a joined room.
+ * @returns {null|string} 'guest-account' or an unratedReason code
+ */
+function roomUnratedReason(data, joiner) {
+	const creator = data.creatorColor === 'blue' ? 'blue' : 'red';
+	const seats = { red: data.red || {}, blue: data.blue || {} };
+	if (joiner !== undefined) {
+		seats[creator === 'red' ? 'blue' : 'red'] = { uid: (joiner && joiner.uid) || null, anon: !!(joiner && joiner.isAnonymous) };
+	}
+	if (!seats.red.uid || !seats.blue.uid || seats.red.anon || seats.blue.anon) return 'guest-account';
+	return unratedReason(data.spellNames, data.variant, data.startSfn || null, data.startPos || null);
 }
 
 function _generateRoomCode() {
