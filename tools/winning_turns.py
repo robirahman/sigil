@@ -103,10 +103,12 @@ def mover_prob(E, sfn, mover, depth, time_ms=0):
 
 
 def key_of(sfn):
-    """Position identity (stones, counters, locks, springlocks), as
-    gen_mate_puzzles.sfn_key and the page's puzzleSfnKey."""
+    """Position identity (stones, counters, locks, springlocks, Providence
+    banks), as gen_mate_puzzles.sfn_key and the page's puzzleSfnKey."""
     p = sfn.split()
-    return ' '.join([p[0].split('/')[0], p[3], p[4], p[5]])
+    key = ' '.join([p[0].split('/')[0], p[3], p[4], p[5]])
+    pm = next((t for t in p[6:] if t.startswith('pm:')), None)
+    return key + ' ' + pm if pm else key
 
 
 def analyze_position(sfn, played_after=None, diag=False):

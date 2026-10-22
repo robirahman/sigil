@@ -152,7 +152,10 @@ def sfn_key(sfn):
     token: the JS records a turn's after-state with the mover still marked
     to move, the engine with the side flipped; both share these tokens."""
     p = sfn.split()
-    return ' '.join([p[0].split('/')[0], p[3], p[4], p[5]])   # spells dropped: constant per puzzle
+    key = ' '.join([p[0].split('/')[0], p[3], p[4], p[5]])   # spells dropped: constant per puzzle
+    # Providence banks (`pm:r:b`) are game state the stone field does not show.
+    pm = next((t for t in p[6:] if t.startswith('pm:')), None)
+    return key + ' ' + pm if pm else key
 
 
 def _solve_one(item):
@@ -569,8 +572,8 @@ def main():
                  'mover': w['mover'], 'sfn': s, 'variant': variant, 'turn': pos['turn'], 'game': game,
                  'played': w.get('played') if pos['after'] else None, 'mover_human': mover_human,
                  'p_best': w['p_best'], 'p_second': w['p_second'], 'accept_p': w['accept_p'],
-                 'solution_keys': [x['key'] for x in w['solutions']],
-                 'solutions': [{'actions': x['actions'], 'after': x['after'], 'key': x['key'], 'p': x['p']}
+                 'solution_keys': [sfn_key(x['after']) for x in w['solutions']],
+                 'solutions': [{'actions': x['actions'], 'after': x['after'], 'key': sfn_key(x['after']), 'p': x['p']}
                                for x in sols]}
             puzzles.append(p)
             by_pos[pk] = p

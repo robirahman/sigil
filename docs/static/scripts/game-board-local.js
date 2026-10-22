@@ -2602,7 +2602,10 @@ function puzzleSfnKey(sfn) {
 	const p = String(sfn || '').trim().split(/\s+/);
 	// The spell list after '/' is constant within a puzzle, so it is dropped
 	// to keep the stored key lists small (39 stone chars + counters + locks).
-	return [String(p[0]).split('/')[0], p[3], p[4], p[5]].join(' ');
+	// Providence banks (`pm:r:b`) are state the stone field does not show.
+	const key = [String(p[0]).split('/')[0], p[3], p[4], p[5]].join(' ');
+	const pm = p.slice(6).find(t => t.startsWith('pm:'));
+	return pm ? key + ' ' + pm : key;
 }
 
 /**
