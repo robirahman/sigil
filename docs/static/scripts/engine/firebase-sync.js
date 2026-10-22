@@ -496,27 +496,27 @@ class FirebaseSync {
 		if (!this.roomRef) { console.error('[Sync] sendTurn: no roomRef!'); return; }
 		console.log('[Sync] sendTurn:', this.myColor, actions);
 		try {
+			// One write: the turn, the timer, and the end of any takeback
+			// request. `after` names the turn this one follows; the rules
+			// refuse it if a takeback has removed that turn, and an accepted
+			// takeback can no longer remove turns once the request is gone,
+			// so a move and an acceptance can never both land.
+			const turnKey = this.roomRef.child('turns').push().key;
+			const keys = this._turnKeys || [];
+			const turn = {
+				color: this.myColor,
+				actions: actions,
+				timestamp: firebase.database.ServerValue.TIMESTAMP,
+			};
+			if (keys.length) turn.after = keys[keys.length - 1];
+			const updates = { ['turns/' + turnKey]: turn, takeback: null };
 			if (timerUpdate) {
-				// Atomic multi-path update: turn + timer in one write
-				const turnKey = this.roomRef.child('turns').push().key;
-				const updates = {};
-				updates['turns/' + turnKey] = {
-					color: this.myColor,
-					actions: actions,
-					timestamp: firebase.database.ServerValue.TIMESTAMP,
-				};
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
 				updates['timer/activeColor'] = timerUpdate.activeColor;
 				updates['timer/lastUpdated'] = firebase.database.ServerValue.TIMESTAMP;
-				await this._track(this.roomRef.update(updates));
-			} else {
-				await this._track(this.roomRef.child('turns').push({
-					color: this.myColor,
-					actions: actions,
-					timestamp: firebase.database.ServerValue.TIMESTAMP,
-				}));
 			}
+			await this._track(this.roomRef.update(updates));
 			console.log('[Sync] sendTurn succeeded');
 		} catch (e) {
 			console.error('[Sync] sendTurn FAILED:', e.code, e.message);
@@ -685,6 +685,11 @@ class FirebaseSync {
 		// Every turn in the room, including those before a reload (the
 		// controller's log holds only the turns since).
 		this._turnKeys = [];
+		// A takeback both players agreed to removes turns: start over from
+		// the room (the reconnect path rebuilds from currentSfn).
+		turnsRef.on('child_removed', () => {
+			if (this.onTurnsRemoved) this.onTurnsRemoved();
+		});
 		turnsRef.on('child_added', (snap) => {
 			this._turnKeys.push(snap.key);
 			if (skipped < existingCount) {
@@ -835,6 +840,82 @@ class FirebaseSync {
 			this._removeActiveGameIndex();
 		} catch (e) {
 			console.error('[Sync] abortGame FAILED:', e.code, e.message);
+		}
+	}
+
+	/* ----- Takebacks by agreement ----- */
+
+	/**
+	 * Ask to take back our last turn, and the opponent's reply if they have
+	 * moved since: rooms/{code}/takeback names the turns to remove. Only the
+	 * opponent can remove them (database.rules.json), by accepting.
+	 */
+	async requestTakeback() {
+		if (!this.roomRef || !this._turnKeys || !this._turnKeys.length) return false;
+		const turns = (await this.roomRef.child('turns').once('value')).val() || {};
+		const keys = this._turnKeys.filter((k) => turns[k]);
+		const lastMine = keys.length && turns[keys[keys.length - 1]].color === this.myColor;
+		const undo = keys.slice(lastMine ? -1 : -2);
+		if (!undo.length || turns[undo[0]].color !== this.myColor) return false;
+		const map = {};
+		for (const k of undo) map[k] = true;
+		try {
+			await this.roomRef.child('takeback').set({ by: this.myColor, keys: map, at: firebase.database.ServerValue.TIMESTAMP });
+			return true;
+		} catch (e) {
+			console.error('[Sync] requestTakeback FAILED:', e.code, e.message);
+			return false;
+		}
+	}
+
+	/** Watch the takeback request: callback(request or null). */
+	listenForTakeback(callback) {
+		if (!this.roomRef) return;
+		this.roomRef.child('takeback').on('value', (snap) => {
+			this._takeback = snap.val();
+			callback(this._takeback);
+		});
+	}
+
+	/** Withdraw our request, or decline the opponent's. */
+	async clearTakeback() {
+		if (!this.roomRef) return;
+		try { await this.roomRef.child('takeback').remove(); } catch (e) { /* already gone */ }
+	}
+
+	/**
+	 * Accept the opponent's request: remove its turns (they must be the
+	 * last ones played) and set the position before them, in one write.
+	 * @param {object} req - the takeback request
+	 * @param {string|null} sfn - the position after the last turn kept
+	 *   (null: back to the start)
+	 */
+	async acceptTakeback(req, sfn) {
+		if (!this.roomRef || !req || !req.keys) return false;
+		const undo = Object.keys(req.keys);
+		const tail = (this._turnKeys || []).slice(-undo.length);
+		if (undo.some((k) => !tail.includes(k))) {
+			await this.clearTakeback();
+			return false;
+		}
+		const updates = { takeback: null, currentSfn: sfn || null };
+		for (const k of undo) updates['turns/' + k] = null;
+		// The requester is to move again: their clock runs (a correspondence
+		// deadline restarts from now).
+		const timer = (await this.roomRef.child('timer').once('value')).val();
+		if (timer && this.timeControl && this.timeControl.type !== 'none') {
+			updates['timer/activeColor'] = req.by;
+			updates['timer/lastUpdated'] = firebase.database.ServerValue.TIMESTAMP;
+			if (this.timeControl.type === 'correspondence' && this.timeControl.moveTimeout) {
+				updates['timer/' + req.by] = this.serverNow() + this.timeControl.moveTimeout;
+			}
+		}
+		try {
+			await this._track(this.roomRef.update(updates));
+			return true;
+		} catch (e) {
+			console.error('[Sync] acceptTakeback FAILED:', e.code, e.message);
+			return false;
 		}
 	}
 
