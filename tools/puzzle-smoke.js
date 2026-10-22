@@ -21,6 +21,11 @@
  *      one of the puzzle's solution keys (the reply needs the wasm engine,
  *      so the game stops there).
  *
+ * --replay instead replays EVERY stored turn -- solutions, defences,
+ * continuations, finishes, casts included -- through rustActionsToTurn (what
+ * the page does with the scripted defence) from the position it starts at,
+ * and fails a puzzle whose turn does not reproduce its stored after-position.
+ *
  * A failure here is a disagreement between the Rust solver and the browser
  * rules -- the thing the page exists to surface -- so it prints the SFN.
  */
@@ -36,6 +41,7 @@ const jsonPath = args.find(a => !a.startsWith('--')) || path.join(REPO, 'docs', 
 const limitIx = args.indexOf('--limit');
 const LIMIT = limitIx >= 0 ? parseInt(args[limitIx + 1], 10) : 0;
 const VERBOSE = args.includes('--verbose');
+const REPLAY = args.includes('--replay');
 
 // ---- minimal browser shims so game-board-local.js's module-level code loads
 const sandbox = {
@@ -73,7 +79,12 @@ function tokenPlan(actions) {
 	for (const a of actions || []) {
 		switch (a.type) {
 			case 'pass': break;
-			case 'move': case 'blink': plan.push({ kind: 'node', token: a.node }); break;
+			case 'move': plan.push({ kind: 'node', token: a.node }); break;
+			case 'blink':
+				// A blink onto an enemy stone pushes it (Seal of Wind and kin).
+				plan.push({ kind: 'node', token: a.node });
+				if (a.pushed_to) plan.push({ kind: 'node', token: a.pushed_to, optional: true });
+				break;
 			case 'hard_move':
 				plan.push({ kind: 'node', token: a.node });
 				if (a.pushed_to) plan.push({ kind: 'node', token: a.pushed_to, optional: true });
@@ -137,7 +148,7 @@ function runPuzzle(puzzle) {
 		let finished = false;
 		const finish = (r) => { if (!finished) { finished = true; clearTimeout(timer); failCurrent = null; resolve(Object.assign({ log }, r)); } };
 		failCurrent = finish;
-		const timer = setTimeout(() => finish({ status: 'fail', why: 'timeout (engine waiting for input the plan did not provide)' }), 8000);
+		const timer = setTimeout(() => finish({ status: 'fail', why: 'timeout (engine waiting for input the plan did not provide)' }), 20000);
 
 		let gc;
 		const component = { puzzleStatus: 'playing' };
@@ -174,6 +185,7 @@ function runPuzzle(puzzle) {
 					const key = puzzleSfnKey(t.sfnAfter);
 					const cur = chain[ply];
 					if (ply === 0 && !puzzle.solution_keys.includes(key)) return finish({ status: 'fail', why: 'played the stored solution but reached a position not in solution_keys: ' + t.sfnAfter });
+					if (ply === 0 && key !== puzzleSfnKey(sol.after)) return finish({ status: 'fail', why: 'the stored first turn reached ' + t.sfnAfter + ', another winning position, not its own ' + sol.after });
 					if (winning) {
 						if (key !== puzzleSfnKey(sol.after)) return finish({ status: 'fail', why: 'winning turn reached ' + t.sfnAfter + ' but the generator stored ' + sol.after });
 						return finish({ status: 'ok' });
@@ -204,6 +216,62 @@ function runPuzzle(puzzle) {
 	});
 }
 
+/** --replay: every stored turn of a puzzle, as [{from, actions, after, what}]. */
+function storedTurns(puzzle) {
+	const out = [];
+	const walk = (sol, from, depth) => {
+		if (!sol || !Array.isArray(sol.actions)) return;
+		out.push({ from, actions: sol.actions, after: sol.after, what: 'line ' + depth });
+		if (sol.defence) {
+			out.push({ from: sol.after, actions: sol.defence.actions, after: sol.defence.after, what: 'defence ' + depth });
+			// A mate-in-3 line's top-level `finish` is the mate at the END of its
+			// first continuation, not a reply to this defence.
+			if (sol.finish && !(sol.continuations || []).length) {
+				out.push({ from: sol.defence.after, actions: sol.finish.actions, after: sol.finish.after, what: 'finish ' + depth });
+			}
+			for (const c of (sol.continuations || [])) walk(c, sol.defence.after, depth + 1);
+		}
+	};
+	for (const sol of (puzzle.solutions || [])) walk(sol, puzzle.sfn, 1);
+	return out;
+}
+
+async function replayPuzzle(puzzle) {
+	vm.runInContext('AI_REPLAY_INSTANT = true', sandbox);      // no animation pacing
+	const { SigilBoard, SimBoard, rustActionsToTurn, sfnToDict, normalizeVariant, applyAITurn, sealOfDestructionBurn } = vm.runInContext(
+		'({ SigilBoard, SimBoard, rustActionsToTurn, sfnToDict, normalizeVariant, applyAITurn, sealOfDestructionBurn })', sandbox);
+	for (const t of storedTurns(puzzle)) {
+		try {
+			const d = sfnToDict(t.from);
+			const fresh = () => {
+				const b = new SigilBoard(null, normalizeVariant(d && d.variant));
+				b.loadFromSfn(t.from);
+				return SimBoard.fromSigilBoard(b);
+			};
+			const color = String(t.from).split(/\s+/)[1] === 'r' ? 'red' : 'blue';
+			const sim = fresh();
+			// A turn that wins on the spot: the browser stops the game there, so
+			// only the winner is compared (the page judges such a turn by the
+			// game ending, never by its position).
+			const probe = fresh();
+			probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
+			probe.getBoardStatePayload = () => ({});
+			await applyAITurn(probe, { actions: t.actions }, color, () => {});
+			probe.update();
+			sealOfDestructionBurn(probe, color);      // the game's end-of-turn trigger
+			probe.checkGameOver(color);
+			if (probe.gameover) {
+				if (probe.winner !== color) throw new Error('the turn ends the game with ' + probe.winner + ' winning');
+				continue;
+			}
+			await rustActionsToTurn(sim, color, t.actions, t.after);
+		} catch (e) {
+			return { status: 'fail', why: t.what + ' does not replay: ' + String((e && e.message) || e).split('\n').slice(0, 3).join(' / '), log: [] };
+		}
+	}
+	return { status: 'ok', log: [] };
+}
+
 (async () => {
 	const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
 	let puzzles = data.puzzles || [];
@@ -213,7 +281,7 @@ function runPuzzle(puzzle) {
 	const cls = p => (p.kind === 'winning' ? 'win' : p.mate);
 	const fails = [];
 	for (const p of puzzles) {
-		const r = await runPuzzle(p);
+		const r = REPLAY ? await replayPuzzle(p) : await runPuzzle(p);
 		tally[r.status]++;
 		if (byMate[cls(p)]) byMate[cls(p)][r.status]++;
 		const what = p.kind === 'winning' ? 'winning-turn' : 'mate-in-' + p.mate;

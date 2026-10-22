@@ -401,6 +401,8 @@ def main():
     ap.add_argument('--old', default=None, help='the previous puzzle set: every puzzle in it is re-proven and reported on')
     ap.add_argument('--report', default=None, help='write a JSON report (funnels, re-verification of --old)')
     ap.add_argument('--out', default=os.path.join(REPO, 'docs', 'static', 'puzzles', 'mate_puzzles.json'))
+    ap.add_argument('--drop', action='append', default=[],
+                    help='ID=REASON: leave this puzzle out (a stored line the browser rejects; see tools/puzzle-smoke.js)')
     ap.add_argument('--shard', default=None, help='i/n: solve only this slice of the games (one per VM)')
     ap.add_argument('--budget', type=int, default=400_000_000, help='apply_turn calls (+ generated turns) per position')
     ap.add_argument('--time-ms', type=int, default=20_000, help='wall-clock cap per position (0 = none)')
@@ -626,6 +628,14 @@ def main():
         puzzles.append(p)
         by_pos[pk] = p
         outcomes[f'mate-in-{mate}'] += 1
+
+    drops = dict(d.split('=', 1) if '=' in d else (d, 'dropped') for d in args.drop)
+    if drops:
+        dropped = [p for p in puzzles if p['id'] in drops]
+        for p in dropped:
+            outcomes['dropped: ' + drops[p['id']]] += 1
+            outcomes['winning turn' if p['kind'] == 'winning' else f"mate-in-{p['mate']}"] -= 1
+        puzzles = [p for p in puzzles if p['id'] not in drops]
 
     # ---- difficulty inputs (cached) and tags
     meta = load_work([args.meta_work]) if args.meta_work else {}

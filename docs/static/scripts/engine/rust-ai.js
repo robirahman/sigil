@@ -516,6 +516,10 @@ async function rustActionsToTurn(sim, color, actions, expectedSfn) {
 		try {
 			await applyAITurn(probe, { actions: actions }, color, () => {});
 			probe.update();
+			// The end-of-turn trigger the game applies next (GameController
+			// _eotTriggers); the engine's position includes it. Without it every
+			// turn completing the Seal of Destruction was refused.
+			sealOfDestructionBurn(probe, color);
 			probe.checkGameOver(color);
 			probe.turnCounter++;
 			probe.whoseTurn = (color === 'red') ? 'blue' : 'red';

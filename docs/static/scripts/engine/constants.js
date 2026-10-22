@@ -579,6 +579,33 @@ function bulwarkProtectedNodes(board) {
 	return out;
 }
 
+// Seal of Destruction's end-of-turn effect: when `color` ends its turn with
+// the Seal charged, every unshielded enemy stone touching one of its stones is
+// destroyed. Returns true when the Seal was charged (the caller announces it).
+// Shared by GameController._eotTriggers and the Rust replay gate
+// (rust-ai.js rustActionsToTurn), whose positions must agree.
+function sealOfDestructionBurn(board, color) {
+	if (!board.chargedSpells[color].includes('Seal_of_Destruction')) return false;
+	const enemy = color === 'red' ? 'blue' : 'red';
+	const shielded = bulwarkProtectedNodes(board);
+	for (const name of NODE_ORDER) {
+		if (board.stones[name] === enemy && !shielded.has(name)) {
+			for (const nb of ADJACENCY[name]) {
+				if (board.stones[nb] === color) {
+					board.stones[name] = null;
+					if (board.lastPlay === name) {
+						board.lastPlay = null;
+						board.lastPlayer = null;
+					}
+					break;
+				}
+			}
+		}
+	}
+	board.update();
+	return true;
+}
+
 // The nodes whose shield would drop if the stone at `node` were removed (it
 // is its owner's Bulwark charm stone). Sequential effects (Carnage-style hard
 // moves, Storm Front, Corrupt) re-check Bulwark before every step, so taking
