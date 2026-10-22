@@ -2287,10 +2287,7 @@ document.addEventListener('alpine:init', () => {
 						_this.messageHistory.push('Sign in to track your rating. This game is saved as a guest game.');
 					}
 
-					// Unrated spell sets: the unofficial Panda and Experimental
-					// packs; everything else is rated.
 					const _spellNames = _engineRef && _engineRef.board ? _engineRef.board.spellNames : [];
-					const _isUnratedPack = _spellNames.some(s => isUnratedSpell(s));
 
 					try {
 						const db = firebase.database();
@@ -2317,16 +2314,13 @@ document.addEventListener('alpine:init', () => {
 						// live board so we don't drift from the URL query param
 						// in edge cases like rematch/reconnect).
 						const recordVariant = normalizeVariant(_engineRef && _engineRef.board && _engineRef.board.variant);
-						const _isDeathmatch = variantHasDeathmatch(recordVariant);
-						const _isDuplicates = variantHasDuplicates(recordVariant);
-						const _isScramble = variantHasScramble(recordVariant);
-						const _isPentagon = variantHasPentagon(recordVariant);
 						// A game from a position is rated only when its start was
 						// priced (position-rating.js); the Elo update then uses it.
 						const _recordSetup = _setupSfn || (gameTurns.length ? gameTurns[0].sfnBefore : null);
 						const _priced = !!(_startPos && _recordSetup && _startPos.sfn === _recordSetup);
-						const _unpricedStart = _fromPosition && !_priced;
-						const _unrated = isGuest || !difficulty || _isUnratedPack || _isDeathmatch || _isDuplicates || _isScramble || _isPentagon || _unpricedStart;
+						const _unratedWhy = unratedReason(_spellNames, recordVariant,
+							_fromPosition ? _recordSetup : null, _priced ? _startPos : null);
+						const _unrated = isGuest || !difficulty || !!_unratedWhy;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2334,6 +2328,9 @@ document.addEventListener('alpine:init', () => {
 						_this._roomCodeForReview = roomCode;
 						const roomRecord = {
 							spellNames: spellNamesArr,
+							// An archive of a game played on this device, not an
+							// online room: the rules let it be created finished.
+							local: true,
 							status: 'finished',
 							created: Date.now(),
 							finishedAt: Date.now(),
@@ -2400,27 +2397,23 @@ document.addEventListener('alpine:init', () => {
 							return;
 						}
 
-						if (!difficulty || isGuest) {
-							// Local 1v1 and guest games are never rated; no notice needed.
-						} else if (_isDeathmatch) {
-							_this.messageHistory.push('Unrated: Deathmatch games do not affect rating.');
-						} else if (_isScramble) {
-							_this.messageHistory.push('Unrated: Scramble games do not affect rating.');
-						} else if (_isDuplicates) {
-							_this.messageHistory.push('Unrated: Allow Duplicates games do not affect rating.');
-						} else if (_isPentagon) {
-							_this.messageHistory.push('Unrated: Cataclysm board games do not affect rating.');
-						} else if (_isUnratedPack) {
-							_this.messageHistory.push('Unrated: Panda expansion games do not affect rating.');
-						} else if (_unpricedStart) {
-							_this.messageHistory.push('Unrated: this game started from a position the engine did not price.');
+						// Local 1v1 and guest games are never rated; no notice needed.
+						if (difficulty && !isGuest && _unratedWhy) {
+							_this.messageHistory.push({
+								'deathmatch': 'Unrated: Deathmatch games do not affect rating.',
+								'scramble': 'Unrated: Scramble games do not affect rating.',
+								'duplicates': 'Unrated: Allow Duplicates games do not affect rating.',
+								'pentagon': 'Unrated: Cataclysm board games do not affect rating.',
+								'unrated-pack': 'Unrated: Panda and Experimental spell games do not affect rating.',
+								'unpriced-start': 'Unrated: this game started from a position the engine did not price.',
+							}[_unratedWhy]);
 						}
 
 						_this._activeFinishingQueuedId = queuedId;
 						let flushResult;
 						try {
 							flushResult = await OfflineGameQueue.flushAll(db,
-								typeof processEloClientSide === 'function' ? processEloClientSide : null);
+								typeof awaitGameRating === 'function' ? awaitGameRating : null);
 						} finally {
 							_this._activeFinishingQueuedId = null;
 						}

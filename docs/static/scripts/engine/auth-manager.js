@@ -60,6 +60,22 @@ class AuthManager {
 		return cred.user;
 	}
 
+	/**
+	 * getUserInfo(), signing in anonymously first when nobody is signed in:
+	 * online rooms only accept moves from the uid in a seat
+	 * (database.rules.json), so guests need one too.
+	 */
+	async ensureSignedIn() {
+		if (!this.currentUser) {
+			try {
+				await this.signInAnonymously();
+			} catch (e) {
+				console.error('[Auth] anonymous sign-in failed:', e);
+			}
+		}
+		return this.getUserInfo();
+	}
+
 	/** Sign out. */
 	async signOut() {
 		this.userProfile = null;
@@ -319,7 +335,7 @@ class AuthManager {
 	getUserInfo() {
 		return {
 			uid: this.uid,
-			displayName: this.displayName,
+			displayName: this.isAnonymous ? 'Guest' : this.displayName,
 			elo: this.elo,
 			isAnonymous: this.isAnonymous,
 		};

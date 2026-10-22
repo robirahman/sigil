@@ -92,7 +92,7 @@ class FirebaseSync {
 			spellNames: spellNames,
 			status: 'waiting',
 			created: this.created,
-			[me]: { connected: true, uid: this[me + 'Uid'], displayName: this[me + 'DisplayName'] },
+			[me]: { connected: true, uid: this[me + 'Uid'], displayName: this[me + 'DisplayName'], anon: !!userInfo?.isAnonymous },
 			[other]: { connected: false },
 			ranked: false,
 			timeControl: this.timeControl,
@@ -194,22 +194,17 @@ class FirebaseSync {
 			this[joiner + 'Uid'] = userInfo?.uid || null;
 			this[joiner + 'DisplayName'] = userInfo?.displayName || 'Guest';
 
-			// Determine if ranked: both players authenticated, no unrated
-			// spells (Panda and Experimental are unofficial), and
-			// not a Deathmatch / Duplicates / Scramble game (always unrated).
-			const hasUnrated = (data.spellNames || []).some(s => isUnratedSpell(s));
-			const isDeathmatch = variantHasDeathmatch(data.variant);
-			const isDuplicates = variantHasDuplicates(data.variant);
-			const isScramble = variantHasScramble(data.variant);
-			const isPentagon = variantHasPentagon(data.variant);
-			// A room from a position is rated only when its start was priced.
-			const unpriced = !!this.startSfn && !(this.startPos && typeof this.startPos.redWinProb === 'number');
-			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isScramble && !isPentagon && !unpriced);
+			// Ranked: both players signed in to real accounts, and a game the
+			// shared rule (elo.js unratedReason) rates. The rating function
+			// checks both again.
+			const creatorAnon = !!(data[creator] && data[creator].anon);
+			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !creatorAnon
+				&& !unratedReason(data.spellNames, data.variant, this.startSfn, this.startPos));
 
 			// Seat, status and ranked in ONE write: the creator's join
 			// listener then reads them together (_refreshPlayers).
 			await roomRef.update({
-				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'] },
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
 				status: 'playing',
 				ranked: this.ranked,
 			});
@@ -804,15 +799,8 @@ class FirebaseSync {
 			console.error('Failed to read room eval_annotations:', e);
 		}
 		try {
-			const ref = await this.db.ref('completed_games').push(gameRecord);
-			// Process Elo client-side for ranked games
-			if (gameRecord.ranked && typeof processEloClientSide === 'function') {
-				try {
-					await processEloClientSide(this.db, ref.key, gameRecord);
-				} catch (eloErr) {
-					console.error('Failed to process Elo:', eloErr);
-				}
-			}
+			// The rateGame Cloud Function rates it (functions/rating.js).
+			await this.db.ref('completed_games').push(gameRecord);
 		} catch (e) {
 			console.error('Failed to save completed game:', e);
 		}
@@ -905,6 +893,9 @@ class FirebaseSync {
 			timeControl: timeControl || { type: 'none' },
 			allowSpectators: allowSpectators !== false,
 			variant: normalizeVariant(variant),
+			// The rules seat both players at once only for a rematch of
+			// a room they both sat in.
+			rematchOf: this.roomCode,
 		};
 		// A rematch of a room from a position replays the same start.
 		if (fromPosition && fromPosition.startSfn) {
