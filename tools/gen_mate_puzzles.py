@@ -419,6 +419,8 @@ def main():
     ap.add_argument('--limit', type=int, default=0, help='solve at most this many new positions')
     ap.add_argument('--no-solve', action='store_true', help='assemble from the work files only')
     ap.add_argument('--no-assemble', action='store_true', help='solve only (fleet VMs; assembly is local)')
+    ap.add_argument('--allow-missing', action='store_true',
+                    help='assemble even when positions have no solver record (a partial set, marked as such)')
     ap.add_argument('--max-win-fraction', type=float, default=0.34,
                     help='drop mate-in-1 puzzles where more than this share of first turns win')
     ap.add_argument('--max-solutions-stored', type=int, default=12, help='full mate-in-1 lines stored per puzzle')
@@ -539,6 +541,17 @@ def main():
         return ({'id': pos['gid'], 'red': who(g.get('redUid')), 'blue': who(g.get('blueUid')),
                  'winner': g.get('winner'), 'date': date}, g.get('variant') or 'standard')
 
+    # Every position must have a solver record: a missing or truncated work
+    # file would otherwise drop positions silently. (Fleet work files can hold
+    # MORE records than positions: each VM dedupes positions within its own
+    # shard, so one position reached in two shards' games is solved twice;
+    # assembly keeps the first game's record.)
+    missing = [pos['key'] for pos in positions if pos['key'] not in done]
+    if missing and not args.no_solve and args.limit:
+        missing = []                      # a --limit run solves a slice on purpose
+    if missing and not args.allow_missing:
+        sys.exit(f'{len(missing)} positions have no solver record (e.g. {missing[:3]}); '
+                 'rerun the solver or pass --allow-missing')
     for pos in positions:
         key, s = pos['key'], pos['sfn']
         r = done.get(key)
@@ -685,6 +698,7 @@ def main():
     out = {'generated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
            'engine': engine, 'count': len(puzzles),
            'positions_examined': len([1 for pos in positions if pos['key'] in done]),
+           'positions_missing': len(missing),
            'outcomes': dict(outcomes), 'winning_outcomes': dict(win_outcomes),
            'unreproduced_wins': unreproduced, 'puzzles': puzzles}
     os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
