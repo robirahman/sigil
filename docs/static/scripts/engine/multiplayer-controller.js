@@ -105,6 +105,18 @@ class MultiplayerController {
 			}
 			return;
 		}
+		if (message === 'takeback_request') {
+			if (!this._takebackReq && !(this.board && this.board.gameover)) this.sync.requestTakeback();
+			return;
+		}
+		if (message === 'takeback_cancel' || message === 'takeback_decline') {
+			this.sync.clearTakeback();
+			return;
+		}
+		if (message === 'takeback_accept') {
+			this._acceptTakeback();
+			return;
+		}
 		if (message === 'claim_win') {
 			this._endByRoom(this.myColor === 'red' ? 'blue' : 'red', 'abandon', true);
 			return;
@@ -310,6 +322,13 @@ class MultiplayerController {
 			this.emit({ type: 'opponent_presence', connected: p.connected, disconnectedAt: p.disconnectedAt });
 		});
 		this.sync.onSyncStatus = (st) => this.emit(Object.assign({ type: 'sync_status' }, st));
+		// Takebacks by agreement: the request, and the turns going away once
+		// the opponent accepts (the page then reloads from the room).
+		this.sync.listenForTakeback((req) => {
+			this._takebackReq = req;
+			this.emit({ type: 'takeback_state', request: req, mine: !!(req && req.by === this.myColor) });
+		});
+		this.sync.onTurnsRemoved = () => this.emit({ type: 'takeback_done' });
 
 		// Send spell setup
 		const posNames = spellSlotNames();
@@ -686,6 +705,27 @@ class MultiplayerController {
 			? await this.sync.writeTimeout(winner)
 			: await this.sync.claimAbandoned(winner);
 		if (committed) this._saveGameRecord(winner);
+	}
+
+	/**
+	 * Accept the opponent's takeback: the position after the last turn kept
+	 * comes from our own log, so it must hold every turn of the game (after
+	 * a reload it holds only the turns since, and we decline).
+	 */
+	_acceptTakeback() {
+		const req = this._takebackReq;
+		if (!req || req.by === this.myColor || !req.keys) return;
+		const n = Object.keys(req.keys).length;
+		const log = this._gameLog;
+		const keys = this.sync._turnKeys || [];
+		if (log.length !== keys.length || n > log.length) {
+			this.emit({ type: 'message', awaiting: null, message: 'This takeback cannot be applied here (the page was reloaded during the game).' });
+			this.sync.clearTakeback();
+			return;
+		}
+		const kept = log.length - n;
+		const sfn = kept > 0 ? log[kept - 1].sfnAfter : (this.sync.startSfn || null);
+		this.sync.acceptTakeback(req, sfn);
 	}
 
 	/** The game was aborted (before both players moved): no result. */

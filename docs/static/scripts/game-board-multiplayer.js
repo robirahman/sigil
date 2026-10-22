@@ -231,6 +231,19 @@ document.addEventListener('alpine:init', () => {
 					&& this.turnsPlayed() < 2;
 			},
 			handleClaimWin() { if (this.canClaimWin) this.sendEvent('claim_win'); },
+			// Takebacks by agreement ('takeback_state' from the controller).
+			takebackRequest: null,
+			takebackMine: false,
+			get canRequestTakeback() {
+				void this._presenceTick;
+				const log = this._engine && this._engine._gameLog;
+				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !this.takebackRequest
+					&& !!log && log.some((t) => t.color === this.myColor);
+			},
+			handleTakebackRequest() { if (this.canRequestTakeback) this.sendEvent('takeback_request'); },
+			handleTakebackCancel() { this.sendEvent('takeback_cancel'); },
+			handleTakebackAccept() { this.sendEvent('takeback_accept'); },
+			handleTakebackDecline() { this.sendEvent('takeback_decline'); },
 			handleAbort() { if (this.canAbort) this.sendEvent('abort'); },
 
 			// Review: open an online room from the reviewed position. The new
@@ -903,6 +916,20 @@ document.addEventListener('alpine:init', () => {
 						clearInterval(_this._presenceTimer);
 						if (_this.opponentGoneSince !== null) {
 							_this._presenceTimer = setInterval(() => { _this._presenceTick++; }, 1000);
+						}
+					}
+					else if (type === 'takeback_state') {
+						_this.takebackRequest = rest.request || null;
+						_this.takebackMine = !!rest.mine;
+					}
+					else if (type === 'takeback_done') {
+						// The room lost its last turns: rebuild from it (by its
+						// link: the creator's page may not carry it yet).
+						window.onbeforeunload = null;
+						if (_this._roomCodeForReview) {
+							window.location.href = 'multiplayer.html?id=' + encodeURIComponent(_this._roomCodeForReview);
+						} else {
+							window.location.reload();
 						}
 					}
 					else if (type === 'game_aborted') {
