@@ -342,12 +342,28 @@ async function key(page, k) {
 			b1.turnCounter = 1; b1.whoseTurn = 'red'; b1.update();
 			const s1 = boardToSfn(b1);
 			const d = window.Alpine.$data(document.querySelector('#analysis-root'));
-			d.anaSetLine([s0, s1], [{ color: 'red', turnNumber: 1, kind: 'input', actions: ['a2', 'Silence', 'submit'] }], 1);
+			const b2 = new SigilBoard(spells); b2.setupInitial();
+			b2.turnCounter = 2; b2.whoseTurn = 'blue'; b2.update();
+			const s2 = boardToSfn(b2);
+			d.anaSetLine([s0, s1, s2], [
+				{ color: 'red', turnNumber: 1, kind: 'input', actions: ['a2', 'Silence', 'submit'] },
+				{ color: 'blue', turnNumber: 1, kind: 'input', actions: ['submit'] },
+			], 1);
 			const after = d._engine && d._engine.board ? Object.assign({}, d._engine.board.silenced) : null;
+			const hrefs = ['ai', 'online', 'local'].map(k => d.anaPlayHref(k));
+			const note = d.anaPlayNote();
+			d.anaGoto(2);
+			const keys = d._engine && d._engine.board ? Object.keys(d._engine.board.allLoopingSnapshotCounts || {}) : [];
 			d.anaGoto(0);
 			const before = d._engine && d._engine.board ? Object.assign({}, d._engine.board.silenced) : null;
-			return { after, before, node: Object.assign({}, d.anaTree[1].silenced) };
+			const hrefs0 = ['ai', 'online', 'local'].map(k => d.anaPlayHref(k));
+			return { after, before, node: Object.assign({}, d.anaTree[1].silenced), hrefs, hrefs0, note,
+				silencedKey: keys.some(k => k.indexOf('|S0/1') >= 0) };
 		});
+		check(silence.hrefs.every(h => h === null) && /silenced/.test(silence.note),
+			'hand-off links are off (with a note) on a silenced position', JSON.stringify({ hrefs: silence.hrefs, note: silence.note }));
+		check(silence.hrefs0.every(h => typeof h === 'string' && h.length > 0), 'and back on before it', JSON.stringify(silence.hrefs0));
+		check(silence.silencedKey, 'repetition history keeps a silenced ancestor\'s Silence flags');
 		check(silence.after && silence.after.blue === true && silence.after.red === false && silence.node.blue === true,
 			'the position after a Silence cast restarts with blue silenced', JSON.stringify(silence));
 		check(silence.before && !silence.before.red && !silence.before.blue, 'and the position before it does not', JSON.stringify(silence.before));

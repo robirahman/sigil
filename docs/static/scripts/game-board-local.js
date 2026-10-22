@@ -1531,7 +1531,8 @@ document.addEventListener('alpine:init', () => {
 				 * that reached this node would. opts.turn: {color, turn} plays
 				 * that turn (a SimTurn, e.g. the engine's best) for the side to
 				 * move through the AI path, with its animations. opts.silenced:
-				 * { red, blue } Silence flags, which SFN does not carry.
+				 * { red, blue } Silence flags, which SFN does not carry;
+				 * opts.historySilenced: the same per opts.history entry.
 				 */
 				function _analysisStart(sfn, opts) {
 					opts = opts || {};
@@ -1590,14 +1591,17 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (engine.board && Array.isArray(opts.history)) {
 						const counts = {};
-						for (const prev of opts.history) {
+						opts.history.forEach((prev, k) => {
 							try {
 								const b = new SigilBoard(sfnToDict(prev).spell_names, variant);
 								b.loadFromSfn(prev);
+								// Silence is part of the snapshot key (opts.historySilenced).
+								const sil = Array.isArray(opts.historySilenced) && opts.historySilenced[k];
+								if (sil) b.silenced = { red: !!sil.red, blue: !!sil.blue };
 								b.allLoopingSnapshotCounts = counts;
 								b.takeSnapshot();
 							} catch (e) { /* an unreadable ancestor just isn't counted */ }
-						}
+						});
 						engine.board.allLoopingSnapshotCounts = counts;
 					}
 					return started;

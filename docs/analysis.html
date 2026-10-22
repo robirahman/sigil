@@ -714,6 +714,7 @@
 								<a class="ana-btn ana-play-online" x-bind:href="anaPlayHref('online')" x-bind:class="{ 'is-disabled': !anaCanPlay() }">Play a friend online</a>
 								<a class="ana-btn ana-play-local" x-bind:href="anaPlayHref('local')" x-bind:class="{ 'is-disabled': !anaCanPlay() }">Play a friend on this device</a>
 							</div>
+							<p class="ana-hint ana-play-note" x-show="anaPlayNote()" x-text="anaPlayNote()"></p>
 						</div>
 					</div>
 				</div>

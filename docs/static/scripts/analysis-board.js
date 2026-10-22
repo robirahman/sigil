@@ -72,6 +72,12 @@ function analysisSilencedAfter(turn) {
 	return out;
 }
 
+/** True when someone is silenced in this node's position (state an SFN,
+ *  and so a hand-off link, cannot carry). */
+function analysisNodeSilenced(node) {
+	return !!(node && node.silenced && (node.silenced.red || node.silenced.blue));
+}
+
 /** A SigilBoard holding a loadable SFN (its own spells and variant). */
 function analysisBoardFromSfn(sfn) {
 	const d = sfnToDict(sfn);
@@ -347,7 +353,9 @@ function analysisMixin() {
 			}
 			const path = this._anaPath(node.id);
 			const history = path.slice(0, -1).map(i => this.anaTree[i].sfn);
-			this._anaCtl.start(node.sfn, { history, turn: turn || null, silenced: node.silenced || null });
+			// Silence is part of the repetition key, so the ancestors need it too.
+			const historySilenced = path.slice(0, -1).map(i => this.anaTree[i].silenced || null);
+			this._anaCtl.start(node.sfn, { history, historySilenced, turn: turn || null, silenced: node.silenced || null });
 		},
 
 		/** Render a loadable SFN without a controller (editor, decided nodes). */
@@ -688,7 +696,8 @@ function analysisMixin() {
 		/** Hand-offs to the game pages ('ai' | 'local' | 'online'). */
 		anaPlayHref(kind) {
 			const sfn = this.anaMode === 'edit' ? this.edSfn : this.anaCurrentSfn();
-			if (!sfn) return '';
+			// No link where the SFN would drop state (Silence): null removes href.
+			if (!sfn || !this.anaCanPlay()) return null;
 			const q = 'sfn=' + encodeURIComponent(sfn);
 			if (kind === 'online') return 'multiplayer.html?' + q;
 			if (kind === 'ai') return 'game.html?' + q + '&ai=' + encodeURIComponent(this.anaAiTier);
@@ -698,7 +707,16 @@ function analysisMixin() {
 		anaCanPlay() {
 			if (this.anaMode === 'edit') return !!this.edSfn && this.edErrors.length === 0;
 			const node = this._anaNode();
-			return !!(node && !node.winner);
+			return !!(node && !node.winner && !analysisNodeSilenced(node));
+		},
+
+		/** Why the hand-offs are off for the selected node, or ''. */
+		anaPlayNote() {
+			if (this.anaMode === 'edit') return '';
+			const node = this._anaNode();
+			return node && !node.winner && analysisNodeSilenced(node)
+				? 'A player is silenced here, which a shared position cannot carry; play on from the next turn.'
+				: '';
 		},
 
 		/** Switch to the editor on the selected node's position. */
