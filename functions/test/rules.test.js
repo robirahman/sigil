@@ -110,6 +110,14 @@ test('rooms: create, join, play', async () => {
 	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'blue' }));
 	await assertFails(update(ref(db('mallory'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
 	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'waiting' }));
+	// The ranked flag is set at the join and never again; a reason for the
+	// end comes from the side that closes the room.
+	await assertFails(set(ref(db('alice'), 'rooms/R1/ranked'), false));
+	await assertFails(update(ref(db('bob'), 'rooms/R1'), { endReason: 'time' }));
+	await assertFails(update(ref(db('bob'), 'rooms/R1'), { endReason: 'time', finishedBy: 'red' }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'), { endReason: 'time', finishedBy: 'blue', winner: 'blue' }));
+	// A playing room cannot be deleted.
+	await assertFails(remove(ref(db('alice'), 'rooms/R1')));
 	// ... and the server's time of closing.
 	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
 	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red', closedAt: 5 }));
@@ -123,6 +131,9 @@ test('rooms: create, join, play', async () => {
 	await assertSucceeds(set(ref(db(null), 'rooms/R1/spectators/s1'), { joined: 1 }));
 	await assertSucceeds(remove(ref(db(null), 'rooms/R1/spectators/s1')));
 	await assertFails(remove(ref(db('mallory'), 'rooms/R1')));
+	// Finished but not yet recorded by the server: it stays.
+	await assertFails(remove(ref(db('alice'), 'rooms/R1')));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/R1/gameId'), 'g1'));
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/R1')));
 });
 

@@ -716,8 +716,10 @@ class FirebaseSync {
 			// replays the moves to check the winner (functions/rating.js).
 			const status = (await this.roomRef.child('status').once('value')).val();
 			if (status === 'playing') {
+				// endReason cleared: a natural end, whatever the other side
+				// may have written before it.
 				await this.roomRef.update({ finishedBy: this.myColor, winner: winner, status: 'finished',
-					closedAt: firebase.database.ServerValue.TIMESTAMP });
+					endReason: null, closedAt: firebase.database.ServerValue.TIMESTAMP });
 			}
 		} catch (e) {
 			// The other client finished it first.

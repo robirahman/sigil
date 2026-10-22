@@ -13,7 +13,9 @@ const ONLINE = require('./online-game.json');
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const full = async () => true;
-const ctx = (extra) => Object.assign({ room: null, isFullAccount: full, now: Date.now() }, extra);
+// The recorded games' own prices stand in for the server's engine (pricing.js).
+const price = async (sfn) => (sfn === AI.W3ZZGX.startPos.sfn ? AI.W3ZZGX.startPos.redWinProb : null);
+const ctx = (extra) => Object.assign({ room: null, isFullAccount: full, priceStart: price, now: Date.now() }, extra);
 
 // ---- games against the AI ----
 
@@ -32,6 +34,15 @@ test('a game from a priced position replays from that position', async () => {
 	const v = await judgeGame(AI.W3ZZGX, ctx());
 	assert.strictEqual(v.rated, true, v.reason);
 	assert.strictEqual(v.startPos.redWinProb, AI.W3ZZGX.startPos.redWinProb);
+});
+
+test('the server\'s price replaces the client\'s', async () => {
+	const forged = clone(AI.W3ZZGX);
+	forged.startPos.redWinProb = 0.001;
+	const v = await judgeGame(forged, ctx());
+	assert.deepStrictEqual([v.rated, v.startPos.redWinProb, v.startPos.clientRedWinProb, v.startPos.pricedBy],
+		[true, AI.W3ZZGX.startPos.redWinProb, 0.001, 'server']);
+	assert.strictEqual((await judgeGame(AI.W3ZZGX, ctx({ priceStart: async () => null }))).reason, 'unpriced-start');
 });
 
 test('a position game without its price replays from the standard start and fails', async () => {

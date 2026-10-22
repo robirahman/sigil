@@ -22,6 +22,8 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabaseWithUrl } = require('firebase-admin/database');
 const { judgeGame, ratingUpdates, recordFromRoom, freshEngine } = require('./rating');
+const { priceStart } = require('./pricing');
+const crypto = require('crypto');
 
 initializeApp();
 
@@ -78,7 +80,9 @@ exports.rateGame = onValueCreated({
 	// current Elo, so two games of one player must not interleave.
 	concurrency: 1,
 	maxInstances: 1,
-	memory: '512MiB',
+	// The wasm engine prices start positions (pricing.js): up to ~65 s.
+	memory: '1GiB',
+	timeoutSeconds: 300,
 	// Retried on failure: the claim below is resumable and the final write
 	// (which sets eloProcessed) is one atomic update, so a retry either
 	// finds the game rated or rates it once.
@@ -92,7 +96,16 @@ exports.rateGame = onValueCreated({
 
 	const room = record.roomCode
 		? (await db.ref('rooms/' + record.roomCode).once('value')).val() : null;
-	const verdict = await judgeGame(record, { room, isFullAccount, now: Date.now() });
+	// Position prices are cached: a position is priced once.
+	const cachedPrice = async (sfn) => {
+		const ref = db.ref('position_prices/' + crypto.createHash('sha256').update(sfn).digest('hex').slice(0, 40));
+		const hit = (await ref.once('value')).val();
+		if (hit && hit.sfn === sfn) return hit.redWinProb;
+		const p = await priceStart(sfn);
+		if (typeof p === 'number') await ref.set({ sfn, redWinProb: p, at: Date.now() });
+		return p;
+	};
+	const verdict = await judgeGame(record, { room, isFullAccount, priceStart: cachedPrice, now: Date.now() });
 	if (verdict.skip) return;
 
 	// One rating per game, however many records claim it (both clients of

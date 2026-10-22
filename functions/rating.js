@@ -154,6 +154,7 @@ async function replayWinner(engine, spellNames, variant, startSfn, turns) {
  * @param {object} ctx
  *   room          - rooms/{record.roomCode} (null if absent)
  *   isFullAccount - async uid => true for a signed-in, non-anonymous account
+ *   priceStart    - async sfn => P(red wins) from that start, or null
  *   now           - server time (ms)
  * @returns {Promise<object>} { rated: true, winner, claimKey, startPos } or
  *   { rated: false, reason }, plus { kind: 'online' | 'ai' } when known.
@@ -179,6 +180,16 @@ async function judgeGame(record, ctx) {
 		if (!AI_UID.test(uid) && !(await ctx.isFullAccount(uid))) {
 			return Object.assign(unrated('guest-account'), { kind: verdict.kind });
 		}
+	}
+	// A game from a position pays by the position's price. The client's
+	// price is only a claim: the server prices the start itself
+	// (pricing.js, the site's own engine and calibration).
+	if (verdict.startPos) {
+		const sfn = verdict.startPos.sfn;
+		const p = (sfn && ctx.priceStart) ? await ctx.priceStart(sfn) : null;
+		if (typeof p !== 'number') return Object.assign(unrated('unpriced-start'), { kind: verdict.kind });
+		verdict.startPos = Object.assign({}, verdict.startPos,
+			{ redWinProb: p, clientRedWinProb: verdict.startPos.redWinProb, pricedBy: 'server' });
 	}
 	return verdict;
 }
