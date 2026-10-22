@@ -47,29 +47,28 @@ function roomTurns(room) {
 		.map((k) => turns[k]);
 }
 
-const sameActions = (a, b) => JSON.stringify(a || []) === JSON.stringify(b || []);
+/**
+ * The number of a transcript's first turn. Start SFNs come in two
+ * conventions: an AI game's setupSfn is its first turn's sfnBefore (counter
+ * already advanced), a room's startSfn is the position before it (the game
+ * loop advances the counter). Turn parity names the mover (odd = red), so
+ * the first mover's colour tells which: the counter itself, or the next.
+ */
+function firstTurnNumber(startSfn, firstColor) {
+	const c = startSfn ? parseInt(String(startSfn).split(' ')[2], 10) || 0 : 0;
+	return (c % 2 === 1) === (firstColor === 'red') ? c : c + 1;
+}
 
 /**
- * The transcript to replay for an online room, built from `turns/` (which
- * each seat can only write as itself). The room's slim gameLog, written by
- * the finishing client, supplies the turn numbers and must agree with it.
+ * The transcript to replay for an online room, from `turns/` alone (each
+ * seat can only write its own). The finishing client's gameLog is not
+ * used: a client that reloaded mid-game holds only the turns since.
  */
 function onlineTranscript(room) {
 	const turns = roomTurns(room);
-	const log = Array.isArray(room.gameLog) ? room.gameLog : null;
-	if (log) {
-		if (log.length !== turns.length) return null;
-		for (let i = 0; i < log.length; i++) {
-			const t = log[i];
-			if (t.kind && t.kind !== 'input') return null;
-			if (t.color !== turns[i].color || !sameActions(t.actions, turns[i].actions)) return null;
-		}
-		return log.map((t, i) => ({ color: t.color, turnNumber: t.turnNumber, kind: 'input', actions: turns[i].actions || [] }));
-	}
-	// No gameLog (the finishing tab closed): a standard start numbers its
-	// turns from 1 with red first; a room from a position cannot be numbered.
-	if (room.startSfn) return null;
-	return turns.map((t, i) => ({ color: t.color, turnNumber: i + 1, kind: 'input', actions: t.actions || [] }));
+	if (!turns.length) return [];
+	const first = firstTurnNumber(room.startSfn, turns[0].color);
+	return turns.map((t, i) => ({ color: t.color, turnNumber: first + i, kind: 'input', actions: t.actions || [] }));
 }
 
 /**
@@ -108,7 +107,7 @@ function recordFromRoom(room, code, now) {
 	const rec = {
 		spellNames: room.spellNames || [],
 		winner: room.winner,
-		turns: transcript || roomTurns(room).map((t) => ({ color: t.color, kind: 'input', actions: t.actions || [] })),
+		turns: transcript,
 		setupSfn: room.setupSfn || room.startSfn || null,
 		finalSfn: room.finalSfn || null,
 		roomCode: code,
@@ -134,7 +133,8 @@ function recordFromRoom(room, code, now) {
  * standard start) and run on by one, and every turn must be played.
  */
 async function replayWinner(engine, spellNames, variant, startSfn, turns) {
-	const first = startSfn ? parseInt(engine.normalizeSfnString(startSfn).split(' ')[2], 10) : 1;
+	if (!turns.length) return null;
+	const first = firstTurnNumber(startSfn && engine.normalizeSfnString(startSfn), turns[0].color);
 	if (!turns.every((t, i) => t.turnNumber === first + i)) return null;
 	const result = {};
 	let rebuilt;
@@ -336,5 +336,5 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 }
 
 module.exports = {
-	AI_UID, CLOCK_GRACE_MS, judgeGame, ratingUpdates, recordFromRoom, flagged, onlineTranscript, roomTurns, freshEngine,
+	AI_UID, CLOCK_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged, onlineTranscript, roomTurns, freshEngine,
 };

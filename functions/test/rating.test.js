@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { judgeGame, ratingUpdates, flagged, freshEngine } = require('../rating');
+const { judgeGame, ratingUpdates, flagged, firstTurnNumber, freshEngine } = require('../rating');
 const AI = require('./ai-games.json');
 const ONLINE = require('./online-game.json');
 
@@ -127,11 +127,11 @@ test('an online result must match the room, its seats and its moves', async () =
 	assert.strictEqual((await judgeGame(rec, ctx({ room: Object.assign(onlineRoom(), { local: true }) }))).reason, 'no-room');
 	assert.strictEqual((await judgeGame(rec, ctx({ room: null }))).reason, 'no-room');
 	assert.strictEqual((await judgeGame(rec, ctx({ room: Object.assign(onlineRoom(), { ranked: false }) }))).reason, 'casual');
-	// gameLog disagreeing with turns/
-	const forged = onlineRoom();
-	forged.gameLog = clone(forged.gameLog);
-	forged.gameLog[2].actions = ['pass'];
-	assert.strictEqual((await judgeGame(rec, ctx({ room: forged }))).reason, 'result-not-verified');
+	// The finishing client's gameLog plays no part: one that reloaded
+	// mid-game holds only the turns since.
+	const reloaded = onlineRoom();
+	reloaded.gameLog = reloaded.gameLog.slice(-5);
+	assert.strictEqual((await judgeGame(rec, ctx({ room: reloaded }))).rated, true);
 	// a turn missing from turns/
 	const short = onlineRoom();
 	delete short.gameLog;
@@ -185,6 +185,14 @@ test('a loss on time is recomputed from the turn timestamps', () => {
 	const corr = { timeControl: { type: 'correspondence', moveTimeout: 86_400_000 }, turns: room.turns };
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 3_600_000), false);
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 86_400_000), true);
+});
+
+test('turn numbers follow both start-SFN conventions', () => {
+	assert.strictEqual(firstTurnNumber(null, 'red'), 1);
+	// An AI game's setupSfn is its first turn's sfnBefore.
+	assert.strictEqual(firstTurnNumber(AI.W3ZZGX.setupSfn, 'red'), 17);
+	// A room's startSfn is the position before it (tools/browser/position-room-test.js: 'r 13', Blue moves at 14).
+	assert.strictEqual(firstTurnNumber('r..b/A,B r 13 0:0 -:- -:- b1', 'blue'), 14);
 });
 
 // ---- the writes ----
