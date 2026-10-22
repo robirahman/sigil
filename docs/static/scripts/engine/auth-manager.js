@@ -194,7 +194,10 @@ class AuthManager {
 	_adoptLinkedUser(user) {
 		this.currentUser = user;
 		for (const cb of this._onAuthChangedCallbacks) {
-			try { cb(user); } catch (e) { console.warn('auth callback failed:', e); }
+			try {
+				const r = cb(user);
+				if (r && typeof r.catch === 'function') r.catch(e => console.warn('auth callback failed:', e));
+			} catch (e) { console.warn('auth callback failed:', e); }
 		}
 		AuthManager._notifyUpgrade();
 	}

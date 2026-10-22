@@ -52,7 +52,11 @@ function installFakeFirebase(cfg) {
 		path = path || '';
 		return {
 			child: (c) => ref(path + '/' + c),
-			once: async () => { rec('db.once', path); return snap(path); },
+			once: async () => {
+				rec('db.once', path);
+				if (cfg.failReads) throw err('PERMISSION_DENIED');
+				return snap(path);
+			},
 			set: async (v) => {
 				rec('db.set', path, v);
 				if (cfg.failSets > 0) { cfg.failSets--; throw err('PERMISSION_DENIED'); }
@@ -330,6 +334,43 @@ async function typeInto(page, sel, text) {
 			const st = await state(page);
 			check('google link then failed profile write: signed-in view with an explanation',
 				st.user === 'anon-7' && st.guest === false && /account was created/.test(st.error || ''), st);
+			await page.__ctx.close();
+		}
+
+		{
+			// The database stays down after the link: the recovery attempt
+			// fails too, and the page must still settle (not stuck busy).
+			const page = await openPage(browser, { user: { uid: 'anon-8', isAnonymous: true }, failReads: true });
+			await clickText(page, '.tab-bar__tab', 'Sign Up');
+			await typeInto(page, '#signup-name', 'Down');
+			await typeInto(page, '#signup-email', 'down@example.com');
+			await typeInto(page, '#signup-password', 'secret123');
+			await clickText(page, 'button', 'Create Account');
+			await sleep(300);
+			const st = await state(page);
+			const busy = await page.evaluate(() => { const d = Alpine.$data(document.querySelector('[x-data]')); return { busy: d.busy, authBusy: d._authBusy }; });
+			check('recovery also fails: not stuck busy, signed-in view, explanation',
+				!busy.busy && !busy.authBusy && st.user === 'anon-8' && st.guest === false && /account was created/.test(st.error || ''), { st, busy });
+			check('recovery also fails: no page errors', page.__errors.length === 0, page.__errors);
+			await page.__ctx.close();
+		}
+
+		// 2c. Ordinary sign-up (no guest): the auth callback that fires
+		// mid-flow must not bootstrap a 'Player' profile or leaderboard entry.
+		{
+			const page = await openPage(browser, {});
+			await clickText(page, '.tab-bar__tab', 'Sign Up');
+			await typeInto(page, '#signup-name', 'Fresh');
+			await typeInto(page, '#signup-email', 'fresh@example.com');
+			await typeInto(page, '#signup-password', 'secret123');
+			await clickText(page, 'button', 'Create Account');
+			await sleep(300);
+			const st = await state(page);
+			const tree = await page.evaluate(() => window.__dbTree);
+			check('signup: profile and leaderboard carry the typed name',
+				tree.users && tree.users['new-uid'] && tree.users['new-uid'].displayName === 'Fresh'
+				&& tree.leaderboard && tree.leaderboard['new-uid'] && tree.leaderboard['new-uid'].displayName === 'Fresh', tree);
+			check('signup: page shows the new profile', st.user === 'new-uid' && st.profile && st.profile.displayName === 'Fresh', st);
 			await page.__ctx.close();
 		}
 

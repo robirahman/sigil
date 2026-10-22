@@ -467,7 +467,7 @@
 				guest: false,
 				linkConflict: '',
 				_linkCredential: null,
-				_upgrading: false,
+				_authBusy: false,
 				deleteOpen: false,
 				deleteConfirm: '',
 				deleteError: '',
@@ -506,7 +506,13 @@
 						this.loading = false;
 					}
 					this._authManager = new AuthManager();
-					this._authManager.onAuthChanged((user) => this._applyUser(user));
+					this._authManager.onAuthChanged((user) => this._applyUser(user).catch((e) => {
+						// The profile read failed (database unreachable): show the
+						// account without it rather than an unhandled rejection.
+						console.warn('Profile load failed:', e);
+						this.profile = null;
+						this.loading = false;
+					}));
 				},
 
 				// Also called after a guest upgrade: linking keeps the same
@@ -514,14 +520,18 @@
 				// `name`: the display name to bootstrap a missing profile with
 				// (a guest upgrade whose profile write failed).
 				async _applyUser(user, name) {
+					// Read now: a call that began mid-flow must not bootstrap
+					// after the flow clears the flag.
+					const authBusy = this._authBusy;
 					this.guest = !!(user && user.isAnonymous);
 					this.user = user && !user.isAnonymous ? user : null;
 					if (this.user) {
 						await this._authManager.loadProfile(firebase.database());
-						// A linked account whose profile was never written (the
-						// write after the link failed): create it now. Not while
-						// an upgrade is still writing it (_upgrading).
-						if (!this._authManager.userProfile && !this.isOffline && !this._upgrading) {
+						// An account whose profile was never written (the write
+						// after a guest link failed): create it now. Not while a
+						// sign-up or sign-in on this page is still writing it
+						// (_authBusy): onAuthStateChanged fires mid-flow.
+						if (!this._authManager.userProfile && !this.isOffline && !authBusy) {
 							try { await this._authManager.ensureUserProfile(firebase.database(), name || undefined); } catch (e) { /* shown by the caller */ }
 						}
 						this.profile = this._authManager.userProfile;
@@ -685,12 +695,32 @@
 					this.successMsg = '';
 					this.linkConflict = '';
 					this.busy = true;
+					this._authBusy = true;
 					try {
-						await this._authManager.signInWithEmail(this.loginEmail, this.loginPassword);
+						const user = await this._authManager.signInWithEmail(this.loginEmail, this.loginPassword);
+						this._authBusy = false;
+						await this._applyUser(user);
 					} catch (e) {
 						this.error = _friendlyError(e);
+					} finally {
+						this._authBusy = false;
+						this.busy = false;
 					}
-					this.busy = false;
+				},
+
+				// A guest link succeeded but its profile setup failed (`e`): show
+				// the account and try the profile once more. Never throws.
+				async _recoverUpgrade(e, name) {
+					try {
+						await this._applyUser(e.upgradedUser, name);
+					} catch (e2) {
+						// The database is still unreachable: show the account anyway.
+						this.guest = false;
+						this.user = e.upgradedUser;
+						this.profile = null;
+						this.loading = false;
+					}
+					if (!this.profile) this.error = _upgradeSetupError(e);
 				},
 
 				async signUp() {
@@ -701,15 +731,15 @@
 					this.linkConflict = '';
 					const wasGuest = this.guest;
 					this.busy = true;
-					this._upgrading = wasGuest;
+					this._authBusy = true;
 					try {
 						const user = await this._authManager.signUpWithEmail(this.signupEmail, this.signupPassword, this.signupName.trim());
-						if (wasGuest) await this._applyUser(user);
+						this._authBusy = false;
+						await this._applyUser(user);
 					} catch (e) {
 						if (e && e.upgradedUser) {
-							this._upgrading = false;
-							await this._applyUser(e.upgradedUser, this.signupName.trim());
-							if (!this.profile) this.error = _upgradeSetupError(e);
+							this._authBusy = false;
+							await this._recoverUpgrade(e, this.signupName.trim());
 						} else if (wasGuest && (e.code === 'auth/email-already-in-use' || e.code === 'auth/credential-already-in-use')) {
 							this.error = 'That email already has a Sigil account, so this guest session can\'t be turned into it. You can sign in to it instead (this guest session\'s games stay with the guest).';
 							this.loginEmail = this.signupEmail;
@@ -717,9 +747,10 @@
 						} else {
 							this.error = _friendlyError(e);
 						}
+					} finally {
+						this._authBusy = false;
+						this.busy = false;
 					}
-					this._upgrading = false;
-					this.busy = false;
 				},
 
 				async signInGoogle() {
@@ -728,15 +759,15 @@
 					this.linkConflict = '';
 					const wasGuest = this.guest;
 					this.busy = true;
-					this._upgrading = wasGuest;
+					this._authBusy = true;
 					try {
 						const user = await this._authManager.signInWithGoogle();
-						if (wasGuest) await this._applyUser(user);
+						this._authBusy = false;
+						await this._applyUser(user);
 					} catch (e) {
 						if (e && e.upgradedUser) {
-							this._upgrading = false;
-							await this._applyUser(e.upgradedUser);
-							if (!this.profile) this.error = _upgradeSetupError(e);
+							this._authBusy = false;
+							await this._recoverUpgrade(e);
 						} else if (wasGuest && (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use')) {
 							this.error = 'That Google account already has a Sigil account, so this guest session can\'t be turned into it. You can sign in to it instead (this guest session\'s games stay with the guest).';
 							this._linkCredential = e.credential || null;
@@ -744,22 +775,28 @@
 						} else {
 							this.error = _friendlyError(e);
 						}
+					} finally {
+						this._authBusy = false;
+						this.busy = false;
 					}
-					this._upgrading = false;
-					this.busy = false;
 				},
 
 				async signInExistingGoogle() {
 					this.error = '';
 					this.busy = true;
+					this._authBusy = true;
 					try {
-						await this._authManager.signInWithGoogleCredential(this._linkCredential);
+						const user = await this._authManager.signInWithGoogleCredential(this._linkCredential);
 						this.linkConflict = '';
 						this._linkCredential = null;
+						this._authBusy = false;
+						await this._applyUser(user);
 					} catch (e) {
 						this.error = _friendlyError(e);
+					} finally {
+						this._authBusy = false;
+						this.busy = false;
 					}
-					this.busy = false;
 				},
 
 				cancelDelete() {
