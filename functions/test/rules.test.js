@@ -178,3 +178,37 @@ test('rooms: rematches, local archives and expired invites', async () => {
 	await assertSucceeds(remove(ref(db('mallory'), 'rooms/EXP')));
 	await assertFails(remove(ref(db('mallory'), 'rooms/FRESH')));
 });
+
+test('rooms: lobby settings (public, casual, the creator\'s colour) are fixed at creation', async () => {
+	// The creator may sit in either seat and must name it.
+	const blueSeek = Object.assign({}, waiting, { public: true, casual: true, creatorColor: 'blue',
+		red: { connected: false }, blue: { uid: 'alice', displayName: 'Alice', connected: true } });
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { creatorColor: 'red' })));
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { creatorColor: 'green' })));
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { public: 'yes' })));
+	await assertFails(set(ref(db('alice'), 'rooms/L1'), Object.assign({}, blueSeek, { casual: 1 })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L1'), blueSeek));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L2'), Object.assign({}, waiting, { creatorColor: 'red', public: true })));
+	// Fixed once created, by anyone.
+	await assertFails(set(ref(db('alice'), 'rooms/L1/casual'), false));
+	await assertFails(set(ref(db('alice'), 'rooms/L1/public'), false));
+	await assertFails(set(ref(db('alice'), 'rooms/L1/creatorColor'), 'red'));
+	// A casual room cannot be joined rated.
+	await assertFails(update(ref(db('bob'), 'rooms/L1'),
+		{ red: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/L1'),
+		{ red: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+	await assertFails(set(ref(db('bob'), 'rooms/L1/ranked'), true));
+	// Two joiners race for one seat: the second claim is refused.
+	await assertSucceeds(update(ref(db('bob'), 'rooms/L2'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+	await assertFails(update(ref(db('carol'), 'rooms/L2'),
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: true }));
+	// The creator withdraws a waiting seek (waiting -> expired, then removed).
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L3'), Object.assign({}, waiting, { creatorColor: 'red', public: true })));
+	await assertFails(set(ref(db('bob'), 'rooms/L3/status'), 'expired'));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/L3/status'), 'expired'));
+	await assertFails(update(ref(db('bob'), 'rooms/L3'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+	await assertSucceeds(remove(ref(db('alice'), 'rooms/L3')));
+});

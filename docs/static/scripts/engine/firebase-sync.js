@@ -147,12 +147,18 @@ class FirebaseSync {
 	 * @param {boolean} [allowSpectators] - whether spectators can watch (default true)
 	 * @param {string} [variant] - 'standard' (default) or 'competitive'
 	 * @param {object} [fromPosition] - a room from a position: { startSfn,
-	 *   startPos (position-rating.js; absent = unrated), creatorColor }. The
-	 *   creator sits in creatorColor's slot; every other room is created by red.
+	 *   startPos (position-rating.js; absent = unrated) }
+	 * @param {object} [opts] - { creatorColor: 'red' | 'blue' | 'random' (the
+	 *   creator's seat, resolved here; default red), public (listed in the
+	 *   lobby's open games), casual (never rated: the joiner writes
+	 *   ranked:false and the rules hold it there) }. All three are fixed at
+	 *   creation. A fromPosition.creatorColor is still honoured.
 	 */
-	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant, fromPosition) {
+	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant, fromPosition, opts) {
 		const code = _generateRoomCode();
-		const me = (fromPosition && fromPosition.creatorColor === 'blue') ? 'blue' : 'red';
+		let pick = (opts && opts.creatorColor) || (fromPosition && fromPosition.creatorColor) || 'red';
+		if (pick === 'random') pick = Math.random() < 0.5 ? 'red' : 'blue';
+		const me = pick === 'blue' ? 'blue' : 'red';
 		const other = me === 'red' ? 'blue' : 'red';
 		this.roomCode = code;
 		this.myColor = me;
@@ -177,10 +183,15 @@ class FirebaseSync {
 			timeControl: this.timeControl,
 			allowSpectators: this.allowSpectators,
 			variant: this.variant,
+			// The joiner takes the other seat (joinRoom).
+			creatorColor: me,
 		};
+		this.isPublic = !!(opts && opts.public);
+		this.casual = !!(opts && opts.casual);
+		if (this.isPublic) roomData.public = true;
+		if (this.casual) roomData.casual = true;
 		if (this.startSfn) {
 			roomData.startSfn = this.startSfn;
-			roomData.creatorColor = me;
 			if (this.startPos) roomData.startPos = this.startPos;
 		}
 
@@ -225,9 +236,15 @@ class FirebaseSync {
 	 * Join an existing room.
 	 * @param {string} code - room code
 	 * @param {object} [userInfo] - { uid, displayName, elo, isAnonymous }
+	 * @param {object} [opts] - { seatOnly: only take the open seat of a
+	 *   waiting room; never reconnect or spectate. A room someone else
+	 *   joined first (or its creator withdrew) throws an Error with code
+	 *   'seat-taken'. The lobby's open games and quick pair use it. }
 	 * @returns {{ spellNames, myColor, sfn?, isSpectator?, timeControl? }}
 	 */
-	async joinRoom(code, userInfo) {
+	async joinRoom(code, userInfo, opts) {
+		const seatOnly = !!(opts && opts.seatOnly);
+		const taken = () => Object.assign(new Error('Someone else joined first.'), { code: 'seat-taken' });
 		this.roomCode = code;
 
 		const roomRef = this.db.ref('rooms/' + code);
@@ -235,6 +252,7 @@ class FirebaseSync {
 
 		const snap = await roomRef.once('value');
 		const data = snap.val();
+		if (seatOnly && (!data || data.status !== 'waiting')) throw taken();
 		if (!data) throw new Error('Room not found');
 		if (data.status === 'expired') throw new Error('This game invite has expired');
 
@@ -276,20 +294,32 @@ class FirebaseSync {
 			// Ranked: both players signed in to real accounts, and a game the
 			// shared rule (elo.js unratedReason) rates. The rating function
 			// checks both again.
+			// A casual room (the creator's choice) is never rated.
 			const creatorAnon = !!(data[creator] && data[creator].anon);
-			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !creatorAnon
+			this.casual = data.casual === true;
+			this.isPublic = data.public === true;
+			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !creatorAnon && !this.casual
 				&& !unratedReason(data.spellNames, data.variant, this.startSfn, this.startPos));
 
 			// Seat, status and ranked in ONE write: the creator's join
-			// listener then reads them together (_refreshPlayers).
-			await roomRef.update({
-				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
-				status: 'playing',
-				ranked: this.ranked,
-				// The server's time the game began: the first mover's clock
-				// (functions/rating.js flagged) runs from it.
-				startedAt: firebase.database.ServerValue.TIMESTAMP,
-			});
+			// listener then reads them together (_refreshPlayers). The rules
+			// give the seat to the first claim only: a second joiner, or a
+			// join after the creator withdrew, is refused.
+			try {
+				await roomRef.update({
+					[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
+					status: 'playing',
+					ranked: this.ranked,
+					// The server's time the game began: the first mover's clock
+					// (functions/rating.js flagged) runs from it.
+					startedAt: firebase.database.ServerValue.TIMESTAMP,
+				});
+			} catch (e) {
+				const now = (await roomRef.once('value').catch(() => null));
+				const v = now && now.val();
+				if (!v || v.status !== 'waiting' || (v[joiner] && v[joiner].uid)) throw taken();
+				throw e;
+			}
 			await this._goOnline(joiner);
 
 			this._writeActiveGameIndex(joiner);
@@ -718,6 +748,68 @@ class FirebaseSync {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Withdraw our own waiting room (the lobby's Cancel, or quick pair
+	 * moving to an older seek): waiting -> expired in a transaction, so a
+	 * joiner who got in first keeps the game, then the room is removed.
+	 * Returns true if the room was withdrawn, false if someone joined it.
+	 */
+	async withdrawRoom(code) {
+		const roomRef = this.db.ref('rooms/' + code);
+		const statusRef = roomRef.child('status');
+		// A transaction starts from the local cache: listen first so it
+		// sees the server's status, not null.
+		const keep = () => {};
+		statusRef.on('value', keep);
+		let res;
+		try {
+			await statusRef.once('value');
+			res = await statusRef.transaction((current) => {
+				if (current === 'waiting') return 'expired';
+				return; // joined (or gone): leave it
+			});
+		} finally {
+			statusRef.off('value', keep);
+		}
+		if (!res || !res.committed) return false;
+		if (this.roomRef && this.roomCode === code) {
+			if (this.myColor) this.roomRef.child(this.myColor).onDisconnect().cancel().catch(() => {});
+			this.roomRef.off();
+			this.roomRef = null;
+			this.roomCode = null;
+			this._presenceColor = null;
+			this.onOpponentJoin = null;
+		}
+		const uid = firebase.auth().currentUser && firebase.auth().currentUser.uid;
+		if (uid) this.db.ref('user_active_games/' + uid + '/' + code).remove().catch(() => {});
+		await roomRef.remove().catch(() => {});
+		return true;
+	}
+
+	/**
+	 * Waiting and playing rooms for the lobby (`.indexOn: ["status"]`).
+	 * callback(rooms) gets [{ code, ...room }] each time the set changes.
+	 * Returns an unsubscribe function.
+	 */
+	watchRoomsByStatus(status, callback) {
+		const q = this.db.ref('rooms').orderByChild('status').equalTo(status);
+		const handler = (snap) => {
+			const out = [];
+			snap.forEach((c) => { out.push(Object.assign({ code: c.key }, c.val())); });
+			callback(out);
+		};
+		q.on('value', handler, (e) => { console.warn('[Sync] lobby query failed:', e); callback([]); });
+		return () => q.off('value', handler);
+	}
+
+	/** The rooms with this status, once: [{ code, ...room }]. */
+	async listRoomsByStatus(status) {
+		const snap = await this.db.ref('rooms').orderByChild('status').equalTo(status).once('value');
+		const out = [];
+		snap.forEach((c) => { out.push(Object.assign({ code: c.key }, c.val())); });
+		return out;
 	}
 
 	/** Get a snapshot of a room without joining. Used by `?id=CODE` URL handler. */

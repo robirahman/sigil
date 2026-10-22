@@ -138,6 +138,7 @@ test('an online result must match the room, its seats and its moves', async () =
 	assert.strictEqual((await judgeGame(rec, ctx({ room: Object.assign(onlineRoom(), { local: true }) }))).reason, 'no-room');
 	assert.strictEqual((await judgeGame(rec, ctx({ room: null }))).reason, 'no-room');
 	assert.strictEqual((await judgeGame(rec, ctx({ room: Object.assign(onlineRoom(), { ranked: false }) }))).reason, 'casual');
+	assert.strictEqual((await judgeGame(rec, ctx({ room: Object.assign(onlineRoom(), { casual: true }) }))).reason, 'casual');
 	// The finishing client's gameLog plays no part: one that reloaded
 	// mid-game holds only the turns since.
 	const reloaded = onlineRoom();
