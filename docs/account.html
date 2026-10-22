@@ -468,6 +468,7 @@
 				linkConflict: '',
 				_linkCredential: null,
 				_authBusy: false,
+				_setupFailed: false,
 				deleteOpen: false,
 				deleteConfirm: '',
 				deleteError: '',
@@ -527,12 +528,19 @@
 					this.user = user && !user.isAnonymous ? user : null;
 					if (this.user) {
 						await this._authManager.loadProfile(firebase.database());
-						// An account whose profile was never written (the write
-						// after a guest link failed): create it now. Not while a
-						// sign-up or sign-in on this page is still writing it
-						// (_authBusy): onAuthStateChanged fires mid-flow.
-						if (!this._authManager.userProfile && !this.isOffline && !authBusy) {
-							try { await this._authManager.ensureUserProfile(firebase.database(), name || undefined); } catch (e) { /* shown by the caller */ }
+						// Finish a setup that a failed write cut short (after a
+						// guest link): the profile and/or its leaderboard entry.
+						// ensureUserProfile only fills in what is missing. Not
+						// while a sign-up or sign-in on this page is still writing
+						// them (_authBusy): onAuthStateChanged fires mid-flow.
+						this._setupFailed = false;
+						if (!this.isOffline && !authBusy) {
+							try {
+								await this._authManager.ensureUserProfile(firebase.database(),
+									(!this._authManager.userProfile && name) || undefined);
+							} catch (e) {
+								this._setupFailed = true;   // shown by _recoverUpgrade
+							}
 						}
 						this.profile = this._authManager.userProfile;
 						this.annotationMode = !!(this.profile && this.profile.annotationMode);
@@ -720,7 +728,7 @@
 						this.profile = null;
 						this.loading = false;
 					}
-					if (!this.profile) this.error = _upgradeSetupError(e);
+					if (!this.profile || this._setupFailed) this.error = _upgradeSetupError(e);
 				},
 
 				async signUp() {

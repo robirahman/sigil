@@ -404,12 +404,15 @@ class AuthManager {
 		const snap = await ref.once('value');
 		const existing = snap.val() || {};
 
-		// Priority: explicit signup arg → existing RTDB record → Auth profile → 'Player'.
-		// 'Player' is reachable only when no name has ever been recorded anywhere.
+		// Priority: explicit signup arg → existing RTDB record → Auth profile →
+		// a linked provider's name (a Google link whose updateProfile failed)
+		// → 'Player'. 'Player' is reachable only when no name exists anywhere.
+		const authName = this.currentUser.displayName ||
+			(this.currentUser.providerData || []).map(p => p && p.displayName).find(Boolean) || null;
 		const resolvedName =
 			displayName ||
 			existing.displayName ||
-			this.currentUser.displayName ||
+			authName ||
 			'Player';
 
 		if (!snap.exists()) {
@@ -430,11 +433,11 @@ class AuthManager {
 			if (displayName && displayName !== existing.displayName) {
 				await ref.child('displayName').set(displayName);
 				this.userProfile.displayName = displayName;
-			} else if (!existing.displayName && this.currentUser.displayName) {
+			} else if (!existing.displayName && authName) {
 				// Skeletal record (created by elo.js multi-path update without a name).
 				// Backfill from Auth profile only — never write the 'Player' literal.
-				await ref.child('displayName').set(this.currentUser.displayName);
-				this.userProfile.displayName = this.currentUser.displayName;
+				await ref.child('displayName').set(authName);
+				this.userProfile.displayName = authName;
 			}
 		}
 

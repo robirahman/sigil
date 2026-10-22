@@ -59,7 +59,7 @@ function installFakeFirebase(cfg) {
 			},
 			set: async (v) => {
 				rec('db.set', path, v);
-				if (cfg.failSets > 0) { cfg.failSets--; throw err('PERMISSION_DENIED'); }
+				if (cfg.failSets > 0 && (!cfg.failSetPrefix || path.startsWith(cfg.failSetPrefix))) { cfg.failSets--; throw err('PERMISSION_DENIED'); }
 				put(path, v);
 			},
 			remove: async () => { rec('db.remove', path); put(path, null); },
@@ -80,7 +80,11 @@ function installFakeFirebase(cfg) {
 		uid: u.uid, isAnonymous: !!u.isAnonymous, email: u.email || null,
 		displayName: u.displayName || null,
 		providerData: (u.providers || []).map(p => ({ providerId: p, displayName: u.googleName || null })),
-		async updateProfile(p) { rec('user.updateProfile', p); Object.assign(this, p); },
+		async updateProfile(p) {
+			rec('user.updateProfile', p);
+			if (cfg.failUpdateProfile) throw err('auth/network-request-failed');
+			Object.assign(this, p);
+		},
 		async linkWithCredential(c) {
 			rec('user.linkWithCredential', c);
 			if (cfg.linkError) throw err(cfg.linkError);
@@ -352,6 +356,48 @@ async function typeInto(page, sel, text) {
 			check('recovery also fails: not stuck busy, signed-in view, explanation',
 				!busy.busy && !busy.authBusy && st.user === 'anon-8' && st.guest === false && /account was created/.test(st.error || ''), { st, busy });
 			check('recovery also fails: no page errors', page.__errors.length === 0, page.__errors);
+			await page.__ctx.close();
+		}
+
+		// Only the leaderboard write fails: recovery must retry it.
+		{
+			const page = await openPage(browser, { user: { uid: 'anon-9', isAnonymous: true }, failSets: 1, failSetPrefix: 'leaderboard' });
+			await clickText(page, '.tab-bar__tab', 'Sign Up');
+			await typeInto(page, '#signup-name', 'Board');
+			await typeInto(page, '#signup-email', 'board@example.com');
+			await typeInto(page, '#signup-password', 'secret123');
+			await clickText(page, 'button', 'Create Account');
+			await sleep(300);
+			const st = await state(page);
+			const tree = await page.evaluate(() => window.__dbTree);
+			check('leaderboard write failed once: recovery creates the entry, no error',
+				tree.leaderboard && tree.leaderboard['anon-9'] && tree.leaderboard['anon-9'].displayName === 'Board' && !st.error, { tree, st });
+			await page.__ctx.close();
+		}
+		{
+			const page = await openPage(browser, { user: { uid: 'anon-10', isAnonymous: true }, failSets: 99, failSetPrefix: 'leaderboard' });
+			await clickText(page, '.tab-bar__tab', 'Sign Up');
+			await typeInto(page, '#signup-name', 'NoBoard');
+			await typeInto(page, '#signup-email', 'noboard@example.com');
+			await typeInto(page, '#signup-password', 'secret123');
+			await clickText(page, 'button', 'Create Account');
+			await sleep(300);
+			const st = await state(page);
+			check('leaderboard write keeps failing: explained though the profile exists',
+				st.profile && st.profile.displayName === 'NoBoard' && /account was created/.test(st.error || ''), st);
+			await page.__ctx.close();
+		}
+		// Google link whose updateProfile fails: the Google name, not 'Player'.
+		{
+			const page = await openPage(browser, { user: { uid: 'anon-11', isAnonymous: true }, failUpdateProfile: true });
+			await clickText(page, 'button', 'Continue with Google');
+			await sleep(300);
+			const st = await state(page);
+			const tree = await page.evaluate(() => window.__dbTree);
+			check('google updateProfile failed: profile and leaderboard use the Google name',
+				tree.users && tree.users['anon-11'] && tree.users['anon-11'].displayName === 'GoogleGuy'
+				&& tree.leaderboard && tree.leaderboard['anon-11'] && tree.leaderboard['anon-11'].displayName === 'GoogleGuy'
+				&& st.user === 'anon-11', { tree, st });
 			await page.__ctx.close();
 		}
 
