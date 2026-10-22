@@ -91,7 +91,7 @@
         },
         "turns": {
           "$turnId": {
-            ".write": "auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))",
+            ".write": "(auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.child('color').val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.child('color').val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))) || (auth !== null && data.exists() && !newData.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && root.child('rooms/' + $roomId + '/takeback/keys/' + $turnId).exists() && ((root.child('rooms/' + $roomId + '/takeback/by').val() === 'red' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid) || (root.child('rooms/' + $roomId + '/takeback/by').val() === 'blue' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid)))",
             ".validate": "newData.hasChildren(['color', 'actions', 'timestamp']) && newData.child('timestamp').val() === now"
           }
         },
@@ -147,6 +147,10 @@
         },
         "abortedBy": {
           ".write": "auth !== null && !data.exists() && root.child('rooms/' + $roomId + '/status').val() === 'playing' && ((newData.val() === 'red' && root.child('rooms/' + $roomId + '/red/uid').val() === auth.uid) || (newData.val() === 'blue' && root.child('rooms/' + $roomId + '/blue/uid').val() === auth.uid))"
+        },
+        "takeback": {
+          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'playing'",
+          ".validate": "(newData.child('by').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.child('by').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)"
         }
       },
       ".indexOn": [

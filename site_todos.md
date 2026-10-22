@@ -37,7 +37,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [x] **Handle disconnects properly.** Done: the server stamps `disconnectedAt` on a dropped seat; the opponent sees a countdown, "reconnected", and after 60 s can claim the game (checked by the rating function); the `expireClocks` function ends flagged games with no tab open. Add a grace-period countdown, a "reconnected" event and claim-win / abort on abandonment.
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
-- [ ] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move: done (later aborts count as forfeits). Draws and takebacks: open.
+- [x] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move and takebacks by agreement: done. Draw offers: not applicable (Sigil has no draws; threefold repetition is a Blue win).
 - [ ] **Add in-game chat or preset emotes.**
 - [ ] **Add a friends / follow list** with "challenge" from a profile.
 - [ ] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
@@ -66,7 +66,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Game screen
 
-- [ ] **Add undo / takeback in local and AI games.** "Reset Turn" only rolls back within the current turn (`docs/game.html:461-467`).
+- [x] **Add undo / takeback in local and AI games.** Done: Take back undoes your last turn (and the AI's reply); a rated AI game becomes unrated. "Reset Turn" only rolls back within the current turn (`docs/game.html:461-467`).
 - [ ] **Add an in-game settings panel** for theme, volume (not just mute), art-only spell circles and animation level.
   These settings are spread across `docs/index.html` and `docs/account.html` today.
 - [ ] **Accessibility:**

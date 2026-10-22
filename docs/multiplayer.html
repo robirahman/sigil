@@ -600,6 +600,18 @@
 						<div x-show="syncBanner" class="connection-banner__line connection-banner__line--self" x-text="syncBanner"></div>
 						<div x-show="opponentAwayText" class="connection-banner__line" x-text="opponentAwayText"></div>
 					</div>
+					<!-- A takeback request: ours (cancel) or the opponent's (accept / decline). -->
+					<div class="connection-banner" role="status" aria-live="polite" x-show="takebackRequest && !winner">
+						<template x-if="takebackMine">
+							<div class="connection-banner__line">Takeback requested. <button class="action-button" x-on:click="handleTakebackCancel()">Cancel</button></div>
+						</template>
+						<template x-if="!takebackMine">
+							<div class="connection-banner__line">Your opponent asks to take back their last turn.
+								<button class="action-button" x-on:click="handleTakebackAccept()">Accept</button>
+								<button class="action-button" x-on:click="handleTakebackDecline()">Decline</button>
+							</div>
+						</template>
+					</div>
 					<!-- Visible whenever a live game is on (not only mid-own-turn): the Forfeit button must be reachable during the opponent's turn too. -->
 					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('skip_providence') || actionList.includes('pass') || actionList.includes('submit') || (whoseTurn && !winner && !reviewMode))}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
@@ -609,6 +621,8 @@
 						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
 						<!-- Concede: first click arms and asks for confirmation, second declares the game a win for the opponent. -->
 						<button class="action-button action-button--forfeit" x-bind:class="{ 'is-hidden': isSpectator || !whoseTurn || winner || reviewMode || gameAborted, 'action-button--forfeit-armed': forfeitArmed }" x-on:click="handleForfeit" x-text="forfeitArmed ? 'Confirm forfeit?' : 'Forfeit'">Forfeit</button>
+						<!-- Ask the opponent to undo our last turn (and their reply). -->
+						<button class="action-button action-button--take-back" x-bind:class="{ 'is-hidden': !canRequestTakeback }" x-on:click="handleTakebackRequest">Take back</button>
 						<!-- Before both players have moved a game can be called off, unrated. -->
 						<button class="action-button action-button--abort" x-bind:class="{ 'is-hidden': !canAbort }" x-on:click="handleAbort">Abort</button>
 						<!-- The opponent left more than ABANDON_GRACE_MS ago. -->
