@@ -546,30 +546,28 @@ class FirebaseSync {
 		if (!this.roomRef) { console.error('[Sync] sendTurn: no roomRef!'); return; }
 		console.log('[Sync] sendTurn:', this.myColor, actions);
 		try {
+			// One write: the turn, the timer, and the end of any takeback
+			// request. `after` names the turn this one follows; the rules
+			// refuse it if a takeback has removed that turn, and an accepted
+			// takeback can no longer remove turns once the request is gone,
+			// so a move and an acceptance can never both land.
+			const turnKey = this.roomRef.child('turns').push().key;
+			const keys = this._turnKeys || [];
+			const turn = {
+				color: this.myColor,
+				actions: actions,
+				timestamp: firebase.database.ServerValue.TIMESTAMP,
+			};
+			if (keys.length) turn.after = keys[keys.length - 1];
+			const updates = { ['turns/' + turnKey]: turn, takeback: null };
 			if (timerUpdate) {
-				// Atomic multi-path update: turn + timer in one write
-				const turnKey = this.roomRef.child('turns').push().key;
-				const updates = {};
-				updates['turns/' + turnKey] = {
-					color: this.myColor,
-					actions: actions,
-					timestamp: firebase.database.ServerValue.TIMESTAMP,
-				};
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
 				updates['timer/activeColor'] = timerUpdate.activeColor;
 				updates['timer/lastUpdated'] = firebase.database.ServerValue.TIMESTAMP;
-				await this._track(this.roomRef.update(updates));
-			} else {
-				await this._track(this.roomRef.child('turns').push({
-					color: this.myColor,
-					actions: actions,
-					timestamp: firebase.database.ServerValue.TIMESTAMP,
-				}));
 			}
+			await this._track(this.roomRef.update(updates));
 			console.log('[Sync] sendTurn succeeded');
-			// Playing on answers any takeback request: it named older turns.
-			if (this._takeback) this.clearTakeback();
 		} catch (e) {
 			console.error('[Sync] sendTurn FAILED:', e.code, e.message);
 		}
@@ -1103,6 +1101,16 @@ class FirebaseSync {
 		}
 		const updates = { takeback: null, currentSfn: sfn || null };
 		for (const k of undo) updates['turns/' + k] = null;
+		// The requester is to move again: their clock runs (a correspondence
+		// deadline restarts from now).
+		const timer = (await this.roomRef.child('timer').once('value')).val();
+		if (timer && this.timeControl && this.timeControl.type !== 'none') {
+			updates['timer/activeColor'] = req.by;
+			updates['timer/lastUpdated'] = firebase.database.ServerValue.TIMESTAMP;
+			if (this.timeControl.type === 'correspondence' && this.timeControl.moveTimeout) {
+				updates['timer/' + req.by] = this.serverNow() + this.timeControl.moveTimeout;
+			}
+		}
 		try {
 			await this._track(this.roomRef.update(updates));
 			return true;

@@ -171,6 +171,9 @@ test('rooms: a takeback removes turns only when the opponent accepts', async () 
 	// The requester may not apply it itself.
 	await assertFails(update(ref(db('alice'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null }));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null, currentSfn: null }));
+	// A move built on a turn that was taken back is refused; on the latest turn it lands.
+	await assertFails(set(ref(db('alice'), 'rooms/R3/turns/t3'), { color: 'red', actions: ['a2'], timestamp: serverTimestamp(), after: 't2' }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R3'), { 'turns/t3': { color: 'red', actions: ['a2'], timestamp: serverTimestamp() }, takeback: null }));
 	// Without a request naming them, turns stay.
 	await seed({ rooms: { R4: playing } });
 	await assertFails(remove(ref(db('bob'), 'rooms/R4/turns/t1')));

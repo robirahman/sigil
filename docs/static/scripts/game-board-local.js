@@ -1003,6 +1003,9 @@ document.addEventListener('alpine:init', () => {
 				let _startPos = null;
 				// A turn was taken back (handleTakeBack): the game is unrated.
 				let _tookBack = false;
+				// The position the game began from (empty for a standard start),
+				// kept in the save: a resumed game's URL carries only its id.
+				let _startSfnForUndo = _startSfnAtLoad;
 				if (_gameId && typeof LocalSaveStore !== 'undefined') {
 					const _save = LocalSaveStore.get(_gameId);
 					if (_save && _save.sfn) {
@@ -1041,6 +1044,7 @@ document.addEventListener('alpine:init', () => {
 							}
 							if (_save.fromPosition) _fromPosition = true;
 							if (_save.tookBack) _tookBack = true;
+							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
 							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
 								_startPos = _save.startPos;
 							}
@@ -1491,6 +1495,7 @@ document.addEventListener('alpine:init', () => {
 						fromPosition: _fromPosition,
 						startPos: _startPos,
 						tookBack: _tookBack,
+						startSfn: _startSfnForUndo,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
@@ -1522,8 +1527,12 @@ document.addEventListener('alpine:init', () => {
 						if (h === 0) {
 							// Back to the start: the loaded position, or a fresh
 							// board with the same spells.
-							if (_startSfnAtLoad) {
-								sfn = _startSfnAtLoad;
+							if (_startSfnForUndo) {
+								sfn = _startSfnForUndo;
+							} else if (_fromPosition) {
+								// A save from before startSfn was kept: the start is unknown.
+								_this.messageHistory.push('Cannot take back the first turn of this game.');
+								return;
 							} else {
 								const fresh = new SigilBoard(board.spellNames, board.variant || gameVariant);
 								fresh.setupInitial();
