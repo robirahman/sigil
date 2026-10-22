@@ -2684,7 +2684,8 @@ class PuzzleOpponent {
 		if (stored && comp && comp.puzzleStatus === 'playing' && !comp._puzzleJudgePending) {
 			comp._puzzleLastDefence = stored;
 			const sim = SimBoard.fromSigilBoard(board);
-			return rustActionsToTurn(sim, color, stored.actions, stored.after);
+			// Stored puzzle positions are taken after the end-of-turn effects.
+			return rustActionsToTurn(sim, color, stored.actions, stored.after, { endOfTurn: true });
 		}
 		if (this.puzzle.kind === 'winning') return this._winningReply(board, color, onProgress);
 		if (typeof RustAI === 'undefined' || !RustAI.judgeMove) {

@@ -23,7 +23,7 @@ first set was collected (engine v5, 2026-09-18).
   - filters for kind, difficulty and theme;
   - a daily puzzle, the same for everyone, with a streak counter;
   - "My missed wins", which lists puzzles from the signed-in player's own ranked games where they missed the win.
-- **A real bug turned up along the way:** the browser refused every engine turn that completes the Seal of Destruction. It is fixed (see below).
+- **Fixed along the way:** the page refused every stored puzzle line that completes the Seal of Destruction (see below).
 
 ## The old set, re-proven
 
@@ -99,14 +99,16 @@ Each puzzle is ranked within its own kind, so each difficulty level holds about 
 
 Tags come from the first stored solution: Dash, Push, Quiet (no cast), Sacrifice, Cast: \<spell\>, Endgame (turn 40 or later), and Tectonic or Providence.
 
-## The Seal of Destruction refusal (a live bug)
+## Seal of Destruction lines on the page
 
 `rustActionsToTurn` (`rust-ai.js`) is the gate every engine turn passes through: it replays the engine's actions and refuses the turn if the position differs from the one the engine reported.
 
-- **The defect:** the gate replayed the turn without the end-of-turn Seal of Destruction burn, which the game controller applies next. The engine's position includes the burn, so every engine turn that completes the Seal was refused.
-- **Puzzle impact:** 23 of the 59 puzzles in the new set that involve the Seal had stored lines the gate rejected. In 4 of them, the scripted defence would have thrown on the page.
-- **Live impact:** a Rust AI turn that completes the Seal in a real game hits the same refusal. The game loop rethrows the error.
-- **Fix:** the burn is now one function, `sealOfDestructionBurn` in `constants.js`, used by both the controller and the gate.
+- **Two conventions:**
+  - The engine's live replies (`emit_actions`) report the board *before* the end-of-turn Seal of Destruction burn, which the game controller applies next. That contract is pinned by a Rust test.
+  - The mate solver stores the board *after* the burn.
+- **The defect:** the puzzle page replayed its scripted defences through the gate with the post-burn positions, so every stored line that completes the Seal was refused.
+- **Impact:** 23 of the 59 puzzles in the new set that involve the Seal had such lines, 4 of them scripted defences. The live set had the same flaw: puzzle `-OvJ-_O0oYKtS6AX9yu_-t20`'s defence threw.
+- **Fix:** the gate gains an explicit `{ endOfTurn: true }` mode that applies the burn (`sealOfDestructionBurn`, now in `constants.js` and shared with the controller). Only stored puzzle lines use it; live engine replies keep the pre-burn comparison.
 - **Checks:**
   - `tools/puzzle-smoke.js --replay` replays every stored turn of every puzzle (casts included) through the gate. **1,577 of 1,577 reproduce.**
   - The input-driven smoke test (moves and dashes only) passes 238 puzzles with 0 failures; the other 1,339 need spell prompts and are skipped.

@@ -264,7 +264,7 @@ async function replayPuzzle(puzzle) {
 				if (probe.winner !== color) throw new Error('the turn ends the game with ' + probe.winner + ' winning');
 				continue;
 			}
-			await rustActionsToTurn(sim, color, t.actions, t.after);
+			await rustActionsToTurn(sim, color, t.actions, t.after, { endOfTurn: true });
 		} catch (e) {
 			return { status: 'fail', why: t.what + ' does not replay: ' + String((e && e.message) || e).split('\n').slice(0, 3).join(' / '), log: [] };
 		}

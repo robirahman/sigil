@@ -582,8 +582,8 @@ function bulwarkProtectedNodes(board) {
 // Seal of Destruction's end-of-turn effect: when `color` ends its turn with
 // the Seal charged, every unshielded enemy stone touching one of its stones is
 // destroyed. Returns true when the Seal was charged (the caller announces it).
-// Shared by GameController._eotTriggers and the Rust replay gate
-// (rust-ai.js rustActionsToTurn), whose positions must agree.
+// Shared by GameController._eotTriggers and the Rust replay gate's
+// end-of-turn mode (rust-ai.js rustActionsToTurn, for stored puzzle lines).
 function sealOfDestructionBurn(board, color) {
 	if (!board.chargedSpells[color].includes('Seal_of_Destruction')) return false;
 	const enemy = color === 'red' ? 'blue' : 'red';
