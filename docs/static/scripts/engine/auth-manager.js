@@ -10,9 +10,13 @@ class AuthManager {
 		this.currentUser = null;
 		this.userProfile = null; // cached RTDB profile
 		this._onAuthChangedCallbacks = [];
+		// Resolves once Firebase has restored any saved sign-in; until then
+		// currentUser is null even for a signed-in player.
+		this._settled = new Promise((resolve) => { this._resolveSettled = resolve; });
 
 		this.auth.onAuthStateChanged((user) => {
 			this.currentUser = user;
+			this._resolveSettled();
 			for (const cb of this._onAuthChangedCallbacks) {
 				cb(user);
 			}
@@ -66,6 +70,8 @@ class AuthManager {
 	 * (database.rules.json), so guests need one too.
 	 */
 	async ensureSignedIn() {
+		// A guest sign-in before the saved session is restored would replace it.
+		await this._settled;
 		if (!this.currentUser) {
 			try {
 				await this.signInAnonymously();
