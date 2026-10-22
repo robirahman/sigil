@@ -28,6 +28,8 @@
 #   shard       optional i/n: this VM's slice of the games (gen_mate_puzzles --shard)
 #   winning     1 = a last phase runs the winning-turn analysis on every position
 #               without a mate puzzle (work file winning.jsonl)
+#   winning-resume  optional GCS object of a prior run's winning.jsonl (a preempted
+#               winning phase resumes from it; `resume` restores mates.jsonl only)
 #
 # Phase 1 also re-proves the committed puzzle set (--old) within the shard.
 # The VM only solves; assembly (difficulty searches, the JSON) is local:
@@ -42,6 +44,7 @@ RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hour
 CORPUS=$(md corpus); TMS1=$(md time-ms-1); TMS2=$(md time-ms-2); MM2=$(md max-mate-2)
 RESUME=$(md resume); : "${RESUME:=}"
 SHARD=$(md shard); : "${SHARD:=}"
+WRESUME=$(md winning-resume); : "${WRESUME:=}"
 WINNING=$(md winning); : "${WINNING:=0}"
 TMS3=$(md retry-ms); : "${TMS3:=0}" 
 : "${RUN:=unknown}" "${WORKERS:=$(nproc)}" "${MAXH:=5}" "${TMS1:=40000}" "${TMS2:=30000}" "${MM2:=3}"
@@ -105,6 +108,10 @@ echo "corpus: $(stat -c%s $WORK/hydrated.json) bytes"
 if [ -n "$RESUME" ]; then
   gcs_get "$RESUME" $WORK/out/mates.jsonl && echo "resume: $(wc -l < $WORK/out/mates.jsonl) positions already solved" \
     || { echo "WARNING: resume download failed; starting fresh"; rm -f $WORK/out/mates.jsonl; }
+fi
+if [ -n "$WRESUME" ]; then
+  gcs_get "$WRESUME" $WORK/out/winning.jsonl && echo "winning resume: $(wc -l < $WORK/out/winning.jsonl) positions already judged" \
+    || { echo "WARNING: winning resume download failed; starting fresh"; rm -f $WORK/out/winning.jsonl; }
 fi
 
 # Continuous upload of the work file + log: a preemption or the watchdog then

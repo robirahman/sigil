@@ -678,7 +678,10 @@ def main():
                         'engine / recorded line and proven against every reply; budget %d, %d ms per position, max mate %d'
                         % (args.budget, args.time_ms, args.max_mate))
     engine['winning'] = ('tools/winning_turns.py: best turn P >= %.2f (position-winprob.json curves), every other '
-                         'candidate >= %.2f below it, at depths 5 and 6' % (winning_turns.WIN_P, winning_turns.GAP))
+                         'candidate >= %.2f below it; root candidates ranked at depth %d, each child searched to '
+                         'depth %d and confirmed at depth %d'
+                         % (winning_turns.WIN_P, winning_turns.GAP, winning_turns.RANK_DEPTH,
+                            winning_turns.CHILD_DEPTH, winning_turns.CONFIRM_DEPTH))
     out = {'generated': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
            'engine': engine, 'count': len(puzzles),
            'positions_examined': len([1 for pos in positions if pos['key'] in done]),

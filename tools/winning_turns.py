@@ -40,6 +40,8 @@ GAP = 0.25
 BAND = 0.05
 RANK_TOP = 12
 RANK_DEPTH = 3
+CHILD_DEPTH = 4       # each candidate's child position, searched by analyze()
+CONFIRM_DEPTH = 5     # the confirmation re-search of the winners and the best losers
 CHILD_MS = 30_000
 CONFIRM_TOP = 4
 MAX_SOLUTIONS = 3
@@ -159,7 +161,7 @@ def analyze_position(sfn, played_after=None, diag=False):
             picks.append({'actions': None, 'after': played_after, 'key': pk, 'root': None})
     judged = []
     for c in picks:
-        c['p4'], c['i4'] = mover_prob(E, c['after'], mover, 4, CHILD_MS)
+        c['p4'], c['i4'] = mover_prob(E, c['after'], mover, CHILD_DEPTH, CHILD_MS)
         if c['p4'] is None:
             continue
         judged.append(c)
@@ -192,7 +194,7 @@ def analyze_position(sfn, played_after=None, diag=False):
     rest.sort(key=lambda c: -c['p4'])
     deep = win + rest[:CONFIRM_TOP]
     for c in deep:
-        c['p5'], c['i5'] = mover_prob(E, c['after'], mover, 5, CHILD_MS)
+        c['p5'], c['i5'] = mover_prob(E, c['after'], mover, CONFIRM_DEPTH, CHILD_MS)
     for c in rest[CONFIRM_TOP:]:
         c['p5'] = c['p4']
     verdict, win5, rest5 = split([c for c in judged if c.get('p5') is not None], 'p5')
