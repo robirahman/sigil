@@ -72,14 +72,16 @@ This pass ran on every position that did not yield a mate puzzle. The rule:
 | Verdict | Positions |
 |---|---|
 | not winning | 31,308 |
-| grey zone (another turn is 0.05–0.25 below the best) | 7,156 |
-| too many winning turns | 6,441 |
+| grey zone (another turn is 0.05–0.25 below the best) | 7,157 |
+| too many winning turns | 6,440 |
 | a mate (left to the solver) | 1,092 |
 | errors (out-of-scope spells) | 1,022 |
 | failed the depth-5 confirmation | 558 |
 | **puzzle** | **90** |
 
 Winning positions in Sigil usually have many good turns. That is why the yield is low and why the gap is what makes a position a puzzle. A random-position probe under a stricter absolute rule (best ≥ 0.80, all others ≤ 0.55) found none in 300 positions.
+
+Candidate turns are scored on the board after the end-of-turn effects (`turn_after` returns `mate::child`), so a turn that completes the Seal of Destruction is judged with its burn. The 402 affected positions were re-run after that fix: no puzzle changed, and two "too many" verdicts became "grey".
 
 The depth-5 confirmation matters: one candidate's value moved from 0.006 to 0.815 between depths 4 and 5.
 
