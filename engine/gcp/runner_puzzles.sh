@@ -25,6 +25,13 @@
 #   resume      optional GCS object name of a prior run's work file: downloaded
 #               first, so already-solved positions are skipped (the first run
 #               was a Spot VM preempted 3.5 minutes into phase 2)
+#   shard       optional i/n: this VM's slice of the games (gen_mate_puzzles --shard)
+#   winning     1 = a last phase runs the winning-turn analysis on every position
+#               without a mate puzzle (work file winning.jsonl)
+#
+# Phase 1 also re-proves the committed puzzle set (--old) within the shard.
+# The VM only solves; assembly (difficulty searches, the JSON) is local:
+#   gen_mate_puzzles.py --no-solve --work 'runs/*/mates.jsonl' --winning-work ...
 set -uo pipefail
 exec > >(tee -a /var/log/sigil-puzzles.log) 2>&1
 echo "=== sigil puzzle runner bootstrap $(date -u +%FT%TZ) ==="
@@ -34,10 +41,12 @@ md() { curl -sf -m 10 -H 'Metadata-Flavor: Google' \
 RUN=$(md run-id); BRANCH=$(md branch); WORKERS=$(md workers); MAXH=$(md max-hours)
 CORPUS=$(md corpus); TMS1=$(md time-ms-1); TMS2=$(md time-ms-2); MM2=$(md max-mate-2)
 RESUME=$(md resume); : "${RESUME:=}"
+SHARD=$(md shard); : "${SHARD:=}"
+WINNING=$(md winning); : "${WINNING:=0}"
 TMS3=$(md retry-ms); : "${TMS3:=0}" 
-: "${RUN:=unknown}" "${BRANCH:=puzzles}" "${WORKERS:=$(nproc)}" "${MAXH:=5}" \
-  "${CORPUS:=puzzles/hydrated_2026-09-17.json}" "${TMS1:=40000}" "${TMS2:=30000}" "${MM2:=3}"
-echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS tms1=$TMS1 tms2=$TMS2 mm2=$MM2"
+: "${RUN:=unknown}" "${WORKERS:=$(nproc)}" "${MAXH:=5}" "${TMS1:=40000}" "${TMS2:=30000}" "${MM2:=3}"
+[ -n "${BRANCH:-}" ] && [ -n "${CORPUS:-}" ] || { echo "FATAL: branch and corpus metadata are required"; shutdown -h now; exit 1; }
+echo "run=$RUN branch=$BRANCH workers=$WORKERS max_hours=$MAXH corpus=$CORPUS tms1=$TMS1 tms2=$TMS2 mm2=$MM2 shard=${SHARD:-all} winning=$WINNING"
 
 # WATCHDOG: nothing below is trusted to terminate (see runner.sh for why).
 ( sleep $((MAXH * 3600)); echo "WATCHDOG: ${MAXH}h cap hit, shutting down"; \
@@ -81,7 +90,7 @@ git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$
   https://github.com/robirahman/sigil.git repo >/dev/null 2>&1 \
   || { echo "FATAL: clone failed"; shutdown -h now; exit 1; }
 cd repo && git sparse-checkout init --cone >/dev/null 2>&1
-git sparse-checkout set engine tools ai docs/static/scripts/engine >/dev/null 2>&1
+git sparse-checkout set engine tools ai docs/static/scripts/engine docs/static/data docs/static/puzzles >/dev/null 2>&1
 git checkout >/dev/null 2>&1
 COMMIT=$(git log --oneline -1)
 echo "repo at $COMMIT"; echo "$COMMIT" > $WORK/out/COMMIT.txt
@@ -107,7 +116,8 @@ fi
     sleep 120; done ) &
 
 cd $WORK/repo
-GEN="$WORK/venv/bin/python -u tools/gen_mate_puzzles.py --hydrated $WORK/hydrated.json --work $WORK/out/mates.jsonl --out $WORK/out/mate_puzzles.json --workers $WORKERS"
+GEN="$WORK/venv/bin/python -u tools/gen_mate_puzzles.py --hydrated $WORK/hydrated.json --work $WORK/out/mates.jsonl --winning-work $WORK/out/winning.jsonl --old docs/static/puzzles/mate_puzzles.json --no-assemble --workers $WORKERS"
+[ -n "$SHARD" ] && GEN="$GEN --shard $SHARD"
 echo "=== phase 1: promising positions, mate <= 3, ${TMS1} ms/position ==="
 $GEN --only-promising --max-mate 3 --time-ms "$TMS1" > $WORK/out/phase1.log 2>&1
 STATUS=$?; FAILED_STAGE="phase 1"
@@ -123,6 +133,13 @@ if [ "$STATUS" -eq 0 ] && [ "$TMS3" -gt 0 ]; then
   $GEN --only-promising --max-mate 3 --time-ms "$TMS3" --retry promising > $WORK/out/phase3.log 2>&1
   STATUS=$?; FAILED_STAGE="phase 3"
   tail -3 $WORK/out/phase3.log
+fi
+
+if [ "$STATUS" -eq 0 ] && [ "$WINNING" = "1" ]; then
+  echo "=== winning-turn pass: positions without a mate puzzle ==="
+  $GEN --winning --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/winning.log 2>&1
+  STATUS=$?; FAILED_STAGE="winning"
+  tail -3 $WORK/out/winning.log
 fi
 
 # The partial work file is uploaded either way (a RESUME can pick it up), but

@@ -16,7 +16,10 @@
  *   3. plays the first stored solution through the human-input path;
  *   4. mate-in-1: asserts game_over with the mover winning;
  *      mate-in-2: asserts the scripted defence replays onto the position the
- *      solver predicted, plays the stored finishing move, asserts game_over.
+ *      solver predicted, plays the stored finishing move, asserts game_over;
+ *      winning turn: asserts the turn lands on the stored after-position,
+ *      one of the puzzle's solution keys (the reply needs the wasm engine,
+ *      so the game stops there).
  *
  * A failure here is a disagreement between the Rust solver and the browser
  * rules -- the thing the page exists to surface -- so it prints the SFN.
@@ -86,6 +89,15 @@ function tokenPlan(actions) {
 	return plan;
 }
 
+// The game loop runs detached from startGame's promise, so an error inside it
+// (a stored reply the browser rejects) surfaces as an unhandled rejection: it
+// fails the puzzle being checked instead of ending the run.
+let failCurrent = null;
+process.on('unhandledRejection', (e) => {
+	if (failCurrent) failCurrent({ status: 'fail', why: 'engine threw: ' + String((e && e.message) || e).split('\n').slice(0, 3).join(' / ') });
+	else throw e;
+});
+
 function runPuzzle(puzzle) {
 	return new Promise((resolve) => {
 		const mover = puzzle.mover;
@@ -108,8 +120,9 @@ function runPuzzle(puzzle) {
 			}
 			return null;
 		};
+		const winning = puzzle.kind === 'winning';
 		for (const cand of (puzzle.solutions || [])) {
-			chain = buildChain(cand, puzzle.mate);
+			chain = buildChain(cand, winning ? 1 : puzzle.mate);
 			if (chain) break;
 		}
 		if (!chain) {
@@ -122,12 +135,14 @@ function runPuzzle(puzzle) {
 		let checkedStart = false;
 		const log = [];
 		let finished = false;
-		const finish = (r) => { if (!finished) { finished = true; clearTimeout(timer); resolve(Object.assign({ log }, r)); } };
+		const finish = (r) => { if (!finished) { finished = true; clearTimeout(timer); failCurrent = null; resolve(Object.assign({ log }, r)); } };
+		failCurrent = finish;
 		const timer = setTimeout(() => finish({ status: 'fail', why: 'timeout (engine waiting for input the plan did not provide)' }), 8000);
 
 		let gc;
 		const component = { puzzleStatus: 'playing' };
 		const opponent = new PuzzleOpponent(puzzle, component);
+		if (winning) opponent.pickTurn = () => new Promise(() => {});   // the check ends at the mover's turn
 		gc = new GameController((ev) => {
 			log.push(ev.type + (ev.message ? ': ' + ev.message : ''));
 			if (finished) return;
@@ -159,6 +174,10 @@ function runPuzzle(puzzle) {
 					const key = puzzleSfnKey(t.sfnAfter);
 					const cur = chain[ply];
 					if (ply === 0 && !puzzle.solution_keys.includes(key)) return finish({ status: 'fail', why: 'played the stored solution but reached a position not in solution_keys: ' + t.sfnAfter });
+					if (winning) {
+						if (key !== puzzleSfnKey(sol.after)) return finish({ status: 'fail', why: 'winning turn reached ' + t.sfnAfter + ' but the generator stored ' + sol.after });
+						return finish({ status: 'ok' });
+					}
 					if (ply > 0 && ply < chain.length - 1 && key !== puzzleSfnKey(cur.sol.after)) return finish({ status: 'fail', why: 'continuation reached ' + t.sfnAfter + ' but solver predicted ' + cur.sol.after });
 					if (ply === chain.length - 1) { stage = 'done'; }
 					else { stage = 'defence'; }
@@ -172,6 +191,7 @@ function runPuzzle(puzzle) {
 				return;
 			}
 			if (ev.type === 'game_over') {
+				if (winning && ev.winner === mover) return finish({ status: 'ok' });
 				if (ev.winner !== mover) return finish({ status: 'fail', why: 'game over but winner is ' + ev.winner });
 				if (stage !== 'done') return finish({ status: 'fail', why: 'game ended early at stage ' + stage });
 				return finish({ status: 'ok' });
@@ -189,19 +209,21 @@ function runPuzzle(puzzle) {
 	let puzzles = data.puzzles || [];
 	if (LIMIT) puzzles = puzzles.slice(0, LIMIT);
 	const tally = { ok: 0, fail: 0, skip: 0 };
-	const byMate = { 1: { ok: 0, fail: 0, skip: 0 }, 2: { ok: 0, fail: 0, skip: 0 }, 3: { ok: 0, fail: 0, skip: 0 } };
+	const byMate = { 1: { ok: 0, fail: 0, skip: 0 }, 2: { ok: 0, fail: 0, skip: 0 }, 3: { ok: 0, fail: 0, skip: 0 }, win: { ok: 0, fail: 0, skip: 0 } };
+	const cls = p => (p.kind === 'winning' ? 'win' : p.mate);
 	const fails = [];
 	for (const p of puzzles) {
 		const r = await runPuzzle(p);
 		tally[r.status]++;
-		if (byMate[p.mate]) byMate[p.mate][r.status]++;
-		if (r.status === 'fail') fails.push({ id: p.id, mate: p.mate, why: r.why, sfn: p.sfn, log: r.log.slice(-6) });
-		if (VERBOSE || r.status === 'fail') console.log(`${r.status.toUpperCase().padEnd(4)} ${p.id} mate-in-${p.mate} ${r.why || ''}`);
+		if (byMate[cls(p)]) byMate[cls(p)][r.status]++;
+		const what = p.kind === 'winning' ? 'winning-turn' : 'mate-in-' + p.mate;
+		if (r.status === 'fail') fails.push({ id: p.id, what, why: r.why, sfn: p.sfn, log: r.log.slice(-6) });
+		if (VERBOSE || r.status === 'fail') console.log(`${r.status.toUpperCase().padEnd(4)} ${p.id} ${what} ${r.why || ''}`);
 	}
 	console.log(`\n${puzzles.length} puzzles: ${tally.ok} ok, ${tally.fail} FAIL, ${tally.skip} skipped (cast solutions need the spell prompts)`);
-	console.log(`  mate-in-1: ${JSON.stringify(byMate[1])}   mate-in-2: ${JSON.stringify(byMate[2])}   mate-in-3: ${JSON.stringify(byMate[3])}`);
+	console.log(`  mate-in-1: ${JSON.stringify(byMate[1])}   mate-in-2: ${JSON.stringify(byMate[2])}   mate-in-3: ${JSON.stringify(byMate[3])}   winning: ${JSON.stringify(byMate.win)}`);
 	for (const f of fails) {
-		console.log(`\nFAIL ${f.id} (mate-in-${f.mate}): ${f.why}\n  sfn: ${f.sfn}\n  last events: ${f.log.join(' | ')}`);
+		console.log(`\nFAIL ${f.id} (${f.what}): ${f.why}\n  sfn: ${f.sfn}\n  last events: ${f.log.join(' | ')}`);
 	}
 	process.exit(tally.fail ? 1 : 0);
 })();

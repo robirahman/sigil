@@ -1715,25 +1715,36 @@ document.addEventListener('alpine:init', () => {
 				// ---------------------------------------------------------------
 				let _puzzleExpectGameOver = false;
 
+				// The page's hook for results (daily streak): solved, failed or
+				// revealed, once per attempt.
+				function _puzzleReport(status) {
+					if (typeof window !== 'undefined' && typeof window.SIGIL_PUZZLE_ON_RESULT === 'function') {
+						try { window.SIGIL_PUZZLE_ON_RESULT(puzzle, status); } catch (e) { /* page hook */ }
+					}
+				}
+
 				function _puzzleFail(msg) {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'failed';
 					_this.puzzleMessage = msg;
+					_puzzleReport('failed');
 					if (typeof soundManager !== 'undefined') { try { soundManager.play('crush'); } catch (e) { /* */ } }
 				}
 				_this._puzzleFail = _puzzleFail;
 
-				function _puzzleSolve() {
+				function _puzzleSolve(msg) {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'solved';
-					_this.puzzleMessage = 'Solved!';
+					_this.puzzleMessage = msg || 'Solved!';
 					try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
 						solved[puzzle.id] = Date.now();
 						localStorage.setItem('sigil_puzzles_solved', JSON.stringify(solved));
 					} catch (e) { /* storage blocked */ }
+					_puzzleReport('solved');
 				}
+				_this._puzzleSolve = _puzzleSolve;
 
 				function _puzzleOnTurn(t) {
 					if (t.color === puzzle.mover) _this.puzzleMoves += 1;
@@ -1751,6 +1762,20 @@ document.addEventListener('alpine:init', () => {
 					const over = !!(_engineRef && _engineRef.board && _engineRef.board.gameover);
 					const step = _this.puzzleStep;
 					_this.puzzleStep = step + 1;
+					if (puzzle.kind === 'winning') {
+						// One turn to find. A stored solution (or a win on the
+						// spot) solves it; anything else is judged by the engine
+						// when it picks its reply (PuzzleOpponent._winningReply).
+						if (step > 0) return;
+						const sol = (puzzle.solutions || []).find(x => x.key === key);
+						if (sol || puzzleKeys(puzzle).indexOf(key) >= 0 || (over && _engineRef.board.winner === puzzle.mover)) {
+							_puzzleSolve(sol && sol.p ? 'Solved! That turn keeps a ' + puzzlePct(sol.p) + ' chance to win.' : 'Solved!');
+							return;
+						}
+						_this._puzzleJudgePending = true;
+						_this.puzzleMessage = 'Not the stored solution — the engine is judging your turn…';
+						return;
+					}
 					// Which turns are "correct" at this step: the puzzle's first
 					// turns, then the proven continuations of the line the
 					// player is on (mate-in-3). The last step is judged by the
@@ -1809,7 +1834,7 @@ document.addEventListener('alpine:init', () => {
 
 				function _puzzleOnGameOver(payload) {
 					_puzzleExpectGameOver = false;
-					if (_this.puzzleStatus === 'failed' && payload.winner === puzzle.mover
+					if (puzzle.kind !== 'winning' && _this.puzzleStatus === 'failed' && payload.winner === puzzle.mover
 						&& _this.puzzleMoves <= puzzle.mate) {
 						// The engine judged an earlier move as an escape, yet the mover
 						// won within the puzzle's count: the JUDGE was wrong. Worth a report.
@@ -1853,13 +1878,17 @@ document.addEventListener('alpine:init', () => {
 
 				_this.puzzleShowSolution = function () {
 					if (_this.puzzleStatus === 'solved') return;
-					if (_this.puzzleStatus === 'playing') _this.puzzleStatus = 'revealed';
+					if (_this.puzzleStatus === 'playing') {
+						_this.puzzleStatus = 'revealed';
+						_puzzleReport('revealed');
+					}
 					const lines = [];
 					const sols = puzzle.solutions || [];
 					const shown = sols.slice(0, 3);
 					const them = puzzle.mover === 'red' ? 'Blue' : 'Red';
 					const render = (sol) => {
 						let text = describePuzzleActions(sol.actions);
+						if (typeof sol.p === 'number') text += ' (keeps a ' + puzzlePct(sol.p) + ' chance to win)';
 						if (sol.defence) text += '  \u2192  ' + them + ' replies ' + describePuzzleActions(sol.defence.actions);
 						if (sol.continuations && sol.continuations.length) {
 							text += '  \u2192  ' + render(sol.continuations[0]);
@@ -1874,6 +1903,9 @@ document.addEventListener('alpine:init', () => {
 					});
 					const extra = puzzleKeys(puzzle).length - shown.length;
 					if (extra > 0) lines.push(extra + ' more winning first turn' + (extra === 1 ? '' : 's') + ' not shown.');
+					if (puzzle.kind === 'winning' && typeof puzzle.p_second === 'number') {
+						lines.push('Every other turn the engine tried keeps at most ' + puzzlePct(puzzle.p_second) + '.');
+					}
 					_this.puzzleSolutionText = lines;
 					// Also into the game log, which is always in view, and ring every
 					// node the first solution turn touches (gold, distinct from the
@@ -2557,6 +2589,11 @@ function formatEngineEval(meta) {
 	return (stones > 0 ? '+' : '') + stones.toFixed(1);
 }
 
+/** "84%" for a win probability. */
+function puzzlePct(p) {
+	return Math.round(100 * Math.max(0, Math.min(1, p))) + '%';
+}
+
 function puzzleKeys(puzzle) {
 	return (puzzle && (puzzle.solution_keys || puzzle.solutionKeys)) || [];
 }
@@ -2646,6 +2683,7 @@ class PuzzleOpponent {
 			const sim = SimBoard.fromSigilBoard(board);
 			return rustActionsToTurn(sim, color, stored.actions, stored.after);
 		}
+		if (this.puzzle.kind === 'winning') return this._winningReply(board, color, onProgress);
 		if (typeof RustAI === 'undefined' || !RustAI.judgeMove) {
 			throw new Error('The engine is not available to judge this move.');
 		}
@@ -2683,5 +2721,65 @@ class PuzzleOpponent {
 			}
 		}
 		return res.turn;
+	}
+
+	/**
+	 * Winning-turn puzzles: the reply is the review search's best turn, and a
+	 * turn off the stored solutions is judged by the same search -- its eval
+	 * of the position after the turn, turned into the mover's win chance by
+	 * the calibrated curves (position-rating.js) the puzzle was generated
+	 * with. The turn counts if it keeps at least the puzzle's `accept_p`
+	 * (midway between the solution and the best other turn).
+	 */
+	async _winningReply(board, color, onProgress) {
+		const comp = this.component;
+		const judging = comp && comp.puzzleStatus === 'playing' && comp._puzzleJudgePending;
+		const sim = SimBoard.fromSigilBoard(board);
+		const sfn = boardToSfn(sim);
+		const worker = getRustEngineWorker();
+		worker.post({ type: 'new_game', ttBits: 20 });
+		const t0 = Date.now();
+		let res = null;
+		// A judgement needs a fitted curve (depth >= 4): retry longer, as
+		// evaluateStartPosition does. A plain reply takes what it gets.
+		for (let tms = this.timeMs, k = 0; k < (judging ? 3 : 1); k++, tms *= 2) {
+			res = await worker.search(Object.assign({
+				sfn, timeMs: tms, ttBits: 20, historySfns: [sfn],
+				threads: typeof rustThreadCount === 'function' ? rustThreadCount() : 1,
+			}, RUST_REVIEW_SEARCH));
+			if (!res || res.ok === false) throw new Error('Rust engine error: ' + ((res && res.error) || 'unknown'));
+			const proven = typeof res.mate_in === 'number' && res.mate_in !== 0 && res.mate_proven;
+			if ((res.depth || 0) >= 4 || proven) break;
+		}
+		this.lastMeta = { depth: res.depth, stones: (typeof res.stones === 'number') ? res.stones : null,
+			mateIn: res.mate_in, mateProven: res.mate_proven, timeMs: Date.now() - t0 };
+		if (onProgress) onProgress(this.lastMeta);
+		if (judging) {
+			comp._puzzleJudgePending = false;
+			const sign = sfn.split(' ')[1] === 'r' ? 1 : -1;      // searcher's POV -> red's
+			const info = {
+				depth: res.depth || 0,
+				stones: typeof res.stones === 'number' ? res.stones * sign : null,
+				mateIn: (typeof res.mate_in === 'number' && res.mate_in !== 0) ? res.mate_in * sign : null,
+				proven: !!res.mate_proven,
+			};
+			const model = typeof loadPositionModel === 'function' ? await loadPositionModel() : null;
+			const pRed = model ? positionRedWinProb(model, info, sfn) : null;
+			const p = pRed === null ? null : (this.puzzle.mover === 'red' ? pRed : 1 - pRed);
+			const need = typeof this.puzzle.accept_p === 'number' ? this.puzzle.accept_p : 0.7;
+			const best = typeof this.puzzle.p_best === 'number' ? puzzlePct(this.puzzle.p_best) : null;
+			if (p === null) {
+				comp.puzzleJudge = 'Engine: could not search deep enough to judge (depth ' + (res.depth || 0) + ').';
+				comp._puzzleFail('The engine could not judge that turn on this device. Retry, or show the solution.');
+			} else if (p >= need) {
+				comp.puzzleJudge = 'Engine: after your turn you win ' + puzzlePct(p) + ' of the time (depth ' + info.depth + ').';
+				comp._puzzleSolve('Correct — not the stored solution, but the engine rates it as winning too.');
+			} else {
+				comp.puzzleJudge = 'Engine: after your turn you win ' + puzzlePct(p) + ' of the time (depth ' + info.depth + ')'
+					+ (best ? '; the best turn keeps ' + best : '') + '. It replies ' + describePuzzleActions(res.actions) + '.';
+				comp._puzzleFail('That lets the advantage slip. Play on, or Retry.');
+			}
+		}
+		return rustActionsToTurn(sim, color, res.actions, res.expected_sfn);
 	}
 }
