@@ -11,7 +11,8 @@
  *                    "Delete account" on account.html.
  *   expireClocks   - every minute, ends games whose clock ran out while no
  *                    player's tab was open to see it.
- *   settleAbort    - an abort after both players have moved is a forfeit.
+ *   settleAbort    - an abort after both players have moved is a forfeit
+ *                    (on the status change to 'aborted').
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -283,18 +284,22 @@ exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION,
 	if (ended) logger.info('expireClocks', { ended });
 });
 
-exports.settleAbort = onValueCreated({
-	ref: '/rooms/{code}/abortedBy',
+exports.settleAbort = onValueWritten({
+	// On the status, not abortedBy: the two may be written apart.
+	ref: '/rooms/{code}/status',
 	instance: DB_INSTANCE,
 	region: REGION,
+	// Retried on failure: finishRoom only acts on a room still 'aborted'.
+	retry: true,
 }, async (event) => {
-	const db = event.data.ref.root.database;
+	if (event.data.after.val() !== 'aborted' || event.data.before.val() === 'aborted') return;
+	const db = event.data.after.ref.root.database;
 	const code = event.params.code;
-	const by = event.data.val();
-	if (by !== 'red' && by !== 'blue') return;
 	const room = (await db.ref('rooms/' + code).once('value')).val();
+	const by = room && room.abortedBy;
+	if (by !== 'red' && by !== 'blue') return;
 	// Each player may abort until both have moved; later it is a forfeit.
-	if (!room || room.status !== 'aborted' || roomTurns(room).length < 2) return;
+	if (room.status !== 'aborted' || roomTurns(room).length < 2) return;
 	await finishRoom(db, code, 'aborted',
 		{ winner: by === 'red' ? 'blue' : 'red', forfeitedBy: by, endReason: 'forfeit' });
 	logger.info('settleAbort', { code, by });
