@@ -13,7 +13,13 @@ node <repo>/tools/browser/puzzle-flow-test.js <repo>/docs 0 correct    # play th
 node <repo>/tools/browser/puzzle-flow-test.js <repo>/docs 595 wrong    # off-line move: engine judge + reply
 ```
 
-Both print the Alpine component state and every console / page error. The
+```sh
+node <repo>/tools/browser/tutorial-test.js <repo>/docs    # play every tutorial lesson + two wrong moves
+```
+
+`tutorial-test.js` exits non-zero on any failed check or page error.
+
+The puzzle scripts print the Alpine component state and every console / page error. The
 `solution_keys` regression (Show solution threw) was found this way.
 
 ```sh
