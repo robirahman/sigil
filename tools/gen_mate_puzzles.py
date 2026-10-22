@@ -269,7 +269,9 @@ def collect_positions(hyd, args, old):
                     'old_id': op['id'] if op else None,
                     'dist': last_turn.get(gid, 0) - t['turnNumber'],
                     'last': bool(g['turns']) and g['turns'][-1]['turnNumber'] == t['turnNumber'],
-                    'won_soon': bool(hints) and g.get('winner') == t.get('color')})
+                    # The mover went on to win soon (whether or not the record
+                    # holds the after-position: self-play shards miss the last one).
+                    'won_soon': g.get('winner') == t.get('color') and last_turn.get(gid, 0) - t['turnNumber'] <= 5})
     for pk, op in old_by_pos.items():
         if pk in seen_pos or not in_shard(op['game']['id'], args.shard):
             continue
