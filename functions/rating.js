@@ -11,7 +11,8 @@
  *     result must follow from the room. A natural end is replayed move by
  *     move with the site's own engine (engine-loader.js) and must end with
  *     the claimed winner. A forfeit is the loser's own `forfeitedBy` write.
- *     A loss on time is recomputed from the server timestamps of the turns.
+ *     A loss on time is recomputed from the server timestamps of the turns,
+ *     as of the server time the room was closed (closedAt).
  *     A result that does not follow counts as a forfeit by the player who
  *     wrote it (`finishedBy`), so finishing a lost game early cannot
  *     escape the rating.
@@ -199,7 +200,10 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 	if (room.forfeitedBy === 'red' || room.forfeitedBy === 'blue') {
 		ok = room.forfeitedBy === loser;
 	} else if (room.endReason === 'time') {
-		ok = flagged(room, loser, ctx.now);
+		// At the moment the room was closed (closedAt, the server's time:
+		// the rules require it), not when this runs: a claim made early
+		// must not come true by waiting.
+		ok = typeof room.closedAt === 'number' && flagged(room, loser, room.closedAt);
 	} else {
 		const transcript = onlineTranscript(room);
 		ok = !!transcript && (await replayWinner(engine, room.spellNames, engine.normalizeVariant(room.variant),

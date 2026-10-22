@@ -76,10 +76,10 @@ test('an online game is recorded and rated once, by the server', async () => {
 	// What multiplayer-controller.js does at a natural end (firebase-sync.js writeRoomFinalState).
 	const fin = ONLINE.winner === 'red' ? alice : bob;
 	await update(ref(fin.db, 'rooms/' + code), { gameLog: ONLINE.turns, finishedAt: Date.now() });
-	await update(ref(fin.db, 'rooms/' + code), { finishedBy: ONLINE.winner, winner: ONLINE.winner, status: 'finished' });
+	await update(ref(fin.db, 'rooms/' + code), { finishedBy: ONLINE.winner, winner: ONLINE.winner, status: 'finished', closedAt: serverTimestamp() });
 	// The other client's attempt is refused: the room is already finished.
 	const late = fin === alice ? bob : alice;
-	await assert.rejects(update(ref(late.db, 'rooms/' + code), { finishedBy: ONLINE.winner === 'red' ? 'blue' : 'red', winner: ONLINE.winner, status: 'finished' }));
+	await assert.rejects(update(ref(late.db, 'rooms/' + code), { finishedBy: ONLINE.winner === 'red' ? 'blue' : 'red', winner: ONLINE.winner, status: 'finished', closedAt: serverTimestamp() }));
 	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
 	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
 	const won = ONLINE.winner === 'red';
@@ -93,7 +93,7 @@ test('finishing a game early with a false result is a resignation', async () => 
 	const bob = await player('bob');
 	// Half the game, then red declares itself the winner.
 	const code = await playRoom(alice, bob, 20);
-	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', status: 'finished' });
+	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', status: 'finished', closedAt: serverTimestamp() });
 	const gameId = await waitFor(bob.db, `rooms/${code}/gameId`);
 	const bobs = await waitFor(bob.db, `user_games/${bob.uid}/${gameId}`);
 	assert.deepStrictEqual([bobs.rated, bobs.result, bobs.eloChange], [true, 'win', 16]);

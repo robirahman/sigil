@@ -716,7 +716,8 @@ class FirebaseSync {
 			// replays the moves to check the winner (functions/rating.js).
 			const status = (await this.roomRef.child('status').once('value')).val();
 			if (status === 'playing') {
-				await this.roomRef.update({ finishedBy: this.myColor, winner: winner, status: 'finished' });
+				await this.roomRef.update({ finishedBy: this.myColor, winner: winner, status: 'finished',
+					closedAt: firebase.database.ServerValue.TIMESTAMP });
 			}
 		} catch (e) {
 			// The other client finished it first.
@@ -726,14 +727,17 @@ class FirebaseSync {
 
 	/**
 	 * playing -> finished, once: true if this client closed the room. The
-	 * caller has written finishedBy (and the winner) first.
+	 * caller has written finishedBy (and the winner) first. closedAt is the
+	 * server's time of closing, which the rating function judges a flag or
+	 * an abandonment by; the rules refuse the write once the room is closed.
 	 */
 	async _closeRoom() {
-		const res = await this.roomRef.child('status').transaction((current) => {
-			if (current === 'playing') return 'finished';
-			return; // abort if already finished
-		});
-		return !!(res && res.committed);
+		try {
+			await this.roomRef.update({ status: 'finished', closedAt: firebase.database.ServerValue.TIMESTAMP });
+			return true;
+		} catch (e) {
+			return false; // the other client closed it first
+		}
 	}
 
 	/**

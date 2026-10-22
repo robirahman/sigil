@@ -110,7 +110,10 @@ test('rooms: create, join, play', async () => {
 	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'blue' }));
 	await assertFails(update(ref(db('mallory'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
 	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'waiting' }));
-	await assertSucceeds(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
+	// ... and the server's time of closing.
+	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red' }));
+	await assertFails(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red', closedAt: 5 }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R1'), { status: 'finished', winner: 'red', finishedBy: 'red', closedAt: serverTimestamp() }));
 	// Once finished the result is fixed, and only the server records it.
 	await assertFails(set(ref(db('bob'), 'rooms/R1/winner'), 'blue'));
 	await assertFails(set(ref(db('bob'), 'rooms/R1/status'), 'playing'));

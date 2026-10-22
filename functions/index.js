@@ -49,6 +49,8 @@ exports.recordRoom = onValueWritten({
 	ref: '/rooms/{code}/status',
 	instance: DB_INSTANCE,
 	region: REGION,
+	// Retried on failure: every step below is safe to repeat.
+	retry: true,
 }, async (event) => {
 	if (event.data.before.val() !== 'playing' || event.data.after.val() !== 'finished') return;
 	const db = event.data.after.ref.root.database;
@@ -56,11 +58,15 @@ exports.recordRoom = onValueWritten({
 	await new Promise((r) => setTimeout(r, RECORD_DELAY_MS));
 	const roomRef = db.ref('rooms/' + code);
 	const room = (await roomRef.once('value')).val();
-	if (!room || room.local === true || room.gameId) return;
-	const gameRef = db.ref('completed_games').push();
-	// Claim the room first, so a retried event cannot record it twice.
-	const claim = await roomRef.child('gameId').transaction((cur) => (cur ? undefined : gameRef.key));
-	if (!claim.committed) return;
+	if (!room || room.local === true) return;
+	// Claim the room first, so a retried event cannot record it twice; a
+	// retry after the claim (the record not yet written) writes it.
+	const newKey = db.ref('completed_games').push().key;
+	const claim = await roomRef.child('gameId').transaction((cur) => (cur ? undefined : newKey));
+	const gameId = claim.committed ? newKey : claim.snapshot.val();
+	if (!gameId) return;
+	const gameRef = db.ref('completed_games/' + gameId);
+	if ((await gameRef.child('winner').once('value')).exists()) return;
 	await gameRef.set(recordFromRoom(room, code, Date.now()));
 });
 
@@ -73,7 +79,10 @@ exports.rateGame = onValueCreated({
 	concurrency: 1,
 	maxInstances: 1,
 	memory: '512MiB',
-	retry: false,
+	// Retried on failure: the claim below is resumable and the final write
+	// (which sets eloProcessed) is one atomic update, so a retry either
+	// finds the game rated or rates it once.
+	retry: true,
 }, async (event) => {
 	const gameId = event.params.gameId;
 	const record = event.data.val();
@@ -89,8 +98,9 @@ exports.rateGame = onValueCreated({
 	// One rating per game, however many records claim it (both clients of
 	// an online game may record it, and a retried upload re-creates one).
 	if (verdict.rated) {
+		// A claim this record already holds (a retry) counts as its own.
 		const claim = await db.ref('rating_claims/' + verdict.claimKey).transaction(
-			(cur) => (cur ? undefined : gameId));
+			(cur) => (cur && cur !== gameId ? undefined : gameId));
 		if (!claim.committed) {
 			Object.assign(verdict, { rated: false, reason: 'duplicate' });
 		}
@@ -170,6 +180,30 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		if (!path.startsWith('completed_games/')) continue;
 		const id = path.split('/')[1];
 		if (!(await db.ref('completed_games/' + id + '/winner').once('value')).exists()) delete updates[path];
+	}
+	// Games still open: a waiting invite goes, a game in play is resigned
+	// (the opponent wins; recordRoom records it, unrated without the
+	// account), and the opponent's active-games entry goes with it.
+	const rooms = [];
+	active.forEach((a) => { rooms.push(a.key); });
+	for (const code of rooms) {
+		const ref = db.ref('rooms/' + code);
+		const room = (await ref.once('value')).val();
+		if (!room) continue;
+		const me = room.red && room.red.uid === uid ? 'red' : room.blue && room.blue.uid === uid ? 'blue' : null;
+		if (!me) continue;
+		const opp = me === 'red' ? 'blue' : 'red';
+		const oppUid = room[opp] && room[opp].uid;
+		if (oppUid && oppUid !== uid) updates['user_active_games/' + oppUid + '/' + code] = null;
+		if (room.status === 'waiting') {
+			updates['rooms/' + code] = null;
+		} else if (room.status === 'playing') {
+			const now = Date.now();
+			await ref.transaction((r) => (r === null ? null : r.status === 'playing'
+				? Object.assign(r, { forfeitedBy: me, finishedBy: me, winner: opp, endReason: 'forfeit',
+					status: 'finished', closedAt: now, finishedAt: now })
+				: undefined));
+		}
 	}
 	await db.ref().update(updates);
 	// Delete the sign-in last, here rather than in the client, so the uid

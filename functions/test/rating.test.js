@@ -165,6 +165,25 @@ test('a forfeit counts only when the loser wrote it', async () => {
 	assert.strictEqual((await judgeGame(rec, ctx({ room }))).reason, 'result-not-verified');
 });
 
+test('a loss on time counts only if the clock was out when the room closed', async () => {
+	const room = onlineRoom();
+	delete room.gameLog;
+	const keys = Object.keys(room.turns).sort().slice(0, 10);
+	room.turns = Object.fromEntries(keys.map((k) => [k, room.turns[k]]));
+	const last = room.turns[keys[keys.length - 1]];
+	const loser = last.color === 'red' ? 'blue' : 'red';
+	Object.assign(room, { timeControl: { type: 'realtime', initialTime: 60_000, increment: 0 },
+		endReason: 'time', winner: last.color, finishedBy: last.color });
+	const rec = Object.assign(onlineRecord(room), { winner: last.color });
+	// Closed ten seconds into a minute: an early claim, however late it is rated.
+	room.closedAt = last.timestamp + 10_000;
+	const early = await judgeGame(rec, ctx({ room, now: last.timestamp + 3_600_000 }));
+	assert.deepStrictEqual([early.rated, early.winner, early.overturned], [true, loser, true]);
+	room.closedAt = last.timestamp + 61_000;
+	const v = await judgeGame(rec, ctx({ room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, last.color, undefined]);
+});
+
 test('a loss on time is recomputed from the turn timestamps', () => {
 	const t0 = 1_000_000;
 	const room = {
