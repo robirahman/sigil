@@ -96,6 +96,7 @@
 				'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
+		<script src="static/scripts/settings-panel.js"></script>
 	</head>
 
 	<body>
@@ -118,6 +119,8 @@
 					<div id="auth-status"></div>
 				</div>
 			</div>
+			<!-- In-game settings (settings-panel.js builds the dialog). -->
+			<button class="settings-toggle" type="button" data-settings-open aria-label="Settings" title="Settings"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
 		</header>
 
 		<div class="main">
@@ -253,14 +256,17 @@
 			</div>
 
 			<!-- Game board -->
-			<div x-data="gameBoard({ importSfn: new URLSearchParams(window.location.search).get('sfn') || '' })" x-on:keydown.window="handleReviewKey($event)" x-bind:class="{ 'review-with-ai-active': reviewMode }">
-				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: localStorage.getItem('sigil_muted') === 'true' }"></button>
+			<div x-data="gameBoard({ importSfn: new URLSearchParams(window.location.search).get('sfn') || '' })" x-on:keydown.window="handleReviewKey($event)" x-on:sigil-settings.window="useArtOnlySpells = $event.detail.artOnly" x-bind:class="{ 'review-with-ai-active': reviewMode }">
+				<button class="mute-toggle" x-on:click="isMuted = soundManager.toggleMute()" x-on:sigil-settings.window="isMuted = $event.detail.muted" x-bind:aria-label="isMuted ? 'Unmute sound' : 'Mute sound'" x-bind:title="isMuted ? 'Unmute sound' : 'Mute sound'" x-text="isMuted ? '\u{1F507}' : '\u{1F50A}'" x-data="{ isMuted: soundManager.muted }"></button>
 				<div class="container">
 					<div class="container__inner">
 						<template x-if="messageHistory.length > 0">
 							<ul
 								class="feed feed--history"
 								x-ref="messageHistory"
+								role="log"
+								aria-live="polite"
+								aria-label="Game log"
 							>
 								<template x-for="message in messageHistory">
 									<li x-text="message"></li>
@@ -507,8 +513,9 @@
 							</button>
 							<button
 								class="action-button action-button--end-turn"
-								x-bind:class="{ 'is-hidden': !actionList.includes('pass') }"
+								x-bind:class="{ 'is-hidden': !actionList.includes('pass'), 'action-button--forfeit-armed': endTurnArmed }"
 								x-on:click="handleEndTurn"
+								x-text="endTurnArmed ? 'Confirm end turn?' : 'End Turn'"
 							>
 								End Turn
 							</button>
@@ -624,6 +631,14 @@
 												}"
 												x-bind:src="getSpellImg('charm' + i)"
 												x-on:click.stop="handleCharmClick(`charm${i}`)"
+												role="button"
+												aria-describedby="spell-tooltip"
+												x-bind:tabindex="spells.images['charm' + i] ? 0 : -1"
+												x-bind:aria-label="spells.text['charm' + i]?.name || ''"
+												x-on:focus="showSpellTooltip('charm' + i)"
+												x-on:blur="closeSpellTooltip()"
+												x-on:keydown.enter.prevent.stop="handleCharmClick(`charm${i}`)"
+												x-on:keydown.space.prevent.stop="handleCharmClick(`charm${i}`)"
 												x-on:click.outside="closeSpellTooltip"
 												x-on:mouseout="handleSpellMouseOut(`charm${i}`)"
 												x-on:mouseover="handleSpellMouseOver(`charm${i}`)"
@@ -662,6 +677,14 @@
 										}"
 												x-bind:src="getSpellImg('ritual' + i)"
 												x-on:click.stop="handleSpellClick(`ritual${i}`)"
+												role="button"
+												aria-describedby="spell-tooltip"
+												x-bind:tabindex="spells.images['ritual' + i] ? 0 : -1"
+												x-bind:aria-label="spells.text['ritual' + i]?.name || ''"
+												x-on:focus="showSpellTooltip('ritual' + i)"
+												x-on:blur="closeSpellTooltip()"
+												x-on:keydown.enter.prevent.stop="handleSpellClick(`ritual${i}`)"
+												x-on:keydown.space.prevent.stop="handleSpellClick(`ritual${i}`)"
 												x-on:click.outside="closeSpellTooltip"
 												x-on:mouseout="handleSpellMouseOut(`ritual${i}`)"
 												x-on:mouseover="handleSpellMouseOver(`ritual${i}`)"
@@ -700,6 +723,14 @@
 										}"
 												x-bind:src="getSpellImg('sorcery' + i)"
 												x-on:click.stop="handleSpellClick(`sorcery${i}`)"
+												role="button"
+												aria-describedby="spell-tooltip"
+												x-bind:tabindex="spells.images['sorcery' + i] ? 0 : -1"
+												x-bind:aria-label="spells.text['sorcery' + i]?.name || ''"
+												x-on:focus="showSpellTooltip('sorcery' + i)"
+												x-on:blur="closeSpellTooltip()"
+												x-on:keydown.enter.prevent.stop="handleSpellClick(`sorcery${i}`)"
+												x-on:keydown.space.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:click.outside="closeSpellTooltip"
 												x-on:mouseout="handleSpellMouseOut()"
 												x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
@@ -726,7 +757,7 @@
 								>
 									<button
 										class="stone-node"
-										x-bind:aria-label="node"
+										x-bind:aria-label="nodeLabel(node)"
 										x-bind:class="{
 												[`stone-node--${node}`]: true,
 												[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
@@ -749,6 +780,8 @@
 
 				<div
 					class="tooltip"
+					id="spell-tooltip"
+					role="tooltip"
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
 				>
@@ -771,7 +804,7 @@
 					</div>
 				</div>
 
-				<div class="win-modal" x-bind:class="{ 'is-visible': winner && !reviewMode }">
+				<div class="win-modal" role="dialog" aria-modal="true" x-bind:aria-label="winner ? (winner === 'red' ? 'Red wins' : 'Blue wins') : 'Game over'" x-bind:class="{ 'is-visible': winner && !reviewMode }">
 					<div class="win-modal__result">
 						<picture x-show="winner === 'blue'"><source type="image/webp" srcset="static/images/stones/blue.webp" /><img alt="" src="static/images/stones/blue.png" height="30" width="30" /></picture>
 						<img alt="Blue Wins" src="static/images/blue-wins.svg" height="26" width="167" x-show="winner === 'blue'" />
@@ -806,7 +839,7 @@
 					</div>
 				</div>
 				<!-- Side picker of a game vs AI from a position (position-rating.js). -->
-				<div class="win-modal side-picker" x-bind:class="{ 'is-visible': !!sideOffer }">
+				<div class="win-modal side-picker" role="dialog" aria-modal="true" aria-label="Play from this position" x-bind:class="{ 'is-visible': !!sideOffer }">
 					<template x-if="sideOffer">
 						<div class="side-picker__body">
 							<div class="side-picker__title">Play from this position</div>
@@ -832,17 +865,18 @@
 					</template>
 				</div>
 				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
-					<button class="review-bar__btn" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x23EE;</button>
-					<button class="review-bar__btn" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x25C0;</button>
+					<button class="review-bar__btn" aria-label="First position" title="First position (&uarr;)" x-on:click="reviewFirst" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x23EE;</button>
+					<button class="review-bar__btn" aria-label="Previous move" title="Previous move (&larr;)" x-on:click="reviewPrev" x-bind:disabled="reviewIndex === 0 || reviewReplaying">&#x25C0;</button>
 					<span class="review-bar__label" x-text="reviewTurnLabels[reviewIndex] || ''"></span>
 					<span class="review-bar__pos" x-text="(reviewIndex + 1) + '/' + reviewSfns.length"></span>
 					<!-- Whole-game animated playthrough; toggles to pause while running. -->
 					<button class="review-bar__btn" x-show="reviewCanReplay"
 						x-on:click="toggleReviewAutoplay"
 						x-bind:title="reviewAutoplay ? 'Pause playthrough' : 'Replay game with animations'"
+						x-bind:aria-label="reviewAutoplay ? 'Pause playthrough' : 'Replay game with animations'"
 						x-text="reviewAutoplay ? '⏸' : '⏯'"></button>
-					<button class="review-bar__btn" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x25B6;</button>
-					<button class="review-bar__btn" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x23ED;</button>
+					<button class="review-bar__btn" aria-label="Next move" title="Next move (&rarr;)" x-on:click="reviewNext" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x25B6;</button>
+					<button class="review-bar__btn" aria-label="Last position" title="Last position (&darr;)" x-on:click="reviewLast" x-bind:disabled="reviewIndex >= reviewSfns.length - 1 || reviewReplaying">&#x23ED;</button>
 					<button class="review-bar__btn review-bar__btn--text" x-show="canRematchFromPosition"
 						x-on:click="rematchFromPosition"
 						x-bind:disabled="reviewReplaying"
@@ -851,7 +885,7 @@
 						x-on:click="playOnlineFromPosition"
 						x-bind:disabled="reviewReplaying"
 						title="Open an online room from this position">Play online from here</button>
-					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
+					<button class="review-bar__btn review-bar__btn--exit" aria-label="Exit review" title="Exit review" x-on:click="exitReview">&#x2715;</button>
 				</div>
 
 				<!-- AI Review trigger that appears in review mode when no review is
@@ -882,7 +916,7 @@
 						<polyline class="ai-review-graph__line" x-bind:points="aiReviewGraphPoints()" />
 						<!-- Blunder dots. Rendered as markup: a <template x-for> inside <svg> is not
 						     an HTML template, so Alpine evaluated its <circle> with no `dot`. -->
-						<g x-html="aiReviewGraphDotsSvg()" x-on:click="onReviewGraphDotClick($event)"></g>
+						<g x-html="aiReviewGraphDotsSvg()" x-on:click="onReviewGraphDotClick($event)" x-on:keydown="onReviewGraphDotKey($event)"></g>
 						<line x-bind:x1="aiReview && aiReview.winPctPerPly.length > 1 ? (reviewIndex / (aiReview.winPctPerPly.length - 1) * 480) : 0"
 							x-bind:x2="aiReview && aiReview.winPctPerPly.length > 1 ? (reviewIndex / (aiReview.winPctPerPly.length - 1) * 480) : 0"
 							y1="0" y2="80" class="ai-review-graph__cursor" />
@@ -985,6 +1019,7 @@
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
 		<script src="static/scripts/board-geometry.js"></script>
+		<script src="static/scripts/game-keys.js"></script>
 		<script src="static/scripts/game-board-local.js?v=33"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
