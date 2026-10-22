@@ -45,3 +45,15 @@ python3 tools/browser/board-dom-check.py docs
 No dependencies. Fails if a board page's `.stone-nodes` layer is not inside the square board
 frame (`position:relative`). Stones are sized and placed in percent of their containing block, so
 outside the frame they stretch and drift with the window (multiplayer.html, fixed 2026-10-22).
+
+## Analysis board
+
+```sh
+node tools/browser/analysis-test.js docs [port] [--coi]   # editor round trip, move tree, keys, engine eval
+```
+
+Checks `analysis.html`: the editor exports an SFN that reloads identically (URL and
+Load box), a turn played from an earlier node adds a variation, the arrow keys
+navigate the tree, the wasm engine evaluates the node and its best turn plays, and
+`openAnalysis()` (the review "Analyse" button) opens the game line. `--coi` serves
+with COOP/COEP for the threaded engine.

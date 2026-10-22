@@ -133,6 +133,21 @@ class RustEngineWorker {
 		});
 	}
 
+	/** Abandon every pending call (the analysis board, when its position
+	 *  changes). A wasm search is one synchronous call and cannot be stopped,
+	 *  so the worker is terminated; the next call rebuilds it, with a fresh
+	 *  table. Pending promises reject with an error named 'cancelled'. */
+	cancel() {
+		if (!this._worker) return;
+		const err = new Error('cancelled');
+		err.name = 'cancelled';
+		for (const p of this._pending.values()) p.reject(err);
+		this._pending.clear();
+		this._worker.terminate();
+		this._worker = null;
+		this._readyPromise = null;
+	}
+
 	/** Fire-and-forget control message (new_game / ponder / ponder_stop). The
 	 *  worker handles messages in order, so this never races a search. */
 	post(msg) {
