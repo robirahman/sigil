@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v80';
+const CACHE_VERSION = 'v81';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -122,11 +122,24 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/images/send-icon.svg',
 	'./static/images/step-pointer.svg',
 	'./static/images/swoosh-separator.svg',
-	// Theme backgrounds (styles.css requests them with ?v2).
-	'./static/images/themes/tiled-background-frost.jpg?v2',
-	'./static/images/themes/tiled-background-parchment.jpg?v2',
-	'./static/images/themes/tiled-background-forest.jpg?v2',
-	'./static/images/themes/tiled-background-volcanic.jpg?v2',
+	// Theme art (tools/themes/build_theme_assets.py). Only the .webp boards and
+	// stones: every browser that runs this worker decodes WebP.
+	'./static/images/themes/tiled-background-frost.jpg?v3',
+	'./static/images/themes/tiled-background-parchment.jpg?v3',
+	'./static/images/themes/tiled-background-forest.jpg?v3',
+	'./static/images/themes/tiled-background-volcanic.jpg?v3',
+	'./static/images/themes/game-board-frost.webp',
+	'./static/images/themes/game-board-parchment.webp',
+	'./static/images/themes/game-board-forest.webp',
+	'./static/images/themes/game-board-volcanic.webp',
+	'./static/images/themes/stones/frost-red.webp',
+	'./static/images/themes/stones/frost-blue.webp',
+	'./static/images/themes/stones/parchment-red.webp',
+	'./static/images/themes/stones/parchment-blue.webp',
+	'./static/images/themes/stones/forest-red.webp',
+	'./static/images/themes/stones/forest-blue.webp',
+	'./static/images/themes/stones/volcanic-red.webp',
+	'./static/images/themes/stones/volcanic-blue.webp',
 	// Spell art is added by spellArtUrls() below.
 ];
 
