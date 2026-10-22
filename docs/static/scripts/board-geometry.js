@@ -241,17 +241,17 @@ function _buildBoardGeometry(layoutId, opts) {
 	const f = (v) => v.toFixed(1);
 	const parts = [];
 	parts.push(`<svg xmlns="http://www.w3.org/2000/svg" class="game-board game-board--svg" viewBox="0 0 ${f(side)} ${f(side)}" aria-hidden="true">`);
-	parts.push(`<defs><radialGradient id="bg-glow" cx="50%" cy="50%" r="60%"><stop offset="0%" stop-color="#2d2a45"/><stop offset="100%" stop-color="#12111c"/></radialGradient></defs>`);
+	parts.push(`<defs><radialGradient id="bg-glow" cx="50%" cy="50%" r="60%"><stop offset="0%" style="stop-color:var(--color-board-bg-inner, #2d2a45)"/><stop offset="100%" style="stop-color:var(--color-board-bg-outer, #12111c)"/></radialGradient></defs>`);
 	parts.push(`<rect width="${f(side)}" height="${f(side)}" fill="url(#bg-glow)"/>`);
-	parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(side / 2 - 20)}" fill="none" stroke="#3b3656" stroke-width="3"/>`);
+	parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(side / 2 - 20)}" fill="none" style="stroke:var(--color-board-ring, #3b3656)" stroke-width="3"/>`);
 	// Links: within a zone solid, between zones dashed.
 	for (const l of links) {
 		const d = l.d.map(f);
-		parts.push(`<path d="M${d[0]} ${d[1]}C${d[2]} ${d[3]} ${d[4]} ${d[5]} ${d[6]} ${d[7]}" fill="none" stroke="${l.cross ? '#b9a8e6' : '#ece6f5'}" stroke-width="${l.cross ? 6 : 5}"${l.cross ? ' stroke-dasharray="16 10"' : ''} stroke-linecap="round"/>`);
+		parts.push(`<path d="M${d[0]} ${d[1]}C${d[2]} ${d[3]} ${d[4]} ${d[5]} ${d[6]} ${d[7]}" fill="none" style="stroke:${l.cross ? 'var(--color-board-line-cross, #b9a8e6)' : 'var(--color-board-line, #ece6f5)'}" stroke-width="${l.cross ? 6 : 5}"${l.cross ? ' stroke-dasharray="16 10"' : ''} stroke-linecap="round"/>`);
 	}
 	// Spell-slot backdrops (the art sits on top as <img> elements).
 	for (const s of Object.values(slots)) {
-		parts.push(`<circle cx="${f(s.x)}" cy="${f(s.y)}" r="${f(SPELL_SLOT_SIZES[s.type] / 2 + 6)}" fill="#1c1a2b" stroke="#6d6390" stroke-width="4"/>`);
+		parts.push(`<circle cx="${f(s.x)}" cy="${f(s.y)}" r="${f(SPELL_SLOT_SIZES[s.type] / 2 + 6)}" style="fill:var(--color-board-slot, #1c1a2b);stroke:var(--color-board-slot-stroke, #6d6390)" stroke-width="4"/>`);
 	}
 	// Node discs for the nodes off the spells; mana nodes get a gold ring.
 	// (Spell nodes are the white spots printed on the art.)
@@ -260,21 +260,21 @@ function _buildBoardGeometry(layoutId, opts) {
 		const p = nodes[n];
 		const mana = def.manaNodes.includes(n);
 		// Empty nodes read as white discs, like the printed board's.
-		parts.push(`<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${mana ? 33 : 28}" fill="#f6f3ec" stroke="${mana ? '#e8c35a' : '#cfc6de'}" stroke-width="${mana ? 9 : 3}"/>`);
+		parts.push(`<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${mana ? 33 : 28}" style="fill:var(--color-board-node, #f6f3ec);stroke:${mana ? '#e8c35a' : 'var(--color-board-node-stroke, #cfc6de)'}" stroke-width="${mana ? 9 : 3}"/>`);
 	}
 	// Zone letters just outside each mana node.
 	def.zones.forEach((z) => {
 		const p = nodes[z + '1'];
 		const vx = p.x - cx, vy = p.y - cy, len = Math.hypot(vx, vy) || 1;
-		parts.push(`<text x="${f(p.x + vx / len * 62)}" y="${f(p.y + vy / len * 62 + 14)}" font-size="42" font-family="Georgia, serif" fill="#8c83aa" text-anchor="middle">${z.toUpperCase()}</text>`);
+		parts.push(`<text x="${f(p.x + vx / len * 62)}" y="${f(p.y + vy / len * 62 + 14)}" font-size="42" font-family="Georgia, serif" style="fill:var(--color-board-text, #8c83aa)" text-anchor="middle">${z.toUpperCase()}</text>`);
 	});
 	// Score track.
-	parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${R + 44}" fill="#1c1a2b" stroke="#6d6390" stroke-width="4"/>`);
+	parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${R + 44}" style="fill:var(--color-board-slot, #1c1a2b);stroke:var(--color-board-slot-stroke, #6d6390)" stroke-width="4"/>`);
 	for (const [key, p] of Object.entries(score)) {
-		const col = key === 'tied' ? '#d9d2bd' : key[0] === 'r' ? '#e0605a' : '#6f8ce0';
-		parts.push(`<circle cx="${f(p.x)}" cy="${f(p.y)}" r="24" fill="none" stroke="${col}" stroke-width="5"/>`);
+		const col = key === 'tied' ? '#d9d2bd' : key[0] === 'r' ? 'var(--color-board-red, #e0605a)' : 'var(--color-board-blue, #6f8ce0)';
+		parts.push(`<circle cx="${f(p.x)}" cy="${f(p.y)}" r="24" fill="none" style="stroke:${col}" stroke-width="5"/>`);
 		if (key !== 'tied') {
-			parts.push(`<text x="${f(cx + (p.x - cx) * 0.62)}" y="${f(cy + (p.y - cy) * 0.62 + 9)}" font-size="26" font-family="Georgia, serif" fill="${col}" text-anchor="middle">${key.slice(1)}</text>`);
+			parts.push(`<text x="${f(cx + (p.x - cx) * 0.62)}" y="${f(cy + (p.y - cy) * 0.62 + 9)}" font-size="26" font-family="Georgia, serif" style="fill:${col}" text-anchor="middle">${key.slice(1)}</text>`);
 		}
 	}
 	parts.push('</svg>');

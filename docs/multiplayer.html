@@ -248,7 +248,7 @@
 
 		<!-- Lobby -->
 		<div class="lobby" x-show="phase === 'lobby'" x-cloak>
-			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Online Multiplayer</h2>
+			<h2 style="font-family: Arvo, serif; color: var(--color-text-warm);">Online Multiplayer</h2>
 
 			<!-- Auth status -->
 			<div class="auth-status" x-show="authReady">
@@ -400,7 +400,7 @@
 
 		<!-- Waiting for opponent -->
 		<div class="lobby" x-show="phase === 'waiting'" x-cloak>
-			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Waiting for Opponent</h2>
+			<h2 style="font-family: Arvo, serif; color: var(--color-text-warm);">Waiting for Opponent</h2>
 			<p class="status-msg">Share this room code:</p>
 			<div class="room-code" x-text="roomCode"></div>
 			<div class="share-link">
@@ -413,7 +413,7 @@
 
 		<!-- Joining a room from a position: its price first -->
 		<div class="lobby" x-show="phase === 'confirmJoin'" x-cloak>
-			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Game from a Position</h2>
+			<h2 style="font-family: Arvo, serif; color: var(--color-text-warm);">Game from a Position</h2>
 			<template x-if="joinOffer">
 				<div class="position-offer">
 					<p class="status-msg">You would play <strong x-text="joinOffer.side === 'red' ? 'Red' : 'Blue'"></strong>.</p>
@@ -430,7 +430,7 @@
 
 		<!-- Spectator-not-allowed error -->
 		<div class="lobby" x-show="phase === 'denied'" x-cloak>
-			<h2 style="font-family: Arvo, serif; color: #e0d0b0;">Spectating Disabled</h2>
+			<h2 style="font-family: Arvo, serif; color: var(--color-text-warm);">Spectating Disabled</h2>
 			<p class="status-msg">The players in this game have not allowed spectators.</p>
 			<a class="lobby-button" href="multiplayer.html">Back to Lobby</a>
 		</div>
