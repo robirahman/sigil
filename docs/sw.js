@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v82';
+const CACHE_VERSION = 'v83';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -35,6 +35,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./active-games.html',
 	'./profile.html',
 	'./puzzles.html',
+	'./tutorial.html',
 	'./annotate.html',
 	'./spells.html',
 	'./spells/index.html',
@@ -58,6 +59,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/game-board-local.js',
+	'./static/scripts/tutorial-lessons.js',
 	'./static/scripts/game-board-local.js?v=33',
 	'./static/scripts/engine/rust-ai.js?v=33',
 	'./static/scripts/game-board-multiplayer.js',
