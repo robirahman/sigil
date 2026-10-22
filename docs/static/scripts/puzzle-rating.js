@@ -5,7 +5,9 @@
  * move.
  *
  * Storage (database.rules.json enforces the shape):
- *   users/<uid>/puzzle                 { rating, plays }
+ *   users/<uid>/puzzle                 { rating, plays, last }   last = the
+ *       puzzle whose first attempt this write records (the rules tie each
+ *       rating change to exactly one new attempt)
  *   users/<uid>/puzzleAttempts/<id>    { solved, at, delta }   write-once
  *   puzzle_ratings/<id>                { rating, plays }       seeded from the
  *       AI calibration (tools/fit_puzzle_ratings.py); clients only update it,
@@ -130,7 +132,7 @@ async function recordPuzzleResult(user, puzzle, solved) {
 	const up = puzzleRatingUpdate(mine, pz, solved);
 	const name = (await db.ref(base + '/displayName').once('value')).val() || u.displayName || 'Player';
 	const write = {};
-	write[base + '/puzzle'] = up.user;
+	write[base + '/puzzle'] = Object.assign({ last: puzzle.id }, up.user);
 	write[base + '/puzzleAttempts/' + puzzle.id] = { solved: !!solved, at: firebase.database.ServerValue.TIMESTAMP, delta: up.delta };
 	write['puzzle_ratings/' + puzzle.id] = up.puzzle;
 	write['puzzle_leaderboard/' + u.uid] = { displayName: String(name).slice(0, 30), rating: up.user.rating, plays: up.user.plays };

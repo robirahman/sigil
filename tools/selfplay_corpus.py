@@ -85,21 +85,38 @@ def main():
     args = ap.parse_args()
     tok = token()
     names = list_objects(args.prefix, tok)
+    tok = token()
     random.Random(args.seed).shuffle(names)
     names = names[:args.shards]
     hyd, t0 = {}, time.time()
-    for n, name in enumerate(names):
-        if n % 200 == 0 and n:
-            tok = token() if n % 2000 == 0 else tok
-            print(f'  {n}/{len(names)} shards, {len(hyd)} games, {time.time() - t0:.0f}s', flush=True)
-        r = requests.get(f'https://storage.googleapis.com/storage/v1/b/{BUCKET}/o/'
-                         + urllib.parse.quote(name, safe='') + '?alt=media',
-                         headers={'Authorization': 'Bearer ' + tok}, timeout=120)
-        if r.status_code != 200:
-            print('  skip', name, r.status_code, flush=True)
-            continue
-        z = np.load(io.BytesIO(r.content), allow_pickle=False)
-        hyd.update(games_of(z, args.tag))
+    state = {'tok': token()}
+
+    def fetch(name):
+        url = (f'https://storage.googleapis.com/storage/v1/b/{BUCKET}/o/'
+               + urllib.parse.quote(name, safe='') + '?alt=media')
+        for attempt in range(4):
+            try:
+                r = requests.get(url, headers={'Authorization': 'Bearer ' + state['tok']}, timeout=120)
+            except requests.exceptions.RequestException as e:   # timeouts: retry
+                if attempt == 3:
+                    return name, str(e)[:80]
+                time.sleep(2 * (attempt + 1))
+                continue
+            if r.status_code == 401:        # the access token lapsed: refresh and retry
+                state['tok'] = token()
+                continue
+            return name, (r.content if r.status_code == 200 else r.status_code)
+        return name, 'gave up'
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(16) as ex:
+        for n, (name, body) in enumerate(ex.map(fetch, names)):
+            if n % 200 == 0 and n:
+                print(f'  {n}/{len(names)} shards, {len(hyd)} games, {time.time() - t0:.0f}s', flush=True)
+            if not isinstance(body, bytes):
+                print('  skip', name, body, flush=True)
+                continue
+            hyd.update(games_of(np.load(io.BytesIO(body), allow_pickle=False), args.tag))
     with open(args.out, 'w', encoding='utf-8') as fh:
         json.dump(hyd, fh)
     print(f'{len(hyd)} games, {sum(len(g["turns"]) for g in hyd.values())} positions -> {args.out}')

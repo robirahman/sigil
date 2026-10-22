@@ -48,11 +48,11 @@
           ".validate": "newData.isBoolean() && newData.val() === false"
         },
         "puzzle": {
-          ".validate": "auth.provider !== 'anonymous' && newData.hasChildren(['rating', 'plays']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 100 && newData.child('rating').val() <= 4000 && newData.child('plays').isNumber() && newData.child('plays').val() === (data.child('plays').exists() ? data.child('plays').val() : 0) + 1 && newData.child('plays').val() === newData.parent().child('puzzleAttempts').numChildren() && (data.child('rating').exists() ? (newData.child('rating').val() - data.child('rating').val() <= 40 && data.child('rating').val() - newData.child('rating').val() <= 40) : (newData.child('rating').val() >= 1460 && newData.child('rating').val() <= 1540))"
+          ".validate": "auth.provider !== 'anonymous' && newData.hasChildren(['rating', 'plays', 'last']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 100 && newData.child('rating').val() <= 4000 && newData.child('plays').isNumber() && newData.child('plays').val() === (data.child('plays').exists() ? data.child('plays').val() : 0) + 1 && newData.child('last').isString() && newData.parent().child('puzzleAttempts/' + newData.child('last').val()).exists() && !data.parent().child('puzzleAttempts/' + newData.child('last').val()).exists() && (data.child('rating').exists() ? (newData.child('rating').val() - data.child('rating').val() <= 40 && data.child('rating').val() - newData.child('rating').val() <= 40) : (newData.child('rating').val() >= 1460 && newData.child('rating').val() <= 1540))"
         },
         "puzzleAttempts": {
           "$pid": {
-            ".validate": "!data.exists() && newData.hasChildren(['solved', 'at', 'delta']) && newData.child('solved').isBoolean() && newData.child('at').isNumber() && newData.child('delta').isNumber() && newData.parent().parent().child('puzzle/plays').val() === (data.parent().parent().child('puzzle/plays').exists() ? data.parent().parent().child('puzzle/plays').val() : 0) + 1"
+            ".validate": "!data.exists() && newData.hasChildren(['solved', 'at', 'delta']) && newData.child('solved').isBoolean() && newData.child('at').isNumber() && newData.child('delta').isNumber() && newData.parent().parent().child('puzzle/last').val() === $pid && newData.parent().parent().child('puzzle/plays').val() === (data.parent().parent().child('puzzle/plays').exists() ? data.parent().parent().child('puzzle/plays').val() : 0) + 1"
           }
         }
       }
