@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v82';
+const CACHE_VERSION = 'v83';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -193,6 +193,7 @@ const CROSS_ORIGIN_PRECACHE = [
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js',
+	'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js',
 	'https://use.typekit.net/rot4udi.css',
 	'https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap',
 ];
