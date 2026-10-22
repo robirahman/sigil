@@ -7,9 +7,12 @@
 Each attempt is a game between the tier and the puzzle: the puzzle wins when the
 tier fails to solve it. A puzzle's rating is its maximum a posteriori Elo against
 the tiers it met (P(tier solves) = 1 / (1 + 10^((R_puzzle - R_tier) / 400))) under
-a normal prior centred on the tiers' mean rating with PRIOR_SD: four results
-cannot place a puzzle every tier solves (or none does) on their own, and the
-prior keeps those finite, below the weakest tier (or above the strongest).
+a normal prior. Four results cannot place a puzzle every tier solves (or none
+does) on their own -- and the tiers solve most puzzles -- so the prior carries
+the rest: its mean is fitted per class and difficulty level (mate in 1/2/3,
+winning turn; the generator's 1-5) by maximising the marginal likelihood of that
+cell's attempts (empirical Bayes), with PRIOR_SD. Puzzles every tier solves
+then still differ by how hard the generator found them.
 
 Writes `rating` (integer) and `ai` (the tiers that solved it) into each puzzle.
 With --seed-firebase, sets puzzle_ratings/<id> = {rating, plays: 0} for every
@@ -52,6 +55,31 @@ def map_rating(results, prior_mean):
     return best
 
 
+GRID = range(400, 3001, 5)
+
+
+def loglik(r, results):
+    lp = 0.0
+    for rt, solved in results:
+        p_solve = 1 / (1 + 10 ** ((r - rt) / 400))
+        lp += math.log(p_solve if solved else 1 - p_solve)
+    return lp
+
+
+def cell_prior_mean(cell_results):
+    """Empirical Bayes: the prior mean maximising the marginal likelihood of the
+    cell's puzzles (each integrated over the grid against N(mu, PRIOR_SD))."""
+    liks = [[math.exp(loglik(r, res)) for r in GRID] for res in cell_results]
+    best, best_ll = None, -1e18
+    for mu in range(600, 2601, 10):
+        w = [math.exp(-((r - mu) ** 2) / (2 * PRIOR_SD ** 2)) for r in GRID]
+        z = sum(w)
+        ll = sum(math.log(max(1e-300, sum(a * b for a, b in zip(lk, w)) / z)) for lk in liks)
+        if ll > best_ll:
+            best, best_ll = mu, ll
+    return best
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('logs', nargs='+')
@@ -66,16 +94,24 @@ def main():
     with open(args.puzzles, encoding='utf-8') as fh:
         data = json.load(fh)
     att = read_attempts(args.logs)
-    prior = sum(tiers.values()) / len(tiers)
     missing = 0
+    results, cells = {}, {}
     for p in data['puzzles']:
         res = [(tiers[t], att[(p['id'], t)]) for t in tiers if (p['id'], t) in att]
         if len(res) < len(tiers):
             missing += 1
-        p['rating'] = map_rating(res, prior)
+        results[p['id']] = res
+        cells.setdefault((p['kind'], p.get('mate'), p.get('difficulty')), []).append(p['id'])
+    means = {c: cell_prior_mean([results[i] for i in ids]) for c, ids in cells.items()}
+    for c in sorted(means, key=lambda c: (str(c[0]), c[1] or 9, c[2] or 0)):
+        print(f'  prior mean {c}: {means[c]} ({len(cells[c])} puzzles)')
+    for p in data['puzzles']:
+        p['rating'] = map_rating(results[p['id']], means[(p['kind'], p.get('mate'), p.get('difficulty'))])
         p['ai'] = sorted(t for t in tiers if att.get((p['id'], t)))
-    data['rating'] = {'method': 'MAP Elo vs the AI tiers, normal prior mean %.0f sd %.0f' % (prior, PRIOR_SD),
-                      'tiers': tiers}
+    data['rating'] = {'method': 'MAP Elo vs the AI tiers; normal prior (sd %.0f) with its mean fitted per '
+                                'class and difficulty by marginal likelihood' % PRIOR_SD,
+                      'tiers': tiers,
+                      'prior_means': {'%s%s:%s' % (c[0], c[1] or '', c[2]): m for c, m in means.items()}}
     rs = sorted(p['rating'] for p in data['puzzles'])
     n = len(rs)
     print(f'{n} puzzles, {missing} with fewer than {len(tiers)} attempts; tiers {tiers}')

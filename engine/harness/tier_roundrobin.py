@@ -27,6 +27,8 @@ sys.path.insert(0, _HERE)
 import sigil_engine as se
 
 TIERS = {
+    # Calibration-only (no site tier): the weakest rated player for puzzle ratings.
+    'very_easy': dict(ms=10,     tt=16, ponder=False),
     'easy':      dict(ms=100,    tt=16, ponder=False),
     'medium':    dict(ms=1000,   tt=18, ponder=False),
     'hard':      dict(ms=10000,  tt=20, ponder=True),
