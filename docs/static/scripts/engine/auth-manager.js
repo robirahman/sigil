@@ -30,10 +30,21 @@ class AuthManager {
 
 	/**
 	 * Sign up with email, password, and display name.
-	 * Creates the Firebase Auth account and RTDB profile.
+	 * Creates the Firebase Auth account and RTDB profile. A guest (anonymous)
+	 * session is upgraded in place with linkWithCredential, so the uid and
+	 * everything recorded under it (games, active rooms) carry over.
 	 */
 	async signUpWithEmail(email, password, displayName) {
-		const cred = await this.auth.createUserWithEmailAndPassword(email, password);
+		const guest = this.auth.currentUser;
+		let cred;
+		if (guest && guest.isAnonymous) {
+			const emailCred = firebase.auth.EmailAuthProvider.credential(email, password);
+			cred = await guest.linkWithCredential(emailCred);
+		} else {
+			cred = await this.auth.createUserWithEmailAndPassword(email, password);
+		}
+		// Linking does not fire onAuthStateChanged; adopt the user directly.
+		this.currentUser = cred.user;
 		await cred.user.updateProfile({ displayName });
 		await this.ensureUserProfile(firebase.database(), displayName);
 		return cred.user;
@@ -42,14 +53,46 @@ class AuthManager {
 	/** Sign in with email and password. */
 	async signInWithEmail(email, password) {
 		const cred = await this.auth.signInWithEmailAndPassword(email, password);
+		this.currentUser = cred.user;
 		await this.ensureUserProfile(firebase.database());
 		return cred.user;
 	}
 
-	/** Sign in with Google popup. */
-	async signInWithGoogle() {
+	/**
+	 * Sign in with Google popup. A guest session is linked to the Google
+	 * account instead (keeping its uid) unless opts.link is false.
+	 * On auth/credential-already-in-use the Google account already has its own
+	 * Sigil account: the caller can offer signInWithGoogleCredential(e.credential).
+	 */
+	async signInWithGoogle(opts) {
+		const link = !opts || opts.link !== false;
 		const provider = new firebase.auth.GoogleAuthProvider();
-		const cred = await this.auth.signInWithPopup(provider);
+		const guest = this.auth.currentUser;
+		let cred;
+		if (link && guest && guest.isAnonymous) {
+			cred = await guest.linkWithPopup(provider);
+			// Linking keeps the guest's (empty) Auth profile; copy the Google name.
+			const g = (cred.user.providerData || []).find(p => p && p.providerId === 'google.com');
+			if (!cred.user.displayName && g && g.displayName) {
+				await cred.user.updateProfile({ displayName: g.displayName });
+			}
+		} else {
+			cred = await this.auth.signInWithPopup(provider);
+		}
+		this.currentUser = cred.user;
+		await this.ensureUserProfile(firebase.database());
+		return cred.user;
+	}
+
+	/**
+	 * Sign in with a Google credential already obtained by a failed link
+	 * (error.credential on auth/credential-already-in-use), so the user is not
+	 * shown a second popup. Falls back to the popup when there is none.
+	 */
+	async signInWithGoogleCredential(credential) {
+		if (!credential) return this.signInWithGoogle({ link: false });
+		const cred = await this.auth.signInWithCredential(credential);
+		this.currentUser = cred.user;
 		await this.ensureUserProfile(firebase.database());
 		return cred.user;
 	}
@@ -58,6 +101,101 @@ class AuthManager {
 	async signInAnonymously() {
 		const cred = await this.auth.signInAnonymously();
 		return cred.user;
+	}
+
+	/**
+	 * Send a password reset email. Firebase's email-enumeration protection
+	 * makes this succeed for unknown addresses too, so callers should word the
+	 * success message as "if an account exists".
+	 */
+	async sendPasswordReset(email) {
+		await this.auth.sendPasswordResetEmail((email || '').trim());
+	}
+
+	/**
+	 * Which re-authentication the signed-in user can do: 'password', 'google',
+	 * or null. Password wins when both are linked (no popup needed).
+	 */
+	get reauthMethod() {
+		const user = this.auth.currentUser;
+		if (!user) return null;
+		const ids = (user.providerData || []).map(p => p && p.providerId);
+		if (ids.includes('password')) return 'password';
+		if (ids.includes('google.com')) return 'google';
+		return null;
+	}
+
+	/**
+	 * True when the last sign-in is recent enough for sensitive operations.
+	 * Firebase demands a sign-in within about five minutes for user.delete();
+	 * checking first lets deleteAccount re-authenticate before removing data.
+	 */
+	async isRecentLogin(maxAgeMs) {
+		const user = this.auth.currentUser;
+		if (!user) return false;
+		try {
+			const tok = await user.getIdTokenResult();
+			const t = Date.parse(tok.authTime);
+			return Number.isFinite(t) && Date.now() - t < (maxAgeMs || 4 * 60 * 1000);
+		} catch (e) {
+			return false;
+		}
+	}
+
+	/** Re-authenticate with the password (email accounts) or a Google popup. */
+	async reauthenticate(password) {
+		const user = this.auth.currentUser;
+		if (!user) throw new Error('Not signed in');
+		if (this.reauthMethod === 'password') {
+			const cred = firebase.auth.EmailAuthProvider.credential(user.email, password || '');
+			await user.reauthenticateWithCredential(cred);
+		} else {
+			await user.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider());
+		}
+	}
+
+	/**
+	 * The RTDB paths deleteAccount removes: everything under the user's own
+	 * uid that the rules let the owner delete, plus their usernames/ claim.
+	 * completed_games and other players' records are left alone (the rules
+	 * make them unreadable/unwritable to clients; anonymising names there
+	 * needs a server-side function).
+	 */
+	async accountDataPaths(db) {
+		const uid = this.auth.currentUser.uid;
+		const paths = ['users/' + uid, 'leaderboard/' + uid];
+		// user_games and user_active_games grant writes per child, not on the
+		// uid node, so each entry is removed by its own path.
+		for (const root of ['user_games/', 'user_active_games/']) {
+			const snap = await db.ref(root + uid).once('value');
+			snap.forEach(child => { paths.push(root + uid + '/' + child.key); });
+		}
+		const name = (this.userProfile && this.userProfile.displayName) || this.auth.currentUser.displayName || '';
+		if (AuthManager.isValidDisplayName(name)) {
+			const key = name.toLowerCase();
+			const owner = await db.ref('usernames/' + key).once('value');
+			if (owner.val() === uid) paths.push('usernames/' + key);
+		}
+		return paths;
+	}
+
+	/**
+	 * Delete the signed-in account: its own RTDB data in one atomic
+	 * multi-path update, then the Auth user. Throws auth/requires-recent-login
+	 * when Firebase wants a fresh sign-in; the caller re-authenticates and
+	 * calls again (the data removal is idempotent).
+	 */
+	async deleteAccount() {
+		const user = this.auth.currentUser;
+		if (!user) throw new Error('Not signed in');
+		const db = firebase.database();
+		const paths = await this.accountDataPaths(db);
+		const updates = {};
+		for (const p of paths) updates[p] = null;
+		await db.ref().update(updates);
+		await user.delete();
+		this.userProfile = null;
+		return paths;
 	}
 
 	/** Sign out. */

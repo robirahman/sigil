@@ -45,3 +45,16 @@ python3 tools/browser/board-dom-check.py docs
 No dependencies. Fails if a board page's `.stone-nodes` layer is not inside the square board
 frame (`position:relative`). Stones are sized and placed in percent of their containing block, so
 outside the frame they stretch and drift with the window (multiplayer.html, fixed 2026-10-22).
+
+## Account page (Firebase stubbed)
+
+```sh
+node <repo>/tools/browser/account-test.js <repo>/docs 8791
+```
+
+`account-test.js` answers the gstatic Firebase scripts with an empty body and
+installs a fake `firebase` (auth + in-memory RTDB) with `evaluateOnNewDocument`,
+so nothing touches the live project. It checks password reset, the guest ->
+account upgrade (`linkWithCredential` / `linkWithPopup`, never a new user) and
+account deletion (typed `DELETE`, exact owner paths, then `user.delete()`,
+re-authentication on a stale sign-in or `auth/requires-recent-login`).

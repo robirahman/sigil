@@ -172,6 +172,43 @@
 			font-size: 0.85em;
 			margin-top: 6px;
 		}
+		.link-button {
+			background: none;
+			border: none;
+			padding: 0;
+			color: var(--color-accent);
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+			cursor: pointer;
+		}
+		.link-button:hover { text-decoration: underline; }
+		.link-button:disabled { opacity: 0.5; cursor: not-allowed; }
+		.danger-zone {
+			border: 2px solid #744;
+			border-radius: 8px;
+			padding: 16px 20px;
+			margin: 24px 0 16px;
+			text-align: left;
+			font-family: 'Overlock', sans-serif;
+		}
+		.danger-zone__title {
+			font-family: 'Arvo', serif;
+			color: var(--color-error);
+			margin-bottom: 8px;
+		}
+		.danger-zone input {
+			display: block;
+			width: 100%;
+			padding: 10px 12px;
+			margin: 6px 0 10px;
+			border-radius: 6px;
+			border: 2px solid var(--color-border);
+			background: var(--color-surface-raised);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			font-size: 1em;
+			box-sizing: border-box;
+		}
 	</style>
 </head>
 <body>
@@ -201,6 +238,10 @@
 				Sign-in and account creation require a connection. <a href="./" style="color: inherit;">Back to menu</a> to play offline.
 			</p>
 
+			<p class="settings-card__hint" x-show="guest" x-cloak style="margin-bottom: 16px;" data-testid="guest-note">
+				You're playing as a guest. Creating an account (or continuing with Google) keeps this guest session's games under your new account.
+			</p>
+
 			<div class="tab-bar">
 				<button class="tab-bar__tab" x-bind:class="{ 'tab-bar__tab--active': tab === 'login' }" x-on:click="tab = 'login'">Sign In</button>
 				<button class="tab-bar__tab" x-bind:class="{ 'tab-bar__tab--active': tab === 'signup' }" x-on:click="tab = 'signup'">Sign Up</button>
@@ -215,6 +256,9 @@
 					<input id="login-password" type="password" x-model="loginPassword" x-on:keydown.enter="signIn" x-bind:disabled="isOffline" />
 				</div>
 				<button class="account-button" x-on:click="signIn" x-bind:disabled="busy || isOffline">Sign In</button>
+				<div style="text-align: right;">
+					<button class="link-button" id="forgot-password" x-on:click="forgotPassword" x-bind:disabled="busy || isOffline">Forgot password?</button>
+				</div>
 			</div>
 
 			<!-- Sign Up Form -->
@@ -231,9 +275,16 @@
 			</div>
 
 			<div class="divider">- or -</div>
-			<button class="account-button account-button--google" x-on:click="signInGoogle" x-bind:disabled="busy || isOffline">Sign in with Google</button>
+			<button class="account-button account-button--google" x-on:click="signInGoogle" x-bind:disabled="busy || isOffline" x-text="guest ? 'Continue with Google' : 'Sign in with Google'">Sign in with Google</button>
 
+			<p class="success-msg" x-text="successMsg"></p>
 			<p class="error-msg" x-text="error"></p>
+			<!-- A guest upgrade hit an address/Google account that already has
+			     its own Sigil account: offer a normal sign-in to that one. -->
+			<div x-show="linkConflict" x-cloak id="link-conflict">
+				<button class="account-button" x-show="linkConflict === 'google'" x-on:click="signInExistingGoogle" x-bind:disabled="busy">Sign in to that Google account</button>
+				<button class="account-button" x-show="linkConflict === 'email'" x-on:click="tab = 'login'; linkConflict = ''" x-bind:disabled="busy">Sign in with that email</button>
+			</div>
 			<a class="back-link" href="./">&larr; Back to menu</a>
 		</div>
 
@@ -347,6 +398,34 @@
 			<button class="account-button" x-on:click="goToMultiplayer">Play Online</button>
 			<a class="account-button" href="leaderboard.html" style="text-decoration: none; text-align: center;">Leaderboard</a>
 			<button class="account-button account-button--signout" x-on:click="doSignOut">Sign Out</button>
+
+			<div class="danger-zone" id="danger-zone">
+				<div class="danger-zone__title">Danger zone</div>
+				<button class="account-button account-button--signout" id="delete-open" x-show="!deleteOpen" x-on:click="deleteOpen = true; deleteError = ''">Delete account&hellip;</button>
+				<div x-show="deleteOpen" x-cloak>
+					<div class="settings-card__hint" style="margin-bottom: 10px;">
+						This permanently deletes your sign-in, profile, rating, leaderboard entry, game list and active-game list, and frees your display name. It cannot be undone. Finished games stay in the shared game archive, where your opponents can still review them.
+					</div>
+					<label for="delete-confirm">Type <strong>DELETE</strong> to confirm</label>
+					<input id="delete-confirm" type="text" autocomplete="off" x-model="deleteConfirm" x-bind:disabled="busy" />
+					<!-- Firebase wants a fresh sign-in before deleting an account. -->
+					<div x-show="reauthNeeded" x-cloak id="reauth">
+						<div class="settings-card__hint" style="margin-bottom: 6px;">For your security, confirm it's you first.</div>
+						<template x-if="reauthMethod === 'password'">
+							<div>
+								<label for="reauth-password">Password</label>
+								<input id="reauth-password" type="password" x-model="reauthPassword" x-on:keydown.enter="deleteAccount" x-bind:disabled="busy" />
+							</div>
+						</template>
+					</div>
+					<button class="account-button account-button--signout" id="delete-submit" x-on:click="deleteAccount"
+					        x-bind:disabled="busy || deleteConfirm.trim() !== 'DELETE'"
+					        x-text="reauthNeeded && reauthMethod === 'google' ? 'Confirm with Google and delete' : 'Delete my account'">Delete my account</button>
+					<button class="account-button" x-on:click="cancelDelete" x-bind:disabled="busy">Cancel</button>
+					<p class="error-msg" x-text="deleteError"></p>
+				</div>
+			</div>
+
 			<a class="back-link" href="./">&larr; Back to menu</a>
 		</div>
 	</div>
@@ -384,6 +463,15 @@
 				signupEmail: '',
 				signupPassword: '',
 				renameName: '',
+				guest: false,
+				linkConflict: '',
+				_linkCredential: null,
+				deleteOpen: false,
+				deleteConfirm: '',
+				deleteError: '',
+				reauthNeeded: false,
+				reauthMethod: null,
+				reauthPassword: '',
 				error: '',
 				successMsg: '',
 				busy: false,
@@ -416,27 +504,32 @@
 						this.loading = false;
 					}
 					this._authManager = new AuthManager();
-					this._authManager.onAuthChanged(async (user) => {
-						this.user = user && !user.isAnonymous ? user : null;
-						if (this.user) {
-							await this._authManager.loadProfile(firebase.database());
-							this.profile = this._authManager.userProfile;
-							this.annotationMode = !!(this.profile && this.profile.annotationMode);
-							this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
-							this.showAiEval = !!(this.profile && this.profile.showAiEval);
-							this.showMapControl = !!(this.profile && this.profile.showMapControl);
-							// Default OFF; only explicit true enables.
-							this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
-						} else {
-							this.profile = null;
-							this.annotationMode = false;
-							this.showAiThinkReport = false;
-							this.showAiEval = false;
-							this.showMapControl = false;
-							this.enablePondering = false;
-						}
-						this.loading = false;
-					});
+					this._authManager.onAuthChanged((user) => this._applyUser(user));
+				},
+
+				// Also called after a guest upgrade: linking keeps the same
+				// user, so onAuthStateChanged does not fire for it.
+				async _applyUser(user) {
+					this.guest = !!(user && user.isAnonymous);
+					this.user = user && !user.isAnonymous ? user : null;
+					if (this.user) {
+						await this._authManager.loadProfile(firebase.database());
+						this.profile = this._authManager.userProfile;
+						this.annotationMode = !!(this.profile && this.profile.annotationMode);
+						this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
+						this.showAiEval = !!(this.profile && this.profile.showAiEval);
+						this.showMapControl = !!(this.profile && this.profile.showMapControl);
+						// Default OFF; only explicit true enables.
+						this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
+					} else {
+						this.profile = null;
+						this.annotationMode = false;
+						this.showAiThinkReport = false;
+						this.showAiEval = false;
+						this.showMapControl = false;
+						this.enablePondering = false;
+					}
+					this.loading = false;
 				},
 
 				async renameUser() {
@@ -557,8 +650,30 @@
 					this.busy = false;
 				},
 
+				async forgotPassword() {
+					this.error = '';
+					this.successMsg = '';
+					const email = (this.loginEmail || '').trim();
+					if (!email) { this.error = 'Enter your email address above, then press "Forgot password?" again.'; return; }
+					this.busy = true;
+					try {
+						await this._authManager.sendPasswordReset(email);
+						this.successMsg = 'If an account exists for ' + email + ', a password reset email is on its way. Check your inbox and spam folder.';
+					} catch (e) {
+						// Unknown addresses get the same answer as known ones.
+						if (e.code === 'auth/user-not-found') {
+							this.successMsg = 'If an account exists for ' + email + ', a password reset email is on its way. Check your inbox and spam folder.';
+						} else {
+							this.error = _friendlyError(e);
+						}
+					}
+					this.busy = false;
+				},
+
 				async signIn() {
 					this.error = '';
+					this.successMsg = '';
+					this.linkConflict = '';
 					this.busy = true;
 					try {
 						await this._authManager.signInWithEmail(this.loginEmail, this.loginPassword);
@@ -572,24 +687,117 @@
 					this.error = '';
 					if (!this.signupName.trim()) { this.error = 'Display name is required.'; return; }
 					if (this.signupName.trim().length > 20) { this.error = 'Display name must be 20 characters or less.'; return; }
+					this.successMsg = '';
+					this.linkConflict = '';
+					const wasGuest = this.guest;
 					this.busy = true;
 					try {
-						await this._authManager.signUpWithEmail(this.signupEmail, this.signupPassword, this.signupName.trim());
+						const user = await this._authManager.signUpWithEmail(this.signupEmail, this.signupPassword, this.signupName.trim());
+						if (wasGuest) await this._applyUser(user);
 					} catch (e) {
-						this.error = _friendlyError(e);
+						if (wasGuest && (e.code === 'auth/email-already-in-use' || e.code === 'auth/credential-already-in-use')) {
+							this.error = 'That email already has a Sigil account, so this guest session can\'t be turned into it. You can sign in to it instead (this guest session\'s games stay with the guest).';
+							this.loginEmail = this.signupEmail;
+							this.linkConflict = 'email';
+						} else {
+							this.error = _friendlyError(e);
+						}
 					}
 					this.busy = false;
 				},
 
 				async signInGoogle() {
 					this.error = '';
+					this.successMsg = '';
+					this.linkConflict = '';
+					const wasGuest = this.guest;
 					this.busy = true;
 					try {
-						await this._authManager.signInWithGoogle();
+						const user = await this._authManager.signInWithGoogle();
+						if (wasGuest) await this._applyUser(user);
+					} catch (e) {
+						if (wasGuest && (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use')) {
+							this.error = 'That Google account already has a Sigil account, so this guest session can\'t be turned into it. You can sign in to it instead (this guest session\'s games stay with the guest).';
+							this._linkCredential = e.credential || null;
+							this.linkConflict = 'google';
+						} else {
+							this.error = _friendlyError(e);
+						}
+					}
+					this.busy = false;
+				},
+
+				async signInExistingGoogle() {
+					this.error = '';
+					this.busy = true;
+					try {
+						await this._authManager.signInWithGoogleCredential(this._linkCredential);
+						this.linkConflict = '';
+						this._linkCredential = null;
 					} catch (e) {
 						this.error = _friendlyError(e);
 					}
 					this.busy = false;
+				},
+
+				cancelDelete() {
+					this.deleteOpen = false;
+					this.deleteConfirm = '';
+					this.deleteError = '';
+					this.reauthNeeded = false;
+					this.reauthPassword = '';
+				},
+
+				async deleteAccount() {
+					this.deleteError = '';
+					if (this.deleteConfirm.trim() !== 'DELETE') {
+						this.deleteError = 'Type DELETE in the box to confirm.';
+						return;
+					}
+					this.busy = true;
+					try {
+						// Re-authenticate before removing any data, so a stale
+						// session can't leave the data gone but the sign-in alive.
+						// Stop after showing the prompt: a Google popup must open
+						// straight from a click, not after an await.
+						if (!this.reauthNeeded && !(await this._authManager.isRecentLogin())) {
+							this._askReauth();
+							this.deleteError = 'Please confirm it\'s you, then press delete again.';
+							this.busy = false;
+							return;
+						}
+						if (this.reauthNeeded) {
+							if (this.reauthMethod === 'password' && !this.reauthPassword) {
+								this.deleteError = 'Enter your password to confirm.';
+								this.busy = false;
+								return;
+							}
+							await this._authManager.reauthenticate(this.reauthPassword);
+							this.reauthNeeded = false;
+							this.reauthPassword = '';
+						}
+						await this._authManager.deleteAccount();
+						this.cancelDelete();
+						this.user = null;
+						this.profile = null;
+						this.successMsg = 'Your account has been deleted.';
+						this.error = '';
+					} catch (e) {
+						if (e.code === 'auth/requires-recent-login') {
+							this._askReauth();
+							this.deleteError = 'Please confirm it\'s you, then press delete again.';
+						} else if (e.code === 'PERMISSION_DENIED' || /permission/i.test(e.message || '')) {
+							this.deleteError = 'The server refused to delete your data, so nothing was deleted. Please try again later.';
+						} else {
+							this.deleteError = _friendlyError(e);
+						}
+					}
+					this.busy = false;
+				},
+
+				_askReauth() {
+					this.reauthNeeded = true;
+					this.reauthMethod = this._authManager.reauthMethod;
 				},
 
 				async doSignOut() {
@@ -612,6 +820,10 @@
 				'auth/invalid-credential': 'Invalid email or password.',
 				'auth/too-many-requests': 'Too many attempts. Please try again later.',
 				'auth/popup-closed-by-user': 'Sign-in popup was closed.',
+				'auth/missing-email': 'Enter your email address.',
+				'auth/requires-recent-login': 'Please sign in again to continue.',
+				'auth/user-mismatch': 'That is a different account from the one signed in.',
+				'auth/network-request-failed': 'Network error. Check your connection and try again.',
 			};
 			return map[e.code] || e.message;
 		}
