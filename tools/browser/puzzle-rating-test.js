@@ -1,0 +1,100 @@
+// Puzzle ratings (docs/static/scripts/puzzle-rating.js), headless:
+//   node tools/browser/puzzle-rating-test.js <docs dir>
+// 1. The Elo arithmetic: expected scores, K, integer deltas inside the rules'
+//    bounds (player +-40, puzzle +-32), every rating gap from -1500 to +1500.
+// 2. pickRatedPuzzle: unattempted puzzles only, near the player's rating.
+// 3. The page, signed out: the rating line renders, the first result moves the
+//    device rating, a second result on the same puzzle does not, and a page
+//    load with no pick lands on a puzzle near the stored rating.
+// Exits 1 on the first failure. Needs puppeteer (NODE_PATH).
+const fs = require('fs');
+const path = require('path');
+const http = require('http');
+const { spawn } = require('child_process');
+
+const DOCS = process.argv[2];
+let failures = 0;
+function check(cond, what) { console.log((cond ? 'ok   ' : 'FAIL ') + what); if (!cond) failures++; }
+
+// ---- 1, 2: the module in a bare context
+const src = fs.readFileSync(path.join(DOCS, 'static/scripts/puzzle-rating.js'), 'utf8');
+const mod = new Function('localStorage', 'navigator', src
+	+ '\nreturn { puzzleExpected, puzzleRatingUpdate, pickRatedPuzzle, PUZZLE_RATING_START };')(
+	{ getItem() { return null; }, setItem() {} }, { onLine: false });
+let maxU = 0, maxP = 0, intOk = true;
+for (let gap = -1500; gap <= 1500; gap += 25) {
+	for (const plays of [0, 19, 20, 500]) {
+		for (const solved of [true, false]) {
+			const up = mod.puzzleRatingUpdate({ rating: 1500, plays }, { rating: 1500 + gap, plays }, solved);
+			maxU = Math.max(maxU, Math.abs(up.delta));
+			maxP = Math.max(maxP, Math.abs(up.puzzleDelta));
+			intOk = intOk && Number.isInteger(up.user.rating) && Number.isInteger(up.puzzle.rating)
+				&& up.user.plays === plays + 1 && up.puzzle.plays === plays + 1
+				&& (solved ? up.delta >= 0 && up.puzzleDelta <= 0 : up.delta <= 0 && up.puzzleDelta >= 0);
+		}
+	}
+}
+check(maxU <= 40 && maxP <= 32 && intOk, `deltas inside the rules' bounds (player max ${maxU}, puzzle max ${maxP}), integer, signed by result`);
+check(Math.abs(mod.puzzleExpected(1500, 1500) - 0.5) < 1e-12 && mod.puzzleExpected(1900, 1500) > 0.9, 'expected score');
+const pool = Array.from({ length: 50 }, (_, i) => ({ id: 'p' + i, rating: 1000 + 20 * i }));
+const picks = new Set();
+for (let k = 0; k < 200; k++) picks.add(mod.pickRatedPuzzle(pool, 1500, { p25: { solved: true } }, {}).id);
+const ratings = [...picks].map(id => pool.find(p => p.id === id).rating);
+check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 220,
+	`rated pick: never the attempted puzzle, within 220 of the rating (picked ${picks.size} distinct)`);
+
+// ---- 3: the page, signed out
+(async () => {
+	const puppeteer = require('puppeteer');
+	const PORT = 8966 + Math.floor(Math.random() * 30);
+	const srv = spawn('python3', ['-m', 'http.server', String(PORT), '-d', DOCS], { stdio: 'ignore' });
+	const data = JSON.parse(fs.readFileSync(path.join(DOCS, 'static/puzzles/mate_puzzles.json'), 'utf8'));
+	data.puzzles.forEach((p, i) => { if (typeof p.rating !== 'number') p.rating = 900 + (i * 37) % 1400; });
+	const body = JSON.stringify(data);
+	let browser;
+	try {
+		await new Promise((res, rej) => { const t0 = Date.now(); (function tick() {
+			http.get({ host: '127.0.0.1', port: PORT, path: '/' }, r => { r.resume(); res(); })
+				.on('error', () => Date.now() - t0 > 15000 ? rej(new Error('server')) : setTimeout(tick, 200)); })(); });
+		browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] });
+		const errors = [];
+		const open = async (q, before) => {
+			const page = await browser.newPage();
+			await page.setBypassServiceWorker(true);
+			await page.setRequestInterception(true);
+			page.on('request', (req) => /mate_puzzles\.json/.test(req.url())
+				? req.respond({ status: 200, contentType: 'application/json', body }) : req.continue());
+			page.on('pageerror', e => errors.push(e.message));
+			if (before) await page.evaluateOnNewDocument(before);
+			await page.goto(`http://127.0.0.1:${PORT}/puzzles.html${q}`, { waitUntil: 'networkidle2', timeout: 60000 });
+			await page.waitForSelector('#puzzle-root [x-data]', { visible: true, timeout: 30000 });
+			await new Promise(r => setTimeout(r, 1500));
+			return page;
+		};
+		let page = await open('?p=0');
+		let line = await page.$eval('#puzzle-rating-status', el => el.textContent);
+		check(/Your puzzle rating: 1500 \(this device/.test(line), `rating line (${line.trim()})`);
+		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'solved'));
+		await new Promise(r => setTimeout(r, 500));
+		const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
+		check(stored && stored.rating > 1500 && stored.plays === 1, `a solve raises the device rating (${JSON.stringify(stored && { rating: stored.rating, plays: stored.plays })})`);
+		await page.evaluate(() => window.SIGIL_PUZZLE_ON_RESULT(window.SIGIL_PUZZLE, 'failed'));
+		await new Promise(r => setTimeout(r, 500));
+		const again = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_rating')));
+		check(again.rating === stored.rating && again.plays === 1, 'a second result on the same puzzle changes nothing');
+		await page.close();
+		page = await open('', `localStorage.setItem('sigil_puzzle_rating', JSON.stringify({ rating: 2100, plays: 30, attempts: {} }))`);
+		const r = await page.evaluate(() => window.SIGIL_PUZZLE.rating);
+		const near = data.puzzles.map(p => Math.abs(p.rating - 2100)).sort((a, b) => a - b)[19];
+		check(Math.abs(r - 2100) <= near, `no pick lands near the stored rating (puzzle ${r}, 20th nearest gap ${near})`);
+		await page.close();
+		check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+	} catch (e) {
+		check(false, 'exception: ' + (e && e.stack || e));
+	} finally {
+		if (browser) await browser.close();
+		srv.kill();
+	}
+	console.log(failures ? failures + ' FAILED' : 'ALL OK');
+	process.exit(failures ? 1 : 0);
+})();
