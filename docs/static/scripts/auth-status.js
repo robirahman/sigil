@@ -49,7 +49,15 @@
 	const el = document.getElementById('auth-status');
 	if (!el) return;
 
-	firebase.auth().onAuthStateChanged(async function (user) {
+	// Linking a guest to an email or Google account keeps the same user, so
+	// onAuthStateChanged does not fire; AuthManager dispatches
+	// 'sigil-auth-refresh' after an upgrade so the header catches up.
+	firebase.auth().onAuthStateChanged(renderStatus);
+	window.addEventListener('sigil-auth-refresh', function () {
+		renderStatus(firebase.auth().currentUser);
+	});
+
+	async function renderStatus(user) {
 		if (user && !user.isAnonymous) {
 			const render = function (name) {
 				el.innerHTML = '<a class="auth-status__name" href="profile.html?uid=' + encodeURIComponent(user.uid) + '" style="color: inherit; text-decoration: none;">' + _escHtml(name) + '</a>';
@@ -64,7 +72,7 @@
 		} else {
 			el.innerHTML = '<a class="auth-status__link" href="account.html">Sign in</a>';
 		}
-	});
+	}
 
 	function _escHtml(s) {
 		var d = document.createElement('div');

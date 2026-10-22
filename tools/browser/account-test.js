@@ -261,6 +261,8 @@ async function typeInto(page, sel, text) {
 			check('guest: profile bootstrapped under the same uid', tree.users && tree.users['anon-1'] && tree.users['anon-1'].displayName === 'Upgraded'
 				&& tree.leaderboard && tree.leaderboard['anon-1'] && tree.leaderboard['anon-1'].elo === 1000, tree);
 			check('guest: page switches to the profile view', st.user === 'anon-1' && st.guest === false && st.profile && st.profile.displayName === 'Upgraded', st);
+			const hdr = await page.$eval('#auth-status', el => el.textContent.trim());
+			check('guest: header shows the new name, not "Sign in"', hdr === 'Upgraded', hdr);
 			check('guest: no page errors', page.__errors.length === 0, page.__errors);
 			await page.__ctx.close();
 		}
@@ -292,6 +294,8 @@ async function typeInto(page, sel, text) {
 			check('guest google: linkWithPopup called, not signInWithPopup', named(cs, 'user.linkWithPopup').length === 1 && named(cs, 'auth.signInWithPopup').length === 0, cs.map(c => c.name));
 			const tree = await page.evaluate(() => window.__dbTree);
 			check('guest google: profile created with the Google name', tree.users && tree.users['anon-3'] && tree.users['anon-3'].displayName === 'GoogleGuy' && st.user === 'anon-3', { tree, st });
+			const hdr = await page.$eval('#auth-status', el => el.textContent.trim());
+			check('guest google: header shows the Google name, not "Sign in"', hdr === 'GoogleGuy', hdr);
 			await page.__ctx.close();
 		}
 		{

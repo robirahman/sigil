@@ -36,8 +36,10 @@ class AuthManager {
 	 */
 	async signUpWithEmail(email, password, displayName) {
 		const guest = this.auth.currentUser;
+		// Read before linking: the linked user is no longer anonymous.
+		const upgrading = !!(guest && guest.isAnonymous);
 		let cred;
-		if (guest && guest.isAnonymous) {
+		if (upgrading) {
 			const emailCred = firebase.auth.EmailAuthProvider.credential(email, password);
 			cred = await guest.linkWithCredential(emailCred);
 		} else {
@@ -47,6 +49,7 @@ class AuthManager {
 		this.currentUser = cred.user;
 		await cred.user.updateProfile({ displayName });
 		await this.ensureUserProfile(firebase.database(), displayName);
+		if (upgrading) AuthManager._notifyUpgrade();
 		return cred.user;
 	}
 
@@ -68,8 +71,10 @@ class AuthManager {
 		const link = !opts || opts.link !== false;
 		const provider = new firebase.auth.GoogleAuthProvider();
 		const guest = this.auth.currentUser;
+		// Read before linking: the linked user is no longer anonymous.
+		const upgrading = !!(link && guest && guest.isAnonymous);
 		let cred;
-		if (link && guest && guest.isAnonymous) {
+		if (upgrading) {
 			cred = await guest.linkWithPopup(provider);
 			// Linking keeps the guest's (empty) Auth profile; copy the Google name.
 			const g = (cred.user.providerData || []).find(p => p && p.providerId === 'google.com');
@@ -81,6 +86,7 @@ class AuthManager {
 		}
 		this.currentUser = cred.user;
 		await this.ensureUserProfile(firebase.database());
+		if (upgrading) AuthManager._notifyUpgrade();
 		return cred.user;
 	}
 
@@ -169,6 +175,16 @@ class AuthManager {
 		this.userProfile = null;
 		// The Auth user is gone server-side; drop the cached session.
 		try { await this.auth.signOut(); } catch (e) { /* already invalid */ }
+	}
+
+	/**
+	 * Tell other auth observers on the page (auth-status.js's header) that a
+	 * guest was upgraded: linking does not fire onAuthStateChanged.
+	 */
+	static _notifyUpgrade() {
+		if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+			window.dispatchEvent(new CustomEvent('sigil-auth-refresh'));
+		}
 	}
 
 	/** True for the "sign in again first" refusals from Auth or deleteUserData. */
