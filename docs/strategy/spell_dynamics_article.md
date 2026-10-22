@@ -6,7 +6,7 @@ Every game of Sigil deals nine spells onto the board: three rituals (five nodes)
 
 This article covers the 39 spells in the core set and the eight expansion packs (Springtime, Celestial, Inferno, Tempest, Flood, Autumn, Gloom, and Covenant). It has four parts: a tier list, a guide to which spells prefer open or crowded boards, a table of synergies and anti-synergies, and a table of head-to-head matchups. A final section looks at what the recorded games say, and where they disagree with us.
 
-A reminder on two rules that come up repeatedly below. Casting a spell locks it for you until your lock moves, and you get one cast per turn unless you hold Seal of Summer. Red moves first, and to compensate, blue starts one point ahead on the score track (a phantom stone that is not on the board). A player wins when the track shows them three ahead, so blue wins with two more stones on the board than red, while red needs four more than blue.
+A reminder on two rules that come up repeatedly below. Casting a three- or five-node spell locks it for you until your lock moves (one-node charms never lock), and you get one cast per turn unless you hold Seal of Summer. Red moves first, and to compensate, blue starts one point ahead on the score track (a phantom stone that is not on the board). A player wins when the track shows them three ahead, so blue wins with two more stones on the board than red, while red needs four more than blue.
 
 ## The tier list
 
@@ -88,7 +88,7 @@ Hurricane destroys the smallest contiguous enemy group. Early in the game your o
 
 Two spells have synergy when holding both lets you do something neither does alone. Three general principles explain most of the table.
 
-**Refill loops.** Casting a spell locks it. Gather and Harvest place stones into your locked spell, so cast a spell and follow with Gather or Harvest and you have both refilled the first spell and gained a stone. Soft-move spells are the best partners, because they can refill Gather or Harvest in turn. This is the strongest synergy in the game. Gather and Harvest have no synergy with each other, because refilling each other nets nothing.
+**Refill loops.** Casting a three- or five-node spell locks it. Gather and Harvest place stones into your locked spell, so cast a spell and follow with Gather or Harvest and you have both refilled the first spell and gained a stone. Soft-move spells are the best partners, because they can refill Gather or Harvest in turn. This is the strongest synergy in the game. Gather and Harvest have no synergy with each other, because refilling each other nets nothing.
 
 **Destroying and converting are redundant.** Every enemy stone Hail Storm or Meteor removes is one Bewitch or Corrupt can no longer convert. Both effects are good, but they eat each other's targets. Two destruction spells cast on consecutive turns thin each other out the same way.
 
