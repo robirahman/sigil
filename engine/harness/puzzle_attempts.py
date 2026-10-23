@@ -1,6 +1,6 @@
 """One AI tier attempts a slice of the puzzle set, as the browser plays that tier.
 
-    puzzle_attempts.py <tier> <puzzles.json> <n_shards>
+    puzzle_attempts.py <tier> <puzzles.json | gs://bucket/object> <n_shards>
 
 The shard index is $SIGIL_SHARD_OFF / 1000 (runner.sh: (SHARD_BASE + worker) * 1000);
 shard i takes the puzzles whose position in the set is i mod n_shards.
@@ -97,15 +97,28 @@ def attempt(p, tier):
 
 def main():
     tier, path, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
-    if not os.path.isabs(path) and not os.path.exists(path):
+    if not path.startswith('gs://') and not os.path.isabs(path) and not os.path.exists(path):
         path = os.path.join(_REPO, path)          # runner.sh passes repo-relative paths
     shard = int(os.environ.get('SIGIL_SHARD_OFF', '0')) // 1000
     if hasattr(se, 'SHIPPED_POLICY'):
         se.set_policy(*se.SHIPPED_POLICY)
     if hasattr(se, 'SHIPPED_EXPLORE'):
         se.set_policy_explore(*se.SHIPPED_EXPLORE)
-    with open(path, encoding='utf-8') as fh:
-        puzzles = json.load(fh)['puzzles']
+    if path.startswith('gs://'):
+        # A candidate set staged in the bucket (the VM venv has no requests).
+        import urllib.parse, urllib.request
+        bucket, name = path[5:].split('/', 1)
+        req = urllib.request.Request(
+            'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+            headers={'Metadata-Flavor': 'Google'})
+        tok = json.load(urllib.request.urlopen(req, timeout=10))['access_token']
+        req = urllib.request.Request(f'https://storage.googleapis.com/storage/v1/b/{bucket}/o/'
+                                     + urllib.parse.quote(name, safe='') + '?alt=media',
+                                     headers={'Authorization': 'Bearer ' + tok})
+        puzzles = json.load(urllib.request.urlopen(req, timeout=300))['puzzles']
+    else:
+        with open(path, encoding='utf-8') as fh:
+            puzzles = json.load(fh)['puzzles']
     mine = [p for i, p in enumerate(puzzles) if i % n == shard % n]
     print(f"  CONFIG tier={tier} shard={shard}/{n} puzzles={len(mine)} eval={EVAL} defence_ms={DEFENCE_MS}", flush=True)
     for p in mine:
