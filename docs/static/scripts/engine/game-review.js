@@ -859,6 +859,9 @@ async function hydrateGameLog(spellNames, variant, setupSfn, finalSfn, turns) {
  *   paceMs — delay before each replayed input token, and keeps applyAITurn's
  *            own animation delays live instead of instant. 0 (default) is the
  *            silent instant rebuild every existing caller gets.
+ *   result — an object to receive how the transcript ends: { gameover,
+ *            winner }, counting a Seal of Destruction still held when the
+ *            next turn would start (the rating function's result check).
  */
 async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 	const noop = () => {};
@@ -970,6 +973,18 @@ async function reconstructGameLog(spellNames, variant, setupSfn, turns, opts) {
 		}
 	} finally {
 		AI_REPLAY_INSTANT = wasInstant;
+	}
+	if (opts && opts.result) {
+		// Beginning-of-turn trigger for the turn after the transcript.
+		if (!board.gameover && rebuilt.length) {
+			const next = board.enemy(rebuilt[rebuilt.length - 1].color);
+			if (board.chargedSpells[next].includes('Seal_of_Destruction')) {
+				board.gameover = true;
+				board.winner = board.enemy(next);
+			}
+		}
+		opts.result.gameover = !!board.gameover;
+		opts.result.winner = board.winner || null;
 	}
 	return rebuilt;
 }

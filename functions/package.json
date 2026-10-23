@@ -1,20 +1,24 @@
 {
   "name": "sigil-functions",
-  "description": "Firebase Cloud Functions for Sigil Online",
+  "description": "Firebase Cloud Functions for Sigil Online: server-side game rating and account deletion",
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
-    "shell": "firebase functions:shell",
-    "start": "npm run shell",
+    "test": "node --test test/rating.test.js",
+    "test:rules": "firebase emulators:exec --only database --project demo-sigil 'node --test test/rules.test.js'",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test:e2e": "firebase emulators:exec --only database,functions,auth --project demo-sigil 'node --test test/e2e.test.js'"
   },
   "engines": {
-    "node": "18"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^11.11.0",
-    "firebase-functions": "^4.5.0"
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.1.0"
   },
   "private": true
 }

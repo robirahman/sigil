@@ -651,44 +651,26 @@ class MultiplayerController {
 		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: 'time' });
 		if (!writeResult) return;
 		const committed = await this.sync.writeTimeout(winner);
-		if (committed) this._saveGameRecord(winner, 'time', true);
+		if (committed) this._saveGameRecord(winner);
 	}
 
-	_saveGameRecord(winner, endReason, force) {
+	/**
+	 * Finish the room and leave its transcript for review. The server
+	 * records and rates the game when the room finishes (functions/
+	 * index.js recordRoom, rateGame), so both clients just write the room:
+	 * the first to finish it sets the result, the other only the review
+	 * fields. Stored records carry the SLIM transcript (marginal moves) plus
+	 * the setup/final SFN anchors; positions are rebuilt by replaying
+	 * through reconstructGameLog. Never store per-turn board states.
+	 */
+	_saveGameRecord(winner) {
 		if (!this.sync) return;
-		// Stored records carry the SLIM transcript (marginal moves) plus
-		// the setup/final SFN anchors; positions are rebuilt by replaying
-		// through reconstructGameLog. Never store per-turn board states.
-		const record = {
-			spellNames: this.board.spellNames,
-			winner: winner,
-			turns: slimGameLog(this._gameLog),
-			setupSfn: this._gameLog.length ? this._gameLog[0].sfnBefore : null,
-			finalSfn: this.board ? boardToSfn(this.board) : null,
-			roomCode: this.sync.roomCode,
-			timestamp: Date.now(),
-			// Variant the live board actually played under. Falls back
-			// to sync.variant (creator's choice persisted in the room
-			// metadata) when board.variant is missing for any reason.
-			variant: normalizeVariant((this.board && this.board.variant) || (this.sync && this.sync.variant)),
-			// The room's clock and how the game ended ('play', 'forfeit', 'time'):
-			// clock games rate in the same pool, the control is kept for later.
-			timeControl: this._timeControl || { type: 'none' },
-			endReason: endReason || 'play',
-		};
-		// `force`: the client that won the time-forfeit transaction records the
-		// game even when it is blue (red's tab may be gone).
-		this.sync.saveCompletedGame(record, { force: !!force });
-		// Mark the room finished so the same `?id=CODE` URL serves review mode.
-		// Either player calls this — it's an idempotent update.
-		if (this.myColor === 'red' || force) {
-			this.sync.writeRoomFinalState(
-				winner,
-				this._gameLog,
-				this.board ? boardToSfn(this.board) : null,
-				this._gameLog.length ? this._gameLog[0].sfnBefore : null,
-			);
-		}
+		this.sync.writeRoomFinalState(
+			winner,
+			this._gameLog,
+			this.board ? boardToSfn(this.board) : null,
+			this._gameLog.length ? this._gameLog[0].sfnBefore : null,
+		);
 	}
 
 	/** Annotate the opponent's most recent turn (or clear an existing annotation). */

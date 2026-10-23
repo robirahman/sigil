@@ -1,0 +1,1816 @@
+{
+ "N3WMQJ": {
+  "spellNames": [
+   "Harvest",
+   "Flourish",
+   "Seal_of_Lightning",
+   "Storm_Front",
+   "Fireblast",
+   "Rock_Slide",
+   "Charge",
+   "Sprout",
+   "Surge"
+  ],
+  "winner": "red",
+  "turns": [
+   {
+    "actions": [
+     "a7",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 1
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "blink"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 2
+   },
+   {
+    "actions": [
+     "a8",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 3
+   },
+   {
+    "actions": [
+     {
+      "node": "c4",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 4
+   },
+   {
+    "actions": [
+     "a4",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 5
+   },
+   {
+    "actions": [
+     {
+      "node": "c5",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 6
+   },
+   {
+    "actions": [
+     "a9",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 7
+   },
+   {
+    "actions": [
+     {
+      "node": "c6",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 8
+   },
+   {
+    "actions": [
+     "a3",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 9
+   },
+   {
+    "actions": [
+     {
+      "node": "c2",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 10
+   },
+   {
+    "actions": [
+     "a2",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 11
+   },
+   {
+    "actions": [
+     {
+      "node": "c3",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "c3"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "a12",
+      "type": "move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "a5",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 12
+   },
+   {
+    "actions": [
+     "a1",
+     "Charge",
+     "a10",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 13
+   },
+   {
+    "actions": [
+     {
+      "node": "c3",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "a12"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "a4",
+      "pushed_to": "a7",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 14
+   },
+   {
+    "actions": [
+     "a4",
+     "a12",
+     "Storm_Front",
+     "a10",
+     "a5",
+     "a12",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 15
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "c3"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "c8",
+      "type": "move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "c10",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 16
+   },
+   {
+    "actions": [
+     "a5",
+     "Charge",
+     "a6",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 17
+   },
+   {
+    "actions": [
+     {
+      "node": "c3",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "c8"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "a11",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 18
+   },
+   {
+    "actions": [
+     "a11",
+     "c9",
+     "Harvest",
+     "a4",
+     "a9",
+     "a8",
+     "a3",
+     "a2",
+     "a6",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 19
+   },
+   {
+    "actions": [
+     {
+      "node": "a11",
+      "pushed_to": "a5",
+      "type": "hard_move"
+     },
+     {
+      "sacrificed": [
+       "c10"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "a1",
+      "pushed_to": "a13",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 20
+   },
+   {
+    "actions": [
+     "a11",
+     "dash",
+     "a13",
+     "a3",
+     "a1",
+     "Storm_Front",
+     "a8",
+     "c10",
+     "c9",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 21
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "c3"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "a12",
+      "type": "move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "a5",
+      "pushed_to": "a7",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 22
+   },
+   {
+    "actions": [
+     "a5",
+     "Charge",
+     "a3",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 23
+   },
+   {
+    "actions": [
+     {
+      "node": "c3",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "c6"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "c6",
+      "type": "move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "a5",
+      "pushed_to": "a7",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 24
+   },
+   {
+    "actions": [
+     "a5",
+     "Harvest",
+     "a5",
+     "a9",
+     "a10",
+     "a6",
+     "a2",
+     "a4",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 25
+   },
+   {
+    "actions": [
+     {
+      "node": "a5",
+      "pushed_to": "a3",
+      "type": "hard_move"
+     },
+     {
+      "sacrificed": [
+       "a12"
+      ],
+      "type": "dash_lightning"
+     },
+     {
+      "node": "a4",
+      "pushed_to": "a13",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "a7",
+      "pushed_to": "b12",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 26
+   },
+   {
+    "actions": [
+     "a4",
+     "dash",
+     "a3",
+     "a13",
+     "a7",
+     "Storm_Front",
+     "a10",
+     "a12",
+     "a5",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 27
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 28
+   },
+   {
+    "actions": [
+     "a5",
+     "Charge",
+     "a3",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 29
+   },
+   {
+    "actions": [
+     {
+      "node": "c8",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 30
+   },
+   {
+    "actions": [
+     "b11",
+     "dash",
+     "a11",
+     "b12",
+     "b1",
+     "Harvest",
+     "a5",
+     "a4",
+     "a3",
+     "a2",
+     "a6",
+     "a9",
+     "a8",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 31
+   }
+  ],
+  "setupSfn": "......................................./Harvest,Flourish,Seal_of_Lightning,Storm_Front,Fireblast,Rock_Slide,Charge,Sprout,Surge r 1 0:0 -:- -:- b1 competitive",
+  "finalSfn": "rrrrrr.rrr...r.........r...bbbbbbb...../Harvest,Flourish,Seal_of_Lightning,Storm_Front,Fireblast,Rock_Slide,Charge,Sprout,Surge r 31 6:0 Harvest:- -:- r3 competitive",
+  "redUid": "human_player_1",
+  "blueUid": "__ai_rust_medium__",
+  "ranked": true,
+  "variant": "competitive",
+  "endReason": "play",
+  "timestamp": 1792682421945,
+  "roomCode": "LOCALN"
+ },
+ "F6N5H4": {
+  "spellNames": [
+   "Blossom",
+   "Hurricane",
+   "Starfall",
+   "Rock_Slide",
+   "Eclipse",
+   "Seal_of_Wind",
+   "Surge",
+   "Charge",
+   "Dividend"
+  ],
+  "winner": "blue",
+  "turns": [
+   {
+    "actions": [
+     "a4",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 1
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "blink"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 2
+   },
+   {
+    "actions": [
+     "a5",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 3
+   },
+   {
+    "actions": [
+     {
+      "node": "c8",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 4
+   },
+   {
+    "actions": [
+     "a6",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 5
+   },
+   {
+    "actions": [
+     {
+      "node": "c9",
+      "type": "move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 6
+   },
+   {
+    "actions": [
+     "a3",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 7
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 8
+   },
+   {
+    "actions": [
+     "a2",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 9
+   },
+   {
+    "actions": [
+     {
+      "node": "c10",
+      "type": "move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 10
+   },
+   {
+    "actions": [
+     "a1",
+     "Blossom",
+     "a4",
+     "c2",
+     "b8",
+     "b2",
+     "a8",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 11
+   },
+   {
+    "actions": [
+     {
+      "node": "c2",
+      "pushed_to": "c3",
+      "type": "blink"
+     },
+     {
+      "node": "c3",
+      "providence": true,
+      "pushed_to": "c13",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 12
+   },
+   {
+    "actions": [
+     "b1",
+     "dash",
+     "c13",
+     "a4",
+     "b10",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 13
+   },
+   {
+    "actions": [
+     {
+      "node": "b10",
+      "pushed_to": "c11",
+      "type": "blink"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 14
+   },
+   {
+    "actions": [
+     "b10",
+     "dash",
+     "b2",
+     "c11",
+     "b9",
+     "Eclipse",
+     "b9",
+     "b8",
+     "a9",
+     "a10",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 15
+   },
+   {
+    "actions": [
+     {
+      "node": "c11",
+      "type": "blink"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 16
+   },
+   {
+    "actions": [
+     "a11",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 17
+   },
+   {
+    "actions": [
+     {
+      "node": "b8",
+      "pushed_to": "b10",
+      "type": "blink"
+     },
+     {
+      "node": "b10",
+      "providence": true,
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 18
+   }
+  ],
+  "setupSfn": "......................................./Blossom,Hurricane,Starfall,Rock_Slide,Eclipse,Seal_of_Wind,Surge,Charge,Dividend r 1 0:0 -:- -:- b1 competitive",
+  "finalSfn": "r......rrrr..r......brb..b.bb....bbbb../Blossom,Hurricane,Starfall,Rock_Slide,Eclipse,Seal_of_Wind,Surge,Charge,Dividend b 18 2:0 Eclipse:- -:- b3 competitive",
+  "redUid": "human_player_1",
+  "blueUid": "__ai_rust_medium__",
+  "ranked": true,
+  "variant": "competitive",
+  "endReason": "play",
+  "timestamp": 1792680680701,
+  "roomCode": "LOCALF"
+ },
+ "W3ZZGX": {
+  "spellNames": [
+   "Corrupt",
+   "Hurricane",
+   "Blossom",
+   "Seal_of_Stone",
+   "Storm_Front",
+   "Scatter",
+   "Seal_of_Summer",
+   "Surge",
+   "Lurk"
+  ],
+  "winner": "blue",
+  "turns": [
+   {
+    "actions": [
+     {
+      "node": "c1",
+      "type": "move"
+     },
+     {
+      "kept": [
+       "c4"
+      ],
+      "spell": "Blossom",
+      "type": "cast"
+     },
+     {
+      "node": "a2",
+      "type": "blink"
+     },
+     {
+      "node": "b5",
+      "type": "blink"
+     },
+     {
+      "node": "a10",
+      "type": "blink"
+     },
+     {
+      "node": "b9",
+      "type": "blink"
+     },
+     {
+      "node": "c10",
+      "type": "blink"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 17
+   },
+   {
+    "actions": [
+     "c10",
+     "dash",
+     "a11",
+     "c10",
+     "b9",
+     "b13",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 18
+   },
+   {
+    "actions": [
+     {
+      "node": "a6",
+      "pushed_to": "a11",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 19
+   },
+   {
+    "actions": [
+     "b1",
+     "dash",
+     "a11",
+     "c13",
+     "b10",
+     "Storm_Front",
+     "b8",
+     "b9",
+     "a6",
+     "a2",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 20
+   },
+   {
+    "actions": [
+     {
+      "node": "b11",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "a12",
+       "c12"
+      ],
+      "type": "dash"
+     },
+     {
+      "node": "b1",
+      "pushed_to": "b6",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 21
+   },
+   {
+    "actions": [
+     "b11",
+     "a9",
+     "dash",
+     "b9",
+     "b6",
+     "b1",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 22
+   },
+   {
+    "actions": [
+     {
+      "node": "b11",
+      "pushed_to": "b6",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 23
+   },
+   {
+    "actions": [
+     "c10",
+     "dash",
+     "b6",
+     "b2",
+     "b10",
+     "Scatter",
+     "c8",
+     "c10",
+     "a7",
+     "b9",
+     "Storm_Front",
+     "b8",
+     "b9",
+     "a9",
+     "a10",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 24
+   },
+   {
+    "actions": [
+     {
+      "node": "b1",
+      "pushed_to": "b2",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 25
+   },
+   {
+    "actions": [
+     "a8",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 26
+   },
+   {
+    "actions": [
+     {
+      "node": "b9",
+      "pushed_to": "b10",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 27
+   },
+   {
+    "actions": [
+     "a10",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 28
+   },
+   {
+    "actions": [
+     {
+      "node": "b10",
+      "pushed_to": "c11",
+      "type": "hard_move"
+     },
+     {
+      "sacrificed": [
+       "b11",
+       "b13"
+      ],
+      "type": "dash"
+     },
+     {
+      "node": "b8",
+      "pushed_to": "b7",
+      "type": "hard_move"
+     },
+     {
+      "kept": [
+       "b8",
+       "b9"
+      ],
+      "spell": "Storm_Front",
+      "type": "cast"
+     },
+     {
+      "destroyed": [
+       "a1",
+       "a10"
+      ],
+      "type": "storm_front"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 29
+   },
+   {
+    "actions": [
+     "a10",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 30
+   },
+   {
+    "actions": [
+     {
+      "node": "a4",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 31
+   },
+   {
+    "actions": [
+     "a9",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 32
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "spell": "Lurk",
+      "type": "cast"
+     },
+     {
+      "node": "b7",
+      "pushed_to": "c12",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 33
+   },
+   {
+    "actions": [
+     "b1",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 34
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 35
+   },
+   {
+    "actions": [
+     "c7",
+     "Lurk",
+     "a11",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 36
+   },
+   {
+    "actions": [
+     {
+      "node": "c7",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "a5",
+       "a12"
+      ],
+      "type": "dash"
+     },
+     {
+      "node": "a10",
+      "pushed_to": "a13",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Lurk",
+      "type": "cast"
+     },
+     {
+      "node": "a7",
+      "pushed_to": "b12",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Surge",
+      "type": "cast"
+     },
+     {
+      "node": "b12",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 37
+   },
+   {
+    "actions": [
+     "a10",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 38
+   },
+   {
+    "actions": [
+     {
+      "node": "a3",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "b5",
+       "b12"
+      ],
+      "type": "dash"
+     },
+     {
+      "node": "a8",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 39
+   },
+   {
+    "actions": [
+     "a8",
+     "dash",
+     "a13",
+     "c12",
+     "c1",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 40
+   },
+   {
+    "actions": [
+     {
+      "node": "a13",
+      "type": "move"
+     },
+     {
+      "sacrificed": [
+       "a4",
+       "b12"
+      ],
+      "type": "dash"
+     },
+     {
+      "node": "a9",
+      "type": "hard_move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 41
+   },
+   {
+    "actions": [
+     "a9",
+     "a4",
+     "dash",
+     "a9",
+     "c11",
+     "c9",
+     "Scatter",
+     "c8",
+     "c9",
+     "b10",
+     "a2",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 42
+   },
+   {
+    "actions": [
+     {
+      "node": "b7",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "red",
+    "kind": "sim",
+    "turnNumber": 43
+   },
+   {
+    "actions": [
+     "b8",
+     "b13",
+     "dash",
+     "a8",
+     "a10",
+     "b9",
+     "Storm_Front",
+     "b8",
+     "b9",
+     "b6",
+     "b3",
+     "pass"
+    ],
+    "color": "blue",
+    "kind": "input",
+    "turnNumber": 44
+   }
+  ],
+  "setupSfn": "b...rb....br..b.....b......rrrrr.bb..rb/Corrupt,Hurricane,Blossom,Seal_of_Stone,Storm_Front,Scatter,Seal_of_Summer,Surge,Lurk r 17 0:1 -:Scatter -:- b1 competitive",
+  "finalSfn": ".brr..r...b.rbb....rbb.r.rbr.r...bb..../Corrupt,Hurricane,Blossom,Seal_of_Stone,Storm_Front,Scatter,Seal_of_Summer,Surge,Lurk b 44 2:6 Storm_Front:Storm_Front -:- b1 competitive",
+  "redUid": "__ai_rust_medium__",
+  "blueUid": "human_player_1",
+  "ranked": true,
+  "variant": "competitive",
+  "endReason": "play",
+  "timestamp": 1792650899911,
+  "roomCode": "LOCALW",
+  "startPos": {
+   "depth": 4,
+   "engineVersion": 33,
+   "model": "2026-10-21",
+   "proven": true,
+   "redWinProb": 0.7225213539633913,
+   "sfn": "b...rb....br..b.....b......rrrrr.bb..rb/Corrupt,Hurricane,Blossom,Seal_of_Stone,Storm_Front,Scatter,Seal_of_Summer,Surge,Lurk r 17 0:1 -:Scatter -:- b1 competitive",
+   "source": "live",
+   "stones": 0.85
+  }
+ },
+ "KMFSUZ": {
+  "spellNames": [
+   "Erupt",
+   "Seal_of_Lightning",
+   "Carnage",
+   "Eclipse",
+   "Storm_Front",
+   "Hail_Storm",
+   "Azimuth",
+   "Dividend",
+   "Gust"
+  ],
+  "winner": "blue",
+  "turns": [
+   {
+    "actions": [
+     "b4",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 1
+   },
+   {
+    "actions": [
+     {
+      "node": "c12",
+      "type": "blink"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 2
+   },
+   {
+    "actions": [
+     "b7",
+     "Dividend",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 3
+   },
+   {
+    "actions": [
+     {
+      "node": "b7",
+      "type": "move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 4
+   },
+   {
+    "actions": [
+     "b7",
+     "c12",
+     "Dividend",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 5
+   },
+   {
+    "actions": [
+     {
+      "node": "c4",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 6
+   },
+   {
+    "actions": [
+     "b3",
+     "b2",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 7
+   },
+   {
+    "actions": [
+     {
+      "node": "c3",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 8
+   },
+   {
+    "actions": [
+     "b6",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 9
+   },
+   {
+    "actions": [
+     {
+      "node": "c12",
+      "pushed_to": "b7",
+      "type": "hard_move"
+     },
+     {
+      "node": "b7",
+      "providence": true,
+      "pushed_to": "b8",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 10
+   },
+   {
+    "actions": [
+     "b5",
+     "dash",
+     "b8",
+     "b7",
+     "Dividend",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 11
+   },
+   {
+    "actions": [
+     {
+      "node": "b7",
+      "type": "move"
+     },
+     {
+      "node": "b4",
+      "providence": true,
+      "pushed_to": "b12",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 12
+   },
+   {
+    "actions": [
+     "b4",
+     "a7",
+     "dash",
+     "b12",
+     "b7",
+     "Dividend",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 13
+   },
+   {
+    "actions": [
+     {
+      "node": "b7",
+      "type": "move"
+     },
+     {
+      "node": "b4",
+      "providence": true,
+      "pushed_to": "b12",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 14
+   },
+   {
+    "actions": [
+     "a4",
+     "b4",
+     "dash",
+     "b12",
+     "b7",
+     "b10",
+     "Dividend",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 15
+   },
+   {
+    "actions": [
+     {
+      "node": "b7",
+      "type": "move"
+     },
+     {
+      "node": "b4",
+      "providence": true,
+      "pushed_to": "b13",
+      "type": "hard_move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 16
+   },
+   {
+    "actions": [
+     "b4",
+     "a8",
+     "dash",
+     "b13",
+     "a5",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 17
+   },
+   {
+    "actions": [
+     {
+      "node": "c2",
+      "type": "move"
+     },
+     {
+      "node": "c1",
+      "providence": true,
+      "type": "move"
+     },
+     {
+      "spell": "Dividend",
+      "type": "cast"
+     },
+     {
+      "banked": 1,
+      "spell": "Dividend",
+      "type": "bank_stones"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 18
+   },
+   {
+    "actions": [
+     "a3",
+     "dash",
+     "b4",
+     "a6",
+     "Azimuth",
+     "a2",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 19
+   },
+   {
+    "actions": [
+     {
+      "node": "b9",
+      "type": "move"
+     },
+     {
+      "node": "b13",
+      "providence": true,
+      "type": "move"
+     },
+     {
+      "kept": [
+       "b8"
+      ],
+      "spell": "Storm_Front",
+      "type": "cast"
+     },
+     {
+      "destroyed": [
+       "a2",
+       "a3"
+      ],
+      "type": "storm_front"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 20
+   },
+   {
+    "actions": [
+     "b1",
+     "dash",
+     "b3",
+     "b2",
+     "a2",
+     "pass"
+    ],
+    "color": "red",
+    "kind": "input",
+    "turnNumber": 21
+   },
+   {
+    "actions": [
+     {
+      "node": "b3",
+      "type": "move"
+     },
+     {
+      "type": "pass"
+     }
+    ],
+    "color": "blue",
+    "kind": "sim",
+    "turnNumber": 22
+   }
+  ],
+  "setupSfn": "......................................./Erupt,Seal_of_Lightning,Carnage,Eclipse,Storm_Front,Hail_Storm,Azimuth,Dividend,Gust r 1 0:0 -:- -:- b1 competitive",
+  "finalSfn": ".r.rrr.r.....r.b.rr.b....bbbbbb......b./Erupt,Seal_of_Lightning,Carnage,Eclipse,Storm_Front,Hail_Storm,Azimuth,Dividend,Gust r 22 0:1 -:Storm_Front -:- b2 competitive",
+  "redUid": "human_player_1",
+  "blueUid": "__ai_rust_medium__",
+  "ranked": true,
+  "variant": "competitive",
+  "endReason": "forfeit",
+  "timestamp": 1792684233388,
+  "roomCode": "LOCALK"
+ }
+}
