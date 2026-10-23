@@ -472,9 +472,9 @@ class FirebaseSync {
 			}
 		});
 
-		// Listen for game over
+		// Listen for game over (or an abort, which ends the stream too)
 		this.roomRef.child('status').on('value', (snap) => {
-			if (snap.val() === 'finished') {
+			if (snap.val() === 'finished' || snap.val() === 'aborted') {
 				// Signal to spectator controller
 				if (this._waitingResolver) {
 					const resolve = this._waitingResolver;
@@ -823,10 +823,13 @@ class FirebaseSync {
 	async claimAbandoned(winner) {
 		if (!this.roomRef) return false;
 		try {
-			await this.roomRef.update({ finishedBy: this.myColor, winner: winner, endReason: 'abandon' });
-			const done = await this._closeRoom();
-			if (done) this._removeActiveGameIndex();
-			return done;
+			// One write: the claim and the close together, so the opponent's
+			// seat is frozen exactly as it was when the claim was judged
+			// (a reconnect in between would otherwise slip in).
+			await this.roomRef.update({ finishedBy: this.myColor, winner: winner, endReason: 'abandon',
+				status: 'finished', closedAt: firebase.database.ServerValue.TIMESTAMP });
+			this._removeActiveGameIndex();
+			return true;
 		} catch (e) {
 			console.error('[Sync] claimAbandoned FAILED:', e.code, e.message);
 			return false;

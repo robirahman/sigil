@@ -1314,7 +1314,7 @@
 						try {
 							const snap = await db.ref('rooms/' + game.roomCode).once('value');
 							const data = snap.val();
-							if (!data || data.status === 'finished' || data.status === 'expired') continue;
+							if (!data || data.status === 'finished' || data.status === 'expired' || data.status === 'aborted') continue;
 							const expiryMs = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined' ? ROOM_INVITE_EXPIRY_MS : (72 * 60 * 60 * 1000);
 							if (data.status === 'waiting' && data.created && (Date.now() - data.created > expiryMs)) continue;
 							stillAlive.push(game);
