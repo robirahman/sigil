@@ -420,7 +420,8 @@ def main():
     ap.add_argument('--no-solve', action='store_true', help='assemble from the work files only')
     ap.add_argument('--no-assemble', action='store_true', help='solve only (fleet VMs; assembly is local)')
     ap.add_argument('--allow-missing', action='store_true',
-                    help='assemble even when positions have no solver record (a partial set, marked as such)')
+                    help='assemble even when positions have no solver record or winning-turn verdict '
+                         '(a partial set, marked as such)')
     ap.add_argument('--max-win-fraction', type=float, default=0.34,
                     help='drop mate-in-1 puzzles where more than this share of first turns win')
     ap.add_argument('--max-solutions-stored', type=int, default=12, help='full mate-in-1 lines stored per puzzle')
@@ -552,6 +553,17 @@ def main():
     if missing and not args.allow_missing:
         sys.exit(f'{len(missing)} positions have no solver record (e.g. {missing[:3]}); '
                  'rerun the solver or pass --allow-missing')
+    # The same for the winning-turn pass, when its work files are given: every
+    # position without a mate puzzle needs a verdict.
+    missing_winning = []
+    if win_work:
+        missing_winning = [pos['key'] for pos in positions
+                           if pos['key'] in done and pos['key'] not in wdone
+                           and not (done[pos['key']].get('ok') and (done[pos['key']].get('mate1') or done[pos['key']].get('mate2')
+                                                                     or done[pos['key']].get('mate3')))]
+        if missing_winning and not args.allow_missing:
+            sys.exit(f'{len(missing_winning)} positions have no winning-turn verdict (e.g. {missing_winning[:3]}); '
+                     'rerun the winning pass or pass --allow-missing')
     for pos in positions:
         key, s = pos['key'], pos['sfn']
         r = done.get(key)
@@ -699,6 +711,7 @@ def main():
            'engine': engine, 'count': len(puzzles),
            'positions_examined': len([1 for pos in positions if pos['key'] in done]),
            'positions_missing': len(missing),
+           'positions_missing_winning': len(missing_winning),
            'outcomes': dict(outcomes), 'winning_outcomes': dict(win_outcomes),
            'unreproduced_wins': unreproduced, 'puzzles': puzzles}
     os.makedirs(os.path.dirname(args.out) or '.', exist_ok=True)
