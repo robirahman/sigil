@@ -824,29 +824,12 @@ class GameController {
 
 	_eotTriggers(color) {
 		const board = this.board;
-		const enemy = board.enemy(color);
 
 		board.providenceOpen = false;
 		if (board.silenced) board.silenced[color] = false;
 		// Seal of Destruction end-of-turn effect
-		if (board.chargedSpells[color].includes('Seal_of_Destruction')) {
+		if (sealOfDestructionBurn(board, color)) {
 			this.emit({ type: 'message', message: 'DESTRUCTION BURNS!', awaiting: null });
-			const shielded = bulwarkProtectedNodes(board);
-			for (const name of NODE_ORDER) {
-				if (board.stones[name] === enemy && !shielded.has(name)) {
-					for (const nb of ADJACENCY[name]) {
-						if (board.stones[nb] === color) {
-							board.stones[name] = null;
-							if (board.lastPlay === name) {
-								board.lastPlay = null;
-								board.lastPlayer = null;
-							}
-							break;
-						}
-					}
-				}
-			}
-			board.update();
 		}
 
 		// Check win conditions

@@ -2319,6 +2319,19 @@ fn split_pick(results: Vec<((Option<crate::turn::Turn>, i32, crate::search::Sear
     out
 }
 
+/// A packed root turn (`root_scores_and_play` candidates) as the page plays
+/// it: (applyAITurn actions JSON, after-SFN with the opponent to move). The
+/// after-position is the search's own child (`mate::child`, end-of-turn
+/// effects applied), NOT `emit_actions`' board, which is deliberately taken
+/// before the Seal of Destruction burn for the live client's replay check.
+#[pyfunction]
+fn turn_after(sfn: &str, packed: Vec<u32>) -> PyResult<(String, String)> {
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let t = turn_from_packed(&packed);
+    let (acts, _pre_burn) = b.emit_actions(&t, b.to_move);
+    Ok((crate::actions::acts_to_json(&acts), crate::mate::child(&b, &t, b.to_move).to_sfn()))
+}
+
 fn turn_from_packed(packed: &[u32]) -> PTurn {
     let mut acts = packed.iter().filter_map(|&v| crate::search::unpack_action(v));
     let mut t = match acts.next() { Some(a) => PTurn::single(a), None => return PTurn::single(PAction::Pass) };
@@ -2471,6 +2484,7 @@ fn policy_diag(sfn: &str, result_sfn: &str, enum_cap: usize, max_turns: usize, w
 fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
     m.add_function(wrap_pyfunction!(policy_example, m)?)?;
+    m.add_function(wrap_pyfunction!(turn_after, m)?)?;
     m.add_function(wrap_pyfunction!(weights_json, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy_weights, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy, m)?)?;

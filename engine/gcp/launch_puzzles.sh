@@ -13,17 +13,24 @@
 # and assemble with tools/gen_mate_puzzles.py --no-solve.
 #
 # The corpus must already be at gs://<bucket>/<CORPUS> (upload the hydrated
-# dump from gen_mate_puzzles.py --hydrated). Environment overrides: PROJECT,
-# BRANCH, CORPUS, TIME_MS_1, TIME_MS_2, MAX_MATE_2, SPOT (1/0).
+# dump from gen_mate_puzzles.py --hydrated). BRANCH and CORPUS are required
+# (stale defaults once sent a run to an old corpus). Other environment
+# overrides: PROJECT, TIME_MS_1, TIME_MS_2, MAX_MATE_2, SPOT (1/0), SHARD (i/n:
+# this VM's slice of the games; give every VM of a fleet its own i), WINNING
+# (1 = a winning-turn pass after the mates, tools/winning_turns.py),
+# WINNING_RESUME (GCS object of a preempted run's winning.jsonl).
 set -euo pipefail
 NAME=${1:-sigil-puzzles-$(date -u +%m%d%H%M)}
 MACHINE=${2:-c3d-highcpu-90}; ZONE=${3:-us-central1-f}; MAXH=${4:-5}; WORKERS=${5:-88}
 PROJECT=${PROJECT:-focus-surfer-494820-g0}
-BRANCH=${BRANCH:-puzzles}
-CORPUS=${CORPUS:-puzzles/hydrated_2026-09-17.json}
+BRANCH=${BRANCH:?set BRANCH (the branch the VM clones)}
+CORPUS=${CORPUS:?set CORPUS (GCS object of the hydrated corpus)}
+SHARD=${SHARD:-}
+WINNING=${WINNING:-0}
 TIME_MS_1=${TIME_MS_1:-40000}; TIME_MS_2=${TIME_MS_2:-30000}; MAX_MATE_2=${MAX_MATE_2:-3}
 SPOT=${SPOT:-1}
-RESUME=${RESUME:-}          # GCS object of a prior work file to continue from
+RESUME=${RESUME:-}          # GCS object of a prior mates.jsonl to continue from
+WINNING_RESUME=${WINNING_RESUME:-}   # GCS object of a prior winning.jsonl to continue from
 RETRY_MS=${RETRY_MS:-0}     # > 0 adds a phase-3 retry of promising empty/timed-out positions
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUN=$(date -u +%Y%m%dT%H%M%SZ)
@@ -31,7 +38,7 @@ SPOT_FLAGS=()
 if [ "$SPOT" = "1" ]; then
   SPOT_FLAGS=(--provisioning-model=SPOT --instance-termination-action=DELETE)
 fi
-echo "RUN=$RUN name=$NAME machine=$MACHINE zone=$ZONE cap=${MAXH}h workers=$WORKERS branch=$BRANCH spot=$SPOT"
+echo "RUN=$RUN name=$NAME machine=$MACHINE zone=$ZONE cap=${MAXH}h workers=$WORKERS branch=$BRANCH spot=$SPOT shard=${SHARD:-all} winning=$WINNING"
 gcloud compute instances create "$NAME" \
   --project="$PROJECT" --zone="$ZONE" \
   --machine-type="$MACHINE" "${SPOT_FLAGS[@]}" \
@@ -39,7 +46,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=puzzles \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,time-ms-1=$TIME_MS_1,time-ms-2=$TIME_MS_2,max-mate-2=$MAX_MATE_2,resume=$RESUME,retry-ms=$RETRY_MS" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,time-ms-1=$TIME_MS_1,time-ms-2=$TIME_MS_2,max-mate-2=$MAX_MATE_2,resume=$RESUME,retry-ms=$RETRY_MS,shard=$SHARD,winning=$WINNING,winning-resume=$WINNING_RESUME" \
   --metadata-from-file="startup-script=$HERE/runner_puzzles.sh" \
   --format="value(name,status)"
 echo "$RUN"
