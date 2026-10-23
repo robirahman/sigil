@@ -5,14 +5,14 @@ first set was collected (engine v5, 2026-09-18).
 
 **Result:**
 
-- **1,570 puzzles**, up from 1,047:
+- **1,568 puzzles**, up from 1,047:
 
   | Kind | Old set | New set |
   |---|---|---|
   | Mate in 1 | 595 | 714 |
   | Mate in 2 | 333 | 560 |
   | Mate in 3 | 119 | 213 |
-  | Winning turn | — | 83 |
+  | Winning turn | — | 81 |
 
   "Winning turn" is a new kind: find the turn that keeps a winning game.
 - **Every puzzle now carries:**
@@ -71,24 +71,24 @@ This pass ran on every position that did not yield a mate puzzle. The rule:
 
 | Verdict | Positions |
 |---|---|
-| not winning | 31,309 |
+| not winning | 31,311 |
 | grey zone (another turn is 0.05–0.25 below the best) | 7,157 |
 | too many winning turns | 6,440 |
 | a mate (left to the solver) | 1,092 |
 | errors (out-of-scope spells) | 1,022 |
-| failed the depth-5 confirmation | 565 |
-| **puzzle** | **83** |
+| failed the depth-5 confirmation | 567 |
+| **puzzle** | **81** |
 
 Winning positions in Sigil usually have many good turns. That is why the yield is low and why the gap is what makes a position a puzzle. A random-position probe under a stricter absolute rule (best ≥ 0.80, all others ≤ 0.55) found none in 300 positions.
 
 Candidate turns are scored on the board after the end-of-turn effects (`turn_after` returns `mate::child`), so a turn that completes the Seal of Destruction is judged with its burn. The 402 affected positions were re-run after that fix: no puzzle changed, and two "too many" verdicts became "grey".
 
-The depth-5 confirmation matters: one candidate's value moved from 0.006 to 0.815 between depths 4 and 5. A position is rejected when any candidate's child search cannot be scored within its 30 s cap, or when a confirmation search does not complete depth 5 within 120 s. Re-judging the 90 puzzles of the first assembly under those two rules removed 7 (3 with an unscored candidate, 4 that no longer held at depth 5).
+The depth-5 confirmation matters: one candidate's value moved from 0.006 to 0.815 between depths 4 and 5. A position is rejected when any candidate's child search cannot be scored within its 30 s cap, or when a confirmation search does not complete depth 5 within 120 s. Every judged candidate (not just the best few) is confirmed at depth 5. Re-judging the puzzles of the first assembly under these rules left 81 of 90; the rest had an unscored candidate or did not hold at depth 5.
 
-Across the 83 puzzles:
+Across the 81 puzzles:
 
-- the median best turn keeps 0.95, and the median runner-up 0.55;
-- the player found the turn in 52 games and missed it in 31.
+- the median best turn keeps 0.96, and the median runner-up 0.55;
+- the player found the turn in 50 games and missed it in 31.
 
 **Difficulty**
 
@@ -112,8 +112,8 @@ Tags come from the first stored solution: Dash, Push, Quiet (no cast), Sacrifice
 - **Impact:** 23 of the 59 puzzles in the new set that involve the Seal had such lines, 4 of them scripted defences. The live set had the same flaw: puzzle `-OvJ-_O0oYKtS6AX9yu_-t20`'s defence threw.
 - **Fix:** the gate gains an explicit `{ endOfTurn: true }` mode that applies the burn (`sealOfDestructionBurn`, now in `constants.js` and shared with the controller). Only stored puzzle lines use it; live engine replies keep the pre-burn comparison.
 - **Checks:**
-  - `tools/puzzle-smoke.js --replay` replays every stored turn of every puzzle (casts included) through the gate. **1,570 of 1,570 reproduce.**
-  - The input-driven smoke test (moves and dashes only) passes 238 puzzles with 0 failures; the other 1,332 need spell prompts and are skipped.
+  - `tools/puzzle-smoke.js --replay` replays every stored turn of every puzzle (casts included) through the gate. **1,568 of 1,568 reproduce.**
+  - The input-driven smoke test (moves and dashes only) passes 237 puzzles with 0 failures; the other 1,331 need spell prompts and are skipped.
 
 ## The page
 
