@@ -81,6 +81,12 @@ gcs_del() {   # object (absent is fine)
     "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")" >/dev/null || true
 }
 
+# Ship the bootstrap log from the start: a FATAL before the work-file
+# uploader starts would otherwise leave nothing in the bucket.
+( while true; do gcs_put /var/log/sigil-puzzles.log "runs/$RUN/bootstrap.log" 2>/dev/null || true; sleep 20; done ) &
+BOOTLOG=$!
+trap 'echo "EXIT status $? at line $LINENO"; gcs_put /var/log/sigil-puzzles.log "runs/$RUN/bootstrap.log" 2>/dev/null' EXIT
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
 apt-get -qq install -y build-essential curl git python3-venv >/dev/null 2>&1
@@ -104,8 +110,9 @@ COMMIT=$(git log --oneline -1)
 echo "repo at $COMMIT"; echo "$COMMIT" > $WORK/out/COMMIT.txt
 
 python3 -m venv $WORK/venv
+echo "venv ready; building the engine"
 $WORK/venv/bin/pip -q install --upgrade pip maturin 2>&1 | tail -1
-cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2
+cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -5
 $WORK/venv/bin/python -c "import sigil_engine; print('engine import ok')" || { echo "FATAL: engine build"; shutdown -h now; exit 1; }
 
 gcs_get "$CORPUS" $WORK/hydrated.json || { echo "FATAL: corpus download"; shutdown -h now; exit 1; }
