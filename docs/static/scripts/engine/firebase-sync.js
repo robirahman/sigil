@@ -198,6 +198,10 @@ class FirebaseSync {
 		const roomRef = this.db.ref('rooms/' + code);
 		await roomRef.set(roomData);
 		this.roomRef = roomRef;
+		// rooms/ is not listable: a public room is announced in open_rooms/
+		// (the rules check it against the room). Best-effort: a missing
+		// entry only keeps the room off the lobby list.
+		if (this.isPublic) this.db.ref('open_rooms/' + code).set(true).catch((e) => console.warn('[Sync] open_rooms:', e));
 
 		this._writeActiveGameIndex(me);
 
@@ -320,6 +324,9 @@ class FirebaseSync {
 				if (!v || v.status !== 'waiting' || (v[joiner] && v[joiner].uid)) throw taken();
 				throw e;
 			}
+			// Off the open-games list, and on Watch Live if spectators may watch.
+			this.db.ref('open_rooms/' + code).remove().catch(() => {});
+			if (data.allowSpectators !== false) this.db.ref('live_rooms/' + code).set(true).catch(() => {});
 			await this._goOnline(joiner);
 
 			this._writeActiveGameIndex(joiner);
@@ -774,6 +781,7 @@ class FirebaseSync {
 			statusRef.off('value', keep);
 		}
 		if (!res || !res.committed) return false;
+		this._unlistRoom(code);
 		if (this.roomRef && this.roomCode === code) {
 			if (this.myColor) this.roomRef.child(this.myColor).onDisconnect().cancel().catch(() => {});
 			this.roomRef.off();
@@ -789,26 +797,75 @@ class FirebaseSync {
 	}
 
 	/**
-	 * Waiting and playing rooms for the lobby (`.indexOn: ["status"]`).
-	 * callback(rooms) gets [{ code, ...room }] each time the set changes.
-	 * Returns an unsubscribe function.
+	 * The lobby's rooms: 'waiting' = public open games (open_rooms/), and
+	 * 'playing' = games spectators may watch (live_rooms/). rooms/ itself is
+	 * not listable (private invites and no-spectator games stay unlisted),
+	 * so these read the public index and then each room by its code. An
+	 * entry whose room no longer qualifies is skipped and, best-effort,
+	 * removed (the rules allow anyone to drop a stale entry).
 	 */
-	watchRoomsByStatus(status, callback) {
-		const q = this.db.ref('rooms').orderByChild('status').equalTo(status);
-		const handler = (snap) => {
-			const out = [];
-			snap.forEach((c) => { out.push(Object.assign({ code: c.key }, c.val())); });
-			callback(out);
-		};
-		q.on('value', handler, (e) => { console.warn('[Sync] lobby query failed:', e); callback([]); });
-		return () => q.off('value', handler);
+	_lobbyIndex(status) {
+		return status === 'waiting' ? 'open_rooms' : 'live_rooms';
 	}
 
-	/** The rooms with this status, once: [{ code, ...room }]. */
+	_lobbyRoomOk(status, room) {
+		if (!room || room.status !== status) return false;
+		return status === 'waiting' ? room.public === true : room.allowSpectators !== false && room.local !== true;
+	}
+
+	/**
+	 * callback(rooms) gets [{ code, ...room }] each time the set or one of
+	 * its rooms changes. Returns an unsubscribe function.
+	 */
+	watchRoomsByStatus(status, callback) {
+		const idx = this._lobbyIndex(status);
+		const indexRef = this.db.ref(idx);
+		const subs = new Map(); // code -> { ref, handler, room }
+		const emit = () => {
+			const out = [];
+			for (const [code, sub] of subs) {
+				if (this._lobbyRoomOk(status, sub.room)) out.push(Object.assign({ code }, sub.room));
+			}
+			callback(out);
+		};
+		const onIndex = (snap) => {
+			const codes = new Set(Object.keys(snap.val() || {}));
+			for (const [code, sub] of subs) {
+				if (!codes.has(code)) { sub.ref.off('value', sub.handler); subs.delete(code); }
+			}
+			for (const code of codes) {
+				if (subs.has(code)) continue;
+				const ref = this.db.ref('rooms/' + code);
+				const sub = { ref, room: null, handler: null };
+				sub.handler = (rs) => {
+					sub.room = rs.val();
+					if (!this._lobbyRoomOk(status, sub.room)) this.db.ref(idx + '/' + code).remove().catch(() => {});
+					emit();
+				};
+				subs.set(code, sub);
+				ref.on('value', sub.handler, () => { subs.delete(code); emit(); });
+			}
+			emit();
+		};
+		indexRef.on('value', onIndex, (e) => { console.warn('[Sync] lobby index failed:', e); callback([]); });
+		return () => {
+			indexRef.off('value', onIndex);
+			for (const sub of subs.values()) sub.ref.off('value', sub.handler);
+			subs.clear();
+		};
+	}
+
+	/** The listed rooms with this status, once: [{ code, ...room }]. */
 	async listRoomsByStatus(status) {
-		const snap = await this.db.ref('rooms').orderByChild('status').equalTo(status).once('value');
+		const idx = this._lobbyIndex(status);
+		const codes = Object.keys((await this.db.ref(idx).once('value')).val() || {});
+		const rooms = await Promise.all(codes.map((code) =>
+			this.db.ref('rooms/' + code).once('value').then((rs) => rs.val(), () => null)));
 		const out = [];
-		snap.forEach((c) => { out.push(Object.assign({ code: c.key }, c.val())); });
+		codes.forEach((code, i) => {
+			if (this._lobbyRoomOk(status, rooms[i])) out.push(Object.assign({ code }, rooms[i]));
+			else this.db.ref(idx + '/' + code).remove().catch(() => {});
+		});
 		return out;
 	}
 
@@ -904,6 +961,7 @@ class FirebaseSync {
 		} catch (e) {
 			// The other client finished it first.
 		}
+		this._unlistRoom();
 		this._removeActiveGameIndex();
 	}
 
@@ -934,6 +992,7 @@ class FirebaseSync {
 		if (!this.roomRef) return;
 		try {
 			await this.roomRef.update({ abortedBy: this.myColor, status: 'aborted' });
+			this._unlistRoom();
 			this._removeActiveGameIndex();
 		} catch (e) {
 			console.error('[Sync] abortGame FAILED:', e.code, e.message);
@@ -949,10 +1008,19 @@ class FirebaseSync {
 	async _closeRoom() {
 		try {
 			await this.roomRef.update({ status: 'finished', closedAt: firebase.database.ServerValue.TIMESTAMP });
+			this._unlistRoom();
 			return true;
 		} catch (e) {
 			return false; // the other client closed it first
 		}
+	}
+
+	/** Drop this room from the lobby indexes (open_rooms, live_rooms); best-effort. */
+	_unlistRoom(code) {
+		const c = code || this.roomCode;
+		if (!c) return;
+		this.db.ref('open_rooms/' + c).remove().catch(() => {});
+		this.db.ref('live_rooms/' + c).remove().catch(() => {});
 	}
 
 	/**
@@ -1094,6 +1162,7 @@ class FirebaseSync {
 			if (fromPosition.startPos) roomData.startPos = fromPosition.startPos;
 		}
 		await this.db.ref('rooms/' + code).set(roomData);
+		if (roomData.allowSpectators) this.db.ref('live_rooms/' + code).set(true).catch(() => {});
 		return code;
 	}
 
