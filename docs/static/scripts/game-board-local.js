@@ -2399,14 +2399,7 @@ document.addEventListener('alpine:init', () => {
 
 						// Local 1v1 and guest games are never rated; no notice needed.
 						if (difficulty && !isGuest && _unratedWhy) {
-							_this.messageHistory.push({
-								'deathmatch': 'Unrated: Deathmatch games do not affect rating.',
-								'scramble': 'Unrated: Scramble games do not affect rating.',
-								'duplicates': 'Unrated: Allow Duplicates games do not affect rating.',
-								'pentagon': 'Unrated: Cataclysm board games do not affect rating.',
-								'unrated-pack': 'Unrated: Panda and Experimental spell games do not affect rating.',
-								'unpriced-start': 'Unrated: this game started from a position the engine did not price.',
-							}[_unratedWhy]);
+							_this.messageHistory.push(describeUnratedReason(_unratedWhy));
 						}
 
 						_this._activeFinishingQueuedId = queuedId;
