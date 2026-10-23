@@ -119,6 +119,15 @@ exports.rateGame = onValueCreated({
 		}
 	}
 
+	// A player who deleted their account while this game was on its way:
+	// nothing is written under their uid, and the record forgets it.
+	const deleted = {};
+	for (const c of ['red', 'blue']) {
+		const u = c === 'red' ? record.redUid : record.blueUid;
+		deleted[c] = u === 'deleted' || (typeof u === 'string' && u.length > 0
+			&& (await db.ref('deleted_users/' + u).once('value')).exists());
+	}
+	if (deleted.red || deleted.blue) Object.assign(verdict, { rated: false, reason: 'deleted-account' });
 	const uids = { red: record.redUid, blue: record.blueUid };
 	const [redSnap, blueSnap, redLb, blueLb] = await Promise.all([
 		db.ref('users/' + uids.red).once('value'),
@@ -139,6 +148,14 @@ exports.rateGame = onValueCreated({
 		{ red: redSnap.val(), blue: blueSnap.val() },
 		{ red: redLb.exists(), blue: blueLb.exists() },
 		freshEngine());
+	for (const c of ['red', 'blue']) {
+		if (!deleted[c]) continue;
+		for (const k of Object.keys(updates)) if (k.startsWith('user_games/' + uids[c] + '/')) delete updates[k];
+		updates['completed_games/' + gameId + '/' + c + 'Uid'] = 'deleted';
+	}
+	// The room may be deleted by its players only once it is rated: until
+	// then it is the evidence (database.rules.json).
+	if (room && room.local !== true && record.roomCode) updates['rooms/' + record.roomCode + '/ratedAt'] = Date.now();
 	await db.ref().update(updates);
 	logger.info('rateGame', { gameId, kind: verdict.kind, rated: verdict.rated, reason: verdict.reason || null,
 		eloChange: updates['completed_games/' + gameId + '/eloChange'] });
@@ -161,11 +178,22 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		db.ref('user_active_games/' + uid).once('value'),
 		db.ref('users/' + uid).once('value'),
 	]);
+	// First, so a game rated after this point writes nothing for the uid
+	// (rateGame checks deleted_users).
+	await db.ref('deleted_users/' + uid).set(Date.now());
 	const updates = {
 		['users/' + uid]: null,
 		['leaderboard/' + uid]: null,
 		['user_games/' + uid]: null,
 		['user_active_games/' + uid]: null,
+	};
+	// Public room records lose the name and uid too (their seats).
+	const seatScrub = async (code, color) => {
+		if (!code || (color !== 'red' && color !== 'blue')) return;
+		const seat = (await db.ref('rooms/' + code + '/' + color + '/uid').once('value')).val();
+		if (seat !== uid) return;
+		updates['rooms/' + code + '/' + color + '/uid'] = 'deleted';
+		updates['rooms/' + code + '/' + color + '/displayName'] = 'Deleted player';
 	};
 	// The player's games stay in their opponents' histories, without a name.
 	games.forEach((g) => {
@@ -180,6 +208,9 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 			updates['completed_games/' + id + '/' + (e.color === 'blue' ? 'blueUid' : 'redUid')] = 'deleted';
 		}
 	});
+	const scrubs = [];
+	games.forEach((g) => { const e = g.val() || {}; scrubs.push([e.roomCode, e.color]); });
+	for (const [code, color] of scrubs) await seatScrub(code, color);
 	const name = profile.val() && profile.val().displayName;
 	// Same key rule as usernames/ in database.rules.json.
 	if (typeof name === 'string' && /^[a-z0-9_-]{1,20}$/.test(name.toLowerCase())) {
@@ -211,11 +242,19 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		if (room.status === 'waiting') {
 			updates['rooms/' + code] = null;
 		} else if (room.status === 'playing') {
+			// Resigned, and the seat already anonymous: recordRoom and
+			// rateGame then never see the uid.
 			const now = Date.now();
-			await ref.transaction((r) => (r === null ? null : r.status === 'playing'
-				? Object.assign(r, { forfeitedBy: me, finishedBy: me, winner: opp, endReason: 'forfeit',
-					status: 'finished', closedAt: now, finishedAt: now })
-				: undefined));
+			await ref.transaction((r) => {
+				if (r === null) return null;
+				if (r.status !== 'playing') return undefined;
+				Object.assign(r, { forfeitedBy: me, finishedBy: me, winner: opp, endReason: 'forfeit',
+					status: 'finished', closedAt: now, finishedAt: now });
+				r[me] = Object.assign({}, r[me], { uid: 'deleted', displayName: 'Deleted player' });
+				return r;
+			});
+		} else if (room.status === 'finished') {
+			await seatScrub(code, me);
 		}
 	}
 	await db.ref().update(updates);

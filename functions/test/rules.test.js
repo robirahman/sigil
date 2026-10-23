@@ -82,6 +82,9 @@ test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db('bob'), 'rooms/R1'), waiting));
 	await assertFails(set(ref(db('alice'), 'rooms/R1'), Object.assign({}, waiting, { ranked: true })));
 	await assertFails(set(ref(db('alice'), 'rooms/R1'), Object.assign({}, waiting, { blue: { uid: 'bob' } })));
+	// A new room carries no result.
+	await assertFails(set(ref(db('alice'), 'rooms/R1'), Object.assign({}, waiting, { forfeitedBy: 'blue' })));
+	await assertFails(set(ref(db('alice'), 'rooms/R1'), Object.assign({}, waiting, { winner: 'red' })));
 	await assertSucceeds(set(ref(db('alice'), 'rooms/R1'), waiting));
 	// An existing room cannot be replaced.
 	await assertFails(set(ref(db('alice'), 'rooms/R1'), waiting));
@@ -131,9 +134,11 @@ test('rooms: create, join, play', async () => {
 	await assertSucceeds(set(ref(db(null), 'rooms/R1/spectators/s1'), { joined: 1 }));
 	await assertSucceeds(remove(ref(db(null), 'rooms/R1/spectators/s1')));
 	await assertFails(remove(ref(db('mallory'), 'rooms/R1')));
-	// Finished but not yet recorded by the server: it stays.
+	// Finished but not yet rated by the server: it stays (recorded is not enough).
 	await assertFails(remove(ref(db('alice'), 'rooms/R1')));
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/R1/gameId'), 'g1'));
+	await assertFails(remove(ref(db('alice'), 'rooms/R1')));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/R1/ratedAt'), 1));
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/R1')));
 });
 
@@ -144,6 +149,7 @@ test('rooms: rematches, local archives and expired invites', async () => {
 		red: { uid: 'bob', connected: false }, blue: { uid: 'alice', connected: false } });
 	await assertFails(set(ref(db('mallory'), 'rooms/NEW'), rematch));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { blue: { uid: 'mallory' } })));
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { forfeitedBy: 'red' })));
 	await assertSucceeds(set(ref(db('alice'), 'rooms/NEW'), rematch));
 
 	const local = { local: true, status: 'finished', red: { uid: 'g1' }, blue: { uid: '__ai_easy__' }, winner: 'red', created: 1 };
