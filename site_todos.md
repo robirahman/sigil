@@ -59,10 +59,10 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 ## Puzzles
 
 - [ ] **Sync puzzle progress to the account.** It is stored only in `localStorage['sigil_puzzles_solved']`.
-- [ ] **Add a puzzle rating, streaks and a daily puzzle.**
-- [ ] **Add Cataclysm, Scramble and expansion puzzles.** None of the 1047 puzzles in `docs/static/puzzles/mate_puzzles.json` cover them.
-- [ ] **Add theme/tactic tags** to puzzles.
-- [ ] **Precache `static/puzzles/mate_puzzles.json` in `docs/sw.js`.** It is cached only after the first online visit.
+- [ ] **Add a puzzle rating.** (Streaks and a daily puzzle: done, puzzles v2.)
+- [ ] **Add Cataclysm and Scramble puzzles.** The Rust engine models neither variant. (Tectonic and Providence puzzles: done, puzzles v2.)
+- [x] **Add theme/tactic tags** to puzzles. (Puzzles v2: tags and a 1–5 difficulty, with filters.)
+- [x] **Precache `static/puzzles/mate_puzzles.json` in `docs/sw.js`.**
 
 ## Game screen
 
@@ -126,7 +126,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 - [ ] **Add a puzzle dashboard** (results by theme over time).
 - [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer).
-- [ ] **Generate puzzles from a player's own games** (positions where they missed a win).
+- [x] **Generate puzzles from a player's own games** (positions where they missed a win). Puzzles v2: "My missed wins", ranked games only.
 
 ### Learning
 

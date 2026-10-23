@@ -80,7 +80,7 @@ function buildRingLayout(zoneCount) {
 // Bump when a deploy changes a script API that the (network-first) HTML
 // pages call, and raise the number in the pages' stale-asset guards to match
 // (the inline script after each page's constants.js tag).
-const SIGIL_ASSET_EPOCH = 1;
+const SIGIL_ASSET_EPOCH = 2;
 
 // Per-layout rules. `spellTarget`: casting this many spells ends the game
 // (the stone leader wins). `winLead`: a real-stone lead of this much over the
@@ -577,6 +577,33 @@ function bulwarkProtectedNodes(board) {
 		}
 	}
 	return out;
+}
+
+// Seal of Destruction's end-of-turn effect: when `color` ends its turn with
+// the Seal charged, every unshielded enemy stone touching one of its stones is
+// destroyed. Returns true when the Seal was charged (the caller announces it).
+// Shared by GameController._eotTriggers and the Rust replay gate's
+// end-of-turn mode (rust-ai.js rustActionsToTurn, for stored puzzle lines).
+function sealOfDestructionBurn(board, color) {
+	if (!board.chargedSpells[color].includes('Seal_of_Destruction')) return false;
+	const enemy = color === 'red' ? 'blue' : 'red';
+	const shielded = bulwarkProtectedNodes(board);
+	for (const name of NODE_ORDER) {
+		if (board.stones[name] === enemy && !shielded.has(name)) {
+			for (const nb of ADJACENCY[name]) {
+				if (board.stones[nb] === color) {
+					board.stones[name] = null;
+					if (board.lastPlay === name) {
+						board.lastPlay = null;
+						board.lastPlayer = null;
+					}
+					break;
+				}
+			}
+		}
+	}
+	board.update();
+	return true;
 }
 
 // The nodes whose shield would drop if the stone at `node` were removed (it
