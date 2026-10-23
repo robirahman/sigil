@@ -187,12 +187,61 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	const g = push(ref(dave.db, 'completed_games'));
 	await set(g, Object.assign({}, AI.N3WMQJ, { redUid: dave.uid, timestamp: Date.now() }));
 	await waitFor(dave.db, `user_games/${dave.uid}/${g.key}`);
+	await set(ref(dave.db, `push_tokens/${dave.uid}/${"d".repeat(32)}`), { token: 'dave-laptop', created: serverTimestamp() });
 	const res = await httpsCallable(dave.fns, 'deleteUserData')();
 	assert.deepStrictEqual(res.data, { ok: true });
 	const other = await player('erin');
 	for (const p of ['users/', 'leaderboard/', 'user_games/']) {
 		assert.strictEqual((await get(ref(other.db, p + dave.uid))).exists(), false, p);
 	}
+	// Push tokens go too (only the server can read them now).
+	const { initializeApp: adminApp } = require('firebase-admin/app');
+	const { getDatabaseWithUrl } = require('firebase-admin/database');
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-del' + seq));
+	assert.strictEqual((await admin.ref('push_tokens/' + dave.uid).once('value')).exists(), false, 'push_tokens/');
+});
+
+test('a correspondence move is pushed to the player to move, from their own tokens', async () => {
+	const { initializeApp: adminApp } = require('firebase-admin/app');
+	const { getDatabaseWithUrl } = require('firebase-admin/database');
+	const { notifyTurn } = require('../notify');
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-push' + seq));
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const carol = await player('carol');
+	// What active-games.html writes when "Notify me" is turned on.
+	const h = (c) => c.repeat(32);
+	await set(ref(bob.db, `push_tokens/${bob.uid}/${h('b')}`), { token: 'bob-phone', created: serverTimestamp() });
+	await set(ref(bob.db, `push_tokens/${bob.uid}/${h('c')}`), { token: 'bob-stale', created: serverTimestamp() });
+	await set(ref(alice.db, `push_tokens/${alice.uid}/${h('a')}`), { token: 'alice-laptop', created: serverTimestamp() });
+	await set(ref(carol.db, `push_tokens/${carol.uid}/${h('d')}`), { token: 'carol-spectating', created: serverTimestamp() });
+	// Nobody else can read them.
+	await assert.rejects(get(ref(alice.db, `push_tokens/${bob.uid}`)));
+
+	const code = await playRoom(alice, bob, 1, { type: 'correspondence', moveTimeout: 86_400_000 });
+	await push(ref(carol.db, `rooms/${code}/spectators`), { joined: serverTimestamp() });
+	const turns = (await admin.ref(`rooms/${code}/turns`).once('value')).val();
+	const turnId = Object.keys(turns)[0];
+	const calls = [];
+	const send = async (tokens, message) => {
+		calls.push({ tokens, message });
+		return tokens.map((t) => (t === 'bob-stale' ? { error: { code: 'messaging/registration-token-not-registered' } } : { success: true }));
+	};
+	const res = await notifyTurn(admin, code, turnId, Date.now(), send);
+	assert.deepStrictEqual(res, { uid: bob.uid, sent: 1, removed: 1 });
+	assert.deepStrictEqual(calls.map((c) => c.tokens.slice().sort()), [['bob-phone', 'bob-stale']]);
+	assert.strictEqual(calls[0].message.data.room, code);
+	assert.deepStrictEqual(Object.keys((await get(ref(bob.db, `push_tokens/${bob.uid}`))).val()), [h('b')]);
+
+	// Bob replies: now alice is told, and only alice.
+	await push(ref(bob.db, `rooms/${code}/turns`), { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() });
+	const all = (await admin.ref(`rooms/${code}/turns`).once('value')).val();
+	const second = Object.keys(all).find((k) => k !== turnId);
+	calls.length = 0;
+	assert.strictEqual((await notifyTurn(admin, code, second, Date.now(), send)).uid, alice.uid);
+	assert.deepStrictEqual(calls.map((c) => c.tokens), [['alice-laptop']]);
+	// The first turn's event, arriving late, tells nobody.
+	assert.strictEqual(await notifyTurn(admin, code, turnId, Date.now(), send), null);
 });
 
 test.after(() => setTimeout(() => process.exit(0), 100));

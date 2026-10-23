@@ -8,7 +8,7 @@ const test = require('node:test');
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
-const { ref, set, update, remove, serverTimestamp } = require('firebase/database');
+const { ref, set, get, update, remove, serverTimestamp } = require('firebase/database');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
 let env;
@@ -177,4 +177,25 @@ test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { EXP: Object.assign({}, waiting, { created: 1 }), FRESH: waiting } });
 	await assertSucceeds(remove(ref(db('mallory'), 'rooms/EXP')));
 	await assertFails(remove(ref(db('mallory'), 'rooms/FRESH')));
+});
+
+test('push tokens: only their owner reads or writes them', async () => {
+	const h = '0123456789abcdef0123456789abcdef';
+	const tok = { token: 'fcm-token', created: serverTimestamp() };
+	await assertSucceeds(set(ref(db('bob'), 'push_tokens/bob/' + h), tok));
+	await assertSucceeds(get(ref(db('bob'), 'push_tokens/bob')));
+	await assertFails(get(ref(db('alice'), 'push_tokens/bob')));
+	await assertFails(get(ref(db('alice'), 'push_tokens/bob/' + h)));
+	await assertFails(get(ref(db(null), 'push_tokens/bob')));
+	await assertFails(get(ref(db('alice'), 'push_tokens')));
+	await assertFails(set(ref(db('alice'), 'push_tokens/bob/' + h), tok));
+	await assertFails(remove(ref(db('alice'), 'push_tokens/bob/' + h)));
+	await assertFails(set(ref(db(null), 'push_tokens/bob/' + h), tok));
+	// The key is a token hash, the time the server's, and nothing else rides along.
+	await assertFails(set(ref(db('bob'), 'push_tokens/bob/not-a-hash'), tok));
+	await assertFails(set(ref(db('bob'), 'push_tokens/bob/' + h), { token: 'x', created: 1 }));
+	await assertFails(set(ref(db('bob'), 'push_tokens/bob/' + h), Object.assign({ extra: 1 }, tok)));
+	await assertSucceeds(remove(ref(db('bob'), 'push_tokens/bob/' + h)));
+	// users/ stays public, so tokens never go there.
+	await assertSucceeds(get(ref(db(null), 'users/bob')));
 });

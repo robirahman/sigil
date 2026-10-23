@@ -13,6 +13,8 @@
  *                    player's tab was open to see it.
  *   settleAbort    - an abort after both players have moved is a forfeit
  *                    (on the status change to 'aborted').
+ *   notifyTurn     - a web push to the player whose move it now is, in
+ *                    correspondence games (and realtime ones they left).
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -29,6 +31,7 @@ const { getDatabaseWithUrl } = require('firebase-admin/database');
 const { judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = require('./rating');
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
+const { notifyTurn } = require('./notify');
 const crypto = require('crypto');
 
 initializeApp();
@@ -192,6 +195,9 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		['leaderboard/' + uid]: null,
 		['user_games/' + uid]: null,
 		['user_active_games/' + uid]: null,
+		// Push tokens: the deleted account can no longer remove them, and
+		// notifyTurn would keep pushing its games to the browser.
+		['push_tokens/' + uid]: null,
 	};
 	// Public room records lose the name and uid too (their seats).
 	const seatScrub = async (code, color) => {
@@ -296,3 +302,32 @@ exports.settleAbort = onValueWritten({
 		{ winner: by === 'red' ? 'blue' : 'red', forfeitedBy: by, endReason: 'forfeit' });
 	logger.info('settleAbort', { code, by });
 });
+
+// The emulators have no FCM: there the push is only logged.
+async function sendPush(tokens, message) {
+	if (process.env.FUNCTIONS_EMULATOR === 'true') {
+		logger.info('notifyTurn (emulator, not sent)', { tokens: tokens.length, data: message.data });
+		return tokens.map(() => ({ success: true }));
+	}
+	const { getMessaging } = require('firebase-admin/messaging');
+	const res = await getMessaging().sendEachForMulticast(Object.assign({ tokens }, message));
+	return res.responses.map((r) => (r.success ? { success: true } : { error: { code: r.error && r.error.code } }));
+}
+
+const notifyTurnFn = onValueCreated({
+	ref: '/rooms/{code}/turns/{turnId}',
+	instance: DB_INSTANCE,
+	region: REGION,
+	retry: false,
+}, async (event) => {
+	const db = event.data.ref.root.database;
+	const res = await notifyTurn(db, event.params.code, event.params.turnId, Date.now(), sendPush);
+	if (res && res.sent + res.removed > 0) logger.info('notifyTurn', Object.assign({ code: event.params.code }, res));
+});
+// Not on the emulators unless asked (SIGIL_EMULATE_PUSH=1): there is no FCM
+// there, and the emulator starts a worker process per pending event, so a
+// test that plays a hundred turns in a few seconds starves the other
+// functions. test/e2e.test.js calls notify.js notifyTurn directly instead.
+if (process.env.FUNCTIONS_EMULATOR !== 'true' || process.env.SIGIL_EMULATE_PUSH === '1') {
+	exports.notifyTurn = notifyTurnFn;
+}
