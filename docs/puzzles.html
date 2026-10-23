@@ -85,8 +85,16 @@
 				font-size: 0.85em;
 				margin-top: 6px;
 			}
+			.puzzle-panel__filters { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
 			.puzzle-panel__filter a { color: inherit; margin-right: 10px; }
 			.puzzle-panel__filter a.is-active { font-weight: bold; text-decoration: underline; }
+			.puzzle-panel__filter select {
+				font: inherit; color: inherit; background: transparent;
+				border: 1px solid var(--color-text-muted, #aaa); border-radius: 4px; padding: 1px 4px;
+			}
+			.puzzle-panel__filter select option { color: #222; }
+			.puzzle-panel__daily { color: #f0d77a; }
+			.puzzle-panel__tags { color: var(--color-text-muted, #aaa); font-size: 0.85em; margin: 0 0 6px; }
 			.puzzle-loading { padding: 80px 0; text-align: center; color: var(--color-text-muted, #aaa); }
 		</style>
 		<script>
@@ -125,10 +133,11 @@
 							<div class="puzzle-panel">
 								<h2 class="puzzle-panel__title"
 									x-bind:class="puzzle.mover === 'red' ? 'puzzle-panel__title--red' : 'puzzle-panel__title--blue'"
-									x-text="'Puzzle ' + (puzzle.index + 1) + ' — Mate in ' + puzzle.mate + ', ' + (puzzle.mover === 'red' ? 'Red' : 'Blue') + ' to move'"></h2>
+									x-text="window.SIGIL_PUZZLE_TITLE"></h2>
 								<p class="puzzle-panel__sub" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
+								<p class="puzzle-panel__tags" x-text="window.SIGIL_PUZZLE_TAGS" x-show="window.SIGIL_PUZZLE_TAGS"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
-									x-text="puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.')"></p>
+									x-text="puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.'))"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
 
 								<div class="puzzle-panel__status"
@@ -158,8 +167,9 @@
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random">Random</a>
 								</div>
 								<div class="puzzle-panel__progress">
-									<span class="puzzle-panel__filter" x-html="window.SIGIL_PUZZLE_FILTER_HTML"></span>
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>
+									<span class="puzzle-panel__daily" id="puzzle-daily-status"></span>
+									<div class="puzzle-panel__filters" x-html="window.SIGIL_PUZZLE_FILTER_HTML"></div>
 								</div>
 							</div>
 
@@ -305,11 +315,12 @@
 			// drop the caches, refetch the page's scripts past the HTTP cache, and
 			// reload once. The new worker deletes the stale cache when it activates.
 			(function () {
-				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 1) return;
+				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 2) return;
 				if (!window.caches || !window.fetch) return;
 				try {
-					if (sessionStorage.getItem('sigilStaleAssetReload') === '1') return;
-					sessionStorage.setItem('sigilStaleAssetReload', '1');
+					// The sentinel holds the epoch it reloaded for, so each new epoch gets its own reload.
+					if (sessionStorage.getItem('sigilStaleAssetReload') === '2') return;
+					sessionStorage.setItem('sigilStaleAssetReload', '2');
 				} catch (e) { return; }
 				document.addEventListener('DOMContentLoaded', function () {
 					var urls = ['static/scripts/engine/ai-worker.js'];
@@ -341,18 +352,19 @@
 		<script src="static/scripts/engine/mcts.js"></script>
 		<script src="static/scripts/engine/minimax-ai.js"></script>
 		<script src="static/scripts/engine/caveman-ai.js"></script>
-		<script src="static/scripts/engine/rust-ai.js?v=33"></script>
+		<script src="static/scripts/engine/rust-ai.js?v=34"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
-		<script src="static/scripts/engine/game-review.js?v=33"></script>
+		<script src="static/scripts/engine/game-review.js?v=34"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
 		<script src="static/scripts/engine/elo.js"></script>
+		<script src="static/scripts/engine/position-rating.js?v=34"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
 		<script src="static/scripts/board-geometry.js"></script>
-		<script src="static/scripts/game-board-local.js?v=33"></script>
+		<script src="static/scripts/game-board-local.js?v=34"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
 		<!-- Firebase SDK (sign-in status in the header only; puzzles never write) -->
@@ -375,10 +387,84 @@
 		<script>
 			/**
 			 * Puzzle selection. The set is a static JSON generated offline by
-			 * tools/gen_mate_puzzles.py (exhaustive Rust solver over recorded
-			 * games). URL: ?p=<index> picks a puzzle, ?mate=1|2 filters, and with
-			 * neither the first unsolved puzzle (localStorage progress) is shown.
+			 * tools/gen_mate_puzzles.py: forced mates proven by the exhaustive
+			 * Rust solver, and winning turns judged by the engine
+			 * (tools/winning_turns.py), all from recorded games.
+			 *
+			 * URL: ?p=<index> or ?id=<id> picks a puzzle; the filters are
+			 * ?set=m1|m2|m3|win (?mate=1|2|3 still works), ?d=1..5 (difficulty),
+			 * ?tag=<tag>, ?mine=1 (wins the signed-in player missed in their own
+			 * ranked games); ?daily=1 is today's puzzle, the same for everyone.
+			 * With no pick, the first unsolved puzzle of the pool is shown.
 			 */
+			const PUZZLE_SETS = { m1: 'Mate in 1', m2: 'Mate in 2', m3: 'Mate in 3', win: 'Winning turn' };
+			function puzzleSet(p) { return p.kind === 'winning' ? 'win' : 'm' + p.mate; }
+			function utcDay(offsetDays) {
+				return new Date(Date.now() + (offsetDays || 0) * 86400000).toISOString().slice(0, 10);
+			}
+			/** Today's puzzle: a hash of the UTC date over the middle difficulties. */
+			function dailyPuzzle(all, day) {
+				const pool = all.filter(p => p.difficulty >= 2 && p.difficulty <= 4);
+				const from = pool.length ? pool : all;
+				let h = 2166136261;
+				for (const ch of 'sigil-daily-' + day) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+				return from[h % from.length];
+			}
+			function readDaily() {
+				try { return JSON.parse(localStorage.getItem('sigil_puzzle_daily') || '{}') || {}; } catch (e) { return {}; }
+			}
+			/**
+			 * Daily streak: the first result on each day's puzzle counts. A
+			 * solve extends the streak when yesterday's was solved too; a miss
+			 * or a revealed solution ends it.
+			 */
+			function recordDaily(day, status) {
+				const d = readDaily();
+				d.done = d.done || {};
+				if (d.done[day]) return d;
+				d.done[day] = status;
+				if (status === 'solved') {
+					d.streak = d.last === utcDay(-1) ? (d.streak || 0) + 1 : 1;
+					d.last = day;
+					d.best = Math.max(d.best || 0, d.streak);
+				} else {
+					d.streak = 0;
+				}
+				// Keep the log short.
+				const days = Object.keys(d.done).sort();
+				for (const k of days.slice(0, Math.max(0, days.length - 60))) delete d.done[k];
+				try { localStorage.setItem('sigil_puzzle_daily', JSON.stringify(d)); } catch (e) { /* storage blocked */ }
+				return d;
+			}
+			function dailyText(d) {
+				// A streak is live while its last solve was today or yesterday.
+				const live = d.last === utcDay(0) || d.last === utcDay(-1);
+				const n = live ? (d.streak || 0) : 0;
+				return 'Daily streak: ' + n + (d.best ? ' (best ' + d.best + ')' : '');
+			}
+			/**
+			 * The signed-in player's ranked games (user_games/<uid>, public),
+			 * as {gameId: colour}. Unranked games are not indexed there.
+			 */
+			async function myGames() {
+				// tools/browser/puzzle-v2-test.js stands in for a signed-in player.
+				if (window.SIGIL_PUZZLE_MY_GAMES_STUB) return window.SIGIL_PUZZLE_MY_GAMES_STUB;
+				const user = typeof firebaseAuthSettled === 'function' ? await firebaseAuthSettled() : null;
+				if (!user) return null;
+				try {
+					const snap = await firebase.database().ref('user_games/' + user.uid).once('value');
+					const out = {};
+					snap.forEach((c) => { const v = c.val() || {}; out[c.key] = v.color; });
+					return out;
+				} catch (e) {
+					return null;
+				}
+			}
+			function missedByMe(p, games) {
+				return !!games && p.played === false && games[p.game && p.game.id] === p.mover;
+			}
+			const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 			(async function boot() {
 				const params = new URLSearchParams(window.location.search);
 				let data;
@@ -391,10 +477,25 @@
 					return;
 				}
 				const all = data.puzzles || [];
-				const mateFilter = ['1', '2', '3'].includes(params.get('mate')) ? parseInt(params.get('mate'), 10) : null;
-				const pool = mateFilter ? all.filter(p => p.mate === mateFilter) : all;
+				const legacyMate = ['1', '2', '3'].includes(params.get('mate')) ? 'm' + params.get('mate') : null;
+				const filt = {
+					set: PUZZLE_SETS[params.get('set')] ? params.get('set') : legacyMate,
+					d: ['1', '2', '3', '4', '5'].includes(params.get('d')) ? parseInt(params.get('d'), 10) : null,
+					tag: params.get('tag') || null,
+					mine: params.get('mine') === '1',
+				};
+				const daily = params.get('daily') === '1';
+				const today = utcDay(0);
+				const games = filt.mine ? await myGames() : null;
+				const pool = daily ? all : all.filter(p => (!filt.set || puzzleSet(p) === filt.set)
+					&& (!filt.d || p.difficulty === filt.d)
+					&& (!filt.tag || (p.tags || []).indexOf(filt.tag) >= 0)
+					&& (!filt.mine || missedByMe(p, games)));
 				if (!pool.length) {
-					document.getElementById('puzzle-loading').textContent = 'No puzzles available yet.';
+					document.getElementById('puzzle-loading').innerHTML = filt.mine
+						? (games ? 'No missed wins found in your ranked games.' : 'Sign in to see the wins you missed in your own ranked games.')
+							+ ' <a href="puzzles.html">All puzzles</a>'
+						: 'No puzzles match this filter. <a href="puzzles.html">All puzzles</a>';
 					return;
 				}
 				let solved = {};
@@ -402,7 +503,9 @@
 
 				// Position within the filtered pool.
 				let pos = -1;
-				if (params.has('p')) {
+				if (daily) {
+					pos = pool.indexOf(dailyPuzzle(all, today));
+				} else if (params.has('p')) {
 					const idx = parseInt(params.get('p'), 10);
 					pos = pool.findIndex(p => p.index === idx);
 				} else if (params.has('id')) {
@@ -413,7 +516,21 @@
 					if (pos < 0) pos = 0;
 				}
 				const puzzle = pool[pos];
-				const link = (p) => 'puzzles.html?p=' + p.index + (mateFilter ? '&mate=' + mateFilter : '');
+				// Links keep the active filters.
+				const query = (over) => {
+					const q = new URLSearchParams();
+					const f = Object.assign({}, filt, over || {});
+					if (f.set) q.set('set', f.set);
+					if (f.d) q.set('d', f.d);
+					if (f.tag) q.set('tag', f.tag);
+					if (f.mine) q.set('mine', '1');
+					return q;
+				};
+				const link = (p) => {
+					const q = daily ? new URLSearchParams() : query();
+					q.set('p', p.index);
+					return 'puzzles.html?' + q.toString();
+				};
 				const randomOther = () => {
 					if (pool.length < 2) return puzzle;
 					let r = puzzle;
@@ -421,26 +538,62 @@
 					return r;
 				};
 				window.SIGIL_PUZZLE = puzzle;
-				window.SIGIL_PUZZLE_NAV = {
+				window.SIGIL_PUZZLE_NAV = daily ? { prev: '', next: '', random: link(randomOther()) } : {
 					prev: pos > 0 ? link(pool[pos - 1]) : '',
 					next: pos < pool.length - 1 ? link(pool[pos + 1]) : '',
 					random: link(randomOther()),
 				};
+				const side = puzzle.mover === 'red' ? 'Red' : 'Blue';
+				const what = puzzle.kind === 'winning' ? 'Winning turn' : 'Mate in ' + puzzle.mate;
+				window.SIGIL_PUZZLE_TITLE = (daily ? 'Daily puzzle ' + today : 'Puzzle ' + (puzzle.index + 1))
+					+ ' — ' + what + ', ' + side + ' to move';
 				const g = puzzle.game || {};
 				const other = puzzle.mover === 'red' ? 'blue' : 'red';
 				const played = puzzle.played === true ? ' — the player found it.'
 					: (puzzle.played === false ? ' — the player missed it.' : '');
 				window.SIGIL_PUZZLE_SOURCE = 'From a ' + (puzzle.variant || 'standard').replace(/_/g, ' ') + ' game'
 					+ (g.date ? ' on ' + g.date : '') + ', turn ' + puzzle.turn + ': '
-					+ (puzzle.mover === 'red' ? 'Red' : 'Blue') + ' (' + (g[puzzle.mover] || '?') + ') vs '
+					+ side + ' (' + (g[puzzle.mover] || '?') + ') vs '
 					+ (other === 'red' ? 'Red' : 'Blue') + ' (' + (g[other] || '?') + ')' + played;
+				window.SIGIL_PUZZLE_TAGS = (puzzle.difficulty ? 'Difficulty ' + puzzle.difficulty + '/5' : '')
+					+ ((puzzle.tags || []).length ? ' · ' + puzzle.tags.join(', ') : '');
 				const nSolved = pool.filter(p => solved[p.id]).length;
-				window.SIGIL_PUZZLE_PROGRESS = (pos + 1) + ' of ' + pool.length
-					+ (mateFilter ? ' mate-in-' + mateFilter : '') + ' puzzles · ' + nSolved + ' solved on this device'
-					+ (data.generated ? ' · set generated ' + data.generated.slice(0, 10) : '');
-				const f = (m, label) => '<a href="puzzles.html' + (m ? '?mate=' + m : '') + '"'
-					+ (mateFilter === m ? ' class="is-active"' : '') + '>' + label + '</a>';
-				window.SIGIL_PUZZLE_FILTER_HTML = f(null, 'All') + f(1, 'Mate in 1') + f(2, 'Mate in 2') + f(3, 'Mate in 3');
+				window.SIGIL_PUZZLE_PROGRESS = daily ? 'One puzzle a day, the same for everyone.'
+					: (pos + 1) + ' of ' + pool.length + ' puzzles · ' + nSolved + ' solved on this device'
+						+ (data.generated ? ' · set generated ' + data.generated.slice(0, 10) : '');
+
+				// Filter bar: puzzle class, difficulty, theme, and the player's own.
+				const a = (over, label, active) => '<a href="puzzles.html?' + query(over).toString() + '"'
+					+ (active ? ' class="is-active"' : '') + '>' + esc(label) + '</a>';
+				const counts = {};
+				for (const p of all) for (const t of (p.tags || [])) counts[t] = (counts[t] || 0) + 1;
+				const tags = Object.keys(counts).sort();
+				const sets = Object.keys(PUZZLE_SETS).filter(k => all.some(p => puzzleSet(p) === k));
+				window.SIGIL_PUZZLE_FILTER_HTML =
+					'<span class="puzzle-panel__filter"><a href="puzzles.html?daily=1"' + (daily ? ' class="is-active"' : '') + '>Daily puzzle</a>'
+					+ a({ set: null }, 'All', !daily && !filt.set)
+					+ sets.map(k => a({ set: k }, PUZZLE_SETS[k], !daily && filt.set === k)).join('') + '</span>'
+					+ '<span class="puzzle-panel__filter">Difficulty: ' + a({ d: null }, 'Any', !filt.d)
+					+ [1, 2, 3, 4, 5].map(d => a({ d }, String(d), filt.d === d)).join('') + '</span>'
+					+ '<span class="puzzle-panel__filter">Theme: <select onchange="location.href=this.value">'
+					+ '<option value="puzzles.html?' + query({ tag: null }).toString() + '">Any</option>'
+					+ tags.map(t => '<option value="puzzles.html?' + query({ tag: t }).toString() + '"'
+						+ (filt.tag === t ? ' selected' : '') + '>' + esc(t) + ' (' + counts[t] + ')</option>').join('')
+					+ '</select> '
+					+ a({ mine: !filt.mine }, filt.mine ? 'My missed wins ✓' : 'My missed wins', filt.mine)
+					+ '</span>';
+
+				// Daily puzzle bookkeeping (the board reports each result).
+				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
+					if (!daily || p.id !== puzzle.id) return;
+					const d = recordDaily(today, status);
+					document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
+				};
+				const d0 = readDaily();
+				if (daily || d0.streak) {
+					document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d0)
+						+ (daily && d0.done && d0.done[today] ? ' — today\'s result is in (' + d0.done[today] + ')' : '');
+				}
 
 				document.getElementById('puzzle-loading').style.display = 'none';
 				document.getElementById('puzzle-root').style.display = '';

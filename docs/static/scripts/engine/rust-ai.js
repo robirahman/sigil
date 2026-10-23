@@ -37,7 +37,7 @@
 // Bumped on every committed engine rebuild (see engine/build-wasm.sh). Threaded
 // as ?v= onto the worker, glue and .wasm URLs so the service worker's cached
 // copies can never be stale — an old set is simply never requested again.
-const RUST_ENGINE_VERSION = 33;
+const RUST_ENGINE_VERSION = 34;
 
 /**
  * Singleton owner of the wasm worker. Modeled on caveman-ai.js's
@@ -507,8 +507,13 @@ class RustAI {
  * The replay gate, shared by every consumer of an engine action list: replay
  * the actions on a throwaway copy of `sim` and refuse them unless they
  * reproduce the position the engine said they would. Returns a SimTurn.
+ *
+ * The engine's live replies (`emit_actions`) hand back the board BEFORE the
+ * end-of-turn Seal of Destruction burn, which the controller applies next.
+ * Puzzle lines store the position after it (the mate solver's own boards):
+ * pass `{ endOfTurn: true }` to compare those with the burn applied.
  */
-async function rustActionsToTurn(sim, color, actions, expectedSfn) {
+async function rustActionsToTurn(sim, color, actions, expectedSfn, opts) {
 	{
 		const probe = sim.copy();
 		probe.enemy = (c) => (c === 'red' ? 'blue' : 'red');
@@ -516,6 +521,7 @@ async function rustActionsToTurn(sim, color, actions, expectedSfn) {
 		try {
 			await applyAITurn(probe, { actions: actions }, color, () => {});
 			probe.update();
+			if (opts && opts.endOfTurn) sealOfDestructionBurn(probe, color);
 			probe.checkGameOver(color);
 			probe.turnCounter++;
 			probe.whoseTurn = (color === 'red') ? 'blue' : 'red';

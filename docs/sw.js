@@ -22,7 +22,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v82';
+const CACHE_VERSION = 'v83';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -43,6 +43,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
+	// The puzzle set (the page fetches it no-cache; this makes it work offline
+	// from the first visit).
+	'./static/puzzles/mate_puzzles.json',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',
@@ -58,10 +61,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/game-board-local.js',
-	'./static/scripts/game-board-local.js?v=33',
-	'./static/scripts/engine/rust-ai.js?v=33',
+	'./static/scripts/game-board-local.js?v=34',
+	'./static/scripts/engine/rust-ai.js?v=34',
 	'./static/scripts/game-board-multiplayer.js',
-	'./static/scripts/game-board-multiplayer.js?v=33',
+	'./static/scripts/game-board-multiplayer.js?v=34',
 	'./static/scripts/help.js',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
@@ -90,21 +93,21 @@ const SAME_ORIGIN_PRECACHE = [
 	// dev/enumeration-gaps.html),
 	// so an old worker's cached copies are never served to a fresh page: bump those
 	// script tags as well.
-	'./static/scripts/engine/rust-worker.js?v=33',
-	'./static/wasm/sigil_engine.js?v=33',
-	'./static/wasm/sigil_engine_bg.wasm?v=33',
+	'./static/scripts/engine/rust-worker.js?v=34',
+	'./static/wasm/sigil_engine.js?v=34',
+	'./static/wasm/sigil_engine_bg.wasm?v=34',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
-	'./static/scripts/engine/game-review.js?v=33',
+	'./static/scripts/engine/game-review.js?v=34',
 	'./static/scripts/engine/auth-manager.js',
 	'./static/scripts/engine/elo.js',
-	'./static/scripts/engine/elo.js?v=33',
-	'./static/scripts/engine/position-rating.js?v=33',
+	'./static/scripts/engine/elo.js?v=34',
+	'./static/scripts/engine/position-rating.js?v=34',
 	'./static/scripts/engine/firebase-sync.js',
-	'./static/scripts/engine/firebase-sync.js?v=33',
+	'./static/scripts/engine/firebase-sync.js?v=34',
 	'./static/scripts/engine/multiplayer-controller.js',
-	'./static/scripts/engine/multiplayer-controller.js?v=33',
+	'./static/scripts/engine/multiplayer-controller.js?v=34',
 	'./static/scripts/engine/spectator-controller.js',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',

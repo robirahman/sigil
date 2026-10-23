@@ -78,7 +78,7 @@ git clone --filter=blob:none --no-checkout --depth=1 --single-branch --branch "$
   https://github.com/robirahman/sigil.git repo >/dev/null 2>&1 \
   || { echo "FATAL: clone failed"; shutdown -h now; exit 1; }
 cd repo && git sparse-checkout init --cone >/dev/null 2>&1
-git sparse-checkout set engine docs/static/scripts ai notation.py simboard.py >/dev/null 2>&1
+git sparse-checkout set engine docs/static/scripts docs/static/data docs/static/puzzles tools ai notation.py simboard.py >/dev/null 2>&1
 git checkout >/dev/null 2>&1
 COMMIT=$(git log --oneline -1)
 echo "repo at $COMMIT"
