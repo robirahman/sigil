@@ -84,11 +84,16 @@ class FirebaseSync {
 		if (!this._connId) this._connId = seat.child('conns').push().key;
 		const conn = seat.child('conns/' + this._connId);
 		const ts = firebase.database.ServerValue.TIMESTAMP;
-		await conn.onDisconnect().remove();
-		await seat.child('disconnectedAt').onDisconnect().set(ts);
-		await seat.child('connected').onDisconnect().set(false);
-		await conn.set(ts);
-		await seat.update({ connected: true, disconnectedAt: null });
+		try {
+			await conn.onDisconnect().remove();
+			await seat.child('disconnectedAt').onDisconnect().set(ts);
+			await seat.child('connected').onDisconnect().set(false);
+			await conn.set(ts);
+			await seat.update({ connected: true, disconnectedAt: null });
+		} catch (e) {
+			// A finished room's seats are frozen (the rating judges an
+			// abandonment by them): nothing to announce.
+		}
 	}
 
 	/**
@@ -281,6 +286,9 @@ class FirebaseSync {
 				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
 				status: 'playing',
 				ranked: this.ranked,
+				// The server's time the game began: the first mover's clock
+				// (functions/rating.js flagged) runs from it.
+				startedAt: firebase.database.ServerValue.TIMESTAMP,
 			});
 			await this._goOnline(joiner);
 
@@ -976,6 +984,7 @@ class FirebaseSync {
 		const roomData = {
 			spellNames: spellNames,
 			status: 'playing',
+			startedAt: firebase.database.ServerValue.TIMESTAMP,
 			created: Date.now(),
 			red: { connected: false, uid: redInfo?.uid || null, displayName: redInfo?.displayName || 'Guest' },
 			blue: { connected: false, uid: blueInfo?.uid || null, displayName: blueInfo?.displayName || 'Guest' },

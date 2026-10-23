@@ -84,7 +84,16 @@ function onlineTranscript(room) {
 function flagged(room, loser, now) {
 	const tc = room.timeControl || {};
 	const turns = roomTurns(room);
-	if (!turns.length) return false;
+	if (!turns.length) {
+		// Nobody has moved: the first mover's clock runs from the start of
+		// the game (startedAt, server time, written with the join).
+		if (typeof room.startedAt !== 'number' || sideToMove(room) !== loser) return false;
+		if (tc.type === 'correspondence') {
+			return typeof tc.moveTimeout === 'number' && now >= room.startedAt + tc.moveTimeout - CLOCK_GRACE_MS;
+		}
+		return tc.type === 'realtime' && typeof tc.initialTime === 'number'
+			&& tc.initialTime - (now - room.startedAt) <= CLOCK_GRACE_MS;
+	}
 	const last = turns[turns.length - 1];
 	if (last.color === loser || typeof last.timestamp !== 'number') return false;
 	if (tc.type === 'correspondence') {
@@ -112,7 +121,11 @@ function abandoned(room, loser, now) {
 	const tc = room.timeControl || {};
 	const seat = room[loser] || {};
 	if (tc.type === 'correspondence') return false;
-	if (roomTurns(room).length < 2) return false;
+	// Both players must have moved, in turn (a modified client could
+	// write several turns of its own colour).
+	const turns = roomTurns(room);
+	if (!turns.some((t) => t.color === 'red') || !turns.some((t) => t.color === 'blue')) return false;
+	if (turns.some((t, i) => i > 0 && t.color === turns[i - 1].color)) return false;
 	// Gone means no live connection (each tab holds one in `conns`); seats
 	// of older clients without conns go by their flag.
 	const live = seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected !== false;
@@ -124,7 +137,10 @@ function abandoned(room, loser, now) {
 function sideToMove(room) {
 	const turns = roomTurns(room);
 	if (turns.length) return other(turns[turns.length - 1].color);
-	return room.startSfn && room.startSfn.split(' ')[1] === 'b' ? 'blue' : 'red';
+	// A room's startSfn is the position before the first turn: the game
+	// loop advances the counter and gives the move by parity (odd = red).
+	const c = room.startSfn ? parseInt(String(room.startSfn).split(' ')[2], 10) || 0 : 0;
+	return (c + 1) % 2 === 1 ? 'red' : 'blue';
 }
 
 /**
