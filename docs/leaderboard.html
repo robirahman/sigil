@@ -325,25 +325,35 @@
 
 					// Fetch leaderboard
 					try {
-						const snap = await db.ref('leaderboard')
-							.orderByChild('elo')
-							.limitToLast(this.limit)
-							.once('value');
-
-						const results = [];
-						snap.forEach((child) => {
-							const data = child.val();
-							const gamesPlayed = data.gamesPlayed || 0;
-							if (gamesPlayed === 0) return;
-							results.push({
-								uid: child.key,
-								displayName: data.displayName || 'Unknown',
-								elo: data.elo ?? 1000,
-								gamesPlayed: gamesPlayed,
-								isAI: data.isAI || false,
-								isDeveloper: data.isDeveloper || false,
+						// The limit must apply to displayed (played) entries:
+						// zero-game records (e.g. seeded AIs) can sit inside the
+						// top Elo window, so over-fetch until `limit` eligible
+						// entries are found or the leaderboard is exhausted.
+						let fetchN = this.limit;
+						let results = [];
+						for (;;) {
+							const snap = await db.ref('leaderboard')
+								.orderByChild('elo')
+								.limitToLast(fetchN)
+								.once('value');
+							results = [];
+							snap.forEach((child) => {
+								const data = child.val();
+								const gamesPlayed = data.gamesPlayed || 0;
+								if (gamesPlayed === 0) return;
+								results.push({
+									uid: child.key,
+									displayName: data.displayName || 'Unknown',
+									elo: data.elo ?? 1000,
+									gamesPlayed: gamesPlayed,
+									isAI: data.isAI || false,
+									isDeveloper: data.isDeveloper || false,
+								});
 							});
-						});
+							if (results.length >= this.limit || snap.numChildren() < fetchN) break;
+							fetchN += (this.limit - results.length) + 50;
+						}
+						results = results.slice(-this.limit);
 
 						this.allPlayers = results.reverse();
 						this.allPlayers.forEach((p, i) => { p.rank = i + 1; });

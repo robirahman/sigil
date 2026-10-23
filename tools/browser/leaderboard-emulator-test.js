@@ -94,6 +94,9 @@ async function openBoard(p) {
 		// Odd ratings never tie with the AI seeds (1000 / 1200 / 1300).
 		leaderboard['p' + String(i).padStart(3, '0')] = { displayName: 'Player ' + String(i).padStart(3, '0'), elo: 1001 + 2 * i, gamesPlayed: (i % 20) + 1 };
 	}
+	// Zero-game records at the very top: the page must skip them and still
+	// show a full 200 played entries.
+	for (let i = 0; i < 12; i++) leaderboard['z' + String(i).padStart(3, '0')] = { displayName: 'Idle ' + i, elo: 1601 + 2 * i, gamesPlayed: 0 };
 	leaderboard[inUid] = { displayName: 'Insider', elo: 1250, gamesPlayed: 40 };
 	leaderboard[outUid] = { displayName: 'Outsider', elo: 901, gamesPlayed: 4 };
 	const users = {
@@ -115,12 +118,12 @@ async function openBoard(p) {
 		p.on('pageerror', (e) => console.log('pageerror:', e.message));
 
 		await openBoard(p);
-		// What the page should show: the top 200 by rating (after its AI
-		// seeding), less the players with no games.
+		// What the page should show: the top 200 played entries by rating
+		// (after its AI seeding); players with no games never take a slot.
 		const all = await (await fetch(`${DB}/leaderboard.json?ns=${NS}`, { headers: OWNER })).json();
-		const top = Object.entries(all).sort((a, b) => b[1].elo - a[1].elo).slice(0, 200).filter(([, v]) => (v.gamesPlayed || 0) > 0);
+		const top = Object.entries(all).sort((a, b) => b[1].elo - a[1].elo).filter(([, v]) => (v.gamesPlayed || 0) > 0).slice(0, 200);
 		const rows = await val(p, 'L.allPlayers.map((r) => [r.uid, r.rank])');
-		check('loads only the top 200 ratings', Object.keys(all).length > 230 && rows.length === top.length
+		check('loads the top 200 played ratings', Object.keys(all).length > 240 && rows.length === 200 && rows.length === top.length
 			&& rows.every(([uid], i) => uid === top[i][0]), { loaded: rows.length, expected: top.length, total: Object.keys(all).length });
 		check('ranks run 1..n', rows.every(([, r], i) => r === i + 1));
 		check('no Find me for a guest', !(await val(p, 'L.myUid')));
