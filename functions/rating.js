@@ -134,18 +134,29 @@ function recordFromRoom(room, code, now) {
  * standard start) and run on by one, and every turn must be played.
  */
 async function replayWinner(engine, spellNames, variant, startSfn, turns) {
-	if (!turns.length) return null;
+	return (await replay(engine, spellNames, variant, startSfn, turns)).winner;
+}
+
+/**
+ * Replay a transcript: { valid, winner }. `valid` is false when the
+ * transcript itself is broken (misnumbered, unplayable, turns past the
+ * end), true when it plays through; `winner` is who it ends with, or null
+ * when it does not end.
+ */
+async function replay(engine, spellNames, variant, startSfn, turns) {
+	const bad = { valid: false, winner: null };
+	if (!turns.length) return bad;
 	const first = firstTurnNumber(startSfn && engine.normalizeSfnString(startSfn), turns[0].color);
-	if (!turns.every((t, i) => t.turnNumber === first + i)) return null;
+	if (!turns.every((t, i) => t.turnNumber === first + i)) return bad;
 	const result = {};
 	let rebuilt;
 	try {
 		rebuilt = await engine.reconstructGameLog(spellNames, variant, startSfn || null, turns, { result });
 	} catch (e) {
-		return null;
+		return bad;
 	}
-	if (rebuilt.length !== turns.length) return null;
-	return result.gameover ? result.winner : null;
+	if (rebuilt.length !== turns.length) return bad;
+	return { valid: true, winner: result.gameover ? result.winner : null };
 }
 
 /**
@@ -217,8 +228,13 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		ok = typeof room.closedAt === 'number' && flagged(room, loser, room.closedAt);
 	} else {
 		const transcript = onlineTranscript(room);
-		ok = !!transcript && (await replayWinner(engine, room.spellNames, engine.normalizeVariant(room.variant),
-			room.startSfn || null, transcript)) === record.winner;
+		const r = transcript ? await replay(engine, room.spellNames, engine.normalizeVariant(room.variant),
+			room.startSfn || null, transcript) : { valid: false, winner: null };
+		// Either seat can append turns of its own colour, so a broken
+		// transcript may be the other side's doing: unrated, not held
+		// against the player who closed the room.
+		if (!r.valid) return Object.assign(unrated('transcript-invalid'), { kind });
+		ok = r.winner === record.winner;
 	}
 	const verdict = {
 		rated: true,

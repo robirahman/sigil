@@ -153,6 +153,14 @@ exports.rateGame = onValueCreated({
 		for (const k of Object.keys(updates)) if (k.startsWith('user_games/' + uids[c] + '/')) delete updates[k];
 		updates['completed_games/' + gameId + '/' + c + 'Uid'] = 'deleted';
 	}
+	// Deletion may have begun since the check above: look again just before
+	// writing (deleteUserData marks deleted_users first).
+	for (const c of ['red', 'blue']) {
+		const u = uids[c];
+		if (!deleted[c] && typeof u === 'string' && u && (await db.ref('deleted_users/' + u).once('value')).exists()) {
+			return; // the deletion's own scrub runs after; this game stays unrated and unindexed
+		}
+	}
 	// The room may be deleted by its players only once it is rated: until
 	// then it is the evidence (database.rules.json).
 	if (room && room.local !== true && record.roomCode) updates['rooms/' + record.roomCode + '/ratedAt'] = Date.now();

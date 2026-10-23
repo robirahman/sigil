@@ -147,6 +147,11 @@ test('rooms: rematches, local archives and expired invites', async () => {
 		blue: { uid: 'bob', displayName: 'Bob' } }) } });
 	const rematch = Object.assign({}, waiting, { status: 'playing', ranked: true, rematchOf: 'OLD',
 		red: { uid: 'bob', connected: false }, blue: { uid: 'alice', connected: false } });
+	// Both players must have offered the rematch on the old room, and it
+	// keeps the old room's clock and variant.
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), rematch));
+	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'rooms/OLD/rematch'), { red: 'offered', blue: 'offered' }));
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { timeControl: { type: 'realtime', initialTime: 0 } })));
 	await assertFails(set(ref(db('mallory'), 'rooms/NEW'), rematch));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { blue: { uid: 'mallory' } })));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { forfeitedBy: 'red' })));
