@@ -367,6 +367,24 @@ async function key(page, k) {
 		check(silence.after && silence.after.blue === true && silence.after.red === false && silence.node.blue === true,
 			'the position after a Silence cast restarts with blue silenced', JSON.stringify(silence));
 		check(silence.before && !silence.before.red && !silence.before.blue, 'and the position before it does not', JSON.stringify(silence.before));
+		// The same SFN with and without Silence are different positions (a
+		// charm cast leaves the spell counter alone): replaying the turn
+		// without the cast from the root must not reuse the silenced child.
+		const reuse = await page.evaluate(() => {
+			const d = window.Alpine.$data(document.querySelector('#analysis-root'));
+			d.anaGoto(0);
+			const s1 = d.anaTree[1].sfn;
+			d._analysisOnTurn({ color: 'red', turnNumber: 1, kind: 'input', actions: ['a2', 'submit'], sfnAfter: s1 },
+				{ silenced: { red: false, blue: false } });
+			const plain = d.anaCur;
+			d.anaGoto(0);
+			d._analysisOnTurn({ color: 'red', turnNumber: 1, kind: 'input', actions: ['a2', 'Silence', 'submit'], sfnAfter: s1 },
+				{ silenced: { red: false, blue: true } });
+			const silenced = d.anaCur;
+			return { plain, silenced, kids: d.anaTree[0].children.slice(), plainFlags: Object.assign({}, d.anaTree[plain].silenced) };
+		});
+		check(reuse.plain !== 1 && reuse.silenced === 1 && reuse.kids.length === 2 && !reuse.plainFlags.blue,
+			'a turn without Silence to the same SFN is its own node; with it, the silenced node is reused', JSON.stringify(reuse));
 		check(await page.evaluate(() => {
 			const r = analysisSilencedAfter({ color: 'blue', kind: 'sim', actions: [{ type: 'cast', spell: 'Silence' }] });
 			return r.red === true && r.blue === false;

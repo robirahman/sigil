@@ -398,9 +398,19 @@ function analysisMixin() {
 			if (!turn || !turn.sfnAfter) return;
 			const parent = this._anaNode();
 			if (!parent) return;
-			let child = parent.children.map(i => this.anaTree[i]).find(c => c.sfn === turn.sfnAfter);
+			const slim = { color: turn.color, turnNumber: turn.turnNumber, kind: turn.kind, actions: turn.actions };
+			// The mover's own flag is cleared at the end of its turn; the
+			// enemy's (a Silence cast this turn) carries over.
+			const silenced = (board && board.silenced)
+				? { red: turn.color === 'blue' && !!board.silenced.red, blue: turn.color === 'red' && !!board.silenced.blue }
+				: analysisSilencedAfter(slim);
+			// Silence is not in the SFN (a charm cast leaves the spell
+			// counter alone), so the same SFN with and without it are
+			// different positions: match the flags too.
+			const sameSilence = (a, b) => !!(a && a.red) === !!(b && b.red) && !!(a && a.blue) === !!(b && b.blue);
+			let child = parent.children.map(i => this.anaTree[i])
+				.find(c => c.sfn === turn.sfnAfter && sameSilence(c.silenced, silenced));
 			if (!child) {
-				const slim = { color: turn.color, turnNumber: turn.turnNumber, kind: turn.kind, actions: turn.actions };
 				child = {
 					id: this.anaTree.length, parent: parent.id, sfn: turn.sfnAfter,
 					label: analysisTurnLabel(turn.color, turn.turnNumber),
@@ -408,11 +418,7 @@ function analysisMixin() {
 					children: [], lastChild: null,
 					winner: (board && board.gameover) ? (board.winner || null) : null,
 					deleted: false,
-					// The mover's own flag is cleared at the end of its turn;
-					// the enemy's (a Silence cast this turn) carries over.
-					silenced: (board && board.silenced)
-						? { red: turn.color === 'blue' && !!board.silenced.red, blue: turn.color === 'red' && !!board.silenced.blue }
-						: analysisSilencedAfter(slim),
+					silenced,
 				};
 				this.anaTree.push(child);
 				parent.children.push(child.id);
