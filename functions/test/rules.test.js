@@ -102,6 +102,8 @@ test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db('bob'), 'rooms/R1/turns/t1'), { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() }));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'), { 'timer/red': 1000, currentSfn: 'x', 'blue/connected': false }));
 	await assertFails(set(ref(db('mallory'), 'rooms/R1/currentSfn'), 'y'));
+	// startedAt was the join's; seats stay writable while playing.
+	await assertFails(set(ref(db('alice'), 'rooms/R1/startedAt'), 5));
 	// Settings fixed at creation stay fixed.
 	await assertFails(set(ref(db('alice'), 'rooms/R1/spellNames'), ['b']));
 	await assertFails(set(ref(db('alice'), 'rooms/R1/startPos'), { redWinProb: 1 }));
@@ -130,6 +132,8 @@ test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db('bob'), 'rooms/R1/status'), 'playing'));
 	await assertFails(set(ref(db('alice'), 'rooms/R1/gameId'), 'g1'));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'), { gameLog: [], finalSfn: 'x' }));
+	// A finished room's seats are frozen (abandonment is judged by them).
+	await assertFails(update(ref(db('bob'), 'rooms/R1/blue'), { connected: true, disconnectedAt: null }));
 	// Spectators need no account.
 	await assertSucceeds(set(ref(db(null), 'rooms/R1/spectators/s1'), { joined: 1 }));
 	await assertSucceeds(remove(ref(db(null), 'rooms/R1/spectators/s1')));

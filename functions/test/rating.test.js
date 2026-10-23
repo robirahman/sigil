@@ -212,6 +212,12 @@ test('a loss on time is recomputed from the turn timestamps', () => {
 	assert.strictEqual(flagged(room, 'red', t0 + 500_000), false);
 	room.timeControl.increment = 5_000;
 	assert.strictEqual(flagged(room, 'blue', t0 + 79_000), false);
+	// Nobody has moved: the first mover's clock runs from startedAt.
+	const fresh = { timeControl: { type: 'realtime', initialTime: 60_000 }, startedAt: t0 };
+	assert.strictEqual(flagged(fresh, 'red', t0 + 30_000), false);
+	assert.strictEqual(flagged(fresh, 'red', t0 + 59_000), true);
+	assert.strictEqual(flagged(fresh, 'blue', t0 + 600_000), false);
+	assert.strictEqual(flagged({ timeControl: fresh.timeControl }, 'red', t0 + 600_000), false);
 	const corr = { timeControl: { type: 'correspondence', moveTimeout: 86_400_000 }, turns: room.turns };
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 3_600_000), false);
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 86_400_000), true);
@@ -240,8 +246,12 @@ test('a game can be claimed only after the opponent has been gone for the grace 
 	// Another tab of the same player still connected: not gone.
 	const twoTabs = Object.assign({}, room, { blue: Object.assign({}, room.blue, { conns: { c2: t0 } }) });
 	assert.strictEqual(abandoned(twoTabs, 'blue', t0 + 10_000_000), false);
+	// Two turns of one colour are not both players moving.
+	const oneSided = Object.assign({}, room, { turns: { a: room.turns.a, b: { color: 'red', timestamp: t0 + 1000 } } });
+	assert.strictEqual(abandoned(oneSided, 'blue', t0 + 10_000_000), false);
 	assert.strictEqual(sideToMove(room), 'red');
-	assert.strictEqual(sideToMove({ startSfn: 'x b 14 0:0' }), 'blue');
+	// A room's startSfn is the position before the first turn: counter 13 -> Blue moves at 14.
+	assert.strictEqual(sideToMove({ startSfn: 'x r 13 0:0' }), 'blue');
 	assert.strictEqual(sideToMove({}), 'red');
 });
 

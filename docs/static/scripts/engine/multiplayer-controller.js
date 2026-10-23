@@ -616,8 +616,11 @@ class MultiplayerController {
 	 * natural game ending: _saveGameRecord on both clients.
 	 */
 	_endByForfeit(loser) {
+		// An abort is provisional: after both players moved the server turns
+		// it into the aborter's forfeit (settleAbort), which replaces it here.
 		if (this._forfeitHandled || this._timedOut
-			|| (this.board && this.board.gameover)) return;
+			|| (this.board && this.board.gameover && !this._aborted)) return;
+		this._aborted = false;
 		this._forfeitHandled = true;
 		const board = this.board;
 		const winner = board.enemy(loser);
