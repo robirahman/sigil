@@ -30,6 +30,10 @@ const { freshEngine } = require('./engine-loader');
 const AI_UID = /^__ai_[a-z0-9_]+__$/;
 // Network slack allowed on a loss on time.
 const CLOCK_GRACE_MS = 2000;
+// How long a player may be gone before the opponent can claim the game
+// (rooms without a correspondence clock). Same as ABANDON_GRACE_MS in
+// docs/static/scripts/engine/constants.js.
+const ABANDON_GRACE_MS = 60 * 1000;
 const DEFAULT_ELO = 1000;
 
 const other = (c) => (c === 'red' ? 'blue' : 'red');
@@ -80,7 +84,16 @@ function onlineTranscript(room) {
 function flagged(room, loser, now) {
 	const tc = room.timeControl || {};
 	const turns = roomTurns(room);
-	if (!turns.length) return false;
+	if (!turns.length) {
+		// Nobody has moved: the first mover's clock runs from the start of
+		// the game (startedAt, server time, written with the join).
+		if (typeof room.startedAt !== 'number' || sideToMove(room) !== loser) return false;
+		if (tc.type === 'correspondence') {
+			return typeof tc.moveTimeout === 'number' && now >= room.startedAt + tc.moveTimeout - CLOCK_GRACE_MS;
+		}
+		return tc.type === 'realtime' && typeof tc.initialTime === 'number'
+			&& tc.initialTime - (now - room.startedAt) <= CLOCK_GRACE_MS;
+	}
 	const last = turns[turns.length - 1];
 	if (last.color === loser || typeof last.timestamp !== 'number') return false;
 	if (tc.type === 'correspondence') {
@@ -96,6 +109,38 @@ function flagged(room, loser, now) {
 		prevTs = t.timestamp;
 	}
 	return remaining - (now - last.timestamp) <= CLOCK_GRACE_MS;
+}
+
+/**
+ * May the opponent of `loser` claim the game because `loser` left? Their
+ * seat must be marked gone (onDisconnect writes it with the server's
+ * clock; only the seat's owner can clear it) for the grace period, and
+ * both players must have moved (before that the game can only be aborted).
+ */
+function abandoned(room, loser, now) {
+	const tc = room.timeControl || {};
+	const seat = room[loser] || {};
+	if (tc.type === 'correspondence') return false;
+	// Both players must have moved, in turn (a modified client could
+	// write several turns of its own colour).
+	const turns = roomTurns(room);
+	if (!turns.some((t) => t.color === 'red') || !turns.some((t) => t.color === 'blue')) return false;
+	if (turns.some((t, i) => i > 0 && t.color === turns[i - 1].color)) return false;
+	// Gone means no live connection (each tab holds one in `conns`); seats
+	// of older clients without conns go by their flag.
+	const live = seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected !== false;
+	return !live && typeof seat.disconnectedAt === 'number'
+		&& now - seat.disconnectedAt >= ABANDON_GRACE_MS - CLOCK_GRACE_MS;
+}
+
+/** The side to move in a room: after the last turn, or the first mover. */
+function sideToMove(room) {
+	const turns = roomTurns(room);
+	if (turns.length) return other(turns[turns.length - 1].color);
+	// A room's startSfn is the position before the first turn: the game
+	// loop advances the counter and gives the move by parity (odd = red).
+	const c = room.startSfn ? parseInt(String(room.startSfn).split(' ')[2], 10) || 0 : 0;
+	return (c + 1) % 2 === 1 ? 'red' : 'blue';
 }
 
 /**
@@ -226,6 +271,8 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		// the rules require it), not when this runs: a claim made early
 		// must not come true by waiting.
 		ok = typeof room.closedAt === 'number' && flagged(room, loser, room.closedAt);
+	} else if (room.endReason === 'abandon') {
+		ok = typeof room.closedAt === 'number' && abandoned(room, loser, room.closedAt);
 	} else {
 		const transcript = onlineTranscript(room);
 		const r = transcript ? await replay(engine, room.spellNames, engine.normalizeVariant(room.variant),
@@ -367,5 +414,6 @@ function ratingUpdates(gameId, record, verdict, users, hasLbName, engine) {
 }
 
 module.exports = {
-	AI_UID, CLOCK_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged, onlineTranscript, roomTurns, freshEngine,
+	AI_UID, CLOCK_GRACE_MS, ABANDON_GRACE_MS, firstTurnNumber, judgeGame, ratingUpdates, recordFromRoom, flagged,
+	abandoned, sideToMove, onlineTranscript, roomTurns, freshEngine,
 };

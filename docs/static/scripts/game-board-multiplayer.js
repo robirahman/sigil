@@ -173,6 +173,59 @@ document.addEventListener('alpine:init', () => {
 			// review (rooms/<code>/rematch/positionRoom).
 			opponentPositionRoom: '',
 
+			// Connection state (controller 'sync_status' / 'opponent_presence'):
+			// our own unsent moves, and since when the opponent has been gone
+			// (server time, from their seat's disconnectedAt).
+			syncConnected: true,
+			syncPending: 0,
+			syncError: null,
+			opponentGoneSince: null,
+			gameAborted: false,
+			_presenceTick: 0,
+			_presenceTimer: null,
+			get syncBanner() {
+				if (this.isSpectator || this.winner || this.gameAborted) return '';
+				if (this.syncError) return 'The server refused a move (' + this.syncError + '). Reload the page to resync.';
+				if (!this.syncConnected) return this.syncPending
+					? 'Connection lost. Reconnecting… your move will be sent when you are back online.'
+					: 'Connection lost. Reconnecting…';
+				return '';
+			},
+			// Completed turns so far (abort is offered until both players moved).
+			turnsPlayed() {
+				// The room's turns, not the controller's log: after a reload the
+				// log holds only the turns since.
+				const sync = this._engine && this._engine.sync;
+				if (sync && sync._turnKeys) return sync._turnKeys.length;
+				return (this._engine && this._engine._gameLog) ? this._engine._gameLog.length : 0;
+			},
+			get opponentAwayText() {
+				void this._presenceTick;
+				if (this.isSpectator || this.winner || this.gameAborted || this.opponentGoneSince === null) return '';
+				if (this.timerType === 'correspondence') return 'Your opponent is offline.';
+				const left = this.claimSecondsLeft();
+				return left > 0
+					? 'Your opponent disconnected. You can claim the game in ' + left + ' s if they do not come back.'
+					: 'Your opponent has been gone for over a minute.';
+			},
+			claimSecondsLeft() {
+				if (this.opponentGoneSince === null || !this._engine || !this._engine.sync) return Infinity;
+				const gone = this._engine.sync.serverNow() - this.opponentGoneSince;
+				return Math.max(0, Math.ceil((ABANDON_GRACE_MS - gone) / 1000));
+			},
+			get canClaimWin() {
+				void this._presenceTick;
+				return !this.isSpectator && !this.winner && !this.gameAborted && this.timerType !== 'correspondence'
+					&& this.opponentGoneSince !== null && this.claimSecondsLeft() === 0 && this.turnsPlayed() >= 2;
+			},
+			get canAbort() {
+				void this._presenceTick;
+				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !!this.whoseTurn
+					&& this.turnsPlayed() < 2;
+			},
+			handleClaimWin() { if (this.canClaimWin) this.sendEvent('claim_win'); },
+			handleAbort() { if (this.canAbort) this.sendEvent('abort'); },
+
 			// Review: open an online room from the reviewed position. The new
 			// room is offered to the opponent through this room's rematch node.
 			get canPlayFromPosition() {
@@ -832,7 +885,30 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'opponent_disconnect') {
 						_this.rematchOpponentDisconnected = true;
 					}
+					else if (type === 'sync_status') {
+						_this.syncConnected = rest.connected;
+						_this.syncPending = rest.pending;
+						_this.syncError = rest.error || null;
+					}
+					else if (type === 'opponent_presence') {
+						const wasGone = _this.opponentGoneSince !== null;
+						_this.opponentGoneSince = rest.connected ? null
+							: (rest.disconnectedAt || (_this._engine && _this._engine.sync ? _this._engine.sync.serverNow() : Date.now()));
+						if (wasGone && rest.connected && !_this.winner) _this.messageHistory.push('Your opponent reconnected.');
+						// A one-second tick while they are gone drives the countdown.
+						clearInterval(_this._presenceTimer);
+						if (_this.opponentGoneSince !== null) {
+							_this._presenceTimer = setInterval(() => { _this._presenceTick++; }, 1000);
+						}
+					}
+					else if (type === 'game_aborted') {
+						_this.gameAborted = true;
+						_this.actionList = [];
+						clearInterval(_this._presenceTimer);
+					}
 					else if (type === 'game_over') {
+						// A settled result replaces a provisional abort.
+						_this.gameAborted = false;
 						drawPushArrows(_this.$refs.pushArrows, []);
 						if (typeof soundManager !== 'undefined') soundManager.play('gameOver');
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);

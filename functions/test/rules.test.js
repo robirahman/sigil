@@ -102,6 +102,8 @@ test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db('bob'), 'rooms/R1/turns/t1'), { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() }));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'), { 'timer/red': 1000, currentSfn: 'x', 'blue/connected': false }));
 	await assertFails(set(ref(db('mallory'), 'rooms/R1/currentSfn'), 'y'));
+	// startedAt was the join's; seats stay writable while playing.
+	await assertFails(set(ref(db('alice'), 'rooms/R1/startedAt'), 5));
 	// Settings fixed at creation stay fixed.
 	await assertFails(set(ref(db('alice'), 'rooms/R1/spellNames'), ['b']));
 	await assertFails(set(ref(db('alice'), 'rooms/R1/startPos'), { redWinProb: 1 }));
@@ -130,6 +132,8 @@ test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db('bob'), 'rooms/R1/status'), 'playing'));
 	await assertFails(set(ref(db('alice'), 'rooms/R1/gameId'), 'g1'));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'), { gameLog: [], finalSfn: 'x' }));
+	// A finished room's seats are frozen (abandonment is judged by them).
+	await assertFails(update(ref(db('bob'), 'rooms/R1/blue'), { connected: true, disconnectedAt: null }));
 	// Spectators need no account.
 	await assertSucceeds(set(ref(db(null), 'rooms/R1/spectators/s1'), { joined: 1 }));
 	await assertSucceeds(remove(ref(db(null), 'rooms/R1/spectators/s1')));
@@ -140,6 +144,20 @@ test('rooms: create, join, play', async () => {
 	await assertFails(remove(ref(db('alice'), 'rooms/R1')));
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/R1/ratedAt'), 1));
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/R1')));
+});
+
+test('rooms: an abort names the side that aborts', async () => {
+	await seed({ rooms: { R2: Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true } }) } });
+	// A seat going offline: the server stamps the time on the owner's seat.
+	await assertSucceeds(update(ref(db('bob'), 'rooms/R2/blue'), { connected: false, disconnectedAt: serverTimestamp() }));
+	await assertFails(update(ref(db('alice'), 'rooms/R2/blue'), { connected: false, disconnectedAt: 1 }));
+	await assertFails(update(ref(db('alice'), 'rooms/R2'), { status: 'aborted' }));
+	await assertFails(update(ref(db('alice'), 'rooms/R2'), { status: 'aborted', abortedBy: 'blue' }));
+	await assertFails(update(ref(db('mallory'), 'rooms/R2'), { status: 'aborted', abortedBy: 'red' }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R2'), { status: 'aborted', abortedBy: 'red' }));
+	await assertFails(update(ref(db('bob'), 'rooms/R2'), { status: 'finished', winner: 'blue', finishedBy: 'blue' }));
+	// ... and once aborted, the seats are frozen.
+	await assertFails(update(ref(db('bob'), 'rooms/R2/blue'), { connected: true }));
 });
 
 test('rooms: rematches, local archives and expired invites', async () => {

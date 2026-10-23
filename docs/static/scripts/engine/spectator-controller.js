@@ -94,6 +94,11 @@ class SpectatorController {
 		try {
 			const s = await this.sync.roomRef.once('value');
 			const d = s.val() || {};
+			if (d.status === 'aborted') {
+				if (this.board) { this.board.gameover = true; this.board.winner = null; }
+				this.emit({ type: 'message', awaiting: null, message: 'Game aborted.' });
+				return;
+			}
 			if (d.winner === 'red' || d.winner === 'blue') {
 				if (this.board) { this.board.gameover = true; this.board.winner = d.winner; }
 				const reason = d.forfeitedBy ? 'forfeit' : (d.endReason || 'finished');
