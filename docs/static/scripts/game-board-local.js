@@ -5,7 +5,7 @@ document.addEventListener('alpine:init', () => {
 
 	Alpine.data(
 		'gameBoard',
-		({ importSfn: initialImportSfn = '', puzzle = null }) => ({
+		({ importSfn: initialImportSfn = '', puzzle = null, analysis = false }) => ({
 			actionList: [],
 			// Puzzles page (puzzles.html): the position, the set of winning
 			// first turns (by resulting position) and, for mate-in-2, the
@@ -914,10 +914,13 @@ document.addEventListener('alpine:init', () => {
 				// the puzzle's mover and a scripted opponent plays the stored
 				// defence. `aiMode` stays null on purpose: every persistence
 				// path below is keyed on it.
-				let aiMode = puzzle ? null : new URLSearchParams(window.location.search).get('ai');
+				// Analysis board (analysis.html): the same no-AI, no-save local
+				// game, restarted at whichever tree node is selected (see
+				// _analysisStart below and analysis-board.js).
+				let aiMode = (puzzle || analysis) ? null : new URLSearchParams(window.location.search).get('ai');
 				// Game clock, any mode: ?clock=M+S (minutes + seconds per move).
 				// A saved clocked game restores its remaining times below.
-				let clockOpt = (puzzle || typeof GameClock === 'undefined') ? null
+				let clockOpt = (puzzle || analysis || typeof GameClock === 'undefined') ? null
 					: GameClock.parse(new URLSearchParams(window.location.search).get('clock'));
 				let _savedClockState = null;
 				// Game-rule variant (separate concept from `aiMode`'s "model
@@ -927,7 +930,7 @@ document.addEventListener('alpine:init', () => {
 				let gameVariant = normalizeVariant(gameVariantParam);
 				// The position this page was opened on (?sfn=). Captured now:
 				// importSfn is bound to the Import Position box.
-				const _startSfnAtLoad = puzzle ? '' : (_this.importSfn || '');
+				const _startSfnAtLoad = (puzzle || analysis) ? '' : (_this.importSfn || '');
 				// An imported SFN names its own layout (a pentagon stone field).
 				// An imported position names its own variant and spells; the AI
 				// hand-off below reads them (a pasted SFN's URL names neither).
@@ -944,16 +947,16 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* bad SFN: the engine reports it */ }
 				}
 				let _engineRef = null;
-				if (puzzle) warnBeforeUnload = false;
+				if (puzzle || analysis) warnBeforeUnload = false;
 
 				// Persistence: pin a game-id to the URL (mint one if missing)
 				// so a reload returns to the same game. If a save exists for
 				// the id, hydrate aiMode / variant / humanColor / SFN from it
 				// — these win over the URL so resume works even if the user
 				// lands on /game.html?id=X without other params.
-				if (!puzzle && typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
-				let _gameId = puzzle ? null : new URLSearchParams(window.location.search).get('id');
-				if (!puzzle && !_gameId && typeof LocalSaveStore !== 'undefined') {
+				if (!puzzle && !analysis && typeof LocalSaveStore !== 'undefined') LocalSaveStore.purgeExpired();
+				let _gameId = (puzzle || analysis) ? null : new URLSearchParams(window.location.search).get('id');
+				if (!puzzle && !analysis && !_gameId && typeof LocalSaveStore !== 'undefined') {
 					_gameId = LocalSaveStore.mintId();
 					try {
 						const u = new URL(window.location.href);
@@ -1022,7 +1025,7 @@ document.addEventListener('alpine:init', () => {
 				_this.gameVariant = gameVariant;
 				_this.clockOpt = clockOpt;
 
-				if (!puzzle) {
+				if (!puzzle && !analysis) {
 					try {
 						const u = new URL(window.location.href);
 						if (_gameId) u.searchParams.set('id', _gameId);
@@ -1039,7 +1042,7 @@ document.addEventListener('alpine:init', () => {
 				// Auth manager for rated AI games, the finished-game upload (vs AI
 				// and local 1v1) and community annotations from AI review.
 				let _aiAuthManager = null;
-				if (!puzzle && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
+				if (!puzzle && !analysis && typeof AuthManager !== 'undefined' && typeof firebase !== 'undefined') {
 					_aiAuthManager = new AuthManager();
 					_aiAuthManager.onAuthChanged(async (user) => {
 						if (aiMode && user && !user.isAnonymous) {
@@ -1071,7 +1074,7 @@ document.addEventListener('alpine:init', () => {
 
 				// Sync any games that were completed offline on a previous visit.
 				// Triggers on page load, on the `online` event, and when auth resolves.
-				if (!puzzle && typeof OfflineGameQueue !== 'undefined') {
+				if (!puzzle && !analysis && typeof OfflineGameQueue !== 'undefined') {
 					OfflineGameQueue.installAutoflush({
 						onFlush: (result) => {
 							// Filter out any game currently being finished on this board,
@@ -1517,7 +1520,114 @@ document.addEventListener('alpine:init', () => {
 					_this.myColor = _humanColor;
 				}
 
-				if (_offerSides) _pickSideFromPosition().then(initEngine);
+				/**
+				 * Analysis board: (re)start a local 1v1 controller on `sfn`, a
+				 * loadable SFN (the form Export Position and after-turn records
+				 * use; the controller advances it to the side to move). The
+				 * previous controller is abandoned mid-prompt, as a puzzle retry
+				 * does; its events are dropped by the identity check in emit.
+				 * opts.history: the SFNs of the positions before this one on the
+				 * analysed line, so threefold repetition counts them as a game
+				 * that reached this node would. opts.turn: {color, turn} plays
+				 * that turn (a SimTurn, e.g. the engine's best) for the side to
+				 * move through the AI path, with its animations. opts.silenced:
+				 * { red, blue } Silence flags, which SFN does not carry;
+				 * opts.historySilenced: the same per opts.history entry.
+				 */
+				function _analysisStart(sfn, opts) {
+					opts = opts || {};
+					_this.winner = '';
+					_this.messageHistory = [];
+					_this.validMoves = {};
+					_this.pushSourceNode = '';
+					_this.lastPlay = '';
+					_this.nodesToRefill = {};
+					_this.playerToRefill = '';
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.showReset = false;
+					_this.currentSfn = '';
+					_this.whoseTurn = '';
+					_this.previousBoardState = {};
+					drawPushArrows(_this.$refs.pushArrows, []);
+					// Past the first turn: no game-start sound on every navigation.
+					_turnCount = 1;
+					_turnMsgMark = -1;
+					_turnMsgText = null;
+					let variant = 'standard';
+					try { variant = normalizeVariant(sfnToDict(sfn).variant); } catch (e) { /* the engine reports it */ }
+					gameVariant = variant;
+					_this.gameVariant = variant;
+					_this.isDeathmatch = variantHasDeathmatch(variant);
+					_this.applyBoardLayout(variantBoardLayout(variant));
+					const options = { variant };
+					if (opts.turn) {
+						const planned = opts.turn;
+						options.aiColor = planned.color;
+						options.ai = { lastMeta: null, pickTurn: async () => planned.turn };
+					}
+					const engine = new GameController(function emitEvent(eventObj) {
+						if (_engineRef !== engine) return;
+						handleIncomingEvent(eventObj);
+						if (eventObj.type === 'turn_complete' && _this._analysisOnTurn) {
+							_this._analysisOnTurn(eventObj.turn, engine.board, !!opts.turn);
+						} else if (eventObj.type === 'game_over' && _this._analysisOnGameOver) {
+							_this._analysisOnGameOver(eventObj);
+						}
+					}, options);
+					_engineRef = engine;
+					_this._engine = engine;
+					_this.sendEvent = function sendEvent(message) {
+						engine.handlePlayerAction(message);
+						_this.awaiting = null;
+					};
+					// startGame builds its board before its first await, so the
+					// repetition counts can be seeded before the loop snapshots.
+					const started = engine.startGame(sfn);
+					// SFN does not record Silence: opts.silenced carries it
+					// from the turn that led here (analysisSilencedAfter).
+					if (engine.board && opts.silenced) {
+						engine.board.silenced = { red: !!opts.silenced.red, blue: !!opts.silenced.blue };
+					}
+					if (engine.board && Array.isArray(opts.history)) {
+						const counts = {};
+						opts.history.forEach((prev, k) => {
+							try {
+								const b = new SigilBoard(sfnToDict(prev).spell_names, variant);
+								b.loadFromSfn(prev);
+								// Silence is part of the snapshot key (opts.historySilenced).
+								const sil = Array.isArray(opts.historySilenced) && opts.historySilenced[k];
+								if (sil) b.silenced = { red: !!sil.red, blue: !!sil.blue };
+								b.allLoopingSnapshotCounts = counts;
+								b.takeSnapshot();
+							} catch (e) { /* an unreadable ancestor just isn't counted */ }
+						});
+						engine.board.allLoopingSnapshotCounts = counts;
+					}
+					return started;
+				}
+
+				// Analysis board: show a position without a live controller
+				// (editor mode, and decided positions where nothing can be played).
+				function _analysisStop() {
+					_engineRef = null;
+					_this._engine = null;
+					_this.sendEvent = function () {};
+					_this.actionList = [];
+					_this.awaiting = null;
+					_this.validMoves = {};
+					_this.pushSourceNode = '';
+					_this.showReset = false;
+					_this.whoseTurn = '';
+					_this.previousBoardState = {};
+					drawPushArrows(_this.$refs.pushArrows, []);
+				}
+
+				if (analysis) {
+					// Deferred: the handlers' turn bookkeeping (declared below)
+					// must be initialized before the first controller starts.
+					setTimeout(() => _this._analysisInit({ start: _analysisStart, stop: _analysisStop }), 0);
+				} else if (_offerSides) _pickSideFromPosition().then(initEngine);
 				else initEngine();
 
 				// Keyboard shortcuts
@@ -2055,6 +2165,8 @@ document.addEventListener('alpine:init', () => {
 						_this.spells.images[key] = `static/images/spells/${baseSpellName(value)}.png`;
 					});
 
+					// The analysis board restarts on every navigation: no jump.
+					if (analysis) return;
 					setTimeout(() => {
 						if (_this.$refs.gameBoardContainer) {
 							_this.$refs.gameBoardContainer.scrollIntoView({
@@ -2285,8 +2397,8 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					// Save the finished game (and rate it, for AI games). Puzzles
-					// are never recorded.
-					if (!puzzle) {
+					// and analysis-board lines are never recorded.
+					if (!puzzle && !analysis) {
 						_recordFinishedGame(payload.winner, aiMode);
 					}
 				}
@@ -2536,6 +2648,10 @@ document.addEventListener('alpine:init', () => {
 				}
 
 			},
+
+			// Analysis board state and methods (analysis-board.js), spread
+			// last so its handleNodeClick (the editor) overrides the game's.
+			...((analysis && typeof analysisMixin === 'function') ? analysisMixin() : {}),
 		})
 	);
 });
