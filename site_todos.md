@@ -19,9 +19,9 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Onboarding & learning
 
-- [ ] **Port the interactive tutorial to `docs/`.** The legacy Flask app has `templates/tutorial.html` and `static/scripts/tutorial.js` (~1900 lines); the live site has no equivalent.
+- [x] **Port the interactive tutorial to `docs/`.** The legacy Flask app has `templates/tutorial.html` and `static/scripts/tutorial.js` (~1900 lines); the live site has no equivalent.
   Rebuild it on `GameController` with scripted positions, as puzzles do.
-- [ ] **Publish the strategy guide.** `docs/strategy-guide.html` is a "being written…" stub, but `docs/strategy/spell_dynamics_article.md` is written and linked from nowhere.
+- [x] **Publish the strategy guide.** `docs/strategy-guide.html` is a "being written…" stub, but `docs/strategy/spell_dynamics_article.md` is written and linked from nowhere.
 - [ ] **Add a page per spell**, with rules text, an example position to try, and win-rate data from `docs/strategy/data/spell_position_winrates.json`.
   Spell text is currently only a hover `title` tooltip on `docs/spells.html`, which doesn't work on touch screens.
 - [ ] **Add rules pages for the variants** (Competitive, Deathmatch, Scramble, Allow duplicates, Cataclysm).
@@ -134,7 +134,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add a node-naming trainer** for the board coordinates.
 - [ ] **Add classes** where teachers manage students and track their progress.
 - [ ] **Add a coach directory and a video library.**
-- [ ] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.
+- [x] **Finish the strategy guide.** `docs/strategy-guide.html` is still a "being written…" stub.
 
 ### Competitions
 
