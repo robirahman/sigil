@@ -1815,8 +1815,15 @@ document.addEventListener('alpine:init', () => {
 							? 'Correct! Two more to go.' : 'Correct! Now find the finishing move.';
 						return;
 					}
-					// Final solver turn: the game must be over now.
-					if (!over) {
+					// Final solver turn: the game must be over now -- or about to be:
+					// an opponent left holding a charged Seal of Destruction loses at
+					// the start of their turn (GameController's opening check).
+					const other = puzzle.mover === 'red' ? 'blue' : 'red';
+					const claimed = !!(_engineRef && _engineRef.board && _engineRef.board.chargedSpells
+						&& (_engineRef.board.chargedSpells[other] || []).includes('Seal_of_Destruction'));
+					if (!over && claimed) {
+						_puzzleExpectGameOver = 'claim';
+					} else if (!over) {
 						_puzzleFail('That was not the finishing move: the mate was in ' + puzzle.mate + ' and this is your turn ' + puzzle.mate + '. Play on, or Retry.');
 					} else {
 						_puzzleExpectGameOver = true;
@@ -1825,6 +1832,9 @@ document.addEventListener('alpine:init', () => {
 
 				function _puzzleOnWhoseTurn(payload) {
 					if (_this.puzzleStatus !== 'playing') return;
+					// A Seal of Destruction claim ends the game just after this
+					// prompt for the opponent's turn: wait for the game-over.
+					if (_puzzleExpectGameOver === 'claim') return;
 					if (_puzzleExpectGameOver && payload.color !== puzzle.mover) {
 						_puzzleExpectGameOver = false;
 						_this.puzzleDiagnostic = 'The solver counted your turn as a win, but the live game continued. Position: ' + _this.currentSfn;
