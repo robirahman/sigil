@@ -1001,6 +1001,11 @@ document.addEventListener('alpine:init', () => {
 				// it is rated, its priced start (position-rating.js).
 				let _fromPosition = !!_startSfnAtLoad;
 				let _startPos = null;
+				// A turn was taken back (handleTakeBack): the game is unrated.
+				let _tookBack = false;
+				// The position the game began from (empty for a standard start),
+				// kept in the save: a resumed game's URL carries only its id.
+				let _startSfnForUndo = _startSfnAtLoad;
 				if (_gameId && typeof LocalSaveStore !== 'undefined') {
 					const _save = LocalSaveStore.get(_gameId);
 					if (_save && _save.sfn) {
@@ -1038,6 +1043,8 @@ document.addEventListener('alpine:init', () => {
 								_savedSetupSfn = _save.setupSfn;
 							}
 							if (_save.fromPosition) _fromPosition = true;
+							if (_save.tookBack) _tookBack = true;
+							if (typeof _save.startSfn === 'string') _startSfnForUndo = _save.startSfn;
 							if (_save.startPos && typeof _save.startPos.redWinProb === 'number') {
 								_startPos = _save.startPos;
 							}
@@ -1487,10 +1494,66 @@ document.addEventListener('alpine:init', () => {
 						setupSfn: _setupSfn,
 						fromPosition: _fromPosition,
 						startPos: _startPos,
+						tookBack: _tookBack,
+						startSfn: _startSfnForUndo,
 						// Game clock: remaining ms per side at this turn boundary.
 						clock: (_engineRef && _engineRef.clock) ? _engineRef.clock.snapshot(Date.now()) : null,
 					});
 				}
+
+				/**
+				 * Take back the player's last turn (and the AI's reply to it):
+				 * rewrite the save to the position before it and reload, which
+				 * resumes from there through the normal resume path. A rated
+				 * game vs the AI becomes unrated.
+				 */
+				_this.canTakeBack = function () {
+					const log = _engineRef && _engineRef._gameLog;
+					if (puzzle || !_gameId || _this.winner || !log || !log.length) return false;
+					if (typeof LocalSaveStore === 'undefined' || typeof reconstructGameLog !== 'function') return false;
+					// Vs the AI: only on the player's own turn (the AI is not thinking).
+					if (aiMode && _this.whoseTurn !== _humanColor) return false;
+					return !aiMode || log.some(t => t.color === _humanColor);
+				};
+				_this.handleTakeBack = async function () {
+					if (!_this.canTakeBack()) return;
+					const log = _engineRef._gameLog;
+					let h = log.length - 1;
+					if (aiMode) while (h >= 0 && log[h].color !== _humanColor) h--;
+					if (h < 0) return;
+					const board = _engineRef.board;
+					let sfn;
+					try {
+						if (h === 0) {
+							// Back to the start: the loaded position, or a fresh
+							// board with the same spells.
+							if (_startSfnForUndo) {
+								sfn = _startSfnForUndo;
+							} else if (_fromPosition) {
+								// A save from before startSfn was kept: the start is unknown.
+								_this.messageHistory.push('Cannot take back the first turn of this game.');
+								return;
+							} else {
+								const fresh = new SigilBoard(board.spellNames, board.variant || gameVariant);
+								fresh.setupInitial();
+								sfn = boardToSfn(fresh);
+							}
+						} else {
+							const rebuilt = await reconstructGameLog(board.spellNames, normalizeVariant(board.variant || gameVariant),
+								_setupSfn, slimGameLog(log.slice(0, h)));
+							sfn = rebuilt[rebuilt.length - 1].sfnAfter;
+						}
+					} catch (e) {
+						_this.messageHistory.push('Could not take back: ' + e.message);
+						return;
+					}
+					_tookBack = !!aiMode;
+					_humanHasMoved = true;
+					_persistedGameLog = slimGameLog(log.slice(0, h));
+					_persistCurrentGame(sfn);
+					warnBeforeUnload = false;
+					window.location.reload();
+				};
 
 				/**
 				 * The side picker of a game vs AI from a position: evaluate the
@@ -2661,7 +2724,7 @@ document.addEventListener('alpine:init', () => {
 						const _priced = !!(_startPos && _recordSetup && _startPos.sfn === _recordSetup);
 						const _unratedWhy = unratedReason(_spellNames, recordVariant,
 							_fromPosition ? _recordSetup : null, _priced ? _startPos : null);
-						const _unrated = isGuest || !difficulty || !!_unratedWhy;
+						const _unrated = isGuest || !difficulty || !!_unratedWhy || _tookBack;
 
 						// Synthesize a /rooms entry so the game is replayable from the
 						// profile page via multiplayer.html?id=CODE.
@@ -2739,7 +2802,9 @@ document.addEventListener('alpine:init', () => {
 						}
 
 						// Local 1v1 and guest games are never rated; no notice needed.
-						if (difficulty && !isGuest && _unratedWhy) {
+						if (difficulty && !isGuest && _tookBack && !_unratedWhy) {
+							_this.messageHistory.push('Unrated: a turn was taken back.');
+						} else if (difficulty && !isGuest && _unratedWhy) {
 							_this.messageHistory.push(describeUnratedReason(_unratedWhy));
 						}
 

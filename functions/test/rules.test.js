@@ -160,6 +160,25 @@ test('rooms: an abort names the side that aborts', async () => {
 	await assertFails(update(ref(db('bob'), 'rooms/R2/blue'), { connected: true }));
 });
 
+test('rooms: a takeback removes turns only when the opponent accepts', async () => {
+	const playing = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true },
+		turns: { t1: { color: 'red', actions: ['a1'], timestamp: 1 }, t2: { color: 'blue', actions: ['b2'], timestamp: 2 } } });
+	await seed({ rooms: { R3: playing } });
+	await assertFails(remove(ref(db('alice'), 'rooms/R3/turns/t2')));
+	await assertFails(set(ref(db('alice'), 'rooms/R3/takeback'), { by: 'blue', keys: { t1: true, t2: true } }));
+	await assertFails(set(ref(db('mallory'), 'rooms/R3/takeback'), { by: 'red', keys: { t1: true, t2: true } }));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/R3/takeback'), { by: 'red', keys: { t1: true, t2: true } }));
+	// The requester may not apply it itself.
+	await assertFails(update(ref(db('alice'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/R3'), { 'turns/t1': null, 'turns/t2': null, takeback: null, currentSfn: null }));
+	// A move built on a turn that was taken back is refused; on the latest turn it lands.
+	await assertFails(set(ref(db('alice'), 'rooms/R3/turns/t3'), { color: 'red', actions: ['a2'], timestamp: serverTimestamp(), after: 't2' }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R3'), { 'turns/t3': { color: 'red', actions: ['a2'], timestamp: serverTimestamp() }, takeback: null }));
+	// Without a request naming them, turns stay.
+	await seed({ rooms: { R4: playing } });
+	await assertFails(remove(ref(db('bob'), 'rooms/R4/turns/t1')));
+});
+
 test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { OLD: Object.assign({}, waiting, { status: 'finished', ranked: true,
 		blue: { uid: 'bob', displayName: 'Bob' } }) } });
@@ -203,6 +222,8 @@ test('push tokens: only their owner reads or writes them', async () => {
 	await assertSucceeds(remove(ref(db('bob'), 'push_tokens/bob/' + h)));
 	// users/ stays public, so tokens never go there.
 	await assertSucceeds(get(ref(db(null), 'users/bob')));
+});
+
 test('rooms: lobby settings (public, casual, the creator\'s colour) are fixed at creation', async () => {
 	// The creator may sit in either seat and must name it.
 	const blueSeek = Object.assign({}, waiting, { public: true, casual: true, creatorColor: 'blue',

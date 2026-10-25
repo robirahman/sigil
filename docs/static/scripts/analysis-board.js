@@ -156,6 +156,7 @@ function analysisValidateSfn(sfn) {
 	// The slot types: rituals, then sorceries, then charms (spellTypeAtPosition).
 	const pools = { ritual: analysisSpellPool('ritual'), sorcery: analysisSpellPool('sorcery'), charm: analysisSpellPool('charm') };
 	const seen = new Set();
+	const seenBase = new Set();
 	spells.forEach((name, i) => {
 		const type = i < layout.perType ? 'ritual' : (i < 2 * layout.perType ? 'sorcery' : 'charm');
 		const base = baseSpellName(name);
@@ -164,6 +165,13 @@ function analysisValidateSfn(sfn) {
 		}
 		if (seen.has(name)) errors.push(displaySpellName(name) + ' is on the board twice.');
 		seen.add(name);
+		// Aliases (Flourish~2) and repeated spells only exist in Allow
+		// Duplicates games; the engine reads no alias otherwise.
+		if (!variantHasDuplicates(d.variant)) {
+			if (name !== base) errors.push(displaySpellName(name) + ' is a duplicate alias, which needs the Allow Duplicates variant.');
+			else if (seenBase.has(base)) errors.push(displaySpellName(base) + ' is on the board twice.');
+		}
+		seenBase.add(base);
 	});
 	if (errors.length) return { errors, warnings, board: null };
 

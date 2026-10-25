@@ -6,7 +6,7 @@
 //   2. Each player may push a turn only in their own colour.
 //   3. A third page may watch but not move.
 //   4. A resignation from the game screen finishes the room for the other side.
-//   5. Through the game screen: Abort until both have moved; the reconnecting
+//   5. Through the game screen: a takeback by agreement; Abort until both have moved; the reconnecting
 //      banner; a minute after the opponent leaves, Claim win finishes it.
 //
 //   (cd docs && python3 -m http.server 8765) &
@@ -190,6 +190,39 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			await p.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).actionList.includes('pass'), { timeout: 30000, polling: 500 });
 			await p.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).handleEndTurn());
 		};
+		await play(redP, 'a2');
+		await play(blueP, 'b11');
+		// Both turns in place on both screens before asking.
+		for (const p of [redP, blueP]) {
+			await p.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).turnsPlayed() >= 2, { timeout: 30000, polling: 500 });
+		}
+		// Red asks to take back its turn (and blue's reply); blue accepts;
+		// both pages rebuild from the room, back at the start.
+		const roomOf = (c) => redP.evaluate(async (code) => (await firebase.database().ref('rooms/' + code).once('value')).val(), c);
+		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).canRequestTakeback, { timeout: 30000, polling: 500 });
+		await redP.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).handleTakebackRequest());
+		await blueP.waitForFunction(() => {
+			const g = Alpine.$data(document.querySelector('[x-data^="gameBoard"]'));
+			return !!g.takebackRequest && !g.takebackMine;
+		}, { timeout: 20000, polling: 500 })
+			.then(() => check('blue is asked to accept the takeback', true), () => check('blue is asked to accept the takeback', false));
+		// A turn written while the request stands is still the opponent's to remove only.
+		const tbRoom = await roomOf(code2);
+		const firstKey = Object.keys(tbRoom.turns)[0];
+		const selfRemove = await redP.evaluate(async (c, k) => {
+			try { await firebase.database().ref('rooms/' + c + '/turns/' + k).remove(); return 'ok'; } catch (e) { return e.code; }
+		}, code2, firstKey);
+		check('the requester cannot remove turns itself', selfRemove !== 'ok');
+		await Promise.all([
+			redP.waitForNavigation({ timeout: 60000 }).catch(() => null),
+			blueP.waitForNavigation({ timeout: 60000 }).catch(() => null),
+			blueP.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).handleTakebackAccept()),
+		]);
+		await ready(redP);
+		await ready(blueP);
+		const afterTb = await roomOf(code2);
+		check('takeback removes both turns', !afterTb.turns && !afterTb.takeback, { turns: afterTb.turns, takeback: afterTb.takeback });
+		// The same opening again: the board is back at the start.
 		await play(redP, 'a2');
 		await play(blueP, 'b11');
 		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).turnsPlayed() >= 2, { timeout: 30000, polling: 500 });

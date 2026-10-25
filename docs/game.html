@@ -493,6 +493,15 @@
 							>
 								Reset Turn
 							</button>
+							<!-- Undo your last turn (and the AI's reply); a rated game vs the AI becomes unrated. -->
+							<button
+								class="action-button action-button--take-back"
+								x-bind:class="{ 'is-hidden': !(typeof canTakeBack === 'function' && canTakeBack()) }"
+								x-on:click="handleTakeBack()"
+								title="Take back your last turn"
+							>
+								Take back
+							</button>
 							<button
 								class="action-button action-button--dash"
 								x-bind:class="{ 'is-hidden': !actionList.includes('dash') }"
