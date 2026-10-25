@@ -69,6 +69,9 @@ function installFakeFirebase(cfg) {
 				for (const [k, v] of Object.entries(u)) put((path ? path + '/' : '') + k, v);
 			},
 			orderByChild: () => ref(path),
+			// Listeners (turn-notify.js's "Your move" badge): one snapshot now.
+			on: (ev, cb) => { if (ev === 'value') setTimeout(() => cb(snap(path)), 0); return cb; },
+			off: () => {},
 		};
 	};
 	window.__dbTree = tree;

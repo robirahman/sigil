@@ -222,6 +222,8 @@ test('push tokens: only their owner reads or writes them', async () => {
 	await assertSucceeds(remove(ref(db('bob'), 'push_tokens/bob/' + h)));
 	// users/ stays public, so tokens never go there.
 	await assertSucceeds(get(ref(db(null), 'users/bob')));
+});
+
 test('rooms: lobby settings (public, casual, the creator\'s colour) are fixed at creation', async () => {
 	// The creator may sit in either seat and must name it.
 	const blueSeek = Object.assign({}, waiting, { public: true, casual: true, creatorColor: 'blue',

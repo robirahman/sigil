@@ -100,6 +100,7 @@ async function key(page, k) {
 		await page.setBypassServiceWorker(true);
 		const logs = [];
 		page.on('console', m => { if (m.type() === 'error') logs.push('console: ' + m.text()); });
+		page.on('requestfailed', r => console.log('requestfailed:', r.url(), r.failure() && r.failure().errorText));
 		page.on('pageerror', e => logs.push('pageerror: ' + e.message));
 
 		// ---------------- 1. editor round trip ----------------

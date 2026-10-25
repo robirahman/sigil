@@ -5,7 +5,7 @@
 //      first, with the clock from the turns' server timestamps;
 //   2. "Waiting for opponent" holds the rest (their move, open invites);
 //   3. the header badge reads "Your move (N)";
-//   4. the push toggle stays hidden while FCM_VAPID_KEY is empty;
+//   4. the push toggle shows exactly when FCM_VAPID_KEY is set and the browser can push;
 //   5. a move by the opponent in a correspondence game raises an in-tab
 //      notification (permission granted) and the badge goes up.
 //
@@ -158,7 +158,7 @@ const DAY = 24 * H;
 			const l = document.querySelector('.push-toggle');
 			return { exists: !!l, shown: !!l && getComputedStyle(l).display !== 'none', key: SigilTurns.vapidKey, supported: SigilTurns.pushSupported() };
 		});
-		check('push toggle hidden without a VAPID key', toggle.exists && !toggle.shown && toggle.key === '' && !toggle.supported, toggle);
+		check('push toggle follows the VAPID key and browser support', toggle.exists && toggle.shown === (!!toggle.key && toggle.supported), toggle);
 
 		// Dan moves in the correspondence game: it becomes my move.
 		await rest('PUT', 'rooms/AGCORD/turns/t2', turn('blue', Date.now()));

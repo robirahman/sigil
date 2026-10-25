@@ -16,10 +16,9 @@
  * room-clock.js sideToMove, the rule the server uses.
  */
 (function () {
-	// TODO(Robi): the FCM web push key. Firebase console → Project settings →
-	// Cloud Messaging → Web Push certificates → Generate key pair, and paste
-	// the public key here. While it is empty the push toggle stays hidden.
-	const FCM_VAPID_KEY = '';
+	// The FCM web push key (public half; Firebase console → Project settings
+	// → Cloud Messaging → Web Push certificates). Empty hides the push toggle.
+	const FCM_VAPID_KEY = 'BKF7QWLVOz8iAhj4AmG5qJy6mhJ0x2ARw2mLDZ4pBXDLr9OttUnaigCBKlk3nk3orQ4pRTnTZhywo_dppt_Gud0';
 
 	const PUSH_HASH_KEY = 'sigil-push-token-hash';
 	const script = document.currentScript;
