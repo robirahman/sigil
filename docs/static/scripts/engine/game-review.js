@@ -524,6 +524,37 @@ function aiReviewMixin() {
 		/** Button text for a review mode (engine tier and time per position). */
 		aiReviewModeLabel(mode) { return reviewModeLabel(mode); },
 
+		/**
+		 * Open the analysis board (analysis.html) on review position `index`
+		 * (default: the one shown). The URL carries that position, so the link
+		 * stands alone; the whole game rides along in sessionStorage and
+		 * becomes the board's main line.
+		 */
+		openAnalysis(index) {
+			const sfns = this.reviewSfns || [];
+			if (!sfns.length) return;
+			const i = Math.max(0, Math.min(sfns.length - 1,
+				typeof index === 'number' ? index : (this.reviewIndex || 0)));
+			// Position 0 of a turn line is a pre-turn SFN; the board loads
+			// after-turn ones, so rewind it. A final-only review (an old
+			// export or a failed replay: one position, not labelled 'Start')
+			// already holds an after-turn SFN and must not be rewound.
+			const labels = this.reviewTurnLabels || [];
+			const preTurn0 = sfns.length > 1 || labels[0] === 'Start';
+			const loadable = sfns.map((s, k) => ((k > 0 || preTurn0) && typeof rematchSfnAt === 'function' ? rematchSfnAt(sfns, k) : s));
+			const log = this._gameLogForExport;
+			try {
+				sessionStorage.setItem('sigil_analysis_line', JSON.stringify({
+					sfns: loadable,
+					turns: (log && log.length === sfns.length - 1)
+						? log.map(t => ({ color: t.color, turnNumber: t.turnNumber, kind: t.kind || 'input', actions: t.actions || [] }))
+						: null,
+					index: i,
+				}));
+			} catch (e) { /* sessionStorage blocked: the position alone */ }
+			window.location.href = 'analysis.html?sfn=' + encodeURIComponent(loadable[i]) + '&line=session';
+		},
+
 		async startAiReview(mode) {
 			if (this.aiReviewComputing) return;
 			if (typeof reviewGame !== 'function') return;

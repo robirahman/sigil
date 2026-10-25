@@ -112,8 +112,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Analysis & study
 
-- [ ] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
-- [ ] **Add a board editor** to set up a position and play it against the AI or a friend.
+- [x] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
+- [x] **Add a board editor** to set up a position and play it against the AI or a friend.
 - [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
 - [ ] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
 - [ ] **Add an evaluation cache** so already-analysed positions load instantly.

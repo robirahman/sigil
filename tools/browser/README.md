@@ -65,3 +65,15 @@ account upgrade (`linkWithCredential` / `linkWithPopup`, never a new user) and
 account deletion (typed `DELETE`, one `deleteUserData` callable call and no
 client-side deletes, re-authentication on a stale sign-in or the callable's
 `failed-precondition`, retried once; an error leaves the account intact).
+
+## Analysis board
+
+```sh
+node tools/browser/analysis-test.js docs [port] [--coi]   # editor round trip, move tree, keys, engine eval
+```
+
+Checks `analysis.html`: the editor exports an SFN that reloads identically (URL and
+Load box), a turn played from an earlier node adds a variation, the arrow keys
+navigate the tree, the wasm engine evaluates the node and its best turn plays, and
+`openAnalysis()` (the review "Analyse" button) opens the game line. `--coi` serves
+with COOP/COEP for the threaded engine.

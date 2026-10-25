@@ -794,6 +794,7 @@
 							x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'"
 							x-bind:disabled="aiReviewComputing"
 							x-text="aiReviewComputing && aiReviewActiveMode === 'deep' ? 'Reviewing... ' + Math.round(aiReviewProgress * 100) + '%' : (aiReview && aiReview.mode === 'deep' ? 'Open Deep Review' : aiReviewModeLabel('deep'))"></button>
+						<button class="win-modal__btn" x-on:click="openAnalysis(reviewSfns.length - 1)" x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'">Analyse</button>
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0 && rematchStage !== 'rematch'" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<a class="win-modal__btn" href="./" x-show="rematchStage !== 'rematch'">Main Menu</a>
 						<button class="win-modal__btn"
@@ -854,6 +855,10 @@
 						x-on:click="playOnlineFromPosition"
 						x-bind:disabled="reviewReplaying"
 						title="Open an online room from this position">Play online from here</button>
+					<button class="review-bar__btn review-bar__btn--text"
+						x-on:click="openAnalysis()"
+						x-bind:disabled="reviewReplaying"
+						title="Open this position on the analysis board">Analyse</button>
 					<button class="review-bar__btn review-bar__btn--exit" x-on:click="exitReview">&#x2715;</button>
 				</div>
 

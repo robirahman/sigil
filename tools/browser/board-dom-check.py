@@ -13,7 +13,7 @@ import sys
 from html.parser import HTMLParser
 from pathlib import Path
 
-PAGES = ['game.html', 'multiplayer.html', 'puzzles.html', 'annotate.html']
+PAGES = ['game.html', 'multiplayer.html', 'puzzles.html', 'annotate.html', 'analysis.html']
 VOID = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
         'meta', 'source', 'track', 'wbr', 'path', 'circle', 'line', 'rect',
         'polyline', 'polygon', 'use', 'ellipse'}

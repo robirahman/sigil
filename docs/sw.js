@@ -36,6 +36,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./profile.html',
 	'./puzzles.html',
 	'./tutorial.html',
+	'./analysis.html',
 	'./annotate.html',
 	'./spells.html',
 	'./spells/index.html',
@@ -61,6 +62,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/board-geometry.js',
+	'./static/scripts/analysis-board.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/tutorial-lessons.js',
 	'./static/scripts/game-board-local.js?v=34',
@@ -249,11 +251,11 @@ async function cachedPage(url) {
 // (the coi-serviceworker pattern) and COEP to the engine's worker scripts.
 // `credentialless` (not require-corp) keeps the CDN scripts, fonts and Firebase
 // loading without CORP headers; browsers without it (Safari) simply stay
-// un-isolated and the engine runs on one thread, as before. game.html has no
-// sign-in (COOP same-origin would break the Google sign-in popup), so only the
-// game page is isolated. The first visit, before this worker controls the page,
-// is never isolated.
-const ISOLATED_PAGES = ['/game.html'];
+// un-isolated and the engine runs on one thread, as before. Only pages without
+// sign-in (COOP same-origin would break the Google sign-in popup) are isolated:
+// the game page and the analysis board. The first visit, before this worker
+// controls the page, is never isolated.
+const ISOLATED_PAGES = ['/game.html', '/analysis.html'];
 function isIsolatedPage(url) {
 	return ISOLATED_PAGES.some((p) => url.pathname.endsWith(p));
 }
