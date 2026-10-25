@@ -7,12 +7,12 @@
 Each attempt is a game between the tier and the puzzle: the puzzle wins when the
 tier fails to solve it. A puzzle's rating is its maximum a posteriori Elo against
 the tiers it met (P(tier solves) = 1 / (1 + 10^((R_puzzle - R_tier) / 400))) under
-a normal prior. Four results cannot place a puzzle every tier solves (or none
-does) on their own -- and the tiers solve most puzzles -- so the prior carries
-the rest: its mean is fitted per class and difficulty level (mate in 1/2/3,
-winning turn; the generator's 1-5) by maximising the marginal likelihood of that
-cell's attempts (empirical Bayes), with PRIOR_SD. Puzzles every tier solves
-then still differ by how hard the generator found them.
+a normal prior (sd PRIOR_SD). A handful of results cannot place a puzzle every
+tier solves (or none does) on their own; the prior keeps those finite, below
+the weakest tier (above the strongest). Its mean is the tiers' mean rating
+(--prior global), or fitted per class and difficulty level by marginal
+likelihood (--prior cell), which runs to the grid's edge in cells where every
+tier solves everything. Players' attempts move the ratings from there.
 
 Writes `rating` (integer) and `ai` (the tiers that solved it) into each puzzle.
 With --seed-firebase, sets puzzle_ratings/<id> = {rating, plays: 0} for every
@@ -88,6 +88,9 @@ def main():
     ap.add_argument('--out', default=None)
     ap.add_argument('--seed-firebase', default=None, help='service-account JSON')
     ap.add_argument('--apply', action='store_true')
+    ap.add_argument('--prior', choices=['global', 'cell'], default='global',
+                    help="prior mean: the tiers' mean rating (global), or fitted per class and difficulty (cell; "
+                         "drifts to the grid's edge where every tier solves every puzzle in a cell)")
     args = ap.parse_args()
     with open(args.tiers, encoding='utf-8') as fh:
         tiers = json.load(fh)['ratings']
@@ -102,14 +105,19 @@ def main():
             missing += 1
         results[p['id']] = res
         cells.setdefault((p['kind'], p.get('mate'), p.get('difficulty')), []).append(p['id'])
-    means = {c: cell_prior_mean([results[i] for i in ids]) for c, ids in cells.items()}
+    if args.prior == 'cell':
+        means = {c: cell_prior_mean([results[i] for i in ids]) for c, ids in cells.items()}
+    else:
+        flat = sum(tiers.values()) / len(tiers)
+        means = {c: flat for c in cells}
     for c in sorted(means, key=lambda c: (str(c[0]), c[1] or 9, c[2] or 0)):
         print(f'  prior mean {c}: {means[c]} ({len(cells[c])} puzzles)')
     for p in data['puzzles']:
         p['rating'] = map_rating(results[p['id']], means[(p['kind'], p.get('mate'), p.get('difficulty'))])
         p['ai'] = sorted(t for t in tiers if att.get((p['id'], t)))
-    data['rating'] = {'method': 'MAP Elo vs the AI tiers; normal prior (sd %.0f) with its mean fitted per '
-                                'class and difficulty by marginal likelihood' % PRIOR_SD,
+    data['rating'] = {'method': ('MAP Elo vs the AI tiers; normal prior (sd %.0f), mean = ' % PRIOR_SD)
+                                + ('fitted per class and difficulty by marginal likelihood' if args.prior == 'cell'
+                                   else "the tiers' mean rating"),
                       'tiers': tiers,
                       'prior_means': {'%s%s:%s' % (c[0], c[1] or '', c[2]): m for c, m in means.items()}}
     rs = sorted(p['rating'] for p in data['puzzles'])
