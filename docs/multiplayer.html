@@ -963,7 +963,7 @@
 							// If the user IS the creator (matched by uid), reattach
 							// to the creator's seat rather than auto-joining.
 							const creator = roomData.creatorColor === 'blue' ? 'blue' : 'red';
-							const userInfo = _authManager ? _authManager.getUserInfo() : null;
+							const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
 							const isCreator = userInfo && userInfo.uid &&
 								roomData[creator] && roomData[creator].uid === userInfo.uid;
 							if (isCreator) {
@@ -1156,7 +1156,7 @@
 						if (!spellNames) {
 							spellNames = generateSpellList(readStoredExpansions(), this.duplicatesVariant);
 						}
-						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
 						const timeControl = this._getTimeControl();
 						let variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
 						let fromPosition = null, creatorColor = 'red';
@@ -1209,7 +1209,7 @@
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
-						const userInfo = _authManager ? _authManager.getUserInfo() : null;
+						const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
 						// A waiting room from a position is priced for the joiner first.
 						if (confirmed !== true) {
 							const code = this.joinCode.toUpperCase();
