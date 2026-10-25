@@ -33,7 +33,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [ ] **Add an open-game lobby / quick-pair.** Online play is room-code only.
   Add a "seek a game at this time control" list.
 - [ ] **Add a "watch live games" list** for rooms that allow spectators. Spectating currently needs a shared link.
-- [ ] **Add turn notifications for correspondence games** (12h / 24h / 3d), using the browser Notification API or Web Push through `docs/sw.js`.
+- [x] **Add turn notifications for correspondence games** Done: an open site tab notifies when it becomes your move (correspondence, or any game while the tab is hidden), and "Notify me when it's my move" on active-games.html registers a web push (FCM) that the `notifyTurn` function sends; needs the FCM web push key in `turn-notify.js`. (12h / 24h / 3d), using the browser Notification API or Web Push through `docs/sw.js`.
 - [x] **Handle disconnects properly.** Done: the server stamps `disconnectedAt` on a dropped seat; the opponent sees a countdown, "reconnected", and after 60 s can claim the game (checked by the rating function); the `expireClocks` function ends flagged games with no tab open. Add a grace-period countdown, a "reconnected" event and claim-win / abort on abandonment.
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
@@ -107,6 +107,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add zen mode** that hides everything but the board and clocks.
 - [ ] **Add board flip** and a choice of which side the board is drawn from.
 - [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
+  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Vacation / pause is open: it changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
 - [ ] **Add move input by typed notation**, and optionally by voice.
 - [ ] **Let players draw arrows and circles** on the board during play and analysis.
 - [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.

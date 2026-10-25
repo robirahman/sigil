@@ -13,6 +13,9 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): cache-first for what we
  *     cached, network otherwise
+ *
+ * It also shows "Your move" web pushes (the push and notificationclick
+ * handlers at the end).
  */
 
 // Spell lists (CORE_* and EXPANSIONS) for the spell-art precache below. The
@@ -59,6 +62,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/form.css',
 	'./static/scripts/theme-manager.js',
 	'./static/scripts/auth-status.js',
+	'./static/scripts/turn-notify.js',
+	'./static/scripts/engine/room-clock.js',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/settings-panel.js',
@@ -404,5 +409,36 @@ self.addEventListener('fetch', (event) => {
 		} catch (e) {
 			throw e;
 		}
+	})());
+});
+
+// ---- "Your move" web push ----
+// The FCM token is made against this worker (turn-notify.js enablePush passes
+// its registration to messaging.getToken), so pushes arrive here rather
+// than at a separate firebase-messaging-sw.js: two workers cannot share the
+// site's scope. functions/notify.js sends data-only messages; FCM delivers
+// them as {data: {...}} JSON, and the worker shows them itself.
+self.addEventListener('push', (event) => {
+	let payload = {};
+	try { payload = event.data ? event.data.json() : {}; } catch (e) { /* not JSON */ }
+	const d = payload.data || {};
+	const n = payload.notification || {};
+	const url = d.url || 'active-games.html';
+	event.waitUntil(self.registration.showNotification(d.title || n.title || 'Your move in Sigil', {
+		body: d.body || n.body || '',
+		tag: d.tag || (d.room ? 'sigil-turn-' + d.room : 'sigil-turn'),
+		icon: './static/images/logo-icon.svg',
+		data: { url },
+	}));
+});
+
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const target = new URL((event.notification.data && event.notification.data.url) || 'active-games.html', self.registration.scope).href;
+	event.waitUntil((async () => {
+		const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+		const same = wins.find((c) => c.url === target);
+		if (same) return same.focus();
+		return self.clients.openWindow(target);
 	})());
 });

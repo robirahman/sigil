@@ -25,7 +25,10 @@
  */
 
 const crypto = require('crypto');
-const { freshEngine } = require('./engine-loader');
+const { freshEngine, requireShared } = require('./engine-loader');
+// roomTurns, sideToMove and the clocks are shared with the site's
+// active-games list (docs/static/scripts/engine/room-clock.js).
+const { roomTurns, sideToMove, roomTimeLeft } = requireShared('room-clock.js');
 
 const AI_UID = /^__ai_[a-z0-9_]+__$/;
 // Network slack allowed on a loss on time.
@@ -40,16 +43,6 @@ const other = (c) => (c === 'red' ? 'blue' : 'red');
 
 function unrated(reason) {
 	return { rated: false, reason };
-}
-
-/** A room's turns in the order they were played: [{color, actions, timestamp}]. */
-function roomTurns(room) {
-	const turns = room.turns || {};
-	// By the server timestamp (the rules make it the write time); push ids
-	// carry each client's own clock, so between two clients they can tie.
-	return Object.keys(turns)
-		.sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0))
-		.map((k) => turns[k]);
 }
 
 /**
@@ -78,37 +71,14 @@ function onlineTranscript(room) {
 
 /**
  * Did `loser` run out of time by `now`? Recomputed from the turns' server
- * timestamps, not from the clients' timer node. The first move of the game
- * is never charged (its start time is not on the server).
+ * timestamps (room-clock.js), not from the clients' timer node. Before
+ * the first move, the first mover's clock runs from the start of the game
+ * (startedAt, server time, written with the join).
  */
 function flagged(room, loser, now) {
-	const tc = room.timeControl || {};
-	const turns = roomTurns(room);
-	if (!turns.length) {
-		// Nobody has moved: the first mover's clock runs from the start of
-		// the game (startedAt, server time, written with the join).
-		if (typeof room.startedAt !== 'number' || sideToMove(room) !== loser) return false;
-		if (tc.type === 'correspondence') {
-			return typeof tc.moveTimeout === 'number' && now >= room.startedAt + tc.moveTimeout - CLOCK_GRACE_MS;
-		}
-		return tc.type === 'realtime' && typeof tc.initialTime === 'number'
-			&& tc.initialTime - (now - room.startedAt) <= CLOCK_GRACE_MS;
-	}
-	const last = turns[turns.length - 1];
-	if (last.color === loser || typeof last.timestamp !== 'number') return false;
-	if (tc.type === 'correspondence') {
-		return typeof tc.moveTimeout === 'number' && now >= last.timestamp + tc.moveTimeout - CLOCK_GRACE_MS;
-	}
-	if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number') return false;
-	const inc = tc.increment || 0;
-	let remaining = tc.initialTime;
-	let prevTs = null;
-	for (const t of turns) {
-		if (typeof t.timestamp !== 'number') return false;
-		if (t.color === loser && prevTs !== null) remaining += inc - (t.timestamp - prevTs);
-		prevTs = t.timestamp;
-	}
-	return remaining - (now - last.timestamp) <= CLOCK_GRACE_MS;
+	if (sideToMove(room) !== loser) return false;
+	const left = roomTimeLeft(room, loser, now);
+	return left !== null && left <= CLOCK_GRACE_MS;
 }
 
 /**
@@ -131,16 +101,6 @@ function abandoned(room, loser, now) {
 	const live = seat.conns ? Object.keys(seat.conns).length > 0 : seat.connected !== false;
 	return !live && typeof seat.disconnectedAt === 'number'
 		&& now - seat.disconnectedAt >= ABANDON_GRACE_MS - CLOCK_GRACE_MS;
-}
-
-/** The side to move in a room: after the last turn, or the first mover. */
-function sideToMove(room) {
-	const turns = roomTurns(room);
-	if (turns.length) return other(turns[turns.length - 1].color);
-	// A room's startSfn is the position before the first turn: the game
-	// loop advances the counter and gives the move by parity (odd = red).
-	const c = room.startSfn ? parseInt(String(room.startSfn).split(' ')[2], 10) || 0 : 0;
-	return (c + 1) % 2 === 1 ? 'red' : 'blue';
 }
 
 /**
