@@ -187,6 +187,7 @@ document.addEventListener('alpine:init', () => {
 			syncPending: 0,
 			syncError: null,
 			opponentGoneSince: null,
+			opponentOffline: false,
 			gameAborted: false,
 			_presenceTick: 0,
 			_presenceTimer: null,
@@ -208,7 +209,8 @@ document.addEventListener('alpine:init', () => {
 			},
 			get opponentAwayText() {
 				void this._presenceTick;
-				if (this.isSpectator || this.winner || this.gameAborted || this.opponentGoneSince === null) return '';
+				if (this.isSpectator || this.winner || this.gameAborted) return '';
+				if (this.opponentGoneSince === null) return this.opponentOffline ? 'Your opponent is offline.' : '';
 				if (this.timerType === 'correspondence') return 'Your opponent is offline.';
 				const left = this.claimSecondsLeft();
 				return left > 0
@@ -237,6 +239,12 @@ document.addEventListener('alpine:init', () => {
 			get canRequestTakeback() {
 				void this._presenceTick;
 				const log = this._engine && this._engine._gameLog;
+				// Not in correspondence games, nor a timed game's opening turns
+				// (firebase-sync.js requestTakeback says why).
+				const sync = this._engine && this._engine.sync;
+				const tc = (sync && sync.timeControl) || {};
+				if (tc.type === 'correspondence') return false;
+				if (tc.type === 'realtime' && sync && sync._turnKeys && sync._turnKeys.length <= 2) return false;
 				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !this.takebackRequest
 					&& !!log && log.some((t) => t.color === this.myColor);
 			},
@@ -909,8 +917,11 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'opponent_presence') {
 						const wasGone = _this.opponentGoneSince !== null;
-						_this.opponentGoneSince = rest.connected ? null
-							: (rest.disconnectedAt || (_this._engine && _this._engine.sync ? _this._engine.sync.serverNow() : Date.now()));
+						// Only the server's stamp counts (the rating function judges a
+						// claim by it): an older client's seat without one shows as
+						// offline but never offers Claim win.
+						_this.opponentGoneSince = rest.connected ? null : (rest.disconnectedAt || null);
+						_this.opponentOffline = !rest.connected;
 						if (wasGone && rest.connected && !_this.winner) _this.messageHistory.push('Your opponent reconnected.');
 						// A one-second tick while they are gone drives the countdown.
 						clearInterval(_this._presenceTimer);

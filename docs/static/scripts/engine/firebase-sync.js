@@ -208,14 +208,32 @@ class FirebaseSync {
 		this._writeActiveGameIndex(me);
 
 		roomRef.child(other + '/connected').on('value', (snap) => {
-			if (snap.val() === true && this.onOpponentJoin) {
-				this._refreshPlayers().then(() => this.onOpponentJoin && this.onOpponentJoin());
-			}
+			if (snap.val() === true) this._opponentArrived();
 		});
 
 		this._listenForTurns();
 		await this._goOnline(me);
 		return code;
+	}
+
+	/**
+	 * The opponent's seat came online. A public room can be joined before
+	 * the lobby has installed onOpponentJoin (createRoom is still running):
+	 * the arrival is kept and delivered when the handler is set.
+	 */
+	_opponentArrived() {
+		if (!this._onOpponentJoin) { this._arrivalPending = true; return; }
+		this._refreshPlayers().then(() => this._onOpponentJoin && this._onOpponentJoin());
+	}
+
+	get onOpponentJoin() { return this._onOpponentJoin || null; }
+
+	set onOpponentJoin(fn) {
+		this._onOpponentJoin = fn;
+		if (fn && this._arrivalPending) {
+			this._arrivalPending = false;
+			this._opponentArrived();
+		}
 	}
 
 	/**
@@ -954,9 +972,7 @@ class FirebaseSync {
 		this._writeActiveGameIndex(me);
 
 		roomRef.child(other + '/connected').on('value', (snap) => {
-			if (snap.val() === true && this.onOpponentJoin) {
-				this._refreshPlayers().then(() => this.onOpponentJoin && this.onOpponentJoin());
-			}
+			if (snap.val() === true) this._opponentArrived();
 		});
 
 		this._listenForTurns();
@@ -1058,6 +1074,12 @@ class FirebaseSync {
 		const lastMine = keys.length && turns[keys[keys.length - 1]].color === this.myColor;
 		const undo = keys.slice(lastMine ? -1 : -2);
 		if (!undo.length || turns[undo[0]].color !== this.myColor) return false;
+		// The server's clocks run from the turns' timestamps (room-clock.js):
+		// a correspondence deadline would not restart, and a timed game with
+		// no turn left would lose its anchor. Those takebacks are not offered.
+		const tc = this.timeControl || {};
+		if (tc.type === 'correspondence') return false;
+		if (tc.type === 'realtime' && undo.length >= keys.length) return false;
 		const map = {};
 		for (const k of undo) map[k] = true;
 		try {
