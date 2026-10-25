@@ -788,15 +788,26 @@ function aiReviewMixin() {
 		},
 
 		/** The blunder dots as SVG markup (see the graph in game.html). */
+		/** The blunder dots as SVG markup (see the graph in game.html). Each is
+		 *  a focusable button: Enter or Space jumps to it like a click. */
 		aiReviewGraphDotsSvg() {
-			return this.aiReviewGraphDots().map(d =>
-				`<circle cx="${d.x}" cy="${d.y}" r="3.5" data-ply="${d.ply}" `
-				+ `class="ai-review-graph__dot ai-review-graph__dot--${d.cls}"></circle>`).join('');
+			return this.aiReviewGraphDots().map(d => {
+				const label = (this.reviewTurnLabels && this.reviewTurnLabels[d.ply + 1]) || ('Move ' + (d.ply + 1));
+				return `<circle cx="${d.x}" cy="${d.y}" r="3.5" data-ply="${d.ply}" tabindex="0" role="button" `
+					+ `aria-label="${String(label + ': ' + d.cls).replace(/[&"<>]/g, ch => '&#' + ch.charCodeAt(0) + ';')}" `
+					+ `class="ai-review-graph__dot ai-review-graph__dot--${d.cls}"></circle>`;
+			}).join('');
 		},
 
 		onReviewGraphDotClick(ev) {
 			const ply = ev && ev.target && ev.target.getAttribute && ev.target.getAttribute('data-ply');
 			if (ply !== null && ply !== undefined && ply !== '') this.jumpToReviewPly(Number(ply) + 1);
+		},
+
+		onReviewGraphDotKey(ev) {
+			if (ev.key !== 'Enter' && ev.key !== ' ') return;
+			ev.preventDefault();
+			this.onReviewGraphDotClick(ev);
 		},
 
 		jumpToReviewPly(plyIdx) {

@@ -61,6 +61,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/auth-status.js',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
+	'./static/scripts/settings-panel.js',
+	'./static/scripts/game-keys.js',
 	'./static/scripts/board-geometry.js',
 	'./static/scripts/analysis-board.js',
 	'./static/scripts/game-board-local.js',

@@ -4,8 +4,12 @@
  */
 class SoundManager {
 	constructor() {
-		this.muted = localStorage.getItem('sigil_muted') === 'true';
+		this.muted = false;
+		try { this.muted = localStorage.getItem('sigil_muted') === 'true'; } catch (e) { /* storage blocked */ }
+		// Master volume 0..1, set from the settings panel (settings-panel.js).
+		this.volume = typeof SigilSettings !== 'undefined' ? SigilSettings.get('volume') : 1;
 		this._ctx = null;
+		this._gain = null;
 	}
 
 	_ensureCtx() {
@@ -18,17 +22,31 @@ class SoundManager {
 		return this._ctx;
 	}
 
+	// Every sound ends in this master gain, which carries the volume.
+	_out(ctx) {
+		if (!this._gain) {
+			this._gain = ctx.createGain();
+			this._gain.connect(ctx.destination);
+		}
+		this._gain.gain.value = this.volume;
+		return this._gain;
+	}
+
 	play(name) {
-		if (this.muted) return;
+		if (this.muted || !(this.volume > 0)) return;
 		try {
 			const fn = this['_snd_' + name];
 			if (fn) fn.call(this);
 		} catch (e) { /* ignore audio errors */ }
 	}
 
+	setMuted(muted) {
+		this.muted = muted;
+		try { localStorage.setItem('sigil_muted', String(this.muted)); } catch (e) { /* storage blocked */ }
+	}
+
 	toggleMute() {
-		this.muted = !this.muted;
-		localStorage.setItem('sigil_muted', String(this.muted));
+		this.setMuted(!this.muted);
 		return this.muted;
 	}
 
@@ -45,7 +63,7 @@ class SoundManager {
 		osc.frequency.exponentialRampToValueAtTime(80, t + 0.08);
 		gain.gain.setValueAtTime(0.3, t);
 		gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-		osc.connect(gain).connect(ctx.destination);
+		osc.connect(gain).connect(this._out(ctx));
 		osc.start(t);
 		osc.stop(t + 0.12);
 	}
@@ -69,7 +87,7 @@ class SoundManager {
 		filter.type = 'lowpass';
 		filter.frequency.setValueAtTime(2000, t);
 		filter.frequency.exponentialRampToValueAtTime(200, t + 0.2);
-		noise.connect(filter).connect(gain).connect(ctx.destination);
+		noise.connect(filter).connect(gain).connect(this._out(ctx));
 		noise.start(t);
 		noise.stop(t + 0.25);
 	}
@@ -88,7 +106,7 @@ class SoundManager {
 		const filter = ctx.createBiquadFilter();
 		filter.type = 'lowpass';
 		filter.frequency.value = 800;
-		osc.connect(filter).connect(gain).connect(ctx.destination);
+		osc.connect(filter).connect(gain).connect(this._out(ctx));
 		osc.start(t);
 		osc.stop(t + 0.25);
 	}
@@ -106,7 +124,7 @@ class SoundManager {
 		gain1.gain.setValueAtTime(0.2, t);
 		gain1.gain.setValueAtTime(0.2, t + 0.15);
 		gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-		osc1.connect(gain1).connect(ctx.destination);
+		osc1.connect(gain1).connect(this._out(ctx));
 		osc1.start(t);
 		osc1.stop(t + 0.5);
 		// Shimmer
@@ -117,7 +135,7 @@ class SoundManager {
 		osc2.frequency.exponentialRampToValueAtTime(1200, t + 0.4);
 		gain2.gain.setValueAtTime(0.1, t);
 		gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
-		osc2.connect(gain2).connect(ctx.destination);
+		osc2.connect(gain2).connect(this._out(ctx));
 		osc2.start(t);
 		osc2.stop(t + 0.5);
 	}
@@ -136,7 +154,7 @@ class SoundManager {
 			gain.gain.setValueAtTime(0, start);
 			gain.gain.linearRampToValueAtTime(0.2, start + 0.02);
 			gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4);
-			osc.connect(gain).connect(ctx.destination);
+			osc.connect(gain).connect(this._out(ctx));
 			osc.start(start);
 			osc.stop(start + 0.4);
 		});
@@ -156,7 +174,7 @@ class SoundManager {
 			gain.gain.linearRampToValueAtTime(0.15, t + 0.05);
 			gain.gain.setValueAtTime(0.15, t + 0.4);
 			gain.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
-			osc.connect(gain).connect(ctx.destination);
+			osc.connect(gain).connect(this._out(ctx));
 			osc.start(t);
 			osc.stop(t + 1.0);
 		});
@@ -168,7 +186,7 @@ class SoundManager {
 		gain.gain.setValueAtTime(0, t + 0.3);
 		gain.gain.linearRampToValueAtTime(0.25, t + 0.35);
 		gain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
-		osc.connect(gain).connect(ctx.destination);
+		osc.connect(gain).connect(this._out(ctx));
 		osc.start(t + 0.3);
 		osc.stop(t + 1.2);
 	}

@@ -759,9 +759,18 @@ document.addEventListener('alpine:init', () => {
 				this.actionList = [];
 			},
 
+			// Armed by a first End Turn when "Confirm before ending a turn"
+			// is on (confirmEndTurn, game-keys.js).
+			endTurnArmed: false,
+			_endTurnTimer: null,
 			handleEndTurn() {
+				if (!confirmEndTurn(this)) return;
 				this.sendEvent('pass');
 				this.actionList = [];
+			},
+
+			nodeLabel(node) {
+				return nodeAriaLabel(this, node);
 			},
 
 			handleSubmit() {
@@ -844,6 +853,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			handleReset() {
+				this.endTurnArmed = false;
 				this.sendEvent('reset');
 				this.actionList = [];
 				this.lastPlay = '';
@@ -878,6 +888,9 @@ document.addEventListener('alpine:init', () => {
 				const _this = this;
 
 				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
+
+				// A new prompt (Reset Turn, a cast) cancels an armed End Turn.
+				_this.$watch('actionList', () => { _this.endTurnArmed = false; });
 
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => {
@@ -1655,23 +1668,8 @@ document.addEventListener('alpine:init', () => {
 				} else if (_offerSides) _pickSideFromPosition().then(initEngine);
 				else initEngine();
 
-				// Keyboard shortcuts
-				document.addEventListener('keydown', (e) => {
-					const tag = document.activeElement?.tagName;
-					if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-					if (e.key === 'Enter' && _this.actionList.includes('pass')) {
-						e.preventDefault();
-						_this.handleEndTurn();
-					}
-					if (e.key === 'Enter' && _this.actionList.includes('submit')) {
-						e.preventDefault();
-						_this.handleSubmit();
-					}
-					if (e.key === 'd' && _this.actionList.includes('dash')) {
-						e.preventDefault();
-						_this.handleDash();
-					}
-				});
+				// Keyboard shortcuts (game-keys.js, shared with multiplayer)
+				bindGameKeys(_this);
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
@@ -2369,7 +2367,7 @@ document.addEventListener('alpine:init', () => {
 					setTimeout(() => {
 						if (_this.$refs.gameBoardContainer) {
 							_this.$refs.gameBoardContainer.scrollIntoView({
-								behavior: 'smooth',
+								behavior: sigilScrollBehavior(),
 								block: 'center',
 								inline: 'center',
 							});
@@ -2466,7 +2464,7 @@ document.addEventListener('alpine:init', () => {
 						setTimeout(() => {
 							const el = document.getElementById(`stone-node--${payload.node}`);
 							if (el) {
-								el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+								el.scrollIntoView({ behavior: sigilScrollBehavior(), block: 'center', inline: 'center' });
 							}
 						}, 50);
 					} else {
