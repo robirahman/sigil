@@ -45,15 +45,15 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Showing data the site already stores
 
-- [ ] **Show the rating change after a game** (e.g. +12 / −8). `eloChange` and the before/after Elo are stored but never shown.
-- [ ] **Show whether a game is rated**, before and during it (`docs/multiplayer.html:261` only says "Sign in for ranked play").
-- [ ] **Show the spectator count to players.** It is written to `rooms/X/spectators` but never displayed.
+- [x] **Show the rating change after a game** (e.g. +12 / −8). Done: each signed-in player's game-over modal and log show the server's `user_games` entry ("Rating: +12 (1456 → 1468)" or "Unrated: <why>"). `eloChange` and the before/after Elo are stored but never shown.
+- [x] **Show whether a game is rated**, before and during it. Done: a Rated / Casual badge for the typed room code, the waiting room and the position-join screen, and in the game header (`docs/multiplayer.html:261` only says "Sign in for ranked play").
+- [x] **Show the spectator count to players.** Done: an eye and count in the game header. It is written to `rooms/X/spectators` but never displayed.
 - [x] **Keep unrated, variant and casual games in profile history.** Done: `rateGame` indexes every signed-in game, marked `rated: false` when unrated. `/user_games` is written only inside `processEloClientSide` (`engine/elo.js:109-135`).
 - [ ] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`.
-- [ ] **Improve the leaderboard** (`docs/leaderboard.html`):
-  - [ ] Add a provisional-rating marker or a minimum number of games.
-  - [ ] Add player search and "find me".
-  - [ ] Load only the top N (`limitToLast`) instead of every entry.
+- [x] **Improve the leaderboard** (`docs/leaderboard.html`):
+  - [x] Add a provisional-rating marker or a minimum number of games. Done: "?" under 10 games.
+  - [x] Add player search and "find me".
+  - [x] Load only the top N (`limitToLast`) instead of every entry. Done: top 200.
 - [ ] **Merge the lobby's "Active Games" list into `docs/active-games.html`.** The lobby list reads localStorage (`docs/multiplayer.html:1093-1120`) and shows "Waiting..." for every untimed game.
 
 ## Puzzles

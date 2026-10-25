@@ -35,7 +35,7 @@ npm run test:e2e     # rules + functions + auth emulators, through the client SD
 
 `test/online-game.json` is a complete game of input transcripts. It is produced by `node test/gen-online-fixture.js`.
 
-`tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators (see its header).
+`tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators (see its header); `show-data-emulator-test.js` checks the Rated / Casual badges, the spectator count and the rating line after a game, and `leaderboard-emulator-test.js` the leaderboard.
 
 ## Deploy
 
