@@ -196,6 +196,7 @@ const CROSS_ORIGIN_PRECACHE = [
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js',
+	'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js',
 	'https://use.typekit.net/rot4udi.css',
 	'https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap',
 ];

@@ -40,7 +40,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [ ] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move: done (later aborts count as forfeits). Draws and takebacks: open.
 - [ ] **Add in-game chat or preset emotes.**
 - [ ] **Add a friends / follow list** with "challenge" from a profile.
-- [ ] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
+- [x] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
 - [x] **Clean up stale rooms.** Game invite rooms (unjoined waiting rooms) expire after 72 hours and are pruned from rooms/ and user_active_games/. Finished rooms are pruned when someone opens `docs/active-games.html` (`:304-308`), and `ai/purge_stale_rooms.py` is available for maintenance.
 
 ## Showing data the site already stores
@@ -165,7 +165,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [ ] **Add game search** by player, result, spell layout and date.
 - [ ] **Add bulk export** of all a player's games.
 - [ ] **Add trophies, badges and verified titles.**
-- [ ] **Add account closing, two-factor authentication and an active-sessions list.**
+- [x] **Add account closing** (Danger zone on the account page).
+- [ ] **Add two-factor authentication and an active-sessions list.**
 - [ ] **Add detailed preferences:** board and stone appearance, sounds, clock display, resignation confirmation, blind mode.
 - [ ] **Translate the interface** into multiple languages.
 
