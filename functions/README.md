@@ -3,6 +3,9 @@
 | function | trigger | what it does |
 |---|---|---|
 | `rateGame` | new `completed_games/{id}` | Checks the result (`rating.js`) and is the only writer of Elo, `gamesPlayed` / `wins` / `losses`, the leaderboard ratings and `user_games`. |
+| `recordRoom` | `rooms/{code}/status` → finished | Writes the game's `completed_games` record and `rooms/{code}/gameId`. |
+| `expireClocks` | every minute | Ends playing rooms whose clock ran out with no tab open (from the turns' server timestamps). |
+| `settleAbort` | new `rooms/{code}/abortedBy` | An abort after both players moved becomes a forfeit by the aborter. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
 
 ## How a result is checked
@@ -11,6 +14,8 @@
   - A natural end is replayed with the site's own engine (`engine-loader.js` runs `docs/static/scripts/engine/`), and it must end with the claimed winner.
   - A forfeit must be the loser's own `forfeitedBy` write.
   - A loss on time is recomputed from the turns' server timestamps.
+  - A claim that the opponent left (`endReason: 'abandon'`) needs their seat marked gone, by the server's onDisconnect stamp, for 60 s, after both players have moved.
+  - A result that does not follow from the room is rated as a forfeit by whoever wrote it (`finishedBy`).
 - **Games against the AI** are replayed the same way.
   - A human win must end on the board.
   - A resignation or flag is rated only when the AI won.

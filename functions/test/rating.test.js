@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { judgeGame, ratingUpdates, flagged, firstTurnNumber, freshEngine } = require('../rating');
+const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, ABANDON_GRACE_MS, freshEngine } = require('../rating');
 const AI = require('./ai-games.json');
 const ONLINE = require('./online-game.json');
 
@@ -212,6 +212,12 @@ test('a loss on time is recomputed from the turn timestamps', () => {
 	assert.strictEqual(flagged(room, 'red', t0 + 500_000), false);
 	room.timeControl.increment = 5_000;
 	assert.strictEqual(flagged(room, 'blue', t0 + 79_000), false);
+	// Nobody has moved: the first mover's clock runs from startedAt.
+	const fresh = { timeControl: { type: 'realtime', initialTime: 60_000 }, startedAt: t0 };
+	assert.strictEqual(flagged(fresh, 'red', t0 + 30_000), false);
+	assert.strictEqual(flagged(fresh, 'red', t0 + 59_000), true);
+	assert.strictEqual(flagged(fresh, 'blue', t0 + 600_000), false);
+	assert.strictEqual(flagged({ timeControl: fresh.timeControl }, 'red', t0 + 600_000), false);
 	const corr = { timeControl: { type: 'correspondence', moveTimeout: 86_400_000 }, turns: room.turns };
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 3_600_000), false);
 	assert.strictEqual(flagged(corr, 'blue', t0 + 50_000 + 86_400_000), true);
@@ -223,6 +229,30 @@ test('turn numbers follow both start-SFN conventions', () => {
 	assert.strictEqual(firstTurnNumber(AI.W3ZZGX.setupSfn, 'red'), 17);
 	// A room's startSfn is the position before it (tools/browser/position-room-test.js: 'r 13', Blue moves at 14).
 	assert.strictEqual(firstTurnNumber('r..b/A,B r 13 0:0 -:- -:- b1', 'blue'), 14);
+});
+
+test('a game can be claimed only after the opponent has been gone for the grace period', async () => {
+	const t0 = 1_000_000;
+	const room = { timeControl: { type: 'realtime', initialTime: 600_000 },
+		turns: { a: { color: 'red', timestamp: t0 }, b: { color: 'blue', timestamp: t0 + 1000 } },
+		red: { uid: 'alice', connected: true }, blue: { uid: 'bob', connected: false, disconnectedAt: t0 + 2000 } };
+	assert.strictEqual(abandoned(room, 'blue', t0 + 2000 + 30_000), false);
+	assert.strictEqual(abandoned(room, 'blue', t0 + 2000 + ABANDON_GRACE_MS), true);
+	assert.strictEqual(abandoned(room, 'red', t0 + 10_000_000), false);
+	// Back again, or before both have moved, or by correspondence: no claim.
+	assert.strictEqual(abandoned(Object.assign({}, room, { blue: { connected: true } }), 'blue', t0 + 10_000_000), false);
+	assert.strictEqual(abandoned(Object.assign({}, room, { turns: { a: room.turns.a } }), 'blue', t0 + 10_000_000), false);
+	assert.strictEqual(abandoned(Object.assign({}, room, { timeControl: { type: 'correspondence', moveTimeout: 1 } }), 'blue', t0 + 10_000_000), false);
+	// Another tab of the same player still connected: not gone.
+	const twoTabs = Object.assign({}, room, { blue: Object.assign({}, room.blue, { conns: { c2: t0 } }) });
+	assert.strictEqual(abandoned(twoTabs, 'blue', t0 + 10_000_000), false);
+	// Two turns of one colour are not both players moving.
+	const oneSided = Object.assign({}, room, { turns: { a: room.turns.a, b: { color: 'red', timestamp: t0 + 1000 } } });
+	assert.strictEqual(abandoned(oneSided, 'blue', t0 + 10_000_000), false);
+	assert.strictEqual(sideToMove(room), 'red');
+	// A room's startSfn is the position before the first turn: counter 13 -> Blue moves at 14.
+	assert.strictEqual(sideToMove({ startSfn: 'x r 13 0:0' }), 'blue');
+	assert.strictEqual(sideToMove({}), 'red');
 });
 
 // ---- the writes ----

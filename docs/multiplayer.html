@@ -72,6 +72,8 @@
 			margin: 12px 0;
 		}
 		.error-msg { color: var(--color-error); }
+		.connection-banner { margin: 6px 0; padding: 6px 10px; border-radius: 6px; background: var(--color-surface-hover, #333); color: var(--color-text-bright, #fff); font-size: 0.9rem; }
+		.connection-banner__line--self { font-weight: bold; }
 		.auth-status {
 			font-family: 'Overlock', sans-serif;
 			color: var(--color-border-hover);
@@ -593,6 +595,11 @@
 							</div>
 						<div class="providence-bank" x-show="redBank || blueBank" x-bind:title="`Providence bank: Red ${redBank}, Blue ${blueBank}`"><span class="providence-bank__label">Bank</span><span class="providence-bank__count providence-bank__count--red" x-text="redBank"></span><span class="providence-bank__count providence-bank__count--blue" x-text="blueBank"></span></div>
 					</div>
+					<!-- Connection trouble: our unsent moves, or an opponent who left (with the claim-win countdown). -->
+					<div class="connection-banner" role="status" aria-live="polite" x-show="syncBanner || opponentAwayText">
+						<div x-show="syncBanner" class="connection-banner__line connection-banner__line--self" x-text="syncBanner"></div>
+						<div x-show="opponentAwayText" class="connection-banner__line" x-text="opponentAwayText"></div>
+					</div>
 					<!-- Visible whenever a live game is on (not only mid-own-turn): the Forfeit button must be reachable during the opponent's turn too. -->
 					<div class="actions" x-bind:class="{ 'actions--visible': !isSpectator && (showReset || actionList.includes('dash') || actionList.includes('skip_providence') || actionList.includes('pass') || actionList.includes('submit') || (whoseTurn && !winner && !reviewMode))}">
 						<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
@@ -601,7 +608,11 @@
 						<button class="action-button action-button--submit" x-bind:class="{ 'is-hidden': isSpectator || !actionList.includes('submit') }" x-on:click="handleSubmit">Submit</button>
 						<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
 						<!-- Concede: first click arms and asks for confirmation, second declares the game a win for the opponent. -->
-						<button class="action-button action-button--forfeit" x-bind:class="{ 'is-hidden': isSpectator || !whoseTurn || winner || reviewMode, 'action-button--forfeit-armed': forfeitArmed }" x-on:click="handleForfeit" x-text="forfeitArmed ? 'Confirm forfeit?' : 'Forfeit'">Forfeit</button>
+						<button class="action-button action-button--forfeit" x-bind:class="{ 'is-hidden': isSpectator || !whoseTurn || winner || reviewMode || gameAborted, 'action-button--forfeit-armed': forfeitArmed }" x-on:click="handleForfeit" x-text="forfeitArmed ? 'Confirm forfeit?' : 'Forfeit'">Forfeit</button>
+						<!-- Before both players have moved a game can be called off, unrated. -->
+						<button class="action-button action-button--abort" x-bind:class="{ 'is-hidden': !canAbort }" x-on:click="handleAbort">Abort</button>
+						<!-- The opponent left more than ABANDON_GRACE_MS ago. -->
+						<button class="action-button action-button--claim" x-bind:class="{ 'is-hidden': !canClaimWin }" x-on:click="handleClaimWin">Claim win</button>
 					</div>
 				</div></div>
 				<div class="container" style="overflow: auto"><div class="container__inner game-board-container" x-ref="gameBoardContainer">
@@ -1303,7 +1314,7 @@
 						try {
 							const snap = await db.ref('rooms/' + game.roomCode).once('value');
 							const data = snap.val();
-							if (!data || data.status === 'finished' || data.status === 'expired') continue;
+							if (!data || data.status === 'finished' || data.status === 'expired' || data.status === 'aborted') continue;
 							const expiryMs = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined' ? ROOM_INVITE_EXPIRY_MS : (72 * 60 * 60 * 1000);
 							if (data.status === 'waiting' && data.created && (Date.now() - data.created > expiryMs)) continue;
 							stillAlive.push(game);
