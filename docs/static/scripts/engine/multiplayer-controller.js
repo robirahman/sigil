@@ -105,6 +105,16 @@ class MultiplayerController {
 			}
 			return;
 		}
+		if (message === 'claim_win') {
+			this._endByRoom(this.myColor === 'red' ? 'blue' : 'red', 'abandon', true);
+			return;
+		}
+		if (message === 'abort') {
+			if (this._gameLog.length >= 2 || (this.board && this.board.gameover)) return;
+			this.sync.abortGame();
+			this._endByAbort();
+			return;
+		}
 		if (message === 'forfeit') {
 			// Never buffered — a forfeit is room state, not a turn action.
 			// Works on either player's turn: the game ends immediately here,
@@ -288,10 +298,18 @@ class MultiplayerController {
 		// A flag the OTHER client saw first (ours may have been asleep or
 		// behind): end the game here too, without writing anything.
 		this.sync.listenForFinish((winner, reason) => {
-			if (reason === 'time' && (winner === 'red' || winner === 'blue')) {
-				this._endByTimeout(winner === 'red' ? 'blue' : 'red', false);
+			if (reason === 'aborted') {
+				this._endByAbort();
+			} else if ((reason === 'time' || reason === 'abandon') && (winner === 'red' || winner === 'blue')) {
+				this._endByRoom(winner === 'red' ? 'blue' : 'red', reason, false);
 			}
 		});
+		// The opponent's connection (the claim-win countdown) and our own
+		// unsent moves (the reconnecting banner).
+		this.sync.listenToOpponentPresence((p) => {
+			this.emit({ type: 'opponent_presence', connected: p.connected, disconnectedAt: p.disconnectedAt });
+		});
+		this.sync.onSyncStatus = (st) => this.emit(Object.assign({ type: 'sync_status' }, st));
 
 		// Send spell setup
 		const posNames = spellSlotNames();
@@ -598,8 +616,11 @@ class MultiplayerController {
 	 * natural game ending: _saveGameRecord on both clients.
 	 */
 	_endByForfeit(loser) {
+		// An abort is provisional: after both players moved the server turns
+		// it into the aborter's forfeit (settleAbort), which replaces it here.
 		if (this._forfeitHandled || this._timedOut
-			|| (this.board && this.board.gameover)) return;
+			|| (this.board && this.board.gameover && !this._aborted)) return;
+		this._aborted = false;
 		this._forfeitHandled = true;
 		const board = this.board;
 		const winner = board.enemy(loser);
@@ -631,6 +652,16 @@ class MultiplayerController {
 	 * start of the turn; the board is closed so no further click can act.
 	 */
 	async _endByTimeout(loser, writeResult) {
+		return this._endByRoom(loser, 'time', writeResult);
+	}
+
+	/**
+	 * The game ends without a final move: `loser` flagged ('time') or left
+	 * ('abandon', claimed by the opponent after ABANDON_GRACE_MS). With
+	 * writeResult this client claims it in the room (the rules and the
+	 * rating function check the claim); otherwise it saw the room finish.
+	 */
+	async _endByRoom(loser, reason, writeResult) {
 		if (this._timedOut || this._forfeitHandled || (this.board && this.board.gameover)) return;
 		this._timedOut = true;
 		this._stopTimer();
@@ -647,48 +678,46 @@ class MultiplayerController {
 		}
 		this._turnBuffer = [];
 		this.emit({ type: 'message', awaiting: null,
-			message: (loser === 'red' ? 'Red' : 'Blue') + ' ran out of time.' });
-		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: 'time' });
+			message: (loser === 'red' ? 'Red' : 'Blue') + (reason === 'time' ? ' ran out of time.' : ' left the game.') });
+		this.emit({ type: 'game_over', winner, gameLog: this._gameLog, endReason: reason });
 		if (!writeResult) return;
-		const committed = await this.sync.writeTimeout(winner);
-		if (committed) this._saveGameRecord(winner, 'time', true);
+		const committed = reason === 'time'
+			? await this.sync.writeTimeout(winner)
+			: await this.sync.claimAbandoned(winner);
+		if (committed) this._saveGameRecord(winner);
 	}
 
-	_saveGameRecord(winner, endReason, force) {
-		if (!this.sync) return;
-		// Stored records carry the SLIM transcript (marginal moves) plus
-		// the setup/final SFN anchors; positions are rebuilt by replaying
-		// through reconstructGameLog. Never store per-turn board states.
-		const record = {
-			spellNames: this.board.spellNames,
-			winner: winner,
-			turns: slimGameLog(this._gameLog),
-			setupSfn: this._gameLog.length ? this._gameLog[0].sfnBefore : null,
-			finalSfn: this.board ? boardToSfn(this.board) : null,
-			roomCode: this.sync.roomCode,
-			timestamp: Date.now(),
-			// Variant the live board actually played under. Falls back
-			// to sync.variant (creator's choice persisted in the room
-			// metadata) when board.variant is missing for any reason.
-			variant: normalizeVariant((this.board && this.board.variant) || (this.sync && this.sync.variant)),
-			// The room's clock and how the game ended ('play', 'forfeit', 'time'):
-			// clock games rate in the same pool, the control is kept for later.
-			timeControl: this._timeControl || { type: 'none' },
-			endReason: endReason || 'play',
-		};
-		// `force`: the client that won the time-forfeit transaction records the
-		// game even when it is blue (red's tab may be gone).
-		this.sync.saveCompletedGame(record, { force: !!force });
-		// Mark the room finished so the same `?id=CODE` URL serves review mode.
-		// Either player calls this — it's an idempotent update.
-		if (this.myColor === 'red' || force) {
-			this.sync.writeRoomFinalState(
-				winner,
-				this._gameLog,
-				this.board ? boardToSfn(this.board) : null,
-				this._gameLog.length ? this._gameLog[0].sfnBefore : null,
-			);
+	/** The game was aborted (before both players moved): no result. */
+	_endByAbort() {
+		if (this._aborted || this._timedOut || this._forfeitHandled) return;
+		this._aborted = true;
+		this._stopTimer();
+		this._turnBuffer = [];
+		if (this.board) {
+			this.board.gameover = true;
+			this.board.winner = null;
 		}
+		this.emit({ type: 'message', awaiting: null, message: 'Game aborted.' });
+		this.emit({ type: 'game_aborted' });
+	}
+
+	/**
+	 * Finish the room and leave its transcript for review. The server
+	 * records and rates the game when the room finishes (functions/
+	 * index.js recordRoom, rateGame), so both clients just write the room:
+	 * the first to finish it sets the result, the other only the review
+	 * fields. Stored records carry the SLIM transcript (marginal moves) plus
+	 * the setup/final SFN anchors; positions are rebuilt by replaying
+	 * through reconstructGameLog. Never store per-turn board states.
+	 */
+	_saveGameRecord(winner) {
+		if (!this.sync) return;
+		this.sync.writeRoomFinalState(
+			winner,
+			this._gameLog,
+			this.board ? boardToSfn(this.board) : null,
+			this._gameLog.length ? this._gameLog[0].sfnBefore : null,
+		);
 	}
 
 	/** Annotate the opponent's most recent turn (or clear an existing annotation). */

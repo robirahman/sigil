@@ -5,16 +5,16 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Fix first
 
-- [ ] **Lock down Elo writes.** `database.rules.json:10-11` gives `users/$uid/elo` (and `gamesPlayed`, `wins`)
+- [x] **Lock down Elo writes.** Done: the `rateGame` Cloud Function (functions/) checks and rates every game; clients cannot write ratings, counters or `user_games`. `database.rules.json:10-11` gives `users/$uid/elo` (and `gamesPlayed`, `wins`)
   `.write: "auth !== null"`, so any signed-in user can change any account's rating (up to ±32 per write).
   Short term: tighten the rules.
   Long term: deploy the server-side Elo in `functions/index.js` (needs the Blaze plan).
   The rating is computed by whichever player's browser reports the result (`engine/elo.js`), and only red's client saves the game record (`engine/firebase-sync.js:682`).
-- [ ] **Restrict `rooms/$roomId`.** It is world-readable and world-writable (`database.rules.json:84-88`).
+- [x] **Restrict `rooms/$roomId`.** Done: only the seated uids write a room (guests sign in anonymously); settings are fixed at creation. It is world-readable and world-writable (`database.rules.json:84-88`).
 - [ ] **Fix the Deep Review labels.** The buttons say "Deep Review (8 ply)" (`docs/game.html:759`) and "Deep AI Review (10 ply)" (`docs/game.html:799`).
   The real preset is 60s per position with no fixed depth (`engine/game-review.js:31`), and the code comment at `engine/game-review.js:101` also says "8-ply".
   Show an estimated time instead, since a long game can take about an hour.
-- [ ] **Handle online move failures.** `sendTurn`, `sendForfeit` and `saveGameState` only `console.error` (`engine/firebase-sync.js:349-388, 453`).
+- [x] **Handle online move failures.** Done: unsent moves are tracked and a banner shows while the connection is down or a write is refused (the SDK resends on reconnect). `sendTurn`, `sendForfeit` and `saveGameState` only `console.error` (`engine/firebase-sync.js:349-388, 453`).
   Add a "reconnecting / move not sent" banner and retry, like `docs/static/scripts/offline-queue.js` does for local games.
 
 ## Onboarding & learning
@@ -34,10 +34,10 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   Add a "seek a game at this time control" list.
 - [ ] **Add a "watch live games" list** for rooms that allow spectators. Spectating currently needs a shared link.
 - [ ] **Add turn notifications for correspondence games** (12h / 24h / 3d), using the browser Notification API or Web Push through `docs/sw.js`.
-- [ ] **Handle disconnects properly.** Add a grace-period countdown, a "reconnected" event and claim-win / abort on abandonment.
+- [x] **Handle disconnects properly.** Done: the server stamps `disconnectedAt` on a dropped seat; the opponent sees a countdown, "reconnected", and after 60 s can claim the game (checked by the rating function); the `expireClocks` function ends flagged games with no tab open. Add a grace-period countdown, a "reconnected" event and claim-win / abort on abandonment.
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
-- [ ] **Add draw offers, abort before move 2, and takebacks by mutual agreement.**
+- [ ] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move: done (later aborts count as forfeits). Draws and takebacks: open.
 - [ ] **Add in-game chat or preset emotes.**
 - [ ] **Add a friends / follow list** with "challenge" from a profile.
 - [ ] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
@@ -48,7 +48,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [ ] **Show the rating change after a game** (e.g. +12 / −8). `eloChange` and the before/after Elo are stored but never shown.
 - [ ] **Show whether a game is rated**, before and during it (`docs/multiplayer.html:261` only says "Sign in for ranked play").
 - [ ] **Show the spectator count to players.** It is written to `rooms/X/spectators` but never displayed.
-- [ ] **Keep unrated, variant and casual games in profile history.** `/user_games` is written only inside `processEloClientSide` (`engine/elo.js:109-135`).
+- [x] **Keep unrated, variant and casual games in profile history.** Done: `rateGame` indexes every signed-in game, marked `rated: false` when unrated. `/user_games` is written only inside `processEloClientSide` (`engine/elo.js:109-135`).
 - [ ] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`.
 - [ ] **Improve the leaderboard** (`docs/leaderboard.html`):
   - [ ] Add a provisional-rating marker or a minimum number of games.

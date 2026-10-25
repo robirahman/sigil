@@ -88,6 +88,7 @@
 		.games-table .result--loss { color: var(--color-error); font-weight: bold; }
 		.games-table .elo-change--pos { color: var(--color-success); }
 		.games-table .elo-change--neg { color: var(--color-error); }
+		.games-table .elo-change--unrated { color: var(--color-text-muted, #999); font-style: italic; }
 		.games-table tr.is-clickable { cursor: pointer; }
 		.games-table tr.is-clickable:hover { background: var(--color-surface-hover); }
 		.games-table .name--ai { color: var(--color-accent); }
@@ -254,8 +255,15 @@
 											</template>
 										</td>
 										<td style="text-align:right;">
-											<span x-text="g.eloAfter"></span>
-											<span x-bind:class="g.eloChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.eloChange >= 0 ? ' (+' : ' (') + g.eloChange + ')'"></span>
+											<template x-if="g.rated">
+												<span>
+													<span x-text="g.eloAfter"></span>
+													<span x-bind:class="g.eloChange >= 0 ? 'elo-change--pos' : 'elo-change--neg'" x-text="(g.eloChange >= 0 ? ' (+' : ' (') + g.eloChange + ')'"></span>
+												</span>
+											</template>
+											<template x-if="!g.rated">
+												<span class="elo-change--unrated">Unrated</span>
+											</template>
 										</td>
 									</tr>
 								</template>
@@ -362,6 +370,8 @@
 								opponentIsAI: !!v.opponentIsAI,
 								color: v.color || 'red',
 								result: v.result || 'loss',
+								// Older entries predate `rated`: every one of them was rated.
+								rated: v.rated !== false,
 								eloBefore: v.eloBefore ?? 1000,
 								eloAfter: v.eloAfter ?? 1000,
 								eloChange: v.eloChange ?? 0,
@@ -398,7 +408,7 @@
 
 				_buildRatingChart(games) {
 					// games here are oldest-first (from gamesSnap.forEach order)
-					const points = games.map((g) => g.eloAfter);
+					const points = games.filter((g) => g.rated).map((g) => g.eloAfter);
 					if (points.length === 0) {
 						this.ratingPoints = [];
 						return;

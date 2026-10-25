@@ -21,6 +21,13 @@ class FirebaseSync {
 		this.myColor = null;
 		this.onOpponentJoin = null;
 		this.onOpponentDisconnect = null;
+		// Connection and unsent writes, for the "reconnecting" banner:
+		// called with { connected, pending, error }.
+		this.onSyncStatus = null;
+		this._connected = true;
+		this._pending = 0;
+		this._writeError = null;
+		this._presenceColor = null;
 
 		// Queue of opponent actions received from Firebase, waiting to be consumed
 		this._incomingQueue = [];
@@ -46,6 +53,14 @@ class FirebaseSync {
 			this._serverTimeOffset = snap.val() || 0;
 		});
 
+		// The database connection: re-announce our seat after a drop (the
+		// server ran our onDisconnect while we were gone).
+		db.ref('.info/connected').on('value', (snap) => {
+			this._connected = snap.val() === true;
+			if (this._connected && this._presenceColor) this._goOnline(this._presenceColor).catch(() => {});
+			this._syncStatus();
+		});
+
 		// Time control config (set during createRoom/joinRoom)
 		this.timeControl = null;
 
@@ -53,6 +68,70 @@ class FirebaseSync {
 		// createRoom / joinRoom and replicated to the joining peer
 		// through the room metadata.
 		this.variant = 'standard';
+	}
+
+	/**
+	 * Mark our seat present. Each connection (tab) holds its own entry in
+	 * the seat's `conns`, removed by the server when that connection drops,
+	 * which also stamps `disconnectedAt` with the server's clock: the seat is
+	 * gone only when no connection is left, and the opponent's grace period
+	 * counts from the last drop (functions/rating.js abandoned).
+	 */
+	async _goOnline(color) {
+		if (!this.roomRef) return;
+		this._presenceColor = color;
+		const seat = this.roomRef.child(color);
+		if (!this._connId) this._connId = seat.child('conns').push().key;
+		const conn = seat.child('conns/' + this._connId);
+		const ts = firebase.database.ServerValue.TIMESTAMP;
+		try {
+			await conn.onDisconnect().remove();
+			await seat.child('disconnectedAt').onDisconnect().set(ts);
+			await seat.child('connected').onDisconnect().set(false);
+			await conn.set(ts);
+			await seat.update({ connected: true, disconnectedAt: null });
+		} catch (e) {
+			// A finished room's seats are frozen (the rating judges an
+			// abandonment by them): nothing to announce.
+		}
+	}
+
+	/**
+	 * Watch the opponent's seat: callback({ connected, disconnectedAt }).
+	 * Fires at once with the current state.
+	 */
+	listenToOpponentPresence(callback) {
+		if (!this.roomRef || !this.myColor) return;
+		const opp = this.myColor === 'red' ? 'blue' : 'red';
+		this.roomRef.child(opp).on('value', (snap) => {
+			const s = snap.val() || {};
+			// Seats of older clients have no conns: their flag decides.
+			const connected = s.conns ? Object.keys(s.conns).length > 0 : s.connected !== false;
+			callback({ connected, disconnectedAt: connected ? null : (typeof s.disconnectedAt === 'number' ? s.disconnectedAt : null) });
+		});
+	}
+
+	/** Count a write until the server acknowledges it. */
+	async _track(promise) {
+		this._pending++;
+		this._syncStatus();
+		try {
+			// A refused write stays reported until the page resyncs: a later
+			// accepted write does not mean the refused move arrived.
+			return await promise;
+		} catch (e) {
+			this._writeError = (e && (e.code || e.message)) || 'error';
+			throw e;
+		} finally {
+			this._pending--;
+			this._syncStatus();
+		}
+	}
+
+	_syncStatus() {
+		if (this.onSyncStatus) {
+			this.onSyncStatus({ connected: this._connected, pending: this._pending, error: this._writeError });
+		}
 	}
 
 	/** Get the current server time estimate. */
@@ -92,7 +171,7 @@ class FirebaseSync {
 			spellNames: spellNames,
 			status: 'waiting',
 			created: this.created,
-			[me]: { connected: true, uid: this[me + 'Uid'], displayName: this[me + 'DisplayName'] },
+			[me]: { connected: true, uid: this[me + 'Uid'], displayName: this[me + 'DisplayName'], anon: !!userInfo?.isAnonymous },
 			[other]: { connected: false },
 			ranked: false,
 			timeControl: this.timeControl,
@@ -118,7 +197,7 @@ class FirebaseSync {
 		});
 
 		this._listenForTurns();
-		roomRef.child(me + '/connected').onDisconnect().set(false);
+		await this._goOnline(me);
 		return code;
 	}
 
@@ -194,26 +273,24 @@ class FirebaseSync {
 			this[joiner + 'Uid'] = userInfo?.uid || null;
 			this[joiner + 'DisplayName'] = userInfo?.displayName || 'Guest';
 
-			// Determine if ranked: both players authenticated, no unrated
-			// spells (Panda and Experimental are unofficial), and
-			// not a Deathmatch / Duplicates / Scramble game (always unrated).
-			const hasUnrated = (data.spellNames || []).some(s => isUnratedSpell(s));
-			const isDeathmatch = variantHasDeathmatch(data.variant);
-			const isDuplicates = variantHasDuplicates(data.variant);
-			const isScramble = variantHasScramble(data.variant);
-			const isPentagon = variantHasPentagon(data.variant);
-			// A room from a position is rated only when its start was priced.
-			const unpriced = !!this.startSfn && !(this.startPos && typeof this.startPos.redWinProb === 'number');
-			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !hasUnrated && !isDeathmatch && !isDuplicates && !isScramble && !isPentagon && !unpriced);
+			// Ranked: both players signed in to real accounts, and a game the
+			// shared rule (elo.js unratedReason) rates. The rating function
+			// checks both again.
+			const creatorAnon = !!(data[creator] && data[creator].anon);
+			this.ranked = !!(this.redUid && this.blueUid && !userInfo?.isAnonymous && !creatorAnon
+				&& !unratedReason(data.spellNames, data.variant, this.startSfn, this.startPos));
 
 			// Seat, status and ranked in ONE write: the creator's join
 			// listener then reads them together (_refreshPlayers).
 			await roomRef.update({
-				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'] },
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
 				status: 'playing',
 				ranked: this.ranked,
+				// The server's time the game began: the first mover's clock
+				// (functions/rating.js flagged) runs from it.
+				startedAt: firebase.database.ServerValue.TIMESTAMP,
 			});
-			roomRef.child(joiner + '/connected').onDisconnect().set(false);
+			await this._goOnline(joiner);
 
 			this._writeActiveGameIndex(joiner);
 
@@ -296,8 +373,7 @@ class FirebaseSync {
 			}
 			this.ranked = data.ranked || false;
 
-			await roomRef.child(this.myColor + '/connected').set(true);
-			roomRef.child(this.myColor + '/connected').onDisconnect().set(false);
+			await this._goOnline(this.myColor);
 
 			this._writeActiveGameIndex(this.myColor);
 
@@ -396,9 +472,9 @@ class FirebaseSync {
 			}
 		});
 
-		// Listen for game over
+		// Listen for game over (or an abort, which ends the stream too)
 		this.roomRef.child('status').on('value', (snap) => {
-			if (snap.val() === 'finished') {
+			if (snap.val() === 'finished' || snap.val() === 'aborted') {
 				// Signal to spectator controller
 				if (this._waitingResolver) {
 					const resolve = this._waitingResolver;
@@ -412,7 +488,7 @@ class FirebaseSync {
 	async saveGameState(sfn) {
 		if (!this.roomRef) return;
 		try {
-			await this.roomRef.child('currentSfn').set(sfn);
+			await this._track(this.roomRef.child('currentSfn').set(sfn));
 		} catch (e) {
 			console.error('[Sync] saveGameState FAILED:', e);
 		}
@@ -441,13 +517,13 @@ class FirebaseSync {
 				updates['timer/blue'] = timerUpdate.blue;
 				updates['timer/activeColor'] = timerUpdate.activeColor;
 				updates['timer/lastUpdated'] = firebase.database.ServerValue.TIMESTAMP;
-				await this.roomRef.update(updates);
+				await this._track(this.roomRef.update(updates));
 			} else {
-				await this.roomRef.child('turns').push({
+				await this._track(this.roomRef.child('turns').push({
 					color: this.myColor,
 					actions: actions,
 					timestamp: firebase.database.ServerValue.TIMESTAMP,
-				});
+				}));
 			}
 			console.log('[Sync] sendTurn succeeded');
 		} catch (e) {
@@ -510,15 +586,16 @@ class FirebaseSync {
 	async sendForfeit(color) {
 		if (!this.roomRef) return;
 		try {
-			// forfeitedBy FIRST, so the opponent ends the game through the
+			// The result FIRST, so the opponent ends the game through the
 			// forfeit path (with attribution) rather than the bare
-			// status-finished signal.
-			await this.roomRef.child('forfeitedBy').set(color);
-			await this.roomRef.child('status').transaction((current) => {
-				if (current === 'playing') return 'finished';
-				return; // abort if already finished
-			});
-			await this.roomRef.child('winner').set(color === 'red' ? 'blue' : 'red');
+			// status-finished signal, and so the room never reads finished
+			// without a winner (the rules require one, and finishedBy).
+			await this._track(this.roomRef.update({
+				forfeitedBy: color,
+				finishedBy: color,
+				winner: color === 'red' ? 'blue' : 'red',
+			}));
+			await this._closeRoom();
 			this._removeActiveGameIndex();
 		} catch (e) {
 			console.error('[Sync] sendForfeit FAILED:', e.code, e.message);
@@ -548,14 +625,11 @@ class FirebaseSync {
 		if (!this.roomRef) return false;
 		let committed = false;
 		try {
-			const res = await this.roomRef.child('status').transaction((current) => {
-				if (current === 'playing') return 'finished';
-				return; // abort if already finished
-			});
-			committed = !!(res && res.committed);
-			// Only the client whose transaction closed the room writes the
-			// result (and records the game): the other one is a witness.
-			if (committed) await this.roomRef.update({ winner: winner, endReason: 'time' });
+			// The result before the status, which the rules allow only while
+			// the room is playing: a client that sees the flag late is refused
+			// here and is a witness, like the one whose transaction loses.
+			await this.roomRef.update({ finishedBy: this.myColor, winner: winner, endReason: 'time' });
+			committed = await this._closeRoom();
 		} catch (e) {
 			console.error('[Sync] writeTimeout FAILED:', e.code, e.message);
 		}
@@ -572,6 +646,10 @@ class FirebaseSync {
 	listenForFinish(callback) {
 		if (!this.roomRef) return;
 		this.roomRef.child('status').on('value', async (snap) => {
+			if (snap.val() === 'aborted') {
+				callback(null, 'aborted');
+				return;
+			}
 			if (snap.val() !== 'finished') return;
 			try {
 				const s = await this.roomRef.once('value');
@@ -612,7 +690,11 @@ class FirebaseSync {
 		}
 
 		let skipped = 0;
+		// Every turn in the room, including those before a reload (the
+		// controller's log holds only the turns since).
+		this._turnKeys = [];
 		turnsRef.on('child_added', (snap) => {
+			this._turnKeys.push(snap.key);
 			if (skipped < existingCount) {
 				skipped++;
 				return;
@@ -676,8 +758,7 @@ class FirebaseSync {
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
 
-		await roomRef.child(me + '/connected').set(true);
-		roomRef.child(me + '/connected').onDisconnect().set(false);
+		await this._goOnline(me);
 
 		this._writeActiveGameIndex(me);
 
@@ -707,9 +788,9 @@ class FirebaseSync {
 		if (!this.roomRef) return;
 		const slim = slimGameLog(gameLog);
 		try {
+			// The record for review first: it may follow a forfeit or a flag
+			// that already finished the room.
 			await this.roomRef.update({
-				status: 'finished',
-				winner: winner,
 				gameLog: slim,
 				finalSfn: finalSfn || null,
 				setupSfn: setupSfn || null,
@@ -718,7 +799,71 @@ class FirebaseSync {
 		} catch (e) {
 			console.error('Failed to write room final state:', e);
 		}
+		try {
+			// A natural end, if no one has finished the room yet: the server
+			// replays the moves to check the winner (functions/rating.js).
+			const status = (await this.roomRef.child('status').once('value')).val();
+			if (status === 'playing') {
+				// endReason cleared: a natural end, whatever the other side
+				// may have written before it.
+				await this.roomRef.update({ finishedBy: this.myColor, winner: winner, status: 'finished',
+					endReason: null, closedAt: firebase.database.ServerValue.TIMESTAMP });
+			}
+		} catch (e) {
+			// The other client finished it first.
+		}
 		this._removeActiveGameIndex();
+	}
+
+	/**
+	 * Claim the game because the opponent left: allowed once their seat has
+	 * been gone for ABANDON_GRACE_MS and both players have moved (the
+	 * rating function checks both). Returns true if this client closed it.
+	 */
+	async claimAbandoned(winner) {
+		if (!this.roomRef) return false;
+		try {
+			// One write: the claim and the close together, so the opponent's
+			// seat is frozen exactly as it was when the claim was judged
+			// (a reconnect in between would otherwise slip in).
+			await this.roomRef.update({ finishedBy: this.myColor, winner: winner, endReason: 'abandon',
+				status: 'finished', closedAt: firebase.database.ServerValue.TIMESTAMP });
+			this._removeActiveGameIndex();
+			return true;
+		} catch (e) {
+			console.error('[Sync] claimAbandoned FAILED:', e.code, e.message);
+			return false;
+		}
+	}
+
+	/**
+	 * Abort the game: no result, no rating. Offered before both players
+	 * have moved; later the server counts it as a forfeit (functions/
+	 * index.js settleAbort).
+	 */
+	async abortGame() {
+		if (!this.roomRef) return;
+		try {
+			await this.roomRef.update({ abortedBy: this.myColor, status: 'aborted' });
+			this._removeActiveGameIndex();
+		} catch (e) {
+			console.error('[Sync] abortGame FAILED:', e.code, e.message);
+		}
+	}
+
+	/**
+	 * playing -> finished, once: true if this client closed the room. The
+	 * caller has written finishedBy (and the winner) first. closedAt is the
+	 * server's time of closing, which the rating function judges a flag or
+	 * an abandonment by; the rules refuse the write once the room is closed.
+	 */
+	async _closeRoom() {
+		try {
+			await this.roomRef.update({ status: 'finished', closedAt: firebase.database.ServerValue.TIMESTAMP });
+			return true;
+		} catch (e) {
+			return false; // the other client closed it first
+		}
 	}
 
 	/**
@@ -761,63 +906,6 @@ class FirebaseSync {
 		});
 	}
 
-	async saveCompletedGame(gameRecord, opts) {
-		if (!this.db) return;
-		// Red records by convention; `force` lets the client that won a
-		// time-forfeit transaction record when red's tab is gone.
-		if (this.myColor !== 'red' && !(opts && opts.force)) return;
-		if (!gameRecord.timeControl) gameRecord.timeControl = this.timeControl || { type: 'none' };
-		// Enrich with auth info
-		gameRecord.redUid = this.redUid || null;
-		gameRecord.blueUid = this.blueUid || null;
-		gameRecord.ranked = this.ranked || false;
-		// A room from a position: the priced start sets the Elo payoffs.
-		if (this.startPos && typeof this.startPos.redWinProb === 'number') gameRecord.startPos = this.startPos;
-		// Backfill the variant if the caller didn't set it (older builds
-		// / edge paths). Treats the room metadata as the source of truth.
-		if (!SIGIL_VARIANTS.includes(gameRecord.variant)) {
-			gameRecord.variant = normalizeVariant(this.variant);
-		}
-		// Merge any room-level annotations (written live by either player) into
-		// the game record before pushing.
-		try {
-			const annotSnap = await this.roomRef.child('annotations').once('value');
-			const roomAnnotations = annotSnap.val();
-			if (roomAnnotations) {
-				gameRecord.annotations = Object.assign(
-					{}, gameRecord.annotations || {}, roomAnnotations);
-			}
-		} catch (e) {
-			console.error('Failed to read room annotations:', e);
-		}
-		// Mirror the merge for the position-evaluation annotations
-		// ('red' | 'blue' | 'even') so both signals end up on the
-		// completed_games record.
-		try {
-			const evalSnap = await this.roomRef.child('eval_annotations').once('value');
-			const roomEvalAnnotations = evalSnap.val();
-			if (roomEvalAnnotations) {
-				gameRecord.eval_annotations = Object.assign(
-					{}, gameRecord.eval_annotations || {}, roomEvalAnnotations);
-			}
-		} catch (e) {
-			console.error('Failed to read room eval_annotations:', e);
-		}
-		try {
-			const ref = await this.db.ref('completed_games').push(gameRecord);
-			// Process Elo client-side for ranked games
-			if (gameRecord.ranked && typeof processEloClientSide === 'function') {
-				try {
-					await processEloClientSide(this.db, ref.key, gameRecord);
-				} catch (eloErr) {
-					console.error('Failed to process Elo:', eloErr);
-				}
-			}
-		} catch (e) {
-			console.error('Failed to save completed game:', e);
-		}
-	}
-
 	/** Write a single annotation to the shared room path. Either player can call. */
 	async setAnnotation(turnNumber, value) {
 		if (!this.roomRef) return;
@@ -856,6 +944,7 @@ class FirebaseSync {
 		if (this.roomRef) {
 			this.roomRef.off();
 			if (this.myColor) {
+				this._presenceColor = null;
 				this.roomRef.child(this.myColor + '/connected').set(false);
 			}
 		}
@@ -898,6 +987,7 @@ class FirebaseSync {
 		const roomData = {
 			spellNames: spellNames,
 			status: 'playing',
+			startedAt: firebase.database.ServerValue.TIMESTAMP,
 			created: Date.now(),
 			red: { connected: false, uid: redInfo?.uid || null, displayName: redInfo?.displayName || 'Guest' },
 			blue: { connected: false, uid: blueInfo?.uid || null, displayName: blueInfo?.displayName || 'Guest' },
@@ -905,6 +995,9 @@ class FirebaseSync {
 			timeControl: timeControl || { type: 'none' },
 			allowSpectators: allowSpectators !== false,
 			variant: normalizeVariant(variant),
+			// The rules seat both players at once only for a rematch of
+			// a room they both sat in.
+			rematchOf: this.roomCode,
 		};
 		// A rematch of a room from a position replays the same start.
 		if (fromPosition && fromPosition.startSfn) {

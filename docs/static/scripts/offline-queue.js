@@ -147,7 +147,7 @@
 		 * by the signed-in player.
 		 *
 		 * @param {firebase.database.Database} db
-		 * @param {function} processEloFn - processEloClientSide
+		 * @param {function} processEloFn - awaitGameRating (elo.js)
 		 * @returns {Promise<{uploaded, failed, results}>}
 		 */
 		flushAll(db, processEloFn) {
@@ -400,13 +400,13 @@
 
 	async function _attempt() {
 		if (typeof firebase === 'undefined' || !firebase.apps || firebase.apps.length === 0) return;
-		if (typeof processEloClientSide !== 'function') return;
+		if (typeof awaitGameRating !== 'function') return;
 		const user = firebase.auth().currentUser;
 		const uid = user && !user.isAnonymous ? user.uid : null;
 		if (!_read().some((it) => _uploadable(it, uid))) return;
 		try {
 			const db = firebase.database();
-			const result = await OfflineGameQueue.flushAll(db, processEloClientSide);
+			const result = await OfflineGameQueue.flushAll(db, awaitGameRating);
 			if (_onFlush && result.uploaded > 0) {
 				try { _onFlush(result); } catch (e) { /* swallow */ }
 			}

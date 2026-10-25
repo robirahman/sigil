@@ -1,0 +1,198 @@
+'use strict';
+// The rules and the rateGame function together, on the emulators, through
+// the same client SDK calls the site makes:
+//   cd functions && npm run test:e2e
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { initializeApp } = require('firebase/app');
+const { getAuth, connectAuthEmulator, createUserWithEmailAndPassword } = require('firebase/auth');
+const { getFunctions, connectFunctionsEmulator, httpsCallable } = require('firebase/functions');
+const { getDatabase, connectDatabaseEmulator, ref, set, update, push, get, onValue, onDisconnect, goOffline, serverTimestamp } = require('firebase/database');
+const ONLINE = require('./online-game.json');
+const AI = require('./ai-games.json');
+
+const NS = 'sigil-js-default-rtdb';
+let seq = 0;
+
+// The emulator applies firebase.json's rules to the project's default
+// namespace only; load them into the production instance's name.
+test.before(async () => {
+	const rules = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
+	const res = await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`,
+		{ method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: rules });
+	assert.strictEqual(res.status, 200, await res.text());
+});
+
+async function player(name) {
+	const app = initializeApp({ projectId: 'demo-sigil', apiKey: 'demo', databaseURL: `http://127.0.0.1:9000?ns=${NS}` }, name + ++seq);
+	const auth = getAuth(app);
+	connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+	const db = getDatabase(app);
+	connectDatabaseEmulator(db, '127.0.0.1', 9000);
+	const cred = await createUserWithEmailAndPassword(auth, `${name}${seq}@example.com`, 'password123');
+	const uid = cred.user.uid;
+	// What auth-manager.js ensureUserProfile writes for a new account.
+	await set(ref(db, 'users/' + uid), { displayName: name, elo: 1000, gamesPlayed: 0, wins: 0, losses: 0, created: Date.now() });
+	await set(ref(db, 'leaderboard/' + uid), { displayName: name, elo: 1000, gamesPlayed: 0 });
+	const fns = getFunctions(app, 'us-central1');
+	connectFunctionsEmulator(fns, '127.0.0.1', 5001);
+	return { uid, db, name, fns };
+}
+
+function waitFor(db, path, ms = 30000) {
+	return new Promise((resolve, reject) => {
+		const t = setTimeout(() => { off(); reject(new Error('timed out waiting for ' + path)); }, ms);
+		const off = onValue(ref(db, path), (snap) => {
+			if (snap.exists()) { clearTimeout(t); off(); resolve(snap.val()); }
+		});
+	});
+}
+
+async function playRoom(alice, bob, upTo, timeControl) {
+	const code = 'E2E' + ++seq;
+	await set(ref(alice.db, 'rooms/' + code), {
+		spellNames: ONLINE.spellNames, status: 'waiting', created: Date.now(), ranked: false,
+		red: { uid: alice.uid, displayName: 'alice', connected: true }, blue: { connected: false },
+		timeControl: timeControl || { type: 'none' }, allowSpectators: true, variant: 'standard',
+	});
+	await update(ref(bob.db, 'rooms/' + code), {
+		blue: { uid: bob.uid, displayName: 'bob', connected: true }, status: 'playing', ranked: true,
+	});
+	for (const t of ONLINE.turns.slice(0, upTo)) {
+		const p = t.color === 'red' ? alice : bob;
+		await push(ref(p.db, 'rooms/' + code + '/turns'), { color: t.color, actions: t.actions, timestamp: serverTimestamp() });
+	}
+	return code;
+}
+
+test('an online game is recorded and rated once, by the server', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob);
+	// A client may neither rate it nor record it.
+	await assert.rejects(set(ref(alice.db, 'users/' + alice.uid + '/elo'), 1016));
+	await assert.rejects(set(push(ref(alice.db, 'completed_games')), { winner: 'red', timestamp: 1, redUid: alice.uid, blueUid: bob.uid, ranked: true }));
+	// What multiplayer-controller.js does at a natural end (firebase-sync.js writeRoomFinalState).
+	const fin = ONLINE.winner === 'red' ? alice : bob;
+	await update(ref(fin.db, 'rooms/' + code), { gameLog: ONLINE.turns, finishedAt: Date.now() });
+	await update(ref(fin.db, 'rooms/' + code), { finishedBy: ONLINE.winner, winner: ONLINE.winner, status: 'finished', closedAt: serverTimestamp() });
+	// The other client's attempt is refused: the room is already finished.
+	const late = fin === alice ? bob : alice;
+	await assert.rejects(update(ref(late.db, 'rooms/' + code), { finishedBy: ONLINE.winner === 'red' ? 'blue' : 'red', winner: ONLINE.winner, status: 'finished', closedAt: serverTimestamp() }));
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	const won = ONLINE.winner === 'red';
+	assert.deepStrictEqual([mine.rated, mine.eloChange, mine.result], [true, won ? 16 : -16, won ? 'win' : 'loss']);
+	assert.strictEqual((await get(ref(bob.db, `users/${bob.uid}/elo`))).val(), won ? 984 : 1016);
+	assert.strictEqual((await get(ref(bob.db, `leaderboard/${alice.uid}/gamesPlayed`))).val(), 1);
+});
+
+test('finishing a game early with a false result is a resignation', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	// Half the game, then red declares itself the winner.
+	const code = await playRoom(alice, bob, 20);
+	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', status: 'finished', closedAt: serverTimestamp() });
+	const gameId = await waitFor(bob.db, `rooms/${code}/gameId`);
+	const bobs = await waitFor(bob.db, `user_games/${bob.uid}/${gameId}`);
+	assert.deepStrictEqual([bobs.rated, bobs.result, bobs.eloChange], [true, 'win', 16]);
+	const room = (await get(ref(bob.db, 'rooms/' + code))).val();
+	assert.deepStrictEqual([room.winner, room.forfeitedBy], ['blue', 'red']);
+});
+
+test('an abort before both players move has no result; after, it is a forfeit', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const early = await playRoom(alice, bob, 1);
+	await update(ref(bob.db, 'rooms/' + early), { abortedBy: 'blue', status: 'aborted' });
+	await new Promise((r) => setTimeout(r, 8000));
+	const e = (await get(ref(alice.db, 'rooms/' + early))).val();
+	assert.deepStrictEqual([e.status, e.gameId, e.winner], ['aborted', undefined, undefined]);
+
+	const late = await playRoom(alice, bob, 6);
+	// Written apart: the abort is still settled from the status change.
+	await update(ref(bob.db, 'rooms/' + late), { abortedBy: 'blue' });
+	await new Promise((r) => setTimeout(r, 2000));
+	await update(ref(bob.db, 'rooms/' + late), { status: 'aborted' });
+	const gameId = await waitFor(alice.db, `rooms/${late}/gameId`);
+	const room = (await get(ref(alice.db, 'rooms/' + late))).val();
+	assert.deepStrictEqual([room.status, room.winner, room.forfeitedBy], ['finished', 'red', 'blue']);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
+});
+
+test('a player gone for a minute loses on a claim; an early claim is the claimer\'s loss', async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob, 4);
+	// What firebase-sync.js _goOnline arranges; then bob's connection drops.
+	await onDisconnect(ref(bob.db, 'rooms/' + code + '/blue')).update({ connected: false, disconnectedAt: serverTimestamp() });
+	goOffline(bob.db);
+	await new Promise((r) => setTimeout(r, 61_000));
+	await update(ref(alice.db, 'rooms/' + code), { finishedBy: 'red', winner: 'red', endReason: 'abandon' });
+	await update(ref(alice.db, 'rooms/' + code), { status: 'finished', closedAt: serverTimestamp() });
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
+
+	const carol = await player('carol');
+	const dave = await player('dave');
+	const code2 = await playRoom(carol, dave, 4);
+	await update(ref(carol.db, 'rooms/' + code2), { finishedBy: 'red', winner: 'red', endReason: 'abandon', status: 'finished', closedAt: serverTimestamp() });
+	const g2 = await waitFor(carol.db, `rooms/${code2}/gameId`);
+	const c = await waitFor(carol.db, `user_games/${carol.uid}/${g2}`);
+	assert.deepStrictEqual([c.rated, c.result], [true, 'loss']);
+});
+
+test('the server ends a game whose clock ran out with nobody watching', async () => {
+	const { initializeApp: adminApp } = require('firebase-admin/app');
+	const { getDatabaseWithUrl } = require('firebase-admin/database');
+	const { expireRooms } = require('../rooms');
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin' + seq));
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob, 3, { type: 'realtime', initialTime: 3000, increment: 0 });
+	// Blue is to move with three seconds on the clock.
+	assert.strictEqual(await expireRooms(admin, Date.now()), 0);
+	await new Promise((r) => setTimeout(r, 6000));
+	assert.ok((await expireRooms(admin, Date.now())) >= 1);
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	const room = (await get(ref(alice.db, 'rooms/' + code))).val();
+	assert.deepStrictEqual([room.status, room.winner, room.endReason], ['finished', 'red', 'time']);
+	// The server left the transcript for the review.
+	assert.strictEqual((room.gameLog || []).length, 3);
+	const mine = await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`);
+	assert.deepStrictEqual([mine.rated, mine.result], [true, 'win']);
+});
+
+test('a forged win against the AI is recorded unrated', async () => {
+	const carol = await player('carol');
+	const real = Object.assign({}, AI.N3WMQJ, { redUid: carol.uid, timestamp: Date.now() });
+	const g1 = push(ref(carol.db, 'completed_games'));
+	await set(g1, real);
+	const ok = await waitFor(carol.db, `user_games/${carol.uid}/${g1.key}`);
+	assert.deepStrictEqual([ok.rated, ok.result], [true, 'win']);
+
+	const forged = Object.assign({}, AI.F6N5H4, { redUid: carol.uid, winner: 'red', timestamp: Date.now() });
+	const g2 = push(ref(carol.db, 'completed_games'));
+	await set(g2, forged);
+	const bad = await waitFor(carol.db, `user_games/${carol.uid}/${g2.key}`);
+	assert.deepStrictEqual([bad.rated, bad.unratedReason], [false, 'result-not-verified']);
+	assert.strictEqual((await get(ref(carol.db, `users/${carol.uid}/elo`))).val(), 1000 + ok.eloChange);
+});
+
+test('deleting an account removes its records and keeps its games anonymous', async () => {
+	const dave = await player('dave');
+	const g = push(ref(dave.db, 'completed_games'));
+	await set(g, Object.assign({}, AI.N3WMQJ, { redUid: dave.uid, timestamp: Date.now() }));
+	await waitFor(dave.db, `user_games/${dave.uid}/${g.key}`);
+	const res = await httpsCallable(dave.fns, 'deleteUserData')();
+	assert.deepStrictEqual(res.data, { ok: true });
+	const other = await player('erin');
+	for (const p of ['users/', 'leaderboard/', 'user_games/']) {
+		assert.strictEqual((await get(ref(other.db, p + dave.uid))).exists(), false, p);
+	}
+});
+
+test.after(() => setTimeout(() => process.exit(0), 100));
