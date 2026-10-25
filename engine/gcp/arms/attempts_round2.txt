@@ -1,0 +1,5 @@
+very_easy,docs/static/puzzles/mate_puzzles.json,16
+very_easy,gs://focus-surfer-494820-g0-sigil/puzzles/hard_selected.json,16
+easy,gs://focus-surfer-494820-g0-sigil/puzzles/hard_selected.json,16
+medium,gs://focus-surfer-494820-g0-sigil/puzzles/hard_selected.json,16
+hard,gs://focus-surfer-494820-g0-sigil/puzzles/hard_selected.json,16
