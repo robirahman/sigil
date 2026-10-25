@@ -30,9 +30,9 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Online play & community
 
-- [ ] **Add an open-game lobby / quick-pair.** Online play is room-code only.
+- [x] **Add an open-game lobby / quick-pair.** Done: "List in the open-games lobby" on the create form, an Open Games list (creator, rating, clock, variant, rated/casual, your colour; your own seek with Cancel) and Quick pair, which joins the oldest matching seek or lists one. Online play is room-code only.
   Add a "seek a game at this time control" list.
-- [ ] **Add a "watch live games" list** for rooms that allow spectators. Spectating currently needs a shared link.
+- [x] **Add a "watch live games" list** (done: Watch Live in the lobby, the 20 most recently active games with a player present) for rooms that allow spectators. Spectating currently needs a shared link.
 - [x] **Add turn notifications for correspondence games** Done: an open site tab notifies when it becomes your move (correspondence, or any game while the tab is hidden), and "Notify me when it's my move" on active-games.html registers a web push (FCM) that the `notifyTurn` function sends; needs the FCM web push key in `turn-notify.js`. (12h / 24h / 3d), using the browser Notification API or Web Push through `docs/sw.js`.
 - [x] **Handle disconnects properly.** Done: the server stamps `disconnectedAt` on a dropped seat; the opponent sees a countdown, "reconnected", and after 60 s can claim the game (checked by the rating function); the `expireClocks` function ends flagged games with no tab open. Add a grace-period countdown, a "reconnected" event and claim-win / abort on abandonment.
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
@@ -54,7 +54,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   - [x] Add a provisional-rating marker or a minimum number of games. Done: "?" under 10 games.
   - [x] Add player search and "find me".
   - [x] Load only the top N (`limitToLast`) instead of every entry. Done: top 200.
-- [ ] **Merge the lobby's "Active Games" list into `docs/active-games.html`.** The lobby list reads localStorage (`docs/multiplayer.html:1093-1120`) and shows "Waiting..." for every untimed game.
+- [x] **Merge the lobby's "Active Games" list into `docs/active-games.html`.** Done: the lobby links there with a count. The lobby list reads localStorage (`docs/multiplayer.html:1093-1120`) and shows "Waiting..." for every untimed game.
 
 ## Puzzles
 
@@ -94,8 +94,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 ### Pairing & ratings
 
 - [ ] **Add matchmaking pools** that pair players automatically within a rating range, alongside the open-game lobby.
-- [ ] **Let a friend-challenge link choose colour** (random, red or blue).
-- [ ] **Let players choose rated or casual per game.**
+- [x] **Let a friend-challenge link choose colour** (random, red or blue). Done: every room records `creatorColor`.
+- [x] **Let players choose rated or casual per game.** Done: a casual room (`casual: true`) is held at `ranked: false` by the rules.
 - [ ] **Split ratings by time control and variant** (bullet, blitz, rapid, correspondence; Cataclysm etc.) instead of one Elo.
 - [ ] **Move to Glicko-2** with a provisional `?` marker, and show rating ranges on open games.
 

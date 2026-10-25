@@ -203,6 +203,38 @@
 			cursor: pointer;
 		}
 		.allow-spec input { cursor: pointer; }
+		/* Open games, quick pair and live games */
+		.lobby-list { text-align: left; margin: 8px 0 16px; }
+		.lobby-list__empty { color: var(--color-text-muted, #999); font-family: 'Overlock', sans-serif; font-size: 0.9em; text-align: center; margin: 6px 0; }
+		.lobby-game {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 8px;
+			padding: 8px 10px;
+			margin: 6px 0;
+			background: var(--color-surface);
+			border-radius: 6px;
+			font-family: 'Overlock', sans-serif;
+			font-size: 0.9em;
+		}
+		.lobby-game__who { color: var(--color-text-bright); overflow-wrap: anywhere; }
+		.lobby-game__meta { color: var(--color-border-hover); font-size: 0.9em; }
+		.lobby-game__btn {
+			flex: none;
+			padding: 4px 12px;
+			background: var(--color-surface-raised);
+			border: 1px solid var(--color-border);
+			border-radius: 4px;
+			color: var(--color-text-warm);
+			cursor: pointer;
+			font-family: 'Overlock', sans-serif;
+		}
+		.lobby-game__btn:hover { background: var(--color-surface-hover); }
+		.lobby-game__btn:disabled { opacity: 0.5; cursor: default; }
+		.lobby-notice { color: var(--color-text-warm); font-family: 'Overlock', sans-serif; margin: 6px 0; }
+		.lobby-section-title { display: flex; justify-content: space-between; align-items: baseline; }
+		.lobby-refresh { background: none; border: none; color: var(--color-border-hover); cursor: pointer; font-family: 'Overlock', sans-serif; text-decoration: underline; }
 		.share-link {
 			display: flex;
 			gap: 6px;
@@ -293,6 +325,41 @@
 				</template>
 			</div>
 
+			<!-- Open games: public rooms waiting for an opponent, and quick pair -->
+			<template x-if="!positionSfn"><div class="resume-section" style="margin-top: 12px;">
+				<div class="lobby-section-title"><h3>Open Games</h3></div>
+				<button class="lobby-button lobby-button--quick-pair" x-on:click="quickPair()" x-bind:disabled="isOffline || quickPairing" x-text="quickPairing ? 'Finding a game\u2026' : 'Quick pair (' + seekLabel + ')'">Quick pair</button>
+				<small style="display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin: -4px 0 8px;">Joins the oldest open game with the time control, variant and rated/casual choice below, or lists one and waits.</small>
+				<p class="lobby-notice" x-show="lobbyNotice" x-text="lobbyNotice"></p>
+				<div class="lobby-list lobby-list--open">
+					<template x-for="g in openGames" x-bind:key="g.code">
+						<div class="lobby-game" x-bind:data-code="g.code">
+							<div>
+								<div class="lobby-game__who"><span x-text="g.creatorName"></span><span x-show="g.creatorElo !== null" x-text="' (' + g.creatorElo + ')'"></span></div>
+								<div class="lobby-game__meta" x-text="g.mine ? 'Your game: waiting for an opponent' : [g.tcLabel, g.variantLabel, g.ratedLabel, 'you play ' + g.youPlay].join(' \u00b7 ')"></div>
+							</div>
+							<template x-if="!g.mine"><button class="lobby-game__btn" x-on:click="joinOpenGame(g.code)" x-bind:disabled="isOffline">Join</button></template>
+							<template x-if="g.mine"><button class="lobby-game__btn" x-on:click="cancelOpenGame(g.code)">Cancel</button></template>
+						</div>
+					</template>
+					<p class="lobby-list__empty" x-show="openGames.length === 0">No open games right now.</p>
+				</div>
+
+				<div class="lobby-section-title"><h3>Watch Live</h3><button class="lobby-refresh" x-on:click="refreshLiveGames()">Refresh</button></div>
+				<div class="lobby-list lobby-list--live">
+					<template x-for="g in liveGames" x-bind:key="g.code">
+						<div class="lobby-game" x-bind:data-code="g.code">
+							<div>
+								<div class="lobby-game__who" x-text="g.redName + ' vs ' + g.blueName"></div>
+								<div class="lobby-game__meta" x-text="[g.tcLabel, g.variantLabel, g.ratedLabel].join(' \u00b7 ')"></div>
+							</div>
+							<button class="lobby-game__btn" x-on:click="watchGame(g.code)" x-text="g.mine ? 'Resume' : 'Watch'">Watch</button>
+						</div>
+					</template>
+					<p class="lobby-list__empty" x-show="liveGames.length === 0">No games being played right now.</p>
+				</div>
+			</div></template>
+
 			<!-- A room from a position: the engine's price and the creator's side -->
 			<template x-if="positionSfn && positionOffer">
 				<div class="position-offer">
@@ -309,9 +376,9 @@
 					<small x-show="positionOffer.payoffs">Rating payoffs between equal ratings (the real ones use both players' ratings). Either side is worth the same on average.</small>
 					<small x-show="positionOffer.note" x-text="positionOffer.note"></small>
 					<div class="time-control__options" style="margin-top: 8px;">
-						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': positionSide === 'red' }" x-on:click="positionSide = 'red'">Play Red</button>
-						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': positionSide === 'blue' }" x-on:click="positionSide = 'blue'">Play Blue</button>
-						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': positionSide === 'random' }" x-on:click="positionSide = 'random'">Random</button>
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': creatorSide === 'red' }" x-on:click="creatorSide = 'red'">Play Red</button>
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': creatorSide === 'blue' }" x-on:click="creatorSide = 'blue'">Play Blue</button>
+						<button class="time-control__option" x-bind:class="{ 'time-control__option--active': creatorSide === 'random' }" x-on:click="creatorSide = 'random'">Random</button>
 					</div>
 				</div>
 			</template>
@@ -351,6 +418,30 @@
 					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': tcCorr === '3d' }" x-on:click="tcCorr = '3d'">3 days</button>
 				</div>
 			</div>
+
+			<!-- Your side (a room from a position picks it above) -->
+			<div class="time-control" x-show="!positionSfn">
+				<div class="time-control__label">Your Colour</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': creatorSide === 'random' }" x-on:click="creatorSide = 'random'">Random</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': creatorSide === 'red' }" x-on:click="creatorSide = 'red'">Red</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': creatorSide === 'blue' }" x-on:click="creatorSide = 'blue'">Blue</button>
+				</div>
+			</div>
+
+			<div class="time-control">
+				<div class="time-control__label">Rating</div>
+				<div class="time-control__options">
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': !casualGame }" x-on:click="casualGame = false">Rated</button>
+					<button class="time-control__option" x-bind:class="{ 'time-control__option--active': casualGame }" x-on:click="casualGame = true">Casual</button>
+				</div>
+				<small style="display: block; color: var(--color-text-muted); font-family: 'Overlock', sans-serif; margin-top: 4px;" x-text="casualGame ? 'Casual: the result does not change either rating.' : 'Rated when both players are signed in and the variant is rated.'"></small>
+			</div>
+
+			<label class="allow-spec">
+				<input type="checkbox" x-model="listPublic" />
+				<span>List in the open-games lobby</span>
+			</label>
 
 			<label class="allow-spec">
 				<input type="checkbox" x-model="allowSpectators" />
@@ -420,16 +511,9 @@
 				Online multiplayer requires a connection. <a href="game.html" style="color: inherit;">Local 1v1</a> or <a href="./" style="color: inherit;">vs AI</a> still work offline.
 			</p>
 
-			<!-- Resume correspondence games -->
-			<div class="resume-section" x-show="activeGames.length > 0">
-				<h3>Active Games</h3>
-				<template x-for="game in activeGames" x-bind:key="game.roomCode">
-					<div class="resume-game">
-						<span class="resume-game__code" x-text="game.roomCode"></span>
-						<span class="resume-game__status" x-bind:class="{ 'resume-game__status--your-turn': game.isYourTurn }" x-text="game.statusText"></span>
-						<button class="resume-game__join" x-on:click="resumeGame(game.roomCode)">Resume</button>
-					</div>
-				</template>
+			<!-- Games in progress live on the Active Games page (user_active_games). -->
+			<div class="resume-section">
+				<a class="active-games-link" href="active-games.html" x-text="activeGameCount ? 'Your games in progress (' + activeGameCount + ') \u2192' : 'Your games in progress \u2192'">Your games in progress &rarr;</a>
 			</div>
 		</div>
 
@@ -447,7 +531,10 @@
 				<span class="rated-badge rated-badge--lobby" x-bind:class="waitingPreview && waitingPreview.ranked ? 'rated-badge--rated' : 'rated-badge--casual'" x-text="waitingPreview && waitingPreview.ranked ? 'Rated' : 'Casual'"></span>
 				<span x-text="waitingPreview ? waitingPreview.note : ''"></span>
 			</p>
+			<p class="status-msg" x-text="waitingInfo"></p>
 			<p class="status-msg">Waiting for Player 2 to join...</p>
+			<button class="lobby-button" x-on:click="cancelWaiting()">Cancel</button>
+			<p class="error-msg" x-text="lobbyError"></p>
 		</div>
 
 		<!-- Joining a room from a position: its price first -->
@@ -824,6 +911,7 @@
 				bannerText: 'Spectating',
 				shareUrl: '',
 				shareCopied: false,
+				waitingInfo: '',
 
 				// Auth state
 				authReady: false,
@@ -852,15 +940,36 @@
 				pentagonVariant: (localStorage.getItem('sigilVariant') || '').indexOf('pentagon') !== -1,
 				useArtOnlySpells: localStorage.getItem('sigilArtOnlySpellCircles') === 'true',
 
-				// Active correspondence games
-				activeGames: [],
+				// Games in progress (user_active_games), counted for the link
+				// to active-games.html.
+				activeGameCount: 0,
+
+				// The creator's seat ('random' is resolved when the room is
+				// created), rated or casual, and whether the room is listed in
+				// the open-games lobby. All fixed at creation.
+				creatorSide: 'random',
+				casualGame: false,
+				listPublic: false,
+
+				// Lobby lists: public waiting rooms (live) and games being
+				// played that allow spectators (refreshed).
+				openGames: [],
+				liveGames: [],
+				lobbyNotice: '',
+				quickPairing: false,
+				// The seek this tab listed through quick pair, while it waits.
+				_quickSeek: null,
+				_movingSeek: false,
+				_waitingRooms: null,
+				_unwatchOpen: null,
+				_liveTimer: null,
+				_eloCache: {},
 
 				// A room from a position (?sfn=, from Import Position or a
 				// review's "from here"): the start, its engine price and the
 				// creator's side; and the joiner's confirmation of such a room.
 				positionSfn: '',
 				positionOffer: null,   // { loading, evalText, oddsText, payoffs, note, startPos, hist }
-				positionSide: 'random',
 				joinOffer: null,       // { code, side, evalText, oddsText, payoffs, note }
 				// Rated / Casual for the room code typed in (or offered), and
 				// for the creator's own waiting room: { ranked, note }.
@@ -887,7 +996,14 @@
 						this.authReady = true;
 					});
 
-					this._loadActiveGames();
+					this._loadActiveGameCount();
+					this._startLobbyLists();
+					// The lists run in the lobby and, for a quick-pair seek, on
+					// the waiting screen; a game stops them.
+					this.$watch('phase', (p) => {
+						if (p === 'lobby') this._startLobbyLists();
+						else if (p !== 'waiting') this._stopLobbyLists();
+					});
 
 					const urlSfn = new URLSearchParams(window.location.search).get('sfn');
 					if (urlSfn && !new URLSearchParams(window.location.search).get('id')) {
@@ -1177,7 +1293,7 @@
 					if (!offer) return;
 					this.joinOffer = null;
 					this.joinCode = offer.code;
-					await this.joinRoom(true);
+					await this.joinRoom(true, offer.seatOnly);
 				},
 
 				/** Rated / Casual for the room code typed into the lobby. */
@@ -1273,7 +1389,9 @@
 						const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
 						const timeControl = this._getTimeControl();
 						let variant = composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant);
-						let fromPosition = null, creatorColor = 'red';
+						let fromPosition = null;
+						let creatorColor = this.creatorSide;
+						const isPublic = !!(opts && opts.public) || this.listPublic;
 						if (this.positionSfn) {
 							// The start position names its spells and variant.
 							if (!this.positionOffer || this.positionOffer.loading) return;
@@ -1281,9 +1399,7 @@
 							spellNames = d.spell_names;
 							variant = normalizeVariant(d.variant);
 							setBoardLayout(variantBoardLayout(variant));
-							creatorColor = this.positionSide === 'random'
-								? (Math.random() < 0.5 ? 'red' : 'blue') : this.positionSide;
-							fromPosition = { startSfn: this.positionSfn, startPos: this.positionOffer.startPos, creatorColor };
+							fromPosition = { startSfn: this.positionSfn, startPos: this.positionOffer.startPos };
 						} else {
 							// Persist the lobby choice across visits (mirrors the
 							// localStorage key used by the static index page).
@@ -1291,7 +1407,14 @@
 								localStorage.setItem('sigilVariant', variant);
 							} catch (e) {}
 						}
-						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant, fromPosition);
+						if (opts && opts.creatorSide) creatorColor = opts.creatorSide;
+						this.roomCode = await _firebaseSync.createRoom(spellNames, userInfo, timeControl, this.allowSpectators, variant, fromPosition,
+							{ creatorColor, public: isPublic, casual: this.casualGame });
+						// Random is resolved by createRoom.
+						creatorColor = _firebaseSync.myColor;
+						this._quickSeek = (opts && opts.quickSeek) || null;
+						this.waitingInfo = 'You play ' + (creatorColor === 'red' ? 'Red' : 'Blue') + ' \u00b7 '
+							+ (this.casualGame ? 'Casual' : 'Rated') + (isPublic ? ' \u00b7 listed in the open-games lobby' : '');
 						this.shareUrl = this._buildShareUrl(this.roomCode);
 						this.phase = 'waiting';
 						this._previewWaitingRoom(this.roomCode);
@@ -1312,15 +1435,24 @@
 						} catch (e) {}
 
 						_firebaseSync.onOpponentJoin = () => {
+							this._quickSeek = null;
 							this._startOnlineGame(spellNames, creatorColor, null, false, timeControl, variant);
 						};
+						// A seek listed while an older compatible one appeared.
+						this._checkQuickSeek();
 					} catch (e) {
 						this.lobbyError = 'Failed to create room: ' + e.message;
 						console.error('createRoom error:', e);
 					}
 				},
 
-				async joinRoom(confirmed) {
+				/**
+				 * Join the room in joinCode. seatOnly (the open-games list and
+				 * quick pair): only take a waiting room's open seat, never
+				 * spectate; a seat someone else took first throws 'seat-taken'
+				 * when rethrow is set, and otherwise says so.
+				 */
+				async joinRoom(confirmed, seatOnly, rethrow) {
 					if (!_firebaseSync) return;
 					this.lobbyError = '';
 					try {
@@ -1333,20 +1465,23 @@
 							const mine = roomData && userInfo && userInfo.uid && roomData[creator] && roomData[creator].uid === userInfo.uid;
 							if (roomData && roomData.status === 'waiting' && roomData.startSfn && !mine) {
 								await this._offerJoin(code, roomData);
+								if (this.joinOffer) this.joinOffer.seatOnly = !!seatOnly;
 								return;
 							}
 						}
-						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo);
+						const result = await _firebaseSync.joinRoom(this.joinCode.toUpperCase(), userInfo, { seatOnly: !!seatOnly });
 						if (result.isSpectator) {
 							this._startOnlineGame(result.spellNames, null, result.sfn, true, result.timeControl, result.variant);
 						} else {
 							this._startOnlineGame(result.spellNames, result.myColor, result.sfn, false, result.timeControl, result.variant);
-							// Track correspondence games
-							if (result.timeControl && result.timeControl.type === 'correspondence') {
-								this._trackCorrespondenceGame(this.joinCode.toUpperCase(), result.myColor);
-							}
 						}
 					} catch (e) {
+						if (e && e.code === 'seat-taken') {
+							if (rethrow) throw e;
+							this.phase = 'lobby';
+							this.lobbyError = 'Someone else joined first.';
+							return;
+						}
 						this.lobbyError = e.message;
 					}
 				},
@@ -1396,46 +1531,297 @@
 					};
 				},
 
-				_trackCorrespondenceGame(roomCode, myColor) {
-					const key = 'sigil_active_games';
-					let games = [];
-					try { games = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
-					if (!games.find(g => g.roomCode === roomCode)) {
-						games.push({ roomCode, myColor, created: Date.now() });
-						localStorage.setItem(key, JSON.stringify(games));
+				/** How many games in progress the Active Games page will list. */
+				async _loadActiveGameCount() {
+					// The lobby's old list lived in localStorage.
+					try { localStorage.removeItem('sigil_active_games'); } catch (e) {}
+					try {
+						const user = await firebaseAuthSettled();
+						if (!user) return;
+						const snap = await firebase.database().ref('user_active_games/' + user.uid).once('value');
+						this.activeGameCount = snap.numChildren();
+					} catch (e) { /* offline: the link still works */ }
+				},
+
+				/* ----- Open games, quick pair, live games ----- */
+
+				_startLobbyLists() {
+					if (!_firebaseSync || this._unwatchOpen) return;
+					this._unwatchOpen = _firebaseSync.watchRoomsByStatus('waiting', (rooms) => {
+						this._waitingRooms = rooms;
+						this._renderOpenGames();
+						this._checkQuickSeek();
+					});
+					this.refreshLiveGames();
+					clearInterval(this._liveTimer);
+					this._liveTimer = setInterval(() => { if (this.phase === 'lobby') this.refreshLiveGames(); }, 30000);
+				},
+
+				_stopLobbyLists() {
+					if (this._unwatchOpen) this._unwatchOpen();
+					this._unwatchOpen = null;
+					clearInterval(this._liveTimer);
+					this._liveTimer = null;
+				},
+
+				_myUid() {
+					const u = typeof firebase !== 'undefined' && firebase.auth().currentUser;
+					return u ? u.uid : null;
+				},
+
+				_creatorOf(room) {
+					return room.creatorColor === 'blue' ? 'blue' : 'red';
+				},
+
+				/** A public waiting room that has not expired and whose creator is still here (or is us). */
+				_isOpen(room, uid) {
+					if (!room || room.status !== 'waiting' || room.public !== true) return false;
+					if (room.created && Date.now() - room.created > ROOM_INVITE_EXPIRY_MS) return false;
+					const seat = room[this._creatorOf(room)] || {};
+					if (!seat.uid) return false;
+					return seat.uid === uid || seat.connected !== false;
+				},
+
+				_formatTimeControl(tc) {
+					if (!tc || tc.type === 'none') return 'Unlimited';
+					if (tc.type === 'realtime') {
+						const min = Math.round((tc.initialTime || 0) / 6000) / 10;
+						const inc = Math.round((tc.increment || 0) / 1000);
+						return min + '+' + inc;
+					}
+					if (tc.type === 'correspondence') {
+						const ms = tc.moveTimeout || 0;
+						const day = 86400000;
+						if (ms >= day) return Math.round(ms / day) + 'd/move';
+						return Math.round(ms / 3600000) + 'h/move';
+					}
+					return '';
+				},
+
+				_variantLabel(v) {
+					const n = normalizeVariant(v);
+					if (n === 'standard') return 'Standard';
+					const names = { competitive: 'Competitive', deathmatch: 'Deathmatch', scramble: 'Scramble', duplicates: 'Duplicates', pentagon: 'Cataclysm' };
+					return n.split('_').map((t) => names[t] || t).join(' + ');
+				},
+
+				/** 'Casual' (the creator's choice), 'Unrated' (a guest, or a variant that is never rated) or 'Rated'. */
+				_ratedLabel(room) {
+					if (room.casual === true) return 'Casual';
+					if (room.status === 'playing') return room.ranked === true ? 'Rated' : 'Unrated';
+					const seat = room[this._creatorOf(room)] || {};
+					if (seat.anon || unratedReason(room.spellNames, room.variant, room.startSfn || null, room.startPos || null)) return 'Unrated';
+					return 'Rated';
+				},
+
+				_renderOpenGames() {
+					const uid = this._myUid();
+					const rows = (this._waitingRooms || []).filter((r) => this._isOpen(r, uid)).map((r) => {
+						const creator = this._creatorOf(r);
+						const seat = r[creator] || {};
+						if (!seat.anon && seat.uid) this._fetchElo(seat.uid);
+						return {
+							code: r.code,
+							created: r.created || 0,
+							creatorUid: seat.uid,
+							creatorName: seat.displayName || 'Guest',
+							creatorElo: !seat.anon && typeof this._eloCache[seat.uid] === 'number' ? this._eloCache[seat.uid] : null,
+							tcLabel: this._formatTimeControl(r.timeControl),
+							variantLabel: r.startSfn ? 'From a position' : this._variantLabel(r.variant),
+							ratedLabel: this._ratedLabel(r),
+							youPlay: creator === 'red' ? 'Blue' : 'Red',
+							mine: !!uid && seat.uid === uid,
+						};
+					});
+					rows.sort((a, b) => b.created - a.created);
+					this.openGames = rows;
+				},
+
+				async _fetchElo(uid) {
+					if (uid in this._eloCache) return;
+					this._eloCache[uid] = null;
+					try {
+						const v = (await firebase.database().ref('users/' + uid + '/elo').once('value')).val();
+						this._eloCache[uid] = typeof v === 'number' ? v : null;
+						this._renderOpenGames();
+					} catch (e) { /* no rating shown */ }
+				},
+
+				/**
+				 * Games being played that allow spectators and have a player at
+				 * the board, most recent activity first (a turn, a clock update
+				 * or the start), at most 20.
+				 */
+				async refreshLiveGames() {
+					if (!_firebaseSync) return;
+					try {
+						const uid = this._myUid();
+						const rooms = await _firebaseSync.listRoomsByStatus('playing');
+						const rows = rooms.filter((r) => r.allowSpectators !== false && !r.local
+							&& ((r.red && r.red.connected !== false) || (r.blue && r.blue.connected !== false))).map((r) => {
+							let last = r.created || 0;
+							if (r.timer && typeof r.timer.lastUpdated === 'number') last = Math.max(last, r.timer.lastUpdated);
+							for (const t of Object.values(r.turns || {})) {
+								if (t && typeof t.timestamp === 'number') last = Math.max(last, t.timestamp);
+							}
+							return {
+								code: r.code,
+								last,
+								redName: (r.red && r.red.displayName) || 'Guest',
+								blueName: (r.blue && r.blue.displayName) || 'Guest',
+								tcLabel: this._formatTimeControl(r.timeControl),
+								variantLabel: r.startSfn ? 'From a position' : this._variantLabel(r.variant),
+								ratedLabel: this._ratedLabel(r),
+								mine: !!uid && ((r.red && r.red.uid === uid) || (r.blue && r.blue.uid === uid)),
+							};
+						});
+						rows.sort((a, b) => b.last - a.last);
+						this.liveGames = rows.slice(0, 20);
+					} catch (e) {
+						console.warn('live games unavailable:', e);
 					}
 				},
 
-				async _loadActiveGames() {
-					const key = 'sigil_active_games';
-					let games = [];
-					try { games = JSON.parse(localStorage.getItem(key)) || []; } catch(e) {}
-					if (games.length === 0) return;
+				async joinOpenGame(code) {
+					this.lobbyNotice = '';
+					this.joinCode = code;
+					await this.joinRoom(false, true);
+				},
 
-					const db = firebase.database();
-					const active = [];
-					const stillAlive = [];
+				/** Spectate (or, for one of its players, resume) a live game. */
+				async watchGame(code) {
+					this.joinCode = code;
+					await this.joinRoom();
+				},
 
-					for (const game of games) {
-						try {
-							const snap = await db.ref('rooms/' + game.roomCode).once('value');
-							const data = snap.val();
-							if (!data || data.status === 'finished' || data.status === 'expired' || data.status === 'aborted') continue;
-							const expiryMs = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined' ? ROOM_INVITE_EXPIRY_MS : (72 * 60 * 60 * 1000);
-							if (data.status === 'waiting' && data.created && (Date.now() - data.created > expiryMs)) continue;
-							stillAlive.push(game);
-							const isYourTurn = data.timer && data.timer.activeColor === game.myColor;
-							active.push({
-								roomCode: game.roomCode,
-								myColor: game.myColor,
-								isYourTurn: isYourTurn,
-								statusText: isYourTurn ? 'Your turn' : 'Waiting...',
-							});
-						} catch(e) { /* skip unreadable rooms */ }
+				async cancelOpenGame(code) {
+					try {
+						const withdrawn = await _firebaseSync.withdrawRoom(code);
+						if (!withdrawn) this.lobbyNotice = 'Someone has already joined that game.';
+					} catch (e) {
+						this.lobbyError = e.message;
 					}
+				},
 
-					localStorage.setItem(key, JSON.stringify(stillAlive));
-					this.activeGames = active;
+				/** The waiting screen's Cancel: withdraw our room and go back to the lobby. */
+				async cancelWaiting() {
+					const code = this.roomCode;
+					this._quickSeek = null;
+					try {
+						const withdrawn = await _firebaseSync.withdrawRoom(code);
+						if (!withdrawn) return; // joined meanwhile: the game starts
+					} catch (e) {
+						this.lobbyError = e.message;
+						return;
+					}
+					this.roomCode = '';
+					this.shareUrl = '';
+					this.phase = 'lobby';
+					try { window.history.replaceState({}, '', 'multiplayer.html'); } catch (e) {}
+				},
+
+				/** What quick pair looks for: the form's time control, variant and rated/casual choice. */
+				_seekSettings() {
+					return {
+						timeControl: this._getTimeControl(),
+						variant: composeVariant(this.competitiveVariant, this.deathmatchVariant, this.duplicatesVariant, this.scrambleVariant, this.pentagonVariant),
+						casual: !!this.casualGame,
+					};
+				},
+
+				get seekLabel() {
+					const s = this._seekSettings();
+					return [this._formatTimeControl(s.timeControl), this._variantLabel(s.variant), s.casual ? 'Casual' : 'Rated'].join(', ');
+				},
+
+				_matchesSeek(room, seek) {
+					if (room.startSfn) return false;
+					if ((room.casual === true) !== seek.casual) return false;
+					if (normalizeVariant(room.variant) !== seek.variant) return false;
+					const a = room.timeControl || { type: 'none' }, b = seek.timeControl;
+					return (a.type || 'none') === b.type && (a.initialTime || 0) === (b.initialTime || 0)
+						&& (a.increment || 0) === (b.increment || 0) && (a.moveTimeout || 0) === (b.moveTimeout || 0);
+				},
+
+				/** Compatible open games from other players, oldest first. */
+				_seekCandidates(rooms, seek, uid) {
+					return rooms.filter((r) => this._isOpen(r, uid) && this._matchesSeek(r, seek)
+						&& (r[this._creatorOf(r)] || {}).uid !== uid)
+						.sort((a, b) => (a.created || 0) - (b.created || 0) || (a.code < b.code ? -1 : 1));
+				},
+
+				/**
+				 * Quick pair: join the oldest compatible open game that is not
+				 * ours, else list one (random colour) and wait. Seats are
+				 * first come, first served: when someone else takes a seat
+				 * first, the next game is tried.
+				 */
+				async quickPair() {
+					if (!_firebaseSync || this.quickPairing) return;
+					this.lobbyError = '';
+					this.lobbyNotice = '';
+					this.quickPairing = true;
+					try {
+						const userInfo = _authManager ? await _authManager.ensureSignedIn() : null;
+						const seek = this._seekSettings();
+						const rooms = await _firebaseSync.listRoomsByStatus('waiting');
+						if (await this._joinFirstOf(this._seekCandidates(rooms, seek, userInfo && userInfo.uid))) return;
+						await this.createRoom({ public: true, creatorSide: 'random', quickSeek: seek });
+					} catch (e) {
+						this.lobbyError = e.message;
+					} finally {
+						this.quickPairing = false;
+					}
+				},
+
+				/** Try each room's open seat in turn; true once one is taken. */
+				async _joinFirstOf(candidates) {
+					for (const r of candidates) {
+						try {
+							this.joinCode = r.code;
+							await this.joinRoom(false, true, true);
+							if (this.phase !== 'lobby') return true;
+						} catch (e) {
+							if (!e || e.code !== 'seat-taken') throw e;
+							this.lobbyNotice = 'Someone else joined first; trying the next game…';
+						}
+					}
+					return false;
+				},
+
+				/**
+				 * Two quick pairs at once can both find nothing and both list a
+				 * game. While ours waits, an older compatible open game wins:
+				 * withdraw ours and join it (both sides use the same order, so
+				 * exactly one of them moves).
+				 */
+				async _checkQuickSeek() {
+					const seek = this._quickSeek;
+					if (!seek || this.phase !== 'waiting' || this._movingSeek || !this._waitingRooms) return;
+					const uid = this._myUid();
+					const mine = this._waitingRooms.find((r) => r.code === this.roomCode);
+					if (!mine) return;
+					const older = this._seekCandidates(this._waitingRooms, seek, uid).filter((r) =>
+						(r.created || 0) < (mine.created || 0) || ((r.created || 0) === (mine.created || 0) && r.code < mine.code));
+					if (!older.length) return;
+					this._movingSeek = true;
+					let again = false;
+					try {
+						const withdrawn = await _firebaseSync.withdrawRoom(this.roomCode);
+						if (!withdrawn) return; // ours was joined: that game starts
+						this._quickSeek = null;
+						this.phase = 'lobby';
+						// All taken meanwhile: seek again.
+						again = !(await this._joinFirstOf(older));
+					} catch (e) {
+						this.lobbyError = e.message;
+					} finally {
+						this._movingSeek = false;
+					}
+					if (again) {
+						this.quickPairing = false;
+						await this.quickPair();
+					}
 				},
 			}));
 		});

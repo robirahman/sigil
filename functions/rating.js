@@ -218,7 +218,8 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		return Object.assign(unrated('seat-mismatch'), { kind });
 	}
 	if (room.status !== 'finished' || room.winner !== record.winner) return Object.assign(unrated('room-result-mismatch'), { kind });
-	if (room.ranked !== true) return Object.assign(unrated('casual'), { kind });
+	// A casual room is held at ranked:false by the rules too.
+	if (room.ranked !== true || room.casual === true) return Object.assign(unrated('casual'), { kind });
 	const why = engine.unratedReason(room.spellNames, room.variant, room.startSfn || null, room.startPos || null);
 	if (why) return Object.assign(unrated(why), { kind });
 

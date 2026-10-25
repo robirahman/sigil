@@ -42,6 +42,8 @@ npm run test:e2e     # rules + functions + auth emulators, through the client SD
 
 `tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators (see its header); `show-data-emulator-test.js` checks the Rated / Casual badges, the spectator count and the rating line after a game, and `leaderboard-emulator-test.js` the leaderboard.
 
+`tools/browser/online-emulator-test.js` drives the real lobby in Chrome against the emulators, and `tools/browser/lobby-emulator-test.js` the open games, quick pair and Watch Live lists (see their headers).
+
 ## Deploy
 
 1. Switch the Firebase project to Blaze.

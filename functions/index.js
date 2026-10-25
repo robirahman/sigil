@@ -259,6 +259,9 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		const opp = me === 'red' ? 'blue' : 'red';
 		const oppUid = room[opp] && room[opp].uid;
 		if (oppUid && oppUid !== uid) updates['user_active_games/' + oppUid + '/' + code] = null;
+		// Off the lobby lists either way (open_rooms, live_rooms).
+		updates['open_rooms/' + code] = null;
+		updates['live_rooms/' + code] = null;
 		if (room.status === 'waiting') {
 			updates['rooms/' + code] = null;
 		} else if (room.status === 'playing') {

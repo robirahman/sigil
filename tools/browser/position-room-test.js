@@ -38,7 +38,7 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		check('lobby prices the position', !!offer.startPos && /^Engine: /.test(offer.evalText), offer);
 		await pageA.evaluate(async () => {
 			const l = document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0];
-			l.positionSide = 'blue';
+			l.creatorSide = 'blue';
 			await l.createRoom();
 		});
 		await pageA.waitForFunction(() => document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0].phase === 'waiting', { timeout: 30000 });
