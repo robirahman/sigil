@@ -13,6 +13,30 @@ const _INVITE_EXPIRY_MS = typeof ROOM_INVITE_EXPIRY_MS !== 'undefined'
 	? ROOM_INVITE_EXPIRY_MS
 	: (72 * 60 * 60 * 1000);
 
+/**
+ * Preset emotes for online games, in picker order. The ids are fixed by
+ * database.rules.json (rooms/$roomId/emotes/$emoteId/e): keep both lists in
+ * step. "Well played" and "Thanks" stay open for a minute after the game.
+ */
+const SIGIL_EMOTES = [
+	{ id: 'hello', text: 'Hello!' },
+	{ id: 'glhf', text: 'Good luck!' },
+	{ id: 'nice', text: 'Nice move!' },
+	{ id: 'wow', text: 'Wow!' },
+	{ id: 'think', text: 'Thinking…' },
+	{ id: 'oops', text: 'Oops!' },
+	{ id: 'sorry', text: 'Sorry!' },
+	{ id: 'thanks', text: 'Thanks!', after: true },
+	{ id: 'gg', text: 'Well played!', after: true },
+	{ id: 'rematch', text: 'Rematch?' },
+];
+/** The rules refuse a seat's emote within this long of its last one. */
+const SIGIL_EMOTE_GAP_MS = 3000;
+/** How long after the game ends the `after` emotes are still accepted. */
+const SIGIL_EMOTE_AFTER_MS = 60000;
+/** How long a bubble stays over the sender's name. */
+const SIGIL_EMOTE_BUBBLE_MS = 3000;
+
 class FirebaseSync {
 	constructor(db) {
 		this.db = db;
@@ -153,8 +177,9 @@ class FirebaseSync {
 	 * @param {object} [opts] - { creatorColor: 'red' | 'blue' | 'random' (the
 	 *   creator's seat, resolved here; default red), public (listed in the
 	 *   lobby's open games), casual (never rated: the joiner writes
-	 *   ranked:false and the rules hold it there) }. All three are fixed at
-	 *   creation. A fromPosition.creatorColor is still honoured.
+	 *   ranked:false and the rules hold it there), invite (a challenge: the
+	 *   one uid the rules let take the open seat; never public) }. All are
+	 *   fixed at creation. A fromPosition.creatorColor is still honoured.
 	 */
 	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant, fromPosition, opts) {
 		const code = _generateRoomCode();
@@ -187,11 +212,16 @@ class FirebaseSync {
 			variant: this.variant,
 			// The joiner takes the other seat (joinRoom).
 			creatorColor: me,
+			// Turns follow rooms/{id}/last (database.rules.json).
+			seq: true,
 		};
 		this.isPublic = !!(opts && opts.public);
 		this.casual = !!(opts && opts.casual);
+		this.invite = (opts && typeof opts.invite === 'string' && opts.invite) || null;
+		if (this.invite) this.isPublic = false;
 		if (this.isPublic) roomData.public = true;
 		if (this.casual) roomData.casual = true;
+		if (this.invite) roomData.invite = this.invite;
 		if (this.startSfn) {
 			roomData.startSfn = this.startSfn;
 			if (this.startPos) roomData.startPos = this.startPos;
@@ -200,6 +230,7 @@ class FirebaseSync {
 		const roomRef = this.db.ref('rooms/' + code);
 		await roomRef.set(roomData);
 		this.roomRef = roomRef;
+		this._seq = true;
 		// rooms/ is not listable: a public room is announced in open_rooms/
 		// (the rules check it against the room). Best-effort: a missing
 		// entry only keeps the room off the lobby list.
@@ -214,6 +245,22 @@ class FirebaseSync {
 		this._listenForTurns();
 		await this._goOnline(me);
 		return code;
+	}
+
+	/**
+	 * Challenge the player our waiting room invites (createRoom's
+	 * opts.invite): challenges/{target}/{room}, which shows them a banner
+	 * (friends.js) and a push (functions/notify.js). The rules refuse it
+	 * when they have blocked us.
+	 */
+	async sendChallenge() {
+		if (!this.roomCode || !this.invite) throw new Error('No challenge room');
+		await this.db.ref('challenges/' + this.invite + '/' + this.roomCode).set({
+			from: this[this.creatorColor + 'Uid'],
+			at: firebase.database.ServerValue.TIMESTAMP,
+			tc: this.timeControl,
+			variant: this.variant,
+		});
 	}
 
 	/**
@@ -274,6 +321,7 @@ class FirebaseSync {
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
+		this._seq = undefined;
 
 		const snap = await roomRef.once('value');
 		const data = snap.val();
@@ -329,20 +377,54 @@ class FirebaseSync {
 			// listener then reads them together (_refreshPlayers). The rules
 			// give the seat to the first claim only: a second joiner, or a
 			// join after the creator withdrew, is refused.
+			const join = () => roomRef.update({
+				// `seq`: this client sequences its turns; the rules start a
+				// sequenced room only for a joiner that says so, so a tab on
+				// older code is refused here, not after its first move.
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous, seq: true },
+				status: 'playing',
+				ranked: this.ranked,
+				// Why it is unrated when a suspension downgraded it, so every
+				// client and the game record can say so (roomUnratedReason).
+				unratedReason: this.unratedWhy === 'suspended' ? 'suspended' : null,
+				// The server's time the game began: the first mover's clock
+				// (functions/rating.js flagged) runs from it.
+				startedAt: firebase.database.ServerValue.TIMESTAMP,
+			});
 			try {
-				await roomRef.update({
-					[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
-					status: 'playing',
-					ranked: this.ranked,
-					// The server's time the game began: the first mover's clock
-					// (functions/rating.js flagged) runs from it.
-					startedAt: firebase.database.ServerValue.TIMESTAMP,
-				});
+				await join();
 			} catch (e) {
 				const now = (await roomRef.once('value').catch(() => null));
 				const v = now && now.val();
 				if (!v || v.status !== 'waiting' || (v[joiner] && v[joiner].uid)) throw taken();
-				throw e;
+				// Still open but refused: a challenge for someone else, or a
+				// creator who blocked us (database.rules.json, the seats).
+				const refused = (err) => /permission/i.test(String((err && (err.code || err.message)) || ''))
+					? Object.assign(new Error(v.invite && v.invite !== this[joiner + 'Uid'] ? 'This game is a challenge for another player.' : 'You cannot join this game.'), { code: 'seat-refused' })
+					: err;
+				if (v.invite && v.invite !== this[joiner + 'Uid']) throw refused(e);
+				// The rules refuse a rated room to a player suspended from
+				// rated play (user_flags/{uid}/banUntil): the game goes ahead
+				// unrated.
+				// Refused for none of those (no invite, no block either way):
+				// the rules expect a newer client (e.g. turn sequencing) than
+				// this page.
+				const me = this[joiner + 'Uid'];
+				const them = v[creator] && v[creator].uid;
+				const blocked = !!(me && them) && (await Promise.all([
+					this.db.ref('blocks/' + them + '/' + me).once('value').then((s) => s.exists(), () => false),
+					this.db.ref('blocks/' + me + '/' + them).once('value').then((s) => s.exists(), () => false),
+				])).some(Boolean);
+				const outdated = () => Object.assign(new Error('This game needs the latest version of the site. Please reload the page and try again.'), { code: 'reload' });
+				const why = (err) => (blocked ? refused(err) : outdated());
+				if (!this.ranked) throw why(e);
+				this.ranked = false;
+				this.unratedWhy = 'suspended';
+				try {
+					await join();
+				} catch (e2) {
+					throw why(e2);
+				}
 			}
 			// Off the open-games list, and on Watch Live if spectators may watch.
 			this.db.ref('open_rooms/' + code).remove().catch(() => {});
@@ -554,6 +636,23 @@ class FirebaseSync {
 		}
 	}
 
+	/** The turns this client holds, in the order played (syncOrderTurnKeys). */
+	_orderedTurnKeys() {
+		const info = this._turnInfo || {};
+		const turns = {};
+		for (const k of this._turnKeys || []) if (info[k]) turns[k] = { after: info[k].after, timestamp: info[k].ts };
+		return syncOrderTurnKeys(turns, this._seq);
+	}
+
+	/**
+	 * Does the room sequence its turns (rooms/{id}/seq, fixed at creation)?
+	 * Then each turn writes rooms/{id}/last with it (database.rules.json).
+	 */
+	async _isSequenced() {
+		if (this._seq === undefined) this._seq = (await this.roomRef.child('seq').once('value')).val() === true;
+		return this._seq;
+	}
+
 	/**
 	 * Send a completed turn's actions as a batch.
 	 * Optionally includes an atomic timer update.
@@ -570,7 +669,11 @@ class FirebaseSync {
 			// takeback can no longer remove turns once the request is gone,
 			// so a move and an acceptance can never both land.
 			const turnKey = this.roomRef.child('turns').push().key;
-			const keys = this._turnKeys || [];
+			// Our own view of the last turn, in the server's order (push
+			// keys carry each client's clock): if the room moved on without
+			// us (a takeback), the rules refuse the move.
+			const seq = await this._isSequenced();
+			const keys = this._orderedTurnKeys();
 			const turn = {
 				color: this.myColor,
 				actions: actions,
@@ -578,6 +681,10 @@ class FirebaseSync {
 			};
 			if (keys.length) turn.after = keys[keys.length - 1];
 			const updates = { ['turns/' + turnKey]: turn, takeback: null };
+			// A sequenced room (rooms/{id}/seq, set at creation): the turn
+			// moves `last` on in the same write. Rooms created before turn
+			// sequencing keep the old rule until they finish.
+			if (seq) updates.last = { key: turnKey, color: this.myColor };
 			if (timerUpdate) {
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
@@ -785,13 +892,19 @@ class FirebaseSync {
 		// Every turn in the room, including those before a reload (the
 		// controller's log holds only the turns since).
 		this._turnKeys = [];
+		// key -> { color, ts }: the order of play is the server timestamps'
+		// (_orderedTurnKeys), not the push keys'.
+		this._turnInfo = {};
 		// A takeback both players agreed to removes turns: start over from
 		// the room (the reconnect path rebuilds from currentSfn).
-		turnsRef.on('child_removed', () => {
+		turnsRef.on('child_removed', (snap) => {
+			delete this._turnInfo[snap.key];
 			if (this.onTurnsRemoved) this.onTurnsRemoved();
 		});
 		turnsRef.on('child_added', (snap) => {
 			this._turnKeys.push(snap.key);
+			const v = snap.val() || {};
+			this._turnInfo[snap.key] = { color: v.color, after: v.after, ts: typeof v.timestamp === 'number' ? v.timestamp : 0 };
 			if (skipped < existingCount) {
 				skipped++;
 				return;
@@ -842,6 +955,9 @@ class FirebaseSync {
 		}
 		if (!res || !res.committed) return false;
 		this._unlistRoom(code);
+		// A challenge room: take the challenge back too.
+		const invite = await roomRef.child('invite').once('value').then((s) => s.val(), () => null);
+		if (invite) await this.db.ref('challenges/' + invite + '/' + code).remove().catch(() => {});
 		if (this.roomRef && this.roomCode === code) {
 			if (this.myColor) this.roomRef.child(this.myColor).onDisconnect().cancel().catch(() => {});
 			this.roomRef.off();
@@ -966,6 +1082,7 @@ class FirebaseSync {
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
+		this._seq = roomData.seq === true;
 
 		await this._goOnline(me);
 
@@ -1060,6 +1177,49 @@ class FirebaseSync {
 		}
 	}
 
+	/* ----- Emotes ----- */
+
+	/**
+	 * Send a preset emote from our seat. One write holds the emote and
+	 * lastEmote/{color}, which names it: the rules accept it only when the
+	 * seat's previous emote is more than SIGIL_EMOTE_GAP_MS old (server time).
+	 * Returns true when the server took it.
+	 */
+	async sendEmote(color, id) {
+		if (!this.roomRef || (color !== 'red' && color !== 'blue')) return false;
+		const key = this.roomRef.child('emotes').push().key;
+		const ts = firebase.database.ServerValue.TIMESTAMP;
+		try {
+			await this.roomRef.update({
+				['emotes/' + key]: { color, e: id, at: ts },
+				['lastEmote/' + color]: { at: ts, key },
+			});
+			return true;
+		} catch (e) {
+			console.warn('[Sync] sendEmote refused:', e.code || e.message);
+			return false;
+		}
+	}
+
+	/**
+	 * Watch for emotes: callback({ color, e, at }) for each new one. Emotes
+	 * already in the room when the page opens are not replayed: the query's
+	 * first child_added events come before its first value event, and are
+	 * skipped (no clock comparison, so a skewed offset cannot hide them).
+	 * Ordered by the server-stamped `at` (indexed), not by key: a sender may
+	 * choose its emote's key, and one sorting last would hide the rest.
+	 */
+	listenForEmotes(callback) {
+		if (!this.roomRef) return;
+		const q = this.roomRef.child('emotes').orderByChild('at').limitToLast(1);
+		let primed = false;
+		q.on('child_added', (snap) => {
+			const v = snap.val();
+			if (primed && v) callback(v);
+		});
+		q.once('value', () => { primed = true; });
+	}
+
 	/* ----- Takebacks by agreement ----- */
 
 	/**
@@ -1070,7 +1230,9 @@ class FirebaseSync {
 	async requestTakeback() {
 		if (!this.roomRef || !this._turnKeys || !this._turnKeys.length) return false;
 		const turns = (await this.roomRef.child('turns').once('value')).val() || {};
-		const keys = this._turnKeys.filter((k) => turns[k]);
+		const mine = {};
+		for (const k of this._turnKeys) if (turns[k]) mine[k] = turns[k];
+		const keys = syncOrderTurnKeys(mine, await this._isSequenced());
 		const lastMine = keys.length && turns[keys[keys.length - 1]].color === this.myColor;
 		const undo = keys.slice(lastMine ? -1 : -2);
 		if (!undo.length || turns[undo[0]].color !== this.myColor) return false;
@@ -1106,6 +1268,63 @@ class FirebaseSync {
 		try { await this.roomRef.child('takeback').remove(); } catch (e) { /* already gone */ }
 	}
 
+	/** The room as the server holds it now (not the local cache). */
+	async readRoom() {
+		if (!this.roomRef) return null;
+		const snap = typeof this.roomRef.get === 'function' ? await this.roomRef.get() : await this.roomRef.once('value');
+		return snap.val();
+	}
+
+	/**
+	 * Follow the room's records that move a clock (room-clock.js): pauses
+	 * (a player's vacation, written by the server) and gifts of time.
+	 * @param {function} callback - receives { pauses, gifts, startedAt, ready }
+	 *   (ready once all three have loaded)
+	 */
+	listenToClockRecords(callback) {
+		if (!this.roomRef) return;
+		const rec = { pauses: null, gifts: null, startedAt: null, ready: false };
+		const keys = ['pauses', 'gifts', 'startedAt'];
+		const seen = new Set();
+		for (const k of keys) {
+			this.roomRef.child(k).on('value', (snap) => {
+				rec[k] = snap.val();
+				seen.add(k);
+				rec.ready = seen.size === keys.length;
+				callback(Object.assign({}, rec));
+			});
+		}
+	}
+
+	/**
+	 * Give the opponent ROOM_GIFT_MS (realtime games). The rules accept a
+	 * gift only to the other seat, stamped with the server's time, at most
+	 * once a second per seat: giftAt/{seat} names the one gift each write
+	 * may add.
+	 */
+	async giveTime() {
+		if (!this.roomRef || (this.myColor !== 'red' && this.myColor !== 'blue')) return false;
+		const to = this.myColor === 'red' ? 'blue' : 'red';
+		const key = this.roomRef.child('gifts').push().key;
+		const ts = firebase.database.ServerValue.TIMESTAMP;
+		try {
+			// giftAt/{seat}/n counts this seat's gifts (at most ROOM_GIFT_MAX).
+			const prev = (await this.roomRef.child('giftAt/' + this.myColor + '/n').once('value')).val();
+			const n = (typeof prev === 'number' ? prev : 0) + 1;
+			if (n > ROOM_GIFT_MAX) return false;
+			// Not _track: a gift refused (too soon after the last) is no
+			// lost move.
+			await this.roomRef.update({
+				['gifts/' + key]: { to, ms: ROOM_GIFT_MS, at: ts },
+				['giftAt/' + this.myColor]: { key, at: ts, n },
+			});
+			return true;
+		} catch (e) {
+			console.error('[Sync] giveTime FAILED:', e.code, e.message);
+			return false;
+		}
+	}
+
 	/**
 	 * Accept the opponent's request: remove its turns (they must be the
 	 * last ones played) and set the position before them, in one write.
@@ -1116,13 +1335,21 @@ class FirebaseSync {
 	async acceptTakeback(req, sfn) {
 		if (!this.roomRef || !req || !req.keys) return false;
 		const undo = Object.keys(req.keys);
-		const tail = (this._turnKeys || []).slice(-undo.length);
+		await this._isSequenced();
+		const ordered = this._orderedTurnKeys();
+		const tail = ordered.slice(-undo.length);
 		if (undo.some((k) => !tail.includes(k))) {
 			await this.clearTakeback();
 			return false;
 		}
 		const updates = { takeback: null, currentSfn: sfn || null };
 		for (const k of undo) updates['turns/' + k] = null;
+		// `last` goes back to the turn kept, in the same write (the rules
+		// require it), or away with the last turn.
+		if (await this._isSequenced()) {
+			const tip = ordered[ordered.length - undo.length - 1];
+			updates.last = tip ? { key: tip, color: this._turnInfo[tip].color } : null;
+		}
 		// The requester is to move again: their clock runs (a correspondence
 		// deadline restarts from now).
 		const timer = (await this.roomRef.child('timer').once('value')).val();
@@ -1298,13 +1525,22 @@ class FirebaseSync {
 			// The rules seat both players at once only for a rematch of
 			// a room they both sat in.
 			rematchOf: this.roomCode,
+			seq: true,
 		};
 		// A rematch of a room from a position replays the same start.
 		if (fromPosition && fromPosition.startSfn) {
 			roomData.startSfn = fromPosition.startSfn;
 			if (fromPosition.startPos) roomData.startPos = fromPosition.startPos;
 		}
-		await this.db.ref('rooms/' + code).set(roomData);
+		try {
+			await this.db.ref('rooms/' + code).set(roomData);
+		} catch (e) {
+			// A player suspended from rated play: the rematch is unrated.
+			if (!roomData.ranked) throw e;
+			roomData.ranked = false;
+			roomData.unratedReason = 'suspended';
+			await this.db.ref('rooms/' + code).set(roomData);
+		}
 		if (roomData.allowSpectators) this.db.ref('live_rooms/' + code).set(true).catch(() => {});
 		return code;
 	}
@@ -1317,6 +1553,38 @@ class FirebaseSync {
 }
 
 /**
+ * As room-clock.js orderTurnKeys (not always loaded with this file).
+ * A room's turn keys in the order played. A sequenced room (rooms/{id}/seq)
+ * chains its turns: each names the one before it (`after`, which the rules
+ * hold to the room's last turn), so the chain from the one turn without a
+ * predecessor here gives the order, ties in time included. Otherwise, or
+ * if the turns given do not form one chain, by server timestamp, push key
+ * breaking a tie (the order of an RTDB orderByChild('timestamp') query).
+ * @param {object} turns - key -> { after, timestamp }
+ * @param {boolean} seq - the room's `seq`
+ */
+function syncOrderTurnKeys(turns, seq) {
+	const keys = Object.keys(turns || {});
+	const byTime = keys.slice().sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0));
+	if (seq !== true || keys.length < 2) return byTime;
+	const next = {};
+	const roots = [];
+	for (const k of keys) {
+		const a = turns[k] && turns[k].after;
+		if (typeof a === 'string' && Object.prototype.hasOwnProperty.call(turns, a)) {
+			if (next[a] !== undefined) return byTime;
+			next[a] = k;
+		} else {
+			roots.push(k);
+		}
+	}
+	if (roots.length !== 1) return byTime;
+	const out = [];
+	for (let k = roots[0]; k !== undefined && out.length <= keys.length; k = next[k]) out.push(k);
+	return out.length === keys.length ? out : byTime;
+}
+
+/**
  * Why a room is (or would be) unrated, or null when it is rated: both seats
  * need full (non-anonymous) accounts, and the game must pass the shared rule
  * (elo.js unratedReason). `joiner` ({ uid, isAnonymous }, as userInfo) fills
@@ -1326,6 +1594,9 @@ class FirebaseSync {
 function roomUnratedReason(data, joiner) {
 	// The creator chose a casual game (lobby).
 	if (data.casual === true) return 'casual';
+	// A rated game downgraded because a player is suspended (joinRoom,
+	// createRematchRoom); the rules allow it only with ranked false.
+	if (joiner === undefined && data.ranked === false && data.unratedReason === 'suspended') return 'suspended';
 	const creator = data.creatorColor === 'blue' ? 'blue' : 'red';
 	const seats = { red: data.red || {}, blue: data.blue || {} };
 	if (joiner !== undefined) {
@@ -1374,6 +1645,54 @@ async function loadGameEvals(db, roomCode) {
 	if (!db || !roomCode) return null;
 	const snap = await db.ref('game_evals/' + roomCode).once('value');
 	return snap.exists() ? snap.val() : null;
+}
+
+/**
+ * The position_evals key of a position: the first 40 hex digits of the
+ * SHA-256 of its SFN, as functions/analysis.js (and position_prices) key it.
+ */
+async function positionEvalKey(sfn) {
+	const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(sfn)));
+	return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+}
+
+/**
+ * The server's stored searches of these positions (RUST_SERVER_PRESET)
+ * (`position_evals/<key>`, written only by functions/analysis.js), as a Map
+ * from SFN to the search result (mover POV, as the engine reports it).
+ * Entries of another engine build or eval are skipped.
+ */
+async function loadPositionEvals(db, sfns) {
+	const out = new Map();
+	if (!db || !Array.isArray(sfns) || !sfns.length || typeof positionEvalEngineTag !== 'function') return out;
+	const tag = positionEvalEngineTag();
+	await Promise.all(Array.from(new Set(sfns)).map(async (sfn) => {
+		try {
+			const snap = await db.ref('position_evals/' + await positionEvalKey(sfn)).once('value');
+			const e = snap.val();
+			if (e && e.sfn === sfn && e.engine === tag) out.set(sfn, e);
+		} catch (e) { /* a missing entry is a miss */ }
+	}));
+	return out;
+}
+
+/**
+ * Ask the server to search and cache positions (the evalPositions callable,
+ * which searches each one itself: clients cannot write position_evals).
+ * Fire and forget; signed-in players only, ten positions per call.
+ */
+async function requestPositionEvals(sfns) {
+	if (typeof firebase === 'undefined' || !firebase.functions || !firebase.auth || !firebase.auth().currentUser) return;
+	const call = firebase.functions().httpsCallable('evalPositions');
+	const todo = Array.from(new Set(sfns)).slice(0, 100);
+	for (let k = 0; k < todo.length; k += 10) {
+		try {
+			await call({ sfns: todo.slice(k, k + 10) });
+		} catch (e) {
+			console.warn('evalPositions failed:', e && e.message);
+			return;
+		}
+	}
 }
 
 /**

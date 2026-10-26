@@ -10,9 +10,10 @@ const { flagged, sideToMove, onlineTranscript, CLOCK_GRACE_MS } = require('./rat
  * End a room the server decided (a flag nobody's tab saw, an abort after
  * both players moved): the result, the status and closedAt in one
  * transaction on the room, so it is never half finished. recordRoom
- * records it from there.
+ * records it from there. `check(room, now)`, when given, must still hold
+ * on the room inside the transaction.
  */
-async function finishRoom(db, code, from, result) {
+async function finishRoom(db, code, from, result, check) {
 	const ref = db.ref('rooms/' + code);
 	const now = Date.now();
 	// A transaction first runs on the local cache, empty here (null): answer
@@ -20,6 +21,9 @@ async function finishRoom(db, code, from, result) {
 	const res = await ref.transaction((room) => {
 		if (room === null) return null;
 		if (room.status !== from) return undefined;
+		// The decision, again on the room as it is now (a gift or a pause
+		// may have landed since it was read).
+		if (check && !check(room, now)) return undefined;
 		const done = Object.assign(room, result, { status: 'finished', closedAt: now, finishedAt: now });
 		// No tab wrote the review fields (writeRoomFinalState): leave the
 		// transcript from the turns, which the review replays.
@@ -49,7 +53,8 @@ async function expireRooms(db, now) {
 		if (!tc || (tc.type !== 'realtime' && tc.type !== 'correspondence')) return;
 		const loser = sideToMove(room);
 		if (!flagged(room, loser, now - CLOCK_GRACE_MS)) return;
-		jobs.push(finishRoom(db, child.key, 'playing', { winner: loser === 'red' ? 'blue' : 'red', endReason: 'time' }));
+		jobs.push(finishRoom(db, child.key, 'playing', { winner: loser === 'red' ? 'blue' : 'red', endReason: 'time' },
+			(r, at) => sideToMove(r) === loser && flagged(r, loser, at - CLOCK_GRACE_MS)));
 	});
 	return (await Promise.all(jobs)).filter(Boolean).length;
 }

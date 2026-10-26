@@ -6,7 +6,7 @@
 		<meta http-equiv="X-UA-Compatible" content="ie=edge" />
 		<link href="static/css/global.css?v202305191" rel="stylesheet" />
 		<link href="static/css/layout.css" rel="stylesheet" />
-		<link href="static/css/styles.css" rel="stylesheet" />
+		<link href="static/css/styles.css?v=35" rel="stylesheet" />
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
@@ -97,6 +97,60 @@
 			.puzzle-panel__rating { margin-top: 4px; color: var(--color-text-warm, #eee); }
 			.puzzle-panel__tags { color: var(--color-text-muted, #aaa); font-size: 0.85em; margin: 0 0 6px; }
 			.puzzle-loading { padding: 80px 0; text-align: center; color: var(--color-text-muted, #aaa); }
+
+		/* Tabs: Puzzles | Dashboard | Storm */
+		.puzzle-tabs { font-family: 'Overlock', sans-serif; padding: 56px 16px 0; display: flex; flex-wrap: wrap; gap: 14px; }
+		.puzzle-tabs a { color: var(--color-text-warm, #eee); }
+		.puzzle-tabs a.is-active { font-weight: bold; text-decoration: underline; }
+		.puzzle-tabs ~ #puzzle-root .puzzle-panel { padding-top: 8px; }
+
+		/* Dashboard */
+		.puzzle-dash { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 8px 16px 16px; max-width: 760px; margin: 0 auto; box-sizing: border-box; }
+		.puzzle-dash h2 { font-family: 'Arvo', serif; font-size: 1.35em; margin: 8px 0 4px; }
+		.puzzle-dash h3 { font-family: 'Arvo', serif; font-size: 1.05em; margin: 18px 0 6px; }
+		.puzzle-dash__note { color: var(--color-text-muted, #aaa); font-size: 0.9em; margin: 2px 0; }
+		.puzzle-dash__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 10px 0; }
+		.puzzle-dash__tile { border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; padding: 8px 10px; }
+		.puzzle-dash__tile b { display: block; font-size: 1.4em; font-family: 'Arvo', serif; }
+		.puzzle-dash__tile span { color: var(--color-text-muted, #aaa); font-size: 0.85em; }
+		.puzzle-dash__rows { width: 100%; border-collapse: collapse; font-size: 0.92em; table-layout: fixed; }
+		.puzzle-dash__rows td { padding: 3px 4px; vertical-align: middle; }
+		.puzzle-dash__rows td:first-child { width: 38%; overflow-wrap: anywhere; }
+		.puzzle-dash__rows td:last-child { width: 30%; text-align: right; color: var(--color-text-muted, #aaa); }
+		.puzzle-dash__bar { height: 10px; border-radius: 0 4px 4px 0; background: var(--color-accent, #d4af37); min-width: 2px; }
+		.puzzle-dash__track { background: rgba(255, 255, 255, 0.08); border-radius: 0 4px 4px 0; }
+		.puzzle-dash__chart { width: 100%; height: auto; display: block; }
+		.puzzle-dash__chart text { fill: var(--color-text-muted, #aaa); font-size: 11px; font-family: 'Overlock', sans-serif; }
+		.puzzle-dash__chart .grid { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1; }
+		.puzzle-dash__chart .line { stroke: var(--color-accent, #d4af37); stroke-width: 2; fill: none; }
+		.puzzle-dash__chart .dot { fill: var(--color-accent, #d4af37); opacity: 0; }
+		.puzzle-dash__chart .dot:hover, .puzzle-dash__chart .dot.is-last { opacity: 1; }
+		.puzzle-dash ul { margin: 4px 0; padding-left: 1.2em; }
+		.puzzle-dash a { color: var(--color-accent, #d4af37); }
+
+		/* Puzzle Storm */
+		.storm-intro { font-family: 'Overlock', sans-serif; color: var(--color-text-warm, #eee); padding: 8px 16px 16px; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+		.storm-intro h2 { font-family: 'Arvo', serif; font-size: 1.35em; margin: 8px 0 4px; }
+		.storm-intro .action-button { margin: 10px 8px 0 0; }
+		.storm-intro a { color: var(--color-accent, #d4af37); }
+		.storm-bar { display: none; font-family: 'Arvo', serif; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 4px; }
+		/* During a run the clock and its buttons stay in view while the board scrolls. */
+		body.storm-mode .storm-bar {
+			display: flex; position: sticky; top: 0; z-index: 50; margin: 0; padding: 6px 16px;
+			background: var(--color-bg-dark, #1b1b1b); border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+		}
+		.storm-bar__time { font-size: 1.6em; min-width: 3.2em; }
+		.storm-bar__time.is-low { color: #e0604a; }
+		.storm-bar__score { font-size: 1.3em; color: #6fd46f; }
+		.storm-bar__combo { color: var(--color-text-muted, #aaa); }
+		.storm-bar__flash { color: #f0d77a; }
+		.storm-bar .action-button { margin: 0; padding: 2px 10px; font-size: 0.8em; }
+		body.storm-mode .puzzle-panel__title, body.storm-mode .puzzle-panel__source, body.storm-mode .puzzle-panel__tags,
+		body.storm-mode .puzzle-panel__nav, body.storm-mode .puzzle-panel__progress { display: none; }
+		.storm-log { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px; }
+		.storm-log a { display: inline-block; min-width: 2.6em; text-align: center; padding: 2px 4px; border-radius: 4px; text-decoration: none; color: #111; font-size: 0.85em; }
+		.storm-log .is-ok { background: #6fd46f; }
+		.storm-log .is-miss { background: #e0604a; }
 		</style>
 		<script>
 			var webpDetector = new Image();
@@ -104,7 +158,7 @@
 			webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
-		<script src="static/scripts/settings-panel.js"></script>
+		<script src="static/scripts/settings-panel.js?v=35"></script>
 	</head>
 
 	<body>
@@ -123,7 +177,27 @@
 		</header>
 
 		<div class="main">
+			<nav class="puzzle-tabs" id="puzzle-tabs" aria-label="Puzzle pages">
+				<a href="puzzles.html" data-tab="puzzles">Puzzles</a>
+				<a href="puzzles.html?tab=dashboard" data-tab="dashboard">Dashboard</a>
+				<a href="puzzles.html?tab=storm" data-tab="storm">Puzzle Storm</a>
+				<a href="leaderboard.html?tab=puzzles">Leaderboard</a>
+			</nav>
 			<div id="puzzle-loading" class="puzzle-loading">Loading puzzles…</div>
+			<!-- ?tab=dashboard: filled by bootDashboard() -->
+			<div id="puzzle-dashboard" class="puzzle-dash" style="display:none"></div>
+			<!-- ?tab=storm: the start and end screens; the run itself uses the board below -->
+			<div id="storm-intro" class="storm-intro" style="display:none"></div>
+			<!-- The run's clock: sticks to the top while the board scrolls -->
+			<div class="storm-bar" id="storm-bar">
+				<span class="storm-bar__time" id="storm-time">3:00</span>
+				<span class="storm-bar__score" id="storm-score" title="Puzzles solved">0</span>
+				<span class="storm-bar__combo" id="storm-combo"></span>
+				<span class="storm-bar__flash" id="storm-flash"></span>
+				<span id="storm-what"></span>
+				<button class="action-button" id="storm-skip" type="button">Skip</button>
+				<button class="action-button" id="storm-end" type="button">End run</button>
+			</div>
 
 			<!-- Filled in by boot() once the puzzle set is loaded; Alpine is
 			     started only after window.SIGIL_PUZZLE exists so the board
@@ -136,10 +210,10 @@
 								<h2 class="puzzle-panel__title"
 									x-bind:class="puzzle.mover === 'red' ? 'puzzle-panel__title--red' : 'puzzle-panel__title--blue'"
 									x-text="window.SIGIL_PUZZLE_TITLE"></h2>
-								<p class="puzzle-panel__sub" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
+								<p class="puzzle-panel__sub puzzle-panel__source" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__tags" x-text="window.SIGIL_PUZZLE_TAGS" x-show="window.SIGIL_PUZZLE_TAGS"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
-									x-text="puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.'))"></p>
+									x-text="puzzle.learn ? 'Find a better turn than the one you played. The engine\'s best turn keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win; yours kept ' + Math.round(100 * puzzle.p_played) + '%.' : puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.'))"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
 
 								<div class="puzzle-panel__status"
@@ -166,8 +240,9 @@
 									<button class="action-button" x-on:click="puzzleShowSolution()" x-show="puzzleStatus !== 'solved' && puzzleStatus !== 'revealed'">Show solution</button>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.prev" x-show="window.SIGIL_PUZZLE_NAV.prev">&larr; Previous</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.next" x-show="window.SIGIL_PUZZLE_NAV.next">Next &rarr;</a>
-									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.rated" title="An unattempted puzzle near your rating">Next rated</a>
-									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random">Random</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.rated" x-show="window.SIGIL_PUZZLE_NAV.rated" title="An unattempted puzzle near your rating">Next rated</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random" x-show="window.SIGIL_PUZZLE_NAV.random">Random</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.back" x-show="window.SIGIL_PUZZLE_NAV.back">Back to the game</a>
 								</div>
 								<div class="puzzle-panel__progress">
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>
@@ -265,7 +340,7 @@
 													x-bind:src="getSpellImg('sorcery' + i)"
 													x-on:click.stop="handleSpellClick(`sorcery${i}`)"
 													x-on:click.outside="closeSpellTooltip"
-													x-on:mouseout="handleSpellMouseOut()"
+													x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
 													x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)" />
 											</picture>
 											<div class="spell-spots sorcery-spell" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
@@ -319,12 +394,12 @@
 			// drop the caches, refetch the page's scripts past the HTTP cache, and
 			// reload once. The new worker deletes the stale cache when it activates.
 			(function () {
-				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 2) return;
+				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 3) return;
 				if (!window.caches || !window.fetch) return;
 				try {
 					// The sentinel holds the epoch it reloaded for, so each new epoch gets its own reload.
-					if (sessionStorage.getItem('sigilStaleAssetReload') === '2') return;
-					sessionStorage.setItem('sigilStaleAssetReload', '2');
+					if (sessionStorage.getItem('sigilStaleAssetReload') === '3') return;
+					sessionStorage.setItem('sigilStaleAssetReload', '3');
 				} catch (e) { return; }
 				document.addEventListener('DOMContentLoaded', function () {
 					var urls = ['static/scripts/engine/ai-worker.js'];
@@ -359,21 +434,23 @@
 		<script src="static/scripts/engine/rust-ai.js?v=34"></script>
 		<script src="static/scripts/engine/ai-player.js"></script>
 		<script src="static/scripts/engine/game-controller.js"></script>
-		<script src="static/scripts/engine/game-review.js?v=34"></script>
+		<script src="static/scripts/engine/game-review.js?v=35"></script>
 		<script src="static/scripts/engine/auth-manager.js"></script>
-		<script src="static/scripts/engine/elo.js"></script>
+		<script src="static/scripts/engine/elo.js?v=35"></script>
 		<script src="static/scripts/engine/position-rating.js?v=34"></script>
-		<script src="static/scripts/puzzle-rating.js"></script>
+		<script src="static/scripts/puzzle-rating.js?v=35"></script>
+		<script src="static/scripts/puzzle-progress.js?v=35"></script>
 		<script src="static/scripts/offline-queue.js"></script>
 		<script src="static/scripts/local-save-store.js"></script>
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
+		<script src="static/scripts/board-marks.js?v=35"></script>
 		<script src="static/scripts/board-geometry.js"></script>
-		<script src="static/scripts/game-keys.js"></script>
-		<script src="static/scripts/game-board-local.js?v=34"></script>
+		<script src="static/scripts/game-keys.js?v=35"></script>
+		<script src="static/scripts/game-board-local.js?v=35"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
-		<!-- Firebase SDK (sign-in status in the header only; puzzles never write) -->
+		<!-- Firebase SDK (sign-in status, puzzle ratings, progress sync and Storm scores) -->
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 		<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -388,7 +465,7 @@
 				appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
 			});
 		</script>
-		<script src="static/scripts/auth-status.js"></script>
+		<script src="static/scripts/auth-status.js?v=35"></script>
 
 		<script>
 			/**
@@ -502,8 +579,342 @@
 			}
 			const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+			/**
+			 * ?learn=<room>&i=<k>: the player's own mistakes from a reviewed
+			 * game, handed over by the review panel ("Learn from your
+			 * mistakes", game-review.js startLearnFromMistakes) in
+			 * sessionStorage, as winning-turn puzzles. Resolves false when there
+			 * is no such set (the page then says so).
+			 */
+			function bootLearn(params) {
+				let set = null;
+				try { set = JSON.parse(sessionStorage.getItem('sigil_learn_set') || 'null'); } catch (e) { set = null; }
+				const pool = set && set.room === params.get('learn') && Array.isArray(set.puzzles) ? set.puzzles : [];
+				if (!pool.length) {
+					document.getElementById('puzzle-loading').innerHTML = 'Open a reviewed game and press "Learn from your mistakes" to practise its turns here.'
+						+ ' <a href="puzzles.html">All puzzles</a>';
+					return false;
+				}
+				const k = Math.max(0, Math.min(pool.length - 1, parseInt(params.get('i'), 10) || 0));
+				const puzzle = pool[k];
+				for (const sol of puzzle.solutions || []) sol.key = puzzleSfnKey(sol.after);
+				puzzle.solution_keys = (puzzle.solutions || []).map(sol => sol.key);
+				const link = (j) => 'puzzles.html?learn=' + encodeURIComponent(set.room) + '&i=' + j;
+				window.SIGIL_PUZZLE = puzzle;
+				window.SIGIL_PUZZLE_NAV = {
+					prev: k > 0 ? link(k - 1) : '',
+					next: k < pool.length - 1 ? link(k + 1) : '',
+					random: '',
+					rated: '',
+					back: set.back || '',
+				};
+				const side = puzzle.mover === 'red' ? 'Red' : 'Blue';
+				window.SIGIL_PUZZLE_TITLE = 'Your mistake ' + (k + 1) + ' of ' + pool.length + ' — ' + side + ' to move';
+				window.SIGIL_PUZZLE_SOURCE = 'From your game ' + set.room + ', Red (' + (set.red || '?') + ') vs Blue (' + (set.blue || '?')
+					+ '), turn ' + puzzle.turn + ': the review rated your turn a ' + puzzle.classification + '.';
+				window.SIGIL_PUZZLE_TAGS = '';
+				window.SIGIL_PUZZLE_PROGRESS = 'Your mistakes from this game, from its engine review.';
+				window.SIGIL_PUZZLE_FILTER_HTML = '';
+				return true;
+			}
+
+			/** Start Alpine (once), so the board component receives window.SIGIL_PUZZLE. */
+			function startPuzzleBoard() {
+				document.getElementById('puzzle-loading').style.display = 'none';
+				document.getElementById('puzzle-root').style.display = '';
+				const s = document.createElement('script');
+				s.defer = true;
+				s.src = 'https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js';
+				document.body.appendChild(s);
+			}
+
+			/**
+			 * The dashboard (?tab=dashboard): solve rates by difficulty and by
+			 * theme, the puzzle rating over time, recent misses. A puzzle's
+			 * outcome is its FIRST result: the rated attempt when there is one
+			 * (puzzleAttempts), else the synced result log, else -- for puzzles
+			 * solved before the log existed -- the solved list.
+			 */
+			async function bootDashboard(all) {
+				const el = document.getElementById('puzzle-dashboard');
+				const viewer = await puzzleViewer();
+				const prog = viewer ? ((await syncWithin(viewer, 8000)) || readLocalPuzzleProgress()) : readLocalPuzzleProgress();
+				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
+				try { rated = await loadPuzzleRating(viewer); } catch (e) { /* offline: defaults */ }
+				let storm = { best: 0, runs: 0 };
+				try { storm = await loadStormRecord(viewer); } catch (e) { /* offline */ }
+				const daily = puzzleDailyFromLog(prog.daily, prog.dailyBest);
+				const byId = {};
+				for (const p of all) byId[p.id] = p;
+
+				const first = {};   // id -> { ok, at }
+				for (const [id, t] of Object.entries(prog.solved || {})) first[id] = { ok: true, at: t };
+				for (const [id, v] of Object.entries(prog.results || {})) first[id] = { ok: v.r === 's', at: v.at, r: v.r };
+				for (const [id, v] of Object.entries(rated.attempts || {})) {
+					if (v && typeof v === 'object') first[id] = { ok: !!v.solved, at: v.at || (first[id] && first[id].at) || 0, rated: true };
+					else if (typeof v === 'number' && !first[id]) first[id] = { ok: v === 1, at: 0 };   // signed out: no time kept
+				}
+				const ids = Object.keys(first).filter(id => byId[id]);
+				const nOk = ids.filter(id => first[id].ok).length;
+				const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '–';
+				const live = daily.last === utcDay(0) || daily.last === utcDay(-1);
+
+				const tile = (v, label) => '<div class="puzzle-dash__tile"><b>' + esc(v) + '</b><span>' + esc(label) + '</span></div>';
+				let html = '<h2>Puzzle dashboard</h2>'
+					+ '<p class="puzzle-dash__note">' + (viewer
+						? (prog.synced ? 'Your progress is saved to your account and merged across your devices.' : 'Showing this device; your account could not be reached, it will merge next time.')
+						: 'This device only. <a href="account.html">Sign in</a> to keep your progress on every device.') + '</p>'
+					+ '<div class="puzzle-dash__tiles">'
+					+ tile(ids.length, 'puzzles attempted')
+					+ tile(pct(nOk, ids.length), 'solved at the first try')
+					+ tile(rated.rating, 'puzzle rating (' + rated.plays + ' rated)')
+					+ tile(live ? daily.streak : 0, 'daily streak (best ' + (daily.best || 0) + ')')
+					+ tile(storm.best || 0, 'Puzzle Storm best (' + (storm.runs || 0) + ' runs)')
+					+ '</div>';
+
+				// Solve rate rows: label, solved/attempted, a bar of the rate.
+				const rows = (groups) => '<table class="puzzle-dash__rows"><tbody>' + groups.map(g =>
+					'<tr><td>' + g.label + '</td><td><div class="puzzle-dash__track" title="' + esc(g.ok + ' of ' + g.n + ' solved') + '">'
+					+ '<div class="puzzle-dash__bar" style="width:' + (g.n ? Math.round(100 * g.ok / g.n) : 0) + '%"></div></div></td>'
+					+ '<td>' + pct(g.ok, g.n) + ' · ' + g.ok + '/' + g.n + '</td></tr>').join('') + '</tbody></table>';
+				const group = (keyOf) => {
+					const m = {};
+					for (const id of ids) for (const k of keyOf(byId[id])) {
+						const g = m[k] || (m[k] = { key: k, n: 0, ok: 0 });
+						g.n += 1;
+						if (first[id].ok) g.ok += 1;
+					}
+					return m;
+				};
+				if (!ids.length) {
+					html += '<p class="puzzle-dash__note">No puzzles attempted yet. <a href="puzzles.html">Start solving</a>, or try <a href="puzzles.html?tab=storm">Puzzle Storm</a>.</p>';
+				} else {
+					const byD = group(p => p.difficulty ? [p.difficulty] : []);
+					html += '<h3>By difficulty</h3>' + rows([1, 2, 3, 4, 5].filter(d => byD[d]).map(d =>
+						Object.assign({ label: '<a href="puzzles.html?d=' + d + '">Difficulty ' + d + '</a>' }, byD[d])));
+					const byS = group(p => [puzzleSet(p)]);
+					html += '<h3>By kind</h3>' + rows(Object.keys(PUZZLE_SETS).filter(k => byS[k]).map(k =>
+						Object.assign({ label: '<a href="puzzles.html?set=' + k + '">' + esc(PUZZLE_SETS[k]) + '</a>' }, byS[k])));
+					const byT = Object.values(group(p => p.tags || [])).sort((a, b) => b.n - a.n || a.key.localeCompare(b.key)).slice(0, 15);
+					if (byT.length) {
+						html += '<h3>By theme</h3>' + rows(byT.map(g => Object.assign({
+							label: '<a href="puzzles.html?tag=' + encodeURIComponent(g.key) + '">' + esc(g.key) + '</a>' }, g)));
+					}
+				}
+
+				// The rating over time: one point per rated attempt, oldest first.
+				html += '<h3>Puzzle rating over time</h3>';
+				const hist = Object.entries(rated.attempts || {})
+					.filter(([, v]) => v && typeof v === 'object' && typeof v.delta === 'number' && typeof v.at === 'number')
+					.sort((a, b) => a[1].at - b[1].at);
+				if (!rated.signedIn) {
+					html += '<p class="puzzle-dash__note">Rated history is kept for signed-in players. This device: ' + rated.rating + ' after ' + rated.plays + ' rated puzzles.</p>';
+				} else if (hist.length < 2) {
+					html += '<p class="puzzle-dash__note">Solve a few rated puzzles to see a history.</p>';
+				} else {
+					html += ratingChart(hist);
+				}
+
+				// Recent misses: newest first, with a link back to each.
+				const misses = Object.entries(first).filter(([id, v]) => !v.ok && byId[id]).sort((a, b) => b[1].at - a[1].at).slice(0, 12);
+				html += '<h3>Recent misses</h3>';
+				if (!misses.length) {
+					html += '<p class="puzzle-dash__note">None yet.</p>';
+				} else {
+					html += '<ul>' + misses.map(([id, v]) => {
+						const p = byId[id];
+						const what = p.kind === 'winning' ? 'Winning turn' : 'Mate in ' + p.mate;
+						const since = prog.solved && prog.solved[id] ? ' · solved since' : '';
+						return '<li><a href="puzzles.html?id=' + encodeURIComponent(id) + '">Puzzle ' + (p.index + 1) + '</a> — ' + esc(what)
+							+ (p.difficulty ? ', difficulty ' + p.difficulty : '') + (v.at ? ' · ' + new Date(v.at).toISOString().slice(0, 10) : '') + esc(since) + '</li>';
+					}).join('') + '</ul>';
+				}
+				el.innerHTML = html;
+				document.getElementById('puzzle-loading').style.display = 'none';
+				el.style.display = '';
+			}
+
+			/** An inline SVG line of the rating after each rated attempt (hover a point for its value). */
+			function ratingChart(hist) {
+				const pts = [];
+				let r = PUZZLE_RATING_START;
+				pts.push({ at: hist[0][1].at, r, id: null });
+				for (const [id, v] of hist) { r += v.delta; pts.push({ at: v.at, r, id }); }
+				const W = 640, H = 200, L = 40, R = 8, T = 10, B = 22;
+				const lo = Math.floor((Math.min(...pts.map(p => p.r)) - 20) / 50) * 50;
+				const hi = Math.ceil((Math.max(...pts.map(p => p.r)) + 20) / 50) * 50;
+				const x = (i) => L + (W - L - R) * (pts.length === 1 ? 0 : i / (pts.length - 1));
+				const y = (v) => T + (H - T - B) * (1 - (v - lo) / Math.max(1, hi - lo));
+				const step = (hi - lo) > 400 ? 200 : ((hi - lo) > 200 ? 100 : 50);
+				let g = '';
+				for (let v = lo; v <= hi; v += step) {
+					g += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"></line>'
+						+ '<text x="' + (L - 4) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+				}
+				const day = (t) => new Date(t).toISOString().slice(0, 10);
+				g += '<text x="' + L + '" y="' + (H - 6) + '">' + day(pts[0].at) + '</text>'
+					+ '<text x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + day(pts[pts.length - 1].at) + '</text>';
+				const line = '<polyline class="line" points="' + pts.map((p, i) => x(i).toFixed(1) + ',' + y(p.r).toFixed(1)).join(' ') + '"></polyline>';
+				const dots = pts.map((p, i) => '<circle class="dot' + (i === pts.length - 1 ? ' is-last' : '') + '" cx="' + x(i).toFixed(1) + '" cy="' + y(p.r).toFixed(1) + '" r="4">'
+					+ '<title>' + p.r + (p.id ? ' after puzzle ' + esc(p.id) : ' (start)') + ', ' + day(p.at) + '</title></circle>').join('');
+				return '<svg class="puzzle-dash__chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Puzzle rating after each rated attempt, from '
+					+ pts[0].r + ' to ' + pts[pts.length - 1].r + '">' + g + line + dots + '</svg>';
+			}
+
+			/**
+			 * Puzzle Storm (?tab=storm): solve as many puzzles as you can in
+			 * 3 minutes. They start easy and ramp up by puzzle rating; a miss
+			 * costs 10 s and combos add time. Unrated: results never touch the
+			 * puzzle ratings, the solved list or the result log.
+			 */
+			async function bootStorm(all) {
+				const pool = stormPool(all);
+				const intro = document.getElementById('storm-intro');
+				const viewer = await puzzleViewer();
+				let rec = { best: 0, runs: 0 };
+				try { rec = await loadStormRecord(viewer); } catch (e) { /* offline */ }
+				const fmt = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+				intro.innerHTML = '<h2>Puzzle Storm</h2>'
+					+ '<p>Solve as many puzzles as you can in ' + fmt(STORM_START_MS) + '. They start easy and get harder. '
+					+ 'A miss costs ' + (STORM_MISS_MS / 1000) + ' seconds; combos of 5, 12, 20 and 30 in a row add time. '
+					+ 'Storm is practice: it does not change your puzzle rating.</p>'
+					+ '<p>Your best: <b id="storm-best">' + (rec.best || 0) + '</b>' + (rec.signedIn ? '' : ' (this device; <a href="account.html">sign in</a> to post scores)')
+					+ ' · <a href="leaderboard.html?tab=storm">Storm leaderboard</a></p>'
+					+ '<button class="action-button" id="storm-start" type="button">Start</button>';
+				document.getElementById('puzzle-loading').style.display = 'none';
+				intro.style.display = '';
+				if (!pool.length) { intro.insertAdjacentHTML('beforeend', '<p>No puzzles available.</p>'); return; }
+
+				const st = { k: 0, used: {}, score: 0, combo: 0, bestCombo: 0, deadline: 0, over: false, resolved: false, log: [], current: null, timer: 0 };
+				window.SIGIL_STORM = st;     // tools/browser/puzzle-storm-test.js
+				window.SIGIL_PUZZLE_STORM = true;
+				// The puzzle panel's bindings (hidden in Storm) still read these.
+				window.SIGIL_PUZZLE_NAV = { prev: '', next: '', rated: '', random: '' };
+				window.SIGIL_PUZZLE_TITLE = window.SIGIL_PUZZLE_SOURCE = window.SIGIL_PUZZLE_TAGS = window.SIGIL_PUZZLE_PROGRESS = window.SIGIL_PUZZLE_FILTER_HTML = '';
+				const $ = (id) => document.getElementById(id);
+				let flashTimer = 0;
+				const flash = (t) => { $('storm-flash').textContent = t; clearTimeout(flashTimer); flashTimer = setTimeout(() => { $('storm-flash').textContent = ''; }, 1500); };
+				const render = () => {
+					const left = st.deadline - Date.now();
+					$('storm-time').textContent = fmt(left);
+					$('storm-time').classList.toggle('is-low', left < 20000);
+					$('storm-score').textContent = st.score;
+					$('storm-combo').textContent = st.combo >= 2 ? 'combo ' + st.combo : '';
+				};
+				const next = () => {
+					const p = pickStormPuzzle(pool, st.k, st.used);
+					st.k += 1;
+					st.used[p.id] = 1;
+					st.current = p;
+					st.resolved = false;
+					window.SIGIL_PUZZLE = p;
+					$('storm-what').textContent = (p.kind === 'winning' ? 'Winning turn' : 'Mate in ' + p.mate) + ', ' + (p.mover === 'red' ? 'Red' : 'Blue') + ' to move';
+					return p;
+				};
+				const end = async () => {
+					if (st.over) return;
+					st.over = true;
+					clearInterval(st.timer);
+					document.body.classList.remove('storm-mode');
+					$('puzzle-root').style.display = 'none';
+					const log = st.log.map((e, i) => '<li><a class="' + (e.ok ? 'is-ok' : 'is-miss') + '" href="puzzles.html?id=' + encodeURIComponent(e.id) + '" title="'
+						+ esc((e.ok ? 'Solved' : 'Missed') + ', rated ' + e.rating) + '">' + (i + 1) + '</a></li>').join('');
+					intro.innerHTML = '<h2>Puzzle Storm: ' + st.score + ' solved</h2>'
+						+ '<p>' + st.log.length + ' puzzles, best combo ' + st.bestCombo + '. <span id="storm-saved">Saving…</span></p>'
+						+ (log ? '<p class="puzzle-dash__note">Review a puzzle:</p><ul class="storm-log">' + log + '</ul>' : '')
+						+ '<a class="action-button" href="puzzles.html?tab=storm">Play again</a>'
+						+ '<a class="action-button" href="leaderboard.html?tab=storm">Leaderboard</a>';
+					intro.style.display = '';
+					try {
+						const r = await recordStormRun(viewer, st.score);
+						st.saved = r;
+						$('storm-saved').textContent = (r.newBest ? 'New best! ' : 'Best: ' + r.best + '. ')
+							+ (r.signedIn ? (r.queued ? 'It will reach your account when you are back online.' : 'Saved to your account.') : 'Saved on this device.');
+					} catch (e) {
+						st.saved = { error: String(e && e.message || e) };
+						$('storm-saved').textContent = 'Score not saved (' + (e && e.message || e) + ').';
+					}
+				};
+				const advance = () => {
+					if (st.over) return;
+					const board = window.SIGIL_PUZZLE_BOARD;
+					const p = next();
+					if (board) board.puzzleLoad(p);
+				};
+				const result = (ok) => {
+					if (st.over || st.resolved) return;
+					st.resolved = true;
+					st.log.push({ id: st.current.id, ok, rating: st.current.rating || 0 });
+					if (ok) {
+						st.score += 1;
+						st.combo += 1;
+						st.bestCombo = Math.max(st.bestCombo, st.combo);
+						const bonus = stormComboBonus(st.combo);
+						if (bonus) { st.deadline += bonus; flash('+' + bonus / 1000 + 's combo ' + st.combo); }
+					} else {
+						st.combo = 0;
+						st.deadline -= STORM_MISS_MS;
+						flash('-' + STORM_MISS_MS / 1000 + 's');
+					}
+					render();
+					if (Date.now() >= st.deadline) { end(); return; }
+					setTimeout(advance, ok ? 700 : 1500);
+				};
+				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
+					if (!st.current || p.id !== st.current.id) return;
+					// A run counts a puzzle's first verdict only. #44's follow-up
+					// reports are not verdicts: 'retry' (puzzleRetry, which
+					// puzzleLoad calls for each new Storm puzzle) and 'failed-final'.
+					if (status !== 'solved' && status !== 'failed' && status !== 'revealed') return;
+					result(status === 'solved');
+				};
+				$('storm-skip').addEventListener('click', () => {
+					if (st.over || st.resolved) return;
+					result(false);
+				});
+				$('storm-end').addEventListener('click', () => end());
+				$('storm-start').addEventListener('click', () => {
+					intro.style.display = 'none';
+					document.body.classList.add('storm-mode');
+					next();
+					st.deadline = Date.now() + STORM_START_MS;
+					st.timer = setInterval(() => { render(); if (!st.over && Date.now() >= st.deadline) end(); }, 200);
+					render();
+					startPuzzleBoard();
+				});
+			}
+
+			/** The settled, non-anonymous Firebase user, or null. */
+			async function puzzleViewer() {
+				try {
+					const u = typeof firebaseAuthSettled === 'function' ? await firebaseAuthSettled() : null;
+					return u && !u.isAnonymous ? u : null;
+				} catch (e) { return null; }
+			}
+			/** Merge this device's progress with the account; never waits more than `ms`. */
+			function syncWithin(viewer, ms) {
+				return Promise.race([
+					syncPuzzleProgress(viewer).catch(() => null),
+					new Promise(r => setTimeout(() => r(null), ms)),
+				]);
+			}
+
 			(async function boot() {
 				const params = new URLSearchParams(window.location.search);
+				const tab = ['dashboard', 'storm'].includes(params.get('tab')) ? params.get('tab') : 'puzzles';
+				document.querySelectorAll('#puzzle-tabs a[data-tab]').forEach((a) => {
+					if (a.dataset.tab === tab) a.classList.add('is-active');
+				});
+				if (params.has('learn')) {
+					if (!bootLearn(params)) return;
+					document.getElementById('puzzle-loading').style.display = 'none';
+					document.getElementById('puzzle-root').style.display = '';
+					const s = document.createElement('script');
+					s.defer = true;
+					s.src = 'https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js';
+					document.body.appendChild(s);
+					return;
+				}
 				let data;
 				try {
 					const res = await fetch('static/puzzles/mate_puzzles.json', { cache: 'no-cache' });
@@ -514,6 +925,8 @@
 					return;
 				}
 				const all = data.puzzles || [];
+				if (tab === 'dashboard') return bootDashboard(all);
+				if (tab === 'storm') return bootStorm(all);
 				const legacyMate = ['1', '2', '3'].includes(params.get('mate')) ? 'm' + params.get('mate') : null;
 				const filt = {
 					set: PUZZLE_SETS[params.get('set')] ? params.get('set') : legacyMate,
@@ -535,9 +948,6 @@
 						: 'No puzzles match this filter. <a href="puzzles.html">All puzzles</a>';
 					return;
 				}
-				let solved = {};
-				try { solved = JSON.parse(localStorage.getItem('sigil_puzzles_solved') || '{}') || {}; } catch (e) { solved = {}; }
-
 				// Position within the filtered pool.
 				let pos = -1;
 				if (daily) {
@@ -549,11 +959,11 @@
 					pos = pool.findIndex(p => p.id === params.get('id'));
 				}
 				// The viewer's puzzle rating (Firebase when signed in, else this device).
-				let viewer = null;
-				try {
-					viewer = typeof firebaseAuthSettled === 'function' ? await firebaseAuthSettled() : null;
-					if (viewer && viewer.isAnonymous) viewer = null;
-				} catch (e) { viewer = null; }
+				const viewer = await puzzleViewer();
+				// Progress follows the account: merge before reading the solved list.
+				if (viewer) await syncWithin(viewer, 3000);
+				let solved = {};
+				try { solved = JSON.parse(localStorage.getItem('sigil_puzzles_solved') || '{}') || {}; } catch (e) { solved = {}; }
 				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
 				// Results an earlier visit left unconfirmed are recorded first, each
 				// where it was rated: device-mode entries (no uid -- signed out, or
@@ -569,7 +979,9 @@
 					if (Date.now() > deadline) break;   // the rest wait for the next visit
 					// A daily's result counts for its day even when it never settled
 					// (a no-op when settle() already logged it).
-					if (e.daily) recordDaily(e.daily, e.solved ? 'solved' : 'failed');
+					const d = e.daily ? recordDaily(e.daily, e.solved ? 'solved' : 'failed') : null;
+					recordPuzzleProgress(e.uid ? viewer : null, pz, e.solved ? 'solved' : 'failed',
+						d ? { day: e.daily, status: d.done[e.daily], best: d.best || 0 } : undefined);
 					try {
 						const current = await Promise.race([loadPuzzleCurrentRating(pz), new Promise(r => setTimeout(() => r(null), 3000))]);
 						const done = await Promise.race([recordPuzzleResult(e.uid ? viewer : null, pz, e.solved, current || undefined).then(() => true),
@@ -639,7 +1051,7 @@
 					+ ((puzzle.tags || []).length ? ' · ' + puzzle.tags.join(', ') : '');
 				const nSolved = pool.filter(p => solved[p.id]).length;
 				window.SIGIL_PUZZLE_PROGRESS = daily ? 'One puzzle a day, the same for everyone.'
-					: (pos + 1) + ' of ' + pool.length + ' puzzles · ' + nSolved + ' solved on this device'
+					: (pos + 1) + ' of ' + pool.length + ' puzzles · ' + nSolved + ' solved' + (viewer ? '' : ' on this device')
 						+ (data.generated ? ' · set generated ' + data.generated.slice(0, 10) : '');
 
 				// Filter bar: puzzle class, difficulty, theme, and the player's own.
@@ -718,9 +1130,14 @@
 						showRating(' · ' + (r.delta >= 0 ? '+' : '') + r.delta);
 					}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); })
 						.finally(() => { recording = null; });
+					// The result log synced to the account (puzzle-progress.js).
+					const st = final === 'solved' ? 'solved' : (final === 'revealed' ? 'revealed' : 'failed');
 					if (daily) {
-						const d = recordDaily(today, final === 'solved' ? 'solved' : (final === 'revealed' ? 'revealed' : 'failed'));
+						const d = recordDaily(today, st);
+						recordPuzzleProgress(viewer, puzzle, st, { day: today, status: d.done[today], best: d.best || 0 });
 						document.getElementById('puzzle-daily-status').textContent = ' · ' + dailyText(d);
+					} else {
+						recordPuzzleProgress(viewer, puzzle, st);
 					}
 				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
@@ -740,13 +1157,8 @@
 						+ (daily && d0.done && d0.done[today] ? ' — today\'s result is in (' + d0.done[today] + ')' : '');
 				}
 
-				document.getElementById('puzzle-loading').style.display = 'none';
-				document.getElementById('puzzle-root').style.display = '';
 				// Start Alpine only now, so gameBoard() receives the puzzle.
-				const s = document.createElement('script');
-				s.defer = true;
-				s.src = 'https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js';
-				document.body.appendChild(s);
+				startPuzzleBoard();
 			})();
 		</script>
 	</body>

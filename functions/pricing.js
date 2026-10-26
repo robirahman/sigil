@@ -22,6 +22,13 @@ function assetDir(sub) {
 	return path.resolve(__dirname, '..', 'docs', 'static', sub);
 }
 
+/** RUST_ENGINE_VERSION from rust-ai.js, the version of the wasm build beside it. */
+function rustEngineVersion() {
+	const src = fs.readFileSync(path.join(engineDir(), 'rust-ai.js'), 'utf8');
+	const m = /const RUST_ENGINE_VERSION = (\d+);/.exec(src);
+	return m ? Number(m[1]) : undefined;
+}
+
 let _loaded = null;
 
 async function load() {
@@ -33,10 +40,17 @@ async function load() {
 		// The init options object must come from this context's own realm
 		// (the glue checks its prototype), so it is built in here.
 		+ '\n;\nglobalThis.__p = { wasm_bindgen, positionRedWinProb, RUST_REVIEW_SEARCH, POSITION_EVAL_MS,'
+		// The review's search and document packing (analysis.js).
+		+ ' RUST_REVIEW_PRESETS, RUST_SERVER_PRESET, rustReviewSearchPosition, rustReviewRow, rustReviewDoc, rustEvalsToReview,'
+		+ ' positionEvalCacheable, positionEvalEngineTag, _reviewPositions, SigilBoard, boardToSfn, sfnToDict,'
+		+ ' normalizeSfnString, normalizeVariant, variantHasDuplicates, variantHasScramble,'
 		+ ' init: (bytes) => wasm_bindgen({ module_or_path: bytes }) };';
 	const ctx = {
 		console: { log() {}, info() {}, debug() {}, warn: console.warn, error: console.error },
 		setTimeout, clearTimeout, Promise, Math, Date, JSON, WebAssembly, TextDecoder, TextEncoder,
+		// The engine build's version (rust-ai.js, which the bundle leaves
+		// out): position_evals entries are tagged with it.
+		RUST_ENGINE_VERSION: rustEngineVersion(),
 	};
 	vm.createContext(ctx);
 	vm.runInContext(src, ctx, { filename: 'sigil-pricing-bundle.js' });
@@ -75,4 +89,4 @@ async function priceStart(sfn) {
 	return typeof prob === 'number' ? prob : null;
 }
 
-module.exports = { priceStart };
+module.exports = { priceStart, load };

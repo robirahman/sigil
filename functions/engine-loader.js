@@ -26,7 +26,7 @@ const ENGINE_FILES = [
 
 // Engine files the functions require() directly (CommonJS-aware), not part
 // of the replay bundle.
-const SHARED_FILES = ['room-clock.js'];
+const SHARED_FILES = ['room-clock.js', 'vacation-bank.js'];
 
 function engineDir() {
 	const copied = path.join(__dirname, 'engine');
@@ -48,6 +48,8 @@ function _compiled() {
 	SigilBoard, boardToSfn, normalizeSfnString, normalizeVariant,
 	reconstructGameLog, unratedReason, computeEloChange,
 	positionExpectedScore, gameStartRedWinProb,
+	// The review panel's reader of game_evals documents (analysis.js tests).
+	rustEvalsToReview, _reviewPositions,
 };`);
 	_script = new vm.Script(parts.join('\n;\n'), { filename: 'sigil-engine-bundle.js' });
 	return _script;

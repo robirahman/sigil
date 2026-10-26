@@ -11,7 +11,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   Long term: deploy the server-side Elo in `functions/index.js` (needs the Blaze plan).
   The rating is computed by whichever player's browser reports the result (`engine/elo.js`), and only red's client saves the game record (`engine/firebase-sync.js:682`).
 - [x] **Restrict `rooms/$roomId`.** Done: only the seated uids write a room (guests sign in anonymously); settings are fixed at creation. It is world-readable and world-writable (`database.rules.json:84-88`).
-- [ ] **Fix the Deep Review labels.** The buttons say "Deep Review (8 ply)" (`docs/game.html:759`) and "Deep AI Review (10 ply)" (`docs/game.html:799`).
+- [x] **Fix the Deep Review labels.** Done: the buttons read the preset (`reviewModeLabel`, e.g. "Deep Review (Hard engine, 10 s/position)") and the stale "8-ply" comment is gone. The buttons say "Deep Review (8 ply)" (`docs/game.html:759`) and "Deep AI Review (10 ply)" (`docs/game.html:799`).
   The real preset is 60s per position with no fixed depth (`engine/game-review.js:31`), and the code comment at `engine/game-review.js:101` also says "8-ply".
   Show an estimated time instead, since a long game can take about an hour.
 - [x] **Handle online move failures.** Done: unsent moves are tracked and a banner shows while the connection is down or a write is refused (the SDK resends on reconnect). `sendTurn`, `sendForfeit` and `saveGameState` only `console.error` (`engine/firebase-sync.js:349-388, 453`).
@@ -22,11 +22,11 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [x] **Port the interactive tutorial to `docs/`.** The legacy Flask app has `templates/tutorial.html` and `static/scripts/tutorial.js` (~1900 lines); the live site has no equivalent.
   Rebuild it on `GameController` with scripted positions, as puzzles do.
 - [x] **Publish the strategy guide.** `docs/strategy-guide.html` is a "being written…" stub, but `docs/strategy/spell_dynamics_article.md` is written and linked from nowhere.
-- [ ] **Add a page per spell**, with rules text, an example position to try, and win-rate data from `docs/strategy/data/spell_position_winrates.json`.
+- [x] **Add a page per spell** Done: `docs/spell.html?name=X` (card text, engine-checked rules notes, a Try-it position from the puzzle set, game statistics); spells.html tiles and in-game tooltips link there. With rules text, an example position to try, and win-rate data from `docs/strategy/data/spell_position_winrates.json`.
   Spell text is currently only a hover `title` tooltip on `docs/spells.html`, which doesn't work on touch screens.
-- [ ] **Add rules pages for the variants** (Competitive, Deathmatch, Scramble, Allow duplicates, Cataclysm).
+- [x] **Add rules pages for the variants** Done: `docs/variants.html` (one anchored section per variant plus Tectonic and Providence), linked from the Game options hints. (Competitive, Deathmatch, Scramble, Allow duplicates, Cataclysm).
   The variants now sit in a collapsed "Game options" panel with one-line hints (`docs/index.html:502-560`).
-- [ ] **Add variant rules to the in-game help popover** (`docs/static/scripts/help.js`).
+- [x] **Add variant rules to the in-game help popover** Done: "This Game's Rules" in game.html and multiplayer.html, from the game's variant and spells. (`docs/static/scripts/help.js`).
 
 ## Online play & community
 
@@ -38,8 +38,8 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   Today there is only a one-off "Opponent disconnected." message (`engine/multiplayer-controller.js:32-35`).
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
 - [x] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move and takebacks by agreement: done. Draw offers: not applicable (Sigil has no draws; threefold repetition is a Blue win).
-- [ ] **Add in-game chat or preset emotes.**
-- [ ] **Add a friends / follow list** with "challenge" from a profile.
+- [x] **Add in-game chat or preset emotes.** Done: ten preset emotes (no free text) from a picker beside the clocks, shown as a 3 s bubble under the sender's name with live-region text; the rules take only the fixed ids from a seated player, one per 3 s by server time ("Well played" / "Thanks" for a minute after the game); "Mute emotes" in the settings panel.
+- [x] **Add a friends / follow list** with "challenge" from a profile. Done: Follow / Challenge on profile.html, friends with online status on active-games.html and the lobby, a challenge banner on every page plus a push (friends.js, notify.js notifyChallenge).
 - [x] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
 - [x] **Clean up stale rooms.** Game invite rooms (unjoined waiting rooms) expire after 72 hours and are pruned from rooms/ and user_active_games/. Finished rooms are pruned when someone opens `docs/active-games.html` (`:304-308`), and `ai/purge_stale_rooms.py` is available for maintenance.
 
@@ -49,7 +49,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [x] **Show whether a game is rated**, before and during it. Done: a Rated / Casual badge for the typed room code, the waiting room and the position-join screen, and in the game header (`docs/multiplayer.html:261` only says "Sign in for ranked play").
 - [x] **Show the spectator count to players.** Done: an eye and count in the game header. It is written to `rooms/X/spectators` but never displayed.
 - [x] **Keep unrated, variant and casual games in profile history.** Done: `rateGame` indexes every signed-in game, marked `rated: false` when unrated. `/user_games` is written only inside `processEloClientSide` (`engine/elo.js:109-135`).
-- [ ] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`.
+- [x] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`. Done: the Stats tab, by opponent type, time control and variant, with games, W–L, win % and net rating.
 - [x] **Improve the leaderboard** (`docs/leaderboard.html`):
   - [x] Add a provisional-rating marker or a minimum number of games. Done: "?" under 10 games.
   - [x] Add player search and "find me".
@@ -58,7 +58,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Puzzles
 
-- [ ] **Sync puzzle progress to the account.** It is stored only in `localStorage['sigil_puzzles_solved']`.
+- [x] **Sync puzzle progress to the account.** It is stored only in `localStorage['sigil_puzzles_solved']`. Done: solved list, first results and the daily log merge into `users/$uid/puzzleProgress` on sign-in (union, never clobbered) and write through (`puzzle-progress.js`).
 - [x] **Add a puzzle rating.** Elo for players and puzzles, calibrated against the AI tiers; puzzle leaderboard (engine/reports/2026-10-puzzle-ratings.md). Streaks and a daily puzzle: puzzles v2.
 - [ ] **Add Cataclysm and Scramble puzzles.** The Rust engine models neither variant. (Tectonic and Providence puzzles: done, puzzles v2.)
 - [x] **Add theme/tactic tags** to puzzles. (Puzzles v2: tags and a 1–5 difficulty, with filters.)
@@ -83,7 +83,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   - [x] Add Escape to close tooltips and reset.
     Escape closes tooltips, dialogs and an armed End Turn / Forfeit; it does not reset the turn (never documented, and one stray key would undo a placed stone).
   - [x] Stop Enter from firing when a button has focus (`docs/static/scripts/game-board-local.js:1274-1289`); it currently both clicks the button and passes the turn.
-- [ ] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`).
+- [x] **Confirm before leaving a game in progress via "Main Menu"** (`docs/game.html:761`). Done: any same-tab link (logo, Sign in, player names) asks "Leave this game?" during a live local, AI or timed online game (`guardLeavingGame`, game-keys.js); not after game over, in review, for spectators or in correspondence games.
   The `beforeunload` warning is disabled on Safari.
 
 ## From a Lichess comparison (2026-10-21)
@@ -101,15 +101,18 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### During a game
 
-- [ ] **Add "ask for more time" and "give opponent +15 s".**
+- [x] **Add "ask for more time" and "give opponent +15 s".** Done: "+15 s" in live timed games writes `rooms/{id}/gifts` (rules: only to the other seat, 15 s, server time, once a second); the shared clock (room-clock.js), the game page and the server's flag judging count gifts recorded before closedAt. "Ask for more time" has no button of its own.
 - [ ] **Add pre-moves** (queue a move during the opponent's turn).
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
-- [ ] **Add zen mode** that hides everything but the board and clocks.
-- [ ] **Add board flip** and a choice of which side the board is drawn from.
-- [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
-  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Vacation / pause is open: it changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
+- [x] **Add zen mode** that hides everything but the board and clocks.
+  Done: Z or the settings panel (stored in `sigil_settings`) on game.html and in multiplayer games; keeps the board, clocks and the buttons a turn needs, with an Exit zen button.
+- [x] ~~**Add board flip** and a choice of which side the board is drawn from.~~
+  Not applicable (Robi, 2026-10-26): both players see the board from the same side on the site, so there is no perspective to flip.
+- [x] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
+  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Done: vacation on account.html (14 days a year, ended early refunds the days not begun) through the `setVacation` function, which pauses every correspondence game of the player (`rooms/{id}/pauses`, server-only); room-clock.js, `flagged` and `expireClocks` add the paused time; "On vacation until …" on the game page and active-games.html.
 - [ ] **Add move input by typed notation**, and optionally by voice.
-- [ ] **Let players draw arrows and circles** on the board during play and analysis.
+- [x] **Let players draw arrows and circles** on the board during play and analysis.
+  Done: board-marks.js. Right-drag arrows, right-click circles, Shift/Alt/Ctrl colours; a pencil draw mode on touch screens; local only, cleared each turn in play, kept per move in review and per tree node in analysis.html; Escape or the ✕ button clears.
 - [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
   Animation speed is the full / reduced / off level; move confirmation asks before End Turn.
 
@@ -118,17 +121,20 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [x] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
 - [x] **Add a board editor** to set up a position and play it against the AI or a friend.
 - [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
-- [ ] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
-- [ ] **Add an evaluation cache** so already-analysed positions load instantly.
-- [ ] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
+- [x] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
+  Done: `analyzeGame` task queue (functions/analysis.js), enqueued by `rateGame`, writes `game_evals/{room}` at the Quick preset.
+- [x] **Add an evaluation cache** so already-analysed positions load instantly.
+  Done: `position_evals/{key}`, written only by the server (`analyzeGame`, the `evalPositions` callable); read by Quick reviews and the analysis board.
+- [x] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
+  Done: a review-panel button on game.html and multiplayer.html opens the player's mistakes as winning-turn puzzles on `puzzles.html?learn=`.
 - [ ] **Add practice-from-position** against the AI with hints.
 - [ ] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player.
-- [ ] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase.
+- [x] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase. Done: the Insights tab, win rate by colour, game length and spell on the board (time control is in Stats; game phase needs evals, not stored per game).
 
 ### Puzzles
 
-- [ ] **Add a puzzle dashboard** (results by theme over time).
-- [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer).
+- [x] **Add a puzzle dashboard** (results by theme over time). Done: `puzzles.html?tab=dashboard`, solve rates by difficulty, kind and theme, rating over time, recent misses.
+- [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer). Storm done: `puzzles.html?tab=storm`, 3 minutes, unrated, best score on the Storm leaderboard. Racer (multiplayer) is still open.
 - [x] **Generate puzzles from a player's own games** (positions where they missed a win). Puzzles v2: "My missed wins", ranked games only.
 
 ### Learning
@@ -149,7 +155,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Social
 
-- [ ] **Add blocking** alongside the friends / follow list.
+- [x] **Add blocking** alongside the friends / follow list. Done: Block on profile.html; the rules refuse a blocked player's challenge, follow and seat in the blocker's rooms, and the lobby hides their open games.
 - [ ] **Add an activity feed / timeline** ("X won a game", "X joined a tournament").
 - [ ] **Add private messaging.**
 - [ ] **Add a notifications inbox** plus web push.
@@ -164,9 +170,9 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Profile & account
 
-- [ ] **Add per-mode stats pages:** streaks, best wins, worst losses, opponents.
-- [ ] **Add game search** by player, result, spell layout and date.
-- [ ] **Add bulk export** of all a player's games.
+- [x] **Add per-mode stats pages:** streaks, best wins, worst losses, opponents. Done: Stats tab tiles, by the opponent's rating before the game.
+- [x] **Add game search** by player, result, spell layout and date. Done: Games tab filters (opponent, result, rated, spell, date range).
+- [x] **Add bulk export** of all a player's games. Done: "Download all games", JSON lines with the stored entry, start/final SFN, transcript and SGN-T.
 - [ ] **Add trophies, badges and verified titles.**
 - [x] **Add account closing** (Danger zone on the account page).
 - [ ] **Add two-factor authentication and an active-sessions list.**
@@ -175,10 +181,10 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Fair play & moderation
 
-- [ ] **Add reporting** of players and games, and a moderation panel to handle reports.
+- [x] **Add reporting** of players and games, and a moderation panel to handle reports. Done: "Report" on profiles and the online game-over modal writes create-only `reports/`; `admin.html` (admins/{uid}) lists them, resolves them with a note and suspends players from rated play (`user_flags/{uid}/banUntil`). Turns are also sequenced by the rules now (`rooms/{id}/last`), closing the extra-turns cheat.
 - [ ] **Add engine-correlation cheat detection** (Lichess's Irwin).
 - [ ] **Add profanity filters** on chat and names.
-- [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process.
+- [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process. Partly done: admins can suspend from rated play (shown with its reason on the account page) and `rateGame` counts upheld abandonments in `user_flags/{uid}/abandons`; no automatic bans, no appeals flow yet.
 
 ### Platform
 
@@ -192,6 +198,6 @@ Items already listed above are not repeated; chess-only features (opening names,
 ## Cleanup
 
 - [x] **Share one keyboard handler** between `docs/static/scripts/game-board-local.js` and `docs/static/scripts/game-board-multiplayer.js:630-646`; multiplayer has a copy today.
-- [ ] **Move the inline styles** in `docs/game.html:51-89` into the stylesheet.
-- [ ] **Pass the spell argument** to `handleSpellMouseOut()` on the sorcery `mouseout` (`docs/game.html:670`).
+- [x] **Move the inline styles** in `docs/game.html:51-89` into the stylesheet. Done: in styles.css, the header rules scoped by `body.game-page`; computed styles and screenshots unchanged.
+- [x] **Pass the spell argument** to `handleSpellMouseOut()` on the sorcery `mouseout` (`docs/game.html:670`). Done on every game page (multiplayer.html passed none).
   It is harmless today because the parameter is unused.

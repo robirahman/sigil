@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link href="static/css/global.css?v202305191" rel="stylesheet" />
 	<link href="static/css/layout.css" rel="stylesheet" />
-	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
@@ -80,6 +80,7 @@
 			text-align: right;
 		}
 		.game-card__status--your-turn { color: var(--color-success); }
+		.game-card__vacation { font-size: 0.8em; color: var(--color-text-dim); margin-top: 2px; text-align: right; }
 		.game-card__resume {
 			padding: 8px 16px;
 			background: var(--color-surface-raised);
@@ -141,6 +142,16 @@
 			.game-card { grid-template-columns: 1fr auto; }
 			.game-card__resume { display: none; }
 		}
+		/* Friends (friends.js) */
+		.friends-list { display: flex; flex-direction: column; gap: 6px; }
+		.friend-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--color-surface); border-radius: 6px; font-family: 'Overlock', sans-serif; }
+		.friend-row__name { flex: 1; color: var(--color-text-bright); text-decoration: none; overflow-wrap: anywhere; }
+		.friend-row__name:hover { text-decoration: underline; }
+		.friend-row__status { color: var(--color-text-dim); font-size: 0.85em; }
+		.friend-row__status--online { color: var(--color-success, #4caf50); }
+		.friend-row__challenge { padding: 4px 10px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface-raised); color: var(--color-text-warm); text-decoration: none; font-size: 0.9em; }
+		.friend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-dim, #777); flex: none; }
+		.friend-dot--online { background: var(--color-success, #4caf50); }
 		.back-link {
 			display: inline-block;
 			margin-top: 20px;
@@ -213,6 +224,7 @@
 							<div>
 								<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
 								<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+								<div class="game-card__vacation" x-show="g.vacationText" x-text="g.vacationText"></div>
 							</div>
 							<span class="game-card__resume" x-text="g.isYourTurn ? 'Play' : 'Open'"></span>
 						</a>
@@ -239,9 +251,25 @@
 							<div>
 								<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
 								<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+								<div class="game-card__vacation" x-show="g.vacationText" x-text="g.vacationText"></div>
 							</div>
 							<span class="game-card__resume" x-text="g.isYourTurn ? 'Play' : 'Open'"></span>
 						</a>
+					</template>
+				</div>
+			</div>
+
+			<div class="games-section games-section--friends" x-show="authUser && !isOffline" x-cloak>
+				<h3>Friends</h3>
+				<p class="games-section__none" x-show="friends.length === 0">You don't follow anyone yet. Follow players from their profile (the leaderboard links to them) to see when they are online and challenge them.</p>
+				<div class="friends-list">
+					<template x-for="f in friends" x-bind:key="f.uid">
+						<div class="friend-row" x-bind:data-uid="f.uid">
+							<span class="friend-dot" x-bind:class="{ 'friend-dot--online': f.online }"></span>
+							<a class="friend-row__name" x-bind:href="'profile.html?uid=' + encodeURIComponent(f.uid)" x-text="f.displayName"></a>
+							<span class="friend-row__status" x-bind:class="{ 'friend-row__status--online': f.online }" x-text="f.online ? 'Online' : 'Offline'"></span>
+							<a class="friend-row__challenge" x-bind:href="'multiplayer.html?challenge=' + encodeURIComponent(f.uid)">Challenge</a>
+						</div>
 					</template>
 				</div>
 			</div>
@@ -270,8 +298,8 @@
 		});
 	</script>
 	<!-- Whose move and how long they have, by the server's rule. -->
-	<script src="static/scripts/engine/room-clock.js"></script>
-	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/engine/room-clock.js?v=35"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
 
 	<script>
 		const ROOM_INVITE_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
@@ -291,6 +319,10 @@
 				pushOn: false,
 				pushBusy: false,
 				pushError: '',
+
+				// The players we follow, with presence (friends.js).
+				friends: [],
+				_unwatchFriends: null,
 
 				/** Games where it is your move, the least time left first. */
 				get yourGames() {
@@ -321,11 +353,15 @@
 						if (!user || user.isAnonymous) {
 							this.authUser = null;
 							this.games = [];
+							this.friends = [];
+							if (this._unwatchFriends) this._unwatchFriends();
+							this._unwatchFriends = null;
 							this.loading = false;
 							return;
 						}
 						this.authUser = user;
 						this._refreshPushState();
+						this._startFriends(user);
 						await this._loadGames(db, user.uid);
 						this.loading = false;
 						// Tick once a second to update displayed clocks
@@ -336,6 +372,15 @@
 							}, 1000);
 						}
 					});
+				},
+
+				async _startFriends(user) {
+					if (this._unwatchFriends) this._unwatchFriends();
+					this._unwatchFriends = null;
+					// friends.js is loaded by auth-status.js and follows the same sign-in.
+					for (let i = 0; i < 50 && !(window.SigilFriends && SigilFriends.uid === user.uid); i++) await new Promise((r) => setTimeout(r, 100));
+					if (!window.SigilFriends || SigilFriends.uid !== user.uid || !this.authUser || this.authUser.uid !== user.uid) return;
+					this._unwatchFriends = SigilFriends.watchFriends((list) => { this.friends = list; });
 				},
 
 				// ---- Notifications (turn-notify.js) ----
@@ -419,6 +464,7 @@
 						isYourTurn: false,
 						clockText: '',
 						statusText: 'Loading...',
+						vacationText: '',
 						sortKey: Infinity,
 						urgencyLevel: 'normal',
 						timeControlLabel: this._formatTimeControl({ type: tcType }),
@@ -501,6 +547,17 @@
 							continue;
 						}
 						if (!g.room) continue;
+
+						// A player on vacation (correspondence): their clock is stopped.
+						g.vacationText = '';
+						for (const c of [g.myColor, g.myColor === 'red' ? 'blue' : 'red']) {
+							const until = typeof roomPausedUntil === 'function' ? roomPausedUntil(g.room, c, now) : null;
+							if (!until) continue;
+							const d = new Date(until);
+							g.vacationText = (c === g.myColor ? 'You are' : (g.opponentDisplayName || 'Your opponent') + ' is')
+								+ ' on vacation until ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+							break;
+						}
 
 						const toMove = sideToMove(g.room);
 						const isYourTurn = toMove === g.myColor;

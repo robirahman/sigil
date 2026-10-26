@@ -62,6 +62,29 @@ function bindGameKeys(c, opts) {
 }
 
 /**
+ * Board tools, for players and spectators alike (bindGameKeys is off for
+ * spectators): Z toggles zen mode on pages that offer it (<body
+ * class="zen-page">, settings-panel.js); Escape clears the arrows and
+ * circles of board-marks.js.
+ */
+document.addEventListener('keydown', (e) => {
+	if (e.ctrlKey || e.metaKey || e.altKey) return;
+	if (typeof SigilDialog !== 'undefined' && SigilDialog.isOpen()) return;
+	const tag = document.activeElement?.tagName;
+	if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+	if (e.key === 'Escape') {
+		document.querySelectorAll('.board-marks').forEach(svg => {
+			if (svg.parentNode && svg.parentNode._boardMarks) svg.parentNode._boardMarks.clear();
+		});
+		return;
+	}
+	if ((e.key === 'z' || e.key === 'Z') && document.body.classList.contains('zen-page') && typeof SigilSettings !== 'undefined') {
+		e.preventDefault();
+		SigilSettings.set('zen', !SigilSettings.get('zen'));
+	}
+});
+
+/**
  * With "Confirm before ending a turn" on, the first End Turn (button or
  * Enter) only arms it: the button asks again and the second press passes.
  * Arming decays like Forfeit's. Returns true when the turn should end now.
@@ -92,4 +115,68 @@ function nodeAriaLabel(c, node) {
 /** Smooth scrolling is motion too: jump instead when animations are cut. */
 function sigilScrollBehavior() {
 	return typeof sigilMotionLevel === 'function' && sigilMotionLevel() !== 'full' ? 'auto' : 'smooth';
+}
+
+/**
+ * Confirm before a link takes the player away from a game in progress. One
+ * click on the logo, "Sign in" or a player's name used to drop a live game,
+ * and the beforeunload prompt is off on Safari. A same-tab link click asks
+ * first (Stay / Leave game); links that open a new tab or stay on the page
+ * pass. `inProgress()` says whether leaving now costs anything (not after
+ * game over, in review or as a spectator); `detail()` is the dialog's text.
+ * Navigations started by the page itself (rematch, New Board) don't ask.
+ */
+function guardLeavingGame(inProgress, detail) {
+	let dialog = null, text = null, href = '';
+	const build = () => {
+		const el = (tag, cls, txt) => {
+			const e = document.createElement(tag);
+			if (cls) e.className = cls;
+			if (txt) e.textContent = txt;
+			return e;
+		};
+		const inner = el('div', 'settings-panel__inner');
+		const title = el('h2', 'settings-panel__title', 'Leave this game?');
+		title.id = 'leave-game-title';
+		text = el('p', 'leave-game__text');
+		const stay = el('button', 'settings-panel__btn', 'Stay');
+		const leave = el('button', 'settings-panel__btn leave-game__leave', 'Leave game');
+		stay.type = leave.type = 'button';
+		const actions = el('div', 'settings-panel__actions');
+		actions.append(stay, leave);
+		inner.append(title, text, actions);
+		dialog = el('div', 'settings-panel leave-game');
+		dialog.setAttribute('role', 'dialog');
+		dialog.setAttribute('aria-modal', 'true');
+		dialog.setAttribute('aria-labelledby', 'leave-game-title');
+		dialog.hidden = true;
+		dialog.appendChild(inner);
+		document.body.appendChild(dialog);
+		stay.addEventListener('click', () => SigilDialog.close(dialog));
+		dialog.addEventListener('click', (e) => { if (e.target === dialog) SigilDialog.close(dialog); });
+		leave.addEventListener('click', () => {
+			// Already confirmed: skip the browser's own beforeunload prompt.
+			window.onbeforeunload = null;
+			window.location.href = href;
+		});
+	};
+	document.addEventListener('click', (e) => {
+		if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+		const a = e.target.closest && e.target.closest('a[href]');
+		if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+		const url = new URL(a.href, window.location.href);
+		if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+		const here = window.location;
+		if (url.origin === here.origin && url.pathname === here.pathname && url.search === here.search && url.hash) return;
+		if (!inProgress()) return;
+		e.preventDefault();
+		if (typeof SigilDialog === 'undefined') {
+			if (window.confirm('Leave this game? ' + detail())) window.location.href = url.href;
+			return;
+		}
+		if (!dialog) build();
+		href = url.href;
+		text.textContent = detail();
+		SigilDialog.open(dialog);
+	}, true);
 }

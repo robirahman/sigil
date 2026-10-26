@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<link href="static/css/global.css?v202305191" rel="stylesheet" />
 	<link href="static/css/layout.css" rel="stylesheet" />
-	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/styles.css?v=35" rel="stylesheet" />
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
@@ -85,6 +85,16 @@
 			color: var(--color-text-faint);
 			font-family: 'Overlock', sans-serif;
 		}
+		.ban-notice {
+			background: rgba(230, 102, 102, 0.12);
+			border: 1px solid var(--color-error);
+			border-radius: 8px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			margin-bottom: 16px;
+			padding: 12px 16px;
+		}
+		.admin-link { color: var(--color-accent); font-family: 'Overlock', sans-serif; }
 		.profile-card {
 			background: var(--color-surface);
 			border-radius: 8px;
@@ -292,6 +302,16 @@
 		<div class="account" x-show="!loading && user" x-cloak>
 			<h2>Your Profile</h2>
 
+			<!-- A suspension an admin set (admin.html): user_flags/{uid}, which
+			     only the player and admins can read. -->
+			<div class="ban-notice" x-show="banActive" x-cloak data-testid="ban-notice">
+				<strong>Your account is suspended from rated play</strong>
+				<span x-text="banUntilText"></span>.
+				<template x-if="flags && flags.reason"><span> Reason: <span x-text="flags.reason"></span></span></template>
+				You can still play casual games.
+			</div>
+			<p x-show="isAdmin" x-cloak><a class="admin-link" href="admin.html">Admin panel: reports and suspensions</a></p>
+
 			<div class="profile-card">
 				<div class="profile-card__name" x-text="profile?.displayName || user?.displayName || 'Player'"></div>
 				<div class="profile-card__stats">
@@ -377,6 +397,34 @@
 				</div>
 			</div>
 
+			<!-- Correspondence vacation: the bank and the pauses are the
+			     server's (functions/vacation.js, setVacation). -->
+			<div class="settings-card vacation-card">
+				<div style="font-family: 'Arvo', serif; color: var(--color-text-warm); margin-bottom: 8px;">Correspondence vacation</div>
+				<div class="settings-card__hint" style="margin-bottom: 10px;">
+					While you are on vacation, your clocks in correspondence games stop, and your opponents see when you are back. You have 14 days a year; ending a vacation early gives back the days not begun. Live games are not affected.
+				</div>
+				<template x-if="vacationActive">
+					<div>
+						<p class="vacation-card__status" x-text="'On vacation until ' + vacationUntilText + '.'"></p>
+						<button class="account-button vacation-card__end" x-on:click="endVacation" x-bind:disabled="vacationBusy">End vacation now</button>
+					</div>
+				</template>
+				<template x-if="!vacationActive">
+					<div>
+						<p class="vacation-card__left" x-text="vacationDaysLeft + (vacationDaysLeft === 1 ? ' day' : ' days') + ' left this year.'"></p>
+						<div x-show="vacationMaxDays > 0">
+							<label for="vacation-days">Days</label>
+							<select id="vacation-days" x-model.number="vacationDays" x-bind:disabled="vacationBusy">
+								<template x-for="n in vacationMaxDays" x-bind:key="n"><option x-bind:value="n" x-text="n"></option></template>
+							</select>
+							<button class="account-button vacation-card__start" x-on:click="startVacation" x-bind:disabled="vacationBusy">Start vacation</button>
+						</div>
+					</div>
+				</template>
+				<p class="error-msg vacation-card__error" x-text="vacationError"></p>
+			</div>
+
 			<!-- Multi-core AI (2026-10 round 2): hidden while root split across
 			     workers measures no gain (engine/reports/2026-10-r2-multicore.md).
 			     The setting works (localStorage sigil.rustWorkers = 'auto');
@@ -448,7 +496,8 @@
 	</script>
 
 	<script src="static/scripts/engine/auth-manager.js"></script>
-	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/engine/vacation-bank.js?v=35"></script>
+	<script src="static/scripts/auth-status.js?v=35"></script>
 
 	<script>
 		document.addEventListener('alpine:init', () => {
@@ -464,11 +513,49 @@
 				signupEmail: '',
 				signupPassword: '',
 				renameName: '',
+				// user_flags/{uid} (a suspension, the abandonment count) and admins/{uid}.
+				flags: null,
+				isAdmin: false,
+				get banActive() { return !!(this.flags && typeof this.flags.banUntil === 'number' && this.flags.banUntil > Date.now()); },
+				get banUntilText() {
+					if (!this.banActive) return '';
+					// A ban past 2100 is permanent.
+					return this.flags.banUntil > 4102444800000 ? ' indefinitely' : ' until ' + new Date(this.flags.banUntil).toLocaleString();
+				},
 				guest: false,
 				linkConflict: '',
 				_linkCredential: null,
 				_authBusy: false,
 				_setupFailed: false,
+				// vacations/{uid} (read-only here), and the form.
+				vacation: null,
+				vacationDays: 1,
+				vacationBusy: false,
+				vacationError: '',
+				_vacationTick: 0,
+				_vacationTimer: null,
+				get vacationActive() {
+					void this._vacationTick;
+					const v = this.vacation;
+					return !!(v && typeof v.until === 'number' && v.from <= Date.now() && Date.now() < v.until);
+				},
+				get vacationUntilText() {
+					if (!this.vacation) return '';
+					const d = new Date(this.vacation.until);
+					return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+				},
+				// The server's bank (engine/vacation-bank.js): 14 days a calendar
+				// year (UTC), each day charged to the year it begins in.
+				get vacationDaysLeft() {
+					void this._vacationTick;
+					return vacationDaysLeft(this.vacation, Date.now());
+				},
+				// The longest vacation the server would accept now (near New
+				// Year it may draw on next year's bank too).
+				get vacationMaxDays() {
+					void this._vacationTick;
+					return vacationMaxDays(this.vacation, Date.now());
+				},
 				deleteOpen: false,
 				deleteConfirm: '',
 				deleteError: '',
@@ -543,14 +630,18 @@
 							}
 						}
 						this.profile = this._authManager.userProfile;
+						this._loadFlags(this.user.uid);
 						this.annotationMode = !!(this.profile && this.profile.annotationMode);
 						this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
 						this.showAiEval = !!(this.profile && this.profile.showAiEval);
 						this.showMapControl = !!(this.profile && this.profile.showMapControl);
 						// Default OFF; only explicit true enables.
 						this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
+						this._loadVacation();
 					} else {
 						this.profile = null;
+						this.flags = null;
+						this.isAdmin = false;
 						this.annotationMode = false;
 						this.showAiThinkReport = false;
 						this.showAiEval = false;
@@ -559,6 +650,47 @@
 					}
 					this.loading = false;
 				},
+
+				async _loadFlags(uid) {
+					const db = firebase.database();
+					try { this.flags = (await db.ref('user_flags/' + uid).once('value')).val(); } catch (e) { this.flags = null; }
+					try { this.isAdmin = (await db.ref('admins/' + uid).once('value')).val() === true; } catch (e) { this.isAdmin = false; }
+				},
+
+				async _loadVacation() {
+					if (!this.user || this.isOffline) return;
+					try {
+						this.vacation = (await firebase.database().ref('vacations/' + this.user.uid).once('value')).val();
+					} catch (e) {
+						this.vacation = null;
+					}
+					this.vacationDays = Math.min(Math.max(1, this.vacationDays), Math.max(1, this.vacationMaxDays));
+					this._vacationTick++;
+					// When the vacation ends on its own, show the bank again (read
+					// afresh: it may have been ended or changed elsewhere).
+					clearTimeout(this._vacationTimer);
+					const v = this.vacation;
+					if (v && typeof v.until === 'number' && v.until > Date.now()) {
+						this._vacationTimer = setTimeout(() => this._loadVacation(), Math.min(v.until - Date.now() + 1000, 2147483647));
+					}
+				},
+
+				async _callVacation(days) {
+					this.vacationError = '';
+					this.vacationBusy = true;
+					try {
+						await firebase.functions().httpsCallable('setVacation')({ days });
+					} catch (e) {
+						const why = { 'already-on-vacation': 'You are already on vacation.', 'not-enough-days': 'Not enough vacation days left this year.',
+							'not-on-vacation': 'You are not on vacation.' }[e && e.message];
+						this.vacationError = why || ('The vacation could not be changed (' + ((e && (e.message || e.code)) || 'unknown error') + ').');
+					}
+					await this._loadVacation();
+					this.vacationBusy = false;
+				},
+
+				startVacation() { return this._callVacation(Number(this.vacationDays) || 1); },
+				endVacation() { return this._callVacation(0); },
 
 				async renameUser() {
 					this.error = '';

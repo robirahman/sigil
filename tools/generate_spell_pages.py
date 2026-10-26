@@ -3,7 +3,10 @@
 
 Excludes unofficial packs: Panda and Experimental.
 Outputs:
-  docs/spells/<spell-slug>.html (45 official spells)
+  docs/spells/<spell-slug>.html and <Spell_Name>.html (45 official spells):
+      redirects to spell.html?name=<Spell_Name>, the one spell reference (its
+      rules text comes from the engine's descriptions; the text these pages
+      used to carry had drifted from the engine's rules)
   docs/spells/index.html (Spells Compendium)
   docs/packs/<pack-slug>.html (11 official packs + 5 core subpacks)
   docs/packs/index.html (Packs Compendium)
@@ -861,6 +864,35 @@ def html_footer(depth=1):
 </html>
 """
 
+def spell_page_url(spell_name, depth=1):
+    return '../' * depth + 'spell.html?name=' + spell_name
+
+
+def generate_spell_redirect(spell_name):
+    """The old per-spell page: a redirect to spell.html (meta refresh, a JS
+    location.replace, and a visible link)."""
+    url = spell_page_url(spell_name)
+    disp = pretty(spell_name)
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<!-- Moved: the spell reference is spell.html (rules text from the engine's
+		own descriptions). This old generated page only redirects there. -->
+	<meta http-equiv="refresh" content="0; url={url}" />
+	<link rel="canonical" href="{url}" />
+	<title>{disp} - Sigil Online</title>
+	<script>location.replace('{url}' + location.hash);</script>
+</head>
+<body>
+	<p>This page has moved: <a href="{url}">{disp}</a>.</p>
+</body>
+</html>
+'''
+
+
+# The full page these files used to hold (unused: see generate_spell_redirect).
 def generate_spell_page(spell_name, all_spell_names):
     info = SPELLS_DATA[spell_name]
     pack = SPELL_TO_PACK[spell_name]
@@ -1122,9 +1154,9 @@ def generate_pack_page(pack):
 				<div class="content-section" style="padding:14px;">
 					<h4 style="font-family:'Arvo',serif; color:var(--color-accent); margin:0 0 6px;">{sp['name']} Trio</h4>
 					<div style="font-size:0.9em; color:var(--color-text-light); margin-bottom:8px;">
-						Ritual: <a href="../spells/{slugify(sp['rituals'][0])}.html" style="color:var(--color-text-warm);">{pretty(sp['rituals'][0])}</a><br/>
-						Sorcery: <a href="../spells/{slugify(sp['sorceries'][0])}.html" style="color:var(--color-text-warm);">{pretty(sp['sorceries'][0])}</a><br/>
-						Charm: <a href="../spells/{slugify(sp['charms'][0])}.html" style="color:var(--color-text-warm);">{pretty(sp['charms'][0])}</a>
+						Ritual: <a href="{spell_page_url(sp['rituals'][0])}" style="color:var(--color-text-warm);">{pretty(sp['rituals'][0])}</a><br/>
+						Sorcery: <a href="{spell_page_url(sp['sorceries'][0])}" style="color:var(--color-text-warm);">{pretty(sp['sorceries'][0])}</a><br/>
+						Charm: <a href="{spell_page_url(sp['charms'][0])}" style="color:var(--color-text-warm);">{pretty(sp['charms'][0])}</a>
 					</div>
 				</div>
             """
@@ -1156,7 +1188,7 @@ def generate_pack_page(pack):
 					{t_badge}
 				</div>
 				<div class="spell-text">"{s_info['text']}"</div>
-				<a class="view-spell-btn" href="../spells/{s_slug}.html">View Spell Details &rarr;</a>
+				<a class="view-spell-btn" href="{spell_page_url(s_name)}">View Spell Details &rarr;</a>
 			</div>
         """
     html += '</div>'
@@ -1229,7 +1261,7 @@ def generate_spells_index(all_spell_names):
         t_badge = f'<span class="badge badge-tier-{t_key.lower()}">Tier {t_key}</span>' if t_key in ['S','A','B','C','D','F'] else ''
         
         html += f"""
-				<a class="spell-grid-item" href="{s_slug}.html" data-name="{s_disp.lower()}" data-pack="{pack['slug']}" data-type="{s_info['type']}" data-text="{s_info['text'].lower()}">
+				<a class="spell-grid-item" href="{spell_page_url(s_name)}" data-name="{s_disp.lower()}" data-pack="{pack['slug']}" data-type="{s_info['type']}" data-text="{s_info['text'].lower()}">
 					<img class="spell-grid-thumb" src="../static/images/spells/art_only/{s_name}.webp" alt="{s_disp}" loading="lazy" />
 					<div class="spell-grid-body">
 						<div>
@@ -1342,21 +1374,11 @@ def main():
     print(f"Generating {len(all_spells)} official spell pages...")
     for s_name in all_spells:
         slug = slugify(s_name)
-        page_html = generate_spell_page(s_name, all_spells)
-        out_path = os.path.join(SPELLS_DIR, f"{slug}.html")
-        with open(out_path, 'w', encoding='utf-8') as f:
-            f.write(page_html)
-        
-        # Also create symlink or alias for exact spell name if different from slug
-        if s_name != slug:
-            exact_path = os.path.join(SPELLS_DIR, f"{s_name}.html")
-            try:
-                if os.path.exists(exact_path) or os.path.islink(exact_path):
-                    os.unlink(exact_path)
-                os.symlink(f"{slug}.html", exact_path)
-            except Exception:
-                with open(exact_path, 'w', encoding='utf-8') as f:
-                    f.write(page_html)
+        page_html = generate_spell_redirect(s_name)
+        # Both the slug and the exact spell name (old links used either).
+        for fn in {slug, s_name}:
+            with open(os.path.join(SPELLS_DIR, f"{fn}.html"), 'w', encoding='utf-8') as f:
+                f.write(page_html)
 
     # Spells directory index
     spells_index_html = generate_spells_index(all_spells)
