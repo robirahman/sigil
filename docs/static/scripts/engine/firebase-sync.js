@@ -1106,6 +1106,13 @@ class FirebaseSync {
 		try { await this.roomRef.child('takeback').remove(); } catch (e) { /* already gone */ }
 	}
 
+	/** The room as the server holds it now (not the local cache). */
+	async readRoom() {
+		if (!this.roomRef) return null;
+		const snap = typeof this.roomRef.get === 'function' ? await this.roomRef.get() : await this.roomRef.once('value');
+		return snap.val();
+	}
+
 	/**
 	 * Follow the room's records that move a clock (room-clock.js): pauses
 	 * (a player's vacation, written by the server) and gifts of time.

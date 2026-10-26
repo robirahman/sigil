@@ -255,7 +255,7 @@ class MultiplayerController {
 			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused });
 			// Not before the records have loaded: a gift not yet seen
 			// would make the claim wrong.
-			if (view.out && !this._timedOut && this._clockRec.ready) this._endByTimeout(view.out, true);
+			if (view.out && !this._timedOut && this._clockRec.ready) this._confirmFlag(view.out);
 			return;
 		}
 
@@ -288,6 +288,26 @@ class MultiplayerController {
 				this._endByTimeout(ts.activeColor, true);
 			}
 		}
+	}
+
+	/**
+	 * Claim `loser`'s flag only once the room as it is on the server now
+	 * agrees (room-clock.js, the rule the rating function applies as of
+	 * closedAt): a gift or a pause that landed after our listeners last
+	 * fired keeps the game going. At most one read every two seconds.
+	 */
+	async _confirmFlag(loser) {
+		const t = Date.now();
+		if (this._flagCheckAt && t - this._flagCheckAt < 2000) return;
+		this._flagCheckAt = t;
+		let room = null;
+		try { room = typeof this.sync.readRoom === 'function' ? await this.sync.readRoom() : null; } catch (e) { return; }
+		if (this._timedOut || !room || room.status !== 'playing') return;
+		if (typeof roomTimeLeft === 'function' && typeof sideToMove === 'function') {
+			const left = roomTimeLeft(room, loser, this.sync.serverNow());
+			if (sideToMove(room) !== loser || left === null || left > 0) return;
+		}
+		this._endByTimeout(loser, true);
 	}
 
 	/** Stop the timer interval. */
