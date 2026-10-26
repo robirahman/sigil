@@ -22,6 +22,8 @@
  *                    positions a browser review searched, searching each
  *                    one again here.
  *   notifyChallenge - a web push to a player challenged from their profile.
+ *   setVacation    - starts or ends the caller's correspondence vacation and
+ *                    pauses their games (vacation.js).
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -42,6 +44,7 @@ const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const { notifyTurn, notifyChallenge } = require('./notify');
+const vacation = require('./vacation');
 const crypto = require('crypto');
 
 initializeApp();
@@ -334,6 +337,7 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		['blocks/' + uid]: null,
 		['challenges/' + uid]: null,
 		['presence/' + uid]: null,
+		['vacations/' + uid]: null,
 	};
 	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
 	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });
@@ -421,9 +425,34 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 });
 
 exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION, timeoutSeconds: 120 }, async () => {
-	const ended = await expireRooms(database(), Date.now());
-	if (ended) logger.info('expireClocks', { ended });
-	await retryPendingAnalyses(database()).catch((e) => logger.warn('retryPendingAnalyses', { error: String(e) }));
+	const db = database();
+	const now = Date.now();
+	const ended = await expireRooms(db, now);
+	// Games begun while a player was already on vacation.
+	const paused = await vacation.pauseNewGames(db, now);
+	if (ended || paused) logger.info('expireClocks', { ended, paused });
+	await retryPendingAnalyses(db).catch((e) => logger.warn('retryPendingAnalyses', { error: String(e) }));
+});
+
+// Correspondence vacation: { days: 1..14 } starts one, { days: 0 } ends it
+// early. The bank and the pauses are the server's alone (vacation.js).
+exports.setVacation = onCall({ region: REGION }, async (request) => {
+	const auth = request.auth;
+	if (!auth || !auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	const days = request.data && request.data.days;
+	if (!Number.isInteger(days) || days < 0 || days > vacation.VACATION_DAYS_PER_YEAR) {
+		throw new HttpsError('invalid-argument', 'invalid-days');
+	}
+	try {
+		const res = await vacation.setVacation(database(), auth.uid, days, Date.now());
+		logger.info('setVacation', { uid: auth.uid, days, rooms: res.rooms });
+		return res;
+	} catch (e) {
+		if (e && typeof e.code === 'string' && /^[a-z-]+$/.test(e.code) && e.code !== 'conflict') {
+			throw new HttpsError('failed-precondition', e.code);
+		}
+		throw e;
+	}
 });
 
 exports.settleAbort = onValueWritten({

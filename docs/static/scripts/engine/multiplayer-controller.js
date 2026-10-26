@@ -28,6 +28,8 @@ class MultiplayerController {
 		this._timerState = { red: 0, blue: 0, activeColor: null, lastUpdated: 0 };
 		this._timeControl = sync.timeControl || { type: 'none' };
 		this._timedOut = false;
+		// The room's pauses (vacations) and gifts of time (room-clock.js).
+		this._clockRec = { pauses: null, gifts: null, startedAt: null };
 
 		sync.onOpponentDisconnect = () => {
 			this.emit({ type: 'message', message: 'Opponent disconnected.', awaiting: null });
@@ -117,6 +119,10 @@ class MultiplayerController {
 			this._acceptTakeback();
 			return;
 		}
+		if (message === 'give_time') {
+			if (this._timeControl.type === 'realtime' && !this._timedOut && !(this.board && this.board.gameover)) this.sync.giveTime();
+			return;
+		}
 		if (message === 'claim_win') {
 			this._endByRoom(this.myColor === 'red' ? 'blue' : 'red', 'abandon', true);
 			return;
@@ -177,7 +183,10 @@ class MultiplayerController {
 		const opponent = this.myColor === 'red' ? 'blue' : 'red';
 
 		if (this._timeControl.type === 'realtime') {
-			const myRemaining = Math.max(0, ts[this.myColor] - elapsed + (this._timeControl.increment || 0));
+			// The node holds the time without gifts (room-clock.js adds
+			// them), so it may go below zero by what we were given.
+			const given = typeof roomGiftMs === 'function' ? roomGiftMs(this._clockRoom(), this.myColor, now) : 0;
+			const myRemaining = Math.max(-given, ts[this.myColor] - elapsed + (this._timeControl.increment || 0));
 			return {
 				red: this.myColor === 'red' ? myRemaining : ts.red,
 				blue: this.myColor === 'blue' ? myRemaining : ts.blue,
@@ -205,10 +214,30 @@ class MultiplayerController {
 		this.sync.listenToTimer((data) => {
 			this._timerState = data;
 		});
+		if (typeof this.sync.listenToClockRecords === 'function') {
+			let seen = null;
+			this.sync.listenToClockRecords((rec) => {
+				this._clockRec = rec;
+				// New gifts, either way, once the first load is in.
+				const keys = Object.keys(rec.gifts || {});
+				if (seen && rec.ready) {
+					for (const k of keys) {
+						const g = rec.gifts[k];
+						if (!seen.has(k) && g) this.emit({ type: 'time_gift', mine: g.to !== this.myColor });
+					}
+				}
+				if (rec.ready) seen = new Set(keys);
+			});
+		}
 
 		this._timerInterval = setInterval(() => {
 			this._tickTimer();
 		}, 250);
+	}
+
+	/** The room as room-clock.js reads it, for the clock records. */
+	_clockRoom() {
+		return Object.assign({ timeControl: this._timeControl }, this._clockRec);
 	}
 
 	/** Called every 250ms to update the timer display and check for timeout. */
@@ -218,6 +247,17 @@ class MultiplayerController {
 
 		const now = this.sync.serverNow();
 		const elapsed = now - ts.lastUpdated;
+
+		// With the room's pauses and gifts: a vacation stops the clock, and
+		// a flag claimed without them would be the claimer's loss.
+		if (typeof roomTimerView === 'function') {
+			const view = roomTimerView(ts, this._clockRoom(), now);
+			this.emit({ type: 'timer_tick', red: view.red, blue: view.blue, paused: view.paused });
+			// Not before the records have loaded: a gift not yet seen
+			// would make the claim wrong.
+			if (view.out && !this._timedOut && this._clockRec.ready) this._endByTimeout(view.out, true);
+			return;
+		}
 
 		if (this._timeControl.type === 'realtime') {
 			const activeRemaining = ts[ts.activeColor] - elapsed;

@@ -866,6 +866,10 @@
 						<div x-show="syncBanner" class="connection-banner__line connection-banner__line--self" x-text="syncBanner"></div>
 						<div x-show="opponentAwayText" class="connection-banner__line" x-text="opponentAwayText"></div>
 					</div>
+					<!-- A player on vacation: their correspondence clock is stopped. -->
+					<div class="connection-banner vacation-banner" role="status" aria-live="polite" x-show="vacationText" x-cloak>
+						<div class="connection-banner__line" x-text="vacationText"></div>
+					</div>
 					<!-- A takeback request: ours (cancel) or the opponent's (accept / decline). -->
 					<div class="connection-banner" role="status" aria-live="polite" x-show="takebackRequest && !winner">
 						<template x-if="takebackMine">
@@ -893,6 +897,8 @@
 						<button class="action-button action-button--abort" x-bind:class="{ 'is-hidden': !canAbort }" x-on:click="handleAbort">Abort</button>
 						<!-- The opponent left more than ABANDON_GRACE_MS ago. -->
 						<button class="action-button action-button--claim" x-bind:class="{ 'is-hidden': !canClaimWin }" x-on:click="handleClaimWin">Claim win</button>
+						<!-- Give the opponent 15 seconds (live timed games). -->
+						<button class="action-button action-button--give-time" x-bind:class="{ 'is-hidden': !canGiveTime }" x-on:click="handleGiveTime" title="Give your opponent 15 seconds">+15 s</button>
 					</div>
 				</div></div>
 				<div class="container" style="overflow: auto"><div class="container__inner game-board-container" x-ref="gameBoardContainer">
@@ -2177,6 +2183,7 @@
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=34"></script>
 	<script src="static/scripts/engine/position-rating.js?v=34"></script>
+	<script src="static/scripts/engine/room-clock.js?v=34"></script>
 	<script src="static/scripts/engine/firebase-sync.js?v=34-seq"></script>
 	<script src="static/scripts/engine/multiplayer-controller.js?v=34"></script>
 	<script src="static/scripts/engine/spectator-controller.js"></script>

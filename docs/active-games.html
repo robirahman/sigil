@@ -80,6 +80,7 @@
 			text-align: right;
 		}
 		.game-card__status--your-turn { color: var(--color-success); }
+		.game-card__vacation { font-size: 0.8em; color: var(--color-text-dim); margin-top: 2px; text-align: right; }
 		.game-card__resume {
 			padding: 8px 16px;
 			background: var(--color-surface-raised);
@@ -223,6 +224,7 @@
 							<div>
 								<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
 								<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+								<div class="game-card__vacation" x-show="g.vacationText" x-text="g.vacationText"></div>
 							</div>
 							<span class="game-card__resume" x-text="g.isYourTurn ? 'Play' : 'Open'"></span>
 						</a>
@@ -249,6 +251,7 @@
 							<div>
 								<div class="game-card__clock" x-bind:class="{ 'game-card__clock--your-turn': g.isYourTurn, 'game-card__clock--low': g.urgencyLevel === 'low' }" x-text="g.clockText"></div>
 								<div class="game-card__status" x-bind:class="{ 'game-card__status--your-turn': g.isYourTurn }" x-text="g.statusText"></div>
+								<div class="game-card__vacation" x-show="g.vacationText" x-text="g.vacationText"></div>
 							</div>
 							<span class="game-card__resume" x-text="g.isYourTurn ? 'Play' : 'Open'"></span>
 						</a>
@@ -461,6 +464,7 @@
 						isYourTurn: false,
 						clockText: '',
 						statusText: 'Loading...',
+						vacationText: '',
 						sortKey: Infinity,
 						urgencyLevel: 'normal',
 						timeControlLabel: this._formatTimeControl({ type: tcType }),
@@ -543,6 +547,17 @@
 							continue;
 						}
 						if (!g.room) continue;
+
+						// A player on vacation (correspondence): their clock is stopped.
+						g.vacationText = '';
+						for (const c of [g.myColor, g.myColor === 'red' ? 'blue' : 'red']) {
+							const until = typeof roomPausedUntil === 'function' ? roomPausedUntil(g.room, c, now) : null;
+							if (!until) continue;
+							const d = new Date(until);
+							g.vacationText = (c === g.myColor ? 'You are' : (g.opponentDisplayName || 'Your opponent') + ' is')
+								+ ' on vacation until ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+							break;
+						}
 
 						const toMove = sideToMove(g.room);
 						const isYourTurn = toMove === g.myColor;

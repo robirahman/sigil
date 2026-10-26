@@ -1252,6 +1252,52 @@ class FirebaseSync {
 	}
 
 	/**
+	 * Follow the room's records that move a clock (room-clock.js): pauses
+	 * (a player's vacation, written by the server) and gifts of time.
+	 * @param {function} callback - receives { pauses, gifts, startedAt, ready }
+	 *   (ready once all three have loaded)
+	 */
+	listenToClockRecords(callback) {
+		if (!this.roomRef) return;
+		const rec = { pauses: null, gifts: null, startedAt: null, ready: false };
+		const keys = ['pauses', 'gifts', 'startedAt'];
+		const seen = new Set();
+		for (const k of keys) {
+			this.roomRef.child(k).on('value', (snap) => {
+				rec[k] = snap.val();
+				seen.add(k);
+				rec.ready = seen.size === keys.length;
+				callback(Object.assign({}, rec));
+			});
+		}
+	}
+
+	/**
+	 * Give the opponent ROOM_GIFT_MS (realtime games). The rules accept a
+	 * gift only to the other seat, stamped with the server's time, at most
+	 * once a second per seat: giftAt/{seat} names the one gift each write
+	 * may add.
+	 */
+	async giveTime() {
+		if (!this.roomRef || (this.myColor !== 'red' && this.myColor !== 'blue')) return false;
+		const to = this.myColor === 'red' ? 'blue' : 'red';
+		const key = this.roomRef.child('gifts').push().key;
+		const ts = firebase.database.ServerValue.TIMESTAMP;
+		try {
+			// Not _track: a gift refused (too soon after the last) is no
+			// lost move.
+			await this.roomRef.update({
+				['gifts/' + key]: { to, ms: ROOM_GIFT_MS, at: ts },
+				['giftAt/' + this.myColor]: { key, at: ts },
+			});
+			return true;
+		} catch (e) {
+			console.error('[Sync] giveTime FAILED:', e.code, e.message);
+			return false;
+		}
+	}
+
+	/**
 	 * Accept the opponent's request: remove its turns (they must be the
 	 * last ones played) and set the position before them, in one write.
 	 * @param {object} req - the takeback request

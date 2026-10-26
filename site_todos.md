@@ -101,15 +101,15 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### During a game
 
-- [ ] **Add "ask for more time" and "give opponent +15 s".**
+- [x] **Add "ask for more time" and "give opponent +15 s".** Done: "+15 s" in live timed games writes `rooms/{id}/gifts` (rules: only to the other seat, 15 s, server time, once a second); the shared clock (room-clock.js), the game page and the server's flag judging count gifts recorded before closedAt. "Ask for more time" has no button of its own.
 - [ ] **Add pre-moves** (queue a move during the opponent's turn).
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
 - [x] **Add zen mode** that hides everything but the board and clocks.
   Done: Z or the settings panel (stored in `sigil_settings`) on game.html and in multiplayer games; keeps the board, clocks and the buttons a turn needs, with an Exit zen button.
 - [x] ~~**Add board flip** and a choice of which side the board is drawn from.~~
   Not applicable (Robi, 2026-10-26): both players see the board from the same side on the site, so there is no perspective to flip.
-- [x] **Add a correspondence "your move" list across games.** Done: active-games.html, least time left first, and a "Your move (N)" header badge.
-- [ ] **Add a correspondence vacation / pause option.** It changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
+- [x] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
+  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Done: vacation on account.html (14 days a year, ended early refunds the days not begun) through the `setVacation` function, which pauses every correspondence game of the player (`rooms/{id}/pauses`, server-only); room-clock.js, `flagged` and `expireClocks` add the paused time; "On vacation until …" on the game page and active-games.html.
 - [ ] **Add move input by typed notation**, and optionally by voice.
 - [x] **Let players draw arrows and circles** on the board during play and analysis.
   Done: board-marks.js. Right-drag arrows, right-click circles, Shift/Alt/Ctrl colours; a pencil draw mode on touch screens; local only, cleared each turn in play, kept per move in review and per tree node in analysis.html; Escape or the ✕ button clears.

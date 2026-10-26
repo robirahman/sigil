@@ -231,6 +231,62 @@ test('rooms: emotes are preset ids from a seated player, one per 3 s', async () 
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/E2')));
 });
 
+test('rooms: pauses are the server\'s; a gift goes only to the opponent, in a live timed game', async () => {
+	const live = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true },
+		timeControl: { type: 'realtime', initialTime: 60000, increment: 0 } });
+	const corr = Object.assign({}, live, { timeControl: { type: 'correspondence', moveTimeout: 86400000 } });
+	await seed({ rooms: { L1: live, C1: corr } });
+	const pause = { color: 'red', from: Date.now(), to: Date.now() + 86400000 };
+	// No client writes a pause, not even its own seat's, nor brings one in a new room.
+	await assertFails(set(ref(db('alice'), 'rooms/C1/pauses/p1'), pause));
+	await assertFails(set(ref(db('bob'), 'rooms/C1/pauses/p1'), pause));
+	await assertFails(update(ref(db('alice'), 'rooms/C1'), { 'pauses/p1': pause }));
+	await assertFails(set(ref(db('alice'), 'rooms/N1'), Object.assign({}, waiting, { pauses: { p1: pause } })));
+	await assertFails(set(ref(db('alice'), 'rooms/N1'), Object.assign({}, waiting, { gifts: { g1: { to: 'red', ms: 15000, at: 1 } } })));
+	await assertFails(set(ref(db('alice'), 'rooms/N1'), Object.assign({}, waiting, { giftAt: { red: { key: 'g1', at: 1 } } })));
+	// The vacation bank is the server's too.
+	await assertFails(set(ref(db('alice'), 'vacations/alice'), { year: 2026, usedDays: 0, from: 1, until: 2 }));
+	await assertFails(set(ref(db('alice'), 'vacations/alice/usedDays'), 0));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'vacations/alice'), { year: 2026, usedDays: 3, from: 1, until: 2 }));
+	await assertSucceeds(get(ref(db('alice'), 'vacations/alice')));
+	await assertFails(get(ref(db('bob'), 'vacations/alice')));
+	await assertFails(remove(ref(db('alice'), 'vacations/alice')));
+	// A gift: to the other seat, 15 s, the server's time, named by the
+	// giver's giftAt (one gift per write).
+	const gift = (to, by) => {
+		const key = to + by + Math.random().toString(36).slice(2, 8);
+		return { ['gifts/' + key]: { to, ms: 15000, at: serverTimestamp() }, ['giftAt/' + by]: { key, at: serverTimestamp() } };
+	};
+	await assertSucceeds(update(ref(db('alice'), 'rooms/L1'), gift('blue', 'red')));
+	// To yourself, as the other seat, or by a stranger: refused.
+	await assertFails(update(ref(db('alice'), 'rooms/L1'), gift('red', 'red')));
+	await assertFails(update(ref(db('alice'), 'rooms/L1'), gift('red', 'blue')));
+	await assertFails(update(ref(db('mallory'), 'rooms/L1'), gift('red', 'blue')));
+	// Another size, a client time, or without the giftAt stamp: refused.
+	const stamp = (key) => ({ key, at: serverTimestamp() });
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), { 'gifts/x1': { to: 'red', ms: 60000, at: serverTimestamp() }, 'giftAt/blue': stamp('x1') }));
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), { 'gifts/x2': { to: 'red', ms: 15000, at: 5 }, 'giftAt/blue': stamp('x2') }));
+	await assertFails(set(ref(db('bob'), 'rooms/L1/gifts/x3'), { to: 'red', ms: 15000, at: serverTimestamp() }));
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), { 'gifts/x4': { to: 'red', ms: 15000, at: serverTimestamp(), extra: 1 }, 'giftAt/blue': stamp('x4') }));
+	// Many gifts in one write: only the one giftAt names may land, so the write fails.
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), { 'gifts/m1': { to: 'red', ms: 15000, at: serverTimestamp() },
+		'gifts/m2': { to: 'red', ms: 15000, at: serverTimestamp() }, 'giftAt/blue': stamp('m1') }));
+	// giftAt must name a gift written with it.
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), { 'gifts/n1': { to: 'red', ms: 15000, at: serverTimestamp() }, 'giftAt/blue': stamp('n2') }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/L1'), gift('red', 'blue')));
+	// One a second per seat.
+	await assertFails(update(ref(db('bob'), 'rooms/L1'), gift('red', 'blue')));
+	// A gift is never changed or taken back.
+	let k = null;
+	await env.withSecurityRulesDisabled(async (c) => { k = Object.keys((await get(ref(c.database(), 'rooms/L1/gifts'))).val())[0]; });
+	await assertFails(set(ref(db('alice'), 'rooms/L1/gifts/' + k + '/ms'), 30000));
+	await assertFails(remove(ref(db('alice'), 'rooms/L1/gifts/' + k)));
+	// Not in a correspondence game, nor once the game is over.
+	await assertFails(update(ref(db('alice'), 'rooms/C1'), gift('blue', 'red')));
+	await seed({ rooms: { L2: Object.assign({}, live, { status: 'finished', winner: 'red' }) } });
+	await assertFails(update(ref(db('alice'), 'rooms/L2'), gift('blue', 'red')));
+});
+
 test('rooms: rematches, local archives and expired invites', async () => {
 	await seed({ rooms: { OLD: Object.assign({}, waiting, { status: 'finished', ranked: true,
 		blue: { uid: 'bob', displayName: 'Bob' } }) } });
