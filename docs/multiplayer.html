@@ -498,7 +498,7 @@
 				Hide spell names and descriptions on the board circles (art only).
 			</small>
 
-			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || (positionSfn && (!positionOffer || positionOffer.loading))" x-text="positionSfn ? 'Create Game from Position' : 'Create Game'">Create Game</button>
+			<button class="lobby-button" x-on:click="createRoom" x-bind:disabled="isOffline || !!(positionSfn && (!positionOffer || positionOffer.loading))" x-text="positionSfn ? 'Create Game from Position' : 'Create Game'">Create Game</button>
 			<div style="margin: 16px 0; color: #777;">- or -</div>
 			<input class="join-input" x-model="joinCode" x-on:input.debounce.300ms="previewRoom()" placeholder="ROOM CODE" maxlength="6" x-bind:disabled="isOffline" />
 			<button class="lobby-button" x-on:click="joinRoom" x-bind:disabled="isOffline || joinCode.length < 4">Join Game</button>
