@@ -118,9 +118,12 @@ Items already listed above are not repeated; chess-only features (opening names,
 - [x] **Add a free analysis board:** any position, a branching move tree, and a live engine evaluation with top lines.
 - [x] **Add a board editor** to set up a position and play it against the AI or a friend.
 - [ ] **Add studies:** shared chapter-based analysis boards with comments and annotation symbols, editable live by several people.
-- [ ] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
-- [ ] **Add an evaluation cache** so already-analysed positions load instantly.
-- [ ] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
+- [x] **Run server-side analysis for every rated game** (Lichess's fishnet), stored and shown to both players; today review runs on demand in the browser.
+  Done: `analyzeGame` task queue (functions/analysis.js), enqueued by `rateGame`, writes `game_evals/{room}` at the Quick preset.
+- [x] **Add an evaluation cache** so already-analysed positions load instantly.
+  Done: `position_evals/{key}`, written only by the server (`analyzeGame`, the `evalPositions` callable); read by Quick reviews and the analysis board.
+- [x] **Add "learn from your mistakes":** replay your blunder positions from a game and find the better move.
+  Done: a review-panel button on game.html and multiplayer.html opens the player's mistakes as winning-turn puzzles on `puzzles.html?learn=`.
 - [ ] **Add practice-from-position** against the AI with hints.
 - [ ] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player.
 - [ ] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase.

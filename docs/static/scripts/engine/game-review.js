@@ -738,6 +738,101 @@ function aiReviewMixin() {
 			}
 		},
 
+		// ---- Learn from your mistakes ----
+		// The viewer's own turns the review rates a mistake or a blunder (the
+		// graph's dots: classifyDelta >= 20), replayed one by one as puzzles
+		// on puzzles.html?learn=<room>: the position before the turn, judged
+		// against the engine's best turn by position (puzzleSfnKey), as the
+		// winning-turn puzzles are.
+
+		/** The side the viewer played: their seat, or their uid's seat in a replay. */
+		learnColor() {
+			if ((this.myColor === 'red' || this.myColor === 'blue') && !this.isSpectator) return this.myColor;
+			const uid = this._aiReviewGetUid();
+			if (uid && this.redUid === uid) return 'red';
+			if (uid && this.blueUid === uid) return 'blue';
+			return '';
+		},
+
+		/** Review positions (= turn indices) of the viewer's mistakes with an engine turn to compare. */
+		learnPlies() {
+			const r = this.aiReview, log = this._gameLogForExport;
+			const color = this.learnColor();
+			if (!r || !color || !Array.isArray(r.bestActionsPerPly) || !log || log.length !== r.classificationPerPly.length) return [];
+			const out = [];
+			for (let i = 0; i < log.length; i++) {
+				const cls = r.classificationPerPly[i];
+				const best = r.bestActionsPerPly[i];
+				if (log[i].color !== color || (cls !== 'mistake' && cls !== 'blunder')) continue;
+				if (!Array.isArray(best) || !best.length || !log[i].sfnBefore) continue;
+				out.push(i);
+			}
+			return out;
+		},
+
+		/** "Learn from your mistakes (3)" */
+		learnButtonText() {
+			const k = this.learnPlies().length;
+			return 'Learn from your mistakes (' + k + ')';
+		},
+
+		/**
+		 * Hand the mistakes to puzzles.html as winning-turn puzzles: the stored
+		 * best turn is the solution (by the position after it), and any other
+		 * turn is judged by the engine against `accept_p`, midway between the
+		 * best turn's and the played turn's win chances, as the puzzle set's
+		 * winning turns are (calibrated by position-rating.js when the review
+		 * searched deep enough, else the review graph's own win%).
+		 */
+		async startLearnFromMistakes() {
+			const r = this.aiReview, log = this._gameLogForExport;
+			const plies = this.learnPlies();
+			if (!plies.length) return;
+			const color = this.learnColor();
+			let model = null;
+			try { model = typeof loadPositionModel === 'function' ? await loadPositionModel() : null; } catch (e) { model = null; }
+			const n = log.length;
+			const sfnAt = (i) => (i < n ? log[i].sfnBefore : null);
+			const calibrated = (i) => {
+				const info = (model && typeof reviewPositionEval === 'function' && sfnAt(i)) ? reviewPositionEval(r, i) : null;
+				const pRed = info ? positionRedWinProb(model, info, sfnAt(i)) : null;
+				return typeof pRed === 'number' ? (color === 'red' ? pRed : 1 - pRed) : null;
+			};
+			const graph = (i) => {
+				const wp = r.winPctPerPly[i] / 100;
+				return r.moverPerPly[i] === color ? wp : 1 - wp;
+			};
+			const room = this._roomCodeForReview || 'game';
+			const puzzles = plies.map((i, k) => {
+				let pBest = calibrated(i), pPlayed = calibrated(i + 1);
+				if (pBest === null || pPlayed === null) { pBest = graph(i); pPlayed = graph(i + 1); }
+				const after = r.bestSfnPerPly ? r.bestSfnPerPly[i] : null;
+				const variant = (sfnToDict(log[i].sfnBefore).variant) || 'standard';
+				return {
+					id: 'learn-' + room + '-' + i, index: k, kind: 'winning', learn: true,
+					mover: color, sfn: log[i].sfnBefore, turn: log[i].turnNumber, variant,
+					classification: r.classificationPerPly[i],
+					p_best: pBest, p_played: pPlayed, accept_p: (pBest + pPlayed) / 2,
+					solutions: after ? [{ actions: r.bestActionsPerPly[i], after, p: pBest }] : [],
+					bestActions: r.bestActionsPerPly[i],
+				};
+			});
+			const set = {
+				room, color, puzzles,
+				red: this._redNameForExport || this.redName || 'Red',
+				blue: this._blueNameForExport || this.blueName || 'Blue',
+				back: window.location.pathname.split('/').pop() + window.location.search,
+				at: Date.now(),
+			};
+			try {
+				sessionStorage.setItem('sigil_learn_set', JSON.stringify(set));
+			} catch (e) {
+				this.aiReviewError = 'This browser would not keep the mistakes for the puzzle page (storage blocked).';
+				return;
+			}
+			window.location.href = 'puzzles.html?learn=' + encodeURIComponent(room);
+		},
+
 		_aiReviewRedWp(i) {
 			const wp = this.aiReview.winPctPerPly[i];
 			return this.aiReview.moverPerPly[i] === 'red' ? wp : 100 - wp;

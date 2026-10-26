@@ -244,4 +244,26 @@ test('a correspondence move is pushed to the player to move, from their own toke
 	assert.strictEqual(await notifyTurn(admin, code, turnId, Date.now(), send), null);
 });
 
+test('a rated game is analysed by the server, and the eval cache is filled only by it', { timeout: 300000 }, async () => {
+	const alice = await player('alice');
+	const bob = await player('bob');
+	const code = await playRoom(alice, bob);
+	const fin = ONLINE.winner === 'red' ? alice : bob;
+	await update(ref(fin.db, 'rooms/' + code), { gameLog: ONLINE.turns, finishedAt: Date.now() });
+	await update(ref(fin.db, 'rooms/' + code), { finishedBy: ONLINE.winner, winner: ONLINE.winner, status: 'finished', closedAt: serverTimestamp() });
+	const gameId = await waitFor(alice.db, `rooms/${code}/gameId`);
+	assert.strictEqual((await waitFor(alice.db, `user_games/${alice.uid}/${gameId}`)).rated, true);
+	// rateGame enqueues analyzeGame (the Cloud Tasks emulator), which runs
+	// a chain of tasks and writes the review panel's document.
+	const doc = await waitFor(alice.db, `game_evals/${code}`, 240000);
+	assert.deepStrictEqual([doc.gameId, doc.roomCode, doc.preset, doc.plies], [gameId, code, 'quick', ONLINE.turns.length]);
+	assert.strictEqual(doc.moverPerPly.length, ONLINE.turns.length + 1);
+	// A client cannot write the cache; the callable searches what it is given.
+	const sfn = doc.finalSfn;
+	await assert.rejects(set(ref(alice.db, 'position_evals/x'), { sfn, stones: 39 }));
+	await assert.rejects(httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(11).fill(sfn) }));
+	const res = await httpsCallable(alice.fns, 'evalPositions')({ sfns: ['not a position'] });
+	assert.deepStrictEqual(res.data, { cached: 0, searched: 0, skipped: 1 });
+});
+
 test.after(() => setTimeout(() => process.exit(0), 100));

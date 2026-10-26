@@ -138,7 +138,7 @@
 								<p class="puzzle-panel__sub" x-text="window.SIGIL_PUZZLE_SOURCE"></p>
 								<p class="puzzle-panel__tags" x-text="window.SIGIL_PUZZLE_TAGS" x-show="window.SIGIL_PUZZLE_TAGS"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0"
-									x-text="puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.'))"></p>
+									x-text="puzzle.learn ? 'Find a better turn than the one you played. The engine\'s best turn keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win; yours kept ' + Math.round(100 * puzzle.p_played) + '%.' : puzzle.kind === 'winning' ? 'Find the turn that keeps a winning game: it keeps a ' + Math.round(100 * puzzle.p_best) + '% chance to win, and no other turn the engine tried keeps more than ' + Math.round(100 * puzzle.p_second) + '%.' : (puzzle.mate === 1 ? 'Find the turn that wins the game immediately.' : (puzzle.mate === 2 ? 'Find the turn that forces a win next turn, whatever the reply.' : 'Find the turn that forces a win within three of your turns, whatever the replies.'))"></p>
 								<p class="puzzle-panel__sub" x-show="puzzleStatus === 'playing' && puzzleStep === 0">Moves off the stored solution are judged by the engine (a few seconds); the AI always replies, and play continues even after a miss.</p>
 
 								<div class="puzzle-panel__status"
@@ -165,7 +165,8 @@
 									<button class="action-button" x-on:click="puzzleShowSolution()" x-show="puzzleStatus !== 'solved' && puzzleStatus !== 'revealed'">Show solution</button>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.prev" x-show="window.SIGIL_PUZZLE_NAV.prev">&larr; Previous</a>
 									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.next" x-show="window.SIGIL_PUZZLE_NAV.next">Next &rarr;</a>
-									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random">Random</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.random" x-show="window.SIGIL_PUZZLE_NAV.random">Random</a>
+									<a class="action-button" x-bind:href="window.SIGIL_PUZZLE_NAV.back" x-show="window.SIGIL_PUZZLE_NAV.back">Back to the game</a>
 								</div>
 								<div class="puzzle-panel__progress">
 									<span x-text="window.SIGIL_PUZZLE_PROGRESS"></span>
@@ -467,8 +468,56 @@
 			}
 			const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+			/**
+			 * ?learn=<room>&i=<k>: the player's own mistakes from a reviewed
+			 * game, handed over by the review panel ("Learn from your
+			 * mistakes", game-review.js startLearnFromMistakes) in
+			 * sessionStorage, as winning-turn puzzles. Resolves false when there
+			 * is no such set (the page then says so).
+			 */
+			function bootLearn(params) {
+				let set = null;
+				try { set = JSON.parse(sessionStorage.getItem('sigil_learn_set') || 'null'); } catch (e) { set = null; }
+				const pool = set && set.room === params.get('learn') && Array.isArray(set.puzzles) ? set.puzzles : [];
+				if (!pool.length) {
+					document.getElementById('puzzle-loading').innerHTML = 'Open a reviewed game and press "Learn from your mistakes" to practise its turns here.'
+						+ ' <a href="puzzles.html">All puzzles</a>';
+					return false;
+				}
+				const k = Math.max(0, Math.min(pool.length - 1, parseInt(params.get('i'), 10) || 0));
+				const puzzle = pool[k];
+				for (const sol of puzzle.solutions || []) sol.key = puzzleSfnKey(sol.after);
+				puzzle.solution_keys = (puzzle.solutions || []).map(sol => sol.key);
+				const link = (j) => 'puzzles.html?learn=' + encodeURIComponent(set.room) + '&i=' + j;
+				window.SIGIL_PUZZLE = puzzle;
+				window.SIGIL_PUZZLE_NAV = {
+					prev: k > 0 ? link(k - 1) : '',
+					next: k < pool.length - 1 ? link(k + 1) : '',
+					random: '',
+					back: set.back || '',
+				};
+				const side = puzzle.mover === 'red' ? 'Red' : 'Blue';
+				window.SIGIL_PUZZLE_TITLE = 'Your mistake ' + (k + 1) + ' of ' + pool.length + ' — ' + side + ' to move';
+				window.SIGIL_PUZZLE_SOURCE = 'From your game ' + set.room + ', Red (' + (set.red || '?') + ') vs Blue (' + (set.blue || '?')
+					+ '), turn ' + puzzle.turn + ': the review rated your turn a ' + puzzle.classification + '.';
+				window.SIGIL_PUZZLE_TAGS = '';
+				window.SIGIL_PUZZLE_PROGRESS = 'Your mistakes from this game, from its engine review.';
+				window.SIGIL_PUZZLE_FILTER_HTML = '';
+				return true;
+			}
+
 			(async function boot() {
 				const params = new URLSearchParams(window.location.search);
+				if (params.has('learn')) {
+					if (!bootLearn(params)) return;
+					document.getElementById('puzzle-loading').style.display = 'none';
+					document.getElementById('puzzle-root').style.display = '';
+					const s = document.createElement('script');
+					s.defer = true;
+					s.src = 'https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js';
+					document.body.appendChild(s);
+					return;
+				}
 				let data;
 				try {
 					const res = await fetch('static/puzzles/mate_puzzles.json', { cache: 'no-cache' });

@@ -7,6 +7,8 @@
 | `expireClocks` | every minute | Ends playing rooms whose clock ran out with no tab open (from the turns' server timestamps). |
 | `settleAbort` | new `rooms/{code}/abortedBy` | An abort after both players moved becomes a forfeit by the aborter. |
 | `notifyTurn` | new `rooms/{code}/turns/{id}` | Web push to the player now to move (`notify.js`): correspondence games, and realtime ones whose player to move has no tab open. Tokens from `push_tokens/{uid}` (owner-only); tokens FCM reports dead are removed. Only logged on the emulator. |
+| `analyzeGame` | task queue, enqueued by `rateGame` for each rated game | The Rust engine's review of the game (`analysis.js`) at the Quick-review preset, 10 positions per task, re-enqueued until done; writes `game_evals/{roomCode}`, which the review panel reads. Progress in `game_evals_progress/{gameId}` (server-only). Fills and reads the eval cache `position_evals/{key}`. |
+| `evalPositions` | callable (signed in) | Up to 10 positions a browser Quick review searched itself: each is checked (it must read back to itself) and searched again here before it is cached in `position_evals`, so clients cannot poison the cache. |
 | `deleteUserData` | callable | "Delete account": removes the caller's records and sign-in, and blanks their uid in old game records. |
 
 ## How a result is checked
@@ -33,7 +35,7 @@
 
 ```sh
 cd functions && npm ci
-npm test             # rating.js on recorded games (no emulator)
+npm test             # rating.js on recorded games, analysis.js with the wasm engine (no emulator)
 npm run test:rules   # database.rules.json on the database emulator
 npm run test:e2e     # rules + functions + auth emulators, through the client SDK
 ```
@@ -54,6 +56,6 @@ npm run test:e2e     # rules + functions + auth emulators, through the client SD
    firebase deploy --only functions,database
    ```
 
-   The rules take rating writes away from the clients, so the function has to be live first. `firebase.json`'s predeploy step copies the engine files into `functions/engine/`.
+   The rules take rating writes away from the clients, so the function has to be live first. `analyzeGame` is a task queue function: the first deploy creates its Cloud Tasks queue (the Cloud Tasks API must be enabled). `firebase.json`'s predeploy step copies the engine files into `functions/engine/`.
 4. For "Notify me when it's my move": Console → Project settings → Cloud Messaging → Web Push certificates → Generate key pair, and put the public key in `FCM_VAPID_KEY` (`docs/static/scripts/turn-notify.js`). Until then the toggle is hidden; in-tab notifications work without it.
 5. Pages cached by older clients still try to write ratings themselves. Those writes are now refused, and the function rates those games anyway.

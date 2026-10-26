@@ -2090,6 +2090,12 @@ body:has(.review-with-ai-active) > .main {
 	margin-top: 6px;
 }
 
+.ai-review-learn {
+	display: flex;
+	justify-content: center;
+	margin-top: 8px;
+}
+
 .ai-review-annotate {
 	margin-top: 8px;
 	padding-top: 8px;
