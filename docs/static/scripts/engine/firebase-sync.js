@@ -574,11 +574,12 @@ class FirebaseSync {
 		}
 	}
 
-	/** The room's turns in the order played: by server timestamp, as room-clock.js roomTurns. */
+	/** The turns this client holds, in the order played (syncOrderTurnKeys). */
 	_orderedTurnKeys() {
 		const info = this._turnInfo || {};
-		return (this._turnKeys || []).filter((k) => info[k])
-			.sort((a, b) => (info[a].ts - info[b].ts) || (a < b ? -1 : a > b ? 1 : 0));
+		const turns = {};
+		for (const k of this._turnKeys || []) if (info[k]) turns[k] = { after: info[k].after, timestamp: info[k].ts };
+		return syncOrderTurnKeys(turns, this._seq);
 	}
 
 	/**
@@ -609,6 +610,7 @@ class FirebaseSync {
 			// Our own view of the last turn, in the server's order (push
 			// keys carry each client's clock): if the room moved on without
 			// us (a takeback), the rules refuse the move.
+			const seq = await this._isSequenced();
 			const keys = this._orderedTurnKeys();
 			const turn = {
 				color: this.myColor,
@@ -620,7 +622,7 @@ class FirebaseSync {
 			// A sequenced room (rooms/{id}/seq, set at creation): the turn
 			// moves `last` on in the same write. Rooms created before turn
 			// sequencing keep the old rule until they finish.
-			if (await this._isSequenced()) updates.last = { key: turnKey, color: this.myColor };
+			if (seq) updates.last = { key: turnKey, color: this.myColor };
 			if (timerUpdate) {
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
@@ -840,7 +842,7 @@ class FirebaseSync {
 		turnsRef.on('child_added', (snap) => {
 			this._turnKeys.push(snap.key);
 			const v = snap.val() || {};
-			this._turnInfo[snap.key] = { color: v.color, ts: typeof v.timestamp === 'number' ? v.timestamp : 0 };
+			this._turnInfo[snap.key] = { color: v.color, after: v.after, ts: typeof v.timestamp === 'number' ? v.timestamp : 0 };
 			if (skipped < existingCount) {
 				skipped++;
 				return;
@@ -1120,8 +1122,9 @@ class FirebaseSync {
 	async requestTakeback() {
 		if (!this.roomRef || !this._turnKeys || !this._turnKeys.length) return false;
 		const turns = (await this.roomRef.child('turns').once('value')).val() || {};
-		const keys = this._turnKeys.filter((k) => turns[k])
-			.sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0));
+		const mine = {};
+		for (const k of this._turnKeys) if (turns[k]) mine[k] = turns[k];
+		const keys = syncOrderTurnKeys(mine, await this._isSequenced());
 		const lastMine = keys.length && turns[keys[keys.length - 1]].color === this.myColor;
 		const undo = keys.slice(lastMine ? -1 : -2);
 		if (!undo.length || turns[undo[0]].color !== this.myColor) return false;
@@ -1167,6 +1170,7 @@ class FirebaseSync {
 	async acceptTakeback(req, sfn) {
 		if (!this.roomRef || !req || !req.keys) return false;
 		const undo = Object.keys(req.keys);
+		await this._isSequenced();
 		const ordered = this._orderedTurnKeys();
 		const tail = ordered.slice(-undo.length);
 		if (undo.some((k) => !tail.includes(k))) {
@@ -1381,6 +1385,38 @@ class FirebaseSync {
 		if (!this.roomRef) return;
 		await this.roomRef.child('rematch/newRoomCode').set(code);
 	}
+}
+
+/**
+ * As room-clock.js orderTurnKeys (not always loaded with this file).
+ * A room's turn keys in the order played. A sequenced room (rooms/{id}/seq)
+ * chains its turns: each names the one before it (`after`, which the rules
+ * hold to the room's last turn), so the chain from the one turn without a
+ * predecessor here gives the order, ties in time included. Otherwise, or
+ * if the turns given do not form one chain, by server timestamp, push key
+ * breaking a tie (the order of an RTDB orderByChild('timestamp') query).
+ * @param {object} turns - key -> { after, timestamp }
+ * @param {boolean} seq - the room's `seq`
+ */
+function syncOrderTurnKeys(turns, seq) {
+	const keys = Object.keys(turns || {});
+	const byTime = keys.slice().sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0));
+	if (seq !== true || keys.length < 2) return byTime;
+	const next = {};
+	const roots = [];
+	for (const k of keys) {
+		const a = turns[k] && turns[k].after;
+		if (typeof a === 'string' && Object.prototype.hasOwnProperty.call(turns, a)) {
+			if (next[a] !== undefined) return byTime;
+			next[a] = k;
+		} else {
+			roots.push(k);
+		}
+	}
+	if (roots.length !== 1) return byTime;
+	const out = [];
+	for (let k = roots[0]; k !== undefined && out.length <= keys.length; k = next[k]) out.push(k);
+	return out.length === keys.length ? out : byTime;
 }
 
 /**

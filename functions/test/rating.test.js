@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, ABANDON_GRACE_MS, freshEngine } = require('../rating');
+const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, roomTurns, ABANDON_GRACE_MS, freshEngine } = require('../rating');
 const AI = require('./ai-games.json');
 const ONLINE = require('./online-game.json');
 
@@ -311,4 +311,20 @@ test('ratingUpdates moves Elo by the client formula and indexes both humans', as
 		['completed_games/G2/eloProcessed', 'completed_games/G2/unratedReason', 'user_games/human_player_1/G2']);
 	assert.strictEqual(n['user_games/human_player_1/G2'].rated, false);
 	assert.strictEqual(n['user_games/human_player_1/G2'].eloChange, undefined);
+});
+
+test('a sequenced room orders its turns by their chain, ties in time included', () => {
+	// b follows a in the same server millisecond, with a push key that sorts
+	// first: by time and key it would come first.
+	const turns = { k2: { color: 'red', timestamp: 5 }, k1: { color: 'blue', timestamp: 5, after: 'k2' }, k3: { color: 'red', timestamp: 9, after: 'k1' } };
+	const colors = (room) => roomTurns(room).map((t) => t.color).join(',');
+	assert.strictEqual(colors({ seq: true, turns }), 'red,blue,red');
+	assert.strictEqual(sideToMove({ seq: true, turns: { k2: turns.k2, k1: turns.k1 } }), 'red');
+	// A room from before sequencing: by time, then key.
+	assert.strictEqual(colors({ turns }), 'blue,red,red');
+	// Turns that are not one chain (a fork, or two starts): by time.
+	const fork = Object.assign({}, turns, { k4: { color: 'blue', timestamp: 7, after: 'k1' } });
+	assert.strictEqual(colors({ seq: true, turns: fork }), 'blue,red,blue,red');
+	const partial = { k3: turns.k3, k9: { color: 'blue', timestamp: 1 } };
+	assert.strictEqual(colors({ seq: true, turns: partial }), 'blue,red');
 });

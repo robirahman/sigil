@@ -220,6 +220,15 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	await set(g, Object.assign({}, AI.N3WMQJ, { redUid: dave.uid, timestamp: Date.now() }));
 	await waitFor(dave.db, `user_games/${dave.uid}/${g.key}`);
 	await set(ref(dave.db, `push_tokens/${dave.uid}/${"d".repeat(32)}`), { token: 'dave-laptop', created: serverTimestamp() });
+	// An admin's suspension and the server's abandonment record, and a
+	// report Dave filed (its rate-limit stamp).
+	{
+		const { initializeApp: adminApp } = require('firebase-admin/app');
+		const { getDatabaseWithUrl } = require('firebase-admin/database');
+		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-flags' + seq));
+		await a.ref('user_flags/' + dave.uid).set({ banUntil: Date.now() + 86400000, reason: 'x', abandons: 1, abandonedGames: { ABC234: true } });
+		await a.ref('report_limits/' + dave.uid).set(Date.now());
+	}
 	const res = await httpsCallable(dave.fns, 'deleteUserData')();
 	assert.deepStrictEqual(res.data, { ok: true });
 	const other = await player('erin');
@@ -230,7 +239,9 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	const { initializeApp: adminApp } = require('firebase-admin/app');
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
 	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-del' + seq));
-	assert.strictEqual((await admin.ref('push_tokens/' + dave.uid).once('value')).exists(), false, 'push_tokens/');
+	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/']) {
+		assert.strictEqual((await admin.ref(p + dave.uid).once('value')).exists(), false, p);
+	}
 });
 
 test('a correspondence move is pushed to the player to move, from their own tokens', async () => {

@@ -228,6 +228,11 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		// Push tokens: the deleted account can no longer remove them, and
 		// notifyTurn would keep pushing its games to the browser.
 		['push_tokens/' + uid]: null,
+		// Fair play: the suspension, abandonment count (and the rooms behind
+		// it) and the report rate-limit stamp. A new account starts clean,
+		// as a deleted one's uid never comes back.
+		['user_flags/' + uid]: null,
+		['report_limits/' + uid]: null,
 	};
 	// Public room records lose the name and uid too (their seats).
 	const seatScrub = async (code, color) => {
