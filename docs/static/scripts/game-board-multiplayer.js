@@ -301,6 +301,24 @@ document.addEventListener('alpine:init', () => {
 				clearTimeout(this._emoteTimers[v.color]);
 				this._emoteTimers[v.color] = setTimeout(() => { this.emoteBubble[v.color] = ''; }, SIGIL_EMOTE_BUBBLE_MS);
 			},
+			// The rules take "Well played" / "Thanks" until a minute after the
+			// room's closedAt (server time): offer them for what is left of
+			// that, less a margin, however late this page heard of the end.
+			async _openAfterGameEmotes() {
+				const sync = window._multiplayerState && window._multiplayerState.sync;
+				if (!sync || !sync.roomRef || this.isSpectator) return;
+				let closedAt = null;
+				for (let i = 0; i < 10 && typeof closedAt !== 'number'; i++) {
+					try { closedAt = (await sync.roomRef.child('closedAt').once('value')).val(); } catch (e) { return; }
+					if (typeof closedAt !== 'number') await new Promise((r) => setTimeout(r, 1000));
+				}
+				if (typeof closedAt !== 'number') return;
+				const left = closedAt + SIGIL_EMOTE_AFTER_MS - 5000 - sync.serverNow();
+				if (left <= 0) return;
+				this.emoteAfterOpen = true;
+				clearTimeout(this._emoteAfterTimer);
+				this._emoteAfterTimer = setTimeout(() => { this.emoteAfterOpen = false; this.emoteMenuOpen = false; }, left);
+			},
 			setEmotesMuted(on) {
 				this.emotesMuted = !!on;
 				if (!on) return;
@@ -1014,9 +1032,7 @@ document.addEventListener('alpine:init', () => {
 						_this.messageHistory.push(`Game over! ${rest.winner === 'blue' ? 'Blue' : 'Red'} wins${rest.endReason === 'time' ? ' on time' : ''}`);
 						_this.showReset = false;
 						_this.winner = rest.winner;
-						// Leave a margin under the rules' minute after closedAt.
-						_this.emoteAfterOpen = true;
-						setTimeout(() => { _this.emoteAfterOpen = false; _this.emoteMenuOpen = false; }, SIGIL_EMOTE_AFTER_MS - 10000);
+						_this._openAfterGameEmotes();
 						if (rest.gameLog && rest.gameLog.length > 0) {
 							const sfns = [rest.gameLog[0].sfnBefore];
 							const labels = ['Start'];
