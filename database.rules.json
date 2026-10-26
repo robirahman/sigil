@@ -402,7 +402,7 @@
     },
     "report_limits": {
       "$uid": {
-        ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous'",
+        ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
         ".validate": "newData.val() === now && (!data.exists() || data.val() <= now - 60000)"
       }
     }

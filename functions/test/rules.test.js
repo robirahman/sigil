@@ -494,6 +494,9 @@ test('reports: create-only by a signed-in account, read by admins only', async (
 	await assertFails(file('alice', 'r9', rep));
 	await assertFails(set(ref(db('alice'), 'report_limits/alice'), 5));
 	await assertFails(set(ref(db('bob'), 'report_limits/alice'), serverTimestamp()));
+	// ... nor deleted to file again at once (.validate does not run on a delete).
+	await assertFails(remove(ref(db('alice'), 'report_limits/alice')));
+	await assertFails(update(ref(db('alice')), { 'report_limits/alice': null }));
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'report_limits/alice'), Date.now() - 61000));
 	await assertSucceeds(file('alice', 'r9', rep));
 	// Create-only: the reporter cannot edit, resolve or delete it.
