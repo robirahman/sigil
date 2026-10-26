@@ -191,12 +191,14 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		throw new HttpsError('failed-precondition', 'requires-recent-login');
 	}
 	const db = database();
-	const [games, active, profile, follows, followers] = await Promise.all([
+	const [games, active, profile, follows, followers, blocks, blockedBy] = await Promise.all([
 		db.ref('user_games/' + uid).once('value'),
 		db.ref('user_active_games/' + uid).once('value'),
 		db.ref('users/' + uid).once('value'),
 		db.ref('follows/' + uid).once('value'),
 		db.ref('followers/' + uid).once('value'),
+		db.ref('blocks/' + uid).once('value'),
+		db.ref('blockedBy/' + uid).once('value'),
 	]);
 	// First, so a game rated after this point writes nothing for the uid
 	// (rateGame checks deleted_users).
@@ -218,6 +220,11 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 	};
 	follows.forEach((f) => { updates['followers/' + f.key + '/' + uid] = null; });
 	followers.forEach((f) => { updates['follows/' + f.key + '/' + uid] = null; });
+	// Blocks both ways: theirs of this account (through the blockedBy
+	// index the rules keep paired with blocks) and this account's.
+	updates['blockedBy/' + uid] = null;
+	blockedBy.forEach((b) => { updates['blocks/' + b.key + '/' + uid] = null; });
+	blocks.forEach((b) => { updates['blockedBy/' + b.key + '/' + uid] = null; });
 	// Public room records lose the name and uid too (their seats).
 	const seatScrub = async (code, color) => {
 		if (!code || (color !== 'red' && color !== 'blue')) return;

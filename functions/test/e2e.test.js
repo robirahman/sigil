@@ -188,9 +188,18 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	await set(g, Object.assign({}, AI.N3WMQJ, { redUid: dave.uid, timestamp: Date.now() }));
 	await waitFor(dave.db, `user_games/${dave.uid}/${g.key}`);
 	await set(ref(dave.db, `push_tokens/${dave.uid}/${"d".repeat(32)}`), { token: 'dave-laptop', created: serverTimestamp() });
+	// Friends: Dave and Erin follow each other; Dave blocks Gus; Frank blocks Dave.
+	const erin = await player('erin');
+	const frank = await player('frank');
+	const gus = await player('gus');
+	const pair = (a, b) => ({ [`follows/${a}/${b}`]: true, [`followers/${b}/${a}`]: true });
+	const blk = (a, b) => ({ [`blocks/${a}/${b}`]: true, [`blockedBy/${b}/${a}`]: true });
+	await update(ref(dave.db), Object.assign(pair(dave.uid, erin.uid), blk(dave.uid, gus.uid)));
+	await update(ref(erin.db), pair(erin.uid, dave.uid));
+	await update(ref(frank.db), blk(frank.uid, dave.uid));
 	const res = await httpsCallable(dave.fns, 'deleteUserData')();
 	assert.deepStrictEqual(res.data, { ok: true });
-	const other = await player('erin');
+	const other = erin;
 	for (const p of ['users/', 'leaderboard/', 'user_games/']) {
 		assert.strictEqual((await get(ref(other.db, p + dave.uid))).exists(), false, p);
 	}
@@ -199,6 +208,11 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	const { getDatabaseWithUrl } = require('firebase-admin/database');
 	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-del' + seq));
 	assert.strictEqual((await admin.ref('push_tokens/' + dave.uid).once('value')).exists(), false, 'push_tokens/');
+	// No follow or block on either side still names the deleted account.
+	for (const p of [`follows/${dave.uid}`, `followers/${dave.uid}`, `follows/${erin.uid}/${dave.uid}`, `followers/${erin.uid}/${dave.uid}`,
+		`blocks/${dave.uid}`, `blockedBy/${gus.uid}/${dave.uid}`, `blocks/${frank.uid}/${dave.uid}`, `blockedBy/${dave.uid}`]) {
+		assert.strictEqual((await admin.ref(p).once('value')).exists(), false, p);
+	}
 });
 
 test('a correspondence move is pushed to the player to move, from their own tokens', async () => {

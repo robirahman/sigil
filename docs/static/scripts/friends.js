@@ -90,17 +90,22 @@
 	}
 
 	/**
-	 * Block: also stops following them, drops their open challenges to us,
+	 * Block: also ends both follows between us, drops their open challenges to us,
 	 * and withdraws ours to them (each with its waiting room, which they
 	 * could no longer join).
 	 */
 	async function block(target) {
 		requireSignedIn();
 		delete blockCache[target];
+		// The block with its reverse index (blockedBy, for account
+		// deletion), and both follows between us: theirs of us too.
 		await db().ref().update({
 			['blocks/' + uid + '/' + target]: true,
+			['blockedBy/' + target + '/' + uid]: true,
 			['follows/' + uid + '/' + target]: null,
 			['followers/' + target + '/' + uid]: null,
+			['follows/' + target + '/' + uid]: null,
+			['followers/' + uid + '/' + target]: null,
 		});
 		// Then sweep: once the block is in, the rules refuse any new
 		// challenge from them, so nothing slips in after this read.
@@ -132,7 +137,7 @@
 	async function unblock(target) {
 		requireSignedIn();
 		delete blockCache[target];
-		await db().ref('blocks/' + uid + '/' + target).remove();
+		await db().ref().update({ ['blocks/' + uid + '/' + target]: null, ['blockedBy/' + target + '/' + uid]: null });
 	}
 
 	/**
