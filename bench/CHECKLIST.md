@@ -6,7 +6,8 @@ compares how many puzzles leading AI models solve (Claude, GPT, Gemini, Grok and
 Sigil NNUE engine and a human-expert baseline. For that baseline, Robi Rahman and Andy Voellmer, the
 creator of Sigil, each attempt 100 puzzles.
 
-Nothing is published until every box below is ticked. Each item ends with **done when:**, the
+The benchmark set is 1,000 new, never-published puzzles, kept in private storage. A public dev set of
+100 existing puzzles sits alongside it. Nothing is published until every box below is ticked. Each item ends with **done when:**, the
 criterion that closes it.
 
 ## Where we start (2026-10-26)
@@ -60,12 +61,25 @@ benchmark's test set.
     exhaustive enumeration and cached by resulting position.
   - Because answers are proven, stored solution lists do not need to be complete.
 - [x] **Size.** 1,000 puzzles.
-- [ ] **Faster mates.** Robi and Andy confirm the convention that a faster forced mate counts as
-  correct, as in chess ("mate in N" means "forced mate within N turns").
-  - **done when:** the convention is written into the methodology.
-- [ ] **Split.** A small public dev set (about 50 puzzles) for developing the prompt and the answer
-  parser. The rest is a private test set, with the option to release it later.
-  - **done when:** the split sizes and the release policy are recorded here.
+- [x] **Faster mates count.** A turn that leads to a faster forced mate than the intended solution is
+  correct. Before the benchmark is finalized, it is our responsibility to prove that no faster mate
+  exists in any puzzle. Each puzzle's category N must be its *shortest* forced mate (see section 3).
+- [x] **Public dev set.** 100 of the existing, already-published puzzles, used for prompt and parser
+  development and as a public sample. They go through the same section 1 and 3 checks as the test set.
+- [x] **Private test set.** The real SigilBench is 1,000 new, never-published puzzles, kept in private
+  storage to avoid contamination.
+- [ ] **Private storage.** This repository is public, so the test set, its answers, proof records and
+  per-puzzle results are never committed here. Nor are they put on the website, Firebase or any public
+  bucket.
+  - Keep them in a private, access-controlled location, such as a private GCS bucket or a private
+    repo, readable only by Robi, Andy and the eval runner.
+  - The public repo holds only code, aggregate results and the dev set.
+  - Model transcripts that quote test positions are stored privately too.
+  - **done when:** the location is chosen and its access list is recorded here.
+- [ ] **Dev-set selection.** Choose the 100 from `mate_puzzles.json`: stratified by N (1/2/3; the
+  existing set has no mate-in-4) and spread across difficulty. Verify them (sections 1 and 3) and
+  publish them at `bench/dev/`.
+  - **done when:** 100 of 100 pass verification, including the shortest-mate proof.
 - [ ] **Pinned versions.** Engine commit, rules version, variant/pack scope, benchmark version
   (`v1.0.0`), and a `bench/CHANGELOG.md`.
   - **done when:** all of these are recorded in `bench/VERSION.json`.
@@ -137,11 +151,24 @@ match the rules.
 - [ ] **Re-proof.** Re-prove every puzzle from scratch with the pinned engine: re-run the mate proof
   and store a per-puzzle proof record (node counts, engine commit, timestamp).
   - **done when:** 1,000 of 1,000 are proven, with no budget or time-limit exits.
-- [ ] **No mate-in-1 for N ≥ 2.** Prove "no mate-in-1" exhaustively for every N ≥ 2 puzzle.
-  - For N = 3 and N = 4, record whether each shorter mate is *disproven* or only *not found*.
-  - Under the grading rule a shorter mate never affects correctness. It does affect the label and the
-    difficulty.
-  - **done when:** every puzzle has a shortest-mate status.
+- [ ] **Shortest mate is proven, not assumed.** Every puzzle sits in the category of its shortest
+  forced mate, and "no faster mate" is a proof.
+  - **No mate-in-1:** a single full enumeration of the root, which the solver already does.
+  - **No mate-in-k for 2 ≤ k < N:** for *every* legal first turn, exhibit a reply that is proven to
+    escape a forced mate in k−1. Today the solver only reports such mates as "not found" (they are
+    nominated, never ruled out), so this is new solver work: an exhaustive refutation search.
+  - **Cost:** about 2×10⁵ root turns, each needing a refuting reply with a full "no mate-in-(k−1)"
+    proof. That is at least about 4×10¹⁰ turn applications per mate-in-3 puzzle, and far more for
+    mate-in-4. So:
+    - build the prover;
+    - measure its cost on 20 positions;
+    - add pruning that keeps it sound (position dedup, a cheap refuting reply tried first, static
+      no-mate bounds);
+    - size the fleet from the measured cost.
+  - A puzzle whose shortest-mate proof does not complete within budget is **dropped**, not relabeled
+    or kept on trust.
+  - **done when:** all 1,100 puzzles (test plus dev) have a completed proof that their category equals
+    their shortest forced mate.
 - [ ] **Independent replay.** Replay every stored solution and defence line under the JS rules.
   - **done when:** `node tools/puzzle-smoke.js <bench set> --replay` reports 0 FAIL.
 - [ ] **Second check.** Re-check a random 10% sample with a second implementation, or on a second
