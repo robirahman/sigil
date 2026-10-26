@@ -327,6 +327,25 @@ const visible = (page, sel) => page.evaluate((s) => {
 		await sleep(150);
 		m = await marks(page);
 		check('analysis: on the child its circle returns', m.length === 1 && m[0].shape === 'circle', m);
+
+		// The editor: changing the board layout drops the editor's marks.
+		await page.goto(BASE + '/analysis.html?mode=edit', { waitUntil: 'load', timeout: 60000 });
+		await page.waitForFunction(() => {
+			const d = window.Alpine && Alpine.$data(document.querySelector('#analysis-root'));
+			return d && d.anaMode === 'edit' && document.querySelector('.stone-node[id^="stone-node--"]');
+		}, { timeout: 30000 });
+		const edNodes = await page.evaluate(() => Object.keys(Alpine.$data(document.querySelector('#analysis-root')).nodes));
+		await rightDrag(page, edNodes[0], edNodes[1]);
+		check('editor: an arrow on the core board', (await marks(page)).length === 1);
+		const otherLayout = await page.evaluate(() => {
+			const d = Alpine.$data(document.querySelector('#analysis-root'));
+			const id = Object.keys(BOARD_LAYOUT_RULES).find(k => k !== 'core');
+			d.ed.layout = id;
+			d.edSync();
+			return id;
+		});
+		await sleep(200);
+		check('editor: changing the layout clears its marks', (await marks(page)).length === 0, { layout: otherLayout, marks: await marks(page) });
 		await page.close();
 	} catch (e) {
 		console.log('FAIL exception: ' + (e.stack || e));

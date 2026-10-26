@@ -819,6 +819,8 @@ function analysisMixin() {
 			// A new board layout: fresh spells and the start stones on it.
 			if (ed.layout !== BOARD.id) {
 				this.applyBoardLayout(ed.layout);
+				// The editor's arrows belong to the old board's nodes.
+				if (this.boardMarks) this.boardMarks.clear();
 				ed.spells = generateSpellList(['core']);
 				const stones = {};
 				for (const n of NODE_ORDER) stones[n] = null;
