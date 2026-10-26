@@ -72,7 +72,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/analysis-board.js',
 	'./static/scripts/game-board-local.js',
 	'./static/scripts/tutorial-lessons.js',
-	'./static/scripts/game-board-local.js?v=34',
+	'./static/scripts/game-board-local.js?v=34.1',
 	'./static/scripts/engine/rust-ai.js?v=34',
 	'./static/scripts/game-board-multiplayer.js',
 	'./static/scripts/game-board-multiplayer.js?v=34',
@@ -104,19 +104,21 @@ const SAME_ORIGIN_PRECACHE = [
 	// dev/enumeration-gaps.html),
 	// so an old worker's cached copies are never served to a fresh page: bump those
 	// script tags as well.
+	// A script changed between engine builds takes a point version (?v=34.1:
+	// game-review.js, firebase-sync.js, game-board-local.js), for the same reason.
 	'./static/scripts/engine/rust-worker.js?v=34',
 	'./static/wasm/sigil_engine.js?v=34',
 	'./static/wasm/sigil_engine_bg.wasm?v=34',
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
-	'./static/scripts/engine/game-review.js?v=34',
+	'./static/scripts/engine/game-review.js?v=34.1',
 	'./static/scripts/engine/auth-manager.js',
 	'./static/scripts/engine/elo.js',
 	'./static/scripts/engine/elo.js?v=34',
 	'./static/scripts/engine/position-rating.js?v=34',
 	'./static/scripts/engine/firebase-sync.js',
-	'./static/scripts/engine/firebase-sync.js?v=34',
+	'./static/scripts/engine/firebase-sync.js?v=34.1',
 	'./static/scripts/engine/multiplayer-controller.js',
 	'./static/scripts/engine/multiplayer-controller.js?v=34',
 	'./static/scripts/engine/spectator-controller.js',
