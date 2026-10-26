@@ -42,6 +42,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./analysis.html',
 	'./annotate.html',
 	'./spells.html',
+	'./spell.html',
+	'./variants.html',
 	'./spells/index.html',
 	'./packs/index.html',
 	'./strategy-guide.html',
@@ -49,6 +51,10 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
+	// spell.html's Try-it positions and game statistics.
+	'./static/data/spell-examples.json',
+	'./strategy/data/spell_position_winrates.json',
+	'./strategy/data/spell_stats2.json',
 	// The puzzle set (the page fetches it no-cache; this makes it work offline
 	// from the first visit).
 	'./static/puzzles/mate_puzzles.json',
@@ -63,6 +69,7 @@ const SAME_ORIGIN_PRECACHE = [
 	// it with the pages' tags when they need a new script or style API.
 	'./static/css/styles.css?ui=2',
 	'./static/css/compendium.css',
+	'./static/css/rules.css',
 	'./static/css/help.css',
 	'./static/css/ladder.css',
 	'./static/css/form.css',
@@ -84,6 +91,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/game-board-multiplayer.js',
 	'./static/scripts/game-board-multiplayer.js?v=34&ui=2',
 	'./static/scripts/help.js',
+	'./static/scripts/rules-reference.js',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
 	'./static/scripts/engine/constants.js',

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/rules.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Variant Rules - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="rules-page">
+			<nav class="rules-crumbs" aria-label="Breadcrumb"><a href="./">Home</a> / <span>Variant rules</span></nav>
+			<h1>Variant rules</h1>
+			<p>Variants change how a game starts or how it is won. Pick them under <a href="./#game-options">Game options</a> on the main menu, or when you create an online room. Variants combine, except Deathmatch with Scramble. Two official packs also bring rules of their own.</p>
+			<nav class="rules-jump" id="variant-jump" aria-label="Variants"></nav>
+			<div id="variant-sections"></div>
+			<p class="rules-note">These rules are what the game's rules engine plays. For the basics, play the <a href="tutorial.html">tutorial</a>; for each spell, see its <a href="spell.html">rules page</a>.</p>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/rules-reference.js"></script>
+	<script>
+	(() => {
+		// One section per SIGIL_VARIANT_RULES entry (rules-reference.js), each
+		// anchored as #<id>: index.html's Game options hints and the in-game
+		// help popover link here.
+		const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+		const EXTRA = {
+			cataclysm: '<div class="rules-actions"><a class="rules-btn" href="cataclysm.html">Play Cataclysm</a></div>',
+			tectonic: '<p>Spells: <a href="spell.html?name=Fissure">Fissure</a> · <a href="spell.html?name=Rock_Slide">Rock Slide</a> · <a href="spell.html?name=Bulwark">Bulwark</a></p>',
+			providence: '<p>Spells: <a href="spell.html?name=Dividend">Dividend</a> · <a href="spell.html?name=Annuity">Annuity</a> · <a href="spell.html?name=Endowment">Endowment</a></p>',
+		};
+		document.getElementById('variant-jump').innerHTML = SIGIL_VARIANT_RULES
+			.map(r => `<a href="#${r.id}">${esc(r.name.replace(/ (pack )?rules$/, ''))}</a>`).join('');
+		document.getElementById('variant-sections').innerHTML = SIGIL_VARIANT_RULES.map(sigilVariantSection).map(r => `
+			<section class="rules-section" id="${r.id}">
+				<h2>${esc(r.name)}</h2>
+				<div class="rules-badges"><span class="rules-badge${r.rated ? '' : ' rules-badge--warn'}">${r.rated ? 'Rated' : 'Unrated'}</span></div>
+				<p>${esc(r.summary)}</p>
+				<ul>${r.rules.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+				${EXTRA[r.id] || ''}
+			</section>`).join('');
+		// The sections are drawn after load, so scroll to the anchor by hand.
+		if (location.hash) {
+			const t = document.getElementById(location.hash.slice(1));
+			if (t) t.scrollIntoView();
+		}
+	})();
+	</script>
+
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+</body>
+</html>

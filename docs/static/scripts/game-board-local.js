@@ -450,6 +450,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			showSpellTooltip(spell) {
+				if (this.spellTooltip && this.spellTooltip.destroy) this.spellTooltip.destroy();
 				this.activeSpell = spell;
 
 				const anchor = document.querySelector(`.spell--tooltip-anchor-${spell}`);
@@ -842,17 +843,43 @@ document.addEventListener('alpine:init', () => {
 
 			handleSpellMouseOut() {
 				if (!this.hasTouchScreen) {
-					this.activeSpell = '';
-					if (this.spellTooltip.destroy) {
-						this.spellTooltip.destroy();
-					}
+					// A short grace lets the pointer reach the tooltip's
+					// "More about this spell" link (holdSpellTooltip).
+					clearTimeout(this._spellTooltipTimer);
+					this._spellTooltipTimer = setTimeout(() => {
+						this.activeSpell = '';
+						if (this.spellTooltip.destroy) {
+							this.spellTooltip.destroy();
+						}
+					}, 250);
 				}
 			},
 
 			handleSpellMouseOver(spell) {
 				if (!this.hasTouchScreen) {
+					clearTimeout(this._spellTooltipTimer);
 					this.showSpellTooltip(spell);
 				}
+			},
+
+			holdSpellTooltip() {
+				clearTimeout(this._spellTooltipTimer);
+			},
+
+			// Keyboard: the tooltip stays open while focus moves from the spell
+			// into it (its "More about this spell" link), and closes when focus
+			// leaves both. A mouse press on the link moves focus there too, so
+			// the tooltip is still open when the click lands.
+			handleSpellBlur(e) {
+				const tip = this.$refs.spellTooltip;
+				if (e && e.relatedTarget && tip && tip.contains(e.relatedTarget)) return;
+				this.closeSpellTooltip();
+			},
+			handleTooltipFocusOut(e) {
+				const to = e && e.relatedTarget;
+				const tip = this.$refs.spellTooltip;
+				if (to && ((tip && tip.contains(to)) || (to.closest && to.closest('img.spell')))) return;
+				this.closeSpellTooltip();
 			},
 
 			handleReset() {
@@ -2429,6 +2456,8 @@ document.addEventListener('alpine:init', () => {
 
 				function handleSpellSetupEvent(payload) {
 					_this.spellDict = payload;
+					// The help popover's "This game's rules" (help.js).
+					if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(_this.gameVariant, Object.values(payload));
 
 					Object.entries(_this.spellDict).forEach(([key, value]) => {
 						_this.spells.images[key] = `static/images/spells/${baseSpellName(value)}.png`;

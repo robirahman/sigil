@@ -2209,6 +2209,14 @@ body:has(.review-with-ai-active) > .main {
 	flex-direction: column;
 }
 
+/* The spell's rules page (spell.html), from the in-game tooltip. */
+.tooltip__more {
+	align-self: flex-start;
+	color: #5b2c78;
+	font-size: 14px;
+	text-decoration: underline;
+}
+
 .tooltip__heading,
 .shepherd-tooltip h2 {
 	font-size: 17px;
