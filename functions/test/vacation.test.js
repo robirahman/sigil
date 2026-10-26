@@ -85,3 +85,22 @@ test('the game page\'s clocks add the pauses and gifts its timer node leaves out
 	assert.deepStrictEqual([w.red, w.blue, w.out], [13_000, 30_000, null]);
 	assert.strictEqual(roomTimerView(live, rt, T + 25_000).out, 'red');
 });
+
+test('a pause whose vacation has ended is due to end then', () => {
+	const { pauseDueEnd, pauseKey } = require('../vacation');
+	const v = startRecord(null, 5, T);
+	const ended = endRecord(v, T + DAY_MS);
+	const k = pauseKey('alice', v.from, 'red');
+	const p = { color: 'red', from: T + 1000, to: v.until };
+	assert.strictEqual(pauseDueEnd(k, p, { alice: v }, T + 2000), null);
+	assert.strictEqual(pauseDueEnd(k, p, { alice: ended }, T + 2 * DAY_MS), T + DAY_MS);
+	// Added by a sweep after the end: ends where it began.
+	assert.strictEqual(pauseDueEnd(k, { color: 'red', from: T + DAY_MS + 5, to: v.until }, { alice: ended }, T + 2 * DAY_MS), T + DAY_MS + 5);
+	// A later vacation keeps the last one's span; one no longer on record ends now.
+	const next = startRecord(ended, 2, T + 3 * DAY_MS);
+	assert.strictEqual(pauseDueEnd(k, p, { alice: next }, T + 3 * DAY_MS), T + DAY_MS);
+	const later = startRecord(endRecord(next, T + 4 * DAY_MS), 1, T + 5 * DAY_MS);
+	assert.strictEqual(pauseDueEnd(k, Object.assign({}, p, { to: T + 10 * DAY_MS }), { alice: later }, T + 5 * DAY_MS), T + 5 * DAY_MS);
+	// Other players' pauses are left to their own records.
+	assert.strictEqual(pauseDueEnd(k, p, { bob: ended }, T + 2 * DAY_MS), null);
+});

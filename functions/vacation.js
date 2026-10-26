@@ -46,7 +46,9 @@ function startRecord(v, days, now) {
 	if (days > left) return { error: 'not-enough-days' };
 	const year = yearOf(now);
 	const used = v && v.year === year ? (v.usedDays || 0) : 0;
-	return { year, usedDays: used + days, from: now, until: now + days * DAY_MS, days };
+	// The last vacation's span stays, so the sweep can still end its pauses.
+	const prev = v && typeof v.from === 'number' ? { from: v.from, until: v.until } : null;
+	return { year, usedDays: used + days, from: now, until: now + days * DAY_MS, days, prev };
 }
 
 /**
@@ -110,6 +112,24 @@ function pauseKey(uid, vacationFrom, color) {
 }
 
 /**
+ * When a pause should have ended, if earlier than its `to`: the end of the
+ * vacation it belongs to (by its key, among `recs` {uid: record}: the
+ * current one or the one before), or `now` when the player's record holds
+ * neither. Null when the pause is right as it is, or the player is not in
+ * `recs` (a deleted account's games are resigned by deleteUserData).
+ */
+function pauseDueEnd(key, p, recs, now) {
+	const m = /^(.+)_(\d+)_(red|blue)$/.exec(key);
+	if (!m || !p || typeof p.from !== 'number' || typeof p.to !== 'number') return null;
+	const rec = recs[m[1]];
+	if (!rec) return null;
+	const from = Number(m[2]);
+	const vac = rec.from === from ? rec : rec.prev && rec.prev.from === from ? rec.prev : null;
+	const end = vac && typeof vac.until === 'number' ? vac.until : now;
+	return end < p.to ? Math.max(p.from, end) : null;
+}
+
+/**
  * Change room `code` by `fn(room)` (which returns false to leave it), in a
  * transaction on the room: a pause is added or ended only while the room is
  * still in play, so a result judged as of closedAt is never changed after
@@ -142,17 +162,25 @@ function addPause(db, code, uid, color, v) {
 	});
 }
 
-/** End `uid`'s pauses of vacation `v` in room `code` at the time of the write. */
-function endPauses(db, code, uid, v) {
+/**
+ * End the pauses in room `code` whose vacation has ended (or is no longer
+ * on record): each at its vacation's end, in a transaction on the open room.
+ */
+function endPauses(db, code, recs) {
 	return changeOpenRoom(db, code, (room) => {
 		const now = Date.now();
 		let changed = false;
-		for (const color of ['red', 'blue']) {
-			const p = room.pauses && room.pauses[pauseKey(uid, v.from, color)];
-			if (p && p.to > now) { p.to = Math.max(p.from, now); changed = true; }
+		for (const k of Object.keys(room.pauses || {})) {
+			const end = pauseDueEnd(k, room.pauses[k], recs, now);
+			if (end !== null) { room.pauses[k].to = end; changed = true; }
 		}
 		return changed;
 	});
+}
+
+/** Does room `room` hold a pause that should already have ended? */
+function hasStalePause(room, recs, now) {
+	return Object.keys((room && room.pauses) || {}).some((k) => pauseDueEnd(k, room.pauses[k], recs, now) !== null);
 }
 
 /**
@@ -162,9 +190,7 @@ function endPauses(db, code, uid, v) {
 async function setVacation(db, uid, days, now) {
 	const ref = db.ref('vacations/' + uid);
 	let refused = null;
-	let before = null;
 	const res = await ref.transaction((v) => {
-		before = v;
 		// A transaction first runs on the local cache, empty here (null):
 		// answer an end unchanged, and the server reruns it on the record.
 		if (v === null && days === 0) { refused = 'not-on-vacation'; return null; }
@@ -188,7 +214,10 @@ async function setVacation(db, uid, days, now) {
 		const seats = seatsOf(rooms[code], uid);
 		if (!seats.length) continue;
 		if (days === 0) {
-			if (await endPauses(db, code, uid, before)) count++;
+			// Each at the vacation's end. If this fails or races a sweep
+			// holding the old record, the next sweep (pauseNewGames) ends
+			// what is left, from the record.
+			if (await endPauses(db, code, { [uid]: rec })) count++;
 		} else {
 			for (const color of seats) if (await addPause(db, code, uid, color, rec)) count++;
 		}
@@ -197,18 +226,21 @@ async function setVacation(db, uid, days, now) {
 }
 
 /**
- * Pause the games that started (or were joined) while a player was already
- * on vacation; run by expireClocks every minute. Resolves to the number of
- * pauses written.
+ * Bring every playing correspondence game in line with the vacation
+ * records; run by expireClocks every minute. Pauses the games that started
+ * (or were joined) while a player was already on vacation, and ends the
+ * pauses of vacations that have ended (cleanup that setVacation missed, or
+ * a pause a sweep added just after the end). Resolves to the number of
+ * rooms changed.
  */
 async function pauseNewGames(db, now) {
-	const snap = await db.ref('vacations').orderByChild('until').startAt(now + 1).once('value');
+	const recs = (await db.ref('vacations').once('value')).val() || {};
 	const active = {};
-	snap.forEach((child) => { if (onVacation(child.val(), now)) active[child.key] = child.val(); });
-	if (!Object.keys(active).length) return 0;
+	for (const uid of Object.keys(recs)) if (onVacation(recs[uid], now)) active[uid] = recs[uid];
 	const rooms = await playingRooms(db);
 	let count = 0;
 	for (const code of Object.keys(rooms)) {
+		if (hasStalePause(rooms[code], recs, now) && await endPauses(db, code, recs)) count++;
 		for (const m of missingPauses(rooms[code], active, now)) {
 			if (await addPause(db, code, m.uid, m.color, active[m.uid])) count++;
 		}
@@ -218,5 +250,5 @@ async function pauseNewGames(db, now) {
 
 module.exports = {
 	DAY_MS, VACATION_DAYS_PER_YEAR, daysLeft, onVacation, startRecord, endRecord, missingPauses,
-	pauseKey, setVacation, pauseNewGames,
+	pauseKey, pauseDueEnd, setVacation, pauseNewGames,
 };
