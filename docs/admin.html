@@ -245,12 +245,19 @@
 
 				async reload() {
 					const db = firebase.database();
-					const [repSnap, flagSnap] = await Promise.all([
+					// Every open report (no `resolved` yet), however old, plus the
+					// latest 500 for the All view: a flood of new reports cannot
+					// push an open one out of the queue.
+					const [openSnap, recentSnap, flagSnap] = await Promise.all([
+						db.ref('reports').orderByChild('resolved').equalTo(null).once('value'),
 						db.ref('reports').orderByChild('at').limitToLast(500).once('value'),
 						db.ref('user_flags').once('value'),
 					]);
-					const reports = [];
-					repSnap.forEach((c) => { reports.push(Object.assign({ id: c.key }, c.val())); });
+					const byId = new Map();
+					for (const snap of [openSnap, recentSnap]) {
+						snap.forEach((c) => { byId.set(c.key, Object.assign({ id: c.key }, c.val())); });
+					}
+					const reports = Array.from(byId.values());
 					reports.sort((a, b) => (b.at || 0) - (a.at || 0));
 					this.reports = reports;
 					this.flags = flagSnap.val() || {};
