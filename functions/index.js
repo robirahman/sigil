@@ -15,6 +15,12 @@
  *                    (on the status change to 'aborted').
  *   notifyTurn     - a web push to the player whose move it now is, in
  *                    correspondence games (and realtime ones they left).
+ *   analyzeGame    - a task queue: the Rust engine's review of each rated
+ *                    game (analysis.js), enqueued by rateGame, written to
+ *                    game_evals/{roomCode} for the review panel.
+ *   evalPositions  - fills the position eval cache (position_evals) with
+ *                    positions a browser review searched, searching each
+ *                    one again here.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -24,6 +30,8 @@
 const { onValueCreated, onValueWritten } = require('firebase-functions/v2/database');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onTaskDispatched } = require('firebase-functions/v2/tasks');
+const { getFunctions } = require('firebase-admin/functions');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
@@ -32,6 +40,7 @@ const { judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns } = req
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { notifyTurn } = require('./notify');
+const { analyzeStep, evalPositions } = require('./analysis');
 const crypto = require('crypto');
 
 initializeApp();
@@ -176,6 +185,68 @@ exports.rateGame = onValueCreated({
 	await db.ref().update(updates);
 	logger.info('rateGame', { gameId, kind: verdict.kind, rated: verdict.rated, reason: verdict.reason || null,
 		eloChange: updates['completed_games/' + gameId + '/eloChange'] });
+	// The engine's review of the game, in the background. The rating is
+	// written: nothing here may undo it or make the event retry.
+	if (verdict.rated) {
+		try {
+			await enqueueAnalysis(gameId, 'start');
+		} catch (e) {
+			logger.warn('rateGame: analysis not enqueued', { gameId, error: String((e && e.message) || e) });
+		}
+	}
+});
+
+/**
+ * Queue an analyzeGame task. The task id makes a repeat (a retried rateGame,
+ * a redelivered task) a no-op.
+ */
+async function enqueueAnalysis(gameId, step) {
+	try {
+		await getFunctions().taskQueue('locations/' + REGION + '/functions/analyzeGame')
+			.enqueue({ gameId }, { id: ('analyze-' + gameId + '-' + step).replace(/[^A-Za-z0-9_-]/g, '_') });
+	} catch (e) {
+		if (e && e.code === 'functions/task-already-exists') return;
+		throw e;
+	}
+}
+
+exports.analyzeGame = onTaskDispatched({
+	region: REGION,
+	// A few positions per task (analysis.js ANALYSIS_BATCH), so one game is
+	// a short chain of tasks and a backlog drains slowly and cheaply.
+	retryConfig: { maxAttempts: 3, minBackoffSeconds: 60 },
+	rateLimits: { maxConcurrentDispatches: 2, maxDispatchesPerSecond: 1 },
+	// One search at a time per instance: the wasm engine is single-threaded.
+	maxInstances: 2,
+	concurrency: 1,
+	memory: '1GiB',
+	timeoutSeconds: 300,
+}, async (req) => {
+	const gameId = req.data && req.data.gameId;
+	if (typeof gameId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(gameId)) return;
+	const res = await analyzeStep(database(), gameId);
+	if (!res.done) {
+		await enqueueAnalysis(gameId, String(res.next));
+		return;
+	}
+	logger.info('analyzeGame', { gameId, reason: res.reason });
+});
+
+exports.evalPositions = onCall({
+	region: REGION,
+	maxInstances: 2,
+	concurrency: 1,
+	memory: '1GiB',
+	timeoutSeconds: 120,
+}, async (request) => {
+	if (!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	const sfns = request.data && request.data.sfns;
+	try {
+		return await evalPositions(database(), sfns);
+	} catch (e) {
+		if (e && e.message === 'bad-request') throw new HttpsError('invalid-argument', 'Up to 10 positions (sfns).');
+		throw e;
+	}
 });
 
 // How recently the caller must have signed in to delete their account.

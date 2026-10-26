@@ -48,6 +48,8 @@ function _compiled() {
 	SigilBoard, boardToSfn, normalizeSfnString, normalizeVariant,
 	reconstructGameLog, unratedReason, computeEloChange,
 	positionExpectedScore, gameStartRedWinProb,
+	// The review panel's reader of game_evals documents (analysis.js tests).
+	rustEvalsToReview, _reviewPositions,
 };`);
 	_script = new vm.Script(parts.join('\n;\n'), { filename: 'sigil-engine-bundle.js' });
 	return _script;

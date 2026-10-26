@@ -253,6 +253,16 @@
         ".write": false
       }
     },
+    "position_evals": {
+      "$key": {
+        ".read": true,
+        ".write": false
+      }
+    },
+    "game_evals_progress": {
+      ".read": false,
+      ".write": false
+    },
     "user_games": {
       "$uid": {
         ".read": true,
