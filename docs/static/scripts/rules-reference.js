@@ -231,14 +231,20 @@ const SIGIL_SPELL_NOTES = {
 // One entry per variant (and per pack with rules of its own), anchored on
 // variants.html as #<id>. `flag` names the variant test for the in-game
 // summary; `pack` the spells whose presence brings the rules into play.
+//
+// Variants combine, so a rule may be a function of the game's context
+// (sigilVariantContext): it returns the rule as it applies in that game, or
+// null when another section's rule replaces it. variants.html renders each
+// section on its own (`page`: true), the help popover for the game in play.
 const SIGIL_VARIANT_RULES = [
 	{
 		id: 'standard', name: 'Standard rules', rated: true,
 		summary: 'Red starts on a1 and Blue on b1. Win by a 3-stone lead, by casting the sixth spell while ahead, or by elimination.',
 		rules: [
-			'Red moves first. Blue\'s score stone counts as one extra Blue stone.',
-			'A player 3 ahead on the score track at the end of a turn wins: Blue needs 2 more stones on the board than Red, Red needs 4 more than Blue.',
-			'The game also ends at the end of the turn in which a player casts their sixth 3- or 5-node spell. The player with more stones wins; on a tie, the player who would move next wins.',
+			c => c.competitive ? 'Red moves first.' : 'Red starts with a stone on a1 and Blue with one on b1. Red moves first.',
+			'Blue\'s score stone counts as one extra Blue stone.',
+			c => `A player ${c.lead} ahead on the score track at the end of a turn wins: Blue needs ${c.lead - 1} more stones on the board than Red, Red needs ${c.lead + 1} more than Blue.`,
+			c => `The game also ends at the end of the turn in which a player casts their ${c.nth} 3- or 5-node spell. The player with more stones wins; on a tie, the player who would move next wins.`,
 			'A player with no stones left on the board loses at once.',
 			'If the same position (stones, side to move, locks and spell counts) comes up for the third time, Blue wins.',
 		],
@@ -249,8 +255,8 @@ const SIGIL_VARIANT_RULES = [
 		rules: [
 			'The board starts empty instead of with stones on a1 and b1.',
 			'Each player\'s first turn is a single stone placed on any empty node, and nothing else: no dash and no spell.',
-			'The no-stones-left loss does not apply until both opening stones are down. From then on every rule is standard.',
-			'Competitive games are rated, and Competitive combines with every other variant.',
+			'The no-stones-left loss does not apply until both opening stones are down. After that the game\'s other rules apply unchanged.',
+			c => c.page ? 'Competitive games are rated, and Competitive combines with every other variant.' : null,
 		],
 	},
 	{
@@ -258,29 +264,29 @@ const SIGIL_VARIANT_RULES = [
 		summary: 'Win only by eliminating every enemy stone. Unrated.',
 		rules: [
 			'The only way to win is to leave your opponent with no stones on the board.',
-			'The 3-stone lead does not win, and there are no spell counts, so the sixth spell does not end the game.',
+			c => `The ${c.lead}-stone lead does not win, and there are no spell counts, so the ${c.nth} spell does not end the game.`,
 			'Threefold repetition still ends the game as a Blue win, so every game finishes.',
-			'Deathmatch cannot be combined with Scramble. Deathmatch games are unrated.',
+			c => c.page ? 'Deathmatch cannot be combined with Scramble. Deathmatch games are unrated.' : null,
 		],
 	},
 	{
 		id: 'scramble', name: 'Scramble', rated: false, flag: 'scramble',
 		summary: 'No stone-lead win: the first player to cast their sixth spell wins. Unrated.',
 		rules: [
-			'The 3-stone lead does not win.',
-			'The first player to cast their sixth 3- or 5-node spell wins at the end of that turn, whatever the stone count.',
+			c => `The ${c.lead}-stone lead does not win.`,
+			c => `The first player to cast their ${c.nth} 3- or 5-node spell wins at the end of that turn, whatever the stone count.`,
 			'Elimination and threefold repetition (a Blue win) still apply.',
-			'Scramble cannot be combined with Deathmatch. Scramble games are unrated.',
+			c => c.page ? 'Scramble cannot be combined with Deathmatch. Scramble games are unrated.' : null,
 		],
 	},
 	{
 		id: 'duplicates', name: 'Allow duplicates', rated: false, flag: 'duplicates',
 		summary: 'The spell draw may repeat a spell, up to three copies. Unrated.',
 		rules: [
-			'The nine spells are drawn as if with replacement: the same spell may appear up to three times. Play is otherwise standard.',
+			c => `The ${c.spells} spells are drawn as if with replacement: the same spell may appear up to three times. Nothing else changes.`,
 			'Each copy is a separate spell with its own sigil. Your lock sits on one copy, so you may cast another copy of the spell you just cast.',
 			'Filling any copy of a static gives its effect; filling two copies does not double it.',
-			'Games that allow duplicates are unrated.',
+			c => c.page ? 'Games that allow duplicates are unrated.' : null,
 		],
 	},
 	{
@@ -288,10 +294,12 @@ const SIGIL_VARIANT_RULES = [
 		summary: 'The expanded board: five zones, 65 nodes, five spells of each size. Win by a 4-stone lead or when a player has cast 8 spells. Unrated.',
 		rules: [
 			'The board has five zones instead of three: 65 nodes, five mana nodes and 15 spells, five of each size.',
-			'Red starts on a1 and Blue on b1, as on the standard board.',
-			'A 4-stone lead wins (Blue\'s score stone still counts), and the game ends at the end of the turn in which a player casts their eighth 3- or 5-node spell.',
+			// In a game the standard section gives the start and the win rules
+			// (or Deathmatch / Scramble the win rules) with Cataclysm's numbers.
+			c => c.page ? 'Red starts on a1 and Blue on b1, as on the standard board.' : null,
+			c => c.page ? 'A 4-stone lead wins (Blue\'s score stone still counts), and the game ends at the end of the turn in which a player casts their eighth 3- or 5-node spell.' : null,
 			'Spells that reach across the board scale with it: Hail Storm and Blossom cover all ten 3- and 5-node spells, and Syzygy\'s opposite spells are two zones away.',
-			'Cataclysm combines with the other variants. Cataclysm games are unrated.',
+			c => c.page ? 'Cataclysm combines with the other variants. Cataclysm games are unrated.' : null,
 		],
 	},
 	{
@@ -302,7 +310,7 @@ const SIGIL_VARIANT_RULES = [
 			'A spell with a void in its sigil can never be filled again, so it cannot be cast and a static there stops working. A void mana node gives mana to nobody.',
 			'Voids are written x in a position string (SFN).',
 			'Rock Slide\'s pushes all happen at once and can destroy stones of either colour; Bulwark protects the stones on its owner\'s locked spell. See each spell\'s page.',
-			'Tectonic is an official pack: its games are rated.',
+			c => c.page ? 'Tectonic is an official pack: its games are rated.' : null,
 		],
 	},
 	{
@@ -310,31 +318,67 @@ const SIGIL_VARIANT_RULES = [
 		summary: 'Dividend, Annuity and Endowment bank 1, 2 and 4 stones. Banked stones count toward your total and can be placed one per turn.',
 		rules: [
 			'Dividend, Annuity and Endowment add 1, 2 and 4 stones to the caster\'s Providence bank.',
-			'Banked stones count toward your stone total for the 3-stone lead and for who is ahead when the sixth spell is cast. They do not keep you alive: a player with no stones on the board still loses.',
+			c => c.deathmatch
+				? 'Banked stones count toward your stone total, but in Deathmatch the total decides nothing. They do not keep you alive: a player with no stones on the board still loses.'
+				: c.scramble
+					? `Banked stones count toward your stone total, but in Scramble the total decides nothing: the ${c.nth} spell wins. They do not keep you alive: a player with no stones on the board still loses.`
+					: `Banked stones count toward your stone total for the ${c.lead}-stone lead and for who is ahead when the ${c.nth} spell is cast. They do not keep you alive: a player with no stones on the board still loses.`,
 			'At the start of a turn with a non-empty bank, you may place one banked stone after your regular move (or instead of it, if you have no legal move) and before dashing. It is an ordinary soft or hard move touching your stones; Seal of Wind and the enemy\'s Seal of Stone do not apply to it.',
 			'Skipping the placement keeps the stone banked.',
-			'Providence is an official pack: its games are rated.',
+			c => c.page ? 'Providence is an official pack: its games are rated.' : null,
 		],
 	},
 ];
 
-// The variant rules that apply to a game, for the in-game help popover: the
-// standard win rules unless an end-condition variant or the Cataclysm board
-// replaces them, then each variant flag, then the packs on the board that
-// bring rules of their own.
-function sigilGameRulesSections(variant, spellNames) {
+const _SIGIL_ORDINALS = { 6: 'sixth', 8: 'eighth' };
+
+// The context the variant rules are written against: the variant's flags and
+// its board's numbers (BOARD_LAYOUT_RULES in constants.js). `page`: a section
+// shown on its own (variants.html) rather than as part of one game's rules.
+function sigilVariantContext(variant, page) {
 	const v = typeof normalizeVariant === 'function' ? normalizeVariant(variant || 'standard') : (variant || 'standard');
-	const has = flag => v.split('_').includes(flag);
+	const flags = v.split('_');
+	const pentagon = flags.includes('pentagon');
+	const layout = (typeof BOARD_LAYOUT_RULES !== 'undefined' && BOARD_LAYOUT_RULES[pentagon ? 'pentagon' : 'core'])
+		|| (pentagon ? { zones: 5, spellTarget: 8, winLead: 4 } : { zones: 3, spellTarget: 6, winLead: 3 });
+	return {
+		variant: v, page: !!page,
+		competitive: flags.includes('competitive'), deathmatch: flags.includes('deathmatch'),
+		scramble: flags.includes('scramble'), duplicates: flags.includes('duplicates'), pentagon,
+		lead: layout.winLead, target: layout.spellTarget,
+		nth: _SIGIL_ORDINALS[layout.spellTarget] || layout.spellTarget + 'th',
+		spells: 3 * layout.zones,
+	};
+}
+
+// A section's rules as they read in context `c` (a function rule may drop out).
+function sigilResolveRules(r, c) {
+	return r.rules.map(t => (typeof t === 'function' ? t(c) : t)).filter(Boolean);
+}
+
+// variants.html: a section shown on its own, as a game with just that variant.
+function sigilVariantSection(r) {
+	return Object.assign({}, r, { rules: sigilResolveRules(r, sigilVariantContext(r.flag || 'standard', true)) });
+}
+
+// The variant rules that apply to a game, for the in-game help popover, with
+// each rule worded for the combination in play: the standard win rules
+// (on the game's board) unless Deathmatch or Scramble replaces them, then
+// each variant flag, then the packs on the board that bring rules of their
+// own. A section's `rated` is the game's (any unrated variant or pack makes
+// the whole game unrated).
+function sigilGameRulesSections(variant, spellNames) {
+	const c = sigilVariantContext(variant, false);
 	const bases = (spellNames || []).map(n => (typeof baseSpellName === 'function' ? baseSpellName(n) : n));
+	const unrated = c.deathmatch || c.scramble || c.duplicates || c.pentagon
+		|| (typeof isUnratedSpell === 'function' && bases.some(n => isUnratedSpell(n)));
 	const out = [];
 	for (const r of SIGIL_VARIANT_RULES) {
-		if (r.id === 'standard') {
-			if (!has('deathmatch') && !has('scramble') && !has('pentagon')) out.push(r);
-		} else if (r.flag) {
-			if (has(r.flag)) out.push(r);
-		} else if (r.pack && r.pack.some(n => bases.includes(n))) {
-			out.push(r);
-		}
+		let on;
+		if (r.id === 'standard') on = !c.deathmatch && !c.scramble;
+		else if (r.flag) on = c.variant.split('_').includes(r.flag);
+		else on = !!(r.pack && r.pack.some(n => bases.includes(n)));
+		if (on) out.push(Object.assign({}, r, { rated: !unrated, rules: sigilResolveRules(r, c) }));
 	}
 	return out;
 }

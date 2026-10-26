@@ -53,7 +53,7 @@
 		};
 		document.getElementById('variant-jump').innerHTML = SIGIL_VARIANT_RULES
 			.map(r => `<a href="#${r.id}">${esc(r.name.replace(/ (pack )?rules$/, ''))}</a>`).join('');
-		document.getElementById('variant-sections').innerHTML = SIGIL_VARIANT_RULES.map(r => `
+		document.getElementById('variant-sections').innerHTML = SIGIL_VARIANT_RULES.map(sigilVariantSection).map(r => `
 			<section class="rules-section" id="${r.id}">
 				<h2>${esc(r.name)}</h2>
 				<div class="rules-badges"><span class="rules-badge${r.rated ? '' : ' rules-badge--warn'}">${r.rated ? 'Rated' : 'Unrated'}</span></div>

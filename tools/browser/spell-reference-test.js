@@ -187,6 +187,19 @@ async function newPage(browser, errors, opts = {}) {
 		});
 		check(gr.shown && /This game: Competitive \+ Deathmatch/.test(gr.text), 'help popover: This Game\'s Rules names the variants', gr.text.slice(0, 120));
 		check(JSON.stringify(gr.more) === JSON.stringify(['variants.html#competitive', 'variants.html#deathmatch']), 'help popover: the Competitive and Deathmatch rules, no standard win rules', JSON.stringify(gr.more));
+		check(/\(unrated\)/.test(gr.text) && !/every rule is standard|games are rated|3 ahead on the score track/.test(gr.text),
+			'help popover: rules worded for the combination (no standard win rule, no per-variant rating line)', gr.text);
+		// Combinations: each rule carries the game's board and end condition.
+		const combo = await page.evaluate(() => {
+			const txt = (v, sp) => sigilGameRulesSections(v, sp || []).map(r => r.id + ': ' + r.rules.join(' | ')).join('\n');
+			return { scrPent: txt('competitive_scramble_pentagon', ['Annuity']), pent: txt('pentagon'), std: txt('standard') };
+		});
+		check(/eighth 3- or 5-node spell wins/.test(combo.scrPent) && /4-stone lead does not win/.test(combo.scrPent)
+			&& /in Scramble the total decides nothing: the eighth spell wins/.test(combo.scrPent) && !/sixth|a1 and Blue on b1, as on/.test(combo.scrPent),
+			'Competitive Scramble on Cataclysm: eighth spell, 4-stone lead, no a1/b1 start', combo.scrPent);
+		check(/4 ahead on the score track/.test(combo.pent) && /eighth/.test(combo.pent) && (combo.pent.match(/a1/g) || []).length === 1,
+			'Cataclysm: standard win rules with Cataclysm numbers, start given once', combo.pent);
+		check(/3 ahead on the score track/.test(combo.std) && /sixth/.test(combo.std), 'standard: 3-stone lead and sixth spell', combo.std);
 		check(gr.spells.length === 9 && JSON.stringify(gr.spells) === JSON.stringify(gr.want), 'help popover: the nine spells link to their pages', JSON.stringify(gr.spells));
 		await page.click('.help-menu-container label');
 		await sleep(300);
@@ -200,6 +213,23 @@ async function newPage(browser, errors, opts = {}) {
 				want: 'spell.html?name=' + encodeURIComponent(baseSpellName(d.spellDict.ritual1)) };
 		});
 		check(tip.visible && tip.href === tip.want && tip.target === '_blank', 'the spell tooltip links to the spell\'s page in a new tab', JSON.stringify(tip));
+		// Focus moving from the spell into the tooltip's link keeps it open;
+		// leaving both closes it.
+		await page.focus('#spell-tooltip .tooltip__more');
+		await sleep(300);
+		const kept = await page.evaluate(() => ({ active: Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).activeSpell,
+			focused: document.activeElement && document.activeElement.className }));
+		check(kept.active === 'ritual1' && kept.focused === 'tooltip__more', 'the tooltip stays open while its link has keyboard focus', JSON.stringify(kept));
+		const popup = new Promise(res => browser.once('targetcreated', t => res(t.url())));
+		await page.click('#spell-tooltip .tooltip__more');
+		const opened = await Promise.race([popup, sleep(5000).then(() => '')]);
+		check(opened.endsWith(tip.want), 'clicking the focused link opens the spell page', opened);
+		for (const p of await browser.pages()) if (p !== page && p.url().includes('spell.html')) await p.close();
+		await page.bringToFront();
+		await page.focus('img.sorcery-spell.sorcery-spell--1');
+		await page.evaluate(() => document.activeElement.blur());
+		await sleep(300);
+		check(await page.evaluate(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).activeSpell) === '', 'focus leaving the spell closes the tooltip');
 		// Desktop hover: the pointer can travel from the spell to the link.
 		const box = await page.$eval('img.sorcery-spell.sorcery-spell--1', el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
 		await page.mouse.move(box.x, box.y);
@@ -228,8 +258,8 @@ async function newPage(browser, errors, opts = {}) {
 				more: [...div.querySelectorAll('a[href^="variants.html#"]')].map(a => a.getAttribute('href')) };
 		});
 		check(mp.present && mp.hidden, 'multiplayer.html: the rules menu exists and is hidden in the lobby', JSON.stringify(mp).slice(0, 120));
-		check(/This game: Cataclysm/.test(mp.text) && JSON.stringify(mp.more) === JSON.stringify(['variants.html#cataclysm', 'variants.html#providence']),
-			'a Cataclysm room with Providence spells gets the Cataclysm and Providence rules', JSON.stringify(mp.more));
+		check(/This game: Cataclysm/.test(mp.text) && JSON.stringify(mp.more) === JSON.stringify(['variants.html#standard', 'variants.html#cataclysm', 'variants.html#providence']),
+			'a Cataclysm room with Providence spells gets the standard (Cataclysm numbers), Cataclysm and Providence rules', JSON.stringify(mp.more));
 		check(errors.length === before6, 'multiplayer.html: no page errors', JSON.stringify(errors.slice(before6)));
 
 		// ---- 7. phone width

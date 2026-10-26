@@ -663,6 +663,22 @@ document.addEventListener('alpine:init', () => {
 			handleSpellMouseOut() { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this._spellTooltipTimer = setTimeout(() => { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); }, 250); } },
 			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this.showSpellTooltip(spell); } },
 			holdSpellTooltip() { clearTimeout(this._spellTooltipTimer); },
+
+			// Keyboard: the tooltip stays open while focus moves from the spell
+			// into it (its "More about this spell" link), and closes when focus
+			// leaves both. A mouse press on the link moves focus there too, so
+			// the tooltip is still open when the click lands.
+			handleSpellBlur(e) {
+				const tip = this.$refs.spellTooltip;
+				if (e && e.relatedTarget && tip && tip.contains(e.relatedTarget)) return;
+				this.closeSpellTooltip();
+			},
+			handleTooltipFocusOut(e) {
+				const to = e && e.relatedTarget;
+				const tip = this.$refs.spellTooltip;
+				if (to && ((tip && tip.contains(to)) || (to.closest && to.closest('img.spell')))) return;
+				this.closeSpellTooltip();
+			},
 			handleReset() { if (this.isSpectator) return; this.endTurnArmed = false; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;

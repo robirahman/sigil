@@ -863,6 +863,22 @@ document.addEventListener('alpine:init', () => {
 				clearTimeout(this._spellTooltipTimer);
 			},
 
+			// Keyboard: the tooltip stays open while focus moves from the spell
+			// into it (its "More about this spell" link), and closes when focus
+			// leaves both. A mouse press on the link moves focus there too, so
+			// the tooltip is still open when the click lands.
+			handleSpellBlur(e) {
+				const tip = this.$refs.spellTooltip;
+				if (e && e.relatedTarget && tip && tip.contains(e.relatedTarget)) return;
+				this.closeSpellTooltip();
+			},
+			handleTooltipFocusOut(e) {
+				const to = e && e.relatedTarget;
+				const tip = this.$refs.spellTooltip;
+				if (to && ((tip && tip.contains(to)) || (to.closest && to.closest('img.spell')))) return;
+				this.closeSpellTooltip();
+			},
+
 			handleReset() {
 				this.endTurnArmed = false;
 				this.sendEvent('reset');

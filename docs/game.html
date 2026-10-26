@@ -652,7 +652,7 @@
 												x-bind:tabindex="spells.images['charm' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['charm' + i]?.name || ''"
 												x-on:focus="showSpellTooltip('charm' + i)"
-												x-on:blur="closeSpellTooltip()"
+												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleCharmClick(`charm${i}`)"
 												x-on:keydown.space.prevent.stop="handleCharmClick(`charm${i}`)"
 												x-on:click.outside="closeSpellTooltip"
@@ -698,7 +698,7 @@
 												x-bind:tabindex="spells.images['ritual' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['ritual' + i]?.name || ''"
 												x-on:focus="showSpellTooltip('ritual' + i)"
-												x-on:blur="closeSpellTooltip()"
+												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`ritual${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`ritual${i}`)"
 												x-on:click.outside="closeSpellTooltip"
@@ -744,7 +744,7 @@
 												x-bind:tabindex="spells.images['sorcery' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['sorcery' + i]?.name || ''"
 												x-on:focus="showSpellTooltip('sorcery' + i)"
-												x-on:blur="closeSpellTooltip()"
+												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:click.outside="closeSpellTooltip"
@@ -801,6 +801,7 @@
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
 					x-on:mouseenter="holdSpellTooltip()"
+					x-on:focusout="handleTooltipFocusOut($event)"
 					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">
@@ -812,7 +813,7 @@
 							class="tooltip__content"
 							x-text="spells.text[activeSpell]?.text"
 						></p>
-						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="sigilSpellPageUrl(spellDict[activeSpell] || '')" target="_blank" rel="noopener">More about this spell</a>
+						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="spellDict[activeSpell] ? sigilSpellPageUrl(spellDict[activeSpell]) : $el.getAttribute('href')" target="_blank" rel="noopener">More about this spell</a>
 						<button
 							class="tooltip-button"
 							x-on:click="handleCastSpell(activeSpell)"

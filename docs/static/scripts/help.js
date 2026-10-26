@@ -92,9 +92,12 @@ function renderGameRules(elem, game) {
 	const variant = (game && game.variant) || 'standard';
 	const names = { competitive: 'Competitive', deathmatch: 'Deathmatch', scramble: 'Scramble', duplicates: 'Allow duplicates', pentagon: 'Cataclysm' };
 	const flags = normalizeVariant(variant).split('_').filter((f) => names[f]).map((f) => names[f]);
-	let html = '<p><strong>This game: ' + esc(flags.length ? flags.join(' + ') : 'Standard') + '</strong></p>';
-	for (const r of sigilGameRulesSections(variant, game ? game.spellNames : [])) {
-		html += '<br /><p><strong>' + esc(r.name) + '</strong>' + (r.rated ? '' : ' (unrated)') + '</p><ul class="game-rules__list">'
+	// Each section's rules are worded for this combination of variants.
+	const sections = sigilGameRulesSections(variant, game ? game.spellNames : []);
+	const unrated = sections.length && !sections[0].rated;
+	let html = '<p><strong>This game: ' + esc(flags.length ? flags.join(' + ') : 'Standard') + '</strong>' + (unrated ? ' (unrated)' : '') + '</p>';
+	for (const r of sections) {
+		html += '<br /><p><strong>' + esc(r.name) + '</strong></p><ul class="game-rules__list">'
 			+ r.rules.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul>'
 			+ '<p><a class="link" href="variants.html#' + r.id + '" target="_blank" rel="noopener">More</a></p>';
 	}

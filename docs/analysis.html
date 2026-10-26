@@ -725,6 +725,7 @@
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
 					x-on:mouseenter="holdSpellTooltip()"
+					x-on:focusout="handleTooltipFocusOut($event)"
 					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">
@@ -736,7 +737,7 @@
 							class="tooltip__content"
 							x-text="spells.text[activeSpell]?.text"
 						></p>
-						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="sigilSpellPageUrl(spellDict[activeSpell] || '')" target="_blank" rel="noopener">More about this spell</a>
+						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="spellDict[activeSpell] ? sigilSpellPageUrl(spellDict[activeSpell]) : $el.getAttribute('href')" target="_blank" rel="noopener">More about this spell</a>
 						<button
 							class="tooltip-button"
 							x-on:click="handleCastSpell(activeSpell)"
