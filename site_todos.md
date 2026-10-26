@@ -175,10 +175,10 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Fair play & moderation
 
-- [ ] **Add reporting** of players and games, and a moderation panel to handle reports.
+- [x] **Add reporting** of players and games, and a moderation panel to handle reports. Done: "Report" on profiles and the online game-over modal writes create-only `reports/`; `admin.html` (admins/{uid}) lists them, resolves them with a note and suspends players from rated play (`user_flags/{uid}/banUntil`). Turns are also sequenced by the rules now (`rooms/{id}/last`), closing the extra-turns cheat.
 - [ ] **Add engine-correlation cheat detection** (Lichess's Irwin).
 - [ ] **Add profanity filters** on chat and names.
-- [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process.
+- [ ] **Add temporary bans** for players who abandon or stall games, and an appeals process. Partly done: admins can suspend from rated play (shown with its reason on the account page) and `rateGame` counts upheld abandonments in `user_flags/{uid}/abandons`; no automatic bans, no appeals flow yet.
 
 ### Platform
 

@@ -162,6 +162,8 @@
 									<span> &middot; <span x-text="winRatePercent + '% win rate'"></span></span>
 								</template>
 							</div>
+							<button class="report-link" type="button" data-testid="report-player" x-show="!user.isAI && viewerUid !== user.uid"
+								x-on:click="SigilReport.open({ target: user.uid, name: user.displayName })">Report this player</button>
 						</div>
 						<div style="text-align: right;">
 							<div class="profile__elo-label">Rating</div>
@@ -299,6 +301,7 @@
 		});
 	</script>
 	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/report-dialog.js"></script>
 
 	<script>
 		document.addEventListener('alpine:init', () => {
@@ -306,6 +309,8 @@
 				loading: true,
 				isOffline: !navigator.onLine,
 				user: null,
+				// The signed-in viewer: no "Report" on one's own profile.
+				viewerUid: null,
 				games: [],
 				topOpponents: [],
 				ratingPoints: [],
@@ -335,6 +340,10 @@
 						this._netListenersAdded = true;
 						window.addEventListener('online', () => { this.isOffline = false; if (!this.user) this.init(); });
 						window.addEventListener('offline', () => { this.isOffline = true; this.loading = false; });
+					}
+					if (!this._authListener) {
+						this._authListener = true;
+						firebase.auth().onAuthStateChanged((u) => { this.viewerUid = u ? u.uid : null; });
 					}
 					if (this.isOffline) { this.loading = false; return; }
 					const uid = new URLSearchParams(window.location.search).get('uid');

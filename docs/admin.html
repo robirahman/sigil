@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<meta name="robots" content="noindex" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Admin - Sigil Online</title>
+	<style>
+		body > .main { padding-top: 80px; }
+		.admin {
+			max-width: 860px;
+			margin: 0 auto;
+			padding: 24px 16px;
+			box-sizing: border-box;
+			font-family: 'Overlock', sans-serif;
+			color: var(--color-text-warm);
+		}
+		.admin h2, .admin h3 { font-family: 'Arvo', serif; color: var(--color-text-bright); }
+		.admin h2 { font-size: 1.6em; margin-bottom: 8px; }
+		.admin h3 { font-size: 1.1em; margin: 24px 0 8px; }
+		.admin a { color: var(--color-accent); }
+		.admin__msg { color: var(--color-text-dim); font-style: italic; padding: 12px 0; }
+		.admin__tabs { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+		.admin__tab, .admin__btn {
+			background: rgba(255, 255, 255, 0.1);
+			border: 1px solid rgba(255, 255, 255, 0.4);
+			border-radius: 6px;
+			color: var(--color-text-warm);
+			cursor: pointer;
+			font-family: inherit;
+			font-size: 0.9em;
+			padding: 6px 12px;
+		}
+		.admin__tab--active { background: var(--color-surface-hover); border-color: var(--color-accent); }
+		.admin__btn:hover, .admin__tab:hover { background: rgba(255, 255, 255, 0.2); }
+		.admin__btn--danger { background: var(--color-btn-reset); border-color: var(--color-btn-reset); color: #fff; }
+		.admin__btn:disabled { opacity: 0.5; cursor: default; }
+		.report-card {
+			background: var(--color-surface);
+			border-left: 4px solid var(--color-error);
+			border-radius: 8px;
+			margin-bottom: 12px;
+			padding: 12px 16px;
+			overflow-wrap: anywhere;
+		}
+		.report-card--resolved { border-left-color: var(--color-success); opacity: 0.8; }
+		.report-card__head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+		.report-card__reason { font-weight: bold; color: var(--color-text-bright); text-transform: capitalize; }
+		.report-card__meta { color: var(--color-text-dim); font-size: 0.85em; }
+		.report-card__note { margin: 8px 0; white-space: pre-wrap; }
+		.report-card__flags { font-size: 0.9em; color: var(--color-text-dim); margin: 6px 0; }
+		.report-card__flags strong { color: var(--color-error); }
+		.report-card__controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+		.report-card textarea, .report-card select, .report-card input {
+			background: var(--color-bg-mid);
+			border: 1px solid var(--color-border);
+			border-radius: 6px;
+			box-sizing: border-box;
+			color: var(--color-text);
+			font-family: inherit;
+			font-size: 0.9em;
+			padding: 6px;
+		}
+		.report-card textarea { width: 100%; margin-top: 8px; }
+		.report-card input { flex: 1 1 160px; min-width: 0; }
+		.flags-table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+		.flags-table th, .flags-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-bg-mid); }
+		.flags-table th { color: var(--color-text-dim); font-family: 'Arvo', serif; font-size: 0.8em; text-transform: uppercase; }
+	</style>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main" x-data="adminPage()">
+		<div class="admin">
+			<h2>Admin</h2>
+			<p class="admin__msg" x-show="state === 'loading'">Loading...</p>
+			<p class="admin__msg" x-show="state === 'signed-out'" x-cloak>Sign in on the <a href="account.html">account page</a> first.</p>
+			<p class="admin__msg" x-show="state === 'denied'" x-cloak data-testid="admin-denied">This page is for site admins. (An admin is added by hand at admins/{uid} in the database.)</p>
+			<p class="admin__msg" x-show="error" x-cloak x-text="error"></p>
+
+			<template x-if="state === 'ready'">
+				<div>
+					<div class="admin__tabs" role="tablist">
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'open' }" x-on:click="view = 'open'" x-text="'Open reports (' + openCount + ')'"></button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'all' }" x-on:click="view = 'all'" x-text="'All reports (' + reports.length + ')'"></button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'players' }" x-on:click="view = 'players'">Suspensions and abandonments</button>
+					</div>
+
+					<template x-if="view !== 'players'">
+						<div>
+							<p class="admin__msg" x-show="shownReports.length === 0">No reports here.</p>
+							<template x-for="r in shownReports" x-bind:key="r.id">
+								<div class="report-card" x-bind:class="{ 'report-card--resolved': r.resolved }" data-testid="report-card">
+									<div class="report-card__head">
+										<span class="report-card__reason" x-text="reasonText(r.reason)"></span>
+										<span>against <a x-bind:href="'profile.html?uid=' + encodeURIComponent(r.target)" x-text="nameOf(r.target)" data-testid="report-target"></a></span>
+										<span class="report-card__meta">by <a x-bind:href="'profile.html?uid=' + encodeURIComponent(r.by)" x-text="nameOf(r.by)"></a> &middot; <span x-text="when(r.at)"></span></span>
+										<template x-if="r.room"><span class="report-card__meta">game <a x-bind:href="'multiplayer.html?id=' + encodeURIComponent(r.room)" x-text="r.room"></a></span></template>
+									</div>
+									<p class="report-card__note" x-show="r.note" x-text="r.note"></p>
+									<p class="report-card__flags">
+										<span x-text="(flagsOf(r.target).abandons || 0) + ' upheld abandonment' + ((flagsOf(r.target).abandons || 0) === 1 ? '' : 's')"></span>
+										&middot; <span x-text="(reportCount[r.target] || 0) + ' report(s) in all'"></span>
+										<template x-if="banned(r.target)"><span> &middot; <strong x-text="'Suspended ' + banText(r.target)"></strong></span></template>
+									</p>
+									<template x-if="r.resolved">
+										<p class="report-card__meta">Resolved<span x-show="r.resolvedAt" x-text="' ' + when(r.resolvedAt)"></span><span x-show="r.adminNote" x-text="': ' + r.adminNote"></span></p>
+									</template>
+									<template x-if="!r.resolved">
+										<div>
+											<textarea rows="2" maxlength="1000" placeholder="Admin note (kept with the report)" x-model="drafts[r.id]"></textarea>
+											<div class="report-card__controls">
+												<button class="admin__btn" x-on:click="resolve(r)" x-bind:disabled="busy" data-testid="resolve">Mark resolved</button>
+												<select x-model="banDays[r.target]" aria-label="Suspension length">
+													<option value="1">1 day</option>
+													<option value="7">7 days</option>
+													<option value="30">30 days</option>
+													<option value="forever">Indefinitely</option>
+												</select>
+												<input type="text" maxlength="500" placeholder="Reason shown to the player" x-model="banReasons[r.target]" aria-label="Suspension reason" />
+												<button class="admin__btn admin__btn--danger" x-on:click="ban(r.target)" x-bind:disabled="busy" data-testid="ban">Suspend from rated play</button>
+												<button class="admin__btn" x-show="banned(r.target)" x-on:click="lift(r.target)" x-bind:disabled="busy">Lift suspension</button>
+											</div>
+										</div>
+									</template>
+								</div>
+							</template>
+						</div>
+					</template>
+
+					<template x-if="view === 'players'">
+						<div>
+							<p class="admin__msg" x-show="flagRows.length === 0">No suspensions or abandonments recorded.</p>
+							<table class="flags-table" x-show="flagRows.length > 0">
+								<thead><tr><th>Player</th><th>Abandonments</th><th>Suspension</th><th></th></tr></thead>
+								<tbody>
+									<template x-for="f in flagRows" x-bind:key="f.uid">
+										<tr>
+											<td><a x-bind:href="'profile.html?uid=' + encodeURIComponent(f.uid)" x-text="nameOf(f.uid)"></a></td>
+											<td x-text="f.abandons || 0"></td>
+											<td><span x-text="banned(f.uid) ? banText(f.uid) : 'none'"></span><span x-show="f.reason && banned(f.uid)" x-text="' (' + f.reason + ')'"></span></td>
+											<td><button class="admin__btn" x-show="banned(f.uid)" x-on:click="lift(f.uid)" x-bind:disabled="busy">Lift</button></td>
+										</tr>
+									</template>
+								</tbody>
+							</table>
+						</div>
+					</template>
+				</div>
+			</template>
+		</div>
+	</div>
+
+	<!-- Firebase SDK -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/report-dialog.js"></script>
+
+	<script>
+		// Reports (reports/), suspensions and abandonment counts (user_flags/).
+		// The rules let only admins (admins/{uid} === true) read either or
+		// write user_flags; a report's own fields stay as filed.
+		document.addEventListener('alpine:init', () => {
+			// A suspension "indefinitely": far enough out to be permanent.
+			const FOREVER = Date.UTC(2200, 0, 1);
+			Alpine.data('adminPage', () => ({
+				state: 'loading',
+				error: '',
+				busy: false,
+				uid: null,
+				view: 'open',
+				reports: [],
+				flags: {},
+				names: {},
+				drafts: {},
+				banDays: {},
+				banReasons: {},
+
+				get openCount() { return this.reports.filter((r) => !r.resolved).length; },
+				get shownReports() { return this.view === 'open' ? this.reports.filter((r) => !r.resolved) : this.reports; },
+				get reportCount() {
+					const n = {};
+					for (const r of this.reports) n[r.target] = (n[r.target] || 0) + 1;
+					return n;
+				},
+				get flagRows() {
+					return Object.keys(this.flags).map((uid) => Object.assign({ uid }, this.flags[uid]))
+						.filter((f) => f.abandons > 0 || typeof f.banUntil === 'number')
+						.sort((a, b) => (this.banned(b.uid) - this.banned(a.uid)) || ((b.abandons || 0) - (a.abandons || 0)));
+				},
+
+				init() {
+					firebase.auth().onAuthStateChanged((u) => this._start(u));
+				},
+
+				async _start(u) {
+					this.error = '';
+					if (!u || u.isAnonymous) { this.state = 'signed-out'; return; }
+					this.uid = u.uid;
+					const db = firebase.database();
+					let admin = false;
+					try { admin = (await db.ref('admins/' + u.uid).once('value')).val() === true; } catch (e) { admin = false; }
+					if (!admin) { this.state = 'denied'; return; }
+					try {
+						await this.reload();
+						this.state = 'ready';
+					} catch (e) {
+						console.error('[Admin] load failed:', e);
+						this.error = 'Could not load the reports: ' + (e.message || e);
+						this.state = 'denied';
+					}
+				},
+
+				async reload() {
+					const db = firebase.database();
+					const [repSnap, flagSnap] = await Promise.all([
+						db.ref('reports').orderByChild('at').limitToLast(500).once('value'),
+						db.ref('user_flags').once('value'),
+					]);
+					const reports = [];
+					repSnap.forEach((c) => { reports.push(Object.assign({ id: c.key }, c.val())); });
+					reports.sort((a, b) => (b.at || 0) - (a.at || 0));
+					this.reports = reports;
+					this.flags = flagSnap.val() || {};
+					for (const r of reports) {
+						if (!(r.target in this.banDays)) this.banDays[r.target] = '7';
+					}
+					const uids = new Set();
+					for (const r of reports) { uids.add(r.by); uids.add(r.target); }
+					for (const uid of Object.keys(this.flags)) uids.add(uid);
+					await Promise.all([...uids].filter((u) => u && !(u in this.names)).map(async (u) => {
+						try {
+							const n = (await db.ref('users/' + u + '/displayName').once('value')).val();
+							this.names[u] = n || u;
+						} catch (e) { this.names[u] = u; }
+					}));
+				},
+
+				nameOf(uid) { return this.names[uid] || uid; },
+				flagsOf(uid) { return this.flags[uid] || {}; },
+				banned(uid) { const f = this.flags[uid]; return !!(f && typeof f.banUntil === 'number' && f.banUntil > Date.now()); },
+				banText(uid) {
+					const t = this.flagsOf(uid).banUntil;
+					return t >= FOREVER ? 'indefinitely' : 'until ' + new Date(t).toLocaleString();
+				},
+				reasonText(code) {
+					const hit = (window.SigilReport && SigilReport.REASONS || []).find((r) => r[0] === code);
+					return hit ? hit[1] : code;
+				},
+				when(ts) { return ts ? new Date(ts).toLocaleString() : ''; },
+
+				async _write(fn) {
+					this.busy = true;
+					this.error = '';
+					try {
+						await fn(firebase.database());
+						await this.reload();
+					} catch (e) {
+						console.error('[Admin] write failed:', e);
+						this.error = 'That change was refused: ' + (e.message || e);
+					}
+					this.busy = false;
+				},
+
+				resolve(r) {
+					const note = (this.drafts[r.id] || '').trim().slice(0, 1000);
+					return this._write((db) => db.ref('reports/' + r.id).update(Object.assign({
+						resolved: true,
+						resolvedBy: this.uid,
+						resolvedAt: firebase.database.ServerValue.TIMESTAMP,
+					}, note ? { adminNote: note } : {})));
+				},
+
+				ban(target) {
+					const d = this.banDays[target] || '7';
+					const until = d === 'forever' ? FOREVER : Date.now() + Number(d) * 86400000;
+					const reason = (this.banReasons[target] || '').trim().slice(0, 500);
+					// update, not set: the abandonment count stays.
+					return this._write((db) => db.ref('user_flags/' + target).update({
+						banUntil: until,
+						reason: reason || null,
+						by: this.uid,
+						at: firebase.database.ServerValue.TIMESTAMP,
+					}));
+				},
+
+				lift(target) {
+					return this._write((db) => db.ref('user_flags/' + target).update({
+						banUntil: 0,
+						reason: null,
+						by: this.uid,
+						at: firebase.database.ServerValue.TIMESTAMP,
+					}));
+				},
+			}));
+		});
+	</script>
+
+	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
+</body>
+</html>

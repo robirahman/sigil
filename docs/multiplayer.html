@@ -813,6 +813,9 @@
 						<button class="win-modal__btn" x-on:click="exportGame" x-show="reviewSfns.length > 0" x-text="gameExportCopied ? 'Copied!' : 'Export Game'"></button>
 						<button class="win-modal__btn" x-on:click="copyGameLink" x-show="shareUrl" x-text="linkCopied ? 'Link Copied!' : 'Copy Share Link'"></button>
 						<a class="win-modal__btn" href="./">Main Menu</a>
+						<button class="report-link" type="button" data-testid="report-opponent"
+							x-show="!isSpectator && (myColor === 'red' ? blueUid : redUid) && !/^__ai_/.test(myColor === 'red' ? blueUid : redUid)"
+							x-on:click="SigilReport.open({ target: myColor === 'red' ? blueUid : redUid, name: myColor === 'red' ? blueName : redName, room: _roomCodeForReview })">Report opponent</button>
 					</div>
 				</div>
 				<div class="review-bar" x-bind:class="{ 'is-visible': reviewMode }">
@@ -1922,6 +1925,7 @@
 		});
 	</script>
 	<script src="static/scripts/auth-status.js"></script>
+	<script src="static/scripts/report-dialog.js"></script>
 
 	<script src="https://unpkg.com/alpinejs@3.10.4/dist/cdn.min.js"></script>
 </body>

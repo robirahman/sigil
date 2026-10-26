@@ -251,6 +251,9 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		claimKey: 'room_' + record.roomCode,
 		startPos: room.startPos && typeof room.startPos.redWinProb === 'number' ? room.startPos : null,
 	};
+	// A claim that the loser abandoned the game, upheld: their record of
+	// abandonments (user_flags/{uid}/abandons, index.js rateGame) counts it.
+	if (ok && room.endReason === 'abandon' && !room.forfeitedBy) verdict.abandonedBy = loser;
 	if (ok) return verdict;
 	if (room.finishedBy !== 'red' && room.finishedBy !== 'blue') return Object.assign(unrated('result-not-verified'), { kind });
 	// The player who closed the room with a result that does not follow

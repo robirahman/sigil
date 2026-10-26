@@ -2817,3 +2817,125 @@ html[data-colourblind] :is(.game-clock__side--red, .cb-mark--red, .providence-ba
 html[data-colourblind] :is(.game-clock__side--blue, .cb-mark--blue, .providence-bank__count--blue, .ladder-details__card > .blue .name)::before {
 	content: "\25CB\00A0";
 }
+
+/* Report a player (report-dialog.js) */
+.report-dialog {
+	align-items: center;
+	background: rgba(0, 0, 0, 0.6);
+	display: none;
+	inset: 0;
+	justify-content: center;
+	padding: 16px;
+	position: fixed;
+	z-index: 10000;
+}
+
+.report-dialog.is-visible {
+	display: flex;
+}
+
+.report-dialog__box {
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	box-shadow: 0 0 8px 2px #000;
+	box-sizing: border-box;
+	color: var(--color-text-warm);
+	font-family: 'Overlock', sans-serif;
+	max-width: 420px;
+	padding: 20px;
+	width: 100%;
+}
+
+.report-dialog__title {
+	color: var(--color-text-bright);
+	font-family: 'Arvo', serif;
+	font-size: 1.2em;
+	margin: 0 0 12px;
+	overflow-wrap: anywhere;
+}
+
+.report-dialog__form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.report-dialog__form label {
+	color: var(--color-text-dim);
+	font-size: 0.85em;
+}
+
+.report-dialog__reason,
+.report-dialog__note {
+	background: var(--color-bg-mid);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	box-sizing: border-box;
+	color: var(--color-text);
+	font-family: inherit;
+	font-size: 0.95em;
+	padding: 8px;
+	width: 100%;
+}
+
+.report-dialog__note {
+	resize: vertical;
+}
+
+.report-dialog__msg {
+	color: var(--color-text-dim);
+	font-size: 0.9em;
+	margin: 12px 0 0;
+}
+
+.report-dialog__msg--ok {
+	color: var(--color-success);
+}
+
+.report-dialog__actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	margin-top: 14px;
+}
+
+.report-dialog__btn {
+	background: rgba(255, 255, 255, 0.1);
+	border: 1px solid rgba(255, 255, 255, 0.4);
+	border-radius: 6px;
+	color: var(--color-text-warm);
+	cursor: pointer;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.95em;
+	padding: 8px 14px;
+}
+
+.report-dialog__btn:hover {
+	background: rgba(255, 255, 255, 0.2);
+}
+
+.report-dialog__btn--send {
+	background: var(--color-btn-reset);
+	border-color: var(--color-btn-reset);
+	color: #fff;
+}
+
+.report-dialog__btn--send:hover {
+	background: var(--color-btn-reset-hover);
+}
+
+.report-link {
+	background: none;
+	border: none;
+	color: var(--color-text-dim);
+	cursor: pointer;
+	font-family: 'Overlock', sans-serif;
+	font-size: 0.85em;
+	padding: 0;
+	text-decoration: underline;
+}
+
+.report-link:hover {
+	color: var(--color-error);
+}

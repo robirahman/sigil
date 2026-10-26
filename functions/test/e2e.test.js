@@ -49,6 +49,16 @@ function waitFor(db, path, ms = 30000) {
 	});
 }
 
+// A turn as firebase-sync.js sendTurn writes it: following the room's last
+// turn, and moving `last` on in the same write (database.rules.json).
+async function pushTurn(db, code, color, actions) {
+	const last = (await get(ref(db, 'rooms/' + code + '/last'))).val();
+	const key = push(ref(db, 'rooms/' + code + '/turns')).key;
+	const turn = { color, actions, timestamp: serverTimestamp() };
+	if (last) turn.after = last.key;
+	await update(ref(db, 'rooms/' + code), { ['turns/' + key]: turn, last: { key, color } });
+}
+
 async function playRoom(alice, bob, upTo, timeControl) {
 	const code = 'E2E' + ++seq;
 	await set(ref(alice.db, 'rooms/' + code), {
@@ -61,7 +71,7 @@ async function playRoom(alice, bob, upTo, timeControl) {
 	});
 	for (const t of ONLINE.turns.slice(0, upTo)) {
 		const p = t.color === 'red' ? alice : bob;
-		await push(ref(p.db, 'rooms/' + code + '/turns'), { color: t.color, actions: t.actions, timestamp: serverTimestamp() });
+		await pushTurn(p.db, code, t.color, t.actions);
 	}
 	return code;
 }
@@ -143,6 +153,12 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	const g2 = await waitFor(carol.db, `rooms/${code2}/gameId`);
 	const c = await waitFor(carol.db, `user_games/${carol.uid}/${g2}`);
 	assert.deepStrictEqual([c.rated, c.result], [true, 'loss']);
+	// The upheld claim adds to bob's record of abandonments; the refused one to nobody's.
+	const { initializeApp: adminApp } = require('firebase-admin/app');
+	const { getDatabaseWithUrl } = require('firebase-admin/database');
+	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'abandons' + seq));
+	const flags = async (u) => (await admin.ref('user_flags/' + u.uid + '/abandons').once('value')).val();
+	assert.deepStrictEqual([await flags(bob), await flags(alice), await flags(carol), await flags(dave)], [1, null, null, null]);
 });
 
 test('the server ends a game whose clock ran out with nobody watching', async () => {
@@ -234,7 +250,7 @@ test('a correspondence move is pushed to the player to move, from their own toke
 	assert.deepStrictEqual(Object.keys((await get(ref(bob.db, `push_tokens/${bob.uid}`))).val()), [h('b')]);
 
 	// Bob replies: now alice is told, and only alice.
-	await push(ref(bob.db, `rooms/${code}/turns`), { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() });
+	await pushTurn(bob.db, code, 'blue', ['pass']);
 	const all = (await admin.ref(`rooms/${code}/turns`).once('value')).val();
 	const second = Object.keys(all).find((k) => k !== turnId);
 	calls.length = 0;
