@@ -24,6 +24,8 @@ const BASE = process.argv[2] || 'http://localhost:8803';
 const NS = 'sigil-js-default-rtdb';
 const DB = 'http://' + (process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000');
 const AUTH = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+// The functions emulator's port (firebase.json's 5001 unless the run uses another config).
+const FN_PORT = Number(process.env.SIGIL_FUNCTIONS_PORT || 5001);
 const OWNER = { Authorization: 'Bearer owner' };
 const FUNCTIONS = path.join(__dirname, '..', '..', 'functions');
 const { analyzeStep } = require(path.join(FUNCTIONS, 'analysis'));
@@ -31,7 +33,7 @@ const { freshEngine } = require(path.join(FUNCTIONS, 'engine-loader'));
 const { fakeDb } = require(path.join(FUNCTIONS, 'test', 'fake-db'));
 const ONLINE = require(path.join(FUNCTIONS, 'test', 'online-game.json'));
 
-function pageHooks(dbHost, authHost) {
+function pageHooks(dbHost, authHost, fnPort) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -40,10 +42,11 @@ function pageHooks(dbHost, authHost) {
 			fb = v;
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
-				const app = init(...args);
+				// The emulators run the demo project: callables are addressed by it.
+				const app = init(Object.assign({}, args[0], { projectId: 'demo-sigil' }), ...args.slice(1));
 				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
 				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
-				if (v.functions) app.functions().useEmulator('127.0.0.1', 5001);
+				if (v.functions) app.functions().useEmulator('127.0.0.1', fnPort);
 				return app;
 			};
 		},
@@ -136,7 +139,7 @@ const boardVal = (p, expr) => p.evaluate((s, x) => {
 	const errors = [];
 	try {
 		const page = await browser.newPage();
-		await page.evaluateOnNewDocument(pageHooks, DB.replace('http://', ''), AUTH);
+		await page.evaluateOnNewDocument(pageHooks, DB.replace('http://', ''), AUTH, FN_PORT);
 		await page.setBypassServiceWorker(true);
 		await page.setRequestInterception(true);
 		page.on('request', (req) => {
@@ -145,6 +148,7 @@ const boardVal = (p, expr) => p.evaluate((s, x) => {
 			sdk(url).then((body) => req.respond({ status: 200, contentType: 'text/javascript', body }), () => req.continue());
 		});
 		page.on('pageerror', (e) => errors.push(e.message));
+		page.on('console', (m) => { if (m.type() === 'warning' || m.type() === 'error') console.log('console ' + m.type() + ': ' + m.text().slice(0, 300)); });
 
 		// ---- 1. the replay, signed in as the player; the stored analysis
 		await page.goto(`${BASE}/multiplayer.html?id=${code}`, { waitUntil: 'load', timeout: 90000 });
@@ -186,6 +190,18 @@ const boardVal = (p, expr) => p.evaluate((s, x) => {
 			try { await firebase.database().ref('position_evals/forged').set({ sfn: 'x', stones: 39 }); return 'written'; } catch (e) { return 'refused'; }
 		});
 		check('the page cannot write the cache itself', forged === 'refused', forged);
+		// A Quick review in this browser takes the cached position and searches the rest.
+		const live = await page.evaluate(async (s) => {
+			const B = document.querySelector(s)._x_dataStack[0];
+			const log = B._gameLogForExport;
+			const cached = await loadPositionEvals(firebase.database(), _reviewPositions(log).slice(0, -1));
+			const searched = [];
+			const r = await reviewGameRust(log, 'quick', null, B.winner, { cached, searched });
+			return { cached: cached.size, searched: searched.length, n: log.length, source: r.source,
+				depth1: r.depthPerPly[1], hasBest: Array.isArray(r.bestSfnPerPly) && typeof r.bestSfnPerPly[1] === 'string' };
+		}, BOARD);
+		check('a live Quick review uses the cache and lists the rest for the server',
+			live.cached === 1 && live.searched >= 1 && live.searched < live.n && live.depth1 === cached.depth && live.hasBest, live);
 
 		// ---- 3. the puzzles
 		await Promise.all([page.waitForNavigation({ waitUntil: 'load', timeout: 60000 }), page.click('.ai-review-learn button')]);
@@ -209,7 +225,12 @@ const boardVal = (p, expr) => p.evaluate((s, x) => {
 		check('the engine\'s best turn is the solution', pz.keys.length === 1, pz.keys);
 		check('the way back is the game', pz.back === `multiplayer.html?id=${code}`, pz.back);
 		check('the task names both win chances', /best turn keeps a \d+% chance to win; yours kept \d+%/.test(pz.sub), pz.sub);
-		await page.click(`#stone-node--${doc.bestPerPly[k][0].node}`);
+		const node = doc.bestPerPly[k][0].node;
+		await page.waitForFunction((sel, n) => {
+			const d = document.querySelector(sel)._x_dataStack[0];
+			return d.validMoves && Object.keys(d.validMoves).length > 0;
+		}, { timeout: 30000, polling: 250 }, BOARD, node);
+		await page.click(`#stone-node--${node}`);
 		await sleep(600);
 		if ((await boardVal(page, 'B.actionList')).includes('pass')) await page.click('.action-button--end-turn');
 		let s;
