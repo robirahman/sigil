@@ -95,6 +95,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/rules-reference.js',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
+	'./static/scripts/profile-stats.js',
 	'./static/scripts/engine/constants.js',
 	'./static/scripts/engine/notation.js',
 	'./static/scripts/engine/board.js',

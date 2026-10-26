@@ -49,7 +49,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 - [x] **Show whether a game is rated**, before and during it. Done: a Rated / Casual badge for the typed room code, the waiting room and the position-join screen, and in the game header (`docs/multiplayer.html:261` only says "Sign in for ranked play").
 - [x] **Show the spectator count to players.** Done: an eye and count in the game header. It is written to `rooms/X/spectators` but never displayed.
 - [x] **Keep unrated, variant and casual games in profile history.** Done: `rateGame` indexes every signed-in game, marked `rated: false` when unrated. `/user_games` is written only inside `processEloClientSide` (`engine/elo.js:109-135`).
-- [ ] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`.
+- [x] **Add per-mode stats** (by time control and by variant) to `docs/profile.html`. Done: the Stats tab, by opponent type, time control and variant, with games, W–L, win % and net rating.
 - [x] **Improve the leaderboard** (`docs/leaderboard.html`):
   - [x] Add a provisional-rating marker or a minimum number of games. Done: "?" under 10 games.
   - [x] Add player search and "find me".
@@ -126,7 +126,7 @@ Items already listed above are not repeated; chess-only features (opening names,
   Done: a review-panel button on game.html and multiplayer.html opens the player's mistakes as winning-turn puzzles on `puzzles.html?learn=`.
 - [ ] **Add practice-from-position** against the AI with hints.
 - [ ] **Add a layout / opening explorer:** play counts and win rates for each spell layout and opening move, site-wide and per player.
-- [ ] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase.
+- [x] **Add insights:** charts of a player's results by spell, layout, colour, time control and game phase. Done: the Insights tab, win rate by colour, game length and spell on the board (time control is in Stats; game phase needs evals, not stored per game).
 
 ### Puzzles
 
@@ -167,9 +167,9 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Profile & account
 
-- [ ] **Add per-mode stats pages:** streaks, best wins, worst losses, opponents.
-- [ ] **Add game search** by player, result, spell layout and date.
-- [ ] **Add bulk export** of all a player's games.
+- [x] **Add per-mode stats pages:** streaks, best wins, worst losses, opponents. Done: Stats tab tiles, by the opponent's rating before the game.
+- [x] **Add game search** by player, result, spell layout and date. Done: Games tab filters (opponent, result, rated, spell, date range).
+- [x] **Add bulk export** of all a player's games. Done: "Download all games", JSON lines with the stored entry, start/final SFN, transcript and SGN-T.
 - [ ] **Add trophies, badges and verified titles.**
 - [x] **Add account closing** (Danger zone on the account page).
 - [ ] **Add two-factor authentication and an active-sessions list.**
