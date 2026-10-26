@@ -18,7 +18,9 @@
 # overrides: PROJECT, TIME_MS_1, TIME_MS_2, MAX_MATE_2, SPOT (1/0), SHARD (i/n:
 # this VM's slice of the games; give every VM of a fleet its own i), WINNING
 # (1 = a winning-turn pass after the mates, tools/winning_turns.py),
-# WINNING_RESUME (GCS object of a preempted run's winning.jsonl).
+# WINNING_RESUME (GCS object of a preempted run's winning.jsonl), PROMISING_ONLY
+# (1: positions where the mover won soon after, only) and NO_OLD (1: skip the
+# re-proof of the committed set; for a self-play corpus).
 set -euo pipefail
 NAME=${1:-sigil-puzzles-$(date -u +%m%d%H%M)}
 MACHINE=${2:-c3d-highcpu-90}; ZONE=${3:-us-central1-f}; MAXH=${4:-5}; WORKERS=${5:-88}
@@ -46,7 +48,7 @@ gcloud compute instances create "$NAME" \
   --image-family=debian-12 --image-project=debian-cloud \
   --scopes=https://www.googleapis.com/auth/devstorage.read_write \
   --labels=project=sigil,purpose=puzzles \
-  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,time-ms-1=$TIME_MS_1,time-ms-2=$TIME_MS_2,max-mate-2=$MAX_MATE_2,resume=$RESUME,retry-ms=$RETRY_MS,shard=$SHARD,winning=$WINNING,winning-resume=$WINNING_RESUME" \
+  --metadata="run-id=$RUN,workers=$WORKERS,branch=$BRANCH,max-hours=$MAXH,corpus=$CORPUS,time-ms-1=$TIME_MS_1,time-ms-2=$TIME_MS_2,max-mate-2=$MAX_MATE_2,resume=$RESUME,retry-ms=$RETRY_MS,shard=$SHARD,winning=$WINNING,winning-resume=$WINNING_RESUME,promising-only=${PROMISING_ONLY:-0},no-old=${NO_OLD:-0}" \
   --metadata-from-file="startup-script=$HERE/runner_puzzles.sh" \
   --format="value(name,status)"
 echo "$RUN"

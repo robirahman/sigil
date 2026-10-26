@@ -28,6 +28,9 @@
 #   shard       optional i/n: this VM's slice of the games (gen_mate_puzzles --shard)
 #   winning     1 = a last phase runs the winning-turn analysis on every position
 #               without a mate puzzle (work file winning.jsonl)
+#   promising-only  1 = skip phase 2 and keep the winning pass to promising positions
+#               (a self-play corpus: tools/selfplay_corpus.py)
+#   no-old      1 = do not re-prove the committed set (a corpus it did not come from)
 #   winning-resume  optional GCS object of a prior run's winning.jsonl (a preempted
 #               winning phase resumes from it; `resume` restores mates.jsonl only)
 #
@@ -45,6 +48,8 @@ CORPUS=$(md corpus); TMS1=$(md time-ms-1); TMS2=$(md time-ms-2); MM2=$(md max-ma
 RESUME=$(md resume); : "${RESUME:=}"
 SHARD=$(md shard); : "${SHARD:=}"
 WRESUME=$(md winning-resume); : "${WRESUME:=}"
+PONLY=$(md promising-only); : "${PONLY:=0}"
+NOOLD=$(md no-old); : "${NOOLD:=0}"
 WINNING=$(md winning); : "${WINNING:=0}"
 TMS3=$(md retry-ms); : "${TMS3:=0}" 
 : "${RUN:=unknown}" "${WORKERS:=$(nproc)}" "${MAXH:=5}" "${TMS1:=40000}" "${TMS2:=30000}" "${MM2:=3}"
@@ -76,6 +81,12 @@ gcs_del() {   # object (absent is fine)
     "https://storage.googleapis.com/storage/v1/b/$BUCKET/o/$(enc "$1")" >/dev/null || true
 }
 
+# Ship the bootstrap log from the start: a FATAL before the work-file
+# uploader starts would otherwise leave nothing in the bucket.
+( while true; do gcs_put /var/log/sigil-puzzles.log "runs/$RUN/bootstrap.log" 2>/dev/null || true; sleep 20; done ) &
+BOOTLOG=$!
+trap 'echo "EXIT status $? at line $LINENO"; gcs_put /var/log/sigil-puzzles.log "runs/$RUN/bootstrap.log" 2>/dev/null' EXIT
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get -qq update
 apt-get -qq install -y build-essential curl git python3-venv >/dev/null 2>&1
@@ -99,8 +110,9 @@ COMMIT=$(git log --oneline -1)
 echo "repo at $COMMIT"; echo "$COMMIT" > $WORK/out/COMMIT.txt
 
 python3 -m venv $WORK/venv
+echo "venv ready; building the engine"
 $WORK/venv/bin/pip -q install --upgrade pip maturin 2>&1 | tail -1
-cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -2
+cd $WORK/repo/engine && VIRTUAL_ENV=$WORK/venv $WORK/venv/bin/maturin develop --release 2>&1 | tail -5
 $WORK/venv/bin/python -c "import sigil_engine; print('engine import ok')" || { echo "FATAL: engine build"; shutdown -h now; exit 1; }
 
 gcs_get "$CORPUS" $WORK/hydrated.json || { echo "FATAL: corpus download"; shutdown -h now; exit 1; }
@@ -123,13 +135,15 @@ fi
     sleep 120; done ) &
 
 cd $WORK/repo
-GEN="$WORK/venv/bin/python -u tools/gen_mate_puzzles.py --hydrated $WORK/hydrated.json --work $WORK/out/mates.jsonl --winning-work $WORK/out/winning.jsonl --old docs/static/puzzles/mate_puzzles.json --no-assemble --workers $WORKERS"
+GEN="$WORK/venv/bin/python -u tools/gen_mate_puzzles.py --hydrated $WORK/hydrated.json --work $WORK/out/mates.jsonl --winning-work $WORK/out/winning.jsonl --no-assemble --workers $WORKERS"
+[ "$NOOLD" = "1" ] || GEN="$GEN --old docs/static/puzzles/mate_puzzles.json"
+[ "$PONLY" = "1" ] && GEN2_FLAGS="--only-promising" || GEN2_FLAGS=""
 [ -n "$SHARD" ] && GEN="$GEN --shard $SHARD"
 echo "=== phase 1: promising positions, mate <= 3, ${TMS1} ms/position ==="
 $GEN --only-promising --max-mate 3 --time-ms "$TMS1" > $WORK/out/phase1.log 2>&1
 STATUS=$?; FAILED_STAGE="phase 1"
 tail -3 $WORK/out/phase1.log
-if [ "$STATUS" -eq 0 ]; then
+if [ "$STATUS" -eq 0 ] && [ "$PONLY" != "1" ]; then
   echo "=== phase 2: everything else, mate <= $MM2, ${TMS2} ms/position ==="
   $GEN --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/phase2.log 2>&1
   STATUS=$?; FAILED_STAGE="phase 2"
@@ -144,7 +158,7 @@ fi
 
 if [ "$STATUS" -eq 0 ] && [ "$WINNING" = "1" ]; then
   echo "=== winning-turn pass: positions without a mate puzzle ==="
-  $GEN --winning --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/winning.log 2>&1
+  $GEN --winning $GEN2_FLAGS --max-mate "$MM2" --time-ms "$TMS2" > $WORK/out/winning.log 2>&1
   STATUS=$?; FAILED_STAGE="winning"
   tail -3 $WORK/out/winning.log
 fi
