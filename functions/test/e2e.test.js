@@ -13,30 +13,35 @@ const ONLINE = require('./online-game.json');
 const AI = require('./ai-games.json');
 
 const NS = 'sigil-js-default-rtdb';
+// The emulators' addresses (firebase emulators:exec sets the first two), so
+// a private emulator config with other ports works too.
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+const FN_PORT = Number(process.env.FUNCTIONS_EMULATOR_PORT || 5001);
 let seq = 0;
 
 // The emulator applies firebase.json's rules to the project's default
 // namespace only; load them into the production instance's name.
 test.before(async () => {
 	const rules = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
-	const res = await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`,
+	const res = await fetch(`http://${DB_HOST}/.settings/rules.json?ns=${NS}`,
 		{ method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: rules });
 	assert.strictEqual(res.status, 200, await res.text());
 });
 
 async function player(name) {
-	const app = initializeApp({ projectId: 'demo-sigil', apiKey: 'demo', databaseURL: `http://127.0.0.1:9000?ns=${NS}` }, name + ++seq);
+	const app = initializeApp({ projectId: 'demo-sigil', apiKey: 'demo', databaseURL: `http://${DB_HOST}?ns=${NS}` }, name + ++seq);
 	const auth = getAuth(app);
-	connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+	connectAuthEmulator(auth, 'http://' + AUTH_HOST, { disableWarnings: true });
 	const db = getDatabase(app);
-	connectDatabaseEmulator(db, '127.0.0.1', 9000);
+	connectDatabaseEmulator(db, DB_HOST.split(':')[0], Number(DB_HOST.split(':')[1]));
 	const cred = await createUserWithEmailAndPassword(auth, `${name}${seq}@example.com`, 'password123');
 	const uid = cred.user.uid;
 	// What auth-manager.js ensureUserProfile writes for a new account.
 	await set(ref(db, 'users/' + uid), { displayName: name, elo: 1000, gamesPlayed: 0, wins: 0, losses: 0, created: Date.now() });
 	await set(ref(db, 'leaderboard/' + uid), { displayName: name, elo: 1000, gamesPlayed: 0 });
 	const fns = getFunctions(app, 'us-central1');
-	connectFunctionsEmulator(fns, '127.0.0.1', 5001);
+	connectFunctionsEmulator(fns, '127.0.0.1', FN_PORT);
 	return { uid, db, name, fns };
 }
 

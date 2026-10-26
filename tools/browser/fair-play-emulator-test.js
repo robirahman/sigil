@@ -16,11 +16,15 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8801';
 const NS = 'sigil-js-default-rtdb';
-const DB = 'http://127.0.0.1:9000';
+// The emulators' addresses (firebase emulators:exec sets them), so a
+// private emulator config with other ports works too.
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+const DB = 'http://' + DB_HOST;
 const OWNER = { Authorization: 'Bearer owner' };
 
 // Point the page's Firebase at the emulators as soon as the app exists.
-function useEmulators() {
+function useEmulators(dbHost, authHost) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -30,8 +34,8 @@ function useEmulators() {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				const app = init(...args);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
+				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
+				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
 				return app;
 			};
 		},
@@ -59,7 +63,7 @@ async function rest(method, p, body) {
 }
 
 async function signUp(email) {
-	const res = await (await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
+	const res = await (await fetch('http://' + AUTH_HOST + '/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
 		method: 'POST', headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ email, password: 'password123', returnSecureToken: true }),
 	})).json();
@@ -98,7 +102,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 		const ctx = await browser.createBrowserContext();
 		const page = await ctx.newPage();
 		await page.setViewport({ width: 412, height: 860 });
-		await page.evaluateOnNewDocument(useEmulators);
+		await page.evaluateOnNewDocument(useEmulators, DB_HOST, AUTH_HOST);
 		await page.setBypassServiceWorker(true);
 		await page.setRequestInterception(true);
 		page.on('request', (req) => {
@@ -187,20 +191,25 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 		check('account page fits a phone', await noHScroll(pb));
 
 		// 5. The game-over modal of an online game: "Report opponent" names the room.
+		// The modal's state is set as the game screen sets it at the end of a game.
 		const room = 'FPGAME';
-		await rest('PUT', 'rooms/' + room, {
-			spellNames: ['a'], status: 'finished', created: stamp, ranked: false, variant: 'standard', timeControl: { type: 'none' },
-			red: { uid: uid.alice, displayName: 'Alice', connected: false }, blue: { uid: uid.bob, displayName: 'Bob', connected: false },
-			winner: 'blue', finishedBy: 'red', forfeitedBy: 'red', closedAt: stamp,
-		});
-		await pa.goto(`${BASE}/multiplayer.html?id=${room}`, { waitUntil: 'load' });
+		await pa.goto(`${BASE}/multiplayer.html`, { waitUntil: 'load' });
+		// The game screen mounts when the lobby's phase turns to playing.
+		await waitIn(pa, () => !!(document.querySelector('[x-data^="multiplayerLobby"]') || {})._x_dataStack);
+		await pa.evaluate(() => { document.querySelector('[x-data^="multiplayerLobby"]')._x_dataStack[0].phase = 'playing'; });
+		await waitIn(pa, () => !!(document.querySelector('[x-data^="gameBoard"]') || {})._x_dataStack);
+		await pa.evaluate((r, a, b) => {
+			const d = document.querySelector('[x-data^="gameBoard"]')._x_dataStack[0];
+			Object.assign(d, { myColor: 'red', redUid: a, blueUid: b, redName: 'Alice', blueName: 'Bob', isSpectator: false, _roomCodeForReview: r, reviewMode: false, winner: 'blue' });
+		}, room, uid.alice, uid.bob);
+		// x-show on the button, and the modal itself shown for a winner.
 		const shown = await pa.waitForFunction(() => {
 			const b = document.querySelector('[data-testid="report-opponent"]');
-			return b && b.offsetParent !== null;
+			return b && getComputedStyle(b).display !== 'none' && b.closest('.win-modal').classList.contains('is-visible');
 		}, { timeout: 45000, polling: 500 }).then(() => true, () => false);
 		check('the game-over modal offers Report opponent', shown);
 		if (shown) {
-			await pa.click('[data-testid="report-opponent"]');
+			await pa.evaluate(() => document.querySelector('[data-testid="report-opponent"]').click());
 			await waitIn(pa, () => document.querySelector('.report-dialog.is-visible'));
 			const title = await pa.evaluate(() => document.querySelector('.report-dialog__title').textContent);
 			await pa.click('.report-dialog__btn--send');
