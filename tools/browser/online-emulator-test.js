@@ -252,7 +252,15 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		await redP.evaluate(() => firebase.database().goOnline());
 		await redP.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).syncBanner === '', { timeout: 15000, polling: 500 })
 			.then(() => check('banner clears on reconnect', true), () => check('banner clears on reconnect', false));
-		const seatBack = await redP.evaluate(async (c) => (await firebase.database().ref('rooms/' + c + '/red').once('value')).val(), code2);
+		// The banner clears on .info/connected; the seat is re-announced after
+		// that (_goOnline: three onDisconnect registrations, then two writes,
+		// each awaiting the server), so give it time under load.
+		let seatBack = null;
+		for (let i = 0; i < 40; i++) {
+			seatBack = await redP.evaluate(async (c) => (await firebase.database().ref('rooms/' + c + '/red').once('value')).val(), code2);
+			if (seatBack && seatBack.connected === true && !seatBack.disconnectedAt) break;
+			await new Promise((r) => setTimeout(r, 250));
+		}
 		check('seat marked present again', seatBack.connected === true && !seatBack.disconnectedAt, seatBack);
 
 		// Blue leaves for good.
