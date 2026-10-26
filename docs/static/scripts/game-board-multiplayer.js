@@ -761,7 +761,8 @@ document.addEventListener('alpine:init', () => {
 				bindGameKeys(_this, { disabled: () => _this.isSpectator });
 				// Leaving a live game asks first (game-keys.js). Correspondence
 				// games are left between moves by design, so they don't ask.
-				guardLeavingGame(
+				// typeof: a stale cached game-keys.js must not break the game.
+				if (typeof guardLeavingGame === 'function') guardLeavingGame(
 					() => !_this.isSpectator && !_this.winner && !_this.gameAborted && !_this.reviewMode
 						&& !!_this.whoseTurn && _this.timerType !== 'correspondence',
 					() => 'The game goes on without you: ' + (_this.timerType === 'none' ? '' : 'your clock keeps running, and ')

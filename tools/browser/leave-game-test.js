@@ -7,6 +7,10 @@
 //   4. vs AI: the dialog opens too.
 //   5. After game over, and in review, the logo leaves at once.
 //   6. The analysis board (same component) never asks.
+//   7. Stale assets from an old service worker (old constants.js and
+//      game-keys.js): the page reloads once (epoch guard), refetching the
+//      stylesheets past the HTTP cache, and the old game-keys.js doesn't
+//      break the game.
 //
 //   (cd docs && python3 -m http.server 8765) &
 //   node tools/browser/leave-game-test.js http://localhost:8765
@@ -34,7 +38,7 @@ async function sdk(url) {
 	return _sdk.get(url);
 }
 
-async function newPage(browser, errors, dialogs) {
+async function newPage(browser, errors, dialogs, intercept) {
 	const ctx = await browser.createBrowserContext();
 	const page = await ctx.newPage();
 	await page.setBypassServiceWorker(true);
@@ -45,6 +49,7 @@ async function newPage(browser, errors, dialogs) {
 		if (u.startsWith('https://www.gstatic.com/firebasejs/')) {
 			return sdk(u).then((body) => r.respond({ status: 200, contentType: 'text/javascript', body }), () => r.continue());
 		}
+		if (intercept && intercept(r)) return;
 		r.continue();
 	});
 	page.on('pageerror', (e) => errors.push(page.url().replace(BASE, '') + ': ' + e.message));
@@ -156,7 +161,8 @@ const path = (page) => new URL(page.url()).pathname;
 		await overLocal();
 		await Promise.all([
 			page.waitForNavigation({ timeout: 30000 }),
-			page.click('.win-modal.is-visible a.win-modal__btn[href="./"]'),
+			// A DOM click: the modal may still be fading in under the pointer.
+			page.$eval('.win-modal.is-visible a.win-modal__btn[href="./"]', (el) => el.click()),
 		]);
 		check('game over: Main Menu leaves at once', !path(page).endsWith('/game.html') && dialogs.length === 0, { path: path(page), dialogs });
 		await page.browserContext().close();
@@ -182,6 +188,32 @@ const path = (page) => new URL(page.url()).pathname;
 			page.click('header .logo a'),
 		]);
 		check('analysis: the logo leaves at once', !path(page).endsWith('/analysis.html') && dialogs.length === 0, { path: path(page), dialogs });
+		await page.browserContext().close();
+
+		// ---- 7. Stale assets.
+		dialogs = [];
+		const local = async (rel) => (await fetch(BASE + '/' + rel)).text();
+		const oldConstants = (await local('static/scripts/engine/constants.js')).replace(/const SIGIL_ASSET_EPOCH = \d+;/, 'const SIGIL_ASSET_EPOCH = 2;');
+		const oldKeys = (await local('static/scripts/game-keys.js')).replace('function guardLeavingGame(', 'function _notYetShipped(');
+		const cssReloads = [];
+		let navs = 0;
+		page = await newPage(browser, errors, dialogs, (r) => {
+			const u = r.url();
+			if (r.isNavigationRequest() && u.includes('/game.html')) navs++;
+			if (u.includes('/static/css/styles.css') && r.resourceType() === 'fetch') cssReloads.push(u);
+			if (u.includes('/engine/constants.js')) { r.respond({ status: 200, contentType: 'text/javascript', body: oldConstants }); return true; }
+			if (u.includes('/static/scripts/game-keys.js')) { r.respond({ status: 200, contentType: 'text/javascript', body: oldKeys }); return true; }
+			return false;
+		});
+		await page.goto(`${BASE}/game.html`, { waitUntil: 'load', timeout: 90000 });
+		for (let i = 0; i < 40 && navs < 2; i++) await sleep(250);
+		await ready(page);
+		check('stale: the page reloads once for epoch 3', navs === 2
+			&& await page.evaluate(() => sessionStorage.getItem('sigilStaleAssetReload')) === '3', navs);
+		check('stale: styles.css is refetched (fetch, cache: reload)', cssReloads.length >= 1, cssReloads);
+		await sleep(500);
+		check('stale: still one reload, and the game runs on the old game-keys.js', navs === 2
+			&& await page.evaluate(() => typeof guardLeavingGame === 'undefined' && G().actionList.length > 0), navs);
 		await page.browserContext().close();
 	} catch (e) {
 		check('exception', false, e.message);

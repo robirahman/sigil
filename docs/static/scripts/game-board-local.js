@@ -1736,7 +1736,8 @@ document.addEventListener('alpine:init', () => {
 
 				// Keyboard shortcuts (game-keys.js, shared with multiplayer)
 				bindGameKeys(_this);
-				guardLeavingGame(
+				// typeof: a stale cached game-keys.js must not break the game.
+				if (typeof guardLeavingGame === 'function') guardLeavingGame(
 					() => gameLive && !_this.winner && !_this.reviewMode && !_this.sideOffer,
 					() => 'The game is still in progress.' + (_humanHasMoved && _gameId ? ' It stays saved in this browser under "In progress" on the main menu.' : ''));
 
