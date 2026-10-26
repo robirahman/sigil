@@ -18,9 +18,13 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8765';
 const NS = 'sigil-js-default-rtdb';
+// The emulators' addresses (firebase emulators:exec sets them), so a
+// private emulator config with other ports works too.
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 
 // Point the page's Firebase at the emulators as soon as the app exists.
-function useEmulators() {
+function useEmulators(dbHost, authHost) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -30,8 +34,8 @@ function useEmulators() {
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (...args) => {
 				const app = init(...args);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
+				app.auth().useEmulator('http://' + authHost, { disableWarnings: true });
+				app.database().useEmulator(dbHost.split(':')[0], Number(dbHost.split(':')[1]));
 				return app;
 			};
 		},
@@ -54,7 +58,7 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 
 (async () => {
 	const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
-	const put = await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`,
+	const put = await fetch(`http://${DB_HOST}/.settings/rules.json?ns=${NS}`,
 		{ method: 'PUT', headers: { Authorization: 'Bearer owner' }, body: rules });
 	if (put.status !== 200) throw new Error('rules upload: ' + put.status + ' ' + await put.text());
 
@@ -68,7 +72,7 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 			const ctx = await browser.createBrowserContext();
 			contexts.push(ctx);
 			const p = await ctx.newPage();
-			await p.evaluateOnNewDocument(useEmulators);
+			await p.evaluateOnNewDocument(useEmulators, DB_HOST, AUTH_HOST);
 			// The service worker's cached CDN scripts race the emulator hook,
 			// and gstatic downloads flake here: serve the SDK from memory.
 			await p.setBypassServiceWorker(true);
@@ -109,7 +113,16 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 		const bluePage = redPage === pageA ? pageB : pageA;
 		const tryPush = (p, color) => p.evaluate(async (c, col) => {
 			try {
-				await firebase.database().ref('rooms/' + c + '/turns').push({ color: col, actions: ['pass'], timestamp: firebase.database.ServerValue.TIMESTAMP });
+				// As firebase-sync.js sendTurn writes it: after the room's last
+				// turn, moving rooms/{id}/last on in the same write.
+				const roomRef = firebase.database().ref('rooms/' + c);
+				// From the server: this page's cache may not have the other
+				// side's last turn yet.
+				const last = (await roomRef.child('last').get()).val();
+				const key = roomRef.child('turns').push().key;
+				const turn = { color: col, actions: ['pass'], timestamp: firebase.database.ServerValue.TIMESTAMP };
+				if (last) turn.after = last.key;
+				await roomRef.update({ ['turns/' + key]: turn, last: { key, color: col } });
 				return 'ok';
 			} catch (e) { return e.code || e.message; }
 		}, code, color);

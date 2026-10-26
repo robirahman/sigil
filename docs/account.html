@@ -85,6 +85,16 @@
 			color: var(--color-text-faint);
 			font-family: 'Overlock', sans-serif;
 		}
+		.ban-notice {
+			background: rgba(230, 102, 102, 0.12);
+			border: 1px solid var(--color-error);
+			border-radius: 8px;
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			margin-bottom: 16px;
+			padding: 12px 16px;
+		}
+		.admin-link { color: var(--color-accent); font-family: 'Overlock', sans-serif; }
 		.profile-card {
 			background: var(--color-surface);
 			border-radius: 8px;
@@ -292,6 +302,16 @@
 		<div class="account" x-show="!loading && user" x-cloak>
 			<h2>Your Profile</h2>
 
+			<!-- A suspension an admin set (admin.html): user_flags/{uid}, which
+			     only the player and admins can read. -->
+			<div class="ban-notice" x-show="banActive" x-cloak data-testid="ban-notice">
+				<strong>Your account is suspended from rated play</strong>
+				<span x-text="banUntilText"></span>.
+				<template x-if="flags && flags.reason"><span> Reason: <span x-text="flags.reason"></span></span></template>
+				You can still play casual games.
+			</div>
+			<p x-show="isAdmin" x-cloak><a class="admin-link" href="admin.html">Admin panel: reports and suspensions</a></p>
+
 			<div class="profile-card">
 				<div class="profile-card__name" x-text="profile?.displayName || user?.displayName || 'Player'"></div>
 				<div class="profile-card__stats">
@@ -464,6 +484,15 @@
 				signupEmail: '',
 				signupPassword: '',
 				renameName: '',
+				// user_flags/{uid} (a suspension, the abandonment count) and admins/{uid}.
+				flags: null,
+				isAdmin: false,
+				get banActive() { return !!(this.flags && typeof this.flags.banUntil === 'number' && this.flags.banUntil > Date.now()); },
+				get banUntilText() {
+					if (!this.banActive) return '';
+					// A ban past 2100 is permanent.
+					return this.flags.banUntil > 4102444800000 ? ' indefinitely' : ' until ' + new Date(this.flags.banUntil).toLocaleString();
+				},
 				guest: false,
 				linkConflict: '',
 				_linkCredential: null,
@@ -543,6 +572,7 @@
 							}
 						}
 						this.profile = this._authManager.userProfile;
+						this._loadFlags(this.user.uid);
 						this.annotationMode = !!(this.profile && this.profile.annotationMode);
 						this.showAiThinkReport = !!(this.profile && this.profile.showAiThinkReport);
 						this.showAiEval = !!(this.profile && this.profile.showAiEval);
@@ -551,6 +581,8 @@
 						this.enablePondering = !!(this.profile && this.profile.enablePondering === true);
 					} else {
 						this.profile = null;
+						this.flags = null;
+						this.isAdmin = false;
 						this.annotationMode = false;
 						this.showAiThinkReport = false;
 						this.showAiEval = false;
@@ -558,6 +590,12 @@
 						this.enablePondering = false;
 					}
 					this.loading = false;
+				},
+
+				async _loadFlags(uid) {
+					const db = firebase.database();
+					try { this.flags = (await db.ref('user_flags/' + uid).once('value')).val(); } catch (e) { this.flags = null; }
+					try { this.isAdmin = (await db.ref('admins/' + uid).once('value')).val() === true; } catch (e) { this.isAdmin = false; }
 				},
 
 				async renameUser() {

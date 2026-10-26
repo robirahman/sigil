@@ -196,6 +196,25 @@ test('a loss on time counts only if the clock was out when the room closed', asy
 	assert.deepStrictEqual([v.rated, v.winner, v.overturned], [true, last.color, undefined]);
 });
 
+test('an upheld abandonment claim names the player who left', async () => {
+	const room = onlineRoom();
+	delete room.gameLog;
+	const keys = Object.keys(room.turns).sort().slice(0, 4);
+	room.turns = Object.fromEntries(keys.map((k) => [k, room.turns[k]]));
+	const lastTs = room.turns[keys[3]].timestamp;
+	Object.assign(room, { timeControl: { type: 'realtime', initialTime: 600_000, increment: 0 },
+		endReason: 'abandon', winner: 'red', finishedBy: 'red',
+		blue: { uid: 'bob', connected: false, disconnectedAt: lastTs + 1000 } });
+	const rec = Object.assign(onlineRecord(room), { winner: 'red' });
+	room.closedAt = lastTs + 1000 + ABANDON_GRACE_MS;
+	const v = await judgeGame(rec, ctx({ room }));
+	assert.deepStrictEqual([v.rated, v.winner, v.abandonedBy], [true, 'red', 'blue']);
+	// A claim made too early is the claimer's loss, and nobody's abandonment.
+	room.closedAt = lastTs + 5000;
+	const early = await judgeGame(rec, ctx({ room }));
+	assert.deepStrictEqual([early.rated, early.winner, early.overturned, early.abandonedBy], [true, 'blue', true, undefined]);
+});
+
 test('a loss on time is recomputed from the turn timestamps', () => {
 	const t0 = 1_000_000;
 	const room = {

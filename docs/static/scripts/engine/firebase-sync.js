@@ -187,6 +187,8 @@ class FirebaseSync {
 			variant: this.variant,
 			// The joiner takes the other seat (joinRoom).
 			creatorColor: me,
+			// Turns follow rooms/{id}/last (database.rules.json).
+			seq: true,
 		};
 		this.isPublic = !!(opts && opts.public);
 		this.casual = !!(opts && opts.casual);
@@ -200,6 +202,7 @@ class FirebaseSync {
 		const roomRef = this.db.ref('rooms/' + code);
 		await roomRef.set(roomData);
 		this.roomRef = roomRef;
+		this._seq = true;
 		// rooms/ is not listable: a public room is announced in open_rooms/
 		// (the rules check it against the room). Best-effort: a missing
 		// entry only keeps the room off the lobby list.
@@ -274,6 +277,7 @@ class FirebaseSync {
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
+		this._seq = undefined;
 
 		const snap = await roomRef.once('value');
 		const data = snap.val();
@@ -329,20 +333,30 @@ class FirebaseSync {
 			// listener then reads them together (_refreshPlayers). The rules
 			// give the seat to the first claim only: a second joiner, or a
 			// join after the creator withdrew, is refused.
+			const join = () => roomRef.update({
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
+				status: 'playing',
+				ranked: this.ranked,
+				// Why it is unrated when a suspension downgraded it, so every
+				// client and the game record can say so (roomUnratedReason).
+				unratedReason: this.unratedWhy === 'suspended' ? 'suspended' : null,
+				// The server's time the game began: the first mover's clock
+				// (functions/rating.js flagged) runs from it.
+				startedAt: firebase.database.ServerValue.TIMESTAMP,
+			});
 			try {
-				await roomRef.update({
-					[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
-					status: 'playing',
-					ranked: this.ranked,
-					// The server's time the game began: the first mover's clock
-					// (functions/rating.js flagged) runs from it.
-					startedAt: firebase.database.ServerValue.TIMESTAMP,
-				});
+				await join();
 			} catch (e) {
 				const now = (await roomRef.once('value').catch(() => null));
 				const v = now && now.val();
 				if (!v || v.status !== 'waiting' || (v[joiner] && v[joiner].uid)) throw taken();
-				throw e;
+				// The rules refuse a rated room to a player suspended from
+				// rated play (user_flags/{uid}/banUntil): the game goes ahead
+				// unrated.
+				if (!this.ranked) throw e;
+				this.ranked = false;
+				this.unratedWhy = 'suspended';
+				await join();
 			}
 			// Off the open-games list, and on Watch Live if spectators may watch.
 			this.db.ref('open_rooms/' + code).remove().catch(() => {});
@@ -554,6 +568,22 @@ class FirebaseSync {
 		}
 	}
 
+	/** The room's turns in the order played: by server timestamp, as room-clock.js roomTurns. */
+	_orderedTurnKeys() {
+		const info = this._turnInfo || {};
+		return (this._turnKeys || []).filter((k) => info[k])
+			.sort((a, b) => (info[a].ts - info[b].ts) || (a < b ? -1 : a > b ? 1 : 0));
+	}
+
+	/**
+	 * Does the room sequence its turns (rooms/{id}/seq, fixed at creation)?
+	 * Then each turn writes rooms/{id}/last with it (database.rules.json).
+	 */
+	async _isSequenced() {
+		if (this._seq === undefined) this._seq = (await this.roomRef.child('seq').once('value')).val() === true;
+		return this._seq;
+	}
+
 	/**
 	 * Send a completed turn's actions as a batch.
 	 * Optionally includes an atomic timer update.
@@ -570,7 +600,10 @@ class FirebaseSync {
 			// takeback can no longer remove turns once the request is gone,
 			// so a move and an acceptance can never both land.
 			const turnKey = this.roomRef.child('turns').push().key;
-			const keys = this._turnKeys || [];
+			// Our own view of the last turn, in the server's order (push
+			// keys carry each client's clock): if the room moved on without
+			// us (a takeback), the rules refuse the move.
+			const keys = this._orderedTurnKeys();
 			const turn = {
 				color: this.myColor,
 				actions: actions,
@@ -578,6 +611,10 @@ class FirebaseSync {
 			};
 			if (keys.length) turn.after = keys[keys.length - 1];
 			const updates = { ['turns/' + turnKey]: turn, takeback: null };
+			// A sequenced room (rooms/{id}/seq, set at creation): the turn
+			// moves `last` on in the same write. Rooms created before turn
+			// sequencing keep the old rule until they finish.
+			if (await this._isSequenced()) updates.last = { key: turnKey, color: this.myColor };
 			if (timerUpdate) {
 				updates['timer/red'] = timerUpdate.red;
 				updates['timer/blue'] = timerUpdate.blue;
@@ -785,13 +822,19 @@ class FirebaseSync {
 		// Every turn in the room, including those before a reload (the
 		// controller's log holds only the turns since).
 		this._turnKeys = [];
+		// key -> { color, ts }: the order of play is the server timestamps'
+		// (_orderedTurnKeys), not the push keys'.
+		this._turnInfo = {};
 		// A takeback both players agreed to removes turns: start over from
 		// the room (the reconnect path rebuilds from currentSfn).
-		turnsRef.on('child_removed', () => {
+		turnsRef.on('child_removed', (snap) => {
+			delete this._turnInfo[snap.key];
 			if (this.onTurnsRemoved) this.onTurnsRemoved();
 		});
 		turnsRef.on('child_added', (snap) => {
 			this._turnKeys.push(snap.key);
+			const v = snap.val() || {};
+			this._turnInfo[snap.key] = { color: v.color, ts: typeof v.timestamp === 'number' ? v.timestamp : 0 };
 			if (skipped < existingCount) {
 				skipped++;
 				return;
@@ -966,6 +1009,7 @@ class FirebaseSync {
 
 		const roomRef = this.db.ref('rooms/' + code);
 		this.roomRef = roomRef;
+		this._seq = roomData.seq === true;
 
 		await this._goOnline(me);
 
@@ -1070,7 +1114,8 @@ class FirebaseSync {
 	async requestTakeback() {
 		if (!this.roomRef || !this._turnKeys || !this._turnKeys.length) return false;
 		const turns = (await this.roomRef.child('turns').once('value')).val() || {};
-		const keys = this._turnKeys.filter((k) => turns[k]);
+		const keys = this._turnKeys.filter((k) => turns[k])
+			.sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0));
 		const lastMine = keys.length && turns[keys[keys.length - 1]].color === this.myColor;
 		const undo = keys.slice(lastMine ? -1 : -2);
 		if (!undo.length || turns[undo[0]].color !== this.myColor) return false;
@@ -1116,13 +1161,20 @@ class FirebaseSync {
 	async acceptTakeback(req, sfn) {
 		if (!this.roomRef || !req || !req.keys) return false;
 		const undo = Object.keys(req.keys);
-		const tail = (this._turnKeys || []).slice(-undo.length);
+		const ordered = this._orderedTurnKeys();
+		const tail = ordered.slice(-undo.length);
 		if (undo.some((k) => !tail.includes(k))) {
 			await this.clearTakeback();
 			return false;
 		}
 		const updates = { takeback: null, currentSfn: sfn || null };
 		for (const k of undo) updates['turns/' + k] = null;
+		// `last` goes back to the turn kept, in the same write (the rules
+		// require it), or away with the last turn.
+		if (await this._isSequenced()) {
+			const tip = ordered[ordered.length - undo.length - 1];
+			updates.last = tip ? { key: tip, color: this._turnInfo[tip].color } : null;
+		}
 		// The requester is to move again: their clock runs (a correspondence
 		// deadline restarts from now).
 		const timer = (await this.roomRef.child('timer').once('value')).val();
@@ -1298,13 +1350,22 @@ class FirebaseSync {
 			// The rules seat both players at once only for a rematch of
 			// a room they both sat in.
 			rematchOf: this.roomCode,
+			seq: true,
 		};
 		// A rematch of a room from a position replays the same start.
 		if (fromPosition && fromPosition.startSfn) {
 			roomData.startSfn = fromPosition.startSfn;
 			if (fromPosition.startPos) roomData.startPos = fromPosition.startPos;
 		}
-		await this.db.ref('rooms/' + code).set(roomData);
+		try {
+			await this.db.ref('rooms/' + code).set(roomData);
+		} catch (e) {
+			// A player suspended from rated play: the rematch is unrated.
+			if (!roomData.ranked) throw e;
+			roomData.ranked = false;
+			roomData.unratedReason = 'suspended';
+			await this.db.ref('rooms/' + code).set(roomData);
+		}
 		if (roomData.allowSpectators) this.db.ref('live_rooms/' + code).set(true).catch(() => {});
 		return code;
 	}
@@ -1326,6 +1387,9 @@ class FirebaseSync {
 function roomUnratedReason(data, joiner) {
 	// The creator chose a casual game (lobby).
 	if (data.casual === true) return 'casual';
+	// A rated game downgraded because a player is suspended (joinRoom,
+	// createRematchRoom); the rules allow it only with ranked false.
+	if (joiner === undefined && data.ranked === false && data.unratedReason === 'suspended') return 'suspended';
 	const creator = data.creatorColor === 'blue' ? 'blue' : 'red';
 	const seats = { red: data.red || {}, blue: data.blue || {} };
 	if (joiner !== undefined) {

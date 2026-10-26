@@ -8,6 +8,7 @@ const test = require('node:test');
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
+const assert = require('assert');
 const { ref, set, get, update, remove, serverTimestamp } = require('firebase/database');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
@@ -75,7 +76,7 @@ test('a game record is written by one of its players, and only before it is rate
 
 const waiting = { spellNames: ['a'], status: 'waiting', created: Date.now(), ranked: false,
 	red: { uid: 'alice', displayName: 'Alice', connected: true }, blue: { connected: false },
-	timeControl: { type: 'none' }, variant: 'standard', allowSpectators: true };
+	timeControl: { type: 'none' }, variant: 'standard', allowSpectators: true, seq: true };
 
 test('rooms: create, join, play', async () => {
 	await assertFails(set(ref(db(null), 'rooms/R1'), waiting));
@@ -95,7 +96,9 @@ test('rooms: create, join, play', async () => {
 	// The seat is now taken.
 	await assertFails(update(ref(db('mallory'), 'rooms/R1'), { blue: { uid: 'mallory', connected: true } }));
 	// Turns: only as yourself, with the server's timestamp.
-	await assertSucceeds(set(ref(db('alice'), 'rooms/R1/turns/t1'), { color: 'red', actions: ['a1', 'pass'], timestamp: serverTimestamp() }));
+	// The first turn of a room moves rooms/{id}/last in the same write.
+	await assertFails(set(ref(db('alice'), 'rooms/R1/turns/t1'), { color: 'red', actions: ['a1', 'pass'], timestamp: serverTimestamp() }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/R1'), { 'turns/t1': { color: 'red', actions: ['a1', 'pass'], timestamp: serverTimestamp() }, last: { key: 't1', color: 'red' } }));
 	await assertFails(set(ref(db('alice'), 'rooms/R1/turns/t2'), { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() }));
 	await assertFails(set(ref(db('mallory'), 'rooms/R1/turns/t2'), { color: 'blue', actions: ['pass'], timestamp: serverTimestamp() }));
 	await assertFails(set(ref(db('bob'), 'rooms/R1/turns/t2'), { color: 'blue', actions: ['pass'], timestamp: 5 }));
@@ -161,8 +164,10 @@ test('rooms: an abort names the side that aborts', async () => {
 });
 
 test('rooms: a takeback removes turns only when the opponent accepts', async () => {
+	// A room created before turn sequencing (no `seq`): the old rule.
 	const playing = Object.assign({}, waiting, { status: 'playing', blue: { uid: 'bob', connected: true },
 		turns: { t1: { color: 'red', actions: ['a1'], timestamp: 1 }, t2: { color: 'blue', actions: ['b2'], timestamp: 2 } } });
+	delete playing.seq;
 	await seed({ rooms: { R3: playing } });
 	await assertFails(remove(ref(db('alice'), 'rooms/R3/turns/t2')));
 	await assertFails(set(ref(db('alice'), 'rooms/R3/takeback'), { by: 'blue', keys: { t1: true, t2: true } }));
@@ -299,4 +304,244 @@ test('rooms: the lobby reads a public index; rooms/ itself is not listable', asy
 	await assertSucceeds(remove(ref(db('carol'), 'live_rooms/LIVE')));
 	await env.withSecurityRulesDisabled((ctx) => set(ref(ctx.database(), 'open_rooms/GONE'), true));
 	await assertSucceeds(remove(ref(db('carol'), 'open_rooms/GONE')));
+});
+
+// ---- turn sequencing: rooms/{id}/last ----
+
+const T = (color, after) => Object.assign({ color, actions: ['x'], timestamp: serverTimestamp() }, after ? { after } : {});
+const move = (uid, room, key, color, after) => update(ref(db(uid), 'rooms/' + room),
+	{ ['turns/' + key]: T(color, after), last: { key, color }, takeback: null });
+const playingRoom = (extra) => Object.assign({}, waiting, { status: 'playing', ranked: true, blue: { uid: 'bob', connected: true } }, extra || {});
+
+test('turns: each follows the last turn, alternating colours, from the first mover', async () => {
+	await seed({ rooms: { S1: playingRoom() } });
+	// Red moves first in a room from the start; blue may not open.
+	await assertFails(move('bob', 'S1', 'b0', 'blue'));
+	// The first turn names no turn before it.
+	await assertFails(move('alice', 'S1', 'a1', 'red', 'nothing'));
+	await assertSucceeds(move('alice', 'S1', 'a1', 'red'));
+	// The same colour twice is refused, even following the last turn.
+	await assertFails(move('alice', 'S1', 'a2', 'red', 'a1'));
+	// A turn not built on the last one, or without `after`, is refused.
+	await assertFails(move('bob', 'S1', 'b1', 'blue'));
+	await assertFails(move('bob', 'S1', 'b1', 'blue', 'zz'));
+	// A turn that leaves `last` behind, or points it at another turn.
+	await assertFails(set(ref(db('bob'), 'rooms/S1/turns/b1'), T('blue', 'a1')));
+	await assertFails(update(ref(db('bob'), 'rooms/S1'), { 'turns/b1': T('blue', 'a1'), last: { key: 'a1', color: 'red' } }));
+	await assertFails(update(ref(db('bob'), 'rooms/S1'), { 'turns/b1': T('blue', 'a1'), last: { key: 'b1', color: 'red' } }));
+	await assertFails(update(ref(db('bob'), 'rooms/S1'), { 'turns/b1': T('blue', 'a1'), last: { key: 'b1', color: 'blue', extra: 1 } }));
+	await assertSucceeds(move('bob', 'S1', 'b1', 'blue', 'a1'));
+	// Out of order: a turn following an older turn.
+	await assertFails(move('alice', 'S1', 'a2', 'red', 'a1'));
+	await assertSucceeds(move('alice', 'S1', 'a2', 'red', 'b1'));
+	const last = (await get(ref(db('alice'), 'rooms/S1/last'))).val();
+	assert.deepStrictEqual(last, { key: 'a2', color: 'red' });
+});
+
+test('turns: two turns in one write, `last` alone, deleting turns or `last` are refused', async () => {
+	await seed({ rooms: { S2: playingRoom() } });
+	await assertSucceeds(move('alice', 'S2', 'a1', 'red'));
+	await assertSucceeds(move('bob', 'S2', 'b1', 'blue', 'a1'));
+	// Red writes its turn and a blue reply, or two of its own, in one update.
+	await assertFails(update(ref(db('alice'), 'rooms/S2'), { 'turns/a2': T('red', 'b1'), 'turns/a3': T('red', 'a2'), last: { key: 'a3', color: 'red' } }));
+	await assertFails(update(ref(db('alice'), 'rooms/S2'), { 'turns/a2': T('red', 'b1'), 'turns/a3': T('red', 'b1'), last: { key: 'a2', color: 'red' } }));
+	await assertFails(update(ref(db('alice'), 'rooms/S2'), { 'turns/a2': T('red', 'b1'), 'turns/b2': T('blue', 'a2'), last: { key: 'b2', color: 'blue' } }));
+	// `last` alone: back to an older turn, to a missing turn, or with a false colour.
+	await assertFails(set(ref(db('alice'), 'rooms/S2/last'), { key: 'a1', color: 'red' }));
+	await assertFails(set(ref(db('alice'), 'rooms/S2/last'), { key: 'zz', color: 'red' }));
+	await assertFails(set(ref(db('alice'), 'rooms/S2/last'), { key: 'b1', color: 'red' }));
+	await assertFails(set(ref(db('alice'), 'rooms/S2/last/color'), 'blue'));
+	await assertFails(set(ref(db('alice'), 'rooms/S2/last/key'), 'a1'));
+	await assertFails(remove(ref(db('alice'), 'rooms/S2/last')));
+	await assertFails(set(ref(db('mallory'), 'rooms/S2/last'), { key: 'b1', color: 'blue' }));
+	// Deleting turns without an accepted takeback.
+	await assertFails(remove(ref(db('alice'), 'rooms/S2/turns/b1')));
+	await assertFails(update(ref(db('bob'), 'rooms/S2'), { 'turns/b1': null, last: { key: 'a1', color: 'red' } }));
+	// A new room cannot be created with a `last`.
+	await assertFails(set(ref(db('alice'), 'rooms/S3'), Object.assign({}, waiting, { last: { key: 'x', color: 'blue' } })));
+	await assertSucceeds(move('alice', 'S2', 'a2', 'red', 'b1'));
+});
+
+test('turns: a room from a position starts with its side to move', async () => {
+	// A room's startSfn is the position before the first turn: counter 13 -> blue moves (rating.js sideToMove).
+	await seed({ rooms: { P1: playingRoom({ startSfn: 'x r 13 0:0' }), P2: playingRoom({ startSfn: 'x b 12 0:0' }),
+		P3: playingRoom({ startSfn: 'x r 7' }) } });
+	await assertFails(move('alice', 'P1', 'a1', 'red'));
+	await assertSucceeds(move('bob', 'P1', 'b1', 'blue'));
+	await assertSucceeds(move('alice', 'P1', 'a1', 'red', 'b1'));
+	await assertFails(move('bob', 'P2', 'b1', 'blue'));
+	await assertSucceeds(move('alice', 'P2', 'a1', 'red'));
+	await assertSucceeds(move('bob', 'P3', 'b1', 'blue'));
+});
+
+test('turns: a room begun before `last` keeps the old rule until it ends', async () => {
+	const legacy = playingRoom({ turns: { t1: { color: 'red', actions: ['a'], timestamp: 1 }, t2: { color: 'blue', actions: ['b'], timestamp: 2 } } });
+	delete legacy.seq;
+	await seed({ rooms: { O1: legacy } });
+	await assertSucceeds(set(ref(db('alice'), 'rooms/O1/turns/t3'), T('red', 't2')));
+	await assertSucceeds(set(ref(db('bob'), 'rooms/O1/turns/t4'), T('blue')));
+	await assertFails(set(ref(db('bob'), 'rooms/O1/turns/t5'), T('blue', 'gone')));
+	// A takeback there works as before.
+	await assertSucceeds(set(ref(db('bob'), 'rooms/O1/takeback'), { by: 'blue', keys: { t4: true } }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/O1'), { 'turns/t4': null, takeback: null }));
+});
+
+test('turns: sequencing is fixed at creation (rooms/{id}/seq); rooms created before it keep the old rule', async () => {
+	// New rooms must sequence: no room is created without `seq`, and it never changes.
+	const noSeq = Object.assign({}, waiting);
+	delete noSeq.seq;
+	await assertFails(set(ref(db('alice'), 'rooms/Q1'), noSeq));
+	await assertFails(set(ref(db('alice'), 'rooms/Q1'), Object.assign({}, waiting, { seq: false })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/Q1'), waiting));
+	await assertFails(set(ref(db('alice'), 'rooms/Q1/seq'), false));
+	await assertFails(remove(ref(db('alice'), 'rooms/Q1/seq')));
+	// A room created before (no `seq`), still without turns: a client from
+	// before the deploy opens it without `last`, as before.
+	const old = playingRoom();
+	delete old.seq;
+	await seed({ rooms: { Z1: old, Z2: playingRoom() } });
+	await assertSucceeds(set(ref(db('alice'), 'rooms/Z1/turns/a1'), T('red')));
+	await assertFails(set(ref(db('bob'), 'rooms/Z1/last'), { key: 'a1', color: 'red' }));
+	await assertFails(set(ref(db('alice'), 'rooms/Z2/turns/a1'), T('red')));
+	await assertFails(set(ref(db('bob'), 'rooms/Z2/turns/b1'), T('blue')));
+	await assertSucceeds(move('alice', 'Z2', 'a1', 'red'));
+});
+
+test('takeback: the acceptor moves `last` back to the turn kept, in the same write', async () => {
+	await seed({ rooms: { K1: playingRoom() } });
+	await assertSucceeds(move('alice', 'K1', 'a1', 'red'));
+	await assertSucceeds(move('bob', 'K1', 'b1', 'blue', 'a1'));
+	await assertSucceeds(move('alice', 'K1', 'a2', 'red', 'b1'));
+	await assertSucceeds(move('bob', 'K1', 'b2', 'blue', 'a2'));
+	// Red asks to take back a2 and blue's reply b2.
+	await assertSucceeds(set(ref(db('alice'), 'rooms/K1/takeback'), { by: 'red', keys: { a2: true, b2: true } }));
+	// The requester may not rewrite `last` while its offer stands, nor apply it.
+	await assertFails(set(ref(db('alice'), 'rooms/K1/last'), { key: 'b1', color: 'blue' }));
+	await assertFails(update(ref(db('alice'), 'rooms/K1'), { 'turns/a2': null, 'turns/b2': null, takeback: null, last: { key: 'b1', color: 'blue' } }));
+	// The acceptor: `last` alone, without deleting the turns.
+	await assertFails(set(ref(db('bob'), 'rooms/K1/last'), { key: 'b1', color: 'blue' }));
+	// ... deleting them but leaving `last` on a removed turn.
+	await assertFails(update(ref(db('bob'), 'rooms/K1'), { 'turns/a2': null, 'turns/b2': null, takeback: null }));
+	// ... moving `last` to an older turn, or to the wrong one.
+	await assertFails(update(ref(db('bob'), 'rooms/K1'), { 'turns/a2': null, 'turns/b2': null, takeback: null, last: { key: 'a1', color: 'red' } }));
+	await assertFails(update(ref(db('bob'), 'rooms/K1'), { 'turns/b2': null, takeback: null, last: { key: 'a2', color: 'red' } }));
+	// ... removing only part of what was asked, or a turn not asked for.
+	await assertFails(update(ref(db('bob'), 'rooms/K1'), { 'turns/a2': null, takeback: null, last: { key: 'b1', color: 'blue' } }));
+	// ... accepting and slipping in a turn of its own built on a removed turn.
+	await assertFails(update(ref(db('bob'), 'rooms/K1'), { 'turns/a2': null, 'turns/b2': null, 'turns/b3': T('blue', 'b2'), takeback: null, last: { key: 'b3', color: 'blue' } }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/K1'), { 'turns/a2': null, 'turns/b2': null, takeback: null, currentSfn: 'x', last: { key: 'b1', color: 'blue' } }));
+	// Red moves again from b1.
+	await assertFails(move('bob', 'K1', 'b3', 'blue', 'b1'));
+	await assertSucceeds(move('alice', 'K1', 'a3', 'red', 'b1'));
+
+	// Blue takes back its own last turn (red has not replied).
+	await assertSucceeds(move('bob', 'K1', 'b4', 'blue', 'a3'));
+	await assertSucceeds(set(ref(db('bob'), 'rooms/K1/takeback'), { by: 'blue', keys: { b4: true } }));
+	// The request may not list older turns for removal.
+	await assertSucceeds(set(ref(db('bob'), 'rooms/K1/takeback'), { by: 'blue', keys: { b4: true, a3: true, b1: true } }));
+	await assertFails(update(ref(db('alice'), 'rooms/K1'), { 'turns/b4': null, 'turns/a3': null, takeback: null, last: { key: 'b1', color: 'blue' } }));
+	await assertSucceeds(update(ref(db('alice'), 'rooms/K1'), { 'turns/b4': null, takeback: null, last: { key: 'a3', color: 'red' } }));
+});
+
+test('takeback: of the first turn removes `last` with it', async () => {
+	await seed({ rooms: { K2: playingRoom() } });
+	await assertSucceeds(move('alice', 'K2', 'a1', 'red'));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/K2/takeback'), { by: 'red', keys: { a1: true } }));
+	await assertFails(update(ref(db('alice'), 'rooms/K2'), { 'turns/a1': null, takeback: null, last: null }));
+	await assertFails(update(ref(db('bob'), 'rooms/K2'), { 'turns/a1': null, takeback: null }));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/K2'), { 'turns/a1': null, takeback: null, last: null }));
+	// The room starts over: red's first turn again.
+	await assertFails(move('bob', 'K2', 'b1', 'blue'));
+	await assertSucceeds(move('alice', 'K2', 'a2', 'red'));
+	// With turns left, `last` may not be removed.
+	await assertSucceeds(move('bob', 'K2', 'b2', 'blue', 'a2'));
+	await assertSucceeds(set(ref(db('bob'), 'rooms/K2/takeback'), { by: 'blue', keys: { b2: true } }));
+	await assertFails(update(ref(db('alice'), 'rooms/K2'), { 'turns/b2': null, takeback: null, last: null }));
+});
+
+// ---- reports, admins, bans ----
+
+test('reports: create-only by a signed-in account, read by admins only', async () => {
+	await seed({ admins: { root1: true } });
+	const rep = { by: 'alice', target: 'bob', room: 'R1', reason: 'cheating', note: 'engine moves', at: serverTimestamp() };
+	await assertFails(set(ref(db(null), 'reports/r1'), Object.assign({}, rep, { by: null })));
+	await assertFails(set(ref(env.authenticatedContext('anon1', { firebase: { sign_in_provider: 'anonymous' } }).database(), 'reports/r1'),
+		Object.assign({}, rep, { by: 'anon1' })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { by: 'carol' })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { target: 'alice' })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { reason: 'ugly' })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { at: 5 })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { resolved: true })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { extra: 1 })));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { note: 'x'.repeat(501) })));
+	await assertSucceeds(set(ref(db('alice'), 'reports/r1'), rep));
+	// Create-only: the reporter cannot edit, resolve or delete it.
+	await assertFails(set(ref(db('alice'), 'reports/r1/note'), 'never mind'));
+	await assertFails(set(ref(db('alice'), 'reports/r1/resolved'), true));
+	await assertFails(remove(ref(db('alice'), 'reports/r1')));
+	await assertFails(set(ref(db('alice'), 'reports/r1'), rep));
+	// Hidden from everyone but admins (the target and the reporter included).
+	await assertFails(get(ref(db('alice'), 'reports')));
+	await assertFails(get(ref(db('alice'), 'reports/r1')));
+	await assertFails(get(ref(db('bob'), 'reports')));
+	await assertSucceeds(get(ref(db('root1'), 'reports')));
+	// An admin resolves it with a note; the report itself stays as filed.
+	await assertSucceeds(update(ref(db('root1'), 'reports/r1'), { resolved: true, adminNote: 'banned 7 days', resolvedBy: 'root1', resolvedAt: serverTimestamp() }));
+	await assertFails(update(ref(db('root1'), 'reports/r1'), { target: 'carol' }));
+	await assertFails(remove(ref(db('root1'), 'reports/r1')));
+	// Nobody can make themselves an admin; each admin may read their own flag.
+	await assertFails(set(ref(db('alice'), 'admins/alice'), true));
+	await assertSucceeds(get(ref(db('root1'), 'admins/root1')));
+	await assertFails(get(ref(db('alice'), 'admins/root1')));
+});
+
+test('bans: set by admins, read by their owner, keep the player out of rated rooms only', async () => {
+	await seed({ admins: { root1: true }, rooms: { B1: waiting, B2: waiting, B3: waiting, B4: waiting } });
+	const ban = { banUntil: Date.now() + 86400000, reason: 'engine use', by: 'root1', at: serverTimestamp() };
+	await assertFails(set(ref(db('bob'), 'user_flags/bob'), ban));
+	await assertFails(set(ref(db('alice'), 'user_flags/bob'), ban));
+	await assertFails(set(ref(db('root1'), 'user_flags/bob'), Object.assign({}, ban, { by: 'alice' })));
+	await assertSucceeds(set(ref(db('root1'), 'user_flags/bob'), ban));
+	// Only the player and admins see it; the player cannot lift it.
+	await assertSucceeds(get(ref(db('bob'), 'user_flags/bob')));
+	await assertFails(get(ref(db('alice'), 'user_flags/bob')));
+	await assertSucceeds(get(ref(db('root1'), 'user_flags')));
+	await assertFails(remove(ref(db('bob'), 'user_flags/bob')));
+	await assertFails(set(ref(db('bob'), 'user_flags/bob/banUntil'), 0));
+	await assertFails(set(ref(db('bob'), 'user_flags/bob/abandons'), 0));
+	// A rated join is refused; the same join unrated goes ahead.
+	const join = (ranked) => ({ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked });
+	await assertFails(update(ref(db('bob'), 'rooms/B1'), join(true)));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/B1'), join(false)));
+	// ... and a banned creator's room is never rated either.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() + 86400000 }));
+	await assertFails(update(ref(db('carol'), 'rooms/B2'), Object.assign(join(true), { blue: { uid: 'carol', connected: true } })));
+	// The room records why it is unrated, only with ranked false and only
+	// while a player in it is suspended.
+	const carol = (o) => update(ref(db('carol'), 'rooms/B2'), Object.assign(join(false), { blue: { uid: 'carol', connected: true } }, o));
+	await assertFails(carol({ unratedReason: 'casual' }));
+	await assertFails(carol({ ranked: true, unratedReason: 'suspended' }));
+	await assertSucceeds(carol({ unratedReason: 'suspended' }));
+	// A ban that has run out no longer counts.
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() - 1000, abandons: 3 }));
+	await assertFails(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(false), { blue: { uid: 'dave', connected: true }, unratedReason: 'suspended' })));
+	await assertSucceeds(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(true), { blue: { uid: 'dave', connected: true } })));
+	// A room already marked ranked while waiting: a suspended joiner who
+	// leaves `ranked` alone still cannot start it (status checks the bans).
+	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'rooms/B4'), { ranked: true }));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/erin'), { banUntil: Date.now() + 86400000 }));
+	const erin = { blue: { uid: 'erin', connected: true }, status: 'playing' };
+	await assertFails(update(ref(db('erin'), 'rooms/B4'), erin));
+	await assertSucceeds(update(ref(db('erin'), 'rooms/B4'), Object.assign({ ranked: false, unratedReason: 'suspended' }, erin)));
+	// Guests (anonymous accounts) still create and join casual rooms.
+	const anon = env.authenticatedContext('g1', { firebase: { sign_in_provider: 'anonymous' } }).database();
+	await assertSucceeds(set(ref(anon, 'rooms/G1'), Object.assign({}, waiting, { red: { uid: 'g1', connected: true, anon: true } })));
+	// A rematch of a rated room with a banned player is unrated.
+	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'rooms/B1'), { status: 'finished', ranked: true, rematch: { red: 'offered', blue: 'offered' } }));
+	const rematch = Object.assign({}, waiting, { status: 'playing', ranked: true, rematchOf: 'B1',
+		red: { uid: 'bob', connected: false }, blue: { uid: 'alice', connected: false } });
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() + 86400000 }));
+	await assertFails(set(ref(db('alice'), 'rooms/RM'), rematch));
+	await assertFails(set(ref(db('alice'), 'rooms/RM'), Object.assign({}, rematch, { unratedReason: 'suspended' })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/RM'), Object.assign({}, rematch, { ranked: false, unratedReason: 'suspended' })));
 });

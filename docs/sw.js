@@ -45,6 +45,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./spells/index.html',
 	'./packs/index.html',
 	'./strategy-guide.html',
+	'./admin.html',
 	'./static/data/spell-charts.json',
 	'./static/data/spell-charts-engine.json',
 	'./static/data/position-winprob.json',
@@ -67,6 +68,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/form.css',
 	'./static/scripts/theme-manager.js',
 	'./static/scripts/auth-status.js',
+	'./static/scripts/report-dialog.js',
 	'./static/scripts/turn-notify.js',
 	'./static/scripts/engine/room-clock.js',
 	'./static/scripts/sound-manager.js',
@@ -121,7 +123,9 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/elo.js?v=34',
 	'./static/scripts/engine/position-rating.js?v=34',
 	'./static/scripts/engine/firebase-sync.js',
-	'./static/scripts/engine/firebase-sync.js?v=34',
+	// -seq: the client that writes rooms/{id}/last (turn sequencing), which
+	// the rules require; a new URL so no cached copy of the old one runs.
+	'./static/scripts/engine/firebase-sync.js?v=34-seq',
 	'./static/scripts/engine/multiplayer-controller.js',
 	'./static/scripts/engine/multiplayer-controller.js?v=34',
 	'./static/scripts/engine/spectator-controller.js',
