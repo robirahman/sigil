@@ -2319,6 +2319,61 @@ fn split_pick(results: Vec<((Option<crate::turn::Turn>, i32, crate::search::Sear
     out
 }
 
+/// The Puzzles page's verdict on a turn off the stored solutions, for the
+/// calibration harness (engine/harness/puzzle_attempts.py): the same logic as
+/// the wasm `judge_move` (wasm.rs), which the page calls. `sfn` is the position
+/// after the mover's turn (the opponent to move); `plies` is twice the mover's
+/// remaining turns. With two plies left, an exhaustive check (40% of the time,
+/// at least 300 ms) decides when it can; otherwise the shipped search to depth
+/// `plies`: a proven mate within `plies` is "mate", a longer one "mate_slow",
+/// an unproven mate score "likely_mate", anything else "escape". Returns
+/// (verdict, reply after-SFN with end-of-turn effects applied, i.e. the
+/// board the game continues from). The caller sets the shipped policy.
+#[pyfunction]
+#[pyo3(signature = (sfn, plies, time_ms, tt_bits=18))]
+fn judge_move(sfn: &str, plies: u32, time_ms: u64, tt_bits: u32) -> PyResult<(String, Option<String>)> {
+    use crate::search::{WIN, MAX_PLY, UNPROVEN_MATE};
+    let b = crate::board::Board::from_sfn(sfn).map_err(pyo3::exceptions::PyValueError::new_err)?;
+    let o = b.to_move;
+    let m = o.other();
+    if b.outcome != Outcome::Ongoing {
+        return Err(pyo3::exceptions::PyValueError::new_err("game already over"));
+    }
+    let t0 = std::time::Instant::now();
+    let mut verdict: Option<&str> = None;
+    let mut forced: Option<crate::turn::Turn> = None;
+    let mut budget = time_ms;
+    if plies <= 2 {
+        let ex_ms = (budget * 2 / 5).max(300);
+        match crate::mate::judge_forced_after(&b, m, 400_000_000, ex_ms) {
+            crate::mate::Judge::Proven => verdict = Some("mate"),
+            crate::mate::Judge::Refuted(t) => { verdict = Some("escape"); forced = Some(t); }
+            crate::mate::Judge::Unknown => {}
+        }
+        budget = budget.saturating_sub(t0.elapsed().as_millis() as u64).max(500);
+    }
+    let mut s = crate::search::Search::new(tt_bits.clamp(10, 22));
+    s.set_width_scale(crate::search::DEFAULT_WIDTH_SCALE);
+    s.weights = weights_by_name(crate::eval::SHIPPED_EVAL)?;
+    let (p, e, h) = crate::search::SHIPPED_ADAPTIVE;
+    s.set_adaptive(p, e, h);
+    s.set_elastic(None);
+    let depth = (plies.max(1) as i32).min(63);
+    let (best, score, _st) = s.go(&b, o, depth, budget);
+    let v = verdict.unwrap_or_else(|| {
+        let mate_floor = WIN - MAX_PLY as i32;
+        if score <= -mate_floor {
+            if WIN - score.abs() <= plies as i32 { "mate" } else { "mate_slow" }
+        } else if score <= -UNPROVEN_MATE {
+            "likely_mate"
+        } else {
+            "escape"
+        }
+    });
+    let reply = forced.or(best).or_else(|| b.turns_ordered(o).next());
+    Ok((v.to_string(), reply.map(|t| crate::mate::child(&b, &t, o).to_sfn())))
+}
+
 /// A packed root turn (`root_scores_and_play` candidates) as the page plays
 /// it: (applyAITurn actions JSON, after-SFN with the opponent to move). The
 /// after-position is the search's own child (`mate::child`, end-of-turn
@@ -2485,6 +2540,7 @@ fn sigil_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBoard>()?;
     m.add_function(wrap_pyfunction!(policy_example, m)?)?;
     m.add_function(wrap_pyfunction!(turn_after, m)?)?;
+    m.add_function(wrap_pyfunction!(judge_move, m)?)?;
     m.add_function(wrap_pyfunction!(weights_json, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy_weights, m)?)?;
     m.add_function(wrap_pyfunction!(set_policy, m)?)?;

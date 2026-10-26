@@ -602,7 +602,7 @@
 					+ sets.map(k => a({ set: k }, PUZZLE_SETS[k], !daily && filt.set === k)).join('') + '</span>'
 					+ '<span class="puzzle-panel__filter">Difficulty: ' + a({ d: null }, 'Any', !filt.d)
 					+ [1, 2, 3, 4, 5].map(d => a({ d }, String(d), filt.d === d)).join('') + '</span>'
-					+ '<span class="puzzle-panel__filter">Theme: <select onchange="location.href=this.value">'
+					+ '<span class="puzzle-panel__filter">Theme: <select onchange="SIGIL_PUZZLE_GO(this.value)">'
 					+ '<option value="puzzles.html?' + query({ tag: null }).toString() + '">Any</option>'
 					+ tags.map(t => '<option value="puzzles.html?' + query({ tag: t }).toString() + '"'
 						+ (filt.tag === t ? ' selected' : '') + '>' + esc(t) + ' (' + counts[t] + ')</option>').join('')
@@ -621,16 +621,35 @@
 				showRating();
 				loadPuzzleCurrentRating(puzzle).then((r) => { puzzleNow = r; showRating(); }).catch(() => {});
 				let rating_recorded = false;
+				let recording = null;
+				// The identity the rating line was built from: when the account
+				// could not be read (offline, or the read timed out), results go
+				// to the device rating shown, not to a server write that may hang.
+				const ratingUser = rated.signedIn ? viewer : null;
+				// A result is saved before the page leaves: links in the puzzle
+				// panel wait (up to 5 s) for a pending rating write.
+				window.SIGIL_PUZZLE_GO = (url) => {
+					if (!recording) { location.href = url; return; }
+					Promise.race([recording, new Promise((r) => setTimeout(r, 5000))])
+						.finally(() => { location.href = url; });
+				};
+				document.getElementById('puzzle-root').addEventListener('click', (ev) => {
+					const link = ev.target.closest && ev.target.closest('a[href]');
+					if (!link || !recording) return;
+					ev.preventDefault();
+					window.SIGIL_PUZZLE_GO(link.href);
+				}, true);
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 					if (p.id !== puzzle.id) return;
 					if (!rating_recorded) {
 						rating_recorded = true;
-						recordPuzzleResult(viewer, puzzle, status === 'solved').then((r) => {
+						recording = recordPuzzleResult(ratingUser, puzzle, status === 'solved', puzzleNow).then((r) => {
 							if (!r) { showRating(' · already attempted, rating unchanged'); return; }
 							rated.rating = r.after;
 							puzzleNow = { rating: r.puzzleAfter, plays: puzzleNow.plays + 1 };
 							showRating(' · ' + (r.delta >= 0 ? '+' : '') + r.delta);
-						}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); });
+						}).catch((e) => { showRating(' · rating not saved (' + (e && e.message || e) + ')'); })
+							.finally(() => { recording = null; });
 					}
 					if (!daily) return;
 					const d = recordDaily(today, status);
