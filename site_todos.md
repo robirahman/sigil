@@ -58,7 +58,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
 
 ## Puzzles
 
-- [ ] **Sync puzzle progress to the account.** It is stored only in `localStorage['sigil_puzzles_solved']`.
+- [x] **Sync puzzle progress to the account.** It is stored only in `localStorage['sigil_puzzles_solved']`. Done: solved list, first results and the daily log merge into `users/$uid/puzzleProgress` on sign-in (union, never clobbered) and write through (`puzzle-progress.js`).
 - [x] **Add a puzzle rating.** Elo for players and puzzles, calibrated against the AI tiers; puzzle leaderboard (engine/reports/2026-10-puzzle-ratings.md). Streaks and a daily puzzle: puzzles v2.
 - [ ] **Add Cataclysm and Scramble puzzles.** The Rust engine models neither variant. (Tectonic and Providence puzzles: done, puzzles v2.)
 - [x] **Add theme/tactic tags** to puzzles. (Puzzles v2: tags and a 1–5 difficulty, with filters.)
@@ -133,8 +133,8 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Puzzles
 
-- [ ] **Add a puzzle dashboard** (results by theme over time).
-- [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer).
+- [x] **Add a puzzle dashboard** (results by theme over time). Done: `puzzles.html?tab=dashboard`, solve rates by difficulty, kind and theme, rating over time, recent misses.
+- [ ] **Add Puzzle Storm and Puzzle Racer** (timed rush, solo and multiplayer). Storm done: `puzzles.html?tab=storm`, 3 minutes, unrated, best score on the Storm leaderboard. Racer (multiplayer) is still open.
 - [x] **Generate puzzles from a player's own games** (positions where they missed a win). Puzzles v2: "My missed wins", ranked games only.
 
 ### Learning

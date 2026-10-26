@@ -173,11 +173,12 @@
 			<p class="leaderboard-tabs">
 				<a href="leaderboard.html" x-bind:class="{ 'is-active': tab === 'games' }">Games</a>
 				<a href="leaderboard.html?tab=puzzles" x-bind:class="{ 'is-active': tab === 'puzzles' }">Puzzles</a>
+				<a href="leaderboard.html?tab=storm" x-bind:class="{ 'is-active': tab === 'storm' }">Puzzle Storm</a>
 			</p>
 
 			<p class="loading-msg" x-show="loading && !isOffline" x-cloak>Loading rankings...</p>
 			<p class="empty-msg" x-show="isOffline" x-cloak>Leaderboard rankings are unavailable while offline. <a href="./" style="color: inherit;">Back to menu</a> to play local games.</p>
-			<p class="empty-msg" x-show="!loading && !isOffline && allPlayers.length === 0" x-cloak x-text="tab === 'puzzles' ? 'No rated puzzle attempts yet.' : 'No ranked games played yet.'"></p>
+			<p class="empty-msg" x-show="!loading && !isOffline && allPlayers.length === 0" x-cloak x-text="tab === 'storm' ? 'No Puzzle Storm runs yet.' : (tab === 'puzzles' ? 'No rated puzzle attempts yet.' : 'No ranked games played yet.')"></p>
 
 			<div class="leaderboard-tools" x-show="!loading && allPlayers.length > 0" x-cloak>
 				<input class="leaderboard-search" type="search" x-model="query" x-on:input="page = 0" placeholder="Search players" aria-label="Search players by name" />
@@ -190,8 +191,8 @@
 					<tr>
 						<th>#</th>
 						<th>Player</th>
-						<th>Rating</th>
-						<th x-text="tab === 'puzzles' ? 'Puzzles' : 'Games'">Games</th>
+						<th x-text="tab === 'storm' ? 'Best score' : 'Rating'">Rating</th>
+						<th x-text="tab === 'storm' ? '' : (tab === 'puzzles' ? 'Puzzles' : 'Games')">Games</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -202,7 +203,7 @@
 								<a x-bind:href="'profile.html?uid=' + player.uid" x-bind:class="{ 'name--ai': player.isAI, 'name--dev': player.isDeveloper }" style="color: inherit; text-decoration: none;" x-text="player.displayName"></a>
 								<template x-if="player.isDeveloper"><span class="name__dev-badge">[dev]</span></template>
 							</td>
-							<td class="elo"><span x-text="player.elo"></span><template x-if="player.gamesPlayed < provisionalGames"><span class="provisional" x-bind:title="'Provisional: fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')" x-bind:aria-label="'provisional, fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')">?</span></template></td>
+							<td class="elo"><span x-text="player.elo"></span><template x-if="tab !== 'storm' && player.gamesPlayed < provisionalGames"><span class="provisional" x-bind:title="'Provisional: fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')" x-bind:aria-label="'provisional, fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')">?</span></template></td>
 							<td x-text="player.gamesPlayed"></td>
 						</tr>
 					</template>
@@ -219,8 +220,8 @@
 				<template x-if="myEntry">
 					<div>
 						<strong x-text="myEntry.displayName"></strong>:
-						<span x-text="myEntry.elo"></span><span class="provisional" x-show="myEntry.gamesPlayed < provisionalGames" x-bind:title="'Provisional: fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')">?</span>
-						(<span x-text="myEntry.gamesPlayed"></span> <span x-text="tab === 'puzzles' ? 'puzzles' : 'games'"></span>)
+						<span x-text="myEntry.elo"></span><span class="provisional" x-show="tab !== 'storm' && myEntry.gamesPlayed < provisionalGames" x-bind:title="'Provisional: fewer than ' + provisionalGames + (tab === 'puzzles' ? ' rated puzzles' : ' rated games')">?</span>
+						(<span x-text="myEntry.gamesPlayed"></span> <span x-text="tab === 'storm' ? 'runs' : (tab === 'puzzles' ? 'puzzles' : 'games')"></span>)
 						<div class="my-entry__note" x-text="'Not in the top ' + limit + '.'"></div>
 					</div>
 				</template>
@@ -252,8 +253,9 @@
 			Alpine.data('leaderboardPage', () => ({
 				allPlayers: [],
 				loading: true,
-				// ?tab=puzzles: puzzle ratings (puzzle_leaderboard/, puzzle-rating.js).
-				tab: new URLSearchParams(location.search).get('tab') === 'puzzles' ? 'puzzles' : 'games',
+				// ?tab=puzzles: puzzle ratings (puzzle_leaderboard/, puzzle-rating.js);
+				// ?tab=storm: best Puzzle Storm scores (storm_leaderboard/, puzzle-progress.js).
+				tab: ['puzzles', 'storm'].includes(new URLSearchParams(location.search).get('tab')) ? new URLSearchParams(location.search).get('tab') : 'games',
 				isOffline: !navigator.onLine,
 				page: 0,
 				perPage: 100,
@@ -304,7 +306,12 @@
 					try {
 						const d = (await firebase.database().ref('users/' + this.myUid).once('value')).val() || {};
 						const pz = d.puzzle || {};
-						this.myEntry = this.tab === 'puzzles' ? {
+						const st = d.puzzleStorm || {};
+						this.myEntry = this.tab === 'storm' ? {
+							displayName: d.displayName || 'You',
+							elo: st.best || 0,
+							gamesPlayed: st.runs || 0,
+						} : this.tab === 'puzzles' ? {
 							displayName: d.displayName || 'You',
 							elo: pz.rating ?? 1500,
 							gamesPlayed: pz.plays || 0,
@@ -332,6 +339,31 @@
 						return;
 					}
 					const db = firebase.database();
+
+					if (this.tab === 'storm') {
+						// The signed-in player, for Find me (as the puzzles tab).
+						await new Promise(resolve => {
+							const unsub = firebase.auth().onAuthStateChanged(() => { unsub(); resolve(); });
+						});
+						const su = firebase.auth().currentUser;
+						this.myUid = su && !su.isAnonymous ? su.uid : null;
+						try {
+							const snap = await db.ref('storm_leaderboard').orderByChild('score').limitToLast(500).once('value');
+							const results = [];
+							snap.forEach((child) => {
+								const d = child.val() || {};
+								if (!d.score) return;
+								results.push({ uid: child.key, displayName: d.displayName || 'Unknown',
+									elo: d.score, gamesPlayed: '', isAI: false, isDeveloper: false });
+							});
+							this.allPlayers = results.reverse();
+							this.allPlayers.forEach((p, i) => { p.rank = i + 1; });
+						} catch (e) {
+							console.error('Failed to load the Storm leaderboard:', e);
+						}
+						this.loading = false;
+						return;
+					}
 
 					if (this.tab === 'puzzles') {
 						// The signed-in player, for Find me (the games tab learns it in _seedAIs).

@@ -59,6 +59,7 @@ const SAME_ORIGIN_PRECACHE = [
 	// from the first visit).
 	'./static/puzzles/mate_puzzles.json',
 	'./static/scripts/puzzle-rating.js',
+	'./static/scripts/puzzle-progress.js',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',

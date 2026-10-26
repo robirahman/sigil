@@ -47,6 +47,57 @@
         "puzzle": {
           ".validate": "auth.provider !== 'anonymous' && newData.hasChildren(['rating', 'plays', 'last']) && newData.child('rating').isNumber() && newData.child('rating').val() >= 100 && newData.child('rating').val() <= 4000 && newData.child('plays').isNumber() && newData.child('plays').val() === (data.child('plays').exists() ? data.child('plays').val() : 0) + 1 && newData.child('last').isString() && newData.parent().child('puzzleAttempts/' + newData.child('last').val()).exists() && !data.parent().child('puzzleAttempts/' + newData.child('last').val()).exists() && (data.child('rating').exists() ? (newData.child('rating').val() - data.child('rating').val() <= 40 && data.child('rating').val() - newData.child('rating').val() <= 40) : (newData.child('rating').val() >= 1460 && newData.child('rating').val() <= 1540))"
         },
+        "puzzleProgress": {
+          ".validate": "auth.uid === $uid && auth.provider !== 'anonymous'",
+          "solved": {
+            "$pid": {
+              ".validate": "$pid.length <= 64 && newData.isNumber() && newData.val() > 0 && newData.val() <= now + 86400000"
+            }
+          },
+          "results": {
+            "$pid": {
+              ".validate": "$pid.length <= 64 && newData.hasChildren(['r', 'at'])",
+              "r": {
+                ".validate": "newData.isString() && newData.val().matches(/^[sfv]$/)"
+              },
+              "at": {
+                ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= now + 86400000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "daily": {
+            "$day": {
+              ".validate": "$day.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) && newData.isString() && newData.val().matches(/^(solved|failed|revealed)$/)"
+            }
+          },
+          "dailyBest": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "puzzleStorm": {
+          ".validate": "auth.uid === $uid && auth.provider !== 'anonymous' && newData.hasChildren(['best', 'runs', 'last', 'at']) && newData.child('runs').val() === (data.child('runs').exists() ? data.child('runs').val() : 0) + 1 && newData.child('best').val() === (newData.child('last').val() > (data.child('best').exists() ? data.child('best').val() : 0) ? newData.child('last').val() : (data.child('best').exists() ? data.child('best').val() : 0))",
+          "best": {
+            ".validate": "newData.isNumber()"
+          },
+          "runs": {
+            ".validate": "newData.isNumber()"
+          },
+          "last": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 300 && newData.val() % 1 === 0"
+          },
+          "at": {
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
         "puzzleAttempts": {
           "$pid": {
             ".validate": "!data.exists() && newData.hasChildren(['solved', 'at', 'delta']) && newData.child('solved').isBoolean() && newData.child('at').isNumber() && newData.child('delta').isNumber() && newData.parent().parent().child('puzzle/last').val() === $pid && newData.parent().parent().child('puzzle/plays').val() === (data.parent().parent().child('puzzle/plays').exists() ? data.parent().parent().child('puzzle/plays').val() : 0) + 1"
@@ -378,6 +429,25 @@
       "$nameKey": {
         ".write": "auth !== null && (!data.exists() || data.val() === auth.uid) && $nameKey.matches(/^[a-z0-9_-]{1,20}$/)",
         ".validate": "newData.isString() && newData.val() === auth.uid"
+      }
+    },
+    "storm_leaderboard": {
+      ".read": true,
+      ".indexOn": [
+        "score"
+      ],
+      "$uid": {
+        ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+        ".validate": "newData.hasChildren(['displayName', 'score']) && newData.child('score').val() === newData.parent().parent().child('users/' + $uid + '/puzzleStorm/best').val()",
+        "displayName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
+        },
+        "score": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
       }
     },
     "puzzle_leaderboard": {
