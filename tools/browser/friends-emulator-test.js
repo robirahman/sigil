@@ -169,7 +169,9 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		const lobbyState = () => pageA.evaluate(() => {
 			const l = document.querySelector('[x-data^="multiplayerLobby"]');
 			const d = l && window.Alpine && Alpine.$data(l);
-			return d ? { authReady: d.authReady, authUser: !!d.authUser, target: d.challengeTarget, error: d.lobbyError, phase: d.phase, code: d.roomCode } : { url: location.href };
+			return d ? { authReady: d.authReady, authUser: !!d.authUser, target: d.challengeTarget && d.challengeTarget.name, error: d.lobbyError, phase: d.phase, code: d.roomCode,
+				sync: typeof _firebaseSync !== 'undefined' && _firebaseSync ? { code: _firebaseSync.roomCode, invite: _firebaseSync.invite, color: _firebaseSync.myColor } : null,
+				user: firebase.auth().currentUser && firebase.auth().currentUser.uid } : { url: location.href };
 		});
 		if (!(await until(async () => (await lobbyState()).target, 60000))) throw new Error('no challenge set up: ' + JSON.stringify(await lobbyState()));
 		const setup = await pageA.evaluate(() => {
@@ -177,7 +179,9 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 			return { box: document.querySelector('.challenge-setup').textContent.replace(/\s+/g, ' ').trim(), btn: btn && btn.textContent };
 		});
 		check('the lobby form is set up to challenge Bob', /Challenging Bob/.test(setup.box) && setup.btn === 'Send Challenge to Bob', setup);
-		await pageA.evaluate(() => Array.from(document.querySelectorAll('.lobby button.lobby-button')).find((b) => /Send Challenge/.test(b.textContent)).click());
+		// Report what createRoom ends in (resolves or throws), for a failure message.
+		pageA.evaluate(() => Alpine.$data(document.querySelector('[x-data^="multiplayerLobby"]')).createRoom()
+			.then(() => 'resolved', (e) => 'threw ' + (e && e.message))).then((r) => console.log('createRoom:', r), (e) => console.log('createRoom eval:', e.message));
 		if (!(await until(async () => (await lobbyState()).phase === 'waiting', 90000))) {
 			throw new Error('no waiting room: ' + JSON.stringify(await lobbyState()) + ' db: '
 				+ JSON.stringify({ rooms: await rest('GET', 'rooms'), challenges: await rest('GET', 'challenges') }));
