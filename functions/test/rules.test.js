@@ -92,7 +92,7 @@ test('rooms: create, join, play', async () => {
 	// Join: the empty seat, status and ranked in one update.
 	await assertFails(update(ref(db('bob'), 'rooms/R1'), { red: { uid: 'bob', connected: true } }));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/R1'),
-		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: true }));
 	// The seat is now taken.
 	await assertFails(update(ref(db('mallory'), 'rooms/R1'), { blue: { uid: 'mallory', connected: true } }));
 	// Turns: only as yourself, with the server's timestamp.
@@ -245,21 +245,21 @@ test('rooms: lobby settings (public, casual, the creator\'s colour) are fixed at
 	await assertFails(set(ref(db('alice'), 'rooms/L1/creatorColor'), 'red'));
 	// A casual room cannot be joined rated.
 	await assertFails(update(ref(db('bob'), 'rooms/L1'),
-		{ red: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+		{ red: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: true }));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/L1'),
-		{ red: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+		{ red: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: false }));
 	await assertFails(set(ref(db('bob'), 'rooms/L1/ranked'), true));
 	// Two joiners race for one seat: the second claim is refused.
 	await assertSucceeds(update(ref(db('bob'), 'rooms/L2'),
-		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: true }));
 	await assertFails(update(ref(db('carol'), 'rooms/L2'),
-		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: true }));
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true, seq: true }, status: 'playing', ranked: true }));
 	// The creator withdraws a waiting seek (waiting -> expired, then removed).
 	await assertSucceeds(set(ref(db('alice'), 'rooms/L3'), Object.assign({}, waiting, { creatorColor: 'red', public: true })));
 	await assertFails(set(ref(db('bob'), 'rooms/L3/status'), 'expired'));
 	await assertSucceeds(set(ref(db('alice'), 'rooms/L3/status'), 'expired'));
 	await assertFails(update(ref(db('bob'), 'rooms/L3'),
-		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: false }));
 	await assertSucceeds(remove(ref(db('alice'), 'rooms/L3')));
 });
 
@@ -296,7 +296,7 @@ test('rooms: the lobby reads a public index; rooms/ itself is not listable', asy
 	await assertFails(remove(ref(db('carol'), 'live_rooms/LIVE')));
 	// The joiner moves the room from one list to the other.
 	await assertSucceeds(update(ref(db('bob'), 'rooms/PUB'),
-		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false, startedAt: serverTimestamp() }));
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: false, startedAt: serverTimestamp() }));
 	await assertSucceeds(remove(ref(db('bob'), 'open_rooms/PUB')));
 	await assertSucceeds(set(ref(db('bob'), 'live_rooms/PUB'), true));
 	// Once a room is over (or gone), anyone may clear its stale entry.
@@ -395,6 +395,17 @@ test('turns: sequencing is fixed at creation (rooms/{id}/seq); rooms created bef
 	await assertSucceeds(set(ref(db('alice'), 'rooms/Q1'), waiting));
 	await assertFails(set(ref(db('alice'), 'rooms/Q1/seq'), false));
 	await assertFails(remove(ref(db('alice'), 'rooms/Q1/seq')));
+	// Starting a sequenced room: the joiner's seat must say it sequences
+	// (`seq: true`), so a tab on pre-sequencing code is refused at the join.
+	await seed({ rooms: { J1: waiting, J2: (() => { const o = Object.assign({}, waiting); delete o.seq; return o; })(),
+		J3: Object.assign({}, waiting, { red: { uid: 'alice', connected: true, seq: true } }) } });
+	const legacyJoin = { blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true };
+	await assertFails(update(ref(db('bob'), 'rooms/J1'), legacyJoin));
+	await assertFails(update(ref(db('bob'), 'rooms/J1'), Object.assign({}, legacyJoin, { ranked: false })));
+	// ... and the creator's seat saying so does not count for the joiner.
+	await assertFails(update(ref(db('bob'), 'rooms/J3'), legacyJoin));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/J2'), legacyJoin));
+	await assertSucceeds(update(ref(db('bob'), 'rooms/J1'), Object.assign({}, legacyJoin, { blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true } })));
 	// A room created before (no `seq`), still without turns: a client from
 	// before the deploy opens it without `last`, as before.
 	const old = playingRoom();
@@ -510,27 +521,27 @@ test('bans: set by admins, read by their owner, keep the player out of rated roo
 	await assertFails(set(ref(db('bob'), 'user_flags/bob/banUntil'), 0));
 	await assertFails(set(ref(db('bob'), 'user_flags/bob/abandons'), 0));
 	// A rated join is refused; the same join unrated goes ahead.
-	const join = (ranked) => ({ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked });
+	const join = (ranked) => ({ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked });
 	await assertFails(update(ref(db('bob'), 'rooms/B1'), join(true)));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/B1'), join(false)));
 	// ... and a banned creator's room is never rated either.
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() + 86400000 }));
-	await assertFails(update(ref(db('carol'), 'rooms/B2'), Object.assign(join(true), { blue: { uid: 'carol', connected: true } })));
+	await assertFails(update(ref(db('carol'), 'rooms/B2'), Object.assign(join(true), { blue: { uid: 'carol', connected: true, seq: true } })));
 	// The room records why it is unrated, only with ranked false and only
 	// while a player in it is suspended.
-	const carol = (o) => update(ref(db('carol'), 'rooms/B2'), Object.assign(join(false), { blue: { uid: 'carol', connected: true } }, o));
+	const carol = (o) => update(ref(db('carol'), 'rooms/B2'), Object.assign(join(false), { blue: { uid: 'carol', connected: true, seq: true } }, o));
 	await assertFails(carol({ unratedReason: 'casual' }));
 	await assertFails(carol({ ranked: true, unratedReason: 'suspended' }));
 	await assertSucceeds(carol({ unratedReason: 'suspended' }));
 	// A ban that has run out no longer counts.
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() - 1000, abandons: 3 }));
-	await assertFails(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(false), { blue: { uid: 'dave', connected: true }, unratedReason: 'suspended' })));
-	await assertSucceeds(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(true), { blue: { uid: 'dave', connected: true } })));
+	await assertFails(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(false), { blue: { uid: 'dave', connected: true, seq: true }, unratedReason: 'suspended' })));
+	await assertSucceeds(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(true), { blue: { uid: 'dave', connected: true, seq: true } })));
 	// A room already marked ranked while waiting: a suspended joiner who
 	// leaves `ranked` alone still cannot start it (status checks the bans).
 	await env.withSecurityRulesDisabled((c) => update(ref(c.database(), 'rooms/B4'), { ranked: true }));
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/erin'), { banUntil: Date.now() + 86400000 }));
-	const erin = { blue: { uid: 'erin', connected: true }, status: 'playing' };
+	const erin = { blue: { uid: 'erin', connected: true, seq: true }, status: 'playing' };
 	await assertFails(update(ref(db('erin'), 'rooms/B4'), erin));
 	await assertSucceeds(update(ref(db('erin'), 'rooms/B4'), Object.assign({ ranked: false, unratedReason: 'suspended' }, erin)));
 	// Guests (anonymous accounts) still create and join casual rooms.

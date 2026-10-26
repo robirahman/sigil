@@ -334,7 +334,10 @@ class FirebaseSync {
 			// give the seat to the first claim only: a second joiner, or a
 			// join after the creator withdrew, is refused.
 			const join = () => roomRef.update({
-				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
+				// `seq`: this client sequences its turns; the rules start a
+				// sequenced room only for a joiner that says so, so a tab on
+				// older code is refused here, not after its first move.
+				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous, seq: true },
 				status: 'playing',
 				ranked: this.ranked,
 				// Why it is unrated when a suspension downgraded it, so every
@@ -353,10 +356,13 @@ class FirebaseSync {
 				// The rules refuse a rated room to a player suspended from
 				// rated play (user_flags/{uid}/banUntil): the game goes ahead
 				// unrated.
-				if (!this.ranked) throw e;
+				// An open seat refused for no other reason: the rules expect
+				// a newer client (e.g. turn sequencing) than this page.
+				const outdated = () => Object.assign(new Error('This game needs the latest version of the site. Please reload the page and try again.'), { code: 'reload' });
+				if (!this.ranked) throw outdated();
 				this.ranked = false;
 				this.unratedWhy = 'suspended';
-				await join();
+				await join().catch(() => { throw outdated(); });
 			}
 			// Off the open-games list, and on Watch Live if spectators may watch.
 			this.db.ref('open_rooms/' + code).remove().catch(() => {});

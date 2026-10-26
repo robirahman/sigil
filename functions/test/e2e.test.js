@@ -72,7 +72,7 @@ async function playRoom(alice, bob, upTo, timeControl) {
 		timeControl: timeControl || { type: 'none' }, allowSpectators: true, variant: 'standard', seq: true,
 	});
 	await update(ref(bob.db, 'rooms/' + code), {
-		blue: { uid: bob.uid, displayName: 'bob', connected: true }, status: 'playing', ranked: true,
+		blue: { uid: bob.uid, displayName: 'bob', connected: true, seq: true }, status: 'playing', ranked: true,
 	});
 	for (const t of ONLINE.turns.slice(0, upTo)) {
 		const p = t.color === 'red' ? alice : bob;
