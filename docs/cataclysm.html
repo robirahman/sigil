@@ -156,12 +156,12 @@
 		// drop the caches, refetch the page's scripts past the HTTP cache, and
 		// reload once. The new worker deletes the stale cache when it activates.
 		(function () {
-			if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 2) return;
+			if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 3) return;
 			if (!window.caches || !window.fetch) return;
 			try {
 				// The sentinel holds the epoch it reloaded for, so each new epoch gets its own reload.
-				if (sessionStorage.getItem('sigilStaleAssetReload') === '2') return;
-				sessionStorage.setItem('sigilStaleAssetReload', '2');
+				if (sessionStorage.getItem('sigilStaleAssetReload') === '3') return;
+				sessionStorage.setItem('sigilStaleAssetReload', '3');
 			} catch (e) { return; }
 			document.addEventListener('DOMContentLoaded', function () {
 				var urls = ['static/scripts/engine/ai-worker.js'];

@@ -58,45 +58,21 @@ const SAME_ORIGIN_PRECACHE = [
 	// The puzzle set (the page fetches it no-cache; this makes it work offline
 	// from the first visit).
 	'./static/puzzles/mate_puzzles.json',
-	'./static/scripts/puzzle-rating.js',
-	'./static/scripts/puzzle-progress.js',
 	'./cataclysm.html',
 	'./firebase-setup.html',
 	'./static/css/global.css?v202305191',
 	'./static/css/layout.css',
-	// ?v=N: every page loads a script or stylesheet changed in a release under
-	// a URL an old worker never cached, so a fresh page can't run on stale
-	// copies (stale-while-revalidate checks each file on its own). v=35: the
-	// round-2 site features (one query for every file they changed).
-	'./static/css/styles.css?v=35',
 	'./static/css/compendium.css',
-	'./static/css/rules.css?v=35',
-	'./static/css/help.css?v=35',
 	'./static/css/ladder.css',
 	'./static/css/form.css',
 	'./static/scripts/theme-manager.js',
-	'./static/scripts/auth-status.js?v=35',
-	'./static/scripts/report-dialog.js?v=35',
-	'./static/scripts/turn-notify.js',
-	'./static/scripts/friends.js?v=35',
-	'./static/scripts/engine/room-clock.js?v=35',
-	'./static/scripts/engine/vacation-bank.js?v=35',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
-	'./static/scripts/board-marks.js?v=35',
-	'./static/scripts/settings-panel.js?v=35',
-	'./static/scripts/game-keys.js?v=35',
 	'./static/scripts/board-geometry.js',
-	'./static/scripts/analysis-board.js?v=35',
-	'./static/scripts/game-board-local.js?v=35',
 	'./static/scripts/tutorial-lessons.js',
 	'./static/scripts/engine/rust-ai.js?v=34',
-	'./static/scripts/game-board-multiplayer.js?v=35',
-	'./static/scripts/help.js?v=35',
-	'./static/scripts/rules-reference.js?v=35',
 	'./static/scripts/offline-queue.js',
 	'./static/scripts/local-save-store.js',
-	'./static/scripts/profile-stats.js?v=35',
 	'./static/scripts/engine/constants.js',
 	'./static/scripts/engine/notation.js',
 	'./static/scripts/engine/board.js',
@@ -130,15 +106,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/engine/ai-player.js',
 	'./static/scripts/engine/game-clock.js',
 	'./static/scripts/engine/game-controller.js',
-	'./static/scripts/engine/game-review.js?v=35',
 	'./static/scripts/engine/auth-manager.js',
-	'./static/scripts/engine/elo.js?v=35',
 	'./static/scripts/engine/position-rating.js?v=34',
-	// The client that writes rooms/{id}/last (turn sequencing), which the
-	// rules require: a new URL, so no cached copy of the old one runs.
-	'./static/scripts/engine/firebase-sync.js?v=35',
-	'./static/scripts/engine/multiplayer-controller.js?v=35',
-	'./static/scripts/engine/spectator-controller.js?v=35',
 	'./static/images/game-board.webp',
 	'./static/images/game-board.jpg',
 	'./static/images/logo-icon.svg',
@@ -185,6 +154,38 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/images/themes/stones/forest-blue.png',
 	'./static/images/themes/stones/volcanic-red.png',
 	'./static/images/themes/stones/volcanic-blue.png',
+	// ?v=N: every page loads a script or stylesheet changed in a release under
+	// a URL an old worker never cached, so a fresh page can't run on stale
+	// copies (stale-while-revalidate checks each file on its own); e.g. the
+	// firebase-sync.js that writes rooms/{id}/last, which the rules require.
+	// v=35: every file round 2 (and #44) changed. engine/constants.js stays
+	// unversioned: its SIGIL_ASSET_EPOCH is what the pages' stale-asset guards
+	// read from a possibly stale cache.
+	'./static/css/help.css?v=35',
+	'./static/css/rules.css?v=35',
+	'./static/css/styles.css?v=35',
+	'./static/scripts/analysis-board.js?v=35',
+	'./static/scripts/auth-status.js?v=35',
+	'./static/scripts/board-marks.js?v=35',
+	'./static/scripts/engine/elo.js?v=35',
+	'./static/scripts/engine/firebase-sync.js?v=35',
+	'./static/scripts/engine/game-review.js?v=35',
+	'./static/scripts/engine/multiplayer-controller.js?v=35',
+	'./static/scripts/engine/room-clock.js?v=35',
+	'./static/scripts/engine/spectator-controller.js?v=35',
+	'./static/scripts/engine/vacation-bank.js?v=35',
+	'./static/scripts/game-board-local.js?v=35',
+	'./static/scripts/game-board-multiplayer.js?v=35',
+	'./static/scripts/game-keys.js?v=35',
+	'./static/scripts/help.js?v=35',
+	'./static/scripts/profile-stats.js?v=35',
+	'./static/scripts/puzzle-progress.js?v=35',
+	'./static/scripts/puzzle-rating.js?v=35',
+	'./static/scripts/report-dialog.js?v=35',
+	'./static/scripts/rules-reference.js?v=35',
+	'./static/scripts/settings-panel.js?v=35',
+	'./static/scripts/turn-notify.js?v=35',
+	'./static/scripts/friends.js?v=35',
 	// Spell art is added by spellArtUrls() below.
 ];
 
