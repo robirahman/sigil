@@ -358,6 +358,20 @@ const OWNER = { Authorization: 'Bearer owner' };
 			await sleep(1000);
 			const fixed = await (await fetch(`${DB}/storm_leaderboard/${uid}.json?ns=${NS}`, { headers: OWNER })).json();
 			check(fixed.score === 11 && (await remote()).puzzleStorm.runs === runsNow, 'a stale leaderboard row is repaired without counting a run ' + JSON.stringify(fixed));
+			// A rename (users/ only) reaches the Storm row on the next visit, with
+			// the best unchanged.
+			await fetch(`${DB}/users/${uid}/displayName.json?ns=${NS}`, { method: 'PUT', headers: OWNER, body: JSON.stringify('Renamed') });
+			await ps.goto(`${BASE}/puzzles.html?tab=storm`, { waitUntil: 'networkidle2' });
+			await ps.waitForSelector('#storm-start', { visible: true, timeout: 30000 });
+			let renamed = null;
+			for (let t = 0; t < 20; t++) {
+				renamed = await (await fetch(`${DB}/storm_leaderboard/${uid}.json?ns=${NS}`, { headers: OWNER })).json();
+				if (renamed && renamed.displayName === 'Renamed') break;
+				await sleep(250);
+			}
+			check(renamed && renamed.displayName === 'Renamed' && renamed.score === 11 && (await remote()).puzzleStorm.runs === runsNow,
+				'a new name reaches the Storm row with the score unchanged ' + JSON.stringify(renamed));
+			await fetch(`${DB}/users/${uid}/displayName.json?ns=${NS}`, { method: 'PUT', headers: OWNER, body: JSON.stringify('Stormer') });
 			// A device that last synced with another account: a result recorded
 			// while this account's progress was being read stays (and reaches it).
 			const ctxC = await browser.createBrowserContext();

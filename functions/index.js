@@ -343,8 +343,14 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 		db.ref('blockedBy/' + uid).once('value'),
 	]);
 	const updates = {
+		// users/{uid} holds the puzzle rating, attempts, synced puzzle
+		// progress and the Storm record too.
 		['users/' + uid]: null,
 		['leaderboard/' + uid]: null,
+		// The public puzzle and Storm boards: the rules only let their owner
+		// write a row, never delete it, so the account's rows go here.
+		['puzzle_leaderboard/' + uid]: null,
+		['storm_leaderboard/' + uid]: null,
 		['user_games/' + uid]: null,
 		['user_active_games/' + uid]: null,
 		// Push tokens: the deleted account can no longer remove them, and

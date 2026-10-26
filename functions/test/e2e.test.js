@@ -237,6 +237,11 @@ test('deleting an account removes its records and keeps its games anonymous', as
 		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-flags' + seq));
 		await a.ref('user_flags/' + dave.uid).set({ banUntil: Date.now() + 86400000, reason: 'x', abandons: 1, abandonedGames: { ABC234: true } });
 		await a.ref('report_limits/' + dave.uid).set(Date.now());
+		// Dave's puzzle rating, synced progress, Storm record and both public
+		// puzzle boards.
+		await a.ref('users/' + dave.uid).update({ puzzle: { rating: 1500, plays: 3 }, puzzleProgress: { solved: { p1: 1 } }, puzzleStorm: { best: 12, runs: 2 } });
+		await a.ref('puzzle_leaderboard/' + dave.uid).set({ displayName: 'dave', rating: 1500, plays: 3 });
+		await a.ref('storm_leaderboard/' + dave.uid).set({ displayName: 'dave', score: 12 });
 	}
 	const res = await httpsCallable(dave.fns, 'deleteUserData')();
 	assert.deepStrictEqual(res.data, { ok: true });
@@ -254,7 +259,7 @@ test('deleting an account removes its records and keeps its games anonymous', as
 		`blocks/${dave.uid}`, `blockedBy/${gus.uid}/${dave.uid}`, `blocks/${frank.uid}/${dave.uid}`, `blockedBy/${dave.uid}`]) {
 		assert.strictEqual((await admin.ref(p).once('value')).exists(), false, p);
 	}
-	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/']) {
+	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/', 'users/', 'puzzle_leaderboard/', 'storm_leaderboard/']) {
 		assert.strictEqual((await admin.ref(p + dave.uid).once('value')).exists(), false, p);
 	}
 });

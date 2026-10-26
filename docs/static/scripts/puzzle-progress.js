@@ -305,7 +305,10 @@ async function _stormSave(u, score, at) {
 
 /**
  * Make storm_leaderboard/<uid> carry the stored best (the rules require it
- * equal). Also repairs a row a lost connection left behind.
+ * equal) and the player's current name. Also repairs a row a lost
+ * connection left behind, and a name changed since the row was written
+ * (a rename updates users/ and the games leaderboard only); it runs on
+ * every Storm visit (flushStormPending with nothing pending).
  */
 async function _stormSyncBoard(u) {
 	const db = firebase.database();
@@ -314,11 +317,11 @@ async function _stormSyncBoard(u) {
 		const best = (await _ptOnce(db.ref(base + '/puzzleStorm/best'))) || 0;
 		if (!best) return;
 		const row = await _ptOnce(db.ref('storm_leaderboard/' + u.uid));
-		if (row && row.score === best) return;
-		const name = (await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player';
+		const name = String((await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player').slice(0, 30);
+		if (row && row.score === best && row.displayName === name) return;
 		try {
 			// A run finishing in between may raise the best again: re-read and retry.
-			await db.ref('storm_leaderboard/' + u.uid).set({ displayName: String(name).slice(0, 30), score: best });
+			await db.ref('storm_leaderboard/' + u.uid).set({ displayName: name, score: best });
 			return;
 		} catch (e) { if (k === 2) throw e; }
 	}
