@@ -101,13 +101,13 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### During a game
 
-- [ ] **Add "ask for more time" and "give opponent +15 s".**
+- [x] **Add "ask for more time" and "give opponent +15 s".** Done: "+15 s" in live timed games writes `rooms/{id}/gifts` (rules: only to the other seat, 15 s, server time, once a second); the shared clock (room-clock.js), the game page and the server's flag judging count gifts recorded before closedAt. "Ask for more time" has no button of its own.
 - [ ] **Add pre-moves** (queue a move during the opponent's turn).
 - [ ] **Add a chat toggle** so players can hide chat (once chat exists).
 - [ ] **Add zen mode** that hides everything but the board and clocks.
 - [ ] **Add board flip** and a choice of which side the board is drawn from.
-- [ ] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
-  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Vacation / pause is open: it changes deadlines, so `flagged` in functions/rating.js and `expireClocks` must learn it first.
+- [x] **Add correspondence conveniences:** a "your move" list across games and a vacation / pause option.
+  The "your move" list is done (active-games.html, least time left first, and a "Your move (N)" header badge). Done: vacation on account.html (14 days a year, ended early refunds the days not begun) through the `setVacation` function, which pauses every correspondence game of the player (`rooms/{id}/pauses`, server-only); room-clock.js, `flagged` and `expireClocks` add the paused time; "On vacation until …" on the game page and active-games.html.
 - [ ] **Add move input by typed notation**, and optionally by voice.
 - [ ] **Let players draw arrows and circles** on the board during play and analysis.
 - [x] **Add volume, animation speed and move confirmation** to the in-game settings panel.
