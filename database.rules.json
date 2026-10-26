@@ -54,21 +54,6 @@
         }
       }
     },
-    "puzzle_ratings": {
-      ".read": true,
-      "$pid": {
-        ".write": "auth !== null && auth.provider !== 'anonymous'",
-        ".validate": "data.exists() && newData.hasChildren(['rating', 'plays']) && newData.child('rating').isNumber() && newData.child('rating').val() - data.child('rating').val() <= 32 && data.child('rating').val() - newData.child('rating').val() <= 32 && newData.child('plays').val() === data.child('plays').val() + 1 && newData.parent().parent().child('users/' + auth.uid + '/puzzleAttempts/' + $pid).exists() && !root.child('users/' + auth.uid + '/puzzleAttempts/' + $pid).exists()"
-      }
-    },
-    "puzzle_leaderboard": {
-      ".read": true,
-      ".indexOn": ["rating"],
-      "$uid": {
-        ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
-        ".validate": "newData.hasChildren(['displayName', 'rating', 'plays']) && newData.child('displayName').isString() && newData.child('displayName').val().length >= 1 && newData.child('displayName').val().length <= 30 && newData.child('rating').val() === newData.parent().parent().child('users/' + $uid + '/puzzle/rating').val() && newData.child('plays').val() === newData.parent().parent().child('users/' + $uid + '/puzzle/plays').val()"
-      }
-    },
     "leaderboard": {
       ".read": true,
       ".indexOn": [

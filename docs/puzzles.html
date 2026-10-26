@@ -522,7 +522,15 @@
 					if (viewer && viewer.isAnonymous) viewer = null;
 				} catch (e) { viewer = null; }
 				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
-				try { rated = await loadPuzzleRating(viewer); } catch (e) { /* offline: defaults */ }
+				// Offline (or a database that never answers), the account read can
+				// hang; the board must not wait for it. 4 s, then the device rating.
+				const deviceRating = () => loadPuzzleRating(null);
+				try {
+					rated = navigator.onLine
+						? await Promise.race([loadPuzzleRating(viewer),
+							new Promise((resolve) => setTimeout(() => resolve(null), 4000))]) || await deviceRating()
+						: await deviceRating();
+				} catch (e) { /* offline: defaults */ }
 				if (pos < 0) {
 					// No pick: an unattempted puzzle near the player's rating.
 					const next = pickRatedPuzzle(pool, rated.rating, rated.attempts, solved);
