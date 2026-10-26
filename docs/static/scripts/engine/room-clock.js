@@ -8,7 +8,66 @@
  * Cloud Functions require() it (functions/rating.js flags, expireClocks,
  * notifyTurn), so a game the list shows as yours is the game the server
  * would flag you on.
+ *
+ * Two kinds of record change a clock, both counted only as of `now` (the
+ * server judges a flag as of closedAt, so nothing recorded later counts):
+ *   - pauses/{push}: {color, from, to}, a player's vacation (correspondence
+ *     only). Written by the setVacation function alone, never by a client.
+ *   - gifts/{push}: {to, ms, at}, time one player gave the other (realtime
+ *     only). The rules let a seat give only to the other seat.
  */
+
+// The one gift size a client may write (database.rules.json).
+const ROOM_GIFT_MS = 15000;
+
+/**
+ * Milliseconds of `color`'s pauses inside [from, to] (overlapping pauses
+ * count once). Pauses are server times; a malformed one counts nothing.
+ */
+function roomPausedMs(room, color, from, to) {
+	const pauses = (room && room.pauses) || {};
+	const spans = [];
+	for (const k of Object.keys(pauses)) {
+		const p = pauses[k];
+		if (!p || p.color !== color || typeof p.from !== 'number' || typeof p.to !== 'number') continue;
+		const a = Math.max(p.from, from), b = Math.min(p.to, to);
+		if (b > a) spans.push([a, b]);
+	}
+	spans.sort((x, y) => x[0] - y[0]);
+	let total = 0, end = -Infinity;
+	for (const [a, b] of spans) {
+		if (b <= end) continue;
+		total += b - Math.max(a, end);
+		end = b;
+	}
+	return total;
+}
+
+/** The end of `color`'s pause running at `now`, or null when none is. */
+function roomPausedUntil(room, color, now) {
+	const tc = (room && room.timeControl) || {};
+	if (tc.type !== 'correspondence') return null;
+	const pauses = (room && room.pauses) || {};
+	let until = null;
+	for (const k of Object.keys(pauses)) {
+		const p = pauses[k];
+		if (!p || p.color !== color || typeof p.from !== 'number' || typeof p.to !== 'number') continue;
+		if (p.from <= now && now < p.to && (until === null || p.to > until)) until = p.to;
+	}
+	return until;
+}
+
+/** Milliseconds given to `color` by `now` (realtime rooms). */
+function roomGiftMs(room, color, now) {
+	const gifts = (room && room.gifts) || {};
+	let total = 0;
+	for (const k of Object.keys(gifts)) {
+		const g = gifts[k];
+		if (!g || g.to !== color || g.ms !== ROOM_GIFT_MS || typeof g.at !== 'number' || g.at > now) continue;
+		total += g.ms;
+	}
+	return total;
+}
 
 /** A room's turns in the order they were played: [{color, actions, timestamp}]. */
 function roomTurns(room) {
@@ -43,9 +102,10 @@ function sideToMove(room) {
  * Before the first move, the first mover's clock runs from the start of the
  * game (startedAt, server time, written with the join).
  * Correspondence: the deadline is the last turn's timestamp (or startedAt)
- * + moveTimeout.
+ * + moveTimeout, + the time `color` has been paused since.
  * Realtime: initialTime, plus the increment and minus the time used on each
- * of `color`'s turns (the first from startedAt).
+ * of `color`'s turns (the first from startedAt), plus the time given to
+ * `color`.
  */
 function roomTimeLeft(room, color, now) {
 	const tc = (room && room.timeControl) || {};
@@ -55,17 +115,18 @@ function roomTimeLeft(room, color, now) {
 		const running = sideToMove(room) === color;
 		if (tc.type === 'correspondence') {
 			if (!running || typeof tc.moveTimeout !== 'number') return null;
-			return room.startedAt + tc.moveTimeout - now;
+			return room.startedAt + tc.moveTimeout + roomPausedMs(room, color, room.startedAt, now) - now;
 		}
 		if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number') return null;
-		return running ? tc.initialTime - (now - room.startedAt) : tc.initialTime;
+		const gift = roomGiftMs(room, color, now);
+		return (running ? tc.initialTime - (now - room.startedAt) : tc.initialTime) + gift;
 	}
 	const last = turns[turns.length - 1];
 	if (typeof last.timestamp !== 'number') return null;
 	const running = last.color !== color;
 	if (tc.type === 'correspondence') {
 		if (!running || typeof tc.moveTimeout !== 'number') return null;
-		return last.timestamp + tc.moveTimeout - now;
+		return last.timestamp + tc.moveTimeout + roomPausedMs(room, color, last.timestamp, now) - now;
 	}
 	if (tc.type !== 'realtime' || typeof tc.initialTime !== 'number') return null;
 	const inc = tc.increment || 0;
@@ -76,9 +137,10 @@ function roomTimeLeft(room, color, now) {
 		if (t.color === color && prevTs !== null) remaining += inc - (t.timestamp - prevTs);
 		prevTs = t.timestamp;
 	}
+	remaining += roomGiftMs(room, color, now);
 	return running ? remaining - (now - last.timestamp) : remaining;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-	module.exports = { roomTurns, sideToMove, roomTimeLeft };
+	module.exports = { roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, ROOM_GIFT_MS };
 }
