@@ -1012,6 +1012,7 @@
 				friends: [],
 				_unwatchFriends: null,
 				_blocked: {},
+				_blockWatches: [],
 				challengeTarget: null,
 				_challengeRef: null,
 				_pendingChallenge: null,
@@ -1650,6 +1651,8 @@
 				async _startFriends() {
 					if (this._unwatchFriends) { this._unwatchFriends(); this._unwatchFriends = null; }
 					this.friends = [];
+					this._blockWatches.forEach((off) => off());
+					this._blockWatches = [];
 					this._blocked = {};
 					if (!this.authUser) return;
 					const api = await this._friendsApi();
@@ -1723,7 +1726,15 @@
 					const api = window.SigilFriends;
 					if (!api || api.uid !== this.authUser.uid) return false;
 					this._blocked[uid] = null;
-					this._blocked[uid] = await api.blockedEither(uid);
+					// Kept live: a block made later (another tab, or theirs)
+					// hides their games without a reload.
+					await new Promise((resolve) => {
+						let first = true;
+						this._blockWatches.push(api.watchBlockedEither(uid, (v) => {
+							this._blocked[uid] = v;
+							if (first) { first = false; resolve(); } else this._renderOpenGames();
+						}));
+					});
 					return true;
 				},
 

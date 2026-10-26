@@ -156,6 +156,27 @@
 	}
 
 	/**
+	 * Watch whether either of us has blocked the other: callback(bool) at
+	 * once and on every change (a block from another tab, or theirs).
+	 * Returns a function that stops watching.
+	 */
+	function watchBlockedEither(other, callback) {
+		if (!uid || !other || other === uid) { callback(false); return () => {}; }
+		const mine = db().ref('blocks/' + uid + '/' + other);
+		const theirs = db().ref('blocks/' + other + '/' + uid);
+		const state = { mine: undefined, theirs: undefined };
+		const report = () => {
+			if (state.mine === undefined || state.theirs === undefined) return;
+			const v = state.mine || state.theirs;
+			blockCache[other] = Promise.resolve(v);
+			callback(v);
+		};
+		mine.on('value', (s) => { state.mine = s.val() === true; report(); }, () => { state.mine = false; report(); });
+		theirs.on('value', (s) => { state.theirs = s.val() === true; report(); }, () => { state.theirs = false; report(); });
+		return () => { mine.off(); theirs.off(); };
+	}
+
+	/**
 	 * The players this one follows, with their names and whether they have a
 	 * tab open: callback([{ uid, displayName, online }]), sorted online first.
 	 * Returns a function that stops watching.
@@ -371,6 +392,7 @@
 		unblock,
 		isBlocked,
 		blockedEither,
+		watchBlockedEither,
 		watchFriends,
 		accept,
 		decline,

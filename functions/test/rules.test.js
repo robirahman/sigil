@@ -340,6 +340,9 @@ test('follows: written only by the follower, mirrored in followers', async () =>
 	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
 	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, deleted_users: { bob: 1 } });
 	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+	// ... or by one (a stale tab during deleteUserData).
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, deleted_users: { alice: 1 } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
 });
 
 test('blocks: owner-written with their blockedBy index; readable by the owner and the one blocked', async () => {
@@ -349,6 +352,8 @@ test('blocks: owner-written with their blockedBy index; readable by the owner an
 	await assertFails(update(ref(db('bob')), blk('bob', 'ghost', true)));
 	// Nor one being deleted (deleteUserData marks it first, removes the profile last).
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users/carol'), 1));
+	await assertFails(update(ref(db('bob')), blk('bob', 'carol', true)));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users'), { bob: 1 }));
 	await assertFails(update(ref(db('bob')), blk('bob', 'carol', true)));
 	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'deleted_users')));
 	// The block and its reverse index go together.
@@ -445,6 +450,10 @@ test('blocking: no challenge to the blocker, no seat in their rooms', async () =
 		{ blue: { uid: 'alice', displayName: 'Alice', connected: true }, status: 'playing', ranked: false }));
 	await assertSucceeds(update(ref(db('carol'), 'rooms/P1'),
 		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: false }));
+	// Nor can Bob, who blocked her, take a seat in hers (an old push or link).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/P2'), Object.assign({}, waiting, { creatorColor: 'red' })));
+	await assertFails(update(ref(db('bob'), 'rooms/P2'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
 	// Unblocked, the challenge goes through.
 	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'blocks/bob/alice')));
 	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C3'), ch));
