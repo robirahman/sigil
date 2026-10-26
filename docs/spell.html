@@ -66,8 +66,11 @@
 		}
 		const findSpell = q => {
 			if (!q) return null;
-			const k = normalizeSpellName(String(q).trim().replace(/[\s-]+/g, '_')).toLowerCase();
-			return SPELLS.find(s => s.name.toLowerCase() === k) || null;
+			const k = String(q).trim().replace(/[\s-]+/g, '_').toLowerCase();
+			// Legacy names (Flood -> Tsunami) match in any case too.
+			const legacy = Object.keys(LEGACY_SPELL_RENAMES).find(old => old.toLowerCase() === k);
+			const want = legacy ? LEGACY_SPELL_RENAMES[legacy].toLowerCase() : k;
+			return SPELLS.find(s => s.name.toLowerCase() === want) || null;
 		};
 		const pageUrl = n => 'spell.html?name=' + encodeURIComponent(n);
 		const official = SPELLS.filter(s => s.official);

@@ -246,7 +246,7 @@ const SIGIL_VARIANT_RULES = [
 			c => `A player ${c.lead} ahead on the score track at the end of a turn wins: Blue needs ${c.lead - 1} more stones on the board than Red, Red needs ${c.lead + 1} more than Blue.`,
 			c => `The game also ends at the end of the turn in which a player casts their ${c.nth} 3- or 5-node spell. The player with more stones wins; on a tie, the player who would move next wins.`,
 			'A player with no stones left on the board loses at once.',
-			'If the same position (stones, side to move, locks and spell counts) comes up for the third time, Blue wins.',
+			'If the same position comes up for the third time, Blue wins. The same position means the same stones, side to move, locks, Seal of Spring second casts, spell counts, Providence banks and Silence.',
 		],
 	},
 	{

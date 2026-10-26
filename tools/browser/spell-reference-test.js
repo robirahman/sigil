@@ -108,7 +108,7 @@ async function newPage(browser, errors, opts = {}) {
 		await page.waitForFunction(() => !/Loading/.test(document.getElementById('stats-body').textContent), { timeout: 15000 });
 		check(/No game statistics yet/.test(await page.$eval('#stats-body', el => el.textContent)), 'Fissure has no game statistics and says so');
 
-		for (const [q, want] of [['hail-storm', 'Hail Storm'], ['SEAL OF WIND', 'Seal of Wind'], ['Flood', 'Tsunami'], ['Silence', 'Silence']]) {
+		for (const [q, want] of [['hail-storm', 'Hail Storm'], ['SEAL OF WIND', 'Seal of Wind'], ['Flood', 'Tsunami'], ['flood', 'Tsunami'], ['Silence', 'Silence']]) {
 			await page.goto(`${BASE}/spell.html?name=${encodeURIComponent(q)}`, { waitUntil: 'load' });
 			check(await page.$eval('#spell-body h1', el => el.textContent) === want, `?name=${q} resolves to ${want}`);
 		}
