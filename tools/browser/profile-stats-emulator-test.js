@@ -11,6 +11,9 @@ const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8807';
+// PROFILE_SHOTS=<dir>: also save screenshots of the tabs there.
+const SHOTS = process.env.PROFILE_SHOTS || '';
+const shot = (p, name) => (SHOTS ? p.screenshot({ path: path.join(SHOTS, name + '.png'), fullPage: true }) : null);
 const NS = 'sigil-js-default-rtdb';
 const OWNER = { Authorization: 'Bearer owner' };
 const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
@@ -193,9 +196,11 @@ const rowsText = (p, sel) => p.$$eval(sel + ' tbody tr', (trs) => trs.map((tr) =
 		const vr = await rowsText(p, '[data-mode="byVariant"]');
 		check('by variant', JSON.stringify(vr) === JSON.stringify(['Standard|4|3–1|75%|+32', 'Deathmatch|1|0–1|0%|—', 'From a position|1|1–0|100%|+8']), vr);
 
+		await shot(p, 'stats-900');
 		// Insights tab
 		await p.click('#tab-insights');
 		await p.waitForFunction(() => document.querySelectorAll('[data-insight] svg.ins-chart').length === 3, { timeout: 10000 });
+		await shot(p, 'insights-900');
 		const tips = await p.$$eval('[data-insight="byColor"] [data-tip]', (gs) => gs.map((g) => g.getAttribute('data-tip')));
 		check('colour chart', JSON.stringify(tips) === JSON.stringify(['Red: 75% won, 3–1 in 4 games', 'Blue: 33% won, 1–2 in 3 games']), tips);
 		const len = await p.$$eval('[data-insight="byLength"] [data-tip]', (gs) => gs.map((g) => g.getAttribute('data-tip')));
@@ -232,8 +237,12 @@ const rowsText = (p, sel) => p.$$eval(sel + ' tbody tr', (trs) => trs.map((tr) =
 		for (const t of ['games', 'stats', 'insights']) {
 			await p.click('#tab-' + t);
 			await new Promise((r) => setTimeout(r, 400));
+			await shot(p, t + '-360');
 			const sw = await p.evaluate(() => document.documentElement.scrollWidth);
-			check('360 px, ' + t + ': no horizontal scroll', sw <= 360, sw);
+			const wide = sw <= 360 ? [] : await p.evaluate(() => Array.from(document.querySelectorAll('body *'))
+				.filter((e) => e.offsetParent !== null && e.getBoundingClientRect().right > 361)
+				.slice(0, 5).map((e) => e.tagName + '.' + e.className + ' ' + Math.round(e.getBoundingClientRect().right)));
+			check('360 px, ' + t + ': no horizontal scroll', sw <= 360, [sw, wide]);
 		}
 		// Cached room fields survive a reload; the light (parchment) theme's
 		// accent paints the bars there.
@@ -245,6 +254,7 @@ const rowsText = (p, sel) => p.$$eval(sel + ' tbody tr', (trs) => trs.map((tr) =
 		check('room fields cached for the 6 rooms found', cached === 6, cached);
 		await p.waitForFunction(() => document.querySelectorAll('[data-insight] svg.ins-chart').length === 3, { timeout: 10000 });
 		const light = await p.$eval('[data-insight="byColor"] .ins-bar', (e) => getComputedStyle(e).fill);
+		await shot(p, 'insights-parchment');
 		check('parchment: bars wear its accent', light === 'rgb(106, 74, 26)', light);
 	} catch (e) {
 		console.log('FAIL exception', e && e.stack);

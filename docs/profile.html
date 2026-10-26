@@ -15,6 +15,10 @@
 	<style>
 		body > .main { padding-top: 80px; }
 		.profile {
+			/* A full-width flex item: with auto margins alone it is sized to
+			   its content, and a wide table pushes it past a phone screen. */
+			width: 100%;
+			box-sizing: border-box;
 			max-width: 720px;
 			margin: 0 auto;
 			padding: 24px;
@@ -153,7 +157,7 @@
 		.profile-btn:disabled { opacity: 0.5; cursor: default; }
 		.game-filters {
 			display: grid;
-			grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+			grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
 			gap: 8px;
 			margin: 12px 0;
 			padding: 12px;
@@ -186,13 +190,14 @@
 		}
 		.export-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
 		.table-scroll { overflow-x: auto; }
-		.stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+		.stat-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 		.stat-tile { background: var(--color-surface); border-radius: 8px; padding: 10px 12px; font-family: 'Overlock', sans-serif; }
 		.stat-tile__label { color: var(--color-text-dim); font-size: 0.8em; }
 		.stat-tile__value { color: var(--color-text-bright); font-family: 'Arvo', serif; font-size: 1.3em; margin: 2px 0; }
 		.stat-tile__sub { color: var(--color-text-dim); font-size: 0.8em; overflow-wrap: anywhere; }
 		.stat-tile__sub a { color: var(--color-accent); text-decoration: none; }
 		.mode-table td.num, .mode-table th.num { text-align: right; }
+		.mode-table td.num { white-space: nowrap; }
 		.ins-wrap { position: relative; }
 		.ins-chart { display: block; max-width: 100%; height: auto; }
 		.ins-chart .ins-bar { fill: var(--color-accent); }
@@ -397,9 +402,9 @@
 									<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartWidth - chartPad" x-bind:y1="chartHeight - chartPad" x-bind:y2="chartHeight - chartPad"></line>
 									<line class="chart-axis" x-bind:x1="chartPad" x-bind:x2="chartPad" x-bind:y1="chartPad" x-bind:y2="chartHeight - chartPad"></line>
 									<polyline class="chart-line" x-bind:points="chartPolyPoints"></polyline>
-									<template x-for="(p, i) in chartDots" x-bind:key="i">
-										<circle class="chart-dot" x-bind:cx="p.x" x-bind:cy="p.y" r="2"></circle>
-									</template>
+									<!-- A <template> inside <svg> is an SVG element without .content, so
+									     x-for cannot clone it: the dots are drawn as markup. -->
+									<g x-html="chartDotsSvg"></g>
 									<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartPad + 4" text-anchor="end" x-text="chartMaxElo"></text>
 									<text class="chart-tick" x-bind:x="chartPad - 4" x-bind:y="chartHeight - chartPad" text-anchor="end" x-text="chartMinElo"></text>
 								</svg>
@@ -644,6 +649,7 @@
 				chartMaxElo: 1000,
 				chartPolyPoints: '',
 				chartDots: [],
+				chartDotsSvg: '',
 
 				get filteredGames() { return ProfileStats.filterGames(this.games, this.filters, (g) => this.meta[g.id]); },
 				get filtersActive() {
@@ -929,6 +935,7 @@
 						polyParts.push(x + ',' + y);
 					}
 					this.chartDots = dots;
+					this.chartDotsSvg = dots.map((d) => '<circle class="chart-dot" cx="' + d.x + '" cy="' + d.y + '" r="2"></circle>').join('');
 					this.chartPolyPoints = polyParts.join(' ');
 				},
 
