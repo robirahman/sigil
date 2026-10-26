@@ -100,7 +100,7 @@
 			<template x-if="state === 'ready'">
 				<div>
 					<div class="admin__tabs" role="tablist">
-						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'open' }" x-on:click="view = 'open'" x-text="'Open reports (' + openCount + ')'"></button>
+						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'open' }" x-on:click="view = 'open'" x-text="'Open reports (' + openCount + (openTruncated ? '+, oldest shown' : '') + ')'"></button>
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'all' }" x-on:click="view = 'all'" x-text="'All reports (' + reports.length + ')'"></button>
 						<button class="admin__tab" role="tab" x-bind:class="{ 'admin__tab--active': view === 'players' }" x-on:click="view = 'players'">Suspensions and abandonments</button>
 					</div>
@@ -213,6 +213,8 @@
 				// Every report on each target, counted by query: the loaded
 				// window (open + latest 500) may not hold them all.
 				reportCount: {},
+				// More open reports than the queue loads (reload).
+				openTruncated: false,
 				get flagRows() {
 					return Object.keys(this.flags).map((uid) => Object.assign({ uid }, this.flags[uid]))
 						.filter((f) => f.abandons > 0 || typeof f.banUntil === 'number')
@@ -243,11 +245,13 @@
 
 				async reload() {
 					const db = firebase.database();
-					// Every open report (no `resolved` yet), however old, plus the
+					// The oldest OPEN_MAX open reports (no `resolved` yet), plus the
 					// latest 500 for the All view: a flood of new reports cannot
-					// push an open one out of the queue.
+					// push an older open one out of the queue, and the download
+					// stays bounded (each account files one a minute, rules).
+					const OPEN_MAX = 500;
 					const [openSnap, recentSnap, flagSnap] = await Promise.all([
-						db.ref('reports').orderByChild('resolved').equalTo(null).once('value'),
+						db.ref('reports').orderByChild('resolved').equalTo(null).limitToFirst(OPEN_MAX).once('value'),
 						db.ref('reports').orderByChild('at').limitToLast(500).once('value'),
 						db.ref('user_flags').once('value'),
 					]);
@@ -255,6 +259,7 @@
 					for (const snap of [openSnap, recentSnap]) {
 						snap.forEach((c) => { byId.set(c.key, Object.assign({ id: c.key }, c.val())); });
 					}
+					this.openTruncated = openSnap.numChildren() >= OPEN_MAX;
 					const reports = Array.from(byId.values());
 					reports.sort((a, b) => (b.at || 0) - (a.at || 0));
 					this.reports = reports;
@@ -264,9 +269,12 @@
 					}
 					const targets = [...new Set(reports.map((r) => r.target).filter(Boolean))];
 					const counts = {};
+					const COUNT_MAX = 200;
 					await Promise.all(targets.map(async (t) => {
 						try {
-							counts[t] = (await db.ref('reports').orderByChild('target').equalTo(t).once('value')).numChildren();
+							// Bounded too: past COUNT_MAX the card says "COUNT_MAX+".
+							const n = (await db.ref('reports').orderByChild('target').equalTo(t).limitToLast(COUNT_MAX).once('value')).numChildren();
+							counts[t] = n >= COUNT_MAX ? COUNT_MAX + '+' : n;
 						} catch (e) { counts[t] = reports.filter((r) => r.target === t).length; }
 					}));
 					this.reportCount = counts;

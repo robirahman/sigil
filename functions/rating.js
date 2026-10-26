@@ -170,6 +170,7 @@ async function replay(engine, spellNames, variant, startSfn, turns) {
  * @param {object} ctx
  *   room          - rooms/{record.roomCode} (null if absent)
  *   isFullAccount - async uid => true for a signed-in, non-anonymous account
+ *   isSuspended   - async uid => true while the player is suspended from rated play
  *   priceStart    - async sfn => P(red wins) from that start, or null
  *   now           - server time (ms)
  * @returns {Promise<object>} { rated: true, winner, claimKey, startPos } or
@@ -195,6 +196,14 @@ async function judgeGame(record, ctx) {
 	for (const uid of [redUid, blueUid]) {
 		if (!AI_UID.test(uid) && !(await ctx.isFullAccount(uid))) {
 			return Object.assign(unrated('guest-account'), { kind: verdict.kind });
+		}
+	}
+	// A player suspended from rated play (user_flags/{uid}/banUntil) is not
+	// rated, whatever the client sent: the rules guard only the room's
+	// `ranked` flag, and an AI game has no room.
+	for (const uid of [redUid, blueUid]) {
+		if (!AI_UID.test(uid) && ctx.isSuspended && (await ctx.isSuspended(uid))) {
+			return Object.assign(unrated('suspended'), { kind: verdict.kind });
 		}
 	}
 	// A game from a position pays by the position's price. The client's

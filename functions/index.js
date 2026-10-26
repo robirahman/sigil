@@ -114,7 +114,12 @@ exports.rateGame = onValueCreated({
 		if (typeof p === 'number') await ref.set({ sfn, redWinProb: p, at: Date.now() });
 		return p;
 	};
-	const verdict = await judgeGame(record, { room, isFullAccount, priceStart: cachedPrice, now: Date.now() });
+	// A suspension running now (user_flags/{uid}/banUntil, set by an admin).
+	const isSuspended = async (uid) => {
+		const until = (await db.ref('user_flags/' + uid + '/banUntil').once('value')).val();
+		return typeof until === 'number' && until > Date.now();
+	};
+	const verdict = await judgeGame(record, { room, isFullAccount, isSuspended, priceStart: cachedPrice, now: Date.now() });
 	if (verdict.skip) return;
 
 	// One rating per game, however many records claim it (both clients of

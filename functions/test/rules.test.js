@@ -475,17 +475,27 @@ test('takeback: of the first turn removes `last` with it', async () => {
 test('reports: create-only by a signed-in account, read by admins only', async () => {
 	await seed({ admins: { root1: true } });
 	const rep = { by: 'alice', target: 'bob', room: 'R1', reason: 'cheating', note: 'engine moves', at: serverTimestamp() };
+	const file = (who, id, r) => update(ref(db(who)), { ['reports/' + id]: r, ['report_limits/' + who]: serverTimestamp() });
 	await assertFails(set(ref(db(null), 'reports/r1'), Object.assign({}, rep, { by: null })));
 	await assertFails(set(ref(env.authenticatedContext('anon1', { firebase: { sign_in_provider: 'anonymous' } }).database(), 'reports/r1'),
 		Object.assign({}, rep, { by: 'anon1' })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { by: 'carol' })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { target: 'alice' })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { reason: 'ugly' })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { at: 5 })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { resolved: true })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { extra: 1 })));
-	await assertFails(set(ref(db('alice'), 'reports/r1'), Object.assign({}, rep, { note: 'x'.repeat(501) })));
-	await assertSucceeds(set(ref(db('alice'), 'reports/r1'), rep));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { by: 'carol' })));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { target: 'alice' })));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { reason: 'ugly' })));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { at: 5 })));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { resolved: true })));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { extra: 1 })));
+	await assertFails(file('alice', 'r1', Object.assign({}, rep, { note: 'x'.repeat(501) })));
+	// Filed with the reporter's report_limits stamp in the same write.
+	await assertFails(set(ref(db('alice'), 'reports/r1'), rep));
+	await assertSucceeds(file('alice', 'r1', rep));
+	// One a minute per account: a second report at once is refused, and the
+	// stamp cannot be moved back or set alone to a past time.
+	await assertFails(file('alice', 'r9', rep));
+	await assertFails(set(ref(db('alice'), 'report_limits/alice'), 5));
+	await assertFails(set(ref(db('bob'), 'report_limits/alice'), serverTimestamp()));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'report_limits/alice'), Date.now() - 61000));
+	await assertSucceeds(file('alice', 'r9', rep));
 	// Create-only: the reporter cannot edit, resolve or delete it.
 	await assertFails(set(ref(db('alice'), 'reports/r1/note'), 'never mind'));
 	await assertFails(set(ref(db('alice'), 'reports/r1/resolved'), true));

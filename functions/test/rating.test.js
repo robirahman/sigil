@@ -81,6 +81,13 @@ test('casual, guest-account and unrated-pack games are not rated', async () => {
 	casual.ranked = false;
 	assert.strictEqual((await judgeGame(casual, ctx())).reason, 'casual');
 	assert.strictEqual((await judgeGame(AI.N3WMQJ, ctx({ isFullAccount: async () => false }))).reason, 'guest-account');
+	// A suspended player's games are not rated, AI games included; only the
+	// human players are looked up.
+	const asked = [];
+	const susp = await judgeGame(AI.N3WMQJ, ctx({ isSuspended: async (uid) => { asked.push(uid); return true; } }));
+	assert.deepStrictEqual([susp.rated, susp.reason], [false, 'suspended']);
+	assert.strictEqual(asked.length, 1);
+	assert.strictEqual((await judgeGame(AI.N3WMQJ, ctx({ isSuspended: async () => false }))).rated, true);
 	const panda = clone(AI.N3WMQJ);
 	panda.spellNames[0] = 'Stampede';
 	assert.strictEqual((await judgeGame(panda, ctx())).reason, 'unrated-pack');
