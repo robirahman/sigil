@@ -172,6 +172,7 @@ const SigilDialog = {
 const SIGIL_SHORTCUTS = [
 	['Enter', 'End turn (or Submit). Press twice when "Confirm before ending a turn" is on.'],
 	['D', 'Dash'],
+	['I', 'On a focused spell: open its tooltip and move to its "More about this spell" link (Escape goes back)'],
 	['Escape', 'Close a tooltip, this list or the settings; cancel an armed End Turn or Forfeit; clear arrows and circles'],
 	['Z', 'Zen mode: only the board, the clocks and the turn buttons', 'zen'],
 	['Right-drag', 'Draw an arrow between two nodes; right-click draws a circle. Again removes it. Shift red, Alt blue, Ctrl yellow. On a touch screen use the pencil on the board'],

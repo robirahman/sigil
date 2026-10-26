@@ -612,7 +612,7 @@
 												aria-describedby="spell-tooltip"
 												x-bind:tabindex="spells.images['charm' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['charm' + i]?.name || ''"
-												x-on:focus="showSpellTooltip('charm' + i)"
+												x-on:focus="showSpellTooltip('charm' + i)" x-on:keydown="handleSpellKey($event, 'charm' + i)" aria-keyshortcuts="I"
 												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleCharmClick(`charm${i}`)"
 												x-on:keydown.space.prevent.stop="handleCharmClick(`charm${i}`)"
@@ -658,7 +658,7 @@
 												aria-describedby="spell-tooltip"
 												x-bind:tabindex="spells.images['ritual' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['ritual' + i]?.name || ''"
-												x-on:focus="showSpellTooltip('ritual' + i)"
+												x-on:focus="showSpellTooltip('ritual' + i)" x-on:keydown="handleSpellKey($event, 'ritual' + i)" aria-keyshortcuts="I"
 												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`ritual${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`ritual${i}`)"
@@ -704,7 +704,7 @@
 												aria-describedby="spell-tooltip"
 												x-bind:tabindex="spells.images['sorcery' + i] ? 0 : -1"
 												x-bind:aria-label="spells.text['sorcery' + i]?.name || ''"
-												x-on:focus="showSpellTooltip('sorcery' + i)"
+												x-on:focus="showSpellTooltip('sorcery' + i)" x-on:keydown="handleSpellKey($event, 'sorcery' + i)" aria-keyshortcuts="I"
 												x-on:blur="handleSpellBlur($event)"
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`sorcery${i}`)"
@@ -762,7 +762,7 @@
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
 					x-on:mouseenter="holdSpellTooltip()"
-					x-on:focusout="handleTooltipFocusOut($event)"
+					x-on:focusout="handleTooltipFocusOut($event)" x-on:keydown="handleTooltipKey($event)"
 					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">
@@ -958,12 +958,12 @@
 			// drop the caches, refetch the page's scripts past the HTTP cache, and
 			// reload once. The new worker deletes the stale cache when it activates.
 			(function () {
-				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 2) return;
+				if (typeof SIGIL_ASSET_EPOCH !== 'undefined' && SIGIL_ASSET_EPOCH >= 3) return;
 				if (!window.caches || !window.fetch) return;
 				try {
 					// The sentinel holds the epoch it reloaded for, so each new epoch gets its own reload.
-					if (sessionStorage.getItem('sigilStaleAssetReload') === '2') return;
-					sessionStorage.setItem('sigilStaleAssetReload', '2');
+					if (sessionStorage.getItem('sigilStaleAssetReload') === '3') return;
+					sessionStorage.setItem('sigilStaleAssetReload', '3');
 				} catch (e) { return; }
 				document.addEventListener('DOMContentLoaded', function () {
 					var urls = ['static/scripts/engine/ai-worker.js'];

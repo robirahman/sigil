@@ -769,6 +769,29 @@ document.addEventListener('alpine:init', () => {
 			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this.showSpellTooltip(spell); } },
 			holdSpellTooltip() { clearTimeout(this._spellTooltipTimer); },
 
+			// Keyboard route to the tooltip's "More about this spell" link: the
+			// tooltip sits after the board in the DOM, so Tab from a spell never
+			// reaches it. "I" (info) on a focused spell opens its tooltip and
+			// focuses the link; Escape there returns to the spell. ("?" is the
+			// shortcut list, settings-panel.js.)
+			handleSpellKey(e, slot) {
+				if ((e.key !== 'i' && e.key !== 'I') || e.ctrlKey || e.metaKey || e.altKey) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn = e.target;
+				if (this.activeSpell !== slot) this.showSpellTooltip(slot);
+				this.$nextTick(() => {
+					const a = this.$refs.spellTooltip && this.$refs.spellTooltip.querySelector('.tooltip__more');
+					if (a) a.focus();
+				});
+			},
+			handleTooltipKey(e) {
+				if (e.key !== 'Escape' || !this._spellTooltipReturn) return;
+				e.preventDefault();
+				e.stopPropagation();
+				this._spellTooltipReturn.focus();
+			},
+
 			// Keyboard: the tooltip stays open while focus moves from the spell
 			// into it (its "More about this spell" link), and closes when focus
 			// leaves both. A mouse press on the link moves focus there too, so
