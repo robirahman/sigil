@@ -415,7 +415,8 @@
 			function pendingEdit(fn) {
 				try { const m = pendingAll(); fn(m); localStorage.setItem(PENDING_KEY, JSON.stringify(m)); } catch (e) { /* storage blocked */ }
 			}
-			const pendingPut = (uid, id, solved) => pendingEdit(m => { m[pendingKey(uid, id)] = { id, uid: uid || null, solved: !!solved, at: Date.now() }; });
+			// `daily` is the UTC day when the result is that day's daily puzzle.
+			const pendingPut = (uid, id, solved, daily) => pendingEdit(m => { m[pendingKey(uid, id)] = { id, uid: uid || null, solved: !!solved, daily: daily || null, at: Date.now() }; });
 			const pendingDrop = (uid, id) => pendingEdit(m => { delete m[pendingKey(uid, id)]; });
 			const PUZZLE_SETS = { m1: 'Mate in 1', m2: 'Mate in 2', m3: 'Mate in 3', win: 'Winning turn' };
 			function puzzleSet(p) { return p.kind === 'winning' ? 'win' : 'm' + p.mate; }
@@ -548,6 +549,9 @@
 					const pz = all.find(p => p.id === e.id);
 					if (!pz) { pendingDrop(e.uid, e.id); continue; }
 					if (Date.now() > deadline) break;   // the rest wait for the next visit
+					// A daily's result counts for its day even when it never settled
+					// (a no-op when settle() already logged it).
+					if (e.daily) recordDaily(e.daily, e.solved ? 'solved' : 'failed');
 					try {
 						const current = await Promise.race([loadPuzzleCurrentRating(pz), new Promise(r => setTimeout(() => r(null), 3000))]);
 						const done = await Promise.race([recordPuzzleResult(viewer, pz, e.solved, current || undefined).then(() => true),
@@ -687,7 +691,7 @@
 					rating_recorded = true;
 					pendingFail = false;
 					const uid = ratingUser ? ratingUser.uid : null;
-					pendingPut(uid, puzzle.id, final === 'solved');   // until the write lands
+					pendingPut(uid, puzzle.id, final === 'solved', daily ? today : null);   // until the write lands
 					recording = puzzleLive.then(() => recordPuzzleResult(ratingUser, puzzle, final === 'solved', puzzleNow)).then((r) => {
 						pendingDrop(uid, puzzle.id);   // recorded (or attempted before): nothing left pending
 						if (!r) { showRating(' · already attempted, rating unchanged'); return; }
@@ -706,7 +710,7 @@
 					if (status === 'failed' && puzzle.kind !== 'winning') {
 						// Held in storage too (see PENDING_KEY).
 						pendingFail = true;
-						pendingPut(ratingUser ? ratingUser.uid : null, puzzle.id, false);
+						pendingPut(ratingUser ? ratingUser.uid : null, puzzle.id, false, daily ? today : null);
 						return;
 					}
 					if (status === 'failed-final' || status === 'retry') { if (pendingFail) settle('failed'); return; }

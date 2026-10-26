@@ -128,6 +128,13 @@ check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 
 			`stored results left by killed tabs are all recorded on the next visit (${JSON.stringify([boot[0].attempts[id5], boot[0].attempts[id7], Object.keys(boot[1])])})`);
 		check(boot[0].attempts[id4] === undefined, 'opening a puzzle records nothing');
 		await page.close();
+		// A daily failed and left pending in a killed tab still counts for its day.
+		const today = new Date().toISOString().slice(0, 10);
+		const dseed = { ['|' + data.puzzles[8].id]: { id: data.puzzles[8].id, uid: null, solved: false, daily: today, at: 4 } };
+		page = await open('?p=9', `if (!sessionStorage.getItem('t')) { sessionStorage.setItem('t', 1); localStorage.setItem('sigil_puzzle_daily', JSON.stringify({ last: '', streak: 3, best: 3, done: {} })); localStorage.setItem('sigil_puzzle_pending_results', ${JSON.stringify(JSON.stringify(dseed))}); }`);
+		const dl = await page.evaluate(() => JSON.parse(localStorage.getItem('sigil_puzzle_daily')));
+		check(dl.done[today] === 'failed' && dl.streak === 0, `a recovered daily failure counts for its day (${JSON.stringify(dl)})`);
+		await page.close();
 		page = await open('', `localStorage.setItem('sigil_puzzle_rating', JSON.stringify({ rating: 2100, plays: 30, attempts: {} }))`);
 		const r = await page.evaluate(() => window.SIGIL_PUZZLE.rating);
 		const near = data.puzzles.map(p => Math.abs(p.rating - 2100)).sort((a, b) => a - b)[19];
