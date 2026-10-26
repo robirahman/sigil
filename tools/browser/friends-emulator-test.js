@@ -258,7 +258,10 @@ const lobby = () => Alpine.$data(document.querySelector('[x-data^="multiplayerLo
 		await pageB.waitForSelector('.profile__block', { visible: true, timeout: 30000 });
 		await pageB.click('.profile__block');
 		await pageB.waitForFunction(() => document.querySelector('.profile__block').textContent.trim() === 'Unblock', { timeout: 15000, polling: 250 });
-		check('block recorded', (await rest('GET', 'blocks/' + bob + '/' + alice)) === true);
+		check('block recorded, with its blockedBy index', (await rest('GET', 'blocks/' + bob + '/' + alice)) === true
+			&& (await rest('GET', 'blockedBy/' + alice + '/' + bob)) === true);
+		check('blocking ends her follow of him', (await rest('GET', 'follows/' + alice + '/' + bob)) === null
+			&& (await rest('GET', 'followers/' + bob + '/' + alice)) === null);
 		check('blocking drops her open challenge', (await rest('GET', 'challenges/' + bob + '/OPENCH')) === null);
 		check('... and withdraws his own challenge to her, with its room', await until(async () =>
 			(await rest('GET', 'challenges/' + alice + '/BOBCH')) === null && (await rest('GET', 'rooms/BOBCH')) === null, 10000));

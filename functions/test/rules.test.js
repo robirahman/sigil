@@ -314,6 +314,12 @@ test('rooms: rematches, local archives and expired invites', async () => {
 	await assertFails(set(ref(db('mallory'), 'rooms/NEW'), rematch));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { blue: { uid: 'mallory' } })));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { forfeitedBy: 'red' })));
+	// Not once either has blocked the other (an offer left standing).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'blocks/bob/alice'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), rematch));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'blocks'), { alice: { bob: true } }));
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), rematch));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'blocks')));
 	await assertSucceeds(set(ref(db('alice'), 'rooms/NEW'), rematch));
 
 	const local = { local: true, status: 'finished', red: { uid: 'g1' }, blue: { uid: '__ai_easy__' }, winner: 'red', created: 1 };
@@ -713,22 +719,62 @@ test('follows: written only by the follower, mirrored in followers', async () =>
 	await assertSucceeds(get(ref(db(null), 'followers/bob')));
 	await assertSucceeds(get(ref(db(null), 'follows/alice')));
 	// Someone who blocked you cannot be followed.
-	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { bob: { alice: true } } });
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { bob: { alice: true } }, blockedBy: { alice: { bob: true } } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+	// Nor someone you blocked, nor an account being deleted.
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { alice: { bob: true } }, blockedBy: { bob: { alice: true } } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, deleted_users: { bob: 1 } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+	// ... or by one (a stale tab during deleteUserData).
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, deleted_users: { alice: 1 } });
 	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
 });
 
-test('blocks: owner-written; readable by the owner and the one blocked', async () => {
-	await assertSucceeds(set(ref(db('bob'), 'blocks/bob/alice'), true));
-	await assertFails(set(ref(db('alice'), 'blocks/bob/carol'), true));
-	await assertFails(remove(ref(db('alice'), 'blocks/bob/alice')));
-	await assertFails(set(ref(db('bob'), 'blocks/bob/bob'), true));
-	await assertFails(set(ref(db('bob'), 'blocks/bob/carol'), 'yes'));
-	await assertFails(set(ref(guestDb('gina'), 'blocks/gina/bob'), true));
+test('blocks: owner-written with their blockedBy index; readable by the owner and the one blocked', async () => {
+	const blk = (who, target, v) => ({ ['blocks/' + who + '/' + target]: v, ['blockedBy/' + target + '/' + who]: v });
+	await seed({ users: { alice: named('Alice'), bob: named('Bob'), carol: named('Carol') } });
+	// Not an account that does not exist (or was deleted).
+	await assertFails(update(ref(db('bob')), blk('bob', 'ghost', true)));
+	// Nor one being deleted (deleteUserData marks it first, removes the profile last).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users/carol'), 1));
+	await assertFails(update(ref(db('bob')), blk('bob', 'carol', true)));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users'), { bob: 1 }));
+	await assertFails(update(ref(db('bob')), blk('bob', 'carol', true)));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'deleted_users')));
+	// The block and its reverse index go together.
+	await assertFails(set(ref(db('bob'), 'blocks/bob/alice'), true));
+	await assertFails(set(ref(db('bob'), 'blockedBy/alice/bob'), true));
+	await assertSucceeds(update(ref(db('bob')), blk('bob', 'alice', true)));
+	await assertFails(update(ref(db('alice')), blk('bob', 'carol', true)));
+	await assertFails(update(ref(db('alice')), blk('bob', 'alice', null)));
+	await assertFails(remove(ref(db('bob'), 'blocks/bob/alice')));
+	await assertFails(update(ref(db('bob')), blk('bob', 'bob', true)));
+	await assertFails(update(ref(db('bob')), Object.assign(blk('bob', 'carol', true), { 'blocks/bob/carol': 'yes' })));
+	await assertFails(update(ref(guestDb('gina')), blk('gina', 'bob', true)));
 	await assertSucceeds(get(ref(db('bob'), 'blocks/bob')));
 	await assertSucceeds(get(ref(db('alice'), 'blocks/bob/alice')));
 	await assertFails(get(ref(db('alice'), 'blocks/bob')));
 	await assertFails(get(ref(db('carol'), 'blocks/bob/alice')));
-	await assertSucceeds(remove(ref(db('bob'), 'blocks/bob/alice')));
+	// Who blocked you is not listable.
+	await assertFails(get(ref(db('alice'), 'blockedBy/alice')));
+	await assertSucceeds(update(ref(db('bob')), blk('bob', 'alice', null)));
+});
+
+test('blocking ends the blocked player\'s follow of the blocker', async () => {
+	await seed({ users: { alice: named('Alice'), bob: named('Bob'), carol: named('Carol') },
+		follows: { alice: { bob: true }, carol: { bob: true } }, followers: { bob: { alice: true, carol: true } } });
+	const unfollowOf = (who, target) => ({ ['follows/' + who + '/' + target]: null, ['followers/' + target + '/' + who]: null });
+	// Not without a block.
+	await assertFails(update(ref(db('bob')), unfollowOf('alice', 'bob')));
+	// With the block, in the same update.
+	await assertSucceeds(update(ref(db('bob')), Object.assign({ 'blocks/bob/alice': true, 'blockedBy/alice/bob': true }, unfollowOf('alice', 'bob'))));
+	// Only the blocked player's follow, and only both halves together.
+	await assertFails(update(ref(db('bob')), unfollowOf('carol', 'bob')));
+	await assertFails(remove(ref(db('bob'), 'followers/bob/carol')));
+	let v = null;
+	await env.withSecurityRulesDisabled(async (c) => { v = (await get(ref(c.database()))).val(); });
+	if (v.follows.alice || v.followers.bob.alice || !v.followers.bob.carol) throw new Error('follows: ' + JSON.stringify(v));
 });
 
 test('challenges: by a room\'s creator, for its invited player, unless blocked', async () => {
@@ -748,6 +794,10 @@ test('challenges: by a room\'s creator, for its invited player, unless blocked',
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { at: 5 })));
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { variant: 'deathmatch' })));
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), Object.assign({}, ch, { note: 'hi' })));
+	// Not from an account being deleted (deleteUserData marks it first).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users/alice'), 1));
+	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'deleted_users')));
 	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C1'), ch));
 	// Not overwritten; read by the target and the room's players only.
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
@@ -786,6 +836,10 @@ test('blocking: no challenge to the blocker, no seat in their rooms', async () =
 		{ blue: { uid: 'alice', displayName: 'Alice', connected: true }, status: 'playing', ranked: false }));
 	await assertSucceeds(update(ref(db('carol'), 'rooms/P1'),
 		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: false }));
+	// Nor can Bob, who blocked her, take a seat in hers (an old push or link).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/P2'), Object.assign({}, waiting, { creatorColor: 'red' })));
+	await assertFails(update(ref(db('bob'), 'rooms/P2'),
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
 	// Unblocked, the challenge goes through.
 	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'blocks/bob/alice')));
 	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C3'), ch));
