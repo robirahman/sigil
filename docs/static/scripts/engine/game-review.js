@@ -225,9 +225,10 @@ async function reviewGame(gameLog, opts, onProgress) {
 	const searchSfns = _reviewPositions(gameLog);
 
 	// Route the per-ply searches through the shared AI Web Worker so a Deep
-	// review (8-ply, no time limit per ply) doesn't freeze the page. The
-	// worker owns the persistent TT, which it reuses across calls when we
-	// pass `useSharedTt: true` — so the reverse-walk priming still works.
+	// review (REVIEW_MODE_PRESETS.deep: 60 s per ply, no practical depth cap)
+	// doesn't freeze the page. The worker owns the persistent TT, which it
+	// reuses across calls when we pass `useSharedTt: true` — so the
+	// reverse-walk priming still works.
 	const worker = (typeof getSharedAiWorker === 'function') ? getSharedAiWorker() : null;
 	const useWorker = !!(worker && typeof Worker !== 'undefined');
 	let mainThreadTt = null;

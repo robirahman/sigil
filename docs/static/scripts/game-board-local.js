@@ -1,7 +1,10 @@
 document.addEventListener('alpine:init', () => {
 	const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-	let warnBeforeUnload = !isSafari;
-	window.onbeforeunload = () => (warnBeforeUnload ? true : null);
+	// A game is live until it ends, or the page turns out to be a review,
+	// puzzle, tutorial or analysis board. Leaving asks first: the browser's
+	// beforeunload prompt (not on Safari) and guardLeavingGame for links.
+	let gameLive = true;
+	window.onbeforeunload = () => (gameLive && !isSafari ? true : null);
 
 	Alpine.data(
 		'gameBoard',
@@ -485,7 +488,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			playAgain() {
-				warnBeforeUnload = false;
+				gameLive = false;
 				const params = new URLSearchParams(window.location.search);
 				params.delete('sfn');
 				params.delete('review');
@@ -564,7 +567,7 @@ document.addEventListener('alpine:init', () => {
 						sfn, info: info,
 					}));
 				} catch (e) { /* sessionStorage blocked */ }
-				warnBeforeUnload = false;
+				gameLive = false;
 				const params = new URLSearchParams(window.location.search);
 				params.delete('review');
 				// A new game: mint a fresh persistence id (see playAgain).
@@ -617,7 +620,7 @@ document.addEventListener('alpine:init', () => {
 						sfn, info: info,
 					}));
 				} catch (e) { /* sessionStorage blocked */ }
-				warnBeforeUnload = false;
+				gameLive = false;
 				window.location.href = 'multiplayer.html?sfn=' + encodeURIComponent(sfn);
 			},
 
@@ -918,14 +921,14 @@ document.addEventListener('alpine:init', () => {
 						try {
 							const payload = JSON.parse(raw);
 							if (payload && payload.type === 'sigil-game') {
-								warnBeforeUnload = false;
+								gameLive = false;
 								_this._loadReviewFromPayload(payload);
 								_this.sendEvent = function() {};
 								return;
 							}
 						} catch (e) { /* not JSON — try SGN-T below */ }
 						if (typeof isSgnText === 'function' && isSgnText(raw)) {
-							warnBeforeUnload = false;
+							gameLive = false;
 							_this._loadSgnForReview(raw);
 							_this.sendEvent = function() {};
 							return;
@@ -974,7 +977,7 @@ document.addEventListener('alpine:init', () => {
 					} catch (e) { /* bad SFN: the engine reports it */ }
 				}
 				let _engineRef = null;
-				if (scripted || analysis) warnBeforeUnload = false;
+				if (scripted || analysis) gameLive = false;
 
 				// Persistence: pin a game-id to the URL (mint one if missing)
 				// so a reload returns to the same game. If a save exists for
@@ -1551,7 +1554,7 @@ document.addEventListener('alpine:init', () => {
 					_humanHasMoved = true;
 					_persistedGameLog = slimGameLog(log.slice(0, h));
 					_persistCurrentGame(sfn);
-					warnBeforeUnload = false;
+					gameLive = false;
 					window.location.reload();
 				};
 
@@ -1733,6 +1736,9 @@ document.addEventListener('alpine:init', () => {
 
 				// Keyboard shortcuts (game-keys.js, shared with multiplayer)
 				bindGameKeys(_this);
+				guardLeavingGame(
+					() => gameLive && !_this.winner && !_this.reviewMode && !_this.sideOffer,
+					() => 'The game is still in progress.' + (_humanHasMoved && _gameId ? ' It stays saved in this browser under "In progress" on the main menu.' : ''));
 
 				function handleIncomingEvent(payload) {
 					const { type, ...rest } = payload;
@@ -2596,7 +2602,7 @@ document.addEventListener('alpine:init', () => {
 					);
 					_this.showReset = false;
 					_this.winner = payload.winner;
-					warnBeforeUnload = false;
+					gameLive = false;
 
 					// Cache the spell list for "Play Again (Same Layout)" regardless of
 					// whether a game log was produced.

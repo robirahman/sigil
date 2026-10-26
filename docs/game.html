@@ -48,45 +48,6 @@
 			rel="stylesheet"
 		/>
 		<title>Local 1v1 - Sigil Online</title>
-		<style>
-		.game-clock { display: flex; justify-content: center; align-items: center; gap: 0.75em; margin: 0.35em auto; font-variant-numeric: tabular-nums; font-size: 1.05em; }
-		.game-clock__side { padding: 0.15em 0.6em; border-radius: 0.4em; opacity: 0.7; border: 1px solid transparent; }
-		.game-clock__side--red { color: #fa3f32; }
-		.game-clock__side--blue { color: #295ccd; }
-		.game-clock__side--active { opacity: 1; font-weight: 700; border-color: currentColor; }
-		.game-clock__side--low.game-clock__side--active { animation: game-clock-pulse 1s ease-in-out infinite; }
-		.game-clock__label { opacity: 0.6; font-size: 0.85em; }
-		@keyframes game-clock-pulse { 50% { opacity: 0.4; } }
-			header {
-				position: absolute;
-			}
-
-			body > .main {
-				padding-top: 0px;
-			}
-
-			.import-form {
-				display: flex;
-				flex-direction: column;
-				gap: 8px;
-				padding: 12px 0;
-			}
-			.import-form textarea {
-				width: 100%;
-				min-height: 48px;
-				font-family: monospace;
-				font-size: 12px;
-				padding: 8px;
-				border-radius: 4px;
-				border: 1px solid #555;
-				background: #1a1a2e;
-				color: #ddd;
-				resize: vertical;
-			}
-			.import-form button {
-				align-self: flex-start;
-			}
-		</style>
 		<script>
 			var webpDetector = new Image();
 			webpDetector.onload = function () {
@@ -99,7 +60,7 @@
 		<script src="static/scripts/settings-panel.js"></script>
 	</head>
 
-	<body>
+	<body class="game-page">
 		<header>
 			<div class="container">
 				<div class="header-container">
@@ -744,7 +705,7 @@
 												x-on:keydown.enter.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:keydown.space.prevent.stop="handleSpellClick(`sorcery${i}`)"
 												x-on:click.outside="closeSpellTooltip"
-												x-on:mouseout="handleSpellMouseOut()"
+												x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
 												x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 											/>
 										</picture>

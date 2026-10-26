@@ -484,7 +484,7 @@
 													x-bind:src="getSpellImg('sorcery' + i)"
 													x-on:click.stop="handleSpellClick(`sorcery${i}`)"
 													x-on:click.outside="closeSpellTooltip"
-													x-on:mouseout="handleSpellMouseOut()"
+													x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
 													x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)"
 												/>
 											</picture>

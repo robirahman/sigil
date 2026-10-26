@@ -262,7 +262,7 @@
 													x-bind:src="getSpellImg('sorcery' + i)"
 													x-on:click.stop="handleSpellClick(`sorcery${i}`)"
 													x-on:click.outside="closeSpellTooltip"
-													x-on:mouseout="handleSpellMouseOut()"
+													x-on:mouseout="handleSpellMouseOut(`sorcery${i}`)"
 													x-on:mouseover="handleSpellMouseOver(`sorcery${i}`)" />
 											</picture>
 											<div class="spell-spots sorcery-spell" x-bind:class="`sorcery-spell--${i}`" x-show="useArtOnlySpells && spells.images['sorcery' + i]"><template x-for="pos in spellSpotTemplate('sorcery')"><div class="spell-spot" x-bind:style="`left:${pos[0]*100}%;top:${pos[1]*100}%`"></div></template></div>
