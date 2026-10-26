@@ -116,7 +116,9 @@ const lobby = () => document.querySelector('[x-data^="multiplayerLobby"]')._x_da
 				// As firebase-sync.js sendTurn writes it: after the room's last
 				// turn, moving rooms/{id}/last on in the same write.
 				const roomRef = firebase.database().ref('rooms/' + c);
-				const last = (await roomRef.child('last').once('value')).val();
+				// From the server: this page's cache may not have the other
+				// side's last turn yet.
+				const last = (await roomRef.child('last').get()).val();
 				const key = roomRef.child('turns').push().key;
 				const turn = { color: col, actions: ['pass'], timestamp: firebase.database.ServerValue.TIMESTAMP };
 				if (last) turn.after = last.key;
