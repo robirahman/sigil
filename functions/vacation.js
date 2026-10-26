@@ -29,6 +29,11 @@ const daysLeft = bank.vacationDaysLeft;
 const dayYears = bank.vacationDayYears;
 const usedByYear = bank.vacationUsedByYear;
 
+/** Is the record `v` a vacation that has not ended by `now` (begun or not)? */
+function unexpired(v, now) {
+	return !!(v && typeof v.until === 'number' && now < v.until);
+}
+
 /** Is the record `v` a vacation running at `now`? */
 function onVacation(v, now) {
 	return !!(v && typeof v.until === 'number' && typeof v.from === 'number' && v.from <= now && now < v.until);
@@ -41,7 +46,9 @@ function onVacation(v, now) {
  */
 function startRecord(v, days, now) {
 	if (!Number.isInteger(days) || days < 1) return { error: 'invalid-days' };
-	if (onVacation(v, now)) return { error: 'already-on-vacation' };
+	// Any vacation not yet over, even one whose start is a moment after
+	// `now` (an overlapping call, or another instance's clock).
+	if (unexpired(v, now)) return { error: 'already-on-vacation' };
 	const charged = bank.vacationCharge(v, days, now);
 	if (!charged) return { error: 'not-enough-days' };
 	const used = charged.used;
@@ -55,7 +62,7 @@ function startRecord(v, days, now) {
  * not begun go back to the banks of the years they fall in.
  */
 function endRecord(v, now) {
-	if (!onVacation(v, now)) return { error: 'not-on-vacation' };
+	if (!unexpired(v, now)) return { error: 'not-on-vacation' };
 	const days = v.days || 0;
 	const kept = Math.min(days, Math.max(1, Math.ceil((now - v.from) / DAY_MS)));
 	const used = usedByYear(v);

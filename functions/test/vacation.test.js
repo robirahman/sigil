@@ -27,6 +27,16 @@ test('a vacation draws on a 14-day yearly bank', () => {
 	assert.strictEqual(u(startRecord(Object.assign({}, after, { used: { 2026: 14 } }), 14, ny), 2027), 14);
 });
 
+test('a vacation that starts a moment after the request blocks another start', () => {
+	// Another call (or instance) committed a vacation from T + 50 ms; this
+	// one's transaction retries with its own earlier now.
+	const other = startRecord(null, 3, T + 50);
+	assert.strictEqual(startRecord(other, 2, T).error, 'already-on-vacation');
+	// ... and it can be ended from that moment too.
+	assert.ok(!endRecord(other, T).error);
+	assert.strictEqual(startRecord(endRecord(other, T + DAY_MS), 2, T + DAY_MS + 10).error, undefined);
+});
+
 test('a vacation over New Year charges each year for its own days', () => {
 	// Ten days from 27 December, noon: five days begin in 2026, five in 2027.
 	const t = Date.UTC(2026, 11, 27, 12);
