@@ -175,12 +175,22 @@ exports.rateGame = onValueCreated({
 			return; // the deletion's own scrub runs after; this game stays unrated and unindexed
 		}
 	}
-	// An upheld abandonment claim adds to the player's record, which only
-	// admins (admin.html) and the player see; a ban stays an admin's call.
-	// In the same atomic update as eloProcessed, so a retry cannot count it twice.
-	const quitter = verdict.rated && verdict.abandonedBy;
-	if (quitter && !deleted[quitter] && typeof uids[quitter] === 'string' && !AI_UID.test(uids[quitter])) {
-		updates['user_flags/' + uids[quitter] + '/abandons'] = ServerValue.increment(1);
+	// An upheld abandonment claim adds to the player's record, rated game or
+	// not, which only admins (admin.html) and the player see; a ban stays an
+	// admin's call. Counted once per room (abandonedGames/{room}), however
+	// often this runs or however many records the room has.
+	const quitter = verdict.abandonedBy;
+	const quitterUid = quitter && uids[quitter];
+	if (quitter && record.roomCode && !deleted[quitter] && typeof quitterUid === 'string' && !AI_UID.test(quitterUid)
+		&& (await isFullAccount(quitterUid))) {
+		await db.ref('user_flags/' + quitterUid).transaction((cur) => {
+			const f = cur || {};
+			if (f.abandonedGames && f.abandonedGames[record.roomCode]) return; // counted already
+			return Object.assign({}, f, {
+				abandons: (typeof f.abandons === 'number' ? f.abandons : 0) + 1,
+				abandonedGames: Object.assign({}, f.abandonedGames, { [record.roomCode]: true }),
+			});
+		});
 	}
 	// The room may be deleted by its players only once it is rated: until
 	// then it is the evidence (database.rules.json).

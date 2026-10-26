@@ -164,6 +164,17 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'abandons' + seq));
 	const flags = async (u) => (await admin.ref('user_flags/' + u.uid + '/abandons').once('value')).val();
 	assert.deepStrictEqual([await flags(bob), await flags(alice), await flags(carol), await flags(dave)], [1, null, null, null]);
+	// Counted once per room: the same record rated again (a retried
+	// event: the trigger's snapshot predates eloProcessed) adds nothing.
+	assert.strictEqual((await admin.ref('user_flags/' + bob.uid + '/abandonedGames/' + code).once('value')).val(), true);
+	const again = admin.ref('completed_games/' + gameId);
+	const rec = (await again.once('value')).val();
+	for (const k of Object.keys(rec)) if (/^elo|^unrated/.test(k)) delete rec[k];
+	await again.remove();
+	await again.set(rec);
+	for (let i = 0; i < 40 && !(await again.child('eloProcessed').once('value')).val(); i++) await new Promise((r) => setTimeout(r, 500));
+	assert.strictEqual((await again.child('eloProcessed').once('value')).val(), true);
+	assert.strictEqual(await flags(bob), 1);
 });
 
 test('the server ends a game whose clock ran out with nobody watching', async () => {

@@ -216,6 +216,12 @@ test('an upheld abandonment claim names the player who left', async () => {
 	room.closedAt = lastTs + 1000 + ABANDON_GRACE_MS;
 	const v = await judgeGame(rec, ctx({ room }));
 	assert.deepStrictEqual([v.rated, v.winner, v.abandonedBy], [true, 'red', 'blue']);
+	// Upheld in an unrated room too: casual, or a guest seat.
+	const casual = Object.assign({}, room, { ranked: false, casual: true });
+	const vc = await judgeGame(Object.assign({}, rec, { ranked: false }), ctx({ room: casual }));
+	assert.deepStrictEqual([vc.rated, vc.reason, vc.abandonedBy], [false, 'casual', 'blue']);
+	const vg = await judgeGame(rec, ctx({ room, isFullAccount: async (u) => u !== 'bob' }));
+	assert.deepStrictEqual([vg.rated, vg.reason, vg.abandonedBy], [false, 'guest-account', 'blue']);
 	// A claim made too early is the claimer's loss, and nobody's abandonment.
 	room.closedAt = lastTs + 5000;
 	const early = await judgeGame(rec, ctx({ room }));

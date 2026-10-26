@@ -347,6 +347,9 @@
         "at": {
           ".validate": "newData.val() === now"
         },
+        "abandonedGames": {
+          ".validate": "false"
+        },
         "$other": {
           ".validate": false
         }

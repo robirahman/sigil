@@ -192,10 +192,13 @@ async function judgeGame(record, ctx) {
 		? await _judgeAiGame(engine, record, aiSide, spellNames, variant)
 		: await _judgeOnlineGame(engine, record, ctx, spellNames, variant);
 	if (!verdict.rated) return verdict;
-	if (record.ranked !== true) return Object.assign(unrated('casual'), { kind: verdict.kind });
+	// What an unrated verdict below keeps from the judgment (an upheld
+	// abandonment counts whether or not the game is rated).
+	const carry = verdict.abandonedBy ? { kind: verdict.kind, abandonedBy: verdict.abandonedBy } : { kind: verdict.kind };
+	if (record.ranked !== true) return Object.assign(unrated('casual'), carry);
 	for (const uid of [redUid, blueUid]) {
 		if (!AI_UID.test(uid) && !(await ctx.isFullAccount(uid))) {
-			return Object.assign(unrated('guest-account'), { kind: verdict.kind });
+			return Object.assign(unrated('guest-account'), carry);
 		}
 	}
 	// A player suspended from rated play (user_flags/{uid}/banUntil) is not
@@ -203,7 +206,7 @@ async function judgeGame(record, ctx) {
 	// `ranked` flag, and an AI game has no room.
 	for (const uid of [redUid, blueUid]) {
 		if (!AI_UID.test(uid) && ctx.isSuspended && (await ctx.isSuspended(uid))) {
-			return Object.assign(unrated('suspended'), { kind: verdict.kind });
+			return Object.assign(unrated('suspended'), carry);
 		}
 	}
 	// A game from a position pays by the position's price. The client's
@@ -212,7 +215,7 @@ async function judgeGame(record, ctx) {
 	if (verdict.startPos) {
 		const sfn = verdict.startPos.sfn;
 		const p = (sfn && ctx.priceStart) ? await ctx.priceStart(sfn) : null;
-		if (typeof p !== 'number') return Object.assign(unrated('unpriced-start'), { kind: verdict.kind });
+		if (typeof p !== 'number') return Object.assign(unrated('unpriced-start'), carry);
 		verdict.startPos = Object.assign({}, verdict.startPos,
 			{ redWinProb: p, clientRedWinProb: verdict.startPos.redWinProb, pricedBy: 'server' });
 	}
@@ -227,12 +230,18 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		return Object.assign(unrated('seat-mismatch'), { kind });
 	}
 	if (room.status !== 'finished' || room.winner !== record.winner) return Object.assign(unrated('room-result-mismatch'), { kind });
-	// A casual room is held at ranked:false by the rules too.
-	if (room.ranked !== true || room.casual === true) return Object.assign(unrated('casual'), { kind });
-	const why = engine.unratedReason(room.spellNames, room.variant, room.startSfn || null, room.startPos || null);
-	if (why) return Object.assign(unrated(why), { kind });
-
 	const loser = other(record.winner);
+	// A claim that the loser abandoned the game, upheld: their record of
+	// abandonments (user_flags/{uid}/abandons, index.js rateGame) counts it,
+	// rated or not (judgeGame carries it on every later verdict).
+	const abandonedBy = room.endReason === 'abandon' && !room.forfeitedBy
+		&& typeof room.closedAt === 'number' && abandoned(room, loser, room.closedAt) ? loser : null;
+	const kindOf = abandonedBy ? { kind, abandonedBy } : { kind };
+	// A casual room is held at ranked:false by the rules too.
+	if (room.ranked !== true || room.casual === true) return Object.assign(unrated('casual'), kindOf);
+	const why = engine.unratedReason(room.spellNames, room.variant, room.startSfn || null, room.startPos || null);
+	if (why) return Object.assign(unrated(why), kindOf);
+
 	let ok;
 	if (room.forfeitedBy === 'red' || room.forfeitedBy === 'blue') {
 		ok = room.forfeitedBy === loser;
@@ -260,9 +269,7 @@ async function _judgeOnlineGame(engine, record, ctx, spellNames, variant) {
 		claimKey: 'room_' + record.roomCode,
 		startPos: room.startPos && typeof room.startPos.redWinProb === 'number' ? room.startPos : null,
 	};
-	// A claim that the loser abandoned the game, upheld: their record of
-	// abandonments (user_flags/{uid}/abandons, index.js rateGame) counts it.
-	if (ok && room.endReason === 'abandon' && !room.forfeitedBy) verdict.abandonedBy = loser;
+	if (abandonedBy) verdict.abandonedBy = abandonedBy;
 	if (ok) return verdict;
 	if (room.finishedBy !== 'red' && room.finishedBy !== 'blue') return Object.assign(unrated('result-not-verified'), { kind });
 	// The player who closed the room with a result that does not follow
