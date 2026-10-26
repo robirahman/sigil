@@ -391,6 +391,10 @@ test('blocking: no challenge to the blocker, no seat in their rooms', async () =
 		rooms: { C3: room, P1: Object.assign({}, waiting, { creatorColor: 'red', red: { uid: 'bob', connected: true }, public: true }) } });
 	const ch = { from: 'alice', at: serverTimestamp() };
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C3'), ch));
+	// Nor can Bob challenge Alice, whom he blocked (she could not take his seat).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/C4'),
+		Object.assign({}, waiting, { creatorColor: 'red', invite: 'alice', red: { uid: 'bob', connected: true } })));
+	await assertFails(set(ref(db('bob'), 'challenges/alice/C4'), { from: 'bob', at: serverTimestamp() }));
 	// Alice cannot take the seat of a room Bob created (quick pair, open games).
 	await assertFails(update(ref(db('alice'), 'rooms/P1'),
 		{ blue: { uid: 'alice', displayName: 'Alice', connected: true }, status: 'playing', ranked: false }));

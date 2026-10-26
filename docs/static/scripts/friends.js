@@ -92,17 +92,20 @@
 	async function block(target) {
 		requireSignedIn();
 		delete blockCache[target];
-		const updates = {
+		await db().ref().update({
 			['blocks/' + uid + '/' + target]: true,
 			['follows/' + uid + '/' + target]: null,
 			['followers/' + target + '/' + uid]: null,
-		};
+		});
+		// Then sweep: once the block is in, the rules refuse any new
+		// challenge from them, so nothing slips in after this read.
 		const pending = (await db().ref('challenges/' + uid).once('value')).val() || {};
+		const sweep = {};
 		Object.keys(pending).forEach((room) => {
-			if (pending[room] && pending[room].from === target) updates['challenges/' + uid + '/' + room] = null;
+			if (pending[room] && pending[room].from === target) sweep['challenges/' + uid + '/' + room] = null;
 		});
 		Object.keys(challenges).forEach((room) => { if (challenges[room].from === target) delete challenges[room]; });
-		await db().ref().update(updates);
+		if (Object.keys(sweep).length) await db().ref().update(sweep);
 		renderBanner();
 		emit();
 	}
