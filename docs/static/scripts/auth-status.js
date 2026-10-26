@@ -60,7 +60,7 @@
 			s.async = false;
 			document.head.appendChild(s);
 		};
-		if (typeof roomTimeLeft !== 'function') add('static/scripts/engine/room-clock.js');
+		if (typeof roomTimeLeft !== 'function') add('static/scripts/engine/room-clock.js?v=35');
 		add('static/scripts/turn-notify.js');
 	})();
 
