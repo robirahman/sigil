@@ -885,12 +885,12 @@ test('challenges: by a room\'s creator, for its invited player, unless blocked',
 	await assertFails(get(ref(db('carol'), 'challenges/bob/C1')));
 	// Only the invited player takes the open seat.
 	await assertFails(update(ref(db('carol'), 'rooms/C1'),
-		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: false }));
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true, seq: true }, status: 'playing', ranked: false }));
 	// The target declines (or accepts) by removing it; a stranger cannot.
 	await assertFails(remove(ref(db('carol'), 'challenges/bob/C1')));
 	await assertSucceeds(remove(ref(db('bob'), 'challenges/bob/C1')));
 	await assertSucceeds(update(ref(db('bob'), 'rooms/C1'),
-		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: true }));
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: true }));
 	// Not for a room that is no longer waiting.
 	await assertFails(set(ref(db('alice'), 'challenges/bob/C1'), ch));
 	// A guest cannot challenge.
@@ -911,13 +911,13 @@ test('blocking: no challenge to the blocker, no seat in their rooms', async () =
 	await assertFails(set(ref(db('bob'), 'challenges/alice/C4'), { from: 'bob', at: serverTimestamp() }));
 	// Alice cannot take the seat of a room Bob created (quick pair, open games).
 	await assertFails(update(ref(db('alice'), 'rooms/P1'),
-		{ blue: { uid: 'alice', displayName: 'Alice', connected: true }, status: 'playing', ranked: false }));
+		{ blue: { uid: 'alice', displayName: 'Alice', connected: true, seq: true }, status: 'playing', ranked: false }));
 	await assertSucceeds(update(ref(db('carol'), 'rooms/P1'),
-		{ blue: { uid: 'carol', displayName: 'Carol', connected: true }, status: 'playing', ranked: false }));
+		{ blue: { uid: 'carol', displayName: 'Carol', connected: true, seq: true }, status: 'playing', ranked: false }));
 	// Nor can Bob, who blocked her, take a seat in hers (an old push or link).
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'rooms/P2'), Object.assign({}, waiting, { creatorColor: 'red' })));
 	await assertFails(update(ref(db('bob'), 'rooms/P2'),
-		{ blue: { uid: 'bob', displayName: 'Bob', connected: true }, status: 'playing', ranked: false }));
+		{ blue: { uid: 'bob', displayName: 'Bob', connected: true, seq: true }, status: 'playing', ranked: false }));
 	// Unblocked, the challenge goes through.
 	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'blocks/bob/alice')));
 	await assertSucceeds(set(ref(db('alice'), 'challenges/bob/C3'), ch));

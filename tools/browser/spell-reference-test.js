@@ -240,6 +240,10 @@ async function newPage(browser, errors, opts = {}) {
 		check(opened.endsWith(tip.want), 'clicking the focused link opens the spell page', opened);
 		for (const p of await browser.pages()) if (p !== page && p.url().includes('spell.html')) await p.close();
 		await page.bringToFront();
+		// The keyboard checks below: the pointer, left on the link just
+		// clicked, must not hover a spell or the tooltip (the mouse handlers
+		// would open or close it under the keys).
+		await page.mouse.move(1, 1);
 		await page.focus('img.sorcery-spell.sorcery-spell--1');
 		await page.evaluate(() => document.activeElement.blur());
 		await sleep(300);

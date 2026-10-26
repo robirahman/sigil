@@ -787,10 +787,14 @@ document.addEventListener('alpine:init', () => {
 				e.stopPropagation();
 				this._spellTooltipReturn = e.target;
 				if (this.activeSpell !== slot) this.showSpellTooltip(slot);
-				this.$nextTick(() => {
+				// The link renders with the tooltip (x-show): a key pressed right as the
+				// spell took focus can come before it is shown, so try for a few frames.
+				const focusLink = (tries) => {
 					const a = this.$refs.spellTooltip && this.$refs.spellTooltip.querySelector('.tooltip__more');
 					if (a) a.focus();
-				});
+					if ((!a || document.activeElement !== a) && tries > 0 && this.activeSpell === slot) requestAnimationFrame(() => focusLink(tries - 1));
+				};
+				this.$nextTick(() => focusLink(10));
 			},
 			handleTooltipKey(e) {
 				if (e.key !== 'Escape' || !this._spellTooltipReturn) return;

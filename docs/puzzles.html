@@ -862,6 +862,10 @@
 				};
 				window.SIGIL_PUZZLE_ON_RESULT = function (p, status) {
 					if (!st.current || p.id !== st.current.id) return;
+					// A run counts a puzzle's first verdict only. #44's follow-up
+					// reports are not verdicts: 'retry' (puzzleRetry, which
+					// puzzleLoad calls for each new Storm puzzle) and 'failed-final'.
+					if (status !== 'solved' && status !== 'failed' && status !== 'revealed') return;
 					result(status === 'solved');
 				};
 				$('storm-skip').addEventListener('click', () => {
