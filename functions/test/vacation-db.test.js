@@ -82,3 +82,23 @@ test('the server ends a game on time only if the clock is still out inside the t
 	assert.strictEqual(await expireRooms(db, Date.now()), 1);
 	assert.strictEqual((await db.ref('rooms/X/status').once('value')).val(), 'finished');
 });
+
+test('ending an old vacation leaves the pause of a newer one alone', async () => {
+	await db.ref('rooms/A').set(room('playing', corr, 'alice', 'bob'));
+	await setVacation(db, 'alice', 2, Date.now());
+	const old = (await db.ref('vacations/alice').once('value')).val();
+	await setVacation(db, 'alice', 0, Date.now());
+	const ended = (await db.ref('vacations/alice').once('value')).val();
+	await new Promise((r) => setTimeout(r, 5));
+	await setVacation(db, 'alice', 3, Date.now());
+	const fresh = (await db.ref('vacations/alice').once('value')).val();
+	// A sweep holding the record from before the new vacation.
+	const { pauseDueEnd } = require('../vacation');
+	const pauses = (await db.ref('rooms/A/pauses').once('value')).val();
+	const nk = pauseKey('alice', fresh.from, 'red');
+	assert.ok(pauses[nk] && pauses[nk].to === fresh.until);
+	for (const stale of [old, ended]) assert.strictEqual(pauseDueEnd(nk, pauses[nk], { alice: stale }, Date.now()), null);
+	await pauseNewGames(db, Date.now());
+	const after = (await db.ref('rooms/A/pauses/' + nk).once('value')).val();
+	assert.strictEqual(after.to, fresh.until);
+});

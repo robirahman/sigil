@@ -114,9 +114,10 @@ function pauseKey(uid, vacationFrom, color) {
 /**
  * When a pause should have ended, if earlier than its `to`: the end of the
  * vacation it belongs to (by its key, among `recs` {uid: record}: the
- * current one or the one before), or `now` when the player's record holds
- * neither. Null when the pause is right as it is, or the player is not in
- * `recs` (a deleted account's games are resigned by deleteUserData).
+ * current one or the one before), or `now` for an older vacation the record
+ * no longer holds. Null when the pause is right as it is, belongs to a
+ * vacation newer than the record, or the player is not in `recs` (a
+ * deleted account's games are resigned by deleteUserData).
  */
 function pauseDueEnd(key, p, recs, now) {
 	const m = /^(.+)_(\d+)_(red|blue)$/.exec(key);
@@ -124,6 +125,9 @@ function pauseDueEnd(key, p, recs, now) {
 	const rec = recs[m[1]];
 	if (!rec) return null;
 	const from = Number(m[2]);
+	// A vacation newer than this record (started elsewhere since it was
+	// read) is not this record's to end.
+	if (!(typeof rec.from === 'number' && from <= rec.from)) return null;
 	const vac = rec.from === from ? rec : rec.prev && rec.prev.from === from ? rec.prev : null;
 	const end = vac && typeof vac.until === 'number' ? vac.until : now;
 	return end < p.to ? Math.max(p.from, end) : null;

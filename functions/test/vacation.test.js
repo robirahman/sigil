@@ -101,6 +101,12 @@ test('a pause whose vacation has ended is due to end then', () => {
 	assert.strictEqual(pauseDueEnd(k, p, { alice: next }, T + 3 * DAY_MS), T + DAY_MS);
 	const later = startRecord(endRecord(next, T + 4 * DAY_MS), 1, T + 5 * DAY_MS);
 	assert.strictEqual(pauseDueEnd(k, Object.assign({}, p, { to: T + 10 * DAY_MS }), { alice: later }, T + 5 * DAY_MS), T + 5 * DAY_MS);
+	// A stale record (read before a newer vacation began elsewhere) never
+	// ends the newer vacation's pause.
+	const newer = startRecord(ended, 2, T + 3 * DAY_MS);
+	const nk = pauseKey('alice', newer.from, 'red');
+	assert.strictEqual(pauseDueEnd(nk, { color: 'red', from: newer.from, to: newer.until }, { alice: ended }, T + 3 * DAY_MS + 5), null);
+	assert.strictEqual(pauseDueEnd(nk, { color: 'red', from: newer.from, to: newer.until }, { alice: v }, T + 3 * DAY_MS + 5), null);
 	// Other players' pauses are left to their own records.
 	assert.strictEqual(pauseDueEnd(k, p, { bob: ended }, T + 2 * DAY_MS), null);
 });
