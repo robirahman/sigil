@@ -263,9 +263,9 @@ const SIGIL_VARIANT_RULES = [
 		id: 'deathmatch', name: 'Deathmatch', rated: false, flag: 'deathmatch',
 		summary: 'Win only by eliminating every enemy stone. Unrated.',
 		rules: [
-			'The only way to win is to leave your opponent with no stones on the board.',
+			'The only way to win is to leave your opponent with no stones on the board. The one exception is threefold repetition, which ends the game as a Blue win.',
 			c => `The ${c.lead}-stone lead does not win, and there are no spell counts, so the ${c.nth} spell does not end the game.`,
-			'Threefold repetition still ends the game as a Blue win, so every game finishes.',
+			'Repetition is there so that every game finishes: the third occurrence of the same position ends it.',
 			c => c.page ? 'Deathmatch cannot be combined with Scramble. Deathmatch games are unrated.' : null,
 		],
 	},
