@@ -88,6 +88,8 @@ def main():
     ap.add_argument('--out', default=None)
     ap.add_argument('--seed-firebase', default=None, help='service-account JSON')
     ap.add_argument('--apply', action='store_true')
+    ap.add_argument('--reseed', action='store_true',
+                    help='also rewrite puzzles nobody has attempted yet (plays 0) whose calibration changed')
     ap.add_argument('--prior', choices=['global', 'cell'], default='global',
                     help="prior mean: the tiers' mean rating (global), or fitted per class and difficulty (cell; "
                          "drifts to the grid's edge where every tier solves every puzzle in a cell)")
@@ -136,15 +138,24 @@ def main():
         sys.path.insert(0, __import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'engine', 'harness'))
         from upload_arena_games import db_token
         tok = db_token(args.seed_firebase)
-        have = requests.get(DB_URL + '/puzzle_ratings.json', params={'access_token': tok, 'shallow': 'true'},
-                            timeout=120).json() or {}
-        new = {p['id']: {'rating': p['rating'], 'plays': 0} for p in data['puzzles'] if p['id'] not in have}
-        print(f'puzzle_ratings: {len(have)} present, {len(new)} to seed' + ('' if args.apply else ' (dry run)'))
+        have = requests.get(DB_URL + '/puzzle_ratings.json', params={'access_token': tok},
+                            timeout=300).json() or {}
+        # New puzzles are seeded; with --reseed, a puzzle no player has
+        # attempted yet (plays 0) takes the new calibration too. A rating that
+        # players have already moved is never overwritten.
+        new = {}
+        for p in data['puzzles']:
+            cur = have.get(p['id'])
+            if cur is None:
+                new[p['id']] = {'rating': p['rating'], 'plays': 0}
+            elif args.reseed and (cur or {}).get('plays', 0) == 0 and cur.get('rating') != p['rating']:
+                new[p['id'] + '/rating'] = p['rating']      # plays untouched
+        print(f'puzzle_ratings: {len(have)} present, {len(new)} to write' + ('' if args.apply else ' (dry run)'))
         if args.apply and new:
             r = requests.patch(DB_URL + '/puzzle_ratings.json', params={'access_token': tok},
                                data=json.dumps(new), timeout=300)
             r.raise_for_status()
-            print('seeded', len(new))
+            print('wrote', len(new))
 
 
 if __name__ == '__main__':
