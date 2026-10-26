@@ -303,7 +303,12 @@
 					}
 					try {
 						const d = (await firebase.database().ref('users/' + this.myUid).once('value')).val() || {};
-						this.myEntry = {
+						const pz = d.puzzle || {};
+						this.myEntry = this.tab === 'puzzles' ? {
+							displayName: d.displayName || 'You',
+							elo: pz.rating ?? 1500,
+							gamesPlayed: pz.plays || 0,
+						} : {
 							displayName: d.displayName || 'You',
 							elo: d.elo ?? 1000,
 							gamesPlayed: d.gamesPlayed || 0,
@@ -329,6 +334,12 @@
 					const db = firebase.database();
 
 					if (this.tab === 'puzzles') {
+						// The signed-in player, for Find me (the games tab learns it in _seedAIs).
+						await new Promise(resolve => {
+							const unsub = firebase.auth().onAuthStateChanged(() => { unsub(); resolve(); });
+						});
+						const u = firebase.auth().currentUser;
+						this.myUid = u && !u.isAnonymous ? u.uid : null;
 						try {
 							const snap = await db.ref('puzzle_leaderboard').orderByChild('rating').limitToLast(500).once('value');
 							const results = [];
@@ -338,6 +349,7 @@
 									elo: d.rating ?? 1500, gamesPlayed: d.plays || 0, isAI: false, isDeveloper: false });
 							});
 							this.allPlayers = results.reverse();
+							this.allPlayers.forEach((p, i) => { p.rank = i + 1; });
 						} catch (e) {
 							console.error('Failed to load the puzzle leaderboard:', e);
 						}
