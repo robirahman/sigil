@@ -337,6 +337,9 @@ class FirebaseSync {
 				[joiner]: { connected: true, uid: this[joiner + 'Uid'], displayName: this[joiner + 'DisplayName'], anon: !!userInfo?.isAnonymous },
 				status: 'playing',
 				ranked: this.ranked,
+				// Why it is unrated when a suspension downgraded it, so every
+				// client and the game record can say so (roomUnratedReason).
+				unratedReason: this.unratedWhy === 'suspended' ? 'suspended' : null,
 				// The server's time the game began: the first mover's clock
 				// (functions/rating.js flagged) runs from it.
 				startedAt: firebase.database.ServerValue.TIMESTAMP,
@@ -1360,6 +1363,7 @@ class FirebaseSync {
 			// A player suspended from rated play: the rematch is unrated.
 			if (!roomData.ranked) throw e;
 			roomData.ranked = false;
+			roomData.unratedReason = 'suspended';
 			await this.db.ref('rooms/' + code).set(roomData);
 		}
 		if (roomData.allowSpectators) this.db.ref('live_rooms/' + code).set(true).catch(() => {});
@@ -1383,6 +1387,9 @@ class FirebaseSync {
 function roomUnratedReason(data, joiner) {
 	// The creator chose a casual game (lobby).
 	if (data.casual === true) return 'casual';
+	// A rated game downgraded because a player is suspended (joinRoom,
+	// createRematchRoom); the rules allow it only with ranked false.
+	if (joiner === undefined && data.ranked === false && data.unratedReason === 'suspended') return 'suspended';
 	const creator = data.creatorColor === 'blue' ? 'blue' : 'red';
 	const seats = { red: data.red || {}, blue: data.blue || {} };
 	if (joiner !== undefined) {

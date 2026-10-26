@@ -97,6 +97,10 @@
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",
           ".validate": "newData.isBoolean() && (newData.val() === false || (newData.parent().child('casual').val() !== true && (!root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').exists() || root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').val() < now) && (!root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').exists() || root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').val() < now)))"
         },
+        "unratedReason": {
+          ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",
+          ".validate": "newData.val() === 'suspended' && newData.parent().child('ranked').val() === false && ((root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').val() > now) || (root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').val() > now))"
+        },
         "public": {
           ".validate": "newData.isBoolean()"
         },

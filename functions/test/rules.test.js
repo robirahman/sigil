@@ -516,9 +516,15 @@ test('bans: set by admins, read by their owner, keep the player out of rated roo
 	// ... and a banned creator's room is never rated either.
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() + 86400000 }));
 	await assertFails(update(ref(db('carol'), 'rooms/B2'), Object.assign(join(true), { blue: { uid: 'carol', connected: true } })));
-	await assertSucceeds(update(ref(db('carol'), 'rooms/B2'), Object.assign(join(false), { blue: { uid: 'carol', connected: true } })));
+	// The room records why it is unrated, only with ranked false and only
+	// while a player in it is suspended.
+	const carol = (o) => update(ref(db('carol'), 'rooms/B2'), Object.assign(join(false), { blue: { uid: 'carol', connected: true } }, o));
+	await assertFails(carol({ unratedReason: 'casual' }));
+	await assertFails(carol({ ranked: true, unratedReason: 'suspended' }));
+	await assertSucceeds(carol({ unratedReason: 'suspended' }));
 	// A ban that has run out no longer counts.
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() - 1000, abandons: 3 }));
+	await assertFails(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(false), { blue: { uid: 'dave', connected: true }, unratedReason: 'suspended' })));
 	await assertSucceeds(update(ref(db('dave'), 'rooms/B3'), Object.assign(join(true), { blue: { uid: 'dave', connected: true } })));
 	// Guests (anonymous accounts) still create and join casual rooms.
 	const anon = env.authenticatedContext('g1', { firebase: { sign_in_provider: 'anonymous' } }).database();
@@ -529,5 +535,6 @@ test('bans: set by admins, read by their owner, keep the player out of rated roo
 		red: { uid: 'bob', connected: false }, blue: { uid: 'alice', connected: false } });
 	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'user_flags/alice'), { banUntil: Date.now() + 86400000 }));
 	await assertFails(set(ref(db('alice'), 'rooms/RM'), rematch));
-	await assertSucceeds(set(ref(db('alice'), 'rooms/RM'), Object.assign({}, rematch, { ranked: false })));
+	await assertFails(set(ref(db('alice'), 'rooms/RM'), Object.assign({}, rematch, { unratedReason: 'suspended' })));
+	await assertSucceeds(set(ref(db('alice'), 'rooms/RM'), Object.assign({}, rematch, { ranked: false, unratedReason: 'suspended' })));
 });
