@@ -31,6 +31,7 @@
 	let connectedRef = null;
 	let challengesRef = null;
 	const challenges = {};   // room -> { from, name, tcLabel, variantLabel }
+	let latest = {};         // the last challenges/{uid} snapshot
 	const blockCache = {};   // uid -> Promise<boolean> (blocked either way)
 	const listeners = [];
 
@@ -213,7 +214,8 @@
 				return;
 			}
 			const name = (await db().ref('users/' + c.from + '/displayName').once('value')).val() || (r[creator].displayName) || 'A player';
-			if (uid !== me) return;
+			// Removed (declined, swept by a block) while we were reading.
+			if (uid !== me || !latest[room] || latest[room].from !== c.from) return;
 			challenges[room] = { room, from: c.from, name, tcLabel: tcLabel(r.timeControl), variantLabel: r.startSfn ? 'From a position' : variantLabel(r.variant) };
 			renderBanner();
 			emit();
@@ -224,6 +226,7 @@
 		challengesRef = db().ref('challenges/' + uid);
 		challengesRef.on('value', (snap) => {
 			const all = snap.val() || {};
+			latest = all;
 			Object.keys(challenges).forEach((room) => { if (!all[room]) delete challenges[room]; });
 			Object.keys(all).forEach((room) => {
 				const c = all[room];
@@ -324,6 +327,7 @@
 		if (challengesRef) challengesRef.off();
 		challengesRef = null;
 		Object.keys(challenges).forEach((r) => delete challenges[r]);
+		latest = {};
 		Object.keys(blockCache).forEach((k) => delete blockCache[k]);
 		uid = null;
 		renderBanner();
