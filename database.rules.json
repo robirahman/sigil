@@ -267,6 +267,10 @@
       ".read": false,
       ".write": false
     },
+    "analysis_pending": {
+      ".read": false,
+      ".write": false
+    },
     "user_games": {
       "$uid": {
         ".read": true,

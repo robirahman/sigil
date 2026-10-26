@@ -195,7 +195,10 @@ exports.rateGame = onValueCreated({
 		try {
 			await enqueueAnalysis(gameId, 'start', verdict.winner);
 		} catch (e) {
+			// Kept for expireClocks to enqueue again (retryPendingAnalyses).
 			logger.warn('rateGame: analysis not enqueued', { gameId, error: String((e && e.message) || e) });
+			await db.ref('analysis_pending/' + gameId).set({ winner: verdict.winner || null, at: Date.now() })
+				.catch(() => { /* the rating stands either way */ });
 		}
 	}
 });
@@ -212,6 +215,25 @@ async function enqueueAnalysis(gameId, step, winner) {
 	} catch (e) {
 		if (e && e.code === 'functions/task-already-exists') return;
 		throw e;
+	}
+}
+
+/**
+ * Analyses whose enqueue failed after their game was rated
+ * (analysis_pending/{gameId}, server-only): enqueued again, a few a minute.
+ */
+async function retryPendingAnalyses(db) {
+	const snap = await db.ref('analysis_pending').orderByKey().limitToFirst(5).once('value');
+	const pending = [];
+	snap.forEach((c) => { pending.push([c.key, c.val() || {}]); });
+	for (const [gameId, v] of pending) {
+		try {
+			await enqueueAnalysis(gameId, 'start', v.winner);
+			await db.ref('analysis_pending/' + gameId).remove();
+		} catch (e) {
+			logger.warn('retryPendingAnalyses', { gameId, error: String((e && e.message) || e) });
+			return;
+		}
 	}
 }
 
@@ -251,12 +273,12 @@ exports.evalPositions = onCall({
 	// Accounts with a sign-in only (anonymous ones cost nothing to make),
 	// within a daily quota per account and for the site.
 	if (!(await isFullAccount(request.auth.uid))) throw new HttpsError('permission-denied', 'Sign in with an account first.');
-	if (!(await claimEvalQuota(database(), request.auth.uid, sfns.length, Date.now()))) {
-		throw new HttpsError('resource-exhausted', 'Daily engine quota used up.');
-	}
+	// Charged only for the positions actually searched (valid, new, not cached).
+	const claim = (n) => claimEvalQuota(database(), request.auth.uid, n, Date.now());
 	try {
-		return await evalPositions(database(), sfns, SEARCH_OPTS);
+		return await evalPositions(database(), sfns, Object.assign({ claim }, SEARCH_OPTS));
 	} catch (e) {
+		if (e && e.message === 'quota') throw new HttpsError('resource-exhausted', 'Daily engine quota used up.');
 		if (e && e.message === 'bad-request') throw new HttpsError('invalid-argument', 'Up to 10 positions (sfns).');
 		throw e;
 	}
@@ -375,6 +397,7 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION, timeoutSeconds: 120 }, async () => {
 	const ended = await expireRooms(database(), Date.now());
 	if (ended) logger.info('expireClocks', { ended });
+	await retryPendingAnalyses(database()).catch((e) => logger.warn('retryPendingAnalyses', { error: String(e) }));
 });
 
 exports.settleAbort = onValueWritten({

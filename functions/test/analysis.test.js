@@ -159,8 +159,16 @@ test('evalPositions searches what it caches, and refuses what is not a position'
 	await assert.rejects(evalPositions(db, new Array(11).fill(log[0].sfnBefore)), /bad-request/);
 	await assert.rejects(evalPositions(db, 'x'), /bad-request/);
 	const forged = log[3].sfnBefore.replace(/ (\d+) /, ' 1x ');
-	const r = await evalPositions(db, [log[2].sfnBefore, log[2].sfnBefore, 'garbage', forged, 7], { timeMs: FAST });
+	const charged = [];
+	const claim = async (n) => { charged.push(n); return true; };
+	const r = await evalPositions(db, [log[2].sfnBefore, log[2].sfnBefore, 'garbage', forged, 7], { timeMs: FAST, claim });
 	assert.deepStrictEqual(r, { cached: 0, searched: 1, skipped: 4 });
+	// Only the position searched is charged; invalid, repeated and cached ones are free.
+	assert.deepStrictEqual(charged, [1]);
+	await evalPositions(db, [log[2].sfnBefore, 'garbage'], { timeMs: FAST, claim });
+	assert.deepStrictEqual(charged, [1]);
+	await assert.rejects(evalPositions(db, [log[4].sfnBefore], { timeMs: FAST, claim: async () => false }), /quota/);
+	assert.strictEqual(db.dump().position_evals[positionEvalKey(log[4].sfnBefore)], undefined);
 	const entry = db.dump().position_evals[positionEvalKey(log[2].sfnBefore)];
 	assert.strictEqual(entry.sfn, log[2].sfnBefore);
 	assert.ok(entry.depth >= 1 && Array.isArray(entry.actions));

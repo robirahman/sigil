@@ -264,9 +264,12 @@ test('a rated game is analysed by the server, and the eval cache is filled only 
 	await assert.rejects(httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(11).fill(sfn) }));
 	const res = await httpsCallable(alice.fns, 'evalPositions')({ sfns: ['not a position'] });
 	assert.deepStrictEqual(res.data, { cached: 0, searched: 0, skipped: 1 });
-	// The daily quota per account: 200 positions.
-	for (let k = 0; k < 19; k++) await httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(10).fill('x' + k) });
-	await assert.rejects(httpsCallable(alice.fns, 'evalPositions')({ sfns: new Array(10).fill('z') }), /quota/);
+	// The daily quota (200 positions an account) is charged only for positions
+	// searched: 250 invalid ones cost nothing.
+	for (let k = 0; k < 25; k++) {
+		const r = await httpsCallable(alice.fns, 'evalPositions')({ sfns: Array.from({ length: 10 }, (_, j) => 'x' + k + '-' + j) });
+		assert.strictEqual(r.data.skipped, 10);
+	}
 });
 
 test.after(() => setTimeout(() => process.exit(0), 100));

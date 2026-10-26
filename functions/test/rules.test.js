@@ -322,4 +322,5 @@ test('engine analysis: game_evals and the position eval cache are server-only, a
 	// Nor the evalPositions quota counters.
 	await assertFails(get(ref(db('alice'), 'eval_quota')));
 	await assertFails(set(ref(db('alice'), 'eval_quota/2026-10-26/u_alice'), 0));
+	await assertFails(set(ref(db('alice'), 'analysis_pending/g1'), { winner: 'red' }));
 });

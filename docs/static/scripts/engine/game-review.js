@@ -772,7 +772,10 @@ function aiReviewMixin() {
 				const cls = r.classificationPerPly[i];
 				const best = r.bestActionsPerPly[i];
 				if (log[i].color !== color || (cls !== 'mistake' && cls !== 'blunder')) continue;
-				if (!Array.isArray(best) || !best.length || !log[i].sfnBefore) continue;
+				// The solution is matched by the position after it: documents
+				// without it (older offline ones) offer no puzzle.
+				const after = Array.isArray(r.bestSfnPerPly) ? r.bestSfnPerPly[i] : null;
+				if (!Array.isArray(best) || !best.length || !log[i].sfnBefore || typeof after !== 'string' || !after) continue;
 				out.push(i);
 			}
 			return out;
@@ -821,7 +824,7 @@ function aiReviewMixin() {
 					mover: color, sfn: log[i].sfnBefore, turn: log[i].turnNumber, variant,
 					classification: r.classificationPerPly[i],
 					p_best: pBest, p_played: pPlayed, accept_p: (pBest + pPlayed) / 2,
-					solutions: after ? [{ actions: r.bestActionsPerPly[i], after, p: pBest }] : [],
+					solutions: [{ actions: r.bestActionsPerPly[i], after, p: pBest }],
 					bestActions: r.bestActionsPerPly[i],
 				};
 			});

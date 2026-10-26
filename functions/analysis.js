@@ -233,7 +233,7 @@ async function claimEvalQuota(db, uid, n, now) {
 
 /**
  * The evalPositions callable: search and cache up to EVAL_CALL_MAX
- * positions a browser review searched for itself. Each SFN must be a
+ * positions (`opts.claim(n)` takes the quota for the n not already cached) a browser review searched for itself. Each SFN must be a
  * well-formed position (it reads back to itself) the engine plays; it is
  * searched here, never taken from the caller, so the cache cannot be
  * poisoned. Resolves to { cached, searched, skipped }.
@@ -243,19 +243,25 @@ async function evalPositions(db, sfns, opts) {
 	const w = await engineWorker();
 	const { p } = w;
 	const out = { cached: 0, searched: 0, skipped: 0 };
-	const seen = new Set();
+	const tag = p.positionEvalEngineTag();
+	// Validate, de-duplicate and look in the cache first: only the positions
+	// left are searched, and only those are charged to the quota.
+	const todo = [];
 	for (const sfn of sfns) {
-		if (typeof sfn !== 'string' || sfn.length > 400 || seen.has(sfn) || !wellFormed(p, sfn)) { out.skipped++; continue; }
-		seen.add(sfn);
-		const stats = { hits: 0, searched: 0, ms: 0 };
+		if (typeof sfn !== 'string' || sfn.length > 400 || todo.includes(sfn) || !wellFormed(p, sfn)) { out.skipped++; continue; }
+		if (await readCache(db, sfn, tag)) { out.cached++; continue; }
+		todo.push(sfn);
+	}
+	if (todo.length && opts && opts.claim && !(await opts.claim(todo.length))) throw new Error('quota');
+	for (const sfn of todo) {
 		try {
 			w.post({ type: 'new_game', ttBits: p.RUST_SERVER_PRESET.ttBits });
-			await positionRow(db, w, [sfn], 0, stats, presetFor(p, opts));
+			await positionRow(db, w, [sfn], 0, null, presetFor(p, opts));
 		} catch (e) {
 			if (/cannot review|no evaluation/.test(String(e && e.message))) { out.skipped++; continue; }
 			throw e;
 		}
-		if (stats.hits) out.cached++; else out.searched++;
+		out.searched++;
 	}
 	return out;
 }
