@@ -1441,6 +1441,54 @@ async function loadGameEvals(db, roomCode) {
 }
 
 /**
+ * The position_evals key of a position: the first 40 hex digits of the
+ * SHA-256 of its SFN, as functions/analysis.js (and position_prices) key it.
+ */
+async function positionEvalKey(sfn) {
+	const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(sfn)));
+	return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+}
+
+/**
+ * The server's stored searches of these positions (RUST_SERVER_PRESET)
+ * (`position_evals/<key>`, written only by functions/analysis.js), as a Map
+ * from SFN to the search result (mover POV, as the engine reports it).
+ * Entries of another engine build or eval are skipped.
+ */
+async function loadPositionEvals(db, sfns) {
+	const out = new Map();
+	if (!db || !Array.isArray(sfns) || !sfns.length || typeof positionEvalEngineTag !== 'function') return out;
+	const tag = positionEvalEngineTag();
+	await Promise.all(Array.from(new Set(sfns)).map(async (sfn) => {
+		try {
+			const snap = await db.ref('position_evals/' + await positionEvalKey(sfn)).once('value');
+			const e = snap.val();
+			if (e && e.sfn === sfn && e.engine === tag) out.set(sfn, e);
+		} catch (e) { /* a missing entry is a miss */ }
+	}));
+	return out;
+}
+
+/**
+ * Ask the server to search and cache positions (the evalPositions callable,
+ * which searches each one itself: clients cannot write position_evals).
+ * Fire and forget; signed-in players only, ten positions per call.
+ */
+async function requestPositionEvals(sfns) {
+	if (typeof firebase === 'undefined' || !firebase.functions || !firebase.auth || !firebase.auth().currentUser) return;
+	const call = firebase.functions().httpsCallable('evalPositions');
+	const todo = Array.from(new Set(sfns)).slice(0, 100);
+	for (let k = 0; k < todo.length; k += 10) {
+		try {
+			await call({ sfns: todo.slice(k, k + 10) });
+		} catch (e) {
+			console.warn('evalPositions failed:', e && e.message);
+			return;
+		}
+	}
+}
+
+/**
  * Write a single community annotation under
  * /community_annotations/{gameId}/{turnNumber}/{kind}/{uid}. This keeps the
  * post-hoc contributions separate from the game-owner's live-game marks

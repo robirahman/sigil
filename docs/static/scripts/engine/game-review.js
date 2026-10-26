@@ -40,6 +40,11 @@ const RUST_REVIEW_PRESETS = {
 	deep:  { tier: 'Hard', timeMs: 10000, ttBits: 20 },
 };
 const RUST_REVIEW_SEARCH = { widthScale: 4, evalName: 'nnue_mt256', adaptive: [0.10, 2, 6] };
+// The server's analysis of every rated game (functions/analysis.js) and the
+// position_evals cache: 1 s/position, as the Medium tier. The browser's Quick
+// preset (0.1 s) reaches depth 1-2 in the middlegame, where the review then
+// flagged about half of a player's turns as mistakes.
+const RUST_SERVER_PRESET = { tier: 'Medium', timeMs: 1000, ttBits: 18 };
 /** Deep review (Hard) searches on every thread the page can give it. */
 function rustReviewThreads(mode) {
 	return (mode === 'deep' && typeof rustThreadCount === 'function') ? rustThreadCount() : 1;
@@ -77,7 +82,7 @@ function reviewModeLabel(mode) {
  * live review renders exactly like a stored one. Throws when the engine cannot
  * play the position (out-of-scope packs) -- the caller falls back to Caveman.
  */
-async function reviewGameRust(gameLog, mode, onProgress, winner) {
+async function reviewGameRust(gameLog, mode, onProgress, winner, opts) {
 	mode = mode === 'deep' ? 'deep' : 'quick';
 	const p = RUST_REVIEW_PRESETS[mode];
 	const n = gameLog.length;
@@ -89,60 +94,33 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 		|| (typeof variantHasScramble === 'function' && variantHasScramble(variant))) {
 		throw new Error('the Rust engine does not play the ' + variant + ' variant');
 	}
-	const other = c => (c === 'red' ? 'blue' : 'red');
-	const tokenSide = _sfnSide;
-	const movers = new Array(n + 1), evals = new Array(n + 1).fill(null);
-	const mates = new Array(n + 1).fill(null), proven = new Array(n + 1).fill(true);
-	const best = new Array(n + 1).fill(null), depths = new Array(n + 1).fill(null);
-	let depthMax = 0;
+	// Quick reviews take positions the server already searched, deeper
+	// (position_evals, see positionEvalCacheable); `opts.cached` maps an SFN to
+	// its stored search result. `opts.searched` collects the SFNs searched here
+	// that the cache could take.
+	const cached = (mode === 'quick' && opts && opts.cached) || null;
+	const searched = (opts && opts.searched) || null;
+	const rows = new Array(n);
 	const worker = getRustEngineWorker();
 	worker.post({ type: 'new_game', ttBits: p.ttBits });   // a fresh table per review
-	// The final position: a finished game is decided; its side token is the
-	// last mover's (browser convention), as eval_games.py reads it.
 	// A resignation or timeout leaves a non-terminal board: the recorded
 	// result (`winner`) decides it, as stored game_evals documents do.
 	const last = sfnToSimBoard(sfns[n]);
-	movers[n] = other(tokenSide(sfns[n]));
 	let terminal;
 	if (last.gameover) terminal = { winner: last.winner || null };
 	else if (winner === 'red' || winner === 'blue') terminal = { winner };
 	for (let i = n - 1; i >= 0; i--) {
 		if (onProgress) onProgress(n - 1 - i, n);
-		const mover = tokenSide(sfns[i]);
-		movers[i] = mover;
-		// A search that completes no depth reports no value (stones and mate
-		// null); it must not read as an even position. Retry with more time,
-		// then give up on the Rust review.
-		let res = null;
-		for (let tms = p.timeMs, k = 0; k < 4; k++, tms *= 4) {
-			res = await worker.search(Object.assign({
-				sfn: sfns[i], timeMs: tms, ttBits: p.ttBits, threads: rustReviewThreads(mode),
-				// The position itself is part of the history, as RustAI._send
-				// sends it: threefold repetition counts it.
-				historySfns: sfns.slice(Math.max(0, i - 63), i + 1),
-			}, RUST_REVIEW_SEARCH));
-			if (!res || res.ok === false) {
-				throw new Error('Rust engine cannot review this position: ' + ((res && res.error) || 'no result'));
-			}
-			if (typeof res.stones === 'number' || typeof res.mate_in === 'number') break;
+		const hit = cached && positionEvalCacheable(sfns, i) ? cached.get(sfns[i]) : null;
+		if (hit) {
+			rows[i] = rustReviewRow(_sfnSide(sfns[i]), hit);
+			continue;
 		}
-		if (typeof res.stones !== 'number' && typeof res.mate_in !== 'number') {
-			throw new Error('Rust engine found no evaluation for position ' + i);
-		}
-		const sign = mover === 'red' ? 1 : -1;            // mover POV -> red POV
-		if (typeof res.mate_in === 'number' && res.mate_in !== 0) mates[i] = res.mate_in * sign;
-		if (typeof res.stones === 'number') evals[i] = res.stones * sign;
-		proven[i] = res.mate_in == null ? true : !!res.mate_proven;
-		best[i] = Array.isArray(res.actions) ? res.actions : null;
-		depths[i] = res.depth || null;
-		depthMax = Math.max(depthMax, res.depth || 0);
+		rows[i] = await rustReviewSearchPosition(worker, sfns, i, p, rustReviewThreads(mode));
+		if (searched && mode === 'quick' && positionEvalCacheable(sfns, i)) searched.push(sfns[i]);
 	}
 	if (onProgress) onProgress(n, n);
-	const doc = {
-		engine: rustReviewModelVersion(), depth: depthMax, finalSfn: sfns[n], plies: n,
-		moverPerPly: movers, evalPerPly: evals, matePerPly: mates, provenPerPly: proven,
-		bestPerPly: best, depthPerPly: depths, terminal,
-	};
+	const doc = rustReviewDoc(sfns, rows, terminal, rustReviewModelVersion());
 	const review = rustEvalsToReview(doc, gameLog);
 	if (!review) throw new Error('Rust review did not match the game record');
 	return Object.assign(review, {
@@ -151,9 +129,101 @@ async function reviewGameRust(gameLog, mode, onProgress, winner) {
 		modelVersion: rustReviewModelVersion(),
 		engineTier: p.tier,
 		timeLimitPerPly: p.timeMs / 1000,
-		engineDepth: depthMax,
+		engineDepth: doc.depth,
 		computedAt: Date.now(),
 	});
+}
+
+/**
+ * Search review position i (of `sfns`, the side-to-move-correct positions of
+ * _reviewPositions) at preset `p` with `worker` (getRustEngineWorker(), or
+ * the server's wasm engine behind the same interface: functions/analysis.js).
+ * Resolves to the position's red-POV row (rustReviewRow).
+ */
+async function rustReviewSearchPosition(worker, sfns, i, p, threads) {
+	// A search that completes no depth reports no value (stones and mate
+	// null); it must not read as an even position. Retry with more time,
+	// then give up on the Rust review.
+	let res = null;
+	for (let tms = p.timeMs, k = 0; k < 4; k++, tms *= 4) {
+		res = await worker.search(Object.assign({
+			sfn: sfns[i], timeMs: tms, ttBits: p.ttBits, threads: threads || 1,
+			// The position itself is part of the history, as RustAI._send
+			// sends it: threefold repetition counts it.
+			historySfns: sfns.slice(Math.max(0, i - 63), i + 1),
+		}, RUST_REVIEW_SEARCH));
+		if (!res || res.ok === false) {
+			throw new Error('Rust engine cannot review this position: ' + ((res && res.error) || 'no result'));
+		}
+		if (typeof res.stones === 'number' || typeof res.mate_in === 'number') break;
+	}
+	if (typeof res.stones !== 'number' && typeof res.mate_in !== 'number') {
+		throw new Error('Rust engine found no evaluation for position ' + i);
+	}
+	return rustReviewRow(_sfnSide(sfns[i]), res);
+}
+
+/**
+ * One position's review row, red POV, from an engine search result (mover
+ * POV: `stones`, `mate_in`, `mate_proven`, `actions`, `expected_sfn`,
+ * `depth`) -- a live search or a stored position_evals entry.
+ */
+function rustReviewRow(mover, res) {
+	const sign = mover === 'red' ? 1 : -1;            // mover POV -> red POV
+	return {
+		mover,
+		eval: typeof res.stones === 'number' ? res.stones * sign : null,
+		mate: (typeof res.mate_in === 'number' && res.mate_in !== 0) ? res.mate_in * sign : null,
+		proven: res.mate_in == null ? true : !!res.mate_proven,
+		best: Array.isArray(res.actions) ? res.actions : null,
+		// The position after the engine's turn (puzzleSfnKey matching in
+		// "learn from your mistakes").
+		bestSfn: typeof res.expected_sfn === 'string' && res.expected_sfn ? res.expected_sfn : null,
+		depth: res.depth || null,
+	};
+}
+
+/**
+ * Pack review rows 0..n-1 (rustReviewRow) as a `game_evals` document: red-POV
+ * stones, mates in the winner's turns, as engine/harness/eval_games.py writes
+ * it and rustEvalsToReview reads it. The final position is not searched: its
+ * side token is the last mover's (browser convention), and `terminal` holds
+ * the result when the game is decided.
+ */
+function rustReviewDoc(sfns, rows, terminal, engine) {
+	const n = sfns.length - 1;
+	const col = (k, end) => rows.map(r => (r && r[k] !== undefined ? r[k] : null)).concat([end]);
+	let depthMax = 0;
+	for (const r of rows) depthMax = Math.max(depthMax, (r && r.depth) || 0);
+	const doc = {
+		engine, depth: depthMax, finalSfn: sfns[n], plies: n,
+		moverPerPly: rows.map(r => r.mover).concat([_sfnSide(sfns[n]) === 'red' ? 'blue' : 'red']),
+		evalPerPly: col('eval', null), matePerPly: col('mate', null),
+		provenPerPly: rows.map(r => (r && r.proven !== undefined ? !!r.proven : true)).concat([true]),
+		bestPerPly: col('best', null), bestSfnPerPly: col('bestSfn', null), depthPerPly: col('depth', null),
+	};
+	if (terminal) doc.terminal = terminal;
+	return doc;
+}
+
+/**
+ * The position_evals cache (functions/analysis.js writes it; clients only
+ * read it). An entry is one RUST_SERVER_PRESET search of the position alone
+ * (no game history), so it stands for review position i only when the game
+ * has not been there before (threefold repetition would count the earlier
+ * visits). Within the search the line's earlier positions are not known
+ * either way: the cached value ignores repetitions back into the game.
+ */
+function positionEvalCacheable(sfns, i) {
+	const key = _reviewSfnKey(sfns[i]);
+	for (let k = 0; k < i; k++) if (_reviewSfnKey(sfns[k]) === key) return false;
+	return true;
+}
+
+/** Identity of a position_evals entry: engine build, eval and search time. */
+function positionEvalEngineTag() {
+	return 'rust-v' + (typeof RUST_ENGINE_VERSION !== 'undefined' ? RUST_ENGINE_VERSION : '?')
+		+ '-' + RUST_REVIEW_SEARCH.evalName + '-t' + RUST_SERVER_PRESET.timeMs;
 }
 
 /** Convert minimax score to win% from the mover's perspective. */
@@ -459,8 +529,12 @@ function rustEvalsToReview(doc, gameLog) {
 		source: 'rust',
 		modelVersion: (doc.engine || 'rust') + '-d' + (doc.depth || '?'),
 		engineDepth: doc.depth || null,
-		// Complete by construction: the panel's mode buttons offer no recompute.
-		mode: 'deep',
+		// Complete by construction: the panel's mode buttons offer no recompute,
+		// except a Deep Review over the server's analysis of a rated game
+		// (functions/analysis.js: `preset` 'server', `timeMs`).
+		mode: doc.preset ? 'quick' : 'deep',
+		preset: doc.preset || null,
+		presetTimeMs: doc.timeMs || null,
 		sigmoidK: REVIEW_DEFAULTS.sigmoidK,
 		forcedWinFloor: floor,
 		timeLimitPerPly: null,
@@ -473,6 +547,8 @@ function rustEvalsToReview(doc, gameLog) {
 		stonesPerPly,
 		bestTurnPerPly: new Array(n + 1).fill(null),
 		bestActionsPerPly: doc.bestPerPly ? pad(doc.bestPerPly) : null,
+		// The position after each best turn (absent on older documents).
+		bestSfnPerPly: doc.bestSfnPerPly ? pad(doc.bestSfnPerPly) : null,
 		// Per-ply search depth (stored game_evals and live reviews): prices a
 		// rated game from a reviewed position (position-rating.js).
 		depthPerPly: doc.depthPerPly ? pad(doc.depthPerPly) : null,
@@ -567,8 +643,9 @@ function aiReviewMixin() {
 			}
 			mode = (mode === 'deep') ? 'deep' : 'quick';
 
-			// A stored Rust-engine review is complete: always just open it.
-			if (this.aiReview && this.aiReview.source === 'rust') {
+			// A stored Rust-engine review is complete: always just open it (a
+			// Deep Review over the server's Quick analysis computes).
+			if (this.aiReview && this.aiReview.source === 'rust' && (this.aiReview.mode === 'deep' || mode === 'quick')) {
 				if (!this.reviewMode) this.startReview();
 				this.reviewFirst();
 				return;
@@ -600,33 +677,34 @@ function aiReviewMixin() {
 			//     overwriting the cached entry
 			const gameId = this._roomCodeForReview;
 			const db = (typeof firebase !== 'undefined' && firebase.database) ? firebase.database() : null;
-			// The Rust engine's stored depth-6 evaluation (game_evals/<roomCode>)
-			// beats any Caveman review, quick or deep, when it describes this game.
+			// Stored reviews, best first: the Rust engine's offline depth-6
+			// evaluation (game_evals/<roomCode>, when it describes this game), a
+			// cached Deep Review, then for a Quick request the server's analysis
+			// of a rated game (functions/analysis.js, also in game_evals) or a
+			// cached Quick review.
+			let stored = null, cached = null;
 			if (db && gameId && typeof loadGameEvals === 'function') {
 				try {
 					const doc = await loadGameEvals(db, gameId);
-					const adapted = doc ? rustEvalsToReview(doc, gameLog) : null;
-					if (adapted) {
-						this.aiReview = adapted;
-						if (!this.reviewMode) this.startReview();
-						this.reviewFirst();
-						return;
-					}
-				} catch (e) { /* fall through to the Caveman review */ }
+					stored = doc ? rustEvalsToReview(doc, gameLog) : null;
+				} catch (e) { /* fall through to the cached review */ }
 			}
 			if (db && gameId && typeof loadGameReview === 'function') {
 				try {
-					const cached = await loadGameReview(db, gameId);
-					if (cached && okVersions.includes(cached.modelVersion)) {
-						const cachedMode = cached.mode || 'quick';
-						if (cachedMode === 'deep' || mode === 'quick') {
-							this.aiReview = cached;
-							if (!this.reviewMode) this.startReview();
-							this.reviewFirst();
-							return;
-						}
-					}
+					const c = await loadGameReview(db, gameId);
+					cached = c && okVersions.includes(c.modelVersion) ? c : null;
 				} catch (e) { /* fall through to compute */ }
+			}
+			const cachedMode = cached ? (cached.mode || 'quick') : null;
+			const pick = (stored && stored.mode === 'deep') ? stored
+				: cachedMode === 'deep' ? cached
+				: (mode === 'quick' && stored) ? stored
+				: (mode === 'quick' && cached) ? cached : null;
+			if (pick) {
+				this.aiReview = pick;
+				if (!this.reviewMode) this.startReview();
+				this.reviewFirst();
+				return;
 			}
 
 			this.aiReviewComputing = true;
@@ -637,7 +715,14 @@ function aiReviewMixin() {
 				let result = null;
 				if (useRust) {
 					try {
-						result = await reviewGameRust(gameLog, mode, progress, this.winner);
+						// Quick reviews take the positions the server already searched.
+						const cached = mode === 'quick' && db && typeof loadPositionEvals === 'function'
+							? await loadPositionEvals(db, _reviewPositions(gameLog).slice(0, -1)).catch(() => null) : null;
+						const searched = [];
+						result = await reviewGameRust(gameLog, mode, progress, this.winner, { cached, searched });
+						// The rest go to the server, which searches them again before
+						// caching them (clients cannot write position_evals).
+						if (searched.length && typeof requestPositionEvals === 'function') requestPositionEvals(searched);
 					} catch (e) {
 						// e.g. a pack the Rust engine does not play: review with Caveman.
 						console.warn('Rust review failed; falling back to the JS engine:', e);
@@ -661,6 +746,104 @@ function aiReviewMixin() {
 			}
 		},
 
+		// ---- Learn from your mistakes ----
+		// The viewer's own turns the review rates a mistake or a blunder (the
+		// graph's dots: classifyDelta >= 20), replayed one by one as puzzles
+		// on puzzles.html?learn=<room>: the position before the turn, judged
+		// against the engine's best turn by position (puzzleSfnKey), as the
+		// winning-turn puzzles are.
+
+		/** The side the viewer played: their seat, or their uid's seat in a replay. */
+		learnColor() {
+			if ((this.myColor === 'red' || this.myColor === 'blue') && !this.isSpectator) return this.myColor;
+			const uid = this._aiReviewGetUid();
+			if (uid && this.redUid === uid) return 'red';
+			if (uid && this.blueUid === uid) return 'blue';
+			return '';
+		},
+
+		/** Review positions (= turn indices) of the viewer's mistakes with an engine turn to compare. */
+		learnPlies() {
+			const r = this.aiReview, log = this._gameLogForExport;
+			const color = this.learnColor();
+			if (!r || !color || !Array.isArray(r.bestActionsPerPly) || !log || log.length !== r.classificationPerPly.length) return [];
+			const out = [];
+			for (let i = 0; i < log.length; i++) {
+				const cls = r.classificationPerPly[i];
+				const best = r.bestActionsPerPly[i];
+				if (log[i].color !== color || (cls !== 'mistake' && cls !== 'blunder')) continue;
+				// The solution is matched by the position after it: documents
+				// without it (older offline ones) offer no puzzle.
+				const after = Array.isArray(r.bestSfnPerPly) ? r.bestSfnPerPly[i] : null;
+				if (!Array.isArray(best) || !best.length || !log[i].sfnBefore || typeof after !== 'string' || !after) continue;
+				out.push(i);
+			}
+			return out;
+		},
+
+		/** "Learn from your mistakes (3)" */
+		learnButtonText() {
+			const k = this.learnPlies().length;
+			return 'Learn from your mistakes (' + k + ')';
+		},
+
+		/**
+		 * Hand the mistakes to puzzles.html as winning-turn puzzles: the stored
+		 * best turn is the solution (by the position after it), and any other
+		 * turn is judged by the engine against `accept_p`, midway between the
+		 * best turn's and the played turn's win chances, as the puzzle set's
+		 * winning turns are (calibrated by position-rating.js when the review
+		 * searched deep enough, else the review graph's own win%).
+		 */
+		async startLearnFromMistakes() {
+			const r = this.aiReview, log = this._gameLogForExport;
+			const plies = this.learnPlies();
+			if (!plies.length) return;
+			const color = this.learnColor();
+			let model = null;
+			try { model = typeof loadPositionModel === 'function' ? await loadPositionModel() : null; } catch (e) { model = null; }
+			const n = log.length;
+			const sfnAt = (i) => (i < n ? log[i].sfnBefore : null);
+			const calibrated = (i) => {
+				const info = (model && typeof reviewPositionEval === 'function' && sfnAt(i)) ? reviewPositionEval(r, i) : null;
+				const pRed = info ? positionRedWinProb(model, info, sfnAt(i)) : null;
+				return typeof pRed === 'number' ? (color === 'red' ? pRed : 1 - pRed) : null;
+			};
+			const graph = (i) => {
+				const wp = r.winPctPerPly[i] / 100;
+				return r.moverPerPly[i] === color ? wp : 1 - wp;
+			};
+			const room = this._roomCodeForReview || 'game';
+			const puzzles = plies.map((i, k) => {
+				let pBest = calibrated(i), pPlayed = calibrated(i + 1);
+				if (pBest === null || pPlayed === null) { pBest = graph(i); pPlayed = graph(i + 1); }
+				const after = r.bestSfnPerPly ? r.bestSfnPerPly[i] : null;
+				const variant = (sfnToDict(log[i].sfnBefore).variant) || 'standard';
+				return {
+					id: 'learn-' + room + '-' + i, index: k, kind: 'winning', learn: true,
+					mover: color, sfn: log[i].sfnBefore, turn: log[i].turnNumber, variant,
+					classification: r.classificationPerPly[i],
+					p_best: pBest, p_played: pPlayed, accept_p: (pBest + pPlayed) / 2,
+					solutions: [{ actions: r.bestActionsPerPly[i], after, p: pBest }],
+					bestActions: r.bestActionsPerPly[i],
+				};
+			});
+			const set = {
+				room, color, puzzles,
+				red: this._redNameForExport || this.redName || 'Red',
+				blue: this._blueNameForExport || this.blueName || 'Blue',
+				back: window.location.pathname.split('/').pop() + window.location.search,
+				at: Date.now(),
+			};
+			try {
+				sessionStorage.setItem('sigil_learn_set', JSON.stringify(set));
+			} catch (e) {
+				this.aiReviewError = 'This browser would not keep the mistakes for the puzzle page (storage blocked).';
+				return;
+			}
+			window.location.href = 'puzzles.html?learn=' + encodeURIComponent(room);
+		},
+
 		_aiReviewRedWp(i) {
 			const wp = this.aiReview.winPctPerPly[i];
 			return this.aiReview.moverPerPly[i] === 'red' ? wp : 100 - wp;
@@ -676,6 +859,10 @@ function aiReviewMixin() {
 			if (!r) return '';
 			if (r.source === 'rust-live') {
 				return 'Rust engine, ' + r.engineTier + ' (' + r.timeLimitPerPly + ' s/position), depth up to ' + r.engineDepth;
+			}
+			if (r.source === 'rust' && r.preset) {
+				return 'Rust engine, ' + ((r.presetTimeMs || RUST_SERVER_PRESET.timeMs) / 1000)
+					+ ' s/position (analysed on the server), depth up to ' + r.engineDepth;
 			}
 			if (r.source === 'rust') return 'Rust engine, depth ' + r.engineDepth + ' at every position';
 			return '';

@@ -878,6 +878,10 @@
 						<span>Red accuracy: <strong x-text="aiReview && aiReview.redAccuracy.toFixed(1) + '%'"></strong></span>
 						<span>Blue accuracy: <strong x-text="aiReview && aiReview.blueAccuracy.toFixed(1) + '%'"></strong></span>
 					</div>
+					<div class="ai-review-learn" x-show="learnPlies().length > 0" x-cloak>
+						<button class="ai-review-trigger__btn" x-on:click="startLearnFromMistakes()" x-text="learnButtonText()"
+							title="Replay your own mistakes from this game as puzzles"></button>
+					</div>
 					<div class="ai-review-annotate"
 						x-show="currentReviewTurnNumber() !== null"
 						x-bind:class="{ 'ai-review-annotate--ambiguous': isCurrentReviewPlyAmbiguous() }"
@@ -1894,7 +1898,7 @@
 	<script src="static/scripts/engine/rust-ai.js?v=34"></script>
 	<script src="static/scripts/engine/ai-player.js"></script>
 	<script src="static/scripts/engine/game-controller.js"></script>
-	<script src="static/scripts/engine/game-review.js?v=34"></script>
+	<script src="static/scripts/engine/game-review.js?v=34.1"></script>
 	<script src="static/scripts/engine/auth-manager.js"></script>
 	<script src="static/scripts/engine/elo.js?v=34"></script>
 	<script src="static/scripts/engine/position-rating.js?v=34"></script>
@@ -1913,6 +1917,7 @@
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 	<script>
 		firebase.initializeApp({
 			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",

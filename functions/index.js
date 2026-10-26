@@ -15,6 +15,12 @@
  *                    (on the status change to 'aborted').
  *   notifyTurn     - a web push to the player whose move it now is, in
  *                    correspondence games (and realtime ones they left).
+ *   analyzeGame    - a task queue: the Rust engine's review of each rated
+ *                    game (analysis.js), enqueued by rateGame, written to
+ *                    game_evals/{roomCode} for the review panel.
+ *   evalPositions  - fills the position eval cache (position_evals) with
+ *                    positions a browser review searched, searching each
+ *                    one again here.
  *
  * Deploy: `firebase deploy --only functions` from the repo root (firebase.json
  * copies the engine into functions/engine/ first). Deploy together with
@@ -24,6 +30,8 @@
 const { onValueCreated, onValueWritten } = require('firebase-functions/v2/database');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onTaskDispatched } = require('firebase-functions/v2/tasks');
+const { getFunctions } = require('firebase-admin/functions');
 const { logger } = require('firebase-functions');
 const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
@@ -32,11 +40,16 @@ const { AI_UID, judgeGame, ratingUpdates, recordFromRoom, freshEngine, roomTurns
 const { finishRoom, expireRooms } = require('./rooms');
 const { priceStart } = require('./pricing');
 const { notifyTurn } = require('./notify');
+const { analyzeStep, evalPositions, claimEvalQuota, analysisStarted, resumeStalledAnalyses, EVAL_CALL_MAX } = require('./analysis');
 const crypto = require('crypto');
 
 initializeApp();
 
 const DB_INSTANCE = 'sigil-js-default-rtdb';
+// The emulators may search shorter than RUST_SERVER_PRESET (SIGIL_ANALYSIS_MS),
+// so a test run that rates many games does not queue minutes of engine time.
+const SEARCH_OPTS = process.env.FUNCTIONS_EMULATOR === 'true' && Number(process.env.SIGIL_ANALYSIS_MS) > 0
+	? { timeMs: Number(process.env.SIGIL_ANALYSIS_MS) } : {};
 const REGION = 'us-central1';
 // By URL rather than the default, which follows the project id: the
 // emulator tests run under a demo project with this instance name.
@@ -183,6 +196,105 @@ exports.rateGame = onValueCreated({
 	await db.ref().update(updates);
 	logger.info('rateGame', { gameId, kind: verdict.kind, rated: verdict.rated, reason: verdict.reason || null,
 		eloChange: updates['completed_games/' + gameId + '/eloChange'] });
+	// The engine's review of the game, in the background. The rating is
+	// written: nothing here may undo it or make the event retry.
+	if (verdict.rated) {
+		try {
+			await enqueueAnalysis(gameId, 'start', verdict.winner);
+			// Seen by the stall sweep even if the first task never succeeds.
+			await analysisStarted(db, gameId, verdict.winner, Date.now()).catch(() => {});
+		} catch (e) {
+			// Kept for expireClocks to enqueue again (retryPendingAnalyses).
+			logger.warn('rateGame: analysis not enqueued', { gameId, error: String((e && e.message) || e) });
+			await db.ref('analysis_pending/' + gameId).set({ winner: verdict.winner || null, at: Date.now() })
+				.catch(() => { /* the rating stands either way */ });
+		}
+	}
+});
+
+/**
+ * Queue an analyzeGame task. The task id makes a repeat (a retried rateGame,
+ * a redelivered task) a no-op.
+ */
+async function enqueueAnalysis(gameId, step, winner) {
+	try {
+		await getFunctions().taskQueue('locations/' + REGION + '/functions/analyzeGame')
+			// The winner as rated (an overturned result differs from the record's).
+			.enqueue({ gameId, winner: winner || null }, { id: ('analyze-' + gameId + '-' + step).replace(/[^A-Za-z0-9_-]/g, '_') });
+	} catch (e) {
+		if (e && e.code === 'functions/task-already-exists') return;
+		throw e;
+	}
+}
+
+/**
+ * Analyses whose enqueue failed after their game was rated
+ * (analysis_pending/{gameId}, server-only): enqueued again, a few a minute.
+ */
+async function retryPendingAnalyses(db) {
+	const snap = await db.ref('analysis_pending').orderByKey().limitToFirst(5).once('value');
+	const pending = [];
+	snap.forEach((c) => { pending.push([c.key, c.val() || {}]); });
+	for (const [gameId, v] of pending) {
+		try {
+			await enqueueAnalysis(gameId, 'start', v.winner);
+			await analysisStarted(db, gameId, v.winner, Date.now());
+			await db.ref('analysis_pending/' + gameId).remove();
+		} catch (e) {
+			logger.warn('retryPendingAnalyses', { gameId, error: String((e && e.message) || e) });
+			return;
+		}
+	}
+	// Chains whose task ran out of retries (no progress for 30 minutes).
+	const res = await resumeStalledAnalyses(db, Date.now(), enqueueAnalysis, 5);
+	if (res.resumed || res.dropped) logger.info('retryPendingAnalyses: stalled analyses', res);
+}
+
+exports.analyzeGame = onTaskDispatched({
+	region: REGION,
+	// A few positions per task (analysis.js ANALYSIS_BATCH), so one game is
+	// a short chain of tasks and a backlog drains slowly and cheaply.
+	retryConfig: { maxAttempts: 3, minBackoffSeconds: 60 },
+	rateLimits: { maxConcurrentDispatches: 2, maxDispatchesPerSecond: 1 },
+	// One search at a time per instance: the wasm engine is single-threaded.
+	maxInstances: 2,
+	concurrency: 1,
+	memory: '1GiB',
+	timeoutSeconds: 540,
+}, async (req) => {
+	const gameId = req.data && req.data.gameId;
+	if (typeof gameId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(gameId)) return;
+	const winner = req.data.winner === 'red' || req.data.winner === 'blue' ? req.data.winner : null;
+	const res = await analyzeStep(database(), gameId, Object.assign({ winner }, SEARCH_OPTS));
+	if (!res.done) {
+		await enqueueAnalysis(gameId, String(res.next), winner);
+		return;
+	}
+	logger.info('analyzeGame', { gameId, reason: res.reason });
+});
+
+exports.evalPositions = onCall({
+	region: REGION,
+	maxInstances: 2,
+	concurrency: 1,
+	memory: '1GiB',
+	timeoutSeconds: 300,
+}, async (request) => {
+	if (!request.auth || !request.auth.uid) throw new HttpsError('unauthenticated', 'Sign in first.');
+	const sfns = request.data && request.data.sfns;
+	if (!Array.isArray(sfns) || sfns.length > EVAL_CALL_MAX) throw new HttpsError('invalid-argument', 'Up to 10 positions (sfns).');
+	// Accounts with a sign-in only (anonymous ones cost nothing to make),
+	// within a daily quota per account and for the site.
+	if (!(await isFullAccount(request.auth.uid))) throw new HttpsError('permission-denied', 'Sign in with an account first.');
+	// Charged only for the positions actually searched (valid, new, not cached).
+	const claim = (n) => claimEvalQuota(database(), request.auth.uid, n, Date.now());
+	try {
+		return await evalPositions(database(), sfns, Object.assign({ claim }, SEARCH_OPTS));
+	} catch (e) {
+		if (e && e.message === 'quota') throw new HttpsError('resource-exhausted', 'Daily engine quota used up.');
+		if (e && e.message === 'bad-request') throw new HttpsError('invalid-argument', 'Up to 10 positions (sfns).');
+		throw e;
+	}
 });
 
 // How recently the caller must have signed in to delete their account.
@@ -298,6 +410,7 @@ exports.deleteUserData = onCall({ region: REGION }, async (request) => {
 exports.expireClocks = onSchedule({ schedule: 'every 1 minutes', region: REGION, timeoutSeconds: 120 }, async () => {
 	const ended = await expireRooms(database(), Date.now());
 	if (ended) logger.info('expireClocks', { ended });
+	await retryPendingAnalyses(database()).catch((e) => logger.warn('retryPendingAnalyses', { error: String(e) }));
 });
 
 exports.settleAbort = onValueWritten({

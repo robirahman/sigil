@@ -1947,7 +1947,9 @@ document.addEventListener('alpine:init', () => {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'solved';
 					_this.puzzleMessage = msg || 'Solved!';
-					try {
+					// A mistake from the player's own game (puzzles.html?learn=) is
+					// not one of the puzzle set's.
+					if (!puzzle.learn) try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
 						solved[puzzle.id] = Date.now();
