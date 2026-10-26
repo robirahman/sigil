@@ -15,19 +15,27 @@
 //   (cd docs && python3 -m http.server 8810) &
 //   cd functions && firebase emulators:exec --only auth,database,functions --project demo-sigil \
 //     'node ../tools/browser/vacation-emulator-test.js http://localhost:8810'
+// (with other emulator ports: VAC_FUNCTIONS_PORT=<functions port>)
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
 const BASE = process.argv[2] || 'http://localhost:8810';
 const NS = 'sigil-js-default-rtdb';
-const DB = 'http://127.0.0.1:9000';
+// emulators:exec sets the database and auth hosts; the functions port and
+// project come from VAC_FUNCTIONS_PORT and GCLOUD_PROJECT (a private
+// emulator config may move them all).
+const DB_HOST = process.env.FIREBASE_DATABASE_EMULATOR_HOST || '127.0.0.1:9000';
+const AUTH_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
+const EMU = { db: DB_HOST, auth: AUTH_HOST, fn: Number(process.env.VAC_FUNCTIONS_PORT || 5001),
+	project: process.env.GCLOUD_PROJECT || 'demo-sigil' };
+const DB = 'http://' + DB_HOST;
 const OWNER = { Authorization: 'Bearer owner' };
 const DAY = 24 * 3600_000;
 
 // Point the page's Firebase at the emulators as soon as the app exists. The
 // functions emulator serves the demo project only.
-function useEmulators() {
+function useEmulators(emu) {
 	let fb;
 	Object.defineProperty(window, 'firebase', {
 		configurable: true,
@@ -36,10 +44,11 @@ function useEmulators() {
 			fb = v;
 			const init = v.initializeApp.bind(v);
 			v.initializeApp = (cfg, ...rest) => {
-				const app = init(Object.assign({}, cfg, { projectId: 'demo-sigil' }), ...rest);
-				app.auth().useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
-				app.database().useEmulator('127.0.0.1', 9000);
-				if (typeof app.functions === 'function') app.functions().useEmulator('127.0.0.1', 5001);
+				const app = init(Object.assign({}, cfg, { projectId: emu.project }), ...rest);
+				const [dbHost, dbPort] = emu.db.split(':');
+				app.auth().useEmulator('http://' + emu.auth, { disableWarnings: true });
+				app.database().useEmulator(dbHost, Number(dbPort));
+				if (typeof app.functions === 'function') app.functions().useEmulator('127.0.0.1', emu.fn);
 				return app;
 			};
 		},
@@ -91,7 +100,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 	const newPage = async () => {
 		const ctx = await browser.createBrowserContext();
 		const p = await ctx.newPage();
-		await p.evaluateOnNewDocument(useEmulators);
+		await p.evaluateOnNewDocument(useEmulators, EMU);
 		await p.setBypassServiceWorker(true);
 		await p.setRequestInterception(true);
 		p.on('request', (req) => {
@@ -152,7 +161,7 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 
 		// ---- 2. a vacation from account.html ----
 		const email = `vac${Date.now()}@example.com`;
-		const signUp = await (await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
+		const signUp = await (await fetch('http://' + AUTH_HOST + '/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo', {
 			method: 'POST', headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ email, password: 'password123', returnSecureToken: true, displayName: 'Vacationer' }),
 		})).json();
