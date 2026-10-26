@@ -142,6 +142,9 @@
 								<a class="link" href="tutorial.html" target="_blank" rel="noopener">Tutorial</a>
 							</li>
 							<li>
+								<button class="link game-rules-btn">This Game's Rules</button>
+							</li>
+							<li>
 								<button class="link turn-structure-btn">Turn Structure</button>
 							</li>
 							<li>
@@ -152,6 +155,7 @@
 							</li>
 						</ul>
 						<div class="content">
+							<div class="game-rules"></div>
 							<div class="glossary">
 								<p>
 									<strong>Soft Move</strong><br />
@@ -796,6 +800,8 @@
 					role="tooltip"
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
+					x-on:mouseenter="holdSpellTooltip()"
+					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">
 						<h2
@@ -806,6 +812,7 @@
 							class="tooltip__content"
 							x-text="spells.text[activeSpell]?.text"
 						></p>
+						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="sigilSpellPageUrl(spellDict[activeSpell] || '')" target="_blank" rel="noopener">More about this spell</a>
 						<button
 							class="tooltip-button"
 							x-on:click="handleCastSpell(activeSpell)"
@@ -1039,6 +1046,7 @@
 		<script src="static/scripts/board-geometry.js"></script>
 		<script src="static/scripts/game-keys.js"></script>
 		<script src="static/scripts/game-board-local.js?v=34"></script>
+		<script src="static/scripts/rules-reference.js"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

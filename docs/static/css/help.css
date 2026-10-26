@@ -129,3 +129,16 @@
 	background: rgb(255 255 255 / 25%);
 	border-radius: 6px;
 }
+
+.help-menu-container .content .game-rules__list {
+	margin: 4px 0;
+	padding-left: 18px;
+	list-style: disc;
+}
+
+.help-menu-container .content .game-rules__list li {
+	display: list-item;
+	padding: 0;
+	margin-top: 3px;
+	cursor: auto;
+}

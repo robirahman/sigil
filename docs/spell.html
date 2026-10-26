@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html class="height:100%" lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link href="static/css/global.css?v202305191" rel="stylesheet" />
+	<link href="static/css/layout.css" rel="stylesheet" />
+	<link href="static/css/styles.css" rel="stylesheet" />
+	<link href="static/css/rules.css" rel="stylesheet" />
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap" rel="stylesheet" />
+	<link href="https://use.typekit.net/rot4udi.css" rel="stylesheet" />
+	<script src="static/scripts/theme-manager.js"></script>
+	<title>Spell Rules - Sigil Online</title>
+</head>
+<body>
+	<header>
+		<div class="container">
+			<div class="header-container">
+				<div>
+					<h1 class="logo"><a href="./"><span class="visually-hidden">Sigil Online</span><img alt="" src="static/images/logo-icon.svg" height="40" width="32" /></a></h1>
+				</div>
+				<h1></h1>
+				<div id="auth-status"></div>
+			</div>
+		</div>
+	</header>
+
+	<div class="main">
+		<div class="rules-page" id="spell-page">
+			<nav class="rules-crumbs" aria-label="Breadcrumb"><a href="./">Home</a> / <a href="spells.html">Spells</a> / <span id="crumb-name">Spell</span></nav>
+			<div class="spell-picker"><label for="spell-select">Spell</label> <select id="spell-select"></select> <a href="variants.html">Variant rules</a></div>
+			<div id="spell-body"><p class="rules-note">Loading…</p></div>
+		</div>
+	</div>
+
+	<script src="static/scripts/engine/constants.js"></script>
+	<script src="static/scripts/rules-reference.js"></script>
+	<script>
+	(() => {
+		// One template for every spell: spell.html?name=Hail_Storm (spaces,
+		// hyphens and any case also work). Rules from SPELL_TEXTS (constants.js,
+		// the card text) and SIGIL_SPELL_NOTES (rules-reference.js); the Try-it
+		// position from tools/gen_spell_examples.js; statistics from the strategy
+		// data files and the spell charts.
+		const el = id => document.getElementById(id);
+		const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+		const pretty = n => n.replace(/_/g, ' ');
+		const TYPES = [['rituals', 'ritual', 5], ['sorceries', 'sorcery', 3], ['charms', 'charm', 1]];
+		const TYPE_LABEL = { ritual: 'Ritual', sorcery: 'Sorcery', charm: 'Charm' };
+		const UNOFFICIAL = ['panda', 'experimental'];
+
+		// Every spell with a pack, in pack order (Core first), with its type and pack.
+		const SPELLS = [];
+		for (const key of ['core', ...EXPANSION_KEYS]) {
+			for (const [list, type, nodes] of TYPES) {
+				for (const name of EXPANSIONS[key][list]) {
+					let pack = packDisplayName(key);
+					for (const [sk, sub] of Object.entries(CORE_SUBPACKS)) {
+						if (sk !== 'core_impact' && sub[list].includes(name)) pack = packDisplayName(sk);
+					}
+					SPELLS.push({ name, type, nodes, packKey: key, pack, official: !UNOFFICIAL.includes(key) });
+				}
+			}
+		}
+		const findSpell = q => {
+			if (!q) return null;
+			const k = normalizeSpellName(String(q).trim().replace(/[\s-]+/g, '_')).toLowerCase();
+			return SPELLS.find(s => s.name.toLowerCase() === k) || null;
+		};
+		const pageUrl = n => 'spell.html?name=' + encodeURIComponent(n);
+		const official = SPELLS.filter(s => s.official);
+
+		const spell = findSpell(new URLSearchParams(location.search).get('name'));
+
+		// The picker: official spells by pack, then the unofficial ones.
+		const sel = el('spell-select');
+		sel.innerHTML = '<option value="">All spells…</option>' + ['core', ...EXPANSION_KEYS].map(key => {
+			const group = SPELLS.filter(s => s.packKey === key);
+			return `<optgroup label="${esc(EXPANSIONS[key].name + (UNOFFICIAL.includes(key) ? ' (unofficial)' : ''))}">`
+				+ group.map(s => `<option value="${s.name}"${spell && s.name === spell.name ? ' selected' : ''}>${esc(pretty(s.name))}</option>`).join('') + '</optgroup>';
+		}).join('');
+		sel.addEventListener('change', () => { location.href = sel.value ? pageUrl(sel.value) : 'spell.html'; });
+
+		if (!spell) {
+			document.title = 'Spell Rules - Sigil Online';
+			el('crumb-name').textContent = 'Spell rules';
+			const q = new URLSearchParams(location.search).get('name');
+			el('spell-body').innerHTML = (q ? `<p>No spell is called “${esc(q)}”.</p>` : '')
+				+ '<section class="rules-section"><h1>Spell rules</h1><p>Pick a spell for its full rules, an example position to try and its record in played games.</p>'
+				+ ['core', ...EXPANSION_KEYS].map(key => `<h3>${esc(EXPANSIONS[key].name)}${UNOFFICIAL.includes(key) ? ' <small class="rules-note">(unofficial, unrated)</small>' : ''}</h3><ul class="spell-index">`
+					+ SPELLS.filter(s => s.packKey === key).map(s => `<li><a href="${pageUrl(s.name)}">${esc(pretty(s.name))}</a></li>`).join('') + '</ul>').join('')
+				+ '</section>';
+			return;
+		}
+
+		const N = spell.name, P = pretty(N);
+		const isStatic = !!(CORE_SPELLS[N] && CORE_SPELLS[N].static);
+		document.title = P + ' - Sigil Online';
+		el('crumb-name').textContent = P;
+
+		const notes = SIGIL_SPELL_NOTES[N];
+		const list = items => '<ul>' + items.map(t => `<li>${esc(t)}</li>`).join('') + '</ul>';
+		const at = official.findIndex(s => s.name === N);
+		const prev = at > 0 ? official[at - 1] : null, next = at >= 0 && at < official.length - 1 ? official[at + 1] : null;
+		const providence = ['Dividend', 'Annuity', 'Endowment'].includes(N);
+
+		el('spell-body').innerHTML = `
+			<div class="spell-head">
+				<img src="static/images/spells/${N}.webp" alt="" width="140" height="140" onerror="this.remove()">
+				<div>
+					<h1>${esc(P)}</h1>
+					<div class="rules-badges">
+						<span class="rules-badge">${TYPE_LABEL[spell.type]} · ${spell.nodes} node${spell.nodes > 1 ? 's' : ''}</span>
+						${isStatic ? '<span class="rules-badge">Static</span>' : ''}
+						<span class="rules-badge">${esc(spell.pack)} pack</span>
+						${spell.official ? '' : '<span class="rules-badge rules-badge--warn">Unofficial · unrated</span>'}
+					</div>
+					<p class="spell-text" id="spell-text">${esc(SPELL_TEXTS[N] || '')}</p>
+				</div>
+			</div>
+
+			<section class="rules-section" id="rules">
+				<h2>Rules</h2>
+				${notes ? list(notes) : '<p class="rules-note">Rules details are written for the official spells only. This spell is under playtest: the card text above is what the game plays.</p>'}
+				${providence ? '<p><a href="variants.html#providence">Providence pack rules</a></p>' : ''}
+				${['Fissure', 'Rock_Slide', 'Bulwark'].includes(N) ? '<p><a href="variants.html#tectonic">Tectonic pack rules</a></p>' : ''}
+				<details class="rules-more"${isStatic ? ' open' : ''}>
+					<summary>${isStatic ? 'How static spells work' : 'How casting works'}</summary>
+					${list(isStatic ? SIGIL_STATIC_RULES : SIGIL_CASTING_RULES)}
+				</details>
+				<details class="rules-more">
+					<summary>Move words</summary>
+					<ul>${SIGIL_MOVE_TERMS.map(([t, d]) => `<li><strong>${esc(t)}:</strong> ${esc(d)}</li>`).join('')}</ul>
+				</details>
+			</section>
+
+			<section class="rules-section" id="try">
+				<h2>Try it</h2>
+				<div id="try-body"><p class="rules-note">${spell.official ? 'Loading…' : 'No example position for unofficial spells yet.'}</p></div>
+			</section>
+
+			<section class="rules-section" id="stats">
+				<h2>In played games</h2>
+				<div id="stats-body"><p class="rules-note">${spell.official ? 'Loading…' : 'Unofficial spells are not in the statistics.'}</p></div>
+			</section>
+
+			<nav class="spell-nav" aria-label="Other spells">
+				<span>${prev ? `<a href="${pageUrl(prev.name)}">&larr; ${esc(pretty(prev.name))}</a>` : ''}</span>
+				<a href="spells.html">All spells</a>
+				<span>${next ? `<a href="${pageUrl(next.name)}">${esc(pretty(next.name))} &rarr;</a>` : ''}</span>
+			</nav>`;
+		if (!spell.official) return;
+
+		const getJson = url => fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+		const pct = x => Math.round(100 * x) + '%';
+		// 95% Wilson interval for k wins in n games.
+		const wilson = (p, n) => {
+			if (!n) return null;
+			const z = 1.96, d = 1 + z * z / n, c = p + z * z / (2 * n), h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+			return [(c - h) / d, (c + h) / d];
+		};
+		const wrCell = (p, n) => {
+			if (!n || typeof p !== 'number' || isNaN(p)) return '<td class="num">–</td><td class="num">0</td>';
+			const ci = wilson(p, n);
+			return `<td class="num">${pct(p)}<br><small>${pct(ci[0])}–${pct(ci[1])}</small></td><td class="num">${n.toLocaleString()}</td>`;
+		};
+		const colour = c => c === 'red' ? 'Red' : 'Blue';
+
+		getJson('static/data/spell-examples.json').then(d => {
+			const ex = d.examples && d.examples[N];
+			if (!ex) { el('try-body').innerHTML = '<p class="rules-note">No example position yet.</p>'; return; }
+			const who = colour(ex.mover);
+			const winWhen = ex.kind === 'mate' ? (ex.mate > 1 ? `can force a win in ${ex.mate} turns` : 'can win this turn') : 'has a winning turn';
+			let what;
+			if (ex.how === 'cast') what = `${who} to move ${winWhen}, and the winning turn casts ${esc(P)}.`;
+			else if (ex.how === 'held') what = `${who} fills ${esc(P)}. ${who} to move ${winWhen}.`;
+			else if (ex.how === 'enemy') what = `${ex.mover === 'red' ? 'Blue' : 'Red'} fills ${esc(P)}. ${who} to move ${winWhen}.`;
+			else if (ex.how === 'fills') what = `${who} to move ${winWhen}, and the winning turn fills ${esc(P)}.`;
+			else what = `${who} to move: place a stone on ${esc(ex.fill)} to fill ${esc(P)}, then cast it.`;
+			const variant = /competitive/.test(ex.variant || '') ? ' It is a Competitive game (empty-board start).' : '';
+			const src = ex.puzzle
+				? `A position from a game played on ${esc(ex.date || 'the site')}, from the puzzle set.`
+				: 'A position built for this page, not from a game.';
+			el('try-body').innerHTML = `<p>${what}${variant}</p>
+				<p class="rules-note">${src} Open it on the analysis board to play any turn from it, or solve it as a puzzle.</p>
+				<div class="rules-actions">
+					<a class="rules-btn" id="try-analysis" href="analysis.html?sfn=${encodeURIComponent(ex.sfn)}">Try it on the analysis board</a>
+					${ex.puzzle ? `<a class="rules-btn rules-btn--quiet" href="puzzles.html?id=${encodeURIComponent(ex.puzzle)}">Solve it as a puzzle</a>` : ''}
+				</div>
+				<details class="rules-more"><summary>Position (SFN)</summary><code class="rules-sfn">${esc(ex.sfn)}</code></details>`;
+		}).catch(err => { el('try-body').innerHTML = `<p class="rules-note">Could not load the example (${esc(err.message)}).</p>`; });
+
+		Promise.all([
+			getJson('strategy/data/spell_position_winrates.json'),
+			getJson('strategy/data/spell_stats2.json'),
+			getJson('static/data/spell-charts.json').catch(() => null),
+			getJson('static/data/spell-charts-engine.json').catch(() => null),
+		]).then(([W, S, players, engine]) => {
+			const w = W[N], raw = S.raw && S.raw[N], coef = S.coef_count && S.coef_count[N];
+			let h = '';
+			if (w && raw) {
+				const usedLabel = isStatic ? 'ended a turn with it filled' : 'cast it at least once';
+				h += `<p>On the board in ${raw.avail.toLocaleString()} of ${S.n.toLocaleString()} recorded games.</p>
+					<table class="spell-stats">
+						<thead><tr><th>Win rate of the side that…</th><th class="num">Won</th><th class="num">Sides</th></tr></thead>
+						<tbody>
+							<tr><th scope="row">${usedLabel}</th>${wrCell(raw.user_wr, raw.users)}</tr>
+							<tr><th scope="row">had it on the board but never ${isStatic ? 'filled it' : 'cast it'}</th>${wrCell(raw.nonuser_wr, (raw.avail * 2) - raw.users)}</tr>
+							<tr><th scope="row">started closer to it (standard start, where the spells fall at random)</th>${wrCell(w.closer_std.wr, w.closer_std.n)}</tr>
+							<tr><th scope="row">started closer to it (Competitive start, where players choose)</th>${wrCell(w.closer_comp.wr, w.closer_comp.n)}</tr>
+							<tr><th scope="row">had more stones in it after turn 10</th>${wrCell(w.more10.wr, w.more10.n)}</tr>
+						</tbody>
+					</table>`;
+				if (coef) {
+					const v = coef[0], se = coef[1], unit = isStatic ? 'turn it was held filled' : 'cast';
+					h += `<p>Adjusted for each player's rating and whether they were an AI, each ${unit} changed that side's log-odds of winning by ${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)} (standard error ${se.toFixed(2)}).</p>`;
+				}
+				h += `<p class="rules-note">Source: ${S.n.toLocaleString()} finished games recorded on the site up to 2026-09-06, human and AI players together
+					(<code>docs/strategy/data/spell_stats2.json</code> and <code>spell_position_winrates.json</code>). The win rates are raw counts with 95% intervals.
+					Players cast a spell when it helps, so “cast it” overstates a spell's strength; the standard-start “started closer” row is the nearest thing to a fair test.
+					Small samples are uncertain.</p>`;
+			} else {
+				h += '<p class="rules-note">No game statistics yet: this spell was not in the 2026-09-06 analysis of recorded games.</p>';
+			}
+			const ps = players && players.spells && players.spells[N];
+			const es = engine && engine.spells && engine.spells[N];
+			const tierOf = (D, n) => { for (const t of (D && D.tiers) || []) if (t.spells.includes(n)) return t; return null; };
+			const rows = [];
+			if (ps && ps.rank) {
+				const t = tierOf(players, N);
+				rows.push(`<li>Players' tier list: ${t ? `tier ${esc(t.key)}, ` : ''}#${ps.rank} of ${Object.keys(players.spells).length} (judgements from the spell survey, not statistics).</li>`);
+			}
+			if (es && typeof es.value === 'number') {
+				const t = tierOf(engine, N), f = x => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2);
+				rows.push(`<li>Engine: ${t ? `tier ${esc(t.key)}, ` : ''}#${es.rank} of ${Object.keys(engine.spells).length}. Holding it is worth ${f(es.value)} points of win probability`
+					+ (es.value95 ? ` (95%: ${f(es.value95[0])} to ${f(es.value95[1])})` : '') + `, measured in ${engine.positions.toLocaleString()} self-play positions.</li>`);
+			}
+			if (rows.length) h += `<h3>Ratings</h3><ul>${rows.join('')}</ul><p><a href="spells.html">Tier list, matchups and synergies</a></p>`;
+			el('stats-body').innerHTML = h;
+		}).catch(err => { el('stats-body').innerHTML = `<p class="rules-note">Could not load the statistics (${esc(err.message)}).</p>`; });
+	})();
+	</script>
+
+	<!-- Firebase SDK + auth status -->
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+	<script>
+		firebase.initializeApp({
+			apiKey: "AIzaSyDcYsA9GxotScZ6m92B_TDSArkeN1qMHvE",
+			authDomain: "sigil-js.firebaseapp.com",
+			databaseURL: "https://sigil-js-default-rtdb.firebaseio.com",
+			projectId: "sigil-js",
+			storageBucket: "sigil-js.firebasestorage.app",
+			messagingSenderId: "174679859896",
+			appId: "1:174679859896:web:9f8e5ddc4388ae73a60a4d"
+		});
+	</script>
+	<script src="static/scripts/auth-status.js"></script>
+</body>
+</html>

@@ -388,6 +388,8 @@ function analysisMixin() {
 			this.spellDict = dict;
 			this.spells.images = images;
 			this.spells.text = text;
+			// The help popover's "This game's rules" (help.js): this position's.
+			if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(b.variant, b.spellNames);
 			this.redLock = b.lock.red || '';
 			this.blueLock = b.lock.blue || '';
 			this.redSpellCounter = b.spellCounter.red || 0;

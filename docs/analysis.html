@@ -724,6 +724,8 @@
 					class="tooltip"
 					x-bind:class="{ 'is-visible': spells.text[activeSpell] }"
 					x-ref="spellTooltip"
+					x-on:mouseenter="holdSpellTooltip()"
+					x-on:mouseleave="handleSpellMouseOut()"
 				>
 					<div class="tooltip__inner">
 						<h2
@@ -734,6 +736,7 @@
 							class="tooltip__content"
 							x-text="spells.text[activeSpell]?.text"
 						></p>
+						<a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="sigilSpellPageUrl(spellDict[activeSpell] || '')" target="_blank" rel="noopener">More about this spell</a>
 						<button
 							class="tooltip-button"
 							x-on:click="handleCastSpell(activeSpell)"
@@ -814,6 +817,7 @@
 		<script src="static/scripts/analysis-board.js"></script>
 		<script src="static/scripts/game-keys.js"></script>
 		<script src="static/scripts/game-board-local.js?v=34"></script>
+		<script src="static/scripts/rules-reference.js"></script>
 		<script src="static/scripts/help.js"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

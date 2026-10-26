@@ -566,6 +566,24 @@
 		</div>
 
 		<!-- Game (only mounts when game starts) -->
+		<!-- Rules menu (help.js): shown in a game; it lives outside the playing
+			template so help.js finds it at load. -->
+		<div class="container" x-show="phase === 'playing'" x-cloak>
+			<div class="help-menu-container">
+				<input id="help-menu" type="checkbox" />
+				<label class="link" for="help-menu">Rules</label>
+				<div class="submenu-container">
+					<ul class="submenu">
+						<li><a class="link" href="tutorial.html" target="_blank" rel="noopener">Tutorial</a></li>
+						<li><button class="link game-rules-btn">This Game's Rules</button></li>
+						<li><a class="link" href="variants.html" target="_blank" rel="noopener">All Variant Rules</a></li>
+					</ul>
+					<div class="content">
+						<div class="game-rules"></div>
+					</div>
+				</div>
+			</div>
+		</div>
 		<template x-if="phase === 'playing'">
 			<div x-data="gameBoard({ importSfn: '' })"
 				x-on:keydown.window="handleReviewKey($event)"
@@ -785,7 +803,7 @@
 						</div>
 					</div>
 				</div></div>
-				<div class="tooltip" id="spell-tooltip" role="tooltip" x-bind:class="{ 'is-visible': spells.text[activeSpell] }" x-ref="spellTooltip"><div class="tooltip__inner"><h2 class="tooltip__heading" x-text="spells.text[activeSpell]?.name"></h2><p class="tooltip__content" x-text="spells.text[activeSpell]?.text"></p><button class="tooltip-button" x-on:click="handleCastSpell(activeSpell)" x-show="hasTouchScreen && activeSpellIsCastable">Cast Spell</button></div></div>
+				<div class="tooltip" id="spell-tooltip" role="tooltip" x-bind:class="{ 'is-visible': spells.text[activeSpell] }" x-ref="spellTooltip" x-on:mouseenter="holdSpellTooltip()" x-on:mouseleave="handleSpellMouseOut()"><div class="tooltip__inner"><h2 class="tooltip__heading" x-text="spells.text[activeSpell]?.name"></h2><p class="tooltip__content" x-text="spells.text[activeSpell]?.text"></p><a class="tooltip__more" x-show="spellDict[activeSpell]" x-bind:href="sigilSpellPageUrl(spellDict[activeSpell] || '')" target="_blank" rel="noopener">More about this spell</a><button class="tooltip-button" x-on:click="handleCastSpell(activeSpell)" x-show="hasTouchScreen && activeSpellIsCastable">Cast Spell</button></div></div>
 				<div class="win-modal" role="dialog" aria-modal="true" x-bind:aria-label="winner ? (winner === 'red' ? 'Red wins' : 'Blue wins') : 'Game over'" x-bind:class="{ 'is-visible': winner && !reviewMode }">
 					<div class="win-modal__result">
 						<picture x-show="winner === 'blue'"><source type="image/webp" srcset="static/images/stones/blue.webp" /><img alt="" src="static/images/stones/blue.png" height="30" width="30" /></picture>
@@ -1903,6 +1921,7 @@
 	<script src="static/scripts/board-geometry.js"></script>
 	<script src="static/scripts/game-keys.js"></script>
 	<script src="static/scripts/game-board-multiplayer.js?v=34"></script>
+	<script src="static/scripts/rules-reference.js"></script>
 	<script src="static/scripts/help.js"></script>
 	<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 

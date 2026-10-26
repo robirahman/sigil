@@ -1,0 +1,91 @@
+/* Rules reference pages: spell.html and variants.html. Theme tokens only. */
+body > .main { padding-top: 80px; }
+.rules-page {
+	max-width: 860px;
+	width: 100%;
+	min-width: 0;
+	margin: 0 auto;
+	padding: 20px 16px 60px;
+	box-sizing: border-box;
+	font-family: 'Overlock', sans-serif;
+	color: var(--color-text);
+	overflow-wrap: anywhere;
+}
+.rules-page h1, .rules-page h2, .rules-page h3 { font-family: 'Arvo', serif; color: var(--color-text-warm); }
+.rules-page h1 { font-size: 1.7em; margin: 0 0 4px; }
+.rules-page h2 { font-size: 1.25em; margin: 0 0 8px; }
+.rules-page h3 { font-size: 1.05em; margin: 14px 0 6px; }
+.rules-page a { color: var(--color-accent); }
+.rules-page p, .rules-page li { line-height: 1.5; }
+.rules-page ul, .rules-page ol { padding-left: 1.3em; margin: 6px 0; }
+.rules-page li + li { margin-top: 4px; }
+.rules-crumbs { font-size: 0.9em; color: var(--color-text-muted); margin-bottom: 14px; }
+.rules-crumbs a { text-decoration: none; }
+.rules-crumbs a:hover { text-decoration: underline; }
+.rules-section {
+	background: var(--color-surface);
+	border: 2px solid var(--color-border);
+	border-radius: 10px;
+	padding: 16px 18px 18px;
+	margin-bottom: 20px;
+	scroll-margin-top: 90px;
+}
+.rules-section:target { border-color: var(--color-accent); }
+.rules-note { color: var(--color-text-muted); font-size: 0.9em; }
+.rules-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.rules-badge {
+	display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.85em;
+	border: 1px solid var(--color-border); background: var(--color-surface-raised); color: var(--color-text-warm);
+}
+.rules-badge--warn { border-color: var(--color-error, #c0392b); }
+.rules-btn {
+	display: inline-block; padding: 8px 16px; border-radius: 8px; text-decoration: none;
+	font-family: 'Arvo', serif; font-size: 0.95em;
+	background: var(--color-btn-menu, #34506e); color: var(--color-text-light, #fff) !important;
+	border: 0; box-shadow: 2px 2px var(--color-bg-dark);
+}
+.rules-btn:hover { background: var(--color-btn-menu-hover, #3d5f82); }
+.rules-btn--quiet { background: var(--color-surface-raised); color: var(--color-text-warm) !important; border: 1px solid var(--color-border); box-shadow: none; }
+.rules-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.rules-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; }
+.rules-jump a {
+	padding: 5px 12px; border: 2px solid var(--color-border); border-radius: 6px;
+	background: var(--color-surface-raised); color: var(--color-text-warm); text-decoration: none; font-size: 0.92em;
+}
+.rules-jump a:hover { background: var(--color-surface-hover); }
+details.rules-more { margin-top: 10px; }
+details.rules-more summary { cursor: pointer; color: var(--color-text-warm); font-family: 'Arvo', serif; }
+code.rules-sfn {
+	display: block; margin-top: 6px; padding: 6px 8px; font-size: 0.8em; word-break: break-all;
+	background: var(--color-surface-raised); border: 1px solid var(--color-border); border-radius: 6px;
+}
+
+/* spell.html */
+.spell-head { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 20px; }
+.spell-head img { width: 140px; height: 140px; flex: 0 0 auto; border-radius: 10px; object-fit: cover; }
+.spell-head .spell-text {
+	margin: 12px 0 0; padding: 10px 14px; font-size: 1.08em; line-height: 1.45;
+	background: var(--color-surface-raised); border: 1px solid var(--color-border); border-left: 4px solid var(--color-accent); border-radius: 6px;
+	color: var(--color-text-bright, var(--color-text));
+}
+.spell-stats { width: 100%; border-collapse: collapse; font-size: 0.95em; margin: 6px 0 10px; }
+.spell-stats th, .spell-stats td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.spell-stats th { font-weight: normal; color: var(--color-text-muted); }
+.spell-stats td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.spell-stats small { color: var(--color-text-muted); }
+.spell-nav { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.spell-index { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; }
+.spell-index li + li { margin-top: 0; }
+.spell-picker { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.92em; color: var(--color-text-muted); margin-bottom: 16px; }
+.spell-picker select {
+	font: inherit; color: var(--color-text-warm); background: var(--color-surface-raised);
+	border: 1px solid var(--color-border); border-radius: 6px; padding: 4px 8px; max-width: 100%;
+}
+@media (max-width: 560px) {
+	.spell-head { flex-direction: column; align-items: center; text-align: center; }
+	.spell-head .rules-badges { justify-content: center; }
+	.spell-head .spell-text { text-align: left; }
+	.spell-head img { width: 120px; height: 120px; }
+	.rules-section { padding: 14px 12px 16px; }
+	.spell-stats th, .spell-stats td { padding: 5px 4px; }
+}

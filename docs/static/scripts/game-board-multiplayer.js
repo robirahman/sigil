@@ -610,6 +610,7 @@ document.addEventListener('alpine:init', () => {
 
 			closeSpellTooltip() { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); },
 			showSpellTooltip(spell) {
+				if (this.spellTooltip && this.spellTooltip.destroy) this.spellTooltip.destroy();
 				this.activeSpell = spell;
 				const anchor = document.querySelector(`.spell--tooltip-anchor-${spell}`);
 				const tooltip = this.$refs.spellTooltip;
@@ -658,8 +659,10 @@ document.addEventListener('alpine:init', () => {
 					if (this.hasTouchScreen) this.showSpellTooltip(spell); else this.sendEvent(sn);
 				} else { this.activeSpellIsCastable = false; if (this.hasTouchScreen) this.showSpellTooltip(spell); }
 			},
-			handleSpellMouseOut() { if (!this.hasTouchScreen) { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); } },
-			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) this.showSpellTooltip(spell); },
+			// A short grace lets the pointer reach the tooltip's "More about this spell" link (holdSpellTooltip).
+			handleSpellMouseOut() { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this._spellTooltipTimer = setTimeout(() => { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); }, 250); } },
+			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) { clearTimeout(this._spellTooltipTimer); this.showSpellTooltip(spell); } },
+			holdSpellTooltip() { clearTimeout(this._spellTooltipTimer); },
 			handleReset() { if (this.isSpectator) return; this.endTurnArmed = false; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;
@@ -709,6 +712,8 @@ document.addEventListener('alpine:init', () => {
 					_this._rematchSpells = Array.isArray(spellNames) ? spellNames.slice() : [];
 					_this._rematchTimeControl = timeControl ? Object.assign({}, timeControl) : null;
 					_this._rematchVariant = normalizeVariant(variant);
+					// The help popover's "This game's rules" (help.js).
+					if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(variant, spellNames);
 				_this.isDeathmatch = variantHasDeathmatch(variant);
 					// The room's variant names its board layout; switch before
 					// the engine or the review draws anything.

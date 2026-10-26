@@ -447,6 +447,7 @@ document.addEventListener('alpine:init', () => {
 			},
 
 			showSpellTooltip(spell) {
+				if (this.spellTooltip && this.spellTooltip.destroy) this.spellTooltip.destroy();
 				this.activeSpell = spell;
 
 				const anchor = document.querySelector(`.spell--tooltip-anchor-${spell}`);
@@ -839,17 +840,27 @@ document.addEventListener('alpine:init', () => {
 
 			handleSpellMouseOut() {
 				if (!this.hasTouchScreen) {
-					this.activeSpell = '';
-					if (this.spellTooltip.destroy) {
-						this.spellTooltip.destroy();
-					}
+					// A short grace lets the pointer reach the tooltip's
+					// "More about this spell" link (holdSpellTooltip).
+					clearTimeout(this._spellTooltipTimer);
+					this._spellTooltipTimer = setTimeout(() => {
+						this.activeSpell = '';
+						if (this.spellTooltip.destroy) {
+							this.spellTooltip.destroy();
+						}
+					}, 250);
 				}
 			},
 
 			handleSpellMouseOver(spell) {
 				if (!this.hasTouchScreen) {
+					clearTimeout(this._spellTooltipTimer);
 					this.showSpellTooltip(spell);
 				}
+			},
+
+			holdSpellTooltip() {
+				clearTimeout(this._spellTooltipTimer);
 			},
 
 			handleReset() {
@@ -2420,6 +2431,8 @@ document.addEventListener('alpine:init', () => {
 
 				function handleSpellSetupEvent(payload) {
 					_this.spellDict = payload;
+					// The help popover's "This game's rules" (help.js).
+					if (typeof sigilPublishGameRules === 'function') sigilPublishGameRules(_this.gameVariant, Object.values(payload));
 
 					Object.entries(_this.spellDict).forEach(([key, value]) => {
 						_this.spells.images[key] = `static/images/spells/${baseSpellName(value)}.png`;
