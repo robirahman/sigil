@@ -192,6 +192,12 @@ test('rooms: rematches, local archives and expired invites', async () => {
 	await assertFails(set(ref(db('mallory'), 'rooms/NEW'), rematch));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { blue: { uid: 'mallory' } })));
 	await assertFails(set(ref(db('alice'), 'rooms/NEW'), Object.assign({}, rematch, { forfeitedBy: 'red' })));
+	// Not once either has blocked the other (an offer left standing).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'blocks/bob/alice'), true));
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), rematch));
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'blocks'), { alice: { bob: true } }));
+	await assertFails(set(ref(db('alice'), 'rooms/NEW'), rematch));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'blocks')));
 	await assertSucceeds(set(ref(db('alice'), 'rooms/NEW'), rematch));
 
 	const local = { local: true, status: 'finished', red: { uid: 'g1' }, blue: { uid: '__ai_easy__' }, winner: 'red', created: 1 };
@@ -333,6 +339,9 @@ test('follows: written only by the follower, mirrored in followers', async () =>
 
 test('blocks: owner-written with their blockedBy index; readable by the owner and the one blocked', async () => {
 	const blk = (who, target, v) => ({ ['blocks/' + who + '/' + target]: v, ['blockedBy/' + target + '/' + who]: v });
+	await seed({ users: { alice: named('Alice'), bob: named('Bob'), carol: named('Carol') } });
+	// Not an account that does not exist (or was deleted).
+	await assertFails(update(ref(db('bob')), blk('bob', 'ghost', true)));
 	// The block and its reverse index go together.
 	await assertFails(set(ref(db('bob'), 'blocks/bob/alice'), true));
 	await assertFails(set(ref(db('bob'), 'blockedBy/alice/bob'), true));
