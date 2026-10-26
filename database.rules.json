@@ -313,7 +313,7 @@
         ".read": true,
         "$target": {
           ".write": "auth !== null && auth.provider !== 'anonymous' && ((auth.uid === $uid && (newData.exists() ? newData.parent().parent().parent().child('followers/' + $target + '/' + $uid).val() === true : !newData.parent().parent().parent().child('followers/' + $target + '/' + $uid).exists())) || (auth.uid === $target && !newData.exists() && newData.parent().parent().parent().child('blocks/' + $target + '/' + $uid).val() === true && !newData.parent().parent().parent().child('followers/' + $target + '/' + $uid).exists()))",
-          ".validate": "newData.val() === true && $target !== $uid && !$target.matches(/^__ai_/) && root.child('users/' + $target + '/displayName').exists() && !root.child('blocks/' + $target + '/' + $uid).exists()"
+          ".validate": "newData.val() === true && $target !== $uid && !$target.matches(/^__ai_/) && root.child('users/' + $target + '/displayName').exists() && !root.child('blocks/' + $target + '/' + $uid).exists() && !root.child('blocks/' + $uid + '/' + $target).exists() && !root.child('deleted_users/' + $target).exists()"
         }
       }
     },
@@ -332,7 +332,7 @@
         "$target": {
           ".read": "auth !== null && auth.uid === $target",
           ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid && (newData.exists() ? newData.parent().parent().parent().child('blockedBy/' + $target + '/' + $uid).val() === true : !newData.parent().parent().parent().child('blockedBy/' + $target + '/' + $uid).exists())",
-          ".validate": "newData.val() === true && $target !== $uid && root.child('users/' + $target + '/displayName').exists()"
+          ".validate": "newData.val() === true && $target !== $uid && root.child('users/' + $target + '/displayName').exists() && !root.child('deleted_users/' + $target).exists()"
         }
       }
     },

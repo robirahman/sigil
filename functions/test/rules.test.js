@@ -335,6 +335,11 @@ test('follows: written only by the follower, mirrored in followers', async () =>
 	// Someone who blocked you cannot be followed.
 	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { bob: { alice: true } }, blockedBy: { alice: { bob: true } } });
 	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+	// Nor someone you blocked, nor an account being deleted.
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, blocks: { alice: { bob: true } }, blockedBy: { bob: { alice: true } } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
+	await seed({ users: { alice: named('Alice'), bob: named('Bob') }, deleted_users: { bob: 1 } });
+	await assertFails(update(ref(db('alice')), follow('alice', 'bob', true)));
 });
 
 test('blocks: owner-written with their blockedBy index; readable by the owner and the one blocked', async () => {
@@ -342,6 +347,10 @@ test('blocks: owner-written with their blockedBy index; readable by the owner an
 	await seed({ users: { alice: named('Alice'), bob: named('Bob'), carol: named('Carol') } });
 	// Not an account that does not exist (or was deleted).
 	await assertFails(update(ref(db('bob')), blk('bob', 'ghost', true)));
+	// Nor one being deleted (deleteUserData marks it first, removes the profile last).
+	await env.withSecurityRulesDisabled((c) => set(ref(c.database(), 'deleted_users/carol'), 1));
+	await assertFails(update(ref(db('bob')), blk('bob', 'carol', true)));
+	await env.withSecurityRulesDisabled((c) => remove(ref(c.database(), 'deleted_users')));
 	// The block and its reverse index go together.
 	await assertFails(set(ref(db('bob'), 'blocks/bob/alice'), true));
 	await assertFails(set(ref(db('bob'), 'blockedBy/alice/bob'), true));
