@@ -1140,7 +1140,11 @@ document.addEventListener('alpine:init', () => {
 					}
 					if (puzzle) {
 						options.aiColor = _aiColor;
+						// The previous attempt's opponent may still be judging a
+						// turn: its verdict must not land on this attempt.
+						if (_this._puzzleOpponent) _this._puzzleOpponent.retired = true;
 						options.ai = new PuzzleOpponent(puzzle, _this, { timeMs: 6000 });
+						_this._puzzleOpponent = options.ai;
 						if (typeof RustAI !== 'undefined' && RustAI.preload) RustAI.preload();
 					}
 
@@ -1736,7 +1740,8 @@ document.addEventListener('alpine:init', () => {
 					if (_this.puzzleStatus !== 'playing') return;
 					_this.puzzleStatus = 'solved';
 					_this.puzzleMessage = msg || 'Solved!';
-					try {
+					// Puzzle Storm runs are unrated practice: they leave the solved list alone.
+					if (!window.SIGIL_PUZZLE_STORM) try {
 						const raw = localStorage.getItem('sigil_puzzles_solved');
 						const solved = raw ? JSON.parse(raw) : {};
 						solved[puzzle.id] = Date.now();
@@ -1885,6 +1890,21 @@ document.addEventListener('alpine:init', () => {
 					_turnCount = 0;
 					initEngine();
 				};
+
+				// Puzzle Storm (puzzles.html?tab=storm): switch this board to the
+				// next puzzle in place, without reloading the page or the engine.
+				_this.puzzleLoad = function (next) {
+					puzzle = next;
+					_this.puzzle = next;
+					_humanColor = next.mover;
+					_aiColor = _humanColor === 'red' ? 'blue' : 'red';
+					_this.myColor = _humanColor;
+					gameVariant = normalizeVariant(next.variant || 'standard');
+					_this.applyBoardLayout(variantBoardLayout(gameVariant));
+					_this.puzzleDiagnostic = '';
+					_this.puzzleRetry();
+				};
+				if (puzzle) window.SIGIL_PUZZLE_BOARD = _this;
 
 				_this.puzzleShowSolution = function () {
 					if (_this.puzzleStatus === 'solved') return;
@@ -2704,7 +2724,7 @@ class PuzzleOpponent {
 		this.lastMeta = { depth: res.depth, nodes: res.nodes, score: res.score_ui,
 			stones: (typeof res.stones === 'number') ? res.stones : null, timeMs: Date.now() - t0 };
 		if (onProgress) onProgress(this.lastMeta);
-		if (judging) {
+		if (judging && !this.retired) {
 			comp._puzzleJudgePending = false;
 			const how = res.exhaustive ? 'exhaustively' : ('at depth ' + res.depth);
 			// The judge reports plies from ITS root (the opponent to move);
@@ -2761,7 +2781,7 @@ class PuzzleOpponent {
 		this.lastMeta = { depth: res.depth, stones: (typeof res.stones === 'number') ? res.stones : null,
 			mateIn: res.mate_in, mateProven: res.mate_proven, timeMs: Date.now() - t0 };
 		if (onProgress) onProgress(this.lastMeta);
-		if (judging) {
+		if (judging && !this.retired) {
 			comp._puzzleJudgePending = false;
 			const sign = sfn.split(' ')[1] === 'r' ? 1 : -1;      // searcher's POV -> red's
 			const info = {
