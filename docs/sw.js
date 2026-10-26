@@ -13,6 +13,9 @@
  *   - Same-origin static (CSS/JS/images): stale-while-revalidate
  *   - Cross-origin (Firebase/Alpine/Popper/fonts): cache-first for what we
  *     cached, network otherwise
+ *
+ * It also shows "Your move" web pushes (the push and notificationclick
+ * handlers at the end).
  */
 
 // Spell lists (CORE_* and EXPANSIONS) for the spell-art precache below. The
@@ -22,7 +25,7 @@ try {
 	importScripts('static/scripts/engine/constants.js');
 } catch (e) { /* precache falls back to the static list only */ }
 
-const CACHE_VERSION = 'v86';
+const CACHE_VERSION = 'v87';
 const CACHE_NAME = 'sigil-shell-' + CACHE_VERSION;
 
 const SAME_ORIGIN_PRECACHE = [
@@ -35,6 +38,8 @@ const SAME_ORIGIN_PRECACHE = [
 	'./active-games.html',
 	'./profile.html',
 	'./puzzles.html',
+	'./tutorial.html',
+	'./analysis.html',
 	'./annotate.html',
 	'./spells.html',
 	'./spells/index.html',
@@ -59,10 +64,16 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/css/form.css',
 	'./static/scripts/theme-manager.js',
 	'./static/scripts/auth-status.js',
+	'./static/scripts/turn-notify.js',
+	'./static/scripts/engine/room-clock.js',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
+	'./static/scripts/settings-panel.js',
+	'./static/scripts/game-keys.js',
 	'./static/scripts/board-geometry.js',
+	'./static/scripts/analysis-board.js',
 	'./static/scripts/game-board-local.js',
+	'./static/scripts/tutorial-lessons.js',
 	'./static/scripts/game-board-local.js?v=34',
 	'./static/scripts/engine/rust-ai.js?v=34',
 	'./static/scripts/game-board-multiplayer.js',
@@ -198,6 +209,7 @@ const CROSS_ORIGIN_PRECACHE = [
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
 	'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js',
+	'https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js',
 	'https://use.typekit.net/rot4udi.css',
 	'https://fonts.googleapis.com/css2?family=Arvo&family=Overlock&display=swap',
 ];
@@ -248,11 +260,11 @@ async function cachedPage(url) {
 // (the coi-serviceworker pattern) and COEP to the engine's worker scripts.
 // `credentialless` (not require-corp) keeps the CDN scripts, fonts and Firebase
 // loading without CORP headers; browsers without it (Safari) simply stay
-// un-isolated and the engine runs on one thread, as before. game.html has no
-// sign-in (COOP same-origin would break the Google sign-in popup), so only the
-// game page is isolated. The first visit, before this worker controls the page,
-// is never isolated.
-const ISOLATED_PAGES = ['/game.html'];
+// un-isolated and the engine runs on one thread, as before. Only pages without
+// sign-in (COOP same-origin would break the Google sign-in popup) are isolated:
+// the game page and the analysis board. The first visit, before this worker
+// controls the page, is never isolated.
+const ISOLATED_PAGES = ['/game.html', '/analysis.html'];
 function isIsolatedPage(url) {
 	return ISOLATED_PAGES.some((p) => url.pathname.endsWith(p));
 }
@@ -399,5 +411,36 @@ self.addEventListener('fetch', (event) => {
 		} catch (e) {
 			throw e;
 		}
+	})());
+});
+
+// ---- "Your move" web push ----
+// The FCM token is made against this worker (turn-notify.js enablePush passes
+// its registration to messaging.getToken), so pushes arrive here rather
+// than at a separate firebase-messaging-sw.js: two workers cannot share the
+// site's scope. functions/notify.js sends data-only messages; FCM delivers
+// them as {data: {...}} JSON, and the worker shows them itself.
+self.addEventListener('push', (event) => {
+	let payload = {};
+	try { payload = event.data ? event.data.json() : {}; } catch (e) { /* not JSON */ }
+	const d = payload.data || {};
+	const n = payload.notification || {};
+	const url = d.url || 'active-games.html';
+	event.waitUntil(self.registration.showNotification(d.title || n.title || 'Your move in Sigil', {
+		body: d.body || n.body || '',
+		tag: d.tag || (d.room ? 'sigil-turn-' + d.room : 'sigil-turn'),
+		icon: './static/images/logo-icon.svg',
+		data: { url },
+	}));
+});
+
+self.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const target = new URL((event.notification.data && event.notification.data.url) || 'active-games.html', self.registration.scope).href;
+	event.waitUntil((async () => {
+		const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+		const same = wins.find((c) => c.url === target);
+		if (same) return same.focus();
+		return self.clients.openWindow(target);
 	})());
 });

@@ -124,21 +124,32 @@ async function recordPuzzleResult(user, puzzle, solved) {
 	}
 	const db = firebase.database();
 	const base = 'users/' + u.uid;
-	const prev = await db.ref(base + '/puzzleAttempts/' + puzzle.id).once('value');
-	if (prev.exists()) return null;
-	const me = (await db.ref(base + '/puzzle').once('value')).val() || {};
-	const mine = { rating: typeof me.rating === 'number' ? me.rating : PUZZLE_RATING_START, plays: me.plays || 0 };
-	const pz = await loadPuzzleCurrentRating(puzzle);
-	const up = puzzleRatingUpdate(mine, pz, solved);
-	const name = (await db.ref(base + '/displayName').once('value')).val() || u.displayName || 'Player';
-	const write = {};
-	write[base + '/puzzle'] = Object.assign({ last: puzzle.id }, up.user);
-	write[base + '/puzzleAttempts/' + puzzle.id] = { solved: !!solved, at: firebase.database.ServerValue.TIMESTAMP, delta: up.delta };
-	write['puzzle_ratings/' + puzzle.id] = up.puzzle;
-	write['puzzle_leaderboard/' + u.uid] = { displayName: String(name).slice(0, 30), rating: up.user.rating, plays: up.user.plays };
-	await db.ref().update(write);
-	return { before: mine.rating, after: up.user.rating, delta: up.delta,
-		puzzleBefore: pz.rating, puzzleAfter: up.puzzle.rating, local: false };
+	// The rules want both play counters exactly one past their stored values,
+	// so a concurrent attempt (another player on this puzzle, or this player
+	// in another tab) makes the write fail: read again and recompute.
+	for (let attempt = 0; ; attempt++) {
+		const prev = await db.ref(base + '/puzzleAttempts/' + puzzle.id).once('value');
+		if (prev.exists()) return null;
+		const me = (await db.ref(base + '/puzzle').once('value')).val() || {};
+		const mine = { rating: typeof me.rating === 'number' ? me.rating : PUZZLE_RATING_START, plays: me.plays || 0 };
+		const pz = await loadPuzzleCurrentRating(puzzle);
+		const up = puzzleRatingUpdate(mine, pz, solved);
+		const name = (await db.ref(base + '/displayName').once('value')).val() || u.displayName || 'Player';
+		const write = {};
+		write[base + '/puzzle'] = Object.assign({ last: puzzle.id }, up.user);
+		write[base + '/puzzleAttempts/' + puzzle.id] = { solved: !!solved, at: firebase.database.ServerValue.TIMESTAMP, delta: up.delta };
+		write['puzzle_ratings/' + puzzle.id] = up.puzzle;
+		write['puzzle_leaderboard/' + u.uid] = { displayName: String(name).slice(0, 30), rating: up.user.rating, plays: up.user.plays };
+		try {
+			await db.ref().update(write);
+		} catch (e) {
+			if (attempt >= 4) throw e;
+			await new Promise(r => setTimeout(r, 200 + Math.random() * 400 * (attempt + 1)));
+			continue;
+		}
+		return { before: mine.rating, after: up.user.rating, delta: up.delta,
+			puzzleBefore: pz.rating, puzzleAfter: up.puzzle.rating, local: false };
+	}
 }
 
 /**

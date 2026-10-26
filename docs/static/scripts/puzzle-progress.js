@@ -283,8 +283,9 @@ async function recordStormRun(user, score) {
 		const name = (await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player';
 		w['storm_leaderboard/' + u.uid] = { displayName: String(name).slice(0, 30), score: rec.best };
 	}
-	await db.ref().update(w);
-	return { best: rec.best, runs: rec.runs, newBest: score > prevBest, signedIn: true };
+	// Offline, the SDK keeps the write queued and the promise pending: report it as queued.
+	const done = await Promise.race([db.ref().update(w).then(() => 'saved'), new Promise(r => setTimeout(() => r('queued'), 8000))]);
+	return { best: rec.best, runs: rec.runs, newBest: score > prevBest, signedIn: true, queued: done === 'queued' };
 }
 
 /** Time control for a run: 3 minutes, -10 s a miss, combo bonuses (Lichess's 5/12/20/30). */

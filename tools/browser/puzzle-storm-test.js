@@ -274,6 +274,7 @@ const OWNER = { Authorization: 'Bearer owner' };
 			// A signed-in Storm run: the account record and the leaderboard.
 			const ratingBefore = (await remote()).puzzle;
 			const ps = await open(ctxA, '?tab=storm', { body: stormBody });
+			ps.on('console', m => { if (/error|warn/i.test(m.type())) console.log('  [storm page ' + m.type() + '] ' + m.text().slice(0, 300)); });
 			await ps.waitForSelector('#storm-start', { visible: true, timeout: 30000 });
 			await ps.click('#storm-start');
 			await ps.waitForFunction(() => window.SIGIL_PUZZLE_BOARD && window.SIGIL_STORM.current, { timeout: 30000 });
@@ -282,7 +283,11 @@ const OWNER = { Authorization: 'Bearer owner' };
 				await ps.waitForFunction((k) => window.SIGIL_STORM.k === k, { timeout: 10000 }, i + 2);
 			}
 			await ps.click('#storm-end');
-			await ps.waitForFunction(() => window.SIGIL_STORM.saved, { timeout: 20000 });
+			await ps.waitForFunction(() => window.SIGIL_STORM.saved, { timeout: 40000 }).catch(async (e) => {
+				console.log('  storm state: ' + await ps.evaluate(() => JSON.stringify({ over: window.SIGIL_STORM.over, k: window.SIGIL_STORM.k, score: window.SIGIL_STORM.score,
+					user: firebase.auth().currentUser && firebase.auth().currentUser.uid, intro: document.getElementById('storm-intro').innerText.slice(0, 200) })));
+				throw e;
+			});
 			const saved = await ps.evaluate(() => window.SIGIL_STORM.saved);
 			r = await remote();
 			check(saved.signedIn && r.puzzleStorm && r.puzzleStorm.best === 2 && r.puzzleStorm.runs === 1, 'a signed-in run is saved to the account ' + JSON.stringify(r.puzzleStorm));

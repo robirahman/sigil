@@ -29,7 +29,10 @@ async function finishRoom(db, code, from, result) {
 		}
 		return done;
 	});
-	return !!(res.committed && res.snapshot.val() && res.snapshot.val().closedAt === now);
+	const done = !!(res.committed && res.snapshot.val() && res.snapshot.val().closedAt === now);
+	// Off Watch Live (the lobby index the players' tabs would have cleared).
+	if (done) await db.ref('live_rooms/' + code).remove().catch(() => {});
+	return done;
 }
 
 /**

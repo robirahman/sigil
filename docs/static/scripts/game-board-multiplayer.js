@@ -51,6 +51,13 @@ document.addEventListener('alpine:init', () => {
 			blueTimer: 0,
 			timerType: 'none',
 			isSpectator: false,
+			// Rated / Casual badge, and why a casual room is unrated.
+			ranked: false,
+			unratedText: '',
+			// Spectators watching, shown to the players.
+			spectatorCount: 0,
+			// This player's rating line once the server has rated the game.
+			ratingText: '',
 
 			// Game review state
 			reviewMode: false,
@@ -180,6 +187,7 @@ document.addEventListener('alpine:init', () => {
 			syncPending: 0,
 			syncError: null,
 			opponentGoneSince: null,
+			opponentOffline: false,
 			gameAborted: false,
 			_presenceTick: 0,
 			_presenceTimer: null,
@@ -201,7 +209,8 @@ document.addEventListener('alpine:init', () => {
 			},
 			get opponentAwayText() {
 				void this._presenceTick;
-				if (this.isSpectator || this.winner || this.gameAborted || this.opponentGoneSince === null) return '';
+				if (this.isSpectator || this.winner || this.gameAborted) return '';
+				if (this.opponentGoneSince === null) return this.opponentOffline ? 'Your opponent is offline.' : '';
 				if (this.timerType === 'correspondence') return 'Your opponent is offline.';
 				const left = this.claimSecondsLeft();
 				return left > 0
@@ -224,6 +233,25 @@ document.addEventListener('alpine:init', () => {
 					&& this.turnsPlayed() < 2;
 			},
 			handleClaimWin() { if (this.canClaimWin) this.sendEvent('claim_win'); },
+			// Takebacks by agreement ('takeback_state' from the controller).
+			takebackRequest: null,
+			takebackMine: false,
+			get canRequestTakeback() {
+				void this._presenceTick;
+				const log = this._engine && this._engine._gameLog;
+				// Not in correspondence games, nor a timed game's opening turns
+				// (firebase-sync.js requestTakeback says why).
+				const sync = this._engine && this._engine.sync;
+				const tc = (sync && sync.timeControl) || {};
+				if (tc.type === 'correspondence') return false;
+				if (tc.type === 'realtime' && sync && sync._turnKeys && sync._turnKeys.length <= 2) return false;
+				return !this.isSpectator && !this.winner && !this.gameAborted && !this.reviewMode && !this.takebackRequest
+					&& !!log && log.some((t) => t.color === this.myColor);
+			},
+			handleTakebackRequest() { if (this.canRequestTakeback) this.sendEvent('takeback_request'); },
+			handleTakebackCancel() { this.sendEvent('takeback_cancel'); },
+			handleTakebackAccept() { this.sendEvent('takeback_accept'); },
+			handleTakebackDecline() { this.sendEvent('takeback_decline'); },
 			handleAbort() { if (this.canAbort) this.sendEvent('abort'); },
 
 			// Review: open an online room from the reviewed position. The new
@@ -593,7 +621,11 @@ document.addEventListener('alpine:init', () => {
 			handleCastSpell(spell) { if (this.isSpectator) return; this.sendEvent(this.spellDict[spell]); this.closeSpellTooltip(); },
 			handleDash() { if (this.isSpectator) return; this.sendEvent('dash'); this.actionList = []; },
 			handleSkipProvidence() { if (this.isSpectator) return; this.sendEvent('skip_providence'); this.actionList = []; },
-			handleEndTurn() { if (this.isSpectator) return; this.sendEvent('pass'); this.actionList = []; },
+			// Armed by a first End Turn when "Confirm before ending a turn" is on (confirmEndTurn, game-keys.js).
+			endTurnArmed: false,
+			_endTurnTimer: null,
+			handleEndTurn() { if (this.isSpectator) return; if (!confirmEndTurn(this)) return; this.sendEvent('pass'); this.actionList = []; },
+			nodeLabel(node) { return nodeAriaLabel(this, node); },
 			handleSubmit() { if (this.isSpectator) return; this.sendEvent('submit'); this.actionList = []; },
 			// Two-click forfeit, mirroring game-board-local.js: first click arms
 			// (relabels to confirm), second concedes; arming decays on its own so
@@ -628,7 +660,7 @@ document.addEventListener('alpine:init', () => {
 			},
 			handleSpellMouseOut() { if (!this.hasTouchScreen) { this.activeSpell = ''; if (this.spellTooltip.destroy) this.spellTooltip.destroy(); } },
 			handleSpellMouseOver(spell) { if (!this.hasTouchScreen) this.showSpellTooltip(spell); },
-			handleReset() { if (this.isSpectator) return; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
+			handleReset() { if (this.isSpectator) return; this.endTurnArmed = false; this.sendEvent('reset'); this.actionList = []; this.lastPlay = ''; this.nodesToRefill = {}; this.playerToRefill = ''; this.showReset = false; this.validMoves = {}; this.pushSourceNode = ''; drawPushArrows(this.$refs.pushArrows, []); },
 			handleNodeClick(node) {
 				if (this.isSpectator) return;
 				this.currentPlayer = this.whoseTurn;
@@ -646,6 +678,8 @@ document.addEventListener('alpine:init', () => {
 			init() {
 				const _this = this;
 				_this.hasTouchScreen = matchMedia('(any-pointer: coarse)').matches;
+				// A new prompt (Reset Turn, a cast) cancels an armed End Turn.
+				_this.$watch('actionList', () => { _this.endTurnArmed = false; });
 				_this.$watch('messageHistory', () => {
 					_this.$nextTick(() => { if (_this.$refs.messageHistory) _this.$refs.messageHistory.scrollTop = _this.$refs.messageHistory.scrollHeight; });
 				});
@@ -665,6 +699,8 @@ document.addEventListener('alpine:init', () => {
 					_this.timerType = (timeControl && timeControl.type) || 'none';
 					_this.isSpectator = isSpectator || false;
 					_this.myColor = myColor || '';
+					_this.ranked = !!state.ranked;
+					_this.unratedText = state.ranked ? '' : describeUnratedReason(state.unratedWhy);
 					_this.annotationMode = !!annotationMode && !_this.isSpectator;
 					_this.isDeveloper = !!state.isDeveloper;
 					_this.showAiEval = !!state.showAiEval;
@@ -715,29 +751,14 @@ document.addEventListener('alpine:init', () => {
 					}
 
 					_this._engine = engine;
+					if (!isSpectator && sync) sync.listenToSpectators((n) => { _this.spectatorCount = n; });
 					// A spectator who arrives before the first move of a room
 					// from a position replays from its start.
 					engine.startGame(reconnectSfn || (isSpectator && sync && sync.startSfn) || null);
 				}, 100);
 
-				// Keyboard shortcuts
-				document.addEventListener('keydown', (e) => {
-					if (_this.isSpectator) return;
-					const tag = document.activeElement?.tagName;
-					if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-					if (e.key === 'Enter' && _this.actionList.includes('pass')) {
-						e.preventDefault();
-						_this.handleEndTurn();
-					}
-					if (e.key === 'Enter' && _this.actionList.includes('submit')) {
-						e.preventDefault();
-						_this.handleSubmit();
-					}
-					if (e.key === 'd' && _this.actionList.includes('dash')) {
-						e.preventDefault();
-						_this.handleDash();
-					}
-				});
+				// Keyboard shortcuts (game-keys.js, shared with game.html)
+				bindGameKeys(_this, { disabled: () => _this.isSpectator });
 
 				let _turnCount = 0;
 				// A repeated turn header is a Reset Turn replay (the controller
@@ -856,7 +877,7 @@ document.addEventListener('alpine:init', () => {
 							_this.lastOpponentTurn = { turnNumber: t.turnNumber, color: t.color };
 						}
 					}
-					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
+					else if (type === 'new_stone_animation') { if (typeof soundManager !== 'undefined') soundManager.play('stonePlaced'); _this.lastPlay = rest.node; if (rest.color !== _this.currentPlayer) { setTimeout(() => { const el = document.getElementById(`stone-node--${rest.node}`); if (el) el.scrollIntoView({ behavior: sigilScrollBehavior(), block: 'center', inline: 'center' }); }, 50); } else { _this.showReset = true; } }
 					else if (type === 'push_animation') {
 						_this.pushSourceNode = '';
 						if (typeof soundManager !== 'undefined') soundManager.play('stonePushed');
@@ -882,6 +903,10 @@ document.addEventListener('alpine:init', () => {
 					else if (type === 'rematch_room_ready') {
 						window.location.href = 'multiplayer.html?id=' + encodeURIComponent(rest.newRoomCode);
 					}
+					else if (type === 'rating_result') {
+						_this.ratingText = rest.text;
+						_this.messageHistory.push(rest.text);
+					}
 					else if (type === 'opponent_disconnect') {
 						_this.rematchOpponentDisconnected = true;
 					}
@@ -892,13 +917,30 @@ document.addEventListener('alpine:init', () => {
 					}
 					else if (type === 'opponent_presence') {
 						const wasGone = _this.opponentGoneSince !== null;
-						_this.opponentGoneSince = rest.connected ? null
-							: (rest.disconnectedAt || (_this._engine && _this._engine.sync ? _this._engine.sync.serverNow() : Date.now()));
+						// Only the server's stamp counts (the rating function judges a
+						// claim by it): an older client's seat without one shows as
+						// offline but never offers Claim win.
+						_this.opponentGoneSince = rest.connected ? null : (rest.disconnectedAt || null);
+						_this.opponentOffline = !rest.connected;
 						if (wasGone && rest.connected && !_this.winner) _this.messageHistory.push('Your opponent reconnected.');
 						// A one-second tick while they are gone drives the countdown.
 						clearInterval(_this._presenceTimer);
 						if (_this.opponentGoneSince !== null) {
 							_this._presenceTimer = setInterval(() => { _this._presenceTick++; }, 1000);
+						}
+					}
+					else if (type === 'takeback_state') {
+						_this.takebackRequest = rest.request || null;
+						_this.takebackMine = !!rest.mine;
+					}
+					else if (type === 'takeback_done') {
+						// The room lost its last turns: rebuild from it (by its
+						// link: the creator's page may not carry it yet).
+						window.onbeforeunload = null;
+						if (_this._roomCodeForReview) {
+							window.location.href = 'multiplayer.html?id=' + encodeURIComponent(_this._roomCodeForReview);
+						} else {
+							window.location.reload();
 						}
 					}
 					else if (type === 'game_aborted') {

@@ -174,6 +174,21 @@
 			text-align: center;
 			padding: 16px 12px;
 		}
+		/* First-visit pointer to the tutorial, above the Play buttons. Hidden
+		   once any lesson is finished on this device. */
+		.tutorial-hint {
+			display: block;
+			margin: 0 0 12px;
+			padding: 10px 14px;
+			border: 2px solid var(--color-border);
+			border-radius: 8px;
+			background: var(--color-surface);
+			color: var(--color-text-warm);
+			font-family: 'Overlock', sans-serif;
+			text-decoration: none;
+		}
+		.tutorial-hint:hover { background: var(--color-surface-hover); border-color: var(--color-border-hover); }
+		.tutorial-hint small { color: var(--color-text-muted); }
 		.mode-button.is-active {
 			background: var(--color-surface-hover);
 			border-color: var(--color-border-hover);
@@ -380,6 +395,19 @@
 			</script>
 			<section class="menu-group menu-group--play" aria-labelledby="menu-play">
 				<h3 class="menu-group__title" id="menu-play">Play</h3>
+				<a class="tutorial-hint" id="tutorial-hint" href="tutorial.html">
+					New to Sigil? <strong>Learn to play in the interactive tutorial &rarr;</strong>
+					<small>Ten short lessons on the real board.</small>
+				</a>
+				<script>
+					(function () {
+						// Only for visitors who have not finished a lesson yet.
+						try {
+							var done = JSON.parse(localStorage.getItem('sigil_tutorial_done') || '{}') || {};
+							if (Object.keys(done).length) document.getElementById('tutorial-hint').style.display = 'none';
+						} catch (e) { /* storage blocked: keep the hint */ }
+					})();
+				</script>
 				<div class="play-grid">
 					<a class="mode-button" id="vs-ai-btn" href="#" aria-expanded="false" aria-controls="ai-difficulty-row">
 						vs AI
@@ -804,12 +832,14 @@
 			<div class="menu-columns">
 				<section class="menu-group" aria-labelledby="menu-learn">
 					<h3 class="menu-group__title" id="menu-learn">Learn</h3>
+					<a class="menu-link" href="tutorial.html">Tutorial<small>Learn the rules on the board, step by step</small></a>
 					<a class="menu-link" href="static/Sigil_Rulebook.pdf" target="_blank" rel="noopener">Rulebook<small>Official rules (PDF)</small></a>
 					<a class="menu-link" href="strategy-guide.html">Strategy Guide<small>How to think about the game</small></a>
 					<a class="menu-link" href="spells.html">Spells Matrix<small>Tier list, matchups and synergies</small></a>
 					<a class="menu-link" href="spells/">Spell Compendium<small>Dedicated pages for all 45 official spells</small></a>
 					<a class="menu-link" href="packs/">Spell Packs<small>All 11 official expansions &amp; Core</small></a>
 					<a class="menu-link" href="puzzles.html">Puzzles<small>Find the forced win in real positions</small></a>
+					<a class="menu-link" href="analysis.html">Analysis Board<small>Set up any position and explore it with the engine</small></a>
 				</section>
 				<section class="menu-group" aria-labelledby="menu-community">
 					<h3 class="menu-group__title" id="menu-community">Community</h3>

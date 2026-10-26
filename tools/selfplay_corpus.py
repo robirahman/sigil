@@ -7,7 +7,7 @@
 The self-play shards in gs://focus-surfer-494820-g0-sigil (`v2d4_<base>_<n>.npz`,
 written by the round-3/4 self-play runners) hold, per position, the SFN, the
 game id, the ply, the side to move (`is_red`) and `y` = 1 when the side to move
-went on to win. Consecutive plies of one game are consecutive turns, so the
+went on to win (255: the game hit the ply cap undecided; skipped). Consecutive plies of one game are consecutive turns, so the
 games rebuild into the hydrated format gen_mate_puzzles.py reads
 ({gid: {redUid, blueUid, winner, timestamp, variant, turns: [{color,
 turnNumber, sfnBefore, sfnAfter}]}}). A turn whose next position is missing
@@ -52,21 +52,35 @@ def list_objects(prefix, tok):
             return out
 
 
+def browser_parity(sfn):
+    """The SFN with its turn counter on the browser's parity (red moves on odd
+    turns; GameController hands out the move by parity). Some self-play
+    runners counted from 0, so about two-thirds of the shard positions are
+    one turn off; the counter is only bookkeeping here, so shift it forward."""
+    t = sfn.split(' ')
+    if (t[1] == 'r') != (int(t[2]) % 2 == 1):
+        t[2] = str(int(t[2]) + 1)
+    return ' '.join(t)
+
+
 def games_of(z, tag):
     out = {}
     by = defaultdict(list)
     for i, g in enumerate(z['game'].tolist()):
         by[g].append(i)
     for g, idx in by.items():
+        if any(int(z['y'][i]) == 255 for i in idx):
+            continue                # selfplay_v2: the game hit the ply cap, no winner
         idx.sort(key=lambda i: int(z['ply'][i]))
         turns, winner = [], None
         for k, i in enumerate(idx):
-            sfn = str(z['sfn'][i])
+            sfn = browser_parity(str(z['sfn'][i]))
             color = 'red' if int(z['is_red'][i]) else 'blue'
-            won = bool(int(z['y'][i]))
+            won = int(z['y'][i]) == 1          # 0 lost, 1 won (255 games skipped above)
             winner = color if won else ('blue' if color == 'red' else 'red')
             nxt = idx[k + 1] if k + 1 < len(idx) else None
-            after = str(z['sfn'][nxt]) if nxt is not None and int(z['ply'][nxt]) == int(z['ply'][i]) + 1 else None
+            after = (browser_parity(str(z['sfn'][nxt]))
+                     if nxt is not None and int(z['ply'][nxt]) == int(z['ply'][i]) + 1 else None)
             turns.append({'color': color, 'turnNumber': int(sfn.split()[2]), 'sfnBefore': sfn, 'sfnAfter': after,
                           'fat': False})
         variant = 'competitive' if 'competitive' in turns[0]['sfnBefore'] else 'standard'

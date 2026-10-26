@@ -75,10 +75,70 @@ function gameStartRedWinProb(game) {
 	return (typeof p === 'number' && p >= 0 && p <= 1) ? p : null;
 }
 
+/** Why a game was not rated, in words, by reason code (unratedReason and the rating function's). */
+const UNRATED_REASON_TEXT = {
+	'deathmatch': 'Deathmatch games do not affect rating.',
+	'scramble': 'Scramble games do not affect rating.',
+	'duplicates': 'Allow Duplicates games do not affect rating.',
+	'pentagon': 'Cataclysm board games do not affect rating.',
+	'unrated-pack': 'Panda and Experimental spell games do not affect rating.',
+	'unpriced-start': 'this game started from a position the engine did not price.',
+	'guest-account': 'both players need a signed-in account.',
+	'casual': 'this was a casual game.',
+	'duplicate': 'this game was already rated.',
+	'result-not-verified': 'the server could not verify the result.',
+	'no-transcript': 'the game record has no moves to check.',
+	'no-room': 'the game record did not match its room.',
+	'seat-mismatch': 'the game record did not match its room.',
+	'room-result-mismatch': 'the game record did not match its room.',
+	'same-player': 'both sides were played by one account.',
+};
+
+/** "Unrated: <why>" for a reason code. */
+function describeUnratedReason(reason) {
+	return 'Unrated: ' + (UNRATED_REASON_TEXT[reason] || 'this game was not rated.');
+}
+
 /**
- * Wait for the server's rating of a just-recorded game (the rateGame Cloud
- * Function writes user_games/{uid}/{gameId} for each human player, rated or
- * not). Resolves with the result for the signed-in player, in the shape
+ * One player's rating line for a user_games entry: "Rating: +12 (1456 → 1468)"
+ * or "Unrated: <why>".
+ */
+function describeGameRating(entry) {
+	if (!entry) return '';
+	if (entry.rated !== true || typeof entry.eloChange !== 'number') return describeUnratedReason(entry.unratedReason);
+	const sign = entry.eloChange >= 0 ? '+' : '\u2212';
+	return 'Rating: ' + sign + Math.abs(entry.eloChange) + ' (' + entry.eloBefore + ' \u2192 ' + entry.eloAfter + ')';
+}
+
+/**
+ * Wait for the rateGame Cloud Function's user_games/{uid}/{gameId} entry
+ * (written for each human player of every signed-in game, rated or not).
+ * Resolves with the entry, or null when it did not arrive in time.
+ * @param {firebase.database.Database} db
+ * @param {string} uid
+ * @param {string} gameId - push key of the completed_games record
+ * @param {number} [timeoutMs]
+ */
+function awaitUserGame(db, uid, gameId, timeoutMs) {
+	const ref = db.ref('user_games/' + uid + '/' + gameId);
+	return new Promise((resolve) => {
+		let timer = null;
+		const done = (v) => {
+			clearTimeout(timer);
+			ref.off('value', onValue);
+			resolve(v);
+		};
+		const onValue = (snap) => {
+			if (snap.exists()) done(snap.val());
+		};
+		timer = setTimeout(() => done(null), timeoutMs || 30000);
+		ref.on('value', onValue, () => done(null));
+	});
+}
+
+/**
+ * Wait for the server's rating of a just-recorded game (awaitUserGame).
+ * Resolves with the result for the signed-in player, in the shape
  * the AI game notice and the offline queue use, or null when the game was
  * not rated or the function did not answer in time.
  *
@@ -89,30 +149,16 @@ function gameStartRedWinProb(game) {
  * @returns {Promise<null|{points, newWinnerElo, newLoserElo}>} the player's
  *   own side of newWinnerElo / newLoserElo; the opponent's is null.
  */
-function awaitGameRating(db, gameId, game, timeoutMs) {
+async function awaitGameRating(db, gameId, game, timeoutMs) {
 	const user = typeof firebase !== 'undefined' && firebase.auth().currentUser;
 	const uid = user && user.uid;
-	if (!game.ranked || !uid || (uid !== game.redUid && uid !== game.blueUid)) return Promise.resolve(null);
-	const ref = db.ref('user_games/' + uid + '/' + gameId);
-	return new Promise((resolve) => {
-		let timer = null;
-		const done = (v) => {
-			clearTimeout(timer);
-			ref.off('value', onValue);
-			resolve(v);
-		};
-		const onValue = (snap) => {
-			const e = snap.val();
-			if (!e) return;
-			if (e.rated !== true || typeof e.eloChange !== 'number') return done(null);
-			const won = e.result === 'win';
-			done({
-				points: Math.abs(e.eloChange),
-				newWinnerElo: won ? e.eloAfter : null,
-				newLoserElo: won ? null : e.eloAfter,
-			});
-		};
-		timer = setTimeout(() => done(null), timeoutMs || 30000);
-		ref.on('value', onValue, () => done(null));
-	});
+	if (!game.ranked || !uid || (uid !== game.redUid && uid !== game.blueUid)) return null;
+	const e = await awaitUserGame(db, uid, gameId, timeoutMs);
+	if (!e || e.rated !== true || typeof e.eloChange !== 'number') return null;
+	const won = e.result === 'win';
+	return {
+		points: Math.abs(e.eloChange),
+		newWinnerElo: won ? e.eloAfter : null,
+		newLoserElo: won ? null : e.eloAfter,
+	};
 }

@@ -24,6 +24,10 @@ const ENGINE_FILES = [
 	'ai-player.js', 'game-controller.js', 'game-review.js', 'elo.js',
 ];
 
+// Engine files the functions require() directly (CommonJS-aware), not part
+// of the replay bundle.
+const SHARED_FILES = ['room-clock.js'];
+
 function engineDir() {
 	const copied = path.join(__dirname, 'engine');
 	if (fs.existsSync(path.join(copied, ENGINE_FILES[0]))) return copied;
@@ -60,4 +64,9 @@ function freshEngine() {
 	return sandbox.__sigil;
 }
 
-module.exports = { freshEngine, ENGINE_FILES, engineDir };
+/** One of SHARED_FILES, from the same place as the engine. */
+function requireShared(name) {
+	return require(path.join(engineDir(), name));
+}
+
+module.exports = { freshEngine, requireShared, ENGINE_FILES, SHARED_FILES, engineDir };

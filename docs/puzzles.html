@@ -154,6 +154,7 @@
 			webpDetector.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=';
 		</script>
 		<script src="static/scripts/theme-manager.js"></script>
+		<script src="static/scripts/settings-panel.js"></script>
 	</head>
 
 	<body>
@@ -277,7 +278,7 @@
 							<div class="actions" x-bind:class="{ 'actions--visible': showReset || actionList.includes('dash') || actionList.includes('pass') }">
 								<button class="action-button action-button--reset-turn" x-bind:class="{ 'is-hidden': !showReset }" x-on:click="handleReset">Reset Turn</button>
 								<button class="action-button action-button--dash" x-bind:class="{ 'is-hidden': !actionList.includes('dash') }" x-on:click="handleDash">Dash</button>
-								<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass') }" x-on:click="handleEndTurn">End Turn</button>
+								<button class="action-button action-button--end-turn" x-bind:class="{ 'is-hidden': !actionList.includes('pass'), 'action-button--forfeit-armed': endTurnArmed }" x-on:click="handleEndTurn" x-text="endTurnArmed ? 'Confirm end turn?' : 'End Turn'">End Turn</button>
 							</div>
 						</div>
 					</div>
@@ -343,7 +344,7 @@
 								<div class="stone-nodes" x-cloak>
 									<div class="stone-node stone-node--blue stone-node--score" x-bind:class="{ [`stone-node--score-${score}`]: true }"></div>
 									<template x-bind:key="node" x-for="node in Object.keys(nodes)">
-										<button class="stone-node" x-bind:aria-label="node"
+										<button class="stone-node" x-bind:aria-label="nodeLabel(node)"
 											x-bind:class="{
 												[`stone-node--${node}`]: true,
 												[`stone-node--${playerToRefill}`]: nodesToRefill[node] && playerToRefill,
@@ -438,6 +439,7 @@
 		<script src="static/scripts/sound-manager.js"></script>
 		<script src="static/scripts/spell-effects.js"></script>
 		<script src="static/scripts/board-geometry.js"></script>
+		<script src="static/scripts/game-keys.js"></script>
 		<script src="static/scripts/game-board-local.js?v=34"></script>
 		<script src="https://unpkg.com/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
 
@@ -750,7 +752,7 @@
 						const r = await recordStormRun(viewer, st.score);
 						st.saved = r;
 						$('storm-saved').textContent = (r.newBest ? 'New best! ' : 'Best: ' + r.best + '. ')
-							+ (r.signedIn ? 'Saved to your account.' : 'Saved on this device.');
+							+ (r.signedIn ? (r.queued ? 'It will reach your account when you are back online.' : 'Saved to your account.') : 'Saved on this device.');
 					} catch (e) {
 						st.saved = { error: String(e && e.message || e) };
 						$('storm-saved').textContent = 'Score not saved (' + (e && e.message || e) + ').';
@@ -872,7 +874,15 @@
 				let solved = {};
 				try { solved = JSON.parse(localStorage.getItem('sigil_puzzles_solved') || '{}') || {}; } catch (e) { solved = {}; }
 				let rated = { rating: PUZZLE_RATING_START, plays: 0, attempts: {}, signedIn: false };
-				try { rated = await loadPuzzleRating(viewer); } catch (e) { /* offline: defaults */ }
+				// Offline (or a database that never answers), the account read can
+				// hang; the board must not wait for it. 4 s, then the device rating.
+				const deviceRating = () => loadPuzzleRating(null);
+				try {
+					rated = navigator.onLine
+						? await Promise.race([loadPuzzleRating(viewer),
+							new Promise((resolve) => setTimeout(() => resolve(null), 4000))]) || await deviceRating()
+						: await deviceRating();
+				} catch (e) { /* offline: defaults */ }
 				if (pos < 0) {
 					// No pick: an unattempted puzzle near the player's rating.
 					const next = pickRatedPuzzle(pool, rated.rating, rated.attempts, solved);
