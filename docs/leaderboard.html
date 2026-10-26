@@ -220,8 +220,8 @@
 				<template x-if="myEntry">
 					<div>
 						<strong x-text="myEntry.displayName"></strong>:
-						<span x-text="myEntry.elo"></span><span class="provisional" x-show="myEntry.gamesPlayed < provisionalGames" x-bind:title="'Provisional: fewer than ' + provisionalGames + ' rated games'">?</span>
-						(<span x-text="myEntry.gamesPlayed"></span> games)
+						<span x-text="myEntry.elo"></span><span class="provisional" x-show="tab !== 'storm' && myEntry.gamesPlayed < provisionalGames" x-bind:title="'Provisional: fewer than ' + provisionalGames + ' rated games'">?</span>
+						(<span x-text="myEntry.gamesPlayed"></span> <span x-text="tab === 'storm' ? 'runs' : (tab === 'puzzles' ? 'puzzles' : 'games')"></span>)
 						<div class="my-entry__note" x-text="'Not in the top ' + limit + '.'"></div>
 					</div>
 				</template>
@@ -306,7 +306,12 @@
 					try {
 						const d = (await firebase.database().ref('users/' + this.myUid).once('value')).val() || {};
 						const pz = d.puzzle || {};
-						this.myEntry = this.tab === 'puzzles' ? {
+						const st = d.puzzleStorm || {};
+						this.myEntry = this.tab === 'storm' ? {
+							displayName: d.displayName || 'You',
+							elo: st.best || 0,
+							gamesPlayed: st.runs || 0,
+						} : this.tab === 'puzzles' ? {
 							displayName: d.displayName || 'You',
 							elo: pz.rating ?? 1500,
 							gamesPlayed: pz.plays || 0,
@@ -336,6 +341,12 @@
 					const db = firebase.database();
 
 					if (this.tab === 'storm') {
+						// The signed-in player, for Find me (as the puzzles tab).
+						await new Promise(resolve => {
+							const unsub = firebase.auth().onAuthStateChanged(() => { unsub(); resolve(); });
+						});
+						const su = firebase.auth().currentUser;
+						this.myUid = su && !su.isAnonymous ? su.uid : null;
 						try {
 							const snap = await db.ref('storm_leaderboard').orderByChild('score').limitToLast(500).once('value');
 							const results = [];

@@ -208,6 +208,8 @@ async function syncPuzzleProgress(user) {
 	const recent = { solved: {}, results: {}, daily: {} };
 	for (const [id, t] of Object.entries(now.solved)) if (typeof t === 'number' && t >= t0) recent.solved[id] = t;
 	for (const [id, v] of Object.entries(now.results)) if (v && typeof v.at === 'number' && v.at >= t0) recent.results[id] = v;
+	// The daily log has no times: a day that appeared since the read began.
+	for (const [d, st] of Object.entries(now.daily)) if (!(d in local.daily)) recent.daily[d] = st;
 	const merged = foreign ? mergePuzzleProgress(remote, recent) : mergePuzzleProgress(remote, mergePuzzleProgress(local, now));
 	writeLocalPuzzleProgress(merged);
 	try { localStorage.setItem(PUZZLE_PROGRESS_KEYS.owner, u.uid); } catch (e) { /* storage blocked */ }
@@ -280,9 +282,10 @@ function readLocalStorm() {
  * at once (two tabs or devices) each count, since the rules want `runs`
  * exactly one past the stored value. (One page records one run at a time:
  * the SDK merges a client's own queued transactions on a path into a single
- * write.) Then storm_leaderboard on a new best. Returns { rec, prevBest }.
+ * write.) Once it commits, the pending entry `at` (if any) is delivered;
+ * the leaderboard row follows separately. Returns { rec, prevBest }.
  */
-async function _stormSave(u, score) {
+async function _stormSave(u, score, at) {
 	const db = firebase.database();
 	const base = 'users/' + u.uid;
 	let prevBest = 0;
@@ -292,19 +295,33 @@ async function _stormSave(u, score) {
 		return { best: Math.max(prevBest, score), runs: (cur.runs || 0) + 1, last: score, at: firebase.database.ServerValue.TIMESTAMP };
 	});
 	const rec = res.snapshot.val();
-	if (res.committed && rec && rec.best > prevBest) {
-		// The row must equal the stored best; a run finishing in between
-		// may raise it again, so write what is stored now.
-		const name = (await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player';
-		for (let k = 0; k < 3; k++) {
-			const best = (await _ptOnce(db.ref(base + '/puzzleStorm/best'))) || 0;
-			try {
-				await db.ref('storm_leaderboard/' + u.uid).set({ displayName: String(name).slice(0, 30), score: best });
-				break;
-			} catch (e) { if (k === 2) throw e; }
-		}
+	// Delivered: a replay would count the run twice.
+	if (res.committed && at !== undefined) _stormDone(at);
+	if (res.committed && rec) {
+		try { await _stormSyncBoard(u); } catch (e) { /* repaired on the next visit */ }
 	}
 	return { rec, prevBest };
+}
+
+/**
+ * Make storm_leaderboard/<uid> carry the stored best (the rules require it
+ * equal). Also repairs a row a lost connection left behind.
+ */
+async function _stormSyncBoard(u) {
+	const db = firebase.database();
+	const base = 'users/' + u.uid;
+	for (let k = 0; k < 3; k++) {
+		const best = (await _ptOnce(db.ref(base + '/puzzleStorm/best'))) || 0;
+		if (!best) return;
+		const row = await _ptOnce(db.ref('storm_leaderboard/' + u.uid));
+		if (row && row.score === best) return;
+		const name = (await _ptOnce(db.ref(base + '/displayName'))) || u.displayName || 'Player';
+		try {
+			// A run finishing in between may raise the best again: re-read and retry.
+			await db.ref('storm_leaderboard/' + u.uid).set({ displayName: String(name).slice(0, 30), score: best });
+			return;
+		} catch (e) { if (k === 2) throw e; }
+	}
 }
 
 /** Drop one pending run (by its `at`) from the device record. */
@@ -323,11 +340,11 @@ async function flushStormPending(user) {
 	if (!u || (typeof navigator !== 'undefined' && navigator.onLine === false)) return 0;
 	let n = 0;
 	for (const p of readLocalStorm().pending.filter(x => x.uid === u.uid)) {
-		const r = await Promise.race([_stormSave(u, p.score), new Promise(res => setTimeout(() => res(null), 10000))]);
+		const r = await Promise.race([_stormSave(u, p.score, p.at), new Promise(res => setTimeout(() => res(null), 10000))]);
 		if (!r) break;
-		_stormDone(p.at);
 		n += 1;
 	}
+	if (!n) { try { await _stormSyncBoard(u); } catch (e) { /* next visit */ } }
 	return n;
 }
 
@@ -373,14 +390,12 @@ async function recordStormRun(user, score) {
 	local.runs += 1;
 	local.pending = local.pending.concat([{ uid: u.uid, score, at }]).slice(-50);
 	_ppWrite(PUZZLE_PROGRESS_KEYS.storm, local);
-	const saving = _stormSave(u, score);
 	// A save that lands after the timeout still clears its pending entry.
-	saving.then((r) => { if (r && r.rec) _stormDone(at); }, () => {});
+	const saving = _stormSave(u, score, at);
 	const saved = await Promise.race([saving, new Promise(r => setTimeout(() => r(null), 10000))]);
 	if (!saved || !saved.rec) {
 		return { best: Math.max(score, deviceBest), runs: null, newBest: score > deviceBest, signedIn: true, queued: true };
 	}
-	_stormDone(at);
 	return { best: saved.rec.best, runs: saved.rec.runs, newBest: score > saved.prevBest, signedIn: true, queued: false };
 }
 

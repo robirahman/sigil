@@ -347,17 +347,36 @@ const OWNER = { Authorization: 'Bearer owner' };
 				await ps.waitForFunction(() => /Stormer/.test((document.querySelector('.leaderboard-table') || {}).innerText || ''), { timeout: 20000 }).catch(() => {});
 				return ps.$eval('.leaderboard-table tbody', el => el.innerText).catch(() => ''); })();
 			check(/^\s*1\s+Stormer\s+11/.test(lbRanks), 'Storm rows are ranked: ' + JSON.stringify(lbRanks.slice(0, 60)));
+			const findMe = await ps.evaluate(() => [...document.querySelectorAll('button')].some(b => /Find me/.test(b.textContent) && b.offsetParent !== null));
+			check(findMe, 'Find me shows on the Storm board');
+			// A run whose transaction landed but whose leaderboard row did not:
+			// the next visit repairs the row and does not count the run again.
+			await fetch(`${DB}/storm_leaderboard/${uid}.json?ns=${NS}`, { method: 'PUT', headers: OWNER, body: JSON.stringify({ displayName: 'Stormer', score: 1 }) });
+			const runsNow = (await remote()).puzzleStorm.runs;
+			await ps.goto(`${BASE}/puzzles.html?tab=storm`, { waitUntil: 'networkidle2' });
+			await ps.waitForSelector('#storm-start', { visible: true, timeout: 30000 });
+			await sleep(1000);
+			const fixed = await (await fetch(`${DB}/storm_leaderboard/${uid}.json?ns=${NS}`, { headers: OWNER })).json();
+			check(fixed.score === 11 && (await remote()).puzzleStorm.runs === runsNow, 'a stale leaderboard row is repaired without counting a run ' + JSON.stringify(fixed));
 			// A device that last synced with another account: a result recorded
 			// while this account's progress was being read stays (and reaches it).
 			const ctxC = await browser.createBrowserContext();
 			const pc = await open(ctxC, '?tab=dashboard', { before: `if (!localStorage.getItem('seeded')) { localStorage.setItem('seeded', 1);
 				localStorage.setItem('sigil_puzzle_progress_owner', 'another-account');
-				localStorage.setItem('sigil_puzzle_results', JSON.stringify({ 'old-of-other': { r: 's', at: 1000 }, 'during-sync': { r: 'f', at: Date.now() + 60000 } })); }` });
+				localStorage.setItem('sigil_puzzle_results', JSON.stringify({ 'old-of-other': { r: 's', at: 1000 }, 'during-sync': { r: 'f', at: Date.now() + 60000 } })); }
+				// The daily puzzle finished while the account read was in flight.
+				else if (!localStorage.getItem('dailyDone')) { localStorage.setItem('dailyDone', 1);
+					const realGet = Storage.prototype.getItem; let n = 0;
+					Storage.prototype.getItem = function (k) { const v = realGet.call(this, k);
+						if (k === 'sigil_puzzle_daily' && ++n === 2) return JSON.stringify({ done: { '2026-10-20': 'solved' }, best: 1, streak: 1, last: '2026-10-20' });
+						return v; }; }` });
 			await signIn(pc);
 			await pc.reload({ waitUntil: 'networkidle2' });
 			await pc.waitForSelector('#puzzle-dashboard', { visible: true, timeout: 30000 });
 			const lc = await local(pc);
 			for (let t = 0; t < 20; t++) { r = await remote(); if (r.puzzleProgress.results['during-sync']) break; await sleep(500); }
+			check(lc.daily.done && lc.daily.done['2026-10-20'] === 'solved' && r.puzzleProgress.daily && r.puzzleProgress.daily['2026-10-20'] === 'solved',
+				'a daily result made during the switch is kept ' + JSON.stringify(lc.daily));
 			check(!lc.results['old-of-other'] && lc.results['during-sync'] && r.puzzleProgress.results['during-sync'] && !r.puzzleProgress.results['old-of-other'],
 				'switching accounts drops the other account\'s record but keeps a result made meanwhile');
 			await ctxC.close();
