@@ -193,6 +193,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 		// 5. The game-over modal of an online game: "Report opponent" names the room.
 		// The modal's state is set as the game screen sets it at the end of a game.
 		const room = 'FPGAME';
+		// Reports are one a minute per account (report_limits): Alice filed
+		// one at step 1.
+		await rest('DELETE', 'report_limits');
 		await pa.goto(`${BASE}/multiplayer.html`, { waitUntil: 'load' });
 		// The game screen mounts when the lobby's phase turns to playing.
 		await waitIn(pa, () => !!(document.querySelector('[x-data^="multiplayerLobby"]') || {})._x_dataStack);

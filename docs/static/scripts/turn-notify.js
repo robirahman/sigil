@@ -11,8 +11,9 @@
  *     helpers behind the "Notify me when it's my move" toggle. The server
  *     side is functions/notify.js; docs/sw.js shows the push.
  *
- * Cheap: per game, its status and only the last turn (an orderByChild
- * ('timestamp').limitToLast(1) query), and whose move that makes it by
+ * Cheap: per game, its status and only the last turn (rooms/{id}/last in a
+ * sequenced room, else an orderByChild('timestamp').limitToLast(1) query),
+ * and whose move that makes it by
  * room-clock.js sideToMove, the rule the server uses.
  */
 (function () {
@@ -70,17 +71,36 @@
 		statusRef.on('value', (s) => { g.status = s.val(); recount(); }, () => {});
 		room.child('timeControl').once('value').then((s) => { g.timeControl = s.val(); }, () => {});
 		room.child('startSfn').once('value').then((s) => { g.startSfn = s.val(); recount(); }, () => {});
-		const lastRef = room.child('turns').orderByChild('timestamp').limitToLast(1);
-		lastRef.on('value', (s) => {
-			let last = null;
-			s.forEach((c) => { last = { key: c.key, turn: c.val() || {} }; });
+		// The last turn: a sequenced room names it (rooms/{id}/last, which
+		// each turn moves on in the same write); an older room's is the
+		// latest by server time.
+		const onLast = (last) => {
 			const first = g.last === undefined;
 			const changed = !first && last && (!g.last || g.last.key !== last.key);
 			g.last = last;
 			recount();
 			if (changed && isYourMove(g)) notifyInTab(code, g);
+		};
+		room.child('seq').once('value').then((seqSnap) => {
+			if (games[code] !== g) return;
+			let lastRef;
+			if (seqSnap.val() === true) {
+				lastRef = room.child('last');
+				lastRef.on('value', (s) => {
+					const v = s.val();
+					onLast(v && v.key ? { key: v.key, turn: { color: v.color } } : null);
+				}, () => {});
+			} else {
+				lastRef = room.child('turns').orderByChild('timestamp').limitToLast(1);
+				lastRef.on('value', (s) => {
+					let last = null;
+					s.forEach((c) => { last = { key: c.key, turn: c.val() || {} }; });
+					onLast(last);
+				}, () => {});
+			}
+			g.refs.push(lastRef);
 		}, () => {});
-		g.refs.push(statusRef, lastRef);
+		g.refs.push(statusRef);
 	}
 
 	function unwatchRoom(code) {

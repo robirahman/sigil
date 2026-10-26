@@ -91,7 +91,7 @@
         },
         "status": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)",
-          ".validate": "!data.exists() || (data.val() === 'waiting' && ((newData.val() === 'playing' && (newData.parent().child('ranked').val() !== true || ((!root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').exists() || root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').val() < now) && (!root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').exists() || root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').val() < now)))) || newData.val() === 'expired')) || (data.val() === 'playing' && newData.val() === 'finished' && newData.parent().child('winner').exists() && newData.parent().child('closedAt').val() === now && ((newData.parent().child('finishedBy').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.parent().child('finishedBy').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid))) || (data.val() === 'playing' && newData.val() === 'aborted' && ((newData.parent().child('abortedBy').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.parent().child('abortedBy').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)))"
+          ".validate": "!data.exists() || (data.val() === 'waiting' && ((newData.val() === 'playing' && (newData.parent().child('seq').val() !== true || (newData.parent().child('red/uid').val() === auth.uid && newData.parent().child('red/seq').val() === true) || (newData.parent().child('blue/uid').val() === auth.uid && newData.parent().child('blue/seq').val() === true)) && (newData.parent().child('ranked').val() !== true || ((!root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').exists() || root.child('user_flags/' + newData.parent().child('red/uid').val() + '/banUntil').val() < now) && (!root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').exists() || root.child('user_flags/' + newData.parent().child('blue/uid').val() + '/banUntil').val() < now)))) || newData.val() === 'expired')) || (data.val() === 'playing' && newData.val() === 'finished' && newData.parent().child('winner').exists() && newData.parent().child('closedAt').val() === now && ((newData.parent().child('finishedBy').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.parent().child('finishedBy').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid))) || (data.val() === 'playing' && newData.val() === 'aborted' && ((newData.parent().child('abortedBy').val() === 'red' && newData.parent().child('red/uid').val() === auth.uid) || (newData.parent().child('abortedBy').val() === 'blue' && newData.parent().child('blue/uid').val() === auth.uid)))"
         },
         "ranked": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid) && root.child('rooms/' + $roomId + '/status').val() === 'waiting'",
@@ -422,6 +422,9 @@
         "at": {
           ".validate": "newData.val() === now"
         },
+        "abandonedGames": {
+          ".validate": "false"
+        },
         "$other": {
           ".validate": false
         }
@@ -436,7 +439,7 @@
       ],
       "$reportId": {
         ".write": "auth !== null && newData.exists() && ((!data.exists() && auth.provider !== 'anonymous') || (data.exists() && root.child('admins/' + auth.uid).val() === true))",
-        ".validate": "newData.hasChildren(['by', 'target', 'reason', 'at']) && (data.exists() ? (newData.child('by').val() === data.child('by').val() && newData.child('target').val() === data.child('target').val() && newData.child('room').val() === data.child('room').val() && newData.child('reason').val() === data.child('reason').val() && newData.child('note').val() === data.child('note').val() && newData.child('at').val() === data.child('at').val()) : (newData.child('by').val() === auth.uid && newData.child('target').val() !== auth.uid && newData.child('at').val() === now && !newData.child('resolved').exists() && !newData.child('adminNote').exists()))",
+        ".validate": "newData.hasChildren(['by', 'target', 'reason', 'at']) && (data.exists() ? (newData.child('by').val() === data.child('by').val() && newData.child('target').val() === data.child('target').val() && newData.child('room').val() === data.child('room').val() && newData.child('reason').val() === data.child('reason').val() && newData.child('note').val() === data.child('note').val() && newData.child('at').val() === data.child('at').val()) : (newData.child('by').val() === auth.uid && newData.child('target').val() !== auth.uid && newData.child('at').val() === now && newData.parent().parent().child('report_limits/' + auth.uid).val() === now && !newData.child('resolved').exists() && !newData.child('adminNote').exists()))",
         "by": {
           ".validate": "newData.isString()"
         },
@@ -531,6 +534,12 @@
           ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid",
           ".validate": "newData.val() === now"
         }
+      }
+    },
+    "report_limits": {
+      "$uid": {
+        ".write": "auth !== null && auth.uid === $uid && auth.provider !== 'anonymous' && newData.exists()",
+        ".validate": "newData.val() === now && (!data.exists() || data.val() <= now - 60000)"
       }
     }
   }

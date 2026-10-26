@@ -7,7 +7,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, ABANDON_GRACE_MS, freshEngine } = require('../rating');
+const { judgeGame, ratingUpdates, flagged, firstTurnNumber, abandoned, sideToMove, roomTurns, ABANDON_GRACE_MS, freshEngine } = require('../rating');
 const AI = require('./ai-games.json');
 const ONLINE = require('./online-game.json');
 
@@ -81,6 +81,13 @@ test('casual, guest-account and unrated-pack games are not rated', async () => {
 	casual.ranked = false;
 	assert.strictEqual((await judgeGame(casual, ctx())).reason, 'casual');
 	assert.strictEqual((await judgeGame(AI.N3WMQJ, ctx({ isFullAccount: async () => false }))).reason, 'guest-account');
+	// A suspended player's games are not rated, AI games included; only the
+	// human players are looked up.
+	const asked = [];
+	const susp = await judgeGame(AI.N3WMQJ, ctx({ isSuspended: async (uid) => { asked.push(uid); return true; } }));
+	assert.deepStrictEqual([susp.rated, susp.reason], [false, 'suspended']);
+	assert.strictEqual(asked.length, 1);
+	assert.strictEqual((await judgeGame(AI.N3WMQJ, ctx({ isSuspended: async () => false }))).rated, true);
 	const panda = clone(AI.N3WMQJ);
 	panda.spellNames[0] = 'Stampede';
 	assert.strictEqual((await judgeGame(panda, ctx())).reason, 'unrated-pack');
@@ -209,6 +216,12 @@ test('an upheld abandonment claim names the player who left', async () => {
 	room.closedAt = lastTs + 1000 + ABANDON_GRACE_MS;
 	const v = await judgeGame(rec, ctx({ room }));
 	assert.deepStrictEqual([v.rated, v.winner, v.abandonedBy], [true, 'red', 'blue']);
+	// Upheld in an unrated room too: casual, or a guest seat.
+	const casual = Object.assign({}, room, { ranked: false, casual: true });
+	const vc = await judgeGame(Object.assign({}, rec, { ranked: false }), ctx({ room: casual }));
+	assert.deepStrictEqual([vc.rated, vc.reason, vc.abandonedBy], [false, 'casual', 'blue']);
+	const vg = await judgeGame(rec, ctx({ room, isFullAccount: async (u) => u !== 'bob' }));
+	assert.deepStrictEqual([vg.rated, vg.reason, vg.abandonedBy], [false, 'guest-account', 'blue']);
 	// A claim made too early is the claimer's loss, and nobody's abandonment.
 	room.closedAt = lastTs + 5000;
 	const early = await judgeGame(rec, ctx({ room }));
@@ -463,4 +476,20 @@ test('ratingUpdates stores the opponent\'s rating before the game, and profile s
 	assert.strictEqual(s.bests.bestWin.oppElo, 1733);
 	assert.strictEqual(s.bests.worstLoss.game.id, 'oldHuman');
 	assert.strictEqual(s.bests.worstLoss.oppElo, 1400);
+});
+
+test('a sequenced room orders its turns by their chain, ties in time included', () => {
+	// b follows a in the same server millisecond, with a push key that sorts
+	// first: by time and key it would come first.
+	const turns = { k2: { color: 'red', timestamp: 5 }, k1: { color: 'blue', timestamp: 5, after: 'k2' }, k3: { color: 'red', timestamp: 9, after: 'k1' } };
+	const colors = (room) => roomTurns(room).map((t) => t.color).join(',');
+	assert.strictEqual(colors({ seq: true, turns }), 'red,blue,red');
+	assert.strictEqual(sideToMove({ seq: true, turns: { k2: turns.k2, k1: turns.k1 } }), 'red');
+	// A room from before sequencing: by time, then key.
+	assert.strictEqual(colors({ turns }), 'blue,red,red');
+	// Turns that are not one chain (a fork, or two starts): by time.
+	const fork = Object.assign({}, turns, { k4: { color: 'blue', timestamp: 7, after: 'k1' } });
+	assert.strictEqual(colors({ seq: true, turns: fork }), 'blue,red,blue,red');
+	const partial = { k3: turns.k3, k9: { color: 'blue', timestamp: 1 } };
+	assert.strictEqual(colors({ seq: true, turns: partial }), 'blue,red');
 });

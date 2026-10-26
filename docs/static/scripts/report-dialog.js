@@ -119,14 +119,18 @@
 		};
 		if (current.room) report.room = String(current.room).slice(0, 32);
 		try {
-			await firebase.database().ref('reports').push(report);
+			// One report a minute per account (report_limits/{uid},
+			// database.rules.json), written with the report.
+			const db = firebase.database();
+			const key = db.ref('reports').push().key;
+			await db.ref().update({ ['reports/' + key]: report, ['report_limits/' + user.uid]: firebase.database.ServerValue.TIMESTAMP });
 			part('.report-dialog__form').hidden = true;
 			sendBtn.hidden = true;
 			setMsg('Thank you. An admin will look at it.', true);
 		} catch (e) {
 			console.error('[Report] failed:', e);
 			sendBtn.disabled = false;
-			setMsg('The report could not be sent. Please try again.');
+			setMsg('The report could not be sent. Please wait a minute and try again.');
 		}
 	}
 

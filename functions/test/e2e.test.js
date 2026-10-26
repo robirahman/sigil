@@ -72,7 +72,7 @@ async function playRoom(alice, bob, upTo, timeControl) {
 		timeControl: timeControl || { type: 'none' }, allowSpectators: true, variant: 'standard', seq: true,
 	});
 	await update(ref(bob.db, 'rooms/' + code), {
-		blue: { uid: bob.uid, displayName: 'bob', connected: true }, status: 'playing', ranked: true,
+		blue: { uid: bob.uid, displayName: 'bob', connected: true, seq: true }, status: 'playing', ranked: true,
 	});
 	for (const t of ONLINE.turns.slice(0, upTo)) {
 		const p = t.color === 'red' ? alice : bob;
@@ -164,6 +164,17 @@ test('a player gone for a minute loses on a claim; an early claim is the claimer
 	const admin = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'abandons' + seq));
 	const flags = async (u) => (await admin.ref('user_flags/' + u.uid + '/abandons').once('value')).val();
 	assert.deepStrictEqual([await flags(bob), await flags(alice), await flags(carol), await flags(dave)], [1, null, null, null]);
+	// Counted once per room: the same record rated again (a retried
+	// event: the trigger's snapshot predates eloProcessed) adds nothing.
+	assert.strictEqual((await admin.ref('user_flags/' + bob.uid + '/abandonedGames/' + code).once('value')).val(), true);
+	const again = admin.ref('completed_games/' + gameId);
+	const rec = (await again.once('value')).val();
+	for (const k of Object.keys(rec)) if (/^elo|^unrated/.test(k)) delete rec[k];
+	await again.remove();
+	await again.set(rec);
+	for (let i = 0; i < 40 && !(await again.child('eloProcessed').once('value')).val(); i++) await new Promise((r) => setTimeout(r, 500));
+	assert.strictEqual((await again.child('eloProcessed').once('value')).val(), true);
+	assert.strictEqual(await flags(bob), 1);
 });
 
 test('the server ends a game whose clock ran out with nobody watching', async () => {
@@ -218,6 +229,15 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	await update(ref(dave.db), Object.assign(pair(dave.uid, erin.uid), blk(dave.uid, gus.uid)));
 	await update(ref(erin.db), pair(erin.uid, dave.uid));
 	await update(ref(frank.db), blk(frank.uid, dave.uid));
+	// An admin's suspension and the server's abandonment record, and a
+	// report Dave filed (its rate-limit stamp).
+	{
+		const { initializeApp: adminApp } = require('firebase-admin/app');
+		const { getDatabaseWithUrl } = require('firebase-admin/database');
+		const a = getDatabaseWithUrl(`https://${NS}.firebaseio.com`, adminApp({ projectId: 'demo-sigil' }, 'admin-flags' + seq));
+		await a.ref('user_flags/' + dave.uid).set({ banUntil: Date.now() + 86400000, reason: 'x', abandons: 1, abandonedGames: { ABC234: true } });
+		await a.ref('report_limits/' + dave.uid).set(Date.now());
+	}
 	const res = await httpsCallable(dave.fns, 'deleteUserData')();
 	assert.deepStrictEqual(res.data, { ok: true });
 	const other = erin;
@@ -233,6 +253,9 @@ test('deleting an account removes its records and keeps its games anonymous', as
 	for (const p of [`follows/${dave.uid}`, `followers/${dave.uid}`, `follows/${erin.uid}/${dave.uid}`, `followers/${erin.uid}/${dave.uid}`,
 		`blocks/${dave.uid}`, `blockedBy/${gus.uid}/${dave.uid}`, `blocks/${frank.uid}/${dave.uid}`, `blockedBy/${dave.uid}`]) {
 		assert.strictEqual((await admin.ref(p).once('value')).exists(), false, p);
+	}
+	for (const p of ['push_tokens/', 'user_flags/', 'report_limits/']) {
+		assert.strictEqual((await admin.ref(p + dave.uid).once('value')).exists(), false, p);
 	}
 });
 

@@ -72,15 +72,41 @@ function roomGiftMs(room, color, now) {
 	return Math.min(count, ROOM_GIFT_MAX) * ROOM_GIFT_MS;
 }
 
-/** A room's turns in the order they were played: [{color, actions, timestamp}]. */
+/**
+ * A room's turn keys in the order played. A sequenced room (rooms/{id}/seq)
+ * chains its turns: each names the one before it (`after`, which the rules
+ * hold to the room's last turn), so the chain from the one turn without a
+ * predecessor here gives the order, ties in time included. Otherwise, or
+ * if the turns given do not form one chain, by server timestamp, push key
+ * breaking a tie (the order of an RTDB orderByChild('timestamp') query).
+ * @param {object} turns - key -> { after, timestamp }
+ * @param {boolean} seq - the room's `seq`
+ */
+function orderTurnKeys(turns, seq) {
+	const keys = Object.keys(turns || {});
+	const byTime = keys.slice().sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0));
+	if (seq !== true || keys.length < 2) return byTime;
+	const next = {};
+	const roots = [];
+	for (const k of keys) {
+		const a = turns[k] && turns[k].after;
+		if (typeof a === 'string' && Object.prototype.hasOwnProperty.call(turns, a)) {
+			if (next[a] !== undefined) return byTime;
+			next[a] = k;
+		} else {
+			roots.push(k);
+		}
+	}
+	if (roots.length !== 1) return byTime;
+	const out = [];
+	for (let k = roots[0]; k !== undefined && out.length <= keys.length; k = next[k]) out.push(k);
+	return out.length === keys.length ? out : byTime;
+}
+
+/** A room's turns in the order they were played: [{color, actions, timestamp}] (orderTurnKeys). */
 function roomTurns(room) {
 	const turns = (room && room.turns) || {};
-	// By the server timestamp; push ids carry each client's own clock, so
-	// between two clients they can tie. Same order as an RTDB
-	// orderByChild('timestamp') query, so its last entry is the last turn.
-	return Object.keys(turns)
-		.sort((a, b) => ((turns[a].timestamp || 0) - (turns[b].timestamp || 0)) || (a < b ? -1 : a > b ? 1 : 0))
-		.map((k) => turns[k]);
+	return orderTurnKeys(turns, room && room.seq).map((k) => turns[k]);
 }
 
 /**
@@ -172,5 +198,5 @@ function roomTimerView(ts, room, now) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-	module.exports = { roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS, ROOM_GIFT_MAX };
+	module.exports = { orderTurnKeys, roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS, ROOM_GIFT_MAX };
 }
