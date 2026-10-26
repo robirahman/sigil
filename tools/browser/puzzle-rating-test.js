@@ -43,6 +43,27 @@ const ratings = [...picks].map(id => pool.find(p => p.id === id).rating);
 check(!picks.has('p25') && Math.max(...ratings.map(r => Math.abs(r - 1500))) <= 220,
 	`rated pick: never the attempted puzzle, within 220 of the rating (picked ${picks.size} distinct)`);
 
+// Daily streaks: a result recorded late (a recovered pending result) counts
+// against its own day, not today.
+{
+	const html = fs.readFileSync(path.join(DOCS, 'puzzles.html'), 'utf8');
+	let store = {};
+	const ls = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+	const f = new Function('localStorage', html.slice(html.indexOf('function utcDay'), html.indexOf('function dailyText'))
+		+ '\nreturn { recordDaily, utcDay };')(ls);
+	const D = f.utcDay;
+	const seed = (d) => { store = { sigil_puzzle_daily: JSON.stringify(d) }; };
+	seed({ last: D(-2), streak: 4, best: 4, done: { [D(-2)]: 'solved' } });
+	let d = f.recordDaily(D(-1), 'solved');
+	check(d.streak === 5 && f.recordDaily(D(0), 'solved').streak === 6, 'a late solve for yesterday extends the streak, and today extends it again');
+	seed({ last: D(0), streak: 2, best: 2, done: { [D(-1)]: 'solved', [D(0)]: 'solved' } });
+	d = f.recordDaily(D(-2), 'failed');
+	check(d.streak === 2 && d.last === D(0), 'a late failure for an older day leaves a newer streak alone');
+	seed({ last: D(0), streak: 1, best: 1, done: { [D(-2)]: 'solved', [D(0)]: 'solved' } });
+	d = f.recordDaily(D(-1), 'solved');
+	check(d.streak === 3 && d.best === 3, 'a late solve filling a gap joins the runs');
+}
+
 // ---- 3: the page, signed out
 (async () => {
 	const puppeteer = require('puppeteer');

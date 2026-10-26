@@ -443,13 +443,29 @@
 				const d = readDaily();
 				d.done = d.done || {};
 				if (d.done[day]) return d;
+				const newest = Object.keys(d.done).every(k => k < day);
 				d.done[day] = status;
-				if (status === 'solved') {
-					d.streak = d.last === utcDay(-1) ? (d.streak || 0) + 1 : 1;
-					d.last = day;
-					d.best = Math.max(d.best || 0, d.streak);
+				const dayBefore = (k) => new Date(Date.parse(k + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+				if (newest) {
+					// The usual case: today's (or the latest) result extends or ends the streak.
+					if (status === 'solved') {
+						d.streak = d.last === dayBefore(day) ? (d.streak || 0) + 1 : 1;
+						d.last = day;
+						d.best = Math.max(d.best || 0, d.streak);
+					} else {
+						d.streak = 0;
+					}
 				} else {
-					d.streak = 0;
+					// An older day recorded late (a recovered pending result): the
+					// streak is rebuilt from the log in calendar order.
+					let run = 0, prev = null, last = null;
+					for (const k of Object.keys(d.done).sort()) {
+						if (d.done[k] === 'solved') { run = prev === dayBefore(k) ? run + 1 : 1; prev = last = k; }
+						else { run = 0; prev = null; }
+						d.best = Math.max(d.best || 0, run);
+					}
+					d.streak = run;
+					d.last = last || d.last;
 				}
 				// Keep the log short.
 				const days = Object.keys(d.done).sort();
