@@ -238,7 +238,8 @@ const board = () => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')
 		check('the bank refunds the days not begun', v2 && v2.usedDays === 1 && v2.until <= Date.now(), v2);
 		const q1 = await pausesIn(corr.code);
 		const q2 = await pausesIn('VACCO2');
-		check('the pauses end now', q1[0].to <= Date.now() && q1[0].to < vac.until && q2[0].to === q1[0].to, { q1, q2 });
+		// Each ends at the time of its own write (a transaction on the room).
+		check('the pauses end now', [q1[0], q2[0]].every((q) => q.to <= Date.now() && q.to >= v2.until - 5000 && q.to < vac.until), { q1, q2 });
 		const gone = await until(async () => (await banner()) === '', 15000);
 		check('the banner goes', gone);
 		const back = deadline + (q1[0].to - q1[0].from);

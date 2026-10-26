@@ -1130,7 +1130,8 @@ class FirebaseSync {
 	/**
 	 * Give the opponent ROOM_GIFT_MS (realtime games). The rules accept a
 	 * gift only to the other seat, stamped with the server's time, at most
-	 * once a second per seat (giftAt).
+	 * once a second per seat: giftAt/{seat} names the one gift each write
+	 * may add.
 	 */
 	async giveTime() {
 		if (!this.roomRef || (this.myColor !== 'red' && this.myColor !== 'blue')) return false;
@@ -1142,7 +1143,7 @@ class FirebaseSync {
 			// lost move.
 			await this.roomRef.update({
 				['gifts/' + key]: { to, ms: ROOM_GIFT_MS, at: ts },
-				['giftAt/' + this.myColor]: ts,
+				['giftAt/' + this.myColor]: { key, at: ts },
 			});
 			return true;
 		} catch (e) {

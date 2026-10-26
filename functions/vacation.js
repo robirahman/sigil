@@ -4,17 +4,19 @@
  * that start during one).
  *
  * A player's bank is VACATION_DAYS_PER_YEAR days a calendar year (UTC),
- * kept at vacations/{uid}: { year, usedDays, from, until, days, rooms }.
+ * kept at vacations/{uid}: { year, usedDays, from, until, days }.
  * Only the server writes it (database.rules.json). Starting a vacation of N
  * days reserves N days; ending it early refunds the days not begun (a day
  * begun counts as used).
  *
  * While a player is on vacation, each of their correspondence games carries
- * a pause, rooms/{code}/pauses/{push}: { color, from, to }, which the shared
- * clock (room-clock.js) adds to that player's deadline. Pauses are written
- * here with admin rights and never backdated: `from` is the time of the
- * write, so a flag already due stays due, and the rating function, which
- * judges a flag as of closedAt, never sees a pause the clients could not.
+ * a pause, rooms/{code}/pauses/{uid_vacationFrom_color}: { color, from, to },
+ * which the shared clock (room-clock.js) adds to that player's deadline.
+ * Pauses are written here with admin rights, in a transaction on the room
+ * that requires it still in play, and never backdated: `from` (and an early
+ * `to`) is the time of the write, so a flag already due stays due, and the
+ * rating function, which judges a flag as of closedAt, never sees a pause
+ * the clients could not.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -44,7 +46,7 @@ function startRecord(v, days, now) {
 	if (days > left) return { error: 'not-enough-days' };
 	const year = yearOf(now);
 	const used = v && v.year === year ? (v.usedDays || 0) : 0;
-	return { year, usedDays: used + days, from: now, until: now + days * DAY_MS, days, rooms: null };
+	return { year, usedDays: used + days, from: now, until: now + days * DAY_MS, days };
 }
 
 /**
@@ -55,7 +57,7 @@ function endRecord(v, now) {
 	if (!onVacation(v, now)) return { error: 'not-on-vacation' };
 	const used = Math.min(v.days || 0, Math.max(1, Math.ceil((now - v.from) / DAY_MS)));
 	const refund = Math.max(0, (v.days || 0) - used);
-	return Object.assign({}, v, { usedDays: Math.max(0, (v.usedDays || 0) - refund), until: now, days: used, rooms: null });
+	return Object.assign({}, v, { usedDays: Math.max(0, (v.usedDays || 0) - refund), until: now, days: used });
 }
 
 /** The colours `uid` sits at in `room` (both, in a game against oneself). */
@@ -98,13 +100,59 @@ async function playingRooms(db) {
 	return rooms;
 }
 
-/** The updates that pause `color` in room `code` until `to`, recorded for `uid`. */
-function pauseUpdates(db, uid, code, color, now, to) {
-	const key = db.ref('rooms/' + code + '/pauses').push().key;
-	return {
-		['rooms/' + code + '/pauses/' + key]: { color, from: now, to },
-		['vacations/' + uid + '/rooms/' + code + '/' + color]: key,
-	};
+/**
+ * The key of the pause one vacation puts on one seat: the same for every
+ * writer (setVacation, any number of overlapping sweeps), so a seat gets
+ * one pause per vacation and ending it finds them all.
+ */
+function pauseKey(uid, vacationFrom, color) {
+	return uid + '_' + vacationFrom + '_' + color;
+}
+
+/**
+ * Change room `code` by `fn(room)` (which returns false to leave it), in a
+ * transaction on the room: a pause is added or ended only while the room is
+ * still in play, so a result judged as of closedAt is never changed after
+ * the fact. Resolves to whether it changed.
+ */
+async function changeOpenRoom(db, code, fn) {
+	const res = await db.ref('rooms/' + code).transaction((room) => {
+		// A transaction first runs on the local cache, empty here (null):
+		// answer it unchanged, and the server reruns it on the real room.
+		if (room === null) return null;
+		if (!pausable(room)) return undefined;
+		return fn(room) === false ? undefined : room;
+	});
+	return !!(res.committed && res.snapshot.exists());
+}
+
+/**
+ * Pause `color` in room `code` for `uid`'s vacation `v`, from the time of
+ * the write. Nothing when the seat already has this vacation's pause.
+ */
+function addPause(db, code, uid, color, v) {
+	const key = pauseKey(uid, v.from, color);
+	return changeOpenRoom(db, code, (room) => {
+		if (!room[color] || room[color].uid !== uid) return false;
+		const now = Date.now();
+		if (room.pauses && room.pauses[key]) return false;
+		if (!(now < v.until)) return false;
+		room.pauses = Object.assign({}, room.pauses, { [key]: { color, from: now, to: v.until } });
+		return true;
+	});
+}
+
+/** End `uid`'s pauses of vacation `v` in room `code` at the time of the write. */
+function endPauses(db, code, uid, v) {
+	return changeOpenRoom(db, code, (room) => {
+		const now = Date.now();
+		let changed = false;
+		for (const color of ['red', 'blue']) {
+			const p = room.pauses && room.pauses[pauseKey(uid, v.from, color)];
+			if (p && p.to > now) { p.to = Math.max(p.from, now); changed = true; }
+		}
+		return changed;
+	});
 }
 
 /**
@@ -132,32 +180,19 @@ async function setVacation(db, uid, days, now) {
 	}
 	const rec = res.snapshot.val();
 	if (!rec) { const e = new Error('not-on-vacation'); e.code = 'not-on-vacation'; throw e; }
-	const updates = {};
+	// Every correspondence game the player is in, however many. A room that
+	// finished meanwhile is left alone (changeOpenRoom).
+	const rooms = await playingRooms(db);
 	let count = 0;
-	if (days === 0) {
-		// Every pause this vacation wrote ends now (a room since finished is
-		// left alone: its result is judged as of its closedAt).
-		const rooms = (before && before.rooms) || {};
-		for (const code of Object.keys(rooms)) {
-			const room = (await db.ref('rooms/' + code).once('value')).val();
-			if (!pausable(room)) continue;
-			for (const color of Object.keys(rooms[code] || {})) {
-				const key = rooms[code][color];
-				const p = room.pauses && room.pauses[key];
-				if (p && p.to > now) { updates['rooms/' + code + '/pauses/' + key + '/to'] = now; count++; }
-			}
-		}
-	} else {
-		// Every correspondence game the player is in, however many.
-		const rooms = await playingRooms(db);
-		for (const code of Object.keys(rooms)) {
-			for (const color of seatsOf(rooms[code], uid)) {
-				Object.assign(updates, pauseUpdates(db, uid, code, color, now, rec.until));
-				count++;
-			}
+	for (const code of Object.keys(rooms)) {
+		const seats = seatsOf(rooms[code], uid);
+		if (!seats.length) continue;
+		if (days === 0) {
+			if (await endPauses(db, code, uid, before)) count++;
+		} else {
+			for (const color of seats) if (await addPause(db, code, uid, color, rec)) count++;
 		}
 	}
-	if (count) await db.ref().update(updates);
 	return { ok: true, until: rec.until, daysLeft: daysLeft(rec, now), rooms: count };
 }
 
@@ -172,19 +207,16 @@ async function pauseNewGames(db, now) {
 	snap.forEach((child) => { if (onVacation(child.val(), now)) active[child.key] = child.val(); });
 	if (!Object.keys(active).length) return 0;
 	const rooms = await playingRooms(db);
-	const updates = {};
 	let count = 0;
 	for (const code of Object.keys(rooms)) {
 		for (const m of missingPauses(rooms[code], active, now)) {
-			Object.assign(updates, pauseUpdates(db, m.uid, code, m.color, now, m.to));
-			count++;
+			if (await addPause(db, code, m.uid, m.color, active[m.uid])) count++;
 		}
 	}
-	if (count) await db.ref().update(updates);
 	return count;
 }
 
 module.exports = {
 	DAY_MS, VACATION_DAYS_PER_YEAR, daysLeft, onVacation, startRecord, endRecord, missingPauses,
-	setVacation, pauseNewGames,
+	pauseKey, setVacation, pauseNewGames,
 };
