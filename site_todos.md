@@ -39,7 +39,7 @@ Paths are relative to the repo root unless noted; `engine/…` means `docs/stati
   Timeouts are enforced only while a client is open, so they also need server-side expiry.
 - [x] **Add draw offers, abort before move 2, and takebacks by mutual agreement.** Abort before both players move and takebacks by agreement: done. Draw offers: not applicable (Sigil has no draws; threefold repetition is a Blue win).
 - [ ] **Add in-game chat or preset emotes.**
-- [ ] **Add a friends / follow list** with "challenge" from a profile.
+- [x] **Add a friends / follow list** with "challenge" from a profile. Done: Follow / Challenge on profile.html, friends with online status on active-games.html and the lobby, a challenge banner on every page plus a push (friends.js, notify.js notifyChallenge).
 - [x] **Add the missing account features:** password reset (`sendPasswordResetEmail`), upgrading an anonymous account to a full one (`linkWith*`), and account deletion.
 - [x] **Clean up stale rooms.** Game invite rooms (unjoined waiting rooms) expire after 72 hours and are pruned from rooms/ and user_active_games/. Finished rooms are pruned when someone opens `docs/active-games.html` (`:304-308`), and `ai/purge_stale_rooms.py` is available for maintenance.
 
@@ -152,7 +152,7 @@ Items already listed above are not repeated; chess-only features (opening names,
 
 ### Social
 
-- [ ] **Add blocking** alongside the friends / follow list.
+- [x] **Add blocking** alongside the friends / follow list. Done: Block on profile.html; the rules refuse a blocked player's challenge, follow and seat in the blocker's rooms, and the lobby hides their open games.
 - [ ] **Add an activity feed / timeline** ("X won a game", "X joined a tournament").
 - [ ] **Add private messaging.**
 - [ ] **Add a notifications inbox** plus web push.

@@ -84,10 +84,10 @@
         ".read": true,
         ".write": "(!data.exists() && newData.exists() && ((newData.child('local').val() === true && newData.child('status').val() === 'finished') || (auth !== null && newData.child('status').val() === 'waiting' && !newData.child('forfeitedBy').exists() && !newData.child('winner').exists() && !newData.child('finishedBy').exists() && !newData.child('endReason').exists() && !newData.child('closedAt').exists() && !newData.child('turns').exists() && !newData.child('last').exists() && newData.child('seq').val() === true && !newData.child('gameId').exists() && !newData.child('ratedAt').exists() && !newData.child('abortedBy').exists() && newData.child('ranked').val() === false && ((newData.child('red/uid').val() === auth.uid && !newData.child('blue/uid').exists()) || (newData.child('blue/uid').val() === auth.uid && !newData.child('red/uid').exists()))) || (auth !== null && newData.child('status').val() === 'playing' && root.child('rooms/' + newData.child('rematchOf').val() + '/rematch/red').val() === 'offered' && root.child('rooms/' + newData.child('rematchOf').val() + '/rematch/blue').val() === 'offered' && newData.child('timeControl/type').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/timeControl/type').val() && newData.child('timeControl/initialTime').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/timeControl/initialTime').val() && newData.child('timeControl/increment').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/timeControl/increment').val() && newData.child('timeControl/moveTimeout').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/timeControl/moveTimeout').val() && newData.child('variant').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/variant').val() && !newData.child('forfeitedBy').exists() && !newData.child('winner').exists() && !newData.child('finishedBy').exists() && !newData.child('endReason').exists() && !newData.child('closedAt').exists() && !newData.child('turns').exists() && !newData.child('last').exists() && newData.child('seq').val() === true && !newData.child('gameId').exists() && !newData.child('ratedAt').exists() && !newData.child('abortedBy').exists() && newData.child('rematchOf').isString() && (newData.child('red/uid').val() === auth.uid || newData.child('blue/uid').val() === auth.uid) && ((newData.child('red/uid').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/red/uid').val() && newData.child('blue/uid').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/blue/uid').val()) || (newData.child('red/uid').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/blue/uid').val() && newData.child('blue/uid').val() === root.child('rooms/' + newData.child('rematchOf').val() + '/red/uid').val())) && (newData.child('ranked').val() === false || root.child('rooms/' + newData.child('rematchOf').val() + '/ranked').val() === true)))) || (data.exists() && !newData.exists() && auth !== null && (data.child('status').val() === 'waiting' || data.child('status').val() === 'expired' || data.child('ratedAt').exists()) && (data.child('red/uid').val() === auth.uid || data.child('blue/uid').val() === auth.uid || (data.child('status').val() === 'waiting' && data.child('created').val() < now - 259200000)))",
         "red": {
-          ".write": "auth !== null && newData.child('uid').val() === auth.uid && (data.child('uid').val() === auth.uid || (!data.child('uid').exists() && data.parent().child('status').val() === 'waiting')) && root.child('rooms/' + $roomId + '/status').val() !== 'finished' && root.child('rooms/' + $roomId + '/status').val() !== 'aborted'"
+          ".write": "auth !== null && newData.child('uid').val() === auth.uid && (data.child('uid').val() === auth.uid || (!data.child('uid').exists() && data.parent().child('status').val() === 'waiting' && (!data.parent().child('invite').exists() || data.parent().child('invite').val() === auth.uid) && (!data.parent().child('blue/uid').isString() || !root.child('blocks/' + data.parent().child('blue/uid').val() + '/' + auth.uid).exists()))) && root.child('rooms/' + $roomId + '/status').val() !== 'finished' && root.child('rooms/' + $roomId + '/status').val() !== 'aborted'"
         },
         "blue": {
-          ".write": "auth !== null && newData.child('uid').val() === auth.uid && (data.child('uid').val() === auth.uid || (!data.child('uid').exists() && data.parent().child('status').val() === 'waiting')) && root.child('rooms/' + $roomId + '/status').val() !== 'finished' && root.child('rooms/' + $roomId + '/status').val() !== 'aborted'"
+          ".write": "auth !== null && newData.child('uid').val() === auth.uid && (data.child('uid').val() === auth.uid || (!data.child('uid').exists() && data.parent().child('status').val() === 'waiting' && (!data.parent().child('invite').exists() || data.parent().child('invite').val() === auth.uid) && (!data.parent().child('red/uid').isString() || !root.child('blocks/' + data.parent().child('red/uid').val() + '/' + auth.uid).exists()))) && root.child('rooms/' + $roomId + '/status').val() !== 'finished' && root.child('rooms/' + $roomId + '/status').val() !== 'aborted'"
         },
         "status": {
           ".write": "auth !== null && (newData.parent().child('red/uid').val() === auth.uid || newData.parent().child('blue/uid').val() === auth.uid)",
@@ -109,6 +109,9 @@
         },
         "creatorColor": {
           ".validate": "(newData.val() === 'red' || newData.val() === 'blue') && auth !== null && newData.parent().child(newData.val() + '/uid').val() === auth.uid"
+        },
+        "invite": {
+          ".validate": "newData.isString() && newData.val() !== auth.uid && newData.parent().child('status').val() === 'waiting' && newData.parent().child('public').val() !== true"
         },
         "turns": {
           ".indexOn": [
@@ -413,6 +416,59 @@
         },
         "$other": {
           ".validate": false
+        }
+      }
+    },
+    "follows": {
+      "$uid": {
+        ".read": true,
+        "$target": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid && (newData.exists() ? newData.parent().parent().parent().child('followers/' + $target + '/' + $uid).val() === true : !newData.parent().parent().parent().child('followers/' + $target + '/' + $uid).exists())",
+          ".validate": "newData.val() === true && $target !== $uid && !$target.matches(/^__ai_/) && root.child('users/' + $target + '/displayName').exists() && !root.child('blocks/' + $target + '/' + $uid).exists()"
+        }
+      }
+    },
+    "followers": {
+      "$target": {
+        ".read": true,
+        "$uid": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid && (newData.exists() ? newData.parent().parent().parent().child('follows/' + $uid + '/' + $target).val() === true : !newData.parent().parent().parent().child('follows/' + $uid + '/' + $target).exists())",
+          ".validate": "newData.val() === true"
+        }
+      }
+    },
+    "blocks": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        "$target": {
+          ".read": "auth !== null && auth.uid === $target",
+          ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid",
+          ".validate": "newData.val() === true && $target !== $uid"
+        }
+      }
+    },
+    "challenges": {
+      "$target": {
+        ".read": "auth !== null && auth.uid === $target",
+        "$room": {
+          ".read": "auth !== null && (root.child('rooms/' + $room + '/red/uid').val() === auth.uid || root.child('rooms/' + $room + '/blue/uid').val() === auth.uid)",
+          ".write": "auth !== null && ((auth !== null && auth.provider !== 'anonymous' && !data.exists() && newData.exists() && root.child('rooms/' + $room + '/status').val() === 'waiting' && root.child('rooms/' + $room + '/invite').val() === $target && ((root.child('rooms/' + $room + '/creatorColor').val() === 'red' && root.child('rooms/' + $room + '/red/uid').val() === auth.uid) || (root.child('rooms/' + $room + '/creatorColor').val() === 'blue' && root.child('rooms/' + $room + '/blue/uid').val() === auth.uid)) && !root.child('blocks/' + $target + '/' + auth.uid).exists() && !root.child('blocks/' + auth.uid + '/' + $target).exists()) || (!newData.exists() && (auth.uid === $target || data.child('from').val() === auth.uid)))",
+          ".validate": "newData.hasChildren(['from', 'at']) && newData.child('from').val() === auth.uid && newData.child('at').val() === now && $target !== auth.uid && !$target.matches(/^__ai_/) && root.child('users/' + $target + '/displayName').exists() && (!newData.child('variant').exists() || newData.child('variant').val() === root.child('rooms/' + $room + '/variant').val())",
+          "tc": {
+            ".validate": "newData.hasChildren(['type'])"
+          },
+          "$other": {
+            ".validate": "$other === 'from' || $other === 'at' || $other === 'tc' || $other === 'variant'"
+          }
+        }
+      }
+    },
+    "presence": {
+      "$uid": {
+        ".read": true,
+        "$conn": {
+          ".write": "auth !== null && auth.provider !== 'anonymous' && auth.uid === $uid",
+          ".validate": "newData.val() === now"
         }
       }
     }

@@ -1,7 +1,9 @@
 'use strict';
 /**
- * "Your move" pushes (index.js notifyTurn). Kept apart from index.js so the
- * tests can call it with a stub sender: the emulators have no FCM.
+ * Web pushes: "Your move" (index.js notifyTurn) and challenges from a
+ * profile (index.js notifyChallenge), both through sendPush. Kept apart
+ * from index.js so the tests can call it with a stub sender: the emulators
+ * have no FCM.
  *
  * Tokens live in push_tokens/{uid}/{hash}: {token, created}, written by the
  * owner from active-games.html and readable only by them and the server.
@@ -79,30 +81,94 @@ function noticeMessage(code, notice) {
 }
 
 /**
- * Handle a new turn: tell the player to move, through `send(tokens,
+ * Push `message` to every browser `uid` has registered, through `send(tokens,
  * message)` (resolves to [{ok} | {error: {code}}] per token, as
  * sendEachForMulticast), and drop the tokens FCM reports dead. Resolves to
- * { uid, sent, removed } or null when nobody is told.
+ * { uid, sent, removed }.
  */
-async function notifyTurn(db, code, turnId, now, send) {
-	const room = (await db.ref('rooms/' + code).once('value')).val();
-	const notice = turnNotice(room, turnId, now);
-	if (!notice) return null;
-	const snap = await db.ref('push_tokens/' + notice.uid).once('value');
+async function sendPush(db, uid, message, send) {
+	const snap = await db.ref('push_tokens/' + uid).once('value');
 	const keys = [];
 	const tokens = [];
 	snap.forEach((c) => {
 		const t = c.child('token').val();
 		if (typeof t === 'string' && t) { keys.push(c.key); tokens.push(t); }
 	});
-	if (!tokens.length) return { uid: notice.uid, sent: 0, removed: 0 };
-	const results = await send(tokens, noticeMessage(code, notice));
+	if (!tokens.length) return { uid, sent: 0, removed: 0 };
+	const results = await send(tokens, message);
 	const dead = {};
 	results.forEach((r, i) => {
-		if (r && r.error && DEAD_TOKEN_CODES.has(r.error.code)) dead['push_tokens/' + notice.uid + '/' + keys[i]] = null;
+		if (r && r.error && DEAD_TOKEN_CODES.has(r.error.code)) dead['push_tokens/' + uid + '/' + keys[i]] = null;
 	});
 	if (Object.keys(dead).length) await db.ref().update(dead);
-	return { uid: notice.uid, sent: results.filter((r) => r && !r.error).length, removed: Object.keys(dead).length };
+	return { uid, sent: results.filter((r) => r && !r.error).length, removed: Object.keys(dead).length };
 }
 
-module.exports = { turnNotice, noticeMessage, notifyTurn, formatLeft };
+/**
+ * Handle a new turn: tell the player to move (sendPush). Resolves to
+ * { uid, sent, removed } or null when nobody is told.
+ */
+async function notifyTurn(db, code, turnId, now, send) {
+	const room = (await db.ref('rooms/' + code).once('value')).val();
+	const notice = turnNotice(room, turnId, now);
+	if (!notice) return null;
+	return sendPush(db, notice.uid, noticeMessage(code, notice), send);
+}
+
+// ---- Challenges (challenges/{target}/{room}, from a profile) ----
+
+function tcLabel(tc) {
+	if (!tc || tc.type === 'none' || !tc.type) return 'untimed';
+	if (tc.type === 'realtime') return Math.round((tc.initialTime || 0) / 6000) / 10 + '+' + Math.round((tc.increment || 0) / 1000);
+	if (tc.type === 'correspondence') {
+		const ms = tc.moveTimeout || 0;
+		return ms >= 86400000 ? Math.round(ms / 86400000) + ' days/move' : Math.round(ms / 3600000) + ' hours/move';
+	}
+	return '';
+}
+
+/**
+ * The push for a challenge still open: the room waits for exactly this
+ * player, its creator sent it, and the target has not blocked them (the
+ * rules check all three at the write; this re-reads them for a retry).
+ * { uid, title, body } or null.
+ */
+function challengeNotice(target, room, challenge, blocked, fromName) {
+	if (!room || !challenge || room.status !== 'waiting' || room.invite !== target) return null;
+	const creator = room.creatorColor === 'blue' ? 'blue' : 'red';
+	if (!room[creator] || room[creator].uid !== challenge.from || blocked) return null;
+	const name = fromName || room[creator].displayName || 'A player';
+	return { uid: target, title: 'Sigil challenge', body: name + ' challenges you to a game (' + tcLabel(room.timeControl) + ').' };
+}
+
+function challengeMessage(code, notice) {
+	return {
+		data: {
+			title: notice.title,
+			body: notice.body,
+			room: code,
+			url: 'multiplayer.html?id=' + encodeURIComponent(code),
+			tag: 'sigil-challenge-' + code,
+		},
+		// An invite expires after three days (ROOM_INVITE_EXPIRY_MS).
+		webpush: { headers: { Urgency: 'high', TTL: String(3 * 24 * 3600) } },
+	};
+}
+
+/** Handle a new challenge: push it to its target. Null when nobody is told. */
+async function notifyChallenge(db, target, code, send) {
+	const [room, challenge] = await Promise.all([
+		db.ref('rooms/' + code).once('value').then((s) => s.val()),
+		db.ref('challenges/' + target + '/' + code).once('value').then((s) => s.val()),
+	]);
+	const from = challenge && typeof challenge.from === 'string' ? challenge.from : null;
+	const [blocked, fromName] = from ? await Promise.all([
+		db.ref('blocks/' + target + '/' + from).once('value').then((s) => s.exists()),
+		db.ref('users/' + from + '/displayName').once('value').then((s) => s.val()),
+	]) : [false, null];
+	const notice = challengeNotice(target, room, challenge, blocked, fromName);
+	if (!notice) return null;
+	return sendPush(db, target, challengeMessage(code, notice), send);
+}
+
+module.exports = { turnNotice, noticeMessage, notifyTurn, formatLeft, sendPush, challengeNotice, challengeMessage, notifyChallenge };

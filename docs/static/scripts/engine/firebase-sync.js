@@ -153,8 +153,9 @@ class FirebaseSync {
 	 * @param {object} [opts] - { creatorColor: 'red' | 'blue' | 'random' (the
 	 *   creator's seat, resolved here; default red), public (listed in the
 	 *   lobby's open games), casual (never rated: the joiner writes
-	 *   ranked:false and the rules hold it there) }. All three are fixed at
-	 *   creation. A fromPosition.creatorColor is still honoured.
+	 *   ranked:false and the rules hold it there), invite (a challenge: the
+	 *   one uid the rules let take the open seat; never public) }. All are
+	 *   fixed at creation. A fromPosition.creatorColor is still honoured.
 	 */
 	async createRoom(spellNames, userInfo, timeControl, allowSpectators, variant, fromPosition, opts) {
 		const code = _generateRoomCode();
@@ -192,8 +193,11 @@ class FirebaseSync {
 		};
 		this.isPublic = !!(opts && opts.public);
 		this.casual = !!(opts && opts.casual);
+		this.invite = (opts && typeof opts.invite === 'string' && opts.invite) || null;
+		if (this.invite) this.isPublic = false;
 		if (this.isPublic) roomData.public = true;
 		if (this.casual) roomData.casual = true;
+		if (this.invite) roomData.invite = this.invite;
 		if (this.startSfn) {
 			roomData.startSfn = this.startSfn;
 			if (this.startPos) roomData.startPos = this.startPos;
@@ -217,6 +221,22 @@ class FirebaseSync {
 		this._listenForTurns();
 		await this._goOnline(me);
 		return code;
+	}
+
+	/**
+	 * Challenge the player our waiting room invites (createRoom's
+	 * opts.invite): challenges/{target}/{room}, which shows them a banner
+	 * (friends.js) and a push (functions/notify.js). The rules refuse it
+	 * when they have blocked us.
+	 */
+	async sendChallenge() {
+		if (!this.roomCode || !this.invite) throw new Error('No challenge room');
+		await this.db.ref('challenges/' + this.invite + '/' + this.roomCode).set({
+			from: this[this.creatorColor + 'Uid'],
+			at: firebase.database.ServerValue.TIMESTAMP,
+			tc: this.timeControl,
+			variant: this.variant,
+		});
 	}
 
 	/**
@@ -350,13 +370,23 @@ class FirebaseSync {
 				const now = (await roomRef.once('value').catch(() => null));
 				const v = now && now.val();
 				if (!v || v.status !== 'waiting' || (v[joiner] && v[joiner].uid)) throw taken();
+				// Still open but refused: a challenge for someone else, or a
+				// creator who blocked us (database.rules.json, the seats).
+				const refused = (err) => /permission/i.test(String((err && (err.code || err.message)) || ''))
+					? Object.assign(new Error(v.invite && v.invite !== this[joiner + 'Uid'] ? 'This game is a challenge for another player.' : 'You cannot join this game.'), { code: 'seat-refused' })
+					: err;
+				if (v.invite && v.invite !== this[joiner + 'Uid']) throw refused(e);
 				// The rules refuse a rated room to a player suspended from
 				// rated play (user_flags/{uid}/banUntil): the game goes ahead
 				// unrated.
-				if (!this.ranked) throw e;
+				if (!this.ranked) throw refused(e);
 				this.ranked = false;
 				this.unratedWhy = 'suspended';
-				await join();
+				try {
+					await join();
+				} catch (e2) {
+					throw refused(e2);
+				}
 			}
 			// Off the open-games list, and on Watch Live if spectators may watch.
 			this.db.ref('open_rooms/' + code).remove().catch(() => {});
@@ -885,6 +915,9 @@ class FirebaseSync {
 		}
 		if (!res || !res.committed) return false;
 		this._unlistRoom(code);
+		// A challenge room: take the challenge back too.
+		const invite = await roomRef.child('invite').once('value').then((s) => s.val(), () => null);
+		if (invite) await this.db.ref('challenges/' + invite + '/' + code).remove().catch(() => {});
 		if (this.roomRef && this.roomCode === code) {
 			if (this.myColor) this.roomRef.child(this.myColor).onDisconnect().cancel().catch(() => {});
 			this.roomRef.off();
