@@ -3,7 +3,8 @@
 	"source": "docs/static/puzzles/mate_puzzles.json",
 	"examples": {
 		"Flourish": {
-			"sfn": "b.bbbbbrrr.......b.....rb..rrr...r.r..r/Flourish,Seal_of_Destruction,Hurricane,Fireblast,Seal_of_Stone,Seal_of_Wind,Seal_of_Autumn,Splash,Lurk b 24 0:0 -:- -:- r1 competitive",
+			"sfn": "b.bbbbbrrr.......b.....rb..rrr...r.r..r/Flourish,Seal_of_Destruction,Hurricane,Fireblast,Seal_of_Stone,Seal_of_Wind,Seal_of_Autumn,Splash,Lurk b 23 0:0 -:- -:- r1 competitive",
+			"puzzle_sfn": "b.bbbbbrrr.......b.....rb..rrr...r.r..r/Flourish,Seal_of_Destruction,Hurricane,Fireblast,Seal_of_Stone,Seal_of_Wind,Seal_of_Autumn,Splash,Lurk b 24 0:0 -:- -:- r1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -13,7 +14,8 @@
 			"variant": "competitive"
 		},
 		"Carnage": {
-			"sfn": "rrrrrr.bbbrrbbbb.bb....b....rr..r....../Bewitch,Carnage,Flourish,Grow,Fireblast,Meteor,Sprout,Seal_of_Summer,Surge b 20 0:0 -:- -:- tied",
+			"sfn": "rrrrrr.bbbrrbbbb.bb....b....rr..r....../Bewitch,Carnage,Flourish,Grow,Fireblast,Meteor,Sprout,Seal_of_Summer,Surge b 19 0:0 -:- -:- tied",
+			"puzzle_sfn": "rrrrrr.bbbrrbbbb.bb....b....rr..r....../Bewitch,Carnage,Flourish,Grow,Fireblast,Meteor,Sprout,Seal_of_Summer,Surge b 20 0:0 -:- -:- tied",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -23,7 +25,8 @@
 			"variant": "standard"
 		},
 		"Bewitch": {
-			"sfn": "r.....bbbb....rrrrr..................../Starfall,Bewitch,Flourish,Hail_Storm,Grow,Fireblast,Seal_of_Summer,Sprout,Slash r 21 1:1 Starfall:Hail_Storm -:- r1",
+			"sfn": "r.....bbbb....rrrrr..................../Starfall,Bewitch,Flourish,Hail_Storm,Grow,Fireblast,Seal_of_Summer,Sprout,Slash r 20 1:1 Starfall:Hail_Storm -:- r1",
+			"puzzle_sfn": "r.....bbbb....rrrrr..................../Starfall,Bewitch,Flourish,Hail_Storm,Grow,Fireblast,Seal_of_Summer,Sprout,Slash r 21 1:1 Starfall:Hail_Storm -:- r1",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -33,7 +36,8 @@
 			"variant": "standard"
 		},
 		"Starfall": {
-			"sfn": "brrrbbrrrrb.rbbbbrbb...rr............../Bewitch,Starfall,Flourish,Meteor,Seal_of_Wind,Fireblast,Surge,Sprout,Seal_of_Summer b 24 0:1 -:Meteor -:- tied",
+			"sfn": "brrrbbrrrrb.rbbbbrbb...rr............../Bewitch,Starfall,Flourish,Meteor,Seal_of_Wind,Fireblast,Surge,Sprout,Seal_of_Summer b 23 0:1 -:Meteor -:- tied",
+			"puzzle_sfn": "brrrbbrrrrb.rbbbbrbb...rr............../Bewitch,Starfall,Flourish,Meteor,Seal_of_Wind,Fireblast,Surge,Sprout,Seal_of_Summer b 24 0:1 -:Meteor -:- tied",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -43,7 +47,8 @@
 			"variant": "standard"
 		},
 		"Seal_of_Lightning": {
-			"sfn": "rrrr.r.b.bb..b......r.r...rbbbbb...brr./Bewitch,Flourish,Seal_of_Lightning,Meteor,Hail_Storm,Grow,Comet,Surge,Sprout b 22 0:1 -:Meteor -:- b1",
+			"sfn": "rrrr.r.b.bb..b......r.r...rbbbbb...brr./Bewitch,Flourish,Seal_of_Lightning,Meteor,Hail_Storm,Grow,Comet,Surge,Sprout b 21 0:1 -:Meteor -:- b1",
+			"puzzle_sfn": "rrrr.r.b.bb..b......r.r...rbbbbb...brr./Bewitch,Flourish,Seal_of_Lightning,Meteor,Hail_Storm,Grow,Comet,Surge,Sprout b 22 0:1 -:Meteor -:- b1",
 			"how": "held",
 			"mover": "blue",
 			"kind": "mate",
@@ -53,7 +58,8 @@
 			"variant": "standard"
 		},
 		"Grow": {
-			"sfn": "r.rr..rrrrr.rbbbbbb.bbbrb............../Flourish,Seal_of_Lightning,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Seal_of_Summer,Surge r 19 5:0 Flourish:- -:- b1",
+			"sfn": "r.rr..rrrrr.rbbbbbb.bbbrb............../Flourish,Seal_of_Lightning,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Seal_of_Summer,Surge r 18 5:0 Flourish:- -:- b1",
+			"puzzle_sfn": "r.rr..rrrrr.rbbbbbb.bbbrb............../Flourish,Seal_of_Lightning,Bewitch,Grow,Fireblast,Hail_Storm,Sprout,Seal_of_Summer,Surge r 19 5:0 Flourish:- -:- b1",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -63,7 +69,8 @@
 			"variant": "standard"
 		},
 		"Fireblast": {
-			"sfn": "rrbbr..rrr..b.....b....b.............../Starfall,Seal_of_Lightning,Carnage,Fireblast,Meteor,Grow,Surge,Comet,Sprout r 19 0:0 -:- -:- tied competitive",
+			"sfn": "rrbbr..rrr..b.....b....b.............../Starfall,Seal_of_Lightning,Carnage,Fireblast,Meteor,Grow,Surge,Comet,Sprout r 18 0:0 -:- -:- tied competitive",
+			"puzzle_sfn": "rrbbr..rrr..b.....b....b.............../Starfall,Seal_of_Lightning,Carnage,Fireblast,Meteor,Grow,Surge,Comet,Sprout r 19 0:0 -:- -:- tied competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -73,7 +80,8 @@
 			"variant": "competitive"
 		},
 		"Hail_Storm": {
-			"sfn": ".b........r.......................rr.../Seal_of_Lightning,Flourish,Carnage,Meteor,Grow,Hail_Storm,Slash,Comet,Sprout r 7 0:1 -:Meteor -:- r1",
+			"sfn": ".b........r.......................rr.../Seal_of_Lightning,Flourish,Carnage,Meteor,Grow,Hail_Storm,Slash,Comet,Sprout r 6 0:1 -:Meteor -:- r1",
+			"puzzle_sfn": ".b........r.......................rr.../Seal_of_Lightning,Flourish,Carnage,Meteor,Grow,Hail_Storm,Slash,Comet,Sprout r 7 0:1 -:Meteor -:- r1",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -83,7 +91,8 @@
 			"variant": "standard"
 		},
 		"Meteor": {
-			"sfn": "rrr....rrrr.rbrrbbb..bbrbbb.........b../Bewitch,Seal_of_Lightning,Starfall,Fireblast,Meteor,Grow,Slash,Sprout,Comet b 28 1:0 Fireblast:- -:- tied",
+			"sfn": "rrr....rrrr.rbrrbbb..bbrbbb.........b../Bewitch,Seal_of_Lightning,Starfall,Fireblast,Meteor,Grow,Slash,Sprout,Comet b 27 1:0 Fireblast:- -:- tied",
+			"puzzle_sfn": "rrr....rrrr.rbrrbbb..bbrbbb.........b../Bewitch,Seal_of_Lightning,Starfall,Fireblast,Meteor,Grow,Slash,Sprout,Comet b 28 1:0 Fireblast:- -:- tied",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -93,7 +102,8 @@
 			"variant": "standard"
 		},
 		"Seal_of_Wind": {
-			"sfn": "r....r.bbbr..rbbbrr....b...........r.../Seal_of_Lightning,Carnage,Bewitch,Seal_of_Wind,Grow,Meteor,Surge,Sprout,Slash b 16 1:0 Meteor:- -:- b1",
+			"sfn": "r....r.bbbr..rbbbrr....b...........r.../Seal_of_Lightning,Carnage,Bewitch,Seal_of_Wind,Grow,Meteor,Surge,Sprout,Slash b 15 1:0 Meteor:- -:- b1",
+			"puzzle_sfn": "r....r.bbbr..rbbbrr....b...........r.../Seal_of_Lightning,Carnage,Bewitch,Seal_of_Wind,Grow,Meteor,Surge,Sprout,Slash b 16 1:0 Meteor:- -:- b1",
 			"how": "held",
 			"mover": "blue",
 			"kind": "mate",
@@ -103,7 +113,8 @@
 			"variant": "standard"
 		},
 		"Sprout": {
-			"sfn": "r..rrr....r........b......bb.bbb.rrr.b./Flourish,Carnage,Seal_of_Destruction,Hail_Storm,Storm_Front,Fireblast,Seal_of_Summer,Sprout,Comet b 16 0:0 -:- -:- tied competitive",
+			"sfn": "r..rrr....r........b......bb.bbb.rrr.b./Flourish,Carnage,Seal_of_Destruction,Hail_Storm,Storm_Front,Fireblast,Seal_of_Summer,Sprout,Comet b 15 0:0 -:- -:- tied competitive",
+			"puzzle_sfn": "r..rrr....r........b......bb.bbb.rrr.b./Flourish,Carnage,Seal_of_Destruction,Hail_Storm,Storm_Front,Fireblast,Seal_of_Summer,Sprout,Comet b 16 0:0 -:- -:- tied competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -113,7 +124,8 @@
 			"variant": "competitive"
 		},
 		"Slash": {
-			"sfn": "rrrbrrbbrb.r.b...b.....bb.r............/Bewitch,Seal_of_Lightning,Flourish,Seal_of_Wind,Grow,Fireblast,Slash,Surge,Comet b 16 0:0 -:- -:- b1",
+			"sfn": "rrrbrrbbrb.r.b...b.....bb.r............/Bewitch,Seal_of_Lightning,Flourish,Seal_of_Wind,Grow,Fireblast,Slash,Surge,Comet b 15 0:0 -:- -:- b1",
+			"puzzle_sfn": "rrrbrrbbrb.r.b...b.....bb.r............/Bewitch,Seal_of_Lightning,Flourish,Seal_of_Wind,Grow,Fireblast,Slash,Surge,Comet b 16 0:0 -:- -:- b1",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -123,7 +135,8 @@
 			"variant": "standard"
 		},
 		"Surge": {
-			"sfn": "rrrrrrrrrbrbbb...bb....b..b......b.b.../Carnage,Flourish,Seal_of_Lightning,Seal_of_Wind,Fireblast,Hail_Storm,Surge,Seal_of_Summer,Comet b 22 1:1 Carnage:Hail_Storm -:- b1",
+			"sfn": "rrrrrrrrrbrbbb...bb....b..b......b.b.../Carnage,Flourish,Seal_of_Lightning,Seal_of_Wind,Fireblast,Hail_Storm,Surge,Seal_of_Summer,Comet b 21 1:1 Carnage:Hail_Storm -:- b1",
+			"puzzle_sfn": "rrrrrrrrrbrbbb...bb....b..b......b.b.../Carnage,Flourish,Seal_of_Lightning,Seal_of_Wind,Fireblast,Hail_Storm,Surge,Seal_of_Summer,Comet b 22 1:1 Carnage:Hail_Storm -:- b1",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -133,7 +146,8 @@
 			"variant": "standard"
 		},
 		"Comet": {
-			"sfn": ".rrrrr.......bbbb..bbbb..brrrrrr....rb./Seal_of_Lightning,Seal_of_Destruction,Blossom,Torrent,Seal_of_Stone,Fury,Slash,Comet,Gust b 24 1:0 Fury:- -:- r1 competitive",
+			"sfn": ".rrrrr.......bbbb..bbbb..brrrrrr....rb./Seal_of_Lightning,Seal_of_Destruction,Blossom,Torrent,Seal_of_Stone,Fury,Slash,Comet,Gust b 23 1:0 Fury:- -:- r1 competitive",
+			"puzzle_sfn": ".rrrrr.......bbbb..bbbb..brrrrrr....rb./Seal_of_Lightning,Seal_of_Destruction,Blossom,Torrent,Seal_of_Stone,Fury,Slash,Comet,Gust b 24 1:0 Fury:- -:- r1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -143,7 +157,8 @@
 			"variant": "competitive"
 		},
 		"Seal_of_Summer": {
-			"sfn": "r.bbrr....rb.b.........b..bbrr..r..r..r/Starfall,Bewitch,Flourish,Grow,Seal_of_Wind,Hail_Storm,Comet,Surge,Seal_of_Summer r 27 1:3 Hail_Storm:Grow -:- r1",
+			"sfn": "r.bbrr....rb.b.........b..bbrr..r..r..r/Starfall,Bewitch,Flourish,Grow,Seal_of_Wind,Hail_Storm,Comet,Surge,Seal_of_Summer r 26 1:3 Hail_Storm:Grow -:- r1",
+			"puzzle_sfn": "r.bbrr....rb.b.........b..bbrr..r..r..r/Starfall,Bewitch,Flourish,Grow,Seal_of_Wind,Hail_Storm,Comet,Surge,Seal_of_Summer r 27 1:3 Hail_Storm:Grow -:- r1",
 			"how": "held",
 			"mover": "red",
 			"kind": "mate",
@@ -153,7 +168,8 @@
 			"variant": "standard"
 		},
 		"Blossom": {
-			"sfn": "bbbbbbrrrr..r...rr......r........b.b.../Blossom,Hurricane,Tsunami,Eclipse,Meteor,Hail_Storm,Seal_of_Spring,Sprout,Slash b 24 0:0 -:- -:- b1 competitive",
+			"sfn": "bbbbbbrrrr..r...rr......r........b.b.../Blossom,Hurricane,Tsunami,Eclipse,Meteor,Hail_Storm,Seal_of_Spring,Sprout,Slash b 23 0:0 -:- -:- b1 competitive",
+			"puzzle_sfn": "bbbbbbrrrr..r...rr......r........b.b.../Blossom,Hurricane,Tsunami,Eclipse,Meteor,Hail_Storm,Seal_of_Spring,Sprout,Slash b 24 0:0 -:- -:- b1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -163,7 +179,8 @@
 			"variant": "competitive"
 		},
 		"Scatter": {
-			"sfn": ".............rrrr..brrr..rbbbbbb.rr.bb./Blossom,Erupt,Harvest,Fury,Scatter,Gather,Splash,Seal_of_Spring,Seal_of_Autumn r 21 2:1 Gather:Harvest -:- tied competitive",
+			"sfn": ".............rrrr..brrr..rbbbbbb.rr.bb./Blossom,Erupt,Harvest,Fury,Scatter,Gather,Splash,Seal_of_Spring,Seal_of_Autumn r 20 2:1 Gather:Harvest -:- tied competitive",
+			"puzzle_sfn": ".............rrrr..brrr..rbbbbbb.rr.bb./Blossom,Erupt,Harvest,Fury,Scatter,Gather,Splash,Seal_of_Spring,Seal_of_Autumn r 21 2:1 Gather:Harvest -:- tied competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -173,7 +190,8 @@
 			"variant": "competitive"
 		},
 		"Seal_of_Spring": {
-			"sfn": "bbbrbbrrrb.brr...r.....rr............../Bewitch,Carnage,Seal_of_Lightning,Grow,Fireblast,Hail_Storm,Seal_of_Spring,Slash,Seal_of_Summer r 21 3:0 Carnage:- -:- r1 competitive",
+			"sfn": "bbbrbbrrrb.brr...r.....rr............../Bewitch,Carnage,Seal_of_Lightning,Grow,Fireblast,Hail_Storm,Seal_of_Spring,Slash,Seal_of_Summer r 20 3:0 Carnage:- -:- r1 competitive",
+			"puzzle_sfn": "bbbrbbrrrb.brr...r.....rr............../Bewitch,Carnage,Seal_of_Lightning,Grow,Fireblast,Hail_Storm,Seal_of_Spring,Slash,Seal_of_Summer r 21 3:0 Carnage:- -:- r1 competitive",
 			"how": "held",
 			"mover": "red",
 			"kind": "mate",
@@ -183,7 +201,8 @@
 			"variant": "competitive"
 		},
 		"Syzygy": {
-			"sfn": ".............bbbbb...........rrrrr...../Tsunami,Syzygy,Carnage,Seal_of_Wind,Seal_of_Stone,Fireblast,Seal_of_Winter,Charge,Gust b 12 0:0 -:- -:- b1 competitive",
+			"sfn": ".............bbbbb...........rrrrr...../Tsunami,Syzygy,Carnage,Seal_of_Wind,Seal_of_Stone,Fireblast,Seal_of_Winter,Charge,Gust b 11 0:0 -:- -:- b1 competitive",
+			"puzzle_sfn": ".............bbbbb...........rrrrr...../Tsunami,Syzygy,Carnage,Seal_of_Wind,Seal_of_Stone,Fireblast,Seal_of_Winter,Charge,Gust b 12 0:0 -:- -:- b1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -193,7 +212,8 @@
 			"variant": "competitive"
 		},
 		"Eclipse": {
-			"sfn": "bbbbbbbrrrbbbr..rr..r.r.r.r..rr.b....r./Seal_of_Lightning,Starfall,Flourish,Eclipse,Hail_Storm,Torrent,Slash,Azimuth,Comet r 29 2:0 Starfall:- -:- r1 competitive",
+			"sfn": "bbbbbbbrrrbbbr..rr..r.r.r.r..rr.b....r./Seal_of_Lightning,Starfall,Flourish,Eclipse,Hail_Storm,Torrent,Slash,Azimuth,Comet r 28 2:0 Starfall:- -:- r1 competitive",
+			"puzzle_sfn": "bbbbbbbrrrbbbr..rr..r.r.r.r..rr.b....r./Seal_of_Lightning,Starfall,Flourish,Eclipse,Hail_Storm,Torrent,Slash,Azimuth,Comet r 29 2:0 Starfall:- -:- r1 competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -203,7 +223,8 @@
 			"variant": "competitive"
 		},
 		"Azimuth": {
-			"sfn": "rrrbb.bbrr..rb..b......bb.r......r...../Starfall,Tsunami,Blossom,Seal_of_Wind,Meteor,Torrent,Azimuth,Charge,Seal_of_Summer b 18 0:1 -:Tsunami -:- b1 competitive",
+			"sfn": "rrrbb.bbrr..rb..b......bb.r......r...../Starfall,Tsunami,Blossom,Seal_of_Wind,Meteor,Torrent,Azimuth,Charge,Seal_of_Summer b 17 0:1 -:Tsunami -:- b1 competitive",
+			"puzzle_sfn": "rrrbb.bbrr..rb..b......bb.r......r...../Starfall,Tsunami,Blossom,Seal_of_Wind,Meteor,Torrent,Azimuth,Charge,Seal_of_Summer b 18 0:1 -:Tsunami -:- b1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -213,7 +234,8 @@
 			"variant": "competitive"
 		},
 		"Erupt": {
-			"sfn": "rrrrrrbbbb..rbb..rb....br............../Erupt,Tsunami,Bewitch,Gather,Scatter,Grow,Sprout,Azimuth,Splash r 19 0:0 -:- -:- tied",
+			"sfn": "rrrrrrbbbb..rbb..rb....br............../Erupt,Tsunami,Bewitch,Gather,Scatter,Grow,Sprout,Azimuth,Splash r 18 0:0 -:- -:- tied",
+			"puzzle_sfn": "rrrrrrbbbb..rbb..rb....br............../Erupt,Tsunami,Bewitch,Gather,Scatter,Grow,Sprout,Azimuth,Splash r 19 0:0 -:- -:- tied",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -223,7 +245,8 @@
 			"variant": "standard"
 		},
 		"Fury": {
-			"sfn": "..rr....r...rr.r...rb.brrrbbb.bb...bbb./Hurricane,Tsunami,Erupt,Meteor,Fury,Hail_Storm,Sprout,Gust,Seal_of_Winter b 28 1:2 Tsunami:Hail_Storm -:- b1 competitive",
+			"sfn": "..rr....r...rr.r...rb.brrrbbb.bb...bbb./Hurricane,Tsunami,Erupt,Meteor,Fury,Hail_Storm,Sprout,Gust,Seal_of_Winter b 27 1:2 Tsunami:Hail_Storm -:- b1 competitive",
+			"puzzle_sfn": "..rr....r...rr.r...rb.brrrbbb.bb...bbb./Hurricane,Tsunami,Erupt,Meteor,Fury,Hail_Storm,Sprout,Gust,Seal_of_Winter b 28 1:2 Tsunami:Hail_Storm -:- b1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -233,7 +256,8 @@
 			"variant": "competitive"
 		},
 		"Charge": {
-			"sfn": "...............bbb.brrr.bbr...rbrrrrbb./Seal_of_Destruction,Hurricane,Erupt,Seal_of_Stone,Storm_Front,Gather,Charge,Seal_of_Winter,Seal_of_Autumn b 24 2:0 Erupt:- -:- b1 competitive",
+			"sfn": "...............bbb.brrr.bbr...rbrrrrbb./Seal_of_Destruction,Hurricane,Erupt,Seal_of_Stone,Storm_Front,Gather,Charge,Seal_of_Winter,Seal_of_Autumn b 23 2:0 Erupt:- -:- b1 competitive",
+			"puzzle_sfn": "...............bbb.brrr.bbr...rbrrrrbb./Seal_of_Destruction,Hurricane,Erupt,Seal_of_Stone,Storm_Front,Gather,Charge,Seal_of_Winter,Seal_of_Autumn b 24 2:0 Erupt:- -:- b1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -243,7 +267,8 @@
 			"variant": "competitive"
 		},
 		"Hurricane": {
-			"sfn": "...r..r.........rr.r....r..bbbb.......b/Syzygy,Carnage,Hurricane,Grow,Storm_Front,Torrent,Splash,Slash,Gust b 12 0:0 -:- -:- tied competitive",
+			"sfn": "...r..r.........rr.r....r..bbbb.......b/Syzygy,Carnage,Hurricane,Grow,Storm_Front,Torrent,Splash,Slash,Gust b 11 0:0 -:- -:- tied competitive",
+			"puzzle_sfn": "...r..r.........rr.r....r..bbbb.......b/Syzygy,Carnage,Hurricane,Grow,Storm_Front,Torrent,Splash,Slash,Gust b 12 0:0 -:- -:- tied competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -253,7 +278,8 @@
 			"variant": "competitive"
 		},
 		"Storm_Front": {
-			"sfn": "r.......rr....bbb.b......br.....r.rr.../Corrupt,Harvest,Starfall,Meteor,Scatter,Storm_Front,Surge,Seal_of_Summer,Splash r 29 4:1 Meteor:Scatter -:- r1 competitive",
+			"sfn": "r.......rr....bbb.b......br.....r.rr.../Corrupt,Harvest,Starfall,Meteor,Scatter,Storm_Front,Surge,Seal_of_Summer,Splash r 28 4:1 Meteor:Scatter -:- r1 competitive",
+			"puzzle_sfn": "r.......rr....bbb.b......br.....r.rr.../Corrupt,Harvest,Starfall,Meteor,Scatter,Storm_Front,Surge,Seal_of_Summer,Splash r 29 4:1 Meteor:Scatter -:- r1 competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -263,7 +289,8 @@
 			"variant": "competitive"
 		},
 		"Gust": {
-			"sfn": "...bb.b..r...rrrrbb....rb............../Seal_of_Destruction,Erupt,Harvest,Decay,Fury,Storm_Front,Gust,Seal_of_Winter,Lurk r 17 1:0 Decay:- -:- b1 competitive",
+			"sfn": "...bb.b..r...rrrrbb....rb............../Seal_of_Destruction,Erupt,Harvest,Decay,Fury,Storm_Front,Gust,Seal_of_Winter,Lurk r 16 1:0 Decay:- -:- b1 competitive",
+			"puzzle_sfn": "...bb.b..r...rrrrbb....rb............../Seal_of_Destruction,Erupt,Harvest,Decay,Fury,Storm_Front,Gust,Seal_of_Winter,Lurk r 17 1:0 Decay:- -:- b1 competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -273,7 +300,8 @@
 			"variant": "competitive"
 		},
 		"Tsunami": {
-			"sfn": "r.........r..b.bbbbb..b...rrrrr...rrb../Corrupt,Carnage,Tsunami,Grow,Fireblast,Storm_Front,Lurk,Surge,Splash r 19 1:0 Storm_Front:- -:- tied",
+			"sfn": "r.........r..b.bbbbb..b...rrrrr...rrb../Corrupt,Carnage,Tsunami,Grow,Fireblast,Storm_Front,Lurk,Surge,Splash r 18 1:0 Storm_Front:- -:- tied",
+			"puzzle_sfn": "r.........r..b.bbbbb..b...rrrrr...rrb../Corrupt,Carnage,Tsunami,Grow,Fireblast,Storm_Front,Lurk,Surge,Splash r 19 1:0 Storm_Front:- -:- tied",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -283,7 +311,8 @@
 			"variant": "standard"
 		},
 		"Torrent": {
-			"sfn": "r......b.br..bxbbbbbrr.bb.r...r.rr.rr../Endowment,Carnage,Fissure,Seal_of_Stone,Annuity,Torrent,Dividend,Seal_of_Autumn,Bulwark r 31 2:0 Annuity:- -:- tied competitive pm:2:1",
+			"sfn": "r......b.br..bxbbbbbrr.bb.r...r.rr.rr../Endowment,Carnage,Fissure,Seal_of_Stone,Annuity,Torrent,Dividend,Seal_of_Autumn,Bulwark r 30 2:0 Annuity:- -:- tied competitive pm:2:1",
+			"puzzle_sfn": "r......b.br..bxbbbbbrr.bb.r...r.rr.rr../Endowment,Carnage,Fissure,Seal_of_Stone,Annuity,Torrent,Dividend,Seal_of_Autumn,Bulwark r 31 2:0 Annuity:- -:- tied competitive pm:2:1",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -293,7 +322,8 @@
 			"variant": "competitive"
 		},
 		"Splash": {
-			"sfn": "rrbbbrrrrrrbr...bbb.....b....b..brrr.../Blossom,Bewitch,Syzygy,Seal_of_Wind,Decay,Seal_of_Stone,Splash,Lurk,Seal_of_Summer r 33 0:0 -:- -:- r1 competitive",
+			"sfn": "rrbbbrrrrrrbr...bbb.....b....b..brrr.../Blossom,Bewitch,Syzygy,Seal_of_Wind,Decay,Seal_of_Stone,Splash,Lurk,Seal_of_Summer r 32 0:0 -:- -:- r1 competitive",
+			"puzzle_sfn": "rrbbbrrrrrrbr...bbb.....b....b..brrr.../Blossom,Bewitch,Syzygy,Seal_of_Wind,Decay,Seal_of_Stone,Splash,Lurk,Seal_of_Summer r 33 0:0 -:- -:- r1 competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -303,7 +333,8 @@
 			"variant": "competitive"
 		},
 		"Harvest": {
-			"sfn": ".............rrrbrrb.r.rrr.bbbbb.....b./Seal_of_Lightning,Harvest,Corrupt,Eclipse,Grow,Scatter,Gust,Azimuth,Seal_of_Spring r 21 1:0 Grow:- -:- tied competitive",
+			"sfn": ".............rrrbrrb.r.rrr.bbbbb.....b./Seal_of_Lightning,Harvest,Corrupt,Eclipse,Grow,Scatter,Gust,Azimuth,Seal_of_Spring r 20 1:0 Grow:- -:- tied competitive",
+			"puzzle_sfn": ".............rrrbrrb.r.rrr.bbbbb.....b./Seal_of_Lightning,Harvest,Corrupt,Eclipse,Grow,Scatter,Gust,Azimuth,Seal_of_Spring r 21 1:0 Grow:- -:- tied competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -313,7 +344,8 @@
 			"variant": "competitive"
 		},
 		"Gather": {
-			"sfn": "bbbbbbr..rbb..rrbb.rrrr.brrrrrrrbbbbrrb/Harvest,Bewitch,Syzygy,Grow,Gather,Torrent,Azimuth,Seal_of_Winter,Splash r 33 3:3 Grow:Torrent -:- tied competitive",
+			"sfn": "bbbbbbr..rbb..rrbb.rrrr.brrrrrrrbbbbrrb/Harvest,Bewitch,Syzygy,Grow,Gather,Torrent,Azimuth,Seal_of_Winter,Splash r 32 3:3 Grow:Torrent -:- tied competitive",
+			"puzzle_sfn": "bbbbbbr..rbb..rrbb.rrrr.brrrrrrrbbbbrrb/Harvest,Bewitch,Syzygy,Grow,Gather,Torrent,Azimuth,Seal_of_Winter,Splash r 33 3:3 Grow:Torrent -:- tied competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -323,7 +355,8 @@
 			"variant": "competitive"
 		},
 		"Seal_of_Autumn": {
-			"sfn": ".rrrrrbbbbrrbb..rr.....bb.......r....../Seal_of_Lightning,Syzygy,Blossom,Meteor,Grow,Storm_Front,Azimuth,Surge,Seal_of_Autumn r 29 0:1 -:Meteor -:- r1 competitive",
+			"sfn": ".rrrrrbbbbrrbb..rr.....bb.......r....../Seal_of_Lightning,Syzygy,Blossom,Meteor,Grow,Storm_Front,Azimuth,Surge,Seal_of_Autumn r 28 0:1 -:Meteor -:- r1 competitive",
+			"puzzle_sfn": ".rrrrrbbbbrrbb..rr.....bb.......r....../Seal_of_Lightning,Syzygy,Blossom,Meteor,Grow,Storm_Front,Azimuth,Surge,Seal_of_Autumn r 29 0:1 -:Meteor -:- r1 competitive",
 			"how": "held",
 			"mover": "red",
 			"kind": "mate",
@@ -333,7 +366,8 @@
 			"variant": "competitive"
 		},
 		"Corrupt": {
-			"sfn": "b......bbb..brrrrrrr...r.br......b.b.../Tsunami,Corrupt,Starfall,Seal_of_Wind,Grow,Torrent,Seal_of_Autumn,Seal_of_Winter,Azimuth r 25 1:1 Grow:Torrent -:- tied competitive",
+			"sfn": "b......bbb..brrrrrrr...r.br......b.b.../Tsunami,Corrupt,Starfall,Seal_of_Wind,Grow,Torrent,Seal_of_Autumn,Seal_of_Winter,Azimuth r 24 1:1 Grow:Torrent -:- tied competitive",
+			"puzzle_sfn": "b......bbb..brrrrrrr...r.br......b.b.../Tsunami,Corrupt,Starfall,Seal_of_Wind,Grow,Torrent,Seal_of_Autumn,Seal_of_Winter,Azimuth r 25 1:1 Grow:Torrent -:- tied competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -343,7 +377,8 @@
 			"variant": "competitive"
 		},
 		"Decay": {
-			"sfn": "br.....rr....r.rrrrrr.r...b..bb.bbbbb../Syzygy,Harvest,Erupt,Scatter,Decay,Fireblast,Sprout,Splash,Seal_of_Autumn r 29 5:1 Scatter:Fireblast -:- r1 competitive",
+			"sfn": "br.....rr....r.rrrrrr.r...b..bb.bbbbb../Syzygy,Harvest,Erupt,Scatter,Decay,Fireblast,Sprout,Splash,Seal_of_Autumn r 28 5:1 Scatter:Fireblast -:- r1 competitive",
+			"puzzle_sfn": "br.....rr....r.rrrrrr.r...b..bb.bbbbb../Syzygy,Harvest,Erupt,Scatter,Decay,Fireblast,Sprout,Splash,Seal_of_Autumn r 29 5:1 Scatter:Fireblast -:- r1 competitive",
 			"how": "cast",
 			"mover": "red",
 			"kind": "mate",
@@ -353,7 +388,8 @@
 			"variant": "competitive"
 		},
 		"Lurk": {
-			"sfn": ".rrbrrbbrbr.rb..bb......r.b............/Seal_of_Lightning,Bewitch,Carnage,Hail_Storm,Meteor,Fireblast,Lurk,Slash,Comet b 40 1:4 Hail_Storm:Bewitch -:- b1 competitive",
+			"sfn": ".rrbrrbbrbr.rb..bb......r.b............/Seal_of_Lightning,Bewitch,Carnage,Hail_Storm,Meteor,Fireblast,Lurk,Slash,Comet b 39 1:4 Hail_Storm:Bewitch -:- b1 competitive",
+			"puzzle_sfn": ".rrbrrbbrbr.rb..bb......r.b............/Seal_of_Lightning,Bewitch,Carnage,Hail_Storm,Meteor,Fireblast,Lurk,Slash,Comet b 40 1:4 Hail_Storm:Bewitch -:- b1 competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -363,7 +399,8 @@
 			"variant": "competitive"
 		},
 		"Seal_of_Destruction": {
-			"sfn": ".bbrbbr...brr...................rr...../Seal_of_Destruction,Tsunami,Blossom,Torrent,Eclipse,Decay,Seal_of_Autumn,Gust,Azimuth b 12 0:0 -:- -:- tied competitive",
+			"sfn": ".bbrbbr...brr...................rr...../Seal_of_Destruction,Tsunami,Blossom,Torrent,Eclipse,Decay,Seal_of_Autumn,Gust,Azimuth b 11 0:0 -:- -:- tied competitive",
+			"puzzle_sfn": ".bbrbbr...brr...................rr...../Seal_of_Destruction,Tsunami,Blossom,Torrent,Eclipse,Decay,Seal_of_Autumn,Gust,Azimuth b 12 0:0 -:- -:- tied competitive",
 			"how": "fills",
 			"mover": "blue",
 			"kind": "mate",
@@ -373,7 +410,8 @@
 			"variant": "competitive"
 		},
 		"Seal_of_Stone": {
-			"sfn": "rrbbbrrrrrrbr...bbb.....b....b..brrr.../Blossom,Bewitch,Syzygy,Seal_of_Wind,Decay,Seal_of_Stone,Splash,Lurk,Seal_of_Summer r 33 0:0 -:- -:- r1 competitive",
+			"sfn": "rrbbbrrrrrrbr...bbb.....b....b..brrr.../Blossom,Bewitch,Syzygy,Seal_of_Wind,Decay,Seal_of_Stone,Splash,Lurk,Seal_of_Summer r 32 0:0 -:- -:- r1 competitive",
+			"puzzle_sfn": "rrbbbrrrrrrbr...bbb.....b....b..brrr.../Blossom,Bewitch,Syzygy,Seal_of_Wind,Decay,Seal_of_Stone,Splash,Lurk,Seal_of_Summer r 33 0:0 -:- -:- r1 competitive",
 			"how": "held",
 			"mover": "red",
 			"kind": "mate",
@@ -383,7 +421,8 @@
 			"variant": "competitive"
 		},
 		"Seal_of_Winter": {
-			"sfn": "...............bbb.brrr.bbr...rbrrrrbb./Seal_of_Destruction,Hurricane,Erupt,Seal_of_Stone,Storm_Front,Gather,Charge,Seal_of_Winter,Seal_of_Autumn b 24 2:0 Erupt:- -:- b1 competitive",
+			"sfn": "...............bbb.brrr.bbr...rbrrrrbb./Seal_of_Destruction,Hurricane,Erupt,Seal_of_Stone,Storm_Front,Gather,Charge,Seal_of_Winter,Seal_of_Autumn b 23 2:0 Erupt:- -:- b1 competitive",
+			"puzzle_sfn": "...............bbb.brrr.bbr...rbrrrrbb./Seal_of_Destruction,Hurricane,Erupt,Seal_of_Stone,Storm_Front,Gather,Charge,Seal_of_Winter,Seal_of_Autumn b 24 2:0 Erupt:- -:- b1 competitive",
 			"how": "held",
 			"mover": "blue",
 			"kind": "mate",
@@ -393,7 +432,8 @@
 			"variant": "competitive"
 		},
 		"Fissure": {
-			"sfn": "...x...rrrxr.b........b...bbbrbbrr....r/Bewitch,Endowment,Fissure,Fury,Meteor,Gather,Splash,Surge,Bulwark b 44 4:5 Gather:Meteor -:- tied competitive",
+			"sfn": "...x...rrrxr.b........b...bbbrbbrr....r/Bewitch,Endowment,Fissure,Fury,Meteor,Gather,Splash,Surge,Bulwark b 43 4:5 Gather:Meteor -:- tied competitive",
+			"puzzle_sfn": "...x...rrrxr.b........b...bbbrbbrr....r/Bewitch,Endowment,Fissure,Fury,Meteor,Gather,Splash,Surge,Bulwark b 44 4:5 Gather:Meteor -:- tied competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -403,7 +443,8 @@
 			"variant": "competitive"
 		},
 		"Rock_Slide": {
-			"sfn": "b...bbrbbb.r.rrrrrr....br....r...b.b.../Starfall,Flourish,Erupt,Eclipse,Annuity,Rock_Slide,Surge,Slash,Splash b 28 0:3 -:Starfall -:- tied competitive",
+			"sfn": "b...bbrbbb.r.rrrrrr....br....r...b.b.../Starfall,Flourish,Erupt,Eclipse,Annuity,Rock_Slide,Surge,Slash,Splash b 27 0:3 -:Starfall -:- tied competitive",
+			"puzzle_sfn": "b...bbrbbb.r.rrrrrr....br....r...b.b.../Starfall,Flourish,Erupt,Eclipse,Annuity,Rock_Slide,Surge,Slash,Splash b 28 0:3 -:Starfall -:- tied competitive",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -413,7 +454,8 @@
 			"variant": "competitive"
 		},
 		"Bulwark": {
-			"sfn": "rxrrrr.bbbrrbb..bb.bb.b.b.bx.r..rrrrb.r/Seal_of_Lightning,Fissure,Seal_of_Destruction,Eclipse,Fireblast,Hail_Storm,Splash,Bulwark,Seal_of_Spring b 74 5:3 Hail_Storm:Fissure -:- b1 competitive",
+			"sfn": "rxrrrr.bbbrrbb..bb.bb.b.b.bx.r..rrrrb.r/Seal_of_Lightning,Fissure,Seal_of_Destruction,Eclipse,Fireblast,Hail_Storm,Splash,Bulwark,Seal_of_Spring b 73 5:3 Hail_Storm:Fissure -:- b1 competitive",
+			"puzzle_sfn": "rxrrrr.bbbrrbb..bb.bb.b.b.bx.r..rrrrb.r/Seal_of_Lightning,Fissure,Seal_of_Destruction,Eclipse,Fireblast,Hail_Storm,Splash,Bulwark,Seal_of_Spring b 74 5:3 Hail_Storm:Fissure -:- b1 competitive",
 			"how": "held",
 			"mover": "blue",
 			"kind": "mate",
@@ -424,13 +466,14 @@
 		},
 		"Endowment": {
 			"how": "fill",
-			"sfn": "rrrr.r.......bbbbb.....b..rr.........../Flourish,Endowment,Carnage,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge b 14 0:0 -:- -:- tied",
+			"sfn": "rrrr.r.......bbbbb.....b..rr.........../Flourish,Endowment,Carnage,Grow,Fireblast,Hail_Storm,Sprout,Slash,Surge b 13 0:0 -:- -:- tied",
 			"mover": "blue",
 			"variant": "standard",
 			"fill": "b6"
 		},
 		"Annuity": {
-			"sfn": "r.............bbb...bbb..brr.rrr.r..br./Flourish,Blossom,Erupt,Eclipse,Annuity,Grow,Gust,Dividend,Comet b 28 1:0 Annuity:- -:- b1 competitive pm:1:1",
+			"sfn": "r.............bbb...bbb..brr.rrr.r..br./Flourish,Blossom,Erupt,Eclipse,Annuity,Grow,Gust,Dividend,Comet b 27 1:0 Annuity:- -:- b1 competitive pm:1:1",
+			"puzzle_sfn": "r.............bbb...bbb..brr.rrr.r..br./Flourish,Blossom,Erupt,Eclipse,Annuity,Grow,Gust,Dividend,Comet b 28 1:0 Annuity:- -:- b1 competitive pm:1:1",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",
@@ -440,7 +483,8 @@
 			"variant": "competitive"
 		},
 		"Dividend": {
-			"sfn": "rrrrrrr...r..bbbbbb.bbb..........rrr.../Harvest,Seal_of_Lightning,Bewitch,Seal_of_Wind,Hail_Storm,Fireblast,Charge,Dividend,Gust b 22 0:0 -:- -:- tied competitive pm:0:1",
+			"sfn": "rrrrrrr...r..bbbbbb.bbb..........rrr.../Harvest,Seal_of_Lightning,Bewitch,Seal_of_Wind,Hail_Storm,Fireblast,Charge,Dividend,Gust b 21 0:0 -:- -:- tied competitive pm:0:1",
+			"puzzle_sfn": "rrrrrrr...r..bbbbbb.bbb..........rrr.../Harvest,Seal_of_Lightning,Bewitch,Seal_of_Wind,Hail_Storm,Fireblast,Charge,Dividend,Gust b 22 0:0 -:- -:- tied competitive pm:0:1",
 			"how": "cast",
 			"mover": "blue",
 			"kind": "mate",

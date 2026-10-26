@@ -187,7 +187,7 @@ const SIGIL_SPELL_NOTES = {
 		'One ordinary soft or hard move (touching one of your stones) onto a node that is not part of a 3- or 5-node spell: a charm, a mana node or any other node outside a sigil.',
 	],
 	Seal_of_Destruction: [
-		'At the end of each of your turns in which you fill it, every enemy stone touching one of your stones is destroyed. This happens before the win check, so a burn that puts you 3 ahead wins.',
+		'At the end of each of your turns in which you fill it, every enemy stone touching one of your stones is destroyed. This happens before the end-of-turn win check, so a burn that wins the game (by elimination, or by the stone lead where the variant has one) ends it at once.',
 		'If it is still filled at the start of your next turn, you lose.',
 		'Stones protected by the opponent\'s Bulwark are not destroyed.',
 	],

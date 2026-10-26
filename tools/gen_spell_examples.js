@@ -37,8 +37,9 @@ const E = vm.runInContext('({ SigilBoard, EXPANSIONS, CORE_SPELLS, setBoardLayou
 const OFFICIAL_PACKS = ['core', 'springtime', 'celestial', 'fury', 'tempest', 'flood', 'autumn', 'gloom', 'covenant', 'tectonic', 'providence'];
 const OFFICIAL = OFFICIAL_PACKS.flatMap(k => [...E.EXPANSIONS[k].rituals, ...E.EXPANSIONS[k].sorceries, ...E.EXPANSIONS[k].charms]);
 
-// Positions for spells no puzzle shows. The side to move fills the spell with
-// its regular move and may then cast it.
+// Positions for spells no puzzle shows, in the puzzle convention (the counter
+// is the mover's turn). The side to move fills the spell with its regular
+// move and may then cast it.
 const HAND_BUILT = {
 	// Blue fills b6 to complete Endowment (b2-b6), keeps 1 stone (mana b1)
 	// and banks 4.
@@ -47,6 +48,17 @@ const HAND_BUILT = {
 		mover: 'blue', variant: 'standard', fill: 'b6',
 	},
 };
+
+// Puzzle SFNs carry the mover's own turn number (the puzzle page loads them
+// through puzzleImportSfn, game-board-local.js). The analysis board, like a
+// game record, reads the counter as the last turn played and moves the next
+// one, so the Try-it link gets the counter one lower: the puzzle's mover moves.
+function analysisSfn(sfn) {
+	const p = String(sfn).trim().split(/\s+/);
+	const tc = parseInt(p[2], 10);
+	if (!isNaN(tc) && tc > 0) p[2] = String(tc - 1);
+	return p.join(' ');
+}
 
 function chargedOf(sfn) {
 	const b = new E.SigilBoard(null, 'standard');
@@ -87,11 +99,11 @@ for (const spell of OFFICIAL) {
 	}
 	if (best) {
 		out[spell] = {
-			sfn: best.sfn, how, mover: best.mover, kind: best.kind, mate: best.mate,
+			sfn: analysisSfn(best.sfn), puzzle_sfn: best.sfn, how, mover: best.mover, kind: best.kind, mate: best.mate,
 			puzzle: best.id, date: best.game && best.game.date, variant: best.variant,
 		};
 	} else if (HAND_BUILT[spell]) {
-		out[spell] = Object.assign({ how: 'fill' }, HAND_BUILT[spell]);
+		out[spell] = Object.assign({ how: 'fill' }, HAND_BUILT[spell], { sfn: analysisSfn(HAND_BUILT[spell].sfn) });
 	}
 }
 

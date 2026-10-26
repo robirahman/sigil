@@ -130,7 +130,7 @@ async function newPage(browser, errors, opts = {}) {
 				await page.waitForFunction(() => {
 					const el = document.querySelector('#analysis-root');
 					const d = window.Alpine && el && window.Alpine.$data(el);
-					return d && (d.anaMode === 'edit' || (d.anaTree.length && Object.keys(d.spellDict).length));
+					return d && (d.anaMode === 'edit' || (d.anaTree.length && Object.keys(d.spellDict).length && d.whoseTurn));
 				}, { timeout: 20000 });
 				st = await page.evaluate(() => {
 					const d = Alpine.$data(document.querySelector('#analysis-root'));
@@ -139,8 +139,8 @@ async function newPage(browser, errors, opts = {}) {
 				});
 			} catch (e) { st = { error: e.message }; }
 			const ok = st && st.mode === 'analyse' && !st.importError && st.sfn === ex.sfn
-				&& st.spells.includes(name) && errors.length === before;
-			check(ok, `Try-it position for ${name} loads in analysis.html`, JSON.stringify(Object.assign({}, st, { errors: errors.slice(before) })));
+				&& st.spells.includes(name) && st.whose === ex.mover && errors.length === before;
+			check(ok, `Try-it position for ${name} loads in analysis.html with ${ex.mover} to move`, JSON.stringify(Object.assign({}, st, { errors: errors.slice(before) })));
 		}
 
 		// ---- 3. variants.html and the links into it
