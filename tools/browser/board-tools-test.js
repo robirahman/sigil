@@ -253,6 +253,29 @@ const visible = (page, sel) => page.evaluate((s) => {
 		await page.waitForFunction(() => Alpine.$data(document.querySelector('[x-data^="gameBoard"]')).actionList.includes('pass'), { timeout: 10000 });
 		st = await board(page);
 		check('with draw mode off a tap plays the node', st.stones.includes(t2), st.stones);
+		// The pencil acts once per touch press, whether or not Chrome sends
+		// the click: pointerup alone, pointerup then click, and a drag that
+		// only ends on the pencil.
+		const pencilAfter = (seq) => page.evaluate((seq) => {
+			const b = document.querySelector('.board-marks-tools__draw');
+			const before = b.getAttribute('aria-pressed');
+			for (const [type, id] of seq) {
+				const ev = type === 'click'
+					? new MouseEvent('click', { bubbles: true, cancelable: true })
+					: new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: true });
+				b.dispatchEvent(ev);
+			}
+			const after = b.getAttribute('aria-pressed');
+			// Back to off for the next case (a click now would be ignored).
+			b.closest('.board-marks-tools').parentElement._boardMarks.setDrawMode(false);
+			return before + '>' + after;
+		}, seq);
+		await sleep(900);
+		check('a touch press toggles the pencil without a click', await pencilAfter([['pointerdown', 41], ['pointerup', 41]]) === 'false>true');
+		await sleep(900);
+		check('a touch press and its click toggle the pencil once', await pencilAfter([['pointerdown', 42], ['pointerup', 42], ['click']]) === 'false>true');
+		await sleep(900);
+		check('a drag that ends on the pencil does not toggle it', await pencilAfter([['pointerup', 43]]) === 'false>false');
 		const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 		check('phone width: the tools add no horizontal scroll', overflow <= 0 || await page.evaluate(() => {
 			// game.html's board has a min width of its own; only count overflow the tools cause.

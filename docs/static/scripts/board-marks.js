@@ -151,22 +151,29 @@ function attachBoardMarks(wrapper, opts) {
 		pencil.setAttribute('aria-pressed', drawMode ? 'true' : 'false');
 		wrapper.classList.toggle('board-marks--drawing', drawMode);
 	};
-	// A touch toggles on pointerup: right after a drawn drag Chrome can drop
-	// the tap's click, which left draw mode stuck on. The click that may
-	// still follow is ignored; mouse and keyboard go by click.
-	let touchToggledAt = 0;
-	pencil.addEventListener('pointerup', (e) => {
-		if (e.pointerType === 'mouse') return;
-		touchToggledAt = Date.now();
-		setDrawMode(!drawMode);
-	});
-	pencil.addEventListener('click', (e) => {
-		e.stopPropagation();
-		if (Date.now() - touchToggledAt < 800) return;
-		setDrawMode(!drawMode);
-	});
-	clearBtn.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') api.clear(); });
-	clearBtn.addEventListener('click', (e) => { e.stopPropagation(); api.clear(); });
+	// A touch or pen press on a tool acts on pointerup: right after a drawn
+	// drag Chrome can drop the tap's click, which left draw mode stuck on.
+	// Only a press that began on the same button counts (not a drag that
+	// ends there), and the click that may still follow is ignored. Mouse
+	// and keyboard go by click.
+	const onTap = (btn, act) => {
+		let downId = null, tappedAt = 0;
+		btn.addEventListener('pointerdown', (e) => { downId = e.pointerType === 'mouse' ? null : e.pointerId; });
+		btn.addEventListener('pointercancel', () => { downId = null; });
+		btn.addEventListener('pointerup', (e) => {
+			if (e.pointerType === 'mouse' || e.pointerId !== downId) return;
+			downId = null;
+			tappedAt = Date.now();
+			act();
+		});
+		btn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			if (Date.now() - tappedAt < 800) return;
+			act();
+		});
+	};
+	onTap(pencil, () => setDrawMode(!drawMode));
+	onTap(clearBtn, () => api.clear());
 
 	// In draw mode a tap on a node must not play it: swallow the click in
 	// the capture phase, before the node button's own handler.
