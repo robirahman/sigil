@@ -52,7 +52,7 @@ test('a vacation pauses open correspondence games once, and ends their pauses', 
 
 	assert.ok(ended.N.pauses[pauseKey('alice', v.from, 'blue')].to < v.until);
 	assert.strictEqual(ended.B.pauses[pauseKey('alice', v.from, 'blue')].to, v.until);
-	assert.strictEqual((await db.ref('vacations/alice/usedDays').once('value')).val(), 1);
+	assert.strictEqual((await db.ref('vacations/alice/used/' + new Date().getUTCFullYear()).once('value')).val(), 1);
 });
 
 test('a pause a sweep adds after the vacation ended is ended by the next sweep', async () => {
@@ -82,3 +82,61 @@ test('the server ends a game on time only if the clock is still out inside the t
 	assert.strictEqual(await expireRooms(db, Date.now()), 1);
 	assert.strictEqual((await db.ref('rooms/X/status').once('value')).val(), 'finished');
 });
+
+test('ending an old vacation leaves the pause of a newer one alone', async () => {
+	await db.ref('rooms/A').set(room('playing', corr, 'alice', 'bob'));
+	await setVacation(db, 'alice', 2, Date.now());
+	const old = (await db.ref('vacations/alice').once('value')).val();
+	await setVacation(db, 'alice', 0, Date.now());
+	const ended = (await db.ref('vacations/alice').once('value')).val();
+	await new Promise((r) => setTimeout(r, 5));
+	await setVacation(db, 'alice', 3, Date.now());
+	const fresh = (await db.ref('vacations/alice').once('value')).val();
+	// A sweep holding the record from before the new vacation.
+	const { pauseDueEnd } = require('../vacation');
+	const pauses = (await db.ref('rooms/A/pauses').once('value')).val();
+	const nk = pauseKey('alice', fresh.from, 'red');
+	assert.ok(pauses[nk] && pauses[nk].to === fresh.until);
+	for (const stale of [old, ended]) assert.strictEqual(pauseDueEnd(nk, pauses[nk], { alice: stale }, Date.now()), null);
+	await pauseNewGames(db, Date.now());
+	const after = (await db.ref('rooms/A/pauses/' + nk).once('value')).val();
+	assert.strictEqual(after.to, fresh.until);
+});
+
+test('one sweep both ends an old vacation\'s pause and adds the current one\'s', async () => {
+	await setVacation(db, 'alice', 1, Date.now());
+	const old = (await db.ref('vacations/alice').once('value')).val();
+	await setVacation(db, 'alice', 0, Date.now());
+	await new Promise((r) => setTimeout(r, 5));
+	await setVacation(db, 'alice', 2, Date.now());
+	const cur = (await db.ref('vacations/alice').once('value')).val();
+	// A room holding only the old vacation's pause, still running (its end
+	// was missed), and not yet the current one's.
+	await db.ref('rooms/S').set(Object.assign(room('playing', corr, 'alice', 'bob'),
+		{ pauses: { [pauseKey('alice', old.from, 'red')]: { color: 'red', from: old.from, to: old.until } } }));
+	await pauseNewGames(db, Date.now());
+	const p = (await db.ref('rooms/S/pauses').once('value')).val();
+	const oldP = p[pauseKey('alice', old.from, 'red')];
+	const curP = p[pauseKey('alice', cur.from, 'red')];
+	assert.ok(oldP.to < old.until, JSON.stringify(oldP));
+	assert.ok(curP && curP.to === cur.until, JSON.stringify(p));
+});
+
+test('the sweep reads only vacations running or ended within the last day', async () => {
+	const now = Date.now();
+	// A long-gone vacation (ended two days ago) with a pause left running,
+	// and one ended an hour ago: only the recent one is the sweep's.
+	await db.ref('vacations').set({
+		zed: { used: { 2026: 1 }, from: now - 3 * DAY, until: now - 2 * DAY, days: 1 },
+		amy: { used: { 2026: 1 }, from: now - 5 * 3_600_000, until: now - 3_600_000, days: 1 },
+	});
+	await db.ref('rooms').set({
+		Z: Object.assign(room('playing', corr, 'zed', 'bob'), { pauses: { [pauseKey('zed', now - 3 * DAY, 'red')]: { color: 'red', from: now - 3 * DAY, to: now + DAY } } }),
+		Y: Object.assign(room('playing', corr, 'amy', 'bob'), { pauses: { [pauseKey('amy', now - 5 * 3_600_000, 'red')]: { color: 'red', from: now - 5 * 3_600_000, to: now + DAY } } }),
+	});
+	await pauseNewGames(db, now);
+	const r = (await db.ref('rooms').once('value')).val();
+	assert.strictEqual(r.Z.pauses[pauseKey('zed', now - 3 * DAY, 'red')].to, now + DAY);
+	assert.strictEqual(r.Y.pauses[pauseKey('amy', now - 5 * 3_600_000, 'red')].to, now - 3_600_000);
+});
+

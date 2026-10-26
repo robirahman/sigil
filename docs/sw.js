@@ -79,6 +79,7 @@ const SAME_ORIGIN_PRECACHE = [
 	'./static/scripts/turn-notify.js',
 	'./static/scripts/friends.js?v=35',
 	'./static/scripts/engine/room-clock.js?v=35',
+	'./static/scripts/engine/vacation-bank.js?v=35',
 	'./static/scripts/sound-manager.js',
 	'./static/scripts/spell-effects.js',
 	'./static/scripts/board-marks.js?v=35',

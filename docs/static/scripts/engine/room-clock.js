@@ -17,9 +17,11 @@
  *     only). The rules let a seat give only to the other seat.
  */
 
-// The one gift size a client may write (database.rules.json). `var`: a page
-// may load this file twice (auth-status.js adds it when it is missing).
+// The one gift size a client may write, and how many gifts each seat may
+// give in a game (database.rules.json, giftAt/{seat}/n). `var`: a page may
+// load this file twice (auth-status.js adds it when it is missing).
 var ROOM_GIFT_MS = 15000;
+var ROOM_GIFT_MAX = 20;
 
 /**
  * Milliseconds of `color`'s pauses inside [from, to] (overlapping pauses
@@ -58,16 +60,16 @@ function roomPausedUntil(room, color, now) {
 	return until;
 }
 
-/** Milliseconds given to `color` by `now` (realtime rooms). */
+/** Milliseconds given to `color` by `now` (realtime rooms): at most ROOM_GIFT_MAX gifts. */
 function roomGiftMs(room, color, now) {
 	const gifts = (room && room.gifts) || {};
-	let total = 0;
+	let count = 0;
 	for (const k of Object.keys(gifts)) {
 		const g = gifts[k];
 		if (!g || g.to !== color || g.ms !== ROOM_GIFT_MS || typeof g.at !== 'number' || g.at > now) continue;
-		total += g.ms;
+		count++;
 	}
-	return total;
+	return Math.min(count, ROOM_GIFT_MAX) * ROOM_GIFT_MS;
 }
 
 /** A room's turns in the order they were played: [{color, actions, timestamp}]. */
@@ -170,5 +172,5 @@ function roomTimerView(ts, room, now) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-	module.exports = { roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS };
+	module.exports = { roomTurns, sideToMove, roomTimeLeft, roomPausedMs, roomPausedUntil, roomGiftMs, roomTimerView, ROOM_GIFT_MS, ROOM_GIFT_MAX };
 }

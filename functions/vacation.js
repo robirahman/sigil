@@ -4,10 +4,11 @@
  * that start during one).
  *
  * A player's bank is VACATION_DAYS_PER_YEAR days a calendar year (UTC),
- * kept at vacations/{uid}: { year, usedDays, from, until, days }.
+ * kept at vacations/{uid}: { used: {year: days}, from, until, days, prev }.
  * Only the server writes it (database.rules.json). Starting a vacation of N
- * days reserves N days; ending it early refunds the days not begun (a day
- * begun counts as used).
+ * days reserves N days, each from the bank of the year it begins in (a
+ * vacation over New Year draws on both); ending it early refunds the days
+ * not begun (a day begun counts as used).
  *
  * While a player is on vacation, each of their correspondence games carries
  * a pause, rooms/{code}/pauses/{uid_vacationFrom_color}: { color, from, to },
@@ -19,15 +20,18 @@
  * the clients could not.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const VACATION_DAYS_PER_YEAR = 14;
+// The bank's arithmetic is shared with account.html's days picker
+// (docs/static/scripts/engine/vacation-bank.js).
+const bank = require('./engine-loader').requireShared('vacation-bank.js');
+const DAY_MS = bank.VACATION_DAY_MS;
+const VACATION_DAYS_PER_YEAR = bank.VACATION_DAYS_PER_YEAR;
+const daysLeft = bank.vacationDaysLeft;
+const dayYears = bank.vacationDayYears;
+const usedByYear = bank.vacationUsedByYear;
 
-const yearOf = (ms) => new Date(ms).getUTCFullYear();
-
-/** Days left in the bank at `now` for the stored record `v` (may be null). */
-function daysLeft(v, now) {
-	if (!v || v.year !== yearOf(now)) return VACATION_DAYS_PER_YEAR;
-	return Math.max(0, VACATION_DAYS_PER_YEAR - (v.usedDays || 0));
+/** Is the record `v` a vacation that has not ended by `now` (begun or not)? */
+function unexpired(v, now) {
+	return !!(v && typeof v.until === 'number' && now < v.until);
 }
 
 /** Is the record `v` a vacation running at `now`? */
@@ -37,29 +41,36 @@ function onVacation(v, now) {
 
 /**
  * The record after starting a `days`-day vacation at `now`, or
- * { error } when the request is refused.
+ * { error } when the request is refused. Each day is charged to the bank
+ * of the year it begins in, so a vacation over New Year draws on both.
  */
 function startRecord(v, days, now) {
 	if (!Number.isInteger(days) || days < 1) return { error: 'invalid-days' };
-	if (onVacation(v, now)) return { error: 'already-on-vacation' };
-	const left = daysLeft(v, now);
-	if (days > left) return { error: 'not-enough-days' };
-	const year = yearOf(now);
-	const used = v && v.year === year ? (v.usedDays || 0) : 0;
+	// Any vacation not yet over, even one whose start is a moment after
+	// `now` (an overlapping call, or another instance's clock).
+	if (unexpired(v, now)) return { error: 'already-on-vacation' };
+	const charged = bank.vacationCharge(v, days, now);
+	if (!charged) return { error: 'not-enough-days' };
+	const used = charged.used;
 	// The last vacation's span stays, so the sweep can still end its pauses.
 	const prev = v && typeof v.from === 'number' ? { from: v.from, until: v.until } : null;
-	return { year, usedDays: used + days, from: now, until: now + days * DAY_MS, days, prev };
+	return { used, from: now, until: now + days * DAY_MS, days, prev };
 }
 
 /**
  * The record after ending the running vacation at `now`: the reserved days
- * not begun go back to the bank (of the year the vacation started in).
+ * not begun go back to the banks of the years they fall in.
  */
 function endRecord(v, now) {
-	if (!onVacation(v, now)) return { error: 'not-on-vacation' };
-	const used = Math.min(v.days || 0, Math.max(1, Math.ceil((now - v.from) / DAY_MS)));
-	const refund = Math.max(0, (v.days || 0) - used);
-	return Object.assign({}, v, { usedDays: Math.max(0, (v.usedDays || 0) - refund), until: now, days: used });
+	if (!unexpired(v, now)) return { error: 'not-on-vacation' };
+	const days = v.days || 0;
+	const kept = Math.min(days, Math.max(1, Math.ceil((now - v.from) / DAY_MS)));
+	const used = usedByYear(v);
+	for (const y of dayYears(v.from, days).slice(kept)) used[y] = Math.max(0, (used[y] || 0) - 1);
+	const next = Object.assign({}, v, { used, until: now, days: kept });
+	delete next.year;
+	delete next.usedDays;
+	return next;
 }
 
 /** The colours `uid` sits at in `room` (both, in a game against oneself). */
@@ -75,7 +86,7 @@ function pausable(room) {
 /**
  * The pauses a room still needs at `now`, for the players in `active`
  * ({uid: vacation record}) who are on vacation: [{ uid, color, to }].
- * A colour that already has a pause running needs none.
+ * A seat that already holds this vacation's pause (by key) needs none.
  */
 function missingPauses(room, active, now) {
 	if (!pausable(room)) return [];
@@ -84,12 +95,9 @@ function missingPauses(room, active, now) {
 		const uid = room[c] && room[c].uid;
 		const v = uid && active[uid];
 		if (!onVacation(v, now)) continue;
-		const pauses = room.pauses || {};
-		const running = Object.keys(pauses).some((k) => {
-			const p = pauses[k];
-			return p && p.color === c && typeof p.from === 'number' && typeof p.to === 'number' && p.from <= now && now < p.to;
-		});
-		if (!running) out.push({ uid, color: c, to: v.until });
+		// This vacation's own pause (another, such as a stale one from an
+		// earlier vacation, does not count).
+		if (!(room.pauses && room.pauses[pauseKey(uid, v.from, c)])) out.push({ uid, color: c, to: v.until });
 	}
 	return out;
 }
@@ -114,9 +122,10 @@ function pauseKey(uid, vacationFrom, color) {
 /**
  * When a pause should have ended, if earlier than its `to`: the end of the
  * vacation it belongs to (by its key, among `recs` {uid: record}: the
- * current one or the one before), or `now` when the player's record holds
- * neither. Null when the pause is right as it is, or the player is not in
- * `recs` (a deleted account's games are resigned by deleteUserData).
+ * current one or the one before), or `now` for an older vacation the record
+ * no longer holds. Null when the pause is right as it is, belongs to a
+ * vacation newer than the record, or the player is not in `recs` (a
+ * deleted account's games are resigned by deleteUserData).
  */
 function pauseDueEnd(key, p, recs, now) {
 	const m = /^(.+)_(\d+)_(red|blue)$/.exec(key);
@@ -124,6 +133,9 @@ function pauseDueEnd(key, p, recs, now) {
 	const rec = recs[m[1]];
 	if (!rec) return null;
 	const from = Number(m[2]);
+	// A vacation newer than this record (started elsewhere since it was
+	// read) is not this record's to end.
+	if (!(typeof rec.from === 'number' && from <= rec.from)) return null;
 	const vac = rec.from === from ? rec : rec.prev && rec.prev.from === from ? rec.prev : null;
 	const end = vac && typeof vac.until === 'number' ? vac.until : now;
 	return end < p.to ? Math.max(p.from, end) : null;
@@ -234,7 +246,10 @@ async function setVacation(db, uid, days, now) {
  * rooms changed.
  */
 async function pauseNewGames(db, now) {
-	const recs = (await db.ref('vacations').once('value')).val() || {};
+	// Only records still running or ended within the last day (cleanup of
+	// a missed end is done by the next sweep, a minute later): never the
+	// whole history.
+	const recs = (await db.ref('vacations').orderByChild('until').startAt(now - DAY_MS).once('value')).val() || {};
 	const active = {};
 	for (const uid of Object.keys(recs)) if (onVacation(recs[uid], now)) active[uid] = recs[uid];
 	const rooms = await playingRooms(db);
